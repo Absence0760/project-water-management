@@ -25,7 +25,8 @@
 		reserveHref = '#res-reserve',
 		otherUsesHref,
 		headline = null,
-		foldChecks = false
+		foldChecks = false,
+		calibrationHref
 	}: {
 		summary: RunSummary;
 		/** Days in the run (for "% of days"). */
@@ -43,6 +44,11 @@
 		 * results reach the first screen (the workspace; issue #521). The report lists them all.
 		 */
 		foldChecks?: boolean;
+		/**
+		 * A link to a Model quality panel on the Calibration page by its anchor, for this run (calibration/links.ts):
+		 * where the model-checks line's calibration, plausibility and WR2012 items go (issue #586 Round 3).
+		 */
+		calibrationHref?: (anchor: string) => string;
 	} = $props();
 
 	const CHECKS_SHOWN = 3;
@@ -69,7 +75,7 @@
 	const groups = $derived(warningGroups(summary.warnings));
 	const checksFolded = $derived(foldChecks && groups.check.length > CHECKS_SHOWN);
 	const shownChecks = $derived(checksFolded && !checksOpen ? groups.check.slice(0, CHECKS_SHOWN) : groups.check);
-	const checkItems = $derived(credibility(summary));
+	const checkItems = $derived(credibility(summary, calibrationHref));
 	const otherUses = $derived(otherUsesHref ? otherUsesLink(summary) : null);
 </script>
 

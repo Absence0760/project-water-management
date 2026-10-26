@@ -1,18 +1,16 @@
 <script lang="ts">
 	// The results below the run's summary on Runs & results, in the groups of
-	// sections.ts (model quality, record, dig deeper), with a heading per group.
-	// Model quality is its own component (ModelQuality.svelte, issue #586), which
-	// takes the run; the parent slots the water balance by water year into it
-	// (Runs & results keeps that table when Model quality moves to Calibration)
-	// and its own panels into Record and Dig deeper. Dig deeper ends with an
-	// explorer for any stored series. The page's flow charts share one unit
-	// switch. The river and unit groups have their own pages; the run header
-	// links there (RunsTab.svelte).
+	// sections.ts: the water balance by water year (with the summary, no heading
+	// of its own), then Record and Dig deeper, with a heading per group. The
+	// parent slots its own panels in. Dig deeper ends with an explorer for any
+	// stored series. Model quality (the hydrograph to the plausibility checks)
+	// moved to the Calibration page (issue #586 Round 3, ModelQuality.svelte), and
+	// the river and unit groups have their own pages; the run header and the
+	// Summary's model checks link there (RunsTab.svelte, RunSummaryView.svelte).
 	import type { Snippet } from 'svelte';
-	import type { Run, RunMeta, RunSeriesRef } from '#lib/api/index.js';
+	import type { Run, RunSeriesRef } from '#lib/api/index.js';
 	import { forecastBand } from '#lib/components/forecast/forecast.js';
 	import FlowUnitSwitch from './FlowUnitSwitch.svelte';
-	import ModelQuality from './ModelQuality.svelte';
 	import RunChart from './RunChart.svelte';
 
 	let {
@@ -21,9 +19,6 @@
 		refs,
 		nodeNames,
 		nodeOrder,
-		runs,
-		series = null,
-		projectSettings = null,
 		waterBalance,
 		record,
 		deeperLead
@@ -34,13 +29,7 @@
 		refs: RunSeriesRef[];
 		nodeNames: Map<string, string>;
 		nodeOrder: ReadonlyMap<string, number>;
-		/** The project's runs, newest first (the plausibility checks overlay other runoff models' latest). */
-		runs: RunMeta[];
-		/** The project's input series: a checks-only gauge links to its record on Data. */
-		series?: readonly { id: string; kind: string; siteNodeId?: string | null }[] | null;
-		/** The project's settings, for a run that kept no snapshot of its own. */
-		projectSettings?: { calibrationStart?: string | null; calibrationEnd?: string | null } | null;
-		/** The water balance by water year, drawn in Model quality after calibration (it stays on Runs & results, issue #586). */
+		/** The water balance by water year (issue #137): first, under the summary. */
 		waterBalance?: Snippet;
 		/** The Record group: notes, evidence and publication (sign-off, after the results). */
 		record?: Snippet;
@@ -50,35 +39,28 @@
 	const band = $derived(forecastBand(run.summary.forecast?.from ?? null));
 
 	let flowUnit = $state<'m³/s' | 'm³/day'>('m³/s');
-	// Record and Dig deeper follow Model quality's panels after the hydrograph is painted (ModelQuality.svelte).
-	let settled = $state(false);
 </script>
 
-<!-- The explorer's copy of the page's one flow-unit switch (FlowUnitSwitch.svelte). -->
+<!-- The explorer's flow-unit switch (FlowUnitSwitch.svelte). -->
 {#snippet unitToggle()}
 	<FlowUnitSwitch bind:unit={flowUnit} />
 {/snippet}
 
 <div class="charts">
-	<h2 class="group-h wide">Model quality</h2>
-	<div class="wide slot">
-		<ModelQuality {projectId} {run} {refs} {nodeNames} {nodeOrder} {runs} {series} {projectSettings} bind:flowUnit bind:settled afterCalibration={waterBalance} />
-	</div>
+	{#if waterBalance}<div class="wide slot">{@render waterBalance()}</div>{/if}
 
-	{#if settled}
-		{#if record}
-			<h2 class="group-h wide">Record</h2>
-			<div class="wide slot">{@render record()}</div>
-		{/if}
-
-		<h2 class="group-h wide">Dig deeper</h2>
-		{#if deeperLead}<div class="wide slot">{@render deeperLead()}</div>{/if}
-
-		<section class="panel wide" id="res-explore" aria-labelledby="exp-h">
-			<div class="panel-head"><h3 id="exp-h">Explore any output</h3></div>
-			<RunChart {projectId} runId={run.id} {refs} {nodeNames} {nodeOrder} {flowUnit} flowToolbar={unitToggle} {band} />
-		</section>
+	{#if record}
+		<h2 class="group-h wide">Record</h2>
+		<div class="wide slot">{@render record()}</div>
 	{/if}
+
+	<h2 class="group-h wide">Dig deeper</h2>
+	{#if deeperLead}<div class="wide slot">{@render deeperLead()}</div>{/if}
+
+	<section class="panel wide" id="res-explore" aria-labelledby="exp-h">
+		<div class="panel-head"><h3 id="exp-h">Explore any output</h3></div>
+		<RunChart {projectId} runId={run.id} {refs} {nodeNames} {nodeOrder} {flowUnit} flowToolbar={unitToggle} {band} />
+	</section>
 </div>
 
 <style>

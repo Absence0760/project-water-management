@@ -1,6 +1,6 @@
 // The observed flow's per-day quality flags on the charts (CR-18 follow-on,
 // engine ≥ 1.48.0, docs/ui.md § Runs and § Data): a run stores the scored
-// record's classes (`observed_flow_quality`), and the Runs hydrograph draws
+// record's classes (`observed_flow_quality`), and the hydrograph on Calibration draws
 // them as strips along the foot of the plot with a text key saying how many
 // days each class holds and what Fit automatically does with them; the Data
 // tab's chart of the record shows the same classes under the current
@@ -18,7 +18,7 @@ test('the hydrograph and the Data tab mark the days above the highest gauging, w
 		qualityFlags: { ratings: { flow_observed_m3s: { gaugedMaxM3s: 0.3, gaugedMinM3s: null, source: 'Synthetic rating table' } } }
 	});
 	const runId = await createRun(page.request, project.id, 'Rated');
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}`);
 	const hydro = page.locator('#res-hydrograph figure').first();
 	await expect(hydro).toHaveAttribute('data-ready', 'true');
 	await expect(hydro).toHaveAttribute('data-lanes', '1');

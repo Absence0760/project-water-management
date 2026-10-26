@@ -1,14 +1,19 @@
 // How far to trust a run, read at the top of its summary: the run's warnings
 // split into what to check before relying on it and notes on how its data
-// were handled, and one line of model checks (self-checks, plausibility,
-// WR2012) each linking to its panel further down. An assessor and a
-// hydrologist both asked for this before the river results. The fit is not
-// one of them: it has no verdict and the NSE card says it (issue #177).
+// were handled, and one line of model checks (self-checks, calibration,
+// plausibility, WR2012) each linking to its panel: the self-checks further
+// down, the rest on the Calibration page, where Model quality moved (issue
+// #586 Round 3). An assessor and a hydrologist both asked for this before the
+// river results. The fit has no verdict of its own (issue #177): its item says
+// the scores and is only toned when the NSE is no better than the mean flow, as
+// the NSE card is (#586 D12).
 import type { RunSummary } from '@water-management/engine';
 import { fmtNum } from '#lib/format/number.js';
 import { checksHeadline } from './checks';
 import { findings } from './plausibility';
 import { FLAG_LABEL } from './wr2012';
+import { volumeBiasText, worseThanMean, WORSE_THAN_MEAN } from '#lib/components/calibration/metrics.js';
+import { calibrationHref } from '#lib/components/calibration/links.js';
 
 /**
  * Warnings that report how the engine handled the input data, as it was set
@@ -49,9 +54,15 @@ export interface CredibilityItem {
 	href: string;
 }
 
-type CredibilityInput = Pick<RunSummary, 'verification' | 'plausibility' | 'wr2012'>;
+type CredibilityInput = Pick<RunSummary, 'verification' | 'plausibility' | 'wr2012'> & {
+	calibration?: Pick<NonNullable<RunSummary['calibration']>, 'days' | 'nse' | 'pbias'> | null;
+};
 
-export function credibility(summary: CredibilityInput): CredibilityItem[] {
+/**
+ * `onCalibration`: a link to a Model quality panel on the Calibration page by its anchor, for the run shown (the
+ * workspace passes calibration/links.ts calibrationHref with the run); without the run by default.
+ */
+export function credibility(summary: CredibilityInput, onCalibration: (anchor: string) => string = (a) => calibrationHref(null, a)): CredibilityItem[] {
 	const out: CredibilityItem[] = [];
 	const v = summary.verification;
 	const head = checksHeadline(v);
@@ -61,6 +72,20 @@ export function credibility(summary: CredibilityInput): CredibilityItem[] {
 		tone: head.tone === 'ok' ? 'ok' : head.tone === 'bad' ? 'bad' : 'none',
 		href: '#res-checks'
 	});
+	const cal = summary.calibration;
+	if (cal && cal.days > 0) {
+		const poor = worseThanMean('nse', cal.nse);
+		// PBIAS is the volume error's negative, as the Summary's volume bias card reads it.
+		const bias = volumeBiasText(cal.pbias == null ? null : -cal.pbias);
+		out.push({
+			label: 'Calibration',
+			text: `NSE ${fmtNum(cal.nse, 2)}${poor ? `, ${WORSE_THAN_MEAN}` : ''}${bias === '–' ? '' : `, volume bias ${bias}`}`,
+			tone: poor ? 'warn' : 'none',
+			href: onCalibration('res-calibration')
+		});
+	} else {
+		out.push({ label: 'Calibration', text: 'not scored: no observed flow in the run', tone: 'none', href: onCalibration('res-calibration') });
+	}
 	if (summary.plausibility) {
 		const f = findings(summary.plausibility);
 		const found = f.filter((x) => x.ok === false).length;
@@ -69,7 +94,7 @@ export function credibility(summary: CredibilityInput): CredibilityItem[] {
 			label: 'Plausibility',
 			text: found ? `${fmtNum(found)} of ${fmtNum(judged)} checks found something` : judged ? `no findings (${fmtNum(judged)} checked)` : 'nothing could be checked',
 			tone: found ? 'warn' : judged ? 'ok' : 'none',
-			href: '#res-plausibility'
+			href: onCalibration('res-plausibility')
 		});
 	}
 	if (summary.wr2012) {
@@ -78,7 +103,7 @@ export function credibility(summary: CredibilityInput): CredibilityItem[] {
 			label: 'WR2012',
 			text: FLAG_LABEL[level],
 			tone: level === 'ok' ? 'ok' : level === 'note' ? 'warn' : 'bad',
-			href: '#res-wr2012'
+			href: onCalibration('res-wr2012')
 		});
 	}
 	return out;

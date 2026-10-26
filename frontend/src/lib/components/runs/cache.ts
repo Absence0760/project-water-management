@@ -5,7 +5,31 @@
 import type { DailySeries } from '@water-management/engine';
 import type { Run, RunSeriesRef } from '#lib/api/types.js';
 
-export const detailCache = new Map<string, { run: Run; series: RunSeriesRef[] }>();
+/** A run's details (GET …/runs/:runId): the run with its summary and settings snapshot, and its stored series. */
+export type RunDetail = { run: Run; series: RunSeriesRef[] };
+
+export const detailCache = new Map<string, RunDetail>();
+
+const detailRequests = new Map<string, Promise<RunDetail>>();
+
+/**
+ * One run's details through the cache, for every page that shows a run (Runs & results, Calibration): a cached
+ * run at once, else one request however many ask while it is out, cached when it arrives (a failure isn't).
+ */
+export function runDetail(runId: string, fetch: () => Promise<RunDetail>): Promise<RunDetail> {
+	const hit = detailCache.get(runId);
+	if (hit) return Promise.resolve(hit);
+	const out = detailRequests.get(runId);
+	if (out) return out;
+	const p = fetch().then(
+		(d) => {
+			detailCache.set(runId, d);
+			return d;
+		}
+	).finally(() => detailRequests.delete(runId));
+	detailRequests.set(runId, p);
+	return p;
+}
 
 const MAX_SERIES = 60;
 const seriesCache = new Map<string, Promise<DailySeries>>();

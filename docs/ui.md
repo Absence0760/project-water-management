@@ -7722,42 +7722,66 @@ is under **Build the model**, after Settings & calibration; it is `core`
 Map's edit tools are). Until issue #586 round 2 `?tab=calibration` was an
 alias that opened Settings at Flow calibration.
 
-**Round 2 is the shell; the panels arrive in Round 3.** For now the page
-has:
+**Round 2 was the shell; Round 3 moves the panels in.** Model quality is
+here (How the shown run fits); the settings panels follow. The page has:
 
 - **Header.** The title (`TAB_LABELS`), the context line "Fit the runoff
   parameters to observed flow, then judge the fit", and the page's Add data
   and Run model. Its guide is *Calibration* (`calibration-page`).
-- **A lead** saying the panels are moving here and, until they arrive, where
-  to set up the fit (Settings & calibration) and read how a run fits (Runs &
-  results), each a link.
+- **A lead** saying the settings panels are moving here and, until they
+  arrive, where to set up the fit (Settings & calibration, a link).
 - **Set up the fit** (`#cal-setup`): links to Flow calibration, Calibration
   record, Fit the parameters and WR2012 check on Settings & calibration
   (`#set-flow`, `#set-record`, `#set-fit`, `#set-wr2012`), named from
   Settings' own section list so they follow a rename, each with a line of
   what it holds, each landing on its heading (Settings' `landOnAnchor`).
-- **How the shown run fits** (`#cal-fit`): the run Runs & results shows (the
-  one picked, `run=`, else its default: the newest, or a viewer's published
-  baseline; `shownRun`), by its label and when it ran, then links to the
-  Model quality panels every run has (Hydrograph, Flow-duration curve,
-  Calibration against observed flow, EWR test: model against observed flow;
-  `page.test.ts` checks they are Runs' headings, in its order), and a line
-  that the rest of Model quality follows them there for the runs that have
-  it. The links keep a picked run (`?tab=runs&run=<id>#res-…`); without a
-  pick they carry none, so Runs & results shows its own default. With no run
-  yet the part says so and links to Runs & results.
+- **How the shown run fits** (`#cal-fit`, `calibration/CalibrationResults.svelte`;
+  issue #586 Round 3): a heading over Model quality's panels (not a panel round
+  them), the page's whole width. First a **run picker**: the run `?run=`
+  names while it is still a run of the project, else Runs & results' default
+  (the newest, or a viewer's published baseline; `page.ts` `shownRun`), so a
+  pick follows the reader between the two pages (the sidebar carries `run=`,
+  `workspace/tabLinks.ts` `RUN_TABS`). A select labelled **Run** with each
+  run named as the other pages' pickers name it (`compare/picker.ts`
+  `runOptionLabel`, newest first, the newest marked *latest*); with one run,
+  its name and no select. Choosing one writes `run=`, one step in history
+  (the hash kept, focus and scroll kept). Beside it the run's dates, when and
+  by whom it ran, its engine, and **Open in Runs & results** for that run.
+  A `run=` naming a run that's gone shows the default, with a note saying so.
+  Then **Model quality** for the run (`runs/ModelQuality.svelte`, [§ Runs &
+  results, Model quality](#runs--results) for its panels), its details
+  fetched through Runs' own cache (`runs/cache.ts` `runDetail`: a run read on
+  either page shows at once on the other, one request however many ask),
+  with the hydrograph's flows prefetched. Another run picked keeps the shown
+  one on screen, `aria-busy`, until its details are in. States: loading the
+  runs (the page's list, or this part's own when the page has none, with
+  **Try again** if that fails), **No run yet** (what the part will show, and
+  **Run the model** for an editor, "An editor can run the model." for a
+  viewer), loading the run, and a failed run with **Try again** (or **Show
+  the newest run** for a run that's gone). A link to a Model quality panel
+  (`#res-plausibility`, the Summary's model checks, an old
+  `?tab=runs#res-…` sent on here) lands once the picked run is shown, focused
+  on the panel's heading (`followAnchors` in CalibrationTab hands it to the
+  part); one this run doesn't have shows the line saying what it needs
+  (`runs/missingPanel.ts`, `#cal-missing`), focused. Each panel keeps the
+  `#res-…` id it had on Runs & results (`runs/modelQuality.ts`
+  `MODEL_QUALITY_ANCHORS`, `modelQualitySections`); Model quality draws its
+  panels after the flow-duration curve at once only for a link to one of
+  them (`isLowerAnchor`, issue #586 R3-B).
 - **Side index** (`SectionNav`, "Calibration sections"): the two parts, by
   their headings; a rail from 80rem of page (1440 px), the bar narrower. A
   loaded `#cal-setup` / `#cal-fit` lands on its heading, focused.
 
-Side by side from 760 px of page, stacked narrower (a container query). The
+Set up the fit is a panel at the top; How the shown run fits takes the
+page's width under it. The
 Calibration row's link carries a run picked on Runs & results
 (`workspace/tabLinks.ts` `RUN_TABS`). An old `?tab=calibration#set-…` link (a
 bookmark, a note's link, from when the tab opened Settings) goes on to that
 panel on Settings, every other parameter kept, replacing the history entry
 (a row of `nav/anchorMoves.ts`); Settings sends a moved one (`#set-feeds`) on again.
-Specs: `calibration-page.spec.ts`, and `settings-layout-pins.spec.ts` for
-the old links.
+Specs: `calibration-page.spec.ts`, `calibration-results.spec.ts` (Model
+quality's panels, anchors, missing-panel lines, the picker, the Summary's
+link), and `settings-layout-pins.spec.ts` for the old links.
 
 ## EWR
 
@@ -8316,15 +8340,13 @@ read it before.
 - **On this page.** The same menu as Settings &
   calibration (`common/SectionNav.svelte`; the "Result sections"
   navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
-  `runs/sections.ts` in groups: Summary, Model quality, Record, Dig deeper),
+  `runs/sections.ts` in groups: Summary with Forecast and Water balance, Record, Dig deeper;
+  Model quality moved to [Calibration](#calibration), issue #586 Round 3),
   each group a list labelled by its name. From 62rem of results (a 1440 px
   window; `RESULTS_RAIL_FROM_REM`) it is a **side index on the right** of the
   results (`railSide="right"`: the runs list is the page's left column),
   every group named over its links, each link named as its panel's heading
-  (**Flow-duration curve**, **Calibration against observed flow**, **Water
-  balance by water year**, **Runoff model: GR4J**, **WR2012 check:
-  <quaternary>**, **EWR test: model against observed flow**, **Plausibility
-  checks**, **Run notes**, **Evidence**, **Reproduction**, **Validation
+  (**Water balance by water year**, **Run notes**, **Evidence**, **Reproduction**, **Validation
   statement**, **Explore any output**), and two last groups for the panels that moved to their own pages
   (issue #17), linked with the run shown: *On EWR* (**Reserve
   rules met, by month**, **Days below the EWR, by month**, **Water
@@ -8336,22 +8358,18 @@ read it before.
   (three at 1280 px until its groups could break across rows; [§ On this page
   menu](#on-this-page-menu)), and on phones is one sideways strip, without the
   other pages' groups (the run header links to both pages). The bar keeps
-  shorter names (`bar`: Flow duration, Calibration, Water balance, Runoff
-  model, Unit rain, WR2012 check, EWR vs observed, Plausibility, Notes &
+  shorter names (`bar`: Water balance, Notes &
   evidence, Validation, Outputs) so it still fits two rows at 1280 px beside
   the runs rail (issue #137); its **Notes & evidence** is one link standing
-  for Run notes, Evidence and Reproduction (`covers`; issue #521). Runoff model only for a GR4J run, Rain for each
-  unit only for a run with rain for each unit (`summary.unitRain`), WR2012
-  check only with a reference, and Plausibility checks only on a run made by
-  engine 0.25.0 or later. The page's `scroll-padding-top` includes the bar's
+  for Run notes, Evidence and Reproduction (`covers`; issue #521). The page's `scroll-padding-top` includes the bar's
   height, so a jumped-to section, or a focused control, clears both the phone
   bar and the menu.
 - **Page order.** The results are grouped by the question they answer
   (`resultGroups` in `runs/sections.ts`; the page repeats each group's name
-  as a quiet heading, `RunCharts.svelte`; Model quality's panels are
-  `ModelQuality.svelte`, which takes the run and reads the rest from it, so the
-  Calibration page can show it next, issue #586), so the panels that are read
-  together sit together:
+  as a quiet heading, `RunCharts.svelte`), so the panels that are read
+  together sit together. Model quality (item 2 below) is described here but
+  shown on the [Calibration](#calibration) page since issue #586 Round 3
+  (`ModelQuality.svelte` takes the run and reads the rest from it):
   1. **Summary**. The run header carries the evidence line and a one-line
      preview of the run's notes (`notesPreview`), each a link to the Record
      group, and, for a run a known engine bug may affect (issue #103), an
@@ -8370,10 +8388,16 @@ read it before.
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
      stretches). Then one line of **model checks** (`credibility`): the
-     self-checks, the plausibility findings and the WR2012 flag, each in words
-     with a coloured edge and a link to its panel (not the calibration fit:
-     it has no verdict and the NSE card below says it, issue #177).
-  2. **Model quality**: the hydrograph with the flow-duration curve under it
+     self-checks, the calibration, the plausibility findings and the WR2012
+     flag, each in words with a coloured edge and a link to its panel: the
+     self-checks below, the rest on Calibration for the run shown
+     (`calibration/links.ts` `calibrationHref`, `?tab=calibration&run=…#res-…`;
+     #586 D12). The calibration item says the NSE and the volume bias in the
+     NSE and volume bias cards' words ("NSE 0.71, volume bias 12.3% too
+     wet"), untoned since the fit has no verdict (issue #177) unless the NSE
+     is no better than the mean flow, as the NSE card flags it; "not scored:
+     no observed flow in the run" without one.
+  2. **Model quality** (on Calibration, under How the shown run fits): the hydrograph with the flow-duration curve under it
      (compared together on every calibration iteration; a run scored at a
      gauge inside the network, engine ≥ 1.41.0, adds under the outlet's
      hydrograph "Flow at &lt;gauge&gt;, the calibration site": that gauge's
@@ -8383,12 +8407,14 @@ read it before.
      below), calibration (its
      *Compared with* and the NSE card name the gauge when scored there; with
      where the parameters came from; under its statistics the **calibration
-     check**, below), the **water balance** by water year
+     check**, below), runoff model, rain for each unit, WR2012 check, EWR vs
+     observed, plausibility checks (Runoff model only for a GR4J run, Rain for
+     each unit only for a run with rain for each unit, WR2012 check only with
+     a reference, Plausibility checks only on a run made by engine 0.25.0 or
+     later). The **water balance** by water year stays on Runs & results,
+     right under the Summary (and the Forecast)
      (`#res-water-balance`, `runs/WaterBalanceTable.svelte`: the table a
      hydrologist hands a client first, its own section since issue #137;
-     not Model quality's own, so Runs & results passes it into
-     `ModelQuality`'s `afterCalibration` snippet and keeps it when Model
-     quality moves to Calibration, issue #586;
      described under [Self-checks](#self-checks); a line under its equation
      links to the EWR page's **Water account** for the same run, the
      catchment's own; it fits its column at 1440 and 1280 rather than scrolling
@@ -8397,8 +8423,7 @@ read it before.
      rain over its runoff coefficient and the balance's residual (m³) over the
      runoff model's (mm); a run with the optional terms, too wide for any
      column, scrolls inside its box with the water year held at its left edge,
-     as on a phone), runoff model, WR2012
-     check, EWR vs observed, plausibility checks.
+     as on a phone).
      The **calibration check** (issue #444, `calibration/CalibrationCheck.svelte`,
      sums in `calibration/calibrationCheck.ts`), inside `#res-calibration`
      under the statistics, where a hydrologist calibrating reads the fit, so it
@@ -8406,9 +8431,8 @@ read it before.
      observed record for (the outlet, then the calibration site), "Calibration
      check at &lt;gauge&gt;: observed, simulated, natural and upstream demand"
      (", with bed losses" after it when it has them),
-     four lines on one axis in the page's flow unit (Runs & results' one
-     m³/s / m³/day switch, shared with the hydrograph inside
-     `ModelQuality`, and with Dig deeper's explorer through its bindable
+     four lines on one axis in the page's flow unit (Model quality's one
+     m³/s / m³/day switch, shared with the hydrograph through its bindable
      `flowUnit`, `runs/FlowUnitSwitch.svelte`; demand converted the same), a log switch and the last 3 years with the
      whole record a click away, none hidden at first. *Natural* is the outlet's
      `natural_flow`, or inside the network the sum of the contributing units'
@@ -8491,19 +8515,19 @@ read it before.
   the run's only ones are other users, listed there). The printable report
   keeps them in the summary.
 
-  Everything after the flow-duration curve (the rest of Model quality,
-  Record, Dig deeper) renders once the hydrograph has drawn and been painted,
-  so the first chart isn't held behind a second of rendering on a busy
-  machine (`runs/ModelQuality.svelte`, whose bindable `settled` lets
-  `RunCharts.svelte` render Record and Dig deeper at the same moment); a link to a panel down there
-  (`#res-notes`, `#res-calibration`) renders them at once, and the page waits
+  On Calibration, everything in Model quality after the flow-duration curve
+  renders once the hydrograph has drawn and been painted, so the first chart
+  isn't held behind a second of rendering on a busy machine
+  (`runs/ModelQuality.svelte`); a link to one of those panels
+  (`#res-calibration`) renders them at once. On both pages a link waits
   for the panel and then its heading (lazy panels too: Forecast, Rain for each
   unit, WR2012; `landOnAnchor`) before landing and focusing it. A link to a
   panel the run doesn't have (`#res-wr2012` on a run without a WR2012
   reference, `#res-gauges`, `#res-forecast`, `#res-runoff`, `#res-unit-rain`,
-  `#res-plausibility`) shows a focused line under the run header saying what
+  `#res-plausibility`) shows a focused line saying what
   the panel needs, with a link to where it is set (`runs/missingPanel.ts`,
-  issue #586); picking another run removes it. The menu names the same groups. The river's panels (Reserve compliance,
+  issue #586): under the run header on Runs & results for `#res-forecast`,
+  above Model quality on Calibration for the rest; picking another run removes it. The menu names the same groups. The river's panels (Reserve compliance,
   EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix,
   the seasonal outlook, the water account) are on EWR and the
   units' (curtailment, assurance of supply, unit detail, the per-unit table)
@@ -8748,8 +8772,8 @@ read it before.
   the first problem (the node's name and date) under a failed one, which engine
   made the run and ran its checks, and the largest daily balance error of any
   unit (column V). Second, the **water balance by water year**
-  (`runs/WaterBalanceTable.svelte`): on Runs & results its own Model quality
-  section (`#res-water-balance`, issue #137), and the self-checks keep only
+  (`runs/WaterBalanceTable.svelte`): on Runs & results its own
+  section under the Summary (`#res-water-balance`, issue #137), and the self-checks keep only
   its closure check: one line, ✓ or ✗ in text, saying the balance closes in
   every water year and over the whole run, or naming the years whose
   residual isn't float noise with their residuals (the first five, then "and

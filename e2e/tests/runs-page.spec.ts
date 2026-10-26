@@ -9,7 +9,7 @@ import { pinClockToProject } from '../support/clock.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { seedRiverProject } from '../support/river.ts';
-import { LONG_LABEL, openRuns, runsList, seedManyRuns } from '../support/runs.ts';
+import { LONG_LABEL, openCalibration, openRuns, runsList, seedManyRuns } from '../support/runs.ts';
 
 const header = (page: import('@playwright/test').Page) => page.getByTestId('section-header');
 
@@ -83,9 +83,9 @@ test('the run header links to the river and hydrological unit pages for its run,
 	await expect(page).toHaveURL(/\?tab=overview$/);
 
 	// A panel still on this page keeps its anchor (positive control).
-	await page.goto(`/projects/${project.id}?tab=runs&run=${first}#res-calibration`);
-	await expect(page).toHaveURL(/tab=runs.*#res-calibration$/);
-	await expect(page.locator('#res-calibration')).toBeInViewport();
+	await page.goto(`/projects/${project.id}?tab=runs&run=${first}#res-water-balance`);
+	await expect(page).toHaveURL(/tab=runs.*#res-water-balance$/);
+	await expect(page.locator('#res-water-balance')).toBeInViewport();
 });
 
 test('the run summary keeps the spaces round its separators, and Explore any output names each series in the unit it is drawn in', async ({ page, owner }) => {
@@ -196,7 +196,7 @@ test('on a phone the page stacks, the runs list folds to its first rows, and the
 	await expectNoViolations(page);
 });
 
-test('at 1024 px the runoff panel stacks its chart under the table, so nothing pokes past the window; side by side at 1440', async ({ page, owner }) => {
+test('on Calibration in a narrow window the runoff panel stacks its chart under the table, so nothing pokes past the window; side by side at 1440', async ({ page, owner }) => {
 	void owner;
 	// Five water years: past three, the stores chart gets Earlier / Later and Last 3 years, the toolbar that
 	// ran 20 px off the window when a viewport query put the chart beside the table in a 465 px panel.
@@ -206,11 +206,14 @@ test('at 1024 px the runoff panel stacks its chart under the table, so nothing p
 	const table = runoff.getByRole('table', { name: 'Where the rain went over the run' });
 	const stores = runoff.locator('figure.chart');
 	for (const [width, height, stacked] of [
-		[1024, 768, true],
+		// On Calibration there is no runs rail beside the panel (it was 465 px at 1024 on Runs & results), so a
+		// narrower window gives the narrow panel: under the 44rem the panel's container query switches at.
+		[900, 768, true],
 		[1440, 960, false]
 	] as const) {
 		await page.setViewportSize({ width, height });
-		await openRuns(page, id);
+		// Model quality, the runoff panel with it, is on Calibration (issue #586 Round 3).
+		await openCalibration(page, id);
 		await runoff.scrollIntoViewIfNeeded();
 		await expect(stores).toHaveAttribute('data-ready', 'true');
 		await expect(stores.getByRole('button', { name: 'Last 3 years' })).toBeVisible();
@@ -281,7 +284,7 @@ test('the validation statement sits in the Record group, folded shut; opened, it
 	await expectNoViolations(page);
 });
 
-test('the hydrograph draws before the groups below it render, and a link to a panel down there still lands on it', async ({ page, owner }) => {
+test('on Calibration, the hydrograph draws before the panels below it render, and a link to a panel down there still lands on it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Runs first paint');
 	const runId = await createRun(page.request, project.id, 'First paint');
@@ -290,17 +293,19 @@ test('the hydrograph draws before the groups below it render, and a link to a pa
 		const w = window as unknown as { __lowerAtChart?: boolean };
 		new MutationObserver(() => {
 			if (w.__lowerAtChart === undefined && document.querySelector('#res-hydrograph figure[data-ready="true"]')) {
-				w.__lowerAtChart = !!document.querySelector('#res-calibration, #res-notes, #res-explore');
+				w.__lowerAtChart = !!document.querySelector('#res-calibration, #res-ewr-agreement, #res-plausibility');
 			}
 		}).observe(document, { subtree: true, childList: true, attributes: true });
 	});
-	await openRuns(page, project.id);
-	await expect(page.locator('#res-explore')).toBeAttached();
+	// Model quality is on Calibration (issue #586 Round 3).
+	await openCalibration(page, project.id);
+	await expect(page.locator('#res-plausibility')).toBeAttached();
 	expect(await page.evaluate(() => (window as unknown as { __lowerAtChart?: boolean }).__lowerAtChart)).toBe(false);
 
-	// A deep link to the Record group renders it at once and scrolls there.
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#res-notes`);
-	await expect(page.locator('#res-notes')).toBeInViewport();
+	// A deep link to a panel down there renders them at once and lands on it.
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}#res-plausibility`);
+	await expect(page.locator('#res-plausibility')).toBeInViewport();
+	await expect(page.locator('#res-plausibility').locator('h2, h3, h4').first()).toBeFocused();
 });
 
 test('the run summary writes figures as they are read: a true minus, proportional figures in the tiles, dates day first', async ({ page, owner }) => {
@@ -403,7 +408,9 @@ test('with no runs, the page is one empty state across its width that says what 
 		await page.goto(`/projects/${project.id}?tab=runs`);
 		const at = `${size.width}`;
 		await expect(runsList(page).getByText('No runs yet. Run the model to see results.')).toBeVisible();
-		await expect(runsList(page)).toContainText("A run's results: flows at the outflow gauge, calibration against observed flow, EWR compliance and each hydrological unit's supply and dam storage.");
+		await expect(runsList(page)).toContainText(
+			"A run's results: its summary and water balance, with the fit to observed flow on Calibration, EWR compliance on EWR and each hydrological unit's supply and dam storage on Hydrological units."
+		);
 		// No second "Results appear here" card beside it (1440) or a screen of it under it (390).
 		await expect(page.getByText(/Results appear here|Pick a run to see its results/)).toHaveCount(0);
 		const card = (await runsList(page).boundingBox())!;
@@ -437,6 +444,8 @@ test('a 15-year run: the water balance by water year fits its column at 1440 and
 	// Float noise reads "< 0.001", never an exponent (#586 D10).
 	const cells = await wrap.locator('td').allTextContents();
 	expect(cells.filter((t) => /\de[-−+]?\d/.test(t))).toEqual([]);
+	// The runoff model, the calibration and the EWR test are on Calibration (Model quality, issue #586 Round 3).
+	await openCalibration(page, id);
 	// The runoff model's parameters by name, rounded as Where the parameters came from rounds them.
 	const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
 	await expect(runoff).toContainText('Production store capacity X1 ');

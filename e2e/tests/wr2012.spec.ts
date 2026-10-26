@@ -90,7 +90,15 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	await page.getByLabel(/^Run label/).fill('With WR2012');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'With WR2012' })).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'WR2012 check' })).toBeVisible();
+	// The same plain-language flag is a run warning.
+	await expect(page.getByRole('status').filter({ hasText: /to check before relying on this run/ })).toContainText('WR2012 naturalised MAR for Z99A');
+	// The Summary's model checks link to the check, in Model quality on Calibration, for this run (issue #586 Round 3).
+	const runId = new URL(page.url()).searchParams.get('run')!;
+	const item = page.getByTestId('credibility').getByRole('link', { name: /^WR2012 / });
+	await expect(item).toHaveAttribute('href', `?tab=calibration&run=${runId}#res-wr2012`);
+	await item.click();
+	await expect(page).toHaveURL(new RegExp(`\\?tab=calibration&run=${runId}#res-wr2012$`));
+	await expect(page.locator('#res-wr2012').getByRole('heading', { name: /^WR2012 check: Z99A/ })).toBeFocused();
 
 	const report = page.getByRole('region', { name: /^WR2012 check: Z99A/ });
 	// The sample network's farms cover 20 km² of the 50 km² quaternary.
@@ -107,8 +115,6 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	await expect(monthly.getByText('dry').first()).toBeVisible();
 	await expect(report.getByText('Monthly pattern correlation')).toBeVisible();
 	await expectNoViolations(page);
-	// The same plain-language flag is a run warning.
-	await expect(page.getByRole('status').filter({ hasText: /to check before relying on this run/ })).toContainText('WR2012 naturalised MAR for Z99A');
 });
 
 test('run comparison lists the WR2012 inputs that changed and compares the ratios', async ({ page, owner }) => {

@@ -140,13 +140,10 @@ test('Settings: at 1280 px every link is on the bar, in at most two rows; at 144
 });
 
 /** Runs & results' bar names (the shorter ones), and the headings the side index says (issue #462). */
-const RUNS_BAR = ['Summary', 'Hydrograph', 'Flow duration', 'Calibration', 'Water balance', 'Runoff model', 'EWR vs observed', 'Plausibility', 'Notes & evidence', 'Validation', 'Publication', 'Self-checks', 'Outputs'];
+// Model quality moved to Calibration (issue #586 Round 3); the water balance stays, after the summary.
+const RUNS_BAR = ['Summary', 'Water balance', 'Notes & evidence', 'Validation', 'Publication', 'Self-checks', 'Outputs'];
 const RUNS_RAIL: [string | null, string[]][] = [
-	[null, ['Summary']],
-	[
-		'Model quality',
-		['Hydrograph', 'Flow-duration curve', 'Calibration against observed flow', 'Water balance by water year', 'Runoff model: GR4J', 'EWR test: model against observed flow', 'Plausibility checks']
-	],
+	[null, ['Summary', 'Water balance by water year']],
 	['Record', ['Run notes', 'Evidence', 'Reproduction', 'Validation statement', 'Publication']],
 	['Dig deeper', ['Self-checks', 'Explore any output']],
 	['On EWR', ['Reserve rules met, by month, on EWR', 'Days below the EWR, by month, on EWR', 'Water account, on EWR']],
@@ -170,7 +167,7 @@ test('Runs & results: at 1280 px every link is on the bar, in at most two rows; 
 	// Wider, a column on the right of the results (the runs list is the left one), each link its panel's heading,
 	// and the panels that moved to EWR and Hydrological units under their pages, for this run.
 	await page.setViewportSize({ width: 1440, height: 960 });
-	await expectRail(menu, RUNS_RAIL, page.locator('#res-calibration'), 'right');
+	await expectRail(menu, RUNS_RAIL, page.locator('#res-water-balance'), 'right');
 	const reserve = menu.getByRole('link', { name: 'Reserve rules met, by month, on EWR' });
 	await expect(reserve).toHaveAttribute('href', `?tab=river&run=${run}#res-reserve`);
 	await expect(menu.getByRole('link', { name: 'Curtailment targets, on Hydrological units' })).toHaveAttribute('href', `?tab=supply&run=${run}#res-curtailment`);
@@ -183,7 +180,7 @@ test('Runs & results: at 1280 px every link is on the bar, in at most two rows; 
 	// Up and Down move between its links, Home and End to its ends.
 	await menu.getByRole('link', { name: 'Summary' }).focus();
 	await page.keyboard.press('ArrowDown');
-	await expect(menu.getByRole('link', { name: 'Hydrograph' })).toBeFocused();
+	await expect(menu.getByRole('link', { name: 'Water balance by water year' })).toBeFocused();
 	await page.keyboard.press('End');
 	await expect(menu.getByRole('link', { name: 'Assurance of supply, on Hydrological units' })).toBeFocused();
 	await expectNoViolations(page, { include: 'nav[aria-label="Result sections"]' });

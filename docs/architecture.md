@@ -441,9 +441,10 @@ on every load; the page takes them over when it mounts. The auth gate is
 unchanged: nothing reads them until `/auth/me` has answered for a signed-in
 user, and when it fails the layout drops them (a signed-out visitor's just
 answer 401 into a promise nobody reads). A client navigation to a catchment
-fetches as before, since the session is already known. Then Runs & results
-renders its lower groups only after the hydrograph is painted
-([ui.md § Runs & results](./ui.md)). Measured 2026-09-27 on a production
+fetches as before, since the session is already known. Then Model quality
+(on the Calibration page since issue #586 Round 3, Runs & results before)
+renders its panels after the flow-duration curve only once the hydrograph is
+painted ([ui.md § Calibration](./ui.md#calibration)). Measured 2026-09-27 on a production
 build, median of 9 loads of an 8-year run, time to the hydrograph's first
 paint: 323 → 268 ms, and 997–1167 → 643–755 ms at 4× CPU throttling.
 `auth.spec.ts` pins the request order and `runs-page.spec.ts` the paint order.

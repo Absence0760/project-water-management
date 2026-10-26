@@ -1,59 +1,19 @@
-// Runs & results' layout as it stands before issue #586 splits it (docs/ui.md
-// § Runs & results; runs/sections.ts): the panels in page order under their
-// group headings, the side index's groups and entries, every #res-* anchor
-// landing on its panel's heading, the run picker (?run=, the default, Back and
-// Forward), and the anchors nav/anchorMoves.ts sends to EWR and Hydrological units.
-// Later rounds move Model quality to a Calibration page; these pins make each
-// move a deliberate edit here rather than a silent loss. runs-page.spec.ts
+// Runs & results' layout (docs/ui.md § Runs & results; runs/sections.ts): the
+// panels in page order under their group headings, the side index's groups and
+// entries, every #res-* anchor landing on its panel's heading, the run picker
+// (?run=, the default, Back and Forward), and the anchors nav/anchorMoves.ts
+// sends to EWR and Hydrological units. Issue #586 Round 3 moved Model quality to
+// the Calibration page (calibration-results.spec.ts pins it there); these pins
+// make each move a deliberate edit here rather than a silent loss. runs-page.spec.ts
 // covers the page's layout and a11y, runs.spec.ts the results themselves.
 // Names and numbers are invented.
-import type { APIRequestContext, Page } from '@playwright/test';
-import { createRun, node, putModel, putSeries, seedRunnableProject, syntheticFlow, updateSettings } from '../support/api.ts';
-import { plantUnitRainSummary } from '../support/db.ts';
-import { API_URL } from '../support/env.ts';
+import type { Page } from '@playwright/test';
+import { createRun, seedRunnableProject } from '../support/api.ts';
+import { seedEveryPanel } from '../support/everyPanel.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openRuns, runsList } from '../support/runs.ts';
 
 const VIEW = { width: 1440, height: 960 };
-
-/**
- * seedRunnableProject with every optional Model quality panel: a gauge inside the network with its own
- * record that the run doesn't score (Flow at gauges, issue #554), a WR2012 reference (an invented
- * quaternary), forecast rain past the record and a forecast run (WP-2.12), and a planted
- * summary.unitRain (Rain for each unit, issue #482; as unit-rain.spec.ts plants it).
- */
-async function seedEveryPanel(request: APIRequestContext, name: string): Promise<{ id: string; runId: string }> {
-	const project = await seedRunnableProject(request, name);
-	const [outlet, upper, lower] = project.model.nodes as { id: string; downstreamNodeId: string | null }[];
-	const weir = node('Upper weir', 'gauge', outlet!.id, 4, { areaKm2: 0, pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
-	upper!.downstreamNodeId = weir.id;
-	await putModel(request, project.id, { ...project.model, nodes: [...project.model.nodes, weir] });
-	await putSeries(request, project.id, { kind: 'flow_observed_m3s', name: 'Upper weir record', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(120) });
-	const list = (await (await request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string; name: string }[];
-	const record = list.find((s) => s.name === 'Upper weir record')!.id;
-	expect((await request.patch(`${API_URL}/projects/${project.id}/series/${record}`, { data: { siteNodeId: weir.id } })).status()).toBe(200);
-	await updateSettings(request, project.id, {
-		wr2012: { reference: { quaternary: 'Z99A', areaKm2: 60, marMm3: 6, monthlyMm3: new Array(12).fill(0.5), periodStart: 1990, periodEnd: 2025, mapMm: null, source: 'Synthetic' } }
-	});
-	// seedRunnableProject records rain 2021-10-01 … 2022-01-28; the forecast follows it.
-	await putSeries(request, project.id, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2022-01-29', values: Array.from({ length: 14 }, (_, i) => (i % 4 === 0 ? 9 : 0)) });
-	const res = await request.post(`${API_URL}/projects/${project.id}/runs`, { data: { label: 'Every panel', forecast: true } });
-	expect(res.status(), await res.text()).toBe(201);
-	const runId = ((await res.json()) as { run: { id: string } }).run.id;
-	const days = { unitGauge: 0, gaugeMap: 0, unitChirps: 0, catchment: 0, forecast: 0, none: 0 };
-	const unit = { areaKm2: 12, gaugeMapClamped: false, chirps: null, petMm: 1200, exchangeMm: 0, storageStartMm: 0, storageEndMm: 0 };
-	await plantUnitRainSummary(runId, {
-		mode: 'perUnit',
-		gaugeMapMm: 640,
-		gaugeMapSource: 'a synthetic gauge record',
-		mapPeriod: { start: '1991-01-01', end: '2020-12-31' },
-		units: [
-			{ ...unit, nodeId: upper!.id, name: 'Upper farm', mapMm: 800, mapSource: 'a synthetic MAP grid', rule: 'gaugeMap', rainKey: 'rain_catchment_mm', factor: 1.25, factorSource: 'gaugeMap', gaugeMapFactor: 1.25, gaugeMapOwnFactor: 1.25, days: { ...days, gaugeMap: 120 }, rainMm: 900, aetMm: 700, flowMm: 150, runoffM3: 1_800_000, runoffCoefficient: 0.167 },
-			{ ...unit, nodeId: lower!.id, name: 'Lower farm', areaKm2: 8, mapMm: null, mapSource: null, rule: 'catchment', rainKey: null, factor: null, factorSource: 'catchment', gaugeMapFactor: null, gaugeMapOwnFactor: null, days: { ...days, catchment: 120 }, rainMm: 700, aetMm: 600, flowMm: 90, runoffM3: 720_000, runoffCoefficient: 0.129 }
-		]
-	});
-	return { id: project.id, runId };
-}
 
 /** The page's group headings and #res-* panels in DOM order: `## group`, then `id: its first heading`. */
 const panelOrder = (page: Page) =>
@@ -70,7 +30,7 @@ const railEntries = (page: Page, runId: string) =>
 		runId
 	);
 
-/** Opens the run and waits for the groups below the flow charts, which render after the hydrograph (RunCharts). */
+/** Opens the run and waits for its last panel. */
 async function openAll(page: Page, projectId: string, runId: string) {
 	await openRuns(page, projectId, `&run=${runId}`);
 	await expect(page.locator('#res-explore')).toBeAttached();
@@ -111,7 +71,7 @@ const RAIL_RECORD_AND_AFTER = [
 	'Assurance of supply↗ → ?tab=supply&run=RUN#res-assurance'
 ];
 
-test('a plain run: its panels in page order under Model quality, Record and Dig deeper, and the side index lists them so', async ({ page, owner }) => {
+test('a plain run: its panels in page order, Record and Dig deeper, and the side index lists them so; Model quality is on Calibration', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize(VIEW);
 	const project = await seedRunnableProject(page.request, 'Pins plain');
@@ -119,28 +79,14 @@ test('a plain run: its panels in page order under Model quality, Record and Dig 
 	await openAll(page, project.id, runId);
 
 	expect(await panelOrder(page)).toEqual([
-		// The opening group has no heading: the run summary (its first heading is the Catchment card's).
+		// The opening group has no heading: the run summary and its water balance by water year.
 		'res-summary: Summary',
-		'## Model quality',
-		'res-hydrograph: Hydrograph',
-		'res-fdc: Flow-duration curve',
-		'res-calibration: Calibration against observed flow',
 		'res-water-balance: Water balance by water year',
-		'res-runoff: Runoff model: GR4J',
-		'res-ewr-agreement: EWR test: model against observed flow',
-		'res-plausibility: Plausibility checks',
 		...RECORD_AND_DEEPER
 	]);
 	expect(await railEntries(page, runId)).toEqual([
 		'Summary → #res-summary',
-		'## Model quality',
-		'Hydrograph → #res-hydrograph',
-		'Flow-duration curve → #res-fdc',
-		'Calibration against observed flow → #res-calibration',
 		'Water balance by water year → #res-water-balance',
-		'Runoff model: GR4J → #res-runoff',
-		'EWR test: model against observed flow → #res-ewr-agreement',
-		'Plausibility checks → #res-plausibility',
 		...RAIL_RECORD_AND_AFTER
 	]);
 	// The other pages' entries name their page to a screen reader.
@@ -149,7 +95,7 @@ test('a plain run: its panels in page order under Model quality, Record and Dig 
 	await expect(rail.getByRole('link', { name: 'Assurance of supply, on Hydrological units', exact: true })).toBeVisible();
 });
 
-test('a run with every optional panel: Forecast beside the Summary, and checks-only gauges, unit rain and WR2012 in Model quality', async ({ page, owner }) => {
+test('a run with every optional panel: Forecast beside the Summary, and none of Model quality’s (on Calibration)', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize(VIEW);
 	const { id, runId } = await seedEveryPanel(page.request, 'Pins every panel');
@@ -158,33 +104,13 @@ test('a run with every optional panel: Forecast beside the Summary, and checks-o
 	expect(await panelOrder(page)).toEqual([
 		'res-summary: Summary',
 		'res-forecast: Forecast',
-		'## Model quality',
-		'res-hydrograph: Hydrograph',
-		'res-fdc: Flow-duration curve',
-		'res-gauges: Flow at gauges in the network (checks only)',
-		'res-calibration: Calibration against observed flow',
 		'res-water-balance: Water balance by water year',
-		'res-runoff: Runoff model: GR4J',
-		'res-unit-rain: Rain for each unit',
-		'res-wr2012: WR2012 check: Z99A',
-		'res-ewr-agreement: EWR test: model against observed flow',
-		'res-plausibility: Plausibility checks',
 		...RECORD_AND_DEEPER
 	]);
 	expect(await railEntries(page, runId)).toEqual([
 		'Summary → #res-summary',
 		'Forecast → #res-forecast',
-		'## Model quality',
-		'Hydrograph → #res-hydrograph',
-		'Flow-duration curve → #res-fdc',
-		'Flow at gauges in the network (checks only) → #res-gauges',
-		'Calibration against observed flow → #res-calibration',
 		'Water balance by water year → #res-water-balance',
-		'Runoff model: GR4J → #res-runoff',
-		'Rain for each unit → #res-unit-rain',
-		'WR2012 check: Z99A → #res-wr2012',
-		'EWR test: model against observed flow → #res-ewr-agreement',
-		'Plausibility checks → #res-plausibility',
 		...RAIL_RECORD_AND_AFTER
 	]);
 
@@ -201,7 +127,7 @@ test('a run with every optional panel: Forecast beside the Summary, and checks-o
 
 test('every #res-* anchor on the page lands on its panel, in view, with the focus on its heading', async ({ page, owner }) => {
 	void owner;
-	test.setTimeout(120_000); // twenty-one fresh page loads
+	test.setTimeout(120_000); // twelve fresh page loads
 	await page.setViewportSize(VIEW);
 	const { id, runId } = await seedEveryPanel(page.request, 'Pins anchors');
 	// Each anchor and the heading it lands on (the panel's first h2–h4; #res-h is the run's own heading).
@@ -209,16 +135,7 @@ test('every #res-* anchor on the page lands on its panel, in view, with the focu
 		['res-h', 'Every panel'],
 		['res-summary', 'Summary'],
 		['res-forecast', 'Forecast'],
-		['res-hydrograph', 'Hydrograph'],
-		['res-fdc', 'Flow-duration curve'],
-		['res-gauges', 'Flow at gauges in the network (checks only)'],
-		['res-calibration', 'Calibration against observed flow'],
 		['res-water-balance', 'Water balance by water year'],
-		['res-runoff', 'Runoff model: GR4J'],
-		['res-unit-rain', 'Rain for each unit'],
-		['res-wr2012', 'WR2012 check: Z99A'],
-		['res-ewr-agreement', 'EWR test: model against observed flow'],
-		['res-plausibility', 'Plausibility checks'],
 		['res-notes', 'Run notes'],
 		['res-evidence', 'Evidence'],
 		['res-reproduce', 'Reproduction'],
@@ -239,12 +156,7 @@ test('every #res-* anchor on the page lands on its panel, in view, with the focu
 		const panel = page.locator(`#${anchor}`);
 		const h = anchor === 'res-h' ? panel : panel.locator('h2, h3, h4').first();
 		await expect(h, anchor).toHaveText(heading);
-		if (anchor === 'res-hydrograph' || anchor === 'res-fdc') {
-			// Shown, word for word the side index's, so the focus ring the link puts on it can be seen (issue #586:
-			// both were visually hidden, which Playwright's toBeVisible still passes).
-			expect(await h.evaluate((e) => !e.closest('.visually-hidden') && e.getBoundingClientRect().width > 1), anchor).toBe(true);
-		}
-		// Lazy panels (Forecast, Rain for each unit, WR2012) included: the page waits for the panel, then its heading (issue #586).
+		// The lazy Forecast panel included: the page waits for the panel, then its heading (issue #586).
 		await expect(h, anchor).toBeFocused();
 		await expectTopInView(panel, anchor);
 	}
@@ -255,13 +167,8 @@ test('a link to a panel this run doesn’t have says what the panel needs, with 
 	await page.setViewportSize(VIEW);
 	const project = await seedRunnableProject(page.request, 'Pins missing panels');
 	const runId = await createRun(page.request, project.id, 'Plain');
-	// A plain run has no WR2012 check, no checks-only gauge, no forecast and no rain for each unit (issue #586).
-	for (const [anchor, needs, href] of [
-		['res-wr2012', 'It needs a WR2012 reference for the catchment', '?tab=settings#set-wr2012'],
-		['res-gauges', 'It needs a flow record at a gauge that is not the calibration site', '?tab=series'],
-		['res-forecast', 'A forecast run needs forecast rain', '?tab=series#data-feeds'],
-		['res-unit-rain', 'It needs Per unit flow generation', '?tab=settings#set-share']
-	] as const) {
+	// A plain run has no forecast (issue #586; Model quality's missing panels are calibration-results.spec.ts's).
+	for (const [anchor, needs, href] of [['res-forecast', 'A forecast run needs forecast rain', '?tab=series#data-feeds']] as const) {
 		await page.goto(`/projects/${project.id}?tab=overview`);
 		await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#${anchor}`);
 		const line = page.getByTestId('missing-panel');
@@ -274,7 +181,7 @@ test('a link to a panel this run doesn’t have says what the panel needs, with 
 	// Another run picked: the line was about the linked run, and goes.
 	const other = await createRun(page.request, project.id, 'Another');
 	await page.goto(`/projects/${project.id}?tab=overview`);
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#res-wr2012`);
+	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#res-forecast`);
 	await expect(page.getByTestId('missing-panel')).toBeVisible();
 	await runsList(page).getByRole('button', { name: /^Another/ }).click();
 	await expect(page).toHaveURL(new RegExp(`run=${other}`));
@@ -289,7 +196,7 @@ test('following a side-index link puts the focus on its panel’s heading, again
 	await openAll(page, project.id, runId);
 	const rail = page.getByRole('navigation', { name: 'Result sections' });
 	for (const [name, anchor] of [
-		['Calibration against observed flow', 'res-calibration'],
+		['Water balance by water year', 'res-water-balance'],
 		['Publication', 'res-publication'],
 		['Explore any output', 'res-explore']
 	] as const) {

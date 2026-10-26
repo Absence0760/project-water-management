@@ -226,7 +226,8 @@ test('a run with rain for each unit lists each unit’s rule and factor, the fal
 		]
 	});
 	await page.setViewportSize({ width: 390, height: 844 });
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	// Model quality is on Calibration (issue #586 Round 3).
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}`);
 	const panel = page.getByTestId('run-unit-rain');
 	await expect(panel.getByRole('heading', { name: 'Rain for each unit' })).toBeVisible();
 	await expect(panel).toContainText('MAP period 1991–2020; rain gauge’s MAP 640 mm (a synthetic gauge record).');
@@ -236,6 +237,7 @@ test('a run with rain for each unit lists each unit’s rule and factor, the fal
 	await expect(rows.first()).toHaveAttribute('data-rule', 'catchment');
 	await expect(rows.nth(1)).toContainText('Catchment gauge × MAP ratio');
 	await expect(rows.nth(1)).toContainText('× 1.25, unit MAP ÷ gauge MAP');
-	await expect(page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Unit rain' })).toHaveAttribute('href', '#res-unit-rain');
+	// Under the anchor Runs & results gave it, so old links still name it.
+	await expect(page.locator('#res-unit-rain').getByTestId('run-unit-rain')).toBeVisible();
 	await expectNoViolations(page, { include: '[data-testid="run-unit-rain"]' });
 });

@@ -27,9 +27,9 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	const gr4j = await createRun(page.request, project.id, 'GR4J run');
 	await plantLegacyRun(await createRun(page.request, project.id, 'Legacy run'));
 
-	await page.goto(`/projects/${project.id}?tab=runs&run=${gr4j}`);
-	await expect(page.getByRole('heading', { level: 2, name: 'GR4J run' })).toBeVisible();
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Plausibility', exact: true }).click();
+	// Model quality is on Calibration (issue #586 Round 3), for the run `run=` names.
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${gr4j}#res-plausibility`);
+	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', gr4j);
 	const panel = page.getByRole('region', { name: /^Plausibility checks/ });
 	await expect(panel.getByText(/^Six checks a reviewing hydrologist makes by hand\..*Dry season: .*, the six months with the lowest mean flow in the gauge record\.$/)).toBeVisible();
 	const results = panel.getByRole('list', { name: 'Check results' });
@@ -99,9 +99,6 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	// store drains, so the low-flow FDC is outside its limit), which the check list and the run's warnings agree with.
 	await expect(panel.getByRole('status').filter({ hasText: 'A signature is outside its limit: see the run’s warnings.' })).toHaveCount(1);
 	await expect(results.getByRole('listitem').filter({ hasText: /^Validation signatures: / })).toHaveText('Validation signatures: see below');
-	// The run's things to check show the first 3 (issue #521): this one is further down the list.
-	await page.getByRole('button', { name: /^Show all \d+ things to check$/ }).click();
-	await expect(page.getByRole('listitem').filter({ hasText: /^Validation signatures \(.*\): on the 1096 scored days of the observed gauge record, / })).toHaveCount(1);
 	const sig = panel.getByRole('table', { name: /^Validation signatures/ });
 	await expect(sig.getByRole('columnheader', { name: 'Provisional limit' })).toBeVisible();
 	await expect(sig.getByRole('row')).toHaveCount(6);
@@ -111,6 +108,11 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	await expect(sig.getByRole('row', { name: /^Skill on held-out recessions / })).toBeVisible();
 	await expect(panel.getByText(/^Held-out recessions: /)).toBeVisible();
 	await expectNoViolations(page);
+
+	// The run's things to check, on its Summary on Runs & results, show the first 3 (issue #521): this one is further down the list.
+	await page.goto(`/projects/${project.id}?tab=runs&run=${gr4j}`);
+	await page.getByRole('button', { name: /^Show all \d+ things to check$/ }).click();
+	await expect(page.getByRole('listitem').filter({ hasText: /^Validation signatures \(.*\): on the 1096 scored days of the observed gauge record, / })).toHaveCount(1);
 });
 
 test('the compare page sets two runs’ recession diagnostics and validation signatures side by side', async ({ page, owner }) => {

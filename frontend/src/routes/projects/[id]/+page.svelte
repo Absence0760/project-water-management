@@ -1034,7 +1034,7 @@
 					</Lazy>
 				{:else if tab === 'calibration'}
 					<Lazy load={LOAD.calibration}>
-						{#snippet children(CalibrationTab)}<CalibrationTab {runs} role={project!.role} />{/snippet}
+						{#snippet children(CalibrationTab)}<CalibrationTab {runs} role={project!.role} {projectId} nodes={editor.model.nodes} {series} projectSettings={project!.settings} />{/snippet}
 					</Lazy>
 				{:else if tab === 'series'}
 					<Lazy load={LOAD.series}>

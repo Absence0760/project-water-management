@@ -3,14 +3,15 @@
 	// Model quality: how well one run fits the record (issue #586). The hydrograph and the flow-duration curve, the
 	// checks-only gauges' flows, calibration with its check and where the parameters came from, the runoff model,
 	// rain for each unit, the WR2012 check, the EWR test against observed flow and the plausibility checks, in that
-	// order, each panel with its `#res-*` id. It takes a run and reads everything else from it (its summary,
-	// settings snapshot, model and input series), so the page that shows it only picks the run: Runs & results
-	// today, in place, and the Calibration page next (issue #586 Round 3, with the run from `?run=`).
-	// The water balance by water year is not Model quality's: it stays on Runs & results (the table handed to a
-	// client), so the page passes it in (`afterCalibration`), drawn after calibration as it has always been.
-	// Each series is fetched once, on demand (see cache.ts).
-	import { untrack, type Snippet } from 'svelte';
+	// order, each panel with its `#res-*` id (modelQuality.ts lists them). It takes a run and reads everything else
+	// from it (its summary, settings snapshot, model and input series), so the page that shows it only picks the
+	// run: the Calibration page, under "How the shown run fits", for the run `?run=` names
+	// (calibration/CalibrationResults.svelte; on Runs & results until issue #586 Round 3). The water balance by
+	// water year is not Model quality's: it stays on Runs & results. Each series is fetched once, on demand (see
+	// cache.ts).
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
+	import { hashId } from '#lib/help/anchor.js';
 	import { FLOW_QUALITY_COLUMN, resolveQualityFlags, runForcingOfSummary, type DailySeries } from '@water-management/engine';
 	import { api, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
 	import { beforeForecast, FDC_RECORDS, fdcPercentileTable, flowDurationCurves, onDaysOf } from '@water-management/engine';
@@ -37,6 +38,7 @@
 	import PlausibilityPanel from './PlausibilityPanel.svelte';
 	import { unitRainOf } from './unitRain';
 	import { stationsOf } from './stationRain';
+	import { isLowerAnchor } from './modelQuality';
 	// The WR2012 report: its own chunk, only a run that has one loads it.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
 	// Rain for each unit (issue #482): its own chunk, only a run that ran per unit loads it.
@@ -52,8 +54,7 @@
 		series = null,
 		projectSettings = null,
 		flowUnit = $bindable('m³/s'),
-		settled = $bindable(false),
-		afterCalibration
+		settled = $bindable(false)
 	}: {
 		projectId: string;
 		/** The run shown (GET …/runs/:runId, with its settings snapshot, model and input series). */
@@ -72,11 +73,9 @@
 		flowUnit?: 'm³/s' | 'm³/day';
 		/**
 		 * True once the panels after the flow-duration curve are on the page (they wait for the hydrograph to be painted,
-		 * or a `#res-*` link to one of them): bind it to render what follows Model quality then too. It never goes back.
+		 * or a link to one of them): bind it to render what follows Model quality then too. It never goes back.
 		 */
 		settled?: boolean;
-		/** Drawn after calibration, before the runoff model: Runs & results' water balance by water year, which isn't Model quality's. */
-		afterCalibration?: Snippet;
 	} = $props();
 
 	const runId = $derived(run.id);
@@ -228,13 +227,15 @@
 	// Model quality, through `settled`) render after the hydrograph has drawn
 	// and been painted: rendered with it, they held the main thread for about a
 	// second on a busy machine before any chart showed. Once shown they stay (a
-	// switch of run keeps them). A link to a panel down there (#res-notes from
-	// the run header, a bookmark) needs it on the page at once, so it shows them
-	// straight away. A hydrograph that failed or has nothing to draw lets them
+	// switch of run keeps them). A link to one of those panels (#res-plausibility
+	// from the Summary's model checks, a bookmark) needs it on the page at once,
+	// so it shows them straight away: only those, by Model quality's own anchors
+	// (modelQuality.ts isLowerAnchor), not any `#res-…` (issue #586 R3-B), so a
+	// link to a part of the page above Model quality doesn't draw it all early. A hydrograph that failed or has nothing to draw lets them
 	// follow too, and so does one whose data is in but that hasn't drawn two
 	// frames on (a chart with no width yet never draws).
 	let hydroReady = $state(false);
-	const lowerLink = $derived(page.url.hash.startsWith('#res-') && !['#res-hydrograph', '#res-fdc'].includes(page.url.hash));
+	const lowerLink = $derived(isLowerAnchor(hashId(page.url.hash)));
 	if (untrack(() => lowerLink)) settled = true;
 	$effect(() => {
 		if (settled) return;
@@ -418,7 +419,6 @@
 					<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
 				{/if}
 			</div>
-			{@render afterCalibration?.()}
 			{#if summary.runoff}
 				<div class="panel" id="res-runoff">
 					<RunoffPanel balance={summary.runoff} {projectId} {runId} {refs} {forecastFrom} />
