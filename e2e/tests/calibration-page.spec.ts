@@ -1,6 +1,6 @@
 // The Calibration page (?tab=calibration, issue #586 round 2): its own sidebar row, one title, its two parts in the
-// side index, and, until round 3 moves the panels in, links that land on each panel's heading where it is today
-// (Settings & calibration, Runs & results), keeping the run picked. Old ?tab=calibration#set- links go on to Settings
+// side index, and, until round 3 moves the settings panels in, links that land on each panel's heading on Settings.
+// How the shown run fits holds Model quality since round 3 (calibration-results.spec.ts), for the run picked. Old ?tab=calibration#set- links go on to Settings
 // (settings-layout-pins.spec.ts pins each). The a11y scans at 1440 and 390 are a11y.spec.ts's. Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -39,12 +39,9 @@ test.describe('1440×960', () => {
 		// Set up the fit: the four panels on Settings, named by their headings, in its order.
 		const setup = page.locator('#cal-setup');
 		await expect(setup.getByRole('link')).toHaveText(['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']);
-		// How the shown run fits: the newest run by default, its Model quality panels on Runs & results.
-		await expect(page.getByTestId('calibration-run')).toContainText('for Newest run (ran ');
-		const fit = page.locator('#cal-fit');
-		await expect(fit.getByRole('link')).toHaveText(['Hydrograph', 'Flow-duration curve', 'Calibration against observed flow', 'EWR test: model against observed flow']);
-		// Without a pick the links carry no run: Runs & results shows its own default.
-		await expect(fit.getByRole('link', { name: 'Hydrograph' })).toHaveAttribute('href', '?tab=runs#res-hydrograph');
+		// How the shown run fits: the newest run by default, with Model quality for it.
+		await expect(page.locator('#cal-fit').getByRole('combobox', { name: 'Run', exact: true }).locator('option:checked')).toHaveText(/^Newest run · /);
+		await expect(page.locator('#res-hydrograph').getByRole('heading', { name: 'Hydrograph' })).toBeVisible();
 
 		// A link lands on its panel's heading there, focused, and Back comes home.
 		await setup.getByRole('link', { name: 'Fit the parameters' }).click();
@@ -54,16 +51,9 @@ test.describe('1440×960', () => {
 		await expect(fitHeading).toBeFocused();
 		await page.goBack();
 		await expect(title(page)).toBeVisible();
-
-		await fit.getByRole('link', { name: 'Flow-duration curve' }).click();
-		// Runs & results opens on its default, the newest run, and writes it into the URL in place (RunsTab).
-		await expect(page).toHaveURL(new RegExp(`\\?tab=runs&run=${newest}#res-fdc$`));
-		const fdc = page.locator('#res-fdc').locator('h2, h3').first();
-		await expect(fdc).toBeInViewport();
-		await expect(fdc).toBeFocused();
 	});
 
-	test('the run picked on Runs & results: the sidebar link carries it, the page names it, and its links keep it', async ({ page, owner }) => {
+	test('the run picked on Runs & results: the sidebar link carries it, and the page shows it', async ({ page, owner }) => {
 		void owner;
 		const p = await seedRunnableProject(page.request, 'Calibration run pick');
 		const older = await createRun(page.request, p.id, 'Older run');
@@ -75,15 +65,12 @@ test.describe('1440×960', () => {
 		await expect(row).toHaveAttribute('href', `?tab=calibration&run=${older}`);
 		await row.click();
 		await expect(title(page)).toBeFocused();
-		await expect(page.getByTestId('calibration-run')).toContainText('for Older run (ran ');
-		const hydro = page.locator('#cal-fit').getByRole('link', { name: 'Hydrograph' });
-		await expect(hydro).toHaveAttribute('href', `?tab=runs&run=${older}#res-hydrograph`);
-		await hydro.click();
-		await expect(page).toHaveURL(new RegExp(`\\?tab=runs&run=${older}#res-hydrograph$`));
+		await expect(page.locator('#cal-fit').getByRole('combobox', { name: 'Run', exact: true }).locator('option:checked')).toHaveText(/^Older run · /);
+		await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', older);
+		// And back: Open in Runs & results keeps it.
+		await page.locator('#cal-fit').getByRole('link', { name: 'Open in Runs & results' }).click();
+		await expect(page).toHaveURL(new RegExp(`\\?tab=runs&run=${older}$`));
 		await expect(page.getByRole('heading', { level: 2, name: 'Older run' })).toBeVisible();
-		const h = page.locator('#res-hydrograph').locator('h2, h3').first();
-		await expect(h).toBeInViewport();
-		await expect(h).toBeFocused();
 	});
 
 	test('a loaded #cal- link lands on its part; an old #set-feeds link goes on through Settings to Data', async ({ page, owner }) => {
@@ -101,15 +88,15 @@ test.describe('1440×960', () => {
 		await expect(page.locator('#data-feeds').locator('h2, h3').first()).toBeFocused();
 	});
 
-	test('no run yet: the second part says so and links to Runs & results', async ({ page, owner }) => {
+	test('no run yet: the second part says what it will show, and an editor gets Run the model', async ({ page, owner }) => {
 		void owner;
 		const p = await createProject(page.request, 'Calibration no run');
 		await page.goto(`/projects/${p.id}?tab=calibration`);
 		await expect(title(page)).toBeVisible();
 		const none = page.getByTestId('calibration-no-run');
-		await expect(none).toHaveText('No run yet. Once the model has run, its fit is on Runs & results, under Model quality.');
-		await expect(none.getByRole('link', { name: 'Runs & results' })).toHaveAttribute('href', '?tab=runs');
-		await expect(page.locator('#cal-fit').getByRole('listitem')).toHaveCount(0);
+		await expect(none).toContainText('No run yet. Once the model has run, this shows how its flows fit the observed record');
+		await expect(none.getByRole('link', { name: 'Run the model' })).toHaveAttribute('href', '?tab=runs');
+		await expect(page.locator('#cal-fit').getByRole('combobox')).toHaveCount(0);
 		// The setup links don't need a run.
 		await expect(page.locator('#cal-setup').getByRole('link')).toHaveCount(4);
 		await expectNoViolations(page);
@@ -127,7 +114,9 @@ test.describe('1440×960', () => {
 		await expect(v.getByLabel('Show model inputs')).not.toBeChecked();
 		await sidebar(v).getByRole('link', { name: 'Calibration', exact: true }).click();
 		await expect(title(v)).toBeFocused();
-		await expect(v.getByTestId('calibration-run')).toContainText('for Baseline');
+		// One run: named, with no picker to choose from.
+		await expect(v.getByTestId('calibration-run')).toContainText('Run Baseline');
+		await expect(v.locator('#cal-fit').getByRole('combobox')).toHaveCount(0);
 		await expect(v.locator('#cal-setup').getByRole('link')).toHaveCount(4);
 		await expect(sectionHeader(v).getByRole('button', { name: 'Add data' })).toHaveCount(0);
 	});
@@ -136,7 +125,7 @@ test.describe('1440×960', () => {
 test.describe('1280×800', () => {
 	test.use({ viewport: { width: 1280, height: 800 } });
 
-	test('the index is the bar above the parts, which sit side by side', async ({ page, owner }) => {
+	test('the index is the bar above the parts; How the shown run fits takes the page’s width, under Set up the fit', async ({ page, owner }) => {
 		void owner;
 		const p = await seedRunnableProject(page.request, 'Calibration 1280');
 		await createRun(page.request, p.id, 'Baseline');
@@ -144,10 +133,9 @@ test.describe('1280×800', () => {
 		await expect(title(page)).toBeVisible();
 		await expect(index(page).getByRole('link')).toHaveText(['Set up the fit', 'How the shown run fits']);
 		await expect(page.locator('nav.rail-nav')).toHaveCount(0);
-		const a = (await page.locator('#cal-setup').boundingBox())!;
-		const b = (await page.locator('#cal-fit').boundingBox())!;
-		expect(Math.abs(a.y - b.y)).toBeLessThanOrEqual(1);
-		expect(b.x).toBeGreaterThan(a.x + a.width);
+		await expectAbove(page.locator('#cal-setup'), page.locator('#cal-fit'));
+		const body = (await page.locator('.cal-page').boundingBox())!;
+		expect((await page.locator('#cal-fit').boundingBox())!.width).toBeGreaterThan(body.width - 2);
 	});
 });
 
