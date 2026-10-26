@@ -69,7 +69,9 @@ const nextPoll = (page: import('@playwright/test').Page) => page.clock.runFor(10
 const triesAgain = (at: number, minutes: number) => {
 	const t = new Date(at + minutes * 60_000);
 	const iso = t.toISOString();
-	const when = iso.slice(0, 10) === new Date(at).toISOString().slice(0, 10) ? iso.slice(11, 16) : `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+	const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+	const day = `${t.getUTCDate()} ${months[t.getUTCMonth()]} ${t.getUTCFullYear()}`;
+	const when = iso.slice(0, 10) === new Date(at).toISOString().slice(0, 10) ? iso.slice(11, 16) : `${day} ${iso.slice(11, 16)}`;
 	return `It tries again after ${when}.`;
 };
 

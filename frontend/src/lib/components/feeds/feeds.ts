@@ -6,7 +6,7 @@ import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, compareSeriesNames, provenanceLabel, same
 import type { Api } from '#lib/api/index.js';
 import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProposal } from '#lib/api/types.js';
 import { ApiError } from '#lib/api/client.js';
-import { fmtDate, fmtDay, fmtNum } from '#lib/format/number.js';
+import { fmtDate, fmtDay, fmtNum, fmtStamp, localIsoDate } from '#lib/format/number.js';
 import { kindLabel } from '#lib/series/kinds.js';
 
 export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws';
@@ -485,8 +485,9 @@ export function nextTryNote(f: Pick<FeedMeta, 'enabled' | 'consecutiveFailures' 
 	if (!f.enabled || f.consecutiveFailures === 0 || !f.actingUser) return null;
 	const at = f.nextAttemptAt ? new Date(f.nextAttemptAt) : null;
 	if (!at || Number.isNaN(at.getTime()) || at.getTime() <= now.getTime()) return 'It is due to try again: the scheduler takes it on its next pass.';
-	const when = fmtDate(at.toISOString(), true);
-	return `It tries again after ${when.slice(0, 10) === fmtDate(now.toISOString()) ? when.slice(11) : when}.`;
+	// Day first, as the app writes days: the time alone today, else "27 Oct 2026 07:59".
+	const when = fmtStamp(at.toISOString());
+	return `It tries again after ${localIsoDate(at) === localIsoDate(now) ? when.slice(-5) : when}.`;
 }
 
 /**

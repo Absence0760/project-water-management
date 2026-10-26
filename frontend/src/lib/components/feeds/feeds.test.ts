@@ -432,14 +432,14 @@ describe('nextTryNote: when a failing feed tries again (issue #586 Round 4)', ()
 	it('says the time on the reader’s day, and the day and time on another (UTC)', () => {
 		process.env.TZ = 'UTC';
 		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T08:14:00Z' }, now)).toBe('It tries again after 08:14.');
-		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-27T07:59:00Z' }, now)).toBe('It tries again after 2026-10-27 07:59.');
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-27T07:59:00Z' }, now)).toBe('It tries again after 27 Oct 2026 07:59.');
 	});
 
 	it('dates it in the reader’s zone, where the day turns over sooner (Pacific/Kiritimati, UTC+14)', () => {
 		process.env.TZ = 'Pacific/Kiritimati';
 		// 08:00 UTC is 22:00 there: 09:13 UTC is 23:13 the same day, 10:13 UTC already tomorrow.
 		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T09:13:00Z' }, now)).toBe('It tries again after 23:13.');
-		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T10:13:00Z' }, now)).toBe('It tries again after 2026-10-27 00:13.');
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T10:13:00Z' }, now)).toBe('It tries again after 27 Oct 2026 00:13.');
 	});
 
 	it('says the next pass takes it once the time has come, or when it was never scheduled', () => {

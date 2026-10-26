@@ -6167,7 +6167,7 @@ editors run one now and read the map's proposals, viewers read.
   (HTTP 403): it may have blocked this server’s address, so the feed waits
   hours before asking again", architecture.md § Data feeds → Throttling),
   followed on a failing feed by when it tries again ("It tries again after
-  10:13." today, "It tries again after 2026-10-27 08:45." on another day, in
+  10:13." today, "It tries again after 27 Oct 2026 08:45." on another day, in
   the reader's clock; "It is due to try again: the scheduler takes it on its
   next pass." once that time has come or it was never scheduled; nothing for
   a feed switched off or with no acting owner): the server's `nextAttemptAt`,
