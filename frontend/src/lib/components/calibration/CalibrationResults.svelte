@@ -22,7 +22,7 @@
 	import { page } from '$app/state';
 	import { api, hasRole, type Role, type RunMeta } from '#lib/api/index.js';
 	import { toEpochDay } from '@water-management/engine';
-	import { fmtDate, fmtDay, fmtNum, fmtWhen } from '#lib/format/number.js';
+	import { fmtDay, fmtNum, fmtWhen } from '#lib/format/number.js';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
 	import { focusAnchor, holdAnchor, landOnAnchor } from '#lib/help/anchor.js';
 	import { runOptionLabel } from '#lib/components/compare/picker.js';
@@ -35,6 +35,8 @@
 	import { isRunGone, runErrorText } from '#lib/components/runs/runList.js';
 	import type { RunSummary } from '@water-management/engine';
 	import { calShown, isCalSubsection, shownRun, type CalShown } from './page';
+	import type { CalState } from './status';
+	import { RetryFocus } from './retryFocus';
 
 	type Land = (id: string) => (() => void) | void;
 
@@ -46,8 +48,10 @@
 		series = null,
 		projectSettings = null,
 		hasRecord = null,
+		changed = [],
 		landing,
-		onshown
+		onshown,
+		onstate
 	}: {
 		projectId: string;
 		/** The page's runs list, newest first: null until it loads, or when it couldn't (this part then loads its own). */
@@ -61,10 +65,14 @@
 		projectSettings?: { calibrationStart?: string | null; calibrationEnd?: string | null } | null;
 		/** The project has an observed or logger flow record a run can be scored against: null while not known. */
 		hasRecord?: boolean | null;
+		/** The form's GR4J parameters that differ from the shown run's (status.ts gr4jChanges), said under the run line. */
+		changed?: readonly string[];
 		/** Called once with this part's landing, for the page's followAnchors to hand a Model quality anchor to. */
 		landing?: (land: Land) => void;
 		/** The run on screen, its summary and the sub-headings it draws (for the page's side index); null for none. */
 		onshown?: (shown: { summary: RunSummary; subs: CalShown } | null) => void;
+		/** What this part shows, for the page's first line (status.ts), with the shown run's GR4J parameters to compare with the form's. */
+		onstate?: (state: CalState, gr4j: Record<string, number | null | undefined> | null) => void;
 	} = $props();
 
 	const canEdit = $derived(hasRole(role, 'editor'));
@@ -152,12 +160,50 @@
 		});
 	});
 	const retry = () => run && loadDetail(run.id);
+
+	// Each Try again takes its alert out of the page: the focus follows the retry (retryFocus.ts, WCAG 2.4.3), onto the
+	// loading line, then the new Try again or the part's heading. The list's is aria-disabled while it loads, never
+	// disabled, which would drop the focus too (ui-playbook § Focus).
+	const listRetry = new RetryFocus();
+	const runRetry = new RetryFocus();
+	let listStatus = $state<HTMLElement>();
+	let listButton = $state<HTMLElement>();
+	let runStatus = $state<HTMLElement>();
+	let runButton = $state<HTMLElement>();
+	$effect(() => {
+		const state = list !== null ? 'loaded' : listError ? 'failed' : 'loading';
+		const [st, bt] = [listStatus, listButton];
+		untrack(() => listRetry.follow(state, st, bt));
+	});
+	$effect(() => {
+		const state = detail ? 'loaded' : detailError ? 'failed' : 'loading';
+		const [st, bt] = [runStatus, runButton];
+		untrack(() => runRetry.follow(state, st, bt));
+	});
 	/** The run picked isn't the one on screen yet: its details are loading. */
 	const busy = $derived(!!detail && !!run && detail.run.id !== run.id);
 	const shownIsPicked = $derived(!!detail && !!run && detail.run.id === run.id);
 	$effect(() => {
 		const d = detail;
 		untrack(() => onshown?.(d ? { summary: d.run.summary, subs: calShown(d.run, d.series) } : null));
+	});
+	// The page's first line (status.ts): the run whose details are on screen, else why there is none yet.
+	$effect(() => {
+		const d = detail;
+		const state: CalState =
+			list === null
+				? listError
+					? { kind: 'error' }
+					: { kind: 'loading' }
+				: !run
+					? { kind: 'none' }
+					: d
+						? { kind: 'run', label: name(d.run), calibration: d.run.summary.calibration }
+						: detailError
+							? { kind: 'error' }
+							: { kind: 'loading' };
+		const gr4j = d && d.run.runoffModel === 'gr4j' ? ((d.run.settings?.gr4j as Record<string, number | null | undefined> | undefined) ?? null) : null;
+		untrack(() => onstate?.(state, gr4j));
 	});
 
 	// Names and order from the current model; nodes deleted since the run fall back to the run's own names.
@@ -234,10 +280,20 @@
 	{#if listError}
 		<div class="alert alert-error" role="alert">
 			Couldn’t load the runs: {listError}
-			<button type="button" class="btn btn-sm" onclick={loadList} disabled={listLoading}>Try again</button>
+			<button
+				type="button"
+				class="btn btn-sm"
+				bind:this={listButton}
+				aria-disabled={listLoading || undefined}
+				onclick={(e) => {
+					if (listLoading) return;
+					listRetry.press(e.currentTarget);
+					void loadList();
+				}}>Try again</button
+			>
 		</div>
 	{:else}
-		<p class="muted" role="status" data-testid="calibration-runs-loading">Loading the runs…</p>
+		<p class="muted retry-line" role="status" tabindex="-1" bind:this={listStatus} data-testid="calibration-runs-loading">Loading the runs…</p>
 	{/if}
 {:else if !run}
 	<!-- The part's one empty state (ui-playbook.md § 2): what to do first. With no record to compare with, a run
@@ -262,7 +318,7 @@
 			{#if list.length > 1}
 				<label class="run-pick" for="cal-run">Run</label>
 				<select id="cal-run" value={run.id} onchange={(e) => choose(e.currentTarget.value)}>
-					{#each list as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>{/each}
+					{#each list as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtWhen(iso), i === 0)}</option>{/each}
 				</select>
 			{:else}
 				<span class="run-pick">Run</span> <strong class="only">{name(run)}</strong>
@@ -270,10 +326,18 @@
 			<a class="btn btn-sm open" href={runHref(run.id)}>Open in Runs &amp; results</a>
 		</div>
 		<p class="muted small run-line">
-			{#if list.length > 1}<span class="whole-name">{name(run)} · </span>{/if}{fmtDay(run.startDate)} – {fmtDay(run.endDate)} ({fmtNum(runDays(run))} days) · ran {fmtWhen(run.createdAt)} by {run.createdBy ??
+			{#if list.length > 1}<span class="whole-name">{name(run)}{' · '}</span>{/if}{fmtDay(run.startDate)} – {fmtDay(run.endDate)} ({fmtNum(runDays(run))} days) · ran {fmtWhen(run.createdAt)} by {run.createdBy ??
 				FORMER_MEMBER} · engine {run.engineVersion}
 		</p>
 	</div>
+	{#if changed.length}
+		<!-- The form's parameters aren't the ones this run used (an edit, saved or not, or a fit applied): its scores are the run's. -->
+		<p class="alert alert-info" role="note" data-testid="calibration-changed">
+			The form’s GR4J parameters differ from the ones this run used ({changed.join(', ')}): the fit below is this run’s. {canEdit
+				? 'Run the model to score the form’s.'
+				: 'An editor can run the model to score the form’s.'}
+		</p>
+	{/if}
 	{#if pickedGone}
 		<p class="alert alert-info" role="note">That run no longer exists (deleted, or removed by the storage cap), so this shows {run.id === list[0]?.id ? 'the newest run' : 'the published run'}.</p>
 	{/if}
@@ -282,7 +346,15 @@
 		<div class="alert alert-error" role="alert">
 			{detailError}
 			{#if !detailGone}
-				<button type="button" class="btn btn-sm" onclick={retry}>Try again</button>
+				<button
+					type="button"
+					class="btn btn-sm"
+					bind:this={runButton}
+					onclick={(e) => {
+						runRetry.press(e.currentTarget);
+						void retry();
+					}}>Try again</button
+				>
 			{:else if list[0] && list[0].id !== run.id}
 				<button type="button" class="btn btn-sm" onclick={() => choose(list[0]!.id)}>Show the newest run</button>
 			{/if}
@@ -299,7 +371,7 @@
 			<ModelQuality {projectId} run={detail.run} refs={detail.series} {nodeNames} {nodeOrder} runs={list} {series} {projectSettings} bind:flowUnit />
 		</div>
 	{:else}
-		<div class="chart-ph" role="status" data-testid="calibration-run-loading">Loading the run…</div>
+		<div class="chart-ph retry-line" role="status" tabindex="-1" bind:this={runStatus} data-testid="calibration-run-loading">Loading the run…</div>
 	{/if}
 {/if}
 
@@ -367,6 +439,10 @@
 		color: var(--text-muted);
 		background: var(--surface-2);
 		border-radius: var(--radius-sm);
+	}
+	/* Focused only by a retry (retryFocus.ts), never by Tab: no ring round the whole line, as LoadState's. */
+	.retry-line:focus {
+		outline: none;
 	}
 	.results[aria-busy='true'] {
 		opacity: 0.7;

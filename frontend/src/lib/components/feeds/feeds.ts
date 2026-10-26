@@ -6,7 +6,7 @@ import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, compareSeriesNames, provenanceLabel, same
 import type { Api } from '#lib/api/index.js';
 import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProposal } from '#lib/api/types.js';
 import { ApiError } from '#lib/api/client.js';
-import { fmtDate, fmtDay, fmtNum } from '#lib/format/number.js';
+import { fmtDate, fmtDay, fmtNum, fmtStamp, localIsoDate } from '#lib/format/number.js';
 import { kindLabel } from '#lib/series/kinds.js';
 
 export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws';
@@ -78,6 +78,12 @@ export interface FeedMeta {
 	replaceFrom: string | null;
 	/** A confirmed replacement being backfilled in its stage: the new record so far. */
 	rebuilding?: { startDate: string; through: string; updatedAt: string } | null;
+	/**
+	 * When the scheduler next takes the feed (backend 243_feed_next_attempt.sql,
+	 * the rule that decides it is due): may be past (due, waiting for the next
+	 * tick). Null: switched off, no acting owner, or never scheduled (due at once).
+	 */
+	nextAttemptAt?: string | null;
 }
 
 /** Why a feed is in its state (backend/src/feeds/health.ts HealthReason); days are YYYY-MM-DD, UTC. */
@@ -463,6 +469,25 @@ export const STATE_LABELS: Record<FeedState, string> = {
 export function describeTimes(f: Pick<FeedMeta, 'lastDataDate' | 'lastAttemptAt'>): string {
 	const data = f.lastDataDate ? `Last data ${fmtDay(f.lastDataDate)}` : 'No data yet';
 	return f.lastAttemptAt ? `${data} · checked ${fmtDate(f.lastAttemptAt, true)}` : `${data} · not checked yet`;
+}
+
+/**
+ * When a failing feed tries again, after its health sentence (issue #586:
+ * "tries again later" said no time): "It tries again after 10:13." today,
+ * "It tries again after 2026-10-27 08:45." on another day (describeTimes'
+ * style, the reader's clock), or, when that time has come or the feed was
+ * never scheduled, that the scheduler's next pass takes it. The time is the
+ * server's (FeedMeta.nextAttemptAt, from the same SQL rule the scheduler
+ * uses), never worked out here. Null for a feed that isn't failing, is
+ * switched off, or has no acting owner (describeRunsAs says so).
+ */
+export function nextTryNote(f: Pick<FeedMeta, 'enabled' | 'consecutiveFailures' | 'actingUser' | 'nextAttemptAt'>, now: Date = new Date()): string | null {
+	if (!f.enabled || f.consecutiveFailures === 0 || !f.actingUser) return null;
+	const at = f.nextAttemptAt ? new Date(f.nextAttemptAt) : null;
+	if (!at || Number.isNaN(at.getTime()) || at.getTime() <= now.getTime()) return 'It is due to try again: the scheduler takes it on its next pass.';
+	// Day first, as the app writes days: the time alone today, else "27 Oct 2026 07:59".
+	const when = fmtStamp(at.toISOString());
+	return `It tries again after ${localIsoDate(at) === localIsoDate(now) ? when.slice(-5) : when}.`;
 }
 
 /**

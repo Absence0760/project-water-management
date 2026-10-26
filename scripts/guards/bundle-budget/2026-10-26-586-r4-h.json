@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Data feeds follow a Run now fetch until it has run (follow.ts) and say when a failing feed tries again; measured 2093 KB after merging R4-A"
+}

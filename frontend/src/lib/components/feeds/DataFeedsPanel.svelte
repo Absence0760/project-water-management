@@ -40,12 +40,14 @@
 		healthMessage,
 		keptNote,
 		needsAttention,
+		nextTryNote,
 		targetHint,
 		separateName,
 		STATE_LABELS,
 		takeoverOf,
 		versionClash
 	} from './feeds';
+	import { createPoller, fetchOutcome, outcomeMessage, STILL_WAITING } from './follow';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -92,32 +94,82 @@
 	const mapOnly = $derived(!!data && data.canRun && !data.canEdit);
 	const sourceLabel = (f: FeedMeta) => data?.sources.find((s) => s.source === f.source)?.label ?? f.source;
 
+	/**
+	 * Fetches queued by Run now that haven't run yet: feed id → its
+	 * lastAttemptAt when the button was pressed (follow.ts fetchOutcome). Every
+	 * list that lands settles them; the poller re-reads the list until none is left.
+	 */
+	const following = new Map<string, string | null>();
+
+	/** Say how each followed fetch that has now run went, in the live region; focus stays where it is. */
+	function settle() {
+		if (!data || following.size === 0) return;
+		const said: string[] = [];
+		for (const [id, before] of following) {
+			const f = data.feeds.find((x) => x.id === id);
+			const outcome = fetchOutcome(before, f);
+			if (outcome === 'waiting') continue;
+			following.delete(id);
+			// Removed or switched off meanwhile: the row (or its absence) says so.
+			if (outcome === 'gone' || !f) continue;
+			said.push(outcomeMessage(outcome, f, healthMessage(f.health), nextTryNote(f)));
+		}
+		if (said.length) message = said.join(' ');
+	}
+
 	// Only the newest list request may land: an older one answering late
-	// (a slow first load, a double press of Refresh) must not overwrite it.
+	// (a slow first load, a double press of Refresh, a poll) must not overwrite it.
 	let seq = 0;
-	/** Re-read the list. Never throws: with a list already shown, a failure keeps it and says so. */
-	async function reload(): Promise<boolean> {
+	/**
+	 * Re-read the list. Never throws: with a list already shown, a failure keeps
+	 * it and says so, unless `quiet` (a background poll, which just tries again).
+	 */
+	async function reload(quiet = false): Promise<boolean> {
 		const mine = ++seq;
 		try {
 			const next = await feeds.list();
 			if (mine !== seq) return false;
 			data = next;
 			loadError = null;
+			settle();
 			return true;
 		} catch (e) {
-			if (mine !== seq) return false;
+			if (mine !== seq || quiet) return false;
 			if (data) error = `Couldn’t refresh the data feeds: ${errorText(e)}`;
 			else loadError = errorText(e);
 			return false;
 		}
 	}
-	onMount(reload);
+
+	// Follows the fetches Run now queued (issue #586 Round 4), never while the page is hidden.
+	const poller = createPoller({
+		poll: async () => {
+			await reload(true);
+			return following.size > 0;
+		},
+		onGiveUp: () => {
+			following.clear();
+			message = STILL_WAITING;
+		},
+		hidden: () => document.hidden
+	});
+
+	onMount(() => {
+		void reload();
+		const onVisibility = () => (document.hidden ? poller.pause() : poller.resume());
+		document.addEventListener('visibilitychange', onVisibility);
+		return () => {
+			document.removeEventListener('visibilitychange', onVisibility);
+			poller.stop();
+		};
+	});
 
 	async function refresh() {
 		if (refreshing) return;
 		message = error = null;
 		refreshing = true;
-		if (await reload()) message = 'Status refreshed.';
+		// A followed fetch that has run says so instead.
+		if ((await reload()) && !message) message = 'Status refreshed.';
 		refreshing = false;
 	}
 
@@ -285,10 +337,14 @@
 			return;
 		busy = f.id;
 		message = error = null;
+		let follow = false;
 		try {
 			if (what === 'run') {
+				const before = f.lastAttemptAt;
 				const r = await feeds.runNow(f.id);
 				message = r.created ? 'Fetch queued. The status below updates once the background worker has run it.' : 'A fetch for this feed is already waiting to run.';
+				following.set(f.id, before);
+				follow = true;
 			} else if (what === 'replace') {
 				await feeds.update(f.id, { replaceSeries: true });
 				message = 'Replacement confirmed: the feed backfills the new record, then replaces the series. Run it now, or wait for the schedule.';
@@ -309,6 +365,7 @@
 		// feed was switched off or removed elsewhere), so show what is there now.
 		await reload();
 		busy = null;
+		if (follow && following.size > 0) poller.start();
 		// A removed feed takes its buttons with it: keep focus in the section.
 		if (what === 'remove' && !data?.feeds.some((x) => x.id === f.id)) heading?.focus();
 	}
@@ -562,7 +619,7 @@
 							<span class="muted">→ {describeTarget(f)}</span>
 						</div>
 						<p class="where muted small">{describePlace(f)}{describeWrites(f)} · {f.schedule}{describeRunsAs(f)}</p>
-						<p class="health">{healthMessage(f.health)}</p>
+						<p class="health">{healthMessage(f.health)}{#if nextTryNote(f)}{' '}{nextTryNote(f)}{/if}</p>
 						{#if conflictMessage(f)}
 							<p class="alert alert-warning version" data-testid="feed-version-conflict">{conflictMessage(f)}</p>
 						{/if}

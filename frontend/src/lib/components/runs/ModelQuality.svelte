@@ -179,6 +179,10 @@
 	// Gauge or logger, and which one the run is scored against (issue #45).
 	const sources = $derived(observedSources(refs));
 	const hydroSeries = $derived(hydrographSeries(catchment, conv, true, sources));
+	// A run with no observed record at the outlet (none in the project, or none read): the titles and the caption say
+	// what is drawn, not "observed" over two lines (issue #586 R4-A).
+	const hasObserved = $derived(!!catchment.observed);
+	const flowsDrawn = $derived(hasObserved ? 'natural, simulated and observed' : 'natural and simulated (no observed record in this run)');
 	const siteSources = $derived(siteId ? observedSources(refs, siteId) : {});
 	const siteSeries = $derived(siteId ? hydrographSeries(site, conv, true, siteSources) : []);
 	const siteName = $derived(siteId ? (nodeNames.get(siteId) ?? 'the calibration site') : '');
@@ -291,7 +295,7 @@
 			<div class="chart-ph" style:height="390px" role="status">Loading flows…</div>
 		{:else}
 			<LineChart
-				title="Flow at the outflow gauge: natural, simulated and observed"
+				title="Flow at the outflow gauge: {flowsDrawn}"
 				toolsLabel="Hydrograph controls"
 				unit={flowUnit}
 				series={hydroSeries}
@@ -307,7 +311,7 @@
 				lanesLabel={LANES_LABEL}
 				lanesNote={lanesLooksNote(outletLanes)}
 				bind:ready={hydroReady}
-				caption="{observedCaption(catchment, sources)} Natural flow starts hidden: click it in the legend to show it."
+				caption="{hasObserved ? `${observedCaption(catchment, sources)} ` : ''}Natural flow starts hidden: click it in the legend to show it."
 			/>
 		{/if}
 		{#if qualityError}
@@ -350,7 +354,7 @@
 			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
 		{:else}
 			<LineChart
-				title="Flow-duration curve at the outflow gauge: natural, simulated and observed"
+				title="Flow-duration curve at the outflow gauge: {flowsDrawn}"
 				toolsLabel="Flow-duration curve controls"
 				unit={flowUnit}
 				height={260}
