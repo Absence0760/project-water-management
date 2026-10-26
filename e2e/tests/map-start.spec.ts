@@ -158,13 +158,15 @@ test('an editor starts an empty model from the map: delineate, the units’ boun
 	await expect(startSheet(page).getByRole('link', { name: 'Rain from the boundary' })).toHaveAttribute('href', '?tab=series&rain=boundary#data-feeds');
 	await expect(startSheet(page).getByRole('link', { name: 'Observed flow' })).toHaveAttribute('href', '?tab=series#data-feeds');
 	// Evaporation is a step of its own: with no A-pan the dams would lose nothing (round 4, persona-hydrologist).
-	await expect(startSheet(page).getByRole('link', { name: 'Evaporation' })).toHaveAttribute('href', '?tab=settings#set-demand');
+	// Model settings' Demand holds the A-pan row; Calibration's Evaporation from the map proposes it (issue #586 split the two).
+	await expect(startSheet(page).getByRole('link', { name: 'Evaporation', exact: true })).toHaveAttribute('href', '?tab=settings#set-demand');
+	await expect(startSheet(page).getByRole('link', { name: 'Evaporation from the map', exact: true })).toHaveAttribute('href', '?tab=calibration#set-evaporation');
 	await expect(startSheet(page).getByTestId('start-run')).toBeVisible();
 	await expect(startSheet(page).getByRole('link', { name: 'Each unit’s composite dam' })).toHaveAttribute('href', '?tab=dams');
 	await expect(page.getByTestId('map-notice')).toContainText('Started the model from the map.');
 
-	// The evaporation link lands on Settings' Demand group, where the A-pan row is, with its heading focused.
-	await startSheet(page).getByRole('link', { name: 'Evaporation' }).click();
+	// The evaporation link lands on Model settings' Demand group, where the A-pan row is, with its heading focused.
+	await startSheet(page).getByRole('link', { name: 'Evaporation', exact: true }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeFocused();
 
 	// The model: the weir, the two units with their boundaries' areas, and the rest.

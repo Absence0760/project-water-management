@@ -89,13 +89,23 @@ test('with the explanations on, Flow generation’s explanation sits on its own 
 	await openSettings(page, project.id);
 	await showExplanations(page);
 	const method = page.getByTestId('flowgen-method');
-	const label = await box(method.locator('label.check').first());
-	const hint = await box(method.locator('.hint.explain'));
-	expect(hint.y).toBeGreaterThanOrEqual(label.y + label.height - 1);
-	expect(Math.abs(hint.x - label.x)).toBeLessThanOrEqual(1);
-	// The two methods side by side on one line.
+	const first = await box(method.locator('label.check').first());
 	const second = await box(method.locator('label.check').nth(1));
-	expect(Math.abs(second.y - label.y)).toBeLessThanOrEqual(1);
+	// The two methods one under the other, each with its plain words beside its name (issue #586 R4-B;
+	// settings-model-layout.spec.ts checks the words themselves).
+	expect(second.y).toBeGreaterThanOrEqual(first.y + first.height - 1);
+	expect(Math.abs(second.x - first.x)).toBeLessThanOrEqual(1);
+	for (const i of [0, 1]) {
+		const name = await box(method.locator('label.check').nth(i));
+		const words = await box(method.getByTestId('flowgen-what').nth(i));
+		expect(words.x).toBeGreaterThanOrEqual(name.x + name.width);
+		expect(Math.abs(words.y + words.height / 2 - (name.y + name.height / 2))).toBeLessThan(6);
+	}
+	// The explanation on its own line under both, lined up with them.
+	const hint = await box(method.locator('.hint.explain'));
+	const lastWords = await box(method.getByTestId('flowgen-what').nth(1));
+	expect(hint.y).toBeGreaterThanOrEqual(Math.max(second.y + second.height, lastWords.y + lastWords.height) - 1);
+	expect(Math.abs(hint.x - first.x)).toBeLessThanOrEqual(1);
 });
 
 test('at 1440×900 the Calibration record opens on the window and the exclusions, with Exclude… in the list’s header row', async ({ page, owner }) => {
