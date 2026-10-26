@@ -39,7 +39,7 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	{
 		id: 'calibration',
 		ready: async (p) => {
-			await expect(p.getByRole('heading', { level: 2, name: 'Flow calibration' })).toBeVisible();
+			await expect(p.getByRole('heading', { level: 3, name: 'Flow calibration' })).toBeVisible();
 			await expect(p.getByTestId('calibration-run')).toBeVisible();
 		}
 	},

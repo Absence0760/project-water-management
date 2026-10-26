@@ -464,7 +464,7 @@ export const PAGE_GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: '[[calibration|Calibration]] is a loop: set the runoff model’s parameters, run the model, compare the modelled flow with the observed record, and adjust. This page brings the two halves of that loop together, so the loop stays on one page. It is under **Build the model**, after **Model settings**, and every member sees it. Its header says where the parameters came from (the fit, its score and whether anything changed since), with **Fit the parameters** to go to that panel.'
+						text: '[[calibration|Calibration]] is a loop: set the runoff model’s parameters, run the model, compare the modelled flow with the observed record, and adjust. This page brings the two halves of that loop together, so the loop stays on one page. It is under **Build the model**, after **Model settings**, and every member sees it. Its header says where the parameters came from (the fit, its score and whether anything changed since), with **Fit the parameters** to go to that panel. The side index lists both halves’ panels: the four that set up the fit, then those of the run shown, with **Calibration check** and **Where the parameters came from** indented under **Calibration against observed flow**.'
 					},
 					{
 						type: 'p',
@@ -472,7 +472,11 @@ export const PAGE_GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**How the shown run fits** links to the Model quality panels on Runs & results (**Hydrograph**, **Flow-duration curve**, **Calibration against observed flow** and **EWR test: model against observed flow**) for the run picked there, or the latest one. With no run yet it says so and links to Runs & results.'
+						text: '**How the shown run fits** shows the Model quality panels for one run: **Hydrograph**, **Flow-duration curve**, **Calibration against observed flow** and **EWR test: model against observed flow**, with **Runoff model**, **WR2012 check** and **Plausibility checks** when the run has them. Pick the run under its heading: it starts on the run picked on Runs & results, or the latest (a viewer’s, the published one), and **Open in Runs & results** goes to that run’s own page. With no observed flow record yet it says to add one on **Data**; with a record but no run, to run the model with **Run model** at the top. Viewers see every result, without the fit controls.'
+					},
+					{
+						type: 'p',
+						text: '**Flow calibration** here is not **Flow generation** on **Model settings**: Flow calibration holds the runoff model’s parameters (how rain becomes flow), Flow generation how the rain reaches each hydrological unit.'
 					}
 				]
 			}

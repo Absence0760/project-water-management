@@ -137,7 +137,7 @@ test('a fit keeps running, and its result waits, while another tab is open', asy
 	await fit.getByRole('button', { name: 'Discard result' }).click();
 	await expect(params).toHaveCount(0);
 	// The button went with the result: the focus is on the card's heading, not lost to the page.
-	await expect(fit.getByRole('heading', { name: /^Fit automatically/, level: 3 })).toBeFocused();
+	await expect(fit.getByRole('heading', { name: /^Fit automatically/, level: 4 })).toBeFocused();
 	await expect(fit.getByTestId('fit-status')).toHaveText('');
 	await expect(fit.getByRole('button', { name: 'Fit automatically', exact: true })).toBeEnabled();
 });

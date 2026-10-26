@@ -9,7 +9,7 @@
 	import { fmtNum } from '#lib/format/number.js';
 	import { agreementFold } from './agreementFold';
 
-	let { agreement, headingLevel = 3, fold = false }: { agreement: ObservedAgreement; headingLevel?: 2 | 3; fold?: boolean } = $props();
+	let { agreement, headingLevel = 3, fold = false }: { agreement: ObservedAgreement; headingLevel?: 2 | 3 | 4; fold?: boolean } = $props();
 
 	const uid = $props.id();
 	const nameA = $derived(cap(OBSERVED_FLOW_LABEL[agreement.a]));
