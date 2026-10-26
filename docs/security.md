@@ -702,7 +702,8 @@ token, a malformed or unknown one, a live invite for another address) is
   (§ Throttles that don't depend on the WAF). The fetcher and renderer
   Lambdas log a failed answer as `feed_fetch_failed` (the feed's and fetch
   job's ids, its source, a reason code and `detail`, which is only the HTTP
-  status or one of the live client's own fixed texts, checked against an
+  status, one of the live client's own fixed texts, or a fixed label we wrote
+  for a server error page or a DWS format check, each checked against an
   allowlist (`failureDetail`): never the stored message, which can name a grid
   cell or a station) and `report_render_failed` (the report and project ids,
   `render`/`store` and `retry`: never the error text or the render token), and
@@ -4505,7 +4506,11 @@ nothing else.
   and the frontend deploy refuses a build without that meta policy
   (`infra/scripts/check-csp.mjs`). This needs `csp.mode = 'hash'` in
   `frontend/vite.config.ts`'s `sveltekit({…})`. Styles keep `'unsafe-inline'`, because Svelte
-  templates and uPlot set inline `style` attributes. CSS injection can't run
+  templates and uPlot set inline `style` attributes, and the prerendered pages
+  (`/welcome`, the legal pages) and the SPA's `index.html` carry the app's CSS
+  in a `<style>` block (`inlineStyleThreshold`, issue #92: linked, its
+  stylesheets blocked the landing's first paint); Kit adds no `style-src` to its
+  `<meta>` policy, since none is configured. CSS injection can't run
   script; Svelte's escaping and the ban on `{@html}` with user data remain the
   first XSS defence.
 - Registration is open to anyone who can reach the site. Registering grants no

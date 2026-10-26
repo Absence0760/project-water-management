@@ -3,7 +3,7 @@
 import type { FarmSummary, OutletEwrInfo } from '@water-management/engine';
 import type { RunSeriesRef } from '#lib/api/types.js';
 
-export const SUPPLY_TARGET = 0.95;
+export { SUPPLY_TARGET } from '#lib/components/network/supplyThresholds.js';
 export const SEC_PER_DAY = 86_400;
 /** m³/day → Mm³ per year (365.25-day year). */
 export const m3DayToMm3a = (v: number) => (v * 365.25) / 1e6;

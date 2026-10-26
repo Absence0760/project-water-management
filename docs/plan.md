@@ -421,8 +421,9 @@ region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 110`, 
 - ✅ **SES production access** (infra/README.md § Operator steps, step 8a):
   requested, then held for more detail; the operator answered on the support
   case 2026-10-05 and AWS granted it 2026-10-06. Mail now reaches any
-  address; sign-up stays invite-only (`signup_open = false`) until the legal
-  go-live gates are met (legal-status.md).
+  address. Sign-up was opened the same day (`signup_open = true`), before
+  the legal go-live gates A and C were met, at the operator's choice
+  (legal-status.md).
 
 ### 6b. Terraform additions (`infra/`)
 

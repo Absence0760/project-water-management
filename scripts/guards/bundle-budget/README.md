@@ -7,7 +7,7 @@ The frontend's total gzipped JS+CSS ceiling (`totalCodeKb`) is
 
 `pnpm check:bundle` prints the sum and fails CI when the build is over it.
 The guard and the other ceilings (largest chunk, tab chunk, workers, asset,
-landing page) are described in `../check_web_bundle_budget.mjs`.
+landing page and its first load) are described in `../check_web_bundle_budget.mjs`.
 
 ## Why entry files
 
@@ -1675,4 +1675,13 @@ ceilings still append here.
             regression; blank maps on iPadOS 16; load/idle never firing
             after a failed tile; terrain camera jumps). Upstream removes the
             empty shared file in its next major, so the split won't return.
+2026-10-25  new ceiling landingFirstLoadKb 120 KB (issue #92, the landing's
+            mobile LCP): welcome.html with its inlined CSS plus every module
+            it preloads, what a phone downloads ahead of the hero render.
+            The landing's what-if imported two supply thresholds through
+            supplyColour.ts, which brought ~43 KB gzip of engine chunks
+            (freshness, dates) onto the page; they now live in a leaf module
+            (network/supplyThresholds.ts). 155 → 115 KB measured locally
+            (HTML 25 KB, 41 modules 90 KB), headroom ~5 KB. Also fails on a
+            stylesheet welcome.html links instead of inlining.
 ```

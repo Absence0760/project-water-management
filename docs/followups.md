@@ -96,7 +96,7 @@ The checklist for these is issue #62; the history scrub is #63.
       outlook on a compare-only run if farmers need one). Rows with
       `current: false` need nothing. Trigger: before the release that ships
       #527 (issue #523's operator list).
-- [ ] **GitHub variables for the background Lambdas (2026-09-25).** The
+- [x] **GitHub variables for the background Lambdas (2026-09-25).** The
       backend release preflight (`deploy-backend.yml`, `REQUIRED_CONFIG`)
       refuses every `backend@` release until these repository variables
       exist: `WORKER_FUNCTION_NAME` (job queue, #10 part 1),
@@ -105,7 +105,9 @@ The checklist for these is issue #62; the history scrub is #63.
       PDFs, #26). They are Terraform outputs (`infra/outputs.tf`), so after
       the AWS bootstrap below, re-run
       `~/github/templates/scripts/export-tf-vars.sh infra/` and check all four
-      appear under the repo's Settings → Variables.
+      appear under the repo's Settings → Variables. — *Done:
+      `export-tf-vars.sh` pushes them, last re-run 2026-10-25 (#571 step
+      13); every `backend@` release since 2026-10-05 passed the preflight.*
 - [x] **`production` environment branch/tag policy and the release-tag
       ruleset (#126, 2026-09-29).** The release preflight now refuses every
       release until the `production` environment deploys only from `main`
@@ -126,7 +128,7 @@ The checklist for these is issue #62; the history scrub is #63.
       tag it printed (`<version>-<sha12>`) and apply again. The image has never been built or run on
       Lambda; smoke-test one render in production and check its alarms
       (details under § Server-side reports).
-- [ ] **Raise the Lambda concurrent-executions quota before the first apply
+- [x] **Raise the Lambda concurrent-executions quota before the first apply
       (2026-09-28, infra audit).** A new account's quota is 10 and AWS keeps
       10 unreserved, so every reserved concurrency fails to apply until it is
       raised, and `-1` (unreserved) is now refused by the variables'
@@ -136,15 +138,21 @@ The checklist for these is issue #62; the history scrub is #63.
       `infra/scripts/preapply-check.sh` (step 7a: the quota, the us-east-1
       state bucket and sops key, the SES endpoint service, the RDS class,
       the CloudTrail trail the KMS key alarm needs) and
-      plan only once it passes.
-- [ ] **After the first apply and first release, run
+      plan only once it passes. — *Done: 1000 in af-south-1, granted
+      2026-10-04 (#571 step 541a); `preapply-check.sh` passed before the
+      first apply and again 2026-10-24.*
+- [x] **After the first apply and first release, run
       `infra/scripts/postapply-check.sh` (#126, 2026-09-29)** and clear
       every FAIL: unconfirmed alert subscriptions, the RDS event
       subscription, the ECR policy, the site's 404s and bucket listing, the
-      Function URL's 403 (infra/README.md § Operator steps, step 8). At the
-      first deploy, before client data, prove RDS events reach the alerts
-      topic with the reboot and `--rds-event-test` (step 10c): the topic
-      policy's `aws:SourceArn` condition can't be proven by a plan.
+      Function URL's 403 (infra/README.md § Operator steps, step 8). —
+      *Done: run 2026-10-05 after the first apply and release, and re-run
+      2026-10-25 after the move to icwbt.jaredhoward.com, all PASS (#571
+      steps 16 and 16b).*
+- [ ] **Prove RDS events reach the alerts topic** before client data, with
+      the reboot and `postapply-check.sh --rds-event-test` (infra/README.md
+      § Operator steps, step 10c): the topic policy's `aws:SourceArn`
+      condition can't be proven by a plan.
 - [ ] **Confirm the database's KMS key before the first apply (#126,
       2026-09-29).** `rds_customer_managed_key` defaults to `true`: a
       customer-managed key (`infra/kms.tf`) that keeps cross-account snapshot
@@ -163,12 +171,14 @@ The checklist for these is issue #62; the history scrub is #63.
       Request production access in the chosen region before any client uses
       email. — *Done 2026-10-06: granted in af-south-1 (support case
       answered 2026-10-05).*
-- [ ] **AWS budget default is now $110** (`infra/variables.tf`
+- [x] **AWS budget default is now $110** (`infra/variables.tf`
       `budget_monthly_usd`; was $60, $80, $90, then $100, #126), sized for af-south-1's ~$77
       idle (list prices re-checked 2026-10-04, deployment-tiers.md), plus a derived $9/day budget (deployment.md § Budget alerts).
-      Set ~85 in tfvars for us-east-1. Cost Anomaly Detection is off by
-      default so the first apply can't fail on an existing monitor: turn it
-      on after the first apply (infra/README.md § Operator steps, step 11).
+      Set ~85 in tfvars for us-east-1. — *Done: production's budgets exist,
+      $110 a month and $9 a day.*
+- [ ] **Turn on Cost Anomaly Detection.** It is off by default so the
+      first apply can't fail on an existing monitor: turn it on now the
+      first apply is done (infra/README.md § Operator steps, step 11).
 - [ ] **Data-feed terms** (operator, roadmap D7): DWS's terms for automated
       fetching and whether the fetcher's region can reach the site (it
       answered our network with HTTP 403, so the DWS parser is untested
@@ -230,11 +240,12 @@ The checklist for these is issue #62; the history scrub is #63.
       `templates/scripts/backfill-prod-environment.sh --apply`, with the
       operator as required reviewer. — *Done: `Absence0760` is the required
       reviewer (checked 2026-09-29).*
-- [ ] **AWS bootstrap:** follow `infra/README.md` steps 1–9a, then
+- [x] **AWS bootstrap:** follow `infra/README.md` steps 1–9a, then
       `export-tf-vars.sh`. Pick the region; the recommendation is af-south-1
       for everything, SES included ([deployment.md § Region
       recommendation](./deployment.md)). The default
       `budget_monthly_usd` (110) is already sized for it; set `dmarc_report_email`.
+      — *Done: af-south-1; production has been live since 2026-10-05.*
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
@@ -3349,6 +3360,12 @@ role and not before it.
         page differs, the feed fails loudly (nothing is written) and
         `sources/dws.ts` plus its fixture change together. Codes that say
         the data is missing (151, 165, 170, 172, 246, 247, 255) become gaps;
+        2026-10-26: the first live fetches (A2H012, a ten-year window) got
+        DWS's ScriptServer error page twice. The feed now treats that page as
+        the source unavailable (retried on the backoff, logged
+        `unavailable` / `ScriptServer error page`) and asks for two years a
+        request; the next live fetch says whether DWS was down or choked on
+        the span;
         the rest are counted: agree with the hydrologist whether flagged flows
         (60 above rating, 150 extrapolated, 173 unreliable…) should be kept.
         Only H (river gauge) codes are accepted, sent as `SiteType=RIV`

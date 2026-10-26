@@ -308,6 +308,16 @@ export default defineConfig({
 			// The sign-in CAPTCHA's two script origins join it when the deploy
 			// sets PUBLIC_WAF_CAPTCHA_SCRIPT_URL (svelte-options.js wafCaptchaOrigins).
 			csp: { mode: 'hash', directives: { 'script-src': ['self', ...wafCaptchaOrigins(process.env.PUBLIC_WAF_CAPTCHA_SCRIPT_URL)] } },
+			// The prerendered pages (/welcome and /welcome/<code>, the legal, methods and data sources pages) carry
+			// their stylesheets in the HTML, one <style>, instead of linking them (issue #92): the landing linked 13
+			// (~15 KB gzip: app.css with the root layout, the landing's chunk, and the CSS of every component the
+			// root layout imports lazily, which Kit links for a server-rendered page so it never shows them
+			// unstyled), and each was a request that blocked the first paint. Every size, so app.css growing can't
+			// quietly put a link back (landing.spec.ts checks there is none). The cost: those pages' HTML is ~15 KB
+			// gzip bigger and not shared from the cache between them; the SPA pages (index.html) and client
+			// navigation still load the CSS files, cached as before. CSP: CloudFront's style-src keeps
+			// 'unsafe-inline' (docs/security.md), and Kit adds no style-src to its <meta> policy (none is configured).
+			inlineStyleThreshold: Infinity,
 			// Kit 3 polls _app/version.json hourly by default; Kit 2 never polled, and nothing here reads
 			// `updated`. It still checks on tab focus and visibility, which Kit 3 can't turn off.
 			version: { pollInterval: 0 }

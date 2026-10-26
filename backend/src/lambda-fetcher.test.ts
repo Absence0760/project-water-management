@@ -209,6 +209,29 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		expect(failureDetail('the fetch failed with an internal error')).toBeNull();
 	});
 
+	// Production, 2026-10-26: {"reason":"format","detail":null} said nothing of why.
+	it('logs DWS’s ScriptServer page as unavailable with a fixed label, and which check a DWS format failure failed', () => {
+		const server = 'the source had a server error (the DWS site answered with its ScriptServer error page instead of data), so the feed tries again later';
+		expect(fetchFailureReason(server)).toBe('unavailable');
+		expect(failureDetail(server)).toBe('ScriptServer error page');
+		// Only that exact sentence: anything else after the prefix isn't ours to trust.
+		expect(failureDetail('the source had a server error (X0H000 said no)')).toBeNull();
+		expect(fetchFailureReason('the source’s data could not be read: the DWS page has no data table')).toBe('format');
+		expect(failureDetail('the source’s data could not be read: the DWS page has no data table')).toBe('no data table');
+		expect(failureDetail('the source’s data could not be read: the DWS table’s columns changed (expected DATE D AVG F/R QUAL, got DATE COR_LEVEL QUAL)')).toBe('columns changed');
+		expect(failureDetail('the source’s data could not be read: the DWS table lists a day twice: 2021-01-01')).toBe('a day listed twice');
+		expect(failureDetail('the source’s data could not be read: the DWS page was not found')).toBe('page not found');
+	});
+
+	it('logs a DWS ScriptServer page end to end: reason unavailable, detail the label', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		httpOverride.next = { range: async () => null, text: async () => '<html><body>Client unable to establish connection to ScriptServerODBC</body></html>' };
+		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'dws', config: { station: 'A2H012' }, start: '2016-10-28', end: '2018-10-27', today: '2026-10-26' } };
+		await handler({ Records: [record('m1', req)] } as never);
+		const failed = warn.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((l) => l.event === 'feed_fetch_failed');
+		expect(failed).toEqual([{ event: 'feed_fetch_failed', feedId: ids.feedId, fetchJobId: ids.fetchJobId, source: 'dws', reason: 'unavailable', detail: 'ScriptServer error page' }]);
+	});
+
 	it('maps each failure message to a fixed reason code', () => {
 		expect(fetchFailureReason('the source is unreachable: it did not answer in time')).toBe('timeout');
 		expect(fetchFailureReason('the fetch request was not valid, so nothing was fetched')).toBe('invalid_request');

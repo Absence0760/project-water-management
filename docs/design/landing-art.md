@@ -24,7 +24,7 @@ running or building the app needs none of it. `bin/gen-landing-art.sh` runs:
 |---|---|---|---|
 | render | Blender 5 (Cycles) | `scripts/landing-art/diorama.py`, which runs the help pictures' scene (`scripts/help-art/catchment.py`) and lights it with that scene's `light()` (the help pictures' dusk rig, which renders their dark-mode set too; the hero hides its cut-face fill and turns the sun into a pale moon) | the hero for day (light mode) and dusk (dark mode); the social card's backdrop; `overlay.json`, where the rivers, dams, clouds, gauge and farms fall in the hero (projected through its camera); `heights.json`, the terrain |
 | render | python3 (stdlib) | `scripts/landing-art/contours.py` | `static/landing/contours.svg`, marching-squares contours of the same terrain |
-| render | ImageMagick 7, avifenc | the renders | `hero-{day,dusk}-{800,1200,1600}.{avif,webp}` (the hero is never wider than ~800 CSS px, so 1600 covers 2× screens and keeps each file under the 100 KB asset ceiling), 24 px blur-up placeholders (inlined) |
+| render | ImageMagick 7, avifenc | the renders | `hero-{day,dusk}-{800,1200,1600}.{avif,webp}` (the hero shows at most ~620 CSS px wide on a desktop, so 1600 covers 2× screens and keeps each file under the 100 KB asset ceiling; on a phone its picture is drawn at 150 % of its box and clipped to the lower valley, and its `sizes` names the box, so a phone fetches the shown part at ~1.3–2× rather than the whole picture at full density: `Diorama.svelte`, issue #92), 24 px blur-up placeholders (inlined) |
 | card | FontForge, ImageMagick | the render's social-card backdrop (`og-dusk.png` in the work folder), `static/fonts/outfit-600.woff2` | `og.jpg`: the dusk backdrop with the app's name (IC-WBT's full name, issue #551) and the headline set in the display font (FontForge makes the TTF ImageMagick needs). Its own step so the words can change without a render: `LANDING_ART_ONLY=card` |
 | vector | Inkscape 1.4 | `scripts/landing-art/vector/*.svg` | the four audience icons and the river divider as plain SVG, every shape a path (their path data goes into the module); the laptop and phone frames at 1× |
 | screens | Playwright | `e2e/art/landing-screens.spec.ts` on the e2e servers, `pnpm seed:examples` data | the Summary (1440 × 900), Network and EWR (River & reserve until issue #558; 1280 × 800) as the demo hydrologist, the farm view (390 × 844) as the demo farmer, light and dark, on a pinned day (below); ImageMagick frames them (the frames' screens are transparent holes, so the screenshot goes under the frame; the phone's camera sits in the bezel, not over the screen, where it covered the farm view's EN button) |
@@ -185,7 +185,9 @@ that contradicts itself.
   in the HTML is blanked when its animation arms (the icons): landing.spec.ts
   checks both.
 - [x] Bundle: the landing is its own chunk (no workspace, no uPlot, no engine),
-  guarded by `scripts/guards/check_web_bundle_budget.mjs`.
+  and everything a first visit loads before its scripts run (the HTML and
+  every preloaded module) has a ceiling of its own (`landingFirstLoadKb`,
+  issue #92), both guarded by `scripts/guards/check_web_bundle_budget.mjs`.
 - [ ] Prototype and operator review: the operator chose to review the built
   page directly rather than a prototype first (2026-09-27).
 - [ ] Lighthouse ≥ 95, LCP < 2 s on throttled 4G, CLS 0: **met locally**; the
@@ -199,15 +201,38 @@ that contradicts itself.
   `/methods` 100 / 100 / 100 / 100, LCP 0.9 s. The LCP element is the hero
   render (load delay 0; the ~0.5 s render delay is the app's scripts booting).
   - **Serve over HTTP/2 when measuring.** The page asks for ~40 small
-    modules and 9 stylesheets; over HTTP/1.1 Lighthouse models six
+    modules (and, until issue #92 inlined them, its stylesheets); over HTTP/1.1 Lighthouse models six
     connections to the origin, which queues them and alone put LCP at
     2.4–2.7 s (the first baseline's figure, and Performance 95–97). A
     self-signed certificate and Chrome's `--ignore-certificate-errors` are
     enough locally.
-  - **Best Practices 96** is the root layout's session check: a signed-out
+  - **Best Practices 96** was the root layout's session check: a signed-out
     `GET /api/auth/me` answers 401, which Chrome logs as a console error.
-    The 401 is the API's contract, so it stays; a stub that answers 200 for
-    `/api/*` scores 100 but doesn't measure the real site.
+    The 401 is the API's contract, so it stays; since issue #92 the landing
+    doesn't ask (it reads nothing of the session), so it scores 100 against
+    the real API.
+  - **Live, 2026-10-25** (Lighthouse 13.5.0 on https://icwbt.jaredhoward.com,
+    issue #92): 96 / 100 / 96 / 100, **LCP 2.71 s**, missing the bar. Its
+    findings, fixed together (issue #92): the hero's `sizes` sent a 412 px
+    phone the 1200 w render; the page linked 13 stylesheets (the root
+    layout's, the landing's, and those of every component the root layout
+    loads lazily, which Kit links on a server-rendered page), each blocking
+    the first paint, now inlined (`inlineStyleThreshold` in
+    `frontend/vite.config.ts`); the 401 above; the EN / AF links' accessible
+    names didn't hold their visible text (WCAG 2.5.3). Measuring it found the
+    largest cause besides: the what-if's two supply thresholds, imported
+    through `supplyColour.ts`, brought ~43 KB gzip of engine chunks onto the
+    page, queued on a phone's link in front of the hero (now a leaf module,
+    `network/supplyThresholds.ts`). **Local measurement, 2026-10-25**
+    (Lighthouse 13.5.0, mobile preset, median of 3, `frontend/build` over
+    HTTP/2 with gzip as above, `/api/*` answering 401 like the signed-out
+    API): before 98 / 100 / 96 / 100, LCP 2.34 s, FCP 1.29 s, 74 requests,
+    305 KB; after **99 / 100 / 100 / 100, LCP 1.96 s**, FCP 1.23 s, CLS 0, 51
+    requests, 238 KB; desktop 100 / 100 / 100 / 100, LCP 0.43 s. The page had
+    grown since the first baseline (161 KB), so LCP is now just under the
+    bar: `pnpm check:bundle`'s `landingFirstLoadKb` (welcome.html with its
+    CSS and every module it preloads, 115 KB against a 120 KB ceiling) keeps
+    a static import from quietly bringing that weight back.
   - Fixed on the way: the LCP element was the 5 % contour texture (a CSS
     mask, above), not the render, which is why preloading the render and
     inlining the stylesheets moved nothing. The first pass also found and

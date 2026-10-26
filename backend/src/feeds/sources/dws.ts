@@ -25,24 +25,46 @@
 //     one row per day, the daily mean flow in m³/s and a DWS quality code
 //     (legend: Verified/HyCodes.aspx); "No data for this period" when there
 //     is none. The clients call the column D_AVG_FR, which is accepted too.
-//     At most 20 years per request. The site can answer HTTP 200 with a
-//     Kisters "ScriptServer" error page instead of data.
+//     At most 20 years per request, the site's limit, which both clients ask
+//     for (daily data in 20-year chunks; point data, many readings a day, in
+//     1-year ones). The feed asks for far less (DWS_WINDOW_DAYS). The site can
+//     answer HTTP 200 with a Kisters "ScriptServer" error page instead of data
+//     (aquascope reads it as the downstream ScriptServer being unavailable).
 //
-// Parsed defensively: no <pre>, a different header, a format block giving the
-// flow in another unit, or a server error page
-// fails the fetch (FeedFormatError) and writes nothing. A row whose value
+// Parsed defensively: no <pre>, a different header, or a format block giving
+// the flow in another unit fails the fetch (FeedFormatError) and writes
+// nothing; each failure's message starts with one of DWS_FORMAT_FAILURES, so
+// the fetcher can log which check failed (dwsFailureLabel). The ScriptServer
+// error page is the site's backend failing, not a changed layout: it fails
+// the fetch as a FeedServerError (unavailable), which the scheduler retries. A row whose value
 // isn't a non-negative number is a gap (null), counted in the result. A gap
 // row can leave the flow column blank and still carry a quality code
 // ("20210102             170"): the code is read by its column, never as a flow.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { DWS_GAP_CODES, DWS_HEADER, DWS_ROW, dwsColumns, dwsTableText, parseDwsRow, stripHtmlComments } from '@water-management/engine/dws';
 import { DWS_RIVER_GAUGE, DWS_RIVER_GAUGE_MESSAGE } from '../config.js';
-import { FeedFormatError } from '../errors.js';
+import { FeedFormatError, FeedServerError } from '../errors.js';
 
 export const DWS_BASE = 'https://www.dws.gov.za/Hydrology/Verified/HyData.aspx';
 
 /** The most one DWS request may span (the site's limit for daily data). */
 export const DWS_MAX_YEARS = 20;
+
+/**
+ * The most days one feed fetch asks DWS for: two years. Production's first
+ * fetch asked for ten (2026-10-26, station A2H012) and got the ScriptServer
+ * error page twice; from outside South Africa we can't tell whether the site
+ * was down or failed on the span, so the feed asks for little at a time, as
+ * the CHIRPS backfill does, and walks a longer history window by window
+ * across fetches (fetch.ts fetchWindow; the ingest queues the next window a
+ * minute later). Two years, not one: a caught-up feed re-reads the year
+ * before its newest day (DWS_REVISION_DAYS, fetch.ts), and verified flow lags
+ * months behind today, so its daily window is one to two years and still
+ * fits one request. It is ~730 rows, a tenth of the 20-year daily chunks the
+ * open-source clients ask for and fewer rows than the one-year chunks they
+ * ask of point data.
+ */
+export const DWS_WINDOW_DAYS = 730;
 
 /**
  * The HyData.aspx SiteType for a station, from its code's third letter. Only
@@ -83,6 +105,34 @@ export interface DwsWindow {
 export { DWS_GAP_CODES };
 
 const SERVER_ERROR = /scriptserver|can't connect to|unable to establish connection/i;
+
+/** What the feed says of the ScriptServer error page (errors.ts FeedServerError), and the fetcher's log label for it. */
+export const DWS_SERVER_ERROR = 'the DWS site answered with its ScriptServer error page instead of data';
+export const DWS_SERVER_ERROR_LABEL = 'ScriptServer error page';
+
+/**
+ * How each DWS format failure's message starts, with the fixed label the
+ * fetcher logs for it (lambda-fetcher.ts failureDetail): the message itself
+ * can quote the page (its header, a date), so it never goes to a log.
+ */
+export const DWS_FORMAT_FAILURES = {
+	notFound: ['the DWS page was not found', 'page not found'],
+	noTable: ['the DWS page has no data table', 'no data table'],
+	noHeader: ['the DWS table has no DATE header', 'no DATE header'],
+	columns: ['the DWS table’s columns changed', 'columns changed'],
+	unit: ['the DWS table’s values are not a daily mean flow in m³/s', 'not a flow in m3/s'],
+	badDate: ['the DWS table has an impossible date', 'impossible date'],
+	twice: ['the DWS table lists a day twice', 'a day listed twice'],
+	tooManyRows: ['the DWS table has more rows than one request can hold', 'too many rows'],
+	tooLong: ['the DWS table spans more days than one request can hold', 'too many days']
+} as const satisfies Record<string, readonly [string, string]>;
+
+/** The log label of a DWS failure's message (a format failure's, after its stored prefix), or null for any other message. */
+export function dwsFailureLabel(message: string): string | null {
+	for (const [start, label] of Object.values(DWS_FORMAT_FAILURES)) if (message === start || message.startsWith(`${start} `) || message.startsWith(`${start}:`)) return label;
+	return null;
+}
+const F = DWS_FORMAT_FAILURES;
 const MAX_ROWS = 20 * 366 + 10;
 /**
  * The daily table's header, spaces collapsed. The site prints "D AVG F/R"
@@ -101,21 +151,21 @@ const DAILY_HEADER = /^DATE (D AVG F\/R|D_AVG_FR) QUAL( |$)/;
 export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 	// A comment is not content: one that mentions <pre> must not be taken for the table.
 	const page = stripHtmlComments(raw);
-	if (SERVER_ERROR.test(page)) throw new FeedFormatError('the DWS site answered with a server error page');
+	if (SERVER_ERROR.test(page)) throw new FeedServerError(DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL);
 	const body = dwsTableText(page);
 	if (body === null) {
 		if (/no data for this period/i.test(page)) return { startDate: null, values: [], quality: {}, rejected: 0, outside: 0 };
-		throw new FeedFormatError('the DWS page has no data table');
+		throw new FeedFormatError(F.noTable[0]);
 	}
 	if (/no data for this period/i.test(body)) return { startDate: null, values: [], quality: {}, rejected: 0, outside: 0 };
 	// Lines keep their leading spaces: a row's columns are read against the header's.
 	const lines = body.split(/\r?\n/).map((l) => l.trimEnd());
 	const h = lines.findIndex((l) => DWS_HEADER.test(l));
-	if (h === -1) throw new FeedFormatError('the DWS table has no DATE header');
+	if (h === -1) throw new FeedFormatError(F.noHeader[0]);
 	const headerLine = lines[h]!.toUpperCase();
 	const header = headerLine.trim().split(/\s+/).join(' ');
 	if (!DAILY_HEADER.test(header)) {
-		throw new FeedFormatError(`the DWS table’s columns changed (expected DATE D AVG F/R QUAL, got ${header.slice(0, 60)})`);
+		throw new FeedFormatError(`${F.columns[0]} (expected DATE D AVG F/R QUAL, got ${header.slice(0, 60)})`);
 	}
 	const cols = dwsColumns(headerLine);
 	// The page states the flow column's unit in its format block ("POS. 10-18 =
@@ -123,7 +173,7 @@ export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 	// a page that says otherwise is refused rather than merged in the wrong unit.
 	const valueSpec = lines.slice(0, h).find((l) => /^\s*POS\.\s*10\s*-\s*18\s*=/i.test(l));
 	if (valueSpec !== undefined && !(/flow rate/i.test(valueSpec) && M3S.test(valueSpec))) {
-		throw new FeedFormatError(`the DWS table’s values are not a daily mean flow in m³/s (${valueSpec.replace(/^\s*POS\.\s*10\s*-\s*18\s*=\s*/i, '').slice(0, 60)})`);
+		throw new FeedFormatError(`${F.unit[0]} (${valueSpec.replace(/^\s*POS\.\s*10\s*-\s*18\s*=\s*/i, '').slice(0, 60)})`);
 	}
 	const from = window ? toEpochDay(window.start) : -Infinity;
 	const to = window ? toEpochDay(window.end) : Infinity;
@@ -135,15 +185,15 @@ export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 	for (const text of lines.slice(h + 1)) {
 		if (!DWS_ROW.test(text.trim())) continue;
 		const row = parseDwsRow(text, cols);
-		if (row.iso === null) throw new FeedFormatError(`the DWS table has an impossible date ${row.date}`);
+		if (row.iso === null) throw new FeedFormatError(`${F.badDate[0]} ${row.date}`);
 		const iso = row.iso;
 		const day = toEpochDay(iso);
 		if (day < from || day > to) {
 			outside++;
 			continue;
 		}
-		if (byDay.has(day)) throw new FeedFormatError(`the DWS table lists ${iso} twice`);
-		if (byDay.size >= MAX_ROWS) throw new FeedFormatError('the DWS table has more rows than one request can hold');
+		if (byDay.has(day)) throw new FeedFormatError(`${F.twice[0]}: ${iso}`);
+		if (byDay.size >= MAX_ROWS) throw new FeedFormatError(F.tooManyRows[0]);
 		// A missing-data code, a blank, text or a negative (-999) value is a gap (parseDwsRow).
 		byDay.set(day, row.value);
 		if (row.gap !== null) rejected++;
@@ -154,7 +204,7 @@ export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 	const first = Math.min(...days);
 	const last = Math.max(...days);
 	// Rows are few, but their dates come from the page: bound the span before allocating it.
-	if (last - first + 1 > MAX_ROWS) throw new FeedFormatError('the DWS table spans more days than one request can hold');
+	if (last - first + 1 > MAX_ROWS) throw new FeedFormatError(F.tooLong[0]);
 	const values = Array.from({ length: last - first + 1 }, (_, i) => byDay.get(first + i) ?? null);
 	return { startDate: fromEpochDay(first), values, quality, rejected, outside };
 }

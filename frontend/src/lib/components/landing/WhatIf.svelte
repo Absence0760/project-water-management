@@ -8,8 +8,8 @@
 	// Compare runs' words: what the change costs the river, and what it gives
 	// the farm.
 	import { t } from '#lib/i18n/locale.svelte.js';
-	import { LOW_SUPPLY } from '#lib/components/network/supplyColour.js';
-	import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
+	// The thresholds alone, not supplyColour.ts: that would bring engine chunks onto the landing (supplyThresholds.ts).
+	import { LOW_SUPPLY, SUPPLY_TARGET } from '#lib/components/network/supplyThresholds.js';
 	import { DATA } from './data.generated';
 	import { fmt, signed } from './format';
 

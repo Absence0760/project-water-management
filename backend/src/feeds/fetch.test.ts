@@ -5,7 +5,7 @@ import { DWS_FIXTURE_LAG_DAYS, dwsFixtureLastDataDay, dwsFixtureValue, FIXTURE_D
 import { writeGrid } from './sources/tiff-write.js';
 import { chirpsFinalUrl, gridMean } from './sources/chirps.js';
 import { bboxCells } from './config.js';
-import { DWS_MAX_YEARS } from './sources/dws.js';
+import { DWS_WINDOW_DAYS } from './sources/dws.js';
 import { FILE_TAG_MAX, type FeedHttp } from './http.js';
 import {
 	CHIRPS_FIRST_DAYS,
@@ -97,12 +97,41 @@ describe('fetchWindow', () => {
 		expect(fetchWindow('chirps_gefs', grid, '2026-10-05', '2026-09-25')).toEqual({ start: '2026-09-25', end: '2026-10-10' });
 	});
 
-	it('DWS: ten years to today at first, then a year of revisions before the newest; never over 20 years at once', () => {
-		expect(fetchWindow('dws', { station: 'X0H000' }, null, '2026-09-25')).toEqual({ start: '2016-09-27', end: '2026-09-25' });
+	it('DWS: ten years back at first, asked for two years at a time; then a year of revisions before the newest', () => {
+		// Production, 2026-10-26: the first fetch asked for all ten years in one request and got the ScriptServer error page.
+		expect(DWS_WINDOW_DAYS).toBe(730);
+		expect(fetchWindow('dws', { station: 'X0H000' }, null, '2026-09-25')).toEqual({ start: '2016-09-27', end: '2018-09-26' });
 		expect(fetchWindow('dws', { station: 'X0H000' }, '2026-06-01', '2026-09-25')).toEqual({ start: '2025-06-01', end: '2026-09-25' });
-		const w = fetchWindow('dws', { station: 'X0H000', startDate: '1980-01-01' }, null, '2026-09-25');
-		// 365 × 20 days, inclusive: inside the site's 20-year limit.
-		expect(w).toEqual({ start: '1980-01-01', end: '1999-12-26' });
+		expect(fetchWindow('dws', { station: 'X0H000', startDate: '1980-01-01' }, null, '2026-09-25')).toEqual({ start: '1980-01-01', end: '1981-12-30' });
+	});
+
+	it('DWS: a backfill moves on a whole window each fetch, and only the window reaching today re-reads the year', () => {
+		const today = '2026-09-25';
+		// Far behind: the day after the newest, no re-read of days just read.
+		expect(fetchWindow('dws', { station: 'X0H000' }, '2023-06-01', today)).toEqual({ start: '2023-06-02', end: '2025-05-31' });
+		// Within a window of today: as much of the year before the newest as still lets the window end today.
+		expect(fetchWindow('dws', { station: 'X0H000' }, '2025-01-01', today)).toEqual({ start: '2024-09-26', end: today });
+		expect(fetchWindow('dws', { station: 'X0H000' }, '2025-10-01', today)).toEqual({ start: '2024-10-01', end: today });
+	});
+
+	it.each(['UTC', 'Pacific/Kiritimati', 'America/St_Johns'])('DWS: walks ten years to today in whole windows, none over the cap (TZ %s)', (zone) => {
+		process.env.TZ = zone;
+		const today = '2026-09-25';
+		let last: string | null = null;
+		let through: string | null = null;
+		const windows: { start: string; end: string }[] = [];
+		while (windows.length < 20) {
+			const w = fetchWindow('dws', { station: 'X0H000' }, last, today, through);
+			windows.push(w);
+			if (w.end === today) break;
+			through = last = w.end; // data on every day
+		}
+		const days = (w: { start: string; end: string }) => Math.round((Date.parse(w.end) - Date.parse(w.start)) / 86_400_000) + 1;
+		expect(windows.at(-1)!.end).toBe(today);
+		expect(windows.every((w) => days(w) <= DWS_WINDOW_DAYS)).toBe(true);
+		// Each window the day after the last, until the one that reaches today.
+		for (let i = 1; i < windows.length - 1; i++) expect(Date.parse(windows[i]!.start) - Date.parse(windows[i - 1]!.end)).toBe(86_400_000);
+		expect(windows).toHaveLength(6);
 	});
 
 	// Issue #29: the newest date is the only other progress marker, so a
@@ -116,21 +145,21 @@ describe('fetchWindow', () => {
 		let last: string | null = null;
 		let through: string | null = null;
 		const windows: { start: string; end: string }[] = [];
-		for (let i = 0; i < 4; i++) {
+		for (let i = 0; i < 40 && windows.at(-1)?.end !== today; i++) {
 			const w = fetchWindow('dws', config, last, today, through);
 			windows.push(w);
 			through = w.end;
 			if (w.end >= '1985-01-01') last = w.end; // data all the way through the window from 1985 on
 		}
-		expect(windows[0]).toEqual({ start: '1960-01-01', end: '1979-12-26' });
-		// The next window starts a revision year before the last day read, not back at 1960.
-		expect(windows[1]).toEqual({ start: '1978-12-27', end: '1998-12-21' });
-		// Then it runs on the data as before: a year of revisions before the newest day.
-		expect(windows[2]!.start).toBe('1997-12-21');
-		expect(windows[3]!.start > windows[2]!.start).toBe(true);
+		expect(windows[0]).toEqual({ start: '1960-01-01', end: '1961-12-30' });
+		// The next window starts the day after the last day read, not back at 1960.
+		expect(windows[1]).toEqual({ start: '1961-12-31', end: '1963-12-30' });
+		// Through the empty years and the data alike, to today.
+		expect(windows.at(-1)!.end).toBe(today);
+		for (let i = 1; i < windows.length; i++) expect(windows[i]!.start > windows[i - 1]!.start).toBe(true);
 
 		// A gap longer than one window: the newest day is from 1990, the last read ended in 2009.
-		expect(fetchWindow('dws', config, '1990-06-30', today, '2009-06-26')).toEqual({ start: '2008-06-27', end: today });
+		expect(fetchWindow('dws', config, '1990-06-30', today, '2009-06-26')).toEqual({ start: '2009-06-27', end: '2011-06-26' });
 		// CHIRPS the same, with its own revision and cap.
 		expect(fetchWindow('chirps', { ...grid, startDate: '2020-01-01' }, null, today, '2020-04-29')).toEqual({ start: '2020-03-11', end: '2020-07-08' });
 	});
@@ -418,6 +447,16 @@ describe('runFetch failures: a result with our message, never a throw or an upst
 		expect(gone).toMatchObject({ ok: false, error: expect.stringMatching(/not found/) });
 	});
 
+	it('a DWS ScriptServer error page: the source had a server error and is retried, not a format failure', async () => {
+		const page = '<html><body>Client unable to establish connection to ScriptServerODBC</body></html>';
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const r = await runFetch({ source: 'dws', config: { station: 'A2H012' }, start: '2016-10-28', end: '2018-10-27', today: '2026-10-26' }, broken({ text: async () => page }));
+		expect(r).toEqual({ ok: false, error: 'the source had a server error (the DWS site answered with its ScriptServer error page instead of data), so the feed tries again later' });
+		// An expected failure: nothing logged as an internal error.
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
+	});
+
 	it('an unexpected error: a generic message, logged in full server-side only', async () => {
 		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const r = await runFetch(
@@ -499,7 +538,10 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 		expect(req('chirps', grid, '2026-01-01', add('2026-01-01', CHIRPS_MAX_DAYS - 1))).toBe(true);
 		expect(req('chirps', grid, '2026-01-01', add('2026-01-01', CHIRPS_MAX_DAYS))).toBe(false);
 		expect(req('chirps', grid, '1981-01-01', '2026-05-31')).toBe(false);
-		expect(req('dws', { station: 'X0H000' }, '2006-06-01', add('2006-06-01', 365 * DWS_MAX_YEARS - 1))).toBe(true);
+		expect(req('dws', { station: 'X0H000' }, '2006-06-01', add('2006-06-01', DWS_WINDOW_DAYS - 1))).toBe(true);
+		// Two years a request: a ten-year window (what production asked for on 2026-10-26) is refused.
+		expect(req('dws', { station: 'X0H000' }, '2006-06-01', add('2006-06-01', DWS_WINDOW_DAYS))).toBe(false);
+		expect(req('dws', { station: 'X0H000' }, '2016-10-28', '2026-10-26')).toBe(false);
 		expect(req('dws', { station: 'X0H000' }, '1906-06-01', '2026-06-01')).toBe(false);
 		// An empty window (a start date configured in the future) is fine: it reads nothing.
 		expect(req('chirps', grid, '2026-07-01', '2026-05-31')).toBe(true);

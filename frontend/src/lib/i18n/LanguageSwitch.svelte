@@ -7,14 +7,18 @@
 	language and marked with its `lang`, so a screen reader says each name
 	right. The choice applies at once, is kept on this device (sign-in pages)
 	and, signed in, saved to the account (PATCH /auth/me { locale }), where the
-	emails read it too. `compact` shows EN | AF for a phone header; the full
-	names stay the accessible names. `segmented` joins the buttons into one
+	emails read it too. `compact` shows EN | AF for a phone header; each
+	accessible name is the code and then the name ("EN English"), so it holds
+	the visible text (WCAG 2.5.3 Label in Name: a voice user says "click EN")
+	and a screen reader still hears the language's name (compactName). `segmented` joins the buttons into one
 	control sized like the form fields around it (the account page), 44 px on
 	touch and phones. `addressOf` makes each language a link to its own
 	address (the landing page, `/welcome` and `/welcome/af`, issue #137),
 	however many languages there are: it works before any script runs, the
 	chosen one is marked `aria-current`, and a click keeps the choice like a
-	button does; the address sets the words.
+	button does; the address sets the words. The landing page never asks for
+	the session (routes/+layout.svelte), so there the choice is kept on this
+	device only.
 
 	Saves to the account go one at a time, across every switch on the page,
 	and only the latest choice's answer is kept: two quick choices (Afrikaans,
@@ -41,6 +45,9 @@
 		addressOf
 	}: { compact?: boolean; segmented?: boolean; addressOf?: (locale: Locale) => string } = $props();
 	let failed = $state(false);
+
+	/** The compact pair's accessible name: the visible code first, then the name ("EN English"). */
+	const compactName = (l: { code: string; name: string }) => (compact ? `${l.code.toUpperCase()} ${l.name}` : undefined);
 
 	/** Past two languages a row of buttons gets long on a phone: a <select> instead. */
 	const asList = LANGUAGES.length > 2;
@@ -82,7 +89,7 @@
 				hreflang={l.code}
 				lang={l.code}
 				aria-current={i18n.locale === l.code ? 'true' : undefined}
-				aria-label={compact ? l.name : undefined}
+				aria-label={compactName(l)}
 				onclick={() => void keep(l.code)}
 			>
 				{compact ? l.code.toUpperCase() : l.name}
@@ -109,7 +116,7 @@
 {:else}
 	<div class="lang" class:compact class:segmented role="group" aria-label={t('Language')}>
 		{#each LANGUAGES as l (l.code)}
-			<button type="button" lang={l.code} aria-pressed={i18n.locale === l.code} aria-label={compact ? l.name : undefined} onclick={() => choose(l.code)}>
+			<button type="button" lang={l.code} aria-pressed={i18n.locale === l.code} aria-label={compactName(l)} onclick={() => choose(l.code)}>
 				{compact ? l.code.toUpperCase() : l.name}
 			</button>
 		{/each}
