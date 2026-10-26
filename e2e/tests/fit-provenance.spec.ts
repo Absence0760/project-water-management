@@ -29,7 +29,7 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Fit provenance');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await expect(fit.getByLabel('Seed')).toHaveValue('1');
 
@@ -53,6 +53,11 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	await page.getByLabel(/^Run label/).fill('Fitted');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Fitted' })).toBeVisible();
+	// The Summary's scores are in-sample too (issue #45).
+	await expect(page.getByRole('region', { name: 'Summary', exact: true }).getByText('calibration period (in-sample)', { exact: true })).toHaveCount(2);
+	// Where the parameters came from is in Model quality, on Calibration (issue #586 Round 3): the newest run by default.
+	await page.goto(`/projects/${project.id}?tab=calibration#res-calibration`);
+	await expect(page.getByTestId('calibration-run')).toContainText('Fitted');
 	const prov = page.getByRole('region', { name: /^Where the parameters came from/ });
 	await expect(prov).toContainText(/GR4J fit of \d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2} UTC/);
 	await expect(definition(prov, 'Seed')).toHaveText('7');
@@ -70,14 +75,13 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	// The run's own scores are in-sample: its parameters were fitted on these days (issue #45).
 	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
 	await expect(calibration.getByText('Calibration period (in-sample).', { exact: true })).toBeVisible();
-	await expect(page.getByRole('region', { name: 'Run summary' }).getByText('calibration period (in-sample)', { exact: true })).toHaveCount(2);
 });
 
 test('editing a fitted parameter by hand marks the fit record as edited: in the form, once saved, on the run and in run comparison', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Fit edited');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await fitAndApply(page, { seed: '3', validate: false });
 
 	const record = page.getByRole('region', { name: /^Fit record of these parameters/ });
@@ -98,8 +102,8 @@ test('editing a fitted parameter by hand marks the fit record as edited: in the 
 	await expect(page.getByRole('region', { name: /^Fit record of these parameters/ }).getByText('Parameters edited since fit')).toBeVisible();
 
 	const tunedRun = await createRun(page.request, project.id, 'Hand-tuned');
-	await page.goto(`/projects/${project.id}?tab=runs`);
-	await expect(page.getByRole('heading', { level: 2, name: 'Hand-tuned' })).toBeVisible();
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${tunedRun}#res-calibration`);
+	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', tunedRun);
 	const prov = page.getByRole('region', { name: /^Where the parameters came from/ });
 	await expect(prov.getByText('Parameters edited since fit')).toBeVisible();
 	// Hand-edited parameters: the run's scores are no longer in-sample (issue #45).
@@ -124,7 +128,7 @@ test('a calibration exclusion needs a reason, and shows in Inputs that differ an
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Exclusions');
 	const before = await createRun(page.request, project.id, 'Before');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const excl = page.getByRole('group', { name: /^Calibration exclusions/ });
 	await expect(excl.getByText('None: every observed day in the calibration window is scored.')).toBeVisible();
@@ -134,7 +138,7 @@ test('a calibration exclusion needs a reason, and shows in Inputs that differ an
 	await expect(saveChanges(page)).toBeDisabled();
 	await excl.getByLabel(/^Water year/).fill('2021');
 	await excl.getByLabel(/^Water year/).press('Tab');
-	await expect(excl.getByText('WY 2021/22: 2021-10-01 – 2022-09-30')).toBeVisible();
+	await expect(excl.getByText('WY 2021/22: 1 Oct 2021 – 30 Sep 2022')).toBeVisible();
 	await excl.getByLabel('Reason').fill('Rain gauge moved');
 	await expect(excl.getByRole('alert')).toHaveCount(0);
 	await saveSettings(page);
@@ -145,11 +149,11 @@ test('a calibration exclusion needs a reason, and shows in Inputs that differ an
 	await page.goto(`/compare?a=${project.id}:${before}&b=${project.id}:${after}`);
 	await expect(whatChanged(page).getByText('Calibration exclusion WY 2021/22 added: “Rain gauge moved”')).toBeVisible();
 
-	await page.goto(`/projects/${project.id}?tab=runs&run=${after}`);
-	await expect(page.getByRole('heading', { level: 2, name: 'After' })).toBeVisible();
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${after}#res-calibration`);
+	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', after);
 	// The whole 120-day record falls in the excluded water year.
 	await expect(page.getByRole('region', { name: 'Calibration against observed flow' })).toContainText(
-		'Every observed day inside the calibration window falls in a calibration exclusion (2021-10-01 – 2022-09-30: Rain gauge moved)'
+		'Every observed day inside the calibration window falls in a calibration exclusion (1 Oct 2021 – 30 Sep 2022: Rain gauge moved)'
 	);
 	await expect(page.getByRole('region', { name: /^Where the parameters came from/ })).toContainText(
 		'This run’s calibration statistics leave out WY 2021/22 (Rain gauge moved).'

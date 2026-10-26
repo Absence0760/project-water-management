@@ -11,7 +11,7 @@ test('fitting GR4J fills the form, and only Save stores it', async ({ page, owne
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Auto-calibration');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await expect(fit.getByLabel('Objective')).toHaveValue('kgePrime');
@@ -67,7 +67,7 @@ test('turning groundwater exchange on offers X2 without resetting the other tick
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Auto-calibration ticks');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	// Only a gauge record: nothing else to validate against, so no choice is offered.
 	await expect(fit.getByLabel('Also validate against')).toHaveCount(0);
@@ -84,7 +84,7 @@ test('a fit can be cancelled, leaving the form untouched', async ({ page, owner 
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Auto-calibration cancel');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('10000');
@@ -101,7 +101,7 @@ test('a fit keeps running, and its result waits, while another tab is open', asy
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Auto-calibration tab change');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const tabs = page.getByRole('navigation', { name: 'Project sections' });
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await openFold(fit, 'fit-search');
@@ -113,10 +113,15 @@ test('a fit keeps running, and its result waits, while another tab is open', asy
 	// Off to another tab mid-fit and back: the choices are kept, and the result is there.
 	await tabs.getByRole('link', { name: 'Network', exact: true }).click();
 	await expect(fit).toHaveCount(0);
-	await tabs.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await tabs.getByRole('link', { name: 'Calibration', exact: true }).click();
 	await expect(fit.getByLabel('Starts')).toHaveValue('2');
 	const params = fit.getByRole('table', { name: 'Parameters', exact: true });
 	await expect(params).toBeVisible();
+	// One status line says the fit finished; the result itself isn't a live region, read out whole (issue #586, C18).
+	await expect(fit.getByTestId('fit-status')).toHaveText(/^Fit finished: .+, \d[\d\u202f ]* runs\. The result is below\.$/);
+	await expect(fit.locator('.result[aria-live]')).toHaveCount(0);
+	// Apply and Discard are the result's action row.
+	await expect(fit.getByTestId('fit-result-actions')).toHaveClass(/\baction-row\b/);
 
 	// Leaving the project with the result unapplied asks first.
 	const projectsLink = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' });
@@ -131,6 +136,9 @@ test('a fit keeps running, and its result waits, while another tab is open', asy
 	await answerConfirm(page, false, 'You have unsaved changes (settings). Leave and go to All projects? They will be lost.');
 	await fit.getByRole('button', { name: 'Discard result' }).click();
 	await expect(params).toHaveCount(0);
+	// The button went with the result: the focus is on the card's heading, not lost to the page.
+	await expect(fit.getByRole('heading', { name: /^Fit automatically/, level: 4 })).toBeFocused();
+	await expect(fit.getByTestId('fit-status')).toHaveText('');
 	await expect(fit.getByRole('button', { name: 'Fit automatically', exact: true })).toBeEnabled();
 });
 
@@ -140,7 +148,7 @@ test('a viewer can fit but not apply', async ({ page, owner, signIn }) => {
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
 	const viewer = await signIn('Fit viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
-	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
+	await viewer.page.goto(`/projects/${project.id}?tab=calibration`);
 	const fit = viewer.page.getByRole('region', { name: /^Fit automatically/ });
 	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('50');
@@ -157,7 +165,7 @@ test('with a gauge and a logger record, the fit can be validated against the oth
 	// Synthetic second instrument: 70 % of the gauge, over the same 120 days.
 	const logger = syntheticFlow(120).map((q) => Math.round(q * 0.7 * 1000) / 1000);
 	await putSeries(page.request, project.id, { kind: 'flow_logger_m3s', unit: 'm³/s', startDate: '2021-10-01', values: logger });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	const record = fit.getByLabel('Also validate against');
@@ -173,7 +181,7 @@ test('with a gauge and a logger record, the fit can be validated against the oth
 	const scores = fit.getByRole('table', { name: /^Fit, and validation/ });
 	const col = scores.getByRole('columnheader', { name: /^Independent record: Logger flow/ });
 	await expect(col).toBeVisible();
-	await expect(col).toContainText('2021-10-01 – 2022-01-28');
+	await expect(col).toContainText('1 Oct 2021 – 28 Jan 2022');
 	// Every logger day was also fitted to (on the gauge), and the note says what that means.
 	await expect(fit.getByText(/120 of the 120 days scored against the logger record were also fitted to/)).toBeVisible();
 });

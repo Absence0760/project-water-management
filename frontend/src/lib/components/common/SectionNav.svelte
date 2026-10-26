@@ -17,8 +17,8 @@
 	(`railSide="right"`: on the right, beside a page's own left column, Runs &
 	results' runs list) instead, every group's name shown as a heading over its
 	links, and the arrow keys move between its links; narrower it is the bar
-	above. Each link says its panel's heading (`label`); on the bar a section may
-	say a shorter `bar` name, to keep the bar to two rows (issue #462). A group
+	above. Each link says its panel's heading (`label`) word for word, on the bar
+	too (issue #586 D4): there is no shorter bar name. A group
 	with no sections draws nothing, and with none at all the menu draws nothing
 	but the content (a page before its results load). `find`
 	adds a box that narrows the menu to the sections and the settings inside
@@ -34,8 +34,9 @@
 	`heading` names the bar's start ("On this page"; null for none).
 -->
 <script lang="ts">
-	import type { Snippet } from 'svelte';
-	import { activeSectionId, findElsewhere, findEntries, navEmpty, navFitCount, navText, pageLinkName, type FindElsewhere, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
+	import { onDestroy, type Snippet } from 'svelte';
+	import { anchorHeading, focusHeading } from '#lib/help/anchor.js';
+	import { activeSectionId, findElsewhere, stripScrollTo, findEntries, navEmpty, navFitCount, pageLinkName, type FindElsewhere, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
 
 	let {
 		groups,
@@ -125,13 +126,38 @@
 	}
 	const hrefOf = (sec: NavSection) => sec.href ?? `#${sec.id}`;
 	const embedded = $derived(!!onjump);
-	/** A link followed: in a box of its own (`onjump`), the page goes to the section instead of the fragment. */
+	/**
+	 * A link followed: in a box of its own (`onjump`), the page goes to the section instead of the
+	 * fragment. On the page, the browser jumps to the fragment, then the section's heading takes
+	 * the focus (as a link into the page does, lib/help/anchor.ts), so Tab carries on from the
+	 * section, not from the top of the page (issue #586). The fragment already in the URL makes
+	 * no hashchange: SvelteKit scrolls to it itself, and the heading is focused at once.
+	 */
+	let stopFocusOnJump = () => {};
 	function follow(e: MouseEvent, sec: NavSection) {
 		moreOpen = false;
-		if (!onjump || sec.href || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-		e.preventDefault();
-		onjump(sec.id);
+		if (sec.href || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		if (onjump) {
+			e.preventDefault();
+			onjump(sec.id);
+			return;
+		}
+		stopFocusOnJump();
+		const el = document.getElementById(sec.id);
+		const heading = el && anchorHeading(el);
+		if (!heading) return;
+		if (location.hash === `#${sec.id}`) {
+			focusHeading(heading);
+			return;
+		}
+		const land = () => {
+			stopFocusOnJump();
+			if (location.hash === `#${sec.id}`) focusHeading(heading);
+		};
+		window.addEventListener('hashchange', land);
+		stopFocusOnJump = () => window.removeEventListener('hashchange', land);
 	}
+	onDestroy(() => stopFocusOnJump());
 
 	/** Each group's links on the bar and in More, in page order. */
 	const split = $derived.by(() => {
@@ -329,6 +355,14 @@
 			flowEl.scrollLeft = left - 16;
 		}
 	});
+	// A link Tab reaches on the strip shows whole, not cut at its edge (the browser leaves a half-shown one).
+	function revealFocused(e: FocusEvent) {
+		const link = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>('.groups a') : null;
+		if (!flowEl || !link || flowEl.scrollWidth <= flowEl.clientWidth) return;
+		const at = link.getBoundingClientRect().left - flowEl.getBoundingClientRect().left + flowEl.scrollLeft;
+		const to = stripScrollTo(at, link.offsetWidth, flowEl.scrollLeft, flowEl.clientWidth);
+		if (to !== null) flowEl.scrollLeft = to;
+	}
 	// The bar sits over the content's top, so jumps and focus keep clear of it; the rail sits beside it.
 	// Not in a box of its own, which the bar doesn't cover.
 	$effect(() => {
@@ -404,8 +438,8 @@
 	More<span class="visually-hidden"> sections{current ? ', including the one being read' : ''}</span>
 	<span aria-hidden="true">▾</span>
 {/snippet}
-{#snippet linkText(sec: NavSection, where: 'bar' | 'rail' = 'rail')}
-	{navText(sec, where)}{#if sec.problem}<span class="dot" aria-hidden="true"></span><span class="visually-hidden"> (has a problem)</span>{/if}
+{#snippet linkText(sec: NavSection)}
+	{sec.label}{#if sec.problem}<span class="dot" aria-hidden="true"></span><span class="visually-hidden"> (has a problem)</span>{/if}
 {/snippet}
 {#snippet findText()}
 	<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" /><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
@@ -446,7 +480,7 @@
 			{#each away as moved (moved.href)}
 				<li>
 					<a data-item href={moved.href} onclick={() => (findOpen = false)} aria-label="{moved.text}, on {moved.page}" data-testid="find-elsewhere"
-						><span>{moved.text}</span><span class="in">on {moved.page} <span aria-hidden="true">↗</span></span></a
+						><span>{moved.text}</span> <span class="in">on {moved.page} <span aria-hidden="true">↗</span></span></a
 					>
 				</li>
 			{/each}
@@ -468,12 +502,12 @@
 						{#if g.label}<p class="rail-h" id="{uid}-r{gi}">{g.label}</p>{/if}
 						<ul aria-labelledby={g.label ? `${uid}-r${gi}` : undefined}>
 							{#each g.sections as sec (sec.id)}
-								<li>
+								<li class:sub={sec.sub}>
 									<a
 										data-item
 										href={hrefOf(sec)}
 										onclick={(e) => follow(e, sec)}
-										aria-label={pageLinkName(sec, 'rail') ?? undefined}
+										aria-label={pageLinkName(sec) ?? undefined}
 										aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}
 									>{@render linkText(sec)}{#if sec.href}<span class="ext" aria-hidden="true">↗</span>{/if}</a>
 								</li>
@@ -485,7 +519,7 @@
 		</nav>
 	{:else}
 		<nav class="sections" class:embedded aria-label={label} bind:clientHeight={height} style:--bar-h="{height}px">
-			<div class="flow" bind:this={flowEl}>
+			<div class="flow" bind:this={flowEl} onfocusin={revealFocused}>
 				{#if find}
 					<div class="item find-wrap" bind:this={findWrap} onkeydown={findPopKeydown} onfocusout={findFocusOut} role="presentation">
 						<button
@@ -516,9 +550,9 @@
 											<a
 												class="pill"
 												href={hrefOf(sec)}
-												aria-label={pageLinkName(sec, 'bar') ?? undefined}
+												aria-label={pageLinkName(sec) ?? undefined}
 												aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}
-												onclick={(e) => follow(e, sec)}>{@render linkText(sec, 'bar')}</a
+												onclick={(e) => follow(e, sec)}>{@render linkText(sec)}</a
 											>
 										</li>
 									{/each}
@@ -550,7 +584,7 @@
 												<li>
 													<a
 														href={hrefOf(sec)}
-														aria-label={pageLinkName(sec, 'rail') ?? undefined}
+														aria-label={pageLinkName(sec) ?? undefined}
 														aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}
 														onclick={(e) => follow(e, sec)}>{@render linkText(sec)}</a
 													>
@@ -575,11 +609,11 @@
 				{#if find}<button type="button" class="pill find-btn" tabindex="-1" data-find>{@render findText()}</button>{/if}
 				{#each flat as sec (sec.id)}
 					{#if sec.groupName}
-						<span class="named" data-m><span class="grp-h">{sec.groupName}</span><span class="pill marked">{@render linkText(sec, 'bar')}</span></span>
-						<span class="named" data-p><span class="grp-h">{sec.groupName}</span><span class="pill">{@render linkText(sec, 'bar')}</span></span>
+						<span class="named" data-m><span class="grp-h">{sec.groupName}</span><span class="pill marked">{@render linkText(sec)}</span></span>
+						<span class="named" data-p><span class="grp-h">{sec.groupName}</span><span class="pill">{@render linkText(sec)}</span></span>
 					{:else}
-						<span class="pill marked" data-m>{@render linkText(sec, 'bar')}</span>
-						<span class="pill" data-p>{@render linkText(sec, 'bar')}</span>
+						<span class="pill marked" data-m>{@render linkText(sec)}</span>
+						<span class="pill" data-p>{@render linkText(sec)}</span>
 					{/if}
 				{/each}
 				<button type="button" class="pill more-btn current" tabindex="-1" data-more>{@render moreText(true)}</button>
@@ -844,6 +878,10 @@
 	.results button:hover {
 		background: var(--surface-2);
 		color: var(--text);
+	}
+	/* A sub-heading's line (NavSection `sub`), indented under its panel's. */
+	.rail-nav li.sub a {
+		padding-left: 1.4rem;
 	}
 	.rail-nav a[aria-current='location'] {
 		border-left-color: var(--accent);

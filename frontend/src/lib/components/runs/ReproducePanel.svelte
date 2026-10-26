@@ -17,11 +17,14 @@
 	const headline = $derived(result ? reproductionHeadline(result) : null);
 
 	async function check() {
+		if (checking) return;
 		checking = true;
 		error = null;
 		try {
 			result = await api.runs.reproduce(projectId, run.id);
 		} catch (err) {
+			// A failed check replaces an earlier answer rather than sitting under it.
+			result = null;
 			error = err instanceof Error ? err.message : String(err);
 		} finally {
 			checking = false;
@@ -34,7 +37,8 @@
 	<div class="panel-head">
 		<h3 id="{uid}-h">Reproduction</h3>
 		{#if run.reproducible !== false}
-			<button type="button" class="btn btn-sm" onclick={check} disabled={checking}>{checking ? 'Checking…' : 'Check reproduction'}</button>
+			<!-- aria-disabled while it checks: disabled would throw the keyboard's focus to the page (ui-playbook § 4). -->
+			<button type="button" class="btn btn-sm" onclick={check} aria-disabled={checking}>{checking ? 'Checking…' : 'Check reproduction'}</button>
 		{/if}
 	</div>
 	{#if run.reproducible === false}

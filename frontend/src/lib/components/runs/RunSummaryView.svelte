@@ -5,18 +5,19 @@
 	// its Other uses section); the printable report passes them back in through
 	// `units`, in their old place.
 	import type { Snippet } from 'svelte';
-	import type { RunSummary } from '@water-management/engine';
+	import type { RunSummary, WarningPlace } from '@water-management/engine';
+	import WarningText from './WarningText.svelte';
 	import type { EwrHeadline } from '#lib/api/types.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import WithheldUnitsNote from './WithheldUnitsNote.svelte';
 	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
-	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
 	import { m3DayToM3s, m3DayToMm3a, outletEwrLine, SUPPLY_TARGET } from './results';
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 	import { credibility, warningGroups } from './credibility';
 	import { otherUsesLink } from './humanImpacts';
 	import { calibrationSample } from '#lib/components/calibration/sample.js';
+	import { volumeBiasText, worseThanMean, WORSE_THAN_MEAN } from '#lib/components/calibration/metrics.js';
 
 	let {
 		summary,
@@ -25,7 +26,9 @@
 		reserveHref = '#res-reserve',
 		otherUsesHref,
 		headline = null,
-		foldChecks = false
+		foldChecks = false,
+		calibrationHref,
+		placeHref = null
 	}: {
 		summary: RunSummary;
 		/** Days in the run (for "% of days"). */
@@ -43,6 +46,16 @@
 		 * results reach the first screen (the workspace; issue #521). The report lists them all.
 		 */
 		foldChecks?: boolean;
+		/**
+		 * A link to a Model quality panel on the Calibration page by its anchor, for this run (calibration/links.ts):
+		 * where the model-checks line's calibration, plausibility and WR2012 items go (issue #586 Round 3).
+		 */
+		calibrationHref?: (anchor: string) => string;
+		/**
+		 * Where each place a warning names is (warningText.ts warningPlaceHref, issue #586 D19): the workspace makes them
+		 * links; null (the printable report) keeps the plain words.
+		 */
+		placeHref?: ((place: WarningPlace) => string) | null;
 	} = $props();
 
 	const CHECKS_SHOWN = 3;
@@ -58,6 +71,9 @@
 	const cal = $derived(summary.calibration);
 	// "in-sample" only when the parameters were fitted on the days scored (issue #45).
 	const sample = $derived(calibrationSample(cal));
+	// Toned and worded as the Calibration panel's tiles are (#586 D12): NSE no better than the mean flow is flagged,
+	// and the volume bias reads "12.3% too wet", the panel's words, not a signed PBIAS.
+	const nseFlag = $derived(worseThanMean('nse', cal?.nse));
 	// Reserve compliance by month (engine ≥ 0.21.0): the headline when the project judges by a rule table.
 	const reserve = $derived(headlineSite(summary, headline));
 	const c = $derived(summary.catchment);
@@ -66,7 +82,7 @@
 	const groups = $derived(warningGroups(summary.warnings));
 	const checksFolded = $derived(foldChecks && groups.check.length > CHECKS_SHOWN);
 	const shownChecks = $derived(checksFolded && !checksOpen ? groups.check.slice(0, CHECKS_SHOWN) : groups.check);
-	const checkItems = $derived(credibility(summary));
+	const checkItems = $derived(credibility(summary, calibrationHref));
 	const otherUses = $derived(otherUsesHref ? otherUsesLink(summary) : null);
 </script>
 
@@ -76,7 +92,7 @@
 {#if groups.check.length}
 	<div class="alert alert-warning" role="status" data-testid="warnings-check">
 		<strong>{groups.check.length === 1 ? '1 thing' : `${groups.check.length} things`} to check before relying on this run</strong>
-		<ul id="{uid}-checks">{#each shownChecks as w, i (i)}<li>{w}</li>{/each}</ul>
+		<ul id="{uid}-checks">{#each shownChecks as w, i (i)}<li><WarningText text={w} {placeHref} /></li>{/each}</ul>
 		{#if checksFolded}
 			<button type="button" class="checks-toggle" aria-expanded={checksOpen} aria-controls="{uid}-checks" onclick={() => (checksOpen = !checksOpen)}
 				>{checksOpen ? 'Show only the first 3 things to check' : `Show all ${groups.check.length} things to check`}</button
@@ -87,7 +103,7 @@
 {#if groups.data.length}
 	<details class="data-notes" data-testid="warnings-data">
 		<summary>{groups.data.length === 1 ? '1 note' : `${groups.data.length} notes`} on how the input data were handled</summary>
-		<ul>{#each groups.data as w, i (i)}<li>{w}</li>{/each}</ul>
+		<ul>{#each groups.data as w, i (i)}<li><WarningText text={w} {placeHref} /></li>{/each}</ul>
 	</details>
 {/if}
 <ul class="cred" aria-label="Model checks" data-testid="credibility">
@@ -140,16 +156,17 @@
 		<dd class="sub">over the whole record</dd>
 	</div>
 	{#if cal && cal.days > 0}
-		<div class="stat">
-			<dt><span title={NSE_HELP}>Calibration NSE</span> <HelpTip key="stats.nse" /></dt>
+		<div class="stat" class:flagged={nseFlag}>
+			<dt><span>Calibration NSE</span> <HelpTip key="stats.nse" /></dt>
 			<dd>{fmtNum(cal.nse, 2)}</dd>
+			{#if nseFlag}<dd class="sub flag">{WORSE_THAN_MEAN}</dd>{/if}
 			<dd class="sub">{fmtNum(cal.days)} days observed{#if cal.siteName} at {cal.siteName}{/if}</dd>
 			<dd class="sub">{sample.short}</dd>
 		</div>
 		<div class="stat">
-			<dt><span title={PBIAS_HELP}>Calibration PBIAS</span> <HelpTip key="stats.pbias" /></dt>
-			<dd>{cal.pbias == null ? '–' : `${cal.pbias > 0 ? '+' : ''}${fmtNum(cal.pbias, 1)}`}<small>%</small></dd>
-			{#if cal.pbias != null}<dd class="sub">{describePbias(cal.pbias)}</dd>{/if}
+			<dt><span>Calibration volume bias</span> <HelpTip key="stats.pbias" /></dt>
+			<!-- PBIAS is 100 × Σ(obs − sim)/Σobs, the volume error's negative (calibration/metrics.ts volumeBiasText). -->
+			<dd>{volumeBiasText(cal.pbias == null ? null : -cal.pbias)}</dd>
 			<dd class="sub">{sample.short}</dd>
 		</div>
 	{:else}
@@ -248,9 +265,10 @@
 	h3:first-of-type {
 		margin-top: 0;
 	}
-	/* Six headline cards: 3 + 3 on a desktop results column, 2 + … on phones. */
+	/* Six headline cards: 3 + 3 on a desktop results column, 2 + … on phones. At most three a row: in a full-width
+	   column (one run, #586 D21) auto-fill put four, then two under them beside an empty half row. */
 	.stats {
-		grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(max(min(100%, 210px), calc((100% - 2rem) / 3)), 1fr));
 	}
 	@media (max-width: 640px) {
 		.stats {
@@ -272,6 +290,10 @@
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
+	}
+	.stat dd.sub.flag {
+		color: var(--warning);
+		font-weight: 600;
 	}
 	.stat dd.none {
 		color: var(--text-muted);

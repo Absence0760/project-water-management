@@ -198,7 +198,7 @@ describe('outputs e2e: an allocation cap (§2.12a)', () => {
 		}
 		expect([fromEpochDay(uncapped[0]!), fromEpochDay(uncapped.at(-1)!), uncapped.length]).toEqual(['2003-03-15', '2004-02-28', toEpochDay('2004-02-29') - toEpochDay('2003-03-15')]);
 		expect(out.summary.warnings.filter((w) => w.includes('no licence in force'))).toEqual([
-			`allocation cap: no licence in force, so modelled demand is used, uncapped (as for a unit with no licence; check the licence dates), and that use doesn't count against the water year's volume: "${BASE.model.nodes.find((n) => n.id === 'b')!.name}" surface water 2003-03-15 to 2004-02-28`
+			`allocation cap: no licence in force, so modelled demand is used, uncapped (as for a unit with no licence; check the licence dates), and that use doesn't count against the water year's volume: "${BASE.model.nodes.find((n) => n.id === 'b')!.name}" surface water 15 Mar 2003 to 28 Feb 2004`
 		]);
 	});
 	it('the first part year (from 15 March) still has the whole year’s volume to take', () => {

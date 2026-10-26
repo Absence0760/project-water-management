@@ -42,7 +42,7 @@
 // then has its wet days rescaled to the scaled wet total, so every month's
 // rain is exactly what the factor alone gives: the mapping moves rain
 // between days, never in or out of a month.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf, isIsoDate as isRealDate } from './calendar';
+import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf, isIsoDate as isRealDate } from './calendar';
 import { EXCLUSION_REASON_MAX, EXCLUSIONS_MAX } from './calibrate/provenance';
 import {
 	RAIN_SOURCE_FALLBACKS,
@@ -236,7 +236,7 @@ export function resolveRainSource(raw: unknown, warnings: string[]): RainSourceP
 	const out: RainSourcePeriod[] = [];
 	for (const r of (raw as unknown[]).slice(0, EXCLUSIONS_MAX)) {
 		const err = rainSourcePeriodError(r);
-		const label = plainObject(r) ? `${String((r as Record<string, unknown>).start)} to ${String((r as Record<string, unknown>).end)}` : JSON.stringify(r)?.slice(0, 40);
+		const label = plainObject(r) ? `${dayText(String((r as Record<string, unknown>).start))} to ${dayText(String((r as Record<string, unknown>).end))}` : JSON.stringify(r)?.slice(0, 40);
 		if (err) {
 			warnings.push(`rain-source period ${label} ${err}; ignored`);
 			continue;
@@ -244,7 +244,7 @@ export function resolveRainSource(raw: unknown, warnings: string[]): RainSourceP
 		const p = cleanPeriod(r as Record<string, unknown>);
 		const clash = out.find((x) => p.start <= x.end && p.end >= x.start);
 		if (clash) {
-			warnings.push(`rain-source period ${label} overlaps ${clash.start} to ${clash.end}; ignored`);
+			warnings.push(`rain-source period ${label} overlaps ${dayText(clash.start)} to ${dayText(clash.end)}; ignored`);
 			continue;
 		}
 		out.push(p);
@@ -797,7 +797,7 @@ export const rainSourceFactorText = (factors: readonly (number | null)[]): strin
 export function rainSourceFactorOrigin(p: Pick<RainSourcePeriodInfo, 'factorMode' | 'provenance' | 'fit'>): string {
 	if (p.factorMode === 'fixed') {
 		const v = p.provenance;
-		return v ? `fixed, from ${v.source}, fitted on ${v.fittedFrom} to ${v.fittedTo} by ${v.method}` : 'fixed';
+		return v ? `fixed, from ${v.source}, fitted on ${dayText(v.fittedFrom)} to ${dayText(v.fittedTo)} by ${v.method}` : 'fixed';
 	}
 	const f = p.fit!;
 	return (
@@ -821,7 +821,7 @@ export function rainSourceText(periods: unknown): string {
 			const f = p.factors === 'fit' ? `fitted against ${rainSourceKindName(p.fitReference?.series ?? '')} ${p.fitReference ? yearSpan(p.fitReference.fromWaterYear, p.fitReference.toWaterYear) : ''}`.trim() : `fixed factors ${Array.isArray(p.factors) ? p.factors.join('/') : ''}`;
 			const fb = p.fallback ? `, gaps from ${rainSourceKindName(p.fallback.series)} ${yearSpan(p.fallback.fromWaterYear, p.fallback.toWaterYear)}` : '';
 			const qm = p.quantileMap ? `, wet days (≥ ${p.quantileMap.wetDayMm} mm) quantile-mapped onto the catchment series ${yearSpan(p.quantileMap.fromWaterYear, p.quantileMap.toWaterYear)}` : '';
-			return `${p.start} to ${p.end}: ${rainSourceKindName(p.series)}, ${f}${fb}${qm} (${p.reason})`;
+			return `${dayText(p.start)} to ${dayText(p.end)}: ${rainSourceKindName(p.series)}, ${f}${fb}${qm} (${p.reason})`;
 		})
 		.join('; ');
 }
@@ -853,7 +853,7 @@ export function rainSourceIntensityWarning(p: RainSourcePeriodInfo): string | nu
 	if (!i) return null;
 	const wet = (h: HeavyDayShare) => (h.days ? `${Math.round((h.wetDays / h.days) * 100)} %` : 'no');
 	const head =
-		`Daily intensity of the ${rainSourceKindName(p.series)} over ${p.start} to ${p.end}: ${pct(i.scaled.share)} of its rain × factor fell on heavy days ` +
+		`Daily intensity of the ${rainSourceKindName(p.series)} over ${dayText(p.start)} to ${dayText(p.end)}: ${pct(i.scaled.share)} of its rain × factor fell on heavy days ` +
 		`(≥ ${i.heavyDayMm} mm), against ${pct(i.reference.share)} in ${rainSourceIntensityReferenceText(i.reference)}; wet (≥ ${i.wetDayMm} mm) on ${wet(i.scaled)} of days against ${wet(i.reference)}`;
 	if (p.quantileMap) {
 		return `${head}. After the quantile map, ${pct(i.mapped?.share ?? null)} on heavy days: ${rainSourceQuantileMapText(p.quantileMap)}; ${plural(p.quantileMap.mappedDays, 'run day')} changed.`;
@@ -861,7 +861,7 @@ export function rainSourceIntensityWarning(p: RainSourcePeriodInfo): string | nu
 	if (!i.differs) return null;
 	return (
 		`${head}. The heavy-day shares are more than ${Math.round(i.band * 100)} points apart: a monthly factor keeps the gauge's own wet-day distribution, and GR4J turns ` +
-		'heavier days into more flow. Consider quantile-mapping its wet days onto the primary series (Settings → Rain gaps → Flagged rain → Rain source periods), or carry the runoff effect in the calibration band. ' +
+		'heavier days into more flow. Consider quantile-mapping its wet days onto the primary series (Model settings → Rain gaps → Flagged rain → Rain source periods), or carry the runoff effect in the calibration band. ' +
 		'The map keeps each month’s total and its wet days, so it corrects the spread of the falls, not how often it rains: a gap that comes from fewer wet days stays.'
 	);
 }
@@ -876,7 +876,7 @@ export function rainSourcePeriodWarnings(info: RainSourceInfo | null): string[] 
 }
 
 function periodWarning(p: RainSourcePeriodInfo): string {
-	const head = `Catchment rain from the ${rainSourceKindName(p.series)} over ${p.start} to ${p.end} (${p.reason})`;
+	const head = `Catchment rain from the ${rainSourceKindName(p.series)} over ${dayText(p.start)} to ${dayText(p.end)} (${p.reason})`;
 	if (!p.seriesPresent) {
 		return `${head}: the project has no ${p.series} series, so all ${plural(p.runDays, 'run day')} fall through to ${rainSourceFallbackText(p.fallback)}, then forecast rain.`;
 	}
@@ -892,7 +892,7 @@ function periodWarning(p: RainSourcePeriodInfo): string {
 		(through.length ? `; its gaps: ${through.join(', ')}` : '') +
 		`. Factors (${rainSourceFactorOrigin(p)}): ${rainSourceFactorText(p.factors)}.` +
 		(missingMonths.length ? ` ${missingMonths.join(', ')} ha${missingMonths.length === 1 ? 's' : 've'} no factor, so their days fall through to ${rainSourceFallbackText(p.fallback)}.` : '') +
-		' The primary catchment series is not used in the period and stays out of every factor fit. Settings → Rain gaps → Flagged rain → Rain source periods.'
+		' The primary catchment series is not used in the period and stays out of every factor fit. Model settings → Rain gaps → Flagged rain → Rain source periods.'
 	);
 }
 
@@ -904,7 +904,7 @@ function periodWarning(p: RainSourcePeriodInfo): string {
 export function rainSourceLines(info: RainSourceInfo | null | undefined): string[] {
 	return (info?.periods ?? []).map(
 		(p) =>
-			`${p.start} to ${p.end} (${p.reason}): ${rainSourceKindName(p.series)}` +
+			`${dayText(p.start)} to ${dayText(p.end)} (${p.reason}): ${rainSourceKindName(p.series)}` +
 			`${p.seriesProvenance !== undefined ? ` (${provenanceLabel(p.seriesProvenance)})` : ''} × ${rainSourceFactorText(p.factors)}; ` +
 			`${rainSourceFactorOrigin(p)}; gaps from ${rainSourceFallbackText(p.fallback)}` +
 			(p.quantileMap ? `; ${rainSourceQuantileMapText(p.quantileMap)}` : '')

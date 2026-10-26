@@ -43,6 +43,40 @@ export function isIsoDate(v: unknown): v is string {
 	return !Number.isNaN(ms) && new Date(ms).getUTCDate() === Number(v.slice(8, 10));
 }
 
+const DAY_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * A calendar day `YYYY-MM-DD` as a person reads it, day first: "2020-10-06" → "6 Oct 2020", the app's day
+ * format (the frontend's fmtDay). Read from the string, never through Date or Intl, so no time zone or locale
+ * can change it. Anything that isn't a calendar day is returned unchanged. For warning text (engine ≥ 1.99.0).
+ */
+export function dayText(iso: string): string {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+	if (!m) return iso;
+	const y = Number(m[1]);
+	const mo = Number(m[2]);
+	const d = Number(m[3]);
+	const month = DAY_MONTHS[mo - 1];
+	if (!month || d < 1 || d > daysInMonth(y, mo)) return iso;
+	return `${d} ${month} ${m[1]}`;
+}
+
+/**
+ * Every calendar day `YYYY-MM-DD` in a text written day first, as dayText writes it ("1 negative value
+ * (2020-10-06: …)" → "(6 Oct 2020: …)"); what isn't a calendar day (2001-02-29, month 13) stays as it is. For
+ * reading an older run's warnings in today's words: up to engine 1.98.0 the data checks, and up to 1.99.0 every
+ * other warning, wrote their days year first (places.ts warningInCurrentWords).
+ */
+export function daysInText(text: string): string {
+	return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, dayText);
+}
+
+/** Days in a Gregorian month (1–12), in integer arithmetic. */
+function daysInMonth(year: number, month: number): number {
+	if (month === 2) return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
+	return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
 /** UTC epoch day number → ISO `YYYY-MM-DD`. */
 export function fromEpochDay(day: number): string {
 	return new Date(day * 86_400_000).toISOString().slice(0, 10);

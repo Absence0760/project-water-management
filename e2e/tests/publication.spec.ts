@@ -41,7 +41,8 @@ test('an editor publishes a run with a notice, then changes the notice; a farmer
 	await expect(dialog).toBeHidden();
 
 	await expect(panel.getByRole('status')).toHaveText('Published. 2 farmer views updated.');
-	await expect(panel.getByRole('heading', { name: /Publication/ }).getByText('Published', { exact: true })).toBeVisible();
+	await expect(panel.getByRole('heading', { name: 'Publication', exact: true })).toBeVisible();
+	await expect(panel.getByTestId('publication-published')).toHaveText('Published');
 	await expect(panel.getByRole('definition').first()).toHaveText('Advisory · 10 %');
 	// The next update is a calendar day, shown as one (never shifted through a timezone).
 	await expect(panel.getByRole('definition').last()).toHaveText('15 Feb 2022');
@@ -114,7 +115,8 @@ test('a publish whose history refresh fails still closes as published', async ({
 	await expect(dialog).toBeHidden();
 	await expect(panel.getByRole('status')).toHaveText(/^Published\. \d+ farmer views? updated\. The publication history couldn’t be refreshed: reload the page to see it\.$/);
 	await expect(panel.getByRole('alert')).toHaveCount(0);
-	await expect(panel.getByRole('heading', { name: /Publication/ }).getByText('Published', { exact: true })).toBeVisible();
+	await expect(panel.getByRole('heading', { name: 'Publication', exact: true })).toBeVisible();
+	await expect(panel.getByTestId('publication-published')).toHaveText('Published');
 	await expect(panel.getByRole('button', { name: 'Publish this run' })).toHaveCount(0);
 	await page.unroute(publicationUrl);
 });

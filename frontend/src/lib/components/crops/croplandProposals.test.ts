@@ -66,7 +66,7 @@ describe('cropRows and the words', () => {
 		const a = { areaM2: 125_000, dataset: 'synthetic', source: 's', version: 'synthetic 1', method: 'm', basis: 'parcel' as const, featureName: 'Top camp', acceptedAt: '2026-10-01T12:00:00.000Z', current: true };
 		// The day it was used, in the viewer's own time zone (fmtDate): the 1st or 2nd of October by where they are.
 		const day = fmtDate(a.acceptedAt);
-		expect(day).toMatch(/^2026-10-0[12]$/);
+		expect(day).toMatch(/^[12] Oct 2026$/);
 		expect(provenanceText(a)).toBe(`12.5 ha from land cover (the parcel “Top camp”; synthetic, synthetic 1), used ${day}`);
 		expect(provenanceText({ ...a, basis: 'unit', featureName: null, current: false })).toBe(
 			`Typed over since: 12.5 ha came from land cover (the unit’s parcels; synthetic, synthetic 1) on ${day}`

@@ -23,7 +23,7 @@
 // Every member is a full model run of the project (runModelWithoutChecks:
 // runModel less the plausibility checks, which no member result reads), so
 // the same seed and options reproduce the ensemble exactly (./verify.ts checks it).
-import { fromEpochDay, toEpochDay, waterYearIndex, waterYearOf, type Monthly } from '../calendar';
+import { dayText, fromEpochDay, toEpochDay, waterYearIndex, waterYearOf, type Monthly } from '../calendar';
 import { prepareCalibration } from '../calibrate/calibrate';
 import { censoredObserved } from '../calibrate/dayFlags';
 import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, type ParamSet } from '../calibrate/params';
@@ -324,7 +324,7 @@ export function resolveEnsembleOptions(input: ModelInput, req: EnsembleRequest =
 	// dimension that changes nothing: drop it and say so.
 	if (settings.pe.kind === 'monthly' && panOffset > 0) {
 		notes.push(
-			'The pan coefficient is not varied: GR4J’s potential evaporation comes from the monthly PE row (Settings), which does not use it. The ensemble does not vary potential evaporation.'
+			'The pan coefficient is not varied: GR4J’s potential evaporation comes from the monthly PE row (Calibration → Flow calibration), which does not use it. The ensemble does not vary potential evaporation.'
 		);
 		panOffset = 0;
 	}
@@ -864,7 +864,7 @@ const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1
 /** The acceptance rule, the percentiles and the coverage test, in words. */
 export function ensembleDecisionRule(o: ResolvedEnsembleOptions, h: Pick<EnsembleHeader, 'splitDate' | 'hasWr2012' | 'wr2012Band'>): string {
 	const t = o.thresholds;
-	const parts = [`${objectiveShortLabel(t.objective)} ≥ ${fmt(t.minSkill)} against its observed record before ${h.splitDate}`];
+	const parts = [`${objectiveShortLabel(t.objective)} ≥ ${fmt(t.minSkill)} against its observed record before ${dayText(h.splitDate)}`];
 	if (h.hasWr2012 && t.wr2012MaxLevel !== 'unusable') {
 		const worst = t.wr2012MaxLevel === 'ok' ? 'no WR2012 flag' : `a WR2012 MAR flag no worse than “${t.wr2012MaxLevel}”`;
 		parts.push(h.wr2012Band ? `${worst} and a natural MAR inside ${fmt(h.wr2012Band.lowMm3)}–${fmt(h.wr2012Band.highMm3)} Mm³/a` : worst);
@@ -874,7 +874,7 @@ export function ensembleDecisionRule(o: ResolvedEnsembleOptions, h: Pick<Ensembl
 	return (
 		`A parameter set is kept when it has ${rule}. ` +
 		`Bands are the ${o.percentiles[0]}th to ${o.percentiles[2]}th percentiles of the kept sets (median in between), shown only with at least ${o.minMembers} kept. ` +
-		`Coverage counts the observations from ${h.splitDate} (never used to keep a set) inside the daily ${o.percentiles[0]}–${o.percentiles[2]} % band of simulated outflow; below ${Math.round(o.coverageWarning * 100)} % it warns. ` +
+		`Coverage counts the observations from ${dayText(h.splitDate)} (never used to keep a set) inside the daily ${o.percentiles[0]}–${o.percentiles[2]} % band of simulated outflow; below ${Math.round(o.coverageWarning * 100)} % it warns. ` +
 		`Sample: ${o.members} Latin-hypercube sets (seed ${o.seed}, ${o.bounds} bounds) plus the run's own.`
 	);
 }

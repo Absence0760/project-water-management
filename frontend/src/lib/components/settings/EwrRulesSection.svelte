@@ -58,11 +58,14 @@
 <section class="panel" aria-labelledby="{uid}-h">
 	<div class="panel-head">
 		<h2 id="{uid}-h">Reserve rule tables <HelpTip key="settings.ewrRules" /></h2>
-		{#if projectId}<NotesDrawer {projectId} target={settingTarget('reserve')} />{/if}
-		<!-- In the head, above the tables: with several sites they run screens long (a "new" action goes above a long list). -->
-		{#if !readonly}
-			<button type="button" class="btn btn-sm head-add" disabled={!canAdd} onclick={add} aria-describedby={!canAdd && value.length ? `${uid}-full` : undefined}>Add a rule table</button>
-		{/if}
+		<!-- In the head, above the tables: with several sites they run screens long (a "new" action goes above a long list).
+		     The panel's own action first, then Notes last, as on every Settings panel (issue #586, C12). -->
+		<div class="head-actions" data-testid="reserve-head-actions">
+			{#if !readonly}
+				<button type="button" class="btn btn-sm head-add" disabled={!canAdd} onclick={add} aria-describedby={!canAdd && value.length ? `${uid}-full` : undefined}>Add a rule table</button>
+			{/if}
+			{#if projectId}<NotesDrawer {projectId} target={settingTarget('reserve')} />{/if}
+		</div>
 	</div>
 	{#if summary}<p class="summary" data-testid="summary-reserve">{summary}</p>{/if}
 	<p class="hint muted explain">Optional: judge each month against the Ecological Reserve’s assurance rules.</p>
@@ -116,6 +119,13 @@
 </section>
 
 <style>
+	/* The panel's own action, then Notes last (issue #586, C12; Wr2012Section's the same). */
+	.head-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+	}
 	.hint {
 		font-size: var(--font-sm);
 		max-width: 75ch;

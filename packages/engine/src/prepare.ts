@@ -44,7 +44,7 @@ import {
 } from './rain';
 import { apanDailyInfo, type ApanDailyInfo } from './evaporation/apanDaily';
 import { doubleMass as doubleMassOf, doubleMassRunWarning, type DoubleMass } from './doublemass';
-import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
+import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
@@ -211,7 +211,7 @@ export function prepareRun(input: ModelInput, options: PrepareOptions = {}): Pre
 	// The station × catchment MAP ÷ station MAP already takes the point rain to the catchment's level: the areal
 	// correction (§2.4g) on top would count that twice, so it is off under a catchment station.
 	if (plan && settings.arealRain) {
-		warnings.push(`station: the catchment runs on "${plan.ctx.name(plan.assignment.stationId)}" × the catchment MAP ÷ its MAP, so the areal rainfall correction (Settings → Flow calibration → Rain into GR4J → Areal rainfall correction) is not applied (docs/model.md §2.4i)`);
+		warnings.push(`station: the catchment runs on "${plan.ctx.name(plan.assignment.stationId)}" × the catchment MAP ÷ its MAP, so the areal rainfall correction (Calibration → Flow calibration → Rain into GR4J → Areal rainfall correction) is not applied`);
 		settings = { ...settings, arealRain: null };
 	}
 	const work = plan ? stationWork(settings, series, plan, input, warnings) : { settings, series };
@@ -286,7 +286,7 @@ function stationWork(settings: ProjectSettings, series: ModelInput['series'], pl
 	const gauge = (input.stations?.[plan.assignment.stationId] as { isCatchmentGauge?: boolean } | undefined)?.isCatchmentGauge === true;
 	if (settings.rainSource.length && !gauge)
 		warnings.push(
-			`station: the catchment runs on "${plan.ctx.name(plan.assignment.stationId)}", so the rain-source periods (Settings → Rain gaps), which name days of the catchment rain series, are not read (docs/model.md §2.4i)`
+			`station: the catchment runs on "${plan.ctx.name(plan.assignment.stationId)}", so the rain-source periods (Model settings → Rain gaps), which name days of the catchment rain series, are not read`
 		);
 	const { rain_catchment_mm: _gauge, ...rest } = series;
 	return { settings: { ...settings, rainSource: [], chirpsBiasCorrection: 'none', chirpsQuantileMap: null }, series: rest };
@@ -350,8 +350,8 @@ export function defaultWindowWarning(series: ModelInput['series'], settings: Pic
 	const left = [before.length ? `${before.join(', ')} before it` : '', after.length ? `${after.join(', ')} after it` : ''].filter(Boolean);
 	const which = before.length && after.length ? 'start and end' : before.length ? 'start' : 'end';
 	return (
-		`the run covers the rain record, ${fromEpochDay(start)} to ${fromEpochDay(end)}, and leaves out ${left.join(', and ')} ` +
-		`(no rain there): set the simulation ${which} (Settings → Simulation period) to include them`
+		`the run covers the rain record, ${dayText(fromEpochDay(start))} to ${dayText(fromEpochDay(end))}, and leaves out ${left.join(', and ')} ` +
+		`(no rain there): set the simulation ${which} (Model settings → Simulation period) to include them`
 	);
 }
 
@@ -599,7 +599,7 @@ function flowFillsFor(
 		// with it (the ratio). Resumed without the history it read, it would fill other values: leave it out, and say so.
 		if (resumed?.kinds.includes(kind) && !hasReadingBefore(record, start) && !hasReadingBefore(donor, start)) {
 			warnings.push(
-				`Resumed from ${fromEpochDay(start)} without the ${gapFillRecordLabel(kind)} record's history: its gap fill is left out (the fill reads the whole record: the gaps' bounds, the highest reading and the donor ratio). Include the history in the input, or run from the start, to fill it.`
+				`Resumed from ${dayText(fromEpochDay(start))} without the ${gapFillRecordLabel(kind)} record's history: its gap fill is left out (the fill reads the whole record: the gaps' bounds, the highest reading and the donor ratio). Include the history in the input, or run from the start, to fill it.`
 			);
 			continue;
 		}
@@ -780,7 +780,7 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		}
 	}
 	if (s.calibrationStart && s.calibrationEnd && s.calibrationStart > s.calibrationEnd) {
-		warnings.push(`calibration window ${s.calibrationStart} … ${s.calibrationEnd} ends before it starts; scoring the whole record`);
+		warnings.push(`calibration window ${dayText(s.calibrationStart)} … ${dayText(s.calibrationEnd)} ends before it starts; scoring the whole record`);
 		s.calibrationStart = null;
 		s.calibrationEnd = null;
 	}
@@ -822,7 +822,7 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23): maps the factor-corrected CHIRPS, so it needs the monthly correction.
 	s.chirpsQuantileMap = resolveChirpsQuantileMap(raw?.chirpsQuantileMap, warnings);
 	if (s.chirpsQuantileMap && s.chirpsBiasCorrection !== 'monthly') {
-		warnings.push('CHIRPS quantile map ignored: it maps bias-corrected CHIRPS, and CHIRPS bias correction is off (Settings → Rain gaps → CHIRPS gap filling → CHIRPS bias correction)');
+		warnings.push('CHIRPS quantile map ignored: it maps bias-corrected CHIRPS, and CHIRPS bias correction is off (Model settings → Rain gaps → CHIRPS gap filling → CHIRPS bias correction)');
 		s.chirpsQuantileMap = null;
 	}
 	if (s.assuranceAnnualThreshold !== undefined && !(typeof s.assuranceAnnualThreshold === 'number' && s.assuranceAnnualThreshold > 0 && s.assuranceAnnualThreshold <= 1)) {

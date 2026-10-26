@@ -287,7 +287,7 @@ export async function plantUnitRainSummary(runId: string, unitRain: unknown): Pr
 }
 
 /**
- * A run as engine 1.54.0 stored it, before the validation signatures (CR-16,
+ * A run as engine 1.54.0 stored it, before the hydrological signatures (CR-16,
  * engine 1.55.0): the summary loses `plausibility.signatures`. The API only
  * makes current runs, so the compare spec that shows how an older run reads
  * plants one. Its run stamp no longer matches (it reads as unverified).

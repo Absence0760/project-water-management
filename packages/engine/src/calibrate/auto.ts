@@ -223,9 +223,9 @@ export function finishAutoCalibration(plan: AutoCalibrationPlan, fitted: readonl
 	const chosen = cancelled ? null : verdict.chosen;
 	const notes = [...plan.notes];
 	if (!rules.signedOff)
-		notes.push('These are draft rules, not yet signed off by the hydrologist: the fit they keep is not evidence until they are (Settings → Fit the parameters → Calibration rules).');
+		notes.push('These are draft rules, not yet signed off by the hydrologist: the fit they keep is not evidence until they are (Calibration → Fit the parameters → Calibration rules).');
 	if (rules.filters.wr2012Mar && cases.some((c) => c.filters.some((f) => f.id === 'wr2012Mar' && f.status === 'notApplicable')))
-		notes.push('The WR2012 MAR filter could not be applied: there is no WR2012 reference in Settings.');
+		notes.push('The WR2012 MAR filter could not be applied: there is no WR2012 reference (Calibration → WR2012 check).');
 	if (plan.ruleExclusions.length) notes.push(`The exclusion rule left out ${plan.ruleExclusions.length} water year${plan.ruleExclusions.length === 1 ? '' : 's'}.`);
 	if (cancelled) notes.push('Cancelled: no fit is kept.');
 	else if (chosen === null) notes.push('No fit passed the rules, so none is kept. The reasons are listed with each fit; the rules, not the result, are what to change.');

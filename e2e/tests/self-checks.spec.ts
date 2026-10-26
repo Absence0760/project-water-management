@@ -14,10 +14,12 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await createRun(page.request, project.id, 'Checked');
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await expect(page.getByRole('heading', { level: 2, name: 'Checked' })).toBeVisible();
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Self-checks' }).click();
+	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Arithmetic checks' }).click();
 
-	const checks = page.getByRole('region', { name: /^Self-checks/ });
-	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 13 self-checks passed.'); // the 7th: EWR attribution (engine 0.17.0, audit Q17); the 8th: groundwater (0.23.0, WP-1.34); the 9th: land cover (0.24.0, WP-1.35); the 10th: registered volumes (1.18.0, issue #72); the 11th: operating rules (1.32.0, issue #204); the 12th: the assurance of supply (1.34.0, issue #192); the 13th: the drought restriction rule (1.54.0, WP-3.8)
+	const checks = page.getByRole('region', { name: /^Arithmetic checks/ });
+	await expect(checks.getByRole('status').filter({ hasText: 'arithmetic checks' })).toHaveText('All 13 arithmetic checks passed.'); // the 7th: EWR attribution (engine 0.17.0, audit Q17); the 8th: groundwater (0.23.0, WP-1.34); the 9th: land cover (0.24.0, WP-1.35); the 10th: registered volumes (1.18.0, issue #72); the 11th: operating rules (1.32.0, issue #204); the 12th: the assurance of supply (1.34.0, issue #192); the 13th: the drought restriction rule (1.54.0, WP-3.8)
+	// All passed, so the list waits behind one button (#586 round 2; runs-record-actions.spec.ts).
+	await checks.getByRole('button', { name: 'Show the 13 checks' }).click();
 	await expect(checks.getByRole('listitem')).toHaveCount(13);
 	// The workspace's word: the engine's "farm" reads "unit" (#54), and the checks say which engine made them.
 	await expect(checks.getByRole('listitem').first()).toContainText('Every hydrological unit balances every day');
@@ -29,7 +31,7 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await expect(page.getByRole('region', { name: 'Water balance by water year' })).toHaveCount(1);
 	const closure = page.locator('#res-checks').getByTestId('checks-balance-link');
 	await expect(closure).toHaveText(
-		'✓Passed: The water balance closes in its one water year and over the whole run: each residual is float noise. The balance itself, term by term: Water balance.'
+		'✓Passed: The water balance closes in its one water year and over the whole run: each residual is float noise. The balance itself, term by term: Water balance by water year.'
 	);
 	await expect(page.locator('#res-checks').getByRole('table')).toHaveCount(0);
 	await closure.getByRole('link', { name: 'Water balance' }).click();
@@ -113,8 +115,9 @@ test('a run shows its self-checks, its water balance and a traced day that close
 		await expect(table.getByRole('rowheader', { name, exact: true })).toBeVisible();
 	}
 	await expect(table.getByRole('row').filter({ hasText: 'Irrigation supplied' }).getByRole('cell').first()).toHaveText('G');
-	// The day closes from the numbers shown: in − used − stored − out is 0 or float noise.
-	await expect(trace.locator('.closure strong')).toHaveText(/^([-−]?0|[-−]?\d\.\d{2}e-\d+)$/);
+	// The day closes from the numbers shown: in − used − stored − out is 0 or float noise, which reads "< 0.001",
+	// never an exponent (checks.ts fmtBalance, #586 D10).
+	await expect(trace.locator('.closure strong')).toHaveText(/^([-−]?0|< 0\.001)$/);
 
 	// The catchment's day: how the runoff model (GR4J, the default) turned rain into natural flow.
 	await trace.getByLabel('Hydrological unit, gauge or catchment').selectOption({ label: 'Catchment (rain to natural flow)' });
@@ -125,6 +128,6 @@ test('a run shows its self-checks, its water balance and a traced day that close
 		await expect(runoff.getByRole('rowheader', { name, exact: true })).toBeVisible();
 	}
 	// The store balance closes from the numbers shown: before + P + F − AET − Q − after is 0 or float noise.
-	await expect(trace.locator('.closure strong')).toHaveText(/^([-−]?0|[-−]?\d\.\d{2}e-\d+)$/);
+	await expect(trace.locator('.closure strong')).toHaveText(/^([-−]?0|< 0\.001)$/);
 	await expect(trace.locator('.closure')).toContainText('mm');
 });

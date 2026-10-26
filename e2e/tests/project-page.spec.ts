@@ -53,28 +53,38 @@ test('the page: one title, its context and Download in the header, the facts, de
 	// No Recent changes (issue #177): History is in the sidebar, and its header names the latest change.
 	await expect(region(page, 'Recent changes')).toHaveCount(0);
 
-	// The notes list fills in after its card is on the page and moves the facts under it: measure once it has.
+	// The notes list fills in after its card is on the page and moves what follows it: measure once it has.
 	await expect(region(page, 'Recent notes')).toHaveAttribute('data-notes-ready', 'true');
-	// Details on the left, who has access on the right: Team above Members, level with the details.
+	// One column in the side index's order (issue #586 R4-B; it was details on the left, who has access on the right):
+	// the details, then the team over the members, every panel the column's width.
 	const details = (await region(page, 'Project details').boundingBox())!;
 	const team = (await region(page, 'Team').boundingBox())!;
 	const members = (await region(page, 'Members').boundingBox())!;
-	expect(Math.round(team.x)).toBe(Math.round(members.x));
-	expect(team.x).toBeGreaterThan(details.x + details.width);
-	expect(team.y + team.height).toBeLessThanOrEqual(members.y);
-	expect(Math.round(team.y)).toBe(Math.round(details.y));
+	for (const box of [team, members]) {
+		expect(Math.round(box.x)).toBe(Math.round(details.x));
+		expect(Math.round(box.width)).toBe(Math.round(details.width));
+	}
+	expect(team.y).toBeGreaterThanOrEqual(details.y + details.height);
+	expect(members.y).toBeGreaterThanOrEqual(team.y + team.height);
 	// The first screen answers "what is this project and who has it": details and the team are in the window.
 	for (const el of [region(page, 'Project details'), region(page, 'Team')]) await expect(el).toBeInViewport({ ratio: 1 });
 	await expect(region(page, 'Members')).toBeInViewport();
-	// The model's facts repeat each tab's header line, so they sit at the left column's foot, not in the first row (issue #176).
+	// The model's facts repeat each tab's header line, so they come after who has access, under the notes (issue #176).
 	const facts = (await region(page, 'The model').boundingBox())!;
 	const notes = (await region(page, 'Recent notes').boundingBox())!;
+	const farmers = (await page.getByRole('region', { name: /^Farmers/ }).boundingBox())!;
 	expect(Math.round(facts.x)).toBe(Math.round(details.x));
+	expect(notes.y).toBeGreaterThanOrEqual(farmers.y + farmers.height);
 	expect(facts.y).toBeGreaterThanOrEqual(notes.y + notes.height);
-	// Two tiles a row in the column: 2 × 4.
+	// Four tiles a row across the column: 4 × 2.
 	const tiles = page.locator('dl.stats > div');
 	const tops = new Set(await tiles.evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top))));
-	expect(tops.size).toBe(4);
+	expect(tops.size).toBe(2);
+	// The details' fields two a row (name beside the time zone, description beside the WUA name), not stretched across.
+	const name = (await page.getByLabel('Name', { exact: true }).boundingBox())!;
+	const zone = (await page.getByRole('combobox', { name: 'Time zone' }).boundingBox())!;
+	expect(zone.x).toBeGreaterThan(name.x + name.width);
+	expect(name.width).toBeLessThan(details.width / 2);
 
 	// Members and Responsible authority explain themselves in their headings' ⓘ (and the glossary behind them), not in
 	// paragraphs that repeated them (issue #521 § 13): the authority's form starts under its heading.
@@ -153,7 +163,7 @@ test('old links: a Summary #…-h fragment lands on its panel here, focused, and
 	await expect(page).toHaveURL(/\?tab=project#members-h$/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Members' })).toBeFocused();
 
-	// The facts' old fragment lands on them at the left column's foot (issue #176).
+	// The facts' old fragment lands on them, after who has access (issue #176, issue #586 R4-B).
 	await page.goto(`/projects/${project.id}#model-h`);
 	await expect(page).toHaveURL(/\?tab=project#model-h$/);
 	const model = page.getByRole('heading', { level: 2, name: 'The model' });
@@ -236,7 +246,6 @@ test.describe('the big case: 30 members and 30 pending farmer invites', () => {
 		['phone', { width: 390, height: 844 }]
 	] as const) {
 		test(label, async ({ page, owner, playwright }) => {
-			void owner;
 			test.setTimeout(120_000);
 			await page.setViewportSize(viewport);
 			const project = await seedRunnableProject(page.request, `Project big case ${label} with a long catchment name to wrap`);
@@ -254,11 +263,42 @@ test.describe('the big case: 30 members and 30 pending farmer invites', () => {
 				expect(res.status()).toBe(201);
 			}
 			await openProject(page, project.id);
-			await expect(region(page, 'Members').getByRole('rowheader')).toHaveCount(31);
-			await expect(page.getByRole('region', { name: /^Farmers/ })).toContainText('Pending farmer invitations (30)');
+			const members = region(page, 'Members');
+			const farmers = page.getByRole('region', { name: /^Farmers/ });
+			const invites = farmers.getByRole('region', { name: /^Pending farmer invitations/ });
+			await expect(invites).toContainText('Pending farmer invitations (30)');
+			await expect(region(page, 'Recent notes')).toHaveAttribute('data-notes-ready', 'true');
+
+			// Each long list shows its first eight and opens the rest in place, never scrolling inside its card (issue
+			// #586 R4-F): unfolded, Recent notes sat 5,063 px down at 1440 and 13,960 px down on a phone.
+			await expect(members.getByRole('rowheader')).toHaveCount(8);
+			await expect(members.getByRole('rowheader').first()).toContainText(`${owner.displayName} (you)`);
+			// By name as a reader counts (the server sorts as text: 1, 10, 11 … 19, 2).
+			await expect(members.getByRole('rowheader').nth(2)).toContainText('Hydrologist 2 with');
+			await expect(invites.getByRole('listitem')).toHaveCount(8);
+			const showMembers = members.getByRole('button', { name: 'Show all 31 members' });
+			const showInvites = invites.getByRole('button', { name: 'Show all 30 invitations' });
+			for (const b of [showMembers, showInvites]) await expect(b).toHaveAttribute('aria-expanded', 'false');
+			const notesTop = (await region(page, 'Recent notes').boundingBox())!.y;
+			// Measured 3,663 px at 1440 and 6,961 px on a phone, the rest being the panels between (who decides, share
+			// links, two-step sign-in …), which the side index reaches in one click.
+			expect(notesTop).toBeLessThan(label === 'desktop' ? 4_000 : 7_600);
 			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
 			if (label === 'desktop') await expect(region(page, 'Project details')).toBeInViewport({ ratio: 1 });
 			await expectNoViolations(page);
+
+			// Opened: every row, the list growing with the page rather than scrolling inside its card.
+			await showMembers.click();
+			await expect(members.getByRole('rowheader')).toHaveCount(31);
+			const less = members.getByRole('button', { name: 'Show the first 8 members' });
+			await expect(less).toHaveAttribute('aria-expanded', 'true');
+			await expect(less).toBeFocused();
+			expect(await members.locator('.table-wrap').evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+			await showInvites.click();
+			await expect(invites.getByRole('listitem')).toHaveCount(30);
+			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+			await less.click();
+			await expect(members.getByRole('rowheader')).toHaveCount(8);
 		});
 	}
 });
@@ -287,7 +327,7 @@ test.describe('no accessibility violations', () => {
 test.describe('on a phone', () => {
 	test.use({ viewport: { width: 360, height: 740 } });
 
-	test('the page stacks details, facts, team, members, and a long description shows in full', async ({ page, owner }) => {
+	test('the page stacks details, team, members, facts, and a long description shows in full', async ({ page, owner }) => {
 		void owner;
 		const project = await createProject(page.request, 'Project phone stack');
 		await openProject(page, project.id);
@@ -296,8 +336,9 @@ test.describe('on a phone', () => {
 		// It grows to fit rather than hiding the text behind an inner scrollbar.
 		expect(await desc.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
 
+		// The side index's order (issue #586 R4-B): who has access before the facts.
 		const ys: number[] = [];
-		for (const name of ['Project details', 'The model', 'Team', 'Members']) ys.push((await region(page, name).boundingBox())!.y);
+		for (const name of ['Project details', 'Team', 'Members', 'The model']) ys.push((await region(page, name).boundingBox())!.y);
 		expect(ys).toEqual([...ys].sort((a, b) => a - b));
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
 	});
@@ -332,4 +373,173 @@ test.describe('on a phone', () => {
 		expect(lines.height).toBeGreaterThan(lines.lineHeight * 1.5); // it did wrap
 		expect(lines.parts.filter((p) => p.lines > 1)).toEqual([]);
 	});
+});
+
+// The in-page menu (common/SectionNav, issue #586 R1-E): a side index from a 1440 px window, the two-row bar below
+// that and one sideways strip on a phone, every link a panel's heading word for word (a trailing count dropped:
+// "Farmers (0)" is "Farmers"), read from the page, so a panel a reader isn't shown has no link and a panel added to
+// PROJECT_ANCHORS gets one with no other change.
+const sections = (page: Page) => page.getByRole('navigation', { name: 'Project page sections' });
+/** The panels' headings as the page draws them, in page order, without their ⓘ or a trailing count. */
+const panelHeadings = (page: Page) =>
+	page.locator('.project-page').evaluate((root) =>
+		// Each panel's own heading: the first h2 of each column's child (not a closed dialog's inside it, Notes').
+		[...root.querySelectorAll<HTMLElement>('[data-nav-group] > *')].flatMap((p) => (p.querySelector('h2') ? [p.querySelector('h2')!] : [])).map((h) => {
+			const copy = h.cloneNode(true) as HTMLElement;
+			copy.querySelectorAll('button, .helptip, .visually-hidden, [aria-hidden="true"]').forEach((n) => n.remove());
+			return (copy.textContent ?? '').replace(/\s+/g, ' ').trim().replace(/\s*\(\d[\d\s]*\)$/, '');
+		})
+	);
+/** Every link the menu has, on the bar and (opened) in More, in order. */
+async function menuLinks(page: Page): Promise<string[]> {
+	const nav = sections(page);
+	const more = nav.getByRole('button', { name: /^More/ });
+	if (await more.count()) await more.click();
+	const names = await nav.getByRole('link').allInnerTexts();
+	if (await more.count()) await page.keyboard.press('Escape');
+	return names.map((n) => n.trim());
+}
+
+test.describe('the page’s side index and bar', () => {
+	test('at 1440: a side index beside the panels, grouped by column, each link its heading; a link lands on its heading and Back returns', async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: 1440, height: 960 });
+		const project = await seedRunnableProject(page.request, 'Project side index');
+		await openProject(page, project.id);
+		const nav = sections(page);
+		// Three groups, one per column of the one-column page (issue #586 R4-B).
+		await expect(nav.getByRole('list', { name: 'The project' }).getByRole('link')).toHaveText(['Project details']);
+		await expect(nav.getByRole('list', { name: 'People and access' }).getByRole('link').first()).toHaveText('Team');
+		await expect(nav.getByRole('list', { name: 'Notes, facts and reports' }).getByRole('link')).toHaveText(['Recent notes', 'The model', 'Scheduled reports']);
+		const headings = await panelHeadings(page);
+		// API keys and Scheduled reports came from Settings (issue #586 R1-B) and got their links with no other change.
+		expect(headings).toEqual(expect.arrayContaining(['Project details', 'Scheduled reports', 'Members', 'Farmers', 'Share links', 'API keys', 'Two-step sign-in', 'Licence record']));
+		expect(await menuLinks(page)).toEqual(headings);
+
+		// Beside the page, not above it: the details start level with the index, and the whole index is in the window.
+		const rail = (await nav.boundingBox())!;
+		const details = (await region(page, 'Project details').boundingBox())!;
+		expect(details.x).toBeGreaterThanOrEqual(rail.x + rail.width);
+		expect(rail.y + rail.height).toBeLessThanOrEqual(960);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
+
+		// Following a link: the fragment, the heading focused and in view, the link marked; Back goes to the top again.
+		await nav.getByRole('link', { name: 'Licence record' }).click();
+		await expect(page).toHaveURL(/\?tab=project#licence-record$/);
+		const heading = page.getByRole('heading', { level: 2, name: 'Licence record' });
+		await expect(heading).toBeFocused();
+		await expect(heading).toBeInViewport();
+		await expect(nav.getByRole('link', { name: 'Licence record' })).toHaveAttribute('aria-current', 'location');
+		await page.goBack();
+		await expect(page).toHaveURL(/\?tab=project$/);
+		await expect(region(page, 'Project details')).toBeInViewport();
+	});
+
+	// Issue #586 R4-B: the page was two columns, and a link to a panel in the taller right column (Farmers onward) put
+	// it at the window's top beside an empty left column. It is one column in the index's order now, so a link to any
+	// panel fills the space beside the index from the panel down.
+	for (const [width, height] of [
+		[1440, 960],
+		[1280, 800]
+	] as const) {
+		test(`at ${width}: one column in the index’s order, so a link to a panel far down shows it, and what follows, the column’s full width`, async ({ page, owner }) => {
+			void owner;
+			await page.setViewportSize({ width, height });
+			const project = await seedRunnableProject(page.request, `Project one column ${width}`);
+			await openProject(page, project.id);
+			const nav = sections(page);
+			// Every panel has the same left edge and width: one column.
+			const boxes = await page.locator('.project-page [data-nav-group] > *').evaluateAll((els) =>
+				els.filter((el) => el.getBoundingClientRect().height > 0).map((el) => ({ x: Math.round(el.getBoundingClientRect().x), w: Math.round(el.getBoundingClientRect().width) }))
+			);
+			expect(boxes.length).toBeGreaterThan(10);
+			expect(new Set(boxes.map((b) => b.x)).size).toBe(1);
+			expect(new Set(boxes.map((b) => b.w)).size).toBe(1);
+			// The page reads in the index's order: each panel's heading below the one before it, as the menu lists them.
+			const names = await menuLinks(page);
+			const tops: number[] = [];
+			for (const name of names) tops.push((await page.getByRole('heading', { level: 2, name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) }).first().boundingBox())!.y);
+			expect(tops).toEqual([...tops].sort((a, b) => a - b));
+
+			await nav.getByRole('link', { name: 'Farmers' }).click();
+			await expect(page).toHaveURL(/\?tab=project#farmers-h$/);
+			const farmers = page.getByRole('heading', { level: 2, name: /^Farmers/ });
+			await expect(farmers).toBeFocused();
+			await expect(farmers).toBeInViewport();
+			// Beside the index, the column from Farmers down: the panel spans it, and the panels after it carry on under
+			// it to the window's foot, with no empty column beside them.
+			const panel = (await page.getByRole('region', { name: /^Farmers/ }).boundingBox())!;
+			const details = (await region(page, 'Project details').boundingBox())!;
+			expect(Math.round(panel.x)).toBe(Math.round(details.x));
+			expect(Math.round(panel.width)).toBe(Math.round(details.width));
+			const after = (await region(page, 'Share links').boundingBox())!;
+			expect(after.y).toBeLessThan(height);
+			expect(Math.round(after.x)).toBe(Math.round(panel.x));
+			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+			await page.goBack();
+			await expect(page).toHaveURL(/\?tab=project$/);
+		});
+	}
+
+	test('at 1280: the bar, at most two rows, every heading on it or in More; a reload of a link lands on its heading', async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: 1280, height: 800 });
+		const project = await seedRunnableProject(page.request, 'Project bar');
+		await openProject(page, project.id);
+		const nav = sections(page);
+		// Two rows of 30 px pills and their gaps: never a third.
+		expect((await nav.boundingBox())!.height).toBeLessThan(90);
+		expect(await menuLinks(page)).toEqual(await panelHeadings(page));
+		// The bar sits above the panels.
+		expect((await region(page, 'Project details').boundingBox())!.y).toBeGreaterThan((await nav.boundingBox())!.y);
+
+		// A fresh load (not a hash change on the open page).
+		await page.goto('/');
+		await openProject(page, project.id, '#project-two-step-h');
+		const twoStep = page.getByRole('heading', { level: 2, name: 'Two-step sign-in' });
+		await expect(twoStep).toBeFocused();
+		await expect(twoStep).toBeInViewport();
+		// Not under the sticky bar (WCAG 2.4.11).
+		expect((await twoStep.boundingBox())!.y).toBeGreaterThanOrEqual((await nav.boundingBox())!.y + (await nav.boundingBox())!.height - 1);
+	});
+
+	test('on a phone: one strip with every link, and the page doesn’t scroll sideways', async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: 390, height: 844 });
+		const project = await seedRunnableProject(page.request, 'Project strip');
+		await openProject(page, project.id);
+		const nav = sections(page);
+		await expect(nav.getByRole('button', { name: /^More/ })).toHaveCount(0);
+		expect(await menuLinks(page)).toEqual(await panelHeadings(page));
+		const tops = new Set(await nav.getByRole('link').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top))));
+		expect(tops.size).toBe(1);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+		await expectNoViolations(page);
+	});
+
+	test('a viewer’s menu lists only the panels a viewer is shown', async ({ page, owner, signIn }) => {
+		void owner;
+		const project = await createProject(page.request, 'Project viewer menu');
+		const viewer = await signIn('Project menu viewer');
+		await addMember(page.request, project.id, viewer.user.email, 'viewer');
+		const v = viewer.page;
+		await v.setViewportSize({ width: 1440, height: 960 });
+		await openProject(v, project.id);
+		const names = await menuLinks(v);
+		expect(names).toEqual(await panelHeadings(v));
+		for (const owners of ['Share links', 'Two-step sign-in', 'Registration checks', 'Licence record']) expect(names).not.toContain(owners);
+		expect(names).toContain('Members');
+	});
+});
+
+test('share links before anything is published link to where a run is published, landing on it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Project unpublished');
+	await createRun(page.request, project.id, 'Baseline');
+	await openProject(page, project.id);
+	const note = page.getByTestId('share-unpublished');
+	await expect(note).toHaveText('Nothing is published yet: a link opens only once a run is published, from its Publication on Runs & results.');
+	await note.getByRole('link', { name: 'Publication on Runs & results' }).click();
+	await expect(page).toHaveURL(/\?tab=runs&run=[0-9a-f-]+#res-publication$/);
+	await expect(page.getByRole('heading', { name: 'Publication', exact: true })).toBeFocused();
 });

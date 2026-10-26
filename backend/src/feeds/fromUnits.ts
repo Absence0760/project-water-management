@@ -208,7 +208,7 @@ async function plan(db: Db, projectId: string, asked?: ChirpsDailyProduct): Prom
 			else if (filled) {
 				refuse(
 					chirpsProduct(feed.config) !== product
-						? `its feed’s series already holds CHIRPS ${chirpsProduct(feed.config)} days, and a feed never splices two products into one record: change the product of its feed on its own (Settings → Data feeds) to replace the record`
+						? `its feed’s series already holds CHIRPS ${chirpsProduct(feed.config)} days, and a feed never splices two products into one record: change the product of its feed on its own (Data → Data feeds) to replace the record`
 						: 'its parcel changed after its feed began fetching, and a feed never splices two areas into one record: remove the unit’s feed, and its series, to start it again with the new cells'
 				);
 				continue;

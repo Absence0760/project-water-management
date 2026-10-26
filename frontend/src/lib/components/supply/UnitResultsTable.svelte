@@ -5,7 +5,7 @@
 	// Moved from the Runs tab's summary to Hydrological units (issue #17); the
 	// printable report still shows it under the run summary.
 	import type { FarmSummary } from '@water-management/engine';
-	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
+	import { fmtDay, fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 	import { m3DayToMm3a, sortFarms, SUPPLY_TARGET, supplyBarFraction, type FarmSortKey } from '#lib/components/runs/results.js';
 
 	let {
@@ -41,7 +41,7 @@
 		ewr: farms.reduce((s, f) => s + f.avgEwrShortfallM3Day, 0)
 	});
 	/** Farm figures here are whole-record means; the curtailment table has its own window. */
-	const wholeRecord = $derived(startDate && endDate ? `the whole record, ${startDate} to ${endDate} (${fmtNum(days)} days)` : 'the whole record');
+	const wholeRecord = $derived(startDate && endDate ? `the whole record, ${fmtDay(startDate)} to ${fmtDay(endDate)} (${fmtNum(days)} days)` : 'the whole record');
 
 	let sortKey = $state<FarmSortKey>('network');
 	let sortDir = $state<'asc' | 'desc'>('asc');

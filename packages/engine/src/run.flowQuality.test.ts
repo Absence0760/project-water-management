@@ -208,7 +208,7 @@ describe('observed_flow_quality', () => {
 		const bare = runModelFrom(stored(), { ...inp, series: { rain_catchment_mm: cut(inp.series.rain_catchment_mm!), flow_observed_m3s: cut(inp.series.flow_observed_m3s!) } });
 		const codes = col(bare)!.values;
 		expect(codes.includes(FLOW_FLAG_CODE.suspect)).toBe(false);
-		expect(bare.summary.warnings).toContainEqual(expect.stringMatching(/^Resumed from 2020-10-01 without the observed flow record's history: its quality flags leave out the suspect class/));
+		expect(bare.summary.warnings).toContainEqual(expect.stringMatching(/^Resumed from 1 Oct 2020 without the observed flow record's history: its quality flags leave out the suspect class/));
 		// The rating classes don't need the history: those days match.
 		for (let t = 0; t < codes.length; t++) if (full[at + t] !== FLOW_FLAG_CODE.suspect) expect(codes[t], `day ${t}`).toBe(full[at + t]);
 		expect(checkFlowQuality({ ...inp, settings: { ...inp.settings, simulationStart: '2020-10-01' } }, bare)).toBeNull();
@@ -268,7 +268,7 @@ describe('recordFlowFlags', () => {
 describe('gap fill on a resumed run', () => {
 	const at = toEpochDay('2020-10-01') - toEpochDay(START);
 	const cut = (s: { startDate: string; values: (number | null)[] }) => ({ startDate: '2020-10-01', values: s.values.slice(at) });
-	const LEFT_OUT = /^Resumed from 2020-10-01 without the observed gauge flow record's history: its gap fill is left out/;
+	const LEFT_OUT = /^Resumed from 1 Oct 2020 without the observed gauge flow record's history: its gap fill is left out/;
 	/** The gauge record with a 5-day gap across the snapshot's day, filled from the logger (a donor ratio over the whole overlap). */
 	function filled(): ModelInput {
 		const gauge = record().values.slice();

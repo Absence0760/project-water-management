@@ -65,6 +65,7 @@ export const INVENTORY = [
 		in: ['frontend/src/lib/components/calibration/CalibrationCheck.svelte', 'frontend/src/lib/components/calibration/calibrationCheck.ts'],
 		note: 'simulated against observed: no observed flow after the forecast starts, so every line stops there'
 	},
+	{ path: 'frontend/src/lib/components/calibration/CalibrationResults.svelte', reads: 1, how: 'passes-on', evidence: ['prefetchSeries('], note: 'warms the cache Model quality’s charts read' },
 	{ path: 'frontend/src/lib/components/compare/CompareOverlay.svelte', reads: 1, how: 'cut+band', evidence: ['recordOf(pair.a, forecastA)', '{band}'] },
 	{ path: 'frontend/src/lib/components/compare/ReserveYearsChart.svelte', reads: 1, how: 'cut', evidence: ['reserveDaysByWaterYear(x.value.startDate, x.value.values, list[i]!.forecastFrom'] },
 	{ path: 'frontend/src/lib/components/dams/DamsTab.svelte', reads: 1, how: 'cut+band', evidence: ['beforeForecast(s.values', 'band={forecastBand('] },
@@ -74,10 +75,10 @@ export const INVENTORY = [
 	{ path: 'frontend/src/lib/components/overview/FlowVsReserve.svelte', reads: 1, how: 'cut+band', evidence: ['belowReserve(record(flows.shortfall))', '{band}'] },
 	{ path: 'frontend/src/lib/components/overview/OverviewTab.svelte', reads: 1, how: 'cut', evidence: ['const forecastFrom = run.summary.forecast?.from ?? null;'], note: 'loadDamLevels cuts (overview/damLevels.ts)' },
 	{ path: 'frontend/src/lib/components/overview/damLevels.ts', reads: 0, how: 'cut', evidence: ['beforeForecast(series.values, series.startDate, forecastFrom)'], note: 'loadDamLevels / damLevel, which the dam readers call' },
+	{ path: 'frontend/src/lib/components/runs/ModelQuality.svelte', reads: 1, how: 'cut+band', evidence: ['beforeForecast(conv(d), d.startDate, forecastFrom)', '{band}'] },
 	{ path: 'frontend/src/lib/components/runs/RecessionDiagnostics.svelte', reads: 1, how: 'never', evidence: ['check.segments'], note: 'only the summary’s recession segments: observed-flow days, which a forecast has none of' },
 	{ path: 'frontend/src/lib/components/runs/ReportWindowPanel.svelte', reads: 1, how: 'cut', evidence: ['resolveWindow(choice, run, stored)'], note: 'reportWindow.ts ends a forecast run’s windows before the forecast' },
 	{ path: 'frontend/src/lib/components/runs/RunChart.svelte', reads: 1, how: 'band', evidence: ['{band}'] },
-	{ path: 'frontend/src/lib/components/runs/RunCharts.svelte', reads: 1, how: 'cut+band', evidence: ['beforeForecast(conv(d), d.startDate, forecastFrom)', '{band}'] },
 	{
 		path: 'frontend/src/lib/components/runs/GaugeCheckFlows.svelte',
 		reads: 1,
@@ -87,7 +88,6 @@ export const INVENTORY = [
 		note: 'issue #554: the checks-only gauges’ flow-duration curves stop at the forecast; their hydrographs band it (their statistics are the summary’s)'
 	},
 	{ path: 'frontend/src/lib/components/runs/RunoffPanel.svelte', reads: 1, how: 'band', evidence: ['{band}'] },
-	{ path: 'frontend/src/lib/components/runs/RunsTab.svelte', reads: 1, how: 'passes-on', evidence: ['prefetchSeries('], note: 'warms the cache the charts read' },
 	{ path: 'frontend/src/lib/components/share/load.ts', reads: 2, how: 'cut', evidence: ['pub.forecast_from'], in: 'backend/migrations/190_history_viewer_share_forecast.sql', note: 'app_share_series cuts in the database' },
 	{ path: 'frontend/src/lib/components/supply/SupplyTab.svelte', reads: 1, how: 'cut', evidence: ['weekWindow(run)'], note: 'resolveWindow’s last 7 days end before the forecast' },
 	{ path: 'frontend/src/lib/components/supply/UnitDetail.svelte', reads: 1, how: 'band', evidence: ['{band}'] },

@@ -106,7 +106,7 @@ test('an empty list starts from the example catchment: imported, run and opened 
 	await expect(page.getByTestId('project-name').filter({ hasText: EXAMPLE })).toBeVisible();
 	await expect(page.getByRole('heading', { level: 1, name: 'Runs & results' })).toBeVisible();
 	await expect(runsList(page).getByRole('button', { name: /^Initial run \(import\)/ })).toHaveAttribute('aria-current', 'true');
-	await expect(page.getByRole('img', { name: /^Flow at the outflow gauge/ }).locator('canvas')).toBeVisible();
+	await expect(page.locator('#res-water-balance')).toBeVisible();
 
 	// It is the user's own project now, on the list in place of the empty state.
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();

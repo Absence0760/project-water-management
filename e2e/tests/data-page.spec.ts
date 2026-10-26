@@ -34,8 +34,8 @@ test('the series are grouped, the series behind come first in their group and ar
 	// Run model is the header's primary action on every section; Add data sits beside it.
 	await expect(header.getByRole('button', { name: 'Add data' })).not.toHaveClass(/btn-primary/);
 	await expect(header.getByTestId('header-run')).toHaveClass(/btn-primary/);
-	// The feeds that fill series daily are one link away (Settings → Data feeds).
-	await expect(page.getByTestId('data-feeds-link')).toHaveAttribute('href', '?tab=settings#set-feeds');
+	// The feeds that fill series daily are Data feeds, further down this page (issue #586: it was on Settings).
+	await expect(page.getByTestId('data-feeds-link')).toHaveAttribute('href', '#data-feeds');
 
 	// Grouped by what each series is (issue #553): the station, the catchment's other rain, the flow records, the
 	// rest. Within a group the series behind come first (CHIRPS, 20 days, before the forecast that runs ahead), each
@@ -89,20 +89,29 @@ test('picking a series charts it through the URL: Back returns to the one before
 	await expect(seriesRow(page, 'CHIRPS cell').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await expect(page.getByRole('heading', { level: 1, name: 'Data' })).toBeVisible();
 
-	// A shared link opens on its series; one to a series that no longer exists shows the default.
+	// A shared link opens on its series, with no note (positive control)…
 	await openData(page, project.id, `&series=${ids['Pan station']}`);
 	await expect(seriesRow(page, 'Pan station').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('gone-series')).toHaveCount(0);
+	await expect(page).toHaveURL(new RegExp(`[?&]series=${ids['Pan station']}`));
+	// …and one to a series that no longer exists shows the default, drops the dead id from the address (no history
+	// entry) and says so in one line (issue #586: it charted another series without a word, the URL unchanged).
 	await openData(page, project.id, '&series=00000000-0000-4000-8000-000000000000');
 	await expect(seriesRow(page, 'Gauge R1').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('gone-series')).toHaveText('The series that link named is no longer stored: showing Gauge R1 instead.');
+	await expect(page).not.toHaveURL(/[?&]series=/);
+	// Picking a series clears the note.
+	await seriesRow(page, 'Logger L1').getByRole('button', { name: 'View', exact: true }).click();
+	await expect(page.getByTestId('gone-series')).toHaveCount(0);
 });
 
 /**
  * Elements on the Data tab that scroll vertically inside themselves (the page is the one scroll; issue #17,
- * 2026-09-29): the series and chart, and the panels below them (gauge vs logger, double mass, checks, reference).
+ * 2026-09-29): the series and chart, and the panels below them (data feeds, gauge vs logger, double mass, checks, reference).
  */
 const innerScrollers = (page: import('@playwright/test').Page) =>
 	page.evaluate(() =>
-		[...document.querySelectorAll('.data-page, #data-agreement, #data-double-mass, #data-checks, #data-uses')]
+		[...document.querySelectorAll('.data-page, #data-feeds, #data-agreement, #data-double-mass, #data-checks, #data-uses')]
 			.flatMap((root) => [root, ...root.querySelectorAll('*')])
 			.filter((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 1)
 			.map((e) => `${e.tagName.toLowerCase()}.${e.className}`)
@@ -332,9 +341,10 @@ test('gauge vs logger flows with the page: the flagged and latest water years, t
 	await expect(panel.getByRole('button', { name: 'Show only the flagged and latest years' })).toHaveAttribute('aria-expanded', 'true');
 	expect(await innerScrollers(page)).toEqual([]);
 
-	await panel.getByRole('link', { name: 'Calibration record → Compare with' }).click();
-	await expect(page).toHaveURL(/[?&]tab=settings#set-record$/);
-	await expect(page.getByRole('heading', { level: 2, name: 'Calibration record' })).toBeFocused();
+	// The record is chosen on Calibration since issue #586 round 3.
+	await panel.getByRole('link', { name: 'Calibration → Calibration record → Compare with' }).click();
+	await expect(page).toHaveURL(/[?&]tab=calibration#set-record$/);
+	await expect(page.getByRole('heading', { level: 3, name: 'Calibration record' })).toBeFocused();
 });
 
 for (const size of [
@@ -357,6 +367,22 @@ for (const size of [
 		await expect(del).toBeInViewport();
 		// From folds under Data up to when the column is narrow; a screen reader still has the From column.
 		await expect(seriesTable(page).getByRole('columnheader', { name: 'From' })).toHaveCount(1);
+		// At 1280 px too (issue #586): kept as a column there, it squeezed the series names to 190 px and wrapped each
+		// role badge onto two lines, its ⓘ on a third. Folded, the names have room and a badge is one line.
+		await expect(seriesRows(page).first().locator('.from-inline')).toBeVisible();
+		await expect(seriesTable(page).getByRole('columnheader', { name: 'From' })).not.toBeInViewport();
+		if (size.width === 1280) expect((await seriesRows(page).first().getByRole('rowheader').boundingBox())!.width).toBeGreaterThan(240);
+		// At 1024 px a long badge may wrap inside itself, but its ⓘ stays beside it, not on a line of its own.
+		for (const row of (await seriesRows(page).all()).slice(0, 4)) {
+			const badge = (await row.getByTestId('series-role').boundingBox())!;
+			const tip = (await row.locator('.role-line').getByRole('button').boundingBox())!;
+			expect(tip.x).toBeGreaterThan(badge.x + badge.width - 1);
+			expect(tip.y).toBeLessThan(badge.y + badge.height);
+			if (size.width === 1280) {
+				const line = await row.getByTestId('series-role').evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
+				expect(badge.height).toBeLessThan(line * 1.5);
+			}
+		}
 	});
 }
 
@@ -433,7 +459,7 @@ test('the series table, the CSV period and Edit a day read day first, and fit a 
 	await expect(row.getByRole('cell').first()).toContainText('10 Oct 2021');
 	await expect(row.getByRole('cell').nth(1)).toHaveText('1 Oct 2021');
 	await row.getByRole('button', { name: /^CSV/ }).click();
-	await expect(page.getByText('1 Oct 2021 → 10 Oct 2021')).toBeVisible();
+	await expect(page.getByText('1 Oct 2021 → 10 Oct 2021', { exact: true })).toBeVisible();
 	await page.keyboard.press('Escape');
 	await row.getByRole('button', { name: 'View', exact: true }).click();
 	await chartReady(page);
@@ -447,6 +473,129 @@ test('the series table, the CSV period and Edit a day read day first, and fit a 
 		await page.setViewportSize({ width, height: 844 });
 		await layoutSettled(page);
 		await expectNoSidewaysScroll(page);
+		// Each card cell holds its label: "Missing (% of days)" wraps rather than running into Typical (issue #586).
+		const overflowing = await row.locator('td[data-label]').evaluateAll((cells) => cells.filter((c) => c.scrollWidth > c.clientWidth + 1).map((c) => c.getAttribute('data-label')));
+		expect(overflowing, `at ${width} px`).toEqual([]);
 	}
 	await expectNoViolations(page);
+});
+
+test('Data feeds is a section of its own: named as its heading in the menu, the series’ link and a link from another page land on its heading past 30 series, and only an owner is told it saves as it changes', async ({ page, owner, signIn }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Data feeds section');
+	await Promise.all(
+		Array.from({ length: 30 }, (_, i) =>
+			putEnding(page.request, project.id, { kind: i % 2 ? 'rain_chirps_mm' : 'flow_observed_m3s', name: `Station ${String(i + 1).padStart(2, '0')}`, endAgo: 2, length: 120 })
+		)
+	);
+	await openData(page, project.id);
+	await expect(seriesRows(page).first()).toBeVisible();
+	const menu = page.getByRole('navigation', { name: 'Data sections' });
+	const feeds = page.getByRole('region', { name: 'Data feeds' });
+	const heading = feeds.getByRole('heading', { level: 2, name: 'Data feeds' });
+	// The side index names it as its heading, word for word, in the Series group after the chart (issue #586: from Settings).
+	await expect(menu.getByRole('link', { name: 'Data feeds', exact: true })).toHaveAttribute('href', '#data-feeds');
+	await expect(feeds.getByText('No feeds yet.')).toBeVisible();
+	await expect(feeds.getByTestId('feeds-saves')).toHaveText('Feeds save as you change them: attaching, switching off or removing one needs no Save changes.');
+
+	// The series panel's link goes down the page to it, its heading focused.
+	await page.getByTestId('data-feeds-link').click();
+	await expect(page).toHaveURL(new RegExp(`\\?tab=series#data-feeds$`));
+	await expect(heading).toBeInViewport();
+	await expect(heading).toBeFocused();
+
+	// A link from another page (Runs & results' forecast stub, the Map's Observed flow): a fresh load lands on it too.
+	await page.goto(`/projects/${project.id}?tab=overview`);
+	await page.goto(`/projects/${project.id}?tab=series#data-feeds`);
+	await expect(heading).toBeFocused();
+	await expect(heading).toBeInViewport();
+	await expectNoViolations(page, { include: '#data-feeds' });
+
+	// A viewer reads it: no add action, no saves line; a ?rain= link lands on the panel's heading and opens nothing.
+	const viewer = await signIn('Data feeds viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const v = viewer.page;
+	await v.setViewportSize({ width: 390, height: 844 });
+	await v.goto(`/projects/${project.id}?tab=series&rain=units#data-feeds`);
+	const seen = v.getByRole('region', { name: 'Data feeds' });
+	await expect(seen.getByRole('heading', { level: 2, name: 'Data feeds' })).toBeFocused();
+	await expect(seen.getByRole('button', { name: 'Refresh status' })).toBeVisible();
+	await expect(seen.getByRole('button', { name: /^(?:Attach a feed|Rain from the map)$/ })).toHaveCount(0);
+	await expect(seen.getByTestId('feeds-saves')).toHaveCount(0);
+	await expect(seen.getByTestId('unit-rain')).toHaveCount(0);
+	await expect(seen.getByText('No feeds yet. An owner can attach one.')).toBeVisible();
+	await expectNoSidewaysScroll(v);
+	await expectNoViolations(v, { include: '#data-feeds' });
+});
+
+test('?rain=units#data-feeds opens Rain for each unit on its heading once per arrival: Close gives the focus back and it stays shut, a reload opens it again', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Data feeds rain arrival');
+	await page.goto(`/projects/${project.id}?tab=series&rain=units#data-feeds`);
+	const feeds = page.getByRole('region', { name: 'Data feeds' });
+	const unitRain = feeds.getByTestId('unit-rain');
+	await expect(unitRain.getByRole('heading', { name: 'Rain for each unit' })).toBeFocused();
+	await expect(feeds.getByLabel('Area', { exact: true })).toHaveValue('units');
+	await expect(feeds.getByRole('heading', { level: 2, name: 'Data feeds' })).toBeInViewport();
+
+	await unitRain.getByRole('button', { name: 'Close' }).click();
+	await expect(unitRain).toHaveCount(0);
+	await expect(feeds.getByRole('button', { name: 'Attach a feed' })).toBeFocused();
+	// The URL still asks, but this arrival was answered: a refreshed list doesn't open it again.
+	await feeds.getByRole('button', { name: 'Refresh status' }).click();
+	await expect(feeds.getByRole('status').filter({ hasText: 'Status refreshed.' })).toBeVisible();
+	await expect(unitRain).toHaveCount(0);
+
+	await page.reload();
+	await expect(unitRain.getByRole('heading', { name: 'Rain for each unit' })).toBeFocused();
+});
+
+test('Data checks: each series named charts it; the heading is named alone; the key keeps each colour with its words; the period link lands on Settings', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Data checks links');
+	const logger = Array.from({ length: 120 }, (_, i) => 1 + (i % 7) / 10);
+	logger[5] = -0.4;
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Gauge R1', unit: 'mm', startDate: '2020-10-01', values: Array.from({ length: 120 }, (_, i) => (i % 5 === 0 ? 8 : 0)) });
+	await putSeries(page.request, project.id, { kind: 'flow_logger_m3s', name: 'Logger', unit: 'm³/s', startDate: '2020-10-01', values: logger });
+	const ids = await seriesIds(page.request, project.id);
+	await openData(page, project.id);
+	await chartReady(page);
+
+	// The heading is "Data checks" alone, its ⓘ beside it (a #data-checks landing focuses and reads the heading).
+	const checks = page.getByTestId('series-checks');
+	await expect(checks.getByRole('heading', { level: 2, name: 'Data checks', exact: true })).toBeVisible();
+	await expect(checks.getByRole('button', { name: 'About the data checks' })).toBeVisible();
+
+	// A check names its series as a control that charts it, as the row's View does: a history entry, Back returns.
+	const item = checks.getByRole('listitem').filter({ hasText: 'Negative values' });
+	const chart = item.getByRole('button', { name: 'Chart Logger' });
+	await expect(chart).toHaveAttribute('aria-pressed', 'false');
+	await chart.click();
+	await expect(page).toHaveURL(new RegExp(`[?&]series=${ids['Logger']}`));
+	await expect(seriesRow(page, 'Logger').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(chart).toHaveAttribute('aria-pressed', 'true');
+	await expect(seriesChart(page)).toBeInViewport();
+	await page.goBack();
+	await expect(seriesRow(page, 'Gauge R1').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expectNoViolations(page);
+
+	// On a phone each swatch stays on one line with its words ("no data" wrapped away from its colour).
+	await page.setViewportSize({ width: 390, height: 844 });
+	const items = page.getByTestId('series-key').locator('.key-item');
+	await expect(items).toHaveText(['complete year', 'some days missing', 'no data.']);
+	for (const it of await items.all()) {
+		const lines = await it.evaluate((el) => el.getClientRects().length);
+		expect(lines).toBe(1);
+		expect(await it.evaluate((el) => el.scrollWidth <= el.parentElement!.clientWidth)).toBe(true);
+	}
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page);
+
+	// What the model uses names the setting that bounds a run's period, as a link that lands on it.
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.getByTestId('uses-period-link').click();
+	await expect(page).toHaveURL(/[?&]tab=settings#set-period$/);
+	await expect(page.getByRole('heading', { level: 2, name: /^Simulation period/ })).toBeFocused();
 });

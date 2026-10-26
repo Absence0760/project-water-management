@@ -200,7 +200,7 @@ describe('multi-day accumulations (§2.4d)', () => {
 		const u = col(rec, 'rain_used')!;
 		expect(u[r - d0]).toBe(90);
 		expect(u[a - d0]).toBeCloseTo(ratio(12) * ch[a - d0]!, 10);
-		expect(rec.summary.warnings.find((x) => x.includes('run as recorded'))).toContain('may be counted twice (2018-01-05)');
+		expect(rec.summary.warnings.find((x) => x.includes('run as recorded'))).toContain('may be counted twice (5 Jan 2018)');
 		const kept = runModel(catchment(series, { zeroRainRuns: { mode: 'missing', keepDry: [], missing: [], keepReadings: [{ start: '2018-01-05', end: '2018-01-05', reason: 'invented thunderstorm' }] } }));
 		expect(col(kept, 'rain_used')![r - d0]).toBe(90);
 	});

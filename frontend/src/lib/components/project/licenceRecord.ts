@@ -8,6 +8,7 @@
 // (D14, as an application's decision records them) and the applicant's
 // withdrawal (233_licence_record_outcome_words, issue #523 G9 (b)).
 import type { LicenceOutcome, LicenceOutcomeInput, LicenceRecord } from '#lib/api/index.js';
+import { fmtDay } from '#lib/format/number.js';
 
 export const OUTCOME_LABEL: Record<LicenceOutcome, string> = {
 	licence_issued: 'Licence issued',
@@ -17,17 +18,17 @@ export const OUTCOME_LABEL: Record<LicenceOutcome, string> = {
 	application_withdrawn: 'Application withdrawn'
 };
 
-/** One sentence on where the record stands, as of `today` (YYYY-MM-DD). */
+/** One sentence on where the record stands, as of `today` (YYYY-MM-DD), its days day first ("1 Mar 2026", issue #586). */
 export function recordStatus(r: LicenceRecord, today: string): { text: string; due: boolean } {
 	if (r.outcome) {
 		const what =
 			r.outcome === 'licence_issued'
-				? `Licence issued on ${r.outcomeOn}; it expires on ${r.expiresOn}.`
-				: `${OUTCOME_LABEL[r.outcome] ?? r.outcome} on ${r.outcomeOn}.`;
+				? `Licence issued on ${fmtDay(r.outcomeOn ?? '')}; it expires on ${fmtDay(r.expiresOn ?? '')}.`
+				: `${OUTCOME_LABEL[r.outcome] ?? r.outcome} on ${fmtDay(r.outcomeOn ?? '')}.`;
 		const closes = r.closesOn ?? '';
 		const due = closes !== '' && closes <= today;
 		return {
-			text: `${what} ${due ? `The record could be deleted from ${closes}: ask the operator, in writing, when the organisation no longer needs it.` : `The record is kept until ${closes}.`}`,
+			text: `${what} ${due ? `The record could be deleted from ${fmtDay(closes)}: ask the operator, in writing, when the organisation no longer needs it.` : `The record is kept until ${fmtDay(closes)}.`}`,
 			due
 		};
 	}
@@ -35,8 +36,8 @@ export function recordStatus(r: LicenceRecord, today: string): { text: string; d
 	const due = r.reviewDueOn <= today;
 	return {
 		text: due
-			? `The review was due on ${r.reviewDueOn}: record the licence outcome, or confirm that the record is still needed.`
-			: `No outcome is recorded. Next review: ${r.reviewDueOn}.`,
+			? `The review was due on ${fmtDay(r.reviewDueOn)}: record the licence outcome, or confirm that the record is still needed.`
+			: `No outcome is recorded. Next review: ${fmtDay(r.reviewDueOn)}.`,
 		due
 	};
 }

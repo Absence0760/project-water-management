@@ -48,7 +48,7 @@
 
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
-		if (!dirty || tooLong) return;
+		if (saving || !dirty || tooLong) return;
 		saving = true;
 		error = null;
 		saved = false;
@@ -90,7 +90,8 @@
 				Everyone who can see the project reads it. <span class:over={tooLong}>{normaliseNotes(draft).length} / {RUN_NOTES_MAX} characters</span>
 			</p>
 			<div class="action-row">
-				<button class="btn btn-primary" type="submit" disabled={saving || !dirty || tooLong}>{saving ? 'Saving…' : 'Save notes'}</button>
+				<!-- aria-disabled, not disabled: a saved note leaves nothing to save, and a disabled button under the focus throws it to the page (ui-playbook § 4). save() ignores the press. -->
+				<button class="btn btn-primary" type="submit" aria-disabled={saving || !dirty || tooLong}>{saving ? 'Saving…' : 'Save notes'}</button>
 				{#if saved && !dirty}<span class="muted small" role="status">Saved.</span>{/if}
 			</div>
 			{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}

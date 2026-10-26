@@ -274,7 +274,7 @@ describe('summaryText', () => {
 	it('reads the stats out in the displayed unit', () => {
 		expect(summaryText(stats, 'm³/s', 1 / 86_400)).toBe(
 			'Over the 120 days both runs have: mean A 0.0116, mean B 0.0127, B − A +0.00116 m³/s. ' +
-				'B is higher on 9 days and lower on 1 day; the largest change is −0.01 m³/s on 2021-12-11.'
+				'B is higher on 9 days and lower on 1 day; the largest change is −0.01 m³/s on 11 Dec 2021.'
 		);
 	});
 	it('says when the runs are identical, and when they share no day', () => {

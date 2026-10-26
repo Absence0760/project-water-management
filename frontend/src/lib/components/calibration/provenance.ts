@@ -2,7 +2,7 @@
 import { CALIBRATION_PARAMS, type ApanDailyFingerprint, type RunoffModelId } from '@water-management/engine';
 import { fittedAtText } from '#lib/calibration/fit.js';
 import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
-import { fmtNum } from '#lib/format/number.js';
+import { fmtDay, fmtNum } from '#lib/format/number.js';
 
 /**
  * "Production store capacity X1" for GR4J's x1; the key itself when unknown,
@@ -49,5 +49,5 @@ export function fitRecordLine(record: { model: string; fittedAt: string; auto?: 
 export function apanDailyText(f: ApanDailyFingerprint | null | undefined): string {
 	if (f === undefined) return 'not recorded (fit made before this was tracked)';
 	if (f === null) return 'none (monthly means only)';
-	return `from ${f.startDate}, ${fmtNum(f.length, 0)} days (SHA-256 ${f.valuesSha256.slice(0, 12)})`;
+	return `from ${fmtDay(f.startDate)}, ${fmtNum(f.length, 0)} days (SHA-256 ${f.valuesSha256.slice(0, 12)})`;
 }

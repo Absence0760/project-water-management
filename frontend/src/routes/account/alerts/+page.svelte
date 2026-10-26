@@ -14,7 +14,8 @@
 	import { resolve } from '$app/paths';
 	import { basePath } from '#lib/nav/base.js';
 	import { api, type AlertChoice, type AlertMode, type ProjectAlerts } from '#lib/api/index.js';
-	import { focusPageStart } from '#lib/a11y/focusPage.js';
+	import { focusPageStart, pageStart } from '#lib/a11y/focusPage.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { session } from '#lib/auth/session.svelte.js';
 	import { ALERT_MODES, choiceLabel, DAILY_CAP, modeLabel, resumeProblem, suppressedText, thresholdLine } from '#lib/components/alerts/words.js';
 	import SectionHeader from '#lib/components/workspace/SectionHeader.svelte';
@@ -41,6 +42,11 @@
 		}
 	}
 	onMount(load);
+	/** Try again takes its alert out of the page: the focus follows (followRetry, WCAG 2.4.3), onto the loading line, then a new Try again or the page's title. */
+	function retry(e: MouseEvent) {
+		followRetry(e.currentTarget as HTMLElement, { landing: () => pageStart() });
+		void load();
+	}
 
 	let resuming = $state(false);
 	let resumed = $state(false);
@@ -143,9 +149,9 @@
 	</SectionHeader>
 
 	{#if loadError}
-		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" onclick={load}>{t('Try again')}</button></div>
+		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" data-retry onclick={retry}>{t('Try again')}</button></div>
 	{:else if projects === null}
-		<p class="muted" role="status">{t('Loading…')}</p>
+		<p class="muted" role="status" data-loading>{t('Loading…')}</p>
 	{:else if !projects.length}
 		<p class="panel empty">{t('None of your catchments can send you alerts yet.')}</p>
 	{:else}

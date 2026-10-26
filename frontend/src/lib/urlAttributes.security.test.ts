@@ -28,6 +28,8 @@ import { farmDrawerHref } from './components/crops/farmDrawer';
 import { farmHref, farmReturn, wordsHref } from './components/farm/load';
 import { fieldHistoryHref } from './components/history/fieldLine';
 import { noteHref } from './components/notes/notes';
+import { calibrationHref } from './components/calibration/links';
+import { warningParts, warningPlaceHref } from './components/runs/warningText';
 import { runHref } from './components/overview/attention';
 import { curtailmentHref } from './components/portfolio/portfolio';
 import { riverHref } from './components/river/links';
@@ -56,7 +58,7 @@ const SAFE_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
 const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	// App URL builders: each returns "?tab=…", "#…" or the base path + "/…" with its ids encoded (BUILDER).
 	withParam: { why: 'BUILDER: "?" + URLSearchParams of the current page', in: ['lib/components/allocations/AllocationsTab.svelte', 'lib/components/allocations/AllocationUseMap.svelte', 'lib/components/crops/CropsTab.svelte', 'lib/components/scenarios/ApplicantView.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/map/MapTab.svelte', 'lib/components/network/NetworkTab.svelte', 'lib/components/settings/SettingsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
-	runHref: { why: 'BUILDER: "?tab=runs&run=" + encoded id', in: ['lib/components/dams/DamsTab.svelte', 'lib/components/overview/LatestRun.svelte', 'lib/components/overview/OverviewTab.svelte', 'lib/components/overview/PublishedBaseline.svelte', 'lib/components/river/RiverTab.svelte', 'lib/components/supply/SupplyTab.svelte', 'routes/projects/[id]/reports/[jobId]/+page.svelte'] },
+	runHref: { why: 'BUILDER: "?tab=runs&run=" + encoded id', in: ['lib/components/dams/DamsTab.svelte', 'lib/components/overview/LatestRun.svelte', 'lib/components/overview/OverviewTab.svelte', 'lib/components/overview/PublishedBaseline.svelte', 'lib/components/calibration/CalibrationResults.svelte', 'lib/components/river/RiverTab.svelte', 'lib/components/supply/SupplyTab.svelte', 'routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	riverHref: { why: 'BUILDER: "?tab=river…"', in: ['lib/components/overview/OverviewTab.svelte', 'lib/components/runs/RunsTab.svelte'] },
 	mapNodeHref: { why: 'BUILDER: "?tab=map&node=" + encoded node id (workspace/mapLinks.ts, #326 A2)', in: ['lib/components/crops/CroplandProposalsBox.svelte', 'lib/components/dams/DamProposalsBox.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	'view.src': { why: 'LocalityMap: data:image/svg+xml of the engine\'s own locality figure (packages/engine/src/geo/localityMap.ts, numbers and escaped names only), shown in an <img>, where an SVG runs no script (report/evidence/locality.ts)', in: ['lib/components/report/evidence/LocalityMap.svelte'] },
@@ -67,6 +69,8 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
 	evidenceRunHref: { why: 'EvidencePanel: a literal "?tab=runs&run=" + encodeURIComponent(the current evidence run id from the API) + "#res-evidence", or null (issue #521)', in: ['lib/components/runs/EvidencePanel.svelte'] },
 	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },
+	calibrationHref: { why: 'BUILDER: "?tab=calibration" + "&run=" + encoded run id (or none) + "#" + a fixed id (calibration/links.ts); SettingsTab passes a literal set- id', in: ['lib/components/settings/SettingsTab.svelte'] },
+	'status.link.href': { why: 'CalibrationTab: calibration/status.ts calibrationStatus, whose link is one of the literals "#cal-fit", "#res-calibration" or "?tab=series", or null (#586 R4-A)', in: ['lib/components/calibration/CalibrationTab.svelte'] },
 	stationHref: { why: 'BUILDER: "?tab=series&series=" + encoded series id + "#data-chart" (settings/unitRain.ts, issue #553)', in: ['lib/components/settings/UnitRainFields.svelte', 'lib/components/settings/FlowGenerationUnits.svelte'] },
 	packHref: {
 		why: 'BUILDER: "<base>/projects/" + encoded project id + "/packs/" + encoded pack id (packs/pack.ts)',
@@ -78,7 +82,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	curtailmentHref: { why: 'BUILDER: "<base>/projects/…" (portfolio.ts; the team page wraps it under the same name)', in: ['routes/teams/[id]/+page.svelte', 'lib/components/projects/ProjectTable.svelte'] },
 	historyHref: { why: 'BUILDER: compare/attribution.ts "/projects/" + encoded project id + "?tab=history"', in: ['lib/components/compare/CompareView.svelte'] },
 	// Local builders and constants in the component itself: a literal "?" or "#" head, or resolve() of a literal path.
-	tabHref: { why: 'routes/projects/[id]: "?tab=<TabId>" or the current pathname', in: ['routes/projects/[id]/+page.svelte'] },
+	tabHref: { why: 'routes/projects/[id]: "?tab=<TabId>" (&run=<encoded run id> on a run tab, workspace/tabLinks.ts) or the current pathname', in: ['routes/projects/[id]/+page.svelte'] },
 	addDataHref: { why: 'ProjectTable: `<base>/projects/${id}?add=data`', in: ['lib/components/projects/ProjectTable.svelte'] },
 	projectHref: { why: 'OverviewTab: project/links.ts "?tab=project" + an anchor', in: ['lib/components/overview/OverviewTab.svelte'] },
 	guide: { why: 'SectionHeader: its `guide` prop, which the workspace page and ApplicantView build as "<base>/help/guides/" + a TAB_GUIDE id (lib/workspace/tabs.ts, a constant; guides.test.ts checks each is a real guide)', in: ['lib/components/workspace/SectionHeader.svelte'] },
@@ -120,7 +124,10 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	},
 	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
 	issueHref: { why: 'BUILDER: "?tab=<area>" with the item id encodeURIComponent-ed (model/validate.ts issueHref)', in: ['lib/components/model/IssueList.svelte'] },
-	'p.href': { why: 'ProblemLinks: issueHref(…), "#" + a NumberInput id, or a draft adapter\'s "?tab=project" / "?tab=settings#<group id>" (SaveBar, ModelSaveRow, the page)', in: ['lib/components/model/ProblemLinks.svelte'] },
+	'p.href': {
+		why: 'ProblemLinks: issueHref(…), "#" + a NumberInput id, or a draft adapter\'s "?tab=project" / "?tab=settings#<group id>" (SaveBar, ModelSaveRow, the page); WarningText: runs/warningText.ts warningParts, each href warningPlaceHref (BUILDER "?tab=settings#" + a fixed set- id, or calibrationHref with the encoded run id and a fixed anchor), never text from the warning',
+		in: ['lib/components/model/ProblemLinks.svelte', 'lib/components/runs/WarningText.svelte']
+	},
 	plantedHref: { why: 'NodeDetail: NetworkTab builds "?" + URLSearchParams of the current page with farm=<node id>, or leaves it null', in: ['lib/components/network/NodeDetail.svelte'] },
 	transfersHref: { why: 'NodeDetail: NetworkTab passes the literal "?tab=transfers" or null', in: ['lib/components/network/NodeDetail.svelte'] },
 	main: { why: 'farm why/dam pages: farmHref(…)', in: ['routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte'] },
@@ -132,10 +139,13 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	uploadHref: { why: 'MapSetupPill prop: MapTab passes withParam(page.url, "upload", "1")', in: ['lib/components/map/MapSetupPill.svelte'] },
 	recordLink: { why: 'GaugeCheckFlows: its recordHref prop, runs/checkGauges.ts recordHref: the literal "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/runs/GaugeCheckFlows.svelte'] },
-	dataHref: { why: 'CalibrationWindowFields prop: SettingsTab passes "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/calibration/CalibrationWindowFields.svelte'] },
+	dataHref: { why: 'CalibrationWindowFields prop: CalibrationSettings passes "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/calibration/CalibrationWindowFields.svelte'] },
+	'missing.panel.link.href': { why: 'CalibrationResults: the line for a linked Model quality panel the run doesn\'t have, a literal "?tab=…" constant (runs/missingPanel.ts NEEDS, issue #586 Round 3)', in: ['lib/components/calibration/CalibrationResults.svelte'] },
+	'missingLink.panel.link.href': { why: 'RunsTab: the line for a linked panel the run doesn\'t have, a literal "?tab=…" constant (runs/missingPanel.ts NEEDS, issue #586)', in: ['lib/components/runs/RunsTab.svelte'] },
+	resolve: { why: 'resolve() of ACCOUNT_TWO_STEP, a literal "account#two-step" constant in auth-extras/requireTwoStep.ts: an app path, never a scheme (issue #586)', in: ['lib/components/auth-extras/RequireTwoStep.svelte'] },
 	'moved.href': { why: 'SectionNav: a moved setting\'s link from the page\'s `elsewhere` list, a literal "?tab=…#…" constant (settings/sections.ts SETTINGS_ELSEWHERE, issue #521)', in: ['lib/components/common/SectionNav.svelte'] },
 	hrefOf: { why: 'SectionNav: a section\'s `href` (a literal "?tab=…" from the page that lists it) or "#" + its id', in: ['lib/components/common/SectionNav.svelte'] },
-	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=settings&rain=boundary#set-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },
+	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=series&rain=boundary#data-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },
 	reportHref: { why: 'report job page: `<base>/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	'register.registerUrl': {
 		why: 'SignoffSection, the public verify page, the registration checks panel: liability/registration.ts constant https:// link to the ECSA or SACNASP public register',
@@ -164,7 +174,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	hrefWith: { why: 'projects list page: "?" + URLSearchParams(owner, sort, q), or `<base>/`', in: ['routes/+page.svelte'] },
 	'it.href': { why: 'NeedsAttention: attention.ts items built from runHref / farmDrawerHref or "?tab=…" literals', in: ['lib/components/overview/NeedsAttention.svelte'] },
 	'c.href': {
-		why: 'RunSummaryView: credibility.ts "#res-…" anchors; FarmMapCanvas: farmMap.ts farmMapCredits, "<base>/data-sources" and its "#hydrorivers" / "#jrc-water" anchors, or null',
+		why: 'RunSummaryView: credibility.ts "#res-…" anchors, or calibration/links.ts calibrationHref (BUILDER "?tab=calibration&run=" + encoded run id + "#" + a fixed res- id); FarmMapCanvas: farmMap.ts farmMapCredits, "<base>/data-sources" and its "#hydrorivers" / "#jrc-water" anchors, or null',
 		in: ['lib/components/runs/RunSummaryView.svelte', 'lib/components/farm/FarmMapCanvas.svelte']
 	},
 	// Values that come from outside the component, each checked where it enters.
@@ -590,7 +600,11 @@ describe('URL attributes', () => {
 				curtailmentHref({ id, sourceRunId: id }),
 				fieldHistoryHref({ filter: id }, id),
 				noteHref({ target: 'node', nodeId: id, runId: null, settingKey: null }) ?? '',
-				noteHref({ target: 'run', nodeId: null, runId: id, settingKey: null }) ?? ''
+				noteHref({ target: 'run', nodeId: null, runId: id, settingKey: null }) ?? '',
+				noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: id }) ?? '',
+				calibrationHref(id, 'res-calibration'),
+				warningPlaceHref('plausibility', id),
+				...warningParts(`${id} Calibration → Fit the parameters ${id}`, (p) => warningPlaceHref(p, id)).flatMap((p) => (p.href ? [p.href] : []))
 			];
 			for (const h of hrefs) expect(lands(h), `${JSON.stringify(id)} → ${h}`).toBe(origin);
 		}

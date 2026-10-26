@@ -954,7 +954,7 @@ def gauge_as_reference(
             "WARNING: [Flow data] rUseFlow calibrates against the gauge column, which --gauge-as-reference says is "
             "another river. calibrationFlowKind is left unset"
             + (
-                ", so runs use the logger record. Check that choice in Settings -> Calibration record -> Compare with"
+                ", so runs use the logger record. Check that choice in Calibration -> Calibration record -> Compare with"
                 if has_logger
                 else " and the project has no observed flow record to calibrate against"
             )
@@ -1033,8 +1033,23 @@ def zero_rain_runs(start_date: str, values: list[float | None]) -> tuple[list[in
     return wet_months, runs
 
 
+DAY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def day_text(iso_day: str) -> str:
+    """A calendar day YYYY-MM-DD day first, "2012-06-01" -> "1 Jun 2012", as the engine's dayText (calendar.ts) writes it."""
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", iso_day)
+    if not m:
+        return iso_day
+    try:
+        dt.date(int(m[1]), int(m[2]), int(m[3]))
+    except ValueError:
+        return iso_day
+    return f"{int(m[3])} {DAY_MONTHS[int(m[2]) - 1]} {m[1]}"
+
+
 def zero_rain_note(series: list[dict[str, Any]]) -> str | None:
-    """The importer's note for zero runs in the catchment rain, or None."""
+    """The importer's note for zero runs in the catchment rain, or None; its days day first, as the engine's data check."""
     rain = next((s for s in series if s["kind"] == "rain_catchment_mm"), None)
     if rain is None:
         return None
@@ -1046,7 +1061,7 @@ def zero_rain_note(series: list[dict[str, Any]]) -> str | None:
         if wet
         else f"{ZERO_RUN_PLAIN_DAYS}+ days"
     )
-    spans = "; ".join(f"{a} to {b} ({n} days)" for a, b, n in runs)
+    spans = "; ".join(f"{day_text(a)} to {day_text(b)} ({n} days)" for a, b, n in runs)
     return (
         f"[Flow data] catchment rain has {len(runs)} run(s) of zero rain covering {rule}: {spans}. "
         "Runs treat them as missing (engine >= 0.15.0, settings.zeroRainRuns, default mode 'missing'), so "

@@ -12,6 +12,7 @@
 -->
 <script lang="ts">
 	import DayInput from '#lib/components/common/DayInput.svelte';
+	import { fmtDay } from '#lib/format/number.js';
 	import { HEAVY_DAY_MM, QM_MIN_WET_DAYS, QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN, waterYearLabel, type RainSourcePeriod } from '@water-management/engine';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -66,7 +67,7 @@
 			periodHasWork(p) &&
 			!(await confirmDialog({
 				title: `Remove rain-source period ${i + 1}?`,
-				message: `${p.start} to ${p.end}${p.reason.trim() ? ` (“${p.reason.trim()}”)` : ''}: its dates, reason and factors, with where they came from, go with it.`,
+				message: `${fmtDay(p.start)} to ${fmtDay(p.end)}${p.reason.trim() ? ` (“${p.reason.trim()}”)` : ''}: its dates, reason and factors, with where they came from, go with it.`,
 				confirmLabel: 'Remove the period',
 				danger: true
 			}))

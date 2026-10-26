@@ -325,7 +325,7 @@ describe('a plain feed never takes over the series runs read (issue #561)', () =
 		const ahead = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells } });
 		expect(ahead.status).toBe(409);
 		expect(ahead.body.details).toMatchObject({ code: 'series_takes_over', runSeries: 'Rainfall CHIRPS', targetName: '' });
-		expect(ahead.body.error).toMatch(/the series without a name would take over from “Rainfall CHIRPS” \(2001-01-01 to 2001-01-02\)/);
+		expect(ahead.body.error).toMatch(/the series without a name would take over from “Rainfall CHIRPS” \(1 Jan 2001 to 2 Jan 2001\)/);
 		const after = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells }, targetName: 'Rainfall CHIRPS 2' });
 		expect(after.status, JSON.stringify(after.body)).toBe(201);
 		const moved = await owner.call('PATCH', `/projects/${pid}/feeds/${after.body.feed.id}`, { targetName: 'CHIRPS feed' });

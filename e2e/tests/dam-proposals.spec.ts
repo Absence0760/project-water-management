@@ -290,7 +290,7 @@ test('with a run the box is the picked dam’s, folded in its chart panel; Dam o
 	// Closed again, a card's Proposals picks its dam, opens the box and gives its picker the keyboard, in view.
 	await summary.click();
 	await expect(unit).toBeHidden();
-	await card('Upper farm').getByRole('link', { name: 'Upper farm: proposed from the register and the map' }).click();
+	await card('Upper farm').getByRole('link', { name: 'Upper farm: proposals from the register and the map' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]dam=${idOf('Upper farm')}$`));
 	await expect(unit).toHaveValue(idOf('Upper farm'));
 	await expect(unit).toBeFocused();

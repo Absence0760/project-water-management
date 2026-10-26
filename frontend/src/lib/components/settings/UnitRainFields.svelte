@@ -1,6 +1,6 @@
 <!--
 	Settings → Flow generation → Per unit → Units without a station (settings.unitRain, issue #482, issue #553 round 3,
-	docs/model.md §2.4h, docs/ui.md § Settings & calibration): what a land unit with no rainfall station runs on, the
+	docs/model.md §2.4h, docs/ui.md § Model settings): what a land unit with no rainfall station runs on, the
 	rule from before stations. The catchment rain gauge's MAP (a read-out of the catchment rain station's since issue
 	#553, edited in the Data tab's Series details), the MAP period the CHIRPS factors compare over, and the reference
 	gauge and unit whose monthly factors level every such unit's CHIRPS (issue #500, docs/model.md §2.4h *Reference
@@ -73,7 +73,7 @@
 	</span>
 	{#if on && value}
 		<p class="hint coverage" data-testid="unit-rain-coverage">
-			{coverage.text} Set each unit’s MAP on its form in Network or from the MAP grid below, and its CHIRPS under <a href="?tab=settings&rain=units#set-feeds">Data feeds → Rain for each unit</a>.
+			{coverage.text} Set each unit’s MAP on its form in Network or from the MAP grid below, and its CHIRPS under <a href="?tab=series&rain=units#data-feeds">Data feeds → Rain for each unit</a>.
 		</p>
 		{#if coverage.without.length}
 			<p class="hint coverage" data-testid="unit-rain-without-map">

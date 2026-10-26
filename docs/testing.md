@@ -11,7 +11,7 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 | --- | --- | --- |
 | `pnpm test:changed` | typecheck the touched workspaces + `vitest --changed` for only the tests the change reaches (db tests too when :5434 is up) | seconds for a leaf change; the full suites when a shared helper changed |
 | `pnpm check` | typecheck everything; the frontend's svelte-check fails on any warning (Svelte's a11y lint included: a scrollable region that must take focus says so with `svelte-ignore` and a reason) | ~20 s |
-| `pnpm test:engine` | engine unit | ~35 s |
+| `pnpm test:engine` | engine unit, then the fuzz shards (the `fuzz` project) | ~35 s on CI's runner; ~3.5 min on the 16-thread laptop, the shards ~30 s of it |
 | `pnpm test:frontend` | frontend unit (most of it is the local-only workbook parity test) | ~40 s |
 | `pnpm test:backend` | backend unit | ~15 s |
 | `pnpm test:backend:db` | API + RLS against Postgres (serial) | ~1.5 min |
@@ -276,7 +276,19 @@ guard, so the pin proves "unchanged", not "the same as now".
   alone; never under 2 minutes; `fuzz/shard.ts` `shardTimeoutMs`), and the
   release raises it to 2 s a case (`RELEASE_MS_PER_CASE`), since a slow
   runner at ~0.4 s a case once timed out `web@0.1.6`'s shards with every
-  invariant holding. The
+  invariant holding. The shards are their own vitest project, `fuzz`
+  (`packages/engine/vitest.config.ts`), which `pnpm test`, `test:coverage`,
+  `test:changed` and the release's soak run with `unit`: `sequence.groupOrder`
+  starts them only once the `unit` group has finished, one worker a shard and
+  at most one fewer than the machine's cores (4 shards on a 4-core CI runner,
+  under coverage, each ran past the guard; `taskset -c 0-1` reproduces it).
+  Inside `unit` they had run beside the engine's other heavy files, one worker
+  per thread (`pnpm test` runs the engine before the frontend and backend,
+  which import it, so its own files are the competition): 54–57 s a shard on the
+  16-thread laptop, and 115–148 s against the 120 s guard when the laptop was
+  busy with other work too, timing out with every invariant holding (issue
+  #586 R4-D). After `unit` they take 27–30 s. The timeout stays a hang guard:
+  the work didn't change, the contention did. The
   determinism check compares outputs value by value (`sameOutput`), not by
   serialising them twice, which cost as much as a run. A shard is fixed,
   CPU-bound work, not a wait: 2026-10-02, shard 2 took 17 s alone, 34 s with

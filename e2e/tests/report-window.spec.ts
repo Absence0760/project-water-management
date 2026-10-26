@@ -42,24 +42,24 @@ test('a viewer picks the last 7 days on Hydrological units: worked out from the 
 	const picker = panel.getByLabel('Reporting window');
 
 	await v.goto(`/projects/${project.id}?tab=supply&run=${second}`);
-	await expect(period).toHaveText('Project window: daily averages over 2022-01-22 – 2022-01-28 (7 days).');
+	await expect(period).toHaveText('Project window: daily averages over 22 Jan 2022 – 28 Jan 2022 (7 days).');
 	const engine = await farmFigures(table);
 	// The reserve is set high enough to be short every day, so the farms carry a charge and the outlet sets it.
 	expect(engine.map((row) => row.includes('Outflow gauge'))).toEqual([true, true]);
 
 	await v.goto(`/projects/${project.id}?tab=supply&run=${first}`);
-	await expect(period).toHaveText('Project window: daily averages over 2021-11-01 – 2021-12-31 (61 days).');
+	await expect(period).toHaveText('Project window: daily averages over 1 Nov 2021 – 31 Dec 2021 (61 days).');
 	await expect(picker).toHaveValue('project');
-	await expect(picker.locator('option:checked')).toHaveText('Project window (2021-11-01 to 2021-12-31)');
+	await expect(picker.locator('option:checked')).toHaveText('Project window (1 Nov 2021 to 31 Dec 2021)');
 	// The unit results table is over the whole record, and says so.
 	await expect(v.getByTestId('farms-period')).toHaveText(
-		'Daily averages over the whole record, 2021-10-01 to 2022-01-28 (120 days); the curtailment targets cover the reporting window.'
+		'Daily averages over the whole record, 1 Oct 2021 to 28 Jan 2022 (120 days); the curtailment targets cover the reporting window.'
 	);
 	const november = await farmFigures(table);
 
 	await picker.selectOption({ label: 'Last 7 days' });
 	await expect(v).toHaveURL(/[?&]window=last7(&|$)/);
-	await expect(period).toHaveText('Last 7 days: daily averages over 2022-01-22 – 2022-01-28 (7 days).');
+	await expect(period).toHaveText('Last 7 days: daily averages over 22 Jan 2022 – 28 Jan 2022 (7 days).');
 	await expect(panel.getByRole('status')).toContainText('Worked out in your browser from this run\'s daily results: nothing is re-run, and the project setting is unchanged.');
 	// The same row as the engine's run over that week, the binding EWR site included (issue #44).
 	await expect(table.getByRole('columnheader', { name: /EWR site\s*setting the charge/ })).toBeVisible();
@@ -68,19 +68,19 @@ test('a viewer picks the last 7 days on Hydrological units: worked out from the 
 
 	await picker.selectOption({ label: 'Whole record' });
 	await expect(v).toHaveURL(/[?&]window=all(&|$)/);
-	await expect(period).toHaveText('Whole record: daily averages over 2021-10-01 – 2022-01-28 (120 days).');
+	await expect(period).toHaveText('Whole record: daily averages over 1 Oct 2021 – 28 Jan 2022 (120 days).');
 
 	// Back and forward step through the windows looked at.
 	await v.goBack();
 	await expect(v).toHaveURL(/[?&]window=last7(&|$)/);
 	await expect(picker).toHaveValue('last7');
-	await expect(period).toHaveText('Last 7 days: daily averages over 2022-01-22 – 2022-01-28 (7 days).');
+	await expect(period).toHaveText('Last 7 days: daily averages over 22 Jan 2022 – 28 Jan 2022 (7 days).');
 	await v.goBack();
 	await expect(v).not.toHaveURL(/[?&]window=/);
 	await expect(picker).toHaveValue('project');
-	await expect(period).toHaveText('Project window: daily averages over 2021-11-01 – 2021-12-31 (61 days).');
+	await expect(period).toHaveText('Project window: daily averages over 1 Nov 2021 – 31 Dec 2021 (61 days).');
 	await v.goForward();
-	await expect(period).toHaveText('Last 7 days: daily averages over 2022-01-22 – 2022-01-28 (7 days).');
+	await expect(period).toHaveText('Last 7 days: daily averages over 22 Jan 2022 – 28 Jan 2022 (7 days).');
 
 	// A custom range starts from the days shown, and each date lands in the URL.
 	await picker.selectOption({ label: 'Custom range' });
@@ -93,10 +93,10 @@ test('a viewer picks the last 7 days on Hydrological units: worked out from the 
 	await panel.getByLabel('To', { exact: true }).fill('2021-12-10');
 	await panel.getByLabel('To', { exact: true }).blur();
 	await expect(v).toHaveURL(/[?&]window=2021-12-01\.\.2021-12-10(&|$)/);
-	await expect(period).toHaveText('Custom range: daily averages over 2021-12-01 – 2021-12-10 (10 days).');
+	await expect(period).toHaveText('Custom range: daily averages over 1 Dec 2021 – 10 Dec 2021 (10 days).');
 	// A reload keeps it.
 	await v.reload();
-	await expect(period).toHaveText('Custom range: daily averages over 2021-12-01 – 2021-12-10 (10 days).');
+	await expect(period).toHaveText('Custom range: daily averages over 1 Dec 2021 – 10 Dec 2021 (10 days).');
 	await expect(panel.getByLabel('From', { exact: true })).toHaveValue('1 Dec 2021');
 
 	// Nothing was saved: the setting is as it was and no run was made.
@@ -113,7 +113,7 @@ test('the reporting-window picker passes axe in both themes and on a phone', asy
 	const run = await createRun(page.request, project.id, 'Baseline');
 	await page.goto(`/projects/${project.id}?tab=supply&run=${run}&window=2021-12-01..2021-12-31`);
 	const panel = page.locator('#res-curtailment');
-	await expect(panel.getByTestId('curtailment-period')).toHaveText('Custom range: daily averages over 2021-12-01 – 2021-12-31 (31 days).');
+	await expect(panel.getByTestId('curtailment-period')).toHaveText('Custom range: daily averages over 1 Dec 2021 – 31 Dec 2021 (31 days).');
 	await expect(panel.getByLabel('From', { exact: true })).toBeVisible();
 	await expectNoViolations(page, { include: '#res-curtailment' });
 	await page.emulateMedia({ colorScheme: 'dark' });

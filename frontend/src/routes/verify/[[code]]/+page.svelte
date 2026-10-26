@@ -21,6 +21,8 @@
 	import { packShortCode, parsePackCode, registrationBody, registrationLine } from '@water-management/engine';
 	import { api, ApiError, type PackVerification } from '#lib/api/index.js';
 	import BrandMark from '#lib/components/layout/BrandMark.svelte';
+	import { pageStart } from '#lib/a11y/focusPage.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import PackBadge from '#lib/components/packs/PackBadge.svelte';
 	import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, latestOnly, lookUpCode, type FileCheck } from '#lib/components/packs/pack.js';
 	import { registrationHeading, SIGNOFF_KIND_LABEL } from '#lib/components/liability/signoffForm.js';
@@ -101,7 +103,7 @@
 
 	<main class="verify-main" data-verify-state={status} aria-busy={status === 'loading'}>
 		{#if status === 'loading'}
-			<p class="muted" role="status">Looking up the code…</p>
+			<p class="muted" role="status" data-loading>Looking up the code…</p>
 		{:else if status === 'no-code'}
 			<section class="card" aria-labelledby="intro-h">
 				<h1 id="intro-h">Verify an evidence pack</h1>
@@ -119,7 +121,17 @@
 			<section class="card" aria-labelledby="err-h">
 				<h1 id="err-h">Verify an evidence pack</h1>
 				<p role="alert">The lookup failed just now: {error}</p>
-				<button type="button" class="btn" onclick={() => load(code)}>Try again</button>
+				<!-- Its card leaves the page: the focus follows in <main> (followRetry, WCAG 2.4.3), onto the loading line, then a new
+				     Try again or the page's title. -->
+				<button
+					type="button"
+					class="btn"
+					data-retry
+					onclick={(e) => {
+						followRetry(e.currentTarget, { scope: e.currentTarget.closest('main'), landing: () => pageStart() });
+						void load(code);
+					}}>Try again</button
+				>
 			</section>
 		{:else if v}
 			<section class="card" aria-labelledby="v-h" data-testid="verify-result" data-status={v.status}>

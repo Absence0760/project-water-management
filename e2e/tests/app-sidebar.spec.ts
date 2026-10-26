@@ -1,6 +1,8 @@
 // The app sidebar's height (issue #17, option A; docs/ui.md § App frame):
 // with a project open, every section an owner sees fits a 1440×960 window
-// with the account block at the foot in view and room for one more row. On a
+// with the account block at the foot in view. Calibration (issue #586) took the
+// last spare row, so there is no room for another: a new section must free one
+// (hide one by default, as History is) or this fails. On a
 // shorter window the project's sections scroll inside the sidebar on their
 // own, so the account block still never leaves the screen, and the open
 // section is scrolled into view. The slot never scrolls sideways (the
@@ -24,7 +26,8 @@ const OWNER_TABS = [
 	'Crops & demand',
 	'Transfers',
 	'Data',
-	'Settings & calibration',
+	'Model settings',
+	'Calibration',
 	'Summary',
 	'EWR',
 	'Hydrological units',
@@ -36,7 +39,7 @@ const OWNER_TABS = [
 ];
 /** Hidden until a person chooses their own sections (lib/workspace/tabs.ts DEFAULT_HIDDEN_TABS). */
 const DEFAULT_HIDDEN = ['Applications', 'History'];
-/** One sidebar row (the rows are 32 px since the Map took the spare one, #326 D3): the room left for one more section. */
+/** One sidebar row (32 px since the Map took a spare one, #326 D3; Calibration took the last, #586). */
 const ROW = 32;
 
 const sidebar = (page: Page) => page.locator('aside.app-sidebar');
@@ -62,7 +65,7 @@ function measure(page: Page) {
 test.describe('1440×960', () => {
 	test.use({ viewport: { width: 1440, height: 960 } });
 
-	test('an owner: every section and the account block fit, with room for one more row', async ({ page, owner }) => {
+	test('an owner: every section and the account block fit, with no row to spare', async ({ page, owner }) => {
 		void owner;
 		const project = await seedRunnableProject(page.request, LONG_NAME);
 		await page.goto(`/projects/${project.id}?tab=river`);
@@ -89,7 +92,10 @@ test.describe('1440×960', () => {
 		expect(m.asideOverflow).toBeLessThanOrEqual(0);
 		expect(m.slotOverflow).toBeLessThanOrEqual(0);
 		expect(m.slotOverflowX).toBeLessThanOrEqual(0);
-		expect(m.spare).toBeGreaterThanOrEqual(ROW);
+		// Calibration took the last spare row (issue #586): every row still fits, with nothing left for another. Should
+		// a change free a row, the second check says so: this budget is then one row again.
+		expect(m.spare).toBeGreaterThanOrEqual(0);
+		expect(m.spare, 'a row is free again: the budget can allow one more section').toBeLessThan(ROW);
 		await expectNoViolations(page);
 
 		// The account menu still opens upward from the foot, inside the window.

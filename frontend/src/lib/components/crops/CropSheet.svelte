@@ -172,7 +172,7 @@
 				{plantedOn.length ? `Planted on ${joinNames(plantedOn)}.` : 'Not planted on any hydrological unit yet.'}
 			</p>
 			{#if !readonly}
-				<p><button type="button" class="btn btn-sm btn-danger" aria-label="Remove {label}" onclick={remove}>Remove crop</button></p>
+				<p><button type="button" class="btn btn-sm btn-danger" aria-label="Remove crop {label}" onclick={remove}>Remove crop</button></p>
 			{/if}
 		</div>
 

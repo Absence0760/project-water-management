@@ -1,6 +1,7 @@
 import type { RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { credibility, warningGroups } from './credibility';
+import { calibrationHref } from '#lib/components/calibration/links.js';
 
 describe('warningGroups', () => {
 	it('puts how the data were handled under data notes and everything else, unknown texts included, under check', () => {
@@ -15,10 +16,11 @@ describe('warningGroups', () => {
 			'a warning the engine adds next year'
 		]);
 		expect(g.data).toHaveLength(5);
+		// Each item starts with a capital, whatever the engine's text (#586 round 2).
 		expect(g.check).toEqual([
-			'farm flow shares sum to 80.00%, not 100% (tolerance ±0.02%): natural flow and EWR are not fully allocated to farms',
+			'Farm flow shares sum to 80.00%, not 100% (tolerance ±0.02%): natural flow and EWR are not fully allocated to farms',
 			'Simulated natural flow is 30 % above the WR2012 naturalised MAR for X99Z … Query it',
-			'a warning the engine adds next year'
+			'A warning the engine adds next year'
 		]);
 		expect(warningGroups(undefined)).toEqual({ check: [], data: [] });
 	});
@@ -27,8 +29,8 @@ describe('warningGroups', () => {
 describe('credibility', () => {
 	const checks = (failed: number) => ({ passed: failed === 0, checks: Array.from({ length: 5 }, (_, i) => ({ label: `c${i}`, passed: i >= failed, detail: '' })) });
 
-	it('reads the self-checks, plausibility and WR2012, each linking to its panel, and not the fit (issue #177)', () => {
-		const items = credibility({
+	it('reads the self-checks, the fit, plausibility and WR2012, each linking to its panel: Model quality’s on Calibration (issue #586)', () => {
+		const summary = {
 			verification: checks(0),
 			plausibility: {
 				naturalised: { judgedYears: 10, failedYears: [2015] },
@@ -37,16 +39,31 @@ describe('credibility', () => {
 				lowFlow: { comparison: { withinFactor: true } }
 			},
 			wr2012: { flag: { level: 'note' } },
-			calibration: { days: 400, nse: 0.712, fitStatus: 'fitted' }
-		} as unknown as Parameters<typeof credibility>[0]);
-		expect(items.map((i) => [i.label, i.text, i.tone, i.href])).toEqual([
-			['Self-checks', 'all 5 passed', 'ok', '#res-checks'],
-			['Plausibility', '1 of 3 checks found something', 'warn', '#res-plausibility'],
-			['WR2012', 'Note the difference', 'warn', '#res-wr2012']
+			calibration: { days: 400, nse: 0.712, pbias: -12.34, fitStatus: 'fitted' }
+		} as unknown as Parameters<typeof credibility>[0];
+		// The fit has no verdict (issue #177): its scores, untoned, in the Summary's words (PBIAS −12.3 is 12.3% too wet).
+		expect(credibility(summary).map((i) => [i.label, i.text, i.tone, i.href])).toEqual([
+			['Arithmetic checks', 'all 5 passed', 'ok', '#res-checks'],
+			['Calibration', 'NSE 0.71, volume bias 12.3% too wet', 'none', '?tab=calibration#res-calibration'],
+			['Plausibility', '1 of 3 checks found something', 'warn', '?tab=calibration#res-plausibility'],
+			['WR2012', 'Note the difference', 'warn', '?tab=calibration#res-wr2012']
+		]);
+		// The workspace's links keep the run shown.
+		expect(credibility(summary, (a) => calibrationHref('r 1', a)).map((i) => i.href)).toEqual([
+			'#res-checks',
+			'?tab=calibration&run=r%201#res-calibration',
+			'?tab=calibration&run=r%201#res-plausibility',
+			'?tab=calibration&run=r%201#res-wr2012'
 		]);
 	});
 
-	it('counts the validation signatures (engine ≥ 1.55.0) among the plausibility findings', () => {
+	it('flags a fit no better than the mean flow, and says when the run scored none (#586 D12)', () => {
+		const item = (calibration: unknown) => credibility({ calibration } as unknown as Parameters<typeof credibility>[0]).find((i) => i.label === 'Calibration')!;
+		expect([item({ days: 400, nse: -0.2, pbias: null }).text, item({ days: 400, nse: -0.2, pbias: null }).tone]).toEqual(['NSE −0.20, no better than the mean flow', 'warn']);
+		expect([item({ days: 0, nse: 0, pbias: 0 }).text, item(null).tone]).toEqual(['not scored: no observed flow in the run', 'none']);
+	});
+
+	it('counts the hydrological signatures (engine ≥ 1.55.0) among the plausibility findings', () => {
 		const plausibility = (withinLimit: boolean) => ({
 			naturalised: null,
 			rainSource: null,
@@ -61,6 +78,9 @@ describe('credibility', () => {
 
 	it('says a failed self-check in red and leaves out what the run has no panel for', () => {
 		const items = credibility({ verification: checks(2) } as unknown as Pick<RunSummary, 'verification' | 'plausibility' | 'wr2012'>);
-		expect(items.map((i) => [i.label, i.text, i.tone])).toEqual([['Self-checks', '2 of 5 failed', 'bad']]);
+		expect(items.map((i) => [i.label, i.text, i.tone])).toEqual([
+			['Arithmetic checks', '2 of 5 failed', 'bad'],
+			['Calibration', 'not scored: no observed flow in the run', 'none']
+		]);
 	});
 });

@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Issue #586 R3-B: Model quality moved from the Runs chunk to the Calibration chunk with its run picker (CalibrationResults.svelte); the modules both pages share (run cache, flow series, charts, missing-panel lines) split into chunks of their own. Measured 2084 KB against 2081 KB after the move."
+}

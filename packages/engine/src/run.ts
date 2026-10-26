@@ -24,7 +24,7 @@ import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind }
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags, withoutPeriodHighs } from './calibrate/dayFlags';
-import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
+import { dayText, daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
 import { cropFactorAreaM2, datedDemandFactorOf, demandFactorOf, demandFactorStart, hasDatedDemandFactor, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
@@ -406,7 +406,7 @@ function runNetwork(
 	if (sim.restrictionJoined) {
 		const pct = `${Math.round(plan.restriction!.fillShare * 1000) / 10} %`;
 		const never = nodes.flatMap((n, i) => (sim.restrictionJoined![i] === -1 ? [n] : [])).sort((a, b) => cmpStr(a.id, b.id));
-		for (const n of never) warnings.push(`drought restriction: the dam of "${n.name}" (in service from ${n.damInServiceFrom}) never reached ${pct} of its capacity in the run, so every review read the milder of the levels with and without it`);
+		for (const n of never) warnings.push(`drought restriction: the dam of "${n.name}" (in service from ${dayText(String(n.damInServiceFrom))}) never reached ${pct} of its capacity in the run, so every review read the milder of the levels with and without it`);
 	}
 
 	// --- outputs -----------------------------------------------------------------
@@ -507,7 +507,7 @@ function runNetwork(
 	// snapshot's day, this input has none before its start) can't judge the suspect class, which reads the whole
 	// record: it leaves the class out and says so, rather than flag other days than the uninterrupted run.
 	let outletFlowFlags: Uint8Array | null = null;
-	// The scored record's classes, wherever it is: the validation signatures' recession segments leave its flagged days out.
+	// The scored record's classes, wherever it is: the hydrological signatures' recession segments leave its flagged days out.
 	let scoredFlowFlags: Uint8Array | null = null;
 	let flowRecordHistory = false;
 	if (calKind) {
@@ -517,7 +517,7 @@ function runNetwork(
 		const noHistory = !!resume?.flowRecordHistory && !hasReadingBefore(record, start);
 		if (noHistory) {
 			warnings.push(
-				`Resumed from ${startDate} without the ${OBSERVED_SERIES_LABEL[calKind].toLowerCase()} record's history: its quality flags leave out the suspect class (outliers and flat stretches are judged over the whole record). Include the history in the input, or run from the start, for the full flags.`
+				`Resumed from ${dayText(startDate)} without the ${OBSERVED_SERIES_LABEL[calKind].toLowerCase()} record's history: its quality flags leave out the suspect class (outliers and flat stretches are judged over the whole record). Include the history in the input, or run from the start, for the full flags.`
 			);
 		}
 		const flags = recordFlowFlags({
@@ -1098,7 +1098,7 @@ function runNetwork(
 		upstream: topo.upstream,
 		flowFill,
 		outletFlowFlags,
-		// The scored record (engine ≥ 1.55.0): the validation signatures follow the calibration site.
+		// The scored record (engine ≥ 1.55.0): the hydrological signatures follow the calibration site.
 		scored:
 			calKind && scoredFlowFlags
 				? { kind: calKind, observedM3s: calScored, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
@@ -1370,7 +1370,7 @@ function runPlausibility(r: {
 	const flowFlagged = kind
 		? flaggedDayMask(r.outletFlowFlags ?? recordFlowFlags({ kind, series: series[kind], start, days, settings, siteNodeId: null, flowFill: r.flowFill }))
 		: null;
-	// The scored record's flagged days (engine ≥ 1.55.0), for the validation signatures' recession segments: the
+	// The scored record's flagged days (engine ≥ 1.55.0), for the hydrological signatures' recession segments: the
 	// classes the run stores as `observed_flow_quality` (at a calibration site without a gauged range or gap fill).
 	const sc = r.scored;
 	const scoredFlagged = sc ? flaggedDayMask(sc.flags) : null;
@@ -1430,7 +1430,7 @@ function runCalibrationSite(input: ModelInput, siteNodeId: string | null, outflo
 	const node = nodes.findIndex((n) => n.id === siteNodeId);
 	if (!calibrationRecordsAt(input.series, siteNodeId).length) {
 		warnings.push(
-			`Calibration site: the gauge "${nodes[node]!.name}" has no observed flow record attached: attach one on the Data page, or pick another site in Settings → Calibration record. Until then, ${fallback}.`
+			`Calibration site: the gauge "${nodes[node]!.name}" has no observed flow record attached: attach one on the Data page, or pick another site in Calibration → Calibration record. Until then, ${fallback}.`
 		);
 		return null;
 	}
@@ -1673,7 +1673,7 @@ export function buildNetworkPlan(
 	// the dams: a river abstraction's pool is storage only from engine 1.86.0 (issue #523 B2), with no evaporation.
 	if (!anyApan && days > 0) {
 		if (nodes.some((n) => n.kind === 'farm' && n.damCapacityM3 > 0))
-			warnings.push('A-pan evaporation is 0 on every day, so the dams lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
+			warnings.push('A-pan evaporation is 0 on every day, so the dams lose nothing to evaporation. Set the monthly A-pan (Model settings → Demand) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
 	const rain = runRain(aligned, hasRainInput(input.series, settings.rainSource, settings.rainStations), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
@@ -1715,8 +1715,8 @@ export function buildNetworkPlan(
 	if (reaches.some((p) => p))
 		warnings.push(
 			ewrSource
-				? `bed losses are on: a Reserve rule table${ewrSource.method === 'percentile' ? ' and the daily EWR’s percentile tables read' : ' reads'} the natural flow net of them, but the daily EWR at the outlet is split between the units by flow share and passed down whole, so it asks the units for the losses above the outlet too (docs/model.md §2.6b)`
-				: 'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet (docs/model.md §2.6b)'
+				? `bed losses are on: a Reserve rule table${ewrSource.method === 'percentile' ? ' and the daily EWR’s percentile tables read' : ' reads'} the natural flow net of them, but the daily EWR at the outlet is split between the units by flow share and passed down whole, so it asks the units for the losses above the outlet too`
+				: 'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet'
 		);
 	// The Priority users' fixed restriction % (engine 1.86.0, issue #523 B3, ./network/restriction.ts): the curtailment
 	// table reads it always, the drought restriction rule when there is one.
@@ -2112,7 +2112,7 @@ function storageResetOf(
 	if (!reset) return null;
 	const day = toEpochDay(reset.date) - start;
 	if (day < 0 || day >= days) {
-		warnings.push(`damStorageReset: ${reset.date} is outside the run; ignored`);
+		warnings.push(`damStorageReset: ${dayText(reset.date)} is outside the run; ignored`);
 		return null;
 	}
 	const byNode = new Map<number, number>();
@@ -2221,7 +2221,7 @@ function boreholeWarnings(nodes: readonly NetworkNode[], plan: NetworkPlan, sim:
 	warnings.push(...ga538Warnings(nodes, plan));
 	if (depleting && observed) {
 		warnings.push(
-			`${depleting} node${depleting === 1 ? ' has' : 's have'} boreholes that deplete the river: if the gauge or logger record was measured while they pumped, keep them in the model when calibrating, so the fitted natural flow isn't reduced twice (docs/model.md §2.7d)`
+			`${depleting} node${depleting === 1 ? ' has' : 's have'} boreholes that deplete the river: if the gauge or logger record was measured while they pumped, keep them in the model when calibrating, so the fitted natural flow isn't reduced twice`
 		);
 	}
 }
@@ -3016,10 +3016,10 @@ function forecastRainDays(
 	if (!count) return null;
 	const from = fromEpochDay(start + first);
 	const to = fromEpochDay(start + last);
-	const span = count === 1 ? `1 day (${from})` : `${count} days (${from} to ${to}${count < last - first + 1 ? ', not all consecutive' : ''})`;
+	const span = count === 1 ? `1 day (${dayText(from)})` : `${count} days (${dayText(from)} to ${dayText(to)}${count < last - first + 1 ? ', not all consecutive' : ''})`;
 	warnings.push(
 		`${span} of this run use forecast rain, not recorded rain (catchment or CHIRPS)` +
-			(inReport ? `; ${inReport === count ? 'all' : inReport} of them fall in the reporting window (${window.reportStart} to ${window.reportEnd}), so curtailment and the EWR sites cover forecast days` : '')
+			(inReport ? `; ${inReport === count ? 'all' : inReport} of them fall in the reporting window (${dayText(window.reportStart)} to ${dayText(window.reportEnd)}), so curtailment and the EWR sites cover forecast days` : '')
 	);
 	return { days: count, from, to, inReport, lastRecorded: lastRecorded >= 0 ? fromEpochDay(start + lastRecorded) : null };
 }
@@ -3059,7 +3059,7 @@ function missingRainWarning(
 		else ranges.push([t, t]);
 	}
 	if (!missing) return;
-	const day = (t: number) => fromEpochDay(start + t);
+	const day = (t: number) => dayText(fromEpochDay(start + t));
 	const named = ranges.slice(0, MISSING_RAIN_RANGES_LISTED).map(([a, b]) => (a === b ? day(a) : `${day(a)} to ${day(b)}`));
 	const more = ranges.length - named.length;
 	const whole = window.from === 0 && window.to === days - 1;
@@ -3067,7 +3067,7 @@ function missingRainWarning(
 		`${missing} of ${days} days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm): ` +
 			named.join(', ') +
 			(more ? ` and ${more} more period${more === 1 ? '' : 's'}` : '') +
-			(whole ? '' : `; ${inReport} of them fall in the reporting window (${window.reportStart} to ${window.reportEnd})`)
+			(whole ? '' : `; ${inReport} of them fall in the reporting window (${dayText(window.reportStart)} to ${dayText(window.reportEnd)})`)
 	);
 }
 
@@ -3101,13 +3101,13 @@ export function resolveReportWindow(
 	let b = parse(settings.reportEnd, 'reportEnd') ?? runEnd;
 	if (b < a || b < runStart || a > runEnd) {
 		warnings.push(
-			`reporting window ${fromEpochDay(a)} … ${fromEpochDay(b)} does not overlap the run (${fromEpochDay(runStart)} … ${fromEpochDay(runEnd)}); the curtailment report covers the whole run`
+			`reporting window ${dayText(fromEpochDay(a))} … ${dayText(fromEpochDay(b))} does not overlap the run (${dayText(fromEpochDay(runStart))} … ${dayText(fromEpochDay(runEnd))}); the curtailment report covers the whole run`
 		);
 		a = runStart;
 		b = runEnd;
 	} else if (a < runStart || b > runEnd) {
 		warnings.push(
-			`reporting window ${fromEpochDay(a)} … ${fromEpochDay(b)} is clipped to the run (${fromEpochDay(runStart)} … ${fromEpochDay(runEnd)})`
+			`reporting window ${dayText(fromEpochDay(a))} … ${dayText(fromEpochDay(b))} is clipped to the run (${dayText(fromEpochDay(runStart))} … ${dayText(fromEpochDay(runEnd))})`
 		);
 		a = Math.max(a, runStart);
 		b = Math.min(b, runEnd);
@@ -3175,7 +3175,7 @@ const USER_LABELS: Record<string, string> = {
 /** Run warning when no calibration record is chosen and both a gauge and a logger record exist (issue #1). */
 export const DEFAULT_GAUGE_PICK_WARNING =
 	'calibrated against the observed gauge flow by default: the project also has a logger flow record and no calibration record is chosen. ' +
-	'The two may not measure the same river; choose the record in Settings → Calibration record → Compare with.';
+	'The two may not measure the same river; choose the record in Calibration → Calibration record → Compare with.';
 
 /**
  * The flow record calibration compares against ([Flow data] rUseFlow): the

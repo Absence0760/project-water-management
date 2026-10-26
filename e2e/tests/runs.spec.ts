@@ -27,20 +27,35 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	await expect(page.locator('#res-h').locator('..')).toContainText(/1 Oct 2021 – 28 Jan 2022 \(120 days\) · ran today \d\d:\d\d by /);
 	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
 
-	const summary = page.getByRole('region', { name: 'Run summary' });
+	const summary = page.getByRole('region', { name: 'Summary', exact: true });
 	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
 	// The per-unit table moved to Hydrological units (issue #17, supply-page.spec.ts): the run header links there for this run.
 	await expect(summary.getByRole('heading', { name: 'Hydrological units', exact: true })).toHaveCount(0);
 	const runId = new URL(page.url()).searchParams.get('run')!;
 	await expect(page.getByRole('link', { name: 'Hydrological units for this run' })).toHaveAttribute('href', `?tab=supply&run=${runId}`);
+	await expect(summary.getByText('calibration period (parameters not from an automatic fit)')).toHaveCount(2);
+	await expect(summary.getByText(/in-sample/)).toHaveCount(0);
+
+	const chart = page.getByRole('img', { name: /^Catchment · .*: line chart/ });
+	await expect(chart.locator('canvas')).toBeVisible();
+
+	// A farm's own series can be charted too.
+	await page.getByLabel('Catchment, hydrological unit or gauge', { exact: true }).selectOption({ label: 'Upper farm' });
+	await expect(page.getByRole('img', { name: /^Upper farm · .*: line chart/ }).locator('canvas')).toBeVisible();
+
+	// The run is stored: a reload shows it again, newest first.
+	await page.reload();
+	await expect(list.getByRole('button', { name: /^Baseline/ })).toHaveAttribute('aria-current', 'true');
+	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
+
+	// The fit is on Calibration (issue #586 Round 3), for the same run.
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}`);
 	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
 	await expect(calibration.getByRole('term').filter({ hasText: 'Observations' })).toBeVisible();
 	// A gauge record is scored against the simulated outflow, not natural flow.
 	await expect(calibration.getByRole('definition').filter({ hasText: 'Simulated outflow at the outlet' })).toBeVisible();
 	// The headline fit scores say whether they are in-sample (issue #4): these parameters were set by hand, not fitted (issue #45).
-	await expect(calibration.getByText('Calibration period (parameters not fitted).', { exact: true })).toBeVisible();
-	await expect(summary.getByText('calibration period (parameters not fitted)')).toHaveCount(2);
-	await expect(summary.getByText(/in-sample/)).toHaveCount(0);
+	await expect(calibration.getByText('Calibration period (parameters not from an automatic fit).', { exact: true })).toBeVisible();
 	await expect(calibration.getByText(/in-sample/)).toHaveCount(0);
 
 	// The outlet EWR test on the observed record: the 2×2 table, the scores and a per-month breakdown.
@@ -54,18 +69,6 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	const months = agreement.getByRole('table', { name: /by month$/ });
 	await expect(months.getByRole('rowheader')).toHaveText(['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
 	await expect(months.getByRole('row', { name: /^Oct/ }).getByRole('cell').first()).toHaveText('31');
-
-	const chart = page.getByRole('img', { name: /^Catchment · .*: line chart/ });
-	await expect(chart.locator('canvas')).toBeVisible();
-
-	// A farm's own series can be charted too.
-	await page.getByLabel('Hydrological unit', { exact: true }).selectOption({ label: 'Upper farm' });
-	await expect(page.getByRole('img', { name: /^Upper farm · .*: line chart/ }).locator('canvas')).toBeVisible();
-
-	// The run is stored: a reload shows it again, newest first.
-	await page.reload();
-	await expect(list.getByRole('button', { name: /^Baseline/ })).toHaveAttribute('aria-current', 'true');
-	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
 });
 
 // Regression: a chart effect that re-triggered itself froze the Runs tab
@@ -78,16 +81,19 @@ test('the results dashboard renders long records without locking the page', asyn
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2001-10-01', values: syntheticRain(days) });
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2001-10-01', values: syntheticFlow(days) });
 	await createRun(page.request, project.id, 'Long');
-	await page.goto(`/projects/${project.id}?tab=runs`);
-
-	for (const name of [/^Flow at the outflow gauge/, /^Flow-duration curve/, /^Catchment · /]) {
-		await expect(page.getByRole('img', { name }).locator('canvas')).toBeVisible();
-	}
-	// The main thread answers promptly once the charts are up, and again a moment later.
-	for (let i = 0; i < 2; i++) {
-		const t0 = Date.now();
-		await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(null))));
-		expect(Date.now() - t0).toBeLessThan(2_000);
+	// The flow charts on Calibration (Model quality, issue #586 Round 3), the explorer on Runs & results.
+	for (const [tab, names] of [
+		['calibration', [/^Flow at the outflow gauge/, /^Flow-duration curve/]],
+		['runs', [/^Catchment · /]]
+	] as const) {
+		await page.goto(`/projects/${project.id}?tab=${tab}`);
+		for (const name of names) await expect(page.getByRole('img', { name }).locator('canvas')).toBeVisible();
+		// The main thread answers promptly once the charts are up, and again a moment later.
+		for (let i = 0; i < 2; i++) {
+			const t0 = Date.now();
+			await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(null))));
+			expect(Date.now() - t0).toBeLessThan(2_000);
+		}
 	}
 });
 
@@ -98,7 +104,7 @@ test('the hydrograph starts with natural flow hidden and keeps a legend toggle a
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2001-10-01', values: syntheticRain(days) });
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2001-10-01', values: syntheticFlow(days) });
 	await createRun(page.request, project.id, 'Legend');
-	await page.goto(`/projects/${project.id}?tab=runs`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
 	await expect(chart.locator('canvas')).toBeVisible();
@@ -118,17 +124,17 @@ test('the hydrograph starts with natural flow hidden and keeps a legend toggle a
 test('the hydrograph names the gauge and the logger, and shows both when a project has both (issue #45)', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Gauge and logger');
-	await createRun(page.request, project.id, 'Gauge only');
-	await page.goto(`/projects/${project.id}?tab=runs`);
-	await expect(page.getByRole('heading', { level: 2, name: 'Gauge only' })).toBeVisible();
+	const gaugeOnly = await createRun(page.request, project.id, 'Gauge only');
+	await page.goto(`/projects/${project.id}?tab=calibration`);
+	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', gaugeOnly);
 	await expect(page.getByRole('img', { name: 'Flow at the outflow gauge: natural, simulated and observed: line chart of Observed gauge, Natural, Simulated outflow' })).toBeVisible();
 
 	// A logger beside the gauge, chosen as the calibration record.
 	await putSeries(page.request, project.id, { kind: 'flow_logger_m3s', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(60) });
 	await updateSettings(page.request, project.id, { calibrationFlowKind: 'flow_logger_m3s' });
-	await createRun(page.request, project.id, 'Both records');
-	await page.goto(`/projects/${project.id}?tab=runs`);
-	await expect(page.getByRole('heading', { level: 2, name: 'Both records' })).toBeVisible();
+	const both = await createRun(page.request, project.id, 'Both records');
+	await page.goto(`/projects/${project.id}?tab=calibration`);
+	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', both);
 	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
 	await expect(
 		chart.getByRole('img', { name: 'Flow at the outflow gauge: natural, simulated and observed: line chart of Observed logger (calibration record), Observed gauge, Natural, Simulated outflow' })
@@ -146,7 +152,7 @@ test('the hydrograph view moves through the record by Shift+drag and by Earlier 
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2001-10-01', values: syntheticRain(days) });
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2001-10-01', values: syntheticFlow(days) });
 	await createRun(page.request, project.id, 'Pan');
-	await page.goto(`/projects/${project.id}?tab=runs`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
 	await expect(chart.locator('canvas')).toBeVisible();
@@ -154,6 +160,10 @@ test('the hydrograph view moves through the record by Shift+drag and by Earlier 
 	const later = chart.getByRole('button', { name: /Later/ });
 	const range = async () => ({ start: (await chart.getAttribute('data-view-start'))!, end: (await chart.getAttribute('data-view-end'))! });
 	const daysBetween = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
+
+	// A mouse is told about the zoom box and Shift+drag; the touch words stay hidden (issue #586).
+	await expect(chart.locator('[data-hint="fine"]')).toBeVisible();
+	await expect(chart.locator('[data-hint="touch"]')).toBeHidden();
 
 	// Opens on the last 3 years, at the end of the record: nothing later.
 	const opened = await range();
@@ -172,6 +182,8 @@ test('the hydrograph view moves through the record by Shift+drag and by Earlier 
 
 	// Shift+dragging right pulls earlier data into view.
 	const over = chart.locator('.u-over');
+	// On Calibration the chart sits under Set up the fit: bring it into the window before the mouse works on it.
+	await over.scrollIntoViewIfNeeded();
 	const box = (await over.boundingBox())!;
 	const y = box.y + box.height / 2;
 	await page.keyboard.down('Shift');
@@ -210,8 +222,6 @@ test('every daily results chart moves through the record like the hydrograph, an
 	await page.goto(`/projects/${project.id}?tab=runs`);
 
 	const figure = (title: RegExp) => page.locator('figure', { has: page.getByRole('img', { name: title }) });
-	const hydro = figure(/^Flow at the outflow gauge/);
-	const fdc = figure(/^Flow-duration curve/);
 	const explore = page.locator('#res-explore figure');
 
 	// Earlier / Later on every windowed daily chart, not just the hydrograph.
@@ -226,13 +236,35 @@ test('every daily results chart moves through the record like the hydrograph, an
 		await chart.getByRole('button', { name: /Later/ }).click();
 		await expect(chart).toHaveAttribute('data-view-end', end!);
 	}
+
+	// Each chart's switches are one group named by its chart, so the repeated Earlier / Later, Log scale and
+	// window buttons say which chart they move; the unit switch's own name says it sets every flow chart (issue #586).
+	const flowUnits = 'Flow units, for every flow chart on this page';
+	const exploreTools = explore.getByRole('group', { name: 'Chart any daily series controls', exact: true });
+	await expect(exploreTools.getByRole('button', { name: 'Log scale' })).toBeVisible();
+	await expect(exploreTools.getByRole('group', { name: flowUnits, exact: true })).toBeVisible();
+
+	// The hydrograph and the flow-duration curve are on Calibration (Model quality, issue #586 Round 3).
+	await page.goto(`/projects/${project.id}?tab=calibration`);
+	const hydro = figure(/^Flow at the outflow gauge/);
+	const fdc = figure(/^Flow-duration curve/);
+	await expect(hydro.locator('canvas')).toBeVisible();
 	// The flow-duration curve has no dates to move through.
 	await expect(fdc.getByRole('button', { name: /Earlier/ })).toHaveCount(0);
+	for (const [chart, name] of [
+		[hydro, 'Hydrograph controls'],
+		[fdc, 'Flow-duration curve controls']
+	] as const) {
+		const tools = chart.getByRole('group', { name, exact: true });
+		await expect(tools.getByRole('button', { name: 'Log scale' })).toBeVisible();
+		await expect(tools.getByRole('group', { name: flowUnits, exact: true })).toBeVisible();
+	}
+	await expect(page.getByRole('group', { name: 'Hydrograph controls', exact: true }).getByRole('button', { name: /Earlier/ })).toBeVisible();
 
 	// The unit switch sits on each flow chart and drives them all.
-	for (const chart of [hydro, fdc, explore]) await expect(chart.getByRole('button', { name: 'm³/s' })).toHaveAttribute('aria-pressed', 'true');
+	for (const chart of [hydro, fdc]) await expect(chart.getByRole('button', { name: 'm³/s' })).toHaveAttribute('aria-pressed', 'true');
 	await fdc.getByRole('button', { name: 'm³/day' }).click();
-	for (const chart of [hydro, fdc, explore]) {
+	for (const chart of [hydro, fdc]) {
 		await expect(chart.getByRole('button', { name: 'm³/day' })).toHaveAttribute('aria-pressed', 'true');
 		await expect(chart.locator('.u-legend')).toContainText('(m³/day)');
 	}
@@ -241,63 +273,67 @@ test('every daily results chart moves through the record like the hydrograph, an
 test('the results menu jumps to each section below the sticky header', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Results menu');
-	await createRun(page.request, project.id, 'Baseline');
+	// Two runs, so the runs rail sits beside the results and the menu is the bar at this width (one run puts the
+	// list in a row above, and the wider results get the side index, #586 D21).
+	await createRun(page.request, project.id, 'Earlier');
+	const runId = await createRun(page.request, project.id, 'Baseline');
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
+	// Model quality moved to Calibration (issue #586 Round 3); the water balance stays, with the summary. Each link
+	// is its panel's heading word for word (D4).
 	await expect(menu.getByRole('link')).toHaveText([
 		'Summary',
-		'Hydrograph',
-		'Flow duration',
-		'Calibration',
-		'Water balance',
-		'Runoff model',
-		'EWR vs observed',
-		'Plausibility',
-		'Notes & evidence',
-		'Validation',
+		'Water balance by water year',
+		'Run notes',
+		'Evidence',
+		'Reproduction',
+		'Validation statement',
 		'Publication',
-		'Self-checks',
-		'Outputs'
+		'Arithmetic checks',
+		'Chart any daily series'
 	]);
 	// The panels are grouped by the question they answer, in the menu and on the page alike.
-	const groups = ['Model quality', 'Record', 'Dig deeper'];
-	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Units & users|Model quality|Record|Dig deeper)$/ })).toHaveText(groups);
+	const groups = ['Record', 'The model’s working'];
+	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Units & users|Model quality|Record|The model’s working)$/ })).toHaveText(groups);
 	// The river and unit groups have their own pages, linked from the run header (runs-page.spec.ts), not the menu.
 	await expect(menu.getByRole('list', { name: 'River & Reserve' })).toHaveCount(0);
 	await expect(menu.getByRole('list', { name: 'Units & users' })).toHaveCount(0);
-	await expect(menu.getByRole('list', { name: 'Model quality' }).getByRole('link').first()).toHaveText('Hydrograph');
-	await expect(menu.getByRole('list', { name: 'Dig deeper' }).getByRole('link')).toHaveText(['Self-checks', 'Outputs']);
+	await expect(menu.getByRole('list', { name: 'Model quality' })).toHaveCount(0);
+	await expect(menu.getByRole('list', { name: 'The model’s working' }).getByRole('link')).toHaveText(['Arithmetic checks', 'Chart any daily series']);
 	// The summary opens with the model checks, each linking to its panel.
 	const checks = page.getByRole('list', { name: 'Model checks' });
-	await expect(checks.getByRole('link', { name: /^Self-checks all \d+ passed$/ })).toHaveAttribute('href', '#res-checks');
+	await expect(checks.getByRole('link', { name: /^Arithmetic checks all \d+ passed$/ })).toHaveAttribute('href', '#res-checks');
+	// The fit and the plausibility checks are on Calibration, for this run (#586 D12).
+	await expect(checks.getByRole('link', { name: /^Calibration NSE / })).toHaveAttribute('href', `?tab=calibration&run=${runId}#res-calibration`);
+	await expect(checks.getByRole('link', { name: /^Plausibility / })).toHaveAttribute('href', `?tab=calibration&run=${runId}#res-plausibility`);
 
-	// The menu sits above the results, as on Settings & calibration, and stays in view as the
+	// The menu sits above the results, as on Model settings, and stays in view as the
 	// page scrolls, marking the section being read.
 	await expect(menu.getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'location');
-	await menu.getByRole('link', { name: 'Hydrograph' }).click();
-	await expect(page.getByRole('img', { name: /^Flow at the outflow gauge/ })).toBeInViewport();
+	await menu.getByRole('link', { name: 'Publication' }).click();
+	await expect(page.getByRole('region', { name: 'Publication' })).toBeInViewport();
 	await expect(menu).toBeInViewport();
-	await expect(menu.getByRole('link', { name: 'Hydrograph' })).toHaveAttribute('aria-current', 'location');
+	await expect(menu.getByRole('link', { name: 'Publication' })).toHaveAttribute('aria-current', 'location');
 	await expect(menu.getByRole('link', { name: 'Summary' })).not.toHaveAttribute('aria-current', 'location');
 
-	await menu.getByRole('link', { name: 'Calibration' }).click();
-	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}#res-calibration$/);
-	const calibration = page.locator('#res-calibration');
-	await expect(calibration).toBeInViewport();
+	await menu.getByRole('link', { name: 'Water balance by water year' }).click();
+	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}#res-water-balance$/);
+	const balance = page.locator('#res-water-balance');
+	await expect(balance).toBeInViewport();
 	// The section's top edge clears the sticky menu (no app bar across the top since the sidebar, issue #17).
 	const menuBox = await menu.boundingBox();
-	const top = await calibration.boundingBox();
+	const top = await balance.boundingBox();
 	expect(menuBox!.y).toBeGreaterThanOrEqual(-1);
 	expect(top!.y).toBeGreaterThanOrEqual(menuBox!.y + menuBox!.height);
 
-	await menu.getByRole('link', { name: 'Outputs', exact: true }).click();
-	await expect(page.getByRole('region', { name: 'Explore any output' })).toBeInViewport();
+	await menu.getByRole('link', { name: 'Chart any daily series', exact: true }).click();
+	await expect(page.getByRole('region', { name: 'Chart any daily series' })).toBeInViewport();
 	await expect(page).toHaveURL(/#res-explore$/);
 
 	// Phone: the menu is one strip that scrolls inside itself, never the page.
 	await page.setViewportSize({ width: 390, height: 900 });
-	await menu.getByRole('link', { name: 'Calibration' }).click();
-	await expect(menu.getByRole('link', { name: 'Calibration' })).toBeInViewport();
+	await menu.getByRole('link', { name: 'Publication' }).click();
+	await expect(menu.getByRole('link', { name: 'Publication' })).toBeInViewport();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
@@ -371,20 +407,20 @@ test('with a long runs list the runs rail and the whole results menu stay in vie
 	await page.goto(`/projects/${project.id}?tab=runs`);
 
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
-	await expect(menu.getByRole('link', { name: 'Outputs', exact: true })).toBeVisible();
+	await expect(menu.getByRole('link', { name: 'Chart any daily series', exact: true })).toBeVisible();
 	// The list scrolls inside its own panel rather than running off the rail.
 	const runs = page.getByRole('region', { name: 'Runs', exact: true }).getByRole('list');
 	expect(await runs.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
 	await expect(menu.getByRole('link', { name: 'Summary' })).toBeInViewport({ ratio: 1 });
 
 	// Once the rail and the menu are stuck under the header, the list and every menu link fit on screen.
-	await menu.getByRole('link', { name: 'Calibration' }).click();
+	await menu.getByRole('link', { name: 'Publication' }).click();
 	await expect(page.getByRole('region', { name: 'Runs', exact: true })).toBeInViewport();
 	// The rail needs no scrollbar of its own: nothing in it is clipped (a fixed 16rem list overflowed by 17px here).
 	// The runs rail (the app sidebar is a complementary landmark too, since issue #17's shell).
 	const rail = page.getByRole('region', { name: 'Runs & results' }).getByRole('complementary');
 	await expect.poll(() => rail.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(0);
-	for (const name of ['Summary', 'Outputs']) await expect(menu.getByRole('link', { name })).toBeInViewport({ ratio: 1 });
+	for (const name of ['Summary', 'Chart any daily series']) await expect(menu.getByRole('link', { name })).toBeInViewport({ ratio: 1 });
 
 	// A long list gets a filter over the labels.
 	const filter = page.getByRole('searchbox', { name: 'Filter runs by label' });
@@ -449,20 +485,64 @@ test('with a gauge covering part of the run, the flow-duration curves rank the o
 	const flow = syntheticFlow(120).map((v, i) => (i < 60 ? null : v));
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: flow });
 	await createRun(page.request, project.id, 'Half gauged');
-	await page.goto(`/projects/${project.id}?tab=runs`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const fdc = page.locator('#res-fdc');
-	const days = fdc.getByRole('group', { name: 'Days the curves rank' });
+	// In the chart's toolbar, beside the unit switch, not under the caption (issue #586).
+	const days = fdc.getByRole('group', { name: 'Flow-duration curve controls', exact: true }).getByRole('group', { name: 'Days the curves rank' });
 	await expect(days.getByRole('button', { name: 'Observed days' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(fdc).toContainText('Every curve ranks the 60 days with an observed reading, so they compare like with like.');
 	await days.getByRole('button', { name: 'Whole run' }).click();
 	await expect(fdc).toContainText('Natural and simulated flow rank all 120 days of the run; observed flow only its 60 days with a reading.');
 });
 
+test('when a run’s series fail to load, each chart says what failed with Try again, and Try again draws it (issue #586)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Series fail to load');
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', gr4j: { x1: 350, x2: -0.5, x3: 90, x4: 1.7, warmupDays: 30 } });
+	await createRun(page.request, project.id, 'Failing series');
+	let fail = true;
+	await page.route(/\/runs\/[^/]+\/series\?/, (route) =>
+		fail ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Series store unavailable' }) }) : route.fallback()
+	);
+	// Model quality's charts on Calibration (issue #586 Round 3).
+	await page.goto(`/projects/${project.id}?tab=calibration`);
+
+	const hydro = page.locator('#res-hydrograph');
+	const fdc = page.locator('#res-fdc');
+	const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
+	const explore = page.locator('#res-explore');
+	const failed = (panel: typeof hydro, what: string) =>
+		expect(panel.getByRole('alert')).toHaveText(new RegExp(`^\\s*Couldn't load ${what}: .+\\s+Try again\\s*$`));
+	await failed(hydro, 'the flows');
+	// The flow-duration curve says the same, not "No positive values to plot on a log scale", which isn't what happened.
+	await failed(fdc, 'the flows');
+	await expect(fdc).not.toContainText('No positive values');
+	await failed(runoff, 'the model stores');
+
+	// Try again loads them again.
+	fail = false;
+	await hydro.getByRole('button', { name: 'Try again' }).click();
+	await expect(hydro.getByRole('img', { name: /^Flow at the outflow gauge/ }).locator('canvas')).toBeVisible();
+	await expect(fdc.getByRole('img', { name: /^Flow-duration curve/ })).toBeVisible();
+	await runoff.getByRole('button', { name: 'Try again' }).click();
+	await expect(runoff.getByRole('img', { name: /^Model stores/ }).locator('canvas')).toBeVisible();
+	for (const panel of [hydro, fdc, runoff]) await expect(panel.getByRole('alert')).toHaveCount(0);
+
+	// The explorer, on Runs & results, the same.
+	fail = true;
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await failed(explore, 'the series');
+	fail = false;
+	await explore.getByRole('button', { name: 'Try again' }).click();
+	await expect(explore.getByRole('img', { name: /^Catchment · / }).locator('canvas')).toBeVisible();
+	await expect(explore.getByRole('alert')).toHaveCount(0);
+});
+
 test('with a gauge covering the whole run there is no choice of days to make (positive control)', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'FDC fully gauged');
 	await createRun(page.request, project.id, 'Fully gauged');
-	await page.goto(`/projects/${project.id}?tab=runs`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.locator('#res-fdc').getByRole('img', { name: /Flow-duration curve/ })).toBeVisible();
 	await expect(page.locator('#res-fdc').getByRole('group', { name: 'Days the curves rank' })).toHaveCount(0);
 });
@@ -505,4 +585,21 @@ test('a run deleted while the list is still loading stays deleted', async ({ pag
 	await expect(list.getByRole('listitem')).toHaveCount(0);
 	await expect(page.getByRole('alert').filter({ hasText: /not found|no longer exists/ })).toHaveCount(0);
 	await expect(page.getByText('No runs yet. Run the model to see results.')).toBeVisible();
+});
+
+test.describe('on a touch screen', () => {
+	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+	test('a chart’s hint says what touch can do: no Shift+drag or zoom box, Earlier / Later through the record (issue #586)', async ({ page, owner }) => {
+		void owner;
+		const project = await seedRunnableProject(page.request, 'Touch hint');
+		await createRun(page.request, project.id, 'Touch');
+		await page.goto(`/projects/${project.id}?tab=calibration`);
+		const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+		await expect(chart.locator('canvas')).toBeVisible();
+		await expect(chart.locator('[data-hint="touch"]')).toHaveText('Tap the chart to read its values; Earlier / Later move through the record.');
+		await expect(chart.locator('[data-hint="fine"]')).toBeHidden();
+		// What it reads (innerText leaves out the hidden mouse words).
+		expect(await chart.locator('.hint').innerText()).not.toMatch(/shift|drag|double/i);
+	});
 });

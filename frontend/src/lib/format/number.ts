@@ -81,6 +81,8 @@ export function fmtQty(n: number | null | undefined, digits = 0, trim = false, s
  */
 export function fmtReading(v: number | null | undefined): string {
 	if (v == null || !Number.isFinite(v)) return '–';
+	// A dry day is 0, not "0.0000": the Data page's preview showed every rainless day with four decimals (issue #586).
+	if (v === 0) return '0';
 	const a = Math.abs(v);
 	return fmtNum(v, a >= 100 ? 0 : a >= 1 ? 2 : a >= 0.01 ? 3 : 4);
 }
@@ -91,14 +93,34 @@ export function fmtPct(fraction: number | null | undefined, digits = 1): string 
 	return `${fmtNum(fraction * 100, digits)}%`;
 }
 
-/** ISO timestamp or date → "2026-09-23" or "2026-09-23 14:05". */
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A moment (ISO timestamp) or a calendar day as a person reads it, day first:
+ * "23 Sep 2026", or with `withTime` fmtStamp's "23 Sep 2026 14:05" (issue
+ * #586). A moment is read in the viewer's time zone; a bare day (YYYY-MM-DD,
+ * which has no time) is that day, never moved by a zone. Empty → "–";
+ * anything that isn't a date is returned unchanged. Machine text (a file
+ * name, a CSV cell, an input's value, a sort key, a day count) takes isoDay.
+ */
 export function fmtDate(iso: string | null | undefined, withTime = false): string {
 	if (!iso) return '–';
+	if (ISO_DAY.test(iso)) return fmtDay(iso);
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return iso;
-	const pad = (x: number) => String(x).padStart(2, '0');
-	const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-	return withTime ? `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}` : date;
+	return withTime ? fmtStamp(iso) : fmtDay(localIsoDate(d));
+}
+
+/**
+ * The viewer's calendar day of a moment as machine text, ISO "2026-09-23":
+ * for a day count, a sort key or anything else code reads, never for a
+ * person (fmtDate). A bare day is itself; anything that isn't a date is
+ * returned unchanged.
+ */
+export function isoDay(iso: string): string {
+	if (ISO_DAY.test(iso)) return iso;
+	const d = new Date(iso);
+	return Number.isNaN(d.getTime()) ? iso : localIsoDate(d);
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -110,8 +132,14 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  */
 export function fmtDay(iso: string): string {
 	const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-	const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
-	return m && month ? `${Number(m[3])} ${month} ${m[1]}` : iso;
+	if (!m) return iso;
+	const y = Number(m[1]);
+	const mo = Number(m[2]);
+	const d = Number(m[3]);
+	const month = MONTHS[mo - 1];
+	// The day must exist in its month (Gregorian leap years), as the engine's dayText checks.
+	const days = mo === 2 ? ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28) : [4, 6, 9, 11].includes(mo) ? 30 : 31;
+	return month && d >= 1 && d <= days ? `${d} ${month} ${m[1]}` : iso;
 }
 
 const MONTHS_LONG = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
@@ -187,8 +215,8 @@ const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.g
 
 /**
  * A moment (an ISO timestamp) day first, in the viewer's time zone: "11 Oct
- * 2026 14:05". What a person reads; fmtDate's ISO form is for file names and
- * codes. Anything that isn't a timestamp is returned unchanged.
+ * 2026 14:05". What a person reads (fmtDate with its time); isoDay is the
+ * machine form. Anything that isn't a timestamp is returned unchanged.
  */
 export function fmtStamp(iso: string): string {
 	const d = new Date(iso);

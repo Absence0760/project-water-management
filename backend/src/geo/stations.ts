@@ -1,7 +1,7 @@
 // The nearest gauging stations to a point, proposed as a catchment's
 // observed-flow source (issue #326 Part B, "B-gauge"; docs/maps.md §
 // Gauging stations). This only *proposes*: the modeller picks a station in
-// Settings → Data feeds, which fills the DWS feed's station field; they still
+// Data → Data feeds, which fills the DWS feed's station field; they still
 // attach the feed themselves. Nothing is written here.
 //
 // The stations come from gauge_station_reference (156), which the operator

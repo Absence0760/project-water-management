@@ -1,4 +1,4 @@
-// Validation signatures (engine ≥ 1.55.0, docs/model.md §2.10d "Validation
+// Hydrological signatures (engine ≥ 1.55.0, docs/model.md §2.10d "Hydrological
 // signatures", calibration-research.md CR-16): BFI by two filters, the
 // low-flow FDC's slope and bias, and the skill on withheld recession segments.
 import { describe, expect, it } from 'vitest';
@@ -407,7 +407,7 @@ function network(): ModelInput {
 	return input;
 }
 
-describe('validation signatures in a run', () => {
+describe('hydrological signatures in a run', () => {
 	it('score the outlet by default and the calibration site when one is set', () => {
 		const input = network();
 		const outlet = runModel(input).summary.plausibility!.signatures!;
@@ -427,7 +427,7 @@ describe('validation signatures in a run', () => {
 		expect(h.segments).toBeGreaterThanOrEqual(3);
 		expect(h.heldOut.length).toBe(Math.floor(h.segments / 3));
 		expect(h.modelSkill).toBeCloseTo(1, 12);
-		expect(site.summary.warnings.filter((w) => w.startsWith('Validation signatures'))).toEqual([]);
+		expect(site.summary.warnings.filter((w) => w.startsWith('Hydrological signatures'))).toEqual([]);
 		// Only a report: the flows are the same whichever record is scored.
 		const flows = (o: ReturnType<typeof runModel>) => o.series.find((x) => x.nodeId === null && x.key === 'simulated_outflow')!.values;
 		expect(flows(site)).toEqual(flows(runModel(input)));

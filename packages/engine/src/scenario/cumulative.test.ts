@@ -3,6 +3,7 @@
 // Invented names and values only.
 import { describe, expect, it } from 'vitest';
 import { blankEwrRuleTable } from '../reserve/rules';
+import { dayText } from '../calendar';
 import { runModel } from '../run';
 import type { ModelInput, NetworkNode } from '../project';
 import { combineScenarios } from './combine';
@@ -166,6 +167,6 @@ describe('cumulativeImpact', () => {
 	it('warns when a run’s window differs from the baseline’s', () => {
 		const b = run(base());
 		const r = cumulativeImpact(b, [{ id: 'x', name: 'Shorter', ...b, endDate: '2021-09-30' }], b);
-		expect(r.warnings).toEqual([`"Shorter" ran over ${b.startDate} to 2021-09-30, the baseline over ${b.startDate} to ${b.endDate}: its day and month counts don't line up with the baseline's.`]);
+		expect(r.warnings).toEqual([`"Shorter" ran over ${dayText(b.startDate)} to 30 Sep 2021, the baseline over ${dayText(b.startDate)} to ${dayText(b.endDate)}: its day and month counts don't line up with the baseline's.`]);
 	});
 });

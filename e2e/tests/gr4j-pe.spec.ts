@@ -1,4 +1,4 @@
-// GR4J's potential-evaporation input (settings.pe, issue #39): Settings shows
+// GR4J's potential-evaporation input (settings.pe, issue #39): Calibration → Flow calibration shows
 // which source GR4J's PE comes from and its annual total; switching to a
 // monthly PE row moves GR4J's PE (and so the natural flow) while irrigation
 // demand, which reads the A-pan row, stays exactly the same.
@@ -25,7 +25,7 @@ test('a monthly PE row moves GR4J’s PE and natural flow, and leaves irrigation
 	const farms = model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id as string);
 	const panRun = await createRun(page.request, id, 'Pan PE');
 
-	await page.goto(`/projects/${id}?tab=settings`);
+	await page.goto(`/projects/${id}?tab=calibration`);
 	const group = page.getByRole('group', { name: 'GR4J potential evaporation' });
 	const pan = group.getByRole('radio', { name: 'Pan coefficient × A-pan' });
 	const monthly = group.getByRole('radio', { name: 'Monthly PE, entered directly' });
@@ -33,6 +33,10 @@ test('a monthly PE row moves GR4J’s PE and natural flow, and leaves irrigation
 	// 0.7 × 1 630 mm, and the A-pan row's other two uses said plainly.
 	await expect(group.getByTestId('gr4j-pe-annual')).toHaveText('Annual GR4J PE: 1\u202f141 mm (pan coefficient × A-pan; A-pan 1\u202f630 mm a year)');
 	await expect(group).toContainText('also drives irrigation demand and dam evaporation');
+	// The A-pan row is Demand's, on Model settings (issue #586 round 3): the words link there.
+	// (An explanation, hidden until Explain each setting is ticked: read from the markup.)
+	await expect(group.locator('#st-pe-h a')).toHaveText('Demand');
+	await expect(group.locator('#st-pe-h a')).toHaveAttribute('href', '?tab=settings#set-demand');
 	await expect(page.getByLabel('Pan coefficient, Oct')).toHaveValue('0.7');
 
 	await monthly.check();
@@ -89,7 +93,7 @@ test('a monthly PE row moves GR4J’s PE and natural flow, and leaves irrigation
 test('the FAO-56 Table 5 helper fills the pan-coefficient row from humidity and wind', async ({ page, owner }) => {
 	void owner;
 	const { id } = await seedRunnableProject(page.request, 'GR4J Kp helper');
-	await page.goto(`/projects/${id}?tab=settings`);
+	await page.goto(`/projects/${id}?tab=calibration`);
 	// The row's fill tools are folded under one line (issue #521), which names the source.
 	await expect(page.getByTestId('pan-tools-summary')).toHaveText('preset, FAO-56 helper, paste · source: not given');
 	await openFold(page, 'pan-tools');

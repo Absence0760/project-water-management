@@ -4,7 +4,7 @@
 // headless Chromium, stores the PDF in MinIO and mails the link through
 // Mailpit; the page follows the job's status to a download link; the PDF is
 // A4 with a page per section; and the emailed link opens the download page
-// for the signed-in member. Settings → Scheduled reports: an editor adds one,
+// for the signed-in member. Project → Scheduled reports: an editor adds one,
 // a viewer only reads.
 //
 // Needs MinIO and Mailpit (`pnpm dev:s3:up && pnpm dev:mail:up`; CI starts
@@ -127,14 +127,16 @@ test('the emailed link opens nothing for someone outside the project', async ({ 
 	await expect(outsider.page.getByRole('link', { name: 'Download the PDF' })).toHaveCount(0);
 });
 
-test('Settings → Scheduled reports: an editor adds a weekly schedule; a viewer reads it without controls', async ({ page, owner, signIn }) => {
+test('Project → Scheduled reports: an editor adds a weekly schedule; a viewer reads it without controls', async ({ page, owner, signIn }) => {
 	const { projectId } = await seedRun(page, 'Scheduled report catchment');
 	const viewer = await signIn('Schedule viewer');
 	await addMember(page.request, projectId, viewer.user.email, 'viewer');
 
-	await page.goto(`/projects/${projectId}?tab=settings`);
+	await page.goto(`/projects/${projectId}?tab=project`);
 	const panel = page.getByRole('region', { name: 'Scheduled reports' });
 	await expect(panel.getByText('No scheduled reports.')).toBeVisible();
+	// It saves as it changes, unlike the page's details, and says so (issue #586, E13).
+	await expect(panel.getByTestId('schedules-saves')).toHaveText('Schedules save as you change them: adding, pausing or removing one needs no Save changes.');
 	await panel.getByRole('button', { name: 'Add a schedule' }).click();
 	await panel.getByLabel('Every', { exact: true }).selectOption('weekly');
 	await panel.getByLabel('On', { exact: true }).selectOption({ label: 'Monday' });
@@ -152,9 +154,10 @@ test('Settings → Scheduled reports: an editor adds a weekly schedule; a viewer
 	await expect(item).toContainText(`sends as ${owner.displayName}`);
 	await expect(item).toContainText(/Next: /);
 
-	await viewer.page.goto(`/projects/${projectId}?tab=settings`);
+	await viewer.page.goto(`/projects/${projectId}?tab=project`);
 	const theirs = viewer.page.getByRole('region', { name: 'Scheduled reports' });
 	await expect(theirs.getByRole('listitem')).toContainText('Every Monday at 07:00 (UTC)');
+	await expect(theirs.getByTestId('schedules-saves')).toHaveCount(0);
 	await expect(theirs.getByRole('button', { name: 'Add a schedule' })).toHaveCount(0);
 	await expect(theirs.getByRole('button', { name: /^Pause/ })).toHaveCount(0);
 

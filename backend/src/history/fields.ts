@@ -1,7 +1,7 @@
 // Field history (WP-2.4 UI, docs/api.md § Field history): how often each
 // model input was changed, and the last change, for the small "Changed 3× ·
 // last by Ann, 12 Aug: 40% → 60%" line on the node sheet, the farm drawer and
-// Settings & calibration. One query over the project's revisions, under RLS.
+// Model settings. One query over the project's revisions, under RLS.
 //
 // Revisions store sentences (the engine's diffInputs), not paths, so the
 // engine's label tables say which input a line is about: a settings line by

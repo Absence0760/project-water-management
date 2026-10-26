@@ -5,7 +5,7 @@
 	// the outcome or confirm a review (the API answers anyone else 403, and
 	// ProjectTab renders it for editors and owners only). Provisional position
 	// (pre-counsel research, 2026-10-01).
-	import { localIsoDate } from '#lib/format/number.js';
+	import { fmtDay, localIsoDate } from '#lib/format/number.js';
 	import DayInput from '#lib/components/common/DayInput.svelte';
 	import { onMount } from 'svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -65,7 +65,7 @@
 		notice = '';
 		try {
 			record = await api.licenceRecord.confirm(projectId);
-			notice = `Confirmed. The next review is on ${record.reviewDueOn}.`;
+			notice = `Confirmed. The next review is on ${fmtDay(record.reviewDueOn ?? '')}.`;
 		} catch (err) {
 			error = msg(err);
 		} finally {

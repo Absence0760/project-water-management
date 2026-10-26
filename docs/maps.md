@@ -915,13 +915,13 @@ Issue #326 B-rain (WP-2.10 × WP-3.12): the catchment's CHIRPS rain feed set
 up from the map's boundary in one action, averaging the rain over the
 boundary itself rather than over a box around it.
 
-- **Where.** Settings → Data feeds → **Attach a feed** (an editor: **Rain
+- **Where.** Data → Data feeds → **Attach a feed** (an editor: **Rain
   from the map**) → **Area**: *The catchment boundary, from the map*
   (`feeds/BoundaryRain.svelte`, a choice of the attach card since issue
   #521), for editors and owners. The Map tab shows one
   line, for editors, while a boundary exists and no CHIRPS feed reads it, or
   one read it before it was redrawn (`map/MapRainLink.svelte`); its link
-  opens the proposal (`?tab=settings&rain=boundary#set-feeds`).
+  opens the proposal (`?tab=series&rain=boundary#data-feeds`).
 - **The proposal** (`GET /projects/:id/feeds/chirps/from-boundary`, editor):
   the boundary (name, area, when it was last changed), the CHIRPS v3 cells
   it covers with how much of them lies inside, the method ("area-weighted
@@ -1068,7 +1068,7 @@ unit, averaged over the unit's own polygon, so that under
 
 ## Quaternary lookup
 
-Settings → WR2012 check → **Propose from the map** looks up the quaternary
+Calibration → WR2012 check → **Propose from the map** looks up the quaternary
 catchment that contains a point (the boundary's centre, a gauge, or typed
 coordinates; `GET /projects/:id/map/quaternary`) and lists its reference
 values (code, area, MAP, naturalised MAR, reference period, monthly means,
@@ -1152,7 +1152,7 @@ as the schema owner; the app never writes it.
 
 ## Gauging stations
 
-Settings → Data feeds → **Attach a feed** → source **DWS gauge flow** shows
+Data → Data feeds → **Attach a feed** → source **DWS gauge flow** shows
 **Nearest gauging stations** above the station field (issue #326 Part B,
 "B-gauge"; `NearestGauges.svelte`, `GET /projects/:id/map/stations`): the
 river gauges within 50 km of the catchment's outlet, nearest first, at most
@@ -2238,9 +2238,9 @@ reads them.
 
 ## Evaporation from the map
 
-**Evaporation from the map**, in Settings → Flow calibration under GR4J's
+**Evaporation from the map**, in Calibration → Flow calibration under GR4J's
 potential evaporation (issue #326 Part B, "B-evap";
-[ui.md § Settings & calibration](./ui.md#settings--calibration)), averages an evaporation
+[ui.md § Calibration](./ui.md#set-up-the-fit)), averages an evaporation
 grid's 12 monthly means over the **catchment boundary** and proposes them,
 beside what the saved settings hold, as one of two inputs. Which one is the
 grid's kind, and **nothing is converted between them**:

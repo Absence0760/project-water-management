@@ -136,7 +136,7 @@ describe('importing a WARMS extract', () => {
 		await asOwner(`UPDATE allocation_source SET imported_at = '2026-09-25T22:30:00Z' WHERE project_id = $1`, [projectId]);
 		const res = await editor.call('POST', `/projects/${projectId}/allocations/import`, importBody({ fileName: 'renamed.csv' }));
 		expect(res.status).toBe(409);
-		expect(res.body.error).toMatch(/already imported \(as “warms-synthetic\.csv” on 2026-09-26\)/);
+		expect(res.body.error).toMatch(/already imported \(as “warms-synthetic\.csv” on 26 Sep 2026\)/);
 	});
 
 	it('undoes an import with its rows, and allows it again after', async () => {

@@ -43,9 +43,15 @@ section it belongs to, with the example that taught it.
    simpler chart; that is a bug, not a simplification.
 5. **Old links keep working.** `?tab=` values, overlay params and `#res-…`
    fragments are in emails, bookmarks, help and other pages. When a view
-   moves, redirect its old URL (the Runs tab redirects moved `#res-…`
-   anchors to River & reserve and Hydrological units; the Summary sends its
-   panels' heading ids, `#members-h` and the rest, to the Project page) and
+   moves, redirect its old URL (a moved `#anchor` is one row of
+   `ANCHOR_MOVES`, `lib/nav/anchorMoves.ts`: the Runs tab's `#res-…` to EWR
+   and Hydrological units, Settings' `#set-feeds` and the rest to Data and
+   Project, the fit's `#set-…` and Model quality's `#res-…` to Calibration,
+   each keeping the parameters the row names (see *One forwarding table for
+   every moved panel*, § 4), and the page lands
+   through `lib/nav/anchorLanding.ts` `followAnchors`, on load and on a hash
+   change; the Summary sends its panels' heading ids, `#members-h` and the
+   rest, to the Project page) and
    grep the app, the help guides, `docs/` and `backend/src/alerts` for links
    to repoint. Grep the prose too: "on the Summary tab" in History's
    restore notes and the team pages' empty states pointed at panels that
@@ -116,6 +122,20 @@ section it belongs to, with the example that taught it.
   disclosure: a fixed set of eight facts isn't a long list to fold, and the
   Summary's old `#model-h` link still lands on them without opening
   anything.
+- **A long page whose answer sits below its inputs says it in a first
+  line.** Calibration puts the settings that set up a fit above the run's
+  fit (the loop is set, run, read), so the shown run's NSE was ~3,800 px down
+  at 1440 × 960 and ~6,000 px on a phone, and a project with no flow record
+  heard so only at the page's foot (#586 R4-A). Reordering would have put
+  3,000 px of charts between the reader and the fields they edit. One slim
+  line under the header (`calibration/status.ts`, `role="status"`) now says
+  how the shown run fits, toned and in words, with a link on to the tiles,
+  or what to do first when there's nothing to read; it keeps its place
+  while loading ("Loading the shown run…") so the panels don't jump. When
+  the page edits what the shown result came from, say so where the result
+  is read: an edited X1 left the old run's scores under it with nothing
+  saying they weren't the edit's, so the line and a note over the results
+  now list the parameters that differ ("X1 350 → 321 mm").
 - **Don't fit a first screen that has more below it.** The Summary was a
   fitted first screen (KPIs, reserve strip, Needs attention beside Supply by
   unit) with the alerts, published baseline, links and setup checklist
@@ -301,6 +321,18 @@ section it belongs to, with the example that taught it.
   card is now the page's one empty state, across its width with no results
   column, its first line the old message (specs and help quote it) and a
   second line saying what a run's results hold.
+- **A picker rail with one item is a row, not a rail.** With one run, Runs &
+  results' 250 px sticky rail held one row beside an empty column down the
+  whole page, and nothing to pick (#586 D21). One run now makes the Runs card
+  one slim row across the top (heading, the run's row with its tags, pin and
+  delete, the tags' key), restyled with the same markup (`.single`), and the
+  results take the whole width; the second run brings the rail back. A grid
+  that auto-fills then gains columns: the Summary's six cards went 4 + 2
+  beside an empty half row until their minimum became a third of the row
+  (`runs-page.spec.ts` checks 3 + 3). Calibration's six score tiles did the
+  same at 1440 (`auto-fill, minmax(210px, 1fr)`); with a fixed count, set the
+  columns by container query to a divisor of it (1, 2, 3), not `auto-fill`
+  (`calibration-first-line.spec.ts`).
 - **Pick a default rather than show an empty half.** With nothing in the
   URL, open the first item and write it with goto's `replace`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
@@ -350,6 +382,14 @@ section it belongs to, with the example that taught it.
   (`dam-proposals.spec.ts`). Land cover's tables fit as columns; the
   evaporation table's twelve months keep their sideways scroll with the
   sticky row label (a variant that can never fit).
+  A new read-only table takes app.css's `.table-stack` rather than another
+  copy: wrap its `.table-wrap` in `<div class="table-stack">` and give each
+  `td` a `data-label`; below 50rem of wrapper the rows are blocks, the cells
+  as many to a line as fit at 6rem (three at 390 px: two to a line made
+  Calibration's twelve-month EWR breakdown ~1,700 px tall). Calibration's
+  EWR test (nine columns, 299 px past its 323 px box) and plausibility
+  tables use it (#586 R4-K, `calibration-tables-phone.spec.ts`, which reads
+  every table box's `scrollWidth`, not just the page's).
 - **In a narrow column, a row's actions get their own line.** The team
   page's Members panel (a 20–24rem side column) had Name · Role · actions,
   and the third column clipped "Reset two-step" to "Reset two-" and
@@ -439,7 +479,14 @@ section it belongs to, with the example that taught it.
   row (#326 D3) took that one: the last link sat 14 % below the window and a
   viewer with the inputs shown overflowed 20 px, so the rows went to 32 px
   (still past the 24 px target) and the gaps to 0.5rem, which keeps a 32 px
-  row to spare with all 17. Below that height the slot scrolls on its own
+  row to spare with all 17. Calibration (issue #586) took that row, and a
+  viewer with the inputs shown then overflowed 13 px: the owner's spare row
+  had hidden that the viewer's **Show model inputs** row (40 px and a 0.5rem
+  gap) was 16 px taller than the Applications row it stands in for. In the
+  sidebar it is a 32 px row now, so both roles fit with the same few pixels
+  and no row to spare; the spec fails on a row too many and on a row free
+  again. Count every role's rows, not just the owner's, when you budget.
+  Below that height the slot scrolls on its own
   (`flex: 0 1 auto` with an 8rem floor, `overflow-y: auto`) so the account block
   never leaves the screen; `app-sidebar.spec.ts` pins both. The slot also
   sets `overflow-x: hidden`, since `overflow-y: auto` alone makes x auto too:
@@ -647,9 +694,9 @@ section it belongs to, with the example that taught it.
   in the field's `aria-describedby`, since a hidden child of a referenced
   element drops out of the description: "The gauge code, e.g. A2H012." stays,
   "Verified DWS data lags by months…" is `.explain`. The switch hides
-  `.explain` inside an `explain-scope` wrapper (`.settings-form` and
-  `.settings-after`, the panels after the form that save on their own, so a
-  panel outside both needs a wrapper);
+  `.explain` inside an `explain-scope` wrapper (`.settings-form`, so a
+  panel outside it needs a wrapper; Data and Project have no switch, so the
+  field help there is always shown);
   and measure the widest content beside a rail before choosing where it
   starts (the A-pan row with its year total overflowed by 23 px beside a
   13.5rem rail until the month cells' padding went to 0.1rem and the rail
@@ -675,8 +722,16 @@ section it belongs to, with the example that taught it.
   (`app.css`): the summary is one line naming the group and its current
   values ("Search: Wide bounds · 1 500 runs × 5 starts · seed 1", from a pure
   helper such as `calibration/fit.ts` `searchSummary`, unit-tested), with
-  **Change** at its end (`aria-hidden`, since the summary already announces
-  expanded/collapsed; **Hide** while open), and the fields open in place. The
+  **Change** at its end (**Hide** while open; **Show** for a viewer, who can
+  change nothing inside: pass `readonly`), and the fields open in place. The
+  visible word ends the summary's accessible name ("Default limits: … Change
+  the limits"), so a voice-control user who says "click Change" reaches it;
+  it was `aria-hidden` until issue #586 R4-I (WCAG 2.5.3 Label in Name;
+  `586-a11y-fold-name.spec.ts`). Never hide a visible action word from the
+  name of the control it sits in. The
+  values shrink and wrap in their own box (`.fold-line`), so a long line
+  keeps its name and action on its row instead of dropping under the name
+  and orphaning the action (issue #586; `expectFoldOnOneRow`). The
   line shows **needs fixing** while any field inside is `aria-invalid`
   (`.fold:has([aria-invalid='true'])`), so a closed fold never hides a
   problem. A native `<details>` keeps its fields in the page, so Find a
@@ -756,6 +811,13 @@ section it belongs to, with the example that taught it.
   the glossary entry already says it. `settings-after-form-layout.spec.ts`
   pins the actions in the window at 1440×900 and the open cards at 390 and
   320 px.
+- **A panel that saves on its own says so itself, not its host page.**
+  Settings had one line after its form ("Data feeds, API keys and scheduled
+  reports save as you change them…") for three panels; moving Data feeds to
+  the Data page (issue #586, E13) would have left the line behind and the
+  panel silent beside a page whose save bar still shows. The line is the
+  panel's (`feeds/DataFeedsPanel.svelte`, `data-testid="feeds-saves"`, for
+  the role that can change it), so it travels with every mount.
 - **A long form of sections folds each section to a card of its values.**
   The node sheet held 72 fields, 13 checkboxes and 48 always-on help
   paragraphs in 13 sections: 5,768 px for one unit, 9 screens, with Save
@@ -859,9 +921,21 @@ section it belongs to, with the example that taught it.
   flat row, menu names drifted from the headings ("Days below, by year" for
   *Days below the pragmatic EWR, each water year*), and the panels that had
   moved to other pages had no entry at all (issue #462). The fix was the
-  same rail on each from a 1440 px window, every link its panel's heading
-  (a shorter `bar` name only where the bar must stay two rows), and on Runs
-  the moved panels under their pages' names. Two traps on the way: River's
+  same rail on each from a 1440 px window, every link its panel's heading,
+  and on Runs the moved panels under their pages' names. The bar names the
+  headings word for word too (issue #586, D4): a shorter `bar` name ("Flow
+  duration", "Notes & evidence" standing for three panels) makes the bar and
+  the page read differently, so when a bar can't fit two rows, the page has
+  too many panels for one menu, and the fix is moving panels (as #586 moved
+  Model quality to Calibration), not shortening names. EWR, Hydrological
+  units and Compare runs dropped theirs too (R4-F), Data (R4-M: "Gauge vs
+  logger agreement", "Double mass: catchment rain vs CHIRPS") and the
+  Network's node sheet (R4-N: all thirteen legends of a unit with a dam,
+  "Combined boreholes (one capacity)" and "Bed losses in the reach below"
+  among them, fit two rows of the 920 px sheet at 1280 px); their full
+  headings still fit two rows at 1280 px. With no page left using one, the
+  `bar` field itself went (R4-N): `NavSection` has only `label`, so the bar
+  can't say anything else. Two traps on the way: River's
   chart-beside-bars switch was a window media query (1100 px), which beside
   a 13rem rail sees a column 13rem wider than it is, so it became a
   container query on the page's own column; and a page that only had a
@@ -874,6 +948,43 @@ section it belongs to, with the example that taught it.
   sheet's hand-made jump row became the same menu in a box of its own
   (`onjump`), which also gave it the mark for the section being read and
   names matching the legends.
+- **A page with a side index is one column, in the index's order.** The
+  Project page kept its two columns (details, notes and facts on the left;
+  who can open it on the right) when it got its index, grouped by column. A
+  link to a panel in the taller right column (Farmers onward) then put that
+  panel at the window's top beside an empty left column, and the index's
+  order (left, then right) wasn't the order the eye met the panels (issue
+  #586 R4-B). It is one column now, each index group a column of its own
+  (`data-nav-group`), the page's second question (who can open it) straight
+  after the first so the first screen still answers both, and the facts
+  that repeat other tabs last. A wide column needs its insides sized on
+  purpose: fields two a row in a container query, a 75ch measure on the
+  explanations, a short form (a picker and its button) kept a form's width.
+  Pin it with every panel's left edge and width equal, the headings in the
+  index's order, and a link to a far panel showing the next one under it
+  (`project-page.spec.ts`).
+- **A panel's heading goes in `.panel-head`, even with nothing beside it.**
+  The settings panels' line of values (`.settings-form .summary`) pulls up
+  0.35rem into the head's 0.75rem margin; Model settings' first panel drew
+  its `h2` bare, so its line ran into the heading at 1440 (issue #586 R4-B).
+  The same frame on every panel gives every line the same gap
+  (`settings-model-layout.spec.ts` compares it with Simulation period's).
+- **A page of parts: the parts are the h2s, and what moves in goes a level
+  down without changing its look.** Calibration (issue #586) put Model
+  settings' panels (h2) under a "Set up the fit" h2, so the outline read
+  part, panel, panel… as siblings, and Model quality's sub-headings ("Where
+  the parameters came from") were h3s beside their own panel's h3. Every
+  heading in the moved components went down one level (panel h3, card h4,
+  a card's group h5; FitProvenance, AgreementTable and ProposalPanel take a
+  level), each keeping the size it had one level up by a scoped rule, so the
+  panels look the same on both pages; the part headings went a size up
+  (1.3rem) so the two halves read as halves. Check the neighbours' pins:
+  specs that waited for `{ level: 2, name: 'Fit the parameters' }`, and
+  helpers that read a panel's first `h2, h3`, had to follow. A sub-heading
+  with an index line of its own is a NavSection `sub`: the rail indents it
+  under its panel, so it doesn't read as one. An index whose second group
+  is a run's panels shows, before a run is shown, one line to the part
+  itself, so the index still reaches the part's empty state.
 - **A title column sized by a fixed basis squeezes its text.** The section
   header's title took `flex: 1 1 16rem`, so whenever the controls fitted
   beside it a long context line wrapped to 3–4 short lines (River & reserve
@@ -1206,7 +1317,7 @@ section it belongs to, with the example that taught it.
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
 | A tool that hasn't run, as one row | `common/ToolRow.svelte` (§ 2 "Findings first") |
 | A form's buttons under its fields | `.action-row` (`app.css`; § 2 "A form's buttons go in one action row") |
-| Rarely changed settings, folded to one line of their values | `common/Fold.svelte` (`name`, `line`, `change`, `open`/`bind:open`, `problem`, `body`; the CSS in `app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` and checks a screen's folds with `expectFoldsNamed` (`e2e/support/settings.ts`) |
+| Rarely changed settings, folded to one line of their values | `common/Fold.svelte` (`name`, `line`, `change`, `readonly`, `open`/`bind:open`, `problem`, `body`; the CSS in `app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` and checks a screen's folds with `expectFoldsNamed` (`e2e/support/settings.ts`) |
 | A group that usually stays at its defaults, as one line that opens | `common/Fold.svelte` with `atDefaults` (and `body="stack"`, `spaced`; § 2 "Settings at their defaults are one line"); the line and the at-defaults test from pure helpers beside the form; e2e `openFold` |
 | A paste dialog | `model/GridPasteDialog.svelte` for a grid of numbers (Now/Pasted preview); a list of rows uses its frame, `model/PasteDialogFrame.svelte`, with its own preview table (§ 4 "A paste box that replaces a whole table is the shared paste dialog") |
 | A typed date | `common/DayInput.svelte`: a text field read by `parseDay`, shown back day first, with `min`/`max`, its message at the field and its place in the save bar's invalid list (§ 2 "A typed date is day first too"), never `<input type="date">` |
@@ -1226,7 +1337,7 @@ section it belongs to, with the example that taught it.
 | Status pills and bars | `portfolio/StatusPill.svelte`, `portfolio/StatusBar.svelte` |
 | Lazy panels | `common/Lazy.svelte`, `common/lazy.ts` |
 | A panel of values proposed from the map (the modeller decides) | `proposals/ProposalPanel.svelte` (heading, intro, controls, the live notice focused after a Use via `focusNotice()`, which callers call only while the panel still shows the Use's unit (it doesn't check), `noticeFailed` for a Use that failed for a unit the panel has left (an error in the notice, naming the unit, not on a row), `saving` (`data-saving`) while a Use is out, the busy/`data-ready` body, failure with Try again; `variant` page, drawer or inline) with `ProposalNoDataset`, `ProposalSynthetic` and `ProposalSource`; the panel keeps its own rows and Use (land cover, dams, evaporation) |
-| "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `supplyNav`, `series/sections.ts`, `compare/sections.ts`), each link named as its panel's heading (`label`, a shorter `bar` name on the bar); at most two rows, the rest in More; with the page's content as `children` and `railFrom`, a sticky side column from that width (`railSide="right"` beside a page's own left column), `href` + `page` for a link to another page, `barHeight` for a sticky panel under the bar, and `find` for a find-a-setting box (Settings, issue #468; every long page from 1440 px, issue #462; ui.md § On this page menu) |
+| "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `supplyNav`, `series/sections.ts`, `compare/sections.ts`, `project/sections.ts`), each link named as its panel's heading (`label`), on the bar too (no shorter `bar` name, issue #586 D4); at most two rows, the rest in More; with the page's content as `children` and `railFrom`, a sticky side column from that width (`railSide="right"` beside a page's own left column), `href` + `page` for a link to another page, `barHeight` for a sticky panel under the bar, and `find` for a find-a-setting box (Settings, issue #468; where the panels a reader sees depend on their role, read the links from the page as drawn, as `project/sections.ts` does from `PROJECT_ANCHORS`, so a hidden panel gets no link, issue #586; every long page from 1440 px, issue #462; ui.md § On this page menu) |
 | Section links in a box that scrolls on its own (a side sheet's long form) | The same `common/SectionNav.svelte` with `onjump` (each link scrolls the box to the section and focuses it, no fragment in the URL; the scroll spy follows the box) and `heading={null}`, in the dialog's fixed `subhead` (the Network's node sheet, `network/nodeSections.ts` `nodeNavGroups`; issue #462). Not a row of buttons of its own: that one drifted from the pages' (no mark for the section being read, no More, names unlike the legends) |
 
 Finished pages to copy from: `dams/DamsTab.svelte` (cards + chart, window
@@ -1269,6 +1380,15 @@ Interaction details that bit:
   *I understand*, *Accept the new terms*, the banner's *Dismiss*) calls
   `focusPageStart()` (`lib/a11y/focusPage.ts`): the new page's `h1`, or
   `#main` while it loads.
+- **A link that moves to another part of the page or app puts the focus there,
+  never on `<body>`.** One pattern each (issue #586): a workspace sidebar
+  link focuses the new page's `h1` (`focusPageStart()` after the navigation;
+  the arrow keys between the links keep it on the link); an in-page menu
+  link (`SectionNav`) and a loaded `#anchor` focus the section's heading
+  (`tabindex="-1"`, no scroll; `anchorHeading`/`focusHeading`,
+  `help/anchor.ts`). Not `data-sveltekit-keepfocus` on a link that changes
+  the page: Tab would start again from the sidebar. Test it with
+  `toBeFocused()`.
 - **Motion that runs longer than 5 s needs a way to stop it** (WCAG 2.2.2);
   reduced motion doesn't count. The landing hero has a pause toggle; the
   sign-in panel's decoration simply stops after 4.8 s. Never animate text a
@@ -1390,7 +1510,11 @@ Interaction details that bit:
   included ("GR4J fit of 2026-09-24 14:05 UTC"), stay YYYY-MM-DD:
   unambiguous in any locale and reproducible byte for byte from the bundle.
   Don't run them through `fmtDay`; the screens around it read day first
-  (issue #521 round 3, decided by the operator).
+  (issue #521 round 3, decided by the operator). Text the engine writes
+  into the manifest (the appendix's input changes from `diffInputs`, its
+  warnings) is printed as the engine wrote it: day first from engine
+  1.100.0, ISO before (#586 R4-O/R4-P). It still matches the hashed text,
+  since a pack is reproduced at its own engine version.
 - **A small chart's month letters keep their room at 320 px.** The farm
   charts' "J F M A M …" nearly touched beside a "100 %" axis column on a
   320 px phone (issue #521). Below 20 px a month (`chartGeometry.ts`
@@ -1450,7 +1574,15 @@ Interaction details that bit:
   (`?tab=settings#set-…`) had silently done that until its page spec
   followed one; the tab now finds the element on mount and holds it with
   `holdAnchor` (`help/anchor.ts`), focusing its heading, as River & reserve,
-  Hydrological units, Runs, Data and Project do. Test a fragment link by *loading* it,
+  Hydrological units, Runs, Data and Project do. A panel that is a lazy chunk
+  of its own is drawn after the tab mounts, so one look at mount finds nothing
+  (Project's API keys, Calibration's Evaporation from the map, Runs' Forecast) or a box
+  without its heading yet: wait with `landOnAnchor(id)`, which holds the
+  panel once drawn and focuses its heading once that is (an h2–h4), giving up
+  when the reader takes over or after `LAND_WAIT_MS` (a panel or heading that
+  never comes must not take the focus late). A link to a panel the page doesn't draw for this
+  item says so in a focused line, not silently at the top (Runs'
+  `missingPanel.ts`). Test a fragment link by *loading* it,
   not only by clicking the in-page menu. And a `page.goto` that changes only
   the fragment is a same-page jump, not a load: the River menu's first
   "loaded link" test passed on such a jump without loading anything, and the
@@ -1490,6 +1622,10 @@ Interaction details that bit:
   one glossary entry made Goodness of fit mark the wrong term. Keep a
   just-linked section marked while its heading is on screen
   (`lib/help/spy.ts` `currentSection`'s `linked`).
+  And on a page short enough that the first section still starts on the
+  screen at the bottom, every section is in view and nothing has been
+  scrolled past: mark the first, not the last (`common/sectionNav.ts`
+  `activeSectionId`; the Calibration page's two parts, issue #586).
 - **Nested wrapping groups wrap as whole blocks.** The in-page menu was a
   flex row of groups, each a wrapping flex row of links: a long group took
   full rows of its own, so Runs & results' menu was three rows at 1280 px
@@ -1506,9 +1642,10 @@ Interaction details that bit:
   count trailing margins; and when a layout check fails only in CI, run it
   in CI's browser before guessing (`e2e/README.md` § Fonts).
 - **A reading page's header says what the page decides.** A long form has
-  no count to show; Settings & calibration's context line says where the
+  no count to show; Calibration's context line says where the
   runoff parameters came from (the fit's day and score, "changed since the
-  fit", or no fit record) and its action jumps to the fit. Find the one fact
+  fit", or no fit record) and its action jumps to the fit (Settings &
+  calibration's, until issue #586 split it into Model settings and Calibration). Find the one fact
   a user opens the page to check, and put it there. It describes the
   section, not the filter: History's "Latest change today 14:05 by Ann:
   Model changed" stays the latest of all while the list is filtered to one
@@ -1606,6 +1743,12 @@ Interaction details that bit:
   and the project's members, the pending invitations and the farmers use it;
   Crops' `removed()` and the Network's `remove()` did the same by hand, and
   Scenarios focuses its list's heading (`focus-after-actions.spec.ts`).
+  A row that stays but loses its control does the same: revoking an API key
+  or withdrawing a share link keeps the row (marked revoked) but its button
+  goes, so the index counts only the rows that still have one, and the next
+  live key's Revoke or link's Withdraw takes the focus (else Make a key, the
+  share form's first field, or the heading); removing a scheduled report
+  focuses the next schedule's Remove, else Add a schedule (issue #586).
   A row with no control every row has (a note: only some have Delete) takes
   the focus itself: the notes list's items carry `tabindex="-1"` and the
   selector is the item (`notes/NotesList.svelte`, `history-steps.spec.ts`).
@@ -1632,7 +1775,27 @@ Interaction details that bit:
   up …: <reason>" with **Try again** calling its load again, never the bare
   server text with only a reload to retry. An action's failure (a start, an
   apply) keeps its own message: the action's button is its retry
-  (`AutoCalibrationFollower.loadFailed`).
+  (`AutoCalibrationFollower.loadFailed`). Try again takes itself out of
+  the page, so it hands the focus on: `common/LoadState.svelte` puts it on
+  the loading line while the retry loads, on the new Try again if it failed
+  again, and on the panel's heading once it has loaded
+  (`common/loadState.ts` `retryTarget`; `586-a11y-load-state.spec.ts`).
+  A panel with its own Try again hands the focus on the same way: its click
+  calls `followRetry` (`common/loadState.ts`) before the retry starts, the
+  button carries `data-retry` and the loading line `data-loading`, and the
+  scope it watches (the alert's parent unless given) stays on the page
+  through the retry (issue #586 R4-I; `586-a11y-retry-focus.spec.ts`). A
+  page's own Try again (the whole page failed to load) passes
+  `landing: () => pageStart()` (`lib/a11y/focusPage.ts`), so it lands on the
+  page's `<h1>`, or `#main` when the answer has none; where the alert's
+  parent leaves the page with it (`/share`'s card, the root layout's
+  `<main>`), it passes a `scope` that stays (issue #586 R4-L;
+  `586-a11y-retry-focus-pages.spec.ts`). Only a line that goes once the
+  retry has answered is `data-loading`: a line that can stay for minutes
+  (an evidence pack's "printing") is not, or every retry in its scope would
+  wait on it. A Try again that can't act while a load is out is
+  `aria-disabled`, never `disabled`. One helper, not one per screen: a new
+  Try again calls `followRetry`.
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
@@ -1677,6 +1840,58 @@ Interaction details that bit:
   page it lands on scrolls to and focuses the card once drawn
   (`AllocationsTab` on `#alloc-band`). Add an entry whenever a setting leaves
   Settings.
+- **Settings split across pages share one draft, owned above the tabs.**
+  Issue #586 put the fit's four panels on Calibration and left the rest on
+  Model settings, both editing `project.settings`. Two drafts, one per tab,
+  would have lost an edit on a tab change, saved half the object, or shown
+  two save bars that disagree. So the workspace page holds one draft
+  (`settings/settingsDraft.svelte.ts`, beside `project/detailsDraft.svelte.ts`),
+  both tabs edit its `s` in place, and the page's one save bar saves or
+  discards it with the model and the details. What blocks Save is worked out
+  by the draft, not by the tab that is shown (`settings/blockers.ts`
+  `settingsBlockers`: the form's own checks as pure functions of the
+  settings, plus each child section's `bind:error`, kept in the draft so it
+  outlives the tab that drew it), so the bar lists every problem on every
+  tab, each a link to its panel on its own page (`sections.ts`
+  `settingsPageOf`). Going from one of the pages to the other never asks:
+  the draft is the workspace's, so only leaving the project asks
+  (`nav/leaveGuard.ts`). When a page's panels move to another page, move the
+  draft and the blockers up first, then the panels; a split done the other
+  way round shows the problem only while its panel's tab is open.
+- **A second page showing a run follows `?run=`, not its own pick.**
+  Calibration's *How the shown run fits* (`calibration/CalibrationResults.svelte`)
+  shows one run's Model quality, as Runs & results shows one run's results.
+  Its picker reads and writes the same `run=` parameter, with the same
+  default (`calibration/page.ts` `shownRun`: the newest, a viewer's published
+  baseline), a pick is one step in history (`goto` without `replace`), and a
+  `run=` naming a deleted run falls back to the default and says so. The
+  sidebar carries `run=` between the pages that show a run
+  (`workspace/tabLinks.ts` `RUN_TABS`), so a run picked on one page is the
+  run shown on the next, and both read details through one cache
+  (`runs/cache.ts` `runDetail`), so the second page draws at once. A
+  `#res-…` link waits until the picked run is shown before it lands (or says
+  the run lacks the panel, `runs/missingPanel.ts`). A run started from that
+  page opens back there, not on Runs & results. Don't add a page-local run
+  state: a second picker that disagrees with the URL is the bug.
+- **One forwarding table for every moved panel.** Each move is one row of
+  `ANCHOR_MOVES` (`nav/anchorMoves.ts`): the page the anchor was on (a tab
+  id, so `?tab=results` counts as Runs), the old anchors (a list, or a test
+  for a family: "every `set-…` not on Calibration"), the new tab and anchor
+  (null for the page itself), and the parameters kept (`'all'`, or a list
+  such as `run`). `anchorForward` builds the new address and every page
+  calls `followAnchors` (`nav/anchorLanding.ts`), which forwards with a
+  replace navigation (Back skips the old address) and then lands on and
+  focuses the heading, on a load, a typed `#…` and an in-page link alike.
+  Before the table each move had its own redirect (Runs' `movedHref`, round
+  1's Settings forwards, Calibration's own `calibrationForward`), three
+  shapes to keep in step. With one table a link that moved twice
+  (`?tab=calibration#set-feeds`: Calibration → Model settings → Data) simply
+  follows two rows. When a panel moves: add the row, pin it in
+  `anchorMoves.test.ts` and an e2e that *loads* the old link
+  (`calibration-forwards.spec.ts`, `settings-layout-pins.spec.ts`), and
+  repoint in-app links, help and notes at the new home rather than leaning
+  on the forward. A forward that opens a dialog (`retiredDataAnchor`) stays
+  outside the table.
 - **A head of named actions folds into one control on a phone, keeping the
   names.** The project list's head was three full-width buttons (New
   project, Import workbook, Import project file) before any project on
@@ -1740,6 +1955,14 @@ Interaction details that bit:
   a radio moved the choice and then threw the keyboard's focus to the page.
   Keep the controls live, mark the card `aria-busy`, and send one item's
   saves in order, taking the server's answer once the last is back.
+  A button is the same: `disabled={saving}` on the focused Check
+  reproduction, Trace or Publish threw the focus to the page mid-action,
+  and Save notes, disabled once nothing was left to save, did it the moment
+  a save succeeded. Mark it `aria-disabled` instead (still focusable,
+  `.btn[aria-disabled='true']` in `app.css` dims it as `:disabled` does) and
+  have its handler ignore the press; keep `disabled` for a reason that holds
+  before the press (an empty required field). Test it with `toBeFocused()`
+  after the action (`runs-record-actions.spec.ts`, issue #586).
 - **A joined switch of radios: cover the border box.** A radio laid over
   its segment with `inset: 0` sits inside the border, so a 32 px segment
   gave a 30 px target; use `inset: -1px` and `calc(100% + 2px)`. And
@@ -1937,6 +2160,11 @@ Interaction details that bit:
   (`scrollable-region-focusable`): the Download → Preview table has only
   text, so a keyboard user couldn't scroll it. Give the box `tabindex="0"`,
   `role="region"` and a name, and a `:focus-visible` outline.
+  A box that is short enough to read whole needn't scroll at all: API keys'
+  example request fitted Settings' full width but scrolled sideways once the
+  panel moved into the Project page's narrower column (issue #586), so it
+  wraps instead (`white-space: pre-wrap; overflow-wrap: anywhere`). A panel
+  that moves to a narrower home gets its axe scan re-run there.
 - **Virtualised rows must be exactly the height the spacers assume.** The
   preview table's rows were ~29 px (the table's padding) against a
   `ROW_H` of 28, and its empty top spacer still had padding, so an 11 px gap

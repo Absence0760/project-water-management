@@ -2,7 +2,11 @@
 	The app's one fold (ui-playbook.md § 2, "Rarely changed settings fold into their values"): a native
 	<details class="fold"> whose summary is one line naming the group and its current values, a disclosure
 	chevron before it and a named action after it ("Change", "Change the limits", "Rebase…"; "Hide" while
-	open; aria-hidden, since the summary announces expanded/collapsed). With `problem` (the default) the line
+	open; "Show" with `readonly`, for a viewer who can change nothing inside). The action is the last words of
+	the summary's accessible name ("Default limits: … Change the limits"): it was aria-hidden, since the summary
+	announces expanded/collapsed, which kept a voice-control user who says "click Change" from reaching it
+	(WCAG 2.5.3 Label in Name, issue #586 R4-I). At the end, the name still starts with the group it opens, and
+	the word is said once. With `problem` (the default) the line
 	shows "needs fixing" while a field inside is aria-invalid (app.css `.fold:has([aria-invalid='true'])`),
 	so a closed fold never hides one; a fold that holds no checked field (a statement, a rule in words)
 	passes `problem={false}`. Its fields stay in the page while closed, so Find a setting finds them and
@@ -26,6 +30,7 @@
 		atDefaults,
 		change = 'Change',
 		hide = 'Hide',
+		readonly = false,
 		problem = true,
 		body = 'grid',
 		spaced = false,
@@ -49,6 +54,8 @@
 		change?: string;
 		/** The open line's action (a translated page passes its own word). */
 		hide?: string;
+		/** A viewer can't change anything inside: the closed line's action reads "Show", never "Change…" (issue #586, C10). */
+		readonly?: boolean;
 		/** Say "needs fixing" on the line while a field inside is aria-invalid. */
 		problem?: boolean;
 		body?: 'grid' | 'stack' | 'none';
@@ -76,9 +83,9 @@
 
 <details class="fold {klass}" class:spaced data-testid={testid} bind:open {ontoggle}>
 	<summary
-		>{#if name}<span class="fold-name">{name}</span>{' '}{/if}<span id={lineId} class={lineClass} data-testid={lineTestid}>{line}</span>{@render after?.()}{#if problem}<span
+		>{#if name}<span class="fold-name">{name}</span>{' '}{/if}<span id={lineId} class="fold-line {lineClass ?? ''}" data-testid={lineTestid}>{line}</span>{@render after?.()}{#if problem}<span
 				class="fold-problem">needs fixing</span
-			>{/if}<span class="fold-change" aria-hidden="true">{open ? hide : change}</span></summary
+			>{/if}{' '}<span class="fold-change">{open ? hide : readonly ? 'Show' : change}</span></summary
 	>
 	{#if body === 'none'}
 		{@render children()}

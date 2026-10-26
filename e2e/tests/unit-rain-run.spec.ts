@@ -1,10 +1,10 @@
 // Rain for each hydrological unit, the whole path through the UI (issue #482;
-// docs/ui.md § Data feeds, § Network, § Settings & calibration, § Runs &
+// docs/ui.md § Data feeds, § Network, § Model settings, § Runs &
 // results; docs/model.md §2.4h). A synthetic catchment: an outflow gauge and
 // three land units, each with a parcel inside the CHIRPS fixture's cover
 // (21.0–25.4° E, 20.0–34.0° S), and a catchment gauge record with a 20-day
 // gap. As the owner:
-// - Settings → Data feeds → Rain for each unit creates the three unit feeds,
+// - Data → Data feeds → Rain for each unit creates the three unit feeds,
 //   whose fetches run offline (a scoped worker tick, FEED_SOURCE=fixtures);
 //   the panel then counts each unit's days.
 // - Each unit's form takes its MAP and source; Settings switches rain for each
@@ -81,8 +81,8 @@ test('unit feeds fetched offline, unit MAPs and a gauge MAP give a run on each u
 	void owner;
 	const { id, feedStart } = await seed(page.request, 'Unit rain end to end');
 
-	// Settings → Data feeds → Rain for each unit: the three parcels, one feed each.
-	await page.goto(`/projects/${id}?tab=settings&rain=units`);
+	// Data → Data feeds → Rain for each unit: the three parcels, one feed each.
+	await page.goto(`/projects/${id}?tab=series&rain=units`);
 	const panel = page.getByTestId('unit-rain');
 	const rows = panel.getByTestId('unit-rain-row');
 	await expect(rows).toHaveCount(3);
@@ -122,6 +122,9 @@ test('unit feeds fetched offline, unit MAPs and a gauge MAP give a run on each u
 	await page.getByLabel(/^Run label/).fill('Per unit');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Per unit' })).toBeVisible();
+	// Rain for each unit is in Model quality, on Calibration (issue #586 Round 3): the newest run by default.
+	await page.goto(`/projects/${id}?tab=calibration#res-unit-rain`);
+	await expect(page.getByTestId('calibration-run')).toContainText('Per unit');
 
 	const result = page.getByTestId('run-unit-rain');
 	await expect(result).toContainText(`rain gauge’s MAP ${GAUGE_MAP} mm (the gauge’s synthetic record, 1991–2020).`);

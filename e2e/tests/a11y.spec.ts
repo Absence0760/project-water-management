@@ -34,12 +34,20 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	{ id: 'network', ready: (p) => expect(p.getByRole('list', { name: 'Drainage tree' })).toBeVisible() },
 	{ id: 'crops', ready: (p) => expect(p.getByRole('heading', { name: 'Planted area by hydrological unit' })).toBeVisible() },
 	{ id: 'transfers', ready: (p) => expect(p.getByLabel('From, transfer 1', { exact: true })).toBeVisible() },
-	{ id: 'settings', ready: (p) => expect(p.getByRole('heading', { name: 'Flow calibration' })).toBeVisible() },
+	{ id: 'settings', ready: (p) => expect(p.getByRole('heading', { level: 2, name: 'Demand', exact: true })).toBeVisible() },
+	// Its two parts: the settings panels that set up a fit (issue #586 round 3), and the links to Model quality.
+	{
+		id: 'calibration',
+		ready: async (p) => {
+			await expect(p.getByRole('heading', { level: 3, name: 'Flow calibration' })).toBeVisible();
+			await expect(p.getByTestId('calibration-run')).toBeVisible();
+		}
+	},
 	{ id: 'series', ready: (p) => expect(p.getByRole('button', { name: 'View', exact: true })).toHaveCount(2) },
 	{
 		id: 'runs',
 		ready: async (p) => {
-			await expect(p.getByRole('region', { name: 'Run summary' })).toBeVisible();
+			await expect(p.getByRole('region', { name: 'Summary', exact: true })).toBeVisible();
 			await expect(p.getByRole('img', { name: /line chart/ }).first().locator('canvas')).toBeVisible();
 		}
 	},
@@ -215,7 +223,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				void owner;
 				const project = await seedRunnableProject(page.request, 'A11y GR4J settings');
 				await updateSettings(page.request, project.id, GR4J);
-				await page.goto(`/projects/${project.id}?tab=settings`);
+				await page.goto(`/projects/${project.id}?tab=calibration`);
 				await expect(page.getByLabel(/^Groundwater exchange X2/)).toHaveValue('-0.5');
 				await expectNoViolations(page);
 			});
@@ -225,7 +233,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				void owner;
 				const project = await seedRunnableProject(page.request, 'A11y GR4J monthly PE');
 				await updateSettings(page.request, project.id, { ...GR4J, pe: { kind: 'monthly', mm: new Array(12).fill(90), source: 'Synthetic station ET₀' } });
-				await page.goto(`/projects/${project.id}?tab=settings`);
+				await page.goto(`/projects/${project.id}?tab=calibration`);
 				await expect(page.getByLabel('Monthly PE, Oct, mm')).toHaveValue('90');
 				await expectNoViolations(page);
 			});
@@ -235,7 +243,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				const project = await seedRunnableProject(page.request, 'A11y GR4J run');
 				await updateSettings(page.request, project.id, GR4J);
 				await createRun(page.request, project.id, 'GR4J');
-				await page.goto(`/projects/${project.id}?tab=runs`);
+				// The runoff model is in Model quality, on Calibration (issue #586 Round 3).
+				await page.goto(`/projects/${project.id}?tab=calibration`);
 				const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
 				await expect(runoff.getByRole('rowheader', { name: /Groundwater exchange/ })).toBeVisible();
 				await expect(runoff.getByRole('img', { name: /^Model stores/ }).locator('canvas')).toBeVisible();
@@ -247,7 +256,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				void owner;
 				const project = await seedRunnableProject(page.request, 'A11y fit');
 				await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
-				await page.goto(`/projects/${project.id}?tab=settings`);
+				await page.goto(`/projects/${project.id}?tab=calibration`);
 				const fit = page.getByRole('region', { name: /^Fit automatically/ });
 				await openFold(fit, 'fit-search');
 				await fit.getByLabel('Model runs per fit').fill('50');

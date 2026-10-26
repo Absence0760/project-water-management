@@ -6,11 +6,12 @@
 -->
 <script lang="ts">
 	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import type { InputChange } from '@water-management/engine';
 	import { api, type HistoryRevision, type Relink, type RunMeta } from '#lib/api/index.js';
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import ChangesList from '#lib/components/compare/ChangesList.svelte';
-	import { fmtDate } from '#lib/format/number.js';
+	import { fmtStamp } from '#lib/format/number.js';
 	import { revisionLines, revisionTitle } from './timeline';
 
 	let {
@@ -51,6 +52,13 @@
 			loading = false;
 		}
 	}
+	// Try again takes itself out (the loading line takes its place): the focus follows (followRetry).
+	// While a load is out it is aria-disabled, never disabled, so a press can't drop the focus (ui-playbook).
+	function retry(e: MouseEvent) {
+		if (loading) return;
+		followRetry(e.currentTarget as HTMLElement);
+		load();
+	}
 	function toggle(e: Event) {
 		open = (e.currentTarget as HTMLDetailsElement).open;
 		if (open && changes === null && !loading) load();
@@ -68,7 +76,9 @@
 		confirmOpen = true;
 		if (changes === null) await load();
 	}
-	const canRestore = $derived(!restoring && changes !== null && changes.some((c) => c.area !== 'series'));
+	/** Something to restore (the button is disabled without it, its reason said above it); restoring marks it aria-disabled instead, so the focus stays on it. */
+	const hasRestore = $derived(changes !== null && changes.some((c) => c.area !== 'series'));
+	const canRestore = $derived(!restoring && hasRestore);
 	async function restore() {
 		if (restoring) return;
 		restoring = true;
@@ -87,13 +97,14 @@
 	}
 </script>
 
-<section aria-labelledby="{uid}-h" class="since">
+<!-- Its heading has the side index's line (runs/sections.ts RUN_SUBSECTIONS, issue #586 D4): one per page. -->
+<section aria-labelledby="res-changes" class="since">
 	<details ontoggle={toggle}>
-		<summary><h3 id="{uid}-h">Changes since this run</h3></summary>
+		<summary><h3 id="res-changes">Changes since this run</h3></summary>
 		{#if loading && changes === null}
-			<p class="muted" role="status">Loading…</p>
+			<p class="muted" role="status" data-loading>Loading…</p>
 		{:else if error}
-			<div class="alert alert-error" role="alert">{error} <button type="button" class="btn btn-sm" onclick={load}>Try again</button></div>
+			<div class="alert alert-error" role="alert">{error} <button type="button" class="btn btn-sm" data-retry onclick={retry}>Try again</button></div>
 		{:else if changes}
 			{#if changes.length === 0}
 				<p class="muted">The saved inputs are the ones this run used.</p>
@@ -106,7 +117,7 @@
 				<ul class="revs">
 					{#each revisions as r (r.id)}
 						<li>
-							<span class="muted">{fmtDate(r.createdAt, true)}{r.actor ? ` · ${r.actor}` : ''}</span> — {revisionTitle(r)}:
+							<span class="muted">{fmtStamp(r.createdAt)}{r.actor ? ` · ${r.actor}` : ''}</span> — {revisionTitle(r)}:
 							{revisionLines(r).join('; ')}{#if r.reason} <em>({r.reason})</em>{/if}
 						</li>
 					{/each}
@@ -114,39 +125,44 @@
 				<a class="small" href="?tab=history">Open the full history</a>
 			{/if}
 		{/if}
-	</details>
-	{#if canEdit}
-		<div class="restore-row">
-			{#if scenarioRun}
-				<p class="muted small">A scenario run’s inputs are its scenario’s changes on the base run, so they can’t be restored into the project.</p>
-			{:else}
-				<button type="button" class="btn btn-sm" onclick={askRestore} disabled={modelDirty} title={modelDirty ? 'Save or discard your unsaved model changes first' : undefined}>
-					Restore these inputs
-				</button>
-				<span class="muted small">Puts back the settings and model this run used, as a new change. Series values stay as they are.</span>
-			{/if}
-		</div>
-		{#if restored}
-			<div class="alert alert-success-ish" role="status">
-				This run’s inputs are restored. Run the model again to see them in the results.
-				{#if restored.length}
-					Farmers to link again (<a href="?tab=project#farmers-h">Project page</a>): {restored.map((r) => `${r.displayName} to ${r.nodeName}`).join(', ')}.
+		<!-- Inside the disclosure, under the changes it would undo, not offered before they are seen (#586 D16). -->
+		{#if canEdit}
+			<div class="restore-row">
+				{#if scenarioRun}
+					<p class="muted small">A scenario run’s inputs are its scenario’s changes on the base run, so they can’t be restored into the project.</p>
+				{:else}
+					<button type="button" class="btn btn-sm" onclick={askRestore} disabled={modelDirty} aria-describedby="{uid}-restore-note">
+						Restore these inputs
+					</button>
+					<span class="muted small" id="{uid}-restore-note"
+						>{modelDirty ? 'Save or discard your unsaved model changes first.' : 'Puts back the settings and model this run used, as a new change. Series values stay as they are.'}</span
+					>
 				{/if}
 			</div>
+			{#if restored}
+				<div class="alert alert-success-ish" role="status">
+					This run’s inputs are restored. Run the model again to see them in the results.
+					{#if restored.length}
+						Farmers to link again (<a href="?tab=project#farmers-h">Project page</a>): {restored.map((r) => `${r.displayName} to ${r.nodeName}`).join(', ')}.
+					{/if}
+				</div>
+			{/if}
 		{/if}
-	{/if}
+	</details>
 </section>
 
 <Dialog bind:open={confirmOpen} title="Restore this run’s inputs?" wide>
 	<p>
-		The settings and model go back to what the run “{run.label || 'Untitled run'}” of {fmtDate(run.createdAt, true)} used. This is saved as a new change in the
+		The settings and model go back to what the run “{run.label || 'Untitled run'}” of {fmtStamp(run.createdAt)} used. This is saved as a new change in the
 		History tab. Series values aren’t part of it.
 	</p>
 	{#if changes === null && error}
 		<!-- The load failed: say so here, where the question is, not only in the closed "Changes since this run" above. -->
-		<div class="alert alert-error" role="alert">{error} <button type="button" class="btn btn-sm" onclick={load} disabled={loading}>Try again</button></div>
+		<div class="alert alert-error" role="alert">
+			{error} <button type="button" class="btn btn-sm" data-retry onclick={retry} aria-disabled={loading ? 'true' : undefined}>Try again</button>
+		</div>
 	{:else if changes === null}
-		<p class="muted" role="status">Working out what changes…</p>
+		<p class="muted" role="status" data-loading>Working out what changes…</p>
 	{:else if changes.filter((c) => c.area !== 'series').length === 0}
 		<p class="muted">The saved settings and model already match this run.</p>
 	{:else}
@@ -168,7 +184,7 @@
 	{#if restoreError}<div class="alert alert-error" role="alert">{restoreError}</div>{/if}
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (confirmOpen = false)}>Cancel</button>
-		<button type="submit" form="{uid}-restore" class="btn btn-primary" disabled={!canRestore}>
+		<button type="submit" form="{uid}-restore" class="btn btn-primary" disabled={!hasRestore} aria-disabled={restoring}>
 			{restoring ? 'Restoring…' : 'Restore'}
 		</button>
 	{/snippet}
@@ -183,10 +199,10 @@
 	summary {
 		cursor: pointer;
 	}
+	/* The page's h3 size, as every other panel heading on Runs & results. */
 	summary h3 {
 		display: inline;
 		margin: 0;
-		font-size: 1rem;
 	}
 	h4 {
 		margin: 0.75rem 0 0.3rem;

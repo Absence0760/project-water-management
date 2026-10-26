@@ -36,7 +36,7 @@ describe('visibleTabs', () => {
 	it('shows a viewer Overview, Data and Runs & results (and Dams, Compare runs, Scenarios, Allocations) by default', () => {
 		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
 		const core = ['overview', 'series', 'runs', 'scenarios', 'allocations'];
-		expect(visibleTabs('viewer')).toEqual(['overview', 'map', 'series', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project']);
+		expect(visibleTabs('viewer')).toEqual(['overview', 'map', 'series', 'calibration', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project']);
 		expect(visibleTabs('viewer', {}, PAGE)).toEqual(core);
 		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(core);
 	});
@@ -216,9 +216,19 @@ describe('navSections', () => {
 	it('puts review first, then the model, then the outcomes', () => {
 		expect(navSections(ALL_TABS)).toEqual([
 			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
-			{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings'] },
+			{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration'] },
 			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] }
 		]);
+	});
+
+	it('shows Calibration to everyone who opens the workspace, a viewer too, without the model inputs (issue #586)', () => {
+		const rendered: TabId[] = ['overview', 'settings', 'calibration', 'runs'];
+		for (const role of ['owner', 'editor', 'viewer'] as const) expect(visibleTabs(role, {}, rendered)).toContain('calibration');
+		expect(navSections(visibleTabs('viewer', {}, rendered))).toEqual([
+			{ id: 'model', label: 'Build the model', tabs: ['calibration'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs'] }
+		]);
+		for (const role of ['contributor', 'farmer', null] as const) expect(visibleTabs(role, {}, rendered)).toEqual(['overview']);
 	});
 
 	it('puts the Project page first under Review, for owners, editors and viewers (no model inputs needed)', () => {
@@ -289,7 +299,7 @@ describe('the Map (issue #288; a sidebar row since #326 D3)', () => {
 		expect(model.tabs.indexOf('map')).toBe(model.tabs.indexOf('network') + 1);
 		// A viewer sees it without "Show model inputs" (it shows results too), but not the Network.
 		const viewer = navSections(visibleTabs('viewer', { hidden: [] }));
-		expect(viewer.find((s) => s.id === 'model')?.tabs).toEqual(['map', 'series']);
+		expect(viewer.find((s) => s.id === 'model')?.tabs).toEqual(['map', 'series', 'calibration']);
 		expect(TAB_GROUP.map).toBe('core');
 	});
 });

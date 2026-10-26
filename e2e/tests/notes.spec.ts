@@ -85,13 +85,36 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Notes on EWR (1)' })).toBeVisible();
 	// The groups whose sources and determinations most need a "why" take notes too (WR2012, Reserve rules, restrictions, Evidence).
-	for (const group of ['WR2012 check', 'Reserve rule tables', 'Drought restrictions', 'Reporting', 'Evidence']) {
+	// Every panel but EWR the results are judged by takes notes (issue #586, C12), and Notes is the last thing in each panel's head,
+	// after the panel's own action.
+	for (const group of ['Reserve rule tables', 'Drought restrictions', 'Reporting', 'Evidence', 'Outcome matrix', 'Seasonal outlook', 'Automatic runs']) {
 		await expect(page.getByRole('button', { name: `Notes on ${group}`, exact: true })).toBeVisible();
 	}
+	const lastInHead = (id: string) => page.locator(`${id} .panel-head`).first().locator('button:visible, a:visible').last();
+	for (const [id, group] of [
+		['#set-reserve', 'Reserve rule tables'],
+		['#set-auto', 'Automatic runs']
+	] as const) {
+		await expect(lastInHead(id), id).toHaveAccessibleName(`Notes on ${group}`);
+	}
+	const reserveHead = page.locator('#set-reserve .panel-head').first();
+	const [add, notes] = [(await reserveHead.getByRole('button', { name: 'Add a rule table' }).boundingBox())!, (await reserveHead.locator('.notes-btn').boundingBox())!];
+	expect(add.x).toBeLessThan(notes.x);
 	// Label in Name (WCAG 2.5.3): the button shows "Notes", and its accessible name starts with it.
 	const reportingNotes = page.locator('#set-reporting .notes-btn');
 	await expect(reportingNotes).toHaveText('Notes');
 	await expect(reportingNotes).toHaveAccessibleName('Notes on Reporting');
+	// The panels that set up a fit take notes on Calibration (issue #586 round 3), Notes last in each head there too.
+	await page.goto(`/projects/${project.id}?tab=calibration`);
+	for (const group of ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']) {
+		await expect(page.getByRole('button', { name: `Notes on ${group}`, exact: true })).toBeVisible();
+	}
+	for (const [id, group] of [
+		['#set-wr2012', 'WR2012 check'],
+		['#set-fit', 'Fit the parameters']
+	] as const) {
+		await expect(lastInHead(id), id).toHaveAccessibleName(`Notes on ${group}`);
+	}
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByRole('button', { name: 'Notes on this run', exact: true }).click();
@@ -173,3 +196,13 @@ for (const size of [
 		await expect(page.getByRole('button', { name: 'Notes on the project (31)' })).toBeFocused();
 	});
 }
+
+test('the Project page’s empty Recent notes links to the Network, where a unit takes notes (issue #586)', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'No notes farm');
+	await page.goto(`/projects/${project.id}?tab=project`);
+	const recent = page.getByRole('region', { name: 'Recent notes' });
+	await expect(recent).toContainText('No notes yet.');
+	await recent.getByRole('link', { name: 'Network' }).click();
+	await expect(page).toHaveURL(`/projects/${project.id}?tab=network`);
+});

@@ -256,7 +256,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `${s.feedId ? `The ${feedName(s.source)} feed replaced` : 'Replaced'} ${seriesName(s)}: ${plural(num(s.daysChanged) ?? 0, 'day')} changed${range(s)}${versionChange(s)}`;
 		case 'series.merged':
 			// A day set or cleared by hand (PUT …/series/:seriesId/days/:date, issue #477).
-			if (s.entry === 'hand') return `Edited ${str(s.date) || 'a day'} of ${seriesName(s)} by hand`;
+			if (s.entry === 'hand') return `Edited ${fmtDay(str(s.date)) || 'a day'} of ${seriesName(s)} by hand`;
 			return `${s.feedId ? `The ${feedName(s.source)} feed added days to` : 'Merged days into'} ${seriesName(s)}: ${plural(num(s.daysChanged) ?? 0, 'day')} changed`;
 		case 'series.deleted':
 			return `Deleted ${seriesName(s)}${range(s)}`;
@@ -325,7 +325,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				const named = units.length > 3 ? `${units.slice(0, 3).join(', ')} and ${units.length - 3} more` : units.join(', ');
 				const made = [typeof s.created === 'number' && s.created ? `${s.created} created` : null, typeof s.updated === 'number' && s.updated ? `${s.updated} updated` : null].filter(Boolean).join(', ');
 				const product = str(s.product) ? ` ${str(s.product)}` : '';
-				return `Set up rain for each unit: CHIRPS${product} feeds for ${plural(units.length, 'unit')}${named ? ` (${named})` : ''}${made ? `, ${made}` : ''}${str(s.startDate) ? `, from ${str(s.startDate)}` : ''}`;
+				return `Set up rain for each unit: CHIRPS${product} feeds for ${plural(units.length, 'unit')}${named ? ` (${named})` : ''}${made ? `, ${made}` : ''}${str(s.startDate) ? `, from ${fmtDay(str(s.startDate))}` : ''}`;
 			}
 			// Set from the map's catchment boundary (issue #326 B-rain): named, with its cell count.
 			const b = s.boundary as { name?: unknown } | undefined;
@@ -471,14 +471,14 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		// The licence record (161): the outcome, the date the record may be deleted, and why. Events before 233 say granted, refused or withdrawn.
 		case 'licence.outcome': {
 			const o = str(s.outcome);
-			const closes = str(s.closesOn) ? `; the record may be deleted from ${str(s.closesOn)}` : '';
+			const closes = str(s.closesOn) ? `; the record may be deleted from ${fmtDay(str(s.closesOn))}` : '';
 			if (!o) return `Cleared the licence outcome${str(s.reason) ? `: ${str(s.reason)}` : ''}`;
 			const words = LICENCE_OUTCOME_WORDS[o] ?? o;
-			const what = o === 'licence_issued' || o === 'granted' ? `${words} on ${str(s.outcomeOn)}, expiring ${str(s.expiresOn)}` : `${words} on ${str(s.outcomeOn)}`;
+			const what = o === 'licence_issued' || o === 'granted' ? `${words} on ${fmtDay(str(s.outcomeOn))}, expiring ${fmtDay(str(s.expiresOn))}` : `${words} on ${fmtDay(str(s.outcomeOn))}`;
 			return `Recorded the licence outcome: ${what}${closes}`;
 		}
 		case 'licence.confirmed':
-			return `Confirmed the licence record is still needed${str(s.reviewDueOn) ? `; next review ${str(s.reviewDueOn)}` : ''}`;
+			return `Confirmed the licence record is still needed${str(s.reviewDueOn) ? `; next review ${fmtDay(str(s.reviewDueOn))}` : ''}`;
 		// Whether viewers read each registered volume (162, D3).
 		case 'allocation.viewer_units':
 			return s.on ? 'Let viewers see each farm’s registered volumes' : 'Showed viewers registered volumes as totals only';

@@ -1,5 +1,6 @@
 <!--
-	Settings → Data feeds (roadmap WP-2.10; docs/ui.md § Data feeds): the
+	Data → Data feeds (roadmap WP-2.10; docs/ui.md § Data feeds; on Settings
+	until issue #586 moved it beside the series it fills): the
 	project's scheduled feeds (CHIRPS rainfall, the CHIRPS-GEFS forecast, DWS
 	gauge flow) with their health, "Run now", and a card to attach one. Owners
 	attach, switch off and remove feeds; editors can run one now; viewers read.
@@ -11,6 +12,7 @@
 <script lang="ts">
 	import DayInput from '#lib/components/common/DayInput.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { onMount, tick, untrack } from 'svelte';
 	import { page } from '$app/state';
@@ -38,12 +40,14 @@
 		healthMessage,
 		keptNote,
 		needsAttention,
+		nextTryNote,
 		targetHint,
 		separateName,
 		STATE_LABELS,
 		takeoverOf,
 		versionClash
 	} from './feeds';
+	import { createPoller, fetchOutcome, outcomeMessage, STILL_WAITING } from './follow';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -90,32 +94,82 @@
 	const mapOnly = $derived(!!data && data.canRun && !data.canEdit);
 	const sourceLabel = (f: FeedMeta) => data?.sources.find((s) => s.source === f.source)?.label ?? f.source;
 
+	/**
+	 * Fetches queued by Run now that haven't run yet: feed id → its
+	 * lastAttemptAt when the button was pressed (follow.ts fetchOutcome). Every
+	 * list that lands settles them; the poller re-reads the list until none is left.
+	 */
+	const following = new Map<string, string | null>();
+
+	/** Say how each followed fetch that has now run went, in the live region; focus stays where it is. */
+	function settle() {
+		if (!data || following.size === 0) return;
+		const said: string[] = [];
+		for (const [id, before] of following) {
+			const f = data.feeds.find((x) => x.id === id);
+			const outcome = fetchOutcome(before, f);
+			if (outcome === 'waiting') continue;
+			following.delete(id);
+			// Removed or switched off meanwhile: the row (or its absence) says so.
+			if (outcome === 'gone' || !f) continue;
+			said.push(outcomeMessage(outcome, f, healthMessage(f.health), nextTryNote(f)));
+		}
+		if (said.length) message = said.join(' ');
+	}
+
 	// Only the newest list request may land: an older one answering late
-	// (a slow first load, a double press of Refresh) must not overwrite it.
+	// (a slow first load, a double press of Refresh, a poll) must not overwrite it.
 	let seq = 0;
-	/** Re-read the list. Never throws: with a list already shown, a failure keeps it and says so. */
-	async function reload(): Promise<boolean> {
+	/**
+	 * Re-read the list. Never throws: with a list already shown, a failure keeps
+	 * it and says so, unless `quiet` (a background poll, which just tries again).
+	 */
+	async function reload(quiet = false): Promise<boolean> {
 		const mine = ++seq;
 		try {
 			const next = await feeds.list();
 			if (mine !== seq) return false;
 			data = next;
 			loadError = null;
+			settle();
 			return true;
 		} catch (e) {
-			if (mine !== seq) return false;
+			if (mine !== seq || quiet) return false;
 			if (data) error = `Couldn’t refresh the data feeds: ${errorText(e)}`;
 			else loadError = errorText(e);
 			return false;
 		}
 	}
-	onMount(reload);
+
+	// Follows the fetches Run now queued (issue #586 Round 4), never while the page is hidden.
+	const poller = createPoller({
+		poll: async () => {
+			await reload(true);
+			return following.size > 0;
+		},
+		onGiveUp: () => {
+			following.clear();
+			message = STILL_WAITING;
+		},
+		hidden: () => document.hidden
+	});
+
+	onMount(() => {
+		void reload();
+		const onVisibility = () => (document.hidden ? poller.pause() : poller.resume());
+		document.addEventListener('visibilitychange', onVisibility);
+		return () => {
+			document.removeEventListener('visibilitychange', onVisibility);
+			poller.stop();
+		};
+	});
 
 	async function refresh() {
 		if (refreshing) return;
 		message = error = null;
 		refreshing = true;
-		if (await reload()) message = 'Status refreshed.';
+		// A followed fetch that has run says so instead.
+		if ((await reload()) && !message) message = 'Status refreshed.';
 		refreshing = false;
 	}
 
@@ -144,9 +198,9 @@
 		if (formField === 'cells' || formField === 'bbox') formError = formField = null;
 	}
 
-	// ?rain=boundary (the Map tab's link) and ?rain=units (Settings' Rain for each unit) open the card on
-	// that proposal, also when the link is followed on this page; once per arrival, so closing it while
-	// the URL still asks doesn't open it again. Not for a viewer, who has neither.
+	// ?rain=boundary (the Map tab's link) and ?rain=units (Settings' Rain for each unit), both links to
+	// ?tab=series…#data-feeds, open the card on that proposal, also when the link is followed on this page;
+	// once per arrival, so closing it while the URL still asks doesn't open it again. Not for a viewer, who has neither.
 	const rainAsked = $derived.by(() => {
 		const r = page.url.searchParams.get('rain');
 		return r === 'boundary' || r === 'units' ? r : null;
@@ -283,10 +337,14 @@
 			return;
 		busy = f.id;
 		message = error = null;
+		let follow = false;
 		try {
 			if (what === 'run') {
+				const before = f.lastAttemptAt;
 				const r = await feeds.runNow(f.id);
 				message = r.created ? 'Fetch queued. The status below updates once the background worker has run it.' : 'A fetch for this feed is already waiting to run.';
+				following.set(f.id, before);
+				follow = true;
 			} else if (what === 'replace') {
 				await feeds.update(f.id, { replaceSeries: true });
 				message = 'Replacement confirmed: the feed backfills the new record, then replaces the series. Run it now, or wait for the schedule.';
@@ -307,12 +365,13 @@
 		// feed was switched off or removed elsewhere), so show what is there now.
 		await reload();
 		busy = null;
+		if (follow && following.size > 0) poller.start();
 		// A removed feed takes its buttons with it: keep focus in the section.
 		if (what === 'remove' && !data?.feeds.some((x) => x.id === f.id)) heading?.focus();
 	}
 </script>
 
-<!-- Its #set-feeds anchor is on the wrapper in SettingsTab.svelte, which lazy-loads this panel. -->
+<!-- Its #data-feeds anchor is on the wrapper in series/SeriesTab.svelte, which lazy-loads this panel. -->
 <section class="panel" aria-labelledby="{uid}-h">
 	<!-- The panel's actions in its head (issue #521): Refresh status, and the add action that opens the card. The words
 	     that were a paragraph under the heading are the (i)'s, with the rest in the glossary. -->
@@ -330,6 +389,11 @@
 			</div>
 		{/if}
 	</div>
+
+	<!-- Feeds save on their own, never through the workspace's save bar: say so where the changes are made (issue #586, E13). -->
+	{#if data?.canEdit}
+		<p class="muted small saves" data-testid="feeds-saves">Feeds save as you change them: attaching, switching off or removing one needs no Save changes.</p>
+	{/if}
 
 	{#if loadError}
 		<div class="alert alert-error" role="alert">
@@ -544,9 +608,8 @@
 			</div>
 		{/if}
 
-		{#if data.feeds.length === 0}
-			<p class="muted">No feeds yet{data.canEdit ? '.' : '. An owner can attach one.'}</p>
-		{:else}
+		<!-- The app's one empty state (LoadState's dashed box), as API keys and Scheduled reports show theirs (issue #586, C17). -->
+		<LoadState loading={false} empty={data.feeds.length === 0} emptyText="No feeds yet{data.canEdit ? '.' : '. An owner can attach one.'}">
 			<ul class="feeds" aria-label="Data feeds">
 				{#each data.feeds as f (f.id)}
 					<li class="feed" data-state={f.health.state}>
@@ -556,7 +619,7 @@
 							<span class="muted">→ {describeTarget(f)}</span>
 						</div>
 						<p class="where muted small">{describePlace(f)}{describeWrites(f)} · {f.schedule}{describeRunsAs(f)}</p>
-						<p class="health">{healthMessage(f.health)}</p>
+						<p class="health">{healthMessage(f.health)}{#if nextTryNote(f)}{' '}{nextTryNote(f)}{/if}</p>
 						{#if conflictMessage(f)}
 							<p class="alert alert-warning version" data-testid="feed-version-conflict">{conflictMessage(f)}</p>
 						{/if}
@@ -583,7 +646,7 @@
 					</li>
 				{/each}
 			</ul>
-		{/if}
+		</LoadState>
 	{/if}
 </section>
 
@@ -602,6 +665,9 @@
 	.hint {
 		font-size: var(--font-sm);
 		max-width: 75ch;
+	}
+	.saves {
+		margin: 0 0 0.6rem;
 	}
 	.feeds {
 		list-style: none;
@@ -700,10 +766,5 @@
 	.err {
 		color: var(--danger);
 		font-size: 0.85rem;
-	}
-	/* Busy buttons stay focusable (aria-disabled, not disabled) but look it. */
-	.btn[aria-disabled='true'] {
-		opacity: 0.55;
-		cursor: not-allowed;
 	}
 </style>

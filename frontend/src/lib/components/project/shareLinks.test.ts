@@ -40,21 +40,25 @@ describe('linkRow', () => {
 			id: 'a',
 			label: 'Catchment forum',
 			state: 'live',
-			created: '2026-09-25 by Jo Owner',
-			ends: '2026-10-25',
-			lastUsed: '2026-09-25 07:42',
+			created: '25 Sep 2026 by Jo Owner',
+			ends: '25 Oct 2026',
+			// Last used as a status line says it, against the owner's clock (NOW is 14:00 on 25 Sep there).
+			lastUsed: 'today 07:42',
 			opens: 'The published baseline',
 			opensNothing: null,
 			canRevoke: true
 		});
 		process.env.TZ = 'Pacific/Pago_Pago';
-		expect(linkRow(link(), NOW)).toMatchObject({ created: '2026-09-24 by Jo Owner', ends: '2026-10-24', lastUsed: 'Never' });
+		expect(linkRow(link(), NOW)).toMatchObject({ created: '24 Sep 2026 by Jo Owner', ends: '24 Oct 2026', lastUsed: 'Never' });
+		// 18:42 on 24 Sep there, the day before NOW's 01:00 on 25 Sep.
+		expect(linkRow(link({ lastUsedAt: '2026-09-25T05:42:00Z' }), NOW).lastUsed).toBe('yesterday 18:42');
+		expect(linkRow(link({ lastUsedAt: '2026-09-20T05:42:00Z' }), NOW).lastUsed).toBe('19 Sep 2026 18:42');
 	});
 
 	it('says who withdrew it, and offers no revoke on a dead link', () => {
 		process.env.TZ = 'UTC';
-		expect(linkRow(link({ revokedAt: '2026-09-25T10:00:00Z', revokedBy: 'Sam Owner' }), NOW)).toMatchObject({ state: 'revoked', ends: 'Withdrawn 2026-09-25 by Sam Owner', canRevoke: false });
-		expect(linkRow(link({ revokedAt: '2026-09-25T10:00:00Z', revokedBy: null, createdBy: null }), NOW)).toMatchObject({ ends: 'Withdrawn 2026-09-25', created: '2026-09-24' });
+		expect(linkRow(link({ revokedAt: '2026-09-25T10:00:00Z', revokedBy: 'Sam Owner' }), NOW)).toMatchObject({ state: 'revoked', ends: 'Withdrawn 25 Sep 2026 by Sam Owner', canRevoke: false });
+		expect(linkRow(link({ revokedAt: '2026-09-25T10:00:00Z', revokedBy: null, createdBy: null }), NOW)).toMatchObject({ ends: 'Withdrawn 25 Sep 2026', created: '24 Sep 2026' });
 		expect(linkRow(link({ expiresAt: '2026-09-20T00:00:00Z' }), NOW)).toMatchObject({ state: 'expired', canRevoke: false });
 	});
 });

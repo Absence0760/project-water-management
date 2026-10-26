@@ -11,6 +11,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openRiver, riverTile, riverTiles, seedRiverProject } from '../support/river.ts';
 import { grouped, ungroup } from '../support/format.ts';
+import { pinClockToProject } from '../support/clock.ts';
 
 /** Visible elements on the page that scroll vertically inside themselves (the window is the page's one scroll). */
 const innerScrollers = (page: Page) =>
@@ -424,6 +425,25 @@ test('Runs & results links here for its run, and an old link to a moved panel la
 	const heading = page.locator('#res-ewr-grid').getByRole('heading', { name: /^Days below the EWR, by month/ });
 	await expect(heading).toBeFocused();
 	await expect(heading).toBeInViewport();
+});
+
+test('a fresh load of a link to a panel lands on it with the focus on its heading (WCAG 2.4.3, issue #586 R4-F)', async ({ page, owner }) => {
+	void owner;
+	const id = await seedRiverProject(page.request, 'River fresh link');
+	const baseline = await createRun(page.request, id, 'Baseline');
+	// A later run too, so the link's run= isn't the one the page would show by itself.
+	await createRun(page.request, id, 'Second');
+	await pinClockToProject(page, id, 'lastRunAt'); // "today" on the run's own day (support/clock.ts)
+	// The links Runs & results gives, loaded afresh: these two left the focus on the page's body.
+	for (const anchor of ['res-ewr-grid', 'res-water-account', 'res-reserve-years']) {
+		await page.goto(`/projects/${id}?tab=overview`);
+		await page.goto(`/projects/${id}?tab=river&run=${baseline}#${anchor}`);
+		const heading = page.locator(`#${anchor}`).getByRole('heading', { level: 2 }).first();
+		await expect(heading).toBeFocused();
+		await expect(heading).toBeInViewport();
+	}
+	// The run picker says when each run was made as Calibration's does, not year first (issue #586 R4-F).
+	await expect(page.getByRole('combobox', { name: 'Run' }).locator(`option[value="${baseline}"]`)).toHaveText(/^Baseline · today \d{2}:\d{2} · \d{4}(–\d{4})?$/);
 });
 
 test('the Summary links here, and ?tab=ewr and the old ?tab=reserve open it', async ({ page, owner }) => {

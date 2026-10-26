@@ -37,6 +37,8 @@
 	let node = $state(CATCHMENT);
 	let key = $state('');
 	let log = $state(false);
+	// Try again on a failed load: bumping it re-runs the load (failures aren't cached, cache.ts).
+	let attempt = $state(0);
 
 	const group = $derived(groups.find((g) => (g.nodeId ?? CATCHMENT) === node) ?? groups[0]);
 	const ref = $derived(group?.options.find((r) => r.key === key) ?? group?.options[0]);
@@ -69,6 +71,7 @@
 	$effect(() => {
 		const r = ref;
 		const fu = flowUnit;
+		void attempt;
 		if (!r) {
 			data = [];
 			return;
@@ -87,7 +90,7 @@
 				data = [{ label: r.label, startDate: d.startDate, values: conv.values }];
 			})
 			.catch((e) => {
-				if (my === requestNo) error = e instanceof Error ? e.message : String(e);
+				if (my === requestNo) error = `Couldn't load the series: ${e instanceof Error ? e.message : String(e)}`;
 			})
 			.finally(() => {
 				if (my === requestNo) loading = false;
@@ -104,7 +107,8 @@
 {:else}
 	<div class="form-row pickers">
 		<div class="field">
-			<label for="rc-node">Hydrological unit</label>
+			<!-- Named for what it lists: the catchment first, then each unit and gauge with series (#586 round 2). -->
+			<label for="rc-node">Catchment, hydrological unit or gauge</label>
 			<select id="rc-node" value={node} onchange={(e) => pickNode(e.currentTarget.value)}>
 				{#each groups as g (g.nodeId ?? CATCHMENT)}
 					<option value={g.nodeId ?? CATCHMENT}>{g.label}</option>
@@ -118,9 +122,10 @@
 			</select>
 		</div>
 	</div>
-	<LoadState {loading} {error}>
+	<LoadState {loading} {error} retry={() => attempt++}>
 		<LineChart
 			{title}
+			toolsLabel="Chart any daily series controls"
 			{unit}
 			series={data}
 			logToggle={isFlow}

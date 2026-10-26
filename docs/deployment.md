@@ -2177,7 +2177,7 @@ Step 2 operations (roadmap [step-2 § 8](./roadmap/step-2-shared-catchment.md#8-
 Every step is an ordinary app action by an owner unless it says "operator".
 
 1. **Bad data pushed by a gateway (an API key).**
-   1. Revoke the key (Settings → API keys → Revoke). It stops working on the
+   1. Revoke the key (Project → API keys → Revoke). It stops working on the
       next request.
    2. In History, filter by `series` and find the key's `series.merged` /
       `series.created` events (the actor is `API key “<name>”`; each gives
@@ -2189,7 +2189,7 @@ Every step is an ordinary app action by an owner unless it says "operator".
       revisions (180 days / 5 versions).
    4. Run the model (this also ends a hold). If the bad days reached a
       publication, publish the corrected run and say so in the notice.
-2. **A feed failing.** Settings → Data feeds shows the error and the
+2. **A feed failing.** Data → Data feeds shows the error and the
    consecutive failures; `feed.failed` is in History. Check the source's
    status (CHIRPS / DWS sites) and the parser error. Switch the feed off
    while it's broken (its days so far stay), tell the modeller, and switch

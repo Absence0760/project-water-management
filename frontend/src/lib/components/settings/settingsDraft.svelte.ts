@@ -1,11 +1,15 @@
-// The Settings & calibration form's unsaved settings. The workspace page holds
-// it (routes/projects/[id]/+page.svelte), not the Settings tab, as it holds the
+// The settings' unsaved edits, on both pages that edit them: Model settings
+// (SettingsTab.svelte) and Calibration's "Set up the fit"
+// (CalibrationSettings.svelte, issue #586 round 3). The workspace page holds
+// it (routes/projects/[id]/+page.svelte), not either tab, as it holds the
 // project details (project/detailsDraft.svelte.ts): the edits survive a tab
-// change, the page's one save bar saves or discards them with the model and
-// the details, the leave guard and the header's "Unsaved changes" count them,
-// and their problems are links in the bar. The tab edits `s` in place and
-// reports what blocks the save (`blockers`, with where each is fixed); the
-// page saves `snapshot()`.
+// change, so an edit on one page and one on the other are one draft; the
+// page's one save bar saves or discards them with the model and the details;
+// the leave guard and the header's "Unsaved changes" count them; and their
+// problems are links in the bar, each to its panel on its page. The tabs edit
+// `s` in place; what blocks the save (`blockers`) is worked out here, from `s`
+// and the sections' reported `errors` (blockers.ts), so it holds whichever
+// page is shown; the page saves `snapshot()`.
 import type { CalibrationParams, ChirpsQuantileMap, ProjectSettings } from '@water-management/engine';
 import type { AutoRunSettings, EwrHeadline, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
 import { resolveAutoRun } from '#lib/components/autorun/autoRun.js';
@@ -14,7 +18,7 @@ import { resolveOutlook } from '#lib/components/outlook/settings.js';
 import { resolveEwrHeadline } from '#lib/components/ewr/headline.js';
 import type { EditableArealRain } from './arealRain';
 import type { EditablePe } from './peInput';
-import type { SaveBlocker } from './sections';
+import { settingsBlockers } from './blockers';
 
 /** Mutable view of the settings (the engine's Monthly type is a readonly tuple). */
 export type EditableSettings = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3PerDay' | 'panCoefficient' | 'calibration' | 'pe' | 'lakeEvapFactorMonthly'> & {
@@ -124,14 +128,17 @@ export class SettingsDraft {
 	saveError = $state<string | null>(null);
 	/** The child sections' problems (their `bind:error`), kept here so they outlive the tab. */
 	errors = $state(noErrors());
-	/** What blocks a save, by group in page order: the Settings tab reports it while it is shown. */
-	blockers = $state.raw<SaveBlocker[]>([]);
+	/** Whether the saved settings have loaded (before, `s` is empty and nothing is checked). */
+	#loaded = $state(false);
+	/** What blocks a save, by panel in page order (Model settings', then Calibration's), whichever page is shown. */
+	readonly blockers = $derived(this.#loaded ? settingsBlockers(this.s, this.errors) : []);
 
 	/** Start over from the saved settings (the project loaded, saved, or a fit was applied). */
 	load(settings: SavedSettings): void {
 		const c = editableSettings(settings);
 		this.#saved = JSON.stringify(c);
 		this.s = editableSettings(settings);
+		this.#loaded = true;
 		this.#reset();
 	}
 
@@ -196,7 +203,6 @@ export class SettingsDraft {
 		this.lastLakeMonthly = null;
 		this.saveError = null;
 		this.errors = noErrors();
-		this.blockers = [];
 		this.kept = {};
 	}
 }

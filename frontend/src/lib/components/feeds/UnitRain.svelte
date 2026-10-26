@@ -1,5 +1,5 @@
 <!--
-	Settings → Data feeds → Attach a feed → Area: "Each unit's parcel" (issue
+	Data → Data feeds → Attach a feed → Area: "Each unit's parcel" (issue
 	#482, issue #521; docs/ui.md § Data feeds, docs/maps.md § Rain for each unit): for every land unit with a parcel
 	on the map, the CHIRPS cells it covers, and one CHIRPS feed into that unit's
 	own rain series, created or updated on the button (owners: feeds are theirs
@@ -346,9 +346,5 @@
 	.err {
 		color: var(--danger);
 		font-size: 0.85rem;
-	}
-	.btn[aria-disabled='true'] {
-		opacity: 0.55;
-		cursor: not-allowed;
 	}
 </style>

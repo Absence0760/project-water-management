@@ -39,7 +39,7 @@ export function agreementGap(summary: Pick<RunSummary, 'catchment' | 'calibratio
 	const a = summary.catchment?.ewrAgreement;
 	if (a === undefined) return 'This run was made before the EWR agreement existed. Run the model again to see it.';
 	if (a === null) {
-		return 'The run has no observed gauge or logger flow, so there is nothing to compare the EWR test with. Upload an observed flow series.';
+		return 'The run has no observed gauge or logger flow, so there is nothing to compare the EWR test with. Add an observed flow record on the Data page.';
 	}
 	if (a.days === 0) return 'The observed record has no day inside the run.';
 	return null;

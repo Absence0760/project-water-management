@@ -41,7 +41,8 @@ test('an ensemble is stored with its rule, reproduces, and pairs with another ru
 
 	// The server fixed the rule; the browser ran it; the server checked and stored it.
 	const rule = panel.getByTestId('decision-rule');
-	await expect(rule).toContainText('A parameter set is kept when it has KGE′ ≥ -10.0 against its observed record before 2021-');
+	// The split day day first (engine 1.100.0, issue #586).
+	await expect(rule).toContainText(/A parameter set is kept when it has KGE′ ≥ -10\.0 against its observed record before \d{1,2} [A-Z][a-z]{2} 2021\b/);
 	await expect(rule).toContainText('shown only with at least 30 kept');
 	await expect(rule).toContainText('Sample: 30 Latin-hypercube sets');
 	await expect(panel.getByTestId('kept')).toHaveText('31 of 31');

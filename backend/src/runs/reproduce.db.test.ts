@@ -111,7 +111,7 @@ describe('GET …/runs/:runId/reproduce', () => {
 		expect(row.choice).toEqual({ rain_chirps_mm: { name: 'CHIRPS boundary', others: [{ name: 'Rainfall CHIRPS', firstDay: rain.startDate, lastDay: expect.any(String) }] } });
 		const warned = (row.warnings as string[]).filter((w) => w.startsWith('the run read the CHIRPS series'));
 		expect(warned).toHaveLength(1);
-		expect(warned[0]).toMatch(/^the run read the CHIRPS series “CHIRPS boundary” \(\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}\), which spans 60 of its \d+ days, but “Rainfall CHIRPS” \(/);
+		expect(warned[0]).toMatch(/^the run read the CHIRPS series “CHIRPS boundary” \(\d{1,2} [A-Z][a-z]{2} \d{4} to \d{1,2} [A-Z][a-z]{2} \d{4}\), which spans 60 of its \d+ days, but “Rainfall CHIRPS” \(/);
 		// Reproduced from its stored inputs, the warning included.
 		expect((await reproduce(u, r, p)).body.status).toBe('identical');
 		// Positive control: one CHIRPS series, no choice recorded and no warning.

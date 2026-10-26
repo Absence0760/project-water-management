@@ -11,7 +11,7 @@ import { enqueueJob } from '../jobs/queue.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { recordAudit } from '../history/record.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { compareSeriesNames, provenanceLabel, sameProvenance } from '@water-management/engine';
+import { compareSeriesNames, dayText, provenanceLabel, sameProvenance } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import {
 	CHIRPS_DAILY_PRODUCTS,
@@ -97,7 +97,7 @@ export async function versionCheck(db: Db, projectId: string, input: FeedInput, 
 		if (from < first && product === 'sat') {
 			throw new ApiError(
 				409,
-				`the series starts on ${from}, before CHIRPS v3’s sat product begins (${first}): a replacement backfills the whole record from one product, so use the rnl product (from ${CHIRPS_PRODUCT_FIRST_DAY.rnl})`,
+				`the series starts on ${dayText(from)}, before CHIRPS v3’s sat product begins (${dayText(first)}): a replacement backfills the whole record from one product, so use the rnl product (from ${dayText(CHIRPS_PRODUCT_FIRST_DAY.rnl)})`,
 				{ code: 'series_backfill', firstDay: from }
 			);
 		}
@@ -105,7 +105,7 @@ export async function versionCheck(db: Db, projectId: string, input: FeedInput, 
 		if (config.startDate !== undefined && config.startDate > need) {
 			throw new ApiError(
 				409,
-				`a replacement backfills the whole record: the series starts on ${from}, so the feed’s start date must be ${need} or earlier (or left empty)`,
+				`a replacement backfills the whole record: the series starts on ${dayText(from)}, so the feed’s start date must be ${dayText(need)} or earlier (or left empty)`,
 				{ code: 'series_backfill', firstDay: from }
 			);
 		}
@@ -146,7 +146,7 @@ export async function refuseTakeOver(db: Db, projectId: string, input: Pick<Feed
 	if (!takesOver(pick, input.targetName, exists)) return;
 	throw new ApiError(
 		409,
-		`runs read the first series of a kind by name, so ${seriesWords(input.targetName)} would take over from ${seriesWords(pick.name)} (${pick.firstDay} to ${pick.lastDay}) as soon as the feed writes a day: name the new series so it sorts after ${seriesWords(pick.name)}, or point the feed at ${seriesWords(pick.name)} to replace it`,
+		`runs read the first series of a kind by name, so ${seriesWords(input.targetName)} would take over from ${seriesWords(pick.name)} (${dayText(pick.firstDay ?? '')} to ${dayText(pick.lastDay ?? '')}) as soon as the feed writes a day: name the new series so it sorts after ${seriesWords(pick.name)}, or point the feed at ${seriesWords(pick.name)} to replace it`,
 		{ code: 'series_takes_over', runSeries: pick.name, targetName: input.targetName }
 	);
 }

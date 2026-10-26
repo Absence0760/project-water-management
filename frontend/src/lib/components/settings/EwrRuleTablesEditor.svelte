@@ -306,7 +306,7 @@
 		</div>
 
 		<!-- Rarely changed: folded into one line of their values (ui-playbook § 2); "needs fixing" shows while a field inside is invalid. -->
-		<Fold name="Table settings:" line={ruleSettingsSummary(t)} body="none" bind:open={foldOpen[i]} testid="rule-settings" lineTestid="rule-settings-summary">
+		<Fold {readonly} name="Table settings:" line={ruleSettingsSummary(t)} body="none" bind:open={foldOpen[i]} testid="rule-settings" lineTestid="rule-settings-summary">
 			<div class="fields fold-fields">
 				<div class="field">
 					<label for="{uid}-{i}-unit">Unit</label>

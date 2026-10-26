@@ -1,4 +1,4 @@
-// The catchment flow charts' series, shared by the Runs tab (RunCharts) and
+// The catchment flow charts' series, shared by the Runs tab (ModelQuality) and
 // the printable report: which lines, in which colour, width and style.
 import { OBSERVED_SERIES_LABEL, outletEwrSeriesLabel, type DailySeries } from '@water-management/engine';
 import type { DailyEwrSource } from '#lib/components/ewr/notMet.js';

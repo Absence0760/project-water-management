@@ -1057,7 +1057,7 @@
 	);
 	const rainLink = $derived(
 		boundary && (rainReads === 'none' || rainReads === 'changed')
-			? { href: '?tab=settings&rain=boundary#set-feeds', text: rainReads === 'none' ? 'Set up the rain feed from the boundary' : 'Propose its cells again' }
+			? { href: '?tab=series&rain=boundary#data-feeds', text: rainReads === 'none' ? 'Set up the rain feed from the boundary' : 'Propose its cells again' }
 			: null
 	);
 
@@ -1549,10 +1549,13 @@
 										bind:this={tabEls[t.id]}
 										onclick={() => (sideTab = t.id)}
 										onkeydown={tabKey}
-										aria-label={t.id === 'features' ? `Features (${features.length})` : t.id === 'checks' && checks.length ? `Checks (${checks.length} ${checks.length === 1 ? 'warning' : 'warnings'})` : undefined}
 										data-testid="map-tab-{t.id}"
 									>
-										{t.label}{#if t.id === 'features'}<span class="tab-count">{features.length}</span>{:else if t.id === 'checks' && checks.length}<span class="tab-count warn">{checks.length}</span>{/if}
+										<!-- The name is the words on the tab, count included ("Checks 2 warnings"), so
+										     a voice command says what it reads (WCAG 2.5.3, axe's label-content-name-mismatch);
+										     the space keeps the count a word of its own and collapses in the flex row. -->
+										{t.label}
+										{#if t.id === 'features'}<span class="tab-count">{features.length}</span>{:else if t.id === 'checks' && checks.length}<span class="tab-count warn">{checks.length}</span><span class="visually-hidden">&nbsp;{checks.length === 1 ? 'warning' : 'warnings'}</span>{/if}
 									</button>
 								{/each}
 							</div>
@@ -1782,7 +1785,7 @@
 										</li>
 									{/each}
 								</ul>
-								<p class="hint muted">Typing a new area on the Network replaces one from the map. The WR2012 check can propose its quaternary’s values from the map: <a href="?tab=settings#set-wr2012">Settings → WR2012 check</a>.</p>
+								<p class="hint muted">Typing a new area on the Network replaces one from the map. The WR2012 check can propose its quaternary’s values from the map: <a href="?tab=calibration#set-wr2012">Calibration → WR2012 check</a>.</p>
 							</section>
 						{/if}
 

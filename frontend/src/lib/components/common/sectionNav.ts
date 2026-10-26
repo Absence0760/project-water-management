@@ -1,17 +1,15 @@
 // The "On this page" menu shared by the long workspace pages (SectionNav.svelte):
-// Settings & calibration, Runs & results, EWR, Hydrological units, Data
+// Model settings, Runs & results, EWR, Hydrological units, Data
 // and Compare runs, and the Network node sheet's form (in a box of its own, `onjump`).
 
 export interface NavSection {
 	id: string;
-	/** Its name: the panel's heading, as the page shows it (issue #462), in the rail, the More menu and the find box. */
-	label: string;
 	/**
-	 * A shorter name for the bar, where every link has to fit two rows (issue
-	 * #462): the heading's first words ("Calibration" for "Calibration against
-	 * observed flow"). The rail, with a line of its own for each link, shows `label`.
+	 * Its name: the panel's heading word for word, as the page shows it (issue #462), on the bar, in the rail, the
+	 * More menu and the find box alike (issue #586 D4). There is no shorter bar name: a bar that can't fit two rows
+	 * has too many panels for one menu.
 	 */
-	bar?: string;
+	label: string;
 	/** Marks the link with a dot and "(has a problem)" for screen readers. */
 	problem?: boolean;
 	/**
@@ -25,11 +23,16 @@ export interface NavSection {
 	 */
 	page?: string;
 	/**
-	 * The ids of the panels after it that this one link stands for (Settings'
-	 * "Automation & access" on the bar): the link is marked while any of them is
+	 * The ids of the panels after it that this one link stands for (Runs &
+	 * results' "Notes & evidence"): the link is marked while any of them is
 	 * read, and the find box searches them as part of it.
 	 */
 	covers?: string[];
+	/**
+	 * A sub-heading of the section before it (the Calibration page's lines under Calibration against observed flow,
+	 * issue #586 D4): the rail indents it under its panel, so it doesn't read as a panel of its own.
+	 */
+	sub?: boolean;
 }
 
 export interface NavGroup {
@@ -43,14 +46,9 @@ export interface NavGroup {
  * aria-label; null for a link on this page, which its text names. Not a hidden span after the text: the
  * hidden class positions it, and Chromium then spaces it off ("by month , on EWR").
  */
-export function pageLinkName(sec: Pick<NavSection, 'label' | 'bar' | 'page' | 'problem'>, where: 'bar' | 'rail'): string | null {
+export function pageLinkName(sec: Pick<NavSection, 'label' | 'page' | 'problem'>): string | null {
 	if (!sec.page) return null;
-	return `${navText(sec, where)}, on ${sec.page}${sec.problem ? ' (has a problem)' : ''}`;
-}
-
-/** What a link says: its short name on the bar, its whole name in the rail and the More menu (issue #462). */
-export function navText(sec: Pick<NavSection, 'label' | 'bar'>, where: 'bar' | 'rail'): string {
-	return where === 'bar' ? (sec.bar ?? sec.label) : sec.label;
+	return `${sec.label}, on ${sec.page}${sec.problem ? ' (has a problem)' : ''}`;
 }
 
 /** True when the groups list no section at all: the menu then draws nothing, only the page's content. */
@@ -67,8 +65,11 @@ export function navEmpty(groups: NavGroup[]): boolean {
  * screen (its top between 0 and `viewH`): when the panels after it are
  * shorter than the window, the page ends before its top can reach the line,
  * and it is the one being read (the EWR page's `#res-outlook` once the
- * water account got shorter, issue #175). `tops` are viewport offsets in page
- * order; sections not rendered yet are simply absent.
+ * water account got shorter, issue #175). And a page short enough that its first
+ * section still starts on the screen at the bottom shows every section at once:
+ * nothing has been scrolled past, so it is the first (the Calibration page's two
+ * parts, issue #586). `tops` are viewport offsets in page order; sections not
+ * rendered yet are simply absent.
  */
 export function activeSectionId(
 	tops: { id: string; top: number }[],
@@ -80,7 +81,8 @@ export function activeSectionId(
 	if (!tops.length) return null;
 	if (atBottom) {
 		const t = target ? tops.find((x) => x.id === target) : undefined;
-		return t && t.top >= 0 && t.top < viewH ? t.id : tops[tops.length - 1]!.id;
+		if (t && t.top >= 0 && t.top < viewH) return t.id;
+		return tops[0]!.top >= 0 ? tops[0]!.id : tops[tops.length - 1]!.id;
 	}
 	let current = tops[0]!.id;
 	for (const t of tops) {
@@ -225,4 +227,17 @@ export function findEntries(
 		});
 	}
 	return out.slice(0, limit);
+}
+
+/**
+ * On a phone the bar is one strip that scrolls sideways: where to scroll it so
+ * the link at `left` (from the strip's start) and `width` wide shows whole,
+ * with `margin` px beside it, or null when it already does. A link Tab reaches
+ * half off the strip's edge stays there otherwise: the browser scrolls a
+ * focused element only when none of it shows (issue #586, at 320 px).
+ */
+export function stripScrollTo(left: number, width: number, scrollLeft: number, clientWidth: number, margin = 16): number | null {
+	if (left < scrollLeft) return Math.max(0, left - margin);
+	if (left + width > scrollLeft + clientWidth) return left + width - clientWidth + margin;
+	return null;
 }

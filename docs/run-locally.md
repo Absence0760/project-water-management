@@ -156,7 +156,7 @@ feature of the current engine:
 
 | Example | What it shows |
 | --- | --- |
-| **Kleinberg** (winter rainfall) | A branching network with four fruit farms on drip and micro irrigation. Two winter transfers leave the upper dam by priority. The rain gauge has a blank spell, a logger fault exported as zeros (a flagged zero-rain run) and a fortnight entered as 0 mm (a listed missing period). Bias-corrected CHIRPS fills all three. The weir drowned in the 2013/14 floods, so that water year is excluded from calibration, and its flat top shows in the data checks. A GR4J fit is stored (**Settings → Fit record**), with split-sample and dry → wet validation. |
+| **Kleinberg** (winter rainfall) | A branching network with four fruit farms on drip and micro irrigation. Two winter transfers leave the upper dam by priority. The rain gauge has a blank spell, a logger fault exported as zeros (a flagged zero-rain run) and a fortnight entered as 0 mm (a listed missing period). Bias-corrected CHIRPS fills all three. The weir drowned in the 2013/14 floods, so that water year is excluded from calibration, and its flat top shows in the data checks. A GR4J fit is stored (**Calibration → Fit the parameters**, its fit record), with split-sample and dry → wet validation. |
 | **Droëvlei** (water-stressed) | Farms run short and the EWR is often missed. It has sprinkler, flood and micro irrigation, shallow dams (one a leaky earth dam with seepage), a smaller soil-water store and a higher dam evaporation factor. The curtailment report covers the last four water years. A logger beside the weir drifted high in 2020/21, and the gauge-vs-logger check flags that year. |
 | **Sandspruit** (summer rainfall) | A bigger tree with a mid-catchment gauge and maize under centre pivots. Three transfers: two of equal priority share one dam pro rata, and one has a daily cap. Calibration is scored over a window. It also has a gauge on a neighbouring river as a reference series, a 10-day forecast that extends the run past the record, and a WR2012-style reference: the run notes that its natural flow is 11 % below it. It is the one example with a catchment map (Map tab): boundary, parcels, dams, gauges and streams, all invented. |
 | **Oranje** (river abstractions) | The client checklist's river abstractions (#342 items 4–5, docs/model.md §2.7j), near Upington on the lower Orange (the rainfall is invented, wetter than the real thing). **Rivierplaas** waters its vines from its dam, with a village and stock water ranked 1 and 2 before the crops, and runs a **packhouse** from the river through its own pump, on weekdays only (an on/off schedule with the weekend off) with a pool at the pump. **Wingerdhoek** irrigates its crops from its own river pump and pool (the pump is the limit on some days), supplies a **town** from the river, and pipes water **out of the catchment** from its dam, last. Its map has the boundary, parcels, dams, the weir and a point at each pump; with HydroRIVERS loaded (`pnpm dev:tiles:rivers`) the Map tab's **River network** layer draws the real Orange around it. |
@@ -213,7 +213,7 @@ aside by name, once its evidence nomination keeps it for good).
 | **Network / Hydrological units / Dams** | Three units with dams on one river, a mid-catchment gauge, an **other water user** (a town's water works with a pump capacity, returning 40 %), two **boreholes** (one supplemental to the crops, one filling a dam in a drought, with an annual cap), a **river abstraction** with a pool for Rivieroewer's crops, in a **crop supply table** (40 % from its own dam, 40 % from the river, 20 % piped from Kransdal's dam), two **EWR sites** (the gauges), and **land cover** (a pine plantation and invasive riparian trees). The Kransdal dam has a firm-**yield** result. |
 | **Crops & demand** | Five crops, each with a default irrigation system; the project's own **irrigation systems** table has micro-sprinkler's efficiency edited (0.78) and a row of its own (*Subsurface drip (farm trial)*), which Vleiplaas's lucerne uses as a per-unit override. Demand objects in **m³/day** (a packhouse that rests at weekends), in **l/s** (a school and clinic) and **per unit** (a village per person with a holiday peak, a dairy herd per head). |
 | **Transfers** | Kransdal → Vleiplaas in four months, and Kransdal → Rivieroewer with a **rate per month**. |
-| **Data / Settings** | Catchment rain with a blank spell CHIRPS fills, an observed weir and a logger that drifts in 2022/23, a reference gauge, a 10-day forecast; a calibration window with one excluded year, a stored GR4J **fit**, a reporting window, a WR2012-style check, a declared uncertainty rule (Settings › Evidence). **Data feeds**: a CHIRPS feed over the map's boundary and a DWS gauge feed, both switched off (their synthetic fixtures are recent days, which would leave a gap after this 2010–2024 record). A weekly **scheduled report**. |
+| **Data / Model settings / Calibration / Project** | Catchment rain with a blank spell CHIRPS fills, an observed weir and a logger that drifts in 2022/23, a reference gauge, a 10-day forecast; a calibration window with one excluded year, a stored GR4J **fit**, a reporting window, a WR2012-style check, a declared uncertainty rule (Model settings › Evidence). **Data feeds** (on Data): a CHIRPS feed over the map's boundary and a DWS gauge feed, both switched off (their synthetic fixtures are recent days, which would leave a gap after this 2010–2024 record). A weekly **scheduled report** (on Project). |
 | **Map** | The boundary, a parcel and a dam for each unit, both gauges, the town's works, the river, the boreholes, the river pump and the plantation, on the synthetic reference data's footprint, so the quaternary lookup, cultivated area from land cover and evaporation from the map all answer. |
 | **Runs & results / Compare** | *Before calibration (GR4J defaults)*, *Calibrated baseline* (pinned, with notes, **published** with a 20 % restriction notice in English and Afrikaans, nominated as **evidence**, with an uncertainty **ensemble**) and *Forecast (next 10 days)*: compare the first two to see the fit's effect. A **sensitivity sweep** and a **seasonal outlook** (demand at 100, 90 and 80 %). |
 | **Scenarios** | Five on the calibrated baseline, each with its run: a bigger dam, a new feedlot (a new demand), WUA **drought restrictions**, a crop change, and a drier climate (−15 % rain); and a cumulative **assessment** of the dam raise and the feedlot together. |
@@ -360,7 +360,7 @@ project's `GET /projects/:id/jobs` shows them `queued`, and the next tick runs
 them. Stopping the worker mid-job is safe: the job is claimed again once its
 lease (`JOB_LEASE_SECONDS`, 6 minutes) runs out.
 
-**Automatic runs** (Settings → Automatic runs, off by default) queue a re-run
+**Automatic runs** (Model settings → Automatic runs, off by default) queue a re-run
 after new data, due after the project's wait (15 minutes by default). Set the
 wait to 0 while trying it out: with the worker running (`pnpm dev:full`), an
 upload's run then appears within seconds; without it, `pnpm dev:jobs:tick`
@@ -368,7 +368,7 @@ runs it ([architecture.md § Automatic runs](./architecture.md#automatic-runs)).
 
 ## Data feeds
 
-Settings → **Data feeds** attaches CHIRPS rainfall, the CHIRPS-GEFS forecast
+Data → **Data feeds** attaches CHIRPS rainfall, the CHIRPS-GEFS forecast
 or a DWS gauge to a project ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 Locally they need **no network**: `FEED_SOURCE=fixtures` (the default)
 answers every source from the synthetic files in `backend/fixtures/feeds/`,
@@ -413,7 +413,7 @@ A logger gateway or a script pushes readings to `POST
 ([api.md § Ingest](./api.md#ingest)). Locally, the push script stands in for
 the gateway:
 
-1. Sign in as a project's owner, open Settings → **API keys**, make a key
+1. Sign in as a project's owner, open Project → **API keys**, make a key
    and copy it (it is shown once).
 2. Put it in a gitignored `.env.development.local` at the repo root:
    `WM_INGEST_KEY=wm_…` (or export it). `WM_API_URL` picks another API
@@ -439,7 +439,7 @@ your gitignored file.
 
 ## Reports
 
-The report page's **Generate PDF / Email me the PDF** and Settings →
+The report page's **Generate PDF / Email me the PDF** and Project →
 **Scheduled reports** make the PDF on the server
 ([architecture.md § Server-side reports](./architecture.md#server-side-reports)).
 Locally that needs no AWS account, just three local pieces:
@@ -479,13 +479,13 @@ uploads, points, areas, the quaternary lookup and the dam proposals all
 work. Optional pieces:
 
 ```bash
-pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
-pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Settings → Data feeds → DWS proposes as the nearest stations
+pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Calibration → WR2012 check → Propose from the map looks up
+pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Data → Data feeds → DWS proposes as the nearest stations
 pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it): what Dams → Proposed from the register and the map proposes capacities from
 pnpm import:rivers          # the synthetic river network (pnpm setup runs it): what Map → Layers → River network draws and proposes as rivers
 pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB download; needs ogr2ogr, sudo dnf install gdal, or docker), cut to South Africa and loaded as HydroRIVERS-v10
 pnpm import:land-cover      # the synthetic cropland grid (pnpm setup runs it): what a unit's planted-areas drawer (From land cover) sums its parcels from
-pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Settings → Evaporation from the map averages over the boundary
+pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Calibration → Evaporation from the map averages over the boundary
 pnpm import:map-grid        # the synthetic MAP grid (pnpm setup runs it): what Map → Layers → MAP grid draws
                             # or a real one: <grid.asc> --dataset <label> --source "…" [--bbox w,s,e,n]; add --out <file.json.gz> to write
                             # the cut grid for a production load instead (deployment.md § Reference datasets; maps.md § MAP grid)
@@ -535,7 +535,7 @@ The synthetic quaternaries are six invented cells in region Z covering 21.0–21
 33.5–34.0° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a
 proposal; anywhere else says no quaternary contains the point. The
 synthetic gauging stations (`Z1H001`–`Z1H005` and a reservoir `Z1R001`) sit
-round the Sandspruit example's outlet, so its Settings → Data feeds →
+round the Sandspruit example's outlet, so its Data → Data feeds →
 **Attach a feed** → DWS lists them nearest first; a real station list loads
 the same way once its licence allows ([maps.md § Gauging-station
 dataset](./maps.md#gauging-station-dataset)).

@@ -4,6 +4,7 @@
 	// the list endpoint is theirs alone. The parent's add form puts new invites
 	// in via `bind:invites`; this lists, re-sends and revokes them.
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { onMount } from 'svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import type { Invite } from '#lib/api/types.js';
@@ -37,13 +38,22 @@
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+	/** Try again's load, in flight: a loading line in the alert's place, which the focus follows (followRetry). */
+	let retrying = $state(false);
 	async function reload() {
 		loadError = null;
 		try {
 			invites = await load();
 		} catch (e) {
 			loadError = msg(e);
+		} finally {
+			retrying = false;
 		}
+	}
+	function retry(e: MouseEvent) {
+		followRetry(e.currentTarget as HTMLElement);
+		retrying = true;
+		reload();
 	}
 	onMount(reload);
 
@@ -88,8 +98,10 @@
 {#if loadError}
 	<div class="alert alert-error" role="alert">
 		Couldn’t load pending invitations: {loadError}
-		<button type="button" class="btn btn-sm" onclick={reload}>Try again</button>
+		<button type="button" class="btn btn-sm" data-retry onclick={retry}>Try again</button>
 	</div>
+{:else if retrying}
+	<p class="muted" role="status" data-loading>Loading pending invitations…</p>
 {/if}
 {#if invites.length}
 	<section class="invites" aria-labelledby="{idPrefix}-inv-h">

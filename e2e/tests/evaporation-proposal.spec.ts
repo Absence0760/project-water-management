@@ -1,5 +1,5 @@
-// Settings → Flow calibration → "Evaporation from the map" (issue #326 B-evap;
-// docs/ui.md § Settings, docs/maps.md § Evaporation from the map). The
+// Calibration → Flow calibration → "Evaporation from the map" (issue #326 B-evap;
+// docs/ui.md § Calibration, docs/maps.md § Evaporation from the map). The
 // catchment boundary is averaged over the committed synthetic reference-ET
 // grid (the four cells it lies in hold the base row, 120 … 95 mm, exactly);
 // the panel proposes it as GR4J's monthly PE beside the saved settings, with
@@ -22,9 +22,9 @@ import { expectNoSidewaysScroll } from '../support/reflow.ts';
 const panel = (page: Page) => page.getByTestId('evaporation-proposal');
 const row = (page: Page, name: string) => panel(page).locator(`tr[data-row="${name}"]`);
 
-/** Settings with the evaporation panel's proposal loaded. */
+/** Calibration (issue #586 round 3) with the evaporation panel's proposal loaded. */
 async function openPanel(page: Page, projectId: string) {
-	await page.goto(`/projects/${projectId}?tab=settings`);
+	await page.goto(`/projects/${projectId}?tab=calibration`);
 	await expect(panel(page).getByTestId('evaporation-body')).toHaveAttribute('data-ready', 'true');
 }
 
@@ -123,9 +123,14 @@ test('Use waits for unsaved settings, and a project with no boundary is told to 
 	await openPanel(page, project.id);
 	const use = panel(page).getByRole('button', { name: 'Use as GR4J’s monthly PE' });
 	await expect(use).toBeEnabled();
+	// An unsaved edit on Model settings (Demand's A-pan) is the same draft: back on Calibration, Use waits for it.
+	const sections = page.getByRole('navigation', { name: 'Project sections' });
+	await sections.getByRole('link', { name: 'Model settings', exact: true }).click();
 	const apanOct = page.getByLabel('A-pan evaporation, Oct, mm');
 	await apanOct.fill('151');
 	await apanOct.blur();
+	await sections.getByRole('link', { name: 'Calibration', exact: true }).click();
+	await expect(panel(page).getByTestId('evaporation-body')).toHaveAttribute('data-ready', 'true');
 	await expect(use).toBeDisabled();
 	await expect(panel(page)).toContainText('Save or discard your settings changes first');
 	await anySaveBar(page).getByRole('button', { name: 'Discard', exact: true }).click();

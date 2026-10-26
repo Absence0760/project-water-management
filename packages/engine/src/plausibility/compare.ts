@@ -5,7 +5,7 @@
 // flows), with pass or fail, at the outlet and at each gauge node with a
 // record of its own; the good-rain and fallback-rain split of check 2; and
 // the breaks of check 3 the model doesn't share; the recession diagnostics'
-// rate ratio and b difference (engine ≥ 1.19.0) and the validation signatures
+// rate ratio and b difference (engine ≥ 1.19.0) and the hydrological signatures
 // (engine ≥ 1.55.0, CR-16): BFI by both filters, the low-flow slope bias and
 // %BiasFLV, and the held-out recession skill. A run saved before engine
 // 0.25.0 has no checks: its side is null. A run saved before the engine that
@@ -149,7 +149,7 @@ export interface BfiDelta {
 	withinB: boolean | null;
 }
 
-/** The validation signatures (engine ≥ 1.55.0, CR-16) in both runs, each on its scored record. */
+/** The hydrological signatures (engine ≥ 1.55.0, CR-16) in both runs, each on its scored record. */
 export interface SignaturesDelta {
 	flowKindA: CalibrationFlowKind | null;
 	flowKindB: CalibrationFlowKind | null;

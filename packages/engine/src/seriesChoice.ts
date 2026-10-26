@@ -7,7 +7,7 @@
 // way, and the gap-filler (§2.4b) shrank to two months with no word. The
 // backend names the others (ModelInput.seriesChoice, runs/execute.ts); the run
 // warns when one of them spans more of the run than the series it read.
-import { fromEpochDay, isIsoDate, toEpochDay } from './calendar';
+import { dayText, fromEpochDay, isIsoDate, toEpochDay } from './calendar';
 import { type DailySeries, type ModelInput, type SeriesPick, type SeriesSpan, unitRainSeriesKey, type UnitRainSettings } from './project';
 import { unitRainOn } from './runoff/unitRain';
 import { compareSeriesNames } from './seriesNames';
@@ -37,7 +37,7 @@ function valueSpan(s: DailySeries | undefined): [number | null, number | null] {
 /** A day of the input's seriesChoice, or null for anything that isn't a real calendar day (it only feeds a warning: never throws). */
 const dayOf = (s: unknown): number | null => (isIsoDate(s) ? toEpochDay(s) : null);
 
-const spanText = (first: number | null, last: number | null) => (first === null || last === null ? 'no values' : `${fromEpochDay(first)} to ${fromEpochDay(last)}`);
+const spanText = (first: number | null, last: number | null) => (first === null || last === null ? 'no values' : `${dayText(fromEpochDay(first))} to ${dayText(fromEpochDay(last))}`);
 
 /** The widest other series of a pick against the one read, or null when none spans more (ties go to the one read). */
 function shadowed(pick: unknown, read: DailySeries | undefined, start: number, days: number) {

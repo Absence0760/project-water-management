@@ -47,7 +47,7 @@
 </script>
 
 <div class="gap-fill" data-testid="flow-gap-fill-settings">
-	<h3 class="sub">Flow gaps <HelpTip key="settings.flowGapFill" /></h3>
+	<h4 class="sub">Flow gaps <HelpTip key="settings.flowGapFill" /></h4>
 	<p class="hint explain">
 		Fill gaps in an observed record in a run only; the record you uploaded is never changed. Short gaps are interpolated on a log scale (a
 		recession), longer ones filled from another record scaled by the ratio of their totals on shared days. Off unless you turn it on.
@@ -104,6 +104,10 @@
 <style>
 	.gap-fill {
 		margin-top: 1rem;
+	}
+	/* Under Calibration record (an h3 on the Calibration page, issue #586 round 3): an h4 at an h3's size. */
+	h4 {
+		font-size: 0.95rem;
 	}
 	.rec {
 		border: 1px solid var(--border);

@@ -45,9 +45,9 @@ test('set a base-flow loss and gain on a unit, save, reload and run', async ({ p
 	await page.getByLabel(/^Run label/).fill('Base flow');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Base flow' })).toBeVisible();
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Self-checks' }).click();
-	const checks = page.getByRole('region', { name: /^Self-checks/ });
-	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText(/^All \d+ self-checks passed\.$/);
+	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Arithmetic checks' }).click();
+	const checks = page.getByRole('region', { name: /^Arithmetic checks/ });
+	await expect(checks.getByRole('status').filter({ hasText: 'arithmetic checks' })).toHaveText(/^All \d+ arithmetic checks passed\.$/);
 	// The gain comes in, the loss leaves the catchment: their own columns, named in the equation.
 	const balance = page.getByRole('region', { name: 'Water balance by water year' });
 	await expect(balance.getByRole('columnheader', { name: 'Base-flow gain', exact: true })).toBeVisible();

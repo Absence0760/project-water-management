@@ -47,7 +47,7 @@
 // The flags never change a stored series. They decide which days the fit's
 // objective scores (scoringDays) and what the data-quality panel (CR-22)
 // shows.
-import { monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from '../calendar';
+import { dayText, monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from '../calendar';
 import type { CalibrationFlowKind, DailySeries, DataQualitySettings } from '../project';
 import { seriesRowFlags } from '../quality';
 import { RAIN_SOURCE_CODE } from '../rainSourcePeriods';
@@ -466,7 +466,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 	const rec = RECORD[x.flowKind];
 	if (!rating?.gaugedMaxM3s) {
 		notes.push(
-			`No highest gauging is recorded for the ${rec} (Settings → Calibration record → Quality flags for Fit automatically, the Highest gauging column), so no day can be flagged as extrapolated: flood days count as readings, however far the rating curve was extended beyond its gaugings.`
+			`No highest gauging is recorded for the ${rec} (Calibration → Calibration record → Quality flags for Fit automatically, the Highest gauging column), so no day can be flagged as extrapolated: flood days count as readings, however far the rating curve was extended beyond its gaugings.`
 		);
 	}
 	if (flow.aboveRating && rating?.gaugedMaxM3s) {
@@ -501,7 +501,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 				: `held for more than ${ZERO_FLOW_TRUST_MAX_DAYS} days, with no months listed in which the river is known to stop`;
 			notes.push(
 				`${n(suspectZeroDays)} of the suspect days ${suspectZeroDays === 1 ? 'is' : 'are'} zero flow ${why}, so the fit leaves them out: check with the client whether the river stopped or the logger failed. ` +
-					`If the river stops in those months, list them under Settings → Calibration record → Months the river stops; if the logger failed, an exclusion period records it.`
+					`If the river stops in those months, list them under Calibration → Calibration record → Months the river stops; if the logger failed, an exclusion period records it.`
 			);
 		}
 	}
@@ -513,7 +513,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 	if (flow.periodHigh) {
 		const periods = (x.settings.lowFlowPeriods ?? []).filter((p) => p.kind === x.flowKind);
 		notes.push(
-			`${days(flow.periodHigh)} read above the threshold of a period in which only the ${rec}’s low flows are valid (${periods.map((p) => `${p.start} – ${p.end}, ${m3s(p.maxM3s)}`).join('; ')}), so they are left out: the fit says nothing about high flows in ${periods.length === 1 ? 'that period' : 'those periods'}.`
+			`${days(flow.periodHigh)} read above the threshold of a period in which only the ${rec}’s low flows are valid (${periods.map((p) => `${dayText(p.start)} – ${dayText(p.end)}, ${m3s(p.maxM3s)}`).join('; ')}), so they are left out: the fit says nothing about high flows in ${periods.length === 1 ? 'that period' : 'those periods'}.`
 		);
 	}
 	if (flow.infilled) {
@@ -532,7 +532,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 		);
 	}
 	if (rain?.zeroRunDays) {
-		notes.push(`Of the scored days, ${days(rain.zeroRunDays)} ${rain.zeroRunDays === 1 ? 'falls' : 'fall'} in zero-rain runs set aside as missing (Settings → Rain gaps → Flagged rain); their rain is filled.`);
+		notes.push(`Of the scored days, ${days(rain.zeroRunDays)} ${rain.zeroRunDays === 1 ? 'falls' : 'fall'} in zero-rain runs set aside as missing (Model settings → Rain gaps → Flagged rain); their rain is filled.`);
 	}
 	return {
 		flowKind: x.flowKind,

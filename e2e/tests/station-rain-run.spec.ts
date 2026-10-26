@@ -26,7 +26,8 @@ test('a run whose catchment ran on a rainfall station shows its station, MAPs, r
 	await updateSettings(page.request, id, { rainStations: { catchment: { stationId: station.id }, catchmentMapMm: CATCHMENT_MAP, catchmentMapSource: 'synthetic isohyets' } });
 	const runId = await createRun(page.request, id, 'On the station');
 
-	await page.goto(`/projects/${id}?tab=runs&run=${runId}`);
+	// Model quality is on Calibration (issue #586 Round 3).
+	await page.goto(`/projects/${id}?tab=calibration&run=${runId}`);
 	const panel = page.getByTestId('run-unit-rain');
 	await expect(panel.getByRole('heading', { level: 3, name: 'Rain from rainfall stations' })).toBeVisible();
 	await expect(panel).toContainText(`Catchment MAP ${CATCHMENT_MAP} mm (entered).`);
@@ -48,6 +49,6 @@ test('a run whose catchment ran on a rainfall station shows its station, MAPs, r
 	await expect(pairing).toHaveAttribute('data-refused', 'true');
 	await expect(pairing.getByRole('rowheader')).toHaveText('Hill station');
 	await expect(pairing.getByRole('cell').last()).toHaveText(/^refused: /);
-	// The section bar links to it by its short name.
-	await expect(page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Station rain' })).toHaveAttribute('href', '#res-unit-rain');
+	// Under the anchor Runs & results gave it, so old links still name it.
+	await expect(page.locator('#res-unit-rain').getByTestId('run-unit-rain')).toBeVisible();
 });

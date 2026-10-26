@@ -98,13 +98,13 @@ describe('describeOp', () => {
 		expect(d({ op: 'transfer.remove', transferId: T })).toBe('Remove the transfer Upper farm → Lower farm');
 		expect(d({ op: 'landCover.remove', patchId: P })).toBe('Lower farm: remove Pine plantation (mature) (1.5 km²)');
 		expect(d({ op: 'settings.set', path: 'flowShareMethod', value: 'manual' })).toBe('Flow-share method: By area → Manual');
-		expect(d({ op: 'settings.set', path: 'simulationStart', value: '2022-01-01' })).toBe('Simulation start: first day with rain → 2022-01-01');
+		expect(d({ op: 'settings.set', path: 'simulationStart', value: '2022-01-01' })).toBe('Simulation start: first day with rain → 1 Jan 2022');
 		// An unset PE input is pan × A-pan (a project saved before engine 0.31.0).
 		expect(d({ op: 'settings.set', path: 'pe', value: { kind: 'monthly', mm: new Array<number>(12).fill(100) as unknown as Monthly, source: 'Station ET₀' } })).toBe(
 			'GR4J potential evaporation: pan coefficient × A-pan → monthly, entered directly: 1\u202f200 mm a year (Station ET₀)'
 		);
 		expect(d({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9 })).toBe('Rainfall — catchment: × 0.9 (−10 %)');
-		expect(d({ op: 'series.scale', kind: 'rain_chirps_mm', factor: 1.25, from: '2022-01-01' })).toBe('Rainfall — CHIRPS: × 1.25 (+25 %), 2022-01-01 to end');
+		expect(d({ op: 'series.scale', kind: 'rain_chirps_mm', factor: 1.25, from: '2022-01-01' })).toBe('Rainfall — CHIRPS: × 1.25 (+25 %), 1 Jan 2022 to end');
 		expect(d({ op: 'demand.scale', factor: 0.85 })).toBe("Irrigation demand of every hydrological unit: 85 % of what they'd take (× 0.85)");
 		expect(d({ op: 'demand.scale', factor: 0.7, nodeIds: [UP, LO], months: [12, 1, 2] })).toBe("Irrigation demand of Upper farm, Lower farm: 70 % of what they'd take (× 0.7), in Jan, Feb, Dec");
 		expect(d({ op: 'demand.scale', factor: 1.1, category: 'user' })).toBe("Demand of every other water user: 110 % of what they'd take (× 1.1)");
@@ -346,12 +346,12 @@ describe('buildOp', () => {
 		// Typed day first, as Trace a day and Edit a day read them (never month first).
 		expect(b({ demandPct: '130', from: '1 Oct 2015', to: '30/09/2016' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 1.3, from: '2015-10-01', to: '2016-09-30' } });
 		expect(b({ demandPct: '130', to: '09/30/2016' })).toEqual({ ok: false, error: 'To: type a day, day first: 15 Nov 2021, 15/11/2021 or 2021-11-15' });
-		expect(b({ demandPct: '130', from: '2017-01-01', to: '2016-09-30' })).toEqual({ ok: false, error: expect.stringMatching(/from 2017-01-01 is after to 2016-09-30/) });
+		expect(b({ demandPct: '130', from: '2017-01-01', to: '2016-09-30' })).toEqual({ ok: false, error: expect.stringMatching(/from 1 Jan 2017 is after to 30 Sep 2016/) });
 		expect(describeOp({ op: 'demand.scale', factor: 1.3, from: '2015-10-01', to: '2016-09-30' }, base())).toBe(
-			"Irrigation demand of every hydrological unit: 130 % of what they'd take (× 1.3), 2015-10-01 to 2016-09-30"
+			"Irrigation demand of every hydrological unit: 130 % of what they'd take (× 1.3), 1 Oct 2015 to 30 Sep 2016"
 		);
 		expect(describeOp({ op: 'demand.scale', factor: 0.5, nodeIds: [UP], months: [12, 1], from: '2021-01-01' }, base())).toBe(
-			"Irrigation demand of Upper farm: 50 % of what they'd take (× 0.5), in Jan, Dec, 2021-01-01 to end"
+			"Irrigation demand of Upper farm: 50 % of what they'd take (× 0.5), in Jan, Dec, 1 Jan 2021 to end"
 		);
 		const r = applyScenario(base(), [(b({ demandPct: '130', demandNodeIds: [UP], from: '2015-10-01', to: '2016-09-30' }) as { op: ScenarioOp }).op]);
 		expect(r.problems).toEqual([]);
@@ -512,7 +512,7 @@ describe('the later ops (engine ≥ 1.35.0): build, describe, apply', () => {
 		const add = built({ kind: 'allocation.set', allocationId: NEW_ALLOCATION, nodeId: UP, alSource: 'surface', alVolume: '120000', alFrom: '2020-10-01', months: [3, 1, 2], alRate: '0.05' });
 		expect(add).toMatchObject({ op: 'allocation.set', allocation: { nodeId: UP, waterSource: 'surface', volumeM3PerYear: 120_000, validFrom: '2020-10-01', months: [1, 2, 3], maxRateM3s: 0.05 } });
 		expect('storageM3' in (add as { allocation: object }).allocation).toBe(false);
-		expect(describeOp(add, base())).toBe('Upper farm: add a registered volume, surface 120\u202f000 m³/a, valid 2020-10-01 to …, Jan, Feb, Mar only, at most 0.05 m³/s');
+		expect(describeOp(add, base())).toBe('Upper farm: add a registered volume, surface 120\u202f000 m³/a, valid 1 Oct 2020 to …, Jan, Feb, Mar only, at most 0.05 m³/s');
 		const withVolume = applyScenario(base(), [add]);
 		expect(withVolume.problems).toEqual([]);
 		expect(classifyScenario(base(), [add], [UP])).toEqual(['proposal']);
@@ -524,13 +524,13 @@ describe('the later ops (engine ≥ 1.35.0): build, describe, apply', () => {
 		expect(refill).toMatchObject({ nodeId: UP, alVolume: '120000', alFrom: '1 Oct 2020', months: [1, 2, 3], alRate: '0.05', alStorage: '' });
 		const replace = (buildOp({ ...refill, allocationId: a.id, alVolume: '90000' }, withVolume.input.model, id) as { op: ScenarioOp }).op;
 		expect(replace).toEqual({ op: 'allocation.set', allocation: { ...a, volumeM3PerYear: 90_000 } });
-		expect(describeOp(replace, withVolume.input)).toBe('Upper farm: registered volume surface 120\u202f000 m³/a, valid 2020-10-01 to …, Jan, Feb, Mar only, at most 0.05 m³/s → surface 90\u202f000 m³/a, valid 2020-10-01 to …, Jan, Feb, Mar only, at most 0.05 m³/s');
+		expect(describeOp(replace, withVolume.input)).toBe('Upper farm: registered volume surface 120\u202f000 m³/a, valid 1 Oct 2020 to …, Jan, Feb, Mar only, at most 0.05 m³/s → surface 90\u202f000 m³/a, valid 1 Oct 2020 to …, Jan, Feb, Mar only, at most 0.05 m³/s');
 		const rm = built({ kind: 'allocation.remove', allocationId: a.id });
-		expect(describeOp(rm, withVolume.input)).toBe('Upper farm: remove the registered volume surface 120\u202f000 m³/a, valid 2020-10-01 to …, Jan, Feb, Mar only, at most 0.05 m³/s');
+		expect(describeOp(rm, withVolume.input)).toBe('Upper farm: remove the registered volume surface 120\u202f000 m³/a, valid 1 Oct 2020 to …, Jan, Feb, Mar only, at most 0.05 m³/s');
 		expect(applyScenario(withVolume.input, [rm]).problems).toEqual([]);
 		// The engine's refusals in the form's words.
 		expect(buildOp(draft({ kind: 'allocation.set', allocationId: NEW_ALLOCATION, nodeId: UP, alVolume: '-1' }), m, id)).toEqual({ ok: false, error: 'The volume must be a number of m³ from 0 to below 10¹²' });
-		expect(buildOp(draft({ kind: 'allocation.set', allocationId: NEW_ALLOCATION, nodeId: UP, alVolume: '1', alFrom: '2022-01-01', alTo: '2021-01-01' }), m, id)).toEqual({ ok: false, error: 'Valid to is before valid from (2022-01-01)' });
+		expect(buildOp(draft({ kind: 'allocation.set', allocationId: NEW_ALLOCATION, nodeId: UP, alVolume: '1', alFrom: '2022-01-01', alTo: '2021-01-01' }), m, id)).toEqual({ ok: false, error: 'Valid to is before valid from (1 Jan 2022)' });
 		expect(buildOp(draft({ kind: 'allocation.set', allocationId: NEW_ALLOCATION, alVolume: '1' }), m, id)).toEqual({ ok: false, error: 'Pick the hydrological unit or other user it is for' });
 	});
 });

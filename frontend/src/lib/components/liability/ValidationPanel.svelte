@@ -25,7 +25,7 @@
 	<details bind:open>
 		<summary>
 			<h3 id="{uid}-h">Validation statement</h3>
-			<span class="muted small">Engine {engineVersion}: its checks, this run’s self-checks and calibration ratings, data quality, the known limitations and errata. Also in the report.</span>
+			<span class="muted small">Engine {engineVersion}: its checks, this run’s arithmetic checks and calibration ratings, data quality, the known limitations and errata. Also in the report.</span>
 		</summary>
 		{#if open}
 			<div class="body">
@@ -43,10 +43,10 @@
 	summary {
 		cursor: pointer;
 	}
+	/* The page's h3 size, as every other panel heading on Runs & results. */
 	summary h3 {
 		display: inline;
 		margin: 0 0.5rem 0 0;
-		font-size: 1rem;
 	}
 	.body {
 		margin-top: 0.75rem;

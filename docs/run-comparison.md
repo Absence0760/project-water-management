@@ -303,7 +303,7 @@ bottom:
    the scores are in-sample (issue #45, `comparison.calibration.fitStatus`):
    **calibration period (in-sample)** when both runs' parameters were fitted
    on the days scored, the shared reason when neither was ("parameters not
-   fitted", "parameters edited since the fit", "not the period fitted"), and
+   from an automatic fit", "parameters edited since the fit", "fitted on other days"), and
    "run A …, run B …" when they differ. Under it, **Fit and validation** sets each run's fit record side
    by side: the fit (model, time, objective, seed; the time day first in UTC, "GR4J fit of 24 Sep 2026
    10:05 UTC", as the run's own provenance says it: the engine's `describeFitRecord` takes the stored
@@ -377,7 +377,7 @@ bottom:
    side, stacked on narrow screens. Compare runs over the same observed days:
    if the day counts differ, part of the difference comes from the record.
 5. **Plausibility checks** (engine ≥ 1.4.0 compares them, issue #64; the
-   recession diagnostics and the validation signatures from engine 1.55.0;
+   recession diagnostics and the hydrological signatures from engine 1.55.0;
    `plausibility/compare.ts` `comparePlausibility`,
    `compare/PlausibilityCompare.svelte`), under its own heading; see
    [Plausibility checks](#plausibility-checks) below.
@@ -513,7 +513,7 @@ and site, with run A, run B and the change:
   flow) and b difference with its stored verdict ("rate 1.50×, b +0.30
   (agrees)", "no simulated fit (disagrees)", "not judged: 5 of 8
   segments"), and the change in each ("rate −1.10×; b −0.40").
-- **Validation signatures** (engine ≥ 1.55.0, CR-16,
+- **Hydrological signatures** (engine ≥ 1.55.0, CR-16,
   `RunComparison.plausibility.signatures`, on each run's scored record: the
   outlet's, or the calibration site's gauge, named in the Site column):
   a row each for the base-flow index by the Hughes et al. (2003) and the
@@ -683,8 +683,8 @@ the losses β becomes r = β(1 − e), and a crop's own efficiency becomes a
 system row "Imported, NN %"), so a project that only went through the
 migrations shows no network line; the engine version line flags the change.
 Settings are compared after merging over the defaults, so an old snapshot that
-stored only some fields doesn't show false differences. Every setting the
-Settings tab edits has a readable line, including the curtailment reporting
+stored only some fields doesn't show false differences. Every setting Model
+settings and Calibration edit has a readable line, including the curtailment reporting
 window, the calibration window and flow series, and the gauge-vs-logger
 thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*) and the
 other data-check limits (engine ≥ 1.20.0: *"Data quality zero-rain run CHIRPS
@@ -733,7 +733,10 @@ project's declared uncertainty rule for evidence (issue #71,
 `settings.evidenceUncertaintyRule`) is one line, **Declared uncertainty rule
 (evidence)**, the whole rule in words either side (`declaredRuleText`, "not
 declared" when absent). It changes no result, so the line only says the two
-runs were made under different declared rules. Settings keys the engine doesn't know yet still appear as
+runs were made under different declared rules. Its wording (`declaredRuleText`)
+changed in issue #586 Round 0, to plain words, with engine 1.97.0: the line
+changes no result, but an evidence pack's reproduction recomputes it at the
+pack's engine version, so its text moves only with an `ENGINE_VERSION` bump. Settings keys the engine doesn't know yet still appear as
 *Setting "x" changed*.
 
 ## Where the code lives

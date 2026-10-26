@@ -80,6 +80,9 @@ describe('where A-pan comes from (issue #45)', () => {
 		const monthlyOnly = apanSourceNote(['rain_catchment_mm'])!;
 		expect(monthlyOnly.daily).toBe(false);
 		expect(monthlyOnly.text).toContain('monthly means on every day');
+		// Each names the Data page its link goes to (issue #586, C4).
+		expect(daily.link).toBe('See the series on Data');
+		expect(monthlyOnly.link).toBe('Add a daily A-pan record on Data');
 	});
 });
 

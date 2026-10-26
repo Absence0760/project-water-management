@@ -21,7 +21,7 @@
 
 <p class="muted small intro">
 	Each run’s own checks: before and after a refit or new data, which water years stopped (or started) failing, and whether the simulated dry-season
-	low flows moved inside the factor of 2 that low-flow gauging error allows, and whether the recessions and the validation signatures (base-flow index,
+	low flows moved inside the factor of 2 that low-flow gauging error allows, and whether the recessions and the hydrological signatures (base-flow index,
 	low-flow curve, held-out recessions) moved inside their provisional limits. A gauge inside the network is checked only when its own observed record
 	is attached to it (Data page).
 </p>

@@ -11,6 +11,7 @@
 		transfers: () => import('#lib/components/transfers/TransfersTab.svelte'),
 		series: () => import('#lib/components/series/SeriesTab.svelte'),
 		settings: () => import('#lib/components/settings/SettingsTab.svelte'),
+		calibration: () => import('#lib/components/calibration/CalibrationTab.svelte'),
 		runs: () => import('#lib/components/runs/RunsTab.svelte'),
 		river: () => import('#lib/components/river/RiverTab.svelte'),
 		supply: () => import('#lib/components/supply/SupplyTab.svelte'),
@@ -35,13 +36,14 @@
 
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import type { SeriesMeta } from '@water-management/engine';
 	import { chirpsSourceOf, observedOriginsOf } from '#lib/series/provenance.js';
 	import { api, ApiError, hasRole, type Project, type ProjectSummary, type RunMeta } from '#lib/api/index.js';
 	import { session } from '#lib/auth/session.svelte.js';
+	import { landOnAnchor } from '#lib/help/anchor.js';
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { prefetch } from '#lib/components/common/lazy.js';
@@ -53,6 +55,7 @@
 	import { issueHref } from '#lib/model/validate.js';
 	import { ProjectDetailsDraft } from '#lib/components/project/detailsDraft.svelte.js';
 	import { SettingsDraft } from '#lib/components/settings/settingsDraft.svelte.js';
+	import { blockerHref } from '#lib/components/settings/blockers.js';
 	import { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import type { UnsavedEdits } from '#lib/preview/overlay.js';
 	import IssueList from '#lib/components/model/IssueList.svelte';
@@ -68,6 +71,8 @@
 	import { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { fetchProjectPage, takeProjectPage } from '#lib/workspace/firstLoad.js';
 	import { compareTabHref } from '#lib/components/compare/picker.js';
+	import { carriedRun, isRunTab, pickOf, tabHref as tabLinkHref } from '#lib/workspace/tabLinks.js';
+	import { focusPageStart } from '#lib/a11y/focusPage.js';
 	import { firstOutletSeries } from '#lib/series/pick.js';
 	import { withoutFarm } from '#lib/components/crops/farmDrawer.js';
 	import { FieldHistoryStore, setFieldHistory } from '#lib/components/history/fieldHistory.svelte.js';
@@ -104,7 +109,6 @@
 		data: 'series',
 		timeseries: 'series',
 		demand: 'crops',
-		calibration: 'settings',
 		results: 'runs',
 		// The EWR page (issue #558) keeps its old id, so a saved choice of sections and old links still work.
 		ewr: 'river',
@@ -156,8 +160,9 @@
 	// The project details being edited on the Project page (issue #162 item 12):
 	// held here, so they survive a tab change and share the model's save bar.
 	const details = new ProjectDetailsDraft();
-	// The Settings & calibration form's unsaved settings: held here for the same reasons, so a tab
-	// change keeps them and the one save bar saves them (settings/settingsDraft.svelte.ts).
+	// The settings' unsaved edits, on Model settings and on Calibration alike: held here for the same reasons, so a tab
+	// change keeps them, an edit on one page and one on the other are one draft, and the one save bar saves them
+	// (settings/settingsDraft.svelte.ts).
 	const settings = new SettingsDraft();
 	// Fit automatically's choices, running fit and result: held here too, so a fit keeps running and its
 	// result waits to be applied while another tab is open (calibration/fitSession.svelte.ts).
@@ -179,7 +184,9 @@
 	// own prompt, lib/nav/leaveGuard.ts).
 	provideUnsaved(() => editor.dirty || details.dirty || settings.dirty || invalidFields.count > 0);
 	// Leaving the project (not just changing tab) with any of them unsaved asks first, in
-	// the app's dialog (lib/nav/leaveGuard.ts); a tab change keeps them all.
+	// the app's dialog (lib/nav/leaveGuard.ts); a tab change keeps them all, so going between Model settings and
+	// Calibration, whose panels share the settings draft, never asks (issue #586 round 3), and neither does a link
+	// to a panel that moved to another tab (#set-feeds), which forwards with the draft kept and the save bar still shown.
 	guardUnsaved({ dirty: () => editor.dirty, what: 'model edits' });
 	guardUnsaved({ dirty: () => details.dirty, what: 'project details' });
 	guardUnsaved({ dirty: () => settings.dirty, what: 'settings' });
@@ -228,15 +235,18 @@
 		get saveError() {
 			return settings.saveError;
 		},
-		// Each group with a problem, linked to its panel: on the Settings tab in place, from elsewhere through it.
+		// Each panel with a problem, linked to it on its page (Model settings or Calibration, issue #586 round 3): in
+		// place on that page, from any other tab through it.
 		get problems() {
-			return settings.blockers.map((b) => ({ message: `${b.label}: ${b.message}`, href: `${tab === 'settings' ? '' : '?tab=settings'}#${b.id}` }));
+			return settings.blockers.map((b) => ({ message: `${b.label}: ${b.message}`, href: blockerHref(b.id, tab) }));
 		},
 		revert: () => settings.revert()
 	};
 	const pageDrafts: PageDraft[] = [detailsDraft, settingsDraft];
 	// Shared with the Overview checklist, the Time series tab and the Runs tab.
 	let series = $state<SeriesMeta[] | null>(null);
+	// What the settings panels read from the series list, on Model settings and Calibration alike.
+	const seriesKinds = $derived(series?.filter((x) => !x.siteNodeId).map((x) => x.kind) ?? null);
 	// A daily A-pan series: runs use it before the monthly means, which the Crops demand preview shows (issue #173).
 	const apanDaily = $derived(series?.some((x) => x.kind === 'evap_apan_mm' && !x.siteNodeId) ?? false);
 	let runs = $state<RunMeta[] | null>(null);
@@ -381,18 +391,23 @@
 		};
 	}
 
-	// The new-data line's Re-run model starts a run here and opens it in Runs.
+	// The new-data line's Re-run model starts a run here and opens it in Runs (on Calibration, on the page: startRun).
 	/** The new-data re-run, labelled with the data's end. */
 	const rerun = () => runModel(`Data to ${fresh?.latest ?? today}`);
 	async function startRun(label?: string, forecast = false) {
 		rerunning = true;
 		rerunError = null;
+		// Started on Calibration, the run opens there, on How the shown run fits, so the calibration loop (fit, run,
+		// read the fit) stays on one page (issue #586 round 3); from anywhere else, in Runs & results.
+		const here = runOpensHere;
 		try {
 			const { run: r, removedRunIds } = await api.runs.create(projectId, label, { forecast });
 			const { summary: _s, ...meta } = r;
 			setRuns([meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
 			banner = null;
-			await goto(`?tab=runs&run=${r.id}`, { reset: false });
+			await goto(here ? `?tab=calibration&run=${r.id}#cal-fit` : `?tab=runs&run=${r.id}`, { reset: false });
+			// A goto the page makes itself lands nowhere (nav/anchorLandingEnv.svelte.ts), so land on the part, focused.
+			if (here && tab === 'calibration') landOnAnchor('cal-fit');
 		} catch (e) {
 			rerunError = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -401,6 +416,8 @@
 	}
 
 	const canEdit = $derived(hasRole(project?.role, 'editor'));
+	/** A run started on this tab opens on it (startRun): Calibration shows the new run's fit itself. */
+	const runOpensHere = $derived(tab === 'calibration');
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
 
 	// --- the section header (SectionHeader, issue #17) -------------------------
@@ -537,7 +554,7 @@
 		}
 	}
 	/**
-	 * The settings (the Settings & calibration form), through the same bar, with the bar's reason (which the
+	 * The settings (Model settings' and Calibration's panels, one draft), through the same bar, with the bar's reason (which the
 	 * model's save then takes too, and clears); true once saved.
 	 */
 	async function saveSettings(): Promise<boolean> {
@@ -658,10 +675,44 @@
 		if (moved) void goto(moved, { replace: true, reset: false });
 	});
 
-	// Selecting a tab keeps focus/scroll and adds a history entry so Back works.
+	// Selecting a tab keeps the scroll and adds a history entry so Back works. The tabs that show
+	// a run keep the one the reader picked on any of them (issue #586, workspace/tabLinks.ts).
+	let pickedRun = $state<{ projectId: string; id: string } | null>(null);
+	// Read once each time the run in the URL changes (not on a #hash or another param), against the runs as
+	// they are then: the default a tab writes in place on opening is no pick (tabLinks.ts pickOf).
+	let seenRun: string | null = null;
+	const runsLoaded = $derived(runs !== null);
+	$effect(() => {
+		const id = isRunTab(tab) ? page.url.searchParams.get('run') : null;
+		if (!id || !runsLoaded || id === seenRun) return;
+		seenRun = id;
+		untrack(() => {
+			const pick = pickOf(id, runs ?? [], project?.role);
+			pickedRun = pick ? { projectId, id: pick } : null;
+		});
+	});
+	const carried = $derived(carriedRun(pickedRun?.projectId === projectId ? pickedRun.id : null, runs, project?.role));
 	function tabHref(id: TabId) {
-		return id === 'overview' ? page.url.pathname : `?tab=${id}`;
+		return tabLinkHref(id, page.url.pathname, carried);
 	}
+
+	// Following a sidebar link puts the focus on the new page's title (its h1, focusPageStart), so Tab
+	// carries on in the page, not from the top of the sidebar (issue #586; ui-playbook.md § 4). The arrow
+	// keys between the links keep it on the link instead (tabKeydown).
+	// The flag names the URL the link goes to: only the navigation to it focuses the title, and any
+	// navigation clears it. A click on the page already shown navigates nowhere, so it sets none (else a
+	// later Back or in-page link would take the focus to the title).
+	let focusTitleFor: string | null = null;
+	function followTab(e: MouseEvent & { currentTarget: HTMLAnchorElement }) {
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		const to = e.currentTarget.href;
+		focusTitleFor = to === location.href ? null : to;
+	}
+	afterNavigate((nav) => {
+		const wanted = focusTitleFor;
+		focusTitleFor = null;
+		if (wanted && nav.to?.url.href === wanted) void focusPageStart();
+	});
 
 	function onProjectChange(p: Project) {
 		project = p;
@@ -743,6 +794,7 @@
 						data-sveltekit-noscroll
 						aria-current={tab === id ? 'page' : undefined}
 						onkeydown={(e) => tabKeydown(e, id)}
+						onclick={followTab}
 						onpointerenter={() => warmTab(id)}
 						onfocus={() => warmTab(id)}
 					>
@@ -772,7 +824,7 @@
 {#snippet projectSidebar()}
 	<div class="project-side">
 		<div class="side-head"><span class="side-kicker">Catchment</span>{@render roleBadge()}<SectionsMenu roleTabs={roleIds} /></div>
-		<a class="side-project" href={tabHref('overview')} title={project?.name} data-testid="project-name">{project?.name}</a>
+		<a class="side-project" href={tabHref('overview')} onclick={followTab} title={project?.name} data-testid="project-name">{project?.name}</a>
 		{@render sectionsNav()}
 	</div>
 {/snippet}
@@ -855,6 +907,7 @@
 			running={rerunning}
 			error={rerunError}
 			behind={!banner && behindRun.length > 0}
+			opensHere={runOpensHere}
 			onrun={runModel}
 		/>
 	{/if}
@@ -980,18 +1033,36 @@
 								project={project!}
 								{editor}
 								draft={settings}
+								{seriesKinds}
+								catchmentRain={series ? (firstOutletSeries(series, 'rain_catchment_mm') ?? null) : undefined}
+								rainSeries={series?.filter((x) => x.kind === 'rain_catchment_mm' && !x.siteNodeId)}
+								readonly={!canEdit}
+								onModelChanged={reloadInputs}
+							/>
+						{/snippet}
+					</Lazy>
+				{:else if tab === 'calibration'}
+					<Lazy load={LOAD.calibration}>
+						{#snippet children(CalibrationTab)}
+							<CalibrationTab
+								{runs}
+								role={project!.role}
+								project={project!}
+								{editor}
+								draft={settings}
 								{fit}
-								seriesKinds={series?.filter((x) => !x.siteNodeId).map((x) => x.kind) ?? null}
+								{seriesKinds}
 								gaugeRecords={series?.flatMap((x) => (x.siteNodeId ? [{ kind: x.kind, siteNodeId: x.siteNodeId }] : [])) ?? null}
 								chirpsSource={chirpsSourceOf(series)}
 								observedOrigins={observedOriginsOf(series)}
 								apanSeries={series ? (firstOutletSeries(series, 'evap_apan_mm') ?? null) : undefined}
 								flowRecordId={series ? ((firstOutletSeries(series, 'flow_observed_m3s') ?? firstOutletSeries(series, 'flow_logger_m3s'))?.id ?? null) : null}
-								catchmentRain={series ? (firstOutletSeries(series, 'rain_catchment_mm') ?? null) : undefined}
-								rainSeries={series?.filter((x) => x.kind === 'rain_catchment_mm' && !x.siteNodeId)}
 								readonly={!canEdit}
 								{onProjectChange}
-								onModelChanged={reloadInputs}
+								{projectId}
+								nodes={editor.model.nodes}
+								{series}
+								projectSettings={project!.settings}
 							/>
 						{/snippet}
 					</Lazy>
@@ -1407,6 +1478,15 @@
 	.project-side .tabs a {
 		min-height: 32px;
 	}
+	/* A viewer's toggle takes one 32 px row in the sidebar, as a link does: Calibration took the sidebar's last
+	   spare row (issue #586), and a viewer, who has no Applications row, has the toggle in its place, so with the
+	   inputs shown they fit 1440×960 exactly as an owner's sections do (app-sidebar.spec.ts). Its taller 40 px
+	   row and gap above had cost 16 px more. */
+	.project-side .inputs-toggle {
+		min-height: 32px;
+		margin-top: 0;
+		padding-top: 0;
+	}
 	/* Phones: the catchment's name and your role, in the app's bar (fillPhoneTitle): at most two lines of name
 	   (whole in its title), the role badge beside it. */
 	.phone-project {
@@ -1566,7 +1646,8 @@
 		text-align: center;
 	}
 	/* Read-only inputs read as plain values, not as a broken, greyed-out form. */
-	.readonly :global(input:not([type='checkbox']):read-only),
+	/* Not a radio: it is always :read-only, and without its circle a viewer couldn't tell which option is chosen (issue #586). */
+	.readonly :global(input:not([type='checkbox']):not([type='radio']):read-only),
 	.readonly :global(select:disabled),
 	.readonly :global(textarea:read-only) {
 		background: transparent;

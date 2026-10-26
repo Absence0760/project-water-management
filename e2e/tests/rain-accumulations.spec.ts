@@ -50,7 +50,7 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 	await expect(chart).toHaveAttribute('data-shaded', '1');
 
 	// Settings → Rain gaps: spread is the default; keep the reading as recorded (a reason is required).
-	await tab('Settings & calibration').click();
+	await tab('Model settings').click();
 	const section = page.getByTestId('zero-rain-settings');
 	const mode = section.getByLabel('Accumulated readings');
 	await expect(mode).toHaveValue('spread');
@@ -75,7 +75,7 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 	await expect(chart).not.toHaveAttribute('data-shaded');
 
 	// A window listed by hand is validated the same way and spread again.
-	await tab('Settings & calibration').click();
+	await tab('Model settings').click();
 	const add = section.getByRole('group', { name: /^Also spread/ });
 	await add.getByRole('button', { name: 'Spread a date range' }).click();
 	await add.getByLabel('From').fill('2012-06-10');
@@ -90,7 +90,7 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 	await expect(page.getByText('Shaded: 1 multi-day accumulation, 12 days, whose recorded total a run spreads over the days it covers by CHIRPS.')).toBeVisible();
 
 	// "Run as recorded" hides the keep list and survives a reload.
-	await tab('Settings & calibration').click();
+	await tab('Model settings').click();
 	await mode.selectOption('asRecorded');
 	await expect(section.getByRole('group', { name: /^Keep as recorded/ })).toHaveCount(0);
 	await saveSettings(page);

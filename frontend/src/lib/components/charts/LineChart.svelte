@@ -11,6 +11,7 @@
 	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
 	import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, logFloor, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
+	import { zoomHint } from './zoomHint';
 
 	let {
 		series,
@@ -26,6 +27,7 @@
 		recentLabel = 'Recent',
 		windows,
 		toolbar,
+		toolsLabel,
 		caption,
 		shade = [],
 		shadeKey,
@@ -61,6 +63,11 @@
 		 */
 		windows?: readonly { label: string; days: number | null }[];
 		toolbar?: Snippet;
+		/**
+		 * Names the chart's switches as one group, by its chart ("Hydrograph controls"), where several charts on a page
+		 * repeat Earlier / Later, Log scale and the time window (Runs & results, issue #586; WCAG 2.4.6).
+		 */
+		toolsLabel?: string;
 		caption?: string;
 		/** Daily charts: inclusive date ranges drawn as a tinted band behind the lines (say what they mean in `caption` or `shadeKey`). */
 		shade?: { start: string; end: string }[];
@@ -138,6 +145,8 @@
 	const a11yName = $derived(chartName(title, series, unit, isTime ? aligned.x : null, xLabel));
 	const dataLo = $derived(aligned.x[0] ?? 0);
 	const dataHi = $derived(aligned.x[aligned.x.length - 1] ?? 0);
+	/** The line under the chart, worded for a mouse and for touch (zoomHint.ts; the CSS shows the reader's). */
+	const hint = $derived(zoomHint(isTime && pannable));
 	const canPan = $derived(!print && isTime && pannable && !!view && view.max - view.min < dataHi - dataLo);
 	// Print mode lays the plot out k times larger and scales it back into its box.
 	const k = $derived(print ? printScale(devicePixelRatio) : 1);
@@ -532,7 +541,7 @@
 				{#each series as s (s.label)}<span><i class:dash={s.style === 'dashed' || s.style === 'step'} style:border-color="var({s.color ?? '--series-1'})"></i>{s.label}</span>{/each}
 			</span>
 		{:else}
-		<span class="tools">
+		<span class="tools" role={toolsLabel ? 'group' : undefined} aria-label={toolsLabel}>
 			{#if toolbar}{@render toolbar()}{/if}
 			{#if isTime && pannable && hasData && (canWindow || canPan)}
 				<span class="seg" role="group" aria-label="Move through the record">
@@ -597,13 +606,13 @@
 		</div>
 	{/if}
 	{#if band && isTime && hasData && bandSpan(band, aligned.x)}
-		<p class="band-key"><i aria-hidden="true"></i><span><strong>{band.label}</strong> (hatched, from {band.from}): {band.note}</span></p>
+		<p class="band-key"><i aria-hidden="true"></i><span><strong>{band.label}</strong> (hatched, from {fmtDay(band.from)}): {band.note}</span></p>
 	{/if}
 	{#if print}
 		{#if caption}<p class="hint">{caption}</p>{/if}
 	{:else}
 		<p class="hint">
-			{#if caption}{caption}{' '}{/if}{#if isTime && pannable}Drag across the chart to zoom, then Shift+drag (or Earlier / Later) to move through the record; double-click for the full period.{:else}Drag across the chart to zoom; double-click to reset.{/if}
+			{#if caption}{caption}{' '}{/if}<span class="fine" data-hint="fine">{hint.fine}</span><span class="touch" data-hint="touch">{hint.touch}</span>
 		</p>
 	{/if}
 </figure>
@@ -772,6 +781,17 @@
 		font-size: var(--font-xs);
 		color: var(--text-muted);
 		margin: 0.25rem 0 0;
+	}
+	/* The zoom hint for the reader's pointer (zoomHint.ts): a touch screen has no drag zoom and no Shift key. */
+	@media (pointer: fine) {
+		.hint .touch {
+			display: none;
+		}
+	}
+	@media not all and (pointer: fine) {
+		.hint .fine {
+			display: none;
+		}
 	}
 	.plot :global(.u-legend) {
 		font-size: var(--font-sm);

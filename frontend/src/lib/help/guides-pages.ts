@@ -375,12 +375,16 @@ export const PAGE_GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**The model**: headline facts (units, gauges, catchment area, dams, irrigated area, transfers, series, runs), each linking to where it is edited.',
+							'One column, read top to bottom in the order the page’s **On this page** list gives: the project’s details, then who can open it, then its notes, facts and reports.',
 							'**Download** in the header: the whole project as one JSON file (model, settings and input series), for every member.',
 							'**Members**: who can open the project and with which [[roles|role]]. Owners add people and change roles.',
 							'**Farmers**: which hydrological units each farmer is linked to; a farmer reads only their own.',
 							'**Share links** (owners only): read-only links for people outside the project, to the published baseline; the list also holds every link to an application, so an owner can withdraw any of them from one place.',
-							'**Two-step sign-in** (owners only): **Require two-step sign-in** for the project’s owners and signers ([[guide:two-step-sign-in|Sign in with two steps]]).'
+							'**API keys** (owners only): keys a logger gateway or a script sends daily readings with ([[guide:push-logger-data|Push logger data with an API key]]).',
+							'**Two-step sign-in** (owners only): **Require two-step sign-in** for the project’s owners and signers ([[guide:two-step-sign-in|Sign in with two steps]]).',
+							'**The model**, after who can open it: headline facts (units, gauges, catchment area, dams, irrigated area, transfers, series, runs), each linking to where it is edited.',
+							'**Scheduled reports**, last, under the model: the latest run’s report PDF emailed to chosen members every week or month. Editors and owners add, pause and remove schedules; viewers read them.',
+							'Scheduled reports and API keys save as you change them; the project’s details wait for **Save changes** at the foot of the page.'
 						]
 					}
 				]
@@ -420,6 +424,87 @@ export const PAGE_GUIDES: Guide[] = [
 		],
 		terms: ['roles', 'published-baseline', 'project', 'registration-check', 'responsible-authority', 'licence-record', 'share-link', 'two-step-sign-in'],
 		related: ['create-a-project', 'applications-page', 'two-step-sign-in']
+	},
+	{
+		id: 'model-settings-page',
+		title: 'Model settings: what the model runs on',
+		summary: 'The settings a run reads besides the network and the data: the period, rain gaps, demand, flow generation, the EWR and how results are read.',
+		kind: 'page',
+		tab: 'settings',
+		sections: [
+			{
+				heading: 'What the page holds',
+				blocks: [
+					{
+						type: 'p',
+						text: 'One long form, under **Build the model**, before **Calibration**. **EWR the results are judged by** comes first, the side index’s first link; then the panels by task: **Data & rain** (Simulation period, Rain gaps, Data quality), **Demand & supply** (Demand, Drought restrictions, Reporting), **Runoff** (Flow generation: how rain becomes each unit’s natural flow, not the runoff model’s parameters, which are fitted under **Calibration → Flow calibration**), **EWR & Reserve** (EWR, Reserve rule tables), **Reading results** (Outcome matrix, Seasonal outlook, Evidence) and **Automatic runs**. Each panel says what it is set to under its heading.'
+					},
+					{
+						type: 'p',
+						text: 'The panels that set up the runoff model’s fit, **Flow calibration**, **Calibration record**, **Fit the parameters** and **WR2012 check**, are on [[guide:calibration-page|Calibration]]. Both pages edit the same settings: an edit on one and an edit on the other wait together for **Save changes** on the one save bar, which shows on both, and a problem on either page is listed there with a link to its panel. Going from one page to the other keeps your edits and never asks; leaving the project with edits unsaved asks first.'
+					},
+					{
+						type: 'p',
+						text: 'Viewers read every panel with its fields read-only. See [[guide:set-the-ewr|Set the EWR and the reporting window]] for the EWR.'
+					}
+				]
+			}
+		],
+		terms: ['ewr', 'apan', 'unit-rain'],
+		related: ['set-the-ewr', 'calibration-page', 'rain-gap-filling']
+	},
+	{
+		id: 'calibration-page',
+		title: 'Calibration: fit the runoff parameters and judge the fit',
+		summary: 'Where the fit is set up and where a run’s fit is read: one page for the calibration loop.',
+		kind: 'page',
+		tab: 'calibration',
+		sections: [
+			{
+				heading: 'What the page is for',
+				blocks: [
+					{
+						type: 'p',
+						text: '[[calibration|Calibration]] is a loop: set the runoff model’s parameters, run the model, compare the modelled flow with the observed record, and adjust. This page brings the two halves of that loop together, so the loop stays on one page. It is under **Build the model**, after **Model settings**, and every member sees it. Its header says where the parameters came from (the fit, its score and whether anything changed since), with **Fit the parameters** to go to that panel. Under the header, one line answers how the shown run fits: its NSE, KGE and volume bias, with **All the scores** to the panel, or why there are none yet. When the GR4J parameters in the form differ from the ones the shown run used, that line says so and a note over the run’s results lists each change (X1 350 → 321 mm), so the old run’s scores aren’t read as the edit’s: run the model to score them. The side index lists both halves’ panels: the four that set up the fit, then those of the run shown, with **Calibration check** and **Where the parameters came from** indented under **Calibration against observed flow**.'
+					},
+					{
+						type: 'p',
+						text: '**Set up the fit** holds **Flow calibration** (the GR4J parameters, the rain GR4J runs on and its potential evaporation, with **Evaporation from the map**), **Calibration record** (the observed flow a fit is scored against, its window and what is left out), **Fit the parameters** (fit automatically, the fit record and the calibration rules) and **WR2012 check**. They are the same settings as **Model settings**’: their edits wait for **Save changes** on the one save bar with the rest, and a problem on either page is listed there with a link to its panel. Viewers read them with every field read-only and no fit controls.'
+					},
+					{
+						type: 'p',
+						text: '**How the shown run fits** shows the Model quality panels for one run: **Hydrograph**, **Flow-duration curve**, **Calibration against observed flow** and **EWR test: model against observed flow**, with **Runoff model**, **WR2012 check** and **Plausibility checks** when the run has them. Pick the run under its heading: it starts on the run picked on Runs & results, or the latest (a viewer’s, the published one), and **Open in Runs & results** goes to that run’s own page. With no observed flow record yet it says to add one on **Data**; with a record but no run, to run the model with **Run model** at the top. Viewers see every result, without the fit controls.'
+					},
+					{
+						type: 'p',
+						text: '**Flow calibration** here is not **Flow generation** on **Model settings**: Flow calibration holds the runoff model’s parameters (how rain becomes flow), Flow generation how the rain reaches each hydrological unit.'
+					}
+				]
+			},
+			{
+				heading: 'The loop: fit, save, run, read',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'**Choose what the fit is scored against.** In **Calibration → Calibration record**, pick the observed flow series (a gauge or a logger), the [[calibration-window]] and any [[calibration-exclusions]], each with its reason. Do this before you look at a score.',
+							'**Fit.** In **Calibration → Fit the parameters → Fit automatically**, choose the objective by what the results will feed, keep **Validate** ticked, and press **Fit automatically**. You can open other pages while it runs; the result waits here. Read the shaded validation columns, then press **Apply to form**. To set a parameter by hand instead, change it under **Flow calibration** ([[guide:calibrate-by-hand|Calibrate by hand]]).',
+							'**Save.** The fitted parameters are an unsaved edit until you press **Save changes** on the save bar. The bar is the same on Model settings, so an edit there and one here save together; a problem on either page is listed on the bar with a link to its panel. **Preview** on the bar shows what your unsaved change does to the last run first, worked out in your browser.',
+							'**Run.** Press **Run model** in the header. A run started here opens back on this page.',
+							'**Read.** Under **How the shown run fits**, the new run is shown: the **Hydrograph**, the **Flow-duration curve** and **Calibration against observed flow** (its scores, the calibration check of flow against use, and where the parameters came from), then the WR2012 check and the plausibility checks when the run has them. Pick an earlier run under the heading to compare by eye, or use **Compare runs** for the full comparison.',
+							'**Repeat** until the validation scores are as good as the record allows. The header always says where the shown parameters came from and whether anything has changed since the fit.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'Links to these panels from before they moved here (an old **Model settings** or **Runs & results** bookmark, a note, an email) still land on the panel here, for the same run.'
+					}
+				]
+			}
+		],
+		terms: ['calibration', 'gr4j'],
+		related: ['fit-automatically', 'calibrate-by-hand', 'how-calibration-works']
 	},
 	{
 		id: 'history-page',

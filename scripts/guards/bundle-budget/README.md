@@ -1684,4 +1684,14 @@ ceilings still append here.
             (network/supplyThresholds.ts). 155 → 115 KB measured locally
             (HTML 25 KB, 41 modules 90 KB), headroom ~5 KB. Also fails on a
             stylesheet welcome.html links instead of inlining.
+2026-10-26  mapKb 440 → 450 KB (#586, maplibre-gl 6.14.0 → 6.15.0, from
+            Dependabot #599). 6.15 adds custom planar projections
+            (addProjection, a {bbox} tile token, GeoJSON projected in the
+            workers) and drag-rotate around the pointer, with fixes the map
+            uses (load/idle firing early after a failed tile, Safari 26.6
+            tiles stopping after the page was in the background, terrain
+            camera drops). Built, gzip -9: the main thread's chunk 280.4 →
+            286.6 KB, the worker 144.0 → 147.4 KB, the PMTiles reader
+            unchanged (7.3 KB); nothing else landed in the map's chunks.
+            Measured 434 → 443 KB locally (CI 443), headroom ~7 KB.
 ```

@@ -26,7 +26,7 @@ describe('runExclusions', () => {
 		);
 		expect(got).toEqual([
 			{ start: '2015-10-01', end: '2016-09-30', label: 'WY 2015/16', reason: 'suspect rain', clipped: false },
-			{ start: '2018-01-01', end: '2018-03-31', label: '2018-01-01 – 2018-03-31', reason: 'gauge outage', clipped: false }
+			{ start: '2018-01-01', end: '2018-03-31', label: '1 Jan 2018 – 31 Mar 2018', reason: 'gauge outage', clipped: false }
 		]);
 	});
 
@@ -39,7 +39,7 @@ describe('runExclusions', () => {
 			{ start: '2015-10-01', end: '2016-09-30', reason: 'suspect rain' },
 			{ start: '2012-02-01', end: '2012-02-29', reason: 'outage' }
 		]);
-		expect(got.map((x) => x.label)).toEqual(['2012-02-01 – 2012-02-29', 'WY 2015/16']);
+		expect(got.map((x) => x.label)).toEqual(['1 Feb 2012 – 29 Feb 2012', 'WY 2015/16']);
 		expect(runExclusions(null, null)).toEqual([]);
 		expect(runExclusions({}, undefined)).toEqual([]);
 	});
@@ -73,20 +73,20 @@ describe('clipExclusions', () => {
 	it('keeps the periods that overlap the chart, clipped to it, and says which were cut', () => {
 		expect(clipExclusions(list, span)).toEqual([
 			{ start: '2011-01-01', end: '2011-09-30', label: 'WY 2010/11', reason: 'straddles the start', clipped: true },
-			{ start: '2012-03-01', end: '2012-03-31', label: '2012-03-01 – 2012-03-31', reason: 'inside', clipped: false },
-			{ start: '2014-09-01', end: '2014-12-31', label: '2014-09-01 – 2015-02-01', reason: 'straddles the end', clipped: true }
+			{ start: '2012-03-01', end: '2012-03-31', label: '1 Mar 2012 – 31 Mar 2012', reason: 'inside', clipped: false },
+			{ start: '2014-09-01', end: '2014-12-31', label: '1 Sep 2014 – 1 Feb 2015', reason: 'straddles the end', clipped: true }
 		]);
 	});
 
 	it('keeps a period that touches the chart by one day, and none without a span', () => {
 		const edge = runExclusions({ calibrationExclusions: [{ start: '2010-06-01', end: '2011-01-01', reason: 'one day in' }] });
-		expect(clipExclusions(edge, span)).toEqual([{ start: '2011-01-01', end: '2011-01-01', label: '2010-06-01 – 2011-01-01', reason: 'one day in', clipped: true }]);
+		expect(clipExclusions(edge, span)).toEqual([{ start: '2011-01-01', end: '2011-01-01', label: '1 Jun 2010 – 1 Jan 2011', reason: 'one day in', clipped: true }]);
 		expect(clipExclusions(list, null)).toEqual([]);
 	});
 
 	it('writes each key line with its reason, and marks a clipped one', () => {
 		const [a, b] = clipExclusions(list, span);
 		expect(exclusionKeyText(a!)).toBe('WY 2010/11: straddles the start (partly outside the run)');
-		expect(exclusionKeyText(b!)).toBe('2012-03-01 – 2012-03-31: inside');
+		expect(exclusionKeyText(b!)).toBe('1 Mar 2012 – 31 Mar 2012: inside');
 	});
 });

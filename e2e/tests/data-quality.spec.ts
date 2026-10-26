@@ -25,7 +25,7 @@ test('gauge-vs-logger thresholds are a project setting the Time series tab appli
 	const checks = page.getByTestId('series-checks');
 	await expect(checks.getByRole('listitem')).toHaveCount(1);
 	await expect(checks.getByRole('listitem')).toContainText('Negative values');
-	await expect(checks.getByRole('listitem')).toContainText('2020-10-06: -0.4 m³/s');
+	await expect(checks.getByRole('listitem')).toContainText('6 Oct 2020: -0.4 m³/s');
 
 	// Tighten the lowest ratio to 90 % in Settings.
 	await page.goto(`/projects/${project.id}?tab=settings`);
@@ -83,7 +83,7 @@ test('the Time series tab flags zero-rain runs and water years far below CHIRPS'
 	const items = page.getByTestId('series-checks').getByRole('listitem');
 	await expect(items).toHaveCount(2);
 	await expect(items.nth(0)).toContainText('Zero rain run');
-	await expect(items.nth(0)).toContainText('2012-06-01 to 2012-08-15 (76 days, 76 in the wet season');
+	await expect(items.nth(0)).toContainText('1 Jun 2012 to 15 Aug 2012 (76 days, 76 in the wet season');
 	await expect(items.nth(0)).toContainText('blocks the fallback to CHIRPS');
 	await expect(items.nth(1)).toContainText('Low vs CHIRPS');
 	await expect(items.nth(1)).toContainText('usual catchment / CHIRPS rain ratio (200 %)');
@@ -112,7 +112,7 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	await expect(chart).toHaveAttribute('data-shaded', '26');
 
 	// Keep the run dry: a period needs a reason before Save is allowed.
-	await tab('Settings & calibration').click();
+	await tab('Model settings').click();
 	const mode = page.getByLabel('Flagged zero runs');
 	await expect(mode).toHaveValue('missing');
 	await openFold(page, 'rain-defaults');
@@ -136,7 +136,7 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	await expect(chart).not.toHaveAttribute('data-shaded');
 
 	// "Run as recorded" hides the keep-dry list and survives a reload.
-	await tab('Settings & calibration').click();
+	await tab('Model settings').click();
 	await expect(page.getByRole('group', { name: /^Keep dry/ }).getByLabel('Reason')).toHaveValue('Farm records show no rain');
 	await mode.selectOption('asRecorded');
 	await expect(page.getByRole('group', { name: /^Keep dry/ })).toHaveCount(0);

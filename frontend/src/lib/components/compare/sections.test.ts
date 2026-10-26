@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { navText } from '#lib/components/common/sectionNav.js';
 import { compareNavGroups, COMPARE_HEADINGS } from './sections';
 
 const all = { overrides: true, reserve: true, plausibility: true, assurance: true };
@@ -26,7 +25,7 @@ describe('compareNavGroups', () => {
 		]);
 	});
 
-	it('names each link by its panel heading, with a shorter bar name only where the heading is long', () => {
+	it('names each link by its panel heading, word for word on the bar too (issue #586 R4-F)', () => {
 		const groups = compareNavGroups({ summary: { yearsHeading: 'Days below the pragmatic EWR, each year' }, full: all });
 		const flat = groups.flatMap((g) => g.sections);
 		expect(flat.map((s) => s.label)).toEqual([
@@ -42,20 +41,6 @@ describe('compareNavGroups', () => {
 			COMPARE_HEADINGS.units,
 			COMPARE_HEADINGS.assurance,
 			COMPARE_HEADINGS.series
-		]);
-		expect(flat.map((s) => navText(s, 'bar'))).toEqual([
-			'What the change does',
-			'Days below, by year',
-			'Scenario overrides',
-			'Inputs that differ',
-			'Headline results',
-			'Uncertainty',
-			'Reserve by month',
-			'EWR vs observed',
-			'Plausibility',
-			'Hydrological units',
-			'Assurance of supply',
-			'Daily series'
 		]);
 	});
 

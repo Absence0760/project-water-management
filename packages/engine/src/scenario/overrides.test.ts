@@ -1221,9 +1221,9 @@ describe('demand.scale with dates (engine ≥ 1.82.0, issue #514: a dry-year str
 		]);
 		expect(validateScenarioOps([{ op: 'demand.scale', factor: 1.3, from: '2021-02-30' }]).errors).toEqual(['ops[0].from: must be an ISO date (YYYY-MM-DD)']);
 		expect(validateScenarioOps([{ op: 'demand.scale', factor: 1.3, to: '1/10/2021' }]).errors).toEqual(['ops[0].to: must be an ISO date (YYYY-MM-DD)']);
-		expect(validateScenarioOps([{ op: 'demand.scale', factor: 1.3, from: '2022-01-01', to: '2021-12-31' }]).errors).toEqual(['ops[0]: from 2022-01-01 is after to 2021-12-31']);
+		expect(validateScenarioOps([{ op: 'demand.scale', factor: 1.3, from: '2022-01-01', to: '2021-12-31' }]).errors).toEqual(['ops[0]: from 1 Jan 2022 is after to 31 Dec 2021']);
 		// Unchecked input (a stored op) meets the same rules when applied.
-		expect(one({ op: 'demand.scale', factor: 1.3, from: '2022-01-01', to: '2021-12-31' }).problems).toEqual(['op 1 (demand.scale): from 2022-01-01 is after to 2021-12-31']);
+		expect(one({ op: 'demand.scale', factor: 1.3, from: '2022-01-01', to: '2021-12-31' }).problems).toEqual(['op 1 (demand.scale): from 1 Jan 2022 is after to 31 Dec 2021']);
 		expect(one({ op: 'demand.scale', factor: 1.3, from: 'soon' }).problems).toEqual(['op 1 (demand.scale): from must be an ISO date (YYYY-MM-DD)']);
 		const r = one({ op: 'demand.scale', factor: 1.3, nodeIds: ['A'], from: '2021-10-01', to: '2022-09-30' });
 		const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });
@@ -1697,7 +1697,7 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'G' }) }).problems).toEqual(['op 1 (allocation.set): a registered volume is held for a unit or other water user; "Outlet gauge" is a gauge']);
 		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'Z' }) }).problems).toEqual(['op 1 (allocation.set): hydrological unit Z not found']);
 		expect(one({ op: 'allocation.set', allocation: alloc({ volumeM3PerYear: -1 }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: volumeM3PerYear must be a number of m³ from 0 to below 10¹²"]);
-		expect(one({ op: 'allocation.set', allocation: alloc({ validFrom: '2022-01-01', validTo: '2021-01-01' }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: validTo is before valid from (2022-01-01)"]);
+		expect(one({ op: 'allocation.set', allocation: alloc({ validFrom: '2022-01-01', validTo: '2021-01-01' }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: validTo is before valid from (1 Jan 2022)"]);
 		expect(one({ op: 'allocation.remove', allocationId: 'al9' }).problems).toEqual(['op 1 (allocation.remove): registered volume al9 not found']);
 	});
 
@@ -2041,7 +2041,7 @@ describe('validateScenarioOps', () => {
 			'ops[8].allocation.waterSource: must be one of surface, groundwater',
 			'ops[8].allocation.volumeM3PerYear: must be a number of m³ from 0 to below 10¹²',
 			'ops[9].allocation.months: names a month more than once',
-			'ops[9].allocation.validTo: is before valid from (2021-01-01)',
+			'ops[9].allocation.validTo: is before valid from (1 Jan 2021)',
 			'ops[10].allocationId: missing'
 		]);
 	});
@@ -2160,7 +2160,7 @@ describe('validateScenarioOps', () => {
 			'ops[2].value: must be an ISO date (YYYY-MM-DD)',
 			'ops[3].kind: must be one of rain_catchment_mm, rain_chirps_mm, rain_forecast_mm, rain_catchment_alt_mm, rain_reanalysis_mm, evap_apan_mm, or a unit\'s own rain record (rain_catchment_mm@<unit id>, rain_chirps_mm@<unit id>)',
 			'ops[4].factor: must be at most 10',
-			'ops[4]: from 2022-01-01 is after to 2021-01-01',
+			'ops[4]: from 1 Jan 2022 is after to 1 Jan 2021',
 			'ops[5].crop.name: must be a name of 1–100 characters',
 			'ops[5].crop.cropFactor: must be 12 crop factors ≥ 0',
 			expect.stringMatching(/^ops\[6\]\.op: must be one of node\.set/),

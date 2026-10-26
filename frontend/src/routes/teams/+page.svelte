@@ -17,7 +17,7 @@
 	import StatusBar from '#lib/components/portfolio/StatusBar.svelte';
 	import StatusPill from '#lib/components/portfolio/StatusPill.svelte';
 	import { DEFAULT_SORT, ewrWindowLabel, portfolioTotals, sortPortfolio } from '#lib/components/portfolio/portfolio.js';
-	import { fmtDate, fmtDay } from '#lib/format/number.js';
+	import { fmtDate } from '#lib/format/number.js';
 
 	let teams = $state<Team[]>([]);
 	/** Projects listed on a card (more when it's your only team: its card is the page); the rest are one click away in the project list. */
@@ -108,7 +108,7 @@
 				{:else if pf === null}
 					<p class="muted small">The projects' status couldn't be loaded. Open the team to see them.</p>
 				{/if}
-				<p class="since muted small">Since {fmtDay(fmtDate(t.createdAt))}</p>
+				<p class="since muted small">Since {fmtDate(t.createdAt)}</p>
 			</div>
 			{#if rows.length}
 				<div class="projects">

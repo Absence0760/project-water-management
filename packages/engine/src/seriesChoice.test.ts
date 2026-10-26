@@ -30,7 +30,7 @@ describe('chirpsChoiceWarning', () => {
 			DAYS
 		);
 		expect(w).toBe(
-			'the run read the CHIRPS series “CHIRPS boundary” (2020-11-01 to 2020-12-31), which spans 61 of its 366 days, but “Rainfall CHIRPS satelite (mm)” (2009-01-01 to 2025-06-30) spans 366: ' +
+			'the run read the CHIRPS series “CHIRPS boundary” (1 Nov 2020 to 31 Dec 2020), which spans 61 of its 366 days, but “Rainfall CHIRPS satelite (mm)” (1 Jan 2009 to 30 Jun 2025) spans 366: ' +
 				'a run reads the first CHIRPS series by name and uses only that one wherever it reads CHIRPS (the fill of catchment rain’s blank days included). Rename or remove one of them so the run reads the record you mean'
 		);
 	});
@@ -45,7 +45,7 @@ describe('chirpsChoiceWarning', () => {
 			START,
 			DAYS
 		);
-		expect(w).toContain('“A” (2020-10-27 to 2020-12-31), which spans 66 of its 366 days, but “B” (2019-01-01 to 2020-04-09) spans 100:');
+		expect(w).toContain('“A” (27 Oct 2020 to 31 Dec 2020), which spans 66 of its 366 days, but “B” (1 Jan 2019 to 9 Apr 2020) spans 100:');
 	});
 
 	it('names the widest other, and an empty series read as holding no values', () => {
@@ -66,7 +66,7 @@ describe('chirpsChoiceWarning', () => {
 			START,
 			DAYS
 		);
-		expect(w).toContain('“A” (no values), which spans 0 of its 366 days, but “C” (2020-01-01 to 2020-06-30) spans 182:');
+		expect(w).toContain('“A” (no values), which spans 0 of its 366 days, but “C” (1 Jan 2020 to 30 Jun 2020) spans 182:');
 	});
 
 	it('reads only real days and readings: an impossible date or a malformed entry is no span, a negative or NaN end is blank, never a throw', () => {
@@ -85,7 +85,7 @@ describe('chirpsChoiceWarning', () => {
 			DAYS
 		);
 		// A spans its readings, 2020-01-03 to 2020-01-04 (2 days); B spans 5; "Bad" counts as no values.
-		expect(w).toContain('“A” (2020-01-03 to 2020-01-04), which spans 2 of its 366 days, but “B” (2020-01-01 to 2020-01-05) spans 5:');
+		expect(w).toContain('“A” (3 Jan 2020 to 4 Jan 2020), which spans 2 of its 366 days, but “B” (1 Jan 2020 to 5 Jan 2020) spans 5:');
 		expect(chirpsChoiceWarning({ series, seriesChoice: { rain_chirps_mm: { name: 'A', others: [{ name: 'Bad', firstDay: '2020-02-30', lastDay: '2020-12-31' }] } } }, START, DAYS)).toBeNull();
 		expect(chirpsChoiceWarning({ series, seriesChoice: { rain_chirps_mm: { name: 'A', others: 'x' as never } } }, START, DAYS)).toBeNull();
 	});
@@ -143,7 +143,7 @@ describe('chirpsChoiceWarnings at each land unit', () => {
 		// The outlet's record spans the run: no warning. Upper's other spans less than its own: none. Lower's spans more.
 		// A unit the model doesn't have (a scenario removed it) is about nothing the run read: none.
 		expect(chirpsChoiceWarnings(input, START, DAYS)).toEqual([
-			'for the unit “Lower”, the run read the CHIRPS series “CHIRPS v3 (rnl) Lower” (2020-12-02 to 2020-12-31), which spans 30 of its 366 days, but “Unit record” (2020-01-01 to 2020-12-31) spans 366: ' +
+			'for the unit “Lower”, the run read the CHIRPS series “CHIRPS v3 (rnl) Lower” (2 Dec 2020 to 31 Dec 2020), which spans 30 of its 366 days, but “Unit record” (1 Jan 2020 to 31 Dec 2020) spans 366: ' +
 				'a run reads a unit’s first CHIRPS series by name and uses only that one for the unit’s own rain. Rename or remove one of them so the run reads the record you mean'
 		]);
 		// Without per-unit rain the run reads no unit’s own CHIRPS: no unit warning (the outlet's still would be).
@@ -175,7 +175,7 @@ describe('a run with seriesChoice', () => {
 		const told = runModel({ ...base, seriesChoice: choice });
 		expect(warned(plain)).toEqual([]);
 		expect(warned(told)).toHaveLength(1);
-		expect(warned(told)[0]).toContain('“CHIRPS boundary” (2020-11-01 to 2020-12-31), which spans 61 of its 366 days, but “Rainfall CHIRPS”');
+		expect(warned(told)[0]).toContain('“CHIRPS boundary” (1 Nov 2020 to 31 Dec 2020), which spans 61 of its 366 days, but “Rainfall CHIRPS”');
 		const strip = (o: ReturnType<typeof runModel>) => ({ ...o, summary: { ...o.summary, warnings: o.summary.warnings.filter((w) => !w.startsWith('the run read the CHIRPS series')) } });
 		expect(sameOutput(strip(plain), strip(told))).toBe(true);
 	});

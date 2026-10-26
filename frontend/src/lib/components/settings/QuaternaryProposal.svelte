@@ -113,7 +113,7 @@
 		{#if result}
 			<div role="status" aria-live="polite">
 				{#if !result.datasets.length}
-					<p class="alert alert-info slim" data-testid="quaternary-no-dataset">No quaternary dataset is loaded, so there is nothing to propose. The operator loads one with <code>pnpm import:quaternaries</code> (docs/maps.md).</p>
+					<p class="alert alert-info slim" data-testid="quaternary-no-dataset">There’s no quaternary dataset on this server yet, so nothing can be proposed. Enter the WR2012 values from the study by hand.</p>
 				{:else if !result.quaternary}
 					<p class="alert alert-info slim" data-testid="quaternary-none">
 						No quaternary in the loaded data ({result.datasets.map((d) => d.dataset).join(', ')}) contains {fmtNum(result.point[1], 4)}, {fmtNum(result.point[0], 4)}.

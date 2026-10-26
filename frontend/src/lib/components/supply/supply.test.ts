@@ -1,7 +1,6 @@
 import type { CurtailmentFarm, FarmSummary, RunSummary, SupplyReliability } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunMeta } from '#lib/api/types.js';
-import { navText } from '#lib/components/common/sectionNav.js';
 import { supplyBars } from '#lib/components/overview/supplyBars.js';
 import { SUPPLY_TARGET } from '#lib/components/runs/results.js';
 import { fmtPct } from '#lib/format/number.js';
@@ -37,23 +36,23 @@ describe('links', () => {
 	it('the On this page menu links every panel, in page order, and nothing else', () => {
 		expect(supplyNav(true, true).flatMap((g) => g.sections.map((s) => s.id))).toEqual([...SUPPLY_ANCHORS]);
 		expect(supplyNav(true).map((g) => g.label)).toEqual([null, 'Tables for this run']);
-		expect(supplyNav(true)[0]!.sections).toEqual([{ id: 'res-farm', label: 'Hydrological unit detail', bar: 'Unit detail' }]);
+		expect(supplyNav(true)[0]!.sections).toEqual([{ id: 'res-farm', label: 'Hydrological unit detail' }]);
 	});
 
 	it('lists Other uses last, and only for a run that has any (issue #137)', () => {
-		expect(supplyNav(true).at(-1)!.sections.at(-1)).toEqual({ id: 'res-other-uses', label: 'Other uses of water', bar: 'Other uses' });
+		expect(supplyNav(true).at(-1)!.sections.at(-1)).toEqual({ id: 'res-other-uses', label: 'Other uses of water' });
 		expect(supplyNav(false).flatMap((g) => g.sections.map((s) => s.id))).toEqual(SUPPLY_ANCHORS.filter((a) => a !== 'res-other-uses' && a !== 'res-restrictions'));
 	});
 
-	it('names each link as its panel’s heading, the long ones shorter on the bar (issue #462)', () => {
-		const names = supplyNav(true, true).flatMap((g) => g.sections.map((s) => [s.label, navText(s, 'bar')]));
+	it('names each link as its panel’s heading, word for word on the bar too (issue #586 R4-F)', () => {
+		const names = supplyNav(true, true).flatMap((g) => g.sections.map((s) => s.label));
 		expect(names).toEqual([
-			['Hydrological unit detail', 'Unit detail'],
-			['Hydrological unit results', 'Hydrological unit results'],
-			['Curtailment targets', 'Curtailment'],
-			['Assurance of supply', 'Assurance of supply'],
-			['Drought restrictions', 'Drought restrictions'],
-			['Other uses of water', 'Other uses']
+			'Hydrological unit detail',
+			'Hydrological unit results',
+			'Curtailment targets',
+			'Assurance of supply',
+			'Drought restrictions',
+			'Other uses of water'
 		]);
 	});
 

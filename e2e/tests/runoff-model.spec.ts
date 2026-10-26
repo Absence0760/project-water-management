@@ -1,22 +1,19 @@
 // The runoff model (issue #16): GR4J is the only one since engine 1.0.0
-// removed the legacy b023 model, so Settings has no model to pick and a new run
+// removed the legacy b023 model, so Calibration's Flow calibration has no model to pick and a new run
 // is GR4J. A run of the legacy model stored before then still opens, read-only
 // and badged "Workbook comparison": it can't be nominated, published or signed
 // off, and compares against a GR4J run. The API can't make such a run any more,
 // so those tests plant one in the database (support/db.ts plantLegacyRun).
-import type { Page } from '@playwright/test';
 import { createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { plantLegacyRun } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { saveSettings } from '../support/settings.ts';
 import { whatChanged } from '../support/compare.ts';
 
-const sections = (page: Page) => page.getByRole('navigation', { name: 'Result sections' });
-
 test('GR4J is the only runoff model: no picker, its parameters save, and a run reports the runoff balance', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'GR4J settings');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const flow = page.getByRole('region', { name: 'Flow calibration', exact: true });
 	await expect(flow.getByTestId('runoff-model')).toHaveText('GR4J (Perrin et al. 2003)');
@@ -52,9 +49,12 @@ test('GR4J is the only runoff model: no picker, its parameters save, and a run r
 	await expect(page.getByRole('heading', { level: 2, name: 'GR4J' })).toBeVisible();
 	// A new run is GR4J: no legacy badge anywhere.
 	await expect(page.getByText('Workbook comparison', { exact: true })).toHaveCount(0);
-	await expect(sections(page).getByRole('link', { name: 'Runoff model' })).toBeVisible();
+	// The runoff balance is in Model quality, on Calibration (issue #586 Round 3): the newest run by default.
+	await page.goto(`/projects/${project.id}?tab=calibration#res-runoff`);
+	await expect(page.getByTestId('calibration-run')).toContainText('GR4J');
 	const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
-	await expect(runoff.getByText('X1 420 mm · X3 90 mm · X4 1.7 days')).toBeVisible();
+	// Each parameter by its name, as Where the parameters came from writes it (#586 D10).
+	await expect(runoff.getByText('Production store capacity X1 420 mm · Routing store capacity X3 90 mm · Unit hydrograph time base X4 1.7 days')).toBeVisible();
 	const balance = runoff.getByRole('table', { name: 'Where the rain went over the run' });
 	for (const row of ['Rain', 'Actual evaporation', 'Natural flow', 'Change in storage']) {
 		await expect(balance.getByRole('rowheader', { name: row, exact: true })).toBeVisible();
@@ -75,12 +75,11 @@ test('an old legacy run opens read-only with a clear badge, and can’t be nomin
 	// Badged in the list and the header.
 	const row = page.getByRole('region', { name: 'Runs', exact: true }).getByRole('listitem').filter({ has: page.getByRole('button', { name: /^Old legacy/ }) });
 	await expect(row.getByText('Workbook comparison', { exact: true })).toBeVisible();
-	await expect(row.getByText('Workbook comparison', { exact: true })).toHaveAttribute('title', /removed in engine 1\.0\.0.*can’t be re-run/);
+	// What the tag means, in words under the list (#586 D18), not only a hover title.
+	const key = page.getByRole('region', { name: 'Runs', exact: true }).locator('details.tag-key');
+	await key.getByText('What the tags mean').click();
+	await expect(key.getByRole('definition').filter({ hasText: /removed in engine 1\.0\.0.*can’t be re-run/ })).toBeVisible();
 	await expect(page.locator('.badge').filter({ hasText: 'Workbook comparison' })).toBeVisible();
-	// No stores to show; the calibration still reads.
-	await expect(sections(page).getByRole('link', { name: 'Calibration' })).toBeVisible();
-	await expect(sections(page).getByRole('link', { name: 'Runoff model' })).toHaveCount(0);
-
 	// It can't be nominated as evidence, nor published.
 	const evidence = page.getByRole('region', { name: 'Evidence', exact: true });
 	await expect(evidence.getByText('A run of the legacy runoff model (removed in engine 1.0.0) is workbook comparison only, so it can’t be nominated as evidence.')).toBeVisible();
@@ -88,6 +87,12 @@ test('an old legacy run opens read-only with a clear badge, and can’t be nomin
 	const publication = page.getByRole('region', { name: /^Publication/ });
 	await expect(publication).toContainText('so it can’t be published. Engine 1.0.0 removed that model: run the project again (a new run uses GR4J) and publish that run.');
 	await expect(publication.getByRole('button', { name: 'Publish this run' })).toHaveCount(0);
+
+	// On Calibration: no stores to show; the calibration still reads.
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${legacy}#res-calibration`);
+	await expect(page.getByRole('region', { name: 'Calibration against observed flow' })).toBeVisible();
+	await expect(page.locator('#res-ewr-agreement')).toBeAttached();
+	await expect(page.locator('#res-runoff')).toHaveCount(0);
 
 	// Its report says what it is and offers no sign-off.
 	await page.goto(`/projects/${project.id}/report?run=${legacy}`);
@@ -124,7 +129,7 @@ test('run comparison shows an old legacy run against a GR4J run', async ({ page,
 	await expect(page.getByRole('rowheader', { name: 'Runoff coefficient (flow ÷ rain)' })).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Kling–Gupta (KGE)' })).toBeVisible();
 	// Neither run's parameters were fitted, so neither side is called in-sample (issue #45).
-	await expect(page.getByRole('table', { name: 'Calibration statistics for both runs, calibration period (parameters not fitted)' })).toBeVisible();
+	await expect(page.getByRole('table', { name: 'Calibration statistics for both runs, calibration period (parameters not from an automatic fit)' })).toBeVisible();
 
 	// The EWR test against the observed record, legacy and GR4J side by side (issue #4).
 	const ewr = page.getByRole('region', { name: 'EWR test against observed flow' });
@@ -137,13 +142,17 @@ test('run comparison shows an old legacy run against a GR4J run', async ({ page,
 	}
 });
 
-test('GR4J without A-pan evaporation: Settings warns, and a run is refused with the reason', async ({ page, owner }) => {
+test('GR4J without A-pan evaporation: Flow calibration warns, and a run is refused with the reason', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'No A-pan');
 	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(0) });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.getByTestId('runoff-model')).toHaveText('GR4J (Perrin et al. 2003)');
-	await expect(page.getByRole('status').filter({ hasText: /GR4J needs A-pan evaporation/ })).toBeVisible();
+	const warning = page.getByRole('status').filter({ hasText: /GR4J needs A-pan evaporation/ });
+	await expect(warning).toBeVisible();
+	// The A-pan row is Demand's, on Model settings (issue #586 round 3): the warning links there.
+	await expect(warning).toContainText('GR4J needs A-pan evaporation (Demand, on Model settings)');
+	await expect(warning.getByRole('link', { name: 'Demand', exact: true })).toHaveAttribute('href', '?tab=settings#set-demand');
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByLabel(/^Run label/).fill('No evaporation');
@@ -152,7 +161,7 @@ test('GR4J without A-pan evaporation: Settings warns, and a run is refused with 
 
 	// Positive control: with A-pan the warning goes and the run goes through.
 	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(150) });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.getByTestId('runoff-model')).toHaveText('GR4J (Perrin et al. 2003)');
 	await expect(page.getByRole('status').filter({ hasText: /GR4J needs A-pan evaporation/ })).toHaveCount(0);
 	await page.goto(`/projects/${project.id}?tab=runs`);

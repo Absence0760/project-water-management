@@ -45,6 +45,6 @@ describe('apanDailyText (issue #45)', () => {
 	it('says whether the fit ran on a daily A-pan series, and which', () => {
 		expect(apanDailyText(undefined)).toBe('not recorded (fit made before this was tracked)');
 		expect(apanDailyText(null)).toBe('none (monthly means only)');
-		expect(apanDailyText({ startDate: '2020-10-01', length: 1461, valuesSha256: '0123456789abcdef'.repeat(4) })).toBe('from 2020-10-01, 1\u202f461 days (SHA-256 0123456789ab)');
+		expect(apanDailyText({ startDate: '2020-10-01', length: 1461, valuesSha256: '0123456789abcdef'.repeat(4) })).toBe('from 1 Oct 2020, 1\u202f461 days (SHA-256 0123456789ab)');
 	});
 });

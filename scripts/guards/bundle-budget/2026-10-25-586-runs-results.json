@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Issue #586 Round 0, Runs & results fixes: the runs list's tag meanings and their What the tags mean key (runs/runTags.ts), the outcome links' descriptions, distinct row labels (runList.ts rowLabels on the schematic's distinctShortNames), the phone fold and the list-failure state. Measured 2068 KB against the 2067 KB ceiling locally on 98d11e357 + this branch (over by 1 KB); 2 KB leaves about 1 KB of headroom."
+}

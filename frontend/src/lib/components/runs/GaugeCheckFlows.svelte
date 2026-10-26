@@ -15,6 +15,7 @@
 	import { api } from '#lib/api/index.js';
 	import LineChart from '#lib/components/charts/LineChart.svelte';
 	import { foldList } from '#lib/components/common/fold.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { cachedSeries } from './cache';
 	import { checkFdc, checkHydrograph, gaugeStatsLine, type CheckGauge } from './checkGauges';
@@ -50,7 +51,7 @@
 
 	const get = (key: string, nodeId: string): Promise<DailySeries> => cachedSeries(runId, key, nodeId, () => api.runs.series(projectId, runId, key, nodeId));
 
-	// $state.raw: long daily arrays must not become deep proxies (RunCharts.svelte). Replace, never mutate.
+	// $state.raw: long daily arrays must not become deep proxies (ModelQuality.svelte). Replace, never mutate.
 	type Flows = { observed: DailySeries; simulated: DailySeries } | { error: string };
 	let flows = $state.raw<Record<string, Flows>>({});
 	let loadedRun = '';
@@ -94,7 +95,7 @@
 	<p class="small muted">
 		Each gauge with its own flow record that the run doesn't score, against the simulated flow there, on the record's days. Each one's NSE, KGE and PBIAS are a check
 		out of sample (the calibration doesn't score its record, and its excluded periods are left out), never the calibration score. To score a gauge instead, make it the
-		calibration site (Settings → Calibration record → Scored at). The calibration check under Calibration covers the outlet and the calibration site only.
+		calibration site (Calibration → Calibration record → Scored at). The calibration check under Calibration covers the outlet and the calibration site only.
 	</p>
 	{#if before.length}
 		<p class="small muted" data-testid="check-gauges-before">
@@ -107,16 +108,26 @@
 		<div class="gauge" data-testid="check-gauge" data-node={g.nodeId}>
 			<h4>{g.name}</h4>
 			{#if !f}
-				<div class="chart-ph" style:height="390px" role="status">Loading flows at {g.name}…</div>
+				<div class="chart-ph" style:height="390px" role="status" data-loading>Loading flows at {g.name}…</div>
 			{:else if 'error' in f}
 				<div class="alert alert-error" role="alert">
 					Couldn’t load the flows at {g.name}: {f.error}
-					<button type="button" class="btn btn-sm" onclick={() => retry(g.nodeId)}>Try again</button>
+					<!-- The loading line takes its place: the focus follows (followRetry), within this gauge. -->
+					<button
+						type="button"
+						class="btn btn-sm"
+						data-retry
+						onclick={(e) => {
+							followRetry(e.currentTarget);
+							retry(g.nodeId);
+						}}>Try again</button
+					>
 				</div>
 			{:else}
 				{@const fdc = checkFdc(f.observed, f.simulated, g.flowKind, conv, forecastFrom)}
 				<LineChart
 					title="Flow at {g.name} (checks only): simulated and observed"
+					toolsLabel="Flow at {g.name} controls"
 					unit={flowUnit}
 					series={checkHydrograph(f.observed, f.simulated, g.flowKind, conv)}
 					logToggle
@@ -128,6 +139,7 @@
 				/>
 				<LineChart
 					title="Flow-duration curve at {g.name} (checks only)"
+					toolsLabel="Flow-duration curve at {g.name} controls"
 					unit={flowUnit}
 					height={220}
 					series={fdc.series}

@@ -1,16 +1,22 @@
 <!--
-	Settings → Scheduled reports (WP-2.15 Phase B; docs/ui.md § Scheduled
+	Project → Scheduled reports (WP-2.15 Phase B; docs/ui.md § Scheduled
 	reports): email the latest run's report PDF to chosen project members
 	every week or month. Editors and owners add, pause and remove schedules;
 	viewers read. "Add a schedule" sits in the panel's head and opens the form
 	as a card above the list, with its own action row (issue #521); the words
-	under the heading are the (i)'s. Its own chunk. Helpers in ./serverPdf.ts.
+	under the heading are the (i)'s. Its own chunk, on the Project page since
+	issue #586 (it was on Settings), whose wrapper carries its anchor,
+	#project-report-schedules. It saves as it changes, unlike the page's
+	details (the save bar), and says so to those who can change it. Helpers in ./serverPdf.ts.
 -->
 <script lang="ts">
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { onMount, tick } from 'svelte';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { api, type Member } from '#lib/api/index.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { session } from '#lib/auth/session.svelte.js';
 	import {
 		describeSchedule,
@@ -63,7 +69,10 @@
 		formError = null;
 		adding = true;
 		await tick();
-		document.getElementById(`${uid}-freq`)?.focus();
+		document.getElementById(`${uid}-freq`)?.focus({ preventScroll: true });
+		// The whole card, its action row included, in the window: focusing the first field scrolled only as far as
+		// that field, so at the foot of the page Add schedule could sit under the window's edge (issue #586).
+		document.getElementById(`${uid}-add-h`)?.closest('form')?.scrollIntoView({ block: 'nearest' });
 	}
 
 	async function closeForm() {
@@ -110,6 +119,8 @@
 			return;
 		busy = s.id;
 		message = error = null;
+		// Its place in the list: its row, and the Remove that had the focus, go with it (issue #586).
+		const at = schedules?.findIndex((x) => x.id === s.id) ?? -1;
 		try {
 			if (what === 'toggle') {
 				await reports.updateSchedule(s.id, { enabled: !s.enabled });
@@ -119,6 +130,8 @@
 				message = 'Schedule removed.';
 			}
 			await reload();
+			// The Remove of the schedule now in its place takes the focus, else Add a schedule, else the heading.
+			if (what === 'remove') await focusAfterRemove(at, `[aria-labelledby="${uid}-h"] .schedule button.btn-danger`, addButton ?? `${uid}-h`);
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -135,14 +148,25 @@
 			<button type="button" class="btn btn-sm btn-primary" bind:this={addButton} onclick={startAdding}>Add a schedule</button>
 		{/if}
 	</div>
+	<!-- Each add, pause and remove saves at once, unlike the page's fields that wait for the save bar (issue #586, E13). -->
+	{#if canEdit}<p class="muted small saves-note" data-testid="schedules-saves">Schedules save as you change them: adding, pausing or removing one needs no Save changes.</p>{/if}
 
 	{#if loadError}
 		<div class="alert alert-error" role="alert">
 			Couldn’t load the report schedules: {loadError}
-			<button type="button" class="btn btn-sm" onclick={reload}>Try again</button>
+			<!-- The loading line takes its place: the focus follows (followRetry). -->
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					followRetry(e.currentTarget);
+					reload();
+				}}>Try again</button
+			>
 		</div>
 	{:else if !schedules}
-		<p class="muted" role="status">Loading…</p>
+		<p class="muted" role="status" data-loading>Loading…</p>
 	{:else}
 		<!-- Always in the page, so screen readers announce each new message. -->
 		<div role="status">{#if message}<p class="muted msg">{message}</p>{/if}</div>
@@ -203,9 +227,8 @@
 			</form>
 		{/if}
 
-		{#if schedules.length === 0}
-			<p class="muted">No scheduled reports{canEdit ? '.' : '. An editor can add one.'}</p>
-		{:else}
+		<!-- The app's one empty state (LoadState's dashed box), as API keys and Data feeds show theirs (issue #586, C17). -->
+		<LoadState loading={false} empty={schedules.length === 0} emptyText="No scheduled reports{canEdit ? '.' : '. An editor can add one.'}">
 			<ul class="schedules" aria-label="Scheduled reports">
 				{#each schedules as s (s.id)}
 					<li class="schedule" data-enabled={s.enabled}>
@@ -225,11 +248,14 @@
 					</li>
 				{/each}
 			</ul>
-		{/if}
+		</LoadState>
 	{/if}
 </section>
 
 <style>
+	.saves-note {
+		margin: 0 0 0.5rem;
+	}
 	.hint {
 		font-size: var(--font-sm);
 		max-width: 75ch;

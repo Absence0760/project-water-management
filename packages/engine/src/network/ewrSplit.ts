@@ -16,7 +16,7 @@
 // cumulative requirement Z, every EWR site's shortfall, the attribution and
 // charge (§2.7b), the curtailment, the hands-off EWR flows and the drought
 // restriction's EWR trigger follow it. Pure: no I/O.
-import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
+import { dayText, fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { cmpStr } from '../order';
 
 export const EWR_SPLIT_METHODS = ['flowShare', 'naturalMar'] as const;
@@ -148,10 +148,10 @@ export function fillPlanEwrShares(nodes: { ewrShare?: number }[], split: EwrSpli
 export function ewrSplitNote(info: EwrSplitInfo): string | null {
 	if (info.method === 'flowShare') return null;
 	if (info.why === 'catchmentRain')
-		return 'the EWR split by each unit’s natural MAR is the flow share here: GR4J runs once on the catchment rain, so a unit’s natural runoff is its flow share of it (docs/model.md §2.5b)';
+		return 'the EWR split by each unit’s natural MAR is the flow share here: GR4J runs once on the catchment rain, so a unit’s natural runoff is its flow share of it';
 	if (info.why === 'noRunoff') return 'no unit made natural runoff over the run, so the EWR is split between the units by the flow share, not by their natural MAR';
 	if (info.why === 'resumed') return 'this run resumes from a snapshot of a run that split the EWR by the flow share, so it keeps the flow share rather than work natural MAR shares out on its own days';
 	const p = info.period!;
-	const over = p.waterYears > 0 ? `${p.waterYears === 1 ? 'the 1 complete water year' : `the ${p.waterYears} complete water years`} ${p.start} – ${p.end}` : `the whole run, ${p.start} – ${p.end}, which holds no complete water year`;
+	const over = p.waterYears > 0 ? `${p.waterYears === 1 ? 'the 1 complete water year' : `the ${p.waterYears} complete water years`} ${dayText(p.start)} – ${dayText(p.end)}` : `the whole run, ${dayText(p.start)} – ${dayText(p.end)}, which holds no complete water year`;
 	return `the EWR is split between the units by each unit’s natural MAR over ${over}${info.pinned ? ' (the capture run’s shares)' : ''}, not by the flow share; the period is provisional (engine-audit.md ES1)`;
 }

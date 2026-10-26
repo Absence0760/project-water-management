@@ -17,7 +17,7 @@
 	import { page } from '$app/state';
 	import { UNIT_PARAM } from '#lib/components/supply/links.js';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
-	import { fmtNum } from '#lib/format/number.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { waterYearLabel } from '#lib/components/calibration/metrics.js';
 	import { fmtVolume } from '#lib/components/ewr/heatmap.js';
 	import { classCounts, notComputedText, partWaterYears, pctText, STRESS_BIN, STRESS_ORDER, STRESS_SHORT, stressLegend } from './reliability';
@@ -84,7 +84,7 @@
 		<p class="muted" data-testid="assurance-not-computed">{notComputedText(engineVersion)}</p>
 	{:else}
 		<p class="muted">
-			Reporting window {assurance.reportStart} to {assurance.reportEnd} ({fmtNum(assurance.days)} days). A demand day counts as met when the whole
+			Reporting window {fmtDay(assurance.reportStart)} to {fmtDay(assurance.reportEnd)} ({fmtNum(assurance.days)} days). A demand day counts as met when the whole
 			demand was supplied; days without demand don't count. A water year is met when {pctText(assurance.annualThreshold)} or more of its demand
 			was supplied (a project setting, not a standard). <HelpTip key="assurance-of-supply" />
 		</p>

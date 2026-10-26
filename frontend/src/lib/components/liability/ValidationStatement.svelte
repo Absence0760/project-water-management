@@ -51,9 +51,9 @@
 			<dd>{v.methodology.version} <span class="muted small">(SHA-256 {v.methodology.sha256.slice(0, 12)}…)</span></dd>
 		</div>
 		<div>
-			<dt>Self-checks on this run</dt>
+			<dt>Arithmetic checks on this run</dt>
 			<dd>
-				{#if !v.selfChecks}Not run (made before the self-checks existed){:else if v.selfChecks.passed}All passed{:else}Failed: {v.selfChecks.failed.join('; ')}{/if}
+				{#if !v.selfChecks}Not run (made before the arithmetic checks existed){:else if v.selfChecks.passed}All passed{:else}Failed: {v.selfChecks.failed.join('; ')}{/if}
 			</dd>
 		</div>
 		<div>

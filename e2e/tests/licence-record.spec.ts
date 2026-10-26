@@ -5,7 +5,7 @@
 // the names it keeps) is kept: the decision + 3 years for a refusal. An
 // editor reads it without the form; a viewer doesn't see it. Synthetic data.
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createRun, nominateRun, seedRunnableProject } from '../support/api.ts';
+import { addMember, createProject, createRun, nominateRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
@@ -22,7 +22,7 @@ test('an owner records the licence outcome, and the panel says how long the reco
 	// A nominated run starts the five-yearly review.
 	await nominateRun(page.request, project.id, run, 'Evidence for the licence record test');
 	await page.reload();
-	await expect(panel.getByTestId('licence-record-status')).toHaveText(/^No outcome is recorded\. Next review: \d{4}-\d{2}-\d{2}\.$/);
+	await expect(panel.getByTestId('licence-record-status')).toHaveText(/^No outcome is recorded\. Next review: \d{1,2} [A-Z][a-z]{2} \d{4}\.$/);
 
 	// The owner records a refusal, in the authority's words (233): kept until three years after the decision.
 	const form = panel.getByRole('form', { name: 'Record the licence outcome' });
@@ -32,7 +32,7 @@ test('an owner records the licence outcome, and the panel says how long the reco
 	await form.getByLabel('Why').fill('Invented decision letter 1');
 	await form.getByRole('button', { name: 'Save the outcome' }).click();
 	await expect(panel.getByRole('status')).toHaveText('Saved.');
-	await expect(panel.getByTestId('licence-record-status')).toHaveText('Licence refused on 2026-03-01. The record is kept until 2029-03-01.');
+	await expect(panel.getByTestId('licence-record-status')).toHaveText('Licence refused on 1 Mar 2026. The record is kept until 1 Mar 2029.');
 	await expect(panel).toContainText('Recorded because: Invented decision letter 1');
 	await expectNoViolations(page);
 
@@ -49,11 +49,23 @@ test('an owner records the licence outcome, and the panel says how long the reco
 	const editor = await signIn('Licence record editor');
 	await addMember(page.request, project.id, editor.user.email, 'editor');
 	await editor.page.goto(`/projects/${project.id}?tab=project`);
-	await expect(editor.page.getByTestId('licence-record-status')).toHaveText('Licence refused on 2026-03-01. The record is kept until 2029-03-01.');
+	await expect(editor.page.getByTestId('licence-record-status')).toHaveText('Licence refused on 1 Mar 2026. The record is kept until 1 Mar 2029.');
 	await expect(editor.page.getByRole('form', { name: 'Record the licence outcome' })).toHaveCount(0);
 	const viewer = await signIn('Licence record viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await viewer.page.goto(`/projects/${project.id}?tab=project`);
 	await expect(viewer.page.getByTestId('project-role')).toBeVisible();
 	await expect(viewer.page.getByTestId('licence-record')).toHaveCount(0);
+});
+
+test('the licence record email’s link (`?tab=project#licence-record`) lands on the panel, focused (issue #586)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const project = await createProject(page.request, 'Licence record link');
+	await page.goto('/');
+	await page.goto(`/projects/${project.id}?tab=project#licence-record`);
+	const heading = page.locator('#licence-record');
+	await expect(heading).toContainText('Licence record');
+	await expect(heading).toBeFocused();
+	await expect(heading).toBeInViewport();
 });

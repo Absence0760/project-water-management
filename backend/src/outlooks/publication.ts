@@ -5,7 +5,7 @@
 // farmOutlookProjection), stored with the publication, which the farm page
 // reads back (farms/view.ts). One current publication per project: a new one
 // ends the last, and the WUA can withdraw it. The app never picks the level.
-import { farmOutlookProjection, type FarmOutlookProjection, type SeasonalOutlook } from '@water-management/engine';
+import { dayText, farmOutlookProjection, type FarmOutlookProjection, type SeasonalOutlook } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -77,7 +77,7 @@ export async function publishOutlook(db: Db, projectId: string, outlookId: strin
 	// An outlook on a cap or full-allocation base (only one made before #523 I can be): never to farmers.
 	if (await outlookOnCapOrFull(db, projectId, outlookId)) throw new ApiError(409, ALLOCATION_MODE_NOT_PUBLISHABLE);
 	if (o.status !== 'complete' || !o.result) throw new ApiError(409, 'the outlook is still running: publish it once it is complete');
-	if (o.seasonEnd < (await projectToday(db, projectId))) throw new ApiError(409, `the outlook's season ended on ${o.seasonEnd}: there is nothing left of it to publish`);
+	if (o.seasonEnd < (await projectToday(db, projectId))) throw new ApiError(409, `the outlook's season ended on ${dayText(o.seasonEnd)}: there is nothing left of it to publish`);
 	const { rows: farms } = await db.query<{ id: string }>(`SELECT id FROM node WHERE project_id = $1 AND kind = 'farm' ORDER BY sort_order, name, id`, [projectId]);
 	const views: { nodeId: string; view: FarmOutlookProjection }[] = [];
 	for (const f of farms) {

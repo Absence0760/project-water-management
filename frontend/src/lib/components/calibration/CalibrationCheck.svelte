@@ -21,6 +21,7 @@
 	import { observedLabels, observedSources } from '#lib/components/runs/flowSeries.js';
 	import { toDisplayUnit } from '#lib/components/runs/results.js';
 	import { fmtNum } from '#lib/format/number.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { allKeys, beforeForecastFlows, checkGauges, checkKeys, checkSeries, sumDaily, type CheckFlows, type CheckNode, type SeriesKey } from './calibrationCheck';
 
 	let {
@@ -40,12 +41,11 @@
 		nodes: readonly CheckNode[];
 		nodeNames: Map<string, string>;
 		forecastFrom?: string | null;
-		/** The page's flow unit (Runs & results' one switch, RunCharts), and the switch itself for each chart's toolbar. */
+		/** The page's flow unit (Runs & results' one switch, ModelQuality), and the switch itself for each chart's toolbar. */
 		flowUnit: 'm³/s' | 'm³/day';
 		toolbar: Snippet;
 	} = $props();
 
-	const uid = $props.id();
 	const RECENT = 3 * 365;
 	let log = $state(false);
 
@@ -111,8 +111,9 @@
 </script>
 
 {#if gauges.length}
-	<section class="check" aria-labelledby="{uid}-h" data-testid="calibration-check">
-		<h3 id="{uid}-h">Calibration check: flow against use, per gauge</h3>
+	<!-- Its heading has Calibration's index line (calibration/page.ts CAL_SUBSECTIONS, issue #586 D4): one per page. -->
+	<section class="check" aria-labelledby="res-calibration-check" data-testid="calibration-check">
+		<h4 id="res-calibration-check">Calibration check: flow against use, per gauge</h4>
 		<p class="muted small how">
 			How to read it: simulated should track observed; natural sits above simulated by roughly the use upstream{anyBedLoss
 				? ' plus the bed losses in the reaches above the gauge'
@@ -121,14 +122,25 @@
 		{#if error}
 			<div class="alert alert-error" role="alert">
 				The series for the calibration check couldn't be loaded: {error}
-				<button type="button" class="btn btn-sm" onclick={() => attempt++}>Try again</button>
+				<button
+					type="button"
+					class="btn btn-sm"
+					data-retry
+					onclick={(e) => {
+						// Its alert leaves the page: the focus follows the retry (followRetry, WCAG 2.4.3), onto the loading
+						// line, then the new Try again or this check's heading.
+						followRetry(e.currentTarget);
+						attempt++;
+					}}>Try again</button
+				>
 			</div>
 		{:else if !loaded}
-			<div class="chart-ph" role="status">Loading the calibration check ({fmtNum(done)} of {fmtNum(total)} series)…</div>
+			<div class="chart-ph" role="status" data-loading>Loading the calibration check ({fmtNum(done)} of {fmtNum(total)} series)…</div>
 		{:else}
 			{#each charts as c (c.gauge ?? 'outlet')}
 				<LineChart
 					title="Calibration check at {c.name}: observed, simulated, natural and upstream demand{c.reaches ? ', with bed losses' : ''}"
+					toolsLabel="Calibration check at {c.name} controls"
 					unit={flowUnit}
 					series={c.series}
 					logToggle
@@ -155,8 +167,10 @@
 	.check {
 		margin-top: 1rem;
 	}
-	h3 {
+	/* Under Calibration against observed flow's h3 (issue #586 round 3), at an h3's size. */
+	h4 {
 		margin: 0 0 0.25rem;
+		font-size: 0.95rem;
 	}
 	.small {
 		font-size: 0.85rem;
@@ -164,6 +178,10 @@
 	.how {
 		margin: 0 0 0.5rem;
 		max-width: 75ch;
+	}
+	/* Focused only by a retry (followRetry gives it tabindex -1), never by Tab. */
+	.chart-ph:focus {
+		outline: none;
 	}
 	.chart-ph {
 		display: flex;

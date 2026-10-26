@@ -230,7 +230,7 @@ describe("allocationMode 'cap'", () => {
 			};
 			// By node id, whatever the node order.
 			expect(warn('cap')).toEqual([
-				`allocation cap: no licence in force, so modelled demand is used, uncapped (as for a unit with no licence; check the licence dates), and that use doesn't count against the water year's volume: "Farm A" surface water 2001-10-01 to 2003-09-30; "Farm B" groundwater 2002-01-01 to 2004-09-30`
+				`allocation cap: no licence in force, so modelled demand is used, uncapped (as for a unit with no licence; check the licence dates), and that use doesn't count against the water year's volume: "Farm A" surface water 1 Oct 2001 to 30 Sep 2003; "Farm B" groundwater 1 Jan 2002 to 30 Sep 2004`
 			]);
 			// Full allocation reads both sources together: Farm B's surface licence is in force throughout.
 			expect(warn('fullAllocation')).toEqual([

@@ -18,12 +18,25 @@ export async function seedManyRuns(request: APIRequestContext, name: string, cou
 	return { id: project.id, runIds };
 }
 
-/** Opens Runs & results (with `query`, e.g. `&run=…`) and waits for the shown run's hydrograph. */
+/** Opens Runs & results (with `query`, e.g. `&run=…`) and waits for the shown run's results (its water balance by water year). */
 export async function openRuns(page: Page, projectId: string, query = '') {
 	await page.goto(`/projects/${projectId}?tab=runs${query}`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Runs & results' })).toBeVisible();
+	await expect(page.locator('#res-water-balance')).toBeVisible();
+}
+
+/**
+ * Opens Calibration (with `query`, e.g. `&run=…`, or a `#res-…` anchor) and waits for the shown run's hydrograph:
+ * Model quality is under How the shown run fits there (issue #586 Round 3).
+ */
+export async function openCalibration(page: Page, projectId: string, query = '') {
+	await page.goto(`/projects/${projectId}?tab=calibration${query}`);
+	await expect(page.getByRole('heading', { level: 1, name: 'Calibration', exact: true })).toBeVisible();
 	await expect(page.getByRole('img', { name: /^Flow at the outflow gauge/ }).locator('canvas')).toBeVisible();
 }
+
+/** How the shown run fits' run picker on Calibration. */
+export const calibrationRunPicker = (page: Page) => page.locator('#cal-fit').getByRole('combobox', { name: 'Run', exact: true });
 
 /** The runs list (the rail's "Runs" region). */
 export const runsList = (page: Page) => page.getByRole('region', { name: 'Runs', exact: true });

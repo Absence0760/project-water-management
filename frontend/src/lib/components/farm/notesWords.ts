@@ -5,6 +5,7 @@
 import type { NotesWords } from '#lib/components/notes/words.js';
 import { errorText } from '#lib/i18n/apiError.js';
 import { t } from '#lib/i18n/locale.svelte.js';
+import { fmtStampTime } from './format';
 
 export function farmNotesWords(): NotesWords {
 	return {
@@ -19,6 +20,8 @@ export function farmNotesWords(): NotesWords {
 		formerMember: t('A former member'),
 		edited: t('edited'),
 		editedAt: (date) => t('Edited {date}', { date }),
+		// "07:42 on 19 Jan 2024", in the reader's language (farm/format.ts).
+		stamp: fmtStampTime,
 		edit: t('Edit'),
 		delete: t('Delete'),
 		noteFrom: (date) => ` ${t('note from {date}', { date })}`,

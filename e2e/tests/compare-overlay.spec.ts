@@ -59,7 +59,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 			await expect(panel.getByRole('img', { name: /^Upper farm · Outflow · difference B − A: line chart of B − A, in m³\/s, \d+ \w+ \d{4} to \d+ \w+ \d{4}$/ }).locator('canvas')).toBeVisible();
 			const summary = panel.getByTestId('overlay-summary');
 			await expect(summary).toHaveText(
-				/^Over the \d+ days both runs have: mean A [\d.\u202f]+, mean B [\d.\u202f]+, B − A [−+]?[\d.\u202f]+ m³\/s\. B is higher on \d+ days? and lower on \d+ days?; the largest change is [−+][\d.\u202f]+ m³\/s on \d{4}-\d\d-\d\d\.$/
+				/^Over the \d+ days both runs have: mean A [\d.\u202f]+, mean B [\d.\u202f]+, B − A [−+]?[\d.\u202f]+ m³\/s\. B is higher on \d+ days? and lower on \d+ days?; the largest change is [−+][\d.\u202f]+ m³\/s on \d{1,2} [A-Z][a-z]{2} \d{4}\.$/
 			);
 
 			// The flow-unit switch rescales the overlay and its read-out.

@@ -96,7 +96,7 @@ test('a form refuses to submit a day it can’t read', async ({ page, owner }) =
 	// A day it reads (day first) submits, as YYYY-MM-DD.
 	await on.fill('1 March 2026');
 	await form.getByRole('button', { name: 'Save the outcome' }).click();
-	await expect(page.getByTestId('licence-record').getByTestId('licence-record-status')).toHaveText('Licence refused on 2026-03-01. The record is kept until 2029-03-01.');
+	await expect(page.getByTestId('licence-record').getByTestId('licence-record-status')).toHaveText('Licence refused on 1 Mar 2026. The record is kept until 1 Mar 2029.');
 });
 
 // A field's error line never moves its row (issue #521, round 6; app.css, after .form-row): rows align their fields

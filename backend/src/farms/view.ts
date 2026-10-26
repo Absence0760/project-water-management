@@ -5,7 +5,7 @@
 // the same as a node that doesn't exist. Everything comes from the project's
 // *current* publication; a response names no other node (no id, no name)
 // beyond the gauges, which are public infrastructure.
-import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmHistoryEntry, type FarmIndex, type FarmProjection, type FarmRegistered, type FarmSeries, type FarmView, type NoticeText, type RestrictionLevel, isIsoDate } from '@water-management/engine';
+import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmHistoryEntry, type FarmIndex, type FarmProjection, type FarmRegistered, type FarmSeries, type FarmView, type NoticeText, type RestrictionLevel, dayText, isIsoDate } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -382,7 +382,7 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			const from = q.from ?? fromEpochDay(toEpochDay(to) - (FARM_SERIES_DEFAULT_DAYS - 1));
 			const lo = Math.max(0, toEpochDay(from) - toEpochDay(start));
 			const hi = toEpochDay(to) - toEpochDay(start);
-			if (hi < lo) throw new ApiError(400, `the window is outside the published figures (${start} … ${until})`);
+			if (hi < lo) throw new ApiError(400, `the window is outside the published figures (${dayText(start)} … ${dayText(until)})`);
 			if (hi - lo + 1 > FARM_SERIES_MAX_DAYS) throw new ApiError(400, `at most ${FARM_SERIES_MAX_DAYS} days at a time; narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD`);
 			// Postgres arrays are 1-based; the slice keeps a decades-long run on the server.
 			const { rows } = await db.query<{ label: string | null; unit: string | null; values: (number | null)[] }>(
@@ -460,7 +460,7 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			// The year to `to` unless asked for more: a farmer wants this season, not a 15-year record.
 			const from = q.from ?? fromEpochDay(toEpochDay(to) - (FARM_CSV_DEFAULT_DAYS - 1));
 			const range = dayRange(start, Math.max(...columns.map((col) => col.values.length)), from, to);
-			if (!range) throw new ApiError(400, `the window is outside the published figures (${start} … ${cur.view.dataUntil})`);
+			if (!range) throw new ApiError(400, `the window is outside the published figures (${dayText(start)} … ${dayText(cur.view.dataUntil)})`);
 			const { rows: p } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
 			return csvDownload(
 				c,

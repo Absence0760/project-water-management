@@ -1,7 +1,7 @@
 // The rain feed from the map's catchment boundary (issue #326 B-rain;
 // docs/ui.md § Data feeds and § Map, docs/maps.md § Rain from the boundary),
 // on the seeded Sandspruit, whose map has a boundary. The Map tab says no rain
-// feed reads it and links to Settings → Data feeds with the proposal open:
+// feed reads it and links to Data → Data feeds with the proposal open:
 // the boundary, its CHIRPS cells and how much of them lies inside, what Apply
 // does, and the cells in a table. The owner applies it, the feed list shows
 // the boundary's cells, and the Map tab's line goes. A viewer gets neither
@@ -69,9 +69,13 @@ test('the owner sets the rain feed up from the boundary: the map links to the pr
 		await pill.click();
 		await page.getByRole('link', { name: 'Set up the rain feed from the boundary' }).click();
 
-		// Settings → Data feeds, the proposal open.
-		await expect(page).toHaveURL(/[?&]tab=settings/);
+		// Data → Data feeds, the proposal open.
+		await expect(page).toHaveURL(/[?&]tab=series/);
 		await expect(page).toHaveURL(/[?&]rain=boundary/);
+		// It lands on the Data page's Data feeds (issue #586: it was on Settings), in view, the proposal's heading focused.
+		await expect(page).toHaveURL(/#data-feeds$/);
+		await expect(page.getByRole('heading', { name: 'Data feeds', level: 2 })).toBeInViewport();
+		await expect(page.getByRole('heading', { name: 'Rain from the catchment boundary' })).toBeFocused();
 		const proposal = page.getByRole('region', { name: 'Rain from the catchment boundary' });
 		await expect(proposal.getByTestId('boundary-rain-boundary')).toHaveText(/^“Sandspruit catchment”, \d+\.\d km², drawn or last changed \d{1,2} \w{3} \d{4}$/);
 		const cellsLine = proposal.getByTestId('boundary-rain-cells');
@@ -110,7 +114,7 @@ test('a viewer gets neither the map’s link nor the button', async ({ page }) =
 	await openMap(page, id);
 	await expect(page.getByTestId('map-feature-list')).toBeVisible();
 	await expect(page.getByTestId('map-rain')).toHaveCount(0);
-	await page.goto(`/projects/${id}?tab=settings&rain=boundary`);
+	await page.goto(`/projects/${id}?tab=series&rain=boundary`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 	await expect(panel.getByRole('button', { name: 'Refresh status' })).toBeVisible();
 	await expect(panel.getByRole('button', { name: /^(?:Attach a feed|Rain from the map)$/ })).toHaveCount(0);
@@ -126,7 +130,7 @@ test('beside a CHIRPS record runs read: the proposal names it and keeps it for r
 		data: { kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [box(21.26, -33.74, 0.1)] } }
 	});
 	expect(made.status(), await made.text()).toBe(201);
-	await page.goto(`/projects/${id}?tab=settings&rain=boundary`);
+	await page.goto(`/projects/${id}?tab=series&rain=boundary`);
 
 	const proposal = page.getByRole('region', { name: 'Rain from the catchment boundary' });
 	await expect(proposal.getByTestId('boundary-rain-run-series')).toHaveText(`“${RECORD}”, 1 Jan 1995 to 3 Jan 1995`);
@@ -171,7 +175,7 @@ test('a record another feed writes can’t be replaced: the choice is off and sa
 	});
 	expect(made.status(), await made.text()).toBe(201);
 	await page.setViewportSize({ width: 390, height: 844 });
-	await page.goto(`/projects/${id}?tab=settings&rain=boundary`);
+	await page.goto(`/projects/${id}?tab=series&rain=boundary`);
 
 	const proposal = page.getByRole('region', { name: 'Rain from the catchment boundary' });
 	const replace = proposal.getByRole('radio', { name: `Replace “${RECORD}” with the boundary’s rain, once its whole record is read` });

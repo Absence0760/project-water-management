@@ -1,10 +1,12 @@
-<!-- "Nothing is loaded" in a map-proposal panel, with the operator's loader (ProposalPanel.svelte; docs/maps.md). -->
+<!-- "Nothing is loaded" in a map-proposal panel, in plain words: what is missing, what follows, and what to do by
+     hand instead (ProposalPanel.svelte). The loader command is the operator's and lives in docs/maps.md only: the
+     people reading this notice are hydrologists, not the server's operator (issue #586, C5). -->
 <script lang="ts">
-	let { testid, what, consequence, command }: { testid: string; what: string; consequence: string; command: string } = $props();
+	let { testid, what, consequence, instead }: { testid: string; what: string; consequence: string; instead: string } = $props();
 </script>
 
 <p class="alert alert-info slim" data-testid={testid}>
-	No {what} is loaded, so {consequence}. The operator loads one with <code>{command}</code> (docs/maps.md).
+	There’s no {what} on this server yet, so {consequence}. {instead}
 </p>
 
 <style>

@@ -1,4 +1,4 @@
-// Pure helpers for the Self-checks panel (SelfChecksPanel.svelte): the
+// Pure helpers for the Arithmetic checks panel (the engine's self-checks) (SelfChecksPanel.svelte): the
 // headline, the water-balance table in Mm³, and the day trace built from
 // GET …/runs/:runId/day with the engine's column catalogue (letters and
 // formulas), so the UI and the CSV column guide say the same thing.
@@ -11,8 +11,8 @@ export type Tone = 'ok' | 'bad' | 'none';
 export function checksHeadline(v: RunVerification | undefined): { tone: Tone; text: string } {
 	if (!v) return { tone: 'none', text: 'This run was made before the model checked itself (engine 0.12.0). Run it again to check it.' };
 	const failed = v.checks.filter((c) => !c.passed).length;
-	if (failed === 0) return { tone: 'ok', text: `All ${v.checks.length} self-checks passed.` };
-	return { tone: 'bad', text: `${failed} of ${v.checks.length} self-checks failed. That is a bug in the model, not in your data: please report it.` };
+	if (failed === 0) return { tone: 'ok', text: `All ${v.checks.length} arithmetic checks passed.` };
+	return { tone: 'bad', text: `${failed} of ${v.checks.length} arithmetic checks failed. That is a bug in the model, not in your data: please report it.` };
 }
 
 /**
@@ -87,6 +87,15 @@ export const balanceTableRows = (wb: WaterBalance | undefined): WaterBalanceRow[
 export function residualIsNoise(r: WaterBalanceRow): boolean {
 	const scale = Math.max(1, r.openingStorageM3, r.farmRunoffM3, r.outflowM3, r.closingStorageM3, r.suppliedM3);
 	return Math.abs(r.residualM3) <= 1e-9 * scale;
+}
+
+/**
+ * A balance figure in m³ (a residual, a day trace's term): to 3 decimals, and float noise below 0.001 as "< 0.001"
+ * rather than an exponent ("-7.45e-9"), which reads as a figure to check (#586 D10). Exactly 0 stays "0".
+ */
+export function fmtBalance(x: number | null | undefined): string {
+	if (x == null || !Number.isFinite(x)) return '–';
+	return x !== 0 && Math.abs(x) < 1e-3 ? '< 0.001' : fmtNum(x, 3, true);
 }
 
 /** How many open water years the closure line names before "and N more" (a 30-year run could have them all). */

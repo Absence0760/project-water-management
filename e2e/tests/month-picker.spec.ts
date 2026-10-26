@@ -1,4 +1,4 @@
-// The month picker (common/MonthPicker.svelte), as Settings → WR2012 check's
+// The month picker (common/MonthPicker.svelte), as Calibration → WR2012 check's
 // dry-season months shows it: every toggle at least 24 × 24 px (WCAG 2.5.8),
 // the twelve wrapping to rows of six in a narrow column, and the All / None
 // button named for its picker ("Dry-season months: all months").
@@ -11,7 +11,7 @@ test('the dry-season month toggles are at least 24 px and the All button names i
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Month picker');
 	await page.setViewportSize({ width: 1280, height: 800 });
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const section = page.getByRole('region', { name: /^WR2012 check/ });
 	await section.getByLabel('Compare runs with WR2012 naturalised flow').check();

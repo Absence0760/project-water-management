@@ -63,8 +63,8 @@ test('at 1440×900 each Record panel’s action is on screen with the panel, in 
 	for (const [panel, heading, name] of [
 		[evidence(page), /^Evidence$/, 'Withdraw the nomination…'],
 		[reproduce(page), /^Reproduction$/, 'Check reproduction'],
-		// "Publication Published": the badge is in the heading.
-		[publication(page), /^Publication Published$/, 'Edit notice']
+		// The Published badge sits beside the heading, not in it (#586 D4): the heading reads as the side index names it.
+		[publication(page), /^Publication$/, 'Edit notice']
 	] as const) {
 		await panel.evaluate((el) => el.scrollIntoView({ block: 'start' }));
 		await layoutSettled(page);

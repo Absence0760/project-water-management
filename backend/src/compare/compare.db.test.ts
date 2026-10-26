@@ -163,7 +163,7 @@ describe('GET /compare/runs', () => {
 				area: 'series',
 				kind: 'changed',
 				subject: 'Rainfall (catchment)',
-				text: 'Rainfall (catchment) values changed on 1 of the 60 days both runs cover (2020-01-01 to 2020-02-29); their total rose 30.6% (180 → 235)'
+				text: 'Rainfall (catchment) values changed on 1 of the 60 days both runs cover (1 Jan 2020 to 29 Feb 2020); their total rose 30.6% (180 → 235)'
 			}
 		]);
 		expect((await compare(u, `${projectId}:${after}`, `${projectId}:${same}`)).body.changes).toEqual([]);
@@ -211,8 +211,8 @@ describe('GET /compare/runs', () => {
 		const after = await run(u, projectId, 'Cut and extended');
 
 		const texts = (await compare(u, `${projectId}:${before}`, `${projectId}:${after}`)).body.changes.map((x: { text: string }) => x.text);
-		expect(texts).toContain('Rainfall (catchment) series extended to 2020-03-01 (was 2020-02-29)');
-		expect(texts).toContain('Rainfall (catchment) values changed on 9 of the 60 days both runs cover (2020-01-01 to 2020-02-29); their total fell 15% (180 → 153)');
+		expect(texts).toContain('Rainfall (catchment) series extended to 1 Mar 2020 (was 29 Feb 2020)');
+		expect(texts).toContain('Rainfall (catchment) values changed on 9 of the 60 days both runs cover (1 Jan 2020 to 29 Feb 2020); their total fell 15% (180 → 153)');
 	});
 
 	it("gives each side its own project's choice of the EWR the results are judged by (issue #444)", async () => {

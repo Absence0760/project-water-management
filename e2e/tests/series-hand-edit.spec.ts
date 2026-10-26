@@ -29,6 +29,11 @@ test('a day set by hand is saved through the API, marked on the row and in the d
 	// A text field read day first (not a native date field, which shows the browser's own order), with the span in words.
 	await expect(day).toHaveAttribute('type', 'text');
 	await expect(edit.getByTestId('edit-day-stored')).toContainText('Pick a day from 1 Oct 2021 to 10 Oct 2021, day first.');
+	// Before a day is picked the button doesn't offer to clear one (a blank value read as "Clear the day"), and the
+	// placeholder reads as an example, not a day already picked.
+	await expect(edit.getByRole('button', { name: 'Save the day' })).toBeDisabled();
+	await expect(edit.getByRole('button', { name: 'Clear the day' })).toHaveCount(0);
+	await expect(day).toHaveAttribute('placeholder', 'e.g. 15 Nov 2021');
 	await day.fill('2 Oct 2021');
 	// The stored value is put in the box to correct, and said beside it.
 	await expect(edit.getByLabel('Value (mm)', { exact: true })).toHaveValue('12.4');
@@ -42,13 +47,16 @@ test('a day set by hand is saved through the API, marked on the row and in the d
 	expect(res.status()).toBe(200);
 	expect(res.request().postDataJSON()).toEqual({ value: 14.2 });
 	await expect(edit.getByTestId('edit-day-done')).toContainText('Saved 2 Oct 2021: 14.2 mm.');
+	// The Save button is disabled once saved; the focus goes to the Day field, its text selected for the next day.
+	await expect(day).toBeFocused();
+	expect(await day.evaluate((el: HTMLInputElement) => el.selectionEnd! - el.selectionStart!)).toBe('2 Oct 2021'.length);
 	await expect(row.getByTestId('series-hand')).toHaveText('1 day edited by hand');
 	await expect(page.getByTestId('series-hand-days')).toHaveText('2 Oct 2021');
 	await expect(edit.getByTestId('edit-day-stored')).toContainText('Stored: 14.2 mm, edited by hand.');
 
 	// History names the edit.
 	await page.goto(`/projects/${project.id}?tab=history`);
-	await expect(page.getByTestId('history-detail').getByText('Edited 2021-10-02 of the Rainfall — catchment series by hand')).toBeVisible();
+	await expect(page.getByTestId('history-detail').getByText('Edited 2 Oct 2021 of the Rainfall — catchment series by hand')).toBeVisible();
 });
 
 test('a blank value clears the day; a negative or text is refused before it is sent', async ({ page, owner }) => {

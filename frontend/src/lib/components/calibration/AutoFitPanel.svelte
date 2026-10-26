@@ -13,9 +13,9 @@
 	import { rulesLines, waterYearLabel, type CalibrationRules } from '@water-management/engine';
 	import { api } from '#lib/api/index.js';
 	import { AutoCalibrationFollower } from '#lib/calibration/autoFollow.svelte.js';
-	import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, selectionText, triggerText } from '#lib/calibration/autoFit.js';
+	import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, runBlocker as runBlockerOf, selectionText, triggerText, type RunBlocker } from '#lib/calibration/autoFit.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '#lib/format/number.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 
 	let {
 		projectId,
@@ -53,7 +53,8 @@
 	const unsaved = $derived(rulesUnsaved(savedRules, formRules));
 	const runState = $derived(latest ? autoState(latest) : null);
 	const running = $derived(runState?.kind === 'running');
-	const canStart = $derived(hasObserved && !readonly && !unsaved && !busy && !running);
+	const blocked = $derived(runBlockerOf({ hasObserved, readonly, rulesUnsaved: unsaved, running, busy }));
+	const canStart = $derived(blocked === null);
 	const rows = $derived(latest ? autoCaseRows(latest) : []);
 	const kept = $derived(latest && latest.chosen !== null ? latest.cases[latest.chosen]! : null);
 	const blocker = $derived(latest ? applyBlocker(latest, { rulesUnsaved: unsaved, formDirty, readonly }) : null);
@@ -65,6 +66,10 @@
 	/** Whether the rules can run now: a record, an editor, the rules saved, no run going. */
 	export function canRun(): boolean {
 		return canStart;
+	}
+	/** Why they can't, for the line beside the button (issue #586, C3), or null. */
+	export function runBlocker(): RunBlocker | null {
+		return blocked;
 	}
 
 	function apply() {
@@ -79,9 +84,9 @@
 </script>
 
 <section class="auto" aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Automated calibration <HelpTip key="calibration-rules" label="About automated calibration" /></h3>
+	<h4 id="{uid}-h">Automated calibration <HelpTip key="calibration-rules" label="About automated calibration" /></h4>
 	{#if !hasObserved}
-		<p class="muted small">Upload an observed or logger flow record (Data) to calibrate against it.</p>
+		<p class="muted small" data-testid="auto-no-record">Add an observed or logger flow record on <a href="?tab=series">Data</a> to calibrate against it.</p>
 	{:else}
 		<p class="muted small">
 			The server runs the saved calibration rules below from start to finish, one background job per fit: no one chooses after the scores are seen.
@@ -89,7 +94,7 @@
 		</p>
 		<dl class="rules small" data-testid="auto-rules">
 			<dt>Rules</dt>
-			<dd>Revision {savedRules.revision}, {savedRules.signedOff ? `signed off by ${savedRules.signedOff.by} on ${savedRules.signedOff.on}` : 'draft (not signed off)'}</dd>
+			<dd>Revision {savedRules.revision}, {savedRules.signedOff ? `signed off by ${savedRules.signedOff.by} on ${fmtDay(savedRules.signedOff.on)}` : 'draft (not signed off)'}</dd>
 			{#each rulesLines(savedRules) as l (l.subject)}
 				<dt>{l.subject}</dt>
 				<dd>{l.text}</dd>
@@ -111,7 +116,7 @@
 
 		{#if latest && runState}
 			<div class="result" data-testid="auto-result">
-				<h4>Latest run</h4>
+				<h5>Latest run</h5>
 				<p class="small muted">
 					{triggerText(latest)} · rules revision {latest.rulesRevision} · kept by {selectionText(latest.rules)} · {latest.createdAt.slice(0, 16).replace('T', ' ')}
 				</p>
@@ -200,11 +205,14 @@
 		padding-top: 0.75rem;
 		margin: 0.75rem 0;
 	}
-	h3 {
-		margin: 0 0 0.25rem;
-	}
+	/* A card's heading in Fit the parameters (an h3 on the Calibration page, issue #586 round 3), at the sizes it had one level up. */
 	h4 {
+		margin: 0 0 0.25rem;
+		font-size: 0.95rem;
+	}
+	h5 {
 		margin: 0.75rem 0 0.25rem;
+		font-size: 1em;
 	}
 	.rules {
 		display: grid;

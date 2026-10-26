@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { SearchStep } from '#lib/nav/searchStep.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { compareTabHref } from '#lib/components/compare/picker.js';
@@ -7,46 +8,40 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { resolveQualityFlags, toEpochDay, type SeriesMeta } from '@water-management/engine';
-	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, rebuildingNote, runChirpsFactors } from '#lib/series/provenance.js';
+	import { toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { rebuildingNote } from '#lib/series/provenance.js';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
-	import CalibrationCheck from '#lib/components/calibration/CalibrationCheck.svelte';
-	import type { CheckNode } from '#lib/components/calibration/calibrationCheck.js';
-	import CalibrationPanel from '#lib/components/calibration/CalibrationPanel.svelte';
-	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
-	import EwrAgreementTable from '#lib/components/ewr/EwrAgreementTable.svelte';
-	import AgreementTable from '#lib/components/series/AgreementTable.svelte';
 	import DownloadMenu from '#lib/components/export/DownloadMenu.svelte';
 	import { downloads, runDownloadItems, type FarmTableItem } from '#lib/export/index.js';
 	import { fmtDay, fmtNum, fmtStamp, fmtWhen } from '#lib/format/number.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { dataEnd, newDataSinceRun } from '#lib/components/series/freshness.js';
-	import { runForcingOfSummary } from '@water-management/engine';
-	import { detailCache, forgetRun, prefetchSeries } from './cache';
-	import { CATCHMENT_FLOW_KEYS } from './flowSeries';
-	import { checksOnlyGauges, recordHref } from './checkGauges';
+	import { detailCache, forgetRun, runDetail } from './cache';
 	import { notesPreview } from './notes';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import WaterBalanceTable from './WaterBalanceTable.svelte';
-	import RunoffPanel from './RunoffPanel.svelte';
-	import { unitRainOf } from './unitRain';
 	import Lazy from '#lib/components/common/Lazy.svelte';
-	import { stationsOf } from './stationRain';
 	import RunNotes from './RunNotes.svelte';
 	import ValidationPanel from '#lib/components/liability/ValidationPanel.svelte';
 	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
-	import { movedHref, otherPageGroups, resultGroups } from './sections';
+	import { otherPageGroups, resultGroups } from './sections';
+	import { anchorMoved } from '#lib/nav/anchorMoves.js';
+	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { supplyHref } from '#lib/components/supply/links.js';
+	import { calibrationHref } from '#lib/components/calibration/links.js';
+	import { warningPlaceHref } from './warningText';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { historyDays, ranAgo } from '#lib/components/overview/latestRun.js';
-	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import { focusAnchor, hashId, holdAnchor, landOnAnchor } from '#lib/help/anchor.js';
+	import { missingPanel, type MissingPanel } from './missingPanel';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
-	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
+	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, rowLabels, runErrorText, runYears } from './runList';
+	import { runTags, tagKey } from './runTags';
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '#lib/components/river/links.js';
 	import { hasForecastRain, runBlockers } from './runReady';
@@ -54,20 +49,13 @@
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Hydrological units
 	// with the other unit panels (issue #17).
-	// The plausibility checks (engine ≥ 0.25.0) render for every run that has them, which is every
-	// run since, so they are in this chunk too (tab chunks have their own ceiling,
-	// scripts/guards/check_web_bundle_budget.mjs).
-	import PlausibilityPanel from './PlausibilityPanel.svelte';
+	// Model quality (ModelQuality.svelte) moved to the Calibration page's chunk (issue #586 Round 3); tab chunks
+	// have their own ceiling (scripts/guards/check_web_bundle_budget.mjs).
 	import EvidencePanel from './EvidencePanel.svelte';
 	import ReproducePanel from './ReproducePanel.svelte';
 	import PublicationPanel from './PublicationPanel.svelte';
 	import RunInputsPanel from '#lib/components/history/RunInputsPanel.svelte';
-	import { runExclusions } from './exclusionShading';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
-	// The WR2012 report: its own chunk, only a run that has one loads it.
-	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
-	// Rain for each unit (issue #482): its own chunk, only a run that ran per unit loads it.
-	const loadUnitRainPanel = () => import('./UnitRainPanel.svelte');
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
 	// seasonal outlook and the water account moved to EWR (issue #17, river/RiverTab.svelte);
 	// this page links there.
@@ -119,8 +107,16 @@
 	let loadError = $state<string | null>(null);
 	/** The list has loaded and holds no run: the page shows one empty state (the Runs card) and no results column. */
 	const noRuns = $derived(!loading && !loadError && runs.length === 0);
+	/** The list failed to load and holds no run: the rail's alert is the page's one message, with no results column (#586 D3). */
+	const listFailed = $derived(!loading && !!loadError && runs.length === 0);
+	/**
+	 * One run: nothing to pick between, so the runs list is one slim row across the top and the results take the
+	 * whole width, rather than a 250 px rail of one row beside an empty column down the whole page (#586 D21).
+	 * From the second run the list is the rail again.
+	 */
+	const singleRun = $derived(!loading && runs.length === 1);
 	const RESULTS_SHOW =
-		"A run's results: flows at the outflow gauge, calibration against observed flow, EWR compliance and each hydrological unit's supply and dam storage.";
+		"A run's results: its summary and water balance, with the fit to observed flow on Calibration, EWR compliance on EWR and each hydrological unit's supply and dam storage on Hydrological units.";
 	let actionError = $state<string | null>(null);
 
 	let label = $state('');
@@ -198,16 +194,26 @@
 			publicationError = msg(e);
 		}
 	}
+	let stopAnchors = () => {};
+	/** An old link is being sent on to the panel's new page (nav/anchorMoves.ts): this page writes nothing more into the URL. */
+	let forwarding = false;
 	onMount(() => {
 		// A link to a panel that moved to EWR (#res-reserve, #res-ewr, …) or Hydrological units
 		// (#res-curtailment from a bookmarked "units short this week", …), or to the link rows those
 		// groups left here for a while (#res-river, #res-units), issue #17: there instead, for the same
-		// run (and reporting window), replacing this entry so Back skips it.
-		const moved = movedHref(page.url.hash.slice(1), page.url.searchParams.get('run'), page.url.searchParams.get('window'));
-		if (moved) {
-			goto(moved, { replace: true, reset: false });
-			return;
-		}
+		// run (and reporting window), replacing this entry so Back skips it (nav/anchorMoves.ts). On
+		// load, and for a #fragment typed or followed while the page is open, which lands on its panel
+		// too (finding R2-D); the load's own landing waits for the run (below).
+		stopAnchors = followAnchors({
+			page: 'runs',
+			onLoad: false,
+			land: (id) => (fragmentShown ? landOnceShown(id) : undefined),
+			forward: (to) => {
+				forwarding = true;
+				void goto(to, { replace: true, reset: false });
+			}
+		});
+		if (forwarding) return;
 		load();
 		loadPublication();
 	});
@@ -225,12 +231,26 @@
 	 * unit, dam or run pick does on every page (ui-playbook § 4, "A pick is a step in history"); the
 	 * default pick and the fallback after a delete replace the entry, so Back never stops on them.
 	 */
-	function select(id: string | null, how: 'pick' | 'default' = 'default') {
+	function select(id: string | null, how: 'pick' | 'default' = 'default'): Promise<void> {
 		const url = new URL(page.url.href);
 		if (id) url.searchParams.set('run', id);
 		else url.searchParams.delete('run');
-		if (url.search === page.url.search) return;
-		goto(url, { replace: how === 'default', reset: false });
+		if (url.search === page.url.search) return Promise.resolve();
+		return goto(url, { replace: how === 'default', reset: false });
+	}
+	/**
+	 * Go to latest: the button hides once the latest run shows, and it had the focus, so the focus goes to that run's
+	 * row in the list (the results heading when a filter hides the row), not to <body> (#586 E9).
+	 */
+	async function goLatest() {
+		if (!latest) return;
+		await select(latest.id, 'pick');
+		await tick();
+		const row = document.querySelector<HTMLElement>('ul.runs li.active button.pick');
+		const target = row ?? document.getElementById('res-h');
+		if (!target) return;
+		if (!row && !target.hasAttribute('tabindex')) target.tabIndex = -1;
+		target.focus();
 	}
 
 	let detailFor = untrack(() => detail?.run.id ?? '');
@@ -245,10 +265,8 @@
 		detailError = null;
 		detailGone = false;
 		try {
-			const d = await api.runs.get(projectId, id);
-			// The first charts' flows go out now, before the results page renders (cache.ts prefetchSeries).
-			prefetchSeries(id, d.series, CATCHMENT_FLOW_KEYS.map(([, key]) => ({ key, nodeId: null })), (key, nodeId) => api.runs.series(projectId, id, key, nodeId));
-			detailCache.set(id, d);
+			// Shared with the Calibration page (cache.ts runDetail): one request for a run either page asks for.
+			const d = await runDetail(id, () => api.runs.get(projectId, id));
 			if (detailFor === id) detail = d;
 		} catch (e) {
 			if (detailFor === id) {
@@ -273,40 +291,79 @@
 
 	// A link to a results panel (#res-publication from the Summary's published
 	// baseline, #res-notes from a note): the panels render only once the run's details are in,
-	// after the browser's own jump, so scroll there then and hold it while the
-	// panels above load (holdAnchor), with focus on the panel's heading so Tab
-	// carries on from there. Once: later jumps (the section menu) find their
-	// panel on the page and are the browser's.
+	// after the browser's own jump, and some (Forecast, Unit rain, WR2012, everything after the
+	// flow-duration curve) are lazy chunks drawn later still. So wait for the panel and then its
+	// heading (landOnAnchor), scroll there and hold it while the panels above load, with focus
+	// on the heading so Tab carries on from there. A panel this run doesn't have (#res-wr2012 on
+	// a run without a WR2012 reference, issue #586) shows a line saying what it needs instead,
+	// focused. Later jumps (the section menu, a #fragment typed) land through followAnchors above.
 	let fragmentShown = false;
 	/** The validation statement is open: the known-bug badge opens it (issue #103). */
 	let validationOpen = $state(false);
+	/** The line for a linked panel this run doesn't draw (missingPanel.ts), for the run it was linked on. */
+	let missingLink = $state<{ runId: string; hash: string; panel: MissingPanel } | null>(null);
 	let releaseFragment = () => {};
 	let destroyed = false;
 	$effect(() => {
 		if (!detail || fragmentShown) return;
 		fragmentShown = true;
-		const hash = untrack(() => page.url.hash.slice(1));
-		if (!hash.startsWith('res-') || movedHref(hash, null)) return;
+		const hash = untrack(() => hashId(page.url.hash));
+		if (hash) releaseFragment = landResult(hash);
+	});
+	// A link that also picks another run (`?run=r2#res-notes`, nav/anchorLandingEnv.svelte.ts) arrives while the
+	// run shown is still the old one: landing then would focus the old run's panel, which the new run's replace.
+	// So hold the landing until the picked run's details are in.
+	let pendingHash = $state<string | null>(null);
+	const shownIsPicked = $derived(!!detail && (!selectedId || detail.run.id === selectedId));
+	function landOnceShown(hash: string): (() => void) | void {
+		if (untrack(() => shownIsPicked)) return landResult(hash);
+		pendingHash = hash;
+		return () => {
+			if (pendingHash === hash) pendingHash = null;
+		};
+	}
+	$effect(() => {
+		if (!shownIsPicked || !pendingHash) return;
+		const hash = pendingHash;
+		pendingHash = null;
+		untrack(() => landResult(hash));
+	});
+	/** Land on the results panel `hash` names, or on the line saying this run lacks it; the release function. */
+	function landResult(hash: string): () => void {
+		releaseFragment();
+		releaseFragment = () => {};
+		if (!detail || !hash.startsWith('res-') || anchorMoved('runs', hash)) return () => {};
 		// The known-bug badge's link (issue #103): the statement opens on load too, not only on a click.
 		if (hash === 'res-validation') validationOpen = true;
+		const lacking = missingPanel(hash, detail.run.summary);
+		missingLink = lacking ? { runId: detail.run.id, hash, panel: lacking } : null;
+		let release = () => {};
+		let gone = false;
 		tick().then(() => {
-			const el = destroyed ? null : document.getElementById(hash);
-			if (!el) return;
-			releaseFragment = holdAnchor(el);
-			const heading = el.querySelector<HTMLElement>('h2, h3, h4') ?? el;
-			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-			focusAnchor(heading);
+			if (destroyed || gone) return;
+			const line = lacking ? document.getElementById('res-missing') : null;
+			if (line) {
+				release = holdAnchor(line);
+				focusAnchor(line);
+			} else release = landOnAnchor(hash);
 		});
-	});
+		releaseFragment = () => {
+			gone = true;
+			release();
+		};
+		return releaseFragment;
+	}
 	onDestroy(() => {
 		destroyed = true;
+		stopAnchors();
 		releaseFragment();
 	});
 
 	// Once the list is known and the URL names no run: the newest run, or for a
-	// viewer the published baseline (runList.ts defaultRunId). ?run= always wins.
+	// viewer the published baseline (runList.ts defaultRunId). ?run= always wins. Not while an old link is sent on:
+	// writing the default replaced the forward's address, so `?tab=runs#res-calibration` stayed here (issue #586 round 3).
 	$effect(() => {
-		if (!loading && !selectedId && runs.length) select(defaultRunId(runs, project.role));
+		if (!forwarding && !loading && !selectedId && runs.length) select(defaultRunId(runs, project.role));
 	});
 
 	async function run(e: SubmitEvent) {
@@ -367,9 +424,6 @@
 		commit(runs.map((r) => ({ ...r, evidence: status(r.id) })));
 	}
 
-	/** The scenarios based on a run (024_scenarios): it is kept, and can't be deleted, while they exist. */
-	const citedByScenario = (r: RunMeta) => (r.citedBy ?? []).filter((c) => c.kind === 'scenario');
-	const signedBy = (r: RunMeta) => (r.citedBy ?? []).filter((c) => c.kind === 'signoff').map((c) => c.name);
 
 	/** Pin or unpin a run (015_run_pinned): the storage cap keeps a pinned run. */
 	async function togglePin(r: RunMeta) {
@@ -416,11 +470,32 @@
 	let runQuery = $state(untrack(() => page.url.searchParams.get('q') ?? ''));
 	// Only while the box shows: an old link's q= never hides runs behind a filter that isn't on screen.
 	const shownRuns = $derived(runs.length >= RUN_FILTER_FROM ? filterRuns(runs, runQuery) : runs);
+	/** Each row's label: null shows it whole (clamped to two lines), else the form that keeps it apart from a look-alike (#586 D7). */
+	const shortLabels = $derived(rowLabels(shownRuns.map((r) => r.label || 'Untitled run')));
+	const rowTags = $derived(shownRuns.map((r) => runTags(r, { latestId: latest?.id ?? null, publishedId: currentPublishedRunId, evidence: evidenceById.get(r.id) })));
+	const tagLines = $derived(tagKey(rowTags));
+	/**
+	 * Stacked (a phone), a long list folds to its newest run and the shown run's, with its filter, so the results start
+	 * on the first screen (#586 D8: three rows still ran the results' heading past a 390×844 screen, each row 96 px with
+	 * its tap-size pin and delete); the fold is CSS (.runs.folded), so the wide rail, which scrolls inside itself, shows
+	 * every row and the filter. Not while a filter narrows the list: the filter is the reader's own fold.
+	 */
+	const FOLD_ROWS = 1;
+	let runsAll = $state(false);
+	const foldable = $derived(!runQuery.trim() && shownRuns.length > FOLD_ROWS + 1);
+	const foldHidden = $derived(foldable ? shownRuns.filter((r, i) => i >= FOLD_ROWS && r.id !== selectedId).length : 0);
+	/** The run on screen isn't in the filtered list (a filter that matches nothing, or not it): say so (#586 D20). */
+	const shownOutsideFilter = $derived(!!runQuery.trim() && !!detail && !shownRuns.some((r) => r.id === detail!.run.id));
 	const queryStep = new SearchStep();
 	let queryTimer: ReturnType<typeof setTimeout> | undefined;
+	/**
+	 * The last words this box wrote to the URL: the URL catching up with them isn't a new filter. Without it, a
+	 * write that landed after more typing put the older words back in the box (as History's filter keeps them).
+	 */
+	let written = untrack(() => page.url.searchParams.get('q') ?? '');
 	$effect(() => {
 		const q = page.url.searchParams.get('q') ?? '';
-		if (untrack(() => runQuery.trim()) !== q) runQuery = q;
+		if (q !== untrack(() => written)) runQuery = written = q;
 	});
 	function writeQuery() {
 		clearTimeout(queryTimer);
@@ -430,6 +505,7 @@
 			if (words) url.searchParams.set('q', words);
 			else url.searchParams.delete('q');
 			if (url.search === page.url.search) return;
+			written = words;
 			void queryStep.write(url.href, (replace) => goto(url, { replace, reset: false }));
 		}, 300);
 	}
@@ -439,7 +515,7 @@
 		const reasons: string[] = [];
 		if (project.updatedAt > latest.createdAt) reasons.push('the model or settings were saved');
 		const newer = project.settings.simulationEnd ? [] : newDataSinceRun(series ?? [], latest);
-		if (newer.length) reasons.push(`new data in ${newer.map((x) => x.name || x.kind.replace(/_/g, ' ')).join(', ')}, now to ${newer.map(dataEnd).sort().pop()}`);
+		if (newer.length) reasons.push(`new data in ${newer.map((x) => x.name || x.kind.replace(/_/g, ' ')).join(', ')}, now to ${fmtDay(newer.map(dataEnd).sort().pop() ?? '')}`);
 		return reasons.length ? reasons : null;
 	});
 	// What a run still needs, and whether forecast rain allows a forecast run (runReady.ts, shared with
@@ -509,7 +585,7 @@
 <svelte:window bind:scrollY />
 
 {#snippet headerContext()}
-	{#if loading && !runs.length}Loading runs…{:else if !runs.length}No runs yet{:else}{runCount(runs.length)}{latest ? ` · newest ran ${ranAgo(latest.createdAt)}` : ''}{/if}
+	{#if loading && !runs.length}Loading runs…{:else if listFailed}Couldn’t load the runs{:else if !runs.length}No runs yet{:else}{runCount(runs.length)}{latest ? ` · newest ran ${ranAgo(latest.createdAt)}` : ''}{/if}
 {/snippet}
 <!-- The run form: in the section header, after Add data; its status line opens the page. -->
 {#snippet runForm()}
@@ -522,7 +598,6 @@
 				class="btn"
 				disabled={runBusy || missing.length > 0 || !!overAllocated}
 				aria-describedby="run-note"
-				title="The record as an ordinary run, then the days after the last recorded rain on forecast rain, shown apart. Keeps one forecast run."
 				onclick={() => start(true)}>Run forecast</button
 			>
 		{/if}
@@ -539,7 +614,7 @@
 	<div class="run-status">
 		<p class="note" id="run-note" role="status" aria-live="polite">
 			{#if runBusy}
-				Simulating every day of the record for all nodes{elapsed >= 1 ? ` · ${elapsed} s` : ''}. Large catchments take a few seconds.
+				Simulating every day of the record for every hydrological unit{elapsed >= 1 ? ` · ${elapsed} s` : ''}. Large catchments take a few seconds.
 			{:else if missing.length}
 				<span class="warn">
 					A run needs {missing.join(' and ')}. Set up the <a href="?tab=network">network</a> and upload
@@ -548,14 +623,15 @@
 			{:else if overAllocated}
 				<span class="warn" data-testid="shares-over">
 					The run can't start: {overAllocated}. See the <a href="?tab=network">network</a> or
-					<a href="?tab=settings">settings</a>.
+					<a href="?tab=settings">model settings</a>.
 				</span>
 			{:else if modelDirty}
 				<span class="warn">The model has unsaved changes: Run model asks to save them first, since a run uses the saved model.</span>
 			{:else if stale}
 				<span class="warn">Inputs changed since the latest run ({stale.join('; ')}). Run again to update the results.</span>
 			{:else}
-				Runs use the saved network, crops, transfers, settings and time series.
+				Runs use the saved network, crops, transfers, settings and time series.{#if hasForecast}
+					Run forecast runs the record as an ordinary run, then the days after the last recorded rain on forecast rain, shown apart; one forecast run is kept.{/if}
 			{/if}
 		</p>
 		{#if runBusy}<div class="progress" aria-hidden="true"><span></span></div>{/if}
@@ -572,10 +648,10 @@
 
 <!-- No runs: one empty state, the Runs card across the page, saying what a run will show (a second
      "Results appear here" card beside or under it was mostly empty space, a screen of it on a phone). -->
-<div class="layout" class:no-runs={noRuns} bind:this={layoutEl} style:--rail-top="{railTop}px">
+<div class="layout" class:no-runs={noRuns || listFailed} class:single={singleRun} bind:this={layoutEl} style:--rail-top="{railTop}px">
 	<!-- The rail: the runs list, in view beside the long results page (sticky on wide screens). -->
 	<aside class="rail" bind:this={railEl}>
-		<section class="panel list" aria-labelledby="runs-h">
+		<section class="panel list" aria-labelledby="runs-h" data-testid="runs-card">
 			<div class="panel-head">
 				<h2 id="runs-h">Runs</h2>
 				{#if runs.length >= 2}
@@ -588,10 +664,20 @@
 				<ul class="runs skeleton" aria-hidden="true">
 					{#each [0, 1] as i (i)}<li><span class="sk sk-line"></span><span class="sk sk-short"></span></li>{/each}
 				</ul>
-				<p class="visually-hidden" role="status">Loading runs…</p>
+				<p class="visually-hidden" role="status" data-loading>Loading runs…</p>
 			{:else if loadError}
 				<div class="alert alert-error" role="alert">
-					{loadError} <button type="button" class="btn btn-sm" onclick={load}>Try again</button>
+					Couldn’t load the runs: {loadError}
+					<!-- Each Try again here takes itself out for a loading line: the focus follows (followRetry). -->
+					<button
+						type="button"
+						class="btn btn-sm"
+						data-retry
+						onclick={(e) => {
+							followRetry(e.currentTarget);
+							load();
+						}}>Try again</button
+					>
 				</div>
 			{:else if runs.length === 0}
 				<!-- "Run the model" only while it can start: otherwise the status line under the header says what a run needs. -->
@@ -601,33 +687,29 @@
 				</div>
 			{:else}
 				{#if runs.length >= RUN_FILTER_FROM}
-					<input class="filter" type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} onfocus={queryStep.focus} oninput={writeQuery} />
+					<input class="filter" class:folded={foldable && !runsAll} type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} onfocus={queryStep.focus} oninput={writeQuery} />
 					{#if runQuery.trim()}<p class="muted small filter-count" role="status">{shownRuns.length ? `${shownRuns.length} of ${runs.length} runs` : 'No run label matches.'}</p>{/if}
+					{#if shownOutsideFilter && detail}<p class="muted small filter-count" data-testid="shown-outside-filter">Showing “{detail.run.label || 'Untitled run'}”, which isn’t in the filter.</p>{/if}
 				{/if}
 				<!-- Compact rows: the label (two lines at most, the full label on
 				     hover), when it ran and the years it covers, then small status
 				     tags. The full dates, author and engine are in the results header. -->
-				<ul class="runs">
-					{#each shownRuns as r (r.id)}
-						<li class:active={r.id === selectedId}>
+				<ul class="runs" class:folded={foldable && !runsAll} id="runs-list">
+					{#each shownRuns as r, i (r.id)}
+						{@const short = shortLabels[i]}
+						<li class:active={r.id === selectedId} class:beyond={i >= FOLD_ROWS && r.id !== selectedId}>
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id, 'pick')}>
-								<span class="lbl">{r.label || 'Untitled run'}</span>
+								{#if short}
+									<!-- Shortened to keep it apart from a look-alike: the full label is read out, and is the results heading once picked. -->
+									<span class="lbl" aria-hidden="true">{short}</span><span class="visually-hidden">{r.label}</span>
+								{:else}
+									<span class="lbl">{r.label || 'Untitled run'}</span>
+								{/if}
 								<!-- Each part on one line: "2021–2022" broke after its dash, a third line on every row. -->
 								<span class="meta"><span class="nw">{fmtWhen(r.createdAt)}</span> · <span class="nw">{runYears(r.startDate, r.endDate)}</span></span>
-								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.reproducible === false || r.trigger === 'auto' || r.trigger === 'forecast' || r.errata?.length}
+								{#if rowTags[i]?.length}
 									<span class="tags">
-										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
-										{#if r.trigger === 'auto'}<span class="tag" title="Made automatically after new data arrived (Settings → Automatic runs). Only the newest automatic run is kept, unless it is pinned or published.">Auto</span>{/if}
-										{#if r.trigger === 'forecast'}<span class="tag tag-warn" title="A forecast run: the days from {r.forecastFrom} run on forecast rain and are shown apart; its other figures cover the record before them. Only the newest forecast run is kept, unless it is pinned or published.">Forecast</span>{/if}
-										{#if r.id === currentPublishedRunId}<span class="tag tag-owner" title="The published baseline: stakeholders and farmers see this run's figures. Kept while a publication holds it.">Published</span>{/if}
-										{#if evidenceById.get(r.id) === 'current'}<span class="tag tag-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="tag" title="Nominated as evidence before, since replaced or withdrawn. Kept for good: it can't be deleted.">Former evidence</span>{/if}
-										{#if r.pinned}<span class="tag" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}
-										{#if r.scenarioName}<span class="tag" title="Made by the scenario “{r.scenarioName}”: its changes applied to its base run.">Scenario</span>{/if}
-										{#if citedByScenario(r).length}<span class="tag" title="The base of {citedByScenario(r).map((c) => `“${c.name}”`).join(', ')}: kept for good while {citedByScenario(r).length === 1 ? 'that scenario exists' : 'those scenarios exist'}, so it can't be deleted or unpinned.">Scenario base</span>{/if}
-										{#if r.reproducible === false}<span class="tag" title="Made before runs stored their input series: it can't be re-run from them, only compared by hash.">Inputs not stored</span>{/if}
-										{#if signedBy(r).length}<span class="tag tag-owner" title="Signed off by {signedBy(r).join(', ')} (see its report). Kept for good: it can't be deleted.">Signed off</span>{/if}
-										{#if r.errata?.length}<span class="tag tag-warn" title="May be affected by {r.errata.length === 1 ? 'a known engine bug' : `${r.errata.length} known engine bugs`} ({r.errata.join(', ')}): each changes results only under its conditions. See the run's validation statement, and re-run on the current engine to compare.">May be affected</span>{/if}
-										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (the original workbook’s, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.">Workbook comparison</span>{/if}
+										{#each rowTags[i]! as t (t.id)}<span class="tag" class:tag-owner={t.tone === 'owner'} class:tag-warn={t.tone === 'warn'} title={t.detail ?? undefined}>{t.label}</span>{/each}
 									</span>
 								{/if}
 							</button>
@@ -650,11 +732,29 @@
 						</li>
 					{/each}
 				</ul>
+				<!-- Show all and the tags' key share a line under the list, so a folded phone list stays short. -->
+				<div class="list-foot">
+					{#if foldable}
+						<!-- Stacked only (CSS): the wide rail lists every row and scrolls inside itself. -->
+						<button type="button" class="btn btn-sm fold-btn" aria-expanded={runsAll} aria-controls="runs-list" onclick={() => (runsAll = !runsAll)}
+							>{runsAll ? 'Show fewer runs' : `Show all ${shownRuns.length} runs`}{#if !runsAll}<span class="visually-hidden">, {foldHidden} more</span>{/if}</button
+						>
+					{/if}
+					{#if tagLines.length}
+						<!-- The tags in words, for touch and keyboard: their hover titles reach only a mouse (#586 D18). -->
+						<details class="tag-key small">
+							<summary>What the tags mean</summary>
+							<dl>
+								{#each tagLines as t (t.label)}<div><dt>{t.label}</dt><dd>{t.meaning}</dd></div>{/each}
+							</dl>
+						</details>
+					{/if}
+				</div>
 			{/if}
 		</section>
 	</aside>
 
-	{#if !noRuns}
+	{#if !noRuns && !listFailed}
 	<div class="detail">
 		<!-- In-page menu, grouped by the question each panel answers: from 62rem of results a side index on the
 		     right (the runs list is the left column), with the main panels of EWR and Hydrological
@@ -664,16 +764,25 @@
 			<div class="alert alert-error" role="alert">
 				{detailError}
 				{#if !detailGone}
-					<button type="button" class="btn btn-sm" onclick={() => selectedId && loadDetail(selectedId)}>Try again</button>
+					<button
+						type="button"
+						class="btn btn-sm"
+						data-retry
+						onclick={(e) => {
+							if (!selectedId) return;
+							// Lands on the run's heading once its results are drawn.
+							followRetry(e.currentTarget, { landing: () => document.getElementById('res-h')?.closest<HTMLElement>('h1, h2, h3, h4') });
+							loadDetail(selectedId);
+						}}>Try again</button
+					>
 				{:else if latest && latest.id !== selectedId}
 					<button type="button" class="btn btn-sm" onclick={() => select(latest.id, 'pick')}>Show the newest run</button>
 				{/if}
 			</div>
 		{:else if detail}
 			{@const summary = detail.run.summary}
-			<!-- The run's own settings: older cached details lack them, so fall back to the project's. -->
+			<!-- The run's own settings: older cached details lack them. -->
 			{@const shownSettings = detail.run.settings}
-			{@const runSettings = shownSettings ?? project.settings}
 			{@const runSeries = detail.series}
 			{@const shownRunId = detail.run.id}
 			{@const shownRun = detail.run}
@@ -708,20 +817,19 @@
 						{#if notesPreview(detail.run.notes)}<a class="muted small evidence-line" href="#res-notes" data-testid="notes-preview">Notes: {notesPreview(detail.run.notes)}</a>{/if}
 						<span class="muted small">
 							{fmtDay(detail.run.startDate)} – {fmtDay(detail.run.endDate)} ({fmtNum(runDays(detail.run))} days) · ran {fmtWhen(detail.run.createdAt)} by {detail.run.createdBy ?? FORMER_MEMBER} · engine {detail.run.engineVersion}
-							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id, 'pick')}>go to latest</button>{/if}
+							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={goLatest}>go to latest</button>{/if}
 						</span>
 						<!-- The river and unit panels have their own pages (issue #17): one link each, keeping the run. -->
 						<nav class="outcomes small" aria-label="Outcomes for this run">
 							<span class="muted">For this run:</span>
-							<a
-								href={riverHref(shownRunId)}
-								aria-label="EWR for this run"
-								title="EWR against outflow, reserve compliance, EWR by month, the uncertainty bands, the outcome matrix, the seasonal outlook and the water account">EWR <span aria-hidden="true">→</span></a
+							<!-- What each page holds, in words beside its link rather than a hover title (#586 D18). -->
+							<span class="outcome"
+								><a href={riverHref(shownRunId)} aria-label="EWR for this run" aria-describedby="outcome-ewr">EWR <span aria-hidden="true">→</span></a>
+								<span class="muted" id="outcome-ewr">reserve compliance, EWR by month, outlook and water account</span></span
 							>
-							<a
-								href={supplyHref(shownRunId)}
-								aria-label="Hydrological units for this run"
-								title="Each hydrological unit's supply against its demand, the hydrological unit results table, the curtailment targets and assurance of supply">Hydrological units <span aria-hidden="true">→</span></a
+							<span class="outcome"
+								><a href={supplyHref(shownRunId)} aria-label="Hydrological units for this run" aria-describedby="outcome-units">Hydrological units <span aria-hidden="true">→</span></a>
+								<span class="muted" id="outcome-units">supply against demand, curtailment and assurance of supply</span></span
 							>
 						</nav>
 					</div>
@@ -739,8 +847,10 @@
 						<DownloadMenu items={downloadItems} />
 					</div>
 				</div>
-				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
+				<section id="res-summary" aria-labelledby="summary-h">
+					<!-- Named as the side index and the bar name it (#586 D4). -->
+					<h3 id="summary-h" class="summary-h">Summary</h3>
+					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} calibrationHref={(hash) => calibrationHref(shownRunId, hash)} placeHref={(place) => warningPlaceHref(place, shownRunId)} />
 					{#if summary.catchment.outletEwr && shownSettings?.ewrDailySource}
 						<Lazy load={loadRunScaledEwr}>
 							{#snippet children(RunScaledEwrTables)}
@@ -750,6 +860,12 @@
 					{/if}
 				</section>
 			</section>
+			{#if missingLink && missingLink.runId === detail.run.id}
+				<!-- A link to a panel this run doesn't have (missingPanel.ts): what it needs, focused on landing. -->
+				<p class="panel missing-panel" id="res-missing" tabindex="-1" data-testid="missing-panel" data-for={missingLink.hash}>
+					{missingLink.panel.text}{#if missingLink.panel.link}{' '}<a href={missingLink.panel.link.href}>{missingLink.panel.link.label}</a>{/if}
+				</p>
+			{/if}
 			{#if summary.forecast}
 				<Lazy load={loadForecastPanel}>
 					{#snippet children(ForecastPanel)}
@@ -757,84 +873,12 @@
 					{/snippet}
 				</Lazy>
 			{/if}
-			<RunCharts
-				{projectId}
-				runId={detail.run.id}
-				refs={detail.series}
-				{nodeNames}
-				{nodeOrder}
-				forecastFrom={summary.forecast?.from ?? null}
-				exclusions={runExclusions(shownSettings, summary.calibration?.exclusions)}
-				flagUse={shownSettings ? resolveQualityFlags(shownSettings.qualityFlags) : null}
-				checkGauges={checksOnlyGauges(summary.plausibility?.gauges, detail.series, summary.calibration?.siteNodeId, nodeOrder)}
-				recordHref={(g) => recordHref(series, g.nodeId, g.flowKind)}
-			>
-				{#snippet modelTail(flow)}
-					<div class="panel" id="res-calibration">
-						<CalibrationPanel
-							calibration={summary.calibration}
-							requestedStart={runSettings.calibrationStart ?? null}
-							requestedEnd={runSettings.calibrationEnd ?? null}
-						/>
-						<!-- Flow against use at each gauge with a record (issue #444): where a calibration gap is read. -->
-						<CalibrationCheck
-							{projectId}
-							runId={shownRunId}
-							refs={runSeries}
-							nodes={(shownRun.model?.nodes ?? []) as unknown as CheckNode[]}
-							{nodeNames}
-							forecastFrom={summary.forecast?.from ?? null}
-							flowUnit={flow.flowUnit}
-							toolbar={flow.toolbar}
-						/>
-						{#if shownSettings}
-							<div class="provenance">
-								<FitProvenance record={shownSettings.fitRecord} settings={shownSettings} chirpsSource={chirpsSourceOfInput(shownRun.inputSeries)} apanDaily={apanDailyOfInput(shownRun.inputSeries)} chirpsFactors={runChirpsFactors(shownRun.summary)} runForcing={runForcingOfSummary(shownRun.summary)} observedOrigin={originOfFit(shownRun.inputSeries, shownSettings.fitRecord)} />
-							</div>
-						{/if}
-						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}
-							<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
-						{/if}
-					</div>
+			<RunCharts {projectId} run={shownRun} refs={runSeries} {nodeNames} {nodeOrder}>
+				{#snippet waterBalance()}
 					<!-- The water balance per water year (issue #137): the table a hydrologist hands a client first. -->
 					<div class="panel" id="res-water-balance">
 						<WaterBalanceTable {summary} accountHref={riverHref(shownRunId, 'res-water-account')} />
 					</div>
-					{#if summary.runoff}
-						<div class="panel" id="res-runoff">
-							<RunoffPanel balance={summary.runoff} {projectId} runId={shownRunId} refs={runSeries} forecastFrom={summary.forecast?.from ?? null} />
-						</div>
-					{/if}
-					{#if unitRainOf(summary) || stationsOf(summary)}
-						<div class="panel" id="res-unit-rain">
-							<Lazy load={loadUnitRainPanel}>
-								{#snippet children(UnitRainPanel)}
-									<UnitRainPanel result={unitRainOf(summary)} stations={stationsOf(summary)} order={summary.farms.map((f) => f.nodeId)} />
-								{/snippet}
-							</Lazy>
-						</div>
-					{/if}
-					{#if summary.wr2012}
-						<div class="panel" id="res-wr2012">
-							<Lazy load={loadWr2012Panel}>
-								{#snippet children(Wr2012Panel)}
-									<Wr2012Panel report={summary.wr2012!} />
-								{/snippet}
-							</Lazy>
-						</div>
-					{/if}
-					<div class="panel" id="res-ewr-agreement">
-						<EwrAgreementTable {summary} />
-						<!-- The same test at each gauge EWR site with a record of its own (engine ≥ 1.41.0). -->
-						{#each summary.catchment?.ewrAgreementSites ?? [] as site (site.nodeId)}
-							<EwrAgreementTable {summary} {site} title="EWR test at {site.name}: model against its observed flow" />
-						{/each}
-					</div>
-					{#if summary.plausibility}
-						<div class="panel" id="res-plausibility">
-							<PlausibilityPanel checks={summary.plausibility} {projectId} runId={shownRunId} runoffModel={shownRun.runoffModel} {runs} />
-						</div>
-					{/if}
 				{/snippet}
 				{#snippet record()}
 					<!-- The Record group (issue #521): Run notes, Evidence and Reproduction are panels of their own, each with its action where it is seen. -->
@@ -877,14 +921,22 @@
 						{#if publicationError}
 							<div class="alert alert-error" role="alert">
 								Couldn’t load the publication: {publicationError}
-								<button type="button" class="btn btn-sm" onclick={loadPublication}>Try again</button>
+								<button
+									type="button"
+									class="btn btn-sm"
+									data-retry
+									onclick={(e) => {
+										followRetry(e.currentTarget);
+										loadPublication();
+									}}>Try again</button
+								>
 							</div>
 						{:else if publication}
 							{#key shownRunId}
 								<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} actsForAuthority={project.actsForAuthority ?? false} onChange={published} />
 							{/key}
 						{:else}
-							<p class="muted" role="status">Loading the publication…</p>
+							<p class="muted" role="status" data-loading>Loading the publication…</p>
 						{/if}
 					</section>
 				{/snippet}
@@ -910,7 +962,7 @@
 				<span class="sk sk-table"></span>
 			</div>
 			<div class="panel" aria-hidden="true"><span class="sk sk-chart"></span></div>
-			<p class="visually-hidden" role="status">Loading run results…</p>
+			<p class="visually-hidden" role="status" data-loading>Loading run results…</p>
 		{:else}
 			<div class="panel placeholder muted">Pick a run to see its results. {RESULTS_SHOW}</div>
 		{/if}
@@ -946,6 +998,13 @@
 		gap: 0 0.9rem;
 		margin-top: 0.2rem;
 	}
+	/* Each link with what its page holds beside it (#586 D18), wrapping as one piece on a phone. */
+	.outcome {
+		display: inline-flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0 0.4rem;
+	}
 	/* A flex item drops the space before the arrow ("EWR→"), so the gap puts it back. */
 	.outcomes a {
 		display: inline-flex;
@@ -963,11 +1022,6 @@
 	.evidence-line {
 		display: block;
 		margin: 0.15rem 0;
-	}
-	.provenance {
-		margin-top: 1rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border);
 	}
 	/* In the section header's actions: label, field and buttons on one row, wrapping on a phone. */
 	.run-form {
@@ -1129,7 +1183,10 @@
 		background: var(--accent-soft);
 		box-shadow: inset 3px 0 0 var(--accent);
 	}
+	/* Positioned, so a row's visually hidden full label (a shortened row, #586 D7) sits in its row: placed against the
+	   sticky rail instead, the hidden labels of rows scrolled out of the list ran the rail 480 px past its box. */
 	.pick {
+		position: relative;
 		flex: 1;
 		display: flex;
 		flex-direction: column;
@@ -1209,6 +1266,65 @@
 	.filter-count {
 		margin: 0 0 0.4rem;
 	}
+	/* Stacked (a phone), a long list shows its first rows and the shown run's under "Show all N runs" (#586 D8),
+	   so the results start on the first screen; the wide rail (below) lists every row and scrolls inside itself. */
+	.runs.folded li.beyond,
+	.filter.folded {
+		display: none;
+	}
+	.list-foot {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.75rem;
+		margin-top: 0.4rem;
+	}
+	.list-foot:empty {
+		display: none;
+	}
+	@container runs-page (min-width: 50rem) {
+		.runs.folded li.beyond {
+			display: flex;
+		}
+		.filter.folded {
+			display: block;
+		}
+		.fold-btn {
+			display: none;
+		}
+		/* The rail is clipped to the window: an opened key scrolls inside itself rather than run past it. */
+		.tag-key dl {
+			max-height: 40vh;
+			overflow-y: auto;
+		}
+	}
+	/* The tags in words (#586 D18): one line under the list that opens. */
+	.tag-key {
+		color: var(--text-2);
+	}
+	.tag-key[open] {
+		flex-basis: 100%;
+	}
+	.tag-key summary {
+		cursor: pointer;
+		min-height: 24px;
+		color: var(--text-muted);
+	}
+	.tag-key dl {
+		margin: 0.35rem 0 0;
+		display: grid;
+		gap: 0.35rem;
+	}
+	.tag-key dt {
+		font-weight: 600;
+	}
+	.tag-key dd {
+		margin: 0;
+	}
+	/* The Summary's heading: the first in its panel, under the run header (#586 D4). */
+	.summary-h {
+		margin: 1rem 0 0.5rem;
+	}
 	.pin svg {
 		fill: none;
 	}
@@ -1242,14 +1358,59 @@
 	.no-runs .empty {
 		text-align: left;
 	}
+	/* One run (#586 D21): the card is one row across the page, its heading, the run's row and the tags' key side by
+	   side (wrapping on a phone), and the results take the whole width under it. */
+	.layout.single {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.single .rail {
+		position: static;
+		max-height: none;
+	}
+	.single .list {
+		display: flex;
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 1.25rem;
+		padding-block: 0.6rem;
+		margin-bottom: 0;
+	}
+	.single .list .panel-head {
+		margin-bottom: 0;
+		gap: 0.75rem;
+	}
+	.single .runs {
+		flex: 1 1 20rem;
+		max-height: none;
+		min-height: 0;
+		min-width: 0;
+	}
+	/* The row's label, when and tags on one line where they fit, its pin and delete side by side at its end. */
+	.single .runs li.active {
+		align-items: center;
+		border-radius: var(--radius-sm);
+	}
+	.single .pick {
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.15rem 0.75rem;
+		padding-block: 0.4rem;
+	}
+	.single .tags {
+		margin-top: 0;
+	}
+	.single .acts {
+		flex-direction: row;
+		padding: 0 0.3rem 0 0;
+	}
+	.single .list-foot {
+		margin-top: 0;
+	}
 	.placeholder {
 		text-align: center;
 		padding: 3rem 1rem;
-	}
-	.agree {
-		margin-top: 1rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border);
 	}
 	.linkish {
 		all: unset;

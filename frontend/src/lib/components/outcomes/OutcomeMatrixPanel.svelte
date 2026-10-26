@@ -21,6 +21,7 @@
 -->
 <script lang="ts">
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import ToolRow from '#lib/components/common/ToolRow.svelte';
 	import { isScenarioRun, type ScenarioRunFields } from '#lib/components/runs/scenarioRun.js';
 	import { onDestroy, tick, untrack } from 'svelte';
@@ -274,7 +275,7 @@
 
 		<div role="status" aria-live="polite" class="status">
 			{#if loading}
-				<span class="muted">Loading…</span>
+				<span class="muted" data-loading>Loading…</span>
 			{:else if shown?.kind === 'pending'}
 				<span data-testid="sweep-status">{shown.text}</span>
 				{#if shown.progress != null}<progress max="100" value={shown.progress} aria-label="Demand sweep progress">{shown.progress} %</progress>{/if}
@@ -285,7 +286,16 @@
 		{#if loadError}
 			<div class="alert alert-error" role="alert" data-testid="outcome-load-error">
 				Couldn’t look up this run’s demand sweep: {loadError}
-				<button type="button" class="btn btn-sm" onclick={() => load()}>Try again</button>
+				<!-- The loading line takes its place: the focus follows (followRetry). -->
+				<button
+					type="button"
+					class="btn btn-sm"
+					data-retry
+					onclick={(e) => {
+						followRetry(e.currentTarget);
+						load();
+					}}>Try again</button
+				>
 			</div>
 		{/if}
 

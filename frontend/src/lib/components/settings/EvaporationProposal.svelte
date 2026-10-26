@@ -112,6 +112,7 @@
 	id="set-evaporation"
 	variant="inline"
 	title="Evaporation from the map"
+	level={4}
 	helpKey="evaporation-from-map"
 	what="evaporation summary"
 	bodyGrid
@@ -142,7 +143,7 @@
 
 	{#if data && view}
 		{#if view.kind === 'no-dataset'}
-			<ProposalNoDataset testid="evaporation-no-dataset" what="evaporation grid" consequence="nothing is proposed" command="pnpm import:evaporation" />
+			<ProposalNoDataset testid="evaporation-no-dataset" what="evaporation map" consequence="nothing can be proposed" instead="Enter the A-pan and pan coefficient by hand." />
 		{:else}
 			{@const d = data.dataset!}
 			{#if data.datasets.length > 1}

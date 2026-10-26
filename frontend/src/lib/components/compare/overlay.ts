@@ -14,7 +14,7 @@ import {
 	type FarmColumn,
 	type NodeKind
 } from '@water-management/engine';
-import { fmtNum } from '#lib/format/number.js';
+import { fmtDay, fmtNum } from '#lib/format/number.js';
 
 /** One stored output series of a run (GET …/runs/:runId `series`). */
 export interface SeriesRefLike {
@@ -324,5 +324,5 @@ export function summaryText(s: DeltaStats, unit: string, scale = 1): string {
 	const plural = (n: number) => `${fmtNum(n)} day${n === 1 ? '' : 's'}`;
 	const head = `Over the ${plural(s.days)} both runs have: mean A ${f(s.meanA)}, mean B ${f(s.meanB)}, B − A ${f(s.meanDelta, true)}${u}.`;
 	if (!s.largest) return `${head} The two runs are identical on every one of those days.`;
-	return `${head} B is higher on ${plural(s.daysHigher)} and lower on ${plural(s.daysLower)}; the largest change is ${f(s.largest.delta, true)}${u} on ${s.largest.date}.`;
+	return `${head} B is higher on ${plural(s.daysHigher)} and lower on ${plural(s.daysLower)}; the largest change is ${f(s.largest.delta, true)}${u} on ${fmtDay(s.largest.date)}.`;
 }

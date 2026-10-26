@@ -6,19 +6,31 @@
 export const PROJECT_TAB = 'project';
 
 /**
- * The panels' heading ids, in page order. They were on the Summary, below its
- * first screen, until 2026-09-27, so a bookmarked `/projects/:id#members-h`
- * is sent here (OverviewTab) and lands on the same panel.
+ * Every panel's heading id, in page order: the page is one column in the
+ * side index's order (issue #586 R4-B), the project, then who can open it,
+ * then its notes, facts and reports. Most were on the Summary, below its
+ * first screen, until 2026-09-27, so a bookmarked `/projects/:id#members-h` is
+ * sent here (OverviewTab) and lands on the same panel; the licence record's
+ * email links `#licence-record` (issue #586). Scheduled reports and API keys,
+ * lazy chunks moved from Settings (issue #586), are named by their wrappers'
+ * ids. project.test.ts checks the list against the headings the page draws.
  */
 export const PROJECT_ANCHORS = [
-	'model-h',
 	'details-h',
 	'import-record-h',
-	'recent-notes-h',
 	'team-h',
 	'members-h',
+	'regcheck-h',
+	'authority-h',
+	'delegates-h',
 	'farmers-h',
-	'share-h'
+	'share-h',
+	'project-api-keys',
+	'project-two-step-h',
+	'licence-record',
+	'recent-notes-h',
+	'model-h',
+	'project-report-schedules'
 ] as const;
 
 /** True for a fragment (without the `#`) that names one of the Project page's panels. */

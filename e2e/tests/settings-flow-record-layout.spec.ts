@@ -3,46 +3,52 @@
 // evaporation with the row's fill tools folded) and Evaporation from the map as a card of its own; the rain threshold
 // for demand now under Demand. Calibration record: the window, Compare with and the exclusions first, "Exclude…" in the
 // list's header row, then one line of the quality-flag values that opens the gauged ranges (a table), the day rules,
-// the river-stop months and gap filling. Synthetic data.
+// the river-stop months and gap filling. Both are on the Calibration page since issue #586 round 3 (Flow generation
+// and Demand stay on Model settings). Synthetic data.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll, layoutSettled, resizeTo, squashedChecks } from '../support/reflow.ts';
-import { openFold, settingsMenu, showExplanations } from '../support/settings.ts';
+import { expectFoldOnOneRow, openFold, openSettings, settingsMenu, showExplanations } from '../support/settings.ts';
 
 const flow = (page: Page) => page.locator('#set-flow');
 const record = (page: Page) => page.locator('#set-record');
 const box = async (l: Locator) => (await l.boundingBox())!;
 
+const calIndex = (page: Page) => page.getByRole('navigation', { name: 'Calibration sections' });
+const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
+
+/** A project with a fit to set up, open on the Calibration page, where Flow calibration and the record are. */
 async function openProject(page: Page, name: string) {
 	const project = await seedRunnableProject(page.request, name);
 	await updateSettings(page.request, project.id, {
 		runoffModel: 'gr4j',
 		calibrationExclusions: [{ waterYear: 2015, reason: 'Rain gauge moved' }]
 	});
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(flow(page).getByTestId('flow-gr4j-card')).toBeVisible();
 	return project;
 }
 
-async function jump(page: Page, name: string, hash: string) {
-	await settingsMenu(page).getByRole('link', { name, exact: true }).click();
+/** A link to a panel followed on the page (the Calibration side index lists its two parts, not the panels). */
+async function jump(page: Page, hash: string) {
+	await page.evaluate((h) => (location.hash = h), `#${hash}`);
 	await expect(page).toHaveURL(new RegExp(`#${hash}$`));
+	await expect(page.locator(`#${hash}`).getByRole('heading', { level: 3 }).first()).toBeFocused();
 	await layoutSettled(page);
 }
 
-test('at 1440×900 Flow calibration opens on its parameters with the jump to the fit in the card’s head, and its folds open in place', async ({ page, owner }) => {
+test('at 1440×900 Flow calibration opens on its parameters, and its folds open in place', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await openProject(page, 'Flow layout');
-	await jump(page, 'Flow calibration', 'set-flow');
+	await jump(page, 'set-flow');
 	const gr4j = flow(page).getByTestId('flow-gr4j-card');
-	// The card's head: its name and its action on one row; the three parameters and the warm-up line on the first screen.
-	const link = gr4j.getByTestId('flow-fit-link');
-	await expect(link).toBeInViewport({ ratio: 1 });
-	const title = await box(gr4j.getByRole('heading', { name: 'GR4J parameters' }));
-	expect(Math.abs((await box(link)).y + (await box(link)).height / 2 - (title.y + title.height / 2))).toBeLessThan(12);
+	// The card's name, the three parameters and the warm-up line on the first screen. The jump to Fit the parameters is
+	// the page header's alone, not repeated in the card (issue #586, C19).
+	await expect(gr4j.getByRole('heading', { level: 4, name: 'GR4J parameters' })).toBeInViewport({ ratio: 1 });
+	await expect(flow(page).getByRole('link', { name: 'Fit the parameters', exact: true })).toHaveCount(0);
 	for (const l of [/^Production store capacity X1/, /^Routing store capacity X3/, /^Unit hydrograph time base X4/]) await expect(gr4j.getByLabel(l)).toBeInViewport();
 	await expect(gr4j.getByTestId('flow-more').locator('summary')).toBeInViewport({ ratio: 1 });
 
@@ -53,9 +59,8 @@ test('at 1440×900 Flow calibration opens on its parameters with the jump to the
 	await gr4j.getByLabel(/^Warm-up/).fill('730');
 	await expect(gr4j.getByTestId('flow-more-summary')).toHaveText('warm-up 730 days');
 
-	// The rain threshold for demand lives under Demand now (issue #521).
+	// The rain threshold for demand lives under Demand now (issue #521), on Model settings (checked at the end).
 	await expect(flow(page).getByLabel(/^Rain threshold for demand/)).toHaveCount(0);
-	await expect(page.locator('#set-demand').getByLabel(/^Rain threshold for demand/)).toHaveValue('2');
 
 	// The pan row stays in view; its fill tools fold under one line that names the source.
 	const pe = flow(page).getByTestId('flow-pe-card');
@@ -67,31 +72,47 @@ test('at 1440×900 Flow calibration opens on its parameters with the jump to the
 
 	// The cards in order, each with its heading.
 	await expect(flow(page).locator(':scope > .sub-card')).toHaveCount(4);
-	await expect(flow(page).getByTestId('flow-rain-card').getByRole('heading', { level: 3 })).toHaveText('Rain into GR4J');
+	await expect(flow(page).getByTestId('flow-rain-card').getByRole('heading', { level: 4 })).toHaveText('Rain into GR4J');
 	await expect(flow(page).getByTestId('flow-evaporation-card').getByRole('heading', { name: 'Evaporation from the map' })).toBeVisible();
 	expect(await squashedChecks(page)).toEqual([]);
+
+	// Demand, with the rain threshold, is on Model settings; the warm-up typed here goes along unsaved.
+	await sidebar(page).getByRole('link', { name: 'Model settings', exact: true }).click();
+	await expect(page.locator('#set-demand').getByLabel(/^Rain threshold for demand/)).toHaveValue('2');
 });
 
 test('with the explanations on, Flow generation’s explanation sits on its own line under its two methods', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await openProject(page, 'Flow explain');
+	const project = await openProject(page, 'Flow explain');
+	// Flow generation is on Model settings.
+	await openSettings(page, project.id);
 	await showExplanations(page);
 	const method = page.getByTestId('flowgen-method');
-	const label = await box(method.locator('label.check').first());
-	const hint = await box(method.locator('.hint.explain'));
-	expect(hint.y).toBeGreaterThanOrEqual(label.y + label.height - 1);
-	expect(Math.abs(hint.x - label.x)).toBeLessThanOrEqual(1);
-	// The two methods side by side on one line.
+	const first = await box(method.locator('label.check').first());
 	const second = await box(method.locator('label.check').nth(1));
-	expect(Math.abs(second.y - label.y)).toBeLessThanOrEqual(1);
+	// The two methods one under the other, each with its plain words beside its name (issue #586 R4-B;
+	// settings-model-layout.spec.ts checks the words themselves).
+	expect(second.y).toBeGreaterThanOrEqual(first.y + first.height - 1);
+	expect(Math.abs(second.x - first.x)).toBeLessThanOrEqual(1);
+	for (const i of [0, 1]) {
+		const name = await box(method.locator('label.check').nth(i));
+		const words = await box(method.getByTestId('flowgen-what').nth(i));
+		expect(words.x).toBeGreaterThanOrEqual(name.x + name.width);
+		expect(Math.abs(words.y + words.height / 2 - (name.y + name.height / 2))).toBeLessThan(6);
+	}
+	// The explanation on its own line under both, lined up with them.
+	const hint = await box(method.locator('.hint.explain'));
+	const lastWords = await box(method.getByTestId('flowgen-what').nth(1));
+	expect(hint.y).toBeGreaterThanOrEqual(Math.max(second.y + second.height, lastWords.y + lastWords.height) - 1);
+	expect(Math.abs(hint.x - first.x)).toBeLessThanOrEqual(1);
 });
 
 test('at 1440×900 the Calibration record opens on the window and the exclusions, with Exclude… in the list’s header row', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await openProject(page, 'Record layout');
-	await jump(page, 'Calibration record', 'set-record');
+	await jump(page, 'set-record');
 	const rec = record(page);
 	const excl = rec.getByRole('group', { name: /^Calibration exclusions/ });
 	const add = excl.getByRole('button', { name: 'Exclude a water year' });
@@ -149,15 +170,18 @@ test('at 1440×900 the Calibration record opens on the window and the exclusions
 	expect(await squashedChecks(page)).toEqual([]);
 });
 
-test('Find a setting reaches a folded field in both panels: it opens the fold and focuses the field', async ({ page, owner }) => {
+// Find a setting is Model settings' (the Calibration record's folded fields moved with it to Calibration, issue #586
+// round 3): it still opens a fold there and focuses the field, as it did for the record's.
+test('Find a setting reaches a folded field: it opens the fold and focuses the field', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await openProject(page, 'Flow record find');
+	const project = await openProject(page, 'Flow record find');
+	await openSettings(page, project.id);
 	const find = page.getByRole('searchbox', { name: 'Find a setting' });
-	await find.fill('Infilled days');
+	await find.fill('Days in February');
 	await find.press('Enter');
-	await expect(record(page).getByTestId('record-flags')).toHaveAttribute('open', '');
-	await expect(record(page).getByLabel('Infilled days')).toBeFocused();
+	await expect(page.getByTestId('feb-advanced')).toHaveAttribute('open', '');
+	await expect(page.getByRole('spinbutton', { name: 'Days in February' })).toBeFocused();
 });
 
 test('Fit automatically holds the WR2012 MAR penalty beside its choices, and the rules’ run sits in the rules’ head', async ({ page, owner }) => {
@@ -183,15 +207,42 @@ test('Fit automatically holds the WR2012 MAR penalty beside its choices, and the
 	expect((await box(run)).y).toBeLessThan((await box(page.getByTestId('rules-try'))).y);
 });
 
+test('at 1440 beside the index, the long fold lines keep their name, values and action on one row (issue #586, C14)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const project = await openProject(page, 'Fold rows');
+	// The record's on Calibration, beside its index; Data quality's on Model settings, beside its own.
+	await expect(page.locator('nav.rail-nav[aria-label="Calibration sections"]')).toBeVisible();
+	await expect(calIndex(page)).toBeVisible();
+	await expect(record(page).getByTestId('record-flags')).not.toHaveAttribute('open', '');
+	await expectFoldOnOneRow(record(page).getByTestId('record-flags'));
+	await openSettings(page, project.id);
+	await expect(settingsMenu(page)).toBeVisible();
+	const limits = page.locator('#set-quality').getByTestId('quality-limits');
+	await expect(limits).not.toHaveAttribute('open', '');
+	await expectFoldOnOneRow(limits);
+});
+
 test('a viewer sees no Exclude… or Use buttons, and can open the folds to read the values', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await openProject(page, 'Flow record viewer');
 	const viewer = await signIn('Flow record viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await viewer.page.setViewportSize({ width: 1440, height: 900 });
-	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
+	await viewer.page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(record(viewer.page).getByRole('button', { name: 'Exclude a water year' })).toHaveCount(0);
 	await expect(viewer.page.getByRole('button', { name: 'Run the calibration rules' })).toHaveCount(0);
+	// No jump to a fit a viewer can't make (issue #586, C11): the header's is an editor's, and the card has none (C19).
+	await expect(flow(viewer.page).getByTestId('flow-gr4j-card')).toBeVisible();
+	await expect(flow(viewer.page).getByRole('link', { name: 'Fit the parameters', exact: true })).toHaveCount(0);
+	// A fold offers a viewer "Show", never "Change", since nothing inside can be changed (issue #586, C10).
+	for (const [scope, id] of [
+		[record(viewer.page), 'record-flags'],
+		[flow(viewer.page), 'flow-more'],
+		[flow(viewer.page), 'pan-tools']
+	] as const) {
+		await expect(scope.getByTestId(id).locator(':scope > summary .fold-change')).toHaveText('Show');
+	}
 	await openFold(record(viewer.page), 'record-flags');
 	await expect(record(viewer.page).getByLabel('Suspect days')).toBeDisabled();
 	await openFold(flow(viewer.page), 'flow-more');

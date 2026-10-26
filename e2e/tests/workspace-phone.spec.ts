@@ -33,7 +33,9 @@ const SECTIONS: { tab: string; ready: string | RegExp }[] = [
 	{ tab: 'network', ready: '+ Add hydrological unit' },
 	{ tab: 'crops', ready: '+ Add crop' },
 	{ tab: 'transfers', ready: '+ Add transfer' },
-	{ tab: 'settings', ready: 'Fit the parameters' },
+	// The fit's line and "Fit the parameters" are Calibration's header's since issue #586 round 3.
+	{ tab: 'settings', ready: 'Add data' },
+	{ tab: 'calibration', ready: 'Fit the parameters' },
 	{ tab: 'series', ready: 'Preview all data' },
 	{ tab: 'runs', ready: 'Run model' },
 	{ tab: 'river', ready: 'Open in Runs & results' },

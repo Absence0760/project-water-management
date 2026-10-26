@@ -27,12 +27,13 @@ export const GUIDE_KIND_TITLES: Record<GuideKind, string> = {
 };
 
 /** The workspace tabs the setup path walks, in the order a catchment is set up. */
-export const SETUP_TABS = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs'] as const;
+export const SETUP_TABS = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'calibration', 'runs'] as const;
 
 /**
  * Tabs under *Build the model* that the setup path skips: optional, not a
  * step every catchment needs (the Map, issue #288: a model builds and runs
- * without one). "Getting around a project" still names them in place.
+ * without one). Calibration joined the path once its panels moved there (issue #586 round 3).
+ * "Getting around a project" still names them in place.
  */
 export const OPTIONAL_MODEL_TABS: readonly string[] = ['map'];
 
@@ -135,7 +136,8 @@ export const GUIDES: Guide[] = [
 							'**Crops & demand** (optional): crops with monthly crop factors, then the hectares each hydrological unit plants. Skip it if nothing is irrigated. See [[guide:set-up-crops-and-demand|Set up crops and demand]].',
 							'**Transfers** (optional): pipelines or canals from one hydrological unit’s dam to another. See [[guide:add-a-transfer|Add a transfer]].',
 							'**Data**: upload daily rainfall (required) and observed flow at the outlet (needed to calibrate). See [[guide:add-data|Upload rainfall and flow data]].',
-							'**Settings & calibration**: A-pan evaporation, the runoff model and its parameters, how rain gaps are filled, the calibration window, the EWR and the simulation period. See [[guide:set-the-ewr|Set the EWR]] and [[guide:fit-automatically|Fit the runoff model automatically]].',
+							'**Model settings**: A-pan evaporation, how rain gaps are filled, how natural flow is made, the EWR and the simulation period. See [[guide:set-the-ewr|Set the EWR]].',
+							'**Calibration**: the runoff model’s parameters, the calibration record and window, and fitting them to the observed flow. See [[guide:fit-automatically|Fit the runoff model automatically]].',
 							'**Run** the model on the Runs & results tab, then read the results. See [[guide:run-and-read-results|Run the model and read the results]].',
 							'**Iterate**: improve the calibration, run again, and compare runs on **Compare runs**. Copy the project to try a what-if without touching the original. See [[guide:compare-runs|Compare runs and try what-ifs]].'
 						]
@@ -143,7 +145,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run, irrigation first: **Irrigation supplied** (the share of demand, and how many hydrological units fell below 95 %), the **Shortfall** (the demand not supplied over the run, in Mm³, and in an average year), **Units curtailed** (the days a drought restriction cut demand; without any, the **Worst-supplied unit** and its share) and how full the dams are, each with its change from the run before (the worst-supplied unit has none). The EWR’s results are on the **EWR** page (a link under the supply list goes there), and the calibration fit on Runs & results. Then **Needs attention** cards (run warnings, new or old data and hydrological units with nothing planted, each a link to where it is fixed), with the **Active alerts** under them; and **Supply by hydrological unit**, the eight least supplied first (**Show all** lists the rest), where a hydrological unit’s name opens its planted areas and **More on Hydrological units** opens that page. The **Dams today** card opens the **Dams** tab. Once the run’s last day is more than a week old, the card says so by its date (**Dams on 31 Dec 2024**), and “this week” and “last 30 days” elsewhere give way to the date the figures end on in the same way. The published baseline and a link to **Project** sit under the supply list. Once every setup step is done, the checklist leaves the page: a **Setup complete** button at the top, beside the rain date, opens the steps over the page.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run, irrigation first: **Irrigation supplied** (the share of demand, and how many hydrological units fell below 95 %), the **Shortfall** (the demand not supplied over the run, in Mm³, and in an average year), **Units curtailed** (the days a drought restriction cut demand; without any, the **Worst-supplied unit** and its share) and how full the dams are, each with its change from the run before (the worst-supplied unit has none). The EWR’s results are on the **EWR** page (a link under the supply list goes there), and the calibration fit on **Calibration**. Then **Needs attention** cards (run warnings, new or old data and hydrological units with nothing planted, each a link to where it is fixed), with the **Active alerts** under them; and **Supply by hydrological unit**, the eight least supplied first (**Show all** lists the rest), where a hydrological unit’s name opens its planted areas and **More on Hydrological units** opens that page. The **Dams today** card opens the **Dams** tab. Once the run’s last day is more than a week old, the card says so by its date (**Dams on 31 Dec 2024**), and “this week” and “last 30 days” elsewhere give way to the date the figures end on in the same way. The published baseline and a link to **Project** sit under the supply list. Once every setup step is done, the checklist leaves the page: a **Setup complete** button at the top, beside the rain date, opens the steps over the page.'
 					}
 				]
 			},
@@ -152,11 +154,11 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project’s tabs are grouped in three sections. **Review** holds the Project page, Applications and the History of changes. **Build the model** is what the model is made of, in setup order: Network, the **Map** (the geography: boundary, parcels, dams, gauges and rivers; the Network’s header links to it too), Crops & demand, Transfers, Data and Settings & calibration. **Outcomes** is what the model says: the Summary (where a project opens), EWR, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations.'
+						text: 'A project’s tabs are grouped in three sections. **Review** holds the Project page, Applications and the History of changes. **Build the model** is what the model is made of, in setup order: Network, the **Map** (the geography: boundary, parcels, dams, gauges and rivers; the Network’s header links to it too), Crops & demand, Transfers, Data, Model settings and Calibration (fitting the runoff parameters and judging the fit, together). **Outcomes** is what the model says: the Summary (where a project opens), EWR, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations.'
 					},
 					{
 						type: 'p',
-						text: '**Project**, under *Review*, is what the project is and who can open it: the model’s headline facts (hydrological units, catchment area, dam capacity, irrigated area, transfers, time series, runs and the outflow gauge, each a link to where it is edited), **Project details** (name, description, time zone and WUA name, saved with **Save changes** at the foot of the page, as model edits are), the **Import record** of an imported project, **Recent notes**, and on the right the **Team**, **Members**, **Farmers** and, for owners, **Share links**. **Download** in its header takes a copy of the project. The Summary links there under **Model facts, details, team and sharing**.'
+						text: '**Project**, under *Review*, is what the project is and who can open it, in one column: **Project details** (name, description, time zone and WUA name, saved with **Save changes** at the foot of the page, as model edits are) and the **Import record** of an imported project; then the **Team**, **Members**, **Farmers** and, for owners, **Share links**; then **Recent notes** and the model’s headline facts (hydrological units, catchment area, dam capacity, irrigated area, transfers, time series, runs and the outflow gauge, each a link to where it is edited) and **Scheduled reports**. Owners also find **API keys** under **Share links**, and the page holds the licensing panels. **Download** in its header takes a copy of the project. The Summary links there under **Model facts, details, team and sharing**.'
 					},
 					{
 						type: 'p',
@@ -168,19 +170,19 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on EWR, the hydrological units and dams on the Network, where the runoff parameters came from on Settings & calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file, and **Run model**, which opens a small form for an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**; the run opens in **Runs & results** when it finishes. On **Runs & results** that form sits in the header itself. On a phone the page’s own actions are in one **⋯** list (**More actions**) beside **Rain up to**, **How this page works** is the **?** beside the name, and **Add data** and **Run model** (on Runs & results the run form) end the header on one row; while new data waits, the button there reads **Re-run model**.'
+						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on EWR, the hydrological units and dams on the Network, where the runoff parameters came from on Calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file, and **Run model**, which opens a small form for an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**; the run opens in **Runs & results** when it finishes. On **Runs & results** that form sits in the header itself. On a phone the page’s own actions are in one **⋯** list (**More actions**) beside **Rain up to**, **How this page works** is the **?** beside the name, and **Add data** and **Run model** (on Runs & results the run form) end the header on one row; while new data waits, the button there reads **Re-run model**.'
 					},
 					{
 						type: 'p',
-						text: 'Each page adds its own actions to the header. The Network has **Map** (the geographic map: boundary, parcels, dams and gauges), **Tables**, **+ Add hydrological unit** and, once there is an outlet, **+ Add other user**; the Map **Upload GeoJSON**, **Start from the map** while the model is empty (the boundary, then the dams, abstraction points and gauges, and the units, their areas and their order are proposed, each value ticked to take it), **Divide the model** once it has hydrological units (with an elevation model: each point on the map stands for its hydrological unit, and its own area and order are proposed beside its values now, each ticked to take it; each proposed piece carries its number on the map and on its card), and a **Getting started** pill while the boundary or the rain feed reading it is still to do. The Map’s tools sit on the map’s left edge: **Measure**, **Draw**, **Point** (place a point), **Delineate** (when the server has an elevation model: the elevation model’s own channels are drawn as solid **terrain channels**, named in the bar and the Key beside the river network’s dashed lines, which are for reference only; click a terrain channel and the catchment above it, following the terrain, is proposed over the dimmed channels, to accept or reject, or pick **Sub-catchments, one per click** and each click gets the land that drains to it before any other click, to save as areas; each point goes on the nearest terrain channel, and one beside a much larger channel is offered that channel first, since a click can land on a hillside stream beside the river meant) and **Trace** (a dam, when the server has water occurrence data: click inside a dam and its outline is proposed as a drawing to adjust and save); a strip over the map names the tool that’s on, and Escape leaves it. **Layers** turns on the optional layers (quaternary catchments, the river network, the hydrological units, the MAP, CHIRPS and DEM grids, and the relief) and sets the **Area fill**, and the search box over the map’s top edge finds a gauge, a registered dam, a quaternary or a place ([[map-search]]); **Key** says what the colours mean and what the areas are coloured by. Beside the map, one panel at a time: **Details** of the picked feature, **Features** (with **Download GeoJSON** and **Every feature**, the table), **Checks**, **Layers** and **Key**; the map’s own **Layers** button (under the zoom buttons) and **Key** button (bottom left, beside **Show everything**) open those tabs, or on a phone a panel over the map. While drawing, **Snap to features** puts a corner on a neighbour’s corner or edge (hold Alt to place one exactly), and a polygon’s card has **Split along a line**; Crops & demand **Tables**, **Load crop factors…**, **Import plantings…** and **+ Add crop**; Transfers **Show on the Network** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. EWR and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
+						text: 'Each page adds its own actions to the header. The Network has **Map** (the geographic map: boundary, parcels, dams and gauges), **Tables**, **+ Add hydrological unit** and, once there is an outlet, **+ Add other user**; the Map **Upload GeoJSON**, **Start from the map** while the model is empty (the boundary, then the dams, abstraction points and gauges, and the units, their areas and their order are proposed, each value ticked to take it), **Divide the model** once it has hydrological units (with an elevation model: each point on the map stands for its hydrological unit, and its own area and order are proposed beside its values now, each ticked to take it; each proposed piece carries its number on the map and on its card), and a **Getting started** pill while the boundary or the rain feed reading it is still to do. The Map’s tools sit on the map’s left edge: **Measure**, **Draw**, **Point** (place a point), **Delineate** (when the server has an elevation model: the elevation model’s own channels are drawn as solid **terrain channels**, named in the bar and the Key beside the river network’s dashed lines, which are for reference only; click a terrain channel and the catchment above it, following the terrain, is proposed over the dimmed channels, to accept or reject, or pick **Sub-catchments, one per click** and each click gets the land that drains to it before any other click, to save as areas; each point goes on the nearest terrain channel, and one beside a much larger channel is offered that channel first, since a click can land on a hillside stream beside the river meant) and **Trace** (a dam, when the server has water occurrence data: click inside a dam and its outline is proposed as a drawing to adjust and save); a strip over the map names the tool that’s on, and Escape leaves it. **Layers** turns on the optional layers (quaternary catchments, the river network, the hydrological units, the MAP, CHIRPS and DEM grids, and the relief) and sets the **Area fill**, and the search box over the map’s top edge finds a gauge, a registered dam, a quaternary or a place ([[map-search]]); **Key** says what the colours mean and what the areas are coloured by. Beside the map, one panel at a time: **Details** of the picked feature, **Features** (with **Download GeoJSON** and **Every feature**, the table), **Checks**, **Layers** and **Key**; the map’s own **Layers** button (under the zoom buttons) and **Key** button (bottom left, beside **Show everything**) open those tabs, or on a phone a panel over the map. While drawing, **Snap to features** puts a corner on a neighbour’s corner or edge (hold Alt to place one exactly), and a polygon’s card has **Split along a line**; Crops & demand **Tables**, **Load crop factors…**, **Import plantings…** and **+ Add crop**; Transfers **Show on the Network** and **+ Add transfer**; Data **Preview all data**; Calibration **Fit the parameters**, which jumps to that panel. EWR and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
 					},
 					{
 						type: 'p',
-						text: '**Settings & calibration** is one long form. On a wide screen a column down its left lists every panel under its task (**Data & rain**, **Demand & supply**, **Runoff & calibration**, **EWR & Reserve**, **Reading results**, **Automation & access**), marks the one you are reading and stays in view as you scroll; in a narrower window it is the row of links over the page. **Find a setting** (at the top of the column, or **Find** at the start of the row) lists the panels and the settings whose names match what you type: pick one to go straight to it, or press Enter for the first. Each panel says what it is set to now under its heading. The explanation under each field is hidden until you tick **Explain each setting under its field**, at the top of the form (your browser remembers it); every field keeps its ⓘ. A panel with something to fix before saving has a red dot in the menu, and the save bar links to it.'
+						text: '**Model settings** is one long form. On a wide screen a column down its left lists every panel under its task (**EWR the results are judged by** first, then **Data & rain**, **Demand & supply**, **Runoff**, **EWR & Reserve**, **Reading results**, **Automatic runs**), marks the one you are reading and stays in view as you scroll; in a narrower window it is the row of links over the page. **Find a setting** (at the top of the column, or **Find** at the start of the row) lists the panels and the settings whose names match what you type: pick one to go straight to it, or press Enter for the first. A setting that lives on another page now is listed with that page’s name and goes there: **Data feeds** is on **Data**, and **API keys** and **Scheduled reports** are on **Project**. The panels that set up a fit (**Flow calibration**, **Calibration record**, **Fit the parameters**, **WR2012 check**) are on **Calibration**, with the same save bar: edits on both pages save together. Each panel says what it is set to now under its heading. The explanation under each field is hidden until you tick **Explain each setting under its field**, at the top of the form (your browser remembers it); every field keeps its ⓘ. A panel with something to fix before saving has a red dot in the menu, and the save bar links to it.'
 					},
 					{
 						type: 'p',
-						text: 'Nothing you edit takes you off the page. **Tables** opens a full table over the page: the Network’s has the **Hydrological unit table**, **Crop factors**, **Planted areas**, **Transfers** and **Demands**, Crops & demand’s the crop factors and planted areas. **+ Add hydrological unit**, or **Edit** on its row under **All hydrological units** (or a double-click on it in the drawing), opens its form in a sheet over the page, its sections folded to a line of their values: the menu over the form, or a section’s heading, opens one, **Show every field** opens them all, and **Explain each setting under its field** shows the help under each field; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard model changes** and **Done**, which brings you back where you were. The **Hydrological unit table**, **Crop factors**, **Planted areas**, **Transfers**’ monthly rates and the **Irrigation systems** also take a block copied from a spreadsheet, or a CSV file: paste it into any cell, or use **Paste from a spreadsheet…** above the grid. With the names in the first column and a heading row (as **Download the table as CSV** gives them), rows and columns can come in any order; a bare block of numbers fills from the cell you pasted into. In **Crop factors** a crop name the project doesn’t have adds that crop, so a list of crop types comes in at once; in **Irrigation systems** a new name adds a system. A preview lists every value it would change before **Apply**, and nothing is kept until you save. The monthly A-pan and pan coefficients in **Settings & calibration → Demand** take a paste the same way. Each of these says its layout under **Expected format** in the paste dialog: the headings, the units, how decimals are read, and an example file to download and fill in. **Help → File formats** gathers every upload and paste box’s Expected format in one page, each with its example file.'
+						text: 'Nothing you edit takes you off the page. **Tables** opens a full table over the page: the Network’s has the **Hydrological unit table**, **Crop factors**, **Planted areas**, **Transfers** and **Demands**, Crops & demand’s the crop factors and planted areas. **+ Add hydrological unit**, or **Edit** on its row under **All hydrological units** (or a double-click on it in the drawing), opens its form in a sheet over the page, its sections folded to a line of their values: the menu over the form, or a section’s heading, opens one, **Show every field** opens them all, and **Explain each setting under its field** shows the help under each field; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard model changes** and **Done**, which brings you back where you were. The **Hydrological unit table**, **Crop factors**, **Planted areas**, **Transfers**’ monthly rates and the **Irrigation systems** also take a block copied from a spreadsheet, or a CSV file: paste it into any cell, or use **Paste from a spreadsheet…** above the grid. With the names in the first column and a heading row (as **Download the table as CSV** gives them), rows and columns can come in any order; a bare block of numbers fills from the cell you pasted into. In **Crop factors** a crop name the project doesn’t have adds that crop, so a list of crop types comes in at once; in **Irrigation systems** a new name adds a system. A preview lists every value it would change before **Apply**, and nothing is kept until you save. The monthly A-pan (**Model settings → Demand**) and the pan coefficients (**Calibration → Flow calibration**) take a paste the same way. Each of these says its layout under **Expected format** in the paste dialog: the headings, the units, how decimals are read, and an example file to download and fill in. **Help → File formats** gathers every upload and paste box’s Expected format in one page, each with its example file.'
 					},
 					{
 						type: 'note',
@@ -189,7 +191,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Notes keep what lives in people’s heads (“dam raised in 2019 per owner”) against what it is about. The speech-bubble button, with a count once there are notes, is on each hydrological unit on the Network (its card beside the map and its row in the Hydrological unit table), on a run’s record in Runs & results, beside each group’s heading on Settings & calibration and on **Recent notes** on the Project page. It opens the notes in a panel down the right: write a new one at the top, and the notes, newest first, scroll under it. Everyone on the project can add one; you edit your own. On a hydrological unit, **Also show to this hydrological unit’s farmers** lets its farmers read it too; every other note stays with the project team.'
+						text: 'Notes keep what lives in people’s heads (“dam raised in 2019 per owner”) against what it is about. The speech-bubble button, with a count once there are notes, is on each hydrological unit on the Network (its card beside the map and its row in the Hydrological unit table), on a run’s record in Runs & results, beside each panel’s heading on Model settings and Calibration and on **Recent notes** on the Project page. It opens the notes in a panel down the right: write a new one at the top, and the notes, newest first, scroll under it. Everyone on the project can add one; you edit your own. On a hydrological unit, **Also show to this hydrological unit’s farmers** lets its farmers read it too; every other note stays with the project team.'
 					}
 				]
 			},
@@ -389,7 +391,7 @@ export const GUIDES: Guide[] = [
 							'On **Crops & demand**, press **+ Add crop**: its sheet opens over the page. Name it and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep). Each crop then has a row in the **Crops** list, largest planted area first, with its colour, area, the month it needs most water and a small chart of its factors (Oct to Sep, the highest marked with its value; point at it to read a month); **Edit** on the row opens the sheet again. A warning icon on a row means a factor above 1.0 (hover or focus it; it opens the sheet). With more than nine crops, the smallest share one grey colour as **Other**, named in their own row.',
 							'Under **Planted area by hydrological unit**, press **Edit areas** and enter the hectares of each crop on each hydrological unit in the grid. Leave a crop blank on hydrological units that don’t grow it. Each hydrological unit then gets a bar split by crop in the list’s colours, largest hydrological unit first (hover a segment for its crop and hectares); a note under the bars names any hydrological unit with nothing planted, whose demand is zero.',
 							'Check **Irrigation demand by month**: what the catchment abstracts for its crops per month (the gross demand ÷ each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]], so an efficiency below 100 % raises it), stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per hydrological unit and for the catchment. It comes before effective rain, which a run takes off day by day. It uses the monthly A-pan means: with a daily [[apan|A-pan]] series on the **Data** tab, runs use that on the days it has a value, so their demand differs, and a line under the heading says so.',
-							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values (or, when an A-pan grid is loaded on the server, take them from **Settings & calibration → Flow calibration → Evaporation from the map**, whose **Use** saves them at once), the [[effective-rainfall|effective-rain fraction]], the [[soil-water-store|soil-water store]] and the [[rain-threshold]].',
+							'On **Model settings → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values (or, when an A-pan grid is loaded on the server, take them from **Calibration → Flow calibration → Evaporation from the map**, whose **Use** saves them at once), the [[effective-rainfall|effective-rain fraction]], the [[soil-water-store|soil-water store]] and the [[rain-threshold]].',
 							'To bring in a list kept in a spreadsheet (a scheme’s register, a farm survey; hundreds of rows at once), press **Import plantings…** and load a CSV file or paste the rows: a heading row, then one row per farm and crop with its area in hectares (Farm, Crop, Area (ha), and optionally Irrigation system; **Download the template** under **Expected format** has the layout). Farms and crops are matched by name, whatever the capitals and spacing. A crop the project doesn’t have is added with crop factors of 0 and marked **needs crop factors** until you fill them in; a farm it doesn’t have is listed, and with **Add them as new hydrological units** ticked it becomes a new unit draining into the outlet, marked **Needs placing** on the Network until you set its area and where it drains. The preview counts what changes and lists every row it can’t read by its line; nothing changes until **Apply**, and then you save as after any edit.',
 							'Give each crop its [[irrigation-system|irrigation system]] in its sheet (a unit can override it per crop in **Edit areas**); the systems and their efficiencies are under **Tables** › **Irrigation systems**. Each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] is its crops’ systems combined.',
 							'Press **Save changes** on the save bar.'
@@ -449,7 +451,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'A missing rain day written as 0 looks like a dry day, and it stops CHIRPS filling the gap. The **Data checks** panel flags long runs of zero rain in the wet season and years that read far below CHIRPS. By default a run treats a flagged run’s days as missing where CHIRPS reads more than 2 mm, so CHIRPS fills them, and keeps the 0 on drier days; **Settings & calibration → Rain gaps** ([[zero-rain-runs|zero-rain runs]]) sets that threshold and keeps a confirmed dry spell dry.'
+						text: 'A missing rain day written as 0 looks like a dry day, and it stops CHIRPS filling the gap. The **Data checks** panel flags long runs of zero rain in the wet season and years that read far below CHIRPS. By default a run treats a flagged run’s days as missing where CHIRPS reads more than 2 mm, so CHIRPS fills them, and keeps the 0 on drier days; **Model settings → Rain gaps** ([[zero-rain-runs|zero-rain runs]]) sets that threshold and keeps a confirmed dry spell dry.'
 					}
 				]
 			},
@@ -460,10 +462,10 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'The table lists the series that are **behind** first: rainfall or evaporation a run reads whose data is more than a week old, the same ones the number beside **Data** counts, each marked **Behind**. Then the last date of each series, its coverage per year and % missing. With many series the first six show and **Show all** lists the rest. Click a row (or its **View**) to chart it: the chart, below the table, comes into view; the link can be shared, and Back returns to the series before.',
-							'**Series details**, under the chart, holds the charted series’ **Name**, **Product** (a CHIRPS series’ product and version), **Measured at** (where a flow record was measured: the outlet, or a gauge inside the network, which lets calibration score at that gauge, **Settings & calibration → Calibration record → Scored at**), its **Source** and the **Upload unit** it was converted from. Editors change the name, product, where measured and source there, each saved as it changes; a new name that changes which series runs read (they read the first of each kind by name) asks first, and a series a data feed or an API key writes by its name keeps it (nor can a series take a name one of them writes to). A row placed at a gauge says *At gauge* and its name.',
+							'**Series details**, under the chart, holds the charted series’ **Name**, **Product** (a CHIRPS series’ product and version), **Measured at** (where a flow record was measured: the outlet, or a gauge inside the network, which lets calibration score at that gauge, **Calibration → Calibration record → Scored at**), its **Source** and the **Upload unit** it was converted from. Editors change the name, product, where measured and source there, each saved as it changes; a new name that changes which series runs read (they read the first of each kind by name) asks first, and a series a data feed or an API key writes by its name keeps it (nor can a series take a name one of them writes to). A row placed at a gauge says *At gauge* and its name.',
 							'**Data checks**: negative values, outliers, flat stretches, suspect zero rain and breaks in catchment rain’s ratio to CHIRPS, which the [[double-mass|double-mass]] chart shows by water year.',
 							'The chart of the catchment rain a run reads shades the days a run treats as missing or spreads a [[rain-accumulations|multi-day accumulation]] over.',
-							'With both a gauge and a logger, the [[gauge-logger-agreement|gauge vs logger]] table flags water years where they disagree. Choose the record you trust as the calibration flow series (**Settings & calibration → Calibration record**).',
+							'With both a gauge and a logger, the [[gauge-logger-agreement|gauge vs logger]] table flags water years where they disagree. Choose the record you trust as the calibration flow series (**Calibration → Calibration record**).',
 							'A [[reference-gauge]] on a neighbouring river is kept for ranking wet and dry years only. The model never reads it.',
 							'**Preview all data** (in the header, beside **Add data**) or a row’s own **Preview** opens every series’ daily values side by side, searchable by date or value, plus how the model used each day: rain used and its source after gap-fill, the CHIRPS bias factor and corrected value, flow in m³/day, and any calibration exclusion.'
 						]
@@ -479,7 +481,7 @@ export const GUIDES: Guide[] = [
 		title: 'Load rainfall and flow automatically with data feeds',
 		summary: 'Attach a CHIRPS, CHIRPS-GEFS or DWS feed, set one up from the catchment boundary, and read whether each is keeping up.',
 		kind: 'howto',
-		tab: 'settings',
+		tab: 'series',
 		sections: [
 			{
 				heading: 'What a feed does',
@@ -497,7 +499,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Put the catchment boundary on the **Map** (delineate, draw or upload it).',
-							'Open **Settings & calibration → Data feeds**, press **Attach a feed** (an editor: **Rain from the map**) and choose the **Area** *The catchment boundary, from the map* (the Map’s own link opens it too).',
+							'Open **Data → Data feeds**, press **Attach a feed** (an editor: **Rain from the map**) and choose the **Area** *The catchment boundary, from the map* (the Map’s own link opens it too).',
 							'Read the proposal: the CHIRPS cells the boundary covers, the share of each inside it and its weight. A boundary over about 2 500 km² needs feeds for its parts.',
 							'An owner presses **Apply**. Where runs already read a CHIRPS record (**Runs read**), the owner chooses: **Keep** it, the default, and the feed goes into a new series named to sort after it, so runs keep reading the record, read from its first day (rnl when that is before 1998); or **Replace** it, and the feed reads the whole record again from its first day and takes its place once complete (the old values stay in the History). The daily product and start date can be changed before Apply.'
 						]
@@ -516,9 +518,9 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Give each hydrological unit its parcel on the **Map** (delineate, draw or upload it, and link it to the unit).',
-							'Open **Settings & calibration → Data feeds**, press **Attach a feed** and choose the **Area** *Each unit’s parcel*: one CHIRPS feed per unit, over the cells its parcel covers.',
+							'Open **Data → Data feeds**, press **Attach a feed** and choose the **Area** *Each unit’s parcel*: one CHIRPS feed per unit, over the cells its parcel covers.',
 							'An owner picks the daily product (*rnl* from 1981 by default) and presses **Create the feed** (**Create 4 feeds** for four units; **Update** where a unit has one already). Units without a parcel are listed, with a link to the map.',
-							'Give each unit its MAP and source on its form, then choose **Per unit** under **Settings & calibration → Flow generation**, give each unit its rainfall station, and refit.'
+							'Give each unit its MAP and source on its form, then choose **Per unit** under **Model settings → Flow generation**, give each unit its rainfall station, and refit.'
 						]
 					},
 					{
@@ -686,12 +688,12 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Take the monthly Reserve flows for the river’s [[ecological-category]], usually from the [[desktop-reserve-model]] tables without high flows.',
 							'Pick one value per month (often a percentile) and convert it to m³/day.',
-							'On **Settings & calibration → EWR**, the first choice is **Daily EWR from**: keep *The pragmatic EWR* and enter the 12 values in the **Pragmatic EWR** row under it, Oct … Sep. The l/s equivalent and the annual volume help catch a unit slip.',
+							'On **Model settings → EWR**, the first choice is **Daily EWR from**: keep *The pragmatic EWR* and enter the 12 values in the **Pragmatic EWR** row under it, Oct … Sep. The l/s equivalent and the annual volume help catch a unit slip.',
 							'Or take the daily EWR straight from the Desktop Reserve Model: set **Daily EWR from** to *The DRM TAB file* or *The DRM percentile tables* ([[ewr-daily-source|the daily EWR at the outlet]]), load the DRM’s .tab or .rul file or paste the values (**Fill from:** beside **Daily EWR from**; a .tab’s flows are shown in m³/s before you use them, a paste’s values in a preview before **Apply**), and choose how the tables are scaled to the catchment, by MAR or by area, with the table’s MAR or area. Under the percentile tables a .rul fills three tables, and **The EWR is the Reserve table** picks which Reserve table is the EWR: the total Reserve flow (with high flows, the default) or the Reserve flow without high flows. Every run then says which EWR it was judged by and the scale factor.',
-							'Optionally, on **Settings & calibration → Reporting** (under *Demand & supply*, above the EWR), set the **Curtailment reporting window** ([[report-window|reporting window]]) to a drought or dry season. The curtailment table then averages over that period only.',
+							'Optionally, on **Model settings → Reporting** (under *Demand & supply*, above the EWR), set the **Curtailment reporting window** ([[report-window|reporting window]]) to a drought or dry season. The curtailment table then averages over that period only.',
 							'To assess the EWR above the outlet too, add a gauge on the **Network** tab at each EWR site of the Reserve determination (a gauge is an **EWR site** until unticked; untick one that only records flow).',
 							'Save and run.',
-							'With a Reserve rule table too (**Settings & calibration → Reserve rule tables**, after the EWR), choose which one the results are judged by in **Judge results by**, the first thing on **Settings & calibration**, above the menu’s panels: automatic (the outlet’s rule table, else the first site’s, else the pragmatic EWR), the pragmatic EWR, or one site’s rule table. It changes no result, so no re-run is needed; EWR says at the top which one is in use.'
+							'With a Reserve rule table too (**Model settings → Reserve rule tables**, after the EWR), choose which one the results are judged by in **EWR the results are judged by**, the first panel on **Model settings**: automatic (the outlet’s rule table, else the first site’s, else the pragmatic EWR), the pragmatic EWR, or one site’s rule table. It changes no result, so no re-run is needed; EWR says at the top which one is in use.'
 						]
 					}
 				]
@@ -722,7 +724,7 @@ export const GUIDES: Guide[] = [
 		title: 'Calibrate by hand',
 		summary: 'Change a runoff parameter, run, and read the hydrograph and statistics until the fit is right.',
 		kind: 'howto',
-		tab: 'settings',
+		tab: 'calibration',
 		sections: [
 			{
 				heading: 'Before you start',
@@ -730,7 +732,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'On **Settings & calibration → Calibration record**, choose the calibration flow series (gauge or logger) and the [[calibration-window]]: a period with a record you trust.',
+							'On **Calibration → Calibration record**, choose the calibration flow series (gauge or logger) and the [[calibration-window]]: a period with a record you trust.',
 							'Add [[calibration-exclusions]] for periods you can’t trust, each with its reason.',
 							'Enter each record’s gauged range (its highest and lowest field gauging) under [[quality-flags|Quality flags]] (the line under the exclusions: **Change** opens it), so days read off the extrapolated rating curve are flagged.',
 							'The [[runoff-model]] is GR4J: its parameters are under **Flow calibration**. (The workbook’s legacy model was removed in engine 1.0.0.)'
@@ -747,7 +749,7 @@ export const GUIDES: Guide[] = [
 							'Change one parameter at a time. For GR4J start with X1 (soil store: less flow when larger), then X4 (timing of the peaks), then X3 (how slowly flow recedes).',
 							'To see what the change does first, press **Preview** on the save bar: the last run against the same run with your unsaved change, worked out in your browser (KGE, NSE, PBIAS and supply). Nothing is saved and no run is made.',
 							'Save and run.',
-							'On the run, read the **Hydrograph** (observed flow against simulated outflow) and the **Calibration** panel: [[kge|KGE]], [[nse|NSE]], [[pbias|PBIAS]], [[log-nse]] and the annual volume table.',
+							'A run started on **Calibration** opens there, under **How the shown run fits**. Read the **Hydrograph** (observed flow against simulated outflow) and **Calibration against observed flow**: [[kge|KGE]], [[nse|NSE]], [[pbias|PBIAS]], [[log-nse]] and the annual water balance.',
 							'Fix volume first (PBIAS near 0), then the shape of the peaks, then the recessions and low flows.',
 							'Compare the run with the previous one to see what the change did.'
 						]
@@ -769,7 +771,7 @@ export const GUIDES: Guide[] = [
 		summary:
 			'Let the optimiser search the parameters, read the validation scores, then apply and save the fit.',
 		kind: 'howto',
-		tab: 'settings',
+		tab: 'calibration',
 		sections: [
 			{
 				heading: 'Steps',
@@ -777,14 +779,14 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On **Settings & calibration → Calibration record**, set the calibration flow series, window and exclusions first. The fit uses the form as it stands.',
-							'Go to the **Fit automatically** panel and choose the **Objective** by what the fit will feed (see *Choosing an objective* below), before you see any score.',
+							'On **Calibration → Calibration record**, set the calibration flow series, window and exclusions first. The fit uses the form as it stands.',
+							'Under **Calibration → Fit the parameters → Fit automatically**, choose the **Objective** by what the fit will feed (see *Choosing an objective* below), before you see any score.',
 							'Keep **Validate** (split-sample and dry → wet) ticked. With both a gauge and a logger, you can also score the fit against the record it doesn’t use (**Also validate against**).',
 							'The **Search** line above the button shows the bounds, model runs, starts and seed; **Change** opens them. Choose **Bounds** Typical (Perrin et al.’s published range) when a short record can’t pin the parameters down, and leave **Model runs per fit** (1 500) and **Starts** (5) at their defaults unless you have a reason. Each start is a separate search from its own seed and the best is kept; the notes say when starts reach nearly the same score with scattered parameters.',
 							'Press **Fit automatically**. A progress bar shows the stage and the best score so far; **Cancel** stops it. You can open other tabs while it runs: the fit carries on, and its result waits on this page.',
 							'Read the result: the notes, current vs fitted parameters, and the scores table. The shaded validation columns are the honest measure.',
-							'Press **Apply to form**, then save the settings. Nothing is stored until you save.',
-							'Run the model with the new parameters.'
+							'Press **Apply to form**, then **Save changes** on the save bar. Nothing is stored until you save.',
+							'Run the model with the new parameters. A run started from Calibration opens there, under **How the shown run fits**, so you read the new fit on the same page.'
 						]
 					},
 					{
@@ -841,7 +843,7 @@ export const GUIDES: Guide[] = [
 		summary:
 			'Enter the quaternary’s published naturalised flow, and every run compares its natural flow with it.',
 		kind: 'howto',
-		tab: 'settings',
+		tab: 'calibration',
 		sections: [
 			{
 				heading: 'Steps',
@@ -850,7 +852,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Find the [[quaternary]] the catchment lies in, and its WR2012 naturalised MAR and 12 monthly mean flows. The app doesn’t ship WR2012 data.',
-							'On **Settings & calibration → WR2012 check**, tick **Compare runs with WR2012 naturalised flow**.',
+							'On **Calibration → WR2012 check**, tick **Compare runs with WR2012 naturalised flow**.',
 							'Enter the quaternary code, its area, MAP (optional), MAR in Mm³/a, the period and the source.',
 							'Enter the monthly means in **Mm³ per month**. Their sum should match the MAR within 5 %; the m³/s row shows a unit slip.',
 							'Under **How the check judges**, choose the scaling (area, or area and rainfall) and save. Every run from now on has a **WR2012 check** panel.'
@@ -890,7 +892,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'With unsaved changes, **Run model** asks first and offers **Save and run**.',
 							'Press **Run model** in the header of any section and optionally type a **Run label** (on **Runs & results** the field is in the header itself), then **Run model**. It needs a network and a rainfall series; until then the form says what is missing.',
-							'The runs are listed on the left, newest first, beside the run shown; pick one to show it. Its header links to **EWR** and **Hydrological units** for that run.',
+							'The runs are listed on the left, newest first, beside the run shown; pick one to show it (with a single run, the list is one row above it). Its header links to **EWR** and **Hydrological units** for that run. A run tagged **Can’t be re-run** was made before runs stored their inputs.',
 							'The new run opens when it finishes. A run keeps a snapshot of the inputs it used, so later edits never change it.'
 						]
 					}
@@ -902,20 +904,20 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (self-checks, plausibility, the WR2012 flag), each linking to its panel. Then a sentence or two in plain words (which hydrological units fell short, then how often the river’s requirement was met), and the headline figures, the calibration NSE and PBIAS among them when there is observed flow. The table per hydrological unit is on **Hydrological units** (see below).',
-							'**Model quality**: the **Hydrograph** (simulated and observed flow; natural flow is hidden until you click it in the legend) with the **Flow duration** curve under it, then **Flow at gauges in the network (checks only)** when another gauge has its own flow record (its hydrograph and flow-duration curve, an out-of-sample NSE, KGE and PBIAS that is never the calibration score, and a link to the record’s Series details, where its Upload unit is), **Calibration** with, under its statistics, the **calibration check** (a chart for each gauge with an observed record: observed, simulated, natural flow and the demand upstream on one axis, plus the **bed losses** in the reaches above the gauge when the model has any, so a gap between simulated and observed can be read against the water used, and lost, above the gauge; a forecast run’s lines stop where its forecast starts) and **Where the parameters came from**, the **Water balance** by water year (summed over the hydrological units: rain with the runoff coefficient under it, storage at the start and end, each gain and loss, in Mm³, and the residual with the runoff model’s under it, each of which should be 0; with a link to EWR’s water account, the catchment’s own), the **Runoff model** (GR4J runs), the **WR2012 check** when set up, **EWR vs observed**, and the **Plausibility checks**.',
-							'**Record**: the run’s notes, whether it is the project’s evidence run (see below), and its publication.',
-							'**Dig deeper**: **Self-checks** (whether each hydrological unit’s daily balance closes and the reports add up, whether the water balance closes in every water year, with a link to the table, and **Trace a day**; see [[balance-check|the self-checks]]) and **Outputs** (*Explore outputs*): any stored daily series, by node.'
+							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (arithmetic checks, calibration, plausibility, the WR2012 flag), each linking to its panel. Then a sentence or two in plain words (which hydrological units fell short, then how often the river’s requirement was met), and the headline figures, the calibration NSE and PBIAS among them when there is observed flow. The table per hydrological unit is on **Hydrological units** (see below).',
+							'**Water balance by water year**: summed over the hydrological units (rain with the runoff coefficient under it, storage at the start and end, each gain and loss, in Mm³, and the residual with the runoff model’s under it, each of which should be 0), with a link to EWR’s water account, the catchment’s own. How the run fits observed flow (the hydrograph, flow duration, calibration, the runoff model, the WR2012 check, EWR vs observed and the plausibility checks) is on **Calibration**, for the same run: the Summary’s model checks link there.',
+							'**Record**: the run’s notes, whether it is the project’s evidence run (see below), how to reproduce it, its validation statement and its publication.',
+							'**The model’s working**: **Arithmetic checks** (the engine’s own checks on the run: whether each hydrological unit’s daily balance closes and the reports add up, the list behind **Show the N checks** when every check passed; whether the water balance closes in every water year, with a link to the table; and **Trace a day**; see [[balance-check|the arithmetic checks]]; a failed one is a bug in the model, not your data) and **Chart any daily series**: any stored daily series of the catchment, a hydrological unit or a gauge.'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The row of links under the header, **On this page**, jumps to each of these sections and marks the one you are reading; it stays in view as you scroll. In a narrower window the last few are under **More** at its end. On a wide screen it is a column down the right of the results instead, each link named as its panel’s heading, with the main panels of **EWR** and **Hydrological units** listed under their pages at its foot. **EWR**, **Hydrological units**, **Data**, **Settings & calibration** and **Compare runs** have the same menu, a column down the left of the page on a wide screen, and a hydrological unit’s form on the Network has it as a row of links over the form.'
+						text: 'The row of links under the header, **On this page**, jumps to each of these sections and marks the one you are reading; it stays in view as you scroll. In a narrower window the last few are under **More** at its end. On a wide screen it is a column down the right of the results instead, each link named as its panel’s heading, with the main panels of **EWR** and **Hydrological units** listed under their pages at its foot. **EWR**, **Hydrological units**, **Data**, **Model settings**, **Calibration** and **Compare runs** have the same menu, a column down the left of the page on a wide screen, and a hydrological unit’s form on the Network has it as a row of links over the form.'
 					},
 					{
 						type: 'p',
-						text: '**EWR**, under *Outcomes* in the sections, is the page for the EWR’s results, one run at a time (the newest, or pick another from its **Run** menu; the link under the Summary’s supply list opens it too). A line at the top says which EWR the results are judged by, with **Change** to choose another in Settings & calibration → **Judge results by**. Two tiles: the headline, **EWR not met** (the share of days at the outflow gauge, the days, and how many in an average year) or, when a Reserve rule table judges the results, **Reserve rules met** (the share of whole months, at which site, with the pragmatic EWR’s days under it); and the mean simulated outflow and its share of natural flow, each with its change from the run before (the worst month is the EWR by month grid’s **All years** row). Beside them (under them on a narrow screen), **Days below the reserve** in each of the run’s last twelve months (with a Reserve rule table judging, it is headed **Days below the pragmatic EWR**, the daily test it counts). Then EWR against outflow with a **30 days / 1 year / All** switch and the days below the pragmatic EWR shaded, beside the days below the reserve each water year. When a Reserve rule table judges the results (by whole months), those bars are headed **Days below the pragmatic EWR, each water year**, the daily test they count, and the chart is headed **Flow vs pragmatic EWR** (or **Flow vs daily EWR** when the daily EWR comes from the DRM tables) when the table is at another site than the outlet, since it then draws only that EWR (with the outlet’s table it draws the rule requirement too). Below them, the findings: **Reserve rules met, by month** (without a rule table, one line saying it needs one, with a link to Settings → Reserve rule tables), **Days below the EWR, by month** with the EWR required and met at each site each water year, and the water account (the catchment’s, from natural flow, in m³, with a link to the run’s water balance on Runs & results). Then, under **How sure, and what if**, the tools you run yourself: the uncertainty bands on those findings (with the sensitivity runs), the outcome matrix and the seasonal outlook, each one row with **Run…** until it has run. On the EWR by month heat map (as % of days) and the reserve strip at the top, **green** means the EWR was not met on fewer than 5 % of the days, **amber** fewer than 20 %, and **red** 20 % or more; these are provisional defaults until the hydrologist confirms them (a team can set its own for its portfolio).'
+						text: '**EWR**, under *Outcomes* in the sections, is the page for the EWR’s results, one run at a time (the newest, or pick another from its **Run** menu; the link under the Summary’s supply list opens it too). A line at the top says which EWR the results are judged by, with **Change** to choose another in Model settings → **EWR the results are judged by**. Two tiles: the headline, **EWR not met** (the share of days at the outflow gauge, the days, and how many in an average year) or, when a Reserve rule table judges the results, **Reserve rules met** (the share of whole months, at which site, with the pragmatic EWR’s days under it); and the mean simulated outflow and its share of natural flow, each with its change from the run before (the worst month is the EWR by month grid’s **All years** row). Beside them (under them on a narrow screen), **Days below the reserve** in each of the run’s last twelve months (with a Reserve rule table judging, it is headed **Days below the pragmatic EWR**, the daily test it counts). Then EWR against outflow with a **30 days / 1 year / All** switch and the days below the pragmatic EWR shaded, beside the days below the reserve each water year. When a Reserve rule table judges the results (by whole months), those bars are headed **Days below the pragmatic EWR, each water year**, the daily test they count, and the chart is headed **Flow vs pragmatic EWR** (or **Flow vs daily EWR** when the daily EWR comes from the DRM tables) when the table is at another site than the outlet, since it then draws only that EWR (with the outlet’s table it draws the rule requirement too). Below them, the findings: **Reserve rules met, by month** (without a rule table, one line saying it needs one, with a link to Model settings → Reserve rule tables), **Days below the EWR, by month** with the EWR required and met at each site each water year, and the water account (the catchment’s, from natural flow, in m³, with a link to the run’s water balance on Runs & results). Then, under **How sure, and what if**, the tools you run yourself: the uncertainty bands on those findings (with the sensitivity runs), the outcome matrix and the seasonal outlook, each one row with **Run…** until it has run. On the EWR by month heat map (as % of days) and the reserve strip at the top, **green** means the EWR was not met on fewer than 5 % of the days, **amber** fewer than 20 %, and **red** 20 % or more; these are provisional defaults until the hydrologist confirms them (a team can set its own for its portfolio).'
 					},
 					{
 						type: 'p',
@@ -1104,7 +1106,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Run the model on the latest data. Both panels need an ordinary run, not a scenario or forecast run.',
-							'In **Settings & calibration**, check **Outcome matrix** (how years are classed and the [[outcome-risk|risk cut-offs]]) and **Seasonal outlook** (the [[outlook-season|season]], the planning share and the review date).',
+							'In **Model settings**, check **Outcome matrix** (how years are classed and the [[outcome-risk|risk cut-offs]]) and **Seasonal outlook** (the [[outlook-season|season]], the planning share and the review date).',
 							'On **EWR**, press **Run…** beside **Outcome matrix**, type the levels and press **Run demand sweep**. Read across a row for one level in every kind of year, and down a column for every level in one kind of year.',
 							'Press **Run…** beside **Seasonal outlook**, type the levels (and a monthly plan, if the WUA is considering one) and press **Run seasonal outlook**. Read each level’s season-end storage, demand met and days below the EWR as the median with its 10–90 % range, and the [[planning-figure]].',
 							'For a mid-season check, read the [[review-triggers]]: the level each band of total dam storage on the review date supported in past years.',
@@ -1190,7 +1192,7 @@ export const GUIDES: Guide[] = [
 		title: 'Push logger data with an API key',
 		summary: 'Let a logger gateway or a script add daily readings to a project’s series without signing in, and keep an eye on it.',
 		kind: 'howto',
-		tab: 'settings',
+		tab: 'project',
 		sections: [
 			{
 				heading: 'Make a key',
@@ -1199,7 +1201,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Make sure the series exists: upload its record once on the **Data** tab, with the name the gateway will send. A key creates a series only when the project has none of that kind.',
-							'As an owner, open **Settings & calibration** and go to **API keys**.',
+							'As an owner, open the **Project** page and go to **API keys**.',
 							'Give the key a **Name** that says where it runs (“Drift logger gateway”), choose how long it **Works for**, and under **What it may write** choose **Only these series** and tick the ones it feeds.',
 							'Press **Make key** and copy the key at once: it is shown only this once. Store it in the gateway’s own settings, never in a shared file.'
 						]
@@ -1327,7 +1329,7 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'The baseline must be the project’s [[evidence-run|nominated evidence run]]. For an [[application]], run the application on that baseline.',
-							'Declare the [[evidence-uncertainty-rule|uncertainty rule]] under **Settings & calibration → Evidence**, and run an ensemble to it, so the report has bands to cite.',
+							'Declare the [[evidence-uncertainty-rule|uncertainty rule]] under **Model settings → Evidence**, and run an ensemble to it, so the report has bands to cite.',
 							'The signer needs two-step sign-in, and, while the project requires it, a current [[pack-signoff|registration check]] recorded on the **Project** page.'
 						]
 					}
@@ -1396,7 +1398,7 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'Flows and volumes are m³/day inside the model. Nothing is rounded mid-calculation; rounding is for display only.',
-							'Every hydrological unit’s daily balance closes: inflow + rain on the dam − irrigation use − dam evaporation − change in storage = outflow. Invariant tests check this on random networks, and every run checks it again on its own results (**Self-checks**).',
+							'Every hydrological unit’s daily balance closes: inflow + rain on the dam − irrigation use − dam evaporation − change in storage = outflow. Invariant tests check this on random networks, and every run checks it again on its own results (**Arithmetic checks** on Runs & results).',
 							'A run is a snapshot: it records its inputs and engine version, so its results can always be explained and reproduced.',
 							'Where the engine departs from the Water Balance Tool workbook, the engine audit records why.'
 						]
@@ -1480,7 +1482,7 @@ export const GUIDES: Guide[] = [
 		title: 'How GR4J turns rain into flow',
 		summary: 'Two stores and two unit hydrographs, four parameters, and a water balance that always closes.',
 		kind: 'concept',
-		tab: 'settings',
+		tab: 'calibration',
 		sections: [
 			{
 				heading: 'Under the ground',
@@ -1546,7 +1548,7 @@ export const GUIDES: Guide[] = [
 		summary:
 			'What is scored, how the optimiser searches, and why validation on unseen days matters more than the fit.',
 		kind: 'concept',
-		tab: 'settings',
+		tab: 'calibration',
 		sections: [
 			{
 				heading: 'What is scored',
@@ -1650,7 +1652,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'A 0 is a reading, so it blocks the fallback. Long wet-season runs of zeros that the **Data checks** flag are the exception: by default a run treats their days as blank where CHIRPS reads more than 2 mm, so CHIRPS fills those, and a day CHIRPS reads 2 mm or less keeps its 0, since CHIRPS reports too many light-rain days ([[zero-rain-runs|zero-rain runs]]). On **Settings & calibration → Rain gaps** you can change the 2 mm, keep a confirmed dry spell dry, run every flagged run as recorded, or list other bad periods to treat as missing. The uploaded series is never changed.'
+						text: 'A 0 is a reading, so it blocks the fallback. Long wet-season runs of zeros that the **Data checks** flag are the exception: by default a run treats their days as blank where CHIRPS reads more than 2 mm, so CHIRPS fills those, and a day CHIRPS reads 2 mm or less keeps its 0, since CHIRPS reports too many light-rain days ([[zero-rain-runs|zero-rain runs]]). On **Model settings → Rain gaps** you can change the 2 mm, keep a confirmed dry spell dry, run every flagged run as recorded, or list other bad periods to treat as missing. The uploaded series is never changed.'
 					},
 					{
 						type: 'p',
@@ -1662,7 +1664,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'With [[unit-rain|flow generation]] set to **Per unit** (**Settings & calibration → Flow generation**), each unit with land also gets a rain series of its own: its [[rain-stations|rainfall station]] × unit MAP ÷ station MAP when it is given one, its gaps filled by its CHIRPS corrected against a station; else, in this order, its **own gauge**, with the same zero-run and accumulation checks, its gaps and set-aside days taking its CHIRPS levelled to its MAP; else the **catchment gauge × unit MAP ÷ gauge MAP**, when the gauge’s MAP is set and the unit has one; else its **own CHIRPS**, levelled by its MAP ÷ the CHIRPS mean over the MAP period; else the catchment rain, with a warning. Demand, rain on the dams and the WR2012 check keep the catchment rain. A seasonal outlook, the uncertainty ensemble’s CHIRPS-only member and a run resumed from a saved state keep each unit’s rule and factors **pinned** as the base run had them, rather than refitting them on a shorter record; the run’s Rain for each unit panel then says its factors are pinned.'
+						text: 'With [[unit-rain|flow generation]] set to **Per unit** (**Model settings → Flow generation**), each unit with land also gets a rain series of its own: its [[rain-stations|rainfall station]] × unit MAP ÷ station MAP when it is given one, its gaps filled by its CHIRPS corrected against a station; else, in this order, its **own gauge**, with the same zero-run and accumulation checks, its gaps and set-aside days taking its CHIRPS levelled to its MAP; else the **catchment gauge × unit MAP ÷ gauge MAP**, when the gauge’s MAP is set and the unit has one; else its **own CHIRPS**, levelled by its MAP ÷ the CHIRPS mean over the MAP period; else the catchment rain, with a warning. Demand, rain on the dams and the WR2012 check keep the catchment rain. A seasonal outlook, the uncertainty ensemble’s CHIRPS-only member and a run resumed from a saved state keep each unit’s rule and factors **pinned** as the base run had them, rather than refitting them on a shorter record; the run’s Rain for each unit panel then says its factors are pinned.'
 					},
 					{
 						type: 'p',
@@ -1740,7 +1742,8 @@ export const SETUP_STEPS: { tab: TabId; text: string; guide: string; optional?: 
 	{ tab: 'crops', text: 'Crop factors and the hectares on each hydrological unit.', guide: 'set-up-crops-and-demand', optional: true },
 	{ tab: 'transfers', text: 'Pipelines or canals between hydrological units’ dams.', guide: 'add-a-transfer', optional: true },
 	{ tab: 'series', text: 'Daily rain, and observed flow to calibrate.', guide: 'add-data' },
-	{ tab: 'settings', text: 'Evaporation, rain gaps, runoff parameters and the EWR.', guide: 'fit-automatically' },
+	{ tab: 'settings', text: 'Evaporation, rain gaps, how natural flow is made, and the EWR.', guide: 'set-the-ewr' },
+	{ tab: 'calibration', text: 'Fit the runoff parameters to observed flow, and judge the fit.', guide: 'fit-automatically' },
 	{ tab: 'runs', text: 'Run the model, read and compare results.', guide: 'run-and-read-results' }
 ];
 
@@ -1758,6 +1761,18 @@ const norm = (s: string) =>
 
 export function guideFor(id: string): Guide | undefined {
 	return byId.get(id);
+}
+
+/**
+ * A guide's line in the help contents. A page guide's title is "<page>: <what it is for>", and the contents list it
+ * by the page's name alone: the "Pages, one by one" group already says what the list is, and twelve full titles, two
+ * or three lines each in the 13rem column, made the open group taller than a 1280×800 window (help.spec.ts). The
+ * guide's own heading keeps the full title.
+ */
+export function guideNavLabel(g: Pick<Guide, 'kind' | 'title'>): string {
+	if (g.kind !== 'page') return g.title;
+	const colon = g.title.indexOf(':');
+	return colon > 0 ? g.title.slice(0, colon) : g.title;
 }
 
 /** In-page anchor for a guide section, from its heading. */

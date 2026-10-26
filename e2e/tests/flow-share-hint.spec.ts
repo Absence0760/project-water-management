@@ -1,5 +1,5 @@
 // Rainfall stations and what Flow share splits (issue #553; docs/ui.md §
-// Settings & calibration, § Data; docs/model.md §2.4h, §2.5). On the sample
+// Model settings, § Data; docs/model.md §2.4h, §2.5). On the sample
 // model and its catchment rain series (synthetic):
 // - Settings → Flow generation's flow-share line follows the method:
 //   Fragmentation, GR4J's one run's flow and the EWR; Per unit, only the EWR

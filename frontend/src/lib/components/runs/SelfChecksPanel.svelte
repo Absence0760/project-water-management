@@ -11,8 +11,8 @@
 	import type { RunSummary } from '@water-management/engine';
 	import { api, type RunCatchmentDay, type RunDay } from '#lib/api/index.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { fmtDay, fmtNum, MINUS, parseDay } from '#lib/format/number.js';
-	import { balanceClosure, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, traceRows } from './checks';
+	import { fmtDay, parseDay } from '#lib/format/number.js';
+	import { balanceClosure, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, fmtBalance, traceRows } from './checks';
 	import WaterBalanceTable from './WaterBalanceTable.svelte';
 
 	let {
@@ -43,6 +43,11 @@
 
 	const uid = $props.id();
 	const v = $derived(summary.verification);
+	// Every check passed: the headline says so, and the list (13 long lines, a phone's screen and more) waits behind
+	// one button, as the things to check fold (#586 round 2). A failed check shows them all. The printable report
+	// (no trace) lists them all.
+	const foldable = $derived(showTrace && !!v && v.checks.length > 0 && v.checks.every((c) => c.passed));
+	let checksOpen = $state(false);
 	const headline = $derived(checksHeadline(v));
 	const closure = $derived(balanceClosure(summary.waterBalance));
 
@@ -88,6 +93,7 @@
 
 	async function trace(e: SubmitEvent) {
 		e.preventDefault();
+		if (tracing) return;
 		const picked = readDay();
 		if (!picked) {
 			dayInput?.focus();
@@ -112,17 +118,22 @@
 		}
 	}
 
-	/** Enough digits to see float noise without drowning the volumes. */
-	const fmtValue = (x: number | null) => (x === null ? '–' : Math.abs(x) > 0 && Math.abs(x) < 1e-3 ? x.toExponential(2).replace(/^-/, MINUS) : fmtNum(x, 3, true));
+	/** Float noise as "< 0.001", not an exponent (checks.ts fmtBalance). */
+	const fmtValue = fmtBalance;
 </script>
 
 <section aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Self-checks <HelpTip key="run.balance_residual" /></h3>
+	<h3 id="{uid}-h">Arithmetic checks <HelpTip key="run.balance_residual" /></h3>
 	<p class="alert {headline.tone === 'bad' ? 'alert-error' : 'alert-info'}" class:ok={headline.tone === 'ok'} role="status">
 		{headline.text}
 	</p>
 	{#if v}
-		<ul class="checks">
+		{#if foldable}
+			<button type="button" class="checks-toggle" aria-expanded={checksOpen} aria-controls="{uid}-list" onclick={() => (checksOpen = !checksOpen)}
+				>{checksOpen ? 'Hide the checks' : `Show the ${v.checks.length} checks`}</button
+			>
+		{/if}
+		<ul class="checks" id="{uid}-list" hidden={foldable && !checksOpen}>
 			{#each v.checks as c (c.id)}
 				<li class:failed={!c.passed}>
 					<span class="mark" aria-hidden="true">{c.passed ? '✓' : '✗'}</span>
@@ -147,15 +158,16 @@
 	     year's residual, and a link to the table (followups § UI, issue #175's overlap check). The report keeps the table here. -->
 	<p class="balance-link small" class:bad={closure.tone === 'bad'} data-testid="checks-balance-link">
 		{#if closure.tone !== 'none'}<span class="mark" aria-hidden="true">{closure.tone === 'ok' ? '✓' : '✗'}</span><span class="visually-hidden">{closure.tone === 'ok' ? 'Passed:' : 'Failed:'}</span>{/if}
-		{closure.text} The balance itself, term by term: <a href={balanceHref}>Water balance</a>.
+		{closure.text} The balance itself, term by term: <a href={balanceHref}>Water balance by water year</a>.
 	</p>
 {:else}
 	<div class="wb"><WaterBalanceTable {summary} /></div>
 {/if}
 
 {#if showTrace}
-<section aria-labelledby="{uid}-tr">
-	<h3 id="{uid}-tr">Trace a day <HelpTip key="run.gross_demand" /></h3>
+<!-- Its heading has the side index's line (runs/sections.ts RUN_SUBSECTIONS, issue #586 D4): one per page. -->
+<section aria-labelledby="res-trace">
+	<h3 id="res-trace">Trace a day <HelpTip key="run.gross_demand" /></h3>
 	<p class="muted small">
 		Every column of one hydrological unit's day, with the formula the model used, so the day can be checked by hand. The hydrological unit's daily CSV has the same
 		columns for every day. Pick the catchment to see how the runoff model turned the day's rain into natural flow.
@@ -188,7 +200,8 @@
 				aria-describedby="{uid}-day-msg"
 			/>
 		</label>
-		<button type="submit" class="btn btn-sm" disabled={tracing || !nodeId}>{tracing ? 'Tracing…' : 'Trace'}</button>
+		<!-- aria-disabled while it traces: disabled would throw the keyboard's focus to the page (ui-playbook § 4). -->
+		<button type="submit" class="btn btn-sm" disabled={!nodeId} aria-disabled={tracing}>{tracing ? 'Tracing…' : 'Trace'}</button>
 	</form>
 	<!-- One line under the form: the run's days, or what's wrong with the typed day (a fresh alert, so it is announced). -->
 	{#if dayError}
@@ -197,8 +210,10 @@
 		<p id="{uid}-day-msg" class="day-msg muted small">Run days {fmtDay(startDate)} to {fmtDay(endDate)}, day first.</p>
 	{/if}
 	{#if traceError}<p class="alert alert-error" role="alert">{traceError}</p>{/if}
+	<!-- One short line is announced when a day is traced, not the whole table (a live region round the table read every row). -->
+	<p class="visually-hidden" role="status">{day ? `Traced ${day.name} on ${fmtDay(day.date)}: ${rows.length} columns.` : ''}</p>
 	{#if day}
-		<div class="table-wrap" aria-live="polite">
+		<div class="table-wrap">
 			<table class="data compact trace">
 				<caption>{day.name}{day.kind === 'catchment' ? ` (${day.runoffModel === 'gr4j' ? 'GR4J' : day.runoffModel})` : ''} on {fmtDay(day.date)}</caption>
 				<thead>
@@ -264,8 +279,31 @@
 		padding: 0;
 		margin: 0.5rem 0;
 	}
+	/* A wrapped line starts under the text, not under the mark. */
 	.checks li {
-		padding: 0.2rem 0;
+		padding: 0.2rem 0 0.2rem 1.2rem;
+		text-indent: -1.2rem;
+	}
+	.checks .detail {
+		text-indent: 0;
+	}
+	/* A link-like button (as the things to check's), a 24 px target (WCAG 2.5.8). */
+	.checks-toggle {
+		all: unset;
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+		margin: 0.25rem 0 0.5rem;
+		color: var(--accent);
+		font-size: var(--font-sm);
+		font-weight: 600;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		cursor: pointer;
+	}
+	.checks-toggle:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
 	}
 	.mark {
 		display: inline-block;
@@ -277,8 +315,8 @@
 	.bad .mark {
 		color: var(--danger);
 	}
+	/* Under the check's text (the item's padding), not under its mark. */
 	.detail {
-		margin-left: 1.2rem;
 		font-size: var(--font-sm);
 		color: var(--danger);
 		overflow-wrap: anywhere;

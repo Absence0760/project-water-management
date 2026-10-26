@@ -66,7 +66,7 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 
 	await page.getByRole('link', { name: 'Runs & results' }).click();
 	await expect(page.getByRole('button', { name: /^Initial run \(seed\)/ })).toHaveAttribute('aria-current', 'true');
-	await expect(page.getByRole('region', { name: 'Run summary' }).getByRole('heading', { name: 'Catchment' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Summary', exact: true }).getByRole('heading', { name: 'Catchment' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Run model' })).toHaveCount(0);
 	// The per-unit table is on Hydrological units (issue #17), which a viewer sees too.
 	await page.getByRole('link', { name: 'Hydrological units', exact: true }).click();
@@ -94,7 +94,7 @@ test('a shared example has a seeded catchment map: a boundary, linked parcels, d
 	await expect(list.getByRole('group', { name: /Rivers/ }).getByRole('listitem').filter({ hasText: /^\s*Sandspruit\s*1 line\s*$/ })).toHaveCount(1);
 	// The checks (#326 A4): the seeded boundary has a margin round the farms, so the units' total is flagged. They are the side
 	// column's Checks tab (a sheet until 2026-10-02), its count on the tab.
-	await expect(page.getByTestId('map-tab-checks')).toHaveAccessibleName('Checks (1 warning)');
+	await expect(page.getByTestId('map-tab-checks')).toHaveAccessibleName('Checks 1 warning');
 	await showTab(page, 'checks');
 	await expect(page.getByTestId('map-checks-line')).toHaveText(/^\s*1 warning from the map’s checks\s*$/);
 	const checks = page.getByTestId('map-checks');

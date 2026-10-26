@@ -5,6 +5,7 @@
 	// switches a kind on, nothing is sent. The rule editor loads on demand
 	// (its own chunk), so the workspace doesn't carry it.
 	import { onMount } from 'svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { api, type AlertEvent } from '#lib/api/index.js';
 	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
@@ -59,9 +60,18 @@
 		{#if events?.length}<span class="muted">{events.length} firing</span>{/if}
 	</div>
 	{#if error}
-		<div class="alert alert-error" role="alert">Couldn’t load the alerts: {error} <button type="button" class="btn btn-sm" onclick={load}>Try again</button></div>
+		<div class="alert alert-error" role="alert">Couldn’t load the alerts: {error} <button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					// The loading line takes its place: the focus follows (followRetry).
+					followRetry(e.currentTarget);
+					load();
+				}}>Try again</button
+			></div>
 	{:else if events === null}
-		<p class="muted" role="status">Loading…</p>
+		<p class="muted" role="status" data-loading>Loading…</p>
 	{:else if !events.length}
 		<p class="muted">No alert is firing.</p>
 	{:else}

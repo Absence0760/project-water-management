@@ -48,9 +48,9 @@ async function seedCheck(request: APIRequestContext, name: string, upperExtra: R
 test('a chart per gauge with a record: observed, simulated, natural and upstream demand, with how to read it', async ({ page, owner }) => {
 	void owner;
 	const { project, runId } = await seedCheck(page.request, 'Calibration check');
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#res-calibration`);
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}#res-calibration`);
 	const check = page.getByTestId('calibration-check');
-	await expect(check.getByRole('heading', { level: 3, name: 'Calibration check: flow against use, per gauge' })).toBeVisible();
+	await expect(check.getByRole('heading', { level: 4, name: 'Calibration check: flow against use, per gauge' })).toBeVisible();
 	await expect(check).toContainText('How to read it: simulated should track observed; natural sits above simulated by roughly the use upstream, and where');
 	// No bed losses in this run, so nothing about them (the next test is the positive control).
 	await expect(check).not.toContainText('bed losses', { ignoreCase: true });
@@ -65,6 +65,10 @@ test('a chart per gauge with a record: observed, simulated, natural and upstream
 		// None starts hidden: the comparison is the point.
 		await expect(figure(img).locator('.u-legend tr.u-series.u-off')).toHaveCount(0);
 		await expect(figure(img).getByRole('button', { name: 'Log scale' })).toBeVisible();
+	}
+	// Each chart's switches are a group named by its chart, so the repeated names can be told apart (issue #586, D13).
+	for (const name of ['the outflow gauge', 'Middle weir']) {
+		await expect(check.getByRole('group', { name: `Calibration check at ${name} controls`, exact: true }).getByRole('button', { name: 'Log scale' })).toBeVisible();
 	}
 	// What each line sums: the whole catchment at the outlet, only what is above the weir there.
 	await expect(figure(outletChart)).toContainText('Upstream demand: the demand (before any drought restriction, boreholes\' share included) of 2 hydrological units and water users above the gauge.');
@@ -81,7 +85,7 @@ test('with bed losses above the gauges, a fifth line sums them and the texts cou
 	void owner;
 	// A fifth of the upper farm's outflow lost in its reach, which leads to the weir and so to the outlet too.
 	const { project, runId } = await seedCheck(page.request, 'Calibration check, losing reach', { reachLossFrac: 0.2 });
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#res-calibration`);
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}#res-calibration`);
 	const check = page.getByTestId('calibration-check');
 	await expect(check).toContainText('natural sits above simulated by roughly the use upstream plus the bed losses in the reaches above the gauge, and where');
 	const FIVE = `${FOUR}, Bed losses upstream`;

@@ -9,7 +9,7 @@
 	import { fmtNum } from '#lib/format/number.js';
 	import { agreementFold } from './agreementFold';
 
-	let { agreement, headingLevel = 3, fold = false }: { agreement: ObservedAgreement; headingLevel?: 2 | 3; fold?: boolean } = $props();
+	let { agreement, headingLevel = 3, fold = false }: { agreement: ObservedAgreement; headingLevel?: 2 | 3 | 4; fold?: boolean } = $props();
 
 	const uid = $props.id();
 	const nameA = $derived(cap(OBSERVED_FLOW_LABEL[agreement.a]));
@@ -28,7 +28,7 @@
 	<p class="muted small">
 		Two instruments on the same river should roughly agree. A year where one reads a small fraction of the other usually means a
 		problem at one instrument (damaged or silted weir, rating change, bypass, zero-filled gaps). Calibrate against the record you
-		trust, under <a href="?tab=settings#set-record">Calibration record → Compare with</a>.
+		trust, under <a href="?tab=calibration#set-record">Calibration → Calibration record → Compare with</a>.
 	</p>
 	<p class="verdict" class:bad={flagged.length > 0}>
 		{#if flagged.length}

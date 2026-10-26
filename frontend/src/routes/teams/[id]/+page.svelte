@@ -55,7 +55,8 @@
 	import TeamSettings from '#lib/components/teams/TeamSettings.svelte';
 	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import { STALE_DAYS } from '#lib/format/age.js';
-	import { fmtDate, fmtDay } from '#lib/format/number.js';
+	import { fmtDate } from '#lib/format/number.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	const teamId = $derived(page.params.id ?? '');
 	const me = $derived(session.user?.id ?? '');
@@ -340,7 +341,7 @@
 					</div>
 					<p class="muted facts">
 						{plural(team.projectCount, 'project')}{#if totals && totals.catchments}{' '}({statusSummary(totals.counts)}){/if} ·
-						{plural(team.memberCount, 'member')} · created {fmtDay(fmtDate(team.createdAt))}
+						{plural(team.memberCount, 'member')} · created {fmtDate(team.createdAt)}
 					</p>
 				</div>
 				<div class="head-actions">
@@ -365,7 +366,17 @@
 						{#if portfolioError}
 							<div class="alert alert-error" role="alert">
 								The projects couldn't be loaded: {portfolioError}
-								<button type="button" class="btn btn-sm" onclick={loadPortfolio}>Try again</button>
+								<!-- Its alert leaves the panel: the focus follows (followRetry, WCAG 2.4.3), onto the loading line, then a new
+								     Try again or the Projects heading. -->
+								<button
+									type="button"
+									class="btn btn-sm"
+									data-retry
+									onclick={(e) => {
+										followRetry(e.currentTarget);
+										void loadPortfolio();
+									}}>Try again</button
+								>
 							</div>
 						{:else if totals && rows.length}
 							<dl class="kpis">
@@ -392,7 +403,7 @@
 									: 'No projects yet.'}
 							</p>
 						{:else}
-							<p class="muted">Loading…</p>
+							<p class="muted" role="status" data-loading>Loading…</p>
 						{/if}
 					</section>
 

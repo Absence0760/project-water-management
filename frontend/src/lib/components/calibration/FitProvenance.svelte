@@ -13,7 +13,7 @@
 	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '#lib/components/settings/rain.js';
 	import { describeRainChecks } from '#lib/components/settings/dataQuality.js';
 	import { peText } from '#lib/components/settings/peInput.js';
-	import { fmtNum } from '#lib/format/number.js';
+	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { apanDailyText, chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
 	import { dayQualityGist, ratingLine } from './dayQuality';
 
@@ -23,6 +23,7 @@
 		record,
 		settings,
 		heading = 'Where the parameters came from',
+		headingId,
 		headingLevel = 3,
 		context = 'run',
 		chirpsSource,
@@ -36,7 +37,9 @@
 		/** The settings the record sits in (a run's snapshot, or the form). */
 		settings: Partial<ProjectSettings>;
 		heading?: string;
-		headingLevel?: 3 | 4;
+		/** The heading's id, when a page links to it (Calibration's index, calibration/page.ts CAL_SUBSECTIONS); else one of its own. */
+		headingId?: string;
+		headingLevel?: 3 | 4 | 5;
 		/** 'run': a stored run; 'form': the unsaved Settings form. */
 		context?: 'run' | 'form';
 		/** The CHIRPS series' product and version now (the run's, or the project's); undefined when not known. */
@@ -65,6 +68,7 @@
 	};
 
 	const uid = $props.id();
+	const hid = $derived(headingId ?? `${uid}-h`);
 	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}), ...(observedOrigin !== undefined ? { observedOrigin } : {}), ...(runForcing ?? {}) }) : null);
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
@@ -76,8 +80,8 @@
 	const exclusions = $derived((settings.calibrationExclusions ?? []) as FitRecord['exclusions']);
 </script>
 
-<section class="prov" aria-labelledby="{uid}-h">
-	<svelte:element this={`h${headingLevel}`} id="{uid}-h">{heading} <HelpTip key="settings.fitRecord" /></svelte:element>
+<section class="prov" aria-labelledby={hid}>
+	<svelte:element this={`h${headingLevel}`} id={hid}>{heading} <HelpTip key="settings.fitRecord" /></svelte:element>
 	{#if !record}
 		<p class="muted small">
 			No fit record: {context === 'run' ? 'this run’s' : 'these'} parameters were set by hand, imported, or saved before fit records existed. Nothing
@@ -105,7 +109,7 @@
 				<div data-testid="fit-auto">
 					<dt>Picked by <HelpTip key="settings.calibrationRules" label="About how the fit was picked" /></dt>
 					<dd>
-						calibration rules revision {a.rules.revision} ({a.rules.signedOff ? `signed off by ${a.rules.signedOff.by} on ${a.rules.signedOff.on}` : 'draft, not signed off'}): kept
+						calibration rules revision {a.rules.revision} ({a.rules.signedOff ? `signed off by ${a.rules.signedOff.by} on ${fmtDay(a.rules.signedOff.on)}` : 'draft, not signed off'}): kept
 						{a.cases[a.chosen]?.label ?? '–'} of {a.cases.length} fit{a.cases.length === 1 ? '' : 's'}, {a.cases.filter((c) => c.eligible).length} passing the filters
 					</dd>
 				</div>
@@ -267,8 +271,14 @@
 		margin: 0.25rem 0 0.75rem;
 	}
 	h3,
-	h4 {
+	h4,
+	h5 {
 		margin: 0 0 0.35rem;
+	}
+	/* One level deeper on the Calibration page (issue #586 round 3), at an h3's size. */
+	h4,
+	h5 {
+		font-size: 0.95rem;
 	}
 	.factor-set {
 		display: block;

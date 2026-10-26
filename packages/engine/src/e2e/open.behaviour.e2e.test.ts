@@ -140,7 +140,7 @@ describe('item 4, decided: cap mode leaves a water year with no allocation in fo
 		expect(src.capReached).toEqual([{ waterYear: 2022, budgetM3: 18_250, usedM3: expect.closeTo(18_250, 6) }]);
 		expect(src.limitBound!.map((y) => y.waterYear)).toEqual([2022]);
 		expect(out.summary.warnings.filter((w) => /no licence in force/.test(w))).toEqual([
-			`allocation cap: no licence in force, so modelled demand is used, uncapped (as for a unit with no licence; check the licence dates), and that use doesn't count against the water year's volume: "Unit F" surface water 2021-10-01 to 2022-09-30`
+			`allocation cap: no licence in force, so modelled demand is used, uncapped (as for a unit with no licence; check the licence dates), and that use doesn't count against the water year's volume: "Unit F" surface water 1 Oct 2021 to 30 Sep 2022`
 		]);
 	});
 });
@@ -278,7 +278,7 @@ describe('item 11 (b): a ≥ 20 mm reading after a long blank outage is set asid
 		expect(ser(out, null, 'rain_catchment_spread')).toBeUndefined();
 		expect(out.summary.rainAccumulation!).toMatchObject({ spreadWindows: 0, spreadDays: 0, spreadMm: 0 });
 		const warn = out.summary.warnings.find((x) => x.includes('after an outage set aside as missing'));
-		expect(warn).toContain('2018-03-01 (30 mm read after a 150-day outage; 0 mm used instead)');
+		expect(warn).toContain('1 Mar 2018 (30 mm read after a 150-day outage; 0 mm used instead)');
 		// The stored series is unchanged.
 		expect(series(30).rain_catchment_mm.values[read]).toBe(30);
 	});
@@ -291,7 +291,7 @@ describe('item 11 (b): a ≥ 20 mm reading after a long blank outage is set asid
 		const rec = runWith(30, { zeroRainRuns: { mode: 'missing', keepDry: [], missing: [], accumulationMode: 'asRecorded' } });
 		expect(rec.summary.rainAccumulation!.windows[0]!.status).toBe('asRecorded');
 		expect(get(rec, null, 'rain_used')[read]).toBe(30);
-		expect(rec.summary.warnings.find((x) => x.includes('run as recorded'))).toContain('may be counted twice (2018-03-01)');
+		expect(rec.summary.warnings.find((x) => x.includes('run as recorded'))).toContain('may be counted twice (1 Mar 2018)');
 	});
 
 	it('listing the outage as missing changes nothing: the outage was blank and CHIRPS-filled already, and the reading is judged on its own day', () => {

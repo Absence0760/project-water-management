@@ -496,15 +496,14 @@ test('the node sheet runs in the order water moves, with the section menu fixed 
 	];
 	await expect(sheet.locator('details.sec > summary > .sec-title')).toHaveText(legends);
 	// The pages' section menu (common/SectionNav, issue #462), as a bar in the sheet's fixed sub-header: the same
-	// sections in the same order, by their short names on the bar and their legends in More.
+	// sections in the same order, each by its legend word for word, on the bar and in More alike (issue #586 R4-N).
 	const menu = sheet.getByRole('navigation', { name: 'Sections of the form' });
-	const short = ['Catchment area', 'Flow share', 'Dam', 'Dam survey', 'Routing', 'Supply', 'Irrigation', 'Demand objects', 'Combined boreholes', 'Individual boreholes', 'Land cover', 'Base flow', 'Bed losses'];
 	const onBar = menu.locator('.groups').getByRole('link');
 	await expect(onBar.first()).toBeVisible();
 	const kept = await onBar.count();
-	await expect(onBar).toHaveText(short.slice(0, kept));
+	await expect(onBar).toHaveText(legends.slice(0, kept));
 	const more = menu.getByRole('button', { name: /^More sections/ });
-	if (kept < short.length) {
+	if (kept < legends.length) {
 		await more.click();
 		await expect(menu.locator('.pop').getByRole('link')).toHaveText(legends.slice(kept));
 		await page.keyboard.press('Escape');
@@ -532,7 +531,7 @@ test('the node sheet runs in the order water moves, with the section menu fixed 
 	expect(await page.evaluate(() => document.documentElement.style.scrollPaddingTop)).toBe('');
 	// Scrolling the form by hand moves the mark: the last section, once the form is at its end.
 	await sheet.locator('.body').evaluate((el) => el.scrollTo(0, el.scrollHeight));
-	if (kept === short.length) await expect(menu.getByRole('link', { name: 'Bed losses' })).toHaveAttribute('aria-current', 'location');
+	if (kept === legends.length) await expect(menu.getByRole('link', { name: 'Bed losses in the reach below' })).toHaveAttribute('aria-current', 'location');
 	else await expect(more).toHaveAccessibleName(/including the one being read/);
 	await expectNoViolations(page);
 });

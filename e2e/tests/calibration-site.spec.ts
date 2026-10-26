@@ -1,6 +1,6 @@
 // Calibrating at a gauge inside the network (engine 1.41.0; docs/ui.md §
-// Settings, docs/model.md §2.10k). The outlet has no record; a record is
-// attached to an inner gauge. Settings → Calibration record offers that gauge
+// Calibration, docs/model.md §2.10k). The outlet has no record; a record is
+// attached to an inner gauge. Calibration → Calibration record offers that gauge
 // under "Scored at" (and no gauge without a record); a fit there scores the
 // gauge's record, its fit record names the gauge, and the Data page says the
 // record is the calibration site. Names and numbers are invented.
@@ -32,7 +32,7 @@ test('a fit is scored at a gauge inside the network, and its record says where',
 	const rec = list.find((s) => s.name === 'Weir record')!;
 	expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${rec.id}`, { data: { siteNodeId: weir.id } })).status()).toBe(200);
 
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const scoredAt = page.getByLabel('Scored at');
 	await expect(scoredAt).toHaveValue('');
 	// The outlet and the gauge with a record; never the bare gauge.
@@ -69,8 +69,9 @@ test('a fit is scored at a gauge inside the network, and its record says where',
 	// A run scores its statistics at the site too: the weir's record against the simulated flow there, charted,
 	// and the weir (an EWR site with its own record) gets its own EWR test beside the outlet's.
 	const runId = await createRun(page.request, project.id, 'At the weir');
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
-	await expect(page.getByRole('heading', { level: 2, name: 'At the weir' })).toBeVisible();
+	// Model quality is on Calibration (issue #586 Round 3).
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}`);
+	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', runId);
 	await expect(page.getByRole('img', { name: /^Flow at Middle weir, the calibration site/ }).locator('canvas')).toBeVisible();
 	await expect(page.getByTestId('calibration-compared-with')).toContainText('at the gauge “Middle weir” (the calibration site)');
 	await expect(page.getByRole('heading', { name: 'EWR test at Middle weir: model against its observed flow' })).toBeVisible();
@@ -95,7 +96,7 @@ test('a saved site whose record has gone warns on the run and in Settings', asyn
 	// The record is moved back to the outlet afterwards: the stored site no longer has one.
 	expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${rec.id}`, { data: { siteNodeId: null } })).status()).toBe(200);
 
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.getByTestId('calibration-site-gone')).toContainText('no flow record is attached to it any more');
 	await expect(page.getByLabel('Scored at')).toHaveValue(weir.id);
 

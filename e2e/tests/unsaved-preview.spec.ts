@@ -115,7 +115,7 @@ test("Settings: the one save bar's Preview takes the settings and the model's ed
 	expect(failed).toBe(1);
 
 	// On Settings there is still one bar, with one Preview: it takes the settings with the model's edits.
-	await page.getByRole('link', { name: 'Settings & calibration' }).first().click();
+	await page.getByRole('link', { name: 'Model settings' }).first().click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeVisible();
 	const bar = page.getByRole('region', { name: 'Unsaved model changes' });
 	await expect(bar.getByRole('button', { name: 'Save changes' })).toBeVisible();

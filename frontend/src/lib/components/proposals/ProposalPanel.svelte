@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
 	import { tick, type Snippet } from 'svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import Fold from '#lib/components/common/Fold.svelte';
 
@@ -24,6 +25,7 @@
 		id,
 		variant,
 		title,
+		level = 3,
 		helpKey,
 		helpLabel,
 		what,
@@ -51,6 +53,8 @@
 		/** 'page' a panel on a page (Dams), 'drawer' a section at a drawer's foot (land cover), 'inline' a group inside a form's section (Settings). */
 		variant: 'page' | 'drawer' | 'inline';
 		title: string;
+		/** The heading's level when not a page's panel (3 by default; 4 one level deeper, the Calibration page's Flow calibration card). */
+		level?: 3 | 4;
 		/** A glossary id for a HelpTip beside the heading, if any. */
 		helpKey?: string;
 		/** The tip button's name when the glossary term doesn't name the heading (default "About <term>"): it should match what the heading says. */
@@ -104,9 +108,23 @@
 	<p class={notice ? `alert ${noticeFailed ? 'alert-error' : 'alert-info'} slim` : 'visually-hidden'} role="status" tabindex="-1" bind:this={noticeEl} data-testid="{prefix}-notice">{#if notice}{notice}{#if !noticeFailed}{' '}<a href="?tab=runs">Run the model</a> to see its effect.{/if}{/if}</p>
 	<div class="body" class:grid={bodyGrid} aria-busy={loading} data-ready={!loading && (loaded || error !== null) ? 'true' : undefined} data-testid="{prefix}-body">
 		{#if error}
-			<p class="err" role="alert">The {what} couldn’t be loaded ({error}). <button type="button" class="btn btn-sm" onclick={onretry}>Try again</button></p>
+			<p class="err" role="alert">
+				The {what} couldn’t be loaded ({error}).
+				<!-- The loading line takes its place: the focus follows, then lands on the panel's heading (followRetry). -->
+				<button
+					type="button"
+					class="btn btn-sm"
+					data-retry
+					onclick={(e) => {
+						followRetry(e.currentTarget);
+						onretry();
+					}}>Try again</button
+				>
+			</p>
 		{:else if loaded}
 			{@render children()}
+		{:else if loading}
+			<p class="muted" role="status" data-loading>Loading the {what}…</p>
 		{/if}
 	</div>
 {/snippet}
@@ -116,11 +134,11 @@
 		<div class="panel-head"><h2 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} label={helpLabel} />{/if}</h2>{@render actions?.()}</div>
 	{:else if actions}
 		<div class="head">
-			<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} label={helpLabel} />{/if}</h3>
+			<svelte:element this={`h${level}`} id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} label={helpLabel} />{/if}</svelte:element>
 			<div class="actions">{@render actions()}</div>
 		</div>
 	{:else}
-		<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} label={helpLabel} />{/if}</h3>
+		<svelte:element this={`h${level}`} id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} label={helpLabel} />{/if}</svelte:element>
 	{/if}
 	{#if fold}
 		<Fold name={fold.name} line={fold.line} change={fold.change} problem={false} body="stack" class="proposal-fold" lineTestid="{prefix}-line" bind:open>
@@ -151,7 +169,7 @@
 		border-top: 1px solid var(--border);
 		container-type: inline-size;
 	}
-	.drawer h3 {
+	.drawer :is(h3, h4) {
 		font-size: 1rem;
 		margin: 0;
 	}
@@ -166,8 +184,12 @@
 		justify-content: space-between;
 		gap: 0.4rem 1rem;
 	}
-	.head h3 {
+	.head :is(h3, h4) {
 		margin: 0;
+	}
+	/* One level deeper (`level`), at an h3's size. */
+	h4 {
+		font-size: 0.95rem;
 	}
 	.actions {
 		display: flex;

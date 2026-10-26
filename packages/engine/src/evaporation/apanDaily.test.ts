@@ -85,7 +85,7 @@ describe('apanDailyMm / apanDailyInfo', () => {
 		const part = apanDailyInfo({ startDate: '2020-01-01', values: [] }, [null, 5, -1, 6], 18262, true, w);
 		expect(part).toEqual({ dailyDays: 2, fallbackDays: 2, invalidDays: 1, first: '2020-01-02', last: '2020-01-04' });
 		expect(w).toHaveLength(1);
-		expect(w[0]).toContain('covers 2 of 4 run days (2020-01-02 to 2020-01-04); the other 2 use the monthly A-pan mean');
+		expect(w[0]).toContain('covers 2 of 4 run days (2 Jan 2020 to 4 Jan 2020); the other 2 use the monthly A-pan mean');
 		expect(w[0]).toContain('1 of them with a negative value');
 		expect(w[0]).toContain('monthly A-pan means are 0');
 		const none = apanDailyInfo({ startDate: '2020-01-01', values: [] }, [null, null], 18262, false, w);

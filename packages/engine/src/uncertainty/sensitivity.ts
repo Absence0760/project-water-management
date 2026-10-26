@@ -154,7 +154,7 @@ export function sensitivityPlan(
 
 	// Pan coefficient: GR4J's PE under pe.kind 'pan' only.
 	if (s.pe.kind === 'monthly') {
-		skipped.push({ factor: 'pan', reason: 'GR4J’s potential evaporation comes from the monthly PE row (Settings), which does not use the pan coefficient' });
+		skipped.push({ factor: 'pan', reason: 'GR4J’s potential evaporation comes from the monthly PE row (Calibration → Flow calibration), which does not use the pan coefficient' });
 	} else if (!s.panCoefficient.some((v) => v > 0)) {
 		skipped.push({ factor: 'pan', reason: 'the pan coefficient is 0 in every month' });
 	} else {

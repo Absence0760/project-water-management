@@ -4,7 +4,7 @@
 import { SERIES_KINDS } from '@water-management/engine';
 import type { ApiKey, ApiKeySeries } from '#lib/api/types.js';
 import type { FileFormat } from '#lib/components/common/formatHelp.js';
-import { fmtDate } from '#lib/format/number.js';
+import { fmtDate, fmtWhen } from '#lib/format/number.js';
 import { kindLabel } from '#lib/series/kinds.js';
 
 /** How long a new key lives: the choices offered (the API takes any 1–3650 days, or none). */
@@ -57,7 +57,7 @@ export function keyRow(key: ApiKey, now: number = Date.now()): KeyRow {
 		series: key.allowedSeries === null ? 'Any series' : key.allowedSeries.map(seriesText).join(', '),
 		created: `${fmtDate(key.createdAt)}${by(key.createdBy)}`,
 		ends: state === 'revoked' ? `Revoked ${fmtDate(key.revokedAt)}${by(key.revokedBy)}` : key.expiresAt === null ? 'Never' : fmtDate(key.expiresAt),
-		lastUsed: key.lastUsedAt ? fmtDate(key.lastUsedAt, true) : 'Never',
+		lastUsed: key.lastUsedAt ? fmtWhen(key.lastUsedAt, new Date(now)) : 'Never',
 		canRevoke: state === 'live'
 	};
 }
@@ -97,7 +97,7 @@ export const INGEST_EXAMPLE_BODY = JSON.stringify(
 export const INGEST_FORMAT: FileFormat = {
 	id: 'ingest-request',
 	title: 'Logger readings sent with an API key',
-	where: 'Settings & calibration → API keys',
+	where: 'Project → API keys',
 	accepts: 'JSON (Content-Type: application/json), sent with POST to /ingest/v1/series/merge with the key as Authorization: Bearer <key>.',
 	rules: [
 		`\`kind\`: one of ${SERIES_KINDS.map((k) => `\`${k}\``).join(', ')}.`,

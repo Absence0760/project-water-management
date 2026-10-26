@@ -1,5 +1,7 @@
 <script module lang="ts">
 	const loadPreviewDialog = () => import('./SeriesPreviewDialog.svelte');
+	// Data feeds (issue #586: moved here from Settings) is its own chunk, as it was there.
+	const loadDataFeeds = () => import('#lib/components/feeds/DataFeedsPanel.svelte');
 </script>
 
 <script lang="ts">
@@ -12,14 +14,16 @@
 	// page flows in the window's one scroll: the first few rows show, the rest
 	// behind "Show all N series" (series/fold.ts; the charted row always
 	// shows), and nothing scrolls inside itself. The chart follows the table,
-	// and a pick brings it into view. The checks and the reference follow.
+	// and a pick brings it into view. Data feeds (`#data-feeds`, the feeds
+	// that fill series daily, issue #586) follows, then the checks and the reference.
 	// Uploading is the header's Add data (series/AddDataDialog.svelte): the
 	// page charts what it uploaded (`series=`), and the empty state's button
 	// opens the same dialog (`onadddata`).
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
-	import { onMount, untrack } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { goto } from '$app/navigation';
+	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { page } from '$app/state';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
@@ -56,6 +60,7 @@
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { prefetch } from '#lib/components/common/lazy.js';
 	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import DownloadMenu from '#lib/components/export/DownloadMenu.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { downloads } from '#lib/export/index.js';
@@ -100,7 +105,7 @@
 	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 	import { foldList } from '#lib/components/common/fold.js';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
-	import { focusAnchor, holdAnchor } from '#lib/help/anchor.js';
+	import { anchorHeading, focusHeading, landOnAnchor } from '#lib/help/anchor.js';
 
 	let {
 		projectId,
@@ -143,6 +148,8 @@
 	let loadError = $state<string | null>(null);
 	// A refresh that failed while a list was already drawn: a slim note with Try again; the table stays.
 	let refreshError = $state<string | null>(null);
+	/** Its Try again's refresh, in flight: a slim line in its place, which the focus follows (followRetry). */
+	let refreshing = $state(false);
 	let actionError = $state<string | null>(null);
 
 	// Full values per series (for coverage and the chart). Input series are few
@@ -173,6 +180,21 @@
 		seriesParam && list.some((s) => s.id === seriesParam) ? seriesParam : list.length ? pickDefault(list) : null
 	);
 	const viewing = $derived(list.find((s) => s.id === selectedId) ?? null);
+	// A `series=` link to a series no longer stored (deleted since a note or a run linked it) charted another one
+	// without a word, the URL still naming the dead id (issue #586). Once the list is in, drop the stale parameter
+	// (replace, no history entry) and say so in one line, as Runs & results does for a deleted run. A series deleted
+	// here drops its own parameter, with no note (remove).
+	let goneSeries = $state(false);
+	let removedHere = '';
+	$effect(() => {
+		const id = seriesParam;
+		if (!id || loading || loadError || list.some((s) => s.id === id)) return;
+		untrack(() => {
+			if (id === removedHere) return;
+			goneSeries = true;
+			void goto(withoutParam(page.url, 'series'), { reset: false, replace: true });
+		});
+	});
 	// How the Series details show its product (series/details.ts): a CHIRPS select, the words, or no field.
 	const viewingProduct = $derived(viewing ? productField(viewing) : null);
 
@@ -205,6 +227,7 @@
 	/** Chart a series: a URL change, so it can be shared and Back returns; the chart, under the table, comes into view. */
 	function choose(id: string, replaceState = false) {
 		if (id === selectedId && seriesParam === id) return;
+		goneSeries = false;
 		void goto(withParam(page.url, 'series', id), { reset: false, replace: replaceState }).then(() => {
 			if (!replaceState) showChart();
 		});
@@ -252,6 +275,7 @@
 			else loadError = msg(e);
 		} finally {
 			loading = false;
+			refreshing = false;
 		}
 	}
 	onMount(() => {
@@ -495,6 +519,7 @@
 			await api.series.remove(projectId, s.id);
 			// Its place among the rows as drawn (grouped, folded), so the View that takes the focus is the one now there.
 			const at = [...document.querySelectorAll('#series-rows tr[data-series]')].findIndex((tr) => (tr as HTMLElement).dataset.series === s.id);
+			removedHere = s.id;
 			list = list.filter((x) => x.id !== s.id);
 			onSeriesChange?.(list);
 			// The deleted series was charted: back to the default, without a history entry for it.
@@ -729,43 +754,54 @@
 	const navGroups = $derived(
 		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks })
 	);
-	// A link to a panel (`?tab=series#data-checks`, the menu's own links reloaded): the tab is a lazy
-	// chunk and most panels wait for the series, so land on it once drawn and hold it while the page
-	// settles (as Settings, Runs and EWR do), with focus on its heading.
-	onMount(() => {
-		let hash = page.url.hash.slice(1);
-		// The retired Upload CSV panel's `#upload-csv`: an editor gets the Add data dialog it now lives in
-		// (the fragment dropped, so Back or a reload doesn't reopen it); anyone else lands on the series.
-		const moved = retiredDataAnchor(hash);
-		if (moved) {
-			if (!readonly && onadddata) {
-				history.replaceState(history.state, '', `${page.url.pathname}${page.url.search}`);
-				onadddata();
-				return;
-			}
-			hash = moved;
+	// A link to a panel (`?tab=series#data-checks`, `?rain=units#data-feeds`, the menu's own links reloaded),
+	// on load or a #fragment typed or followed while the page is open (finding R2-D): the tab is a lazy chunk,
+	// most panels wait for the series and Data feeds is a chunk of its own, so land on it once drawn and hold
+	// it while the page settles, with focus on its heading (help/anchor.ts landOnAnchor, through
+	// nav/anchorLanding.ts as Settings, Runs and Project do).
+	onMount(() =>
+		followAnchors({
+			page: 'series',
+			land(hash) {
+				// The retired Upload CSV panel's `#upload-csv`: an editor gets the Add data dialog it now lives in
+				// (the fragment dropped, so Back or a reload doesn't reopen it); anyone else lands on the series.
+				const moved = retiredDataAnchor(hash);
+				if (moved) {
+					if (!readonly && onadddata) {
+						history.replaceState(history.state, '', `${location.pathname}${location.search}`);
+						onadddata();
+						return;
+					}
+					hash = moved;
+				}
+				return dataAnchor(hash) ? landOnAnchor(hash) : undefined;
+			},
+			forward: (to) => void goto(to, { replace: true, reset: false })
+		})
+	);
+
+	// The series panel's link to Data feeds, further down: the browser jumps to the fragment, then the
+	// heading takes the focus, so Tab carries on from there (as SectionNav's links do; the fragment already
+	// in the URL makes no hashchange, so then at once).
+	let stopFeedsFocus = () => {};
+	function toFeeds(e: MouseEvent) {
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		stopFeedsFocus();
+		const el = document.getElementById('data-feeds');
+		const heading = el && anchorHeading(el);
+		if (!heading) return;
+		if (location.hash === '#data-feeds') {
+			focusHeading(heading);
+			return;
 		}
-		if (!dataAnchor(hash)) return;
-		let release = () => {};
 		const land = () => {
-			const el = document.getElementById(hash);
-			if (!el) return false;
-			release = holdAnchor(el);
-			const heading = el.querySelector<HTMLElement>('h2, h3');
-			if (heading) {
-				if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-				focusAnchor(heading);
-			}
-			return true;
+			stopFeedsFocus();
+			if (location.hash === '#data-feeds') focusHeading(heading);
 		};
-		if (land()) return () => release();
-		const mo = new MutationObserver(() => land() && mo.disconnect());
-		mo.observe(document.body, { childList: true, subtree: true });
-		return () => {
-			mo.disconnect();
-			release();
-		};
-	});
+		window.addEventListener('hashchange', land);
+		stopFeedsFocus = () => window.removeEventListener('hashchange', land);
+	}
+	onDestroy(() => stopFeedsFocus());
 </script>
 
 <!-- Saving…, Saved or why not, beside a control that saves on change (a polite live region, always there so it is announced). -->
@@ -903,13 +939,31 @@
 
 <!-- The notices: one slim line each under the section header, as the page's own. "New data since the latest run"
      is the page's notice (newDataSinceRun, with Re-run model or the queued automatic re-run), here as on every tab. -->
-{#if actionError || refreshError || rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
+{#if actionError || refreshError || refreshing || goneSeries || rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
 	<div class="notes">
 		{#if actionError}<p class="note err" role="alert">{actionError}</p>{/if}
+		{#if goneSeries}
+			<p class="note note-info" role="status" data-testid="gone-series">
+				The series that link named is no longer stored{viewing ? `: showing ${viewing.name || kindLabel(viewing.kind)} instead` : ''}.
+			</p>
+		{/if}
+		{#if refreshing}
+			<p class="note note-info" role="status" data-loading>Refreshing the series…</p>
+		{/if}
 		{#if refreshError}
 			<p class="note err" role="alert" data-testid="refresh-error">
 				Couldn't refresh the series ({refreshError}); showing the list as last loaded.
-				<button type="button" class="btn btn-sm" onclick={load}>Try again</button>
+				<!-- The notices may all go with it: the focus lands on the series list it refreshed (followRetry). -->
+				<button
+					type="button"
+					class="btn btn-sm"
+					data-retry
+					onclick={(e) => {
+						followRetry(e.currentTarget, { scope: e.currentTarget.closest('.notes')?.parentElement, landing: document.getElementById('data-series') });
+						refreshing = true;
+						load();
+					}}>Try again</button
+				>
 			</p>
 		{/if}
 		{#if rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
@@ -927,10 +981,10 @@
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
 		<div class="head-tools">
-			<!-- The feeds that fill series daily live in Settings → Data feeds; a project that has none had no way to
-			     find them from here (issue #444). -->
+			<!-- The feeds that fill series daily are Data feeds, further down this page (issue #586; before, Settings, and a
+			     project with none had no way to find them from here, issue #444). Followed, it lands on its heading. -->
 			{#if !readonly}
-				<a class="small feeds-link" href="?tab=settings#set-feeds" data-testid="data-feeds-link">Fetch data automatically (CHIRPS rain, forecast, DWS flow) <span aria-hidden="true">→</span> Data feeds</a>
+				<a class="small feeds-link" href="#data-feeds" data-testid="data-feeds-link" onclick={toFeeds}>Fetch data automatically (CHIRPS rain, forecast, DWS flow) <span aria-hidden="true">→</span> Data feeds</a>
 			{/if}
 			<!-- The grouped list as one CSV (issue #553 round 5): Compact or Full, each with what every area's rain is made of. -->
 			{#if list.length}
@@ -1018,9 +1072,13 @@
 				{/each}
 			</table>
 		</div>
-		<p class="muted small key">
-			<span class="sw full"></span> complete year <span class="sw part"></span> some days missing <span class="sw none"></span> no data.
-			Rainfall "typical" = mean annual total; flow = mean daily flow. <span class="behind">Behind</span> a series a run reads, more than {STALE_DAYS} days old.
+		<!-- Each swatch or pill stays on one line with its words: a phone wrapped "no data" away from its colour. -->
+		<p class="muted small key" data-testid="series-key">
+			<span class="key-item"><span class="sw full"></span> complete year</span>
+			<span class="key-item"><span class="sw part"></span> some days missing</span>
+			<span class="key-item"><span class="sw none"></span> no data.</span>
+			<span>Rainfall’s typical value is its mean annual total; flow’s, its mean daily flow.</span>
+			<span><span class="behind">Behind</span> a series a run reads, more than {STALE_DAYS} days old.</span>
 		</p>
 	</LoadState>
 </section>
@@ -1184,6 +1242,14 @@
 {/if}
 </div>
 
+<!-- Data feeds (issue #586, from Settings): every reader, as there (owners attach, editors run one now, viewers read).
+     The id sits outside the lazy panel, so a #data-feeds link and the section menu find it while the chunk loads. -->
+<div id="data-feeds">
+	<Lazy load={loadDataFeeds}>
+		{#snippet children(DataFeedsPanel)}<DataFeedsPanel {projectId} />{/snippet}
+	</Lazy>
+</div>
+
 {#if agreement}
 	<section class="panel" id="data-agreement" aria-label="Gauge vs logger agreement">
 		<AgreementTable {agreement} headingLevel={2} fold />
@@ -1197,15 +1263,19 @@
 {#if hasChecks}
 	<section class="panel" id="data-checks" aria-labelledby="chk-h" data-testid="series-checks">
 		<div class="panel-head">
-			<!-- What the checks look for is the ⓘ's (issue #464), not a line under the heading. -->
-			<h2 id="chk-h">Data checks <HelpTip key="data-quality-limits" label="About the data checks" /></h2>
+			<!-- What the checks look for is the ⓘ's (issue #464), not a line under the heading; beside the heading, not in
+			     it, so the heading (and a #data-checks landing) is named "Data checks" alone. -->
+			<div class="chk-h"><h2 id="chk-h">Data checks</h2><HelpTip key="data-quality-limits" label="About the data checks" /></div>
 		</div>
 		{#if checks.length}
 			<ul class="checks">
 				{#each checks as c (c.id)}
 					<li>
 						<span class="badge badge-warn">{CHECK_LABEL[c.check.check]}</span>
-						<strong>{c.series.name || kindLabel(c.series.kind)}</strong>
+						<!-- The series named charts it, as its row's View does (the check was a dead end: issue #586). -->
+						<button type="button" class="chk-series" data-testid="check-series" aria-pressed={c.series.id === selectedId} onclick={() => choose(c.series.id)}
+							><span class="visually-hidden">Chart </span>{c.series.name || kindLabel(c.series.kind)}</button
+						>
 						<span class="muted">({seriesKindLabel(c.series)})</span>:
 						{c.check.text.slice(c.check.text.indexOf(':') + 1).trim()}
 					</li>
@@ -1234,7 +1304,8 @@
 		</dl>
 	</details>
 	<p class="muted small">
-		A run needs at least one rainfall series; its period is the span of those series unless Settings sets one.
+		A run needs at least one rainfall series; its period is the span of those series unless the
+		<a href="?tab=settings#set-period" data-testid="uses-period-link">Simulation period</a> setting sets one.
 		With several series of one kind, the first by name is used, in character order: digits and capitals before lower case.
 	</p>
 </section>
@@ -1249,11 +1320,12 @@
 {/if}
 
 <style>
-	/* A 24 px target (WCAG 2.5.8). */
+	/* A 24 px target (WCAG 2.5.8) that wraps as text: inline-flex made the words and the arrow
+	   separate columns on a phone (issue #586 R1-D). */
 	.feeds-link {
-		display: inline-flex;
-		align-items: center;
+		display: inline-block;
 		min-height: 24px;
+		line-height: 24px;
 	}
 	.series th[scope='row'] {
 		min-width: 190px;
@@ -1338,10 +1410,11 @@
 		width: 100%;
 		max-width: 28rem;
 	}
+	/* The ⓘ stays beside its badge: in a narrow column (a 1024 px window) a long badge wraps inside itself, and the
+	   tip used to drop to a line of its own under it. */
 	.role-line {
 		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
+		align-items: flex-start;
 		gap: 0.15rem;
 		margin-top: 0.15rem;
 	}
@@ -1350,9 +1423,11 @@
 		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0 0.4rem;
-		border-radius: 999px;
+		/* Not a full pill: a badge that wraps reads as one rounded box, not a lozenge pinched at each line. */
+		border-radius: 0.6rem;
 		background: var(--accent-soft);
 		color: var(--accent);
+		min-width: 0;
 	}
 	.why {
 		font-weight: 400;
@@ -1415,12 +1490,15 @@
 	}
 	/* A mid-width column (beside the sidebar, e.g. a 1024 px window): the table fits without a sideways scroll by
 	   folding From under Data up to, letting the row header and coverage narrow, and wrapping the actions two to a
-	   line. Container, not viewport, widths: the sidebar takes 240 px, so the viewport lies about the room. */
-	@container data-page (max-width: 72rem) {
+	   line. Container, not viewport, widths: the sidebar takes 240 px, so the viewport lies about the room. Up to 76rem (at the
+root's 14 px, a 1280 px window under the bar): at 72rem a 1280 px window kept the From column and squeezed the
+series names to 190 px, wrapping each role badge. */
+	@container data-page (max-width: 76rem) {
 		.series th[scope='row'] {
 			min-width: 9rem;
 		}
-		.cov {
+		/* .series: the plain `.cov` rule below comes later in the file and would win a tie. */
+		.series .cov {
 			min-width: 7.5rem;
 		}
 		.series .from-col {
@@ -1567,6 +1645,32 @@
 		align-items: center;
 		gap: 0.3rem;
 	}
+	.key-item {
+		white-space: nowrap;
+	}
+	.chk-h {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.chk-h h2 {
+		margin: 0;
+	}
+	/* A series named in a check, as a link: it charts that series. */
+	.chk-series {
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		font-weight: 600;
+		color: var(--accent);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+	.chk-series[aria-pressed='true'] {
+		color: var(--text);
+		text-decoration: none;
+	}
 	.sw {
 		display: inline-block;
 		width: 10px;
@@ -1696,6 +1800,8 @@
 		.series td[data-label]::before {
 			content: attr(data-label) / '';
 			display: block;
+			/* A number cell doesn't wrap; its label must, or "Missing (% of days)" runs into the next at 320 px (issue #586). */
+			white-space: normal;
 			font-size: var(--font-xs);
 			font-weight: 600;
 			color: var(--text-muted);

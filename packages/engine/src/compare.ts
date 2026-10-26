@@ -10,7 +10,7 @@ import { DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocation
 import { ALLOCATION_MODE_LABEL, type AllocationMode } from './allocations/mode';
 import { regroup } from './format';
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
-import { fromEpochDay, toEpochDay } from './calendar';
+import { dayText, fromEpochDay, toEpochDay } from './calendar';
 import { ewrSourceConfidence, type EwrRuleTable, type EwrRuleSourceKind } from './reserve/rules';
 import { EWR_DAILY_SOURCE_LABEL, ewrDailySourceChanges } from './reserve/dailySource';
 import { isEwrSite } from './network/topology';
@@ -242,7 +242,7 @@ export interface RunComparison {
 	 * per site (the outlet, then each gauge with a record of its own) the failing
 	 * water years of check 1 and the Q90 ratio of check 4, with pass or fail,
 	 * the catchment-wide checks 2 and 3, the recession diagnostics (rate ratio
-	 * and b difference) and the validation signatures (BFI by both filters,
+	 * and b difference) and the hydrological signatures (BFI by both filters,
 	 * the low-flow slope bias and %BiasFLV, the held-out recession skill).
 	 * null when neither run has them (both before engine 0.25.0).
 	 */
@@ -727,7 +727,7 @@ export function unitRainText(raw: unknown): string {
 	const p = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 	// The reference gauge and unit (engine ≥ 1.80.0), only when set, so a setting without one reads as before.
 	const ref = u.reference ? `; reference gauge ${u.reference.gauge} at the unit ${u.reference.unitId}` : '';
-	return `on (${gauge}; MAP period ${p.start} to ${p.end}${ref})`;
+	return `on (${gauge}; MAP period ${dayText(p.start)} to ${dayText(p.end)}${ref})`;
 }
 
 /** The change of settings.unitRain between two runs, or null. A run saved without it (engine < 1.78.0) ran on the catchment rain. */
@@ -1847,7 +1847,7 @@ function sharedDaysText(label: string, c: NonNullable<ReturnType<typeof sharedDa
 			: c.totalA !== 0
 				? `; their total ${c.totalB > c.totalA ? 'rose' : 'fell'} ${fmtValue((Math.abs(c.totalB - c.totalA) / Math.abs(c.totalA)) * 100, 1)}% (${fmtValue(c.totalA)} → ${fmtValue(c.totalB)})`
 				: `; their total went from 0 to ${fmtValue(c.totalB)}`;
-	return `${label} values changed on ${fmtValue(c.changed, 0)} of the ${fmtValue(c.shared, 0)} days both runs cover (${c.first} to ${c.last})${total}`;
+	return `${label} values changed on ${fmtValue(c.changed, 0)} of the ${fmtValue(c.shared, 0)} days both runs cover (${dayText(c.first)} to ${dayText(c.last)})${total}`;
 }
 
 /** A series key's label: its kind's, or a gauge node's own record (`<kind>@<node id>`, engine ≥ 1.4.0) named by its gauge. */
@@ -1889,7 +1889,7 @@ function diffSeries(
 		if (x && !y) out.push({ area: 'series', kind: 'removed', subject: label, text: `${label} series removed` });
 		else if (!x && y) {
 			const r = range(y);
-			out.push({ area: 'series', kind: 'added', subject: label, text: `${label} series added (${r.empty ? 'no values' : `${r.start} to ${r.end}`})` });
+			out.push({ area: 'series', kind: 'added', subject: label, text: `${label} series added (${r.empty ? 'no values' : `${dayText(r.start)} to ${dayText(r.end)}`})` });
 		} else if (x && y) {
 			const ra = range(x);
 			const rb = range(y);
@@ -1916,15 +1916,15 @@ function diffSeries(
 						area: 'series',
 						kind: 'changed',
 						subject: label,
-						text: rb.empty ? `${label} series now has no values (was ${ra.start} to ${ra.end})` : `${label} series now has values (${rb.start} to ${rb.end})`
+						text: rb.empty ? `${label} series now has no values (was ${dayText(ra.start)} to ${dayText(ra.end)})` : `${label} series now has values (${dayText(rb.start)} to ${dayText(rb.end)})`
 					});
 				}
 				continue;
 			}
-			if (rb.end > ra.end) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series extended to ${rb.end} (was ${ra.end})` });
-			else if (rb.end < ra.end) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series now ends ${rb.end} (was ${ra.end})` });
-			if (rb.start < ra.start) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series extended back to ${rb.start} (was ${ra.start})` });
-			else if (rb.start > ra.start) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series now starts ${rb.start} (was ${ra.start})` });
+			if (rb.end > ra.end) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series extended to ${dayText(rb.end)} (was ${dayText(ra.end)})` });
+			else if (rb.end < ra.end) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series now ends ${dayText(rb.end)} (was ${dayText(ra.end)})` });
+			if (rb.start < ra.start) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series extended back to ${dayText(rb.start)} (was ${dayText(ra.start)})` });
+			else if (rb.start > ra.start) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series now starts ${dayText(rb.start)} (was ${dayText(ra.start)})` });
 			// The days both cover: compared value by value when both runs stored
 			// their values (021_series_blob), so an edit can't hide behind a date
 			// change; else the hash can only speak for identical dates.
@@ -1936,7 +1936,7 @@ function diffSeries(
 			if (shared) {
 				if (shared.changed) out.push({ area: 'series', kind: 'changed', subject: label, text: sharedDaysText(label, shared) });
 			} else if (sameRange && x.valuesSha256 && y.valuesSha256) {
-				out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} values changed (same dates, ${ra.start} to ${ra.end})` });
+				out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} values changed (same dates, ${dayText(ra.start)} to ${dayText(ra.end)})` });
 			} else if (!sameRange && !(va && vb) && ra.end >= rb.start && rb.end >= ra.start) {
 				out.push({
 					area: 'series',

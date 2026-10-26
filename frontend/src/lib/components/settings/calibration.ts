@@ -34,7 +34,7 @@ export function typicalRange(p: ParamSpec<Gr4jParams>): string {
 }
 
 /**
- * The Settings & calibration header's line (issue #17): where the GR4J
+ * The Calibration page header's line (issue #17; Settings' until issue #586 round 3): where the GR4J
  * parameters in the form came from. The fit's day and its in-sample score on
  * its own objective ("KGE′ 0.93 in calibration"), and whether anything the fit
  * depends on has changed since (the fit record under Fit automatically says

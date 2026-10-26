@@ -11,10 +11,12 @@
 <script lang="ts">
 	import DayInput from '#lib/components/common/DayInput.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtDay } from '#lib/format/number.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, type Run, type RunSeriesRef } from '#lib/api/index.js';
 	import CurtailmentTable from '#lib/components/curtailment/CurtailmentTable.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import {
 		describePeriod,
 		forecastDaysIn,
@@ -78,7 +80,7 @@
 	});
 
 	const idOf = (k: SeriesKey) => `${k.nodeId ?? ''}|${k.key}`;
-	// $state.raw: long daily arrays must not become deep proxies (RunCharts.svelte). Replace, never mutate.
+	// $state.raw: long daily arrays must not become deep proxies (ModelQuality.svelte). Replace, never mutate.
 	let loaded = $state.raw<{ runId: string; series: ReadonlyMap<string, Stored> }>({ runId: '', series: new Map() });
 	let loading = $state(false);
 	let loadError = $state<string | null>(null);
@@ -170,7 +172,7 @@
 			<label for="rw-preset">Reporting window <HelpTip key="report-window" label="About the period the targets cover" /></label>
 			<select id="rw-preset" value={choice.preset} disabled={!!unavailable} aria-describedby="rw-status" onchange={(e) => pickPreset(e.currentTarget.value as WindowPreset)}>
 				{#each WINDOW_PRESETS as p (p.preset)}
-					<option value={p.preset}>{p.label}{p.preset === 'project' ? ` (${stored.reportStart} to ${stored.reportEnd})` : ''}</option>
+					<option value={p.preset}>{p.label}{p.preset === 'project' ? ` (${fmtDay(stored.reportStart)} to ${fmtDay(stored.reportEnd)})` : ''}</option>
 				{/each}
 			</select>
 		</div>
@@ -191,7 +193,7 @@
 		{:else if resolution && !resolution.ok}
 			<p class="warn">{resolution.error} Showing the project window.</p>
 		{:else if recompute && loading}
-			<p>Working out {presetLabel(choice.preset).toLowerCase()} from this run's daily results…</p>
+			<p data-loading>Working out {presetLabel(choice.preset).toLowerCase()} from this run's daily results…</p>
 		{:else if recompute && !windowed}
 			<!-- The error itself is in the alert below. -->
 			<p>Showing the project window.</p>
@@ -215,7 +217,16 @@
 	{#if loadError && recompute}
 		<div class="alert alert-error" role="alert">
 			Couldn't load the run's daily results: {loadError}
-			<button type="button" class="btn btn-sm" onclick={() => attempt++}>Try again</button>
+			<!-- The working-out line takes its place: the focus follows (followRetry). -->
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					followRetry(e.currentTarget);
+					attempt++;
+				}}>Try again</button
+			>
 		</div>
 	{:else if workError && recompute}
 		<div class="alert alert-error" role="alert">Couldn't work out this window from the run's daily results: {workError}</div>

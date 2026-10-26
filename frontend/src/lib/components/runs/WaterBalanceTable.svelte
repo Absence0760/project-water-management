@@ -9,8 +9,8 @@
 <script lang="ts">
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { RunSummary } from '@water-management/engine';
-	import { fmtNum, fmtQty, MINUS } from '#lib/format/number.js';
-	import { balanceColumns, balanceEquation, balanceTableRows, residualIsNoise, waterYearLabel } from './checks';
+	import { fmtNum, fmtQty } from '#lib/format/number.js';
+	import { balanceColumns, balanceEquation, fmtBalance, balanceTableRows, residualIsNoise, waterYearLabel } from './checks';
 
 	let {
 		summary,
@@ -31,8 +31,8 @@
 	const shown = $derived(cols.filter((c) => c.key !== 'runoffCoef'));
 	const RUNOFF_RESIDUAL_TITLE = 'the runoff model’s residual: rain − evaporation − flow + exchange − change in storage (mm)';
 
-	/** Enough digits to see float noise without drowning the volumes. */
-	const fmtValue = (x: number | null) => (x === null ? '–' : Math.abs(x) > 0 && Math.abs(x) < 1e-3 ? x.toExponential(2).replace(/^-/, MINUS) : fmtNum(x, 3, true));
+	/** Float noise as "< 0.001", not an exponent (checks.ts fmtBalance). */
+	const fmtValue = fmtBalance;
 </script>
 
 <section aria-labelledby="{uid}-wb">
@@ -50,7 +50,8 @@
 				<a href={accountHref}>Water account</a> on EWR.
 			</p>
 		{/if}
-		<div class="table-wrap">
+		<!-- Every water year shows: no inner scroll (the global 70vh cap), so a 15-year run reads down the page (#586 D1). -->
+		<div class="table-wrap balance-wrap">
 			<table class="data compact balance">
 				<thead>
 					<tr>
@@ -91,6 +92,9 @@
 </section>
 
 <style>
+	.balance-wrap {
+		max-height: none;
+	}
 	/* Fit by wrapping the headings, not by scrolling sideways (ui-playbook § 2,
 	   "Table headings wrap"): app.css keeps table headings on one line, and with
 	   thirteen or more columns of two-word names the table ran 535 px past its
@@ -109,14 +113,15 @@
 	}
 	/* A run with the optional terms (groundwater, other users, losses: up to
 	   twenty-one columns) can't fit any column; it scrolls inside its box, with
-	   the water year held at the left edge so every row stays named. */
-	.balance :is(thead th:first-child, tbody th) {
+	   the water year held at the left edge so every row stays named. Only while it scrolls (`data-scrolls-x`,
+	   lib/a11y/scrollRegions.ts), as app.css pins row names on a phone: a table that fits fixes nothing. */
+	.balance-wrap:global([data-scrolls-x]) .balance :is(thead th:first-child, tbody th) {
 		position: sticky;
 		left: 0;
 		z-index: 1;
 		background: var(--surface);
 	}
-	.balance thead th:first-child {
+	.balance-wrap:global([data-scrolls-x]) .balance thead th:first-child {
 		background: var(--surface-2);
 	}
 	tr.total th,

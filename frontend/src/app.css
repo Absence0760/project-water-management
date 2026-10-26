@@ -296,7 +296,7 @@ p a:not(.btn),
 	cursor: pointer;
 	white-space: nowrap;
 }
-.btn:hover:not(:disabled) {
+.btn:hover:not(:disabled):not([aria-disabled='true']) {
 	background: var(--surface-2);
 }
 .btn:disabled {
@@ -316,7 +316,20 @@ p a:not(.btn),
 	color: var(--text-muted);
 	opacity: 1;
 }
-.btn-primary:hover:not(:disabled) {
+/* A button that stays focusable while it can't act (its own save is out, nothing to save): marked with
+   aria-disabled rather than disabled, which would throw the keyboard's focus to the page (ui-playbook § 4,
+   "Don't disable a control while its own change saves"). Its handler ignores the press. */
+.btn[aria-disabled='true'] {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+.btn-primary[aria-disabled='true'] {
+	background: var(--surface-2);
+	border-color: var(--border-strong);
+	color: var(--text-muted);
+	opacity: 1;
+}
+.btn-primary:hover:not(:disabled):not([aria-disabled='true']) {
 	background: var(--accent-hover);
 	border-color: var(--accent-hover);
 }
@@ -497,10 +510,29 @@ textarea {
 .explain-scope:not(.explained) .explain {
 	display: none;
 }
+/* The settings panels' shared frame (issue #586 round 3): Model settings (SettingsTab.svelte) and the Calibration
+   page's "Set up the fit" (CalibrationSettings.svelte) each wrap their panels in `.settings-form`. The explanations
+   switch's place, each panel's current values (the line under its heading) and a panel's cards, two forms in one
+   panel (ui-playbook.md § 2, "Two forms in one panel are two cards"). */
+.settings-form > .explain-switch.check {
+	margin: 0 0 0.75rem;
+}
+.settings-form .summary {
+	margin: -0.35rem 0 0.6rem;
+	font-size: 0.85rem;
+	color: var(--text-2);
+	font-variant-numeric: tabular-nums;
+}
+.settings-form .sub-card {
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: 0.75rem 0.9rem;
+	margin: 0.75rem 0;
+}
 /* Rarely changed settings folded into one line of their values (ui-playbook.md § 2, "Rarely changed
    settings fold into their values"): common/Fold.svelte writes the markup, <details class="fold"><summary>
    <span class="fold-name">Search:</span> <span>values</span><span class="fold-problem">needs fixing</span>
-   <span class="fold-change" aria-hidden="true">Change</span></summary><div class="fold-body">fields</div>
+   <span class="fold-change">Change</span></summary><div class="fold-body">fields</div>
    </details>. "needs fixing" shows while a field inside is aria-invalid, so a closed fold still says so. Every
    fold's line starts with the same chevron, turned down while it is open (the one marker rule; a node sheet's
    section card, a headed band, keeps its own triangle). */
@@ -538,6 +570,14 @@ textarea {
 .fold-name {
 	font-weight: 500;
 }
+/* The values shrink and wrap inside their own box, so a long line stays beside its name with the action on the
+   same row, rather than dropping whole under the name and pushing the action onto a row of its own (issue #586,
+   C14: Data quality's limits and the Calibration record's quality flags at 1440 beside the index). On a phone,
+   where even 14rem won't fit beside the name, the line takes the next row whole. */
+.fold-line {
+	flex: 1 1 14rem;
+	min-width: 0;
+}
 .fold-problem {
 	display: none;
 	color: var(--danger);
@@ -548,6 +588,7 @@ textarea {
 }
 .fold-change {
 	margin-left: auto;
+	white-space: nowrap;
 	color: var(--accent);
 	font-weight: 500;
 	text-decoration: underline;
@@ -683,6 +724,65 @@ table.data tbody th {
 	}
 	.table-wrap[data-scrolls-x] table.data tbody tr.flag > th[scope='row']:first-child {
 		background: var(--row-flag);
+	}
+}
+/* A read-only table that stacks in a narrow box instead of scrolling sideways (ui-playbook § 2, "Fit a wide table by
+   stacking"): wrap its .table-wrap in a `.table-stack` and give each td a `data-label` naming its column. Below 50rem
+   of that wrapper (a phone, a half-width compare column) each row is a block: the row header (th scope="row") on its
+   own line, then the cells as many to a line as fit, each value under its name; the column heads are hidden. As columns from
+   50rem (700 px at 14 px), which every user of it fits. Used by Calibration's EWR test and plausibility tables
+   (#586 R4-K); the older per-component copies (YearTable, the annual water balance, Dams' proposals) predate it. */
+.table-stack {
+	container: table-stack / inline-size;
+	min-width: 0;
+}
+@container table-stack (max-width: 50rem) {
+	.table-stack > .table-wrap {
+		border: 0;
+		background: none;
+		overflow: visible;
+		max-height: none;
+	}
+	.table-stack table.data,
+	.table-stack table.data tbody {
+		display: block;
+	}
+	.table-stack table.data thead {
+		display: none;
+	}
+	.table-stack table.data caption:not(.visually-hidden) {
+		display: block;
+	}
+	/* As many cells to a line as fit at 6rem each: three on a phone, so a nine-column row takes three lines, not four. */
+	.table-stack table.data tr {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 6rem), 1fr));
+		gap: 0.3rem 0.75rem;
+		padding: 0.5rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.table-stack table.data tbody tr:last-child {
+		border-bottom: none;
+	}
+	.table-stack table.data th,
+	.table-stack table.data td {
+		display: block;
+		padding: 0;
+		border-bottom: none;
+		text-align: left;
+		white-space: normal;
+		min-width: 0;
+	}
+	.table-stack table.data th[scope='row'] {
+		grid-column: 1 / -1;
+		font-weight: 600;
+	}
+	.table-stack table.data td::before {
+		content: attr(data-label);
+		display: block;
+		font-size: var(--font-xs);
+		font-weight: 400;
+		color: var(--text-2);
 	}
 }
 table.data tfoot td,
@@ -869,6 +969,10 @@ table.data tr.flag {
 
 /* Skip-link target: focusable but no ring around the whole page. */
 #main:focus {
+	outline: none;
+}
+/* A loading line takes the focus only from a Try again (common/loadState.ts followRetry), never from Tab. */
+[data-loading]:focus {
 	outline: none;
 }
 

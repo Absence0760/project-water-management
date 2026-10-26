@@ -42,7 +42,7 @@
 // the volume, and its months and rate are what a cap run adds on top.
 //
 // Pure, like the rest of the engine.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearOf, isIsoDate as isRealDate } from '../calendar';
+import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearOf, isIsoDate as isRealDate } from '../calendar';
 import { isStorageOnly, type AllocationEntry, type AllocationWaterSource } from './compare';
 import { cmpStr } from '../order';
 
@@ -544,7 +544,7 @@ export function planAllocations(
 			for (const source of ['surface', 'groundwater'] as const) {
 				const spans = uncappedSpans(allocs, source, start, days);
 				if (spans.length)
-					notInForce.push([i, `"${nodes[i]!.name}" ${source === 'surface' ? 'surface water' : 'groundwater'} ${spans.map(([a, b]) => (a === b ? fromEpochDay(start + a) : `${fromEpochDay(start + a)} to ${fromEpochDay(start + b)}`)).join(', ')}`]);
+					notInForce.push([i, `"${nodes[i]!.name}" ${source === 'surface' ? 'surface water' : 'groundwater'} ${spans.map(([a, b]) => (a === b ? dayText(fromEpochDay(start + a)) : `${dayText(fromEpochDay(start + a))} to ${dayText(fromEpochDay(start + b))}`)).join(', ')}`]);
 			}
 			const surface = yearBudgets(allocs, 'surface', start, days);
 			const groundwater = yearBudgets(allocs, 'groundwater', start, days);

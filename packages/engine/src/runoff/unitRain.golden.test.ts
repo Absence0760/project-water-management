@@ -108,14 +108,17 @@ function fingerprint(out: ModelOutput) {
 
 /**
  * Expected fingerprints, from the engine before rainfall stations' forcing: computed on
- * 195e66c86 (issue #553 round 1, pushed), which gives the same values on macOS and Linux. Print them with
+ * 195e66c86 (issue #553 round 1, pushed), which gives the same values on macOS and Linux; the shapes re-pinned at
+ * engine 1.98.0, whose warnings name Model settings and Calibration (issue #586 round 3: text only, every series'
+ * sums unchanged), and unitGauge's and reference's at 1.100.0, whose warnings write their days day first (#586 R4-O:
+ * text only, every series' and the summary's sums unchanged). Print them with
  * `GOLDEN_PRINT=1 pnpm -C packages/engine exec vitest run src/runoff/unitRain.golden.test.ts`.
  */
 const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 	fragmentation: {
 		units: null,
 		golden: {
-			shape: "b007242ba2f8c5a6",
+			shape: "92bd1ca403d76ee9",
 			series: {
 				"natural_flow@": {
 					sum: 31197362.536312077,
@@ -244,7 +247,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "11ed8ec02f09d50d",
+			shape: "767f9b8c73543fe1",
 			series: {
 				"natural_flow@": {
 					sum: 42767824.923284635,
@@ -413,7 +416,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "2acb39537e17c4be",
+			shape: "7a38a3338456e296",
 			series: {
 				"natural_flow@": {
 					sum: 40724533.36977918,
@@ -582,7 +585,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "d293db0cf2ee2bb9",
+			shape: "3f3c4380773662dd",
 			series: {
 				"natural_flow@": {
 					sum: 17320217.189539496,

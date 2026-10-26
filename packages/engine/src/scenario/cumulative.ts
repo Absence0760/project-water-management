@@ -4,6 +4,7 @@
 // less the sum of the single changes: what the applications do together that
 // adding up their separate effects misses (two abstractions that each leave
 // the Reserve just met can fail it together). Pure: no I/O, no model run.
+import { dayText } from '../calendar';
 import type { RunSummary } from '../project';
 
 /** The measures the table compares (docs/scenarios.md § Cumulative impact). */
@@ -219,7 +220,7 @@ export function cumulativeImpact(baseline: CumulativeRun, singles: readonly Cumu
 		};
 	});
 	const warnings: string[] = [];
-	const window = (r: CumulativeRun) => `${r.startDate} to ${r.endDate}`;
+	const window = (r: CumulativeRun) => `${dayText(r.startDate)} to ${dayText(r.endDate)}`;
 	singles.forEach((s) => {
 		if (s.startDate !== baseline.startDate || s.endDate !== baseline.endDate) warnings.push(`"${s.name}" ran over ${window(s)}, the baseline over ${window(baseline)}: its day and month counts don't line up with the baseline's.`);
 	});

@@ -1,12 +1,13 @@
 // The Data page's "On this page" menu (common/SectionNav): its panels run to
 // two or three screens under the table and the chart (double mass, data
 // checks, what the model uses). The ids are set on the panels in
-// SeriesTab.svelte. Uploading is the header's Add data dialog; the Upload CSV
+// SeriesTab.svelte. Data feeds (feeds/DataFeedsPanel.svelte, moved here from
+// Settings in issue #586) is always drawn: it is how series fill themselves. Uploading is the header's Add data dialog; the Upload CSV
 // panel that repeated it is gone, and its `#upload-csv` is a retired id.
 import type { NavGroup } from '#lib/components/common/sectionNav.js';
 
 /** Every panel id, in page order. */
-export const DATA_ANCHORS = ['data-series', 'data-chart', 'data-agreement', 'data-double-mass', 'data-checks', 'data-uses'] as const;
+export const DATA_ANCHORS = ['data-series', 'data-chart', 'data-feeds', 'data-agreement', 'data-double-mass', 'data-checks', 'data-uses'] as const;
 
 /** True for a fragment (without the `#`) naming one of the Data page's panels. */
 export function dataAnchor(hash: string): boolean {
@@ -39,17 +40,20 @@ export function dataNavGroups(p: DataPanels): NavGroup[] {
 	const groups: NavGroup[] = [
 		{
 			label: 'Series',
-			// Each link says its panel's heading; the bar the long ones shorter (issue #462).
+			// Each link says its panel's heading, on the bar too: "Series" there read as the group's own name (issue #586).
 			sections: [
-				{ id: 'data-series', label: 'Input time series', bar: 'Series' },
-				...(p.chart ? [{ id: 'data-chart', label: 'Series chart', bar: 'Chart' }] : [])
+				{ id: 'data-series', label: 'Input time series' },
+				...(p.chart ? [{ id: 'data-chart', label: 'Series chart' }] : []),
+				// The feeds that fill the series daily (issue #586: from Settings); its heading word for word.
+				{ id: 'data-feeds', label: 'Data feeds' }
 			]
 		},
 		{
 			label: 'Checks',
+			// Each by its heading word for word, on the bar too (issue #586 R4-M): all seven still fit two rows at 1280 px.
 			sections: [
-				...(p.agreement ? [{ id: 'data-agreement', label: 'Gauge vs logger agreement', bar: 'Gauge vs logger' }] : []),
-				...(p.doubleMass ? [{ id: 'data-double-mass', label: 'Double mass: catchment rain vs CHIRPS', bar: 'Double mass' }] : []),
+				...(p.agreement ? [{ id: 'data-agreement', label: 'Gauge vs logger agreement' }] : []),
+				...(p.doubleMass ? [{ id: 'data-double-mass', label: 'Double mass: catchment rain vs CHIRPS' }] : []),
 				...(p.checks ? [{ id: 'data-checks', label: 'Data checks' }] : [])
 			]
 		},

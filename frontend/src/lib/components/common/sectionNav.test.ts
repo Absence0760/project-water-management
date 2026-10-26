@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSectionId, findElsewhere, findEntries, foldText, matchesQuery, navEmpty, navFitCount, navText, pageLinkName } from './sectionNav';
+import { activeSectionId, findElsewhere, findEntries, foldText, matchesQuery, navEmpty, navFitCount, pageLinkName, stripScrollTo } from './sectionNav';
 
 describe('navFitCount', () => {
 	const fit = { avail: 400, lead: 100, gap: 5, groupGap: 15, more: 60, rows: 2 };
@@ -56,6 +56,13 @@ describe('activeSectionId', () => {
 
 	it('marks the last section at the bottom of the page, even if it never reached the line', () => {
 		expect(activeSectionId(tops(-900, -200, 400), 68, true)).toBe('s2');
+	});
+
+	it('marks the first section on a page so short that, at the bottom, the first still starts on the screen', () => {
+		expect(activeSectionId(tops(140, 420), 68, true)).toBe('s0');
+		expect(activeSectionId(tops(0, 420), 68, true)).toBe('s0');
+		// A followed link still wins.
+		expect(activeSectionId(tops(140, 420), 68, true, 's1', 960)).toBe('s1');
 	});
 
 	it('at the bottom, keeps the section a followed link named while it still starts on the screen', () => {
@@ -126,25 +133,35 @@ describe('findElsewhere (issue #521)', () => {
 	});
 });
 
-describe('navText and navEmpty (issue #462)', () => {
-	it('says the panel’s heading in the rail, and the shorter bar name on the bar when there is one', () => {
-		const sec = { label: 'Calibration against observed flow', bar: 'Calibration' };
-		expect(navText(sec, 'rail')).toBe('Calibration against observed flow');
-		expect(navText(sec, 'bar')).toBe('Calibration');
-		expect(navText({ label: 'Publication' }, 'bar')).toBe('Publication');
-	});
-
-	it('names a link to another page with that page, the problem after it; a link on this page has no name of its own', () => {
-		const sec = { label: 'Reserve rules met, by month', bar: 'Reserve rules', page: 'EWR' };
-		expect(pageLinkName(sec, 'rail')).toBe('Reserve rules met, by month, on EWR');
-		expect(pageLinkName(sec, 'bar')).toBe('Reserve rules, on EWR');
-		expect(pageLinkName({ ...sec, problem: true }, 'rail')).toBe('Reserve rules met, by month, on EWR (has a problem)');
-		expect(pageLinkName({ label: 'Summary' }, 'rail')).toBeNull();
+describe('pageLinkName and navEmpty (issue #462)', () => {
+	it('names a link to another page by its heading and that page, the problem after it; a link on this page has no name of its own', () => {
+		const sec = { label: 'Reserve rules met, by month', page: 'EWR' };
+		expect(pageLinkName(sec)).toBe('Reserve rules met, by month, on EWR');
+		expect(pageLinkName({ ...sec, problem: true })).toBe('Reserve rules met, by month, on EWR (has a problem)');
+		expect(pageLinkName({ label: 'Summary' })).toBeNull();
 	});
 
 	it('is empty only when no group lists a section', () => {
 		expect(navEmpty([])).toBe(true);
 		expect(navEmpty([{ label: 'A', sections: [] }])).toBe(true);
 		expect(navEmpty([{ label: 'A', sections: [] }, { label: null, sections: [{ id: 'x', label: 'X' }] }])).toBe(false);
+	});
+});
+
+describe('stripScrollTo (the phone strip shows a focused link whole, issue #586)', () => {
+	// A 273 px strip scrolled to 0, as the Data page's at 320 px.
+	it('leaves a link that shows whole where it is', () => {
+		expect(stripScrollTo(100, 80, 0, 273)).toBeNull();
+		expect(stripScrollTo(0, 273, 0, 273)).toBeNull();
+	});
+
+	it('scrolls a link cut at the right edge in whole, with a margin beyond it', () => {
+		// "What the model uses": 144 px wide, starting 265 px in, 8 px of it showing.
+		expect(stripScrollTo(265, 144, 0, 273)).toBe(265 + 144 - 273 + 16);
+	});
+
+	it('scrolls back to a link cut at the left edge (Shift+Tab), never before the start', () => {
+		expect(stripScrollTo(200, 80, 240, 273)).toBe(184);
+		expect(stripScrollTo(4, 80, 30, 273)).toBe(0);
 	});
 });

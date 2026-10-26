@@ -1044,8 +1044,8 @@ describe('diffInputs', () => {
 			{
 				area: 'settings',
 				kind: 'removed',
-				subject: 'Calibration exclusion 2017-01-01 – 2017-02-01',
-				text: 'Calibration exclusion 2017-01-01 – 2017-02-01 removed (was: “gauge outage”)'
+				subject: 'Calibration exclusion 1 Jan 2017 – 1 Feb 2017',
+				text: 'Calibration exclusion 1 Jan 2017 – 1 Feb 2017 removed (was: “gauge outage”)'
 			},
 			{
 				area: 'settings',
@@ -1077,7 +1077,7 @@ describe('diffInputs', () => {
 		};
 		expect(texts(a, b)).toEqual([
 			'Flagged zero-rain runs: treated as missing (CHIRPS fills them) → run as recorded (dry)',
-			'Keep-dry period 2003-05-01 – 2003-08-31 added: “real drought”',
+			'Keep-dry period 1 May 2003 – 31 Aug 2003 added: “real drought”',
 			'Missing-rain period WY 1999/00 added: “gauge offline”'
 		]);
 		const old = snapshot();
@@ -1135,8 +1135,8 @@ describe('diffInputs', () => {
 		};
 		expect(texts(a, b)).toEqual([
 			'Multi-day rain accumulations: spread over the days they cover (CHIRPS pattern) → run as recorded (one day)',
-			'Keep-reading period 2003-06-10 – 2003-06-10 added: “thunderstorm”',
-			'Listed accumulation 2003-07-01 – 2003-07-09 added: “observer away”'
+			'Keep-reading period 10 Jun 2003 – 10 Jun 2003 added: “thunderstorm”',
+			'Listed accumulation 1 Jul 2003 – 9 Jul 2003 added: “observer away”'
 		]);
 		// A 0.15–0.19 run stored zeroRainRuns without the accumulation fields: it compares as "as recorded".
 		const old = snapshot();
@@ -1246,16 +1246,16 @@ describe('diffInputs', () => {
 			}
 		});
 		expect(texts(a, b)).toEqual([
-			'Logger flow series added (2000-01-01 to 2000-01-31)',
+			'Logger flow series added (1 Jan 2000 to 31 Jan 2000)',
 			'Observed flow series removed',
-			'Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)',
-			'Rainfall (catchment) series extended back to 1999-12-31 (was 2000-01-01)',
+			'Rainfall (catchment) series extended to 1 Jan 2001 (was 31 Dec 2000)',
+			'Rainfall (catchment) series extended back to 31 Dec 1999 (was 1 Jan 2000)',
 			// Snapshots without stored values: the shared days can't be checked, and it says so.
 			'Rainfall (catchment): the days both runs cover were not checked for edits (a run from before runs stored their input series)'
 		]);
 		const c = snapshot({ series: { rain_catchment_mm: { startDate: '2000-02-01', length: 30 } } });
-		expect(texts(a, c)).toContain('Rainfall (catchment) series now ends 2000-03-01 (was 2000-12-31)');
-		expect(texts(a, c)).toContain('Rainfall (catchment) series now starts 2000-02-01 (was 2000-01-01)');
+		expect(texts(a, c)).toContain('Rainfall (catchment) series now ends 1 Mar 2000 (was 31 Dec 2000)');
+		expect(texts(a, c)).toContain('Rainfall (catchment) series now starts 1 Feb 2000 (was 1 Jan 2000)');
 	});
 
 	it('labels the report and calibration windows, the calibration series and data-quality thresholds', () => {
@@ -1306,8 +1306,8 @@ describe('diffInputs', () => {
 
 	it('says when a series became empty or got values, instead of inventing a one-day range', () => {
 		const withRain = (length: number) => snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length } } });
-		expect(texts(withRain(366), withRain(0))).toEqual(['Rainfall (catchment) series now has no values (was 2000-01-01 to 2000-12-31)']);
-		expect(texts(withRain(0), withRain(31))).toEqual(['Rainfall (catchment) series now has values (2000-01-01 to 2000-01-31)']);
+		expect(texts(withRain(366), withRain(0))).toEqual(['Rainfall (catchment) series now has no values (was 1 Jan 2000 to 31 Dec 2000)']);
+		expect(texts(withRain(0), withRain(31))).toEqual(['Rainfall (catchment) series now has values (1 Jan 2000 to 31 Jan 2000)']);
 		expect(texts(withRain(0), withRain(0))).toEqual([]);
 		expect(texts(snapshot({ series: {} }), withRain(0))).toEqual(['Rainfall (catchment) series added (no values)']);
 	});
@@ -1320,7 +1320,7 @@ describe('diffInputs', () => {
 		try {
 			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'UTC']) {
 				env.TZ = zone;
-				expect(texts(a, b), zone).toEqual(['Rainfall (catchment) series extended to 2020-03-01 (was 2020-02-28)', 'Rainfall (catchment): the days both runs cover were not checked for edits (a run from before runs stored their input series)']);
+				expect(texts(a, b), zone).toEqual(['Rainfall (catchment) series extended to 1 Mar 2020 (was 28 Feb 2020)', 'Rainfall (catchment): the days both runs cover were not checked for edits (a run from before runs stored their input series)']);
 			}
 		} finally {
 			env.TZ = tz;
@@ -1330,14 +1330,14 @@ describe('diffInputs', () => {
 	it('reports values changed within the same dates from the series hash', () => {
 		const s = (valuesSha256?: string) =>
 			snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length: 366, ...(valuesSha256 ? { valuesSha256 } : {}) } } });
-		expect(texts(s('aa'), s('bb'))).toEqual(['Rainfall (catchment) values changed (same dates, 2000-01-01 to 2000-12-31)']);
+		expect(texts(s('aa'), s('bb'))).toEqual(['Rainfall (catchment) values changed (same dates, 1 Jan 2000 to 31 Dec 2000)']);
 		expect(diffInputs(s('aa'), s('bb'))[0]).toMatchObject({ area: 'series', kind: 'changed', subject: 'Rainfall (catchment)' });
 		expect(texts(s('aa'), s('aa'))).toEqual([]);
 		// Runs stored before hashes existed: nothing to compare, nothing reported.
 		expect(texts(s(), s('bb'))).toEqual([]);
 		// Different dates and no stored values: the hash can't isolate the shared days, and the diff says so.
 		const longer = snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length: 367, valuesSha256: 'cc' } } });
-		expect(texts(s('aa'), longer)).toEqual(['Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)', 'Rainfall (catchment): the days both runs cover were not checked for edits (a run from before runs stored their input series)']);
+		expect(texts(s('aa'), longer)).toEqual(['Rainfall (catchment) series extended to 1 Jan 2001 (was 31 Dec 2000)', 'Rainfall (catchment): the days both runs cover were not checked for edits (a run from before runs stored their input series)']);
 	});
 
 	it('notes a CHIRPS version change (issue #40 part c), only when both runs recorded the version', () => {
@@ -1387,7 +1387,7 @@ describe('diffInputs', () => {
 
 	it('notes a declared uncertainty rule set, changed or withdrawn, and nothing between absent and null (issue #71)', () => {
 		const rule = { members: 300, bounds: 'typical', panOffset: 0.1, thresholds: { objective: 'kgePrime', minSkill: 0.5, wr2012MaxLevel: 'query', maxLowFlowBiasPct: 50 } };
-		const text = 'skill score KGE′, lowest skill kept 0.5, worst wr2012 flag kept query, largest low-flow bias kept ±50 %, members 300, bounds typical, pan coefficient shift ±0.1';
+		const text = 'KGE′ of at least 0.5, WR2012 flags up to “query”, low-flow bias within ±50 %, 300 members, typical bounds, pan coefficient varied by ±0.1';
 		const withRule = (r: unknown) => snapshot({ settings: { ...snapshot().settings, evidenceUncertaintyRule: r } as never });
 		const absent = snapshot();
 		expect('evidenceUncertaintyRule' in absent.settings).toBe(false);
@@ -1396,7 +1396,7 @@ describe('diffInputs', () => {
 		expect(texts(withRule(null), withRule(rule))).toEqual([`Declared uncertainty rule (evidence): not declared → ${text}`]);
 		expect(texts(withRule(rule), withRule(null))).toEqual([`Declared uncertainty rule (evidence): ${text} → not declared`]);
 		expect(texts(withRule(rule), withRule({ ...rule, members: 500 }))).toEqual([
-			`Declared uncertainty rule (evidence): ${text} → ${text.replace('members 300', 'members 500')}`
+			`Declared uncertainty rule (evidence): ${text} → ${text.replace('300 members', '500 members')}`
 		]);
 		expect(texts(absent, withRule(null))).toEqual([]);
 		expect(texts(withRule(null), absent)).toEqual([]);
@@ -1410,18 +1410,18 @@ describe('diffInputs', () => {
 		const snap = (length: number, valuesSha256: string) => snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length, valuesSha256 } } });
 		const both = { a: { rain_catchment_mm: rain }, b: { rain_catchment_mm: cut } };
 		expect(diffInputs(snap(366, 'aa'), snap(367, 'bb'), both).map((c) => c.text)).toEqual([
-			'Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)',
-			'Rainfall (catchment) values changed on 53 of the 366 days both runs cover (2000-01-01 to 2000-12-31); their total fell 15% (1\u202f060 → 901)'
+			'Rainfall (catchment) series extended to 1 Jan 2001 (was 31 Dec 2000)',
+			'Rainfall (catchment) values changed on 53 of the 366 days both runs cover (1 Jan 2000 to 31 Dec 2000); their total fell 15% (1\u202f060 → 901)'
 		]);
 		// Only extended, the shared days untouched: just the date change (positive control).
 		const extended = { a: { rain_catchment_mm: rain }, b: { rain_catchment_mm: [...rain, 5] } };
-		expect(diffInputs(snap(366, 'aa'), snap(367, 'cc'), extended).map((c) => c.text)).toEqual(['Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)']);
+		expect(diffInputs(snap(366, 'aa'), snap(367, 'cc'), extended).map((c) => c.text)).toEqual(['Rainfall (catchment) series extended to 1 Jan 2001 (was 31 Dec 2000)']);
 		// Same dates: the stored values give the count and the total, not just "changed".
 		expect(diffInputs(snap(366, 'aa'), snap(366, 'dd'), { a: { rain_catchment_mm: rain }, b: { rain_catchment_mm: cut.slice(0, 366) } })[0]!.text).toMatch(/changed on 53 of the 366 days/);
 		// A gap opened counts as a change but stays out of the totals, which then match: no total quoted.
 		const gap = rain.map((v, i) => (i === 7 ? null : v));
 		expect(diffInputs(snap(366, 'aa'), snap(366, 'ee'), { a: { rain_catchment_mm: rain }, b: { rain_catchment_mm: gap } })[0]!.text).toBe(
-			'Rainfall (catchment) values changed on 1 of the 366 days both runs cover (2000-01-01 to 2000-12-31)'
+			'Rainfall (catchment) values changed on 1 of the 366 days both runs cover (1 Jan 2000 to 31 Dec 2000)'
 		);
 	});
 

@@ -209,9 +209,11 @@ test('a table that scrolls sideways keeps its row names at the left and shows th
 	expect(Math.abs(after.x - left)).toBeLessThan(3);
 	expect(Math.abs(after.x - before.x)).toBeLessThan(3);
 	await expectNoViolations(page);
-	// Wide, nothing scrolls, so nothing is fixed.
+	// Wide, nothing scrolls, so nothing is fixed. The same cell: the locator above finds its table by
+	// `data-scrolls-x`, which goes once the table no longer scrolls.
+	const cell = (await name.elementHandle())!;
 	await resizeTo(page, { width: 1440, height: 960 });
-	expect(await name.evaluate((el) => getComputedStyle(el).position)).not.toBe('sticky');
+	expect(await cell.evaluate((el) => getComputedStyle(el).position)).not.toBe('sticky');
 });
 
 test('the fit record folds into its line on a phone and stands open on a wide screen', async ({ page, owner }) => {
@@ -220,7 +222,7 @@ test('the fit record folds into its line on a phone and stands open on a wide sc
 	const p = await seedRunnableProject(page.request, 'Fit record fold');
 	await updateSettings(page.request, p.id, { runoffModel: 'gr4j' });
 	await page.setViewportSize({ width: 1440, height: 960 });
-	await page.goto(`/projects/${p.id}?tab=settings`);
+	await page.goto(`/projects/${p.id}?tab=calibration`);
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('50');

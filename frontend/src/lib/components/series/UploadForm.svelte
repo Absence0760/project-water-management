@@ -28,6 +28,7 @@
 	import { emptyStation, STATION_KIND, STATION_LABEL, STATION_OPTION, stationBody, stationNames, stationProblem, type StationField, type StationInput } from './stationInput';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { SERIES_FILE_FORMAT, SERIES_PASTE_FORMAT } from '#lib/series/example.js';
 
 	let {
@@ -458,8 +459,8 @@
 		{#if station}
 			<span class="hint muted" id={id('kind-h')} data-testid="station-kind-hint">
 				A rainfall station is one rain gauge’s daily record, with its own MAP and, if known, where it stands. A catchment can have several, and each can
-				serve one or more hydrological units. Until Settings has a Flow generation section, runs read catchment rainfall as they do today: the first
-				catchment rain series by name, which may be a station.
+				serve one or more hydrological units: Settings → Flow generation says which. Until a station is assigned to the catchment there, runs read
+				catchment rainfall as before: the first catchment rain series by name, which may be a station.
 			</span>
 		{:else if kind === STATION_KIND}
 			<span class="hint muted" id={id('kind-h')}>The catchment’s average daily rain. For one gauge’s record with its own MAP, pick {STATION_LABEL}.</span>
@@ -749,11 +750,20 @@
 					<dt>Couldn't read the stored series to compare</dt>
 					<dd class="target-error" role="alert" data-testid="target-error">
 						<span>“{target.name || kindLabel(target.kind)}”: {targetError}</span>
-						<button type="button" class="btn btn-sm" onclick={() => targetTry++}>Try again</button>
+						<!-- The comparing line replaces this row: the focus follows within the summary (followRetry). -->
+						<button
+							type="button"
+							class="btn btn-sm"
+							data-retry
+							onclick={(e) => {
+								followRetry(e.currentTarget, { scope: e.currentTarget.closest('dl') });
+								targetTry++;
+							}}>Try again</button
+						>
 					</dd>
 				</div>
 			{:else if target && mode === 'merge'}
-				<div class="wide"><dt>Comparing with the stored series…</dt><dd></dd></div>
+				<div class="wide" data-loading><dt>Comparing with the stored series…</dt><dd></dd></div>
 			{:else if target && mode === 'replace'}
 				<div class="wide"><dt>Replaces</dt><dd class="warn-text">all {fmtNum(target.length)} stored days</dd></div>
 			{/if}

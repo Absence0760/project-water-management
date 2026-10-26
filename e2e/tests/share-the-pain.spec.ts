@@ -71,7 +71,7 @@ test('the curtailment panel leads with the share-the-pain board: two stages, the
 	await page.goto(`/projects/${project.id}?tab=supply&run=${run}`);
 	const panel = page.locator('#res-curtailment');
 	const board = panel.getByRole('region', { name: 'Share the pain' });
-	const table = board.getByRole('table', { name: /^Share the pain, Project window, 2021-11-01 to 2021-12-31:/ });
+	const table = board.getByRole('table', { name: /^Share the pain, Project window, 1 Nov 2021 to 31 Dec 2021:/ });
 	await expect(table).toBeVisible();
 	// The panel still opens on its own heading (the portfolio's "farms short this week" link lands there), the board under it.
 	await expect(panel.getByRole('heading').first()).toHaveText('Curtailment targets');
@@ -148,7 +148,7 @@ test('the curtailment panel leads with the share-the-pain board: two stages, the
 
 	// It follows the reporting window: the last 7 days, worked out in the browser.
 	await panel.getByLabel('Reporting window').selectOption({ label: 'Last 7 days' });
-	const week = board.getByRole('table', { name: /^Share the pain, Last 7 days, 2022-01-22 to 2022-01-28:/ });
+	const week = board.getByRole('table', { name: /^Share the pain, Last 7 days, 22 Jan 2022 to 28 Jan 2022:/ });
 	await expect(week).toBeVisible();
 	const weekRows = await rowsOf(week);
 	expect(weekRows.map((r) => r[0])).toEqual(rows.map((r) => r[0]));

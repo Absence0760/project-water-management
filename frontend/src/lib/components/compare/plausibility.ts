@@ -1,7 +1,7 @@
 // The compare page's plausibility checks (RunComparison.plausibility, engine
 // plausibility/compare.ts; docs/run-comparison.md § Plausibility checks): one
 // row per check and site, each run's result in words and the change; then the
-// recession diagnostics and the validation signatures, with notes on a side
+// recession diagnostics and the hydrological signatures, with notes on a side
 // that has none (an older run, or nothing to score) or on two runs that
 // scored different records. Pure, unit-tested.
 import type {
@@ -227,11 +227,11 @@ export function plausibilityNotes(c: PlausibilityComparison): string[] {
 	}
 	const s = c.signatures;
 	if (s) {
-		missing('validation signatures', SINCE.signatures, s.missingA, s.missingB, 'it has no observed flow record to score.');
+		missing('hydrological signatures', SINCE.signatures, s.missingA, s.missingB, 'it has no observed flow record to score.');
 		if (!s.comparable && !s.missingA && !s.missingB) {
 			const rec = (k: SignaturesDelta['flowKindA'], name: string | null) => scoredRecordText({ flowKind: k ?? 'flow_observed_m3s', siteName: name ?? undefined });
 			notes.push(
-				`The validation signatures score different records (run A ${rec(s.flowKindA, s.siteNameA)}, run B ${rec(s.flowKindB, s.siteNameB)}), so no change is given.`
+				`The hydrological signatures score different records (run A ${rec(s.flowKindA, s.siteNameA)}, run B ${rec(s.flowKindB, s.siteNameB)}), so no change is given.`
 			);
 		}
 	}
@@ -241,7 +241,7 @@ export function plausibilityNotes(c: PlausibilityComparison): string[] {
 /**
  * The table's rows: per site (outlet first) checks 1 and 4, then the
  * catchment-wide checks 2 and 3, the recession diagnostics and the
- * validation signatures.
+ * hydrological signatures.
  */
 export function plausibilityRows(c: PlausibilityComparison): PlausibilityRow[] {
 	const rows: PlausibilityRow[] = [];
@@ -281,7 +281,7 @@ export function plausibilityRows(c: PlausibilityComparison): PlausibilityRow[] {
 			change: d.wholeSlope.delta === null ? '–' : `runoff ratio ${d.wholeSlope.delta >= 0 ? '+' : '−'}${fmtNum(Math.abs(d.wholeSlope.delta), 3)}`
 		});
 	}
-	// The recession diagnostics and the validation signatures, when a run has them (older engines' summaries may lack both keys).
+	// The recession diagnostics and the hydrological signatures, when a run has them (older engines' summaries may lack both keys).
 	if (c.recession) rows.push(recessionRow(c.recession));
 	if (c.signatures) rows.push(...signatureRowsOf(c.signatures));
 	return rows;

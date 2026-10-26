@@ -18,6 +18,7 @@
 	import { clearFarmMemo } from './farmState.svelte';
 	import { farmHref, wordsHref } from './load';
 	import { keepsCopy, setKeepsCopy } from './savedCopy';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	let {
 		projectId = null,
@@ -106,6 +107,15 @@
 		document.addEventListener('pointerdown', onDoc);
 		return () => document.removeEventListener('pointerdown', onDoc);
 	});
+
+	// The strip's Try again: the strip goes once the page has the figures again (or the skeleton replaces them),
+	// so the focus follows within the page (followRetry): the loading line, a new Try again, then the page's heading.
+	function retryStrip(e: MouseEvent) {
+		const button = e.currentTarget as HTMLElement;
+		const shell = button.closest('.farm');
+		followRetry(button, { scope: shell, landing: () => shell?.querySelector<HTMLElement>('main h1') });
+		onretry?.();
+	}
 </script>
 
 <div class="farm" class:account-page={accountPage}>
@@ -166,7 +176,7 @@
 				{/if}
 			</svg>
 			<span>{strip.text}</span>
-			{#if onretry}<button type="button" onclick={onretry}>{t('Try again')}</button>{/if}
+			{#if onretry}<button type="button" data-retry onclick={retryStrip}>{t('Try again')}</button>{/if}
 		</div>
 	{/if}
 

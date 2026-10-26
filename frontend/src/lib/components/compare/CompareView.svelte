@@ -50,7 +50,7 @@
 	import { compareEvidenceNote } from '#lib/components/runs/evidence.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { runYears } from '#lib/components/runs/runList.js';
-	import { fmtDate } from '#lib/format/number.js';
+	import { fmtDate, fmtWhen } from '#lib/format/number.js';
 	import { runForcingOfSummary } from '@water-management/engine';
 
 	// Every comparison renders the paired uncertainty band (issue #4 phase 9), the daily series
@@ -316,7 +316,7 @@
 
 	const sameRun = $derived(!!refA && !!refX && formatRef(refA) === formatRef(refX));
 	const describe = (s: RunCompareResponse['a']) =>
-		`${s.run.label || 'Untitled run'} · ${s.project.name} · ${s.run.startDate} → ${s.run.endDate} · run ${fmtDate(s.run.createdAt, true)}`;
+		`${s.run.label || 'Untitled run'} · ${s.project.name} · ${fmtDate(s.run.startDate)} → ${fmtDate(s.run.endDate)} · run ${fmtDate(s.run.createdAt, true)}`;
 
 	// --- the header's context line and the cards ---------------------------------
 	const runMeta = (side: Side) => {
@@ -339,7 +339,7 @@
 	const baseLine = $derived.by(() => {
 		const m = runMeta('a');
 		if (!m) return '';
-		const tags = [runYears(m.startDate, m.endDate), `ran ${fmtDate(m.createdAt, true)}`];
+		const tags = [runYears(m.startDate, m.endDate), `ran ${fmtWhen(m.createdAt)}`];
 		if (m.published) tags.push('published');
 		if (m.evidence === 'current') tags.push('evidence');
 		if (refA && projectA && refA.projectId !== (refB?.projectId ?? refA.projectId)) tags.push(projects.find((p) => p.id === refA.projectId)?.name ?? '');
@@ -651,8 +651,8 @@
 					{/if}
 					{#if !data.comparison.samePeriod}
 						<div class="alert alert-warning" role="status">
-							The runs cover different periods (A {data.a.run.startDate} → {data.a.run.endDate}, B {data.b.run.startDate} →
-							{data.b.run.endDate}). Figures are averages over each run's own period, so part of each change comes from the dates.
+							The runs cover different periods (A {fmtDate(data.a.run.startDate)} → {fmtDate(data.a.run.endDate)}, B {fmtDate(data.b.run.startDate)} →
+							{fmtDate(data.b.run.endDate)}). Figures are averages over each run's own period, so part of each change comes from the dates.
 						</div>
 					{/if}
 					{#if data.comparison.engineVersionChanged}

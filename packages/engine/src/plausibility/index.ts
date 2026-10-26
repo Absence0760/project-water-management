@@ -57,7 +57,7 @@ export interface PlausibilityChecks {
 	 */
 	recession?: RecessionCheck | null;
 	/**
-	 * Validation signatures of the scored record (engine ≥ 1.55.0,
+	 * Hydrological signatures of the scored record (engine ≥ 1.55.0,
 	 * ./signatures.ts, CR-16): the calibration site's record when the run
 	 * scores a gauge inside the network, else the outlet's. null without an
 	 * observed record; absent on runs made before 1.55.0.
@@ -173,7 +173,7 @@ export interface PlausibilityInput {
 	 * calibration site's (settings.calibrationSiteNodeId) or the outlet's, with
 	 * the simulated outflow where it is and the recession segments' day mask
 	 * (the exclusions and that record's flagged days). Absent or null without
-	 * an observed record: no validation signatures.
+	 * an observed record: no hydrological signatures.
 	 */
 	scored?: ScoredRecordInput | null;
 	/** Gauge nodes with a record of their own (engine ≥ 1.4.0), in node-id order; absent or empty = none. */

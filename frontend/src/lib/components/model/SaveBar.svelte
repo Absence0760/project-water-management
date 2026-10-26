@@ -2,7 +2,7 @@
 	// The workspace's one sticky footer for unsaved edits: the model's (the
 	// Network, Crops and Transfers tabs, the farm drawer, a grid) and the page's
 	// other drafts (`drafts`: the project details, issue #162 item 12, and the
-	// Settings & calibration form; see pageDraft.ts for adding one). Unsaved
+	// Model settings form; see pageDraft.ts for adding one). Unsaved
 	// indicator naming what changed, the problems that block the save as links
 	// to where they are fixed, the optional reason for a model or settings
 	// change (kept with it in the History tab), Preview of the model and

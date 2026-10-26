@@ -28,6 +28,7 @@ import {
 	healthMessage,
 	keptNote,
 	needsAttention,
+	nextTryNote,
 	parseBbox,
 	parseCells,
 	separateName,
@@ -146,8 +147,8 @@ describe('draftToBody', () => {
 		const chirps = { ...emptyDraft('chirps', ['rain_chirps_mm']), cells: '-20.12, 25.17' };
 		expect(draftToBody({ ...chirps, product: 'rnl', startDate: '1985-01-01' })).toMatchObject({ body: { config: { cells: [{ lat: -20.12, lon: 25.17 }], product: 'rnl', startDate: '1985-01-01' } } });
 		expect(draftToBody({ ...chirps, startDate: '1998-01-01' })).toMatchObject({ body: { config: { startDate: '1998-01-01' } } });
-		expect(draftToBody({ ...chirps, startDate: '1997-12-31' })).toEqual({ error: expect.stringMatching(/sat product begins on 1998-01-01\. For earlier days choose the rnl product/), field: 'start' });
-		expect(draftToBody({ ...chirps, product: 'rnl', startDate: '1980-12-31' })).toEqual({ error: 'CHIRPS begins on 1981-01-01.', field: 'start' });
+		expect(draftToBody({ ...chirps, startDate: '1997-12-31' })).toEqual({ error: expect.stringMatching(/sat product begins on 1 Jan 1998\. For earlier days choose the rnl product/), field: 'start' });
+		expect(draftToBody({ ...chirps, product: 'rnl', startDate: '1980-12-31' })).toEqual({ error: 'CHIRPS begins on 1 Jan 1981.', field: 'start' });
 		expect(draftToBody({ ...chirps, startDate: '1 Jan 2020' })).toEqual({ error: expect.stringMatching(/YYYY-MM-DD/), field: 'start' });
 		// The forecast has no product or start date field.
 		expect(draftToBody({ ...emptyDraft('chirps_gefs'), cells: '-20.12, 25.17', product: 'rnl', startDate: '1985-01-01' })).toMatchObject({ body: { config: { cells: [{ lat: -20.12, lon: 25.17 }] } } });
@@ -213,7 +214,23 @@ describe('descriptions', () => {
 
 	it('say when data last arrived as a calendar day, whatever the time zone', () => {
 		expect(describeTimes({ lastDataDate: '2026-09-21', lastAttemptAt: null })).toBe('Last data 21 Sep 2026 · not checked yet');
-		expect(describeTimes({ lastDataDate: null, lastAttemptAt: '2026-09-24T06:00:00Z' })).toMatch(/^No data yet · checked 2026-09-2\d \d\d:\d\d$/);
+	});
+
+	it('say when the feed was last checked as the reader’s clock does: today, yesterday, else the day first (issue #586 R4-O)', () => {
+		const tz = process.env.TZ;
+		const at = { lastDataDate: null, lastAttemptAt: '2026-09-24T22:30:00Z' };
+		try {
+			// 00:30 on 25 Sep in South Africa.
+			process.env.TZ = 'Africa/Johannesburg';
+			expect(describeTimes(at, new Date('2026-09-25T06:00:00Z'))).toBe('No data yet · checked today 00:30');
+			expect(describeTimes(at, new Date('2026-09-26T06:00:00Z'))).toBe('No data yet · checked yesterday 00:30');
+			expect(describeTimes(at, new Date('2026-10-02T06:00:00Z'))).toBe('No data yet · checked 25 Sep 2026 00:30');
+			// 11:30 on 24 Sep in Pago Pago: the same moment, the reader's own day.
+			process.env.TZ = 'Pacific/Pago_Pago';
+			expect(describeTimes(at, new Date('2026-10-02T06:00:00Z'))).toBe('No data yet · checked 24 Sep 2026 11:30');
+		} finally {
+			process.env.TZ = tz;
+		}
 	});
 
 	describe('the health sentence, written from the server’s reason code with its days as "1 Sep 2026"', () => {
@@ -380,7 +397,7 @@ describe('the rain feed from the catchment boundary (issue #326 B-rain)', () => 
 		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: true, product: 'rnl', startDate: '1995-01-01' })).toEqual({
 			body: { featureId: 'b1', updatedAt: boundary2.updatedAt, replace: true, product: 'rnl' }
 		});
-		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: false, product: 'sat', startDate: '1995-01-01' })).toEqual({ error: expect.stringMatching(/^The sat product begins on 1998-01-01/) });
+		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: false, product: 'sat', startDate: '1995-01-01' })).toEqual({ error: expect.stringMatching(/^The sat product begins on 1 Jan 1998/) });
 		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: false, product: 'sat', startDate: '' })).toEqual({
 			body: { featureId: 'b1', updatedAt: boundary2.updatedAt, targetName: 'Rainfall CHIRPS (boundary)', product: 'sat' }
 		});
@@ -416,5 +433,43 @@ describe('targetHint (issue #51)', () => {
 		expect(targetHint('chirps', 'rain_chirps_mm')).toBeNull();
 		expect(targetHint('chirps_gefs', 'rain_forecast_mm')).toBeNull();
 		expect(targetHint('dws', 'flow_observed_m3s')).toBeNull();
+	});
+});
+
+describe('nextTryNote: when a failing feed tries again (issue #586 Round 4)', () => {
+	// Rule 7: the time is the reader's clock, so "today" is the reader's day.
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+	const now = new Date('2026-10-26T08:00:00Z');
+	const failing = { enabled: true, consecutiveFailures: 1, actingUser: 'Ann' };
+
+	it('says the time on the reader’s day, and the day and time on another (UTC)', () => {
+		process.env.TZ = 'UTC';
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T08:14:00Z' }, now)).toBe('It tries again after 08:14.');
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-27T07:59:00Z' }, now)).toBe('It tries again after 27 Oct 2026 07:59.');
+	});
+
+	it('dates it in the reader’s zone, where the day turns over sooner (Pacific/Kiritimati, UTC+14)', () => {
+		process.env.TZ = 'Pacific/Kiritimati';
+		// 08:00 UTC is 22:00 there: 09:13 UTC is 23:13 the same day, 10:13 UTC already tomorrow.
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T09:13:00Z' }, now)).toBe('It tries again after 23:13.');
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T10:13:00Z' }, now)).toBe('It tries again after 27 Oct 2026 00:13.');
+	});
+
+	it('says the next pass takes it once the time has come, or when it was never scheduled', () => {
+		process.env.TZ = 'UTC';
+		const due = 'It is due to try again: the scheduler takes it on its next pass.';
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T07:59:00Z' }, now)).toBe(due);
+		expect(nextTryNote({ ...failing, nextAttemptAt: '2026-10-26T08:00:00Z' }, now)).toBe(due);
+		expect(nextTryNote({ ...failing, nextAttemptAt: null }, now)).toBe(due);
+	});
+
+	it('says nothing for a feed that isn’t failing, is switched off, or has no acting owner', () => {
+		const at = '2026-10-26T09:00:00Z';
+		expect(nextTryNote({ ...failing, consecutiveFailures: 0, nextAttemptAt: at }, now)).toBeNull();
+		expect(nextTryNote({ ...failing, enabled: false, nextAttemptAt: null }, now)).toBeNull();
+		expect(nextTryNote({ ...failing, actingUser: null, nextAttemptAt: null }, now)).toBeNull();
 	});
 });

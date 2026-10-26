@@ -15,7 +15,7 @@ test('a run re-run from its stored inputs is identical, for an editor and a view
 	await expect(panel.getByRole('heading', { name: 'Reproduction' })).toBeVisible();
 	// A run made now stored its inputs, so the list doesn't tag it.
 	const list = page.getByRole('region', { name: 'Runs', exact: true });
-	await expect(list.getByText('Inputs not stored', { exact: true })).toHaveCount(0);
+	await expect(list.getByText('Can’t be re-run', { exact: true })).toHaveCount(0);
 
 	await panel.getByRole('button', { name: 'Check reproduction' }).click();
 	await expect(panel.getByTestId('reproduce-result')).toHaveText(

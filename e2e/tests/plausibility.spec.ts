@@ -3,7 +3,7 @@
 // panel, with the latest run of another runoff model overlaid on the
 // dry-season low-flow curves: an old legacy run (engine < 1.0.0, planted, as the
 // API can't make one any more). Then the Compare page sets two runs' recession
-// diagnostics and validation signatures side by side, and says so when a run
+// diagnostics and hydrological signatures side by side, and says so when a run
 // made before engine 1.55.0 has none. Names and numbers are invented.
 import { createProject, createRun, putModel, putSeries, sampleModel, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -27,29 +27,49 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	const gr4j = await createRun(page.request, project.id, 'GR4J run');
 	await plantLegacyRun(await createRun(page.request, project.id, 'Legacy run'));
 
-	await page.goto(`/projects/${project.id}?tab=runs&run=${gr4j}`);
-	await expect(page.getByRole('heading', { level: 2, name: 'GR4J run' })).toBeVisible();
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Plausibility', exact: true }).click();
+	// Model quality is on Calibration (issue #586 Round 3), for the run `run=` names.
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${gr4j}#res-plausibility`);
+	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', gr4j);
 	const panel = page.getByRole('region', { name: /^Plausibility checks/ });
 	await expect(panel.getByText(/^Six checks a reviewing hydrologist makes by hand\..*Dry season: .*, the six months with the lowest mean flow in the gauge record\.$/)).toBeVisible();
 	const results = panel.getByRole('list', { name: 'Check results' });
-	// Six on a run from engine 1.55.0: the recession diagnostics (CR-13) are the fifth, the validation signatures (CR-16) the sixth.
+	// Six on a run from engine 1.55.0: the recession diagnostics (CR-13) are the fifth, the hydrological signatures (CR-16) the sixth.
 	await expect(results.getByRole('listitem')).toHaveCount(6);
 	await expect(results.getByRole('listitem').filter({ hasText: /^Recessions: / })).toHaveCount(1);
-	await expect(results.getByRole('listitem').filter({ hasText: /^Validation signatures: / })).toHaveCount(1);
+	await expect(results.getByRole('listitem').filter({ hasText: /^Hydrological signatures: / })).toHaveCount(1);
 	// Three years is too few for the double-mass check.
 	await expect(results.getByRole('listitem').filter({ hasText: 'Observed flow vs rain' })).toHaveText('Observed flow vs rain: not checked');
 
 	// 1. One row per water year of the gauge record, each judged.
 	const nat = panel.getByRole('table', { name: /^Natural flow ≥ observed \+ net abstraction/ });
 	await expect(nat.getByRole('row')).toHaveCount(4);
-	await expect(nat.getByRole('row', { name: /^2019\/20 366 / })).toBeVisible();
-	await expect(nat.getByRole('row', { name: /^2021\/22 365 .* (passes|fails)$/ })).toBeVisible();
+	// The year over its days, then the verdict (issue #586: it sat last, off the right edge at 1440).
+	await expect(nat.getByRole('row', { name: /^2019\/20 366 days (passes|fails|not judged) / })).toBeVisible();
+	await expect(nat.getByRole('row', { name: /^2021\/22 365 days (passes|fails) / })).toBeVisible();
+	await expect(nat.getByRole('columnheader')).toHaveText([/^Water year/, 'Result', /^Natural/, /^Gap/, /^Observed/, /^Use/, /^Land cover/]);
+	// Paired figures share a column: the whole table fits beside the side index at 1440 and 1280, with the verdict in
+	// view; on a phone each year is a block (table-stack, #586 R4-K), so the box doesn't scroll sideways either.
+	const verdictInView = () =>
+		nat.evaluate((t) => {
+			const box = t.closest('.table-wrap')!.getBoundingClientRect();
+			const result = t.querySelector('thead th:nth-child(2)')!.getBoundingClientRect();
+			return { fits: t.scrollWidth <= t.closest('.table-wrap')!.clientWidth + 1, verdict: result.right <= box.right + 1 };
+		});
+	for (const width of [1440, 1280]) {
+		await page.setViewportSize({ width, height: 900 });
+		await expect.poll(verdictInView, { message: `${width}` }).toEqual({ fits: true, verdict: true });
+	}
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect.poll(async () => (await verdictInView()).fits, { message: '390' }).toBe(true);
+	await page.setViewportSize({ width: 1280, height: 720 });
 
 	// 2. The blank third year ran on CHIRPS: one fallback-rain year, two good-rain years.
 	await expect(panel.getByText('of days EWR not met, 2 water years')).toBeVisible();
 	await expect(panel.getByText('of days EWR not met, 1 water year', { exact: true })).toBeVisible();
-	await panel.getByText(/^Rain source by water year/).click();
+	// A disclosure with its marker (▶), like every other on the page (issue #586: display: flex dropped it).
+	const rainYears = panel.locator('summary').filter({ hasText: /^Rain source by water year/ });
+	expect(await rainYears.evaluate((el) => getComputedStyle(el).display)).toBe('list-item');
+	await rainYears.click();
 	await expect(panel.getByRole('row', { name: /^2021\/22 0 of 365 .* fallback \d+$/ })).toBeVisible();
 	await expect(panel.getByRole('row', { name: /^2019\/20 366 of 366 .* good \d+$/ })).toBeVisible();
 
@@ -70,19 +90,16 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	// 5. Recession diagnostics (engine ≥ 1.19.0): the section is there, judged or not.
 	await expect(panel.getByRole('heading', { level: 4, name: /^Recession diagnostics/ })).toBeVisible();
 
-	// 6. Validation signatures (engine ≥ 1.55.0): three years of the outlet's gauge record against the model, one row per signature.
-	await expect(panel.getByRole('heading', { level: 4, name: /^Validation signatures/ })).toBeVisible();
+	// 6. Hydrological signatures (engine ≥ 1.55.0): three years of the outlet's gauge record against the model, one row per signature.
+	await expect(panel.getByRole('heading', { level: 4, name: /^Hydrological signatures/ })).toBeVisible();
 	// A regex getByText sees the text as written, source line breaks included: \s+ between words that wrap there.
 	await expect(panel.getByText(/^On the gauge record at the outlet \(the record the calibration statistics score\), 1\u202f096 days, against the simulated\s+outflow/)).toBeVisible();
 	await expect(panel.getByText(/The limits are provisional, for the hydrologist to confirm\./)).toBeVisible();
 	// The verdict line (the synthetic record is deterministic: its low flows fall away faster than the model's
 	// store drains, so the low-flow FDC is outside its limit), which the check list and the run's warnings agree with.
 	await expect(panel.getByRole('status').filter({ hasText: 'A signature is outside its limit: see the run’s warnings.' })).toHaveCount(1);
-	await expect(results.getByRole('listitem').filter({ hasText: /^Validation signatures: / })).toHaveText('Validation signatures: see below');
-	// The run's things to check show the first 3 (issue #521): this one is further down the list.
-	await page.getByRole('button', { name: /^Show all \d+ things to check$/ }).click();
-	await expect(page.getByRole('listitem').filter({ hasText: /^Validation signatures \(.*\): on the 1096 scored days of the observed gauge record, / })).toHaveCount(1);
-	const sig = panel.getByRole('table', { name: /^Validation signatures/ });
+	await expect(results.getByRole('listitem').filter({ hasText: /^Hydrological signatures: / })).toHaveText('Hydrological signatures: see below');
+	const sig = panel.getByRole('table', { name: /^Hydrological signatures/ });
 	await expect(sig.getByRole('columnheader', { name: 'Provisional limit' })).toBeVisible();
 	await expect(sig.getByRole('row')).toHaveCount(6);
 	await expect(sig.getByRole('row', { name: /^Base-flow index, Hughes et al\. \(2003\) \d\.\d\d \d\.\d\d [+−]\d\.\d\d ±0\.15 (within|outside)$/ })).toBeVisible();
@@ -91,9 +108,14 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	await expect(sig.getByRole('row', { name: /^Skill on held-out recessions / })).toBeVisible();
 	await expect(panel.getByText(/^Held-out recessions: /)).toBeVisible();
 	await expectNoViolations(page);
+
+	// The run's things to check, on its Summary on Runs & results, show the first 3 (issue #521): this one is further down the list.
+	await page.goto(`/projects/${project.id}?tab=runs&run=${gr4j}`);
+	await page.getByRole('button', { name: /^Show all \d+ things to check$/ }).click();
+	await expect(page.getByRole('listitem').filter({ hasText: /^Hydrological signatures \(.*\): on the 1096 scored days of the observed gauge record, / })).toHaveCount(1);
 });
 
-test('the compare page sets two runs’ recession diagnostics and validation signatures side by side', async ({ page, owner }) => {
+test('the compare page sets two runs’ recession diagnostics and hydrological signatures side by side', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Compare signatures');
 	await putModel(page.request, project.id, sampleModel());
@@ -133,7 +155,7 @@ test('the compare page sets two runs’ recession diagnostics and validation sig
 
 	// Against a run made before engine 1.55.0: its side says so, with no change, and a note says why.
 	await page.goto(`/compare?a=${project.id}:${older}&b=${project.id}:${after}`);
-	await expect(cmp.getByRole('note')).toHaveText('Run A was made before engine 1.55.0, so it has no validation signatures: run the model again to compare them.');
+	await expect(cmp.getByRole('note')).toHaveText('Run A was made before engine 1.55.0, so it has no hydrological signatures: run the model again to compare them.');
 	for (const check of ['Base-flow index, Hughes et al. (2003)', 'Low-flow volume bias (%BiasFLV)', 'Skill on held-out recessions, simulated']) {
 		await expect(row(check).getByRole('cell').nth(1)).toHaveText('not in this run (made before engine 1.55.0)');
 		await expect(row(check).getByRole('cell').nth(3)).toHaveText('–');

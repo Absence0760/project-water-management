@@ -33,7 +33,7 @@ describe('POST /projects/:id/runs', () => {
 		await set({ apanMm: monthly(0) });
 		const res = await u.call('POST', `/projects/${projectId}/runs`, { label: 'no pan' });
 		expect(res.status).toBe(400);
-		expect(res.body.error).toMatch(/GR4J needs potential evaporation.*Settings → Demand/);
+		expect(res.body.error).toMatch(/GR4J needs potential evaporation.*Model settings → Demand/);
 		expect((await u.call('GET', `/projects/${projectId}/runs`)).body.runs).toEqual([]);
 		// The legacy model, which didn't use evaporation, was removed in engine 1.0.0: no way round it.
 		const legacy = await u.call('PATCH', `/projects/${projectId}`, { settings: { runoffModel: 'legacy' } });
@@ -471,7 +471,7 @@ describe('settings.pe (engine ≥ 0.31.0, issue #39)', () => {
 		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { pe: { ...pe, mm: monthly(0) } } })).status).toBe(200);
 		const res = await u.call('POST', `/projects/${projectId}/runs`, { label: 'zero PE' });
 		expect(res.status).toBe(400);
-		expect(res.body.error).toMatch(/GR4J needs potential evaporation.*Settings → Demand/);
+		expect(res.body.error).toMatch(/GR4J needs potential evaporation.*Model settings → Demand/);
 		expect((await u.call('GET', `/projects/${projectId}/runs`)).body.runs).toEqual([]);
 		// Positive control: a non-zero monthly row runs.
 		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { pe } })).status).toBe(200);

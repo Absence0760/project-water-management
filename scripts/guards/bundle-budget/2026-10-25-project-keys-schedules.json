@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Issue #586 Round 1 B: API keys and Scheduled reports mounted on the Project page as lazy chunks (Scheduled reports split out of Settings' lazySections chunk while Settings still mounts it, until Round 1 C removes that mount), with their saves lines and wrappers. Measured 2075 KB against 2073 on feat/586-r1-b after merging round 1 A (+2 KB); no panel code is duplicated (one chunk each). Headroom 0 KB; C's removal of the Settings mounts may give some back."
+}

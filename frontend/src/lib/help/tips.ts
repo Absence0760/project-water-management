@@ -925,7 +925,7 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'balance-check',
-		term: 'Self-checks and the balance check',
+		term: 'Arithmetic checks and the balance check',
 		short: 'Every run checks its own output: each hydrological unit’s day must balance, and the reports must add up to the daily series.',
 		units: 'm³/day',
 		category: 'results',
@@ -1532,7 +1532,7 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'plausibility-signatures',
-		term: 'Validation signatures',
+		term: 'Hydrological signatures',
 		short: 'Base-flow index by two filters, the low-flow duration curve’s slope and bias, and skill on held-out recessions.',
 		units: 'ratio; %',
 		category: 'results'
@@ -1736,7 +1736,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'preview-excluded',
 		term: 'Excluded from calibration (daily preview)',
-		short: 'Marks days inside a calibration exclusion from Settings: they don’t count in Fit automatically or in a run’s calibration scores.',
+		short: 'Marks days inside a calibration exclusion (Calibration record): they don’t count in Fit automatically or in a run’s calibration scores.',
 		category: 'data',
 		fields: ['preview.excluded']
 	},

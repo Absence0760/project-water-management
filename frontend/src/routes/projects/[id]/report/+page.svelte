@@ -67,6 +67,7 @@
 	import { CATCHMENT_FLOW_KEYS, EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartCaption, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '#lib/components/runs/flowSeries.js';
 	import { toDisplayUnit } from '#lib/components/runs/results.js';
 	import RunSummaryView from '#lib/components/runs/RunSummaryView.svelte';
+	import { calibrationHref } from '#lib/components/calibration/links.js';
 	import UnitResultsTable from '#lib/components/supply/UnitResultsTable.svelte';
 	import { hasHumanImpacts, loadHumanImpacts } from '#lib/components/runs/humanImpacts.js';
 	import { loadRestrictionTables } from '#lib/components/runs/restrictions.js';
@@ -82,6 +83,8 @@
 	import ServerPdf from '#lib/components/report/ServerPdf.svelte';
 	// Evidence mode's shell is small; its report is a chunk of its own (EvidencePage loads it).
 	import EvidencePage from '#lib/components/report/evidence/EvidencePage.svelte';
+	import { pageStart } from '#lib/a11y/focusPage.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	const projectId = $derived(page.params.id ?? '');
 	const runParam = $derived(page.url.searchParams.get('run'));
@@ -98,7 +101,7 @@
 	let project = $state.raw<Project | null>(null);
 	let run = $state.raw<Run | null>(null);
 	let series = $state.raw<SeriesMeta[]>([]);
-	// $state.raw: daily arrays, replaced and never mutated (as in RunCharts).
+	// $state.raw: daily arrays, replaced and never mutated (as in ModelQuality).
 	let flows = $state.raw<CatchmentFlows>({});
 	/** Gauge or logger behind each observed series (issue #45). */
 	let sources = $state.raw<ObservedSources>({});
@@ -301,7 +304,17 @@
 	{:else if status === 'error'}
 		<div class="alert alert-error" role="alert">
 			The report could not be loaded: {error}
-			<button type="button" class="btn btn-sm" onclick={() => load(projectId, runParam, againstParam)}>Try again</button>
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					// Its alert leaves the page: the focus follows (followRetry, WCAG 2.4.3), onto the loading line, then a new
+					// Try again or the page's title.
+					followRetry(e.currentTarget, { landing: () => pageStart() });
+					void load(projectId, runParam, againstParam);
+				}}>Try again</button
+			>
 		</div>
 	{:else if status === 'forbidden'}
 		<div class="alert alert-info" role="status">
@@ -329,7 +342,8 @@
 			{#if run && (!againstParam || impact)}
 				<ServerPdf {projectId} runId={run!.id} against={againstParam} />
 			{/if}
-			<p class="muted small" role="status">
+			<!-- data-loading until ready: a Try again's focus waits here (followRetry). -->
+			<p class="muted small" role="status" data-loading={!ready || undefined}>
 				{#if ready}
 					Opens your browser’s print dialog: choose <strong>Save as PDF</strong> as the destination. The report prints on A4, in the light
 					theme.
@@ -502,7 +516,9 @@
 					{:else if s.id === 'assurance'}
 						<AssurancePanel assurance={summary.supplyAssurance} engineVersion={run.engineVersion} print />
 					{:else if s.id === 'farms'}
-						<RunSummaryView {summary} {days} headline={project!.settings.ewrHeadline ?? null}>
+						<!-- The model checks' calibration items link to that run on Calibration (issue #586 round 3): a report link
+						     is absolute, since the report is its own route; the warnings keep their places as plain words. -->
+						<RunSummaryView {summary} {days} headline={project!.settings.ewrHeadline ?? null} calibrationHref={(hash) => resolve(`projects/${projectId}${calibrationHref(run?.id ?? null, hash)}`)}>
 							{#snippet units()}
 								<UnitResultsTable farms={summary.farms ?? []} {days} {nodeOrder} />
 								<!-- The land-cover, groundwater, demand-object and other-user tables: on Hydrological units in the workspace (issue #137), here in their old place. -->
@@ -519,7 +535,8 @@
 								{/if}
 							{/snippet}
 						</RunSummaryView>
-						<div class="sub">
+						<!-- The model checks' Self-checks item links here (#res-checks). -->
+						<div class="sub" id="res-checks">
 							<SelfChecksPanel {summary} {projectId} runId={run.id} startDate={run.startDate} endDate={run.endDate} engineVersion={run.engineVersion} nodes={[]} trace={false} />
 						</div>
 					{:else if s.id === 'notes'}

@@ -23,7 +23,7 @@ import {
 	spreadAccumulations,
 	type AccumulationCandidate
 } from './accumulation';
-import { fromEpochDay, toEpochDay } from './calendar';
+import { dayText, fromEpochDay, toEpochDay } from './calendar';
 import { defaultZeroRainSettings, type DailySeries, type SeriesKind, type ZeroRainSettings } from './project';
 import { Rng } from './random';
 
@@ -248,7 +248,7 @@ describe('what a run does with an outage reading (rainAccumulations, spread, app
 		const warn = accumulationWarnings(run.info);
 		expect(warn).toHaveLength(1);
 		expect(warn[0]).toMatch(/^1 catchment reading after an outage set aside as missing: /);
-		expect(warn[0]).toContain(`${iso(r)} (60 mm read after a 30-day outage; 0 mm used instead)`);
+		expect(warn[0]).toContain(`${dayText(iso(r))} (60 mm read after a 30-day outage; 0 mm used instead)`);
 		expect(warn[0]).toContain('keeps a reading as recorded');
 	});
 
@@ -339,8 +339,8 @@ describe('what a run does with an outage reading (rainAccumulations, spread, app
 		};
 		const info = { mode: 'asRecorded' as const, criteria: ACCUMULATION_CRITERIA, windows: [w], skipped: [], spreadWindows: 0, spreadDays: 0, spreadMm: 0 };
 		const [text] = accumulationWarnings(info, [w]);
-		expect(text).toContain('2001-07-01 (60 mm read after a 30-day outage)');
-		expect(text).toContain('a flagged zero run or a blank outage that CHIRPS fills, so that rain may be counted twice (2001-07-01)');
+		expect(text).toContain('1 Jul 2001 (60 mm read after a 30-day outage)');
+		expect(text).toContain('a flagged zero run or a blank outage that CHIRPS fills, so that rain may be counted twice (1 Jul 2001)');
 	});
 });
 

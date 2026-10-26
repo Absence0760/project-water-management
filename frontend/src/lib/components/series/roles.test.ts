@@ -131,7 +131,7 @@ describe('roleBadge', () => {
 		const g = { ...meta('g', 'flow_observed_m3s', 'Upper'), siteNodeId: 'n1' };
 		const checks = roleBadge(g, ctx([g]));
 		expect(checks?.label).toBe('Gauge record (checks only)');
-		expect(checks?.why).toMatch(/Settings → Calibration record/);
+		expect(checks?.why).toMatch(/Calibration → Calibration record/);
 		expect(roleBadge(g, ctx([g], { calibrationSite: 'n1' }))?.label).toBe('Gauge record (calibration site)');
 		const gone = { ...g, siteNodeId: 'n9' };
 		expect(roleBadge(gone, ctx([gone]))?.label).toBe('Not used: its gauge is no longer in the model');

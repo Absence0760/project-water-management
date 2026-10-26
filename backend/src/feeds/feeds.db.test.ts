@@ -457,6 +457,105 @@ describe('the scheduler', () => {
 		expect(await dueAfter(1, 16, 'the source is unreachable: HTTP 403')).toBe(true);
 	});
 
+	it('app_feed_next_attempt is the first instant app_feed_is_due turns true: each schedule, the failing and the refused backoff (243)', async () => {
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		try {
+			// A session far from UTC: the GEFS slot is 08:45 UTC whatever the session's zone.
+			await client.query(`SET TimeZone = 'Pacific/Kiritimati'`);
+			const refused = feedErrorMessage(new FeedRefusedError());
+			const outage = feedErrorMessage(new FeedServerError(DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL));
+			const next = async (source: string, failures: number, last: string | null, error: string | null = null) => {
+				const { rows } = await client.query<{ at: Date | null }>('SELECT app_feed_next_attempt($1, $2, $3, $4, $5) AS at', [source, 'daily', failures, last, error]);
+				return rows[0]!.at?.toISOString() ?? null;
+			};
+			// Never scheduled: no instant (due at once).
+			expect(await next('chirps', 0, null)).toBeNull();
+			// The day's rule, a minute's slack for the tick.
+			expect(await next('chirps', 0, '2026-03-01T06:00:00Z')).toBe('2026-03-02T05:59:00.000Z');
+			expect(await next('dws', 0, '2026-03-01T06:00:00Z')).toBe('2026-03-02T05:59:00.000Z');
+			// GEFS: the first 08:45 UTC after it was scheduled, today's or tomorrow's.
+			expect(await next('chirps_gefs', 0, '2026-03-01T06:00:00Z')).toBe('2026-03-01T08:45:00.000Z');
+			expect(await next('chirps_gefs', 0, '2026-03-01T08:45:00Z')).toBe('2026-03-02T08:45:00.000Z');
+			expect(await next('chirps_gefs', 0, '2026-03-01T23:30:00Z')).toBe('2026-03-02T08:45:00.000Z');
+			// Failing: 15 min × 2^(failures − 1), less the minute's slack, whatever the error but a refusal.
+			expect(await next('dws', 1, '2026-03-01T09:00:00Z', outage)).toBe('2026-03-01T09:14:00.000Z');
+			expect(await next('dws', 3, '2026-03-01T09:00:00Z', outage)).toBe('2026-03-01T09:59:00.000Z');
+			// Refused (HTTP 403): 2 h × 2^(failures − 1).
+			expect(await next('dws', 1, '2026-03-01T09:00:00Z', refused)).toBe('2026-03-01T10:59:00.000Z');
+			expect(await next('dws', 3, '2026-03-01T09:00:00Z', refused)).toBe('2026-03-01T16:59:00.000Z');
+			// Capped at the day: the schedule's own instant.
+			expect(await next('dws', 5, '2026-03-01T09:00:00Z', refused)).toBe('2026-03-02T08:59:00.000Z');
+			// A failing GEFS feed whose slot comes before its backoff ends: the slot.
+			expect(await next('chirps_gefs', 1, '2026-03-01T08:40:00Z', outage)).toBe('2026-03-01T08:45:00.000Z');
+
+			// 242's app_feed_is_due, frozen: the rewrite must agree with it everywhere, not only with itself.
+			await client.query(`CREATE FUNCTION pg_temp.feed_is_due_242(p_source text, p_schedule text, p_failures integer, p_last timestamptz, p_now timestamptz, p_last_error text)
+				RETURNS boolean LANGUAGE sql AS $$
+					SELECT p_last IS NULL
+						OR CASE WHEN p_source = 'chirps_gefs' THEN
+							p_last < (
+								SELECT CASE WHEN s <= p_now THEN s ELSE s - interval '1 day' END
+								FROM (SELECT (date_trunc('day', p_now AT TIME ZONE 'UTC') + interval '8 hours 45 minutes') AT TIME ZONE 'UTC' AS s) slot
+							)
+						ELSE
+							p_last <= p_now + interval '1 minute' - interval '1 day'
+						END
+						OR (p_failures > 0 AND p_last <= p_now + interval '1 minute' - LEAST(
+							interval '1 day',
+							make_interval(mins => CASE WHEN starts_with(coalesce(p_last_error, ''), 'the source refused this server’s requests') THEN 120 ELSE 15 END
+								* power(2, LEAST(p_failures, 10) - 1)::integer)
+						))
+				$$`);
+
+			// app_feed_is_due turns true exactly at each instant, and agrees with 242's on either side of it, on a grid of feeds.
+			const lasts = ['2026-03-01T06:00:00Z', '2026-03-01T08:44:59Z', '2026-03-01T08:45:00Z', '2026-03-01T23:30:00Z'];
+			for (const source of ['chirps', 'chirps_gefs', 'dws'])
+				for (const failures of [0, 1, 2, 4, 7, 12])
+					for (const error of [null, outage, refused])
+						for (const last of lasts) {
+							const at = await next(source, failures, last, error);
+							const due = async (now: number) =>
+								(await client.query<{ due: boolean }>('SELECT app_feed_is_due($1, $2, $3, $4, $5, $6) AS due', [source, 'daily', failures, last, new Date(now).toISOString(), error])).rows[0]!.due;
+							const t = Date.parse(at!);
+							expect(await due(t - 1000), `${source} ${failures} ${error} ${last}: before ${at}`).toBe(false);
+							expect(await due(t), `${source} ${failures} ${error} ${last}: at ${at}`).toBe(true);
+							for (const now of [t - 3_600_000, t - 60_000, t - 1000, t, t + 1000, t + 60_000]) {
+								const args = [source, 'daily', failures, last, new Date(now).toISOString(), error];
+								const { rows } = await client.query<{ now243: boolean; was242: boolean }>(
+									'SELECT app_feed_is_due($1, $2, $3, $4, $5, $6) AS now243, pg_temp.feed_is_due_242($1, $2, $3, $4, $5, $6) AS was242',
+									args
+								);
+								expect(rows[0]!.now243, `${source} ${failures} ${error} ${last} at ${new Date(now).toISOString()}: 243 against 242`).toBe(rows[0]!.was242);
+							}
+						}
+		} finally {
+			await client.end();
+		}
+	});
+
+	it('the feed list says when a feed is next tried: the failing and refused backoff, and none once switched off', async () => {
+		const owner = await signUp('NextTry');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		const nextAt = async () => (await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].nextAttemptAt as string | null;
+		// Never scheduled: nothing to say (due at once).
+		expect(await nextAt()).toBeNull();
+		const fail = (failures: number, error: string) =>
+			asOwner(`UPDATE data_feed SET consecutive_failures = $2, last_error = $3, last_scheduled_at = '2026-03-01T09:00:00Z' WHERE id = $1`, [id, failures, error]);
+		await fail(1, feedErrorMessage(new FeedServerError(DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL)));
+		expect(await nextAt()).toBe('2026-03-01T09:14:00.000Z');
+		await fail(2, feedErrorMessage(new FeedRefusedError()));
+		expect(await nextAt()).toBe('2026-03-01T12:59:00.000Z');
+		// A viewer reads it too (it's the list's, under RLS: positive control for the grant to water_app).
+		const viewer = await signUp('NextTryViewer');
+		await member(owner, pid, viewer, 'viewer');
+		expect((await viewer.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].nextAttemptAt).toBe('2026-03-01T12:59:00.000Z');
+		// Switched off: no attempt is scheduled.
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { enabled: false })).status).toBe(200);
+		expect(await nextAt()).toBeNull();
+	});
+
 	it('a daily CHIRPS-GEFS feed is due once the day’s 08:45 UTC has passed since it was last scheduled, in UTC whatever the session time zone (#33)', async () => {
 		// The pure timing function, at fixed instants, in a session far from UTC
 		// (UTC+14: its calendar day already differs from UTC's at 08:45 UTC).
@@ -1442,7 +1541,7 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		const { owner, pid } = await withV2('Backfill');
 		const later = await owner.call('POST', `/projects/${pid}/feeds`, { ...chirps(), replaceSeries: true });
 		expect(later.status).toBe(409);
-		expect(later.body).toMatchObject({ error: expect.stringMatching(/start date must be 2001-01-01 or earlier/), details: { code: 'series_backfill', firstDay: '2001-01-01' } });
+		expect(later.body).toMatchObject({ error: expect.stringMatching(/start date must be 1 Jan 2001 or earlier/), details: { code: 'series_backfill', firstDay: '2001-01-01' } });
 		const confirm = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true });
 		expect(confirm.status).toBe(201);
 		expect(confirm.body.feed).toMatchObject({ versionConflict: true, replaceFrom: 'CHIRPS/2.0', config: { startDate: '2001-01-01' } });
@@ -1618,7 +1717,7 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '1990-06-01', values: [null, 1, 2], ...V2 });
 		const sat = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true });
 		expect(sat.status).toBe(409);
-		expect(sat.body.error).toMatch(/starts on 1990-06-02, before CHIRPS v3’s sat product begins \(1998-01-01\).*use the rnl product/);
+		expect(sat.body.error).toMatch(/starts on 2 Jun 1990, before CHIRPS v3’s sat product begins \(1 Jan 1998\).*use the rnl product/);
 		const rnl = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()], product: 'rnl' }, replaceSeries: true });
 		expect(rnl.status).toBe(201);
 		// From the first day with a value.

@@ -114,7 +114,7 @@ describe('daily intensity of a rain-source period', () => {
 		const warnings = rainSourcePeriodWarnings(run.rainSource!.info);
 		expect(warnings).toHaveLength(2);
 		expect(warnings[1]).toMatch(
-			/^Daily intensity of the alternative catchment gauge over 2005-10-01 to 2010-09-30: \d+ % of its rain × factor fell on heavy days \(≥ 20 mm\), against \d+ % in the whole trusted primary catchment series \(1990\/91–2004\/05\); wet \(≥ 1 mm\) on \d+ % of days against \d+ %\. The heavy-day shares are more than 5 points apart/
+			/^Daily intensity of the alternative catchment gauge over 1 Oct 2005 to 30 Sep 2010: \d+ % of its rain × factor fell on heavy days \(≥ 20 mm\), against \d+ % in the whole trusted primary catchment series \(1990\/91–2004\/05\); wet \(≥ 1 mm\) on \d+ % of days against \d+ %\. The heavy-day shares are more than 5 points apart/
 		);
 		expect(i.wetDayMm).toBe(1);
 		expect(i.reference.wetDays).toBeGreaterThan(0);

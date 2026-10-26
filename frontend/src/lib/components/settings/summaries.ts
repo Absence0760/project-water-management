@@ -1,27 +1,22 @@
-// One line under each Settings & calibration panel's heading saying what it is
-// set to now (issue #468), so the page reads as a list of current values and a
-// panel needn't be scanned field by field to know whether it matters. They
-// follow the unsaved form. Pure: SettingsTab passes the derived figures in.
+// One line under each settings panel's heading saying what it is set to now
+// (issue #468), so the page reads as a list of current values and a panel
+// needn't be scanned field by field to know whether it matters. They follow the
+// unsaved form. Pure: SettingsTab (Model settings, settingsSummaries) and
+// CalibrationSettings (the Calibration page's four panels, calibrationSummaries)
+// pass the derived figures in.
 import { defaultDataQualitySettings, zeroFlowMonthsText, type ProjectSettings } from '@water-management/engine';
 import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
 import { fmtDay, fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 import type { SettingsSectionId } from './sections';
 import { ewrSplitSummary } from './ewrSplit';
 
+/** What Model settings' lines read. */
 export interface SummaryInput {
 	s: ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
-	/** The sum of the hydrological units' areas (km²), the catchment area when none is set. */
-	unitAreaKm2: number;
-	/** The PE GR4J runs on in a year (mm). */
-	peAnnualMm: number;
 	/** The pragmatic EWR in a year (Mm³). */
 	ewrAnnualMm3: number;
 	/** Where the daily EWR at the outlet comes from (the EWR panel's own line). */
 	ewrSource: string;
-	/** The header's line about the fit (fitSummary). */
-	fit: string;
-	/** The calibration site's name when it isn't the outlet. */
-	siteName?: string | null;
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -44,6 +39,58 @@ export function changedLimits(dq: Record<string, unknown> | undefined): number {
 	return Object.keys(d).filter((k) => k in dq && JSON.stringify(dq[k]) !== JSON.stringify(d[k])).length;
 }
 
+/** What the Calibration page's settings panels' lines read (issue #586). */
+export interface CalibrationSummaryInput {
+	s: SummaryInput['s'];
+	/** The sum of the hydrological units' areas (km²), the catchment area when none is set. */
+	unitAreaKm2: number;
+	/** The PE GR4J runs on in a year (mm). */
+	peAnnualMm: number;
+	/** The calibration site's name when it isn't the outlet. */
+	siteName?: string | null;
+}
+
+/**
+ * The lines of the four panels on the Calibration page, Flow calibration, Calibration record, Fit the parameters and
+ * the WR2012 check (CalibrationSettings.svelte, issue #586 round 3).
+ */
+export function calibrationSummaries(i: CalibrationSummaryInput): Partial<Record<SettingsSectionId, string>> {
+	const s = i.s;
+	const exclusions = s.calibrationExclusions?.length ?? 0;
+	const area = s.calibration?.catchmentAreaKm2 ?? null;
+	const g = s.gr4j;
+	const span = dateSpan(s.calibrationStart, s.calibrationEnd);
+	return {
+		'set-flow': [
+			g ? `GR4J X1 ${fmtNum(g.x1, 0)} mm, X3 ${fmtNum(g.x3, 0)} mm, X4 ${fmtNum(g.x4, 2, true)} days${g.x2 ? `, X2 ${fmtNum(g.x2, 2, true)} mm` : ''}` : 'GR4J',
+			`${fmtNum(area != null && area > 0 ? area : i.unitAreaKm2, 1, true)} km²`,
+			`PE ${fmtNum(i.peAnnualMm)} mm a year${s.pe?.kind === 'monthly' ? ' (monthly PE)' : ''}`,
+			s.arealRain ? 'areal correction on' : null
+		]
+			.filter(Boolean)
+			.join(' · '),
+		'set-record': [
+			span ?? 'The whole flow record',
+			i.siteName ? `at ${i.siteName}` : 'at the outlet',
+			exclusions ? `${plural(exclusions, 'period')} left out` : null,
+			// Engine ≥ 1.90.0 (issue #557): named only when set.
+			s.qualityFlags?.lowFlowPeriods?.length ? `low flows only in ${plural(s.qualityFlags.lowFlowPeriods.length, 'period')}` : null,
+			// Engine ≥ 1.81.0 (issue #507 item 2): named only when set.
+			s.qualityFlags?.zeroFlowMonths?.length ? `river stops ${zeroFlowMonthsText(s.qualityFlags.zeroFlowMonths)}` : null
+		]
+			.filter(Boolean)
+			.join(' · '),
+		// Not the fit record's line: the page's header says where the parameters came from (fitSummary), and the panel
+		// repeated it word for word (issue #586, C19). The panel's own state is its calibration rules.
+		'set-fit': s.calibrationRules
+			? `Calibration rules revision ${s.calibrationRules.revision} · ${s.calibrationRules.signedOff ? `signed off by ${s.calibrationRules.signedOff.by}` : 'draft, not signed off'}`
+			: 'No calibration rules',
+		'set-wr2012': s.wr2012?.reference
+			? `On: quaternary ${s.wr2012.reference.quaternary || '(unnamed)'}, MAR ${fmtQty(s.wr2012.reference.marMm3, 3)} Mm³`
+			: 'Off: runs aren’t compared with WR2012'
+	};
+}
+
 export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSectionId, string>> {
 	const s = i.s;
 	const apan = (s.apanMm ?? []).reduce((t, v) => t + (v || 0), 0);
@@ -51,10 +98,6 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 	const bias = s.chirpsBiasCorrection === 'none' ? 'Raw CHIRPS fills gaps' : 'CHIRPS bias-corrected per month fills gaps';
 	const zr = s.zeroRainRuns;
 	const restrict = s.droughtRestriction;
-	const exclusions = s.calibrationExclusions?.length ?? 0;
-	const area = s.calibration?.catchmentAreaKm2 ?? null;
-	const g = s.gr4j;
-	const span = dateSpan(s.calibrationStart, s.calibrationEnd);
 	const share =
 		s.flowShareMethod === 'hiLo'
 			? `High/low MAP split, ${fmtPct(s.hiLoSplit?.hi ?? 0, 0)} / ${fmtPct(s.hiLoSplit?.lo ?? 0, 0)}`
@@ -96,26 +139,6 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 						.filter(Boolean)
 						.join(' · '),
 		'set-restrict': restrict ? `On: ${plural(restrict.levels?.length ?? 0, 'level')}, reviewed on ${plural(restrict.reviewDates?.length ?? 0, 'date')}` : 'Off',
-		'set-flow': [
-			g ? `GR4J X1 ${fmtNum(g.x1, 0)} mm, X3 ${fmtNum(g.x3, 0)} mm, X4 ${fmtNum(g.x4, 2, true)} days${g.x2 ? `, X2 ${fmtNum(g.x2, 2, true)} mm` : ''}` : 'GR4J',
-			`${fmtNum(area != null && area > 0 ? area : i.unitAreaKm2, 1, true)} km²`,
-			`PE ${fmtNum(i.peAnnualMm)} mm a year${s.pe?.kind === 'monthly' ? ' (monthly PE)' : ''}`,
-			s.arealRain ? 'areal correction on' : null
-		]
-			.filter(Boolean)
-			.join(' · '),
-		'set-record': [
-			span ?? 'The whole flow record',
-			i.siteName ? `at ${i.siteName}` : 'at the outlet',
-			exclusions ? `${plural(exclusions, 'period')} left out` : null,
-			// Engine ≥ 1.90.0 (issue #557): named only when set.
-			s.qualityFlags?.lowFlowPeriods?.length ? `low flows only in ${plural(s.qualityFlags.lowFlowPeriods.length, 'period')}` : null,
-			// Engine ≥ 1.81.0 (issue #507 item 2): named only when set.
-			s.qualityFlags?.zeroFlowMonths?.length ? `river stops ${zeroFlowMonthsText(s.qualityFlags.zeroFlowMonths)}` : null
-		]
-			.filter(Boolean)
-			.join(' · '),
-		'set-fit': i.fit,
 		'set-ewr': [
 			i.ewrSource,
 			s.ewrDailySource && s.ewrDailySource.method !== 'pragmatic' ? null : `${fmtQty(i.ewrAnnualMm3, 3)} Mm³ a year`,
@@ -124,9 +147,6 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			.join(' · '),
 		// Moved out of EWR (issue #521): the window results average over, and when a water year counts as met.
 		'set-reporting': `${dateSpan(s.reportStart, s.reportEnd) ? `Reporting ${dateSpan(s.reportStart, s.reportEnd)}` : 'Reporting over the whole run'} · a water year is met at ${Math.round((s.assuranceAnnualThreshold ?? 0.9) * 1000) / 10} % of demand`,
-		'set-wr2012': s.wr2012?.reference
-			? `On: quaternary ${s.wr2012.reference.quaternary || '(unnamed)'}, MAR ${fmtQty(s.wr2012.reference.marMm3, 3)} Mm³`
-			: 'Off: runs aren’t compared with WR2012',
 		'set-reserve': s.ewrRules?.length
 			? `${plural(s.ewrRules.length, 'rule table')} · the EWR charge follows ${s.ewrChargeSource === 'ruleTable' ? 'the rule tables' : 'the pragmatic EWR'}`
 			: // The panel's own line says what having none means.

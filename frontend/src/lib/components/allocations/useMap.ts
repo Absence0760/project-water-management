@@ -290,10 +290,14 @@ export function useBounds(s: UseShading): [[number, number], [number, number]] |
 	return Number.isFinite(w) ? [[w, so], [e, n]] : null;
 }
 
-/** A unit's figures in one sentence, for its label's accessible name and the list under the map. */
+/**
+ * A unit's figures in one sentence, for its label's accessible name and the
+ * list under the map. It holds the label's words (useLabel) in order, so a
+ * voice command that says what the label reads reaches it (WCAG 2.5.3).
+ */
 export function useSentence(name: string, u: UnitUse | null, period: string): string {
-	if (!u) return `${name}: the run covers no whole water year for ${period}.`;
+	if (!u) return `${name}: no whole year; the run covers no whole water year for ${period}.`;
 	const m = `${fmtNum(u.modelledM3)} m³ modelled${u.atIntake ? ' (taken at the intake)' : ''}`;
-	if (u.ratio === null) return u.band === 'unregistered' ? `${name}: ${m}, with no registered volume (${period}).` : `${name}: no modelled use and nothing registered (${period}).`;
+	if (u.ratio === null) return u.band === 'unregistered' ? `${name}: none registered, ${m} (${period}).` : `${name}: no use, nothing modelled and nothing registered (${period}).`;
 	return `${name}: ${fmtNum(u.ratio * 100, 0)} % of registered, ${m} against ${fmtNum(u.registeredM3)} m³ registered (${period}). ${BAND_SHORT[u.band]}.`;
 }

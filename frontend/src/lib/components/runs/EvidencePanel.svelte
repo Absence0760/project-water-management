@@ -9,6 +9,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { focusHeading } from '#lib/help/anchor.js';
 	import { api, NOMINATION_REASON_MAX, type Nomination, type RunMeta } from '#lib/api/index.js';
 	import { fmtStamp } from '#lib/format/number.js';
 	import { currentNomination, evidenceKindBlocker, evidenceLine, historyEntries, nominateBlocker } from './evidence';
@@ -50,15 +51,23 @@
 	const trimmed = $derived(reason.trim());
 	const tooLong = $derived(trimmed.length > NOMINATION_REASON_MAX);
 
+	/** After a nomination or a withdrawal the form (and the head's button) give way to the status line: the focus goes to the heading (ui-playbook § 4). */
+	async function focusTitle() {
+		await tick();
+		const h = document.getElementById(`${uid}-h`);
+		if (h) focusHeading(h);
+	}
+
 	async function nominate(e: SubmitEvent) {
 		e.preventDefault();
-		if (!trimmed || tooLong) return;
+		if (saving || !trimmed || tooLong) return;
 		saving = true;
 		error = null;
 		try {
 			const updated = await api.runs.nominate(projectId, run.id, trimmed);
 			reason = '';
 			onNominated?.(updated);
+			await focusTitle();
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -81,7 +90,7 @@
 
 	async function withdraw(e: SubmitEvent) {
 		e.preventDefault();
-		if (!withdrawTrimmed || withdrawTooLong) return;
+		if (saving || !withdrawTrimmed || withdrawTooLong) return;
 		saving = true;
 		withdrawError = null;
 		try {
@@ -89,6 +98,7 @@
 			withdrawReason = '';
 			withdrawing = false;
 			onNominated?.(updated);
+			await focusTitle();
 		} catch (err) {
 			withdrawError = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -123,9 +133,8 @@
 		</p>
 	{:else}
 		{#if canEdit}
-			{#if blocker}
-				<p class="muted small">{blocker}</p>
-			{:else}
+			<!-- Past kindBlocker, the only blocker left is "this run is the evidence", which the status line above already says. -->
+			{#if !blocker}
 				<form onsubmit={nominate}>
 					<label for="{uid}-r">Why this run is the evidence <span class="muted">(required)</span> <HelpTip key="evidence-run" label="About nominating a run" /></label>
 					<textarea
@@ -142,7 +151,7 @@
 					</p>
 					<!-- The panel's forms end in one action row (ui-playbook § 2). -->
 					<div class="action-row">
-						<button class="btn btn-primary" type="submit" disabled={saving || !trimmed || tooLong}>
+						<button class="btn btn-primary" type="submit" disabled={!trimmed || tooLong} aria-disabled={saving}>
 							{saving ? 'Nominating…' : current ? 'Nominate this run instead' : 'Nominate as evidence'}
 						</button>
 					</div>
@@ -166,7 +175,7 @@
 						<span class:over={withdrawTooLong}>{withdrawTrimmed.length} / {NOMINATION_REASON_MAX} characters</span>
 					</p>
 					<div class="action-row">
-						<button class="btn btn-danger" type="submit" disabled={saving || !withdrawTrimmed || withdrawTooLong}>
+						<button class="btn btn-danger" type="submit" disabled={!withdrawTrimmed || withdrawTooLong} aria-disabled={saving}>
 							{saving ? 'Withdrawing…' : 'Withdraw the nomination'}
 						</button>
 						<button class="btn" type="button" onclick={cancelWithdraw}>Cancel</button>

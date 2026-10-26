@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toEpochDay } from '../calendar';
+import { dayText, toEpochDay } from '../calendar';
 import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModel } from '../run';
@@ -374,7 +374,7 @@ describe('runEnsemble on a synthetic catchment', () => {
 			expect(c.warning).toBe(c.fraction! < 0.7);
 		}
 		expect(result.header.splitDate > '1992-10-01' && result.header.splitDate < '1994-06-01').toBe(true);
-		expect(summary.decisionRule).toContain(`KGE′ ≥ 0.30 against its observed record before ${result.header.splitDate}`);
+		expect(summary.decisionRule).toContain(`KGE′ ≥ 0.30 against its observed record before ${dayText(result.header.splitDate)}`);
 		expect(summary.decisionRule).toContain('a low-flow FDC bias within ±200 %');
 		expect(summary.decisionRule).toContain('shown only with at least 30 kept');
 		expect(summary.decisionRule).toContain('seed 1');

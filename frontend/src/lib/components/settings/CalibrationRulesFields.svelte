@@ -43,7 +43,8 @@
 		error = $bindable(null),
 		lastShare = $bindable(),
 		readonly = false,
-		headAction
+		headAction,
+		headNote
 	}: {
 		value: CalibrationRules;
 		error?: string | null;
@@ -52,6 +53,8 @@
 		readonly?: boolean;
 		/** The card's main action, in the head beside the fit count: Run the calibration rules (AutoFitPanel's); not for a viewer. */
 		headAction?: Snippet;
+		/** Why that action can't run now, as a line under it (issue #586, C3); not for a viewer. */
+		headNote?: Snippet;
 	} = $props();
 
 	const uid = $props.id();
@@ -75,7 +78,7 @@
      above the fields, not under ~25 of them; the fields follow in four labelled groups, the search folded into its
      values (ui-playbook.md § 2, "A form's state and actions in its head"). Saving is the page's save bar. -->
 <fieldset class="plain rules" aria-describedby="{uid}-hint" data-testid="calibration-rules">
-	<legend><h3 class="title">Calibration rules <HelpTip key="settings.calibrationRules" label="About the calibration rules" /></h3></legend>
+	<legend><h4 class="title">Calibration rules <HelpTip key="settings.calibrationRules" label="About the calibration rules" /></h4></legend>
 	<p class="hint explain" id="{uid}-hint">
 		Automated calibration makes its choices by these rules, saved before any fit is seen: which water years to leave out, which fits to try and which
 		one to keep. It only runs on the saved rules, and saving a change raises the revision.
@@ -91,6 +94,7 @@
 				{#if headAction && !readonly}<div class="run" data-testid="rules-run">{@render headAction()}</div>{/if}
 				<p class="hint fits" data-testid="rules-fits">{fits} fit{fits === 1 ? '' : 's'}, each with the split-sample and dry → wet tests (at most {RULE_CASES_MAX}).</p>
 			</div>
+			{#if headNote && !readonly}{@render headNote()}{/if}
 		</div>
 		{#if !readonly}
 			<div class="sign" data-testid="rules-sign-off">
@@ -236,7 +240,7 @@
 
 		<!-- Rarely changed: folded into its values, opened in place (a closed <details> keeps its fields in the page,
 		     so Find a setting still reaches them and opens it). -->
-		<Fold name="Search budget per fit:" line={searchSummary({ budget: value.run.budget, starts: value.run.starts, seed: value.run.seed })} body="none" class="group" testid="rules-search" lineTestid="rules-search-summary">
+		<Fold {readonly} name="Search budget per fit:" line={searchSummary({ budget: value.run.budget, starts: value.run.starts, seed: value.run.seed })} body="none" class="group" testid="rules-search" lineTestid="rules-search-summary">
 			<fieldset class="plain">
 				<legend class="visually-hidden">Search budget</legend>
 				<div class="fold-body">
@@ -269,8 +273,10 @@
 	.rules {
 		container: cal-rules / inline-size;
 	}
+	/* A card's heading under Fit the parameters (an h3 on the Calibration page, issue #586 round 3): an h4 at an h3's size. */
 	.title {
 		margin: 0;
+		font-size: 0.95rem;
 	}
 	legend {
 		font-weight: 500;

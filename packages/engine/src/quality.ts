@@ -20,7 +20,7 @@
 //
 // None of these change a model result. They become run warnings and
 // RunSummary.dataQuality, and the Time series tab shows them before a run.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from './calendar';
+import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from './calendar';
 import {
 	defaultDataQualitySettings,
 	LOW_VS_CHIRPS_BASELINES,
@@ -220,7 +220,7 @@ export function agreementWarning(ag: ObservedAgreement | null): string | null {
 	return (
 		`Observed flow records disagree — the ${OBSERVED_FLOW_LABEL[ag.a]} as a share of the ${OBSERVED_FLOW_LABEL[ag.b]} volume ` +
 		`(days both have readings; expected ${Math.round(ag.minRatio * 100)}–${Math.round(ag.maxRatio * 100)} %): ${parts.join('; ')}. ` +
-		`Check which record to calibrate against (Settings → Calibration record → Compare with).`
+		`Check which record to calibrate against (Calibration → Calibration record → Compare with).`
 	);
 }
 
@@ -467,7 +467,7 @@ export function checkSeries(kind: SeriesKind, s: DailySeries, dq: DataQualitySet
 	const name = SERIES_NAME[kind] ?? kind;
 	const unit = unitOf(kind);
 	const eg = (xs: SeriesCheck['examples']) =>
-		xs.map((x) => `${x.date}: ${fmt(x.value)} ${unit}${x.runDays ? ` for ${x.runDays} days` : ''}`).join('; ');
+		xs.map((x) => `${dayText(x.date)}: ${fmt(x.value)} ${unit}${x.runDays ? ` for ${x.runDays} days` : ''}`).join('; ');
 	const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 	// Negative values: impossible for rain and for flow.
@@ -785,14 +785,14 @@ const listed = (parts: string[]) =>
 	parts.length > MAX_LISTED ? `${parts.slice(0, MAX_LISTED).join('; ')}; and ${parts.length - MAX_LISTED} more` : parts.join('; ');
 const FALLBACK_NOTE =
 	'A zero counts as a reading, so on its own it blocks the fallback to CHIRPS (then forecast) rain that a blank day gets. ' +
-	'A run treats these runs as missing, so CHIRPS fills them, unless Settings → Rain gaps → Flagged rain keeps them as recorded; the run says what it filled';
+	'A run treats these runs as missing, so CHIRPS fills them, unless Model settings → Rain gaps → Flagged rain keeps them as recorded; the run says what it filled';
 
 /** A zero run for a warning: its dates, length and what its rule counted. */
 function zeroRunText(r: ZeroRun, z: ZeroRainRuns, byUsual: boolean): string {
 	const chirps = r.chirpsShare != null ? `; CHIRPS read ${pctText(r.chirpsShare)} of its usual rain over it` : r.verdict === null ? '; too little CHIRPS to judge it' : '';
-	if (!z.wetMonths) return `${r.startDate} to ${r.endDate} (${r.days} days${chirps})`;
-	if (byUsual) return `${r.startDate} to ${r.endDate} (${r.days} days, which usually bring about ${Math.round(r.usualMm!)} mm${chirps})`;
-	return `${r.startDate} to ${r.endDate} (${r.days} days, ${r.wetDays} in the wet season, which usually brings about ${Math.round(r.usualMm!)} mm${chirps})`;
+	if (!z.wetMonths) return `${dayText(r.startDate)} to ${dayText(r.endDate)} (${r.days} days${chirps})`;
+	if (byUsual) return `${dayText(r.startDate)} to ${dayText(r.endDate)} (${r.days} days, which usually bring about ${Math.round(r.usualMm!)} mm${chirps})`;
+	return `${dayText(r.startDate)} to ${dayText(r.endDate)} (${r.days} days, ${r.wetDays} in the wet season, which usually brings about ${Math.round(r.usualMm!)} mm${chirps})`;
 }
 
 /**
@@ -823,7 +823,7 @@ export function zeroRainCheck(z: ZeroRainRuns): SeriesCheck | null {
 	const head = z.runs.length
 		? `Rainfall (catchment): ${runsWord(z.runs.length)} of zero rain covering ${rule}: ${listed(parts)}.${chirpsNote}${dryNote} ` +
 			`Real dry spells, or missing data? ${FALLBACK_NOTE}`
-		: `Rainfall (catchment): no zero-rain run is flagged.${dryNote} A run keeps ${dry.length === 1 ? 'it' : 'them'} as recorded (Settings → Data quality turns the CHIRPS check off)`;
+		: `Rainfall (catchment): no zero-rain run is flagged.${dryNote} A run keeps ${dry.length === 1 ? 'it' : 'them'} as recorded (Model settings → Data quality turns the CHIRPS check off)`;
 	return {
 		seriesKind: 'rain_catchment_mm',
 		check: 'zerorun',

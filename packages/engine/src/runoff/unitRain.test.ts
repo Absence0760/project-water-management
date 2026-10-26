@@ -181,7 +181,7 @@ describe('the forcing rule (§2.4h)', () => {
 		expect(unitOf(nine, 'C').chirps).toMatchObject({ source: 'map', inPeriod: false });
 		expect((unitOf(nine, 'C').chirps as { years: number[] }).years).toHaveLength(16);
 		expect(nine.summary.warnings).toContain(
-			'unit rain: "Unit C": its CHIRPS has fewer than 10 complete calendar years in the MAP period 2006-01-01 to 2014-12-31, so its MAP factor averages every complete year of the record (16, 2005–2020)'
+			'unit rain: "Unit C": its CHIRPS has fewer than 10 complete calendar years in the MAP period 1 Jan 2006 to 31 Dec 2014, so its MAP factor averages every complete year of the record (16, 2005–2020)'
 		);
 	});
 
@@ -357,7 +357,7 @@ describe('the forcing rule (§2.4h)', () => {
 		const seriesChoice = { unitChirps: { C: { name: 'C short', others: [{ name: 'C long', firstDay: START, lastDay: fromEpochDay(toEpochDay(START) + DAYS - 1) }] } } };
 		const told = runModel({ ...x, seriesChoice });
 		const unitWarned = (o: ReturnType<typeof runModel>) => o.summary.warnings.filter((w) => w.startsWith('for the unit'));
-		expect(unitWarned(told)).toEqual([expect.stringMatching(/^for the unit “Unit C”, the run read the CHIRPS series “C short” \(2020-12-02 to 2020-12-31\), which spans 30 of its 2192 days, but “C long” \(2015-01-01 to 2020-12-31\) spans 2192:/)]);
+		expect(unitWarned(told)).toEqual([expect.stringMatching(/^for the unit “Unit C”, the run read the CHIRPS series “C short” \(2 Dec 2020 to 31 Dec 2020\), which spans 30 of its 2192 days, but “C long” \(1 Jan 2015 to 31 Dec 2020\) spans 2192:/)]);
 		const plain = runModel(x);
 		const strip = (o: ReturnType<typeof runModel>) => ({ ...o, summary: { ...o.summary, warnings: o.summary.warnings.filter((w) => !w.startsWith('for the unit')) } });
 		expect(sameOutput(strip(plain), strip(told))).toBe(true);
@@ -458,7 +458,7 @@ describe('GR4J per unit', () => {
 		x.settings.calibration = { rainThresholdMm: 0, catchmentAreaKm2: 40 };
 		const o = runModel(x);
 		expect(o.summary.runoff!.areaKm2).toBe(20.5);
-		expect(o.summary.warnings.some((w) => /runs on the units' areas \(20\.5 km²\), not the catchment area set in Settings \(40 km²\)/.test(w))).toBe(true);
+		expect(o.summary.warnings.some((w) => /runs on the units' areas \(20\.5 km²\), not the catchment area set in Calibration → Flow calibration \(40 km²\)/.test(w))).toBe(true);
 	});
 
 	it('resumes from a snapshot to the bit, each unit from its own state', () => {
@@ -534,7 +534,7 @@ describe('fit provenance and run comparison', () => {
 		const a = catchment('absent');
 		const b = everyRule();
 		const changes = diffInputs({ settings: a.settings, model: a.model, series: {} } as never, { settings: b.settings, model: b.model, series: {} } as never).map((c) => c.text);
-		expect(changes, changes.join('\n')).toContain('Runoff from each unit’s own rain: off → on (gauge MAP 500 mm (invented gauge MAP); MAP period 1991-01-01 to 2020-12-31)');
+		expect(changes, changes.join('\n')).toContain('Runoff from each unit’s own rain: off → on (gauge MAP 500 mm (invented gauge MAP); MAP period 1 Jan 1991 to 31 Dec 2020)');
 		expect(changes).toContain('Unit B: MAP none → 700 mm');
 	});
 });

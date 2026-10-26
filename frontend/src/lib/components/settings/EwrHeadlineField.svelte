@@ -1,5 +1,6 @@
 <!--
-	Settings → Judge results by (issue #444): which EWR test the results are
+	Model settings → EWR the results are judged by (issue #444; "Judge results
+	by" until issue #586 E14, plainer now): which EWR test the results are
 	judged by, the first thing on the page. Bind `value` (settings.ewrHeadline).
 	Changes no result: it decides which test the EWR page's headline tile (the
 	Summary's card until issue #558), the run sentence, the printable report and
@@ -11,6 +12,7 @@
 	import type { EwrChargeSource, EwrDailySource, EwrRuleTable, NetworkNode } from '@water-management/engine';
 	import type { EwrHeadline } from '#lib/api/types.js';
 	import { headlineKey, headlineOfKey, headlineOptions, headlineProblem, headlineTest, ruleTableSites } from '#lib/components/ewr/headline.js';
+	import { JUDGE_HEADING } from './sections';
 
 	let {
 		value = $bindable(),
@@ -46,14 +48,19 @@
 
 <section class="panel judge" id="set-judge" aria-labelledby="judge-h">
 	{#if nothing}
-		<h2 id="judge-h">Judge results by</h2>
-		<p class="hint muted" data-testid="judge-nothing">
-			Results are judged by the pragmatic EWR at the outflow gauge. Add a Reserve rule table under <a href="#set-reserve">Reserve rules</a> to
+		<!-- In a .panel-head like every other panel's, so the line under it keeps the same gap (it ran into the
+		     heading at 1440, issue #586 R4-B). -->
+		<div class="panel-head">
+			<h2 id="judge-h">{JUDGE_HEADING}</h2>
+		</div>
+		<!-- The panel's one line, at the summary line's size like the other panels' (issue #586, C16); the link named as the heading it goes to. -->
+		<p class="summary" data-testid="judge-nothing">
+			Results are judged by the pragmatic EWR at the outflow gauge. Add a Reserve rule table under <a href="#set-reserve">Reserve rule tables</a> to
 			choose another test here.
 		</p>
 	{:else}
 		<div class="row">
-			<h2 id="judge-h"><label for="judge-pick">Judge results by</label></h2>
+			<h2 id="judge-h"><label for="judge-pick">{JUDGE_HEADING}</label></h2>
 			<select id="judge-pick" disabled={readonly} value={headlineKey(value)} onchange={(e) => (value = headlineOfKey(e.currentTarget.value))} aria-describedby={describedBy}>
 				{#each options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
 			</select>
@@ -61,12 +68,12 @@
 		<p class="hint muted explain" id="judge-hint">
 			Which EWR the headline on the EWR page, the run sentence and the printable report are judged by. It changes no result: save it and no
 			re-run is needed. The pragmatic EWR and the Reserve rule tables are set under <a href="#set-ewr">EWR</a> and
-			<a href="#set-reserve">Reserve rules</a>.
+			<a href="#set-reserve">Reserve rule tables</a>.
 		</p>
 		{#if problem}<p class="alert alert-warning small" role="status" id="judge-problem" data-testid="judge-problem">{problem}</p>{/if}
 		{#if differs}
 			<p class="hint muted" id="judge-charge" data-testid="judge-charge-note">
-				The daily EWR charge and curtailment follow {chargeSource === 'ruleTable' ? 'the rule tables' : 'the pragmatic EWR'} (Reserve rules → EWR charge follows), a different test.
+				The daily EWR charge and curtailment follow {chargeSource === 'ruleTable' ? 'the rule tables' : 'the pragmatic EWR'} (Reserve rule tables → EWR charge follows), a different test.
 			</p>
 		{/if}
 	{/if}

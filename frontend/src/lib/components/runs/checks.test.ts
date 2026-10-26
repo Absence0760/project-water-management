@@ -1,15 +1,16 @@
 import { FARM_COLUMNS, type RunVerification, type WaterBalanceRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunCatchmentDay, RunDay } from '#lib/api/index.js';
-import { BALANCE_COLUMNS, balanceClosure, balanceColumns, balanceEquation, balanceTableRows, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
+import { fmtNum } from '#lib/format/number.js';
+import { BALANCE_COLUMNS, balanceClosure, balanceColumns, balanceEquation, balanceTableRows, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, fmtBalance, residualIsNoise, traceRows, waterYearLabel } from './checks';
 
 const check = (passed: boolean) => ({ id: 'balance' as const, label: 'x', passed, detail: passed ? null : 'broken' });
 
 describe('checksHeadline', () => {
 	it('says all passed, how many failed, or that the run predates the checks', () => {
 		const v = (p: boolean[]): RunVerification => ({ passed: p.every(Boolean), checks: p.map(check), maxResidual: null });
-		expect(checksHeadline(v([true, true, true]))).toEqual({ tone: 'ok', text: 'All 3 self-checks passed.' });
-		expect(checksHeadline(v([true, false, false]))).toMatchObject({ tone: 'bad', text: expect.stringMatching(/^2 of 3 self-checks failed/) });
+		expect(checksHeadline(v([true, true, true]))).toEqual({ tone: 'ok', text: 'All 3 arithmetic checks passed.' });
+		expect(checksHeadline(v([true, false, false]))).toMatchObject({ tone: 'bad', text: expect.stringMatching(/^2 of 3 arithmetic checks failed/) });
 		expect(checksHeadline(undefined)).toMatchObject({ tone: 'none', text: expect.stringMatching(/before .*engine 0\.12\.0/) });
 	});
 });
@@ -115,6 +116,17 @@ describe('water balance table', () => {
 			'Start storage + hydrological unit runoff + transfers + base-flow gain + rain on dams = consumptive use + dam evaporation + base-flow loss + outflow + end storage'
 		);
 		expect(balanceColumns([row()]).some((c) => c.key.startsWith('baseflow'))).toBe(false);
+	});
+});
+
+describe('fmtBalance', () => {
+	it('writes float noise as "< 0.001", not an exponent, and the rest to 3 decimals (#586 D10)', () => {
+		expect(fmtBalance(-7.45e-9)).toBe('< 0.001');
+		expect(fmtBalance(2.33e-10)).toBe('< 0.001');
+		expect(fmtBalance(0)).toBe('0');
+		expect(fmtBalance(-1.23456)).toBe('\u22121.235');
+		expect(fmtBalance(12345.6)).toBe(fmtNum(12345.6, 3, true));
+		expect(fmtBalance(null)).toBe('–');
 	});
 });
 

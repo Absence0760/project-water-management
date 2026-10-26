@@ -44,7 +44,7 @@ test('three tiles, a card per hydrological unit worst supplied first in the Summ
 	await expect(supplyTile(page, 'supplied')).toContainText(/Irrigation supplied\s*[\d.]+%\s*of demand/);
 	await expect(supplyTile(page, 'supplied')).toContainText(/0 pp\s*no change vs previous run/);
 	await expect(supplyTile(page, 'supplied').getByTestId('supply-below')).toHaveText(/^(\d of 4 hydrological units below 95%|all hydrological units ≥ 95%)$/);
-	await expect(supplyTile(page, 'week')).toContainText('2022-01-22 to 2022-01-28');
+	await expect(supplyTile(page, 'week')).toContainText('22 Jan 2022 to 28 Jan 2022');
 	await expect(supplyTile(page, 'week').getByRole('link', { name: 'Short in the week to 28 Jan 2022' })).toHaveAttribute('href', `?tab=supply&run=${run}&window=last7#res-curtailment`);
 	await expect(supplyTile(page, 'shortfall')).toContainText(/Total shortfall\s*[\d.]+\s*Mm³\/a/);
 
@@ -87,7 +87,7 @@ test('three tiles, a card per hydrological unit worst supplied first in the Summ
 	await expect(results.getByRole('rowheader', { name: 'All hydrological units' })).toBeVisible();
 	await expect(results.getByRole('rowheader', { name: /^Upper farm/ })).toBeVisible();
 	await expect(results.getByTestId('farms-period')).toHaveText(
-		'Daily averages over the whole record, 2021-10-01 to 2022-01-28 (120 days); the curtailment targets cover the reporting window.'
+		'Daily averages over the whole record, 1 Oct 2021 to 28 Jan 2022 (120 days); the curtailment targets cover the reporting window.'
 	);
 	await expect(page.locator('#res-curtailment').getByRole('heading', { name: 'Curtailment targets' })).toBeVisible();
 	await expect(page.locator('#res-curtailment').getByLabel('Reporting window')).toHaveValue('project');
@@ -342,6 +342,25 @@ test('the run follows run= and the header picker; Runs & results links here for 
 	await page.goto(`/projects/${project.id}?tab=supply&run=00000000-0000-4000-8000-000000000000`);
 	await expect(page.getByRole('note').filter({ hasText: 'That run no longer exists, so this shows the newest run.' })).toBeVisible();
 	await expect(page.getByTestId('supply-summary')).toContainText('run “Latest”');
+});
+
+test('a fresh load of a link to a table lands on it with the focus on its heading (WCAG 2.4.3, issue #586 R4-F)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedSupplyProject(page.request, 'Supply fresh link');
+	const run = await createRun(page.request, project.id, 'Baseline');
+	// A later run too, so the link's run= isn't the one the page would show by itself.
+	await createRun(page.request, project.id, 'Second');
+	await pinClockToProject(page, project.id, 'lastRunAt'); // "today" on the run's own day (support/clock.ts)
+	// #res-assurance left the focus on the page's body; #res-curtailment didn't.
+	for (const anchor of ['res-assurance', 'res-curtailment', 'res-farms']) {
+		await page.goto(`/projects/${project.id}?tab=overview`);
+		await page.goto(`/projects/${project.id}?tab=supply&run=${run}#${anchor}`);
+		const heading = page.locator(`#${anchor}`).getByRole('heading').first();
+		await expect(heading).toBeFocused();
+		await expect(heading).toBeInViewport();
+	}
+	// The run picker says when each run was made as Calibration's does, not year first (issue #586 R4-F).
+	await expect(page.getByRole('combobox', { name: 'Run shown' }).locator(`option[value="${run}"]`)).toHaveText(/^Baseline · today \d{2}:\d{2} · \d{4}(–\d{4})?$/);
 });
 
 test('empty states: no run yet (owner and viewer), and no hydrological units in the model', async ({ page, owner, signIn }) => {

@@ -13,6 +13,7 @@
 	import { DEMAND_NORMS, DEMAND_PCT_FLOOR_M3_DAY, EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary } from '@water-management/engine';
 	import { shareThePain, type StageCell } from './shareThePain';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtDay } from '#lib/format/number.js';
 
 	let {
 		curtailment,
@@ -75,7 +76,7 @@
 	<div class="table-wrap">
 		<table class="data">
 			<caption class="visually-hidden">
-				Share the pain, {period ? `${period}, ` : ''}{curtailment.reportStart} to {curtailment.reportEnd}: each group's supply as a share of
+				Share the pain, {period ? `${period}, ` : ''}{fmtDay(curtailment.reportStart)} to {fmtDay(curtailment.reportEnd)}: each group's supply as a share of
 				its demand today and once the EWR is met.
 			</caption>
 			<thead>

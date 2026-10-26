@@ -3,7 +3,7 @@ import { createProject, putSeries } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { anySaveBar, openFold, saveChanges, saveSettings, settingsBar } from '../support/settings.ts';
+import { anySaveBar, openCalibration, openFold, saveChanges, saveSettings, settingsBar } from '../support/settings.ts';
 
 test('monthly A-pan and EWR values are saved and survive a reload', async ({ page, owner }) => {
 	void owner;
@@ -141,6 +141,7 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 
 	const menu = page.getByRole('navigation', { name: 'Settings sections' });
 	await expect(menu.getByRole('link')).toHaveText([
+		'EWR the results are judged by',
 		'Simulation period',
 		'Rain gaps',
 		'Data quality',
@@ -148,21 +149,15 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 		'Drought restrictions',
 		'Reporting',
 		'Flow generation',
-		'Flow calibration',
-		'Calibration record',
-		'Fit the parameters',
-		'WR2012 check',
 		'EWR',
 		'Reserve rule tables',
 		'Outcome matrix',
 		'Seasonal outlook',
 		'Evidence',
-		'Automatic runs',
-		'Data feeds',
-		'API keys',
-		'Scheduled reports'
+		'Automatic runs'
 	]);
-	await expect(menu.getByRole('link', { name: 'Simulation period' })).toHaveAttribute('aria-current', 'location');
+	// The page's first panel is the one being read at the top (issue #586 R4-B: it has a link now).
+	await expect(menu.getByRole('link', { name: 'EWR the results are judged by' })).toHaveAttribute('aria-current', 'location');
 
 	await menu.getByRole('link', { name: 'EWR', exact: true }).click();
 	await expect(page).toHaveURL(/#set-ewr$/);
@@ -170,7 +165,7 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 	await expect(ewr).toBeInViewport();
 	await expect(menu).toBeInViewport();
 	await expect(menu.getByRole('link', { name: 'EWR', exact: true })).toHaveAttribute('aria-current', 'location');
-	await expect(menu.getByRole('link', { name: 'Simulation period' })).not.toHaveAttribute('aria-current', 'location');
+	await expect(menu.getByRole('link', { name: 'EWR the results are judged by' })).not.toHaveAttribute('aria-current', 'location');
 	// The index sits beside the panels, never over them.
 	const menuBox = (await menu.boundingBox())!;
 	const headBox = (await ewr.boundingBox())!;
@@ -223,11 +218,12 @@ test('flow calibration is split into its own groups, and a bad exclusion points 
 	const project = await createProject(page.request, 'Settings groups');
 	await page.goto(`/projects/${project.id}?tab=settings`);
 
-	// Each part of calibration is its own panel with its own heading.
+	// Each part of calibration is its own panel with its own heading: Rain gaps on Model settings, the rest on Calibration.
 	const rain = page.getByRole('region', { name: 'Rain gaps', exact: true });
 	await openFold(rain, 'rain-defaults');
 	await expect(rain.getByLabel('CHIRPS bias correction', { exact: true })).toBeVisible();
 	await expect(rain.getByLabel('Flagged zero runs', { exact: true })).toBeVisible();
+	await openCalibration(page, project.id);
 	const record = page.getByRole('region', { name: 'Calibration record' });
 	await expect(record.getByRole('group', { name: /^Calibration exclusions/ })).toBeVisible();
 	await expect(page.getByRole('region', { name: /^Fit automatically/ })).toBeVisible();

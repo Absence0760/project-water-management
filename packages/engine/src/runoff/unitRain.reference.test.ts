@@ -231,7 +231,7 @@ describe('every unit’s CHIRPS takes the reference factors, then k_unit: the re
 			for (let i = 0; i < DAYS; i++) expect(rain[i], `${id} day ${i}`).toBe(ch[i]! * factors[monthOf(i) - 1]! * k.factor);
 		}
 		expect(out.summary.warnings).toContain(
-			'unit rain: "Unit B": its CHIRPS has fewer than 10 complete calendar years in the MAP period 1991-01-01 to 2020-12-31, so its k_unit averages every complete year of the record (6, 2015–2020, still fewer than 10)'
+			'unit rain: "Unit B": its CHIRPS has fewer than 10 complete calendar years in the MAP period 1 Jan 1991 to 31 Dec 2020, so its k_unit averages every complete year of the record (6, 2015–2020, still fewer than 10)'
 		);
 	});
 
@@ -320,7 +320,7 @@ describe('every unit’s CHIRPS takes the reference factors, then k_unit: the re
 		const nine = at('2006-01-01', '2014-12-31');
 		expect(refLevel(nine, 'B').kUnit).toMatchObject({ inPeriod: false });
 		expect(refLevel(nine, 'B').kUnit!.years).toHaveLength(16);
-		expect(nine.summary.warnings.some((w) => /"Unit B": its CHIRPS has fewer than 10 complete calendar years in the MAP period 2006-01-01 to 2014-12-31, so its k_unit averages every complete year of the record \(16, 2005–2020\)$/.test(w))).toBe(true);
+		expect(nine.summary.warnings.some((w) => /"Unit B": its CHIRPS has fewer than 10 complete calendar years in the MAP period 1 Jan 2006 to 31 Dec 2014, so its k_unit averages every complete year of the record \(16, 2005–2020\)$/.test(w))).toBe(true);
 	});
 
 	it('rule 2’s gaps on a unit with the factors but no k_unit keep its MAP ratio: no step where a gap starts or ends', () => {
@@ -437,7 +437,7 @@ describe('the setting', () => {
 		const b = withReference({ gauge: 'rain_catchment_mm', unitId: 'B' });
 		const changes = diffInputs({ settings: a.settings, model: a.model, series: {} } as never, { settings: b.settings, model: b.model, series: {} } as never).map((c) => c.text);
 		expect(changes).toEqual([
-			'Runoff from each unit’s own rain: on (no gauge MAP; MAP period 1991-01-01 to 2020-12-31; reference gauge rain_catchment_mm at the unit C) → on (no gauge MAP; MAP period 1991-01-01 to 2020-12-31; reference gauge rain_catchment_mm at the unit B)'
+			'Runoff from each unit’s own rain: on (no gauge MAP; MAP period 1 Jan 1991 to 31 Dec 2020; reference gauge rain_catchment_mm at the unit C) → on (no gauge MAP; MAP period 1 Jan 1991 to 31 Dec 2020; reference gauge rain_catchment_mm at the unit B)'
 		]);
 	});
 

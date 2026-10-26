@@ -338,7 +338,7 @@ test('nine dams: the proposals sit in the picked dam’s chart panel, folded, be
 	// the window, sticks by its foot, so its last line is in view without scrolling inside anything.
 	const far = cards(page).nth(7);
 	const farName = (await far.locator('a.name').innerText()).trim();
-	await far.getByRole('link', { name: `${farName}: proposed from the register and the map` }).click();
+	await far.getByRole('link', { name: `${farName}: proposals from the register and the map` }).click();
 	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${farName}`);
 	await expect(proposals.locator('details.fold')).toHaveAttribute('open', '');
 	await expect(proposals.getByLabel('Dam of')).toBeFocused();

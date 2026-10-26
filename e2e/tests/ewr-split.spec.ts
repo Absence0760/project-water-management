@@ -1,5 +1,5 @@
 // Settings → Flow generation → Split the EWR between units by (settings.ewrSplit, issue #553 round 4;
-// docs/ui.md § Settings & calibration, docs/model.md §2.5b). On the sample model (synthetic):
+// docs/ui.md § Model settings, docs/model.md §2.5b). On the sample model (synthetic):
 // the flow share by default; the state line says the choice only matters under Per unit, and
 // follows the method; choosing each unit's natural MAR saves, joins the panel's summary
 // and changes the Flow share line, and a reload keeps it.
@@ -21,7 +21,7 @@ test('the EWR split: the flow share by default, each unit’s natural MAR when c
 	await expect(state).toHaveText('Fragmentation: GR4J runs once on the catchment rain, so both give the flow share. The choice matters only under Per unit.');
 
 	// Per unit (unsaved is enough: the line reads the form).
-	await share.getByRole('group', { name: /^Method/ }).getByRole('radio', { name: 'Per unit' }).check();
+	await share.getByRole('group', { name: /^How natural flow is made/ }).getByRole('radio', { name: 'Per unit' }).check();
 	await expect(field).toHaveAttribute('data-unit-rain', 'on');
 	await expect(state).toHaveText('Per unit: the flow share splits the EWR, though each unit makes its own runoff.');
 	await select.selectOption('naturalMar');

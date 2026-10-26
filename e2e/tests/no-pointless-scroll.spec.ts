@@ -11,7 +11,7 @@ import { rulesCard } from '../support/transfers.ts';
 const GUTTER = 14;
 
 const TABS = [
-	'overview', 'network', 'map', 'crops', 'transfers', 'series', 'settings', 'runs', 'river',
+	'overview', 'network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration', 'runs', 'river',
 	'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'applications', 'history'
 ];
 
@@ -92,9 +92,9 @@ test('with unsaved model edits the save bar never covers the last row, on a shor
 	}).toBeLessThanOrEqual(0);
 	await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeLessThanOrEqual(0);
 
-	// Settings is long: scrolled to the end, its content ends above the bar (the page's room below is the bar's height).
-	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Settings & calibration', exact: true }).click();
-	await expect(page.getByRole('heading', { level: 1, name: 'Settings & calibration' })).toBeVisible();
+	// Model settings is long: scrolled to the end, its content ends above the bar (the page's room below is the bar's height).
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Model settings', exact: true }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Model settings' })).toBeVisible();
 	await expect(bar).toBeVisible();
 	await expect
 		.poll(async () => {

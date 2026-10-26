@@ -16,7 +16,7 @@ test('a low-flow period needs a reason and a source, leaves its high readings ou
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Low flows only');
 	const before = await createRun(page.request, project.id, 'Before');
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const group = page.getByRole('group', { name: /^Low flows only/ });
 	await expect(group.getByText('None: every reading in the calibration window is scored at any flow.')).toBeVisible();
@@ -47,7 +47,7 @@ test('a low-flow period needs a reason and a source, leaves its high readings ou
 
 	// The synthetic record peaks at 0.35 m³/s every 9th day: 11 of those peaks fall in Oct–Dec 2021.
 	const after = await createRun(page.request, project.id, 'After');
-	await page.goto(`/projects/${project.id}?tab=runs&run=${after}`);
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${after}`);
 	const hydro = page.locator('#res-hydrograph figure').first();
 	await expect(hydro).toHaveAttribute('data-ready', 'true');
 	await expect(hydro).toHaveAttribute('data-lanes', '1');
@@ -56,7 +56,7 @@ test('a low-flow period needs a reason and a source, leaves its high readings ou
 	await expect(hydro.locator('.lane-key li[data-doubled]')).toHaveCount(0);
 
 	await page.goto(`/compare?a=${project.id}:${before}&b=${project.id}:${after}`);
-	await expect(whatChanged(page).getByText('Low flows only: added gauge record 2021-10-01 – 2021-12-31 at or below 0.3 m³/s')).toBeVisible();
+	await expect(whatChanged(page).getByText('Low flows only: added gauge record 1 Oct 2021 – 31 Dec 2021 at or below 0.3 m³/s')).toBeVisible();
 });
 
 const PERIOD = { kind: 'flow_observed_m3s', start: '2021-10-01', end: '2021-12-31', maxM3s: 0.3, reason: 'Logger over-reads floods', source: 'Client site visit' };
@@ -67,7 +67,7 @@ test('a viewer reads the low-flow periods but can’t add, change or remove one'
 	await updateSettings(page.request, project.id, { qualityFlags: { lowFlowPeriods: [PERIOD] } });
 	const viewer = await signIn('Low flows viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
-	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
+	await viewer.page.goto(`/projects/${project.id}?tab=calibration`);
 
 	const group = viewer.page.getByRole('group', { name: /^Low flows only/ });
 	await expect(group.getByTestId('low-flow-period')).toHaveCount(1);
@@ -86,7 +86,7 @@ test('a viewer reads the low-flow periods but can’t add, change or remove one'
 	await expectNoViolations(viewer.page, { include: '[data-testid="low-flow-periods"]' });
 });
 
-test('scored at a gauge inside the network, Settings says the low-flow periods are not used there', async ({ page, owner }) => {
+test('scored at a gauge inside the network, Calibration says the low-flow periods are not used there', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Low flows at a weir');
 	const outlet = node('Outflow gauge', 'gauge', null, 1, { pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
@@ -101,7 +101,7 @@ test('scored at a gauge inside the network, Settings says the low-flow periods a
 	expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${rec.id}`, { data: { siteNodeId: weir.id } })).status()).toBe(200);
 	await updateSettings(page.request, project.id, { calibrationSiteNodeId: weir.id, qualityFlags: { lowFlowPeriods: [PERIOD] } });
 
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.getByLabel('Scored at')).toHaveValue(weir.id);
 	const group = page.getByRole('group', { name: /^Low flows only/ });
 	await expect(group.getByTestId('low-flow-period')).toHaveCount(1);

@@ -75,7 +75,7 @@ test.describe('the seeded Sandspruit', () => {
 		// The Key (the side column's tab beside the map) holds the measure, the run and the legend.
 		await openKey(page);
 		await expect(results(page).getByLabel('Colour areas by')).toHaveValue('daysShort');
-		await expect(page.getByTestId('map-run-caption')).toHaveText(/^From the published run “.+”, ran \d{4}-\d\d-\d\d\.$/);
+		await expect(page.getByTestId('map-run-caption')).toHaveText(/^From the published run “.+”, ran \d{1,2} [A-Z][a-z]{2} \d{4}\.$/);
 		// The legend names the measure and each band in words, with how many units are in it.
 		await expect(legend(page).getByText('Days short', { exact: true })).toBeVisible();
 		const items = legend(page).locator('.legend-item');

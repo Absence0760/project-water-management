@@ -61,7 +61,7 @@ describe('a day edited by hand', () => {
 		const { u, p, sid } = await setup('HandBad');
 		const outside = await setDay(u, p, sid, '2021-10-05', { value: 1 });
 		expect(outside.status).toBe(400);
-		expect(outside.body.error).toContain('2021-10-01 to 2021-10-04');
+		expect(outside.body.error).toContain('1 Oct 2021 to 4 Oct 2021');
 		expect((await setDay(u, p, sid, '2021-09-30', { value: 1 })).status).toBe(400);
 		expect((await setDay(u, p, sid, '2021-02-30', { value: 1 })).status).toBe(400);
 		expect((await setDay(u, p, sid, '02-10-2021', { value: 1 })).status).toBe(400);
