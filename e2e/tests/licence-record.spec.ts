@@ -22,7 +22,7 @@ test('an owner records the licence outcome, and the panel says how long the reco
 	// A nominated run starts the five-yearly review.
 	await nominateRun(page.request, project.id, run, 'Evidence for the licence record test');
 	await page.reload();
-	await expect(panel.getByTestId('licence-record-status')).toHaveText(/^No outcome is recorded\. Next review: \d{4}-\d{2}-\d{2}\.$/);
+	await expect(panel.getByTestId('licence-record-status')).toHaveText(/^No outcome is recorded\. Next review: \d{1,2} [A-Z][a-z]{2} \d{4}\.$/);
 
 	// The owner records a refusal, in the authority's words (233): kept until three years after the decision.
 	const form = panel.getByRole('form', { name: 'Record the licence outcome' });
@@ -32,7 +32,7 @@ test('an owner records the licence outcome, and the panel says how long the reco
 	await form.getByLabel('Why').fill('Invented decision letter 1');
 	await form.getByRole('button', { name: 'Save the outcome' }).click();
 	await expect(panel.getByRole('status')).toHaveText('Saved.');
-	await expect(panel.getByTestId('licence-record-status')).toHaveText('Licence refused on 2026-03-01. The record is kept until 2029-03-01.');
+	await expect(panel.getByTestId('licence-record-status')).toHaveText('Licence refused on 1 Mar 2026. The record is kept until 1 Mar 2029.');
 	await expect(panel).toContainText('Recorded because: Invented decision letter 1');
 	await expectNoViolations(page);
 
@@ -49,7 +49,7 @@ test('an owner records the licence outcome, and the panel says how long the reco
 	const editor = await signIn('Licence record editor');
 	await addMember(page.request, project.id, editor.user.email, 'editor');
 	await editor.page.goto(`/projects/${project.id}?tab=project`);
-	await expect(editor.page.getByTestId('licence-record-status')).toHaveText('Licence refused on 2026-03-01. The record is kept until 2029-03-01.');
+	await expect(editor.page.getByTestId('licence-record-status')).toHaveText('Licence refused on 1 Mar 2026. The record is kept until 1 Mar 2029.');
 	await expect(editor.page.getByRole('form', { name: 'Record the licence outcome' })).toHaveCount(0);
 	const viewer = await signIn('Licence record viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');

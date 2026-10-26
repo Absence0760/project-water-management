@@ -64,7 +64,7 @@ test('a unit’s detail and its dam on the Dams page carry the unit’s reliabil
 	// Hydrological units → the picked unit: its reliability in one line, then a strip of twelve months.
 	await page.goto(`/projects/${project.id}?tab=supply&unit=${upper.id}`);
 	const unit = page.locator('#res-farm').getByRole('region', { name: 'Assurance of supply: Upper farm' });
-	await expect(unit.getByTestId('node-reliability')).toHaveText(/^[\d.]+% of demand days fully met · [\d.]+% of the demand volume supplied \(2021-10-01 to 2022-01-28\)$/);
+	await expect(unit.getByTestId('node-reliability')).toHaveText(/^[\d.]+% of demand days fully met · [\d.]+% of the demand volume supplied \(1 Oct 2021 to 28 Jan 2022\)$/);
 	const strip = unit.getByTestId('node-stress-strip');
 	const cells = strip.getByRole('listitem');
 	await expect(cells).toHaveCount(12);

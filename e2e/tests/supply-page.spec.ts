@@ -44,7 +44,7 @@ test('three tiles, a card per hydrological unit worst supplied first in the Summ
 	await expect(supplyTile(page, 'supplied')).toContainText(/Irrigation supplied\s*[\d.]+%\s*of demand/);
 	await expect(supplyTile(page, 'supplied')).toContainText(/0 pp\s*no change vs previous run/);
 	await expect(supplyTile(page, 'supplied').getByTestId('supply-below')).toHaveText(/^(\d of 4 hydrological units below 95%|all hydrological units ≥ 95%)$/);
-	await expect(supplyTile(page, 'week')).toContainText('2022-01-22 to 2022-01-28');
+	await expect(supplyTile(page, 'week')).toContainText('22 Jan 2022 to 28 Jan 2022');
 	await expect(supplyTile(page, 'week').getByRole('link', { name: 'Short in the week to 28 Jan 2022' })).toHaveAttribute('href', `?tab=supply&run=${run}&window=last7#res-curtailment`);
 	await expect(supplyTile(page, 'shortfall')).toContainText(/Total shortfall\s*[\d.]+\s*Mm³\/a/);
 
@@ -87,7 +87,7 @@ test('three tiles, a card per hydrological unit worst supplied first in the Summ
 	await expect(results.getByRole('rowheader', { name: 'All hydrological units' })).toBeVisible();
 	await expect(results.getByRole('rowheader', { name: /^Upper farm/ })).toBeVisible();
 	await expect(results.getByTestId('farms-period')).toHaveText(
-		'Daily averages over the whole record, 2021-10-01 to 2022-01-28 (120 days); the curtailment targets cover the reporting window.'
+		'Daily averages over the whole record, 1 Oct 2021 to 28 Jan 2022 (120 days); the curtailment targets cover the reporting window.'
 	);
 	await expect(page.locator('#res-curtailment').getByRole('heading', { name: 'Curtailment targets' })).toBeVisible();
 	await expect(page.locator('#res-curtailment').getByLabel('Reporting window')).toHaveValue('project');

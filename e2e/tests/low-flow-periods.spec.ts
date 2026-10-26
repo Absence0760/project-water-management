@@ -56,7 +56,7 @@ test('a low-flow period needs a reason and a source, leaves its high readings ou
 	await expect(hydro.locator('.lane-key li[data-doubled]')).toHaveCount(0);
 
 	await page.goto(`/compare?a=${project.id}:${before}&b=${project.id}:${after}`);
-	await expect(whatChanged(page).getByText('Low flows only: added gauge record 2021-10-01 – 2021-12-31 at or below 0.3 m³/s')).toBeVisible();
+	await expect(whatChanged(page).getByText('Low flows only: added gauge record 1 Oct 2021 – 31 Dec 2021 at or below 0.3 m³/s')).toBeVisible();
 });
 
 const PERIOD = { kind: 'flow_observed_m3s', start: '2021-10-01', end: '2021-12-31', maxM3s: 0.3, reason: 'Logger over-reads floods', source: 'Client site visit' };

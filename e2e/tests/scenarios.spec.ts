@@ -144,7 +144,7 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	await overlay.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await overlay.getByLabel('Series').selectOption('dam_storage');
 	// The bigger dam stores more: B is above A on some day and never below it.
-	await expect(overlay.getByTestId('overlay-summary')).toHaveText(/B is higher on [1-9]\d* days? and lower on 0 days; the largest change is \+[\d.\u202f]+ m³ on \d{4}-\d\d-\d\d\.$/);
+	await expect(overlay.getByTestId('overlay-summary')).toHaveText(/B is higher on [1-9]\d* days? and lower on 0 days; the largest change is \+[\d.\u202f]+ m³ on \d{1,2} [A-Z][a-z]{2} \d{4}\.$/);
 
 	// The list and the Runs tab know the run came from the scenario, and the base is kept.
 	await expect(page.getByRole('button', { name: new RegExp(`^${NAME.replace('+', '\\+')}`) })).toContainText(/1 change · on Baseline · run /);
