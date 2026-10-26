@@ -7585,7 +7585,9 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
 - **Calibration record** (`#set-record`). **Layout (issue #521):** the
   window's From and To, *Scored at* and *Compare with* on one row, then the
   exclusions with **Exclude a water year** / **Exclude a date range** in the
-  list's header row (`common/PeriodList.svelte`), then **Quality flags:**, a
+  list's header row (`common/PeriodList.svelte`; an excluded water year's
+  hint gives its days day first, "WY 2021/22: 1 Oct 2021 – 30 Sep 2022",
+  issue #586 R4-K, as on Low flows only and Zero rain), then **Quality flags:**, a
   `common/Fold.svelte` with `atDefaults` line of their values ("gauged range not known
   · above-range days censored · below-range, suspect and infilled days left
   out · no river-stop months · flow gaps not filled", `settings/qualityFlags.ts`
@@ -9593,7 +9595,13 @@ read it before.
   hit rate, false-alarm ratio and frequency bias, the 2×2 table of observed
   days (model below / at or above the EWR × observed below / at or above, with
   totals), a per-month table (Oct … Sep, every month listed, months without
-  observed days shown as dashes) and, collapsed, a per-water-year table. A run
+  observed days shown as dashes) and, collapsed, a per-water-year table. Below
+  50rem of box (a phone, a half-width compare column) the 2×2 table and both
+  breakdowns stack, as the plausibility tables do (app.css `.table-stack`,
+  issue #586 R4-K): each row a block, its name on top and its cells as many to
+  a line as fit (three at 390 px), each value under its column's name
+  (`data-label`), so no box scrolls sideways (`calibration-tables-phone.spec.ts`,
+  light and dark). A run
   without a gauge or logger record, or saved before engine 0.5.3, says why
   there is no table. Under it, the same table for each gauge EWR site with a
   record of its own (engine ≥ 1.41.0, `summary.catchment.ewrAgreementSites`,
@@ -9608,8 +9616,11 @@ read it before.
   after the year (failing rows shaded, the verdict bold), natural with
   observed + abstraction under it, the gap as % of natural, observed, use
   with dams under it, and land cover: paired figures share a column so the
-  verdict shows at 1440 and 1280, and comes second where a phone still
-  scrolls the table (issue #586); (2) **EWR days by rain source**:
+  verdict shows at 1440 and 1280; below 50rem (a phone) each year is a
+  block, the year and its days on top, then its cells three to a line under
+  their names (`.table-stack`, issue #586 R4-K), as are check 2's water years,
+  check 3's breaks, the gauges' table and the hydrological signatures (the
+  Q70 / Q90 / Q95 table fits as columns); (2) **EWR days by rain source**:
   the share of days not met in good-rain and fallback-rain years, the Reserve
   months met split the same way per rule-table site, and, collapsed, each
   water year's station days, rain, fallback shares and days not met; (3)

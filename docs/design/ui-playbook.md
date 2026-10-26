@@ -382,6 +382,14 @@ section it belongs to, with the example that taught it.
   (`dam-proposals.spec.ts`). Land cover's tables fit as columns; the
   evaporation table's twelve months keep their sideways scroll with the
   sticky row label (a variant that can never fit).
+  A new read-only table takes app.css's `.table-stack` rather than another
+  copy: wrap its `.table-wrap` in `<div class="table-stack">` and give each
+  `td` a `data-label`; below 50rem of wrapper the rows are blocks, the cells
+  as many to a line as fit at 6rem (three at 390 px: two to a line made
+  Calibration's twelve-month EWR breakdown ~1,700 px tall). Calibration's
+  EWR test (nine columns, 299 px past its 323 px box) and plausibility
+  tables use it (#586 R4-K, `calibration-tables-phone.spec.ts`, which reads
+  every table box's `scrollWidth`, not just the page's).
 - **In a narrow column, a row's actions get their own line.** The team
   page's Members panel (a 20–24rem side column) had Name · Role · actions,
   and the third column clipped "Reset two-step" to "Reset two-" and

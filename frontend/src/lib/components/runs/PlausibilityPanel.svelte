@@ -108,7 +108,9 @@
 <section aria-labelledby="{uid}-h">
 	<h3 id="{uid}-h">Plausibility checks <HelpTip key="plausibility-checks" /></h3>
 	<p class="muted small">
-		{checkCount} checks a reviewing hydrologist makes by hand. They only report and warn; none changes a result. Dry season: {seasonText(checks.drySeason)}.
+		{checkCount} checks a reviewing hydrologist makes by hand. They only report and warn; none changes a result.
+		<!-- seasonText's no-season sentence ends with its own full stop. -->
+		{checks.drySeason ? `Dry season: ${seasonText(checks.drySeason)}.` : seasonText(null)}
 	</p>
 	<ul class="flags" aria-label="Check results">
 		{#each flags as f (f.label)}
@@ -128,9 +130,9 @@
 		</p>
 		<!-- Fit by stacking, not by scrolling sideways (ui-playbook § 2): ten columns ran off the right edge at 1440,
 		     the verdict with them. Pairs share a column, one over the other (the year over its days, the natural flow over the
-		     natural flow the record implies, use over dams), and the result comes straight after the year, so it shows
-		     even where the table still scrolls (a phone). -->
-		<div class="table-wrap">
+		     natural flow the record implies, use over dams), and the result comes straight after the year. On a phone
+		     (table-stack, app.css) each year is a block, its figures under their data-labels (#586 R4-K). -->
+		<div class="table-stack"><div class="table-wrap">
 			<table class="data compact nat" aria-labelledby="{uid}-nat">
 				<thead>
 					<tr>
@@ -147,17 +149,17 @@
 					{#each n.years as y (y.waterYear)}
 						<tr class:short-row={y.passed === false}>
 							<th scope="row">{wy(y.waterYear)} <span class="under">{fmtNum(y.days)} days</span></th>
-							<td class:fails={y.passed === false}>{y.passed === null ? 'not judged' : y.passed ? 'passes' : 'fails'}</td>
-							<td class="num">{mm3(y.naturalMm3)} <span class="under">{mm3(y.naturalisedMm3)}</span></td>
-							<td class="num">{y.gapPct === null ? '–' : fmtNum(y.gapPct, 1)}</td>
-							<td class="num">{mm3(y.observedMm3)}</td>
-							<td class="num">{mm3(y.useMm3)} <span class="under">{mm3(y.damsMm3)}</span></td>
-							<td class="num">{mm3(y.landCoverMm3)}</td>
+							<td class:fails={y.passed === false} data-label="Result">{y.passed === null ? 'not judged' : y.passed ? 'passes' : 'fails'}</td>
+							<td class="num" data-label="Natural (Mm³), under it observed + abstraction">{mm3(y.naturalMm3)} <span class="under">{mm3(y.naturalisedMm3)}</span></td>
+							<td class="num" data-label="Gap (% of natural)">{y.gapPct === null ? '–' : fmtNum(y.gapPct, 1)}</td>
+							<td class="num" data-label="Observed (Mm³)">{mm3(y.observedMm3)}</td>
+							<td class="num" data-label="Use (Mm³), under it dams">{mm3(y.useMm3)} <span class="under">{mm3(y.damsMm3)}</span></td>
+							<td class="num" data-label="Land cover (Mm³)">{mm3(y.landCoverMm3)}</td>
 						</tr>
 					{/each}
 				</tbody>
 			</table>
-		</div>
+		</div></div>
 	{:else}
 		<p class="muted small">Not checked: the run has no observed flow record.</p>
 	{/if}
@@ -185,7 +187,7 @@
 		</dl>
 		<details>
 			<summary>Rain source by water year ({fmtNum(r.years.length)} years)</summary>
-			<div class="table-wrap">
+			<div class="table-stack"><div class="table-wrap">
 				<table class="data compact">
 					<caption class="visually-hidden">Rain source and EWR days not met by water year</caption>
 					<thead>
@@ -203,17 +205,17 @@
 						{#each r.years as y (y.waterYear)}
 							<tr>
 								<th scope="row">{wy(y.waterYear)}</th>
-								<td class="num">{fmtNum(y.stationDays)} of {fmtNum(y.days)}</td>
-								<td class="num">{fmtNum(y.rainMm)}</td>
-								<td class="num">{y.fallbackRainShare === null ? '–' : fmtPct(y.fallbackRainShare, 0)}</td>
-								<td class="num">{fmtPct(y.fallbackDayShare, 0)}</td>
-								<td>{y.fallback ? 'fallback' : 'good'}</td>
-								<td class="num">{fmtNum(y.ewrDaysNotMet)}</td>
+								<td class="num" data-label="Station days">{fmtNum(y.stationDays)} of {fmtNum(y.days)}</td>
+								<td class="num" data-label="Rain (mm)">{fmtNum(y.rainMm)}</td>
+								<td class="num" data-label="Fallback rain (%)">{y.fallbackRainShare === null ? '–' : fmtPct(y.fallbackRainShare, 0)}</td>
+								<td class="num" data-label="Fallback days (%)">{fmtPct(y.fallbackDayShare, 0)}</td>
+								<td data-label="Year">{y.fallback ? 'fallback' : 'good'}</td>
+								<td class="num" data-label="Days EWR not met">{fmtNum(y.ewrDaysNotMet)}</td>
 							</tr>
 						{/each}
 					</tbody>
 				</table>
-			</div>
+			</div></div>
 		</details>
 	{:else}
 		<p class="muted small">Not checked: the run has no rainfall series.</p>
@@ -226,7 +228,7 @@
 			{fmtNum(dm.wholeSlope, 3)}. {dm.breaks.length ? '' : 'No break: the ratio stays steady.'}
 		</p>
 		{#if dm.breaks.length}
-			<div class="table-wrap">
+			<div class="table-stack"><div class="table-wrap">
 				<table class="data compact" aria-labelledby="{uid}-dm">
 					<thead>
 						<tr>
@@ -243,17 +245,17 @@
 						{#each dm.breaks as b (b.afterWaterYear)}
 							<tr class:short-row={b.hint !== 'rain'}>
 								<th scope="row">{wy(b.afterWaterYear)}</th>
-								<td class="num">{fmtNum(b.slopeBefore, 3)} → {fmtNum(b.slopeAfter, 3)}</td>
-								<td class="num">{signedPct(b.change)}</td>
-								<td class="num">{fmtNum(b.simulatedSlopeBefore, 3)} → {fmtNum(b.simulatedSlopeAfter, 3)}</td>
-								<td class="num">{signedPct(b.unexplained)}</td>
-								<td class="num">{signedPct(b.unexplainedDry)} / {signedPct(b.unexplainedWet)}</td>
-								<td>{breakHint(b)}</td>
+								<td class="num" data-label="Observed ratio">{fmtNum(b.slopeBefore, 3)} → {fmtNum(b.slopeAfter, 3)}</td>
+								<td class="num" data-label="Change">{signedPct(b.change)}</td>
+								<td class="num" data-label="Simulated ratio">{fmtNum(b.simulatedSlopeBefore, 3)} → {fmtNum(b.simulatedSlopeAfter, 3)}</td>
+								<td class="num" data-label="Beyond the model">{signedPct(b.unexplained)}</td>
+								<td class="num" data-label="Dry / wet season">{signedPct(b.unexplainedDry)} / {signedPct(b.unexplainedWet)}</td>
+								<td data-label="Points to">{breakHint(b)}</td>
 							</tr>
 						{/each}
 					</tbody>
 				</table>
-			</div>
+			</div></div>
 		{/if}
 	{:else}
 		<p class="muted small">Not checked: needs an observed flow record, rain and a catchment area, with at least 10 water years of 300+ days with both.</p>
@@ -341,7 +343,7 @@
 			The first and last checks again at each gauge with its own observed record (attached on the Data page), against the simulated flow at that gauge and
 			the natural flow, dams and land cover above it, in the same dry season. The run's warnings name each finding.
 		</p>
-		<div class="table-wrap">
+		<div class="table-stack"><div class="table-wrap">
 			<table class="data compact" aria-labelledby="{uid}-gauges" data-testid="plausibility-gauges">
 				<thead>
 					<tr>
@@ -357,9 +359,9 @@
 					{#each gauges as g (g.nodeId)}
 						<tr class:short-row={g.ok.includes(false)}>
 							<th scope="row">{g.name}</th>
-							<td>{g.record}</td>
-							<td class="num">{fmtPct(g.naturalShare, 0)}</td>
-							<td>
+							<td data-label="Record">{g.record}</td>
+							<td class="num" data-label="Natural flow above (% of catchment)">{fmtPct(g.naturalShare, 0)}</td>
+							<td data-label="Natural ≥ observed + abstraction">
 								{g.judgedYears === null
 									? 'not checked'
 									: !g.judgedYears
@@ -368,13 +370,13 @@
 											? `fails ${g.failedYears.map(wy).join(', ')} (${g.failedYears.length} of ${g.judgedYears})`
 											: `passes (${g.judgedYears} judged)`}
 							</td>
-							<td class="num">{g.q90Ratio === null ? '–' : `${fmtNum(g.q90Ratio, 2)}×`}</td>
-							<td>{g.withinFactor === null ? 'not checked' : g.withinFactor ? 'within the factor of 2' : 'outside the factor of 2'}</td>
+							<td class="num" data-label="Q90 simulated ÷ observed">{g.q90Ratio === null ? '–' : `${fmtNum(g.q90Ratio, 2)}×`}</td>
+							<td data-label="Low flows">{g.withinFactor === null ? 'not checked' : g.withinFactor ? 'within the factor of 2' : 'outside the factor of 2'}</td>
 						</tr>
 					{/each}
 				</tbody>
 			</table>
-		</div>
+		</div></div>
 	{/if}
 </section>
 

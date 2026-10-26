@@ -726,6 +726,65 @@ table.data tbody th {
 		background: var(--row-flag);
 	}
 }
+/* A read-only table that stacks in a narrow box instead of scrolling sideways (ui-playbook § 2, "Fit a wide table by
+   stacking"): wrap its .table-wrap in a `.table-stack` and give each td a `data-label` naming its column. Below 50rem
+   of that wrapper (a phone, a half-width compare column) each row is a block: the row header (th scope="row") on its
+   own line, then the cells as many to a line as fit, each value under its name; the column heads are hidden. As columns from
+   50rem (700 px at 14 px), which every user of it fits. Used by Calibration's EWR test and plausibility tables
+   (#586 R4-K); the older per-component copies (YearTable, the annual water balance, Dams' proposals) predate it. */
+.table-stack {
+	container: table-stack / inline-size;
+	min-width: 0;
+}
+@container table-stack (max-width: 50rem) {
+	.table-stack > .table-wrap {
+		border: 0;
+		background: none;
+		overflow: visible;
+		max-height: none;
+	}
+	.table-stack table.data,
+	.table-stack table.data tbody {
+		display: block;
+	}
+	.table-stack table.data thead {
+		display: none;
+	}
+	.table-stack table.data caption:not(.visually-hidden) {
+		display: block;
+	}
+	/* As many cells to a line as fit at 6rem each: three on a phone, so a nine-column row takes three lines, not four. */
+	.table-stack table.data tr {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 6rem), 1fr));
+		gap: 0.3rem 0.75rem;
+		padding: 0.5rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.table-stack table.data tbody tr:last-child {
+		border-bottom: none;
+	}
+	.table-stack table.data th,
+	.table-stack table.data td {
+		display: block;
+		padding: 0;
+		border-bottom: none;
+		text-align: left;
+		white-space: normal;
+		min-width: 0;
+	}
+	.table-stack table.data th[scope='row'] {
+		grid-column: 1 / -1;
+		font-weight: 600;
+	}
+	.table-stack table.data td::before {
+		content: attr(data-label);
+		display: block;
+		font-size: var(--font-xs);
+		font-weight: 400;
+		color: var(--text-2);
+	}
+}
 table.data tfoot td,
 table.data tfoot th {
 	border-top: 2px solid var(--border-strong);
