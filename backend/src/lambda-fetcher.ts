@@ -23,9 +23,10 @@
 import type { Context, SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { z } from 'zod';
 import { assertLambdaEnv } from './config/production.js';
-import { FeedFormatError, FeedRefusedError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
+import { FEED_SERVER_ERROR_PREFIX, FeedFormatError, FeedRefusedError, FeedServerError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
 import { type FetchAnswer, type FetchRequest, runFetch } from './feeds/fetch.js';
 import { type FeedHttp, feedHttp } from './feeds/http.js';
+import { DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL, dwsFailureLabel } from './feeds/sources/dws.js';
 import { type IngestResultMessage, MAX_MESSAGE_BYTES, parseFetchRequest, sendToQueue } from './jobs/transport.js';
 import { logEvent } from './logging/logEvent.js';
 import { safeError } from './logging/safeError.js';
@@ -43,6 +44,10 @@ const INVALID_REQUEST = 'the fetch request was not valid, so nothing was fetched
 
 const UNAVAILABLE = feedErrorMessage(new FeedUnavailableError(''));
 const REFUSED = feedErrorMessage(new FeedRefusedError());
+const FORMAT = feedErrorMessage(new FeedFormatError(''));
+
+/** The source's own server error pages, as stored, with the fixed label each logs as its detail (feeds/errors.ts FeedServerError). */
+const SERVER_ERRORS: ReadonlyMap<string, string> = new Map([[feedErrorMessage(new FeedServerError(DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL)), DWS_SERVER_ERROR_LABEL]]);
 
 /**
  * A failed fetch's error, as a fixed code for the log (feed_fetch_failed): the
@@ -50,13 +55,16 @@ const REFUSED = feedErrorMessage(new FeedRefusedError());
  * whole (failureDetail is the part that may). `throttled`: the source
  * answered HTTP 429 or 503 (feeds/errors.ts FeedThrottledError). `refused`:
  * it answered HTTP 403, refusing this server's address (FeedRefusedError).
+ * A server error page (FeedServerError: DWS's ScriptServer page) is
+ * `unavailable`, its detail saying which page.
  */
 export function fetchFailureReason(error: string): 'timeout' | 'throttled' | 'refused' | 'invalid_request' | 'unavailable' | 'format' | 'internal' | 'other' {
 	if (error === TOO_SLOW) return 'timeout';
 	if (error === INVALID_REQUEST) return 'invalid_request';
 	if (error === REFUSED) return 'refused';
+	if (error.startsWith(FEED_SERVER_ERROR_PREFIX)) return 'unavailable';
 	if (error.startsWith(UNAVAILABLE)) return /^HTTP (429|503)\b/.test(error.slice(UNAVAILABLE.length)) ? 'throttled' : 'unavailable';
-	if (error.startsWith(feedErrorMessage(new FeedFormatError('')))) return 'format';
+	if (error.startsWith(FORMAT)) return 'format';
 	if (error === feedErrorMessage(new Error())) return 'internal';
 	return 'other';
 }
@@ -82,11 +90,17 @@ export const FAILURE_DETAIL_MAX = 80;
 
 /**
  * What of a failed fetch's message may go to the log beside its reason: the
- * HTTP status (`HTTP 429`, `HTTP 403`) or one of SAFE_DETAILS, else null.
- * Never a format error's text, which names grid cells and stations.
+ * HTTP status (`HTTP 429`, `HTTP 403`), one of SAFE_DETAILS, a server error
+ * page's label (`ScriptServer error page`), or for a DWS format failure the
+ * fixed label of the check that failed (sources/dws.ts DWS_FORMAT_FAILURES:
+ * `no data table`, `columns changed`), else null. Never a format error's
+ * text, which names grid cells, stations and quotes the page.
  */
 export function failureDetail(error: string): string | null {
 	if (error === REFUSED) return 'HTTP 403';
+	const server = SERVER_ERRORS.get(error);
+	if (server) return server;
+	if (error.startsWith(FORMAT)) return dwsFailureLabel(error.slice(FORMAT.length));
 	if (!error.startsWith(UNAVAILABLE)) return null;
 	const rest = error.slice(UNAVAILABLE.length);
 	const status = /^HTTP [1-5]\d\d\b/.exec(rest);

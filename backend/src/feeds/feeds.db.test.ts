@@ -28,7 +28,8 @@ import { app, asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { parseFetchRequest } from '../jobs/transport.js';
-import { FeedRefusedError, FeedThrottledError, FeedUnavailableError, feedErrorMessage } from './errors.js';
+import { FeedRefusedError, FeedServerError, FeedThrottledError, FeedUnavailableError, feedErrorMessage } from './errors.js';
+import { DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL } from './sources/dws.js';
 import { CHIRPS_REVISION_DAYS, FEED_META_MAX_BYTES, runFetch, utcToday } from './fetch.js';
 import { dwsFixtureLastDataDay, FIXTURE_CELL, fixtureHttp } from './fixtures.js';
 import { MAX_FEEDS, RUN_NOW_RATE, runNowWait } from './routes.js';
@@ -449,6 +450,9 @@ describe('the scheduler', () => {
 		// Positive controls: an unavailable or throttled source keeps 15 minutes, doubling.
 		expect(await dueAfter(1, 16, feedErrorMessage(new FeedUnavailableError('HTTP 502')))).toBe(true);
 		expect(await dueAfter(1, 16, feedErrorMessage(new FeedThrottledError(429, 60)))).toBe(true);
+		// DWS's ScriptServer error page is the site down for a while: retried like any outage.
+		expect(await dueAfter(1, 16, feedErrorMessage(new FeedServerError(DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL)))).toBe(true);
+		expect(await dueAfter(2, 28, feedErrorMessage(new FeedServerError(DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL)))).toBe(false);
 		// An older stored 403, from before FeedRefusedError, is no refusal to the backoff.
 		expect(await dueAfter(1, 16, 'the source is unreachable: HTTP 403')).toBe(true);
 	});
@@ -966,14 +970,14 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 	// Issue #29: a DWS backfill starting before the station's record re-read the same empty window forever.
 	it('an empty answer records how far it read, so the next fetch moves past the empty stretch', async () => {
 		const o = await fetchJob({ source: 'dws', config: { station: 'X0H000', startDate: '1960-01-01' }, targetKind: 'flow_observed_m3s' });
-		expect(o.window).toEqual({ start: '1960-01-01', end: '1979-12-26' });
+		expect(o.window).toEqual({ start: '1960-01-01', end: '1961-12-30' });
 		// Nothing before the station opened.
 		await acceptIngestResult(msg(o, { ok: true, startDate: null, values: [], meta: { days: 0, gaps: 0 } }));
 		await tick();
-		expect(await feedRow(o.feedId)).toMatchObject({ last_data_date: null, consecutive_failures: 0, last_meta: { through: '1979-12-26' } });
+		expect(await feedRow(o.feedId)).toMatchObject({ last_data_date: null, consecutive_failures: 0, last_meta: { through: '1961-12-30' } });
 		await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
-		// A year of overlap before the last day read, not back to 1960.
-		expect((await runFetchJob()).request).toMatchObject({ start: '1978-12-27', end: '1998-12-21' });
+		// The day after the last day read (two years a request), not back to 1960.
+		expect((await runFetchJob()).request).toMatchObject({ start: '1961-12-31', end: '1963-12-30' });
 	});
 
 	it('a startDate in the future asks for no days: a CHIRPS feed fetches nothing and records a success', async () => {

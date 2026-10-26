@@ -361,7 +361,8 @@ resource "aws_cloudwatch_metric_alarm" "fetch_requests_age" {
 #   {"event":"feed_fetch_failed","feedId":"…","fetchJobId":"…","source":"dws","reason":"unavailable","detail":"HTTP 403"}
 # the ids, its source, a reason code (timeout, throttled, refused,
 # invalid_request, unavailable, format, internal, other) and the failure's safe detail (an HTTP
-# status or one of the live client's fixed texts), never the stored message,
+# status, one of the live client's fixed texts, or our fixed label for a server
+# error page or a DWS format check), never the stored message,
 # which can name a grid cell or a station. One failure alarms: feeds fetch a few times a
 # day, and SNS only notifies on the change to ALARM, so a source that stays
 # down alarms once, not on every fetch.

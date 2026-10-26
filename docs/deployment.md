@@ -1337,15 +1337,20 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
   `fetcher-errors`, because the Lambda succeeded: it counts the fetcher's
   `{"event":"feed_fetch_failed","feedId","fetchJobId","source","reason","detail"}`
   log line (ids, the source, a reason code and the safe part of the failure:
-  `detail` is the HTTP status, `HTTP 429`, or one of the live client's own
-  texts, `the request timed out`, else null; never the stored message, which
-  can name a grid cell or a station). A stale or failing feed also shows in the
+  `detail` is the HTTP status, `HTTP 429`, one of the live client's own
+  texts, `the request timed out`, a server error page's label, `ScriptServer
+  error page`, or which DWS check failed, `no data table`, else null; never
+  the stored message, which can name a grid cell or a station). A stale or failing feed also shows in the
   app, and emails the owners and editors of a project with the `data_stale`
   or `feed_failing` alert on.
   - *Runbook: `feed-fetch-failed`.* Logs Insights on the fetcher's log group:
     `filter message.event = "feed_fetch_failed" | stats count() by message.source, message.reason, message.detail`.
     `unavailable` or `timeout`: the source is down or slow; the feed retries
-    on its own schedule (nothing to do unless it persists). `refused`
+    on its own schedule (nothing to do unless it persists). `unavailable`
+    with `detail` `ScriptServer error page` is the DWS site's backend failing
+    (it answers HTTP 200 with that page); if it persists for days on every
+    station while DWS's site works in a browser, suspect the request (the
+    feed already asks two years at a time) and raise it with #92. `refused`
     (`HTTP 403`): the source refuses this server's address. From CHC it is a
     per-IP ban for volume (each fetcher environment has its own address: a
     new one gets a fetch or two through, then 403s); the fetcher stops
@@ -1362,7 +1367,8 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
     that host for its `Retry-After` and the feeds back off on their own
     (architecture.md § Data feeds → Throttling); if it persists through a
     backfill, lower `fetcher_reserved_concurrency` to 1. `format`: the source
-    changed what it serves, a code fix. `invalid_request` or `internal`: a
+    changed what it serves, a code fix; for DWS, `detail` names the check
+    that failed (`sources/dws.ts` `DWS_FORMAT_FAILURES`). `invalid_request` or `internal`: a
     bug; the feed's status panel has the stored message.
   - *A feed that logs failures but shows none* ("not checked yet"): on the
     worker's log group,

@@ -15,7 +15,7 @@ import { CELL_VALUE_MAX_BITS, CHC_COLS, CHC_ROWS, cellCentre, encodeCellValue, R
 import { BBOX_MAX_CELLS, BBOX_MAX_ROWS, CHIRPS_DAILY_PRODUCTS, CHIRPS_PRODUCT_FIRST_DAY } from './config.js';
 import { FILE_TAG_MAX, FILE_TAG_RE } from './http.js';
 import { cellsUsed, fetchChirps, fetchChirpsCells, fetchGefs, type NoDataPolicy, recheckChirpsFinals } from './sources/chirps.js';
-import { dwsUrl, DWS_MAX_YEARS, parseDwsDaily } from './sources/dws.js';
+import { dwsUrl, DWS_FORMAT_FAILURES, DWS_WINDOW_DAYS, parseDwsDaily } from './sources/dws.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/limits.js';
 
 /**
@@ -43,6 +43,7 @@ export const CHIRPS_MAX_DAYS = 120;
 export const CHIRPS_FIRST_DAYS = 60;
 /** DWS re-reads a year: verified data is revised in arrears. */
 export const DWS_REVISION_DAYS = 365;
+/** How far back a DWS feed with no startDate starts; walked DWS_WINDOW_DAYS a request (sources/dws.ts). */
 export const DWS_FIRST_YEARS = 10;
 
 export interface FetchRequest {
@@ -107,6 +108,14 @@ export interface FetchWindow {
  * yesterday leaves a one-day window, the cheapest valid request), and the
  * 120-day cap counts from there. The startDate floor still holds, since the
  * marker only ever moves the start later.
+ *
+ * DWS asks for at most DWS_WINDOW_DAYS (two years) a request, so a first
+ * fetch's ten years, or an older startDate, is walked a window at a time.
+ * Its year of re-read is for recent days, which DWS revises in arrears: a
+ * window that can't reach today starts the day after the newest day (or the
+ * last day read), so a backfill moves on a whole window each fetch rather
+ * than re-asking a year of days it just read; the window that reaches today
+ * re-reads up to a year before the newest day, as much as still fits.
  */
 export function fetchWindow(
 	source: FeedSource,
@@ -116,10 +125,11 @@ export function fetchWindow(
 	readThrough: string | null = null,
 	finalThrough: string | null = null
 ): FetchWindow {
+	const floor = (start: string) => (config.startDate && start < config.startDate ? config.startDate : start);
 	const from = (revisionDays: number, firstDays: number, maxDays: number, newest: string) => {
 		let start = lastDataDate ? addDays(lastDataDate, -revisionDays) : (config.startDate ?? addDays(today, -firstDays));
 		if (readThrough && readThrough < newest && addDays(start, maxDays - 1) <= readThrough) start = addDays(readThrough, 1 - revisionDays);
-		return config.startDate && start < config.startDate ? config.startDate : start;
+		return floor(start);
 	};
 	switch (source) {
 		case 'chirps': {
@@ -132,8 +142,19 @@ export function fetchWindow(
 		case 'chirps_gefs':
 			return { start: today, end: addDays(today, 15) };
 		case 'dws': {
-			const start = from(DWS_REVISION_DAYS, 365 * DWS_FIRST_YEARS, 365 * DWS_MAX_YEARS, today);
-			const limit = addDays(start, 365 * DWS_MAX_YEARS - 1);
+			// After `mark` (the newest day, or the last day read): the day after it,
+			// or, when a window from there would reach today, up to a year before
+			// it, keeping the window's end at today.
+			const after = (mark: string) => {
+				const reach = addDays(today, 1 - DWS_WINDOW_DAYS);
+				const resume = addDays(mark, 1) < reach ? addDays(mark, 1) : reach;
+				const reread = addDays(mark, -DWS_REVISION_DAYS);
+				return reread > resume ? reread : resume;
+			};
+			let start = lastDataDate ? after(lastDataDate) : (config.startDate ?? addDays(today, -365 * DWS_FIRST_YEARS));
+			if (readThrough && readThrough < today && addDays(start, DWS_WINDOW_DAYS - 1) <= readThrough) start = after(readThrough);
+			start = floor(start);
+			const limit = addDays(start, DWS_WINDOW_DAYS - 1);
 			return { start, end: limit < today ? limit : today };
 		}
 	}
@@ -260,8 +281,13 @@ export type CellsResult = z.output<typeof CellsResult>;
 /** What the fetcher answers: a CHIRPS request with `cells` gets a CellsResult, every other request a FetchResult. */
 export type FetchAnswer = FetchResult | CellsResult;
 
-/** The longest window per source, as fetchWindow caps it (GEFS reads its 16 days whatever the window). */
-const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: 365 * DWS_MAX_YEARS };
+/**
+ * The longest window per source, as fetchWindow caps it (GEFS reads its 16
+ * days whatever the window). A DWS request queued by a worker from before
+ * DWS_WINDOW_DAYS (up to 20 years) is refused here: the feed records the
+ * failure and its retry asks for the shorter window.
+ */
+const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: DWS_WINDOW_DAYS };
 
 /** A fetch request as the fetcher Lambda receives it: the config is checked against its source's schema again. */
 export const FetchRequestSchema = z
@@ -393,7 +419,7 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 			}
 			case 'dws': {
 				const page = await http.text(dwsUrl((req.config as DwsConfig).station, req.start, req.end));
-				if (page === null) throw new FeedFormatError('the DWS page was not found');
+				if (page === null) throw new FeedFormatError(DWS_FORMAT_FAILURES.notFound[0]);
 				// Never a day after today: the feed's newest day drives its next window and its health.
 				const r = parseDwsDaily(page, { start: req.start, end: req.end < req.today ? req.end : req.today });
 				const meta: Record<string, string | number> = { days: r.values.length, gaps: r.values.filter((v) => v === null).length };
