@@ -1736,7 +1736,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'preview-excluded',
 		term: 'Excluded from calibration (daily preview)',
-		short: 'Marks days inside a calibration exclusion from Settings: they don’t count in Fit automatically or in a run’s calibration scores.',
+		short: 'Marks days inside a calibration exclusion (Calibration record): they don’t count in Fit automatically or in a run’s calibration scores.',
 		category: 'data',
 		fields: ['preview.excluded']
 	},

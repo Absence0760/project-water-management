@@ -170,7 +170,7 @@ pnpm import:rivers          # load the synthetic river network the Map's River n
                              # pnpm dev:tiles:rivers fetches HydroRIVERS (GDAL's ogr2ogr) and loads it (maps.md § River network)
 pnpm import:land-cover      # load the synthetic cropland grid a unit's planted-areas drawer proposes from (pnpm setup runs it);
                              # <tile.tif> … --dataset <label> [--cell 0.0025] [--bbox w,s,e,n] loads your own ESA WorldCover tiles (maps.md § Cultivated area from land cover)
-pnpm import:evaporation     # load the synthetic evaporation grid Settings → Evaporation from the map proposes from (pnpm setup runs it);
+pnpm import:evaporation     # load the synthetic evaporation grid Calibration → Evaporation from the map proposes from (pnpm setup runs it);
                              # <file> … --dataset <label> [--bbox w,s,e,n] loads dPET years (.nc, or the totals --reduce <dir> wrote) as monthly means;
                              # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)
 pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 GB a year, deleted once reduced) and load it (maps.md § Evaporation from the map)

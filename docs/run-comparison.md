@@ -683,8 +683,8 @@ the losses β becomes r = β(1 − e), and a crop's own efficiency becomes a
 system row "Imported, NN %"), so a project that only went through the
 migrations shows no network line; the engine version line flags the change.
 Settings are compared after merging over the defaults, so an old snapshot that
-stored only some fields doesn't show false differences. Every setting the
-Settings tab edits has a readable line, including the curtailment reporting
+stored only some fields doesn't show false differences. Every setting Model
+settings and Calibration edit has a readable line, including the curtailment reporting
 window, the calibration window and flow series, and the gauge-vs-logger
 thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*) and the
 other data-check limits (engine ≥ 1.20.0: *"Data quality zero-rain run CHIRPS
