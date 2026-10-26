@@ -154,7 +154,7 @@ export function abstractionStartDay(n: NetworkNode, start: number, days: number,
 	const v = n.abstractionFrom;
 	if (v === null || v === undefined) return 0;
 	if (!isIso(v) || n.kind === 'gauge') {
-		warnings.push(`${n.kind} "${n.name}": abstraction start ${JSON.stringify(isIso(v) ? dayText(v) : v)} ignored (${n.kind === 'gauge' ? 'a gauge takes no water' : 'not a date, YYYY-MM-DD'})`);
+		warnings.push(`${n.kind} "${n.name}": abstraction start ${isIso(v) ? dayText(v) : JSON.stringify(v)} ignored (${n.kind === 'gauge' ? 'a gauge takes no water' : 'not a date, YYYY-MM-DD'})`);
 		return 0;
 	}
 	return Math.min(Math.max(toEpochDay(v) - start, 0), days);

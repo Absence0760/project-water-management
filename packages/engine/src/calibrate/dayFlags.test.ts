@@ -442,7 +442,7 @@ describe('low-flow periods (issue #557)', () => {
 	it('run comparison names an added or removed period', () => {
 		const a = defaultQualityFlags();
 		const b = { ...a, lowFlowPeriods: [period()] };
-		expect(qualityFlagChanges(a, b)).toEqual([{ subject: 'Low flows only', text: 'Low flows only: added logger record 2000-10-11 – 2000-10-20 at or below 1.2 m³/s' }]);
+		expect(qualityFlagChanges(a, b)).toEqual([{ subject: 'Low flows only', text: 'Low flows only: added logger record 11 Oct 2000 – 20 Oct 2000 at or below 1.2 m³/s' }]);
 		expect(qualityFlagChanges(b, a)[0]!.text).toMatch(/removed logger record/);
 		expect(qualityFlagChanges(b, b)).toEqual([]);
 	});

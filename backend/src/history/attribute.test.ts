@@ -44,6 +44,14 @@ describe('attributeChanges', () => {
 		expect(attributeChanges([diff], [{ id: '2', changes: [line('Rooikloof: dam capacity 650,000 m³ → 1,750,001 m³')] }])).toEqual([null]);
 	});
 
+	it('matches a revision saved with its days year first (before engine 1.100.0, issue #586) against today’s day-first line', () => {
+		const s = (text: string) => line(text, { area: 'settings', subject: 'Low flows only' });
+		const diff = s('Low flows only: added logger record 11 Oct 2000 – 20 Oct 2000 at or below 1.2 m³/s');
+		expect(attributeChanges([diff], [{ id: '1', changes: [s('Low flows only: added logger record 2000-10-11 – 2000-10-20 at or below 1.2 m³/s')] }])).toEqual(['1']);
+		// Positive control's negative: another period is another change.
+		expect(attributeChanges([diff], [{ id: '2', changes: [s('Low flows only: added logger record 2000-10-11 – 2000-10-21 at or below 1.2 m³/s')] }])).toEqual([null]);
+	});
+
 	it('credits a settings line changed twice', () => {
 		const s = (text: string) => line(text, { area: 'settings', subject: 'Calibration rain threshold' });
 		expect(attributeChanges([s('Calibration rain threshold: 2 mm → 4 mm')], [{ id: '9', changes: [s('Calibration rain threshold: 3 mm → 4 mm')] }])).toEqual(['9']);

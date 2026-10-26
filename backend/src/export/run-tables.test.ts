@@ -953,7 +953,7 @@ describe('rain-source block (engine ≥ 0.30.0)', () => {
 			'Start,End,Series,Reason,Run days,From the series,From CHIRPS,From reanalysis,From forecast,No value,Series rain (mm),Rain used from it (mm),Factors,Gaps from',
 			'2012-10-01,2019-09-30,alternative catchment gauge (SASSCAL AWS v1),"automatic station, gauges closed",2556,2500,50,0,0,6,5000,6000,"fixed, from hydrologist, fitted on 1 Oct 2012 to 30 Sep 2015 by overlap ratio",CHIRPS × the CHIRPS fit-period factors',
 			'Factor per month,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep',
-			'2012-10-01 to 2019-09-30,1.2,1.1,1.1,1.1,1.1,1.2,1.2,1.2,1.3,1.3,1.3,1.2'
+			'1 Oct 2012 to 30 Sep 2019,1.2,1.1,1.1,1.1,1.1,1.2,1.2,1.2,1.3,1.3,1.3,1.2'
 		]);
 		expect([...summaryCsvLines(meta, { ...summary, rainSource: { periods: [period] } })]).toContain('Factor per month,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep');
 	});
@@ -988,8 +988,8 @@ describe('rain-source block (engine ≥ 0.30.0)', () => {
 		const lines = [...rainSourceCsvLines({ periods: [withIntensity, { ...mapped, start: '2020-10-01', end: '2021-09-30' }] })];
 		expect(lines.slice(7)).toEqual([
 			'Daily intensity,Heavy day (mm),Reference,Reference heavy-day share (%),Series × factor heavy-day share (%),After the quantile map (%),Band (points),Differs by more than the band,Quantile map',
-			'2012-10-01 to 2019-09-30,20,the whole trusted primary catchment series (1990/91–2011/12),25,40,,5,yes,none: the monthly factor alone',
-			"2020-10-01 to 2021-09-30,20,the primary catchment series over 1995/96–2011/12 (readings in 1995/96–2011/12),25,40,30,5,yes,\"wet days (≥ 1 mm) quantile-mapped onto the primary catchment series over 1995/96–2011/12 (readings in 1995/96–2011/12), each month's total kept; by month: Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun, Aug, Sep; by season: Jul\""
+			'1 Oct 2012 to 30 Sep 2019,20,the whole trusted primary catchment series (1990/91–2011/12),25,40,,5,yes,none: the monthly factor alone',
+			"1 Oct 2020 to 30 Sep 2021,20,the primary catchment series over 1995/96–2011/12 (readings in 1995/96–2011/12),25,40,30,5,yes,\"wet days (≥ 1 mm) quantile-mapped onto the primary catchment series over 1995/96–2011/12 (readings in 1995/96–2011/12), each month's total kept; by month: Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun, Aug, Sep; by season: Jul\""
 		]);
 		// A run before 1.21.0 has no intensity block.
 		expect([...rainSourceCsvLines({ periods: [period] })]).toHaveLength(5);
@@ -1535,7 +1535,7 @@ describe('multi-day accumulations block (B4)', () => {
 				usedMm: 2.5
 			}
 		],
-		skipped: ['Listed accumulation 2005-01-01 to 2005-01-05 overlaps another listed accumulation, so it is not spread.'],
+		skipped: ['Listed accumulation 1 Jan 2005 to 5 Jan 2005 overlaps another listed accumulation, so it is not spread.'],
 		spreadWindows: 1,
 		spreadDays: 21,
 		spreadMm: 120
@@ -1553,7 +1553,7 @@ describe('multi-day accumulations block (B4)', () => {
 			'Windows spread,1',
 			'Run days from a window,21',
 			'Rain on them (mm),120',
-			'"Listed accumulation 2005-01-01 to 2005-01-05 overlaps another listed accumulation, so it is not spread."'
+			'"Listed accumulation 1 Jan 2005 to 5 Jan 2005 overlaps another listed accumulation, so it is not spread."'
 		]);
 	});
 

@@ -131,7 +131,7 @@ describe('the plausibility checks in the run comparison', () => {
 			series: Object.fromEntries(keys.map((k) => [k, { startDate, length: days }]))
 		});
 		const lines = diffInputs(snap(['flow_observed_m3s']), snap(['flow_observed_m3s', gaugeSeriesKey('flow_logger_m3s', 'H')])).map((c) => c.text);
-		expect(lines).toEqual(['Observed flow (logger) at gauge Node H series added (2001-10-01 to 2003-09-30)']);
+		expect(lines).toEqual(['Observed flow (logger) at gauge Node H series added (1 Oct 2001 to 30 Sep 2003)']);
 	});
 });
 

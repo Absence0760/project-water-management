@@ -8,8 +8,8 @@
 // runs made before engine 1.98.0 used ("Settings → Calibration record", "The
 // Plausibility checks panel"), so their warnings link too, to the panel's
 // place now. Words only: which page and anchor a place is lives in the app. The
-// one value import is calendar.ts's daysInText (the day-first dates of engine 1.99.0 and 1.100.0).
-import { daysInText } from './calendar';
+// value imports are calendar.ts's daysInText and isIsoDate (the day-first dates of engine 1.99.0 and 1.100.0).
+import { daysInText, isIsoDate } from './calendar';
 
 /** Each place a warning names: the page it is on and the panel's heading there. */
 export const WARNING_PLACES = {
@@ -95,10 +95,13 @@ const OLD_WORDS: readonly [string, string][] = [
  * checks' from engine 1.99.0, every other warning's from 1.100.0; daysInText). Any day in the text is rewritten, a
  * user's words included (a period's reason): auto-publish masks a date in either form anyway. For comparing an
  * older run's warnings with a newer one's (auto-publish's "no new warning"): the same warning in the old words reads
- * the same. A warning already in today's words is unchanged.
+ * the same. A warning already in today's words is unchanged. Not for display: names, URLs and a user's words
+ * are rewritten too, so show a warning as the run stored it.
  */
 export function warningInCurrentWords(text: string): string {
-	let out = daysInText(text).replace(/ \(docs\/model\.md §[^)]*\)/g, '');
+	// Up to 1.99.0 the abstraction start's day was quoted, as a value typed; a calendar day no longer is (1.100.0).
+	const unquoted = text.replace(/abstraction start "(\d{4}-\d{2}-\d{2})" ignored/g, (whole, day: string) => (isIsoDate(day) ? `abstraction start ${day} ignored` : whole));
+	let out = daysInText(unquoted).replace(/ \(docs\/model\.md §[^)]*\)/g, '');
 	for (const [old, now] of OLD_WORDS) out = out.split(old).join(now);
 	const marks = placesIn(out);
 	for (let i = marks.length - 1; i >= 0; i--) {

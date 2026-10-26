@@ -6572,9 +6572,22 @@ has another results digest. `warningInCurrentWords` now writes every
 calendar day in any warning day first (`calendar.ts` `daysInText`, which
 replaces 1.99.0's `seriesCheckInCurrentWords`), a user's words inside a
 warning included (harmless: auto-publish, its one reader, masks a date in
-either form). The run comparison's own sentences (a series extended, the
-MAP period of per-unit rain), the evidence report's checks and the forecast
-disclaimer still write ISO days.
+either form); it is for comparing warnings, never for display. A real
+abstraction start a gauge can't use is no longer quoted as if typed
+("abstraction start 1 Jan 2021 ignored"; a value that isn't a day stays
+quoted), and `warningInCurrentWords` drops 1.99.0's quotes around a real
+day so the two read the same. The run comparison's own sentences write
+their days day first too (a series added, extended, trimmed or emptied, the
+days both runs cover, the MAP period of per-unit rain, a low-flow period,
+`qualityFlagChanges`), as do the scenario ops' validation errors ("from 1 Jan
+2022 is after to 31 Dec 2021", "valid to is before valid from (1 Jan 2022)").
+History's attribution reads a revision stored with year-first days as
+today's line (`backend/src/history/attribute.ts`). The printed evidence
+report's checks, the run report's forecast line (`FORECAST_RAIN_NOTE`) and
+the known limitations keep ISO days on purpose: the evidence report is a
+signed document matching its hashed manifest (ui-playbook § Dates, issue
+#521 round 3), the run report prints ISO (#586 D9), and the limitations are
+docs/engine-audit.md's own words, hashed into every sign-off and pack.
 
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`

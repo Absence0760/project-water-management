@@ -3,7 +3,7 @@
 // days, with their resolver, validation and run-comparison lines. Kept apart
 // from ./dayFlags.ts (the per-day flags themselves) with no import of the
 // data checks, so settings, provenance and run comparison load only this.
-import { isIsoDate, toEpochDay } from '../calendar';
+import { dayText, isIsoDate, toEpochDay } from '../calendar';
 import type { CalibrationFlowKind } from '../project';
 
 /** The rating curve's gauged range at one flow record: the extrapolated flags come from it. */
@@ -237,9 +237,9 @@ const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep
 export const ZERO_FLOW_MONTHS_LABEL = 'Months the river stops';
 export const LOW_FLOW_PERIODS_LABEL = 'Low flows only';
 
-/** "logger record 2019-01-01 – 2019-06-30 below 0.8 m³/s". */
+/** "logger record 1 Jan 2019 – 30 Jun 2019 at or below 0.8 m³/s" (its days day first from engine 1.100.0, issue #586). */
 export const lowFlowPeriodText = (p: LowFlowPeriod): string =>
-	`${p.kind === 'flow_logger_m3s' ? 'logger' : 'gauge'} record ${p.start} – ${p.end} at or below ${+p.maxM3s.toPrecision(4)} m³/s`;
+	`${p.kind === 'flow_logger_m3s' ? 'logger' : 'gauge'} record ${dayText(p.start)} – ${dayText(p.end)} at or below ${+p.maxM3s.toPrecision(4)} m³/s`;
 
 /**
  * Each run day's threshold for one record (m³/s; NaN = no period that day),
