@@ -100,6 +100,18 @@
 //                   root layout's or the projects page's chunk (it must stay a
 //                   chunk of its own, loaded only for a signed-out visitor).
 //                   Still counted in totalCodeKb.
+//   landingFirstLoadKb  everything a first visit to /welcome downloads before
+//                   its scripts run (issue #92): the prerendered welcome.html
+//                   (its CSS is inlined, vite.config.ts inlineStyleThreshold)
+//                   and every module it preloads, the root layout's and the
+//                   landing's whole static import graph. On a phone's slow
+//                   link these bytes queue in front of the hero render, the
+//                   LCP element: three supply thresholds imported through
+//                   supplyColour.ts once brought ~43 KB of engine chunks with
+//                   them and put LCP past 2 s. The guard also fails on a
+//                   stylesheet the page links instead of inlining (it would
+//                   block the first paint again), and if welcome.html is
+//                   missing. Not added to totalCodeKb (the same files).
 //
 // ── Raising a ceiling ─────────────────────────────────────────────────────
 // totalCodeKb, the one that grows with every feature, is BUDGET.totalCodeKb
@@ -131,6 +143,8 @@ export const BUDGET = Object.freeze({
 	largestSpreadsheetWorkerKb: 34,
 	largestAssetKb: 100,
 	landingKb: 25,
+	// Measured 2026-10-25 (issue #92): 115 KB, welcome.html 25 KB with its inlined CSS + 41 preloaded modules 90 KB.
+	landingFirstLoadKb: 120,
 	// MapLibre + PMTiles (issue #288, roadmap D8 (b); measured 2026-10-01: 301 KB, its two chunks, the PMTiles reader and its CSS, maplibre-gl 6.10.0 + pmtiles 4.5.0).
 	// 440 from maplibre-gl 6.14 (#570): its worker is self-contained since 6.13 and now counts here (bundle-budget/README.md).
 	mapKb: 440,
@@ -367,6 +381,52 @@ export function landingChunks(chunks) {
 	return { files, errors };
 }
 
+/** The landing page's prerendered HTML: the English one; every language's preloads the same modules. */
+export const LANDING_HTML = 'welcome.html';
+
+/**
+ * What the landing page's HTML makes the browser fetch before its scripts run:
+ * the modules it preloads, and any stylesheet it links that is not disabled
+ * (Kit leaves the inlined ones as disabled links for its client router, which
+ * don't load).
+ * @param {string} html
+ * @returns {{ modules: string[], blockingCss: string[] }} paths relative to the build directory
+ */
+export function landingFirstLoad(html) {
+	const attr = (tag, name) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
+	const path = (href) => (href ?? '').replace(/^\.?\//, '');
+	const links = [...html.matchAll(/<link\b[^>]*>/g)].map((m) => m[0]);
+	return {
+		modules: links.filter((l) => attr(l, 'rel') === 'modulepreload').map((l) => path(attr(l, 'href'))),
+		blockingCss: links.filter((l) => attr(l, 'rel') === 'stylesheet' && !/\sdisabled(\s|=|>|\/)/.test(l)).map((l) => path(attr(l, 'href'))),
+	};
+}
+
+/**
+ * The landing's first load in gzipped bytes (landingFirstLoadKb), and what is wrong with it.
+ * @param {string | null} html welcome.html's text, null when the build has none
+ * @param {{ path: string, gzipBytes: number }[]} files
+ * @returns {{ kb: number, modules: number, errors: string[] }}
+ */
+export function measureLandingFirstLoad(html, files) {
+	if (html === null) return { kb: 0, modules: 0, errors: [`No ${LANDING_HTML} in the build: the landing page is prerendered there (routes/welcome). The first-load ceiling measured nothing.`] };
+	const { modules, blockingCss } = landingFirstLoad(html);
+	const byPath = new Map(files.map((f) => [f.path, f.gzipBytes]));
+	const errors = [];
+	let bytes = gzipSync(html).length;
+	for (const m of modules) {
+		const b = byPath.get(m);
+		if (b === undefined) errors.push(`${LANDING_HTML} preloads ${m}, which is not in the build.`);
+		else bytes += b;
+	}
+	for (const css of blockingCss) {
+		errors.push(
+			`${LANDING_HTML} links the stylesheet ${css}, which blocks its first paint (issue #92). The prerendered pages inline their CSS (frontend/vite.config.ts, inlineStyleThreshold); check that option is still set.`,
+		);
+	}
+	return { kb: kb(bytes), modules: modules.length, errors };
+}
+
 /** The npm packages whose chunks are the map's (mapKb). */
 export const MAP_PACKAGES = ['maplibre-gl', 'pmtiles'];
 
@@ -492,6 +552,11 @@ export function violations(m, budget = BUDGET) {
 			`The landing page's code is ${m.landingKb} KB, over the ${budget.landingKb} KB landing budget: it is the first download of every new visitor (issue #57). Check it still imports no workspace code, uPlot or engine, and trim before raising the ceiling.`,
 		);
 	}
+	if (m.landingFirstLoadKb !== undefined && m.landingFirstLoadKb > budget.landingFirstLoadKb) {
+		out.push(
+			`A first visit to /welcome downloads ${m.landingFirstLoadKb} KB before its scripts run (${LANDING_HTML} and the modules it preloads), over the ${budget.landingFirstLoadKb} KB budget: on a phone these bytes queue in front of the hero, the LCP element (issue #92). Look for a static import that brings workspace or engine code onto the landing or into the root layout (lazy-load it, or import a leaf module), before raising the ceiling.`,
+		);
+	}
 	if (m.mapKb > budget.mapKb) {
 		out.push(
 			`The map library is ${m.mapKb} KB, over the ${budget.mapKb} KB map budget (MapLibre and PMTiles, issue #288). Check a MapLibre upgrade's size, or that nothing else landed in its chunks, before raising the ceiling.`,
@@ -567,6 +632,14 @@ function main() {
 	const map = mapChunks(chunkModules, tabModules(readFileSync(join('frontend', WORKSPACE_PAGE), 'utf8')));
 	const files = paths.map((p) => ({ path: relative(buildDir, p), gzipBytes: gzipSync(readFileSync(p)).length }));
 	const m = measure(files, tabs.files, landing.files, map.files);
+	let welcome = null;
+	try {
+		welcome = readFileSync(join(buildDir, LANDING_HTML), 'utf8');
+	} catch {
+		// measureLandingFirstLoad says so.
+	}
+	const firstLoad = measureLandingFirstLoad(welcome, files);
+	m.landingFirstLoadKb = firstLoad.kb;
 	const rows = [
 		['Total gzipped JS+CSS', `${m.totalCodeKb} KB`, `${budget.totalCodeKb} KB: base ${BUDGET.totalCodeKb}, ${entries.addKb >= 0 ? '+' : ''}${entries.addKb} from ${entries.entries.length} entries in ${ENTRIES_DIR_SHOWN}/`],
 		[`Largest chunk (${m.largestChunk.path})`, `${m.largestChunk.kb} KB`, `${budget.largestChunkKb} KB`],
@@ -575,6 +648,7 @@ function main() {
 		[`Largest spreadsheet worker (${m.largestSpreadsheetWorker.path || 'none'})`, `${m.largestSpreadsheetWorker.kb} KB`, `${budget.largestSpreadsheetWorkerKb} KB`],
 		[`Largest other asset (${m.largestAsset.path || 'none'})`, `${m.largestAsset.kb} KB`, `${budget.largestAssetKb} KB`],
 		[`Landing page (${landing.files.size} files)`, `${m.landingKb} KB`, `${budget.landingKb} KB`],
+		[`Landing first load (${LANDING_HTML} + ${firstLoad.modules} preloaded modules; not in the total)`, `${m.landingFirstLoadKb} KB`, `${budget.landingFirstLoadKb} KB`],
 		[`Map library, lazy (${map.files.size} files; not in the total)`, `${m.mapKb} KB`, `${budget.mapKb} KB`],
 	];
 	for (const [what, size, ceiling] of rows) console.log(`${what}: ${size} (budget ${ceiling})`);
@@ -589,7 +663,7 @@ function main() {
 	const stale = tabs.errors.length === 0 && m.tabCount !== tabs.files.size
 		? [`The chunk map names ${tabs.files.size} tab files, but ${m.tabCount} of them are in ${buildDir}: the map is from another build. Run pnpm build:frontend again.`]
 		: [];
-	const bad = [...tabs.errors, ...landing.errors, ...map.errors, ...stale, ...violations(m, budget), ...pageBuildWorkerViolations(workers)];
+	const bad = [...tabs.errors, ...landing.errors, ...firstLoad.errors, ...map.errors, ...stale, ...violations(m, budget), ...pageBuildWorkerViolations(workers)];
 	for (const v of bad) console.error(`::error::${v}`);
 	process.exit(bad.length ? 1 : 0);
 }

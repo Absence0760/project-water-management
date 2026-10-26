@@ -19,9 +19,9 @@ describe('LanguageSwitch with two languages', () => {
 		expect(body).toMatch(/<button[^>]*lang="en"[^>]*aria-pressed="true"/);
 	});
 
-	it('shows codes when compact, keeping the names as the accessible names', () => {
+	it('shows codes when compact, the accessible name holding the code and then the name (WCAG 2.5.3)', () => {
 		const { body } = render(LanguageSwitch, { props: { compact: true } });
-		for (const l of LANGUAGES) expect(body).toMatch(new RegExp(`<button[^>]*lang="${l.code}"[^>]*aria-label="${l.name}"[^>]*>\\s*${l.code.toUpperCase()}\\s*</button>`));
+		for (const l of LANGUAGES) expect(body).toMatch(new RegExp(`<button[^>]*lang="${l.code}"[^>]*aria-label="${l.code.toUpperCase()} ${l.name}"[^>]*>\\s*${l.code.toUpperCase()}\\s*</button>`));
 	});
 
 	it('with addressOf, is a link per language to its own address, the current one marked, not preloaded (issue #137)', () => {
@@ -29,7 +29,7 @@ describe('LanguageSwitch with two languages', () => {
 		expect(body).not.toContain('<button');
 		expect(body).toMatch(/role="group"[^>]*data-sveltekit-preload-data="false"/);
 		const links = [...body.matchAll(/<a href="([^"]+)" hreflang="(\w+)" lang="(\w+)"[^>]*aria-label="([^"]+)"[^>]*>\s*([^<]*?)\s*<\/a>/g)].map((m) => m.slice(1));
-		expect(links).toEqual(LANGUAGES.map((l) => [`/welcome/${l.code}`, l.code, l.code, l.name, l.code.toUpperCase()]));
+		expect(links).toEqual(LANGUAGES.map((l) => [`/welcome/${l.code}`, l.code, l.code, `${l.code.toUpperCase()} ${l.name}`, l.code.toUpperCase()]));
 		expect(body).toMatch(/<a href="\/welcome\/en"[^>]*aria-current="true"/);
 		expect(body).not.toMatch(/<a href="\/welcome\/af"[^>]*aria-current/);
 	});

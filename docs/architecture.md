@@ -474,7 +474,12 @@ must not inherit the last page's language. CloudFront's `spa_rewrite` function s
 checks `PRERENDERED` against the routes and the language table, so a new
 language can't 404 in production only; the e2e static server mirrors it). The absolute URLs in
 its tags come from `paths.origin` (SvelteKit's config in `frontend/vite.config.ts`): the build's `SITE_ORIGIN` (the
-deploy passes `PUBLIC_SITE_URL`), else `http://localhost:7777`.
+deploy passes `PUBLIC_SITE_URL`), else `http://localhost:7777`. These pages,
+and the fallback `index.html`, carry their CSS in a `<style>` block instead of
+linked stylesheets (`inlineStyleThreshold`, issue #92), since each link blocked
+the first paint; client navigation still loads the cached CSS files. The
+landing page never asks for the session (`GET /auth/me`): the root layout asks
+once the visitor goes on to another page ([ui.md § Landing page](./ui.md#landing-page)).
 
 A signed-out `/` shows the same component client-side: the root layout renders
 `lib/components/landing/Landing.svelte` in place of the projects page, a lazy
@@ -483,7 +488,10 @@ rejected: `/` is also the signed-in project list, and a prerendered landing
 there would flash for every signed-in user and fail hydration. The landing
 imports no workspace code, no uPlot and no engine: its figures are a small
 generated module (`data.generated.ts`), made by running the engine at build
-time (`pnpm gen:landing-art`).
+time (`pnpm gen:landing-art`), and it reads shared constants from leaf modules
+(`network/supplyThresholds.ts`), never through a module that brings engine
+chunks with it; `pnpm check:bundle` caps what its first visit preloads
+(`landingFirstLoadKb`).
 
 ## Shared CSS (frontend)
 

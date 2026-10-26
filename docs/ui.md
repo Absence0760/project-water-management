@@ -427,8 +427,12 @@ other signed-out route still goes to `/login?next=`.
   `/welcome/<code>` in every other language of the table (`/welcome/af`;
   `landingPath`, the `locale` param matcher), so crawlers, link previews and
   a visitor before any script get the page and its tags in the address's
-  language without running the app; it renders at once, before the session is
-  known, and even with the API down. The canonical link and `og:url` point at
+  language without running the app; it renders at once, even with the API
+  down, and never asks for the session: nothing on it depends on who is
+  looking, and for a signed-out visitor `GET /auth/me` answered 401, which the
+  browser logged as a failed request (issue #92). The root layout asks once
+  the visitor goes on to any other page (`onLanding` in `routes/+layout.svelte`),
+  so a signed-in visitor who follows **Sign in** lands in the app. The canonical link and `og:url` point at
   the page's own address, `hreflang` alternates name every language's (and
   `x-default` → `/welcome`), and `og:locale` is the language's (`af_ZA`).
 - **Frame.** Outside the app shell, like the sign-in pages: a slim header (the
@@ -11859,7 +11863,10 @@ methods and verify pages (their readers are assessors).
 - **Switch.** `lib/i18n/LanguageSwitch.svelte`, drawn from the table. With
   two languages it is "English | Afrikaans" (each name in its own language,
   the button marked with that `lang`, `aria-pressed` on the current one;
-  "EN | AF" in the phone headers, the full name as the accessible name, and
+  "EN | AF" in the phone headers, whose accessible names are the code and
+  then the name, "EN English" and "AF Afrikaans", so each holds the text it
+  shows (WCAG 2.5.3 Label in Name: a voice user says "click AF") and a screen
+  reader still hears the language's name, and
   that compact pair never wraps, so a 320 px header stays one row; below
   360 px the farm header shows its mark, or a back link's chevron, without
   the words "My hydrological unit", which stay for screen readers, since
@@ -11881,7 +11888,10 @@ saved unit with the error above them). There it is `segmented`:
   engine's `matchLocale`, run by the root layout whenever the session
   changes).
   Choosing applies at once, is kept on the device and, signed in, saved with
-  `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). The saves go
+  `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). The landing
+  page (`/welcome`, `/welcome/<code>`) never asks for the session (§ Landing
+  page), so there the account's language doesn't apply and a choice is kept
+  on the device only. The saves go
   one at a time across every switch on the page, and only the latest
   choice's answer sets the session (`LanguageSwitch.svelte`): two quick
   choices could otherwise reach the server in either order and leave the

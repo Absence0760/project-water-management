@@ -68,7 +68,26 @@
 	});
 
 	const srcset = (mode: 'day' | 'dusk', type: 'avif' | 'webp') => hero.widths.map((w) => `${basePath()}/landing/hero-${mode}-${w}.${type} ${w}w`).join(', ');
-	const sizes = '(max-width: 760px) 140vw, 56vw';
+	// The width each use shows the render at, from the layout (issue #92), so a
+	// phone doesn't fetch a file twice as wide as it needs. The page's .wrap pads
+	// clamp(16px, 4vw, 42px) a side and stops at 1200px; past 760px both uses sit
+	// in a 7fr column of a 12fr grid with a ~4vw gap, so 7/12 of the wrap's
+	// content less the gap: 52vw to 1050px, 56vw - 49px to 1200px, ~620px past it.
+	// Up to 760px the story fills the wrap's content (100vw less the padding),
+	// and the hero's box (Hero.svelte .art) is that plus the gutter each side,
+	// 100vw to 400px and 92vw + 32px past it. The hero's picture is drawn at
+	// 150% of that box, but the box clips it to its middle two-thirds (the
+	// lower valley): its sizes names the box, the part a phone shows. That
+	// caps the density on purpose: the shown part arrives at ~1.3x on a 412px
+	// phone at 1.75x (800w) and ~2x on a 390px one at 3x (1200w), sharp
+	// enough for a painted scene behind its blur-up, instead of the whole
+	// picture at the screen's density (1200w, 1600w: half again the bytes, for
+	// the LCP element). landing.spec.ts holds each width to the layout.
+	const sizes = $derived(
+		mode === 'hero'
+			? '(max-width: 400px) 100vw, (max-width: 760px) calc(92vw + 32px), (max-width: 1050px) 52vw, (max-width: 1200px) calc(56vw - 49px), 620px'
+			: '(max-width: 400px) calc(100vw - 32px), (max-width: 760px) 92vw, (max-width: 1050px) 52vw, (max-width: 1200px) calc(56vw - 49px), 620px'
+	);
 
 	let root: HTMLElement | undefined = $state();
 	let img: HTMLImageElement | undefined = $state();
