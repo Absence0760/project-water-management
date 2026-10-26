@@ -6180,7 +6180,13 @@ editors run one now and read the map's proposals, viewers read.
   in `feeds.ts`, its days like the rest of the app's calendar days; a source
   that answered HTTP 403 reads "the source refused this server’s requests
   (HTTP 403): it may have blocked this server’s address, so the feed waits
-  hours before asking again", architecture.md § Data feeds → Throttling), and
+  hours before asking again", architecture.md § Data feeds → Throttling),
+  followed on a failing feed by when it tries again ("It tries again after
+  10:13." today, "It tries again after 27 Oct 2026 08:45." on another day, in
+  the reader's clock; "It is due to try again: the scheduler takes it on its
+  next pass." once that time has come or it was never scheduled; nothing for
+  a feed switched off or with no acting owner): the server's `nextAttemptAt`,
+  from the scheduler's own rule (`nextTryNote` in `feeds.ts`), and
   "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
   calendar day, never shifted by the time zone). CHIRPS says how many of the
   days are preliminary.
@@ -6198,8 +6204,19 @@ editors run one now and read the map's proposals, viewers read.
   tabs note that runs use the current series until it completes.
 - **A warning** above the list counts the feeds that are stale or failing
   ("1 feed needs attention: …", `role="alert"`).
-- **Run now** (editors) queues a fetch at once and says so; the status
-  updates once the background worker has run it (**Refresh status**).
+- **Run now** (editors) queues a fetch at once and says so ("Fetch queued.
+  …"), then follows it (issue #586 Round 4, `feeds/follow.ts`): the panel
+  re-reads the list every 2 s for the first 10 s, then every 5 s, then every
+  10 s, about two minutes in all, until the feed's `lastAttemptAt` moves (a
+  result was recorded; in production when the fetcher's answer comes back).
+  Then the card updates and the live region says how it went, focus staying
+  on the button: "Fetch done: Rainfall — forecast. OK; newest data …" or
+  "Fetch failed: Rainfall — CHIRPS: <why>. It tries again after 10:13."
+  Polling stops when the panel unmounts and pauses while the page is hidden
+  (one poll at once when it shows again); a failed poll just waits for the
+  next, and never overwrites a newer list. If the two minutes run out it
+  says "The fetch is still waiting to run. Refresh status will show it once
+  it has." **Refresh status** still re-reads at any time.
   Pressed too often (6 fetches, then one every 10 minutes per feed), the
   section's error line shows the server's words, with the wait in whole
   minutes and a reminder that the feed also runs daily.
@@ -13159,6 +13176,22 @@ data button or Run button.
   name, such as "Curve" or "Flow record"; `lib/a11y/tableHeaders.test.ts`
   refuses an empty `<th>` in any component) and `landmark-unique` (a tab's
   top panel is not a second region with the tab's own name).
+- **Try again keeps the focus.** Pressing a panel's Try again takes the
+  error (and the button) out of the page; the focus goes to the loading line
+  while it loads, to the new Try again if it fails again, and to the panel's
+  heading once it has loaded (the farm pages, the evidence report: the
+  page's `<h1>`; a Map layer: its checkbox; Preview all data: its search),
+  never to the top of the page (WCAG 2.4.3; `common/LoadState.svelte`, and
+  `common/loadState.ts` `followRetry` for a panel's own Try again;
+  `586-a11y-load-state.spec.ts`, `586-a11y-retry-focus.spec.ts`). A retry
+  with nothing on screen while it loads now shows a line saying so: the
+  Data tab's *Refreshing the series…*, the Project page's *Loading the import
+  record…* and *Loading pending invitations…*, and a map proposal panel's
+  *Loading the …*.
+- **A fold's action word is in its name.** A fold's summary
+  (`common/Fold.svelte`) is named with its visible **Change…** / **Hide** /
+  **Show** at the end ("Default limits: … Change the limits"), so a
+  voice-control user can say it (WCAG 2.5.3; `586-a11y-fold-name.spec.ts`).
 - **Sideways-scrolling boxes** (every `.table-wrap`, and anything marked
   `data-scroll-region`, such as the schematic) become a focusable, named
   group while their content overflows, so Tab reaches them and the arrow keys

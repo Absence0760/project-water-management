@@ -12,12 +12,15 @@
 	import { importerLabel } from '#lib/components/import/importReport.js';
 	import { fmtDate } from '#lib/format/number.js';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 
 	let { projectId }: { projectId: string } = $props();
 
 	let report = $state.raw<StoredImportReport | null>(null);
 	let error = $state<string | null>(null);
 
+	/** Set by Try again until its load settles, so the section stays (with its loading line) meanwhile. */
+	let retrying = $state(false);
 	let loadedFor = '';
 	async function load(id: string) {
 		loadedFor = id;
@@ -28,7 +31,14 @@
 			if (loadedFor === id) report = r;
 		} catch (e) {
 			if (loadedFor === id) error = e instanceof Error ? e.message : String(e);
+		} finally {
+			if (loadedFor === id) retrying = false;
 		}
+	}
+	function retry(e: MouseEvent) {
+		followRetry(e.currentTarget as HTMLElement);
+		retrying = true;
+		load(projectId);
 	}
 	$effect(() => {
 		if (projectId !== loadedFor) load(projectId);
@@ -38,27 +48,32 @@
 	const sourceLabel = $derived(report?.source === 'b023-workbook' ? 'Water Balance Tool workbook' : 'project file');
 </script>
 
-{#if report}
+<!-- One section through a retry, so the focus can follow Try again (followRetry): the
+     loading line while it loads, the new Try again if it fails again, the heading once loaded. -->
+{#if report || error || retrying}
 	<section class="panel" aria-labelledby="import-record-h-t">
 		<div class="panel-head"><h2 id="import-record-h"><span id="import-record-h-t">Import record</span> <HelpTip key="import-record" /></h2></div>
-		<!-- One line of markup, so the sentence has no stray line break in its text. -->
-		<p class="summary">Imported from the {sourceLabel} <span class="mono">{report.fileName}</span> on {when} by {report.importedBy ?? FORMER_MEMBER}.</p>
-		<p class="muted small">Importer: {importerLabel(report.importerVersion)}. What it flagged then is kept here as it was shown.</p>
-		<ImportReportLists
-			notes={report.notes}
-			unmapped={report.unmapped}
-			notesOmitted={report.notesOmitted}
-			unmappedOmitted={report.unmappedOmitted}
-			idPrefix="ov-import"
-			showUnmapped={report.source === 'b023-workbook'}
-			collapsible
-		/>
-	</section>
-{:else if error}
-	<section class="panel" aria-labelledby="import-record-h">
-		<div class="panel-head"><h2 id="import-record-h">Import record</h2></div>
-		<p class="alert alert-error" role="alert">Couldn't load the import record: {error}</p>
-		<button type="button" class="btn" onclick={() => load(projectId)}>Try again</button>
+		{#if report}
+			<!-- One line of markup, so the sentence has no stray line break in its text. -->
+			<p class="summary">Imported from the {sourceLabel} <span class="mono">{report.fileName}</span> on {when} by {report.importedBy ?? FORMER_MEMBER}.</p>
+			<p class="muted small">Importer: {importerLabel(report.importerVersion)}. What it flagged then is kept here as it was shown.</p>
+			<ImportReportLists
+				notes={report.notes}
+				unmapped={report.unmapped}
+				notesOmitted={report.notesOmitted}
+				unmappedOmitted={report.unmappedOmitted}
+				idPrefix="ov-import"
+				showUnmapped={report.source === 'b023-workbook'}
+				collapsible
+			/>
+		{:else if error}
+			<div class="alert alert-error" role="alert">
+				Couldn't load the import record: {error}
+				<button type="button" class="btn btn-sm" data-retry onclick={retry}>Try again</button>
+			</div>
+		{:else}
+			<p class="muted" role="status" data-loading>Loading the import record…</p>
+		{/if}
 	</section>
 {/if}
 

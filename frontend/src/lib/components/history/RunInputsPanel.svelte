@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import type { InputChange } from '@water-management/engine';
 	import { api, type HistoryRevision, type Relink, type RunMeta } from '#lib/api/index.js';
 	import Dialog from '#lib/components/common/Dialog.svelte';
@@ -51,6 +52,13 @@
 			loading = false;
 		}
 	}
+	// Try again takes itself out (the loading line takes its place): the focus follows (followRetry).
+	// While a load is out it is aria-disabled, never disabled, so a press can't drop the focus (ui-playbook).
+	function retry(e: MouseEvent) {
+		if (loading) return;
+		followRetry(e.currentTarget as HTMLElement);
+		load();
+	}
 	function toggle(e: Event) {
 		open = (e.currentTarget as HTMLDetailsElement).open;
 		if (open && changes === null && !loading) load();
@@ -94,9 +102,9 @@
 	<details ontoggle={toggle}>
 		<summary><h3 id="res-changes">Changes since this run</h3></summary>
 		{#if loading && changes === null}
-			<p class="muted" role="status">Loading…</p>
+			<p class="muted" role="status" data-loading>Loading…</p>
 		{:else if error}
-			<div class="alert alert-error" role="alert">{error} <button type="button" class="btn btn-sm" onclick={load}>Try again</button></div>
+			<div class="alert alert-error" role="alert">{error} <button type="button" class="btn btn-sm" data-retry onclick={retry}>Try again</button></div>
 		{:else if changes}
 			{#if changes.length === 0}
 				<p class="muted">The saved inputs are the ones this run used.</p>
@@ -150,9 +158,11 @@
 	</p>
 	{#if changes === null && error}
 		<!-- The load failed: say so here, where the question is, not only in the closed "Changes since this run" above. -->
-		<div class="alert alert-error" role="alert">{error} <button type="button" class="btn btn-sm" onclick={load} disabled={loading}>Try again</button></div>
+		<div class="alert alert-error" role="alert">
+			{error} <button type="button" class="btn btn-sm" data-retry onclick={retry} aria-disabled={loading ? 'true' : undefined}>Try again</button>
+		</div>
 	{:else if changes === null}
-		<p class="muted" role="status">Working out what changes…</p>
+		<p class="muted" role="status" data-loading>Working out what changes…</p>
 	{:else if changes.filter((c) => c.area !== 'series').length === 0}
 		<p class="muted">The saved settings and model already match this run.</p>
 	{:else}

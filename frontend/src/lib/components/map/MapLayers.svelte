@@ -22,6 +22,7 @@
 -->
 <script lang="ts">
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { MapFeature } from '#lib/api/index.js';
@@ -94,6 +95,12 @@
 		void goto(withLayer(page.url.search, layer, on), { reset: false });
 	}
 
+	// A layer's Try again takes itself out for the loading line: the focus follows it there, to a new Try again if
+	// it fails again, and to the layer's own checkbox once loaded (no heading of its own; followRetry).
+	function retryLayer(e: MouseEvent, layer: { retry(): void }, checkbox: string) {
+		followRetry(e.currentTarget as HTMLElement, { landing: () => document.querySelector<HTMLElement>(`[data-testid="${checkbox}"]`) });
+		layer.retry();
+	}
 	const answer = $derived(quaternaries.answer);
 	const synthetic = $derived(!!answer?.quaternaries.some((q) => q.synthetic));
 	const datasets = $derived([...new Set(answer?.quaternaries.map((q) => q.dataset) ?? [])]);
@@ -203,9 +210,9 @@
 			{#if quaternaries.nothingAround}
 				<p class="muted">Nothing on the map yet to show the quaternaries around.</p>
 			{:else if quaternaries.error}
-				<p class="err" role="alert">The quaternaries couldn’t be loaded: {quaternaries.error} <button type="button" class="btn btn-sm" onclick={() => quaternaries.retry()}>Try again</button></p>
+				<p class="err" role="alert">The quaternaries couldn’t be loaded: {quaternaries.error} <button type="button" class="btn btn-sm" data-retry onclick={(e) => retryLayer(e, quaternaries!, 'map-layer-quaternaries')}>Try again</button></p>
 			{:else if !answer}
-				<p class="muted">Loading the quaternaries…</p>
+				<p class="muted" data-loading>Loading the quaternaries…</p>
 			{:else if !answer.quaternaries.length}
 				<p class="muted" data-testid="map-quaternaries-none">
 					{answer.datasets.length ? 'No quaternary catchment in the loaded dataset is near this catchment.' : 'No quaternary dataset is loaded (docs/maps.md § Quaternary dataset).'}
@@ -235,9 +242,9 @@
 			{#if rivers.nothingAround}
 				<p class="muted">Zoom in to see the river network here (to about {RIVER_BBOX_MAX_DEG}° across), or draw the catchment.</p>
 			{:else if rivers.error}
-				<p class="err" role="alert">The river network couldn’t be loaded: {rivers.error} <button type="button" class="btn btn-sm" onclick={() => rivers.retry()}>Try again</button></p>
+				<p class="err" role="alert">The river network couldn’t be loaded: {rivers.error} <button type="button" class="btn btn-sm" data-retry onclick={(e) => retryLayer(e, rivers!, 'map-layer-rivers')}>Try again</button></p>
 			{:else if !rv}
-				<p class="muted">Loading the river network…</p>
+				<p class="muted" data-loading>Loading the river network…</p>
 			{:else if !rv.reaches.length}
 				<p class="muted" data-testid="map-rivers-none">
 					{rv.datasets.length ? (rivers.aroundFeatures ? 'No reach of the loaded river network is near this catchment.' : 'No reach of the loaded river network is in view.') : 'No river network is loaded (docs/maps.md § River network).'}
@@ -323,9 +330,9 @@
 				{#if mapGrid.zoomIn}
 					<p class="muted" data-testid="map-mapgrid-zoom">Zoom in to see the MAP grid (to about {MAP_GRID_BBOX_MAX_DEG}° across).</p>
 				{:else if mapGrid.error}
-					<p class="err" role="alert">The MAP grid couldn’t be loaded: {mapGrid.error} <button type="button" class="btn btn-sm" onclick={() => mapGrid.retry()}>Try again</button></p>
+					<p class="err" role="alert">The MAP grid couldn’t be loaded: {mapGrid.error} <button type="button" class="btn btn-sm" data-retry onclick={(e) => retryLayer(e, mapGrid!, 'map-layer-mapgrid')}>Try again</button></p>
 				{:else if !mg}
-					<p class="muted">Loading the MAP grid…</p>
+					<p class="muted" data-loading>Loading the MAP grid…</p>
 				{:else if !mg.dataset}
 					<p class="muted" data-testid="map-mapgrid-none">No MAP grid is loaded (<code>pnpm import:map-grid</code>, docs/maps.md § MAP grid).</p>
 				{:else}
@@ -382,9 +389,9 @@
 				{#if demGrid.zoomIn}
 					<p class="muted" data-testid="map-demgrid-zoom">Zoom in to see the DEM grid (to about {DEM_GRID_BBOX_MAX_DEG}° across).</p>
 				{:else if demGrid.error}
-					<p class="err" role="alert">The DEM grid couldn’t be loaded: {demGrid.error} <button type="button" class="btn btn-sm" onclick={() => demGrid.retry()}>Try again</button></p>
+					<p class="err" role="alert">The DEM grid couldn’t be loaded: {demGrid.error} <button type="button" class="btn btn-sm" data-retry onclick={(e) => retryLayer(e, demGrid!, 'map-layer-demgrid')}>Try again</button></p>
 				{:else if !dg}
-					<p class="muted">Loading the DEM grid…</p>
+					<p class="muted" data-loading>Loading the DEM grid…</p>
 				{:else if dg.tooDense}
 					<p class="muted" data-testid="map-demgrid-dense">This view holds more than {fmtNum(dg.max, 0, true)} of the grid’s points: zoom in to see them.</p>
 				{:else if !dg.points.length}

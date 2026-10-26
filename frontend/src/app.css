@@ -532,7 +532,7 @@ textarea {
 /* Rarely changed settings folded into one line of their values (ui-playbook.md § 2, "Rarely changed
    settings fold into their values"): common/Fold.svelte writes the markup, <details class="fold"><summary>
    <span class="fold-name">Search:</span> <span>values</span><span class="fold-problem">needs fixing</span>
-   <span class="fold-change" aria-hidden="true">Change</span></summary><div class="fold-body">fields</div>
+   <span class="fold-change">Change</span></summary><div class="fold-body">fields</div>
    </details>. "needs fixing" shows while a field inside is aria-invalid, so a closed fold still says so. Every
    fold's line starts with the same chevron, turned down while it is open (the one marker rule; a node sheet's
    section card, a headed band, keeps its own triangle). */
@@ -910,6 +910,10 @@ table.data tr.flag {
 
 /* Skip-link target: focusable but no ring around the whole page. */
 #main:focus {
+	outline: none;
+}
+/* A loading line takes the focus only from a Try again (common/loadState.ts followRetry), never from Tab. */
+[data-loading]:focus {
 	outline: none;
 }
 

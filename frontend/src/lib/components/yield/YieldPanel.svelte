@@ -15,6 +15,7 @@
 	// part of the same build) and names it, with a note when the stored
 	// result came from another engine (the backend is released separately).
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { onDestroy, untrack } from 'svelte';
 	import { api, type JobMeta, type RunMeta, type YieldResult } from '#lib/api/index.js';
 	import LineChart from '#lib/components/charts/LineChart.svelte';
@@ -313,9 +314,21 @@
 	{#if submitError}<div class="alert alert-error" role="alert">{submitError}</div>{/if}
 
 	{#if loading}
-		<p class="muted">Loading results…</p>
+		<p class="muted" data-loading>Loading results…</p>
 	{:else if loadError}
-		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" onclick={load}>Try again</button></div>
+		<div class="alert alert-error" role="alert">
+			{loadError}
+			<!-- The loading line takes its place: the focus follows (followRetry). -->
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					followRetry(e.currentTarget);
+					load();
+				}}>Try again</button
+			>
+		</div>
 	{:else if !latest.firm && !latest.curve}
 		{#if target}<p class="muted" data-testid="yield-empty">No yield worked out for this dam on this {scenarioId ? 'scenario' : 'run'} yet.</p>{/if}
 	{:else}

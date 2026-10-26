@@ -15,6 +15,7 @@
 	import { page } from '$app/state';
 	import { api, type Run, type RunSeriesRef } from '#lib/api/index.js';
 	import CurtailmentTable from '#lib/components/curtailment/CurtailmentTable.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import {
 		describePeriod,
 		forecastDaysIn,
@@ -191,7 +192,7 @@
 		{:else if resolution && !resolution.ok}
 			<p class="warn">{resolution.error} Showing the project window.</p>
 		{:else if recompute && loading}
-			<p>Working out {presetLabel(choice.preset).toLowerCase()} from this run's daily results…</p>
+			<p data-loading>Working out {presetLabel(choice.preset).toLowerCase()} from this run's daily results…</p>
 		{:else if recompute && !windowed}
 			<!-- The error itself is in the alert below. -->
 			<p>Showing the project window.</p>
@@ -215,7 +216,16 @@
 	{#if loadError && recompute}
 		<div class="alert alert-error" role="alert">
 			Couldn't load the run's daily results: {loadError}
-			<button type="button" class="btn btn-sm" onclick={() => attempt++}>Try again</button>
+			<!-- The working-out line takes its place: the focus follows (followRetry). -->
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					followRetry(e.currentTarget);
+					attempt++;
+				}}>Try again</button
+			>
 		</div>
 	{:else if workError && recompute}
 		<div class="alert alert-error" role="alert">Couldn't work out this window from the run's daily results: {workError}</div>

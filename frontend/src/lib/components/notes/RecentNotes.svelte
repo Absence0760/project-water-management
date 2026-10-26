@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import { api, type Note } from '#lib/api/index.js';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { fmtDate } from '#lib/format/number.js';
 	import { noteCounts } from './counts.svelte';
@@ -20,6 +21,12 @@
 	const counts = $derived(noteCounts(projectId));
 	/** Bumped by Try again after a failed load. */
 	let attempt = $state(0);
+	// Try again shows the loading line (or the notes kept from before) in its place: the focus follows (followRetry).
+	function retry(e: MouseEvent) {
+		followRetry(e.currentTarget as HTMLElement);
+		error = null;
+		attempt++;
+	}
 
 	$effect(() => {
 		void counts.counts; // reload after any change the counts pick up
@@ -42,10 +49,10 @@
 	{#if error}
 		<div class="alert alert-error" role="alert">
 			Couldn’t load the notes: {error}
-			<button type="button" class="btn btn-sm" onclick={() => attempt++}>Try again</button>
+			<button type="button" class="btn btn-sm" data-retry onclick={retry}>Try again</button>
 		</div>
 	{:else if notes === null}
-		<p class="muted" aria-busy="true">Loading notes…</p>
+		<p class="muted" aria-busy="true" data-loading>Loading notes…</p>
 	{:else if notes.length === 0}
 		<p class="muted">No notes yet. Add one on a hydrological unit in <a href="?tab=network">Network</a>, a run, a settings group or the project itself.</p>
 	{:else}

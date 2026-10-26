@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
 	import { tick, type Snippet } from 'svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import Fold from '#lib/components/common/Fold.svelte';
 
@@ -107,9 +108,23 @@
 	<p class={notice ? `alert ${noticeFailed ? 'alert-error' : 'alert-info'} slim` : 'visually-hidden'} role="status" tabindex="-1" bind:this={noticeEl} data-testid="{prefix}-notice">{#if notice}{notice}{#if !noticeFailed}{' '}<a href="?tab=runs">Run the model</a> to see its effect.{/if}{/if}</p>
 	<div class="body" class:grid={bodyGrid} aria-busy={loading} data-ready={!loading && (loaded || error !== null) ? 'true' : undefined} data-testid="{prefix}-body">
 		{#if error}
-			<p class="err" role="alert">The {what} couldn’t be loaded ({error}). <button type="button" class="btn btn-sm" onclick={onretry}>Try again</button></p>
+			<p class="err" role="alert">
+				The {what} couldn’t be loaded ({error}).
+				<!-- The loading line takes its place: the focus follows, then lands on the panel's heading (followRetry). -->
+				<button
+					type="button"
+					class="btn btn-sm"
+					data-retry
+					onclick={(e) => {
+						followRetry(e.currentTarget);
+						onretry();
+					}}>Try again</button
+				>
+			</p>
 		{:else if loaded}
 			{@render children()}
+		{:else if loading}
+			<p class="muted" role="status" data-loading>Loading the {what}…</p>
 		{/if}
 	</div>
 {/snippet}

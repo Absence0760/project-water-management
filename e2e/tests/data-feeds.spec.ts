@@ -57,6 +57,24 @@ async function fetchOnce(projectId: string): Promise<[number, number]> {
 const datedIn = (span: [number, number], text: (at: number) => string) =>
 	new RegExp([...new Set(span.map(text))].map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'));
 
+/**
+ * Fire the panel's next follow-up poll now instead of waiting it out: after
+ * Run now the panel re-reads the list on its own, at most 10 s apart
+ * (frontend feeds/follow.ts FOLLOW_DELAYS_MS), until the fetch has run. The
+ * page's clock must be installed (page.clock.install()) before the page loads.
+ */
+const nextPoll = (page: import('@playwright/test').Page) => page.clock.runFor(10_000);
+
+/** `at + minutes` as the row writes the next try (feeds.ts nextTryNote): the time alone on the same UTC day (timezoneId), else the day too. */
+const triesAgain = (at: number, minutes: number) => {
+	const t = new Date(at + minutes * 60_000);
+	const iso = t.toISOString();
+	const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+	const day = `${t.getUTCDate()} ${months[t.getUTCMonth()]} ${t.getUTCFullYear()}`;
+	const when = iso.slice(0, 10) === new Date(at).toISOString().slice(0, 10) ? iso.slice(11, 16) : `${day} ${iso.slice(11, 16)}`;
+	return `It tries again after ${when}.`;
+};
+
 /** Attach a CHIRPS feed straight through the API (as whoever `request` is signed in as). */
 async function attachFeed(request: APIRequestContext, projectId: string): Promise<string> {
 	const res = await request.post(`${API_URL}/projects/${projectId}/feeds`, {
@@ -66,9 +84,10 @@ async function attachFeed(request: APIRequestContext, projectId: string): Promis
 	return ((await res.json()) as { feed: { id: string } }).feed.id;
 }
 
-test('an owner attaches a forecast feed on fixtures, runs it, and the status panel shows it OK', async ({ page, owner }) => {
+test('an owner attaches a forecast feed on fixtures, runs it, and the status panel follows the fetch and shows it OK', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Feeds');
+	await page.clock.install();
 	await page.goto(`/projects/${project.id}?tab=series`);
 
 	const panel = page.getByRole('region', { name: 'Data feeds' });
@@ -95,12 +114,16 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 	await expect(feed.getByText('Waiting for its first fetch.')).toBeVisible();
 	await expect(feed.getByText('No data yet · not checked yet')).toBeVisible();
 
-	await feed.getByRole('button', { name: 'Run now: Rainfall — forecast' }).click();
+	const run = feed.getByRole('button', { name: 'Run now: Rainfall — forecast' });
+	await run.click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
 	const fetched = await fetchOnce(project.id);
 
-	await panel.getByRole('button', { name: 'Refresh status' }).click();
+	// No Refresh status: the panel follows the queued fetch, updates the row and announces it, focus staying on Run now.
+	await nextPoll(page);
 	await expect(feed).toHaveAttribute('data-state', 'ok');
+	await expect(panel.getByRole('status')).toHaveText(datedIn(fetched, (at) => `Fetch done: Rainfall — forecast. OK; newest data ${day(15, at)}, checked ${projectToday(at)}.`));
+	await expect(run).toBeFocused();
 	await expect(feed.getByText('OK', { exact: true })).toBeVisible();
 	await expect(feed).toContainText(datedIn(fetched, (at) => `Last data ${day(15, at)} · checked `));
 	// The health sentence, written by the panel from the server's reason code, its days formatted the same way (never raw ISO).
@@ -181,9 +204,10 @@ test('a coastal box leaves out its sea cells when asked, and fetches the land’
 	await expect(feed).toContainText('· 3 of 4 cells with data');
 });
 
-test('a feed that fails shows as failing, with the warning above the list', async ({ page, owner }) => {
+test('a feed that fails shows as failing, says when it tries again, with the warning above the list', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Failing feed');
+	await page.clock.install();
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 
@@ -194,11 +218,15 @@ test('a feed that fails shows as failing, with the warning above the list', asyn
 	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
 	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
-	await runJobsTick({ projects: [project.id] });
+	// The tick's schedule takes the feed (it was never scheduled) and the fetch fails: the
+	// scheduler's backoff, 15 min less its minute's slack (243_feed_next_attempt.sql), counts from then.
+	const fetched = await fetchOnce(project.id);
 
-	await panel.getByRole('button', { name: 'Refresh status' }).click();
+	await nextPoll(page);
 	await expect(feed).toHaveAttribute('data-state', 'failing');
-	await expect(feed).toContainText('The last fetch failed: the source’s data could not be read: the grid has no data at -20.27, 25.37');
+	const why = 'the source’s data could not be read: the grid has no data at -20.27, 25.37 (the sea, or outside the product’s coverage)';
+	await expect(panel.getByRole('status')).toHaveText(datedIn(fetched, (at) => `Fetch failed: Rainfall — CHIRPS: ${why}. ${triesAgain(at, 14)}`));
+	await expect(feed.locator('.health')).toHaveText(datedIn(fetched, (at) => `The last fetch failed: ${why}. No data yet. ${triesAgain(at, 14)}`));
 	await expect(panel.getByTestId('feeds-attention')).toHaveText('1 feed needs attention: its data is out of date or its last fetch failed.');
 
 	// WCAG 2.2 AA on the panel in its busiest state: a failing feed, the warning, the open form.

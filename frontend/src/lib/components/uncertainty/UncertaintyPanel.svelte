@@ -16,6 +16,7 @@
 -->
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import {
 		ENSEMBLE_DEFAULTS,
 		ENSEMBLE_MEMBERS_MAX,
@@ -52,6 +53,8 @@
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
 
+	/** Try again's load, in flight: the panel stays open on its loading line (not the collapsed row) until it settles. */
+	let retrying = $state(false);
 	async function load() {
 		loadError = null;
 		try {
@@ -60,7 +63,15 @@
 			loadError = msg(e);
 		} finally {
 			loading = false;
+			retrying = false;
 		}
+	}
+	// Try again takes itself out for the loading line: the focus follows (followRetry).
+	function retry(e: MouseEvent) {
+		followRetry(e.currentTarget as HTMLElement);
+		retrying = true;
+		loading = true;
+		load();
 	}
 	$effect(() => {
 		void runId;
@@ -160,7 +171,7 @@
 
 	// Never run on this run (nothing started, nothing loading wrong): one row until the editor opens the form (issue #465).
 	let opened = $state(false);
-	const collapsed = $derived(!opened && !loadError && (loading || list.length === 0) && phase === 'idle' && !actionError);
+	const collapsed = $derived(!opened && !loadError && !retrying && (loading || list.length === 0) && phase === 'idle' && !actionError);
 	async function open() {
 		opened = true;
 		await tick();
@@ -197,9 +208,9 @@
 	</p>
 
 	{#if loading}
-		<p class="muted" role="status">Loading…</p>
+		<p class="muted" role="status" data-loading>Loading…</p>
 	{:else if loadError}
-		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" onclick={load}>Try again</button></div>
+		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" data-retry onclick={retry}>Try again</button></div>
 	{:else if summary && shown}
 		<p class="rule" data-testid="decision-rule"><strong>Decision rule.</strong> {summary.decisionRule}</p>
 		<p class="muted small">{optionLine(shown)} · {shown.runoffModel} · stored {shown.completedAt?.slice(0, 16).replace('T', ' ')} by {shown.createdBy ?? FORMER_MEMBER}</p>

@@ -10,6 +10,7 @@
 	// <tr>s, the header row and the date column stay in view while scrolling,
 	// and number columns are right-aligned under right-aligned headers.
 	import Dialog from '#lib/components/common/Dialog.svelte';
+	import { followRetry } from '#lib/components/common/loadState.js';
 	import { fetchDownload, saveBlob } from '#lib/export/download.js';
 	import { parseDailyCsv, type DailyTable } from '#lib/export/dailyTable.js';
 	import { dayPrefix, fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
@@ -100,10 +101,19 @@
 	{#if error}
 		<div class="alert alert-error" role="alert">
 			{error}
-			<button type="button" class="btn btn-sm" onclick={() => load(url)}>Try again</button>
+			<button
+				type="button"
+				class="btn btn-sm"
+				data-retry
+				onclick={(e) => {
+					// The loading line takes its place: the focus follows (followRetry).
+					followRetry(e.currentTarget);
+					load(url);
+				}}>Try again</button
+			>
 		</div>
 	{:else if !shown}
-		<div class="state" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Loading…</div>
+		<div class="state" role="status" aria-live="polite" data-loading><span class="spinner" aria-hidden="true"></span> Loading…</div>
 	{:else}
 		{#if shown.legacy}<div class="alert alert-warning" role="note">This run used the legacy runoff model (removed in engine 1.0.0): a workbook comparison only, not evidence.</div>{/if}
 		<div class="controls">
