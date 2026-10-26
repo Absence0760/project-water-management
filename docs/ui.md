@@ -1153,7 +1153,7 @@ there is something to say about what goes with the node (its crop areas,
 transfers, boreholes…, `removeMessage`); Crops' **Remove crop** when the crop
 has planted areas; Transfers' **Remove transfer** whenever the rule has
 anything set besides its ends (a month's rate, a limit, an off-take's
-fields: `transferIsBlank`), so a rule just added goes at once. On Settings,
+fields: `transferIsBlank`), so a rule just added goes at once. On Model settings,
 **Remove the rule table at …** always asks (**Remove the table**, naming its
 grids and high flows), a rain-source period asks once it has a reason or
 fixed factors (**Remove the period**), and a fill that would replace typed
@@ -5990,7 +5990,7 @@ for every flow series; **Rain used (model)** and its source (catchment / CHIRPS 
 forecast) after gap-fill, in words beside the value; the **CHIRPS bias factor** for that calendar
 month and the **CHIRPS (corrected)** value (respecting Settings → *CHIRPS bias
 correction*); and **Excluded from calibration**, with its reason, for any day
-inside a Settings → *Calibration exclusions* period. A third group, *Each
+inside a Calibration → *Calibration record* exclusion period. A third group, *Each
 area’s rain (derived, not stored)*, has the Full CSV's columns for each area
 with a station (the average catchment rainfall, then each land unit, in the
 list's order; issue #553): *station × ratio*, *CHIRPS corrected* (absent when
@@ -6129,7 +6129,7 @@ editors run one now and read the map's proposals, viewers read.
   automatically … → Data feeds** (in-page, `#data-feeds`), the Map's
   Getting started step and the Start sheet's data step
   (`?tab=series&rain=boundary#data-feeds`, and **Observed flow**
-  `?tab=series#data-feeds`), Settings' Rain for each unit line
+  `?tab=series#data-feeds`), Model settings' Rain for each unit line (Flow generation)
   (`?tab=series&rain=units#data-feeds`) and Runs & results' stub for a run
   with no forecast (`res-forecast`, `runs/missingPanel.ts`). Each lands
   through `landOnAnchor` (`help/anchor.ts`): once the lazy panel's heading
@@ -6413,9 +6413,10 @@ other sections.
   `?tab=calibration#set-…`, from when that opened this page, goes on here
   from the Calibration page, § Calibration) land on
   that group once the tab's chunk has drawn it, held while the page settles
-  (`holdAnchor`), with focus on its heading. The panels that are lazy chunks
-  of their own (Evaporation from the map, Data feeds, API keys, Scheduled
-  reports) are waited for, then their heading (`landOnAnchor`, help/anchor.ts;
+  (`holdAnchor`), with focus on its heading. The panels and cards that are
+  lazy chunks (`settings/lazySections.ts`: Rain gaps' cards, Flow generation's
+  station table, the evidence rule; on Calibration, Evaporation from the map)
+  are waited for, then their heading (`landOnAnchor`, help/anchor.ts;
   a card's h4, as Units without a station's in its legend, counts), until the
   reader scrolls, types or clicks, or for at most about six seconds each
   (`LAND_WAIT_MS`; issue #586). Before, the browser's own jump
@@ -6521,9 +6522,9 @@ other sections.
   "The whole rain record"; "CHIRPS bias-corrected per month fills gaps ·
   fitted on the whole record · zero runs treated as missing"; "A-pan
   1 730 mm a year · effective rain 65% · soil-water store 25 mm · dam
-  evaporation 0.75 × A-pan"; GR4J's X1, X3, X4 (and X2), the catchment area
-  and the PE a year; the calibration window, site and periods left out; the
-  header's fit line; where the daily EWR comes from and its volume; the
+  evaporation 0.75 × A-pan"; on Calibration's panels, GR4J's X1, X3, X4 (and X2), the
+  catchment area and the PE a year, the calibration window, site and periods
+  left out, and the fit line; where the daily EWR comes from and its volume; the
   reporting window (or the whole run) and the annual assurance threshold
   (Reporting); WR2012 on with its quaternary and MAR, or off; the rule
   tables and what the EWR charge follows (nothing when there is none: the
@@ -6564,10 +6565,10 @@ other sections.
   field it is fixed in, which names it (`aria-describedby`); a required text
   left blank in a row just added (a reason, a source) is marked once the
   field has been left, not the moment the row appears. A number field
-  holding text it can't take lists itself too and blocks the save. After the
-  form, a line tells editors that Data feeds, API keys (owners) and
-  scheduled reports save as they change, not with the save bar's Save
-  changes.
+  holding text it can't take lists itself too and blocks the save. Data
+  feeds, API keys and Scheduled reports, which save as they change rather
+  than with the save bar, are no longer on this page (Data and Project each
+  say so beside them), so the form ends at Automatic runs with no such line.
 - **Switches keep what they turned off.** Unticking a section and ticking it
   again before saving brings back what was there, never a fresh default:
   the monthly dam evaporation factors, the WR2012 check's reference (and its
@@ -6576,25 +6577,20 @@ other sections.
   correction, GR4J's monthly PE, the CHIRPS gap map and drought
   restrictions. The page's draft keeps them (`kept`, `last…`) until the
   settings are saved or discarded.
-- **Headings.** Each panel is an `h2` (Flow calibration, Rain gaps, Flow
-  share and EWR were shortened to the menu's words; the summary line under
-  each says the rest); inside the long ones each sub-group is
-  an `h3` in the order shown (in its fieldset's legend where it has one), so
-  heading navigation reaches them: under Flow calibration its cards, GR4J
-  parameters, Rain into GR4J (with the areal rainfall correction as an `h4`),
-  GR4J potential evaporation and Evaporation from the map
-  (issue #521); under Flow generation its cards (Per unit: Each unit's
-  rainfall station, then the Flow share card; Units without a station an `h4`
-  in its legend, issue #553); under
-  Rain gaps its two cards, CHIRPS gap filling and Flagged rain, with the
-  Flagged rain card's zero-rain runs, multi-day accumulations and rain
-  source periods as `h4`s (issue #521); under the Calibration record the
-  quality flags and flow gaps.
-  Fit the parameters (`#set-fit`) is a panel with its own `h2` over two
-  cards: Fit automatically with the fit record at its foot, then the
-  calibration rules with automated calibration under them (2026-10-10; the
-  record moved into the first card in issue #521). Each help tip has a name of its own (the three GR4J
-  parameters' "About GR4J, for …").
+- **Headings.** Each panel is an `h2` (Rain gaps, Flow share and EWR were
+  shortened to the menu's words; the summary line under each says the rest);
+  inside the long ones each sub-group is an `h3` in the order shown (in its
+  fieldset's legend where it has one), so heading navigation reaches them:
+  under Flow generation its cards (Per unit: Each unit's rainfall station,
+  then the Flow share card; Units without a station an `h4` in its legend,
+  issue #553); under Rain gaps its two cards, CHIRPS gap filling and Flagged
+  rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
+  and rain source periods as `h4`s (issue #521). The four panels that moved
+  to Calibration (Flow calibration, Calibration record, Fit the parameters,
+  WR2012 check) are an `h3` each there, under its *Set up the fit* part
+  heading, their cards one level down ([§ Calibration](#calibration)). Each
+  help tip has a name of its own (the three GR4J parameters' "About GR4J,
+  for …").
 
 The settings are grouped by what they drive. Every 12-month row (A-pan, pan
 coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen beside the
@@ -6827,7 +6823,7 @@ two.
     without either its pairing is refused). Under 40rem of width each row
     stacks into a block with its fields labelled, so nothing scrolls sideways
     (`flow-generation.spec.ts` at 390 px). Then **Units without a station**
-    (above, in Flow calibration's description) and, for editors, MAP from the grid.
+    ([§ Calibration](#calibration), in Flow calibration's description) and, for editors, MAP from the grid.
   - **Flow share** (Fragmentation) or **Flow share: the EWR between units**
     (Per unit), a card: the **Flow share method** and the **High/low MAP
     split** (High, Low, their Sum, amber unless 100 %) only while the method
@@ -8026,7 +8022,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   with nothing to choose doesn't get it; resolved from the run shown
   under the project's `settings.ewrHeadline` (`resolveHeadline`,
   `ewr/headline.ts` `judgedByText`), "(automatic)" when the project hasn't
-  chosen. **Change** (for a viewer, **Where this is set**) opens Settings →
+  chosen. **Change** (for a viewer, **Where this is set**) opens Model settings →
   EWR the results are judged by (`?tab=settings#set-judge`). When the chosen site's table
   isn't in the run (the table or gauge went, or the run predates it), the
   line adds that the run is judged automatically. Reserve compliance keeps
@@ -8517,8 +8513,8 @@ read it before.
   forecast days, and fails on a new one that doesn't say.
   The daily CSVs lead with an `F` column and the `.xlsx` sheets with a 1/0
   flag ([api.md § Export](./api.md#export)).
-- **On this page.** The same menu as Settings &
-  calibration (`common/SectionNav.svelte`; the "Result sections"
+- **On this page.** The same menu as Model
+  settings (`common/SectionNav.svelte`; the "Result sections"
   navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
   `runs/sections.ts` in groups: Summary with Forecast and Water balance, Record, The model’s working;
   Model quality moved to [Calibration](#calibration), issue #586 Round 3),
@@ -8680,7 +8676,7 @@ read it before.
      says so with **Try again**.
      A record 30× the simulated flow (a unit error at upload) reads at a
      glance as a gap between the lines and a PBIAS near 97 %. A gauge
-     scored instead, made the calibration site in Settings → Calibration
+     scored instead, made the calibration site in Calibration → Calibration
      record → Scored at, moves to the calibration site's chart above. A run
      made before engine 1.90.0 says once, naming the gauges, that it was
      made before gauge records were charted and to run the model again. The side index
@@ -8735,7 +8731,7 @@ read it before.
   button is disabled, with links, until the project has a network and a
   rainfall series, and while the farms' flow shares add up to more than 100 %
   (the engine refuses those runs, [model.md §2.5](./model.md); the note gives
-  the total and links to Network and Settings). While a run is going it shows progress. A note says when
+  the total and links to Network and Model settings). While a run is going it shows progress. A note says when
   inputs changed since the latest run.
 - **The runs list** (newest first, the newest marked "latest") selects the
   run shown; a run picked from the list (or **Show the newest run**, "go to
@@ -9086,7 +9082,7 @@ read it before.
 - <a id="share-the-pain"></a>**Share the pain** (issue #53 R3,
   `curtailment/ShareThePainBoard.svelte`, view model
   `curtailment/shareThePain.ts`; [design/planning-outputs.md §3.3](./design/planning-outputs.md#33-r3-the-share-the-pain-board-s-presentation-only)).
-  On the Runs tab the curtailment panel leads with a board under its
+  On Hydrological units the curtailment panel leads with a board under its
   *Curtailment targets* heading and period line, over the same reporting
   window (it follows the [picker](#report-window)); the per-farm table
   follows under a *Per hydrological unit* heading. The printable report leaves the board
@@ -9245,14 +9241,14 @@ read it before.
   for 1 September. Every daily chart has the same moves
   (`LineChart`'s `pannable` prop is on by default; Earlier / Later appear once
   there is somewhere to move to): EWR vs outflow, farm storage and supply vs
-  demand, Explore outputs, the model stores, the Data tab's series chart and
+  demand, Chart any daily series, the model stores, the Data tab's series chart and
   the run comparison's daily series overlay. Every chart's legend swatch is
   its series' colour and line style: a dashed or stepped line has a dashed
   swatch, a points-only series (recessions, double mass) a filled one, where
   uPlot's default left it empty. The m³/s ↔ m³/day switch sits on every flow chart
-  (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
+  (hydrograph, flow-duration curve, EWR vs outflow, and Chart any daily series while a
   flow series is picked), and one click sets all of them: its group is named
-  "Flow units, for every flow chart on this page", and on Runs & results each
+  "Flow units, for every flow chart on this page", and on Calibration and Runs & results each
   chart's switches are a group named by its chart ("Hydrograph controls",
   "Flow-duration curve controls", "Chart any daily series controls", "Model
   stores controls"; `LineChart`'s `toolsLabel`), so the repeated Earlier /
@@ -9567,7 +9563,7 @@ read it before.
   record of its own (engine ≥ 1.41.0, `summary.catchment.ewrAgreementSites`,
   "EWR test at &lt;gauge&gt;: model against its observed flow"; model.md
   §2.10k). The **Plausibility checks** (`#res-plausibility`,
-  `runs/PlausibilityPanel.svelte`, part of the Runs tab's chunk, helpers in
+  `runs/PlausibilityPanel.svelte`, part of Model quality on the Calibration page's chunk, helpers in
   `runs/plausibility.ts`; engine ≥ 0.25.0, [model.md §2.10d](./model.md);
   only on runs that have them): the dry season in one sentence, a line per
   check (*no finding*, *see below* or *not checked*, with a coloured edge and
@@ -10208,7 +10204,7 @@ them scenarios).
   demand objects of one category, DWS's % per category, never below a
   domestic or municipal object's basic-needs floor), set an EWR
   site's Reserve rule table (`ewrRule.set`, engine ≥ 1.6.0: the outlet or a
-  gauge marked as an EWR site, then the Settings tab's own table editor,
+  gauge marked as an EWR site, then Model settings' own table editor,
   starting from the site's table; always a baseline assumption,
   [scenarios.md § Reserve rule tables](./scenarios.md)), and from engine
   1.35.0 (issue #73) move a node (what it drains into), insert a node on a
@@ -10222,9 +10218,9 @@ them scenarios).
   schedule with the Network tab's own schedule editor, recorded whole) or
   remove one
   ([scenarios.md § UI](./scenarios.md#ui) has each one's wording). A setting's value is typed as
-  the Settings tab takes it; GR4J's PE input (`pe`, issue #39) has its own
+  Model settings or Calibration takes it; GR4J's PE input (`pe`, issue #39) has its own
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
-  a required source note), checked with the Settings tab's own rules
+  a required source note), checked with Flow calibration's own rules
   (`settings/peInput.ts`), and a new monthly row starts from the PE GR4J
   runs on now. A farm's dam survey curve (`damCurve`, engine ≥ 1.20.0) is
   a paste box that reads rows as the Network tab's survey box does (level,
@@ -11280,12 +11276,12 @@ baseline card links to the published run's report (**Report**, beside
   coefficient),
   **Calibration** (the calibration panel with the annual water balance, where
   the parameters came from, the hydrograph over the whole run, and the
-  flow-duration percentiles Q10–Q95 in m³/s on the days the Runs tab's FDC
-  chart ranks by default, `report/fdc.ts`, issue #45),
+  flow-duration percentiles Q10–Q95 in m³/s on the days Calibration's flow-duration
+  curve ranks by default, `report/fdc.ts`, issue #45),
   **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve
   compliance for every rule-table site with Month by month open, the EWR grid
   for the outlet and every farm), **Assurance of supply** (when the run has
-  it, engine ≥ 0.32.0: the Runs tab's Assurance panel in print mode, every
+  it, engine ≥ 0.32.0: Hydrological units' Assurance of supply panel in print mode, every
   stress grid printed, the system's then each unit's, each under its own
   "Stress classes by month: <name>" heading, with no picker; issue #70),
   **Hydrological units, warnings and checks** (the run
@@ -11922,8 +11918,9 @@ code step, /share, /verify) link to neither, since both need a sign-in: they say
 itself, translated (the reset's wait, how to cancel it, that nothing else about the account changes). Making
 `/farm/words` public was the other choice; it was not taken because its frame (FarmShell's Menu: your units,
 Account, Sign out) is a signed-in frame, and the two pages already carried most of the words. `guides.test.ts` checks every
-`/help/guides/<id>` link in the app's source names a guide (and section) that exists, and every Settings path
-the help or the app names (“Settings → Rain gaps → Flagged rain”) resolves to a panel and its headings.
+`/help/guides/<id>` link in the app's source names a guide (and section) that exists, and every settings path
+the help or the app names (“Model settings → Rain gaps → Flagged rain”, “Calibration → Calibration record”) resolves to a panel
+on that page and its headings (a Model settings path to one of Calibration's panels fails).
 The guides are `lib/help/guides.ts`, with the *Pages, one by one* guides in `lib/help/guides-pages.ts`, a chunk of
 their own (`vite.config.ts` `helpArticlesChunk`), so neither passes check:bundle's per-chunk ceiling.
 
@@ -11977,8 +11974,12 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   guards), the model guides and **What each page does**: the page guides
   (kind `page`, 2026-10-02), one for each workspace page the setup path and
   the model guides don't cover (Scenarios, Applications, Allocations, the Map,
-  Dams, EWR, Hydrological units, Project and History), each
-  saying what the page is for and how to work it. Help names tabs with
+  Dams, EWR, Hydrological units, Project and History, plus Model settings
+  and Calibration, whose setup steps point at task guides), each saying what
+  the page is for and how to work it. Calibration's (`calibration-page`,
+  issue #586) also walks the loop the page is built for: choose the record,
+  fit, save on the shared save bar, run, and read the run that opens back on
+  the page. Help names tabs with
   `TAB_TITLES`, the workspace's own `TAB_LABELS`, so a renamed tab can't
   leave help behind.
   *The whole process* has a **Getting around a project** section (the three

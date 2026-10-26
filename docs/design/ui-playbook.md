@@ -46,7 +46,9 @@ section it belongs to, with the example that taught it.
    moves, redirect its old URL (a moved `#anchor` is one row of
    `ANCHOR_MOVES`, `lib/nav/anchorMoves.ts`: the Runs tab's `#res-…` to EWR
    and Hydrological units, Settings' `#set-feeds` and the rest to Data and
-   Project, each keeping the parameters the row names, and the page lands
+   Project, the fit's `#set-…` and Model quality's `#res-…` to Calibration,
+   each keeping the parameters the row names (see *One forwarding table for
+   every moved panel*, § 4), and the page lands
    through `lib/nav/anchorLanding.ts` `followAnchors`, on load and on a hash
    change; the Summary sends its panels' heading ids, `#members-h` and the
    rest, to the Project page) and
@@ -1534,7 +1536,7 @@ Interaction details that bit:
   `holdAnchor` (`help/anchor.ts`), focusing its heading, as River & reserve,
   Hydrological units, Runs, Data and Project do. A panel that is a lazy chunk
   of its own is drawn after the tab mounts, so one look at mount finds nothing
-  (Project's API keys, Settings' Evaporation from the map, Runs' Forecast) or a box
+  (Project's API keys, Calibration's Evaporation from the map, Runs' Forecast) or a box
   without its heading yet: wait with `landOnAnchor(id)`, which holds the
   panel once drawn and focuses its heading once that is (an h2–h4), giving up
   when the reader takes over or after `LAND_WAIT_MS` (a panel or heading that
@@ -1783,6 +1785,58 @@ Interaction details that bit:
   page it lands on scrolls to and focuses the card once drawn
   (`AllocationsTab` on `#alloc-band`). Add an entry whenever a setting leaves
   Settings.
+- **Settings split across pages share one draft, owned above the tabs.**
+  Issue #586 put the fit's four panels on Calibration and left the rest on
+  Model settings, both editing `project.settings`. Two drafts, one per tab,
+  would have lost an edit on a tab change, saved half the object, or shown
+  two save bars that disagree. So the workspace page holds one draft
+  (`settings/settingsDraft.svelte.ts`, beside `project/detailsDraft.svelte.ts`),
+  both tabs edit its `s` in place, and the page's one save bar saves or
+  discards it with the model and the details. What blocks Save is worked out
+  by the draft, not by the tab that is shown (`settings/blockers.ts`
+  `settingsBlockers`: the form's own checks as pure functions of the
+  settings, plus each child section's `bind:error`, kept in the draft so it
+  outlives the tab that drew it), so the bar lists every problem on every
+  tab, each a link to its panel on its own page (`sections.ts`
+  `settingsPageOf`). Going from one of the pages to the other never asks:
+  the draft is the workspace's, so only leaving the project asks
+  (`nav/leaveGuard.ts`). When a page's panels move to another page, move the
+  draft and the blockers up first, then the panels; a split done the other
+  way round shows the problem only while its panel's tab is open.
+- **A second page showing a run follows `?run=`, not its own pick.**
+  Calibration's *How the shown run fits* (`calibration/CalibrationResults.svelte`)
+  shows one run's Model quality, as Runs & results shows one run's results.
+  Its picker reads and writes the same `run=` parameter, with the same
+  default (`calibration/page.ts` `shownRun`: the newest, a viewer's published
+  baseline), a pick is one step in history (`goto` without `replace`), and a
+  `run=` naming a deleted run falls back to the default and says so. The
+  sidebar carries `run=` between the pages that show a run
+  (`workspace/tabLinks.ts` `RUN_TABS`), so a run picked on one page is the
+  run shown on the next, and both read details through one cache
+  (`runs/cache.ts` `runDetail`), so the second page draws at once. A
+  `#res-…` link waits until the picked run is shown before it lands (or says
+  the run lacks the panel, `runs/missingPanel.ts`). A run started from that
+  page opens back there, not on Runs & results. Don't add a page-local run
+  state: a second picker that disagrees with the URL is the bug.
+- **One forwarding table for every moved panel.** Each move is one row of
+  `ANCHOR_MOVES` (`nav/anchorMoves.ts`): the page the anchor was on (a tab
+  id, so `?tab=results` counts as Runs), the old anchors (a list, or a test
+  for a family: "every `set-…` not on Calibration"), the new tab and anchor
+  (null for the page itself), and the parameters kept (`'all'`, or a list
+  such as `run`). `anchorForward` builds the new address and every page
+  calls `followAnchors` (`nav/anchorLanding.ts`), which forwards with a
+  replace navigation (Back skips the old address) and then lands on and
+  focuses the heading, on a load, a typed `#…` and an in-page link alike.
+  Before the table each move had its own redirect (Runs' `movedHref`, round
+  1's Settings forwards, Calibration's own `calibrationForward`), three
+  shapes to keep in step. With one table a link that moved twice
+  (`?tab=calibration#set-feeds`: Calibration → Model settings → Data) simply
+  follows two rows. When a panel moves: add the row, pin it in
+  `anchorMoves.test.ts` and an e2e that *loads* the old link
+  (`calibration-forwards.spec.ts`, `settings-layout-pins.spec.ts`), and
+  repoint in-app links, help and notes at the new home rather than leaning
+  on the forward. A forward that opens a dialog (`retiredDataAnchor`) stays
+  outside the table.
 - **A head of named actions folds into one control on a phone, keeping the
   names.** The project list's head was three full-width buttons (New
   project, Import workbook, Import project file) before any project on
