@@ -46,8 +46,6 @@ export interface CalibrationSummaryInput {
 	unitAreaKm2: number;
 	/** The PE GR4J runs on in a year (mm). */
 	peAnnualMm: number;
-	/** The header's line about the fit (fitSummary). */
-	fit: string;
 	/** The calibration site's name when it isn't the outlet. */
 	siteName?: string | null;
 }
@@ -82,7 +80,11 @@ export function calibrationSummaries(i: CalibrationSummaryInput): Partial<Record
 		]
 			.filter(Boolean)
 			.join(' · '),
-		'set-fit': i.fit,
+		// Not the fit record's line: the page's header says where the parameters came from (fitSummary), and the panel
+		// repeated it word for word (issue #586, C19). The panel's own state is its calibration rules.
+		'set-fit': s.calibrationRules
+			? `Calibration rules revision ${s.calibrationRules.revision} · ${s.calibrationRules.signedOff ? `signed off by ${s.calibrationRules.signedOff.by}` : 'draft, not signed off'}`
+			: 'No calibration rules',
 		'set-wr2012': s.wr2012?.reference
 			? `On: quaternary ${s.wr2012.reference.quaternary || '(unnamed)'}, MAR ${fmtQty(s.wr2012.reference.marMm3, 3)} Mm³`
 			: 'Off: runs aren’t compared with WR2012'

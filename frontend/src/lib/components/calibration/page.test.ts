@@ -3,7 +3,7 @@ import type { RunSummary } from '@water-management/engine';
 import { modelQualitySections } from '#lib/components/runs/modelQuality.js';
 import { CALIBRATION_SETTINGS_ANCHORS, CALIBRATION_SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
 import { anchorForward } from '#lib/nav/anchorMoves.js';
-import { CAL_PARTS, CAL_SUBSECTIONS, calibrationNavGroups, isCalPart, isCalSubsection, shownRun } from './page';
+import { CAL_PARTS, CAL_SUBSECTIONS, calibrationNavGroups, calShown, isCalPart, isCalSubsection, shownRun } from './page';
 
 const at = (href: string) => new URL(href, 'https://x.test');
 
@@ -22,10 +22,11 @@ describe('the side index (issue #586 round 3)', () => {
 		expect(CAL_PARTS.map((p) => p.label)).toEqual(['Set up the fit', 'How the shown run fits']);
 		expect(lines(calibrationNavGroups())).toEqual([
 			['Set up the fit', ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
-			// No run shown yet: the group draws nothing.
-			['How the shown run fits', []]
+			// No run shown yet: one line to the part, where its empty state is, under no second heading.
+			[null, ['How the shown run fits']]
 		]);
 		expect(calibrationNavGroups()[0]!.sections.map((s) => s.id)).toEqual(CALIBRATION_SETTINGS_SECTIONS.map((s) => s.id));
+		expect(calibrationNavGroups()[1]!.sections.map((s) => s.id)).toEqual(['cal-fit']);
 		expect(isCalPart('cal-fit')).toBe(true);
 		expect(isCalPart('set-fit')).toBe(false);
 	});
@@ -45,6 +46,9 @@ describe('the side index (issue #586 round 3)', () => {
 		const ids = (shown: Parameters<typeof calibrationNavGroups>[1]) => calibrationNavGroups(bare, shown)[1]!.sections.map((s) => s.id);
 		expect(ids({ check: true, provenance: true })).toEqual(['res-hydrograph', 'res-fdc', 'res-calibration', 'res-calibration-check', 'res-fit-provenance', 'res-ewr-agreement']);
 		expect(ids({ provenance: true })).toEqual(['res-hydrograph', 'res-fdc', 'res-calibration', 'res-fit-provenance', 'res-ewr-agreement']);
+		// Marked as sub-headings, so the rail indents them under their panel; the panels themselves are not.
+		const sections = calibrationNavGroups(bare, { check: true, provenance: true })[1]!.sections;
+		expect(sections.filter((s) => s.sub).map((s) => s.id)).toEqual(['res-calibration-check', 'res-fit-provenance']);
 		expect(CAL_SUBSECTIONS.check.label).toBe('Calibration check: flow against use, per gauge');
 		expect(CAL_SUBSECTIONS.provenance.label).toBe('Where the parameters came from');
 		expect(isCalSubsection('res-fit-provenance')).toBe(true);
@@ -54,6 +58,21 @@ describe('the side index (issue #586 round 3)', () => {
 	it('uses unique ids across both parts', () => {
 		const ids = calibrationNavGroups(full, { check: true, provenance: true }).flatMap((g) => g.sections.map((s) => s.id));
 		expect(new Set(ids).size).toBe(ids.length);
+	});
+});
+
+describe('calShown: the sub-headings a run draws', () => {
+	const outlet = [{ key: 'observed_flow', nodeId: null }, { key: 'simulated_flow', nodeId: null }];
+	const inner = [{ key: 'observed_flow', nodeId: 'g1' }];
+	it('draws the calibration check for an observed record at the outlet, and at an inner gauge only with the run’s network', () => {
+		expect(calShown({ settings: {}, model: { nodes: [] } }, outlet)).toEqual({ check: true, provenance: true });
+		expect(calShown({ settings: {}, model: { nodes: [] } }, inner).check).toBe(false);
+		expect(calShown({ settings: {}, model: { nodes: [{}] } }, inner).check).toBe(true);
+		expect(calShown({ settings: {}, model: null }, [{ key: 'simulated_flow', nodeId: null }]).check).toBe(false);
+	});
+	it('draws where the parameters came from only for a run that kept its settings', () => {
+		expect(calShown({ settings: null }, outlet).provenance).toBe(false);
+		expect(calShown({}, outlet).provenance).toBe(false);
 	});
 });
 

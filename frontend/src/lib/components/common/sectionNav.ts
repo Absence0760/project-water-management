@@ -30,6 +30,11 @@ export interface NavSection {
 	 * read, and the find box searches them as part of it.
 	 */
 	covers?: string[];
+	/**
+	 * A sub-heading of the section before it (the Calibration page's lines under Calibration against observed flow,
+	 * issue #586 D4): the rail indents it under its panel, so it doesn't read as a panel of its own.
+	 */
+	sub?: boolean;
 }
 
 export interface NavGroup {

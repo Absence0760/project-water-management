@@ -72,10 +72,12 @@ describe('modelQualitySections', () => {
 });
 
 describe('isLowerAnchor', () => {
-	it('is every Model quality panel after the flow-duration curve, and nothing else (issue #586 R3-B)', () => {
+	it('is every Model quality panel after the flow-duration curve and the sub-headings with an index line, and nothing else (issue #586 R3-B, R3-D)', () => {
 		expect(isLowerAnchor('res-hydrograph')).toBe(false);
 		expect(isLowerAnchor('res-fdc')).toBe(false);
 		for (const id of MODEL_QUALITY_ANCHORS.slice(2)) expect(isLowerAnchor(id), id).toBe(true);
+		// And Calibration against observed flow's sub-headings with an index line, so a link to one has it drawn at once.
+		for (const id of ['res-calibration-check', 'res-fit-provenance']) expect(isLowerAnchor(id), id).toBe(true);
 		// Calibration's own parts, Runs & results' panels and the settings panels draw nothing early.
 		for (const id of ['cal-setup', 'cal-fit', 'res-notes', 'res-water-balance', 'set-fit', '']) {
 			expect(isLowerAnchor(id), id).toBe(false);

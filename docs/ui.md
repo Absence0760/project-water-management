@@ -7156,19 +7156,27 @@ The page has:
   changed; it follows the unsaved form), or "GR4J · no fit record: the
   parameters were set by hand or imported". The actions add **Fit the
   parameters** for editors (a link to `#set-fit`), or **Fit record** for a
-  viewer when there is one, before Add data and Run model. Its guide is
+  viewer when there is one, before Add data and Run model. The header carries
+  the line and the jump once (issue #586 C19): Fit the parameters' own panel
+  line is its calibration rules' state ("Calibration rules revision 1 ·
+  draft, not signed off", `settings/summaries.ts`), and the GR4J card has no
+  second jump. Its guide is
   *Calibration* (`calibration-page`). The daily A-pan series' fingerprint the
   fit record compares with (issue #45) is fetched once per version of the
   series and kept for the session (`calibration/apanFingerprint.ts`), for
   the header and the fit record alike.
-- **A lead**: set up the fit, then read how the shown run fits below; the
-  setup edits save with Model settings' from the one save bar.
-- **Set up the fit** (`#cal-setup`, below): the settings panels,
+- **Two parts, the page's h2s** (issue #586 R3-D), 1.3rem, 2rem apart, with
+  their panels' headings h3 under them, each card's h4 and a card's sub-group
+  h5 (every component keeps the size it had one level up on Model settings,
+  so the panels look the same on both pages). No lead paragraph: what it said
+  that a reader needs is the line under Set up the fit.
+- **Set up the fit** (`#cal-setup`): the settings panels,
   `settings/CalibrationSettings.svelte`, in a `settings-form explain-scope`
-  wrapper with the **Explain each setting under its field** switch (the same
-  switch and the same panel lines and cards as Model settings', app.css
-  `.settings-form`). A viewer reads them with every field read-only and no fit
-  controls.
+  wrapper. Its first line says, for editors, "These settings save with Model
+  settings', from the one save bar.", with the **Explain each setting under
+  its field** switch at its end (the same switch and the same panel lines and
+  cards as Model settings', app.css `.settings-form`). A viewer reads them
+  with every field read-only, no fit controls and no save line.
 - **How the shown run fits** (`#cal-fit`, `calibration/CalibrationResults.svelte`;
   issue #586 Round 3): a heading over Model quality's panels (not a panel round
   them), the page's whole width. First a **run picker**: the run `?run=`
@@ -7179,8 +7187,11 @@ The page has:
   run named as the other pages' pickers name it (`compare/picker.ts`
   `runOptionLabel`, newest first, the newest marked *latest*); with one run,
   its name and no select. Choosing one writes `run=`, one step in history
-  (the hash kept, focus and scroll kept). Beside it the run's dates, when and
-  by whom it ran, its engine, and **Open in Runs & results** for that run.
+  (the hash kept, focus and scroll kept). The select takes the width its
+  labels need up to 44rem, with **Open in Runs & results** for that run at
+  the row's end; under them, on one line, the run's dates, when and by whom
+  it ran and its engine. Below 48rem of part (a phone), where the closed
+  select cuts a long label, that line starts with the run's whole name.
   A `run=` naming a run that's gone shows the default, with a note saying so.
   Then **Model quality** for the run (`runs/ModelQuality.svelte`, [§ Runs &
   results, Model quality](#runs--results) for its panels), its details
@@ -7189,10 +7200,16 @@ The page has:
   with the hydrograph's flows prefetched. Another run picked keeps the shown
   one on screen, `aria-busy`, until its details are in. States: loading the
   runs (the page's list, or this part's own when the page has none, with
-  **Try again** if that fails), **No run yet** (what the part will show, and
-  **Run the model** for an editor, "An editor can run the model." for a
-  viewer), loading the run, and a failed run with **Try again** (or **Show
-  the newest run** for a run that's gone). A link to a Model quality panel
+  **Try again** if that fails), the part's one empty state (a dashed box as
+  Runs & results' no-runs card: **No observed flow record yet.** with a link
+  to Data when the project has no observed or logger flow record, else **No
+  run yet.** "Run the model to see how its flows fit the observed record." for
+  an editor, whose Run model is the header's, or "An editor can run the
+  model." for a viewer; then a line on what a run shows), loading the run,
+  and a failed run with **Try again** (or **Show the newest run** for a run
+  that's gone). Calibration against observed flow's no-statistics line links
+  its fixes here (Data, and Calibration record on the page; `linked`, words
+  in a printed report). A link to a Model quality panel
   (`#res-plausibility`, the Summary's model checks, an old
   `?tab=runs#res-…` sent on here) lands once the picked run is shown, focused
   on the panel's heading (`followAnchors` in CalibrationTab hands it to the
@@ -7212,8 +7229,15 @@ The page has:
   flow for each sub-heading the page draws: **Calibration check: flow against
   use, per gauge** (`#res-calibration-check`) and **Where the parameters came
   from** (`#res-fit-provenance`; `CAL_SUBSECTIONS`; the page says which it
-  shows). A rail from 80rem of page (1440 px), the bar narrower. A loaded
-  `#cal-setup` / `#cal-fit` lands on its heading, focused.
+  shows; NavSection `sub`, indented in the rail under their panel). The page
+  passes the shown run's summary and those sub-headings in from the part
+  (`onshown`, `page.ts` `calShown`). Before a run shows (none, loading), the
+  second group is one line, **How the shown run fits**, to the part, under no
+  heading, so the index still reaches its empty state. A rail from 80rem of
+  page (1440 px), the bar narrower. A loaded `#cal-setup` / `#cal-fit` lands
+  on its heading, focused, and `#res-calibration-check` / `#res-fit-provenance`
+  on that sub-heading once the run shows (on Calibration against observed flow
+  when the run doesn't draw it).
 
 The two parts are stacked: the settings panels' monthly rows and the charts
 need the page's width. The Calibration row's link carries a run picked on Runs & results
@@ -7262,13 +7286,13 @@ dialog (`settings/MonthlyPasteDialog.svelte`) and fills only its own row:
 Flow calibration's pan coefficients here (**Paste monthly pan
 coefficients**), Demand's A-pan on Model settings (**Paste monthly A-pan
 evaporation**). Their links to Model settings' panels say so ("Demand, on
-Model settings", "Flow generation, on Model settings"), and Flow
+Model settings"; the areal rainfall note: "When Flow generation on Model
+settings runs each unit on its own rain (Per unit)…", issue #586 E14), and Flow
 calibration's line points at *How the shown run fits* for NSE and PBIAS.
 
 - **Flow calibration** (rain → natural flow, `#set-flow`). **Layout (issue
-  #521):** four bordered cards. **GR4J parameters**, with **Fit the
-  parameters** (a link to `#set-fit`; editors only, as in the header, issue
-  #586) in its head: X1, X3 and X4, the
+  #521):** four bordered cards. **GR4J parameters** (its jump to Fit the
+  parameters is the page header's alone since issue #586 C19): X1, X3 and X4, the
   catchment area and the runoff model, X2's switch, and **More: warm-up 365
   days**, a `common/Fold.svelte` with `atDefaults` line that opens to the warm-up
   (closed while it is 365). Each field's "Changed 1× · last by …" history

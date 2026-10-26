@@ -8,7 +8,9 @@
 	Model quality for that run). The settings panels edit the workspace's one
 	settings draft, so Model settings' edits and these save together from the one
 	save bar, and the header carries the fit's line and its way to Fit the
-	parameters (they were Settings'). A side index lists the two parts.
+	parameters (they were Settings'), once: no panel repeats them (C19). The
+	parts are the page's h2s, their panels h3s under them. A side index lists
+	the panels under the two parts, the second part's for the run shown.
 	`?tab=calibration` opened Settings until this page had its own, so an old
 	`#set-…` link to a panel still there goes on there (nav/anchorMoves.ts); a
 	link to one of these panels (#set-fit, #set-evaporation, #res-hydrograph…)
@@ -33,7 +35,8 @@
 	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { isModelQualityAnchor } from '#lib/components/runs/modelQuality.js';
 	import CalibrationResults from './CalibrationResults.svelte';
-	import { calibrationNavGroups, isCalPart } from './page';
+	import type { RunSummary } from '@water-management/engine';
+	import { calibrationNavGroups, isCalPart, isCalSubsection, type CalShown } from './page';
 	import { apanFingerprint } from './apanFingerprint';
 
 	let {
@@ -89,7 +92,11 @@
 		onProjectChange: (p: Project) => void;
 	} = $props();
 
-	const navGroups = calibrationNavGroups();
+	// The side index: the settings panels, then the shown run's Model quality panels and sub-headings (none until a run shows).
+	let shown = $state.raw<{ summary: RunSummary; subs: CalShown } | null>(null);
+	const navGroups = $derived(calibrationNavGroups(shown?.summary ?? null, shown?.subs ?? {}));
+	/** An observed or logger flow record a run can be scored against (null while the series list loads), for the empty state. */
+	const hasRecord = $derived(series ? series.some((x) => x.kind === 'flow_observed_m3s' || x.kind === 'flow_logger_m3s') : null);
 	/** How the shown run fits' landing (CalibrationResults.svelte): a Model quality anchor waits there for the run. */
 	let landResults: ((id: string) => (() => void) | void) | null = null;
 
@@ -134,7 +141,7 @@
 		followAnchors({
 			page: 'calibration',
 			land: (id) =>
-				isCalPart(id) && body ? landOnAnchor(id, body) : isCalibrationAnchor(id) ? landOnAnchor(id) : isModelQualityAnchor(id) ? landResults?.(id) : undefined,
+				isCalPart(id) && body ? landOnAnchor(id, body) : isCalibrationAnchor(id) ? landOnAnchor(id) : isModelQualityAnchor(id) || isCalSubsection(id) ? landResults?.(id) : undefined,
 			forward: (to) => void goto(to, { replace: true, reset: false })
 		})
 	);
@@ -148,17 +155,18 @@
 <!-- The side index from 80rem of page (a 1440 px window), as Project and Data; the bar below that. -->
 <SectionNav groups={navGroups} label="Calibration sections" railFrom={80}>
 	<div class="cal-page" bind:this={body}>
-		<p class="lead" data-testid="calibration-lead">
-			Set up the fit, then read how the shown run fits below. Its edits save with Model settings’ from the one save bar.
-		</p>
 		<div class="parts">
 			<!-- The settings panels that set up a fit (issue #586 round 3). Their wrapper gives them the settings pages'
 			     frame (app.css `.settings-form`) and the explanations switch, as on Model settings. A viewer reads them
 			     with every field read-only and no fit controls (`readonly`, as on Model settings). -->
-			<section class="cal-part" id="cal-setup" aria-labelledby="cal-setup-h">
+			<section class="part" id="cal-setup" aria-labelledby="cal-setup-h">
 				<h2 id="cal-setup-h" class="part-h">Set up the fit</h2>
 				<div class="settings-form explain-scope" class:explained={explainSwitch.on}>
-					<ExplainSwitch />
+					<!-- What the page's old lead said that a reader needs here: these edits are Model settings' draft too. -->
+					<div class="setup-line">
+						{#if !readonly}<p class="muted small" data-testid="calibration-setup-note">These settings save with Model settings’, from the one save bar.</p>{/if}
+						<ExplainSwitch />
+					</div>
 					<CalibrationSettings
 						{project}
 						{editor}
@@ -178,7 +186,7 @@
 			<!-- Model quality's panels are panels of their own, so this part is a heading over them, not a panel round them. -->
 			<section class="part" id="cal-fit" aria-labelledby="cal-fit-h">
 				<h2 id="cal-fit-h" class="part-h">How the shown run fits</h2>
-				<CalibrationResults {projectId} {runs} {role} {nodes} {series} {projectSettings} landing={(land) => (landResults = land)} />
+				<CalibrationResults {projectId} {runs} {role} {nodes} {series} {projectSettings} {hasRecord} landing={(land) => (landResults = land)} onshown={(v) => (shown = v)} />
 			</section>
 		</div>
 	</div>
@@ -189,22 +197,34 @@
 	.cal-page {
 		container: cal-page / inline-size;
 	}
-	.lead {
-		margin: 0 0 1rem;
-		max-width: 75ch;
-	}
-	/* The parts one above the other: the settings panels' monthly rows need the page's full width. */
+	/* The parts one above the other: the settings panels' monthly rows and the charts need the page's full width. */
 	.parts {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: 1rem;
+		gap: 2rem;
 		align-items: start;
 	}
-	/* How the shown run fits takes the page's width: its charts need it. */
-	.parts > #cal-fit {
+	.part {
 		min-width: 0;
 	}
+	/* A part's heading over its panels' (h3, 1.1rem): a size up, so the two parts read as the page's two halves. */
 	.part-h {
 		margin: 0 0 0.75rem;
+		font-size: 1.3rem;
+	}
+	/* The save note and the explanations switch share a line, the switch at its end; under each other when narrow. */
+	.setup-line {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.25rem 1rem;
+		margin: 0 0 0.75rem;
+	}
+	.setup-line p {
+		margin: 0;
+	}
+	.setup-line :global(.explain-switch.check) {
+		margin: 0;
 	}
 </style>

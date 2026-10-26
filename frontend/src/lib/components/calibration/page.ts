@@ -9,6 +9,7 @@ import { modelQualitySections } from '#lib/components/runs/modelQuality.js';
 import { CALIBRATION_SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
 import { defaultRunId } from '#lib/components/runs/runList.js';
 import type { Role } from '#lib/api/types.js';
+import { checkGauges } from './calibrationCheck';
 
 /** The page's two parts, by their headings' anchors (CalibrationTab.svelte sets them). */
 export const CAL_PARTS = [
@@ -32,35 +33,42 @@ export const CAL_SUBSECTIONS = {
 /** Every anchor How the shown run fits lands on beyond Model quality's panels: the sub-headings above. */
 export const isCalSubsection = (id: string): boolean => Object.values(CAL_SUBSECTIONS).some((s) => s.id === id);
 
+/** Which of the sub-headings above a run's Model quality draws, for the side index (`calibrationNavGroups`' `shown`). */
+export interface CalShown {
+	check: boolean;
+	provenance: boolean;
+}
+
+/**
+ * The sub-headings Model quality draws for a run, as ModelQuality.svelte decides them: the calibration check when
+ * the run stored an observed record it can chart (CalibrationCheck.svelte: the outlet's always, an inner gauge's
+ * only with the run's network), and where the parameters came from when the run kept its settings.
+ */
+export function calShown(run: { settings?: unknown; model?: { nodes?: readonly unknown[] } | null }, refs: readonly { key: string; nodeId: string | null }[]): CalShown {
+	const known = (run.model?.nodes?.length ?? 0) > 0;
+	return { check: checkGauges(refs).some((g) => known || g === null), provenance: !!run.settings };
+}
+
 /**
  * The side index (issue #586 round 3): a group for each part, named by its heading, listing its panels by
  * theirs. Set up the fit: the four settings panels. How the shown run fits: Model quality's panels for the run
- * shown (runs/modelQuality.ts; none until a run is shown), with a line under Calibration against observed flow
- * for each sub-heading the page draws (`shown`).
+ * shown (runs/modelQuality.ts), with a line under Calibration against observed flow for each sub-heading the page
+ * draws (`shown`); until a run is shown, one line to the part itself, where its empty or loading state is.
  */
 export function calibrationNavGroups(
 	summary: Parameters<typeof modelQualitySections>[0] | null = null,
-	shown: { check?: boolean; provenance?: boolean } = {}
+	shown: Partial<CalShown> = {}
 ): NavGroup[] {
-	const subs: NavSection[] = [...(shown.check ? [CAL_SUBSECTIONS.check] : []), ...(shown.provenance ? [CAL_SUBSECTIONS.provenance] : [])].map((s) => ({ id: s.id, label: s.label }));
+	const subs: NavSection[] = [...(shown.check ? [CAL_SUBSECTIONS.check] : []), ...(shown.provenance ? [CAL_SUBSECTIONS.provenance] : [])].map((s) => ({ id: s.id, label: s.label, sub: true }));
 	const results = summary ? modelQualitySections(summary).flatMap((s) => (s.id === 'res-calibration' ? [s, ...subs] : [s])) : [];
 	return [
 		{ label: CAL_PARTS[0].label, sections: CALIBRATION_SETTINGS_SECTIONS.map((s) => ({ id: s.id, label: s.label })) },
-		{ label: CAL_PARTS[1].label, sections: results }
+		// No run shown yet (none, or still loading): the part itself, so the index still reaches its empty state.
+		summary ? { label: CAL_PARTS[1].label, sections: results } : { label: null, sections: [{ id: CAL_PARTS[1].id, label: CAL_PARTS[1].label }] }
 	];
 }
 
 export const isCalPart = (id: string): id is CalPartId => CAL_PARTS.some((p) => p.id === id);
-
-export interface PanelLink {
-	/** The panel's anchor on its page today. */
-	id: string;
-	/** The panel's heading there, word for word. */
-	label: string;
-	/** What it holds, in a few words. */
-	hint: string;
-}
-
 
 /**
  * The run Runs & results shows, and so How the shown run fits (CalibrationResults.svelte): the one in the URL
