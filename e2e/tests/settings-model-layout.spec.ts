@@ -94,7 +94,8 @@ test('Flow generation says what each method does and where the runoff parameters
 	await expect(where).toHaveText('The runoff model’s parameters are fitted on Calibration, under Flow calibration.');
 	await where.getByRole('link', { name: 'Flow calibration' }).click();
 	await expect(page).toHaveURL(/\?tab=calibration#set-flow$/);
-	const flowCal = page.getByRole('heading', { level: 2, name: /^Flow calibration/ });
+	// A panel under Calibration's "Set up the fit" part, a level down (issue #586 round 3).
+	const flowCal = page.locator('#set-flow').getByRole('heading', { name: /^Flow calibration/ }).first();
 	await expect(flowCal).toBeFocused();
 	await expect(flowCal).toBeInViewport();
 	await page.goBack();
