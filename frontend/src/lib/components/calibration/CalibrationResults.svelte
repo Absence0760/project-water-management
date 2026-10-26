@@ -7,10 +7,14 @@
 	baseline). Picking a run writes `run=`, one step in history. The run's
 	details come through Runs' own cache (runs/cache.ts runDetail), so a run
 	read on one page shows at once on the other. A link to a Model quality
-	panel (`#res-plausibility`) lands once the picked run is shown, or on a
-	line saying what the panel needs when this run has none
+	panel (`#res-plausibility`), or to a sub-heading with an index line
+	(`#res-fit-provenance`, page.ts CAL_SUBSECTIONS), lands once the picked run
+	is shown, or on a line saying what the panel needs when this run has none
 	(runs/missingPanel.ts); CalibrationTab's followAnchors hands it here
-	through `landing`.
+	through `landing`. The run shown is told to the page (`onshown`), for its
+	side index. With no run, the part's one empty state says what to do first:
+	add an observed flow record on Data when there is none, else run the
+	model (the header's Run model, as on Runs & results).
 -->
 <script lang="ts">
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
@@ -29,7 +33,8 @@
 	import { missingPanel, type MissingPanel } from '#lib/components/runs/missingPanel.js';
 	import { isModelQualityAnchor } from '#lib/components/runs/modelQuality.js';
 	import { isRunGone, runErrorText } from '#lib/components/runs/runList.js';
-	import { shownRun } from './page';
+	import type { RunSummary } from '@water-management/engine';
+	import { calShown, isCalSubsection, shownRun, type CalShown } from './page';
 
 	type Land = (id: string) => (() => void) | void;
 
@@ -40,7 +45,9 @@
 		nodes = [],
 		series = null,
 		projectSettings = null,
-		landing
+		hasRecord = null,
+		landing,
+		onshown
 	}: {
 		projectId: string;
 		/** The page's runs list, newest first: null until it loads, or when it couldn't (this part then loads its own). */
@@ -52,8 +59,12 @@
 		series?: readonly { id: string; kind: string; siteNodeId?: string | null }[] | null;
 		/** The project's settings, for a run that kept no snapshot of its own (its calibration window). */
 		projectSettings?: { calibrationStart?: string | null; calibrationEnd?: string | null } | null;
+		/** The project has an observed or logger flow record a run can be scored against: null while not known. */
+		hasRecord?: boolean | null;
 		/** Called once with this part's landing, for the page's followAnchors to hand a Model quality anchor to. */
 		landing?: (land: Land) => void;
+		/** The run on screen, its summary and the sub-headings it draws (for the page's side index); null for none. */
+		onshown?: (shown: { summary: RunSummary; subs: CalShown } | null) => void;
 	} = $props();
 
 	const canEdit = $derived(hasRole(role, 'editor'));
@@ -144,6 +155,10 @@
 	/** The run picked isn't the one on screen yet: its details are loading. */
 	const busy = $derived(!!detail && !!run && detail.run.id !== run.id);
 	const shownIsPicked = $derived(!!detail && !!run && detail.run.id === run.id);
+	$effect(() => {
+		const d = detail;
+		untrack(() => onshown?.(d ? { summary: d.run.summary, subs: calShown(d.run, d.series) } : null));
+	});
 
 	// Names and order from the current model; nodes deleted since the run fall back to the run's own names.
 	const nodeOrder = $derived(new Map(nodes.map((n, i) => [n.id, i] as [string, number])));
@@ -164,7 +179,7 @@
 	let releaseLanding = () => {};
 	let destroyed = false;
 	function land(id: string): (() => void) | void {
-		if (!isModelQualityAnchor(id)) return;
+		if (!isModelQualityAnchor(id) && !isCalSubsection(id)) return;
 		const known = untrack(() => list);
 		if (known && !known.length) return landOnAnchor('cal-fit');
 		if (untrack(() => shownIsPicked)) return landResult(id);
@@ -187,6 +202,9 @@
 		if (!shown) return () => {};
 		const lacking = missingPanel(hash, shown.run.summary);
 		missing = lacking ? { runId: shown.run.id, hash, panel: lacking } : null;
+		// A sub-heading this run doesn't draw (no record to chart, no settings kept): its panel, Calibration against observed flow.
+		const subs = calShown(shown.run, shown.series);
+		const target = (hash === 'res-calibration-check' && !subs.check) || (hash === 'res-fit-provenance' && !subs.provenance) ? 'res-calibration' : hash;
 		let release = () => {};
 		let gone = false;
 		tick().then(() => {
@@ -195,7 +213,7 @@
 			if (line) {
 				release = holdAnchor(line);
 				focusAnchor(line);
-			} else release = landOnAnchor(hash);
+			} else release = landOnAnchor(target);
 		});
 		releaseLanding = () => {
 			gone = true;
@@ -222,28 +240,39 @@
 		<p class="muted" role="status" data-testid="calibration-runs-loading">Loading the runs…</p>
 	{/if}
 {:else if !run}
+	<!-- The part's one empty state (ui-playbook.md § 2): what to do first. With no record to compare with, a run
+	     would show no fit, so that comes first; then a run, which the header's Run model starts (as on Runs & results). -->
 	<div class="empty" data-testid="calibration-no-run">
-		<p>
-			<strong>No run yet.</strong> Once the model has run, this shows how its flows fit the observed record: the hydrograph, the
-			flow-duration curve, the calibration scores and the plausibility checks.
-		</p>
-		{#if canEdit}<a class="btn btn-primary" href="?tab=runs">Run the model</a>{:else}<p class="muted small">An editor can run the model.</p>{/if}
+		{#if hasRecord === false}
+			<p>
+				<strong>No observed flow record yet.</strong> A fit compares a run’s flows with a record measured at a gauge: add one on
+				<a href="?tab=series">Data</a>{canEdit ? ', then run the model.' : '.'}
+			</p>
+		{:else}
+			<p><strong>No run yet.</strong> {canEdit ? 'Run the model to see how its flows fit the observed record.' : 'An editor can run the model.'}</p>
+		{/if}
+		<p class="muted small">A run shows here with its hydrograph, flow-duration curve, calibration scores and plausibility checks.</p>
 	</div>
 {:else}
-	<div class="run-row" data-testid="calibration-run">
-		{#if list.length > 1}
-			<label class="run-pick" for="cal-run">Run</label>
-			<select id="cal-run" value={run.id} onchange={(e) => choose(e.currentTarget.value)}>
-				{#each list as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>{/each}
-			</select>
-		{:else}
-			<span class="run-pick">Run</span> <strong class="only">{name(run)}</strong>
-		{/if}
-		<span class="muted small run-line">
-			{fmtDay(run.startDate)} – {fmtDay(run.endDate)} ({fmtNum(runDays(run))} days) · ran {fmtWhen(run.createdAt)} by {run.createdBy ??
+	<!-- The picker and the way to the run's own page on one line, its dates and maker on the next: the select takes the room
+	     its labels need up to a cap, so the line never wraps the run's details beside it (issue #586 R3-D). On a narrow
+	     page, where a long label is cut in the closed select, the second line starts with the run's whole name. -->
+	<div class="run-head" data-testid="calibration-run">
+		<div class="run-row">
+			{#if list.length > 1}
+				<label class="run-pick" for="cal-run">Run</label>
+				<select id="cal-run" value={run.id} onchange={(e) => choose(e.currentTarget.value)}>
+					{#each list as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>{/each}
+				</select>
+			{:else}
+				<span class="run-pick">Run</span> <strong class="only">{name(run)}</strong>
+			{/if}
+			<a class="btn btn-sm open" href={runHref(run.id)}>Open in Runs &amp; results</a>
+		</div>
+		<p class="muted small run-line">
+			{#if list.length > 1}<span class="whole-name">{name(run)} · </span>{/if}{fmtDay(run.startDate)} – {fmtDay(run.endDate)} ({fmtNum(runDays(run))} days) · ran {fmtWhen(run.createdAt)} by {run.createdBy ??
 				FORMER_MEMBER} · engine {run.engineVersion}
-		</span>
-		<a class="btn btn-sm" href={runHref(run.id)}>Open in Runs &amp; results</a>
+		</p>
 	</div>
 	{#if pickedGone}
 		<p class="alert alert-info" role="note">That run no longer exists (deleted, or removed by the storage cap), so this shows {run.id === list[0]?.id ? 'the newest run' : 'the published run'}.</p>
@@ -275,30 +304,60 @@
 {/if}
 
 <style>
+	/* The part answers to its own width (the page's, less the side index), for the narrow line below. */
+	.run-head {
+		container: cal-run / inline-size;
+		margin: 0 0 1rem;
+	}
 	.run-row {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.35rem 0.75rem;
-		margin: 0 0 1rem;
 	}
 	.run-pick {
 		font-weight: 600;
 	}
-	/* The select takes the room its labels need, and never more than the row (a phone). */
+	/* The select takes the room its labels need, up to a cap that leaves Open in Runs & results on its line. */
 	.run-row select {
-		max-width: 100%;
+		flex: 0 1 auto;
+		min-width: 0;
+		max-width: min(100%, 44rem);
 		min-height: 2rem;
+		text-overflow: ellipsis;
+	}
+	.run-row .open {
+		margin-left: auto;
 	}
 	.run-line {
-		flex: 1 1 18rem;
-		min-width: 0;
+		margin: 0.35rem 0 0;
 	}
+	.whole-name {
+		display: none;
+		font-weight: 600;
+		color: var(--text-2);
+	}
+	@container cal-run (max-width: 48rem) {
+		.whole-name {
+			display: inline;
+		}
+	}
+	/* The part's one empty state, as Runs & results' (RunsTab.svelte .empty, left-aligned across the width). */
 	.empty {
-		max-width: 75ch;
+		color: var(--text-muted);
+		padding: 1.25rem 0.75rem;
+		border: 1px dashed var(--border-strong);
+		border-radius: var(--radius);
 	}
 	.empty p {
-		margin: 0 0 0.75rem;
+		margin: 0;
+		max-width: 75ch;
+	}
+	.empty p + p {
+		margin-top: 0.4rem;
+	}
+	.empty strong {
+		color: var(--text);
 	}
 	.chart-ph {
 		display: flex;

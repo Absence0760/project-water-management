@@ -10,7 +10,17 @@
 // by nav/anchorMoves.ts.
 import { calibrationHref } from '#lib/components/calibration/links.js';
 
+/**
+ * The heading of the panel that heads the page (#set-judge, EwrHeadlineField.svelte, issue #444): which EWR the
+ * results are judged by. "Judge results by" until issue #586 E14 (R4-B), which read as jargon: judged by what?
+ */
+export const JUDGE_HEADING = 'EWR the results are judged by';
+
 export const SETTINGS_SECTIONS = [
+	// The page's first panel (issue #444): it reads results and changes none. Its own link, in a group with no
+	// name above the first task's, so the index lists every panel and Find a setting finds it (issue #586 R4-B: it
+	// had no link, and a search for "judged" found nothing).
+	{ id: 'set-judge', label: JUDGE_HEADING, group: null },
 	// Data & rain: what the model runs on.
 	{ id: 'set-period', label: 'Simulation period', group: 'Data & rain' },
 	{ id: 'set-rain', label: 'Rain gaps', group: 'Data & rain' },
@@ -25,7 +35,7 @@ export const SETTINGS_SECTIONS = [
 	// Runoff: how rain becomes natural flow, Fragmentation or Per unit (issue #553 round 3); the id is the Flow share
 	// panel's, so its links still land. The runoff parameters and their fit moved to Calibration (issue #586 round 3).
 	{ id: 'set-share', label: 'Flow generation', group: 'Runoff' },
-	// EWR & Reserve: what must stay in the river. Judge results by (#set-judge) heads the page, above the menu's first panel.
+	// EWR & Reserve: what must stay in the river.
 	{ id: 'set-ewr', label: 'EWR', group: 'EWR & Reserve' },
 	{ id: 'set-reserve', label: 'Reserve rule tables', group: 'EWR & Reserve' },
 	// How the Runs tab's outcome matrix reads a demand sweep (issue #53 R4); changes no result.
@@ -98,8 +108,8 @@ export function settingsElsewhere(owner: boolean) {
  * The menu's groups, by task (issue #468), in page order: every panel has its link, on the bar and
  * in the side index alike, each one its panel's heading.
  */
-export function settingsNavGroups(): { label: string; sections: { id: string; label: string }[] }[] {
-	const groups: { label: string; sections: { id: string; label: string }[] }[] = [];
+export function settingsNavGroups(): { label: string | null; sections: { id: string; label: string }[] }[] {
+	const groups: { label: string | null; sections: { id: string; label: string }[] }[] = [];
 	for (const sec of SETTINGS_SECTIONS) {
 		let g = groups.find((x) => x.label === sec.group);
 		if (!g) groups.push((g = { label: sec.group, sections: [] }));

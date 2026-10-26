@@ -24,15 +24,22 @@ import {
 export type { FlowGenerationMethod };
 export { flowMethodOf };
 
-export const FLOW_METHODS: readonly { value: FlowGenerationMethod; label: string; help: string }[] = [
+/**
+ * The two methods: `label` is the name the engine's messages and the fit record use ("fitted under Fragmentation"),
+ * `short` the plain words shown beside it, always (issue #586 E14: "Fragmentation" alone said nothing to a reader,
+ * and the panel's name read like Calibration's Flow calibration), `help` the longer explanation behind the switch.
+ */
+export const FLOW_METHODS: readonly { value: FlowGenerationMethod; label: string; short: string; help: string }[] = [
 	{
 		value: 'fragmentation',
 		label: 'Fragmentation',
+		short: 'one runoff run on the catchment rain, split between the units',
 		help: 'GR4J runs once on the catchment rain, and the flow share splits its flow and the EWR between the units.'
 	},
 	{
 		value: 'perUnit',
 		label: 'Per unit',
+		short: 'a runoff run for each unit with land, on its own rain',
 		help: 'GR4J runs on each unit with land, on the rain of the rainfall station it is assigned. Demand and the dams keep the catchment rain.'
 	}
 ];

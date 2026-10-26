@@ -50,7 +50,7 @@ test('a chart per gauge with a record: observed, simulated, natural and upstream
 	const { project, runId } = await seedCheck(page.request, 'Calibration check');
 	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}#res-calibration`);
 	const check = page.getByTestId('calibration-check');
-	await expect(check.getByRole('heading', { level: 3, name: 'Calibration check: flow against use, per gauge' })).toBeVisible();
+	await expect(check.getByRole('heading', { level: 4, name: 'Calibration check: flow against use, per gauge' })).toBeVisible();
 	await expect(check).toContainText('How to read it: simulated should track observed; natural sits above simulated by roughly the use upstream, and where');
 	// No bed losses in this run, so nothing about them (the next test is the positive control).
 	await expect(check).not.toContainText('bed losses', { ignoreCase: true });

@@ -27,12 +27,15 @@
 	let {
 		calibration,
 		requestedStart = null,
-		requestedEnd = null
+		requestedEnd = null,
+		linked = false
 	}: {
 		calibration: CalibrationStats | null | undefined;
 		/** settings.calibrationStart/End, to show what was asked for next to what was scored. */
 		requestedStart?: string | null;
 		requestedEnd?: string | null;
+		/** On the Calibration page: the fixes link to Calibration record (on the page) and Data. A printed report keeps them as words. */
+		linked?: boolean;
 	} = $props();
 
 	const uid = $props.id();
@@ -54,14 +57,14 @@
 		<p class="muted">
 			Every observed day inside the calibration window falls in a calibration exclusion
 			({calibration.exclusions?.map((x) => `${fmtDay(x.start)} – ${fmtDay(x.end)}: ${x.reason}`).join('; ')}), so there are no calibration statistics.
-			Change the exclusions in Settings.
+			Change the exclusions in {#if linked}<a href="#set-record">Calibration record</a>{:else}Calibration record, on the Calibration page{/if}.
 		</p>
 	{:else if !calibration || calibration.days === 0}
 		<p class="muted">
 			No observed flow falls inside the calibration window{requestedStart || requestedEnd
 				? ` (${describeWindow(requestedStart, requestedEnd, fmtDay)})`
-				: ''}, so there are no calibration statistics. Upload an observed or logger flow series, or widen the window in
-			Settings.
+				: ''}, so there are no calibration statistics. Add an observed or logger flow record on {#if linked}<a href="?tab=series">Data</a>{:else}Data{/if}, or
+			widen the window in {#if linked}<a href="#set-record">Calibration record</a>{:else}Calibration record, on the Calibration page{/if}.
 		</p>
 	{:else}
 		<p class="note muted in-sample" data-fit-status={sample.status}>

@@ -14,6 +14,8 @@ import { openRiver, seedRiverProject } from '../support/river.ts';
 import { openSupply, seedSupplyProject } from '../support/supply.ts';
 
 const SETTINGS_LINKS = [
+	// The panel that heads the page (issue #586 R4-B).
+	'EWR the results are judged by',
 	'Simulation period',
 	'Rain gaps',
 	'Data quality',
@@ -31,7 +33,8 @@ const SETTINGS_LINKS = [
 	'Automatic runs'
 ];
 /** The side index's groups at 1440 px (issue #468): every panel, under its task. */
-const SETTINGS_RAIL: [string, string[]][] = [
+const SETTINGS_RAIL: [string | null, string[]][] = [
+	[null, ['EWR the results are judged by']],
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
 	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
 	['Runoff', ['Flow generation']],
@@ -125,6 +128,7 @@ test('Settings: at 1280 px every link is on the bar, in at most two rows; at 144
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await expect(menu.getByRole('link')).toHaveText(SETTINGS_RAIL.flatMap(([, links]) => links));
 	for (const [name, links] of SETTINGS_RAIL) {
+		if (!name) continue;
 		await expect(menu.getByRole('list', { name, exact: true }).getByRole('link')).toHaveText(links);
 		// The group's name over its links (the last group's is its one link's too).
 		await expect(menu.getByText(name, { exact: true }).first()).toBeVisible();

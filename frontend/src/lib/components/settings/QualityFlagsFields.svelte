@@ -37,7 +37,7 @@
 </script>
 
 <fieldset class="plain qf" aria-describedby="{uid}-hint">
-	<legend><h3 class="title">Quality flags for Fit automatically <HelpTip key="settings.qualityFlags" /></h3></legend>
+	<legend><h4 class="title">Quality flags for Fit automatically <HelpTip key="settings.qualityFlags" /></h4></legend>
 	<p class="hint explain" id="{uid}-hint">
 		A flow above the highest field gauging, or below the lowest, comes from an extrapolated rating curve. Enter the gauged range where you know it,
 		with where it comes from. Days the Data checks call suspect (outliers, flat stretches) are flagged too. The fit leaves flagged days out by default
@@ -177,8 +177,10 @@
 		padding: 0;
 		margin-bottom: 0.2rem;
 	}
+	/* Under Calibration record (an h3 on the Calibration page, issue #586 round 3): an h4 at an h3's size. */
 	.title {
 		margin: 0;
+		font-size: 0.95rem;
 	}
 	.hint {
 		font-size: var(--font-sm);

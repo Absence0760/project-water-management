@@ -910,6 +910,43 @@ section it belongs to, with the example that taught it.
   sheet's hand-made jump row became the same menu in a box of its own
   (`onjump`), which also gave it the mark for the section being read and
   names matching the legends.
+- **A page with a side index is one column, in the index's order.** The
+  Project page kept its two columns (details, notes and facts on the left;
+  who can open it on the right) when it got its index, grouped by column. A
+  link to a panel in the taller right column (Farmers onward) then put that
+  panel at the window's top beside an empty left column, and the index's
+  order (left, then right) wasn't the order the eye met the panels (issue
+  #586 R4-B). It is one column now, each index group a column of its own
+  (`data-nav-group`), the page's second question (who can open it) straight
+  after the first so the first screen still answers both, and the facts
+  that repeat other tabs last. A wide column needs its insides sized on
+  purpose: fields two a row in a container query, a 75ch measure on the
+  explanations, a short form (a picker and its button) kept a form's width.
+  Pin it with every panel's left edge and width equal, the headings in the
+  index's order, and a link to a far panel showing the next one under it
+  (`project-page.spec.ts`).
+- **A panel's heading goes in `.panel-head`, even with nothing beside it.**
+  The settings panels' line of values (`.settings-form .summary`) pulls up
+  0.35rem into the head's 0.75rem margin; Model settings' first panel drew
+  its `h2` bare, so its line ran into the heading at 1440 (issue #586 R4-B).
+  The same frame on every panel gives every line the same gap
+  (`settings-model-layout.spec.ts` compares it with Simulation period's).
+- **A page of parts: the parts are the h2s, and what moves in goes a level
+  down without changing its look.** Calibration (issue #586) put Model
+  settings' panels (h2) under a "Set up the fit" h2, so the outline read
+  part, panel, panel… as siblings, and Model quality's sub-headings ("Where
+  the parameters came from") were h3s beside their own panel's h3. Every
+  heading in the moved components went down one level (panel h3, card h4,
+  a card's group h5; FitProvenance, AgreementTable and ProposalPanel take a
+  level), each keeping the size it had one level up by a scoped rule, so the
+  panels look the same on both pages; the part headings went a size up
+  (1.3rem) so the two halves read as halves. Check the neighbours' pins:
+  specs that waited for `{ level: 2, name: 'Fit the parameters' }`, and
+  helpers that read a panel's first `h2, h3`, had to follow. A sub-heading
+  with an index line of its own is a NavSection `sub`: the rail indents it
+  under its panel, so it doesn't read as one. An index whose second group
+  is a run's panels shows, before a run is shown, one line to the part
+  itself, so the index still reaches the part's empty state.
 - **A title column sized by a fixed basis squeezes its text.** The section
   header's title took `flex: 1 1 16rem`, so whenever the controls fitted
   beside it a long context line wrapped to 3–4 short lines (River & reserve

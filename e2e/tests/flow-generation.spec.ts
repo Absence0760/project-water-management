@@ -51,7 +51,7 @@ test('Flow generation switches between Fragmentation and Per unit, and assigns e
 	const { id, upper, lower, ridge, vlei } = await seed(page.request, 'Flow generation');
 	await openSettings(page, id);
 	await expect(panel(page).getByRole('heading', { level: 2 })).toHaveText('Flow generation');
-	const method = panel(page).getByRole('group', { name: /^Method/ });
+	const method = panel(page).getByRole('group', { name: /^How natural flow is made/ });
 	const fragmentation = method.getByRole('radio', { name: 'Fragmentation' });
 	const perUnit = method.getByRole('radio', { name: 'Per unit' });
 	await expect(fragmentation).toBeChecked();

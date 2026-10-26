@@ -249,12 +249,14 @@
 	.intro {
 		margin: -0.25rem 0 0.75rem;
 	}
+	/* A short label, a period and Make link: a form's width, not the one wide column's (issue #586 R4-B). */
 	.add {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
 		gap: 0.5rem 0.75rem;
 		margin-bottom: 0.75rem;
+		max-width: 48rem;
 	}
 	.add .field {
 		margin-bottom: 0;

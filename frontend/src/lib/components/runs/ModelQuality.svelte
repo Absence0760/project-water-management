@@ -399,7 +399,7 @@
 		{/if}
 		<div class="slot">
 			<div class="panel" id="res-calibration">
-				<CalibrationPanel calibration={summary.calibration} requestedStart={windowSettings?.calibrationStart ?? null} requestedEnd={windowSettings?.calibrationEnd ?? null} />
+				<CalibrationPanel linked calibration={summary.calibration} requestedStart={windowSettings?.calibrationStart ?? null} requestedEnd={windowSettings?.calibrationEnd ?? null} />
 				<!-- Flow against use at each gauge with a record (issue #444): where a calibration gap is read. -->
 				<CalibrationCheck
 					{projectId}
@@ -413,11 +413,11 @@
 				/>
 				{#if run.settings}
 					<div class="provenance">
-						<FitProvenance headingId={CAL_SUBSECTIONS.provenance.id} record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} runForcing={runForcingOfSummary(run.summary)} observedOrigin={originOfFit(run.inputSeries, run.settings.fitRecord)} />
+						<FitProvenance headingId={CAL_SUBSECTIONS.provenance.id} headingLevel={4} record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} runForcing={runForcingOfSummary(run.summary)} observedOrigin={originOfFit(run.inputSeries, run.settings.fitRecord)} />
 					</div>
 				{/if}
 				{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}
-					<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
+					<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={4} /></div>
 				{/if}
 			</div>
 			{#if summary.runoff}

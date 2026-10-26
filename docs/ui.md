@@ -1974,6 +1974,29 @@ files moved from `overview/` to `project/`); the Summary links here and
 sends its old `#…-h` fragments here ([§ Summary](#summary)). A reading page:
 it scrolls, and isn't fitted to the window.
 
+**One column, in the side index's order** (issue #586 R4-B). It was two
+columns (details, notes, the model's facts and Scheduled reports on the left;
+who can open it on the right), and once the page had a side index a link to a
+panel in the taller right column (Farmers onward) put that panel at the
+window's top beside an empty left column. Now the page reads top to bottom as
+the index lists it, in three groups, each a column of its own
+(`data-nav-group`): **The project** (Project details, Import record), **People
+and access** (Team, Members, Registration checks, Responsible authority, Acts
+for the authority, Farmers, Share links, API keys, Two-step sign-in, Licence
+record) and **Notes, facts and reports** (Recent notes, The model, Scheduled
+reports). Who can open it follows the details, so the first screen at 1440
+still answers "what is this project and who has it" (details and Team whole,
+Members begun), and the model's facts, which repeat other tabs' lines (issue
+#176), come after everything the page is for. Every panel spans the column:
+Project details lays its fields two a row from 46rem of page (Name beside Time
+zone, Description beside WUA name, the keyboard going down the left, then the
+right), the facts are four a row (two on a phone), lines of explanation keep a
+75ch measure, and the short forms (Team's Move to, Members' Add member,
+Share links' Make link) keep a form's width rather than the column's.
+`project-page.spec.ts` pins the one column and the order at 1440 and 1280,
+and a link to Farmers showing it and the panels after it the column's full
+width.
+
 - **Header**: the section header titled "Project", with the context line
   "Personal project · created 3 Sep 2026 · time zone Africa/Johannesburg"
   (or "Team “North WUA” · …"; `project/project.ts` `projectContext`) and
@@ -1997,7 +2020,7 @@ it scrolls, and isn't fitted to the window.
   drawn, in that order, named by its heading word for word (a trailing count
   dropped, "Farmers (3)" is "Farmers", so the link doesn't change while the
   count loads), grouped by its column's `data-nav-group` (**The project**,
-  **People and access**). So a viewer's menu has no Share links, Two-step
+  **People and access**, **Notes, facts and reports**). So a viewer's menu has no Share links, Two-step
   sign-in, Registration checks or Licence record; Import record shows only
   on an imported project; and a panel added to `PROJECT_ANCHORS` (API keys
   and Scheduled reports, #586 R1-B) gets its link with no other change. The
@@ -2015,9 +2038,9 @@ it scrolls, and isn't fitted to the window.
   link to `#farmers-h`, and the licence record review email to
   `#licence-record` (issue #586). A link to a panel this reader isn't shown
   (`#project-api-keys` for an editor) leaves the page at its top.
-- **Scheduled reports** (`#project-report-schedules`, at the foot of the left
-  column under The model) and **API keys** (`#project-api-keys`, owners
-  only, in the right column between Share links and Two-step sign-in) moved
+- **Scheduled reports** (`#project-report-schedules`, last, under The model)
+  and **API keys** (`#project-api-keys`, owners only, between Share links
+  and Two-step sign-in) moved
   here from Settings (issue #586 Round 1): they are about who gets the
   project's output and who may write to it, not the model's settings. Each
   is its own lazy chunk, and its anchor is a wrapper outside the chunk, so a
@@ -2065,17 +2088,16 @@ it scrolls, and isn't fitted to the window.
   ("Questions? Contact Vaalbank WUA."), saved with the page's **Save
   changes** bar (editors); empty keeps "your WUA". Not the team's name, which may be a
   consultancy's.
-- **Layout**: Project details, the import record, recent notes and the
-  model's facts (a panel, 2 × 4 tiles) on the left; on the right, "who has access": Team above
-  Members (or "Shared directly with" for a team project), so the two panels
-  that refer to each other sit together, then **Farmers** and share links. The columns answer to
-  the page's width (container queries on `project-page`: two columns from
-  about 760 px of page), then one column in the order details, import
-  record, notes, facts (4 × 2 tiles, 2 × 4 on a phone), team, members,
-  farmers, share links. The facts were the page's first row, eight across,
-  until 2026-09 (issue #176): each repeats the header line of the tab it
-  links to, so the first row now answers what the project is and who has
-  it.
+- **Layout**: one column at every width, in the side index's order (above):
+  details and import record; Team above Members (or "Shared directly with"
+  for a team project), so the two panels that refer to each other sit
+  together, then the rest of who can open it, Farmers and share links among
+  them; then recent notes, the model's facts (4 × 2 tiles, 2 × 4 on a phone)
+  and Scheduled reports. Two columns until issue #586 R4-B (the details,
+  notes and facts on the left from about 760 px of page). The facts were the
+  page's first row, eight across, until 2026-09 (issue #176): each repeats
+  the header line of the tab it links to, so the first screen answers what
+  the project is and who has it.
 - **Members** on a phone (under 560 px; issue #521 round 5: Leave read
   "Lea" and Remove "Remo" at 390 px, the role select 25 px tall): each
   member is a row of two lines, as on the team page (issue #520), the name
@@ -6339,10 +6361,16 @@ other sections.
   Calibration's header now: they are about that page's panels. The old
   intro paragraph is gone: the header and the menu's groups say what it
   said, and the monthly tables' own Oct … Sep headers show the water year.
-- **Judge results by** (`#set-judge`, `settings/EwrHeadlineField.svelte`,
-  helpers in `ewr/headline.ts`; issue #444: the client asked where to choose
-  which EWR to use, at the top). The first panel of the form, right under the
-  section menu (not a link in it: it is already at the top): one select,
+- **EWR the results are judged by** (`#set-judge`,
+  `settings/EwrHeadlineField.svelte`, its heading `JUDGE_HEADING` in
+  `settings/sections.ts`, helpers in `ewr/headline.ts`; issue #444: the client
+  asked where to choose which EWR to use, at the top). Named **Judge results
+  by** until issue #586 R4-B (finding E14: judged by what?). The first panel
+  of the form, and the side index's first link, in a group of its own with no
+  name above Data & rain, so Find a setting finds it ("judged"; it had no
+  link, and nothing to find it by). Its heading sits in a `.panel-head` as
+  every other panel's, so the line under it keeps the same gap (it ran into
+  the heading at 1440). One select,
   `settings.ewrHeadline`, with a line saying what it does. The options list
   only what exists: **Automatic: now …**, naming what it picks today (the
   outlet's Reserve rule table, else the first site's, else the pragmatic EWR:
@@ -6428,14 +6456,24 @@ other sections.
   own, moved to the Data page (`?tab=series#data-feeds`) and the Project page
   (`?tab=project#project-api-keys` and `#project-report-schedules`, [§
   Project](#project)) in issue #586 round 1; nothing follows the form now.
-  Judge results by (`#set-judge`) heads the form
-  above them all, as the client asked (issue #444), and isn't in the menu.
+  EWR the results are judged by (`#set-judge`) heads the form above them all,
+  as the client asked (issue #444), the menu's first link, in a group with no
+  name (issue #586 R4-B).
   The panels sit in that order on the page, so the marked link moves down the
   column as you read. Beside the index, every 12-month row still fits (the
   month cells' padding is slim: twelve months and a year total at 1440 px,
   `settings.spec.ts`; the WR2012 check's row and its Sum too, `wr2012.spec.ts`,
-  issue #586). Narrower (1280 px and down) it is the bar under the
-  header, its links evenly spaced, the same thirteen links as the index, in
+  issue #586). Demand's rows (A-pan in mm, the monthly dam evaporation
+  factors) are `monthly short`: their cells take five characters ("250.5",
+  "0.75") rather than the EWR row's six-digit m³/day, so the label "A-pan
+  evaporation mm" stays on one line with the year total inside the panel at
+  1440 and 1280 (it wrapped to three lines and the total ran past the panel;
+  issue #586 R4-B, `settings-model-layout.spec.ts`). EWR's Pragmatic EWR row
+  keeps the six-digit cells and fits as it is: its box doesn't scroll sideways
+  and Sep is whole inside it at 1440 and 1280, pinned by the same spec
+  (`ewr-row`). Narrower (1280 px and
+  down) it is the bar under the header, its links evenly spaced, the same
+  fourteen links as the index, in
   two rows at 1280 px in CI's fonts; on a phone the sideways strip. Both have
   **Find a setting**: type part of a setting's name (`pan coef`,
   `february`) and the index narrows to the panels and settings that match;
@@ -6734,14 +6772,24 @@ two.
   (the CHIRPS fit period is the first), short of the third caller that
   would justify a shared editor.
 - **Flow generation** (`#set-share`, issue #553 round 3; [model.md §2.4h,
-  §2.4i, §2.5](./model.md)): how natural flow is made, one choice, first in
-  Runoff & calibration. It replaced the Flow share panel and the
+  §2.4i, §2.5](./model.md)): how natural flow is made, one choice, the
+  Runoff group's one panel. It replaced the Flow share panel and the
   "Runoff from each unit's own rain" checkbox, which the operator found read as
-  two separate settings (2026-10-23). A **Method** radio pair:
-  **Fragmentation** (the default: `settings.unitRain` null, absent or
-  `catchment`; GR4J once on the catchment rain, its flow split by the flow
-  share) or **Per unit** (`{ mode: 'perUnit' }`: GR4J on each land unit's own
-  rain). The radio writes the same `settings.unitRain` the checkbox did, so no
+  two separate settings (2026-10-23). Under its line of values, a line that
+  stays with the explanations off says where the runoff model's parameters
+  are: "The runoff model’s parameters are fitted on Calibration, under Flow
+  calibration." (`flowgen-where`, linking to `?tab=calibration#set-flow`), so
+  the panel isn't taken for Calibration's Flow calibration (issue #586 E14).
+  A radio pair, **How natural flow is made** ("Method" until E14), each
+  method's name followed by what it does in plain words, always shown and
+  its radio's description (`FLOW_METHODS` `short`, `flowGeneration.ts`; on a
+  phone the words sit under the name, lined up with it):
+  **Fragmentation**, "one runoff run on the catchment rain, split between the
+  units" (the default: `settings.unitRain` null, absent or `catchment`; GR4J
+  once on the catchment rain, its flow split by the flow share) or **Per
+  unit**, "a runoff run for each unit with land, on its own rain" (`{ mode:
+  'perUnit' }`: GR4J on each land unit's own rain). The names stay: the fit
+  record and the engine's "fitted under …" message use them. The radio writes the same `settings.unitRain` the checkbox did, so no
   stored project changes and no migration was needed; switching to
   Fragmentation keeps the Per unit setting (`draft.kept.unitRain`) until the
   form is saved, and the stations assigned stay stored, unused, so Per unit
@@ -6912,7 +6960,7 @@ two.
   (`runs/RunScaledEwrTables.svelte`, its own chunk): its settings snapshot's
   tables × the s in its summary (`summary.catchment.outletEwr.scale`), so
   they are the values that run read whatever Settings say now. Wherever a screen
-  names the outlet's daily test (Judge results by's choice and Automatic, the
+  names the outlet's daily test (EWR the results are judged by's choice and Automatic, the
   EWR page's reserve strip and judged-by line, water-year bars
   and EWR by month note, Compare runs' water-year bars, the outcome matrix's
   and the seasonal outlook's days-below measure, the licence impact board,
@@ -6929,7 +6977,7 @@ two.
   caption counts the days below "the daily EWR line (from the DRM TAB file)"
   (`runs/flowSeries.ts ewrLineWords`); beside a rule table at another site
   it is headed **Flow vs daily EWR**. A DRM source counts as a daily test set
-  for Judge results by.
+  for EWR the results are judged by.
 - **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a
@@ -7164,19 +7212,27 @@ The page has:
   changed; it follows the unsaved form), or "GR4J · no fit record: the
   parameters were set by hand or imported". The actions add **Fit the
   parameters** for editors (a link to `#set-fit`), or **Fit record** for a
-  viewer when there is one, before Add data and Run model. Its guide is
+  viewer when there is one, before Add data and Run model. The header carries
+  the line and the jump once (issue #586 C19): Fit the parameters' own panel
+  line is its calibration rules' state ("Calibration rules revision 1 ·
+  draft, not signed off", `settings/summaries.ts`), and the GR4J card has no
+  second jump. Its guide is
   *Calibration* (`calibration-page`). The daily A-pan series' fingerprint the
   fit record compares with (issue #45) is fetched once per version of the
   series and kept for the session (`calibration/apanFingerprint.ts`), for
   the header and the fit record alike.
-- **A lead**: set up the fit, then read how the shown run fits below; the
-  setup edits save with Model settings' from the one save bar.
-- **Set up the fit** (`#cal-setup`, below): the settings panels,
+- **Two parts, the page's h2s** (issue #586 R3-D), 1.3rem, 2rem apart, with
+  their panels' headings h3 under them, each card's h4 and a card's sub-group
+  h5 (every component keeps the size it had one level up on Model settings,
+  so the panels look the same on both pages). No lead paragraph: what it said
+  that a reader needs is the line under Set up the fit.
+- **Set up the fit** (`#cal-setup`): the settings panels,
   `settings/CalibrationSettings.svelte`, in a `settings-form explain-scope`
-  wrapper with the **Explain each setting under its field** switch (the same
-  switch and the same panel lines and cards as Model settings', app.css
-  `.settings-form`). A viewer reads them with every field read-only and no fit
-  controls.
+  wrapper. Its first line says, for editors, "These settings save with Model
+  settings', from the one save bar.", with the **Explain each setting under
+  its field** switch at its end (the same switch and the same panel lines and
+  cards as Model settings', app.css `.settings-form`). A viewer reads them
+  with every field read-only, no fit controls and no save line.
 - **How the shown run fits** (`#cal-fit`, `calibration/CalibrationResults.svelte`;
   issue #586 Round 3): a heading over Model quality's panels (not a panel round
   them), the page's whole width. First a **run picker**: the run `?run=`
@@ -7187,8 +7243,11 @@ The page has:
   run named as the other pages' pickers name it (`compare/picker.ts`
   `runOptionLabel`, newest first, the newest marked *latest*); with one run,
   its name and no select. Choosing one writes `run=`, one step in history
-  (the hash kept, focus and scroll kept). Beside it the run's dates, when and
-  by whom it ran, its engine, and **Open in Runs & results** for that run.
+  (the hash kept, focus and scroll kept). The select takes the width its
+  labels need up to 44rem, with **Open in Runs & results** for that run at
+  the row's end; under them, on one line, the run's dates, when and by whom
+  it ran and its engine. Below 48rem of part (a phone), where the closed
+  select cuts a long label, that line starts with the run's whole name.
   A `run=` naming a run that's gone shows the default, with a note saying so.
   Then **Model quality** for the run (`runs/ModelQuality.svelte`, [§ Runs &
   results, Model quality](#runs--results) for its panels), its details
@@ -7197,10 +7256,16 @@ The page has:
   with the hydrograph's flows prefetched. Another run picked keeps the shown
   one on screen, `aria-busy`, until its details are in. States: loading the
   runs (the page's list, or this part's own when the page has none, with
-  **Try again** if that fails), **No run yet** (what the part will show, and
-  **Run the model** for an editor, "An editor can run the model." for a
-  viewer), loading the run, and a failed run with **Try again** (or **Show
-  the newest run** for a run that's gone). A link to a Model quality panel
+  **Try again** if that fails), the part's one empty state (a dashed box as
+  Runs & results' no-runs card: **No observed flow record yet.** with a link
+  to Data when the project has no observed or logger flow record, else **No
+  run yet.** "Run the model to see how its flows fit the observed record." for
+  an editor, whose Run model is the header's, or "An editor can run the
+  model." for a viewer; then a line on what a run shows), loading the run,
+  and a failed run with **Try again** (or **Show the newest run** for a run
+  that's gone). Calibration against observed flow's no-statistics line links
+  its fixes here (Data, and Calibration record on the page; `linked`, words
+  in a printed report). A link to a Model quality panel
   (`#res-plausibility`, the Summary's model checks, an old
   `?tab=runs#res-…` sent on here) lands once the picked run is shown, focused
   on the panel's heading (`followAnchors` in CalibrationTab hands it to the
@@ -7220,8 +7285,15 @@ The page has:
   flow for each sub-heading the page draws: **Calibration check: flow against
   use, per gauge** (`#res-calibration-check`) and **Where the parameters came
   from** (`#res-fit-provenance`; `CAL_SUBSECTIONS`; the page says which it
-  shows). A rail from 80rem of page (1440 px), the bar narrower. A loaded
-  `#cal-setup` / `#cal-fit` lands on its heading, focused.
+  shows; NavSection `sub`, indented in the rail under their panel). The page
+  passes the shown run's summary and those sub-headings in from the part
+  (`onshown`, `page.ts` `calShown`). Before a run shows (none, loading), the
+  second group is one line, **How the shown run fits**, to the part, under no
+  heading, so the index still reaches its empty state. A rail from 80rem of
+  page (1440 px), the bar narrower. A loaded `#cal-setup` / `#cal-fit` lands
+  on its heading, focused, and `#res-calibration-check` / `#res-fit-provenance`
+  on that sub-heading once the run shows (on Calibration against observed flow
+  when the run doesn't draw it).
 
 The two parts are stacked: the settings panels' monthly rows and the charts
 need the page's width. The header's **Run model**, started here, opens the
@@ -7275,13 +7347,13 @@ dialog (`settings/MonthlyPasteDialog.svelte`) and fills only its own row:
 Flow calibration's pan coefficients here (**Paste monthly pan
 coefficients**), Demand's A-pan on Model settings (**Paste monthly A-pan
 evaporation**). Their links to Model settings' panels say so ("Demand, on
-Model settings", "Flow generation, on Model settings"), and Flow
+Model settings"; the areal rainfall note: "When Flow generation on Model
+settings runs each unit on its own rain (Per unit)…", issue #586 E14), and Flow
 calibration's line points at *How the shown run fits* for NSE and PBIAS.
 
 - **Flow calibration** (rain → natural flow, `#set-flow`). **Layout (issue
-  #521):** four bordered cards. **GR4J parameters**, with **Fit the
-  parameters** (a link to `#set-fit`; editors only, as in the header, issue
-  #586) in its head: X1, X3 and X4, the
+  #521):** four bordered cards. **GR4J parameters** (its jump to Fit the
+  parameters is the page header's alone since issue #586 C19): X1, X3 and X4, the
   catchment area and the runoff model, X2's switch, and **More: warm-up 365
   days**, a `common/Fold.svelte` with `atDefaults` line that opens to the warm-up
   (closed while it is 365). Each field's "Changed 1× · last by …" history
@@ -7955,7 +8027,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   under the project's `settings.ewrHeadline` (`resolveHeadline`,
   `ewr/headline.ts` `judgedByText`), "(automatic)" when the project hasn't
   chosen. **Change** (for a viewer, **Where this is set**) opens Settings →
-  Judge results by (`?tab=settings#set-judge`). When the chosen site's table
+  EWR the results are judged by (`?tab=settings#set-judge`). When the chosen site's table
   isn't in the run (the table or gauge went, or the run predates it), the
   line adds that the run is judged automatically. Reserve compliance keeps
   its panel whenever the run has a table, whatever judges the headline.
@@ -8783,7 +8855,7 @@ read it before.
   hydrological unit got at least 95 %"; left out when the run has no units),
   then the river: the EWR headline's measure (Reserve rules met in X % of
   months at the headline site when the results are judged by a rule table
-  (Settings → Judge results by), else the % of days below the pragmatic EWR at
+  (Model settings → EWR the results are judged by), else the % of days below the pragmatic EWR at
   the outflow gauge). The river led until issue #558 put irrigation first, as
   the Summary does; the printable report's cover says the same sentences. The
   calibration fit is left to the NSE and PBIAS cards (a sentence repeating
@@ -10055,7 +10127,7 @@ gives it an `h1` and **Back to runs**). The full reference is
   judged by a rule table the heading and the chart's labels say "the
   pragmatic EWR" instead of "the reserve" (`daysBelowTestOf`, issue #177);
   that is true of every run in a mixed set. Each run is judged by its own
-  project's Settings → Judge results by (issue #444; `GET /compare/runs`
+  project's Model settings → EWR the results are judged by (issue #444; `GET /compare/runs`
   gives each side's), so runs whose projects all judge by the pragmatic EWR
   say "the reserve", as EWR does for them.
 - **Full comparison:** a divider, "Baseline (run A) against What-if 1 (run B)",
@@ -11049,7 +11121,7 @@ March") is kept against what it is about.
     tables, Drought restrictions, Reporting, Simulation period, Data quality,
     Outcome matrix, Seasonal outlook, Evidence, Automatic runs), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`),
     always last in the head, after the panel's own action (**Propose from the
-    map**, **Add a rule table**; issue #586). Judge results by has none: it is
+    map**, **Add a rule table**; issue #586). EWR the results are judged by has none: it is
     one pick of how results are read, not in the index, and a note on it
     belongs with the EWR or Reserve rule table it names;
   - on the **Summary**: *Recent notes*, the newest 8 across the project,
@@ -11098,8 +11170,8 @@ March") is kept against what it is about.
 WP-2.15 Phase A, issue #19): a meeting-ready catchment report of one run, for
 anyone who can view the project. Without `?run=` it reports the latest run. It
 reads the project, the run with its settings and model snapshot (one
-exception: the lede and headline cards follow the project's current Settings
-→ Judge results by, `settings.ewrHeadline`, issue #444, which runs don't
+exception: the lede and headline cards follow the project's current Model
+settings → EWR the results are judged by, `settings.ewrHeadline`, issue #444, which runs don't
 record, so an old run's printed headline follows a later change of it; the
 line under the lede, `ewr/headline.ts` `reportJudgedBy`, says which EWR the
 results are judged by and that it is the project's setting when printed, so

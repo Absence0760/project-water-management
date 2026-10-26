@@ -82,6 +82,7 @@
 	import { apanSourceNote, withLakeMonthly } from './peInput';
 	import { withUnitRain } from './unitRain';
 	import { FLOW_METHODS, flowMethodOf, methodLabel, stationOptions, type FlowGenerationMethod } from './flowGeneration';
+	import { calibrationHref } from '#lib/components/calibration/links.js';
 	// These panels render on every visit of the tab (the pan-coefficient helper aside, above), so they are in its chunk rather than chunks of
 	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
 	// ceiling in scripts/guards/check_web_bundle_budget.mjs). Data feeds, API keys and scheduled
@@ -290,8 +291,9 @@
      inside the panels would otherwise be nested forms (invalid HTML) whose submit reached this one. -->
 <div class="settings-form explain-scope" class:explained={explainSwitch.on}>
 
-	<!-- Judge results by (issue #444): first, as the client asked; it reads results and changes none. Not in the
-	     section menu, which starts right above it; the EWR page's "Change" links here (#set-judge). -->
+	<!-- EWR the results are judged by (issue #444; "Judge results by" until issue #586 E14): first, as the client
+	     asked; it reads results and changes none. The index's first link, in a group of its own with no name
+	     (sections.ts); the EWR page's "Change" links here (#set-judge). -->
 	<EwrHeadlineField
 		bind:value={s.ewrHeadline}
 		ewrRules={s.ewrRules}
@@ -448,7 +450,9 @@
 			</div>
 		{/if}
 		<div class="table-wrap">
-			<table class="data compact monthly">
+			<!-- `short`: a month's A-pan is at most a few hundred mm, so its cells are narrower than the EWR row's
+			     six-digit m³/day, and the row label keeps one line beside the side index at 1440 (issue #586 R4-B). -->
+			<table class="data compact monthly short" data-testid="apan-row">
 				<thead>
 					<tr>
 						<th scope="col" class="sticky">Parameter</th>
@@ -476,7 +480,7 @@
 		<MonthlyPasteDialog bind:this={monthlyPaste} {draft} rows="apan" {readonly} />
 		{#if s.lakeEvapFactorMonthly}
 			<div class="table-wrap">
-				<table class="data compact monthly" data-testid="lake-factor-row">
+				<table class="data compact monthly short" data-testid="lake-factor-row">
 					<caption class="visually-hidden">Dam evaporation factor by month, × A-pan</caption>
 					<thead>
 						<tr>
@@ -672,14 +676,24 @@
 			<NotesDrawer projectId={project.id} target={settingTarget('share')} />
 		</div>
 		<p class="summary" data-testid="summary-share">{summaries['set-share']}</p>
+		<!-- Which "flow" panel is which (issue #586 E14): this one makes natural flow from rain; Calibration's Flow
+		     calibration sets the runoff model's parameters. A where-line, not an explanation, so it stays with the
+		     explanations off, as the comparison band's line under EWR does. -->
+		<p class="hint" data-testid="flowgen-where">
+			The runoff model’s parameters are fitted on Calibration, under <a href={calibrationHref(null, 'set-flow')}>Flow calibration</a>.
+		</p>
 		<fieldset class="plain flowgen-method" data-testid="flowgen-method" aria-describedby="st-flowgen-h">
-			<legend>Method <HelpTip key="settings.unitRain" /></legend>
+			<legend>How natural flow is made <HelpTip key="settings.unitRain" /></legend>
+			<!-- Each method's name, then what it does in plain words, always shown (its name alone said nothing). -->
 			<div class="radios">
 				{#each FLOW_METHODS as m (m.value)}
-					<label class="check">
-						<input type="radio" name="st-flowgen" value={m.value} checked={flowMethod === m.value} disabled={readonly} onchange={() => setFlowMethod(m.value)} />
-						{m.label}
-					</label>
+					<span class="opt">
+						<label class="check">
+							<input type="radio" name="st-flowgen" value={m.value} checked={flowMethod === m.value} disabled={readonly} onchange={() => setFlowMethod(m.value)} aria-describedby="st-flowgen-{m.value}" />
+							{m.label}
+						</label>
+						<span class="opt-what" id="st-flowgen-{m.value}" data-testid="flowgen-what">{m.short}</span>
+					</span>
 				{/each}
 			</div>
 			<span class="hint explain" id="st-flowgen-h">
@@ -802,7 +816,7 @@
 		{#if dailyFromDrm}<p class="hint" data-testid="pragmatic-unused">Not used while the daily EWR comes from the DRM tables: kept for switching back.</p>{/if}
 		<div class="ewr">
 			<div class="table-wrap">
-				<table class="data compact monthly">
+				<table class="data compact monthly" data-testid="ewr-row">
 					<thead>
 						<tr>
 							<th scope="col" class="sticky">Month</th>
@@ -986,6 +1000,15 @@
 	table.data.monthly td :global(input) {
 		min-width: calc(6.5ch + 0.7rem + 2px);
 	}
+	/* Demand's rows (A-pan in mm, the dam evaporation factors): five characters ("250.5", "0.75") are enough, so
+	   twelve months, the year total and the label "A-pan evaporation mm" on one line fit beside the side index at
+	   1440 px; at 6.5ch the label wrapped to three lines and the year total ran past the panel (issue #586 R4-B). */
+	.monthly.short td {
+		width: calc(5ch + 0.7rem + 2px + 0.4rem);
+	}
+	table.data.monthly.short td :global(input) {
+		min-width: calc(5ch + 0.7rem + 2px);
+	}
 	.monthly td :global(input[type='number']) {
 		appearance: textfield;
 		-moz-appearance: textfield;
@@ -1085,11 +1108,33 @@
 		align-items: center;
 		min-height: 36px;
 	}
-	/* Flow generation's two methods side by side, wrapping on a phone (issue #553). */
+	/* Flow generation's two methods, one a line, each name followed by what it does (issue #553; issue #586 E14).
+	   On a phone the words wrap under the name. */
 	.radios {
+		display: grid;
+		gap: 0;
+		container: flowgen / inline-size;
+	}
+	.opt {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 0 1.25rem;
+		align-items: center;
+		column-gap: 0.5rem;
+	}
+	.opt-what {
+		color: var(--text-2);
+		font-size: var(--font-sm);
+	}
+	/* Narrow (a phone): the words under the name, lined up with it (the radio's box, its margins and the gap). */
+	@container flowgen (max-width: 30rem) {
+		.opt {
+			display: block;
+		}
+		.opt-what {
+			display: block;
+			padding-left: calc(21px + 0.4rem);
+			margin-top: -0.35rem;
+			padding-bottom: 0.35rem;
+		}
 	}
 	.flowgen-method + .alert {
 		margin-top: 0.5rem;

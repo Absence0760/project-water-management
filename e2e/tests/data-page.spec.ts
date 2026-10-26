@@ -344,7 +344,7 @@ test('gauge vs logger flows with the page: the flagged and latest water years, t
 	// The record is chosen on Calibration since issue #586 round 3.
 	await panel.getByRole('link', { name: 'Calibration → Calibration record → Compare with' }).click();
 	await expect(page).toHaveURL(/[?&]tab=calibration#set-record$/);
-	await expect(page.getByRole('heading', { level: 2, name: 'Calibration record' })).toBeFocused();
+	await expect(page.getByRole('heading', { level: 3, name: 'Calibration record' })).toBeFocused();
 });
 
 for (const size of [

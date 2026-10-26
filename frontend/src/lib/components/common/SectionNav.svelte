@@ -502,7 +502,7 @@
 						{#if g.label}<p class="rail-h" id="{uid}-r{gi}">{g.label}</p>{/if}
 						<ul aria-labelledby={g.label ? `${uid}-r${gi}` : undefined}>
 							{#each g.sections as sec (sec.id)}
-								<li>
+								<li class:sub={sec.sub}>
 									<a
 										data-item
 										href={hrefOf(sec)}
@@ -878,6 +878,10 @@
 	.results button:hover {
 		background: var(--surface-2);
 		color: var(--text);
+	}
+	/* A sub-heading's line (NavSection `sub`), indented under its panel's. */
+	.rail-nav li.sub a {
+		padding-left: 1.4rem;
 	}
 	.rail-nav a[aria-current='location'] {
 		border-left-color: var(--accent);

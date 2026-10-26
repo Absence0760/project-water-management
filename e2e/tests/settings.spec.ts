@@ -141,6 +141,7 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 
 	const menu = page.getByRole('navigation', { name: 'Settings sections' });
 	await expect(menu.getByRole('link')).toHaveText([
+		'EWR the results are judged by',
 		'Simulation period',
 		'Rain gaps',
 		'Data quality',
@@ -155,7 +156,8 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 		'Evidence',
 		'Automatic runs'
 	]);
-	await expect(menu.getByRole('link', { name: 'Simulation period' })).toHaveAttribute('aria-current', 'location');
+	// The page's first panel is the one being read at the top (issue #586 R4-B: it has a link now).
+	await expect(menu.getByRole('link', { name: 'EWR the results are judged by' })).toHaveAttribute('aria-current', 'location');
 
 	await menu.getByRole('link', { name: 'EWR', exact: true }).click();
 	await expect(page).toHaveURL(/#set-ewr$/);
@@ -163,7 +165,7 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 	await expect(ewr).toBeInViewport();
 	await expect(menu).toBeInViewport();
 	await expect(menu.getByRole('link', { name: 'EWR', exact: true })).toHaveAttribute('aria-current', 'location');
-	await expect(menu.getByRole('link', { name: 'Simulation period' })).not.toHaveAttribute('aria-current', 'location');
+	await expect(menu.getByRole('link', { name: 'EWR the results are judged by' })).not.toHaveAttribute('aria-current', 'location');
 	// The index sits beside the panels, never over them.
 	const menuBox = (await menu.boundingBox())!;
 	const headBox = (await ewr.boundingBox())!;
