@@ -901,6 +901,22 @@ section it belongs to, with the example that taught it.
   sheet's hand-made jump row became the same menu in a box of its own
   (`onjump`), which also gave it the mark for the section being read and
   names matching the legends.
+- **A page of parts: the parts are the h2s, and what moves in goes a level
+  down without changing its look.** Calibration (issue #586) put Model
+  settings' panels (h2) under a "Set up the fit" h2, so the outline read
+  part, panel, panel… as siblings, and Model quality's sub-headings ("Where
+  the parameters came from") were h3s beside their own panel's h3. Every
+  heading in the moved components went down one level (panel h3, card h4,
+  a card's group h5; FitProvenance, AgreementTable and ProposalPanel take a
+  level), each keeping the size it had one level up by a scoped rule, so the
+  panels look the same on both pages; the part headings went a size up
+  (1.3rem) so the two halves read as halves. Check the neighbours' pins:
+  specs that waited for `{ level: 2, name: 'Fit the parameters' }`, and
+  helpers that read a panel's first `h2, h3`, had to follow. A sub-heading
+  with an index line of its own is a NavSection `sub`: the rail indents it
+  under its panel, so it doesn't read as one. An index whose second group
+  is a run's panels shows, before a run is shown, one line to the part
+  itself, so the index still reaches the part's empty state.
 - **A title column sized by a fixed basis squeezes its text.** The section
   header's title took `flex: 1 1 16rem`, so whenever the controls fitted
   beside it a long context line wrapped to 3–4 short lines (River & reserve

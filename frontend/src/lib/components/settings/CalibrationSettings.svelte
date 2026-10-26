@@ -34,8 +34,6 @@
 		CALIBRATION_FLOW_KINDS,
 		calibrationSeriesKey,
 		calibrationSites,
-		fitRecordCaveats,
-		fitRecordStatus,
 		hasPotentialEvaporation,
 		PAN_COEFFICIENT_PRESET_SOURCE,
 		PAN_COEFFICIENT_PRESETS,
@@ -70,7 +68,7 @@
 	import { fmtNum } from '#lib/format/number.js';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
-	import { fitSummary, GR4J_FIELDS, RUNOFF_MODEL_HELP, RUNOFF_MODEL_LABEL, typicalRange } from './calibration';
+	import { GR4J_FIELDS, RUNOFF_MODEL_HELP, RUNOFF_MODEL_LABEL, typicalRange } from './calibration';
 	import { qualityFlagsAtDefaults, qualityFlagsSummary } from './qualityFlagsLine';
 	import MarPenaltyFields from './MarPenaltyFields.svelte';
 	import MonthlyPasteDialog from './MonthlyPasteDialog.svelte';
@@ -211,16 +209,12 @@
 	const petMissing = $derived(
 		!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }, apanSource?.daily ?? false)
 	);
-	// Where the parameters came from, for Fit the parameters' line (the page's header says the same, fitSummary).
-	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily }) : null);
-	const summary = $derived(fitSummary(s.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
 	// Each panel's line of what it is set to now (summaries.ts).
 	const summaries = $derived(
 		calibrationSummaries({
 			s: s as unknown as SummaryInput['s'],
 			unitAreaKm2: farmAreaKm2,
 			peAnnualMm: peAnnual,
-			fit: summary,
 			siteName: s.calibrationSiteNodeId ? (nodeName(s.calibrationSiteNodeId) ?? null) : null
 		})
 	);
@@ -229,7 +223,7 @@
 <!-- Flow calibration ----------------------------------------------------------->
 <section class="panel" id="set-flow" aria-labelledby="cal-h">
 	<div class="panel-head">
-		<h2 id="cal-h">Flow calibration</h2>
+		<h3 id="cal-h">Flow calibration</h3>
 		<NotesDrawer projectId={project.id} target={settingTarget('flow')} />
 	</div>
 	<p class="summary" data-testid="summary-flow">{summaries['set-flow']}</p>
@@ -249,11 +243,8 @@
 	     then Evaporation from the map, which saves straight away, as its own card. Rarely changed settings fold into
 	     one line of their values (ui-playbook.md § 2). -->
 	<div class="sub-card" data-testid="flow-gr4j-card">
-		<div class="card-head">
-			<h3 class="sub first">GR4J parameters</h3>
-			<!-- A viewer can't fit (the header gives them only "Fit record"), so no jump to a fit they can't make (issue #586, C11). -->
-			{#if !readonly}<a class="btn btn-sm" href="#set-fit" data-testid="flow-fit-link">Fit the parameters</a>{/if}
-		</div>
+		<!-- Its jump to Fit the parameters is the page header's alone (issue #586, C19). -->
+		<h4 class="sub first">GR4J parameters</h4>
 		<div class="fields gr4j-fields">
 			{#each GR4J_FIELDS.filter((f) => !f.fixedByDefault) as p (p.key)}
 				<div class="field">
@@ -313,12 +304,12 @@
 		</Fold>
 	</div>
 	<div class="sub-card" data-testid="flow-rain-card">
-		<h3 class="sub first">Rain into GR4J</h3>
+		<h4 class="sub first">Rain into GR4J</h4>
 		<!-- The areal rainfall correction (settings.arealRain, engine ≥ 1.13.0): GR4J's rain only;
 		     irrigation demand's effective rain and rain on the dams keep the recorded rain. -->
 		<fieldset class="plain areal" data-testid="areal-rain">
-			<!-- Each sub-group of a card is an h4 (in its legend) under the card’s h3, so heading navigation reaches it. -->
-			<legend><h4 class="sub">Areal rainfall correction <HelpTip key="settings.arealRain" /></h4></legend>
+			<!-- Each sub-group of a card is an h5 (in its legend) under the card’s h4, so heading navigation reaches it. -->
+			<legend><h5 class="sub">Areal rainfall correction <HelpTip key="settings.arealRain" /></h5></legend>
 			<label class="check">
 				<input type="checkbox" disabled={readonly} checked={!!areal} onchange={(e) => setArealOn(e.currentTarget.checked)} />
 				Scale the rain GR4J runs on to the catchment’s areal rain
@@ -329,7 +320,7 @@
 			</span>
 			{#if s.unitRain?.mode === 'perUnit'}
 				<!-- A state line, not an explanation: it stays when the explanations are off. -->
-				<span class="hint" role="note" data-testid="areal-rain-unit-note">With flow generation Per unit (<a href="?tab=settings#set-share">Flow generation</a>, on Model settings), it applies only to the units that fall back to the catchment rain.</span>
+				<span class="hint" role="note" data-testid="areal-rain-unit-note">When <a href="?tab=settings#set-share">Flow generation</a> on Model settings runs each unit on its own rain (Per unit), it applies only to the units that fall back to the catchment rain.</span>
 			{/if}
 			{#if areal}
 				<!-- Its own chunk (issue #521): most projects leave the correction off. -->
@@ -343,7 +334,7 @@
 		<!-- Where GR4J's potential evaporation comes from (settings.pe, issue #39). Irrigation
 		     demand and dam evaporation read the A-pan row whichever is chosen. -->
 		<fieldset class="plain pe" data-testid="gr4j-pe" aria-describedby="st-pe-annual st-pe-h">
-			<legend><h3 class="sub">GR4J potential evaporation <HelpTip key="settings.pe" /></h3></legend>
+			<legend><h4 class="sub">GR4J potential evaporation <HelpTip key="settings.pe" /></h4></legend>
 			{#each PE_KIND_OPTIONS as o (o.value)}
 				<label class="check">
 					<input type="radio" name="st-pe-kind" value={o.value} checked={pe.kind === o.value} disabled={readonly} onchange={() => setPeKind(o.value)} />
@@ -499,7 +490,7 @@
 
 <section class="panel" id="set-record" aria-labelledby="rec-h">
 	<div class="panel-head">
-		<h2 id="rec-h">Calibration record</h2>
+		<h3 id="rec-h">Calibration record</h3>
 		<NotesDrawer projectId={project.id} target={settingTarget('record')} />
 	</div>
 	<p class="summary" data-testid="summary-record">{summaries['set-record']}</p>
@@ -552,7 +543,7 @@
 
 <section class="panel" id="set-fit" aria-labelledby="fit-h">
 	<div class="panel-head">
-		<h2 id="fit-h">Fit the parameters</h2>
+		<h3 id="fit-h">Fit the parameters</h3>
 		<NotesDrawer projectId={project.id} target={settingTarget('fit')} />
 	</div>
 	<p class="summary" data-testid="summary-fit">{summaries['set-fit']}</p>
@@ -584,6 +575,7 @@
 			record={s.fitRecord}
 			settings={s as unknown as ProjectSettings}
 			heading="Fit record of these parameters"
+			headingLevel={5}
 			context="form"
 			{chirpsSource}
 			{apanDaily}
@@ -670,20 +662,11 @@
 	.panel > .hint {
 		margin: 0.5rem 0 0.75rem;
 	}
-	/* A card's heading with its action at the right (Flow calibration's GR4J parameters → Fit the parameters). */
-	.card-head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.25rem 1rem;
-	}
 	/* Evaporation from the map as a card of its own: its heading at the card's top, not 1rem under it. */
 	.sub-card :global(.proposals.inline) {
 		margin-top: 0;
 	}
-	.sub-card > .sub.first,
-	.card-head .sub.first {
+	.sub-card > .sub.first {
 		margin: 0 0 0.25rem;
 	}
 	/* A fold whose body is a column of blocks (a table helper, a toolbar), not a grid of fields. */
@@ -819,10 +802,22 @@
 		color: var(--text-2);
 	}
 	legend :global(.helptip),
-	h2 :global(.helptip),
 	h3 :global(.helptip),
+	h4 :global(.helptip),
+	h5 :global(.helptip),
 	th :global(.helptip) {
 		margin-left: 0.15rem;
+	}
+	/* The page's parts are its h2s (CalibrationTab.svelte, issue #586 round 3), so a panel's heading is an h3, a card's
+	   an h4 and a card's sub-group an h5: each keeps the size it had one level up on Model settings. */
+	.panel-head > h3 {
+		font-size: 1.1rem;
+	}
+	h4.sub {
+		font-size: 0.95rem;
+	}
+	h5.sub {
+		font-size: 1em;
 	}
 	.sub {
 		margin: 1rem 0 0.35rem;

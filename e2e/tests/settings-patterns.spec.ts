@@ -15,20 +15,21 @@ test.describe.configure({ timeout: 120_000 });
 
 /** Each settings page: its tab, a heading to wait for, and how many panels it has at least. */
 const PAGES = [
-	{ tab: 'settings', ready: 'Demand', minPanels: 10 },
-	{ tab: 'calibration', ready: 'Fit the parameters', minPanels: 3 }
+	{ tab: 'settings', ready: 'Demand', level: 2, minPanels: 10 },
+	// Calibration's panels are h3s under its parts' h2s (issue #586 R3-D).
+	{ tab: 'calibration', ready: 'Fit the parameters', level: 3, minPanels: 3 }
 ] as const;
 
 async function checkPanels(page: Page, projectId: string) {
 	for (const p of PAGES) await checkPage(page, projectId, p);
 }
 
-async function checkPage(page: Page, projectId: string, { tab, ready, minPanels }: (typeof PAGES)[number]) {
+async function checkPage(page: Page, projectId: string, { tab, ready, level, minPanels }: (typeof PAGES)[number]) {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto(`/projects/${projectId}?tab=${tab}`);
-	await expect(page.getByRole('heading', { level: 2, name: ready })).toBeVisible();
+	await expect(page.getByRole('heading', { level, name: ready })).toBeVisible();
 	// Evaporation from the map, a card of Flow calibration, loads on its own; wait for it.
-	if (tab === 'calibration') await expect(page.locator('#set-evaporation').locator('h2, h3').first()).toBeVisible();
+	if (tab === 'calibration') await expect(page.locator('#set-evaporation').locator('h2, h3, h4').first()).toBeVisible();
 	await layoutSettled(page);
 
 	// Closed, every fold's line says its values.
@@ -47,7 +48,7 @@ async function checkPage(page: Page, projectId: string, { tab, ready, minPanels 
 	const panels = await page.locator('.settings-form section.panel').all();
 	expect(panels.length, tab).toBeGreaterThan(minPanels);
 	for (const panel of panels) {
-		const id = (await panel.getAttribute('id')) ?? (await panel.getByRole('heading', { level: 2 }).first().innerText());
+		const id = (await panel.getAttribute('id')) ?? (await panel.getByRole('heading', { level }).first().innerText());
 		expect(await sharedButtonNames(panel), `${id}: buttons that share a name`).toEqual([]);
 	}
 
