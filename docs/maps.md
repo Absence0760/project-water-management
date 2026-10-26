@@ -2393,11 +2393,19 @@ The Map tab's **MAP grid** layer (`layers=mapgrid`) draws a mean annual
 precipitation grid's points in the map's view, each a dot coloured on a
 light-to-dark blue ramp by its MAP (`mapStyle.ts` `MAP_RAMP`, ringed in the
 halo colour so both ends read in either theme) and labelled with its value
-in whole mm ("812 mm"; labels thin themselves where they would overlap, and
-need glyphs). The Layers box says how many points are in view, from which
-grid, at what cell size, and their range ("396 points in view from
-synthetic (0.01° cells): 449 mm to 799 mm."), then the grid's source
-line; **Synthetic test data, never real rainfall.** for the repo's grid.
+in whole mm ("812 mm" under the dot; labels thin themselves where they
+would overlap each other, and need glyphs). MapLibre never thins a label
+against the dots, so the label layer starts at the zoom where one of the
+drawn grid's cells is 31 px tall (`mapGridLabelMinZoom`, from the grid's
+cell size, at the equator: z11.1 for 0.01°, z10.4 for 1′, z14.6 for
+100 m) and each label fits in the gap under its own point; further out the
+map shows the dots alone, read by their colour (PR #579). The Layers box
+says how many points are in view, from which grid, at what cell size, and
+their range ("396 points in view from synthetic (0.01° cells): 449 mm to
+799 mm."), then **Synthetic test data, never real rainfall.** for the
+repo's grid, then "Each point’s value shows under it once you zoom in far
+enough for it to clear the next row of points." (or, with no fonts, that
+the points show without their values), then the grid's source line.
 
 - **One grid at a time.** With more than one loaded, a **Grid** picker
   chooses; the default is a real grid before the synthetic one, the finest
@@ -2519,6 +2527,14 @@ units' `mapMm` / `mapSource` only when an editor uses it.
   period*](./model.md#reference-gauge-engine--1800-issue-500)). Name the
   grid and its study in the dataset's source, so a unit's MAP source line
   says which surface it came from.
+- **The citation.** The panel's source and method cites the grid as
+  "<source> (<version>; dataset “<label>”, <cell size>° cells).", then its
+  attribution only when that differs from the source, ignoring spaces and a
+  trailing stop (`unitMapProposal.ts` `gridCitation`, PR #579): `pnpm
+  import:map-grid` stores the source as the attribution when none is given,
+  and the Southwestern Cape surface carries its credit line as both, so the
+  line is cited once, not twice, as the Layers box drops it ([§ MAP
+  grid](#map-grid)).
 - **The synthetic grid** proposes invented values, marked as such; the
   units' MAP from it is for development and tests only.
 

@@ -225,7 +225,12 @@ round 5; there is no `<input type="date">` left, whose order is the
 browser's own: 12/30/2021 in a US browser, and `lib/uiPatterns.test.ts`
 refuses one). It is a text field read by `parseDay`: "15 Nov 2021", "15
 November 2021", "15/11/2021", "15.11.2021" and "2021-11-15" all read, never
-month first, and once typing ends it shows the day as "15 Nov 2021". The
+month first, and once typing ends it shows the day as "15 Nov 2021". A
+blank field's hint is an example, "e.g. 15 Nov 2021", never a bare day,
+which read as a stored one (Settings' blank Simulation start and end both
+seemed to say 15 Nov 2021); where blank means something the field says
+that instead: Simulation start's "First day with rain", end's "Last day
+with rain" (PR #579; `DayInput.test.ts`, `day-input.spec.ts`). The
 value kept, saved and sent stays YYYY-MM-DD ('' or null for none), so
 nothing on the server changed. `min` / `max` bound it (the reporting
 window's From / To to the run's days, a registration check to today). Text
@@ -6239,7 +6244,12 @@ two.
     values for less than the whole parcel, floored, so never rounded up to
     100 %; a unit needs 90 % to be proposed at all, issue #500 answer 8, and a
     line under the table says such a MAP is the mean over the covered part),
-    the cells and what its form holds now; the units the
+    the cells, what its form holds now, as stored (up to 6 decimals,
+    trailing zeros dropped, so a typed 855.5 reads "855.5 mm" beside a
+    proposed 855, never "856"; "None" with none) and, in its own narrow
+    column **Its source now**, where that came from (its `mapSource` in
+    words, not a `title` keyboard and touch can't reach; "–" with none;
+    PR #579); the units the
     grid doesn't cover with the reason, never filled from another grid; a
     warning naming the units holding another grid's MAP (Use is then
     disabled); a **Grid** picker when more than one is loaded; the synthetic
