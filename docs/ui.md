@@ -8024,7 +8024,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   against. The **Run** menu in the header (named for screen readers only,
   `aria-label="Run"`, like Hydrological units's picker, so on a phone the select fills a row of its own with
   no "Run" line above it) lists every run, newest first
-  (`runOptionLabel`, the compare picker's labels); picking one is a new
+  (`runOptionLabel`, the compare picker's labels, when each ran day first:
+  "today 13:40", `fmtWhen`, issue #586 R4-F); picking one is a new
   history entry (`?tab=river&run=<id>`), so Back returns to the run before and
   a reload keeps it. **Open in Runs & results** goes to `?tab=runs&run=<id>`.
   While the picked run's record loads, the page keeps the run before it on
@@ -8280,8 +8281,12 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   (`river-body`): the flow chart and the years bars sit side by side from
   56rem of it.
 - **Links in.** A `#res-…` fragment scrolls to its panel once the run is in
-  and holds it there (`holdAnchor`), with focus on the panel's heading, waiting
-  for a lazy panel's heading to arrive. An old link to one of these panels on
+  and holds it there, with focus on the panel's heading, waiting for a lazy
+  panel and its heading to arrive: the shared landing (`help/anchor.ts`
+  `landOnAnchor`, as Runs & results), since issue #586 R4-F replaced the
+  page's own copy of it (a fresh load of `#res-ewr-grid` or
+  `#res-water-account` was reported leaving the focus on the page;
+  `river-page.spec.ts` pins the focus on a fresh load). An old link to one of these panels on
   Runs & results (`?tab=runs&run=<id>#res-reserve` …, `RIVER_ANCHORS`) is
   replaced by the same link here. The Summary's **Reserve and EWR results**
   link and the run headline's "by month of the year" link here too, and an
@@ -8312,7 +8317,8 @@ read it before.
   `createdAt`, as the Summary shows (`pickRuns`). A `run=` naming a run that
   is gone shows the newest with a note. The run before it (by `createdAt`,
   `previousRunOf`) is what the change is against. The header's **Run shown**
-  menu lists every run; picking one is a history entry. **Open in Runs &
+  menu lists every run, each with when it ran day first ("today 13:40",
+  "23 Sep 2026 15:06", `fmtWhen`, issue #586 R4-F); picking one is a history entry. **Open in Runs &
   results** goes to `?tab=runs&run=<id>`, named as on EWR (issue #466).
 - **Header.** The shared section header; the context line (`supplySummary`)
   is "8 units · 3 short this week · run “Baseline”, ran today", with the
@@ -8438,7 +8444,10 @@ read it before.
   but scrolling. Not shown with no run or no units.
 - **Links in.** A `#res-farm`, `#res-farms`, `#res-curtailment`,
   `#res-assurance` or `#res-other-uses` fragment scrolls to its panel once the run is in and holds
-  it there (`holdAnchor`), focus on its heading. An old link to one of them on
+  it there, focus on its heading, through the shared landing (`help/anchor.ts`
+  `landOnAnchor`, issue #586 R4-F: the page's own copy looked the panel up
+  once, and `#res-assurance` was reported leaving the focus on the page;
+  `supply-page.spec.ts` pins it on a fresh load). An old link to one of them on
   Runs & results (`SUPPLY_ANCHORS`) is replaced by the same link here, with
   its `run=` and `window=`. The portfolio's and team page's "units short this
   week", the Summary's *Supply by hydrological unit* and its short-units card, and the
@@ -10139,9 +10148,12 @@ gives it an `h1` and **Back to runs**). The full reference is
   What-if 2, each a fieldset (legend = its name) with a coloured top edge
   (baseline grey `--text-muted`, what-if 1 `--series-2`, what-if 2
   `--series-1`, the same colours in the table keys and the chart), the run's
-  label, one line (the baseline's years, when it ran and its tags; a
+  label, one line (the baseline's years, when it ran, day first as `fmtWhen`
+  says it, and its tags; a
   what-if's lead input change, `summary.ts` `leadChange`, with **all N
-  changes**) and its project and run pickers, each label beside its select.
+  changes**) and its project and run pickers, each label beside its select,
+  the runs named with when each ran day first (`fmtWhen`, as Calibration's
+  picker; year first until issue #586 R4-F).
   With no second what-if the third column is a dashed **+ Add a second
   what-if** card; What-if 2 has **Remove**. Focus moves to the new card's run
   select on add, and back to the add button on remove.
