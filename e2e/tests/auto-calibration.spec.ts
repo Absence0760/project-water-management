@@ -181,7 +181,7 @@ test('with a gauge and a logger record, the fit can be validated against the oth
 	const scores = fit.getByRole('table', { name: /^Fit, and validation/ });
 	const col = scores.getByRole('columnheader', { name: /^Independent record: Logger flow/ });
 	await expect(col).toBeVisible();
-	await expect(col).toContainText('2021-10-01 – 2022-01-28');
+	await expect(col).toContainText('1 Oct 2021 – 28 Jan 2022');
 	// Every logger day was also fitted to (on the gauge), and the note says what that means.
 	await expect(fit.getByText(/120 of the 120 days scored against the logger record were also fitted to/)).toBeVisible();
 });

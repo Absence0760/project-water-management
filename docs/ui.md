@@ -5926,7 +5926,8 @@ a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years
 where they disagree, using the project's thresholds from Settings → *Data
 quality*. A **Data checks** panel lists negative values, outliers and flat
-stretches found in each loaded series (engine `checkSeries`), each naming
+stretches found in each loaded series (engine `checkSeries`; its dates day
+first, "6 Oct 2020: -0.4 m³/s", from engine 1.99.0, issue #586), each naming
 its series as a link-styled button (*Chart Logger* to a screen reader,
 `aria-pressed` while charted) that charts it as its row's **View** does,
 a history entry (issue #586: the check named the series and went nowhere), plus the
@@ -7709,7 +7710,7 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     a scores table. Its columns are current parameters, fitted, then each
     test's fitted part and validation part, then the independent record if
     one was chosen; the validation columns are shaded. Each column header
-    gives its period: a date range, except for the dry → wet test, whose
+    gives its period: a date range, day first ("1 Oct 2001 – 30 Sep 2004", `fit.ts` `scoreColumns` with `fmtDay`, issue #586 D9), except for the dry → wet test, whose
     years interleave and are listed (for example "WY 2001/02, 2003/04"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
     variants, the low/high-flow KGE′ on Q and 1/Q (engine ≥ 1.19.0; "–" on a report made
     before it), volume error and the FDC signatures. From engine 1.19.0
