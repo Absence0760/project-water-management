@@ -5585,18 +5585,32 @@ with the table the data needs).
   by what each series is, one `<tbody>` named by its heading row each:
   **Rainfall stations** (catchment rain with no site; each row adds its
   MAP and source, or *No MAP recorded*, and where its rain goes from
-  `settings.rainStations`: *Rain for the catchment and Upper unit. Corrects
-  the CHIRPS gaps of Lower unit.*, or *Not assigned to the catchment or a
-  unit.*), **Catchment rainfall** (CHIRPS, the alternative gauge, the
+  `settings.rainStations` as a run reads it (`groups.ts stationUses`: a
+  unit's assignment only under per-unit rain and only for a land unit):
+  *Rain for the catchment and Upper unit. Corrects the CHIRPS gaps of Lower
+  unit.*, *Assigned to Upper unit, read only under per-unit rain.*, or *Not
+  assigned to the catchment or a unit.*). A station with its details (added
+  as Add data's *Rainfall — station*, or given a MAP in Series details)
+  names its kind **Rainfall — station** (`lib/series/kinds.ts
+  seriesKindLabel`), here, in the chart's title, the preview's columns and
+  the report's input coverage; catchment rain without them keeps
+  *Rainfall — catchment* (issue #589). **Catchment rainfall** (CHIRPS, the alternative gauge, the
   reanalysis and the forecast with no site), **Hydrological units**,
   **Flow records** (a gauge's record too) and **Other inputs** (A-pan
   evaporation), in that order, an empty group left out. Each group's
   heading row is a `<th scope="rowgroup">` holding its `<h3>`, which names
   the `<tbody>`. The role badges know the groups: a unit's own CHIRPS reads
   *Upper unit’s own rain* (*Not used: per-unit rain is off* without
-  per-unit rain), and a station a run reads for an area or a pairing,
-  though not the catchment rain read by name, reads *Rainfall station*
-  (`roles.ts roleBadge`; both read as gauge records or *Not used* before).
+  per-unit rain), and a station is judged as a station, never as a second
+  catchment rain series (`roles.ts roleBadge`, issue #589): the catchment
+  rain read by name keeps *Main rainfall*; a station a run reads for an
+  area or a pairing reads *Rainfall station*; one assigned only to units
+  while per-unit rain is off reads *Not used: per-unit rain is off*; any
+  other *Not used: no area is assigned to it*. With a station for the
+  catchment, that station's rule is the catchment rain, so the series read
+  by name is *Rainfall station* only where it is assigned itself, else *Not
+  used: the catchment runs on its station*. The badge and the row's line
+  read the same `stationUses`, so they never disagree.
   Past three areas a station's line counts the units (*Rain for the
   catchment and 30 units.*).
   - **Derived rows.** With a station for the catchment, *Catchment

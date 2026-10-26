@@ -644,7 +644,7 @@ test('a series row’s role explains itself through a tip the keyboard reaches, 
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Station B', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Station B' });
-	await expect(row.getByTestId('series-role')).toHaveText('Not used (another series of this kind is)');
+	await expect(row.getByTestId('series-role')).toHaveText('Not used: no area is assigned to it');
 	await expect(row.getByTestId('series-role')).not.toHaveAttribute('title');
 	const tip = row.getByRole('button', { name: 'About Catchment rainfall' });
 	await tip.focus();
