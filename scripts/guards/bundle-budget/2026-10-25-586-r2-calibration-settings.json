@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Issue #586 Round 2 B: Flow calibration, Calibration record, Fit the parameters and the WR2012 check moved out of SettingsTab into settings/CalibrationSettings.svelte (still in the Settings tab chunk), with the scoped styles those panels read copied so the component stands on its own on the Calibration page in Round 3, and the monthly A-pan / pan coefficient paste dialog as its own component (one per panel). Measured +1.2 KB gzip against origin/test/586-round0-pins @ ff35082e5 (2076 KB there, 2077 KB here by the guard); rounded up. Headroom under 1 KB."
+}

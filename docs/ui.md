@@ -6577,7 +6577,13 @@ two.
   when it differs, so a changed value is never hidden.
 - **Calibration is four panels**, each its own menu entry, rather than one
   long one: Flow calibration, Calibration record, Fit the parameters and the
-  WR2012 check, in that order, after Rain gaps (under Data & rain).
+  WR2012 check, in that order, after Rain gaps (under Data & rain). Their
+  code is one component, `settings/CalibrationSettings.svelte` (issue #586
+  round 2), rendered in place by `SettingsTab.svelte` with the page's draft
+  and Fit automatically's session, so the Calibration page can mount it as it
+  is. Each paste of the monthly rows has its own dialog
+  (`settings/MonthlyPasteDialog.svelte`): Demand's A-pan row and Flow
+  calibration's pan coefficient row.
 - **Flow calibration** (rain → natural flow, `#set-flow`). **Layout (issue
   #521):** four bordered cards. **GR4J parameters**, with **Fit the
   parameters** (a link to `#set-fit`; editors only, as in the header, issue

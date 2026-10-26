@@ -132,7 +132,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	uploadHref: { why: 'MapSetupPill prop: MapTab passes withParam(page.url, "upload", "1")', in: ['lib/components/map/MapSetupPill.svelte'] },
 	recordLink: { why: 'GaugeCheckFlows: its recordHref prop, runs/checkGauges.ts recordHref: the literal "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/runs/GaugeCheckFlows.svelte'] },
-	dataHref: { why: 'CalibrationWindowFields prop: SettingsTab passes "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/calibration/CalibrationWindowFields.svelte'] },
+	dataHref: { why: 'CalibrationWindowFields prop: CalibrationSettings passes "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/calibration/CalibrationWindowFields.svelte'] },
 	'missingLink.panel.link.href': { why: 'RunsTab: the line for a linked panel the run doesn\'t have, a literal "?tab=…" constant (runs/missingPanel.ts NEEDS, issue #586)', in: ['lib/components/runs/RunsTab.svelte'] },
 	resolve: { why: 'resolve() of ACCOUNT_TWO_STEP, a literal "account#two-step" constant in auth-extras/requireTwoStep.ts: an app path, never a scheme (issue #586)', in: ['lib/components/auth-extras/RequireTwoStep.svelte'] },
 	'moved.href': { why: 'SectionNav: a moved setting\'s link from the page\'s `elsewhere` list, a literal "?tab=…#…" constant (settings/sections.ts SETTINGS_ELSEWHERE, issue #521)', in: ['lib/components/common/SectionNav.svelte'] },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultDataQualitySettings, defaultProjectSettings } from '@water-management/engine';
-import { changedLimits, dateSpan, settingsSummaries, type SummaryInput } from './summaries';
+import { calibrationSummaries, changedLimits, dateSpan, settingsSummaries, type SummaryInput } from './summaries';
 
 const base = (patch: Partial<SummaryInput['s']> = {}): SummaryInput => ({
 	s: { ...defaultProjectSettings(), ...patch } as SummaryInput['s'],
@@ -98,5 +98,27 @@ describe('the Reporting panel’s line (issue #521)', () => {
 		expect(s['set-reporting']).toMatch(/^Reporting .+ · a water year is met at 85 % of demand$/);
 		expect(s['set-reporting']).not.toContain('whole run');
 		expect(s['set-ewr']).not.toContain('reporting');
+	});
+});
+
+describe('calibrationSummaries', () => {
+	// The calibration panels' lines (CalibrationSettings.svelte, issue #586) are the page's lines for those panels, so
+	// the two halves of the page can't drift apart while they share it.
+	const CAL = ['set-flow', 'set-record', 'set-fit', 'set-wr2012'] as const;
+	it('gives the four calibration panels exactly the lines settingsSummaries gives them', () => {
+		for (const input of [
+			base(),
+			{ ...base({ calibrationStart: '2001-10-01', calibrationExclusions: [{ start: '2003-01-01', end: '2003-02-01', reason: 'Gauge rebuilt' }] }), siteName: 'Gauge B' }
+		]) {
+			const own = calibrationSummaries(input);
+			const page = settingsSummaries(input);
+			expect(Object.keys(own).sort()).toEqual([...CAL].sort());
+			for (const id of CAL) expect(own[id]).toBe(page[id]);
+		}
+	});
+
+	it('reads only what the calibration panels have (no EWR figures)', () => {
+		const { s, unitAreaKm2, peAnnualMm, fit } = base();
+		expect(calibrationSummaries({ s, unitAreaKm2, peAnnualMm, fit })['set-flow']).toContain('· 70 km² · PE ');
 	});
 });
