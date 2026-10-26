@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { followAnchors, type LandingEnv } from './anchorLanding';
+import { followAnchors, queryHashLink, type LandingEnv, type LinkClick } from './anchorLanding';
+
+// The browser listener reads SvelteKit's page; these tests pass their own URLs.
+vi.mock('$app/state', () => ({ page: { url: new URL('https://example.org/') } }));
 
 /** A fake browser: `go` changes the URL and fires the hash change, as typing a #fragment does. */
 function fakeEnv(path: string) {
@@ -103,5 +106,40 @@ describe('followAnchors', () => {
 		expect(s.land).not.toHaveBeenCalled();
 		b.go('#data%2Dfeeds');
 		expect(s.land.mock.calls).toEqual([['data-feeds']]);
+	});
+});
+
+const here = { origin: 'https://example.org', pathname: '/projects/p1', search: '?tab=runs&run=r1' };
+
+/** A click on a span inside a link to `href`. */
+function clickOn(href: string, init: Partial<LinkClick> = {}, attrs: Record<string, string> = {}): LinkClick {
+	const a = { href, target: attrs.target ?? '', hasAttribute: (n: string) => n in attrs };
+	const span = { closest: (sel: string) => (sel === 'a[href]' ? a : null) };
+	return { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, target: span as unknown as EventTarget, ...init };
+}
+
+describe('queryHashLink', () => {
+	it('notes a same-page link with another query and a #fragment', () => {
+		expect(queryHashLink(clickOn('https://example.org/projects/p1?tab=runs&run=r2#res-notes'), here)).toBe(
+			'https://example.org/projects/p1?tab=runs&run=r2#res-notes'
+		);
+	});
+
+	it('ignores a link hashchange already covers, one with no fragment, another page and a click off any link', () => {
+		expect(queryHashLink(clickOn('https://example.org/projects/p1?tab=runs&run=r1#res-notes'), here)).toBeNull();
+		expect(queryHashLink(clickOn('https://example.org/projects/p1?tab=runs&run=r2'), here)).toBeNull();
+		expect(queryHashLink(clickOn('https://example.org/projects/p1?tab=runs&run=r2#'), here)).toBeNull();
+		expect(queryHashLink(clickOn('https://example.org/projects/p2?tab=runs#res-notes'), here)).toBeNull();
+		expect(queryHashLink(clickOn('https://other.example/projects/p1?run=r2#res-notes'), here)).toBeNull();
+		expect(queryHashLink({ ...clickOn('x'), target: { closest: () => null } as unknown as EventTarget }, here)).toBeNull();
+	});
+
+	it('ignores a modified click, another button, a new window and a download', () => {
+		const href = 'https://example.org/projects/p1?tab=runs&run=r2#res-notes';
+		expect(queryHashLink(clickOn(href, { ctrlKey: true }), here)).toBeNull();
+		expect(queryHashLink(clickOn(href, { metaKey: true }), here)).toBeNull();
+		expect(queryHashLink(clickOn(href, { button: 1 }), here)).toBeNull();
+		expect(queryHashLink(clickOn(href, {}, { target: '_blank' }), here)).toBeNull();
+		expect(queryHashLink(clickOn(href, {}, { download: '' }), here)).toBeNull();
 	});
 });

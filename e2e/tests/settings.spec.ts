@@ -157,10 +157,7 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 		'Outcome matrix',
 		'Seasonal outlook',
 		'Evidence',
-		'Automatic runs',
-		'Data feeds',
-		'API keys',
-		'Scheduled reports'
+		'Automatic runs'
 	]);
 	await expect(menu.getByRole('link', { name: 'Simulation period' })).toHaveAttribute('aria-current', 'location');
 

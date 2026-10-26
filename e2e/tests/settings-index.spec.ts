@@ -97,7 +97,7 @@ test('the index moves with the arrow keys, and a panel with a Save blocker is ma
 	await page.keyboard.press('ArrowDown');
 	await expect(menu.getByRole('link', { name: 'Rain gaps', exact: true })).toBeFocused();
 	await page.keyboard.press('End');
-	await expect(menu.getByRole('link', { name: 'Scheduled reports', exact: true })).toBeFocused();
+	await expect(menu.getByRole('link', { name: 'Automatic runs', exact: true })).toBeFocused();
 	await page.keyboard.press('Home');
 	await expect(first).toBeFocused();
 	// Up from the first link goes back to the find box, never out of the page.

@@ -66,3 +66,36 @@ test('a #fragment typed while Settings, Runs & results, Data or Project is open 
 	await typeHash(page, '#members-h');
 	await expectLanded(page, 'members-h', /^Members/);
 });
+
+/** Click a link on the page to `href`, as an in-page link with another query is followed (SvelteKit pushes it). */
+async function followLink(page: Page, href: string) {
+	await page.evaluate((to) => {
+		const a = document.createElement('a');
+		a.href = to;
+		a.textContent = 'Test link';
+		a.dataset.testid = 'query-hash-link';
+		document.querySelector('main')!.prepend(a);
+	}, href);
+	await page.getByTestId('query-hash-link').click();
+}
+
+test('a link that changes the query as well as the #fragment lands on its panel, focused', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const project = await seedRunnableProject(page.request, 'Query and hash landing');
+	const first = await createRun(page.request, project.id, 'First');
+	const second = await createRun(page.request, project.id, 'Second');
+
+	// Settings: nothing mounts again, and no hashchange fires.
+	await openSettings(page, project.id);
+	await followLink(page, `/projects/${project.id}?tab=settings&view=all#set-auto`);
+	await expect(page).toHaveURL(/view=all#set-auto$/);
+	await expectLanded(page, 'set-auto', 'Automatic runs');
+
+	// Runs & results: another run's panel, drawn for that run.
+	await page.goto(`/projects/${project.id}?tab=runs&run=${first}`);
+	await expect(page.locator('#res-summary')).toBeVisible();
+	await followLink(page, `/projects/${project.id}?tab=runs&run=${second}#res-notes`);
+	await expect(page).toHaveURL(new RegExp(`run=${second}#res-notes$`));
+	await expectLanded(page, 'res-notes', 'Run notes');
+});

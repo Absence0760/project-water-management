@@ -11,10 +11,12 @@
 // this listens for `hashchange`. Back and Forward between two entries the app
 // has seen keep the place they return to (nav/backScroll.ts, ui-playbook § URL
 // state) rather than land: their `popstate` carries the entry's state, where a
-// new fragment entry (typed or followed) has none.
+// new fragment entry (typed or followed) has none. A link that changes the
+// query too fires no `hashchange`; anchorLandingEnv.svelte.ts follows those.
 import type { TabId } from '#lib/workspace/tabs.js';
 import { anchorForward } from './anchorMoves';
 import { hashId } from '#lib/help/anchor.js';
+import { browserEnv } from './anchorLandingEnv.svelte';
 
 /** What followAnchors needs from the browser; a test passes fakes. */
 export interface LandingEnv {
@@ -36,25 +38,17 @@ export interface AnchorLanding {
 	env?: LandingEnv;
 }
 
-function browserEnv(): LandingEnv {
-	return {
-		url: () => location,
-		listen(onHash) {
-			let traversal = false;
-			const pop = (e: PopStateEvent) => (traversal = e.state != null);
-			const hash = () => {
-				const t = traversal;
-				traversal = false;
-				onHash(t);
-			};
-			window.addEventListener('popstate', pop);
-			window.addEventListener('hashchange', hash);
-			return () => {
-				window.removeEventListener('popstate', pop);
-				window.removeEventListener('hashchange', hash);
-			};
-		}
-	};
+/** The parts of a click queryHashLink reads (a MouseEvent; a fake in tests). */
+export type LinkClick = Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'> & { target: EventTarget | null };
+
+/** The same-page address with another query and a #fragment that the click follows, or null. */
+export function queryHashLink(e: LinkClick, here: Pick<URL, 'origin' | 'pathname' | 'search'>): string | null {
+	if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return null;
+	const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null | undefined;
+	if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download')) return null;
+	const to = new URL(a.href, here.origin);
+	if (to.origin !== here.origin || to.pathname !== here.pathname || to.search === here.search || to.hash.length < 2) return null;
+	return to.href;
 }
 
 /**

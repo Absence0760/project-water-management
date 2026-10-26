@@ -1,7 +1,7 @@
 // The Runs & results page's in-page menu: the results panels in page order,
 // grouped by the question they answer (the model's quality, the record, then
 // digging deeper). Each id is set on its panel (RunsTab.svelte,
-// RunCharts.svelte); each group's heading is on the page too. Each link says
+// ModelQuality.svelte, RunCharts.svelte); each group's heading is on the page too. Each link says
 // its panel's heading, and on the bar a shorter name where the heading is long
 // (issue #462). The river and unit panels have their own pages (issue #17):
 // the run header links there, the side index lists the main ones under their
