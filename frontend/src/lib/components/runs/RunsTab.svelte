@@ -188,6 +188,8 @@
 		}
 	}
 	let stopAnchors = () => {};
+	/** An old link is being sent on to the panel's new page (nav/anchorMoves.ts): this page writes nothing more into the URL. */
+	let forwarding = false;
 	onMount(() => {
 		// A link to a panel that moved to EWR (#res-reserve, #res-ewr, …) or Hydrological units
 		// (#res-curtailment from a bookmarked "units short this week", …), or to the link rows those
@@ -195,17 +197,16 @@
 		// run (and reporting window), replacing this entry so Back skips it (nav/anchorMoves.ts). On
 		// load, and for a #fragment typed or followed while the page is open, which lands on its panel
 		// too (finding R2-D); the load's own landing waits for the run (below).
-		let forwarded = false;
 		stopAnchors = followAnchors({
 			page: 'runs',
 			onLoad: false,
 			land: (id) => (fragmentShown ? landOnceShown(id) : undefined),
 			forward: (to) => {
-				forwarded = true;
+				forwarding = true;
 				void goto(to, { replace: true, reset: false });
 			}
 		});
-		if (forwarded) return;
+		if (forwarding) return;
 		load();
 		loadPublication();
 	});
@@ -352,9 +353,10 @@
 	});
 
 	// Once the list is known and the URL names no run: the newest run, or for a
-	// viewer the published baseline (runList.ts defaultRunId). ?run= always wins.
+	// viewer the published baseline (runList.ts defaultRunId). ?run= always wins. Not while an old link is sent on:
+	// writing the default replaced the forward's address, so `?tab=runs#res-calibration` stayed here (issue #586 round 3).
 	$effect(() => {
-		if (!loading && !selectedId && runs.length) select(defaultRunId(runs, project.role));
+		if (!forwarding && !loading && !selectedId && runs.length) select(defaultRunId(runs, project.role));
 	});
 
 	async function run(e: SubmitEvent) {
