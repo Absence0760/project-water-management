@@ -1430,7 +1430,10 @@ merges into:
   tries again, and one feed's failure doesn't hold up the rest (#32). A
   failing feed retries sooner: 15 minutes after one failure, doubling up to
   the day (2 hours, doubling, when the source refused it with HTTP 403;
-  Throttling below). If the acting user is no longer an editor, the enqueue is
+  Throttling below). When that is (`app_feed_next_attempt`,
+  243_feed_next_attempt.sql, the same rule `app_feed_is_due` now reads) is
+  the feed list's `nextAttemptAt`, and a failing feed's card says it ("It
+  tries again after 10:13."; ui.md § Data feeds). If the acting user is no longer an editor, the enqueue is
   refused, the feed records it (`app_feed_schedule_failed`, keeping the
   claim), and it shows failing until an owner saves it.
 - **Health** (`feeds/health.ts`), shown in Data → Data feeds: `ok`,

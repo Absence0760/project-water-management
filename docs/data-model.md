@@ -4050,7 +4050,15 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     requests`, `FEED_REFUSED_PREFIX` in `feeds/errors.ts`: the source
     answered HTTP 403), the failing backoff is 2 h × 2^(failures − 1)
     instead, still capped at the day ([architecture.md § Data feeds →
-    Throttling](./architecture.md#data-feeds)).
+    Throttling](./architecture.md#data-feeds)). 243 rewrote it as "never
+    scheduled, or `app_feed_next_attempt` has come", same signature and
+    behaviour.
+  - `app_feed_next_attempt(source, schedule, failures, last_scheduled_at,
+    last_error)` (243, plain, pinned `search_path`, executable by
+    `water_app`): the first instant `app_feed_is_due` turns true, so the
+    backoff arithmetic lives in one place; NULL when never scheduled. The
+    feed list (`feeds/store.ts`) returns it as `nextAttemptAt` for an enabled
+    feed with an acting user, null otherwise.
   - `app_record_feed_checked(feed)` (027): a fetch whose forecast issue was
     older than the one merged, dropped by the ingest: stamps
     `last_attempt_at` only, as an editor.
