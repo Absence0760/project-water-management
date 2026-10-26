@@ -89,9 +89,10 @@
 	}
 </script>
 
-<section aria-labelledby="{uid}-h" class="since">
+<!-- Its heading has the side index's line (runs/sections.ts RUN_SUBSECTIONS, issue #586 D4): one per page. -->
+<section aria-labelledby="res-changes" class="since">
 	<details ontoggle={toggle}>
-		<summary><h3 id="{uid}-h">Changes since this run</h3></summary>
+		<summary><h3 id="res-changes">Changes since this run</h3></summary>
 		{#if loading && changes === null}
 			<p class="muted" role="status">Loading…</p>
 		{:else if error}

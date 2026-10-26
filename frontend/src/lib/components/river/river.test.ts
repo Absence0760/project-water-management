@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '#lib/api/types.js';
 import { navText } from '#lib/components/common/sectionNav.js';
-import { RIVER_ANCHORS, riverAnchor, riverHref, summaryToRiverAnchor } from './links';
+import { RIVER_ANCHORS, riverAnchor, riverHref } from './links';
 import { EWR_MONTHS_HEADING, ewrRuleText, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type RiverKpi } from './river';
 
 const meta = (id: string, createdAt: string): RunMeta => ({
@@ -43,17 +43,10 @@ const site = (nodeId: string | null, name: string, met: number, months: number):
 
 const tile = (ks: RiverKpi[], id: RiverKpi['id']) => ks.find((k) => k.id === id)!;
 
-describe('summaryToRiverAnchor', () => {
-	it('sends the Summary’s old reserve strip and any EWR panel to the EWR page (issue #558)', () => {
-		expect(summaryToRiverAnchor('strip-h')).toBe('res-reserve-strip');
-		expect(summaryToRiverAnchor('reserve-strip')).toBe('res-reserve-strip');
-		expect(summaryToRiverAnchor('res-reserve-strip')).toBe('res-reserve-strip');
-		expect(summaryToRiverAnchor('res-reserve')).toBe('res-reserve');
-		// The strip is linkable on the EWR page, but not in its menu (it is beside the tiles).
+describe('the reserve strip’s anchor', () => {
+	it('is linkable on the EWR page, but not in its menu (it is beside the tiles); the Summary’s old links forward there (nav/anchorMoves.test.ts)', () => {
 		expect(riverAnchor('res-reserve-strip')).toBe(true);
 		expect(riverNavGroups(false, false).flatMap((g) => g.sections.map((x) => x.id))).not.toContain('res-reserve-strip');
-		// The Summary's own panels stay.
-		for (const id of ['', 'members-h', 'res-curtailment']) expect(summaryToRiverAnchor(id)).toBeNull();
 	});
 });
 

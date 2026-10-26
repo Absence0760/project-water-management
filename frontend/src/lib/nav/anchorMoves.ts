@@ -1,12 +1,16 @@
 // Links into a panel that moved to another page (issue #586): an old
 // `?tab=settings#set-feeds` in an email, a bookmark or a note, or a
 // `?tab=runs#res-curtailment` from before EWR and Hydrological units had pages
-// of their own (issue #17). Every such move is one row of ANCHOR_MOVES, and
+// of their own (issue #17), a `?tab=settings#set-fit` or `?tab=runs#res-calibration`
+// from before Calibration had them (issue #586 round 3). Every such move is one row of ANCHOR_MOVES, and
 // anchorForward reads them: the page the reader opened sends the link on to the
 // panel's new page and anchor (anchorLanding.ts followAnchors, with a replace
 // navigation so Back skips the old address), and that page lands on the panel
 // and focuses its heading. Moving another panel is adding a row.
-import { RIVER_ANCHORS, RIVER_STRIP_ANCHOR } from '#lib/components/river/links.js';
+import { MODEL_QUALITY_ANCHORS } from '#lib/components/calibration/links.js';
+import { CALIBRATION_SETTINGS_ANCHORS, isCalibrationAnchor } from '#lib/components/settings/sections.js';
+import { PROJECT_ANCHORS } from '#lib/components/project/links.js';
+import { RIVER_ANCHORS, RIVER_STRIP_ANCHOR, SUMMARY_STRIP_ANCHORS } from '#lib/components/river/links.js';
 import { SUPPLY_ANCHORS, SUPPLY_TAB } from '#lib/components/supply/links.js';
 import { hashId } from '#lib/help/anchor.js';
 import type { TabId } from '#lib/workspace/tabs.js';
@@ -34,6 +38,9 @@ export interface AnchorMove {
 const RUN = ['run'] as const;
 const RUN_WINDOW = ['run', 'window'] as const;
 
+/** The panels that stayed on Model settings: an old `?tab=calibration#set-ewr` goes there (any `set-…` not moved to Calibration). */
+const stayedOnSettings = (id: string) => id.startsWith('set-') && !isCalibrationAnchor(id);
+
 /** Every moved anchor, by the page it was on. */
 export const ANCHOR_MOVES: readonly AnchorMove[] = [
 	// Settings → Data and Project (issue #586 round 1). `?rain=boundary`/`?rain=units` is a map proposal for Data feeds.
@@ -46,10 +53,23 @@ export const ANCHOR_MOVES: readonly AnchorMove[] = [
 	{ from: 'runs', hash: [...RIVER_ANCHORS, RIVER_STRIP_ANCHOR], tab: 'river', keep: RUN },
 	{ from: 'runs', hash: 'res-units', tab: SUPPLY_TAB, to: null, keep: RUN_WINDOW },
 	{ from: 'runs', hash: SUPPLY_ANCHORS, tab: SUPPLY_TAB, keep: RUN_WINDOW },
+	// Settings → Calibration (issue #586 round 3): Flow calibration, Calibration record, Fit the parameters, WR2012
+	// check and the Evaporation from the map card, ids unchanged.
+	{ from: 'settings', hash: CALIBRATION_SETTINGS_ANCHORS, tab: 'calibration', keep: 'all' },
+	// Runs & results → Calibration (issue #586 round 3): Model quality's panels, for the same run (Calibration's run
+	// picker reads `run=` as Runs does). The runs filter (`q=`) is Runs' own. Water balance by water year stays.
+	{ from: 'runs', hash: MODEL_QUALITY_ANCHORS, tab: 'calibration', keep: RUN },
 	// `?tab=calibration` opened Settings & calibration until Calibration had a page of its own (issue #586 round 2),
-	// so an old `?tab=calibration#set-ewr` (a bookmark, a note's link) goes to that panel there; Settings sends a
-	// moved one (`#set-feeds`) on again. Round 3 moves the calibration panels here, and turns their rows round.
-	{ from: 'calibration', hash: (id) => id.startsWith('set-'), tab: 'settings', keep: 'all' }
+	// so an old `?tab=calibration#set-ewr` (a bookmark, a note's link) goes to that panel on Model settings, which
+	// sends a panel that moved again (`#set-feeds`) on to its page. The calibration panels are here now, so their
+	// anchors stay.
+	{ from: 'calibration', hash: stayedOnSettings, tab: 'settings', keep: 'all' },
+	// The Summary's old panels (issue #17, issue #558): the model's facts, details, notes and access went to Project
+	// (`/projects/:id#members-h`, bookmarked before 2026-09-27), the reserve strip and the EWR panels to EWR, for
+	// the run the Summary shows (the page fills `run=`, followAnchors `fill`).
+	{ from: 'overview', hash: PROJECT_ANCHORS, tab: 'project', keep: [] },
+	{ from: 'overview', hash: SUMMARY_STRIP_ANCHORS, tab: 'river', to: RIVER_STRIP_ANCHOR, keep: RUN },
+	{ from: 'overview', hash: [...RIVER_ANCHORS, RIVER_STRIP_ANCHOR], tab: 'river', keep: RUN }
 ];
 
 const names = (m: AnchorMove, hash: string): boolean =>
@@ -64,8 +84,15 @@ export function anchorMove(from: TabId, hash: string, params: URLSearchParams, m
  * Where a link on page `from` goes instead, when its `#anchor` names a panel that moved: the same
  * path (a base path kept), the new page's `?tab=`, the kept parameters and the new anchor. null when
  * the anchor is still on this page, or names nothing. A percent-encoded `#` is read as its id.
+ * `fill` gives a kept parameter the link lacks: the Summary's link carries no `run=`, so the page
+ * passes the run it shows. A list `keep` only: 'all' keeps the link's own.
  */
-export function anchorForward(from: TabId, url: Pick<URL, 'pathname' | 'search' | 'hash'>, moves: readonly AnchorMove[] = ANCHOR_MOVES): string | null {
+export function anchorForward(
+	from: TabId,
+	url: Pick<URL, 'pathname' | 'search' | 'hash'>,
+	moves: readonly AnchorMove[] = ANCHOR_MOVES,
+	fill: Readonly<Record<string, string | null | undefined>> = {}
+): string | null {
 	const params = new URLSearchParams(url.search);
 	const hash = hashId(url.hash);
 	const move = anchorMove(from, hash, params, moves);
@@ -77,7 +104,7 @@ export function anchorForward(from: TabId, url: Pick<URL, 'pathname' | 'search' 
 	} else {
 		q = new URLSearchParams({ tab: move.tab });
 		for (const k of move.keep) {
-			const v = params.get(k);
+			const v = params.get(k) || fill[k];
 			if (v) q.set(k, v);
 		}
 	}

@@ -3,10 +3,14 @@
 // without a WR2012 reference, say. The panel isn't drawn at all, so the link
 // would land nowhere and say nothing; RunsTab shows this line instead, with a
 // link to where the panel's input is set (playbook § 2: a one-line stub
-// saying what it needs).
+// saying what it needs). Calibration shows it the same way for the Model
+// quality panels, which moved there (issue #586 Round 3,
+// calibration/CalibrationResults.svelte).
 import { resultSections } from './sections';
+import { modelQualitySections } from './modelQuality';
+import { calibrationHref } from '#lib/components/calibration/links.js';
 
-type SectionInput = Parameters<typeof resultSections>[0];
+type SectionInput = Parameters<typeof resultSections>[0] & Parameters<typeof modelQualitySections>[0];
 
 export interface MissingPanel {
 	/** The line: what the panel is and what it needs. */
@@ -35,7 +39,7 @@ const NEEDS: Record<string, MissingPanel> = {
 	},
 	'res-wr2012': {
 		text: 'This run has no WR2012 check. It needs a WR2012 reference for the catchment, set under WR2012 check.',
-		link: { href: '?tab=settings#set-wr2012', label: 'WR2012 check' }
+		link: { href: calibrationHref(null, 'set-wr2012'), label: 'WR2012 check' }
 	},
 	'res-plausibility': {
 		text: 'This run has no plausibility checks: it was made by an older version of the model. Run the model again to get them.',
@@ -47,5 +51,6 @@ const NEEDS: Record<string, MissingPanel> = {
 export function missingPanel(hash: string, summary: SectionInput): MissingPanel | null {
 	const needs = NEEDS[hash];
 	if (!needs) return null;
-	return resultSections(summary, true).some((s) => s.id === hash) ? null : needs;
+	const drawn = [...resultSections(summary, true), ...modelQualitySections(summary)];
+	return drawn.some((s) => s.id === hash) ? null : needs;
 }

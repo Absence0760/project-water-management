@@ -23,6 +23,7 @@
 		record,
 		settings,
 		heading = 'Where the parameters came from',
+		headingId,
 		headingLevel = 3,
 		context = 'run',
 		chirpsSource,
@@ -36,6 +37,8 @@
 		/** The settings the record sits in (a run's snapshot, or the form). */
 		settings: Partial<ProjectSettings>;
 		heading?: string;
+		/** The heading's id, when a page links to it (Calibration's index, calibration/page.ts CAL_SUBSECTIONS); else one of its own. */
+		headingId?: string;
 		headingLevel?: 3 | 4;
 		/** 'run': a stored run; 'form': the unsaved Settings form. */
 		context?: 'run' | 'form';
@@ -65,6 +68,7 @@
 	};
 
 	const uid = $props.id();
+	const hid = $derived(headingId ?? `${uid}-h`);
 	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}), ...(observedOrigin !== undefined ? { observedOrigin } : {}), ...(runForcing ?? {}) }) : null);
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
@@ -76,8 +80,8 @@
 	const exclusions = $derived((settings.calibrationExclusions ?? []) as FitRecord['exclusions']);
 </script>
 
-<section class="prov" aria-labelledby="{uid}-h">
-	<svelte:element this={`h${headingLevel}`} id="{uid}-h">{heading} <HelpTip key="settings.fitRecord" /></svelte:element>
+<section class="prov" aria-labelledby={hid}>
+	<svelte:element this={`h${headingLevel}`} id={hid}>{heading} <HelpTip key="settings.fitRecord" /></svelte:element>
 	{#if !record}
 		<p class="muted small">
 			No fit record: {context === 'run' ? 'this run’s' : 'these'} parameters were set by hand, imported, or saved before fit records existed. Nothing

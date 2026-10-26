@@ -1782,7 +1782,7 @@
 										</li>
 									{/each}
 								</ul>
-								<p class="hint muted">Typing a new area on the Network replaces one from the map. The WR2012 check can propose its quaternary’s values from the map: <a href="?tab=settings#set-wr2012">Settings → WR2012 check</a>.</p>
+								<p class="hint muted">Typing a new area on the Network replaces one from the map. The WR2012 check can propose its quaternary’s values from the map: <a href="?tab=calibration#set-wr2012">Calibration → WR2012 check</a>.</p>
 							</section>
 						{/if}
 

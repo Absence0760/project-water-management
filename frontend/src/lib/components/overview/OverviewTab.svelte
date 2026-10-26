@@ -5,7 +5,6 @@
 	import AlertsPanel from '#lib/components/alerts/AlertsPanel.svelte';
 	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
 	import { fmtDay } from '#lib/format/number.js';
 	import { projectToday } from '#lib/components/projects/freshness.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
@@ -13,14 +12,15 @@
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { loadOnce, peek } from '#lib/components/common/lazy.js';
 	import { attention, runHref } from './attention';
-	import { riverHref, summaryToRiverAnchor } from '#lib/components/river/links.js';
+	import { riverHref } from '#lib/components/river/links.js';
+	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { supplyHref } from '#lib/components/supply/links.js';
 	import { allocationsHref } from '#lib/components/allocations/links.js';
 	import { checklist, checklistMode } from './checklist';
 	import LatestRun from './LatestRun.svelte';
 	import { historyEnd, pickRuns, ranAgo, type DamsState } from './latestRun';
 	import { damLevelsFromSummary, damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
-	import { projectAnchor, projectHref } from '#lib/components/project/links.js';
+	import { projectHref } from '#lib/components/project/links.js';
 	import NeedsAttention from './NeedsAttention.svelte';
 	import PublishedBaseline from './PublishedBaseline.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
@@ -49,19 +49,18 @@
 	} = $props();
 
 	// The model's facts, the project's details, import record and notes, and who has access moved to
-	// the Project page (issue #17): an old link to one of their panels (`#members-h`) goes there,
-	// replacing this entry so Back skips it.
-	// The EWR's pieces moved to the EWR page (issue #558): an old link to the reserve strip or a
-	// `#res-…` EWR panel goes there the same way.
-	onMount(() => {
-		const hash = page.url.hash.slice(1);
-		if (projectAnchor(hash)) goto(projectHref(hash), { replace: true, reset: false });
-		else {
-			const ewr = summaryToRiverAnchor(hash);
-			// For the run the Summary shows, as the strip was.
-			if (ewr) goto(riverHref(pick?.latest.id ?? null, ewr), { replace: true, reset: false });
-		}
-	});
+	// the Project page (issue #17), and the EWR's pieces to the EWR page (issue #558): an old link to one
+	// of their panels (`#members-h`, `#strip-h`) goes there, on load or followed while the Summary is open,
+	// replacing this entry so Back skips it. They are rows of the shared table (nav/anchorMoves.ts); an EWR
+	// panel opens for the run the Summary shows, as the strip was.
+	onMount(() =>
+		followAnchors({
+			page: 'overview',
+			land: () => undefined,
+			forward: (to) => void goto(to, { replace: true, reset: false }),
+			fill: () => ({ run: pick?.latest.id ?? null })
+		})
+	);
 
 	// The series and runs lists come from the page, which loads them before any
 	// tab renders and refreshes them after an upload or a run, so the checklist

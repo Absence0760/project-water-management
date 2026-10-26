@@ -3,6 +3,8 @@
 // for a note's target. Pure, so the rules are unit-tested.
 import { NOTE_MAX, type Note, type NoteCounts, type NoteCreate, type NotesQuery, type NoteVisibility } from '#lib/api/types.js';
 import { NOTES_EN, type NotesWords } from './words';
+import { calibrationHref } from '#lib/components/calibration/links.js';
+import { settingsPageOf } from '#lib/components/settings/sections.js';
 
 /** What a drawer or list holds notes about. */
 export type NoteTarget =
@@ -208,8 +210,10 @@ export function noteAbout(n: Pick<Note, 'target' | 'nodeName' | 'settingKey'>): 
 		case 'run':
 			return 'A run';
 		case 'setting': {
+			// Named by the page its panel is on (issue #586 round 3): Model settings, or Calibration for the fit's.
 			const group = n.settingKey?.split('.')[0] as SettingNoteGroup | undefined;
-			return `Settings: ${(group && SETTING_NOTE_GROUPS[group]) || n.settingKey}`;
+			const known = !!group && group in SETTING_NOTE_GROUPS;
+			return `${known && settingsPageOf(`set-${group}`) === 'calibration' ? 'Calibration' : 'Model settings'}: ${(known && SETTING_NOTE_GROUPS[group]) || n.settingKey}`;
 		}
 	}
 }
@@ -230,8 +234,11 @@ export function noteHref(n: Pick<Note, 'target' | 'nodeId' | 'runId' | 'settingK
 		case 'run':
 			return n.runId ? `?tab=runs&run=${encodeURIComponent(n.runId)}#res-notes` : '?tab=runs';
 		case 'setting': {
+			// Its panel, on Model settings or, for the fit's four (issue #586 round 3), on Calibration.
 			const group = n.settingKey?.split('.')[0];
-			return group && group in SETTING_NOTE_GROUPS ? `?tab=settings#set-${group}` : '?tab=settings';
+			if (!group || !(group in SETTING_NOTE_GROUPS)) return '?tab=settings';
+			const id = `set-${group}`;
+			return settingsPageOf(id) === 'calibration' ? calibrationHref(null, id) : `?tab=settings#${id}`;
 		}
 	}
 }

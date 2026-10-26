@@ -19,7 +19,7 @@ import {
 	targetTitle,
 	type NoteTarget
 } from './notes';
-import { SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
+import { CALIBRATION_SETTINGS_SECTIONS, SETTINGS_SECTIONS } from '#lib/components/settings/sections.js';
 
 const farm: NoteTarget = { kind: 'node', nodeId: 'n1', name: 'Farm A', isFarm: true };
 const gauge: NoteTarget = { kind: 'node', nodeId: 'g1', name: 'Weir', isFarm: false };
@@ -76,21 +76,27 @@ describe('labels', () => {
 
 	it('says what a note in a mixed list is about, and links to it', () => {
 		expect(noteAbout({ target: 'node', nodeName: 'Farm A', settingKey: null })).toBe('Farm A');
-		expect(noteAbout({ target: 'setting', nodeName: null, settingKey: 'flow.a' })).toBe('Settings: Flow calibration');
-		expect(noteAbout({ target: 'setting', nodeName: null, settingKey: 'other' })).toBe('Settings: other');
+		expect(noteAbout({ target: 'setting', nodeName: null, settingKey: 'flow.a' })).toBe('Calibration: Flow calibration');
+		expect(noteAbout({ target: 'setting', nodeName: null, settingKey: 'ewr' })).toBe('Model settings: EWR');
+		expect(noteAbout({ target: 'setting', nodeName: null, settingKey: 'other' })).toBe('Model settings: other');
 		expect(noteHref({ target: 'node', nodeId: 'n1', runId: null, settingKey: null })).toBe('?tab=network&node=n1');
 		expect(noteHref({ target: 'run', nodeId: null, runId: 'r/1', settingKey: null })).toBe('?tab=runs&run=r%2F1#res-notes');
 		expect(noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: 'ewr' })).toBe('?tab=settings#set-ewr');
 		expect(noteHref({ target: 'project', nodeId: null, runId: null, settingKey: null })).toBeNull();
 	});
-	it('links every settings group to a Settings section that exists', () => {
-		const ids = new Set<string>(SETTINGS_SECTIONS.map((x) => x.id));
+	it('links every settings group to its panel, on Model settings or Calibration (issue #586 round 3)', () => {
+		const pages = new Map<string, string>([...SETTINGS_SECTIONS.map((x) => [x.id, 'settings'] as const), ...CALIBRATION_SETTINGS_SECTIONS.map((x) => [x.id, 'calibration'] as const)]);
 		for (const key of Object.keys(SETTING_NOTE_GROUPS)) {
-			expect(ids, key).toContain(noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: key })!.split('#')[1]);
+			const href = noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: key })!;
+			const id = href.split('#')[1]!;
+			expect(pages.has(id), key).toBe(true);
+			expect(href, key).toBe(`?tab=${pages.get(id)}#${id}`);
 		}
+		expect(noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: 'fit' })).toBe('?tab=calibration#set-fit');
+		expect(noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: 'other' })).toBe('?tab=settings');
 	});
 	it('names each settings group as its panel’s heading', () => {
-		const label = new Map<string, string>(SETTINGS_SECTIONS.map((x) => [x.id, x.label]));
+		const label = new Map<string, string>([...SETTINGS_SECTIONS, ...CALIBRATION_SETTINGS_SECTIONS].map((x) => [x.id, x.label]));
 		for (const [key, name] of Object.entries(SETTING_NOTE_GROUPS)) expect(name, key).toBe(label.get(`set-${key}`));
 	});
 });

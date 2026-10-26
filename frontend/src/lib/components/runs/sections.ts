@@ -1,18 +1,22 @@
 // The Runs & results page's in-page menu: the results panels in page order,
-// grouped by the question they answer (the model's quality, the record, then
+// grouped by the question they answer (the run itself, the record, then
 // digging deeper). Each id is set on its panel (RunsTab.svelte,
-// ModelQuality.svelte, RunCharts.svelte); each group's heading is on the page too. Each link says
-// its panel's heading, and on the bar a shorter name where the heading is long
-// (issue #462). The river and unit panels have their own pages (issue #17):
-// the run header links there, the side index lists the main ones under their
-// pages (otherPageGroups), and their old anchors here are sent on (nav/anchorMoves.ts).
+// RunCharts.svelte); each group's heading is on the page too. Model quality
+// (the hydrograph to the plausibility checks) moved to Calibration (issue #586
+// round 3, runs/modelQuality.ts), and its old anchors here are sent on
+// (nav/anchorMoves.ts). Each link says its panel's heading word for word, on
+// the bar and in the side index alike (issue #586, D4: the bar's shorter
+// names went with Model quality's links, which needed them to fit). The side
+// index also has a line for each sub-heading a reader looks for (Changes
+// since this run, Trace a day). The river and unit panels have their own pages
+// (issue #17), and so has the fit: the run header links there, the side index
+// lists the main ones under their pages (otherPageGroups), and their old
+// anchors here are sent on.
 import type { RunSummary } from '@water-management/engine';
 import type { NavGroup, NavSection } from '#lib/components/common/sectionNav.js';
+import { calibrationHref } from '#lib/components/calibration/links.js';
 import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverHref } from '#lib/components/river/links.js';
 import { supplyHref } from '#lib/components/supply/links.js';
-import { runoffModelName } from './runoff';
-import { unitRainOf } from './unitRain';
-import { stationsOf } from './stationRain';
 
 export type ResultSection = NavSection;
 
@@ -22,73 +26,40 @@ export interface ResultGroup extends NavGroup {
 	sections: ResultSection[];
 }
 
-type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast' | 'unitRain' | 'stations'> & { calibration?: Pick<NonNullable<RunSummary['calibration']>, 'siteNodeId'> | null };
+type SectionInput = Pick<RunSummary, 'forecast'>;
 
 /**
- * `rail`: the side index, with a line for each panel. On the bar (which must
- * keep every link on two rows at 1280 px, section-nav.spec.ts) the Record
- * group's Run notes, Evidence and Reproduction are one link, "Notes &
- * evidence", landing on Run notes and standing for the three (`covers`).
+ * The sub-headings with a line of their own in the side index (`rail`), each its heading's id (the heading sets
+ * it): the changes to the inputs since the run, under Reproduction (history/RunInputsPanel.svelte), and Trace a day,
+ * under Self-checks (SelfChecksPanel.svelte). Not on the bar, which keeps to the panels so it fits two rows.
  */
-/** The run checks a gauge inside the network that it doesn't score: GaugeCheckFlows draws it under the flow-duration curve (checkGauges.ts checksOnlyGauges, from the same summary fields). */
-const hasCheckGauges = (summary: SectionInput) => (summary.plausibility?.gauges ?? []).some((g) => g.nodeId !== (summary.calibration?.siteNodeId ?? null));
+export const RUN_SUBSECTIONS = { changes: 'res-changes', trace: 'res-trace' } as const;
 
 export function resultGroups(summary: SectionInput, rail = false): ResultGroup[] {
 	return [
 		{
 			// The run header says whether the run is the evidence and previews its notes (links to Record).
 			label: null,
-			// A forecast run's forecast days (WP-2.12) follow the summary, apart from it.
-			sections: [{ id: 'res-summary', label: 'Summary' }, ...(summary.forecast ? [{ id: 'res-forecast', label: 'Forecast' }] : [])]
-		},
-		{
-			label: 'Model quality',
 			sections: [
-				// The hydrograph and the flow-duration curve, compared on every calibration iteration: together.
-				{ id: 'res-hydrograph', label: 'Hydrograph' },
-				// The checks-only gauges' flows (issue #554), after them: a line of its own on the side index; on the bar, which
-				// must keep to two rows at 1280 px, the flow-duration link stands for it.
-				...(hasCheckGauges(summary)
-					? rail
-						? [{ id: 'res-fdc', label: 'Flow-duration curve' }, { id: 'res-gauges', label: 'Flow at gauges in the network (checks only)' }]
-						: [{ id: 'res-fdc', label: 'Flow-duration curve', bar: 'Flow duration', covers: ['res-gauges'] }]
-					: [{ id: 'res-fdc', label: 'Flow-duration curve', bar: 'Flow duration' }]),
-				// The calibration statistics and the fit record.
-				{ id: 'res-calibration', label: 'Calibration against observed flow', bar: 'Calibration' },
-				// The water balance per water year, every run (issue #137; it was only under Self-checks).
-				{ id: 'res-water-balance', label: 'Water balance by water year', bar: 'Water balance' },
-				// Runoff model balance: conceptual models (GR4J) only.
-				...(summary.runoff ? [{ id: 'res-runoff', label: `Runoff model: ${runoffModelName(summary.runoff)}`, bar: 'Runoff model' }] : []),
-				// Rain for each unit: runs with settings.unitRain perUnit (issue #482), or rainfall stations (issue #553).
-				...(unitRainOf(summary)
-					? [{ id: 'res-unit-rain', label: 'Rain for each unit', bar: 'Unit rain' }]
-					: stationsOf(summary)
-						? [{ id: 'res-unit-rain', label: 'Rain from rainfall stations', bar: 'Station rain' }]
-						: []),
-				// WR2012 check: only when the project has a reference.
-				...(summary.wr2012 ? [{ id: 'res-wr2012', label: wr2012Heading(summary.wr2012), bar: 'WR2012 check' }] : []),
-				{ id: 'res-ewr-agreement', label: 'EWR test: model against observed flow', bar: 'EWR vs observed' },
-				// Hydrologist plausibility checks: runs made by engine ≥ 0.25.0.
-				// "Plausibility" on the bar, as the Summary's model-checks line says it: the shorter word keeps the
-				// whole bar on two rows at 1280 px beside the runs rail (issue #137).
-				...(summary.plausibility ? [{ id: 'res-plausibility', label: 'Plausibility checks', bar: 'Plausibility' }] : [])
+				{ id: 'res-summary', label: 'Summary' },
+				// A forecast run's forecast days (WP-2.12) follow the summary, apart from it.
+				...(summary.forecast ? [{ id: 'res-forecast', label: 'Forecast' }] : []),
+				// The water balance per water year, every run (issue #137): it stays here when Model quality moves to
+				// Calibration (issue #586 round 3), the table a hydrologist hands a client.
+				{ id: 'res-water-balance', label: 'Water balance by water year' }
 			]
 		},
 		{
-			// The run's written explanation, its evidence nomination, its validation statement and its publication: sign-off, after the results.
+			// The run's written explanation, its evidence nomination, its reproduction, its validation statement and its
+			// publication: sign-off, after the results. A panel each (issue #521).
 			label: 'Record',
 			sections: [
-				// The run's notes, its evidence nomination, and its reproduction with the input changes since: a panel each (issue #521),
-				// one link on the bar.
-				...(rail
-					? [
-							{ id: 'res-notes', label: 'Run notes' },
-							{ id: 'res-evidence', label: 'Evidence' },
-							{ id: 'res-reproduce', label: 'Reproduction' }
-						]
-					: [{ id: 'res-notes', label: 'Run notes & evidence', bar: 'Notes & evidence', covers: ['res-evidence', 'res-reproduce'] }]),
+				{ id: 'res-notes', label: 'Run notes' },
+				{ id: 'res-evidence', label: 'Evidence' },
+				{ id: 'res-reproduce', label: 'Reproduction' },
+				...(rail ? [{ id: RUN_SUBSECTIONS.changes, label: 'Changes since this run' }] : []),
 				// The report's validation statement (WP-3.13), collapsed: every run.
-				{ id: 'res-validation', label: 'Validation statement', bar: 'Validation' },
+				{ id: 'res-validation', label: 'Validation statement' },
 				// Whether the run is the published baseline, publishing it, and the WUA's notice (WP-2.3): every run.
 				{ id: 'res-publication', label: 'Publication' }
 			]
@@ -97,31 +68,31 @@ export function resultGroups(summary: SectionInput, rail = false): ResultGroup[]
 			label: 'Dig deeper',
 			sections: [
 				{ id: 'res-checks', label: 'Self-checks' },
-				// "Outputs" on the bar: with Water balance added, a longer word pushed the last link
-				// into More at 1280 px beside the runs rail (issue #137).
-				{ id: 'res-explore', label: 'Explore any output', bar: 'Outputs' }
+				...(rail ? [{ id: RUN_SUBSECTIONS.trace, label: 'Trace a day' }] : []),
+				{ id: 'res-explore', label: 'Explore any output' }
 			]
 		}
 	];
 }
 
-/** The WR2012 panel's heading (Wr2012Panel): the check and the quaternary it compares with. */
-function wr2012Heading(report: NonNullable<RunSummary['wr2012']>): string {
-	return report.quaternary ? `WR2012 check: ${report.quaternary}` : 'WR2012 check';
-}
-
 /**
  * The side index's last groups (issue #462): the panels that moved from here
- * to EWR and Hydrological units (issue #17), by the same headings
- * those pages give them, linked with the run shown. Only in the rail, which has
- * a line for each: on the bar the run header's links to the two pages do it.
+ * to Calibration (issue #586 round 3), EWR and Hydrological units (issue #17),
+ * by the same headings those pages give them, linked with the run shown. Only
+ * in the rail, which has a line for each: on the bar the run header's links to
+ * those pages do it.
  * The main findings only, so the rail fits a laptop's window: each page's own
  * index lists the rest.
  */
 export function otherPageGroups(runId: string | null): NavGroup[] {
 	const river = (id: string, label: string): NavSection => ({ id: `river-${id}`, label, href: riverHref(runId, id), page: 'EWR' });
 	const units = (id: string, label: string): NavSection => ({ id: `units-${id}`, label, href: supplyHref(runId, { hash: id }), page: 'Hydrological units' });
+	const fit = (id: string, label: string): NavSection => ({ id: `cal-${id}`, label, href: calibrationHref(runId, id), page: 'Calibration' });
 	return [
+		{
+			label: 'On Calibration',
+			sections: [fit('res-hydrograph', 'Hydrograph'), fit('res-calibration', 'Calibration against observed flow')]
+		},
 		{
 			label: 'On EWR',
 			sections: [river('res-reserve', RESERVE_MONTHS_HEADING), river('res-ewr-grid', EWR_MONTHS_HEADING), river('res-water-account', 'Water account')]
