@@ -147,7 +147,8 @@ export const BUDGET = Object.freeze({
 	landingFirstLoadKb: 120,
 	// MapLibre + PMTiles (issue #288, roadmap D8 (b); measured 2026-10-01: 301 KB, its two chunks, the PMTiles reader and its CSS, maplibre-gl 6.10.0 + pmtiles 4.5.0).
 	// 440 from maplibre-gl 6.14 (#570): its worker is self-contained since 6.13 and now counts here (bundle-budget/README.md).
-	mapKb: 440,
+	// 450 from maplibre-gl 6.15 (#586, Dependabot #599): custom projections and CRS support grew both halves (bundle-budget/README.md).
+	mapKb: 450,
 });
 
 /** The entry files that raise (or lower) BUDGET.totalCodeKb, one per change. */
