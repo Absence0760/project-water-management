@@ -88,7 +88,7 @@ Every job that fetches from an upstream:
 | [gauge-stations](#gauge-stations) | DWS hydrological station catalogue | blocked | `www.dws.gov.za` | – | `pnpm import:gauge-stations` |
 | [era5-land](#era5-land) | ERA5-Land daily precipitation | planned R4-A | `cds.climate.copernicus.eu`, `s3://nsf-ncar-era5` (backfill) | – | R4 `ingest/era5land.py` |
 | [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS / AIFS-ENS precipitation | planned R4-C | `s3://ecmwf-forecasts` (eu-central-1) | `ecmwf_ens` (planned) | R4 `ingest/ecmwf.py` |
-| [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | planned R4-D | NASA GES DISC (Earthdata) | – | R4 `ingest/imerg.py` |
+| [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | the copy built (R4-D), off until `imerg_enabled` (needs the operator's Earthdata token) | `cmr.earthdata.nasa.gov`, `opendap.earthdata.nasa.gov` | – | `ingest/imerg.py`, `infra/imerg.tf` |
 | [deafrica-waterbodies](#deafrica-waterbodies) | DE Africa Waterbodies area series | planned R5-A | `s3://deafrica-services` (af-south-1) | – | R5 |
 | [deafrica-wofs](#deafrica-wofs) | DE Africa WOfS inside our own outlines | planned R5-C | `s3://deafrica-services`, `explorer.digitalearth.africa` | – | R5 |
 | [sanlc](#sanlc) | SANLC orchard and vine classes | planned R5-D (gated on its terms; blocked today) | `egis.environment.gov.za` | – | R5 |
@@ -243,6 +243,60 @@ in `infra/feeds.tf`):
   `backend/src/ingest/dws.ts`, `backend/src/feeds/fromGaugeRecord.ts`,
   `backend/scripts/import-dws.ts`.
 
+## The copy's recent days
+
+### imerg
+
+- **Source:** NASA GPM IMERG Late Run, daily, version 07
+  (`GPM_3IMERGDL`, DOI 10.5067/GPM/IMERGDL/DAY/07), 0.1° grid, about 14 h
+  after the day ends. One NetCDF-4 file a day,
+  `3B-DAY-L.MS.MRG.3IMERG.YYYYMMDD-S000000-E235959.V07C.nc4`; variable
+  `precipitation(time, lon, lat)`, the day's mean rate in mm/day (V06
+  called it `precipitationCal`). V07 Final stopped at 2025-09-30 and V08
+  is due "fall 2026" ([Earthdata](https://www.earthdata.nasa.gov/data/alerts-outages/transition-gpm-imerg-products-v08));
+  Early and Late stay in V07 "hybrid" mode until at least winter 2026. The
+  copy records each day's collection version (`V07`, later `V08`) in its
+  manifest, because bias correction is fitted per version (D16).
+- **Hosts:** `cmr.earthdata.nasa.gov` (the granule search, no sign-in) and
+  `opendap.earthdata.nasa.gov` (Hyrax OPeNDAP in AWS us-west-2, behind an
+  Earthdata Login bearer token). The whole file is also on
+  `data.gesdisc.earthdata.nasa.gov`; we don't fetch it.
+- **Licence:** NASA's data use guidance says data from a NASA-led mission is
+  CC0 unless marked otherwise
+  ([Earthdata](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance),
+  read 2026-10-27); the AWS Open Data registry lists the collection as CC BY
+  4.0 ([registry](https://registry.opendata.aws/nasa-gpm3imergdl/), read
+  2026-10-27). Commercial use allowed either way. We attribute as CC BY
+  asks, which also meets NASA's "NASA should be acknowledged as the
+  source" and its request to cite, without implying NASA's endorsement.
+- **Attribution:** "Huffman, G.J., E.F. Stocker, D.T. Bolvin, E.J. Nelkin,
+  J. Tan (2024), GPM IMERG Late Precipitation L3 1 day 0.1 degree x 0.1
+  degree V07, edited by Andrey Savtchenko, Greenbelt, MD, Goddard Earth
+  Sciences Data and Information Services Center (GES DISC), accessed
+  [date], doi:10.5067/GPM/IMERGDL/DAY/07." (CMR's collection citation,
+  release date 2024-06-07.) Series are labelled `IMERG Late` with the
+  day's version.
+- **Contact:** GES DISC user services (the help link on disc.gsfc.nasa.gov)
+  and the Earthdata forum. Needs an Earthdata Login account and a user token
+  (operator step, docs/deployment.md § IMERG Late).
+- **Access pattern:** the mirror-ingest Lambda, 4 times a day
+  (`{"product":"imerg_late","mode":"recent"}`): one CMR search for the
+  last 10 days, then for each day not held from the same granule one
+  OPeNDAP DAP4 request returning only region D1 (310 × 275 cells, about
+  0.2 MB, instead of the 26 MB global file), newest day first, into Zarr
+  `imerg_late` (0.1°, daily layout). 30 days kept, then dropped. Which days
+  the engine takes from IMERG (only where CHIRPS has no preliminary value)
+  is decided later, in the engine, not by the copy.
+- **Limits we keep to:** about 1 request a second, at most 11 requests a
+  run and usually 1 or 2 (the search, plus the day that landed), about 10
+  a day. A 403 or 401 stops the run with no retry, alarms, and writes a
+  same-day marker (`ingest-state/imerg_late/refused.json`) so the day's
+  later runs ask nothing. GES DISC publishes no rate limit for OPeNDAP.
+- **Fallback:** CHIRPS preliminary, then finals, cover every day within a
+  week or so; GSMaP Gauge-NRT (commercial use allowed with credit, FTP
+  after registration) is the second near-real-time option if IMERG stops.
+- **Owner:** the operator; code `ingest/imerg.py`, `infra/imerg.tf`.
+
 ## Planned: the copy's cross-check
 
 ### dynamical
@@ -308,7 +362,6 @@ starts.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | <a id="era5-land"></a>era5-land | CC BY 4.0 (Copernicus, since 2025-07-02) | Copernicus's attribution text wherever its values show (UI, reports, exports) | ECMWF support (CDS); needs a CDS account and API key (operator step) | CDS API with area subsetting, monthly into Zarr `era5l` (0.1°); a request is submitted on one run and collected on a later one (queues of hours) | one request in flight; never waits inside a Lambda | AWS `nsf-ncar-era5` for backfill (3–4 months behind) | operator; R4-A |
 | <a id="ecmwf-ens"></a>ecmwf-ens | CC BY 4.0 (ECMWF open data) | ECMWF, CC BY 4.0 | ECMWF support | `tp` for the region from each 00 UTC ENS/AIFS-ENS run, anonymous S3, archived as `ecmwf/<issue>` (ECMWF keeps only ~12 runs) | one run a day; subset at the source before copying to af-south-1 | CHIRPS-GEFS | operator; R4-C |
-| <a id="imerg"></a>imerg | CC BY 4.0 | NASA GPM IMERG, with its version | NASA GES DISC / Earthdata forum; needs an Earthdata login and token (operator step) | `GPM_3IMERGDL` daily, region subset, product `imerg_late`, only days with no CHIRPS preliminary value | Earthdata allows about 20–60 requests a minute; we keep to 1 a second | GSMaP Gauge-NRT (commercial use allowed with credit; FTP after registration) | operator; R4-D |
 | <a id="deafrica-waterbodies"></a>deafrica-waterbodies | CC BY 4.0 | Digital Earth Africa | Digital Earth Africa | weekly read of the Waterbodies area series for our traced dams into `dam_observation`; same region as the app, unsigned | weekly; only the waterbodies our dams overlap | [deafrica-wofs](#deafrica-wofs) | operator; R5-A |
 | <a id="deafrica-wofs"></a>deafrica-wofs | CC BY 4.0 | Digital Earth Africa | Digital Earth Africa | WOfS scenes from the STAC catalogue, summed inside our own dam outlines | only scenes over our dams | none (Sentinel-1/2 masks are a Round 6 candidate) | operator; R5-C |
 | <a id="sanlc"></a>sanlc | **gated:** fails D-B on the terms we could read (2013/14: no derivatives, no competing products); the 2018–2022 terms on EGIS still to be read (operator step) | "© GEOTERRAIMAGE" with the year, if allowed | DFFE (EGIS) | the operator's download, once allowed | – | WorldCover | operator; R5-D |

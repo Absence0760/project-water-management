@@ -29,6 +29,9 @@ Fixtures mode runs the same code against a synthetic directory.
 | `requirements-verify.txt` | `verify_copy.py`'s hash-pinned packages (the image's plus icechunk), for `ingest/.venv-verify` only. |
 | `fixtures/make_chc_fixture.py` | Writes `fixtures/chc/chirps-v3.0.2024.02.days_p05.nc`, the reader's synthetic fixture. |
 | `fixtures/chirps/make_chirps_fixtures.py` | Writes the synthetic `byMonth` directory (`fixtures/chirps/`): two months, their listing, and a rewritten and a changed variant. |
+| `imerg.py` | IMERG Late's recent days into `imerg_late` (§ IMERG Late): the CMR search, the OPeNDAP region subset, the reader that places cells by coordinate, the per-day version, the refusal marker and the Earthdata token. |
+| `imerg_fixture.py` | Fixtures mode's fake CMR and OPeNDAP: UMM-G search results and NetCDF-4 subsets cut from `fixtures/imerg/`'s synthetic field. Not in the image. |
+| `fixtures/imerg/make_imerg_fixture.py` | The synthetic IMERG Late daily field and file writer, in GPM_3IMERGDL V07's real layout (a global file from the command line). |
 | `tests/roundtrip.ts` | The Node half of the cross-language round trip (`test_roundtrip.py`). |
 | `Dockerfile` | The Lambda image (build context `ingest/`). |
 | `dev.sh` | `pnpm dev:ingest:run`, `pnpm test:ingest` and `ingest/dev.sh verify`. |
@@ -38,10 +41,12 @@ Fixtures mode runs the same code against a synthetic directory.
 ```json
 { "product": "rnl" | "sat", "mode": "monthly" }
 { "product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM" }
+{ "product": "imerg_late", "mode": "recent", "days": 10 }
 ```
 
 A backfill names its month (from 1981-01 for `rnl`, 2000-06 for `sat`); a
-monthly run takes none. Any other key is refused.
+monthly run takes none. An `imerg_late` event takes an optional `days`
+(1–30, default 10; § IMERG Late). Any other key is refused.
 
 | Variable | Meaning |
 | --- | --- |
@@ -49,6 +54,7 @@ monthly run takes none. Any other key is refused.
 | `FEED_SOURCE` | `fixtures` (the default: the synthetic `byMonth` directory, no network) or `live` (production: CHC). |
 | `INGEST_CONTACT` | The contact address in the User-Agent. Optional. |
 | `INGEST_FIXTURE_VARIANT` | Fixtures mode only: `rewritten` or `changed` serves that variant of the synthetic directory. |
+| `EARTHDATA_TOKEN_SECRET_ARN` | Live mode, `imerg_late` only: the Secrets Manager secret holding the Earthdata token (`infra/imerg.tf`). Read at run time, never logged; fixtures mode reads nothing. |
 | `MIRROR_METRIC_NAMESPACE` | Optional: the metric's namespace, default `water-management/Mirror`. |
 
 Fixtures mode runs exactly the live code with three differences: CHC is
@@ -109,6 +115,75 @@ that copied, a run the budget cut short, a monthly run held off by the lease,
 and every failure, before the error is re-raised. The lag alarms treat a
 missing datapoint as breaching, and `test_chirps_final.MetricOnEveryExit`
 walks every exit to keep it that way.
+
+## IMERG Late
+
+`imerg.py` (issue #604 R4-D) copies NASA's GPM IMERG Late daily rain
+(`GPM_3IMERGDL`, about 14 h behind) for the last few days into
+`imerg_late/`, for the days CHIRPS has no preliminary value for yet. Which
+days the engine takes from it is decided later, in the engine; this job only
+keeps the copy. Runbook: docs/deployment.md § IMERG Late; source:
+docs/data-sources.md § imerg.
+
+**A run** (`recent`, 4 times a day):
+
+1. A refusal earlier the same UTC day (`ingest-state/imerg_late/refused.json`)
+   ends it with no request (`stopped: "refused_today"`).
+2. It holds the product's lease (`lease.py`); held by another run, it ends
+   (`stopped: "busy"`).
+3. Days older than 30 are dropped: out of the manifest, then their chunks.
+4. One CMR search (`cmr.earthdata.nasa.gov/search/granules.umm_json`,
+   `short_name=GPM_3IMERGDL`, versions 07 and 08, no sign-in) for the last
+   `days` days through yesterday. For each day the newest version listed
+   wins; a day already held from the same granule URL costs nothing.
+5. Each remaining day, newest first, is one OPeNDAP DAP4 request for region
+   D1 only (`<granule>.dap.nc4?dap4.ce=/precipitation[0:1:0][1900:1:2209][545:1:819];…`,
+   ~0.2 MB instead of the 26 MB global file), at most one request a second,
+   while the Lambda has 60 s left. The Earthdata token goes in
+   `Authorization: Bearer`, to `opendap.earthdata.nasa.gov` and
+   `data.gesdisc.earthdata.nasa.gov` only, as an unredirected header (never
+   copied onto a redirect); landing on Earthdata Login's page counts as a 401.
+6. Each day is read, checked (0–2000 mm), hashed (`valuesSha256`) and
+   written; the manifest is saved after every day.
+
+**The file.** `precipitation(time, lon, lat)` float32, **lon before lat**,
+lon −179.95…179.95 and lat −89.95…89.95 ascending (centres on x.x5),
+`_FillValue` −9999.9, units `mm/day` (the day's mean rate, so the day's mm).
+The reader places every cell from the coordinates, so the copy's row 0 is the
+southernmost and column 0 the westernmost whatever the file's order; it
+refuses another variable name (V06's `precipitationCal` by name), units
+other than mm/day, a time not on the day, packed values, and anything that
+isn't HDF5 (a login page).
+
+**The copy** `imerg_late/`: the 0.1° daily layout, shape (days, 275, 310),
+chunk (1, 55, 62), `[0, 0]` centred at −35.45, 10.05; `firstDay` is 30 days
+before the run that made it. The manifest's `grid.step` is 0.1,
+`finalThrough` is always null, and `prelimThrough` is the end of the
+contiguous run of held days from the oldest. **Each `files` entry carries
+`version`** (`V07`, `V08`): the collection version the day came from, for
+fitting bias correction per version; the file's minor letter (V07C) stays
+in its URL. `imerg.py` checks that field itself until `manifest.py` knows
+it (R4-B). A held day whose granule changes (V08 arrives) is fetched again:
+the same values move only the URL and version, other values bump the
+revision with a one-day `changes` entry.
+
+**Refusals.** A 403 from either host, or a 401 (a token that expired or was
+never approved for GES DISC), stops the run, never retried, writes
+`refused.json` (`{v, day, at, status, host}`) and re-raises, so the Lambda
+errors and the DLQ sees it. The marker keeps the day's later runs from
+asking; the next UTC day tries again. A marker that isn't one never blocks.
+
+**`MirrorLagDays{Product=imerg_late}`** on every exit once the event is
+valid and `MIRROR_URL` set: today minus `prelimThrough`, or 11 with nothing
+held.
+
+**Locally**, fixtures mode reads no token and touches no network:
+`imerg_fixture.FakeEarthdata` answers the search with one granule a day up
+to yesterday and cuts each subset from `fixtures/imerg`'s synthetic field:
+
+```sh
+MIRROR_URL=file://$PWD/ingest/.mirror ingest/.venv/bin/python ingest/imerg.py 3
+```
 
 ## The copy
 
@@ -271,6 +346,7 @@ They cover:
 - **The manifest:** the round-trip, refusing manifests that don't follow the spec, and a hash that stays stable across NaN payloads, memory layout and byte order.
 - **The handler:** a fixtures-mode run from start to finish, a re-run that is one 304, the variants through the environment, a retry after a crash between the chunk upload and the manifest, a gap in the months that holds `finalThrough` back, a file whose days aren't its month's, and an image whose COPY line lacks a module.
 - **The finals job** (`test_chirps_final.py`): the listing parser, a new month, a rewrite with the same values (no bump), a rewrite with changed values (a bump and its `changes`), the 304, a 403 that stops with no retry, the time budget, the pacing (within and across runs, on a fake clock), a backfill of a named month, the lease (local and S3), and the metric on every exit.
+- **IMERG Late** (`test_imerg.py`): a known cell of a synthetic *global* file in IMERG's layout lands at its lat/lon (neighbours east and north, the region's four corners, nothing from outside), the whole region cell by cell, an OPeNDAP subset reading the same as the global file, a north-first (lat, lon) file still placed by coordinate, the units (mm/day read as the day's mm; mm/hr, V06's `precipitationCal`, the wrong day, 2500 mm and a login page refused), the CMR search (the newest version wins, a missing OPeNDAP link or a wrong time stops), the last 10 days newest first, held days skipped with no request, a gap and `prelimThrough`, the time budget, keeping 30 days (manifest and chunks), the per-day version (V08 replacing V07 with and without a change of values), a 403 or 401 from either host stopping with the same-day marker, the lease (local and S3), the metric on every exit, and the token read from Secrets Manager and sent only to OPeNDAP, never on a redirect.
 - **The round trip** (`test_roundtrip.py`): Python writes the copy from the synthetic NetCDF, and Node's `backend/src/mirror/` reads it through `tests/roundtrip.ts`, bit for bit, with the same hash and manifest. It needs the pnpm install (`backend/node_modules/.bin/tsx`) and skips without it, except in CI, where `INGEST_REQUIRE_NODE=1` makes it fail.
 - **The reader:** a value outside 0–2000 mm fails the read and writes nothing.
 - **The fixture:** it still matches its generator.
@@ -290,6 +366,14 @@ file) and `changed/` (two cells changed). Each listing's sizes are the files'
 real sizes. Regenerate them with
 `ingest/.venv/bin/python ingest/fixtures/chirps/make_chirps_fixtures.py` and
 commit the result; a test fails if they drift from the generator.
+
+`fixtures/imerg/make_imerg_fixture.py` writes IMERG Late daily files in
+GPM_3IMERGDL V07's layout for any day, from an invented field that differs
+between neighbouring cells in both directions and between days (so a
+transposed or flipped read can't pass), with a block of fill inside the
+region. Nothing is committed but the script: the tests and the fake server
+write what they need (`ingest/.venv/bin/python ingest/fixtures/imerg/make_imerg_fixture.py <dir> [YYYY-MM-DD]`
+writes one global file, ~3 MB).
 
 `fixtures/chc/chirps-v3.0.2024.02.days_p05.nc` is the reader's fixture, also invented. It covers
 2024-02-27 to 2024-02-29 (so the leap day is included) over the region plus a
