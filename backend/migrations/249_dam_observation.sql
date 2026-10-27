@@ -40,8 +40,15 @@
 --    project by construction, so no assert_same_project trigger is needed
 --    (that function resolves node, run and scenario columns, not features).
 --    Covering indexes on every foreign key.
+--  * reference_load (192, latest 248) takes the kind 'waterbodies', so a
+--    production load of the polygons (load-reference.yml, geo/referenceLoad.ts)
+--    records which file it came from, as the other reference datasets do.
 --  * No PostGIS: the polygons are jsonb with a bounding box; the box test
 --    runs here, the overlap in the backend.
+
+-- From 248's definition, plus 'waterbodies'.
+ALTER TABLE reference_load DROP CONSTRAINT reference_load_kind_check;
+ALTER TABLE reference_load ADD CONSTRAINT reference_load_kind_check CHECK (kind IN ('land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies'));
 
 -- ---------------------------------------------------------------------------
 -- waterbody_reference
