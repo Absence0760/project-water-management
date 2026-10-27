@@ -187,6 +187,12 @@ resource "aws_lambda_function" "worker" {
       # Never a fetch here (FEED_FETCHER=sqs); it is the cell cache the
       # worker's runs read, the same `chc` the API's read (lambda.tf).
       FEED_SOURCE = "live"
+      # Which CHIRPS a feed fetch reads (issue #604): chc sends it to the
+      # fetcher above; mirror reads our copy in the fetch job itself, from
+      # the mirror bucket (ingest.tf; the role's GetObject and the S3
+      # endpoint's statement are there). chc until the cutover (R3-C).
+      CHIRPS_SOURCE = var.chirps_source
+      MIRROR_URL    = "s3://${aws_s3_bucket.mirror.bucket}"
       # Server-side reports (reports.tf): no Chromium here, so renders go to
       # the renderer; the worker records them and emails the link (SES).
       REPORT_RENDERER           = "sqs"

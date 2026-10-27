@@ -619,6 +619,16 @@ variable "renderer_reserved_concurrency" {
 
 # --- The data mirror (ingest.tf, issue #604) ------------------------------------
 
+variable "chirps_source" {
+  description = "Which CHIRPS the worker's feed fetches read (CHIRPS_SOURCE, issue #604): chc sends each fetch to the fetcher Lambda, which reads CHC's files; mirror reads our copy in the mirror bucket (ingest.tf) inside the worker's own fetch job, with no request to CHC. chc until the cutover (Round 3, R3-C): switch only once the copy holds the region's finals and preliminary days (docs/deployment.md § The data mirror)."
+  type        = string
+  default     = "chc"
+  validation {
+    condition     = contains(["chc", "mirror"], var.chirps_source)
+    error_message = "chirps_source must be chc or mirror."
+  }
+}
+
 variable "ingest_image_tag" {
   description = "Tag of the mirror ingest image (ingest/Dockerfile) in its ECR repository that the mirror-ingest Lambda is created from: <release version>-<first 12 hex of its commit>, e.g. 0.7.0-0123456789ab, as deploy-backend.yml pushes it and prints it. Empty (the default) creates the mirror bucket, the repository, the DLQ and the (disabled) schedules but not the function or its freshness alarms: push an image with a backend release first (docs/deployment.md § The data mirror). Setting it enables the daily schedules and the alarms; the ECR lifecycle policy never expires this image (ingest.tf)."
   type        = string
