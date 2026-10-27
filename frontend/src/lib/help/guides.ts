@@ -467,7 +467,7 @@ export const GUIDES: Guide[] = [
 							'The chart of the catchment rain a run reads shades the days a run treats as missing or spreads a [[rain-accumulations|multi-day accumulation]] over.',
 							'With both a gauge and a logger, the [[gauge-logger-agreement|gauge vs logger]] table flags water years where they disagree. Choose the record you trust as the calibration flow series (**Calibration → Calibration record**).',
 							'A [[reference-gauge]] on a neighbouring river is kept for ranking wet and dry years only. The model never reads it.',
-							'**Preview all data** (in the header, beside **Add data**) or a row’s own **Preview** opens every series’ daily values side by side, searchable by date or value, plus how the model used each day: rain used and its source after gap-fill, the CHIRPS bias factor and corrected value, flow in m³/day, and any calibration exclusion.'
+							'**Preview all data** (in the header, beside **Add data**) or a row’s own **Preview** opens every series’ daily values side by side, searchable by date or value, plus how the model used each day: rain used and its source after gap-fill, the CHIRPS bias factor and corrected value, flow in m³/day, and any calibration exclusion. Its **View** picks the columns: All, one unit with land (its station raw and adjusted to the unit’s MAP, its CHIRPS raw and bias-corrected with the twelve monthly factors above the table, its rain used and where each day came from), the rainfall stations, the average catchment rainfall or the flow records.'
 						]
 					}
 				]

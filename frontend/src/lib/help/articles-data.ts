@@ -150,14 +150,30 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		related: ['calibration-exclusions', 'calibration-window'],
 		source: 'Not in the workbook; docs/model.md §2.10'
 	},
+	'preview-view': {
+		long: 'All shows every column, as the preview always has. A hydrological unit shows only what that unit’s rain is made of, side by side: its station as recorded, the station adjusted to the unit (× the ratio of the unit’s MAP to the station’s, three decimals in the header), the unit’s own CHIRPS as stored and bias-corrected, the rain a run reads and where each day came from, then any other series stored at the unit. Above the table it lists the twelve monthly CHIRPS factors, the station they were fitted against, or why that pairing was refused. A unit without a rainfall station shows only the series stored at it for now.\n\nThe groups gather the rainfall stations, the average catchment rainfall (when Settings assigns the catchment a station) and every flow record with its m³/day and the calibration exclusions. The Columns checkboxes hide columns inside the view, and Missing only and Flagged only read only the stored series shown. The view is kept in the address while the preview is open, so a reload or a shared link opens the same view.',
+		aliases: ['preview view', 'unit view', 'filter by unit'],
+		related: ['preview-area-station-raw', 'preview-area-chirps-corrected', 'rain-stations'],
+		source: 'Not in the workbook; docs/ui.md § Data'
+	},
+	'preview-area-station-raw': {
+		long: 'The station’s record as stored, cut to the run window, shown in a unit’s or the average catchment rainfall’s own view right before the same rain adjusted to the area. The difference between the two columns is only the MAP ratio, so reading them side by side checks the scaling day by day. Blank where the station has no reading.\n\nThe All view leaves it out: the station is a stored series column there already.',
+		related: ['preview-area-station-scaled', 'rain-stations'],
+		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
+	},
 	'preview-area-station-scaled': {
-		long: 'Shown for the average catchment rainfall and each land unit that reads a rainfall station (Settings → Flow generation). It is the station’s record as stored, multiplied by the ratio a run applies: the area’s MAP divided by the station’s MAP, or 1 when a MAP is missing or the scaling is off. Blank where the station has no reading.\n\nNothing here is stored: it is worked out when the preview opens, with the same engine code a run uses over the inputs a run would read, so it changes as soon as a series or a setting does. It is the same column as “station × ratio” in the Data tab’s Full CSV.',
+		long: 'Shown for the average catchment rainfall and each land unit that reads a rainfall station (Settings → Flow generation). It is the station’s record as stored, multiplied by the ratio a run applies: the area’s MAP divided by the station’s MAP, or 1 when a MAP is missing or the scaling is off. Blank where the station has no reading.\n\nNothing here is stored: it is worked out when the preview opens, with the same engine code a run uses over the inputs a run would read, so it changes as soon as a series or a setting does. It is the same column as “station × ratio” in the Data tab’s Full CSV. In a unit’s own view (the View select) its header names the station, the unit and the ratio to three decimals, and the station raw column sits beside it.',
 		aliases: ['station times ratio', 'scaled station rain'],
 		related: ['rain-stations', 'unit-rain', 'preview-area-rain-used'],
 		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
 	},
+	'preview-area-chirps-raw': {
+		long: 'The area’s own CHIRPS as stored (a unit’s CHIRPS feed, or the catchment CHIRPS for the average catchment rainfall), cut to the run window, shown in the area’s own view right before the bias-corrected line. Each corrected value is this one × the factor of its month, listed above the table.\n\nThe All view leaves it out: the CHIRPS series is a stored series column there already.',
+		related: ['preview-area-chirps-corrected', 'chirps-bias'],
+		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
+	},
 	'preview-area-chirps-corrected': {
-		long: 'The area’s own CHIRPS (a unit’s CHIRPS feed, or the catchment CHIRPS for the average catchment rainfall) multiplied by the factor of the day’s month, from the pairing a run fits between that CHIRPS and the area’s correcting station. It is what fills a day the station has no reading. The column is missing when the area has no CHIRPS, and blank when the pairing is refused, so its gaps are not corrected.\n\nDerived when the preview opens, never stored: the Full CSV’s “CHIRPS corrected” column. Unlike the catchment’s CHIRPS (corrected) column, it applies the factor on every day.',
+		long: 'The area’s own CHIRPS (a unit’s CHIRPS feed, or the catchment CHIRPS for the average catchment rainfall) multiplied by the factor of the day’s month, from the pairing a run fits between that CHIRPS and the area’s correcting station. It is what fills a day the station has no reading. The column is missing when the area has no CHIRPS, and blank when the pairing is refused, so its gaps are not corrected.\n\nDerived when the preview opens, never stored: the Full CSV’s “CHIRPS corrected” column. Unlike the catchment’s CHIRPS (corrected) column, it applies the factor on every day. In a unit’s own view (the View select) it reads “bias-corrected (f(m) against” its station, follows the CHIRPS raw column, and the twelve factors are listed above the table.',
 		related: ['chirps-bias', 'rain-stations', 'preview-area-rain-used'],
 		source: 'Not in the workbook; docs/model.md §2.4i'
 	},
