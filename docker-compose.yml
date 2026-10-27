@@ -23,7 +23,7 @@ services:
   # same digest as Docker Hub's: CI runs it on every job, and Docker Hub's
   # anonymous pull limit refused them (issue #492).
   postgres:
-    image: public.ecr.aws/docker/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    image: public.ecr.aws/docker/library/postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
     container_name: water-management-db
     ports:
       - "5434:5432"
