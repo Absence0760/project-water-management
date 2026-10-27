@@ -4,35 +4,45 @@
 // with "/". A chunk never written is all fill: zarr-python skips writing
 // all-NaN chunks, so a reader treats a missing chunk as NaN (zarrita does).
 //
-//   finals (`rnl`, `sat`): (year, doy[366], lat, lon), chunk (1, 366, 20, 20).
-//     year index = year − attrs.firstYear; doy index = days since 1 January,
-//     so index 365 stays NaN in a year with no 29 February.
-//   daily (`prelim`, `gefs/<issue>`): (day, lat, lon), chunk (1, 110, 124).
-//     day index = days since attrs.firstDay.
+//   finals (`rnl`, `sat`, `era5l`): (year, doy[366], lat, lon), chunk
+//     (1, 366, 20, 20) on either grid. year index = year − attrs.firstYear;
+//     doy index = days since 1 January, so index 365 stays NaN in a year with
+//     no 29 February.
+//   daily (`prelim`, `imerg_late`, `gefs/<issue>`): (day, lat, lon), chunk
+//     (1, 110, 124) on the 0.05° grid and (1, 55, 62) on the 0.1° grid: 25
+//     chunks a day either way. day index = days since attrs.firstDay.
 //
-// Both carry attrs.region {w,s,e,n} and attrs.grid {origin {lat, lon}, step}.
+// Both carry attrs.region {w,s,e,n} and attrs.grid {origin {lat, lon}, step},
+// the step the product's (grid.ts PRODUCT_GRIDS): an array on another grid is
+// refused.
 import type { AbsolutePath } from '@zarrita/storage';
 import * as zarr from 'zarrita';
 import { FeedFormatError } from '../feeds/errors.js';
-import { gridOf, isLeapYear, MIRROR_REGION, MIRROR_STEP, type MirrorGrid, type Region, regionSize } from './grid.js';
+import { gridOf, isLeapYear, MIRROR_REGION, type MirrorGrid, PRODUCT_GRIDS, productStep, type Region, regionSize } from './grid.js';
 import { type MirrorStore, registerNodeGzip } from './store.js';
 
 export const FINALS_CHUNK = [1, 366, 20, 20] as const;
+/** The daily layout's chunk on CHC's 0.05° grid. */
 export const DAILY_CHUNK = [1, 110, 124] as const;
+/** The daily layout's chunk on the 0.1° grid: the same 25 chunks a day. */
+export const DAILY_CHUNK_P1 = [1, 55, 62] as const;
+/** The daily layout's chunk for a grid step. */
+export const dailyChunk = (step: number): readonly [1, number, number] => (step === 0.1 ? DAILY_CHUNK_P1 : DAILY_CHUNK);
 export const FINALS_DIMS = ['year', 'doy', 'lat', 'lon'];
 export const DAILY_DIMS = ['day', 'lat', 'lon'];
 export const CODECS = [
 	{ name: 'bytes', configuration: { endian: 'little' } },
 	{ name: 'gzip', configuration: { level: 6 } }
 ];
-/** The finals' first year: rnl's, 1981 (sat's year axis starts there too, its years before 1998 unwritten). */
+/** The CHIRPS finals' first year: rnl's, 1981 (sat's year axis starts there too, its years before 1998 unwritten). */
 export const FINALS_FIRST_YEAR = 1981;
 
 /** The products each layout holds, as the store's paths name them. */
-export type FinalsProduct = 'rnl' | 'sat';
-export type DailyProduct = 'prelim' | `gefs/${string}`;
+export type ChcFinalsProduct = 'rnl' | 'sat';
+export type FinalsProduct = ChcFinalsProduct | 'era5l';
+export type DailyProduct = 'prelim' | 'imerg_late' | `gefs/${string}`;
 export type MirrorProduct = FinalsProduct | DailyProduct;
-export const PRODUCT_RE = /^(rnl|sat|prelim|gefs\/\d{4}-\d{2}-\d{2})$/;
+export const PRODUCT_RE = /^(rnl|sat|prelim|era5l|imerg_late|gefs\/\d{4}-\d{2}-\d{2})$/;
 
 /** The mirror's array is missing or isn't laid out as D2 says. */
 export class MirrorFormatError extends FeedFormatError {}
@@ -58,8 +68,8 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 const path = (p: string) => `/${p}` as AbsolutePath;
 
-/** The attributes every array carries for its region. */
-const regionAttrs = (region: Region) => ({ region: { ...region }, grid: gridOf(region) });
+/** The attributes every array carries for its region, on its product's grid. */
+const regionAttrs = (region: Region, step: number) => ({ region: { ...region }, grid: gridOf(region, step) });
 
 async function readJson(store: MirrorStore, key: string): Promise<unknown> {
 	const bytes = await store.get(path(key));
@@ -87,7 +97,8 @@ const same = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.le
 function checkLayout(arr: MirrorArray, product: string, kind: 'finals' | 'daily', meta: Record<string, unknown>): { region: Region; grid: MirrorGrid } {
 	const bad = (what: string) => new MirrorFormatError(`the rain data copy's ${product} array is not laid out as expected (${what})`);
 	if (arr.dtype !== 'float32') throw bad(`data type ${arr.dtype}`);
-	const chunk = kind === 'finals' ? FINALS_CHUNK : DAILY_CHUNK;
+	const step = productStep(product);
+	const chunk = kind === 'finals' ? FINALS_CHUNK : dailyChunk(step);
 	if (!same(arr.chunks, chunk)) throw bad(`chunks ${arr.chunks.join('×')}`);
 	if (!same(arr.dimensionNames ?? [], kind === 'finals' ? FINALS_DIMS : DAILY_DIMS)) throw bad('dimension names');
 	if (JSON.stringify(meta.codecs) !== JSON.stringify(CODECS)) throw bad('codecs');
@@ -96,9 +107,9 @@ function checkLayout(arr: MirrorArray, product: string, kind: 'finals' | 'daily'
 	const a = arr.attrs as { region?: Region; grid?: MirrorGrid };
 	const r = a.region;
 	if (!r || ![r.w, r.s, r.e, r.n].every(Number.isFinite) || r.w >= r.e || r.s >= r.n) throw bad('region');
-	const g = gridOf(r, MIRROR_STEP);
+	const g = gridOf(r, step);
 	if (!a.grid || a.grid.step !== g.step || a.grid.origin?.lat !== g.origin.lat || a.grid.origin?.lon !== g.origin.lon) throw bad('grid');
-	const { rows, cols } = regionSize(r);
+	const { rows, cols } = regionSize(r, step);
 	const shape = arr.shape;
 	if (shape.at(-2) !== rows || shape.at(-1) !== cols) throw bad(`shape ${shape.join('×')}`);
 	if (kind === 'finals' && shape[1] !== 366) throw bad('day-of-year axis');
@@ -156,9 +167,10 @@ export async function ensureFinals(
 		await growOuter(store, product, lastYear - existing.firstYear + 1);
 		return (await openFinals(store, product))!;
 	}
-	const firstYear = opts.firstYear ?? FINALS_FIRST_YEAR;
+	const firstYear = opts.firstYear ?? PRODUCT_GRIDS[product].firstYear;
 	const region = opts.region ?? MIRROR_REGION;
-	const { rows, cols } = regionSize(region);
+	const step = productStep(product);
+	const { rows, cols } = regionSize(region, step);
 	await ensureGroups(store, product);
 	await zarr.create(zarr.root(store).resolve(product), {
 		shape: [lastYear - firstYear + 1, 366, rows, cols],
@@ -167,7 +179,7 @@ export async function ensureFinals(
 		fillValue: Number.NaN,
 		codecs: CODECS,
 		dimensionNames: FINALS_DIMS,
-		attributes: { firstYear, ...regionAttrs(region) }
+		attributes: { firstYear, ...regionAttrs(region, step) }
 	});
 	return (await openFinals(store, product))!;
 }
@@ -182,16 +194,17 @@ export async function ensureDaily(store: MirrorStore, product: DailyProduct, fir
 		return (await openDaily(store, product))!;
 	}
 	const region = opts.region ?? MIRROR_REGION;
-	const { rows, cols } = regionSize(region);
+	const step = productStep(product);
+	const { rows, cols } = regionSize(region, step);
 	await ensureGroups(store, product);
 	await zarr.create(zarr.root(store).resolve(product), {
 		shape: [days, rows, cols],
-		chunkShape: [...DAILY_CHUNK],
+		chunkShape: [...dailyChunk(step)],
 		dtype: 'float32',
 		fillValue: Number.NaN,
 		codecs: CODECS,
 		dimensionNames: DAILY_DIMS,
-		attributes: { firstDay, ...regionAttrs(region) }
+		attributes: { firstDay, ...regionAttrs(region, step) }
 	});
 	return (await openDaily(store, product))!;
 }

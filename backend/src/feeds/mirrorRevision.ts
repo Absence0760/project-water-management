@@ -10,9 +10,9 @@
 // functions refuse any other caller.
 import type { Db } from '../db/tx.js';
 import type { CacheOrigin } from './cellCacheStore.js';
-import type { ChirpsDailyProduct } from './config.js';
+import type { CacheProduct } from './cellCache.js';
 
-/** A region in degrees, edges on the 0.05° grid. */
+/** A region in degrees, edges on the product's grid (0.05° or 0.1°). */
 export interface MirrorRegion {
 	w: number;
 	s: number;
@@ -67,7 +67,7 @@ export interface MirrorApplyResult {
 }
 
 /** The revision of the copy `origin` / `product`'s cache was last brought up to (null: none yet). */
-export async function mirrorRevision(db: Db, origin: CacheOrigin, product: ChirpsDailyProduct): Promise<number | null> {
+export async function mirrorRevision(db: Db, origin: CacheOrigin, product: CacheProduct): Promise<number | null> {
 	const { rows } = await db.query<{ revision: number | null }>('SELECT app_mirror_revision($1, $2) AS revision', [origin, product]);
 	return rows[0]?.revision ?? null;
 }
@@ -88,7 +88,7 @@ export async function mirrorRevision(db: Db, origin: CacheOrigin, product: Chirp
  * manifest or change out of bounds, 42501 from a session with a user, 55P03
  * when a fetch holds a day it needs: try again later).
  */
-export async function applyMirrorRevision(db: Db, origin: CacheOrigin, product: ChirpsDailyProduct, manifest: MirrorManifest): Promise<MirrorApplyResult> {
+export async function applyMirrorRevision(db: Db, origin: CacheOrigin, product: CacheProduct, manifest: MirrorManifest): Promise<MirrorApplyResult> {
 	const { rows } = await db.query<MirrorApplyResult>('SELECT revision, applied, marked, remaining FROM app_mirror_apply_revision($1, $2, $3, $4, $5)', [
 		origin,
 		product,
@@ -100,7 +100,7 @@ export async function applyMirrorRevision(db: Db, origin: CacheOrigin, product: 
 }
 
 /** A product of our copy, as `mirror_copy` holds it (246). */
-export type MirrorCopyProduct = ChirpsDailyProduct | 'prelim';
+export type MirrorCopyProduct = CacheProduct | 'prelim';
 
 /**
  * Record how far `product` of the copy runs (its manifest's revision,
