@@ -2,6 +2,9 @@
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
 import {
 	dayText,
+	rainCredits,
+	runRainCredits,
+	type RainCredit,
 	CROPS_TAKE_KEY,
 	EWR_SPLIT_LABEL,
 	USER_PRIORITY_LABEL,
@@ -158,6 +161,12 @@ export interface SummaryMeta {
 	 * farm names, and an id no name is known for is printed as it is.
 	 */
 	nodeNames?: Record<string, string>;
+	/**
+	 * A forecast run's rain source (runs/execute.ts forecastRainSource): on
+	 * 'ecmwf_ens' the forecast block credits ECMWF (issue #604 R4-E). Absent =
+	 * not a forecast run, or one stored before it was recorded.
+	 */
+	forecastRainSource?: string | null;
 }
 
 /**
@@ -748,6 +757,31 @@ export function* flowGapFillLines(f: RunSummary['flowGapFill']): Generator<strin
 
 const WY_CALENDAR_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
+const GAP_PRODUCT_TEXT: Record<string, string> = { chirps: 'CHIRPS', era5l: 'ERA5-Land', chirpsThenEra5l: 'CHIRPS, then ERA5-Land where CHIRPS has none' };
+
+/**
+ * The gap-filling product (engine ≥ 1.101.0, model.md §2.4b *Gap-filling
+ * product*, issue #604): the choice, each product's (and IMERG version's)
+ * days, rain and fit, the runs of days each filled with the IMERG version,
+ * and the credits their values carry (docs/data-sources.md), word for word.
+ */
+export function* gapRainLines(g: NonNullable<RunSummary['gapRain']>, credits: readonly RainCredit[]): Generator<string> {
+	yield csvRow(['Gap-filling products']);
+	yield csvRow(['Fills the catchment rain’s blank days', GAP_PRODUCT_TEXT[g.product] ?? g.product]);
+	yield csvRow(['IMERG Late for the recent days', g.imergLate ? `yes, from ${g.tailFrom ?? 'no day (no reading)'}` : 'no']);
+	yield csvRow(['Gap days CHIRPS filled', g.chirpsDays]);
+	yield csvRow(['Product', 'In the run', 'Days filled', 'Rain as read (mm)', 'Rain used (mm)', 'Pooled factor', 'Double-mass breaks']);
+	for (const p of g.products) {
+		const breaks = p.doubleMass?.breaks.map((b) => `after ${waterYearLabel(b.afterWaterYear)} (${b.slopeBefore.toFixed(2)} → ${b.slopeAfter.toFixed(2)})`).join('; ');
+		yield csvRow([p.label, p.present ? 'yes' : 'no: none for the cells', p.days, p.rawMm, p.mm, p.correction?.pooled.factor ?? null, p.doubleMass ? breaks || 'none' : 'not checked']);
+	}
+	if (g.segments.length) {
+		yield csvRow(['Filled from', 'To', 'Product', 'IMERG version']);
+		for (const s of g.segments) yield csvRow([s.from, s.to, s.product === 'era5l' ? 'ERA5-Land' : 'IMERG Late', s.version ?? '']);
+	}
+	for (const c of credits) for (const line of c.lines) yield csvRow([`Credit: ${c.name}`, line]);
+}
+
 /**
  * The rain-source periods (engine ≥ 0.30.0, model.md §2.4e, issue #40 (b)):
  * one row per period with its reason, where its days' rain came from, and
@@ -923,8 +957,10 @@ export function* evidenceLines(e: RunEvidence | null): Generator<string> {
  * A forecast run's forecast days (WP-2.12, summary.forecast): kept out of
  * every other block of the sheet, which covers the days before them.
  */
-export function* forecastLines(f: NonNullable<RunSummary['forecast']>): Generator<string> {
+export function* forecastLines(f: NonNullable<RunSummary['forecast']>, source?: string | null): Generator<string> {
 	yield csvRow(['Forecast days (modelled on forecast rain, not recorded rain; every other figure in this sheet covers the days before them)']);
+	// The forecast an ECMWF feed wrote carries ECMWF's credit (CC BY 4.0, issue #604 R4-E).
+	if (source === 'ecmwf_ens') yield csvRow(['Forecast rain from', `the ECMWF ENS forecast (${rainCredits({ ecmwf: true }, '')[0]!.lines[0]})`]);
 	yield csvRow(['First forecast day', f.from]);
 	yield csvRow(['Last forecast day', f.to]);
 	yield csvRow(['Days', f.days]);
@@ -1201,7 +1237,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	}
 
 	if (summary.forecast) {
-		yield* forecastLines(summary.forecast);
+		yield* forecastLines(summary.forecast, meta.forecastRainSource);
 		yield '';
 	}
 
@@ -1251,6 +1287,12 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 
 	yield* chirpsFactorLines(summary.chirpsCorrection);
 	yield '';
+
+	// Only on a run with a gap-filling product (engine ≥ 1.101.0, issue #604): other exports are unchanged.
+	if (summary.gapRain) {
+		yield* gapRainLines(summary.gapRain, runRainCredits({ summary }, meta.createdAt.slice(0, 10)));
+		yield '';
+	}
 
 	yield* zeroRainLines(summary.zeroRainInfill);
 	yield '';

@@ -1,4 +1,4 @@
-import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, OBSERVED_FLOW_COLUMNS, plausibilityChecks, type RainStationSummary, type RunSummary, type RunVerification, type StationAreaForcing, type UnitRainSummary, type UnitRainUnit, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
+import { copernicusEra5lNotice, runRainCredits, assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, OBSERVED_FLOW_COLUMNS, plausibilityChecks, type RainStationSummary, type RunSummary, type RunVerification, type StationAreaForcing, type UnitRainSummary, type UnitRainUnit, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { splitCsv } from '../allocations/parse.js';
 import {
@@ -15,6 +15,8 @@ import {
 	ewrSiteLines,
 	zeroRainLines,
 	flowGapFillLines,
+	forecastLines,
+	gapRainLines,
 	rainSourceCsvLines,
 	accumulationLines,
 	doubleMassLines,
@@ -1895,5 +1897,42 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines).toContain('Plausibility checks');
 		expect(lines).toContain('Water years judged,2,failed,2');
 		expect([...summaryCsvLines(meta, summary)]).toContain('Run made before engine 0.25.0: no plausibility checks');
+	});
+});
+
+describe('gapRainLines (engine ≥ 1.101.0, issue #604 R4-E)', () => {
+	const gapRain = {
+		product: 'chirpsThenEra5l',
+		imergLate: true,
+		chirpsDays: 40,
+		tailFrom: '2026-10-20',
+		products: [
+			{ key: 'rain_era5l_mm', product: 'era5l', version: null, label: 'ERA5-Land', present: true, correction: { pooled: { factor: 1.12 } }, doubleMass: { breaks: [{ afterWaterYear: 2010, slopeBefore: 1.1, slopeAfter: 0.9 }] }, days: 12, rawMm: 30, mm: 33.6 },
+			{ key: 'rain_imerg_late_mm~V07', product: 'imerg_late', version: 'V07', label: 'IMERG Late V07', present: true, correction: null, doubleMass: null, days: 3, rawMm: 5, mm: 5 }
+		],
+		segments: [
+			{ from: '2026-01-05', to: '2026-01-16', product: 'era5l', version: null },
+			{ from: '2026-10-20', to: '2026-10-22', product: 'imerg_late', version: 'V07' }
+		]
+	} as unknown as NonNullable<RunSummary['gapRain']>;
+
+	it('lists the choice, each product, the days each filled with IMERG’s version, and the credits word for word', () => {
+		const credits = runRainCredits({ summary: { gapRain } }, '2026-10-27');
+		const rows = [...gapRainLines(gapRain, credits)].map((l) => splitCsv(l, ',')[0]!.cells);
+		expect(rows[0]).toEqual(['Gap-filling products']);
+		expect(rows[1]).toEqual(['Fills the catchment rain’s blank days', 'CHIRPS, then ERA5-Land where CHIRPS has none']);
+		expect(rows[2]).toEqual(['IMERG Late for the recent days', 'yes, from 2026-10-20']);
+		expect(rows.find((r) => r[0] === 'ERA5-Land')).toEqual(['ERA5-Land', 'yes', '12', '30', '33.6', '1.12', 'after 2010/11 (1.10 → 0.90)']);
+		expect(rows.find((r) => r[0] === 'IMERG Late V07')!.slice(5)).toEqual(['', 'not checked']);
+		expect(rows).toContainEqual(['2026-10-20', '2026-10-22', 'IMERG Late', 'V07']);
+		expect(rows).toContainEqual(['Credit: ERA5-Land', copernicusEra5lNotice(2026)]);
+		expect(rows.filter((r) => r[0] === 'Credit: IMERG Late')).toHaveLength(1);
+	});
+
+	it('the summary sheet has the block only on a run with a product, and the forecast block credits ECMWF only on its own source', () => {
+		const forecast = { from: '2026-10-28', to: '2026-11-11', days: 15, lastObserved: '2026-10-27', rainMm: 20, outletEwrDaysAtRisk: 0, perFarm: [] } as unknown as NonNullable<RunSummary['forecast']>;
+		expect([...forecastLines(forecast, 'ecmwf_ens')].map((l) => splitCsv(l, ',')[0]!.cells)[1]).toEqual(['Forecast rain from', 'the ECMWF ENS forecast (ECMWF open data, CC BY 4.0)']);
+		expect([...forecastLines(forecast, 'chirps_gefs')].join('\n')).not.toContain('ECMWF');
+		expect([...forecastLines(forecast)].join('\n')).not.toContain('Forecast rain from');
 	});
 });

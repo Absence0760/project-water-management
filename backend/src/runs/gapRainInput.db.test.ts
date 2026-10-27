@@ -25,6 +25,7 @@ import { productVersions, readProductSeries } from '../feeds/fromMirror.js';
 import { fillGapProducts } from '../feeds/gapRainFill.js';
 import { loadModelInput, loadRunInput } from './execute.js';
 import { gapRainInputs } from './gapRainInput.js';
+import { gapRainProducts } from '../feeds/gapRainView.js';
 
 const tmp: string[] = [];
 afterAll(() => tmp.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -155,5 +156,47 @@ describe('settings.gapRain: the copy to the run', () => {
 		expect((await p.owner.call('PATCH', `/projects/${p.pid}`, { settings: { gapRain: null } })).status).toBe(200);
 		const plain = await withUser(p.owner.id, (db) => loadModelInput(db, p.pid));
 		expect(Object.keys(plain.series).sort()).toEqual(['rain_catchment_mm', 'rain_chirps_mm']);
+	});
+
+	it('the Data tab’s view (GET …/feeds/gap-rain, issue #604 R4-E): the products over the feed’s cells as the run reads them, IMERG with its version per day', async () => {
+		const store = copy();
+		const p = await project({ product: 'chirpsThenEra5l', imergLate: true });
+		await withUser(p.owner.id, async (db) => fillGapProducts(db, { id: p.feed, projectId: p.pid }, { jobId: await p.job(), today: TODAY, store, origin }));
+		const other = await p.addFeed([{ lat: -30.025, lon: 20.025, weight: 1 }], 'Other CHIRPS');
+		await asOwner(`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", feed_id) VALUES ($1, 'rain_chirps_mm', 'Other CHIRPS', 'mm', '2025-11-01', '{1}', $2)`, [p.pid, other]);
+		const view = await withUser(p.owner.id, (db) => gapRainProducts(db, p.pid, null, TODAY));
+		expect(view.gapRain).toEqual({ product: 'chirpsThenEra5l', imergLate: true });
+		expect(view.feed).toBe(p.feed);
+		expect(view.feeds.map((f) => [f.seriesName, f.runsRead])).toEqual([
+			['CHIRPS', true],
+			['Other CHIRPS', false]
+		]);
+		expect(view.window).toEqual({ start: '2025-11-01', end: TODAY });
+		// ERA5-Land: what the run's input reads, to the day.
+		const inputs = (await withUser(p.owner.id, (db) => gapRainInputs(db, p.pid, { gapRain: view.gapRain }, p.chirps, TODAY)))!;
+		expect(view.era5l!.startDate).toBe(inputs[ERA5L_SERIES_KEY]!.startDate);
+		expect(view.era5l!.values).toEqual(inputs[ERA5L_SERIES_KEY]!.values);
+		expect(view.era5l!.held).toBe(view.era5l!.values.filter((v) => v !== null).length);
+		// IMERG Late: one series, each day with its version (V07 to 2026-02-06, V08 after).
+		expect(view.imergLate!.startDate).toBe('2026-01-25');
+		expect(view.imergLate!.versions).toHaveLength(view.imergLate!.values.length);
+		expect(view.imergLate!.versions.at(-1)).toBe('V08');
+		expect(view.imergLate!.versions[0]).toBe('V07');
+		// Another feed's cells, which no fetch filled: nothing held, said by null.
+		const elsewhere = await withUser(p.owner.id, (db) => gapRainProducts(db, p.pid, other, TODAY));
+		expect([elsewhere.feed, elsewhere.era5l, elsewhere.imergLate]).toEqual([other, null, null]);
+		// Through the API: a viewer may read it; a stranger gets 404; a malformed feed id is 400.
+		const ok = await p.owner.call('GET', `/projects/${p.pid}/feeds/gap-rain?feed=${p.feed}`);
+		expect(ok.status).toBe(200);
+		expect(ok.body.feed).toBe(p.feed);
+		const stranger = await signUp('GapRainStranger');
+		expect((await stranger.call('GET', `/projects/${p.pid}/feeds/gap-rain`)).status).toBe(404);
+		expect((await p.owner.call('GET', `/projects/${p.pid}/feeds/gap-rain?feed=nope`)).status).toBe(400);
+	});
+
+	it('the view with no CHIRPS feed: no feed, nothing read', async () => {
+		const owner = await signUp('GapRainNoFeed');
+		const pid = (await owner.call('POST', '/projects', { name: 'No feed' })).body.project.id as string;
+		expect(await withUser(owner.id, (db) => gapRainProducts(db, pid, null, TODAY))).toEqual({ gapRain: null, feeds: [], feed: null, window: null, era5l: null, imergLate: null });
 	});
 });

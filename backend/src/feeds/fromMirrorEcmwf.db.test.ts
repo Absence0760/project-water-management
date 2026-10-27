@@ -22,6 +22,8 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 import { ecmwfFixtureMean } from '../../scripts/ecmwf-fixture.js';
 import { MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
 import { asOwner, signUp } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
+import { forecastRainSource } from '../runs/execute.js';
 import { ECMWF_STATS, writeEcmwfIndex, writeEcmwfIssue } from '../ingest/ecmwf.js';
 import { runTick } from '../jobs/runner.js';
 import { openStore } from '../mirror/store.js';
@@ -97,6 +99,10 @@ describe('an ECMWF ENS feed reads our copy', () => {
 			last_data_date: fromEpochDay(toEpochDay(today) + 14),
 			last_meta: { days: 15, issued: today, model: 'ECMWF ENS mean', calibration: NOT_CALIBRATED, merged: 15 }
 		});
+		// A forecast run on it credits ECMWF (issue #604 R4-E): the feed wrote every forecast day. A day before them isn't its own.
+		const seriesId = ((await owner.call('GET', `/projects/${f.pid}/series`)).body.series as { id: string; kind: string }[]).find((x) => x.kind === 'rain_forecast_mm')!.id;
+		expect(await withUser(owner.id, (db) => forecastRainSource(db, seriesId, today))).toBe('ecmwf_ens');
+		expect(await withUser(owner.id, (db) => forecastRainSource(db, seriesId, fromEpochDay(toEpochDay(today) - 1)))).toBe('other');
 	});
 
 	it('a live copy: today’s issue, quantile-mapped once the fit is in the copy', async () => {

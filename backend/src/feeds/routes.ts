@@ -27,6 +27,7 @@ import {
 } from './config.js';
 import { feedSourceMode } from './http.js';
 import { rainCopy } from './rainCopy.js';
+import { gapRainProducts } from './gapRainView.js';
 import { createFeed, deleteFeed, getFeed, listFeeds, replaceKey, type RunSeriesPick, runSeries, seriesAccepts, targetSeries, updateFeed } from './store.js';
 
 /**
@@ -185,6 +186,17 @@ function refuseBoundaryMark(config: unknown) {
 }
 
 export const feedRoutes = new Hono<AuthEnv>()
+	// The gap-filling products over one CHIRPS feed's cells (issue #604 R4-E, docs/api.md § Data feeds): what the
+	// Data tab draws beside CHIRPS. Read from the shared cell cache only (a feed's fetch fills it), never the copy.
+	.get('/:id/feeds/gap-rain', async (c) => {
+		const id = c.req.param('id');
+		const feed = c.req.query('feed') ?? null;
+		if (feed !== null && !UUID.test(feed)) throw new ApiError(400, 'feed must be a feed id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			return c.json(await gapRainProducts(db, id, feed));
+		});
+	})
 	.get('/:id/feeds', async (c) => {
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, c.req.param('id'), 'viewer');
