@@ -66,6 +66,23 @@ Node reader in `backend/src/mirror/` reads the same files:
   only the objects that changed are uploaded, and any chunk zarr deleted is
   deleted. A month's write touches one year's chunks, at most 868 objects.
 
+**`finalThrough`:** the last day of the **contiguous** run of months the
+manifest's `files` hold, from the first month copied
+(`manifest.finals_coverage`; each byMonth URL names its month). It moves
+forward only when the next month is copied: after a partial backfill plus the
+newest month, it stays at the end of the backfill, so the months between are
+never read as final (a NaN there would be cached as final no-data for good).
+A byMonth file must hold days of the month its URL names, through that
+month's last day, or the run refuses it. Both validators (`manifest.py` and
+`backend/src/mirror/manifest.ts`) refuse a finals manifest whose
+`finalThrough` runs past that run, or whose file URL names no month.
+
+**Plausible values:** after CHC's fill becomes NaN, every value must lie in
+0–2000 mm, the bounds the Node reader holds a day's rain to. A file with a
+value outside them fails the run (`chcnetcdf.ImplausibleValueError`) before
+anything is written, so the alarm fires instead of one bad cell failing every
+feed over it for good.
+
 **Revisions (D8):** each file's `valuesSha256` is the SHA-256 of its region
 values as float32 little-endian bytes in (day, lat, lon) order, with every NaN
 written as `0x7FC00000`. When a file is copied again:
@@ -74,6 +91,14 @@ written as `0x7FC00000`. When a file is copied again:
 - with a different hash, the product's `revision` goes up by one and a
   `changes` entry is added, giving the days, the number of cells that changed
   and the largest absolute difference.
+- unless the copy no longer holds the previous file's values (their hash
+  doesn't match the file's `valuesSha256`). That happens when a run died after
+  uploading some or all of the new chunks but before writing the manifest:
+  the retry reads the new values back, and a diff would claim 0 cells, which
+  `245_mirror_revision.sql` skips, leaving stale cached finals unmarked. The
+  old values are unknown, so the entry claims every cell of the region
+  (341,000) and a `maxAbsDiff` of 2000, the widest difference two plausible
+  values can have: an upper bound, never 0.
 
 ## The polite client
 
@@ -114,7 +139,8 @@ They cover:
 - **The polite client:** pacing, the 304 skip, the 403 stop, and `Retry-After` given in seconds or as a date. They run against a fake opener and clock, so nothing touches the network or sleeps.
 - **The writer:** the exact D2 metadata, and where a known cell-day lands, for leap and non-leap years and across New Year. Chunks that are all NaN aren't written, and S3 staging is checked against an in-memory fake.
 - **The manifest:** the round-trip, refusing manifests that don't follow the spec, and a hash that stays stable across NaN payloads, memory layout and byte order.
-- **The handler:** a fixtures-mode run from start to finish, a re-run that changes nothing, and a rewrite that bumps the revision.
+- **The handler:** a fixtures-mode run from start to finish, a re-run that changes nothing, a rewrite that bumps the revision, a retry after a crash between the chunk upload and the manifest, a gap in the months that holds `finalThrough` back, and a file whose days aren't its month's.
+- **The reader:** a value outside 0–2000 mm fails the read and writes nothing.
 - **The fixture:** it still matches its generator.
 
 CI runs them in the `ingest` job, "Bulk ingest (Python)", in

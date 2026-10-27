@@ -18,6 +18,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "fixtures"))
 
 import chcnetcdf  # noqa: E402
+import grid  # noqa: E402
 import lambda_handler  # noqa: E402
 import make_chc_fixture as fx  # noqa: E402
 import manifest  # noqa: E402
@@ -25,6 +26,13 @@ import zarrstore  # noqa: E402
 from fakes3 import FakeS3  # noqa: E402
 
 FIXTURE = HERE / "fixtures" / "chc" / fx.NAME
+
+
+def month_slice(first_day: dt.date, days: int = 3, bump: float = 0.0) -> chcnetcdf.RegionSlice:
+    """The fixture's values moved to other days (the last `days` of a month)."""
+    v = fx.region_values()[:days].copy()
+    v[~np.isnan(v)] += np.float32(bump)
+    return chcnetcdf.RegionSlice(first_day=first_day, values=v)
 
 
 class Event(unittest.TestCase):
@@ -65,6 +73,27 @@ class Fixture(unittest.TestCase):
             a, b = chcnetcdf.read_region(str(fresh)), chcnetcdf.read_region(str(FIXTURE))
         self.assertEqual(a.first_day, b.first_day)
         np.testing.assert_array_equal(a.values, b.values)
+
+    def test_refuses_an_implausible_value_before_anything_is_written(self):
+        import h5netcdf
+
+        land = (fx.MARGIN + 50, fx.MARGIN + 350)  # a land cell of the region
+        for bad in (2000.5, -0.5, np.inf):
+            with tempfile.TemporaryDirectory() as tmp:
+                path = fx.write(Path(tmp))
+                with h5netcdf.File(path, "a") as f:
+                    f["precip"][1, land[0], land[1]] = np.float32(bad)
+                with self.assertRaisesRegex(chcnetcdf.ImplausibleValueError, r"1 implausible value.*2024-02-28.*region row 50, col 350", msg=bad):
+                    chcnetcdf.read_region(str(path))
+                # The handler's run fails with it, and no copy or manifest exists.
+                root = Path(tmp) / "mirror"
+                with self.assertRaises(chcnetcdf.ImplausibleValueError):
+                    lambda_handler.ingest_file(zarrstore.Mirror.from_url(f"file://{root}"), "rnl", f"fixture:chc/{fx.NAME}", path)
+                self.assertFalse(root.exists())
+        # Positive control: the bounds themselves are plausible, and NaN (sea) is skipped.
+        edge = np.full((2, grid.ROWS, grid.COLS), np.nan, dtype=np.float32)
+        edge[0, 0, 0], edge[1, 0, 0] = 0.0, 2000.0
+        chcnetcdf.check_plausible(edge, fx.FIRST_DAY)
 
     def test_refuses_off_layout_time_units(self):
         self.assertEqual(chcnetcdf.time_origin("days since 1980-1-1"), dt.date(1980, 1, 1))
@@ -131,6 +160,72 @@ class FixturesRun(unittest.TestCase):
         self.assertEqual(m["revision"], 2)
         self.assertEqual(m["files"][0]["revision"], 2)
         self.assertEqual(m["changes"], [{"revision": 2, "days": ["2024-02-27", "2024-02-29"], "cellsChanged": 2, "maxAbsDiff": 1.5}])
+
+    def test_finalThrough_stops_at_a_gap_in_the_months(self):
+        mirror = zarrstore.Mirror.from_url(f"file://{self.root}")
+        url = lambda y, mo: f"fixture:chc/chirps-v3.0.{y:04d}.{mo:02d}.days_p05.nc"  # noqa: E731
+        slices = {
+            url(2024, 2): month_slice(dt.date(2024, 2, 27)),
+            url(2024, 3): month_slice(dt.date(2024, 3, 29), bump=1.0),
+            url(2024, 5): month_slice(dt.date(2024, 5, 29), bump=2.0),
+        }
+
+        def ingest(u):
+            with unittest.mock.patch.object(chcnetcdf, "read_region", lambda _path: slices[u]):
+                return lambda_handler.ingest_file(mirror, "rnl", u, FIXTURE)
+
+        ingest(url(2024, 2))
+        self.assertEqual(manifest.read(mirror, "rnl")["finalThrough"], "2024-02-29")
+        # May arrives before March and April: the run still ends in February.
+        ingest(url(2024, 5))
+        m = manifest.read(mirror, "rnl")
+        self.assertEqual(m["finalThrough"], "2024-02-29")
+        self.assertEqual(m["years"], {"first": 2024, "last": 2024})
+        # March closes part of the gap: the run reaches March, not May.
+        ingest(url(2024, 3))
+        self.assertEqual(manifest.read(mirror, "rnl")["finalThrough"], "2024-03-31")
+
+    def test_a_file_whose_days_are_not_its_months_end_is_refused(self):
+        mirror = zarrstore.Mirror.from_url(f"file://{self.root}")
+        for u, sl in [
+            ("fixture:chc/chirps-v3.0.2024.03.days_p05.nc", month_slice(dt.date(2024, 2, 27))),  # another month
+            ("fixture:chc/chirps-v3.0.2024.02.days_p05.nc", month_slice(dt.date(2024, 2, 20))),  # stops short of the end
+            ("fixture:chc/no-month.nc", month_slice(dt.date(2024, 2, 27))),
+        ]:
+            with unittest.mock.patch.object(chcnetcdf, "read_region", lambda _path, sl=sl: sl):
+                with self.assertRaises(ValueError, msg=u):
+                    lambda_handler.ingest_file(mirror, "rnl", u, FIXTURE)
+        self.assertIsNone(manifest.read(mirror, "rnl"))
+
+    def test_a_retry_after_a_crash_between_upload_and_manifest_claims_every_cell(self):
+        s3 = FakeS3()
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": "s3://mirror"}):
+            lambda_handler.handler({"product": "rnl", "mode": "backfill"}, None, s3_client=s3)
+            real = chcnetcdf.read_region
+
+            def rewritten(path):
+                r = real(path)
+                r.values[1, 100, 350] += 1.5
+                return r
+
+            # The run dies after the chunks went up but before the manifest did.
+            with unittest.mock.patch.object(chcnetcdf, "read_region", rewritten):
+                with unittest.mock.patch.object(manifest, "write", side_effect=RuntimeError("Lambda timed out")):
+                    with self.assertRaises(RuntimeError):
+                        lambda_handler.handler({"product": "rnl", "mode": "backfill"}, None, s3_client=s3)
+                mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
+                m = manifest.read(mirror, "rnl")
+                self.assertEqual(m["revision"], 1)  # the manifest still names the old values
+                with mirror.stage(zarrstore.finals_year_prefixes("rnl", fx.FIRST_DAY, fx.DAYS)) as root:
+                    held = zarrstore.read_finals(root, "rnl", fx.FIRST_DAY, fx.DAYS)
+                self.assertEqual(held[1, 100, 350], np.float32(fx.value(1, 100, 350) + 1.5))  # ...but the new chunks are up
+
+                out = lambda_handler.handler({"product": "rnl", "mode": "backfill"}, None, s3_client=s3)
+        self.assertEqual(out["files"][0]["outcome"], "changed")
+        m = manifest.read(mirror, "rnl")
+        self.assertEqual(m["revision"], 2)
+        # The old values are unknown, so the entry claims the whole region and the widest plausible difference, never 0.
+        self.assertEqual(m["changes"], [{"revision": 2, "days": ["2024-02-27", "2024-02-29"], "cellsChanged": 550 * 620, "maxAbsDiff": 2000.0}])
 
     def test_the_same_run_through_s3(self):
         s3 = FakeS3()

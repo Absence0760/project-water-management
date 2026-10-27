@@ -10,7 +10,9 @@ Round 1 is the skeleton: in fixtures mode it reads `fixtures/chc/*.nc`
 (make_chc_fixture.py), writes the region into the product's finals array and
 updates its manifest; a re-run with the same values changes nothing but the
 file's `fetchedAt`, and changed values bump the revision with a `changes`
-entry. Live mode (listing CHC's `byMonth` directory and downloading through
+entry. `finalThrough` is the end of the contiguous run of months copied from
+the first (manifest.finals_coverage), so a gap left by a partial backfill is
+never read as final. Live mode (listing CHC's `byMonth` directory and downloading through
 polite.py) arrives with R2-A, so it refuses for now.
 
 Run locally: `pnpm dev:ingest:run` (ingest/README.md).
@@ -37,7 +39,9 @@ PRODUCTS = ("rnl", "sat")
 MODES = ("monthly", "backfill")
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "chc"
 _MONTH = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
-_FILE_MONTH = re.compile(r"\.(\d{4})\.(\d{2})\.days_p05\.nc$")
+
+#: cellsChanged when the copy didn't hold the previous file's values (below): every cell of the region.
+REGION_CELLS = grid.ROWS * grid.COLS
 
 
 class BadEvent(ValueError):
@@ -64,7 +68,7 @@ def validate_event(event) -> dict:
 def fixture_files(month: str | None) -> list[Path]:
     files = sorted(FIXTURE_DIR.glob("*.nc"))
     if month is not None:
-        files = [f for f in files if (m := _FILE_MONTH.search(f.name)) and f"{m[1]}-{m[2]}" == month]
+        files = [f for f in files if (ym := manifest.file_month(f.name)) and f"{ym[0]:04d}-{ym[1]:02d}" == month]
         if not files:
             raise BadEvent(f"no fixture file for {month} in {FIXTURE_DIR}")
     return files
@@ -80,11 +84,23 @@ def _diff(old: np.ndarray, new: np.ndarray) -> tuple[int, float]:
     return cells, max_abs
 
 
+def _check_month(url: str, first_day: dt.date, last_day: dt.date) -> None:
+    """The file's days lie in the month its URL names and run to that month's
+    last day, so manifest.finals_coverage can count the month as held whole."""
+    ym = manifest.file_month(url)
+    if ym is None:
+        raise ValueError(f"{url} names no month (….YYYY.MM.days_p05.nc)")
+    month_end = dt.date(ym[0] + ym[1] // 12, ym[1] % 12 + 1, 1) - dt.timedelta(days=1)
+    if (first_day.year, first_day.month) != ym or last_day != month_end:
+        raise ValueError(f"{url} holds {first_day}..{last_day}, not days of {ym[0]:04d}-{ym[1]:02d} through {month_end}")
+
+
 def ingest_file(mirror: zarrstore.Mirror, product: str, url: str, path: Path, etag=None, last_modified=None, now=manifest.utc_now) -> dict:
     """Copy one CHC NetCDF file's region into `product` and record it in the manifest."""
     region = chcnetcdf.read_region(str(path))
     days = region.values.shape[0]
     last_day = region.first_day + dt.timedelta(days=days - 1)
+    _check_month(url, region.first_day, last_day)
     sha = manifest.values_sha256(region.values)
     m = manifest.read(mirror, product) or manifest.new(product)
     previous = manifest.file_entry(m, url)
@@ -99,7 +115,20 @@ def ingest_file(mirror: zarrstore.Mirror, product: str, url: str, path: Path, et
             outcome = "added"
         else:
             m["revision"] += 1
-            cells, max_abs = _diff(old, region.values)
+            if old is not None and manifest.values_sha256(old) == previous["valuesSha256"]:
+                cells, max_abs = _diff(old, region.values)
+            else:
+                # The copy didn't hold the previous file's values: a run died
+                # after uploading some or all of the new chunks but before the
+                # manifest, and this retry reads them back (or the array is
+                # gone). The old values are unknown, so the diff would claim
+                # fewer cells than changed, 0 after a whole upload, and
+                # 245_mirror_revision skips an entry with cellsChanged 0,
+                # leaving stale cached finals unmarked. Claim every cell of the
+                # region, and as maxAbsDiff the widest difference two plausible
+                # values can have (chcnetcdf's 0–2000 mm): a true upper bound,
+                # never 0.
+                cells, max_abs = REGION_CELLS, chcnetcdf.PLAUSIBLE_MAX_MM - chcnetcdf.PLAUSIBLE_MIN_MM
             m["changes"].append({"revision": m["revision"], "days": [region.first_day.isoformat(), last_day.isoformat()], "cellsChanged": cells, "maxAbsDiff": max_abs})
             outcome = "changed"
 
@@ -117,8 +146,10 @@ def ingest_file(mirror: zarrstore.Mirror, product: str, url: str, path: Path, et
     )
     first, last = m["years"]["first"], m["years"]["last"]
     m["years"] = {"first": min(filter(None, [first, region.first_day.year])), "last": max(filter(None, [last, last_day.year]))}
-    if m["finalThrough"] is None or last_day.isoformat() > m["finalThrough"]:
-        m["finalThrough"] = last_day.isoformat()
+    # The end of the contiguous run of months from the first copied, never the
+    # newest day seen: a month not yet copied in between is not held.
+    coverage = manifest.finals_coverage(m["files"])
+    m["finalThrough"] = coverage[1] if coverage else None
     manifest.write(mirror, m)
     return {"url": url, "outcome": outcome, "days": [region.first_day.isoformat(), last_day.isoformat()], "revision": m["revision"]}
 

@@ -10,6 +10,12 @@ misread would put rain in the wrong cell.
 
 Read with h5netcdf through xarray, decoding nothing itself: no netCDF4, no
 GDAL.
+
+Every value left after the fill becomes NaN must lie within 0–2000 mm, the
+bounds the Node reader holds a day's rain to (backend/src/feeds/sources/
+chirps.ts, backend/src/mirror/readCells.ts). A value outside them fails the
+read with ImplausibleValueError, so the run stops and alarms before anything
+is written: copied in, it would fail every feed over that cell for good.
 """
 
 from __future__ import annotations
@@ -21,6 +27,10 @@ from dataclasses import dataclass
 import numpy as np
 
 import grid
+
+#: The plausible range of one day's rain in mm, as the Node reader checks it.
+PLAUSIBLE_MIN_MM = 0.0
+PLAUSIBLE_MAX_MM = 2000.0
 
 _UNITS = re.compile(r"^\s*days since (\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]0{1,2}:0{1,2}(?::0{1,2}(?:\.0+)?)?)?\s*$")
 
@@ -35,6 +45,23 @@ class RegionSlice:
     @property
     def days(self) -> list[dt.date]:
         return [self.first_day + dt.timedelta(days=i) for i in range(self.values.shape[0])]
+
+
+class ImplausibleValueError(ValueError):
+    """A value outside PLAUSIBLE_MIN_MM–PLAUSIBLE_MAX_MM that isn't the fill."""
+
+
+def check_plausible(values: np.ndarray, first_day: dt.date, source: str = "the file") -> None:
+    """Raise ImplausibleValueError naming the first non-NaN value outside 0–2000 mm."""
+    bad = ~np.isnan(values) & ((values < PLAUSIBLE_MIN_MM) | (values > PLAUSIBLE_MAX_MM))
+    if bad.any():
+        d, row, col = (int(i) for i in np.argwhere(bad)[0])
+        lat = grid.ORIGIN["lat"] + row * grid.STEP
+        lon = grid.ORIGIN["lon"] + col * grid.STEP
+        raise ImplausibleValueError(
+            f"{source} has {int(bad.sum())} implausible value(s) outside {PLAUSIBLE_MIN_MM:g}–{PLAUSIBLE_MAX_MM:g} mm, "
+            f"the first {float(values[d, row, col])} mm on {first_day + dt.timedelta(days=d)} at {lat:.3f}, {lon:.3f} (region row {row}, col {col})"
+        )
 
 
 def time_origin(units: str) -> dt.date:
@@ -89,4 +116,5 @@ def read_region(path: str) -> RegionSlice:
 
     for fill in fills | {-9999.0}:
         values[values == np.float32(fill)] = np.nan
+    check_plausible(values, first_day, path)
     return RegionSlice(first_day=first_day, values=values)
