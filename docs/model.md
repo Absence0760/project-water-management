@@ -7565,8 +7565,8 @@ no control characters, numbers finite, ≥ 0 and ≤ 10⁶, no unknown fields), 
 **No run reads them**: `resolveEwrDailySource` leaves them out, so a source
 with them resolves to the same object, and runs bit-identically, as one
 without (a test pins it), and a run comparison sees no change when only they
-differ. No result moves, as with the REC (§2.9c), but engine 1.100.1 is
-a patch bump all the same: an earlier build refuses a source carrying either
+differ. No result moves, as with the REC (§2.9c), but engine 1.102.0 is
+a version bump all the same (shared with #614's rename): an earlier build refuses a source carrying either
 field as an unknown one and runs the pragmatic EWR, so the stamp says which
 inputs a run's engine accepts (an evidence pack's reproduction re-runs at the
 pack's own version, evidence-pack.md). The
