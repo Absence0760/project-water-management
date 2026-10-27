@@ -43,7 +43,7 @@ async function dam(u: User, pid: string, name: string, x: number, nodeId: string
 const updatedAt = async (featureId: string) => ((await asOwner('SELECT updated_at FROM map_feature WHERE id = $1', [featureId]))[0] as { updated_at: Date }).updated_at;
 const match = (db: Db, featureId: string, status: string, uid: string | null, at: Date, shares: [number, number] | null = uid ? [0.95, 0.9] : null) =>
 	db
-		.query<{ applied: boolean; dropped: number }>('SELECT applied, dropped FROM app_dam_match_write($1, $2, $3, $4, $5, $6)', [featureId, status, uid, shares?.[0] ?? null, shares?.[1] ?? null, at])
+		.query<{ applied: boolean; dropped: number }>('SELECT applied, dropped FROM app_dam_match_write($1, $2, $3, $4, $5, $6, NULL)', [featureId, status, uid, shares?.[0] ?? null, shares?.[1] ?? null, at])
 		.then((r) => r.rows[0]!);
 const load = (db: Db, source: string, key: string, rows: [string, number, number, string][], at: Date | string = new Date()) =>
 	db
@@ -151,6 +151,9 @@ describe('dam observations: read by the project, written only by the worker', ()
 		expect(await as(`UPDATE dam_waterbody_match SET status = 'none', uid = NULL, dam_share = NULL, waterbody_share = NULL`)).toBe('42501');
 		expect(await as(`DELETE FROM waterbody_reference`)).toBe('42501');
 		expect(await code(withoutUser((db) => db.query(`DELETE FROM dam_observation`)))).toBe('42501');
+		// The load marks are the worker's alone: no privilege at all, even to read.
+		expect(await as(`SELECT * FROM dam_observation_load_mark`)).toBe('42501');
+		expect(await code(withoutUser((db) => db.query(`SELECT * FROM dam_observation_load_mark`)))).toBe('42501');
 	});
 
 	it('the worker’s functions refuse a signed-in user, and run with no user (positive control)', async () => {
@@ -159,6 +162,10 @@ describe('dam observations: read by the project, written only by the worker', ()
 		expect(await code(withUser(owner.id, (db) => load(db, 'wofs', damA, [['2020-01-01', 1, 100, 'k']])))).toBe('42501');
 		expect(await code(withUser(owner.id, (db) => db.query('SELECT * FROM app_dam_outlines()')))).toBe('42501');
 		expect(await code(withUser(owner.id, (db) => db.query('SELECT * FROM app_waterbody_candidates(21, -34, 21.5, -33.5)')))).toBe('42501');
+		expect(await code(withUser(owner.id, (db) => db.query('SELECT * FROM app_dam_load_marks()')))).toBe('42501');
+		expect(await code(withUser(owner.id, (db) => db.query(`SELECT * FROM app_dam_load_mark_write('wofs', $1, now(), now(), '', false)`, [damA])))).toBe('42501');
+		expect(await withoutUser(async (db) => (await db.query(`SELECT applied FROM app_dam_load_mark_write('wofs', $1, now(), now(), '', false)`, [damA])).rows[0].applied)).toBe(true);
+		expect((await withoutUser(async (db) => (await db.query('SELECT key FROM app_dam_load_marks()')).rows)).map((r) => r.key)).toContain(damA);
 		const outlines = await withoutUser(async (db) => (await db.query<{ feature_id: string; match_stale: boolean }>('SELECT feature_id, match_stale FROM app_dam_outlines()')).rows);
 		expect(outlines.map((o) => o.feature_id)).toEqual(expect.arrayContaining([damA, damB, damOther]));
 		expect(outlines.find((o) => o.feature_id === damA)!.match_stale).toBe(true);

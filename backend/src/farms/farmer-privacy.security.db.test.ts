@@ -153,7 +153,7 @@ beforeAll(async () => {
 	] as const) {
 		const featureId = damFeature.get(n.id)!;
 		const [f] = await asOwner('SELECT updated_at FROM map_feature WHERE id = $1', [featureId]);
-		await asOwner('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6)', [featureId, 'matched', uid, 0.9, 0.8, f!.updated_at]);
+		await asOwner('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6, NULL)', [featureId, 'matched', uid, 0.9, 0.8, f!.updated_at]);
 		await asOwner('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
 			'wofs',
 			featureId,

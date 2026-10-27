@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DamOutlineGeometry, Position } from './handover.js';
-import { bboxOf, MATCH_WATERBODY_SHARE, matchDam, MIN_DAM_SHARE, planarArea } from './match.js';
+import { bboxOf, candidateBoxOk, MATCH_WATERBODY_SHARE, matchDam, MIN_DAM_SHARE, planarArea } from './match.js';
 
 /** A rectangle w × h degrees from (x, y), closed. */
 const rect = (x: number, y: number, w: number, h = w): Position[] => [
@@ -66,5 +66,16 @@ describe('matchDam', () => {
 		// The island covers none of the dam; the waterbody (less its island) is 0.000088°², 0.00008 of it the dam.
 		expect(r).toMatchObject({ status: 'matched', damShare: 1 });
 		expect(r.waterbodyShare).toBeCloseTo(0.9091, 4);
+	});
+});
+
+describe('candidateBoxOk', () => {
+	it('takes a box of at most 1° a side, as app_waterbody_candidates does, and refuses the rest before the query', () => {
+		expect(candidateBoxOk([20, -34, 21, -33])).toBe(true);
+		expect(candidateBoxOk([20, -34, 20.01, -33.99])).toBe(true);
+		expect(candidateBoxOk([20, -34, 21.2, -33.99])).toBe(false);
+		expect(candidateBoxOk([20, -34, 20.01, -32.5])).toBe(false);
+		expect(candidateBoxOk([20, -34, Number.NaN, -33])).toBe(false);
+		expect(candidateBoxOk([21, -34, 20, -33])).toBe(false);
 	});
 });

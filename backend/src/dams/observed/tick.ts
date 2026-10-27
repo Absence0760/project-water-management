@@ -9,21 +9,31 @@
 // (never the committed synthetic copy; `pnpm dev:dams:run` uses a scratch
 // directory). Each tick:
 //   1. Matches every traced dam polygon whose match is missing or older than
-//      the reference set's last load (match.ts), at most MATCHES_PER_TICK.
+//      the reference set's last load (match.ts), at most MATCHES_PER_TICK,
+//      oldest traced first, with the dams whose match failed in this process
+//      after the others, so one project's failing dams can't take every slot
+//      tick after tick. A dam that can't be compared (too large, too complex)
+//      is recorded 'none' with its reason and leaves the stale list.
 //   2. Publishes dams/wanted.json: the uids of the matched dams and every
 //      dam's outline with the date WOfS should start from, written only when
 //      it differs from what this process last wrote (one GET when it hasn't).
-//   3. Loads what the passes fetched: for each source, its status, then each
-//      key whose last good fetch this process hasn't loaded, its file, into
-//      dam_observation (app_dam_observation_load). A Waterbodies file is
-//      loaded again when the dams matched to its uid change, so a dam matched
-//      after the file was fetched gets its series. A 304 week moves a key's
-//      last good fetch, so each unchanged file is read and loaded again once a
-//      week (one GET and one call each); the function skips rows it already
-//      holds unchanged, so that, and a restarted worker reloading every file,
-//      rewrites nothing.
+//   3. Loads what the passes fetched, into dam_observation
+//      (app_dam_observation_load). What was loaded is kept in the database
+//      (dam_observation_load_mark, per source and key: the status's lastGood
+//      it was checked against, the file's fetchedAt, a digest of the matched
+//      dams it was loaded for), so a restarted or cold worker repeats nothing.
+//      A key is due when its status lastGood is newer than its mark's, or (a
+//      Waterbodies uid) the dams matched to it changed, by feature or by
+//      matched_at, so a dam matched or redrawn after the file was fetched gets
+//      its series. A key that isn't due costs no GET. A due key's file is
+//      read; it is loaded only when its fetchedAt is newer than the mark's or
+//      its dams changed (a 304 week moves lastGood but not the file, so it
+//      costs one GET a week and no load). At most LOADS_PER_TICK files are
+//      read a tick, the oldest lastGood first and keys whose last attempt
+//      failed after the others; the rest wait for the next tick.
 // A failure is logged and left to the next tick; the rest of the tick goes on.
 // The log names counts only, never a dam, uid or project.
+import { createHash } from 'node:crypto';
 import { withoutUser, type Db } from '../../db/tx.js';
 import { logEvent } from '../../logging/logEvent.js';
 import { safeError } from '../../logging/safeError.js';
@@ -41,12 +51,20 @@ import {
 	WOFS_FIRST_DATE,
 	writeWanted
 } from './handover.js';
-import { damOutlines, matchAndWrite } from './match.js';
+import { damOutlines, type DamOutlineRow, matchAndWrite } from './match.js';
 
 type Env = Record<string, string | undefined>;
 
 /** The most dams matched in one tick (each one a box query and an overlap); the rest wait for the next. */
 export const MATCHES_PER_TICK = 200;
+/**
+ * The most pass files read (and loaded) in one tick. Each is one GET from the mirror bucket inside the VPC and one
+ * app_dam_observation_load call: a Waterbodies series is ~1,000–2,000 rows and a dam's WOfS file at most a few
+ * thousand, a fraction of a second together, so 200 is well under a minute of the worker's 300 s budget, which the
+ * tick's other work and the queued jobs share. A cold start with both status files full (up to ~10,000 keys) then
+ * takes ~50 ticks (about four hours on the 5-minute schedule) instead of one invocation that times out.
+ */
+export const LOADS_PER_TICK = 200;
 
 /** Whether this process runs the dams tick: DAM_OBSERVATIONS on, off or unset (off). */
 export function damObservationsOn(env: Env = process.env): boolean {
@@ -79,21 +97,61 @@ export interface DamsTickResult {
 	loaded: number;
 	unreached: number;
 	failed: number;
+	/** Files read whose fetch was already loaded (a 304 week): the mark moved, nothing was loaded. */
+	unchanged: number;
+	/** Due files left for the next tick (past LOADS_PER_TICK). */
+	deferred: number;
 	/** Rows inserted or changed. */
 	rows: number;
 }
 
-/** Per process: the wanted list last written, and per source and key what was last loaded. */
+/** Per process: the wanted list last written, and when each dam's match last failed (those go after the others). */
 let published: string | null = null;
-const loaded = new Map<string, string>();
-/** Forget what this process saw (tests). */
+const matchFailedAt = new Map<string, number>();
+/** Forget what this process saw (tests: a fresh process). What was loaded is in the database, not here. */
 export function resetDamsTick(): void {
 	published = null;
-	loaded.clear();
+	matchFailedAt.clear();
 }
 
+/**
+ * The stale dams to match this tick, at most `cap`: oldest traced first (app_dam_outlines' order; the sort is
+ * stable), the dams whose match failed in this process after the rest, oldest failure first, so failures can't
+ * hold every slot tick after tick. After a restart the failures are forgotten: they take one tick's slots again.
+ */
+export function matchQueue<T extends Pick<DamOutlineRow, 'feature_id' | 'match_stale'>>(outlines: readonly T[], failedAt: ReadonlyMap<string, number>, cap: number): T[] {
+	const at = (d: T) => failedAt.get(d.feature_id) ?? 0;
+	return outlines
+		.filter((d) => d.match_stale)
+		.sort((a, b) => at(a) - at(b))
+		.slice(0, cap);
+}
+
+/** A load mark as app_dam_load_marks returns it. */
+interface LoadMark {
+	source: ObservationSource;
+	key: string;
+	last_good: Date | null;
+	fetched_at: Date | null;
+	targets: string;
+	failed_at: Date | null;
+}
+
+/** The digest of the dams a Waterbodies file reaches: each matched dam's feature id and matched_at, sorted. */
+export function targetsDigest(dams: readonly Pick<DamOutlineRow, 'feature_id' | 'matched_at'>[]): string {
+	const parts = dams.map((d) => `${d.feature_id}@${d.matched_at ? new Date(d.matched_at).toISOString() : ''}`).sort();
+	return createHash('sha256').update(parts.join(',')).digest('hex');
+}
+
+const ms = (d: Date | null | undefined) => (d ? new Date(d).getTime() : -Infinity);
+
+const writeMark = (db: Db, source: ObservationSource, key: string, lastGood: string | null, fetchedAt: string | null, targets: string, failed: boolean) =>
+	db.query('SELECT applied FROM app_dam_load_mark_write($1, $2, $3, $4, $5, $6)', [source, key, lastGood, fetchedAt, targets, failed]);
+
 /** One tick's dams work (see the header); null when it is off. Never throws. */
-export async function runDamsTick(o: { store?: MirrorStore; env?: Env; now?: () => number } = {}): Promise<DamsTickResult | null> {
+export async function runDamsTick(
+	o: { store?: MirrorStore; env?: Env; now?: () => number; matchesPerTick?: number; loadsPerTick?: number } = {}
+): Promise<DamsTickResult | null> {
 	const env = o.env ?? process.env;
 	let on: boolean;
 	try {
@@ -104,7 +162,9 @@ export async function runDamsTick(o: { store?: MirrorStore; env?: Env; now?: () 
 	}
 	if (!on) return null;
 	const now = o.now ?? Date.now;
-	const result: DamsTickResult = { dams: 0, matched: 0, matchFailed: 0, published: false, loaded: 0, unreached: 0, failed: 0, rows: 0 };
+	const matchesPerTick = o.matchesPerTick ?? MATCHES_PER_TICK;
+	const loadsPerTick = o.loadsPerTick ?? LOADS_PER_TICK;
+	const result: DamsTickResult = { dams: 0, matched: 0, matchFailed: 0, published: false, loaded: 0, unreached: 0, failed: 0, unchanged: 0, deferred: 0, rows: 0 };
 	let store: MirrorStore;
 	try {
 		store = o.store ?? damsStore(env);
@@ -121,17 +181,20 @@ export async function runDamsTick(o: { store?: MirrorStore; env?: Env; now?: () 
 		outlinesRead = true;
 		result.dams = outlines.length;
 		if (outlines.length >= MAX_OUTLINES) logEvent('warn', { event: 'dams_outline_cap', cap: MAX_OUTLINES });
-		for (const d of outlines.filter((x) => x.match_stale).slice(0, MATCHES_PER_TICK)) {
+		for (const d of matchQueue(outlines, matchFailedAt, matchesPerTick)) {
 			try {
 				const r = await withoutUser((db) => matchAndWrite(db, d));
+				matchFailedAt.delete(d.feature_id);
 				if (r.applied) {
 					d.status = r.result.status;
 					d.uid = r.result.uid;
+					d.matched_at = r.matchedAt;
 					d.match_stale = false;
 					result.matched++;
 				}
 			} catch (err) {
 				result.matchFailed++;
+				matchFailedAt.set(d.feature_id, now());
 				logEvent('error', { event: 'dams_match_failed', ...safeError(err) });
 			}
 		}
@@ -160,43 +223,64 @@ export async function runDamsTick(o: { store?: MirrorStore; env?: Env; now?: () 
 		}
 	}
 
-	// 3. What the passes fetched.
-	const matchedTo = new Map<string, string[]>();
-	for (const d of outlines) if (d.status === 'matched' && d.uid) matchedTo.set(d.uid, [...(matchedTo.get(d.uid) ?? []), d.feature_id]);
-	for (const source of OBSERVATION_SOURCES) {
-		try {
-			const status = await readStatus(store, source);
-			for (const [key, s] of Object.entries(status?.perKey ?? {})) {
-				if (!s.lastGood) continue;
-				// A Waterbodies file reaches the dams matched to its uid: when they change, load it again.
-				const mark = source === 'waterbodies' ? `${s.lastGood}|${[...(matchedTo.get(key) ?? [])].sort().join(',')}` : s.lastGood;
-				const id = `${source}:${key}`;
-				if (loaded.get(id) === mark) continue;
-				if (source === 'waterbodies' && !matchedTo.has(key)) continue;
-				try {
-					const file = await readObservationFile(store, source as ObservationSource, key);
-					// A pass writes the file before the status names its fetch, so a listed fetch has its file; a missing one is retried next tick.
-					if (!file) {
-						result.failed++;
-						continue;
-					}
-					const r = await withoutUser((db) => loadObservationFile(db, file));
-					if (r === false) result.unreached++;
-					else {
-						result.loaded++;
-						result.rows += r.written;
-					}
-					loaded.set(id, mark);
-				} catch (err) {
-					result.failed++;
-					logEvent('error', { event: 'dams_load_failed', source, ...safeError(err) });
+	// 3. What the passes fetched (see the header).
+	const matchedTo = new Map<string, DamOutlineRow[]>();
+	for (const d of outlines) if (d.status === 'matched' && d.uid) matchedTo.set(d.uid, [...(matchedTo.get(d.uid) ?? []), d]);
+	let marks: Map<string, LoadMark> | null = null;
+	try {
+		marks = new Map((await withoutUser(async (db) => (await db.query<LoadMark>('SELECT source, key, last_good, fetched_at, targets, failed_at FROM app_dam_load_marks()')).rows)).map((m) => [`${m.source}:${m.key}`, m]));
+	} catch (err) {
+		logEvent('error', { event: 'dams_tick_failed', step: 'marks', ...safeError(err) });
+	}
+	if (marks) {
+		const due: { source: ObservationSource; key: string; lastGood: string; targets: string; mark: LoadMark | undefined }[] = [];
+		for (const source of OBSERVATION_SOURCES) {
+			try {
+				const status = await readStatus(store, source);
+				for (const [key, s] of Object.entries(status?.perKey ?? {})) {
+					if (!s.lastGood || Number.isNaN(Date.parse(s.lastGood))) continue;
+					// A Waterbodies file reaches the dams matched to its uid only: none, nothing to load.
+					if (source === 'waterbodies' && !matchedTo.has(key)) continue;
+					const targets = source === 'waterbodies' ? targetsDigest(matchedTo.get(key)!) : '';
+					const mark = marks.get(`${source}:${key}`);
+					if (mark && Date.parse(s.lastGood) <= ms(mark.last_good) && mark.targets === targets) continue;
+					due.push({ source, key, lastGood: s.lastGood, targets, mark });
 				}
+			} catch (err) {
+				logEvent('error', { event: 'dams_tick_failed', step: 'status', source, ...safeError(err) });
 			}
-		} catch (err) {
-			logEvent('error', { event: 'dams_tick_failed', step: 'status', source, ...safeError(err) });
+		}
+		// Never-failed (or since succeeded) first, oldest lastGood first; then the failing ones, oldest failure first.
+		const failedAt = (d: (typeof due)[number]) => (d.mark?.failed_at ? ms(d.mark.failed_at) : 0);
+		due.sort((a, b) => failedAt(a) - failedAt(b) || Date.parse(a.lastGood) - Date.parse(b.lastGood) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+		result.deferred = Math.max(0, due.length - loadsPerTick);
+		for (const { source, key, lastGood, targets, mark } of due.slice(0, loadsPerTick)) {
+			try {
+				const file = await readObservationFile(store, source, key);
+				// A pass writes the file before the status names its fetch, so a listed fetch has its file; a missing one is retried next tick.
+				if (!file) throw new Error('the status names a fetch whose file is missing');
+				const fresh = !mark || Date.parse(file.fetchedAt) > ms(mark.fetched_at) || mark.targets !== targets;
+				const r = await withoutUser(async (db) => {
+					const loadedNow = fresh ? await loadObservationFile(db, file) : null;
+					await writeMark(db, source, key, lastGood, file.fetchedAt, targets, false);
+					return loadedNow;
+				});
+				if (r === null) result.unchanged++;
+				else if (r === false) result.unreached++;
+				else {
+					result.loaded++;
+					result.rows += r.written;
+				}
+			} catch (err) {
+				result.failed++;
+				logEvent('error', { event: 'dams_load_failed', source, ...safeError(err) });
+				await withoutUser((db) => writeMark(db, source, key, null, null, targets, true)).catch((e) =>
+					logEvent('error', { event: 'dams_tick_failed', step: 'mark', source, ...safeError(e) })
+				);
+			}
 		}
 	}
-	if (result.matched || result.matchFailed || result.published || result.loaded || result.failed) {
+	if (result.matched || result.matchFailed || result.published || result.loaded || result.failed || result.deferred) {
 		logEvent(result.failed || result.matchFailed ? 'warn' : 'info', { event: 'dams_tick', ...result });
 	}
 	return result;

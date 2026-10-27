@@ -4535,7 +4535,8 @@ passes leave in the mirror bucket; no route writes them.
 | Table | Holds |
 | --- | --- |
 | `waterbody_reference` | DE Africa Waterbodies polygons (the v0.0.3 historical extent): `uid` (primary key, the waterbody's geohash, `^[0-9a-z]{6,12}$`, which names its series upstream), `dataset` (`synthetic` for the committed fixture, else the operator's label), `geometry` (Polygon or MultiPolygon jsonb), its bounding box (`min_lon` … `max_lat`, indexed for the match's first pass), `area_m2` (geodesic), `source`, `loaded_at`. Global reference data like `dam_register_reference` (157): loaded by the operator (`pnpm import:waterbodies`, or `load-reference.yml` kind `waterbodies`), read-only to the app |
-| `dam_waterbody_match` | One row per traced dam polygon (`feature_id`, primary key; `project_id`): `status` `matched` (one waterbody is essentially this dam), `merged` (the waterbody also holds other water, or the dam is split over several) or `none`; `uid` (the best overlap's, null for `none`); `dam_share` and `waterbody_share` (0–1: how much of the dam the waterbody covers, and of the waterbody the dam is); `matched_at`. `uid` is no foreign key: a reload of the reference set replaces its rows, and the worker matches every dam again (`matched_at` older than the newest `loaded_at`). Thresholds: `backend/src/dams/observed/match.ts` |
+| `dam_waterbody_match` | One row per traced dam polygon (`feature_id`, primary key; `project_id`): `status` `matched` (one waterbody is essentially this dam), `merged` (the waterbody also holds other water, or the dam is split over several) or `none`; `uid` (the best overlap's, null for `none`); `dam_share` and `waterbody_share` (0–1: how much of the dam the waterbody covers, and of the waterbody the dam is); `reason` (only with `none`: `too_large`, its box is over 1° a side, past what `app_waterbody_candidates` takes; `too_complex`, the overlap spent its work cap; null when it was compared); `matched_at`. A dam that can't be compared is recorded `none` with its reason, so it leaves the tick's stale list (tried again on the next reload of the reference set) and WOfS still observes it. `uid` is no foreign key: a reload of the reference set replaces its rows, and the worker matches every dam again (`matched_at` older than the newest `loaded_at`). Thresholds: `backend/src/dams/observed/match.ts` |
+| `dam_observation_load_mark` | Worker only, not project data. Per pass file (`source`, `key`: primary key): `last_good` (the status file's `lastGood` the key was last checked against), `fetched_at` (the file's `fetchedAt` last loaded), `targets` (for a Waterbodies uid, a SHA-256 of the matched dams' feature ids and `matched_at` it was loaded for; `''` for WOfS), `failed_at` (the last attempt failed; cleared by the next success), `updated_at`. A WOfS key also holds its `feature_id` (→ `map_feature` `ON DELETE CASCADE`, indexed), so the mark goes with its dam. It lets a restarted or cold worker skip every file it already loaded without a GET (architecture.md § Dam observations) |
 | `dam_observation` | One row per dam, `source` and `obs_date` (unique): `wet_area_m2` (the wet area seen, of the part seen clearly), `pct_observed` (0–100, the share of the outline seen clearly that date; for Waterbodies 100 − `pc_invalid`), `upstream_key` (the Waterbodies uid, or the WOfS STAC item id), `loaded_at`. `obs_date` from 1984 (Landsat's record) |
 
 - **Same project**: both project tables reach their dam through the
@@ -4549,7 +4550,9 @@ passes leave in the mirror bucket; no route writes them.
   features linked to the caller's farms in every project, read once per
   query); `water_app` holds SELECT and nothing else
   (`catalogue.db.test.ts` `READ_ONLY`). `waterbody_reference`: any
-  signed-in session reads it.
+  signed-in session reads it. `dam_observation_load_mark`: owner only (RLS
+  on, no policy, no privilege for `water_app`; `catalogue.db.test.ts`
+  `OWNER_ONLY`), reached only through the two worker functions below.
 - **A redrawn dam** (its geometry or kind changed) loses its match and its
   observations (`map_feature_outline_changed`, an AFTER UPDATE trigger,
   `SECURITY DEFINER` since the editor holds no DELETE on them); a rename
@@ -4559,17 +4562,24 @@ passes leave in the mirror bucket; no route writes them.
   worker only: no user and no API key, 245's `mirror_worker_context`, else
   42501):
   - `app_dam_outlines()`: every dam polygon in any project (at most 5000,
-    the tick logs `dams_outline_cap` at the cap), with its match,
-    `match_stale` and the newest observation date per source: the match's
-    input and the wanted list's outlines.
+    oldest traced first, `created_at` then `id`, so past the cap the most
+    recently traced wait; the tick logs `dams_outline_cap` at the cap),
+    with its match, `match_stale`, `matched_at` and the newest observation
+    date per source: the match's input and the wanted list's outlines.
   - `app_waterbody_candidates(w, s, e, n)`: the waterbodies whose box meets
     the dam's (a box of at most 1° a side; at most 200, most shared box
     area first).
   - `app_dam_match_write(feature_id, status, uid, dam_share,
-    waterbody_share, feature_at)`: records a match unless the feature
-    changed since it was read (`applied = false`); a dam that was `matched`
-    and isn't now (or is matched to another uid) loses its `waterbodies`
-    rows (`dropped`).
+    waterbody_share, feature_at, reason)`: records a match unless the
+    feature changed since it was read (`applied = false`), and returns its
+    `matched_at`; a dam that was `matched` and isn't now (or is matched to
+    another uid) loses its `waterbodies` rows (`dropped`). `reason` only
+    with `none` (else 23514).
+  - `app_dam_load_marks()` and `app_dam_load_mark_write(source, key,
+    last_good, fetched_at, targets, failed)`: read every load mark, and
+    record one: loaded (or found already loaded) as of `last_good`, clearing
+    a failure; or `failed`, which sets `failed_at` only. A WOfS key whose
+    feature is gone records nothing (`applied = false`).
   - `app_dam_observation_load(source, key, dates[], wet[], pct[],
     upstream_keys[], fetched_at)`: one pass file. `waterbodies`: `key` is a
     uid and the rows go to every dam matched to it; `wofs`: `key` is a dam's
@@ -4592,7 +4602,11 @@ passes leave in the mirror bucket; no route writes them.
   bound, the loader's targets; unmatching, redrawing (match and observations
   gone) against renaming (both kept) and deleting a dam);
   `dams/observed/tick.db.test.ts` (the tick, the pass and the load end to end
-  on the synthetic set, and `runTick`'s `dams` result, under a skewed TZ);
+  on the synthetic set, and `runTick`'s `dams` result, under a skewed TZ;
+  a dam too large and one too complex recorded `none` with their reasons
+  while another project's dam is matched the same tick; the loads' cap,
+  oldest first; a fresh process GETting nothing it loaded, and loading a
+  newer file);
   `catalogue.db.test.ts`.
 
 ### Feed days (031_feed_days.sql)

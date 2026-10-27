@@ -50,7 +50,7 @@ async function dam(name: string, x: number, nodeId: string | null): Promise<stri
 const updatedAt = async (featureId: string) => ((await asOwner('SELECT updated_at FROM map_feature WHERE id = $1', [featureId]))[0] as { updated_at: Date }).updated_at;
 const match = async (db: Db, featureId: string, status: string, uid: string | null) =>
 	expect(
-		(await db.query('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6)', [featureId, status, uid, uid ? 0.95 : null, uid ? 0.9 : null, await updatedAt(featureId)])).rows[0]!.applied
+		(await db.query('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6, NULL)', [featureId, status, uid, uid ? 0.95 : null, uid ? 0.9 : null, await updatedAt(featureId)])).rows[0]!.applied
 	).toBe(true);
 const load = (db: Db, source: string, key: string, rows: [string, number, number][]) =>
 	db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [

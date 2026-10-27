@@ -30,6 +30,15 @@
 //            a waterbody's wet area isn't this dam's. Only WOfS over the
 //            dam's own outline observes it (R5-C).
 // Only a matched dam gets Waterbodies observations (app_dam_observation_load).
+//
+// A dam that can't be compared is recorded 'none' with a reason, so it leaves
+// the tick's stale list (it would otherwise be tried, and fail, every tick):
+//   too_large    its box is over MAX_CANDIDATE_BOX_DEG (1°) a side, past what
+//                app_waterbody_candidates takes (no dam is that big; a
+//                mistraced or hostile outline is)
+//   too_complex  the overlap spent GEO_MAX_SWEEP_STEPS (MatchTooComplex)
+// It is tried again when the reference set is reloaded, and WOfS observes it
+// regardless (every traced dam's outline is on the wanted list).
 import type { Db } from '../../db/tx.js';
 import { signedArea2 } from '../../geo/clip.js';
 import { GEO_MAX_SWEEP_STEPS, intersectionArea, type Position } from '../../geo/geojson.js';
@@ -38,14 +47,20 @@ import type { DamOutlineGeometry } from './handover.js';
 export const MIN_DAM_SHARE = 0.3;
 export const MATCH_WATERBODY_SHARE = 0.7;
 export const MAX_OTHER_DAM_SHARE = 0.1;
+/** The largest box app_waterbody_candidates takes, degrees a side (249). */
+export const MAX_CANDIDATE_BOX_DEG = 1;
 
 export type MatchStatus = 'matched' | 'merged' | 'none';
+/** Why a 'none' wasn't compared (dam_waterbody_match.reason). */
+export type NoneReason = 'too_large' | 'too_complex';
 export interface MatchResult {
 	status: MatchStatus;
 	/** The best candidate's uid (null for none). */
 	uid: string | null;
 	damShare: number | null;
 	waterbodyShare: number | null;
+	/** Set when the dam couldn't be compared. */
+	reason?: NoneReason;
 }
 export interface Candidate {
 	uid: string;
@@ -110,6 +125,7 @@ export interface DamOutlineRow {
 	status: MatchStatus | null;
 	uid: string | null;
 	match_stale: boolean;
+	matched_at: Date | null;
 	waterbodies_newest: string | null;
 	wofs_newest: string | null;
 }
@@ -118,7 +134,7 @@ export interface DamOutlineRow {
 export async function damOutlines(db: Db): Promise<DamOutlineRow[]> {
 	return (
 		await db.query<DamOutlineRow>(
-			`SELECT feature_id, project_id, geometry, updated_at, status, uid, match_stale,
+			`SELECT feature_id, project_id, geometry, updated_at, status, uid, match_stale, matched_at,
 				to_char(waterbodies_newest, 'YYYY-MM-DD') AS waterbodies_newest, to_char(wofs_newest, 'YYYY-MM-DD') AS wofs_newest
 			 FROM app_dam_outlines()`
 		)
@@ -131,16 +147,34 @@ export async function candidatesFor(db: Db, dam: DamOutlineGeometry): Promise<Ca
 	return (await db.query<Candidate>('SELECT uid, geometry FROM app_waterbody_candidates($1, $2, $3, $4)', [w, s, e, n])).rows;
 }
 
-/** Match one dam and record it; false when the dam changed since it was read (matched again next tick). */
-export async function matchAndWrite(db: Db, dam: Pick<DamOutlineRow, 'feature_id' | 'geometry' | 'updated_at'>): Promise<{ applied: boolean; result: MatchResult; dropped: number }> {
-	const result = matchDam(dam.geometry, await candidatesFor(db, dam.geometry));
-	const { rows } = await db.query<{ applied: boolean; dropped: number }>('SELECT applied, dropped FROM app_dam_match_write($1, $2, $3, $4, $5, $6)', [
-		dam.feature_id,
-		result.status,
-		result.uid,
-		result.damShare,
-		result.waterbodyShare,
-		dam.updated_at
-	]);
-	return { applied: rows[0]!.applied, result, dropped: rows[0]!.dropped };
+/** Whether a box is one app_waterbody_candidates takes: finite, ordered, at most MAX_CANDIDATE_BOX_DEG a side. */
+export function candidateBoxOk([w, s, e, n]: readonly [number, number, number, number]): boolean {
+	return [w, s, e, n].every(Number.isFinite) && w <= e && s <= n && e - w <= MAX_CANDIDATE_BOX_DEG && n - s <= MAX_CANDIDATE_BOX_DEG;
+}
+
+/** The match of one dam as it's recorded: a dam that can't be compared is 'none' with its reason (see the header). */
+export async function matchOne(db: Db, dam: DamOutlineGeometry): Promise<MatchResult> {
+	const none = (reason: NoneReason): MatchResult => ({ status: 'none', uid: null, damShare: null, waterbodyShare: null, reason });
+	// Checked here, not left to the function's check_violation: an error would abort the transaction the match is written in.
+	if (!candidateBoxOk(bboxOf(dam))) return none('too_large');
+	const candidates = await candidatesFor(db, dam);
+	try {
+		return matchDam(dam, candidates);
+	} catch (err) {
+		if (err instanceof MatchTooComplex) return none('too_complex');
+		throw err;
+	}
+}
+
+/** Match one dam and record it; applied false when the dam changed since it was read (matched again next tick). */
+export async function matchAndWrite(
+	db: Db,
+	dam: Pick<DamOutlineRow, 'feature_id' | 'geometry' | 'updated_at'>
+): Promise<{ applied: boolean; result: MatchResult; dropped: number; matchedAt: Date | null }> {
+	const result = await matchOne(db, dam.geometry);
+	const { rows } = await db.query<{ applied: boolean; dropped: number; matched_at: Date | null }>(
+		'SELECT applied, dropped, matched_at FROM app_dam_match_write($1, $2, $3, $4, $5, $6, $7)',
+		[dam.feature_id, result.status, result.uid, result.damShare, result.waterbodyShare, dam.updated_at, result.reason ?? null]
+	);
+	return { applied: rows[0]!.applied, result, dropped: rows[0]!.dropped, matchedAt: rows[0]!.matched_at };
 }

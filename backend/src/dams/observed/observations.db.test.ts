@@ -38,7 +38,7 @@ async function dam(u: User, pid: string, name: string, x: number, nodeId: string
 const updatedAt = async (featureId: string) => ((await asOwner('SELECT updated_at FROM map_feature WHERE id = $1', [featureId]))[0] as { updated_at: Date }).updated_at;
 const match = (db: Db, featureId: string, status: string, uid: string | null, at: Date, shares: [number, number] | null = uid ? [0.95, 0.9] : null) =>
 	db
-		.query<{ applied: boolean; dropped: number }>('SELECT applied, dropped FROM app_dam_match_write($1, $2, $3, $4, $5, $6)', [featureId, status, uid, shares?.[0] ?? null, shares?.[1] ?? null, at])
+		.query<{ applied: boolean; dropped: number }>('SELECT applied, dropped FROM app_dam_match_write($1, $2, $3, $4, $5, $6, NULL)', [featureId, status, uid, shares?.[0] ?? null, shares?.[1] ?? null, at])
 		.then((r) => r.rows[0]!);
 const load = (db: Db, source: string, key: string, rows: [string, number, number, string][], at: Date | string = new Date()) =>
 	db

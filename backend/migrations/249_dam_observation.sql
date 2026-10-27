@@ -15,13 +15,24 @@
 --    there): 'matched' (one waterbody is essentially this dam), 'merged' (the
 --    waterbody it sits in also holds other water, so its wet area isn't this
 --    dam's) or 'none' (no waterbody, e.g. a dam under Waterbodies' 0.45 ha
---    minimum). Only 'matched' dams get Waterbodies observations.
+--    minimum). Only 'matched' dams get Waterbodies observations. A dam
+--    that can't be compared is recorded 'none' too, with a reason
+--    ('too_large': its box is over 1° a side; 'too_complex': its outline
+--    and the candidates' cost more than the overlap's work cap), so it
+--    leaves the tick's stale list instead of being tried every tick; it is
+--    tried again when the reference set is reloaded, and WOfS still
+--    observes it.
 --  * dam_observation: one row per dam, source and date: the wet area seen
 --    (m²), the share of the outline seen clearly that date (pct_observed),
 --    and the upstream key the row came from (a Waterbodies uid, or a WOfS
 --    STAC item id). Sources: 'waterbodies' (DE Africa's per-waterbody time
 --    series, for matched dams) and 'wofs' (Water Observations from Space
 --    over the dam's own outline, every traced dam).
+--  * dam_observation_load_mark: per (source, key), the pass file the worker
+--    last loaded (its fetchedAt), the status file's lastGood it was checked
+--    against, and the matched dams it was loaded for, so a restarted worker
+--    doesn't GET and load every file again. Worker only: RLS on, no policy,
+--    no privilege for water_app (the functions below read and write it).
 --  * Writers: only the SECURITY DEFINER functions below, from the worker's
 --    session with no user (245 mirror_worker_context): the tick matches dams
 --    (app_dam_match_write) and loads the files the weekly fetcher pass left
@@ -97,11 +108,15 @@ CREATE TABLE dam_waterbody_match (
 	-- The share of the dam's outline inside the waterbody, and of the waterbody inside the dam's outline (0–1).
 	dam_share       double precision CHECK (dam_share BETWEEN 0 AND 1),
 	waterbody_share double precision CHECK (waterbody_share BETWEEN 0 AND 1),
+	-- Why a dam is 'none' without being compared: 'too_large' (its box is over 1° a side, past what
+	-- app_waterbody_candidates takes) or 'too_complex' (the overlap's work cap, match.ts). NULL: compared.
+	reason          text CHECK (reason IN ('too_large', 'too_complex')),
 	matched_at      timestamptz NOT NULL DEFAULT now(),
 	PRIMARY KEY (feature_id),
 	FOREIGN KEY (feature_id, project_id) REFERENCES map_feature (id, project_id) ON DELETE CASCADE,
 	CHECK ((status = 'none') = (uid IS NULL)),
-	CHECK ((uid IS NULL) = (dam_share IS NULL) AND (uid IS NULL) = (waterbody_share IS NULL))
+	CHECK ((uid IS NULL) = (dam_share IS NULL) AND (uid IS NULL) = (waterbody_share IS NULL)),
+	CHECK (reason IS NULL OR status = 'none')
 );
 -- Covers the composite feature foreign key (the primary key leads with feature_id alone).
 CREATE INDEX dam_waterbody_match_feature_idx ON dam_waterbody_match (feature_id, project_id);
@@ -110,7 +125,39 @@ CREATE INDEX dam_waterbody_match_project_idx ON dam_waterbody_match (project_id)
 CREATE INDEX dam_waterbody_match_uid_idx ON dam_waterbody_match (uid) WHERE status = 'matched';
 
 COMMENT ON TABLE dam_waterbody_match IS
-	'Which DE Africa waterbody a traced dam polygon is, by overlap (249; backend/src/dams/observed/match.ts): matched, merged (the waterbody also holds other water) or none. Written only by app_dam_match_write (the worker).';
+	'Which DE Africa waterbody a traced dam polygon is, by overlap (249; backend/src/dams/observed/match.ts): matched, merged (the waterbody also holds other water) or none (with a reason when it could not be compared). Written only by app_dam_match_write (the worker).';
+
+-- ---------------------------------------------------------------------------
+-- dam_observation_load_mark
+-- ---------------------------------------------------------------------------
+-- What the worker last loaded per pass file (dams/observed/tick.ts step 3).
+-- Not project data: a Waterbodies uid's file reaches every dam matched to it.
+-- A WOfS key is a dam feature, held by feature_id so the mark goes with the
+-- feature. Owner only (the catalogue test's OWNER_ONLY): water_app holds no
+-- privilege; app_dam_load_marks and app_dam_load_mark_write are its only way in.
+CREATE TABLE dam_observation_load_mark (
+	source      text NOT NULL CHECK (source IN ('waterbodies', 'wofs')),
+	-- The uid (waterbodies) or the feature id (wofs), as the status file names it.
+	key         text NOT NULL CHECK (char_length(key) BETWEEN 1 AND 64),
+	-- The WOfS dam (NULL for waterbodies).
+	feature_id  uuid REFERENCES map_feature (id) ON DELETE CASCADE,
+	-- The status file's lastGood for the key when it was last read, and the file's fetchedAt last loaded.
+	last_good   timestamptz,
+	fetched_at  timestamptz,
+	-- A digest of the matched dams (feature id and matched_at) a Waterbodies file was loaded for; '' for WOfS.
+	targets     text NOT NULL DEFAULT '' CHECK (targets ~ '^([0-9a-f]{64})?$'),
+	-- The last attempt failed (cleared by the next success): the tick takes such keys after the others.
+	failed_at   timestamptz,
+	updated_at  timestamptz NOT NULL DEFAULT now(),
+	PRIMARY KEY (source, key),
+	CHECK ((source = 'wofs') = (feature_id IS NOT NULL)),
+	CHECK (feature_id IS NULL OR key = feature_id::text)
+);
+CREATE INDEX dam_observation_load_mark_feature_idx ON dam_observation_load_mark (feature_id);
+COMMENT ON TABLE dam_observation_load_mark IS
+	'Per pass file (source, key), what the dams tick last loaded: the status''s lastGood, the file''s fetchedAt and the matched dams, so a restart reloads nothing (249). Owner only; the worker reads and writes it through app_dam_load_marks and app_dam_load_mark_write.';
+ALTER TABLE dam_observation_load_mark ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON dam_observation_load_mark FROM water_app;
 
 -- ---------------------------------------------------------------------------
 -- dam_observation
@@ -199,14 +246,16 @@ CREATE TRIGGER map_feature_outline_changed AFTER UPDATE OF geometry, kind ON map
 
 -- Every traced dam polygon in any project (at most 5000), for the tick: the
 -- outline for the wanted list and the match, its match as it stands
--- (match_stale when there is none, or the reference set was loaded since),
--- and the newest observation held per source. The outlines leave the VPC
--- only to our own mirror bucket, for the fetcher (docs/security.md). Past the
--- cap the newest dams wait: the tick logs it (dams/observed/tick.ts).
+-- (match_stale when there is none, or the reference set was loaded since,
+-- and matched_at), and the newest observation held per source. The outlines
+-- leave the VPC only to our own mirror bucket, for the fetcher
+-- (docs/security.md). Oldest traced first (created_at, then id): past the cap
+-- the most recently traced dams wait, and the tick logs it
+-- (dams/observed/tick.ts).
 CREATE FUNCTION app_dam_outlines()
 	RETURNS TABLE (
 		feature_id uuid, project_id uuid, geometry jsonb, area_m2 double precision, updated_at timestamptz,
-		status text, uid text, match_stale boolean, waterbodies_newest date, wofs_newest date
+		status text, uid text, match_stale boolean, matched_at timestamptz, waterbodies_newest date, wofs_newest date
 	)
 	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
 	AS $$
@@ -218,12 +267,13 @@ CREATE FUNCTION app_dam_outlines()
 			SELECT f.id, f.project_id, f.geometry, f.area_m2, f.updated_at,
 				m.status, m.uid,
 				m.feature_id IS NULL OR m.matched_at < coalesce((SELECT max(r.loaded_at) FROM waterbody_reference r), '-infinity'),
+				m.matched_at,
 				(SELECT max(o.obs_date) FROM dam_observation o WHERE o.feature_id = f.id AND o.source = 'waterbodies'),
 				(SELECT max(o.obs_date) FROM dam_observation o WHERE o.feature_id = f.id AND o.source = 'wofs')
 			FROM map_feature f
 			LEFT JOIN dam_waterbody_match m ON m.feature_id = f.id
 			WHERE f.kind = 'dam' AND f.geometry ->> 'type' IN ('Polygon', 'MultiPolygon')
-			ORDER BY f.id
+			ORDER BY f.created_at, f.id
 			LIMIT 5000;
 	END
 	$$;
@@ -263,10 +313,13 @@ GRANT EXECUTE ON FUNCTION app_waterbody_candidates(double precision, double prec
 -- another waterbody) loses its Waterbodies observations; the loader adds the
 -- new waterbody's. p_feature_at is the feature's updated_at as the tick read
 -- it (compared to the millisecond, as JavaScript reads it): a feature changed
--- since is left alone (applied = false), and matched again next tick. Worker only.
+-- since is left alone (applied = false), and matched again next tick.
+-- p_reason: why a 'none' wasn't compared (the table's reason), else NULL.
+-- matched_at is the time recorded. Worker only.
 CREATE FUNCTION app_dam_match_write(
 	p_feature_id uuid, p_status text, p_uid text, p_dam_share double precision, p_waterbody_share double precision, p_feature_at timestamptz,
-	OUT applied boolean, OUT dropped integer
+	p_reason text,
+	OUT applied boolean, OUT dropped integer, OUT matched_at timestamptz
 )
 	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 	AS $$
@@ -289,18 +342,19 @@ CREATE FUNCTION app_dam_match_write(
 			DELETE FROM dam_observation WHERE feature_id = p_feature_id AND source = 'waterbodies';
 			GET DIAGNOSTICS dropped = ROW_COUNT;
 		END IF;
-		-- The table's CHECKs bound the status, uid and shares (23514).
-		INSERT INTO dam_waterbody_match (feature_id, project_id, status, uid, dam_share, waterbody_share, matched_at)
-			VALUES (p_feature_id, f.project_id, p_status, p_uid, p_dam_share, p_waterbody_share, now())
+		-- The table's CHECKs bound the status, uid, shares and reason (23514).
+		INSERT INTO dam_waterbody_match AS m (feature_id, project_id, status, uid, dam_share, waterbody_share, reason, matched_at)
+			VALUES (p_feature_id, f.project_id, p_status, p_uid, p_dam_share, p_waterbody_share, p_reason, now())
 			ON CONFLICT (feature_id) DO UPDATE SET status = EXCLUDED.status, uid = EXCLUDED.uid, dam_share = EXCLUDED.dam_share,
-				waterbody_share = EXCLUDED.waterbody_share, matched_at = EXCLUDED.matched_at;
+				waterbody_share = EXCLUDED.waterbody_share, reason = EXCLUDED.reason, matched_at = EXCLUDED.matched_at
+			RETURNING m.matched_at INTO matched_at;
 		applied := true;
 	END
 	$$;
-COMMENT ON FUNCTION app_dam_match_write(uuid, text, text, double precision, double precision, timestamptz) IS
+COMMENT ON FUNCTION app_dam_match_write(uuid, text, text, double precision, double precision, timestamptz, text) IS
 	'Record which waterbody a traced dam is (249), for the worker (no user) only; a dam no longer matched loses its Waterbodies observations.';
-REVOKE ALL ON FUNCTION app_dam_match_write(uuid, text, text, double precision, double precision, timestamptz) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app_dam_match_write(uuid, text, text, double precision, double precision, timestamptz) TO water_app;
+REVOKE ALL ON FUNCTION app_dam_match_write(uuid, text, text, double precision, double precision, timestamptz, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_dam_match_write(uuid, text, text, double precision, double precision, timestamptz, text) TO water_app;
 
 -- Load one observation file the weekly pass wrote (backend/src/dams/observed/handover.ts ObservationFile):
 --   p_source 'waterbodies': p_key is a uid; the rows go to every dam matched to it.
@@ -410,3 +464,76 @@ COMMENT ON FUNCTION app_dam_observation_load(text, text, date[], double precisio
 	'Load one weekly pass file of dam observations (249): a Waterbodies uid''s series into every dam matched to it, or a dam''s WOfS rows. For the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_dam_observation_load(text, text, date[], double precision[], double precision[], text[], timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_dam_observation_load(text, text, date[], double precision[], double precision[], text[], timestamptz) TO water_app;
+
+
+-- The worker's load marks (dam_observation_load_mark), every one: the tick
+-- reads them once a tick to choose the files it loads. Worker only.
+CREATE FUNCTION app_dam_load_marks()
+	RETURNS TABLE (source text, key text, last_good timestamptz, fetched_at timestamptz, targets text, failed_at timestamptz)
+	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+	AS $$
+	BEGIN
+		IF NOT mirror_worker_context() THEN
+			RAISE EXCEPTION 'only the worker reads the dam load marks' USING ERRCODE = 'insufficient_privilege';
+		END IF;
+		RETURN QUERY SELECT k.source, k.key, k.last_good, k.fetched_at, k.targets, k.failed_at FROM dam_observation_load_mark k;
+	END
+	$$;
+COMMENT ON FUNCTION app_dam_load_marks() IS
+	'What the dams tick last loaded per pass file (249), for the worker (no user) only.';
+REVOKE ALL ON FUNCTION app_dam_load_marks() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_dam_load_marks() TO water_app;
+
+-- Record a pass file's mark. p_failed false: the file (fetchedAt p_fetched_at,
+-- for the dams digest p_targets) was loaded, or found already loaded, as of
+-- the status's lastGood p_last_good; the failure mark is cleared. p_failed
+-- true: the attempt failed, so the tick takes the key after the others; the
+-- rest of the mark stays. A WOfS key whose feature is gone records nothing
+-- (applied = false). Worker only.
+CREATE FUNCTION app_dam_load_mark_write(
+	p_source text, p_key text, p_last_good timestamptz, p_fetched_at timestamptz, p_targets text, p_failed boolean,
+	OUT applied boolean
+)
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		fid uuid;
+	BEGIN
+		IF NOT mirror_worker_context() THEN
+			RAISE EXCEPTION 'only the worker records dam load marks' USING ERRCODE = 'insufficient_privilege';
+		END IF;
+		IF p_source IS NULL OR p_source NOT IN ('waterbodies', 'wofs') OR p_failed IS NULL THEN
+			RAISE EXCEPTION 'not a dam observation source' USING ERRCODE = 'check_violation';
+		END IF;
+		IF p_key IS NULL OR (p_source = 'waterbodies' AND p_key !~ '^[0-9a-z]{6,12}$')
+			OR (p_source = 'wofs' AND p_key !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') THEN
+			RAISE EXCEPTION 'not a pass file key' USING ERRCODE = 'check_violation';
+		END IF;
+		IF p_source = 'wofs' THEN
+			SELECT f.id INTO fid FROM map_feature f WHERE f.id = p_key::uuid;
+			IF fid IS NULL THEN
+				applied := false;
+				RETURN;
+			END IF;
+		END IF;
+		IF p_failed THEN
+			INSERT INTO dam_observation_load_mark AS k (source, key, feature_id, failed_at, updated_at)
+				VALUES (p_source, p_key, fid, now(), now())
+				ON CONFLICT (source, key) DO UPDATE SET failed_at = now(), updated_at = now();
+		ELSE
+			IF p_last_good IS NULL OR p_fetched_at IS NULL THEN
+				RAISE EXCEPTION 'a loaded mark needs the lastGood and the fetchedAt' USING ERRCODE = 'check_violation';
+			END IF;
+			-- The table's CHECK bounds the digest (23514).
+			INSERT INTO dam_observation_load_mark AS k (source, key, feature_id, last_good, fetched_at, targets, failed_at, updated_at)
+				VALUES (p_source, p_key, fid, p_last_good, p_fetched_at, coalesce(p_targets, ''), NULL, now())
+				ON CONFLICT (source, key) DO UPDATE SET last_good = EXCLUDED.last_good, fetched_at = EXCLUDED.fetched_at,
+					targets = EXCLUDED.targets, failed_at = NULL, updated_at = now();
+		END IF;
+		applied := true;
+	END
+	$$;
+COMMENT ON FUNCTION app_dam_load_mark_write(text, text, timestamptz, timestamptz, text, boolean) IS
+	'Record what the dams tick loaded, or that it failed, for one pass file (249), for the worker (no user) only.';
+REVOKE ALL ON FUNCTION app_dam_load_mark_write(text, text, timestamptz, timestamptz, text, boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_dam_load_mark_write(text, text, timestamptz, timestamptz, text, boolean) TO water_app;

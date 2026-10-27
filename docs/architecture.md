@@ -1846,8 +1846,9 @@ EventBridge, hourly at :20 ──► fetcher, {"mode":"dams-weekly"} (outside th
       writes dams/wofs/<featureId>.json, dams/wofs-status.json
    each pass: DamPassCompleted{Source} + DamObservationAgeDays{Source} (EMF)
 
-worker tick: each status, then each file whose last good fetch is new to it
+worker tick: each status, then each key due by its load mark (≤ 200 a tick, oldest lastGood first)
    ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs)
+   ──► app_dam_load_mark_write ──► dam_observation_load_mark (what was loaded, kept across restarts)
 ```
 
 - **Why hourly.** The fetcher's 120 s limit, less Waterbodies' share (up to
@@ -1888,6 +1889,36 @@ worker tick: each status, then each file whose last good fetch is new to it
   several). Only matched dams are asked for Waterbodies series; WOfS runs
   over every outline. A redrawn dam is matched again; a reload of the
   polygons matches every dam again.
+- **The tick's bounds.** `app_dam_outlines` lists at most 5000 dams,
+  oldest traced first (`created_at`, then `id`): past the cap the most
+  recently traced wait, and the tick logs `dams_outline_cap`. It matches at
+  most `MATCHES_PER_TICK` (200) stale dams a tick, in that order, with the
+  dams whose match failed in this process after the rest (a failure is
+  logged and counted, `matchFailed`), so one project's failing dams can't
+  take every slot tick after tick (after a restart they get one tick's
+  slots again, then go last). A dam the match can't compare doesn't fail:
+  a box over 1° a side (`too_large`, past `app_waterbody_candidates`) or an
+  overlap past the sweep's work cap (`too_complex`) is recorded `none`
+  with that `reason`, leaves the stale list until the next reload of the
+  polygons, and WOfS still observes it.
+- **Loading, remembered in the database.** What the tick loaded is kept per
+  source and key in `dam_observation_load_mark` (the status's `lastGood` it
+  was checked against, the file's `fetchedAt`, and for a Waterbodies uid a
+  digest of the matched dams and their `matched_at`), not in the worker's
+  memory, so a restarted or cold worker repeats nothing. A key is due when
+  its status `lastGood` is newer than its mark's, or (a uid) its matched
+  dams changed: one matched, or rematched after a redraw or a reload,
+  gets the series. A key not due costs no GET. A due key's file is read and
+  loaded only when its `fetchedAt` is newer than the mark's or its dams
+  changed; a 304 week moves `lastGood` but not the file, so it costs one
+  GET and no load. At most `LOADS_PER_TICK` (200) files are read a tick,
+  oldest `lastGood` first, keys whose last attempt failed after the rest
+  (`failed_at`); the rest wait (`deferred` in the tick's log). Each is one
+  GET inside the VPC and one load of up to a few thousand rows, a fraction
+  of a second, so 200 is well under a minute of the worker's 300 s, which
+  the queued jobs share; a cold start with both status files full (up to
+  ~10 000 keys) takes about 50 ticks (four hours at one tick every 5
+  minutes) instead of one invocation that times out.
 - **Rows kept from a Waterbodies series**: the wet area (`area_wet_m2`) and
   the share seen clearly (100 − `pc_invalid`), per date; a date nothing was
   seen on is dropped (stored as 0 m² it would read as an empty dam), and a
@@ -1925,7 +1956,9 @@ worker tick: each status, then each file whose last good fetch is new to it
   WOfS's per-pixel bit flags. The pass (`pass.ts`) takes the dams in turn
   (never tried first, then the oldest turn) and, per dam, searches STAC
   (`stac.ts`, `explorer.digitalearth.africa/stac/search`, the outline's
-  lon/lat box, a year a search, 100 items a page, following `next` only to
+  lon/lat box snapped outward to a 0.05° grid so the search never carries
+  a dam's exact position (a scene over the snapped box that misses the
+  outline has no pixel inside it and adds no row), a year a search, 100 items a page, following `next` only to
   the same search) from where it left off, then reads each scene's header
   and only the tiles under the outline (`cog.ts`) and sums them (`sum.ts`).
   - **The scenes** (checked on a live 2026-09 Landsat 8 scene, 2026-10-27):
