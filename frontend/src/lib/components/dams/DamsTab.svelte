@@ -425,7 +425,7 @@
 					{#if run && picked}
 						<!-- The picked dam seen from space against the run's surface area (issue #604 R5-B), folded to one line. -->
 						<div bind:clientHeight={observedH}>
-							<DamObservedBox {projectId} runId={run.id} nodeId={picked.nodeId} name={picked.name} bind:open={observedOpen} />
+							<DamObservedBox {projectId} runId={run.id} nodeId={picked.nodeId} name={picked.name} {readonly} bind:open={observedOpen} />
 						</div>
 					{/if}
 					{#if run && picked}

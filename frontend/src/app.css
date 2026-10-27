@@ -102,6 +102,14 @@
 	--lane-suspect: #b28512;
 	--lane-infilled: #461a66;
 	--lane-human-use: #e65c83;
+	/* The Dams tab's Seen from space strips (dams/observed.ts OBSERVED_LANE_COLOR): disagree, seen full, seen
+	   empty. Their own colours, not --danger / --accent / --warning: a deuteranope saw the light danger and
+	   warning as one (ΔE00 0.7), and the dark danger sat 9.8 from the --series-2 points for a tritanope. Each
+	   ≥ 3:1 on --surface, ΔE00 ≥ 12 from the other two and ≥ 13 from every line that chart draws, for every
+	   colour-vision deficiency (observedLaneColours.test.ts computes them). */
+	--lane-disagree: #bb2211;
+	--lane-seen-full: #005577;
+	--lane-seen-empty: #442200;
 	--chart-grid: #e4e6e3;
 	--chart-axis: #6c706c;
 
@@ -171,6 +179,9 @@
 		--lane-suspect: #cc8800;
 		--lane-infilled: #7f40ff;
 		--lane-human-use: #e6397b;
+		--lane-disagree: #ff9977;
+		--lane-seen-full: #44ccee;
+		--lane-seen-empty: #ffcc33;
 		--chart-grid: #2c2f2c;
 		--chart-axis: #9a9e99;
 		--shadow: 0 1px 2px rgb(0 0 0 / 0.4);

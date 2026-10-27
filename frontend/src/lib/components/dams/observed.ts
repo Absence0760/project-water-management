@@ -38,8 +38,11 @@ export const observedFor = (data: DamObservations | null, nodeId: string): Obser
 const pct = (share: number) => `${fmtNum(share * 100, 0)}%`;
 const views = (n: number) => `${fmtNum(n)} clear view${n === 1 ? '' : 's'}`;
 
-/** The fold's line: how many views were compared and how many disagree, or why there's nothing to show. */
-export function observedLine(dam: ObservedDam | null, loading: boolean, error: string | null): string {
+/**
+ * The fold's line: how many views were compared, how many disagree and how many agree within `withinShare` of the
+ * full area (the API's threshold, DamObservations.thresholds), or why there's nothing to show.
+ */
+export function observedLine(dam: ObservedDam | null, loading: boolean, error: string | null, withinShare: number): string {
 	if (error) return 'couldn’t be loaded';
 	if (loading) return 'loading…';
 	if (!dam) return 'no outline of this dam on the map';
@@ -47,7 +50,7 @@ export function observedLine(dam: ObservedDam | null, loading: boolean, error: s
 	const s = dam.summary;
 	if (!s.compared) return s.latestClear ? `none compared · latest clear view ${fmtDay(s.latestClear.date)}` : 'no clear view yet';
 	const parts = [`${views(s.compared)} compared`, s.mismatches ? `${fmtNum(s.mismatches)} disagree${s.mismatches === 1 ? 's' : ''}` : 'none disagree'];
-	if (s.withinShare !== null) parts.push(`${pct(s.withinShare)} within ±10%`);
+	if (s.withinShare !== null) parts.push(`${pct(s.withinShare)} within ±${fmtNum(withinShare * 100, 0)}%`);
 	return parts.join(' · ');
 }
 
@@ -118,17 +121,29 @@ export function observedChartSeries(dam: ObservedDam, modelled: DailySeries | nu
 	return series;
 }
 
-/** The flags as the chart's lanes: one strip each along the plot's foot, named in its key. */
+/**
+ * The flags as the chart's lanes: one strip each along the plot's foot, named in its key. Their own colours
+ * (app.css --lane-disagree, --lane-seen-full, --lane-seen-empty), not --danger / --accent / --warning: a deuteranope
+ * saw the light --danger and --warning as one colour (ΔE00 0.7), and the dark --danger sat under 13 from the
+ * --series-2 points. observedLaneColours.test.ts computes every pair and each strip against every line the chart draws.
+ */
+export const OBSERVED_LANE_COLOR = { disagree: '--lane-disagree', seenFull: '--lane-seen-full', seenEmpty: '--lane-seen-empty' } as const;
+/** The chart's own lines and points, by token (observedChartSeries), which the strips must stay apart from. */
+export const OBSERVED_LINE_COLORS = ['--series-1', '--series-2', '--text-muted', '--text-2'] as const;
+
 export function observedLanes(dam: ObservedDam): { label: string; color: string; ranges: { start: string; end: string }[]; text: string }[] {
 	const c = dam.points.filter((p) => p.compared);
 	const days = (f: (p: ObservedPoint) => boolean) => c.filter(f).map((p) => ({ start: p.date, end: p.date }));
 	const lanes = [
-		{ label: 'Disagree', color: '--danger', ranges: days((p) => p.mismatch !== null), text: 'the model and the satellite disagree: one says full or empty, the other clearly doesn’t' },
-		{ label: 'Seen full', color: '--accent', ranges: days((p) => p.seenFull), text: 'the satellite saw the dam at its full area or more (likely spilling)' },
-		{ label: 'Seen empty', color: '--warning', ranges: days((p) => p.seenEmpty), text: 'the satellite saw almost no water' }
+		{ label: 'Disagree', color: OBSERVED_LANE_COLOR.disagree, ranges: days((p) => p.mismatch !== null), text: 'the model and the satellite disagree: one says full or empty, the other clearly doesn’t' },
+		{ label: 'Seen full', color: OBSERVED_LANE_COLOR.seenFull, ranges: days((p) => p.seenFull), text: 'the satellite saw the dam at its full area or more (likely spilling)' },
+		{ label: 'Seen empty', color: OBSERVED_LANE_COLOR.seenEmpty, ranges: days((p) => p.seenEmpty), text: 'the satellite saw almost no water' }
 	];
 	return lanes.filter((l) => l.ranges.length);
 }
+
+/** The table shows this many of the newest views until "Show all N views" opens the rest (ui-playbook.md § 2, fold every long list). */
+export const VIEWS_SHOWN = 10;
 
 /** A view's row in the table: what it says, newest first. */
 export interface ViewRow {

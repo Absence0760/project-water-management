@@ -181,3 +181,17 @@ export function decadeTicks(splits: readonly number[], room: number): (number | 
 	const step = Math.max(1, Math.ceil(decades.length / Math.max(1, Math.floor(room))));
 	return splits.map((v) => (isDecade(v) && ((Math.round(Math.log10(v)) % step) + step) % step === 0 ? v : null));
 }
+
+/**
+ * Room under a linear y axis for the lanes along the plot's foot (LineChart `lanesRoom`): the axis's
+ * lower end moved down so that `lo` (the lowest value the axis would start at) sits `lanePx` above the
+ * plot's foot, over the strips rather than under them. A dam seen empty is a reading of 0 ha, and the
+ * strips at 0 hid it (issue #604 R5-B). `plotPx` and `lanePx` in the same pixels; unchanged when the
+ * plot is no taller than the lanes.
+ */
+export function laneRoom(lo: number, hi: number, plotPx: number, lanePx: number): [number, number] {
+	if (!(plotPx > lanePx) || !(lanePx > 0)) return [lo, hi];
+	// A flat range (every value the same) gets a span to place the value in, as uPlot gives one.
+	const top = hi > lo ? hi : lo + (Math.abs(lo) || 1);
+	return [lo - ((top - lo) * lanePx) / (plotPx - lanePx), top];
+}

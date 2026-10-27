@@ -1,11 +1,14 @@
 <!--
 	Dams → "Seen from space" (issue #604 R5-B; docs/ui.md § Dams, docs/model.md § Modelled vs observed dam area).
-	Inside the picked dam's chart panel, under its storage chart, folded to one line (observedLine): how many
-	clear satellite views were compared with the run's surface area and how many disagree. Opened: the match
+	Inside the picked dam's chart panel, under its storage chart, folded to one line named "Seen from space:"
+	(observedLine): how many clear satellite views were compared with the run's surface area and how many
+	disagree. No heading of its own: the fold's line carries the name, so the closed box is one line and the
+	panel fits a 1280×800 window (it had an h3 over the fold until the R5-B review). Opened: the match
 	notes (an outline DE Africa Waterbodies merged with a neighbour, or doesn't have), the full area and a
 	summary in words, the chart of the run's modelled surface area (the `dam_area` column, ha) beside the
-	views, the flags as lanes along its foot (disagree, seen full, seen empty), every view in a table, and the
-	credit. The observations are one request for the run (GET …/dams/observations?run=), so picking another
+	views, the flags as lanes along its foot (disagree, seen full, seen empty) with the axis making room for
+	them under 0 ha, the newest views in a table (VIEWS_SHOWN, "Show all N views" for the rest), and the
+	credit. A viewer (`readonly`) is told an editor draws the outline, not to draw it. The observations are one request for the run (GET …/dams/observations?run=), so picking another
 	dam reads no more; the modelled series comes through the Runs cache when the fold opens.
 -->
 <script lang="ts">
@@ -18,13 +21,15 @@
 	import { cachedSeries } from '#lib/components/runs/cache.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
-	import { fullAreaWords, matchNotes, observedChartSeries, observedFor, observedLanes, observedLine, summaryWords, viewRows } from './observed';
+	import { fullAreaWords, matchNotes, observedChartSeries, observedFor, observedLanes, observedLine, summaryWords, viewRows, VIEWS_SHOWN } from './observed';
+	import { foldList } from '#lib/components/common/fold.js';
 
 	let {
 		projectId,
 		runId,
 		nodeId,
 		name,
+		readonly = false,
 		open = $bindable(false)
 	}: {
 		projectId: string;
@@ -33,6 +38,8 @@
 		/** The picked dam's unit. */
 		nodeId: string;
 		name: string;
+		/** A viewer: can't draw an outline, so the no-outline line says an editor does. */
+		readonly?: boolean;
 		open?: boolean;
 	} = $props();
 
@@ -92,19 +99,26 @@
 		});
 	});
 
-	const line = $derived(observedLine(dam, loading, error));
+	const withinShare = $derived(data?.thresholds.withinShare ?? 0.1);
+	const line = $derived(observedLine(dam, loading, error, withinShare));
 	const waiting = $derived(!!dam?.inRun && !modelled && !modelledError);
 	const series = $derived(dam && !waiting ? observedChartSeries(dam, modelled) : []);
 	const lanes = $derived(dam ? observedLanes(dam) : []);
 	const rows = $derived(dam ? viewRows(dam) : []);
+	// The newest views, the rest behind "Show all N views" (ui-playbook.md § 2, fold every long list); a new dam shuts it.
+	let allViews = $state(false);
+	$effect(() => {
+		void nodeId;
+		allViews = false;
+	});
+	const folded = $derived(foldList(rows, (r) => r.key, null, allViews, VIEWS_SHOWN));
 	const notes = $derived(dam ? matchNotes(dam) : []);
-	const summary = $derived(dam && data ? summaryWords(dam, data.thresholds.withinShare) : null);
+	const summary = $derived(dam && data ? summaryWords(dam, withinShare) : null);
 	const minClear = $derived(data ? fmtNum(data.thresholds.minPctObserved) : '90');
 </script>
 
-<section class="observed" aria-labelledby="{uid}-h" data-testid="dam-observed" data-ready={!loading && (!open || !waiting) ? 'true' : 'false'}>
-	<h3 id="{uid}-h">Seen from space</h3>
-	<Fold name="{name}:" {line} change="Show" problem={false} body="stack" class="observed-fold" lineTestid="dam-observed-line" bind:open>
+<section class="observed" aria-label="{name} seen from space" data-testid="dam-observed" data-ready={!loading && (!open || !waiting) ? 'true' : 'false'}>
+	<Fold name="Seen from space:" {line} readonly problem={false} body="stack" class="observed-fold" lineTestid="dam-observed-line" bind:open>
 		{#if error}
 			<p class="err small" role="alert">
 				The satellite views couldn’t be loaded: {error}
@@ -114,8 +128,13 @@
 			<p class="muted small" role="status">Loading the satellite views…</p>
 		{:else if !dam}
 			<p class="muted small" data-testid="dam-observed-no-outline">
-				No outline of {name}’s dam on the map. Satellites are compared inside the dam’s outline: draw its water surface as a polygon on
-				the Map and link it to {name}. <a href={mapNodeHref(nodeId)}>Open the Map</a>
+				{#if readonly}
+					No outline of {name}’s dam on the map. Satellites are compared inside the dam’s outline, which an editor draws on the Map.
+				{:else}
+					No outline of {name}’s dam on the map. Satellites are compared inside the dam’s outline: draw its water surface as a polygon on
+					the Map and link it to {name}.
+				{/if}
+				<a href={mapNodeHref(nodeId)}>Open the Map</a>
 			</p>
 		{:else}
 			{#each notes as n (n)}<p class="small note" data-testid="dam-observed-match">{n}</p>{/each}
@@ -146,15 +165,16 @@
 						windows={FLOW_WINDOWS}
 						{lanes}
 						lanesLabel="Flags"
+						lanesRoom
 						pannable={false}
 						toolsLabel="Seen from space chart controls"
 						caption="Points: clear satellite views (at least {minClear}% of the dam seen). Line: the run’s surface area at the start of each day. Dashed: the area when full."
 					/>
 				{/if}
 				<details class="views">
-					<summary>Show the {fmtNum(rows.length)} view{rows.length === 1 ? '' : 's'}</summary>
+					<summary>The {fmtNum(rows.length)} view{rows.length === 1 ? '' : 's'}, newest first</summary>
 					<div class="rows-box"><div class="table-wrap">
-						<table class="data compact" data-testid="dam-observed-views">
+						<table class="data compact" id="{uid}-views" data-testid="dam-observed-views">
 							<caption class="visually-hidden">Satellite views of {name}’s dam, newest first, beside the run’s surface area</caption>
 							<thead>
 								<tr>
@@ -167,7 +187,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each rows as r (r.key)}
+								{#each folded.shown as r (r.key)}
 									<tr class:mismatch={r.mismatch}>
 										<th scope="row">{r.date}</th>
 										<td data-label="Source">{r.source}</td>
@@ -180,6 +200,11 @@
 							</tbody>
 						</table>
 					</div></div>
+					{#if folded.hidden || allViews}
+						<button type="button" class="btn btn-sm more" aria-expanded={allViews} aria-controls="{uid}-views" onclick={() => (allViews = !allViews)}>
+							{allViews ? `Show the newest ${fmtNum(VIEWS_SHOWN)} views` : `Show all ${fmtNum(rows.length)} views`}
+						</button>
+					{/if}
 				</details>
 			{/if}
 			<p class="fine muted" data-testid="dam-observed-credit">Satellite views: {data?.attribution} (Waterbodies and WOfS, from Landsat).</p>
@@ -194,10 +219,6 @@
 		gap: 0.6rem;
 		min-width: 0;
 		margin: 1rem 0 0;
-	}
-	h3 {
-		margin: 0;
-		font-size: 1rem;
 	}
 	.observed :global(.observed-fold .fold-stack) {
 		display: grid;
@@ -220,9 +241,12 @@
 		min-height: 24px;
 		font-size: 0.85rem;
 	}
+	/* No inner scroll: the list is folded to the newest views instead (a phone showed two rows at a time in a 20rem box). */
 	.table-wrap {
-		max-height: 20rem;
-		overflow: auto;
+		max-height: none;
+		margin-top: 0.4rem;
+	}
+	.more {
 		margin-top: 0.4rem;
 	}
 	.num {
