@@ -292,8 +292,8 @@ class Diff(unittest.TestCase):
         new = old.copy()
         new[:, 0, 0] = 3.0  # one cell, two days
         new[0, 0, 1] = 0.5  # NaN to a value: changed, not in maxAbsDiff
-        self.assertEqual(lambda_handler._diff(old, new), (2, 2.0))
-        self.assertEqual(lambda_handler._diff(old, old.copy()), (0, 0.0))
+        self.assertEqual(chirps_final._diff(old, new), (2, 2.0))
+        self.assertEqual(chirps_final._diff(old, old.copy()), (0, 0.0))
 
 
 if __name__ == "__main__":

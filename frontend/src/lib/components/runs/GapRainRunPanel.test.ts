@@ -8,7 +8,14 @@ import GapRainRunPanel from './GapRainRunPanel.svelte';
 
 vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
-const text = (body: string) => body.replace(/<!--[\s\S]*?-->/g, '');
+const text = (body: string) => {
+	let s = body;
+	for (let prev = ''; prev !== s; ) {
+		prev = s;
+		s = s.replace(/<!--[\s\S]*?-->/g, '');
+	}
+	return s;
+};
 
 const info = (segments = 2): GapRainInfo =>
 	({

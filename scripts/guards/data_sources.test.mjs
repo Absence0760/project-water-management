@@ -163,7 +163,9 @@ describe('the real tree', () => {
 	it('reads the real FEED_HOSTS and sources', () => {
 		const { hosts, problems } = feedHosts();
 		assert.deepEqual(problems, []);
-		assert.ok(hosts.includes('data.chc.ucsb.edu') && hosts.includes('www.dws.gov.za'), hosts.join(', '));
+		// Whole hostnames, compared exactly: a host that only contains one of these is a different host.
+		const listed = new Set(hosts);
+		for (const host of ['data.chc.ucsb.edu', 'www.dws.gov.za']) assert.ok(listed.has(host), `${host} not in ${hosts.join(', ')}`);
 	});
 
 	it('has a register row for every live host and every data_feed.source', () => {

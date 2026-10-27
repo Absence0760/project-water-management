@@ -68,7 +68,7 @@ describe('applyQm (the rule ingest/ecmwf_qm_fit.py apply keeps; test_ecmwf_qm_fi
 /** A reader giving `day d, cell i` = base[i] + d, with the fit `qm`. */
 const fakeReader =
 	(base: number[], issued: string, qm: EcmwfQm | null = null): EcmwfReader =>
-	async (cells) => ({ issued, qm, values: Array.from({ length: ECMWF_DAYS }, (_, d) => cells.map((_, i) => base[i]! + d)) });
+	async (cells, _today) => ({ issued, qm, values: Array.from({ length: ECMWF_DAYS }, (_, d) => cells.map((_, i) => base[i]! + d)) });
 
 describe('ecmwfForecastFromMirror', () => {
 	// Two 0.05° cells in one 0.1° cell, and one in the next: the mean weights each listed cell.

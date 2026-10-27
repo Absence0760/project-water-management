@@ -34,6 +34,8 @@ class Plan(unittest.TestCase):
         try:
             import chirps_final
         except ImportError:  # backfill_plan is stdlib only; chirps_final needs numpy
+            chirps_final = None
+        if chirps_final is None:
             self.skipTest("chirps_final needs the ingest venv")
         self.assertEqual({p: tuple(int(x) for x in m.split("-")) for p, m in backfill_plan.FIRST_MONTH.items()}, chirps_final.FIRST_MONTH)
 

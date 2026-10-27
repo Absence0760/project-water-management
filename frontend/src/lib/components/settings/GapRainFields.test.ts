@@ -11,7 +11,14 @@ vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: strin
 vi.mock('$app/state', () => ({ page: { url: new URL('http://localhost/') } }));
 vi.mock('$app/env/public', () => ({ PUBLIC_API_URL: 'http://localhost:3001' }));
 
-const text = (body: string) => body.replace(/<!--[\s\S]*?-->/g, '');
+const text = (body: string) => {
+	let s = body;
+	for (let prev = ''; prev !== s; ) {
+		prev = s;
+		s = s.replace(/<!--[\s\S]*?-->/g, '');
+	}
+	return s;
+};
 
 describe('GapRainFields', () => {
 	it('offers the three products, CHIRPS chosen by default, the IMERG switch off and no state line', () => {

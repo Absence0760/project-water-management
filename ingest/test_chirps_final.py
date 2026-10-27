@@ -393,6 +393,12 @@ class Lease(Base):
         with lease.hold(mirror, "rnl", self.clock):
             pass
 
+    def test_a_local_lease_file_is_the_owners_alone(self):
+        mirror = zarrstore.Mirror.from_url(f"file://{self.root}")
+        with lease.hold(mirror, "rnl", self.clock):
+            mode = (self.root / lease.lease_key("rnl")).stat().st_mode & 0o777
+        self.assertEqual(mode & 0o077, 0, oct(mode))  # nothing for group or others, whatever the umask
+
     def test_s3_lease_uses_conditional_writes(self):
         s3 = FakeS3()
         mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)

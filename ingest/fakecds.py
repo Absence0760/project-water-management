@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "fixtures" / "era5land"))
 
-import era5land  # noqa: E402
+import era5request  # noqa: E402
 import make_era5land_fixture as fx  # noqa: E402
 import polite  # noqa: E402
 
@@ -44,16 +44,16 @@ class FakeCds:
     def _gate(self, what, *args):
         self.calls.append((what, *args))
         if self.refuse:
-            raise polite.StopRun(f"{era5land.CDS_URL} ({what})", self.refuse)
+            raise polite.StopRun(f"{era5request.CDS_URL} ({what})", self.refuse)
 
     def submit(self, dataset, request) -> str:
         self._gate("submit", dataset)
-        if dataset != era5land.DATASET:
-            raise era5land.CdsError(f"no dataset {dataset}")
-        ym = era5land.request_month(request)
-        if ym is None or request != era5land.month_request(ym):
-            raise era5land.CdsError(f"not an era5l month request: {request}")
-        key = era5land.month_str(ym)
+        if dataset != era5request.DATASET:
+            raise era5request.CdsError(f"no dataset {dataset}")
+        ym = era5request.request_month(request)
+        if ym is None or request != era5request.month_request(ym):
+            raise era5request.CdsError(f"not an era5l month request: {request}")
+        key = era5request.month_str(ym)
         n = sum(1 for s in self.submits if s == key) + 1
         rid = f"fake-{key}-{n}"
         self.submits.append(key)
@@ -75,7 +75,7 @@ class FakeCds:
 
     def find(self, dataset, ym):
         self._gate("find", dataset)
-        key = era5land.month_str(ym)
+        key = era5request.month_str(ym)
         for rid, job in self.jobs.items():
             if job["month"] == tuple(ym) and key not in self.fail:
                 return rid
@@ -85,7 +85,7 @@ class FakeCds:
         if self.preliminary is not None:
             p = self.preliminary(*ym)
             return None if p is None else bool(p)
-        return (self.today - era5land.month_end(ym)).days < era5land.RECHECK_AFTER_DAYS
+        return (self.today - era5request.month_end(ym)).days < era5request.RECHECK_AFTER_DAYS
 
     def download(self, rid, dest) -> int:
         self._gate("download", rid)

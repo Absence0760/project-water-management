@@ -61,7 +61,6 @@ import era5land  # noqa: E402
 
 # Round 1's names for the single-file path, which now lives in chirps_final.
 ingest_file = chirps_final.ingest_file
-_diff = chirps_final._diff
 REGION_CELLS = chirps_final.REGION_CELLS
 
 PRODUCTS = ("rnl", "sat")
