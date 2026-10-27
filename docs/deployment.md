@@ -1849,16 +1849,13 @@ One Terraform variable, off by default:
 
 ### Turning it on
 
-1. **Two changes outside `infra/dam_observations.tf`, in the data mirror's
-   files (#605's), made before the apply:**
-   - the worker's environment (`infra/jobs.tf`, beside `DWS_WEEKLY`):
-     `DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"`;
-   - the S3 interface endpoint's policy (`infra/packs.tf`, beside
-     `WorkerWritesDwsStationList`): a statement letting the worker role
-     `s3:PutObject` on `${aws_s3_bucket.mirror.arn}/dams/wanted.json`.
-     Without it the worker's write is AccessDenied from the VPC whatever its
-     role allows. The worker's reads under `dams/` are already allowed
-     (`WorkerReadsMirror`), and the fetcher is outside the VPC.
+1. **One change in the data mirror's files (#605's), made before the apply:**
+   the worker's environment (`infra/jobs.tf`, beside `DWS_WEEKLY`):
+   `DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"`. The S3
+   interface endpoint's policy already lets the worker put
+   `dams/wanted.json` (`infra/packs.tf`, `WorkerWritesDamWantedList`); its
+   reads under `dams/` are `WorkerReadsMirror`'s, and the fetcher is outside
+   the VPC.
 2. Load the Waterbodies polygons (below).
 3. Deploy a backend release with migration 249 and the `dams-weekly` mode,
    then apply `dam_observations_enabled = true` (a `terraform plan` first,

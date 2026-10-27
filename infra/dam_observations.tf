@@ -51,9 +51,8 @@ resource "aws_iam_role_policy" "fetcher_dams" {
 
 # The worker's one write: the wanted list. Its reads (the status files and the
 # observation files) are worker_mirror's (ingest.tf, the whole bucket). The S3
-# interface endpoint's policy (packs.tf) must carry the same write, as it does
-# dws/stations.json: that statement is not added here (packs.tf belongs to the
-# data mirror's work, #605), see docs/deployment.md § Dam observations.
+# interface endpoint's policy carries the same write (packs.tf
+# WorkerWritesDamWantedList), as it does dws/stations.json.
 data "aws_iam_policy_document" "worker_dams" {
   statement {
     sid       = "WriteDamsWantedList"

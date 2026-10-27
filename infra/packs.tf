@@ -337,4 +337,15 @@ data "aws_iam_policy_document" "s3_endpoint" {
       identifiers = [aws_iam_role.worker_lambda.arn]
     }
   }
+  # And the dam observations' wanted list (issue #604 R5-A, dam_observations.tf
+  # worker_dams, which the role holds only with dam_observations_enabled).
+  statement {
+    sid       = "WorkerWritesDamWantedList"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.mirror.arn}/dams/wanted.json"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.worker_lambda.arn]
+    }
+  }
 }
