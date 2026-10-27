@@ -1322,6 +1322,32 @@ row names a source, where to read it and the series it merges into:
   4 then re-read those days from the copy, log what really changed in
   `chirps_revision` and refresh each feed's series. Details and bounds:
   [data-model.md § Mirror revisions](./data-model.md#mirror-revisions-245_mirror_revisionsql).
+
+- **The rain data copy (in progress, issue #604).** `backend/src/mirror/`
+  reads and writes our own copy of CHIRPS for the D1 region (10–41° E,
+  35.5–8° S, 620 × 550 cells): Zarr v3 arrays through zarrita (exact pin)
+  from `MIRROR_URL` (`file:///abs/path` locally, `s3://bucket[/prefix]` in
+  production, through `@aws-sdk/client-s3`), float32, gzip, NaN for the sea
+  and for any chunk never written. The finals (`rnl`, `sat`) are laid out
+  (year, day of year[366], lat, lon) in (1, 366, 20, 20) chunks, so index 365
+  stays NaN in a year with no 29 February; the preliminary days (`prelim`,
+  later `gefs/<issue>`) (day, lat, lon) in (1, 110, 124) chunks. Each product
+  has a `manifest.json` beside it (revision, `finalThrough`, `prelimThrough`,
+  the upstream files with a hash of their values, each revision's changes),
+  validated on read and write (`manifest.ts`). zarrita's gzip only decodes,
+  so `store.ts` registers a `node:zlib` codec before any array opens.
+  `readCells(store, product, cells, window)` answers in the fetcher's
+  `CellsResult` shape: a day is `f` when the product's manifest says its
+  finals reach it, a `sat` day after that `p` when the `prelim` manifest's
+  does, else `-`, and on a day read a NaN is no data (-1); a cell outside the
+  region is refused (`MirrorOutsideRegionError`, a format error). Dev, CI and
+  e2e read the committed synthetic copy, `backend/fixtures/mirror/` (~90 KB;
+  the fixture grid's chunks, finals 2023–2025 and preliminary days to
+  2026-02-06, as the synthetic files stood on 2026-02-09), which
+  `pnpm gen:mirror-fixture` writes from the same synthetic GeoTIFFs
+  `FEED_SOURCE=fixtures` serves, so a read from the copy is the files' value
+  bit for bit (`mirror/readCells.test.ts`). Nothing in production imports
+  `mirror/` yet: the worker reads it once R2-C wires `CHIRPS_SOURCE=mirror`.
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed replaces only the days
