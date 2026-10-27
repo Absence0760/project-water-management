@@ -471,7 +471,7 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 
 	it('the worker and the API say which CHIRPS is read, and the worker reads our copy only from its S3 bucket', () => {
 		for (const role of ['worker', 'api'] as const) {
-			for (const v of [undefined, '', 'dyn', 'live']) expect(problemNames(role, prod(role, { CHIRPS_SOURCE: v })), `${role} CHIRPS_SOURCE=${String(v)}`).toContain('CHIRPS_SOURCE');
+			for (const v of ['dyn', 'live', 'CHC']) expect(problemNames(role, prod(role, { CHIRPS_SOURCE: v })), `${role} CHIRPS_SOURCE=${String(v)}`).toContain('CHIRPS_SOURCE');
 		}
 		// Positive control: the API needs no MIRROR_URL either way (it reads the copy's days from mirror_copy).
 		expect(problemNames('api', prod('api', { CHIRPS_SOURCE: 'mirror' }))).toEqual([]);
@@ -488,8 +488,8 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 	});
 
 	it('the worker says where DWS feeds read (store or live) and whether it runs the weekly pass, which needs the mirror bucket', () => {
-		for (const v of [undefined, '', 'dws', 'fixtures']) expect(problemNames('worker', prod('worker', { DWS_SOURCE: v })), `DWS_SOURCE=${String(v)}`).toContain('DWS_SOURCE');
-		for (const v of [undefined, '', 'yes', 'true']) expect(problemNames('worker', prod('worker', { DWS_WEEKLY: v })), `DWS_WEEKLY=${String(v)}`).toContain('DWS_WEEKLY');
+		for (const v of ['dws', 'fixtures']) expect(problemNames('worker', prod('worker', { DWS_SOURCE: v })), `DWS_SOURCE=${String(v)}`).toContain('DWS_SOURCE');
+		for (const v of ['yes', 'true']) expect(problemNames('worker', prod('worker', { DWS_WEEKLY: v })), `DWS_WEEKLY=${String(v)}`).toContain('DWS_WEEKLY');
 		// Positive controls: either source, the pass on or off.
 		for (const v of ['store', 'live']) expect(problemNames('worker', prod('worker', { DWS_SOURCE: v }))).toEqual([]);
 		expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'on' }))).toEqual([]);
@@ -497,6 +497,28 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		for (const v of [undefined, 'file:///tmp/mirror/', 's3://'])
 			expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'on', CHIRPS_SOURCE: 'chc', MIRROR_URL: v })), `MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
 		expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'off', CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
+	});
+
+	// Release before apply: a worker or API released with code that reads the flags starts on the env Terraform last
+	// applied, which has none of them. Unset is today's production behaviour (CHIRPS from CHC, DWS live, no weekly
+	// pass), so it must start; a wrong value is still refused.
+	it('starts on today’s production env without CHIRPS_SOURCE, DWS_SOURCE or DWS_WEEKLY (released before the apply that sets them)', () => {
+		const before = { CHIRPS_SOURCE: undefined, DWS_SOURCE: undefined, DWS_WEEKLY: undefined };
+		expect(problemNames('worker', prod('worker', before))).toEqual([]);
+		expect(problemNames('api', prod('api', { CHIRPS_SOURCE: undefined }))).toEqual([]);
+		for (const v of ['', '  ']) expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: v, DWS_SOURCE: v, DWS_WEEKLY: v })), JSON.stringify(v)).toEqual([]);
+		// Unset means the old values, so the per-feed fetcher is still required: no FEED_FETCHER is refused, as with chc + live.
+		expect(problemNames('worker', prod('worker', { ...before, FEED_FETCHER: undefined }))).toContain('FEED_FETCHER');
+		expect(problemNames('worker', prod('worker', { ...before, FETCH_REQUESTS_QUEUE_URL: undefined }))).toContain('FETCH_REQUESTS_QUEUE_URL');
+		// One flag new and the other unset (its old value) still fetches per feed.
+		expect(problemNames('worker', prod('worker', { ...before, CHIRPS_SOURCE: 'mirror', FEED_FETCHER: undefined }))).toContain('FEED_FETCHER');
+		expect(problemNames('worker', prod('worker', { ...before, DWS_SOURCE: 'store', FEED_FETCHER: undefined }))).toContain('FEED_FETCHER');
+		// The weekly pass off when unset: the mirror bucket may be unset too (CHIRPS from CHC).
+		expect(problemNames('worker', prod('worker', { ...before, MIRROR_URL: undefined }))).toEqual([]);
+		// A wrong value is refused (the reverse of the controls above).
+		expect(problemNames('worker', prod('worker', { ...before, DWS_SOURCE: 'dws' }))).toContain('DWS_SOURCE');
+		expect(problemNames('worker', prod('worker', { ...before, DWS_WEEKLY: 'true' }))).toContain('DWS_WEEKLY');
+		for (const role of ['worker', 'api'] as const) expect(problemNames(role, prod(role, { ...before, CHIRPS_SOURCE: 'live' })), role).toContain('CHIRPS_SOURCE');
 	});
 
 	// Issue #604 R3-C: per-feed fetching retires once CHIRPS reads the copy and DWS the store.

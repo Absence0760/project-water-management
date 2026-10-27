@@ -298,20 +298,20 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { fetcher: optional(publicHttps) }
 	},
 	CHIRPS_SOURCE: {
-		why: 'Which CHIRPS a feed fetch reads (mirror/source.ts, issue #604): chc, CHC’s files through the fetcher, or mirror, our copy read in the worker’s own fetch job (feeds/fromMirror.ts). The API reads it too, only to know whether the Data feeds panel reports the copy (feeds/rainCopy.ts, from the mirror_copy rows the worker records; the API never reaches the copy). Unset follows FEED_SOURCE (chc when live), but production says which, the same on both: Terraform sets it from var.chirps_source (infra/jobs.tf, infra/lambda.tf).',
-		checks: { api: oneOf('chc', 'mirror'), worker: oneOf('chc', 'mirror') }
+		why: 'Which CHIRPS a feed fetch reads (mirror/source.ts, issue #604): chc, CHC’s files through the fetcher, or mirror, our copy read in the worker’s own fetch job (feeds/fromMirror.ts). The API reads it too, only to know whether the Data feeds panel reports the copy (feeds/rainCopy.ts, from the mirror_copy rows the worker records; the API never reaches the copy). Unset follows FEED_SOURCE (chc when live, which production checks), so unset is today’s production behaviour: a release that reads it can go out before the terraform apply that sets it (from var.chirps_source, infra/jobs.tf, infra/lambda.tf) without refusing to start. A value set is checked.',
+		checks: { api: optional(oneOf('chc', 'mirror')), worker: optional(oneOf('chc', 'mirror')) }
 	},
 	MIRROR_URL: {
 		why: 'Where our copy of CHIRPS lives (mirror/source.ts mirrorUrl): s3://<the mirror bucket> (infra/ingest.tf). Unset off Lambda is the committed synthetic copy, which a live process refuses. The worker needs it when CHIRPS_SOURCE=mirror; the ingest Lambdas (the fetcher’s daily ingest, issue #604 R2-B) write it, and Terraform sets it on the fetcher always (infra/feeds.tf), so the fetcher must name the bucket.',
 		checks: { worker: mirrorUrlFor, fetcher: s3Url }
 	},
 	DWS_SOURCE: {
-		why: 'Where a DWS feed fetch reads its station’s days (feeds/fromGaugeRecord.ts, issue #604 R3-B): live, DWS’s site through the fetcher, or store, our gauge_record table in the worker’s own fetch job. Unset follows FEED_SOURCE (live when live), but production says which: Terraform sets it from var.dws_source (infra/jobs.tf), live until the operator has DWS’s written answer and has loaded its reply.',
-		checks: { worker: oneOf('store', 'live') }
+		why: 'Where a DWS feed fetch reads its station’s days (feeds/fromGaugeRecord.ts, issue #604 R3-B): live, DWS’s site through the fetcher, or store, our gauge_record table in the worker’s own fetch job. Unset follows FEED_SOURCE (live when live), today’s production behaviour, so a release can go out before the apply that sets it. Terraform sets it from var.dws_source (infra/jobs.tf), live until the operator has DWS’s written answer and has loaded its reply. A value set is checked.',
+		checks: { worker: optional(oneOf('store', 'live')) }
 	},
 	DWS_WEEKLY: {
-		why: 'on: the worker hands the weekly DWS pass its stations and loads what it fetched (feeds/gaugeRecordLoad.ts), through the mirror bucket, so MIRROR_URL must name it. Terraform sets it from var.dws_weekly_enabled (infra/jobs.tf), with the schedule and the grants.',
-		checks: { worker: oneOf('on', 'off') }
+		why: 'on: the worker hands the weekly DWS pass its stations and loads what it fetched (feeds/gaugeRecordLoad.ts), through the mirror bucket, so MIRROR_URL must name it. Terraform sets it from var.dws_weekly_enabled (infra/jobs.tf), with the schedule and the grants. Unset is off (gaugeRecordLoad.ts), today’s production behaviour, so a release can go out before that apply; a value set is checked.',
+		checks: { worker: optional(oneOf('on', 'off')) }
 	},
 	FEED_FIXTURE_REWRITE: {
 		why: 'Fixtures only (FEED_SOURCE=fixtures): 1 serves some synthetic CHIRPS finals rewritten in place, to watch the re-check locally. The live client never reads it, and the fetcher refuses the fixtures in production.'
