@@ -1625,11 +1625,18 @@ run that finds the day's issue held asks CHC nothing. It runs apart from the
 03:00 preliminary pass because CHC issues at about 08:30 UTC, and the two
 passes together could need more than the fetcher's 120 s. The first run is
 at 08:38 so the forecast feeds, due at 08:45, read the day's issue. A 403
-stops the run, not retried.
+stops the run, not retried, and leaves `gefs/refused.json` in the mirror
+(the time CHC refused): each hourly run is a fresh invocation, so without it
+the next would ask CHC again within the hour. A later run that finds the
+marker dated today asks nothing and logs `stopped: "refused_today"` (with
+`refusedAt`, at warn); the next UTC day's 08:38 run tries again. A marker
+that couldn't be written is logged as `markerFailed` beside the 403. The
+03:00 preliminary pass needs no marker: its rule runs once a day and is
+never retried.
 
 Each run logs `mirror_daily_ingest` with `product: "gefs"` (`copied`,
 `partial` for an issue found half published, `newest`, `stopped`, and for a
-failure `reason`/`detail`) and publishes `MirrorLagDays{Product=gefs}`,
+failure `reason`/`detail`, or `refused_today`) and publishes `MirrorLagDays{Product=gefs}`,
 today minus the newest issue held, as an embedded metric. The alarm
 `mirror-lag-gefs` (essential tier) fires at **2 days** (neither today's nor
 yesterday's issue held, so the forecast feeds reading the copy wait, keeping
@@ -1727,6 +1734,14 @@ before until the operator turns them on:
   above `dws_weekly_lag_alarm_days`, default 10, or no datapoint for two
   days; essential tier).
 
+Release and apply can come in either order. Unset, `CHIRPS_SOURCE`,
+`DWS_SOURCE` and `DWS_WEEKLY` mean what production does today (`chc`,
+`live`, off), so a backend release that reads them starts on the
+environment the last apply left (`backend/src/config/production.ts`); a
+value set is checked, and a wrong one still refuses to start. Unset also
+counts as the old values for the cutover's checks (`FEED_FETCHER=sqs` and
+its queue stay required).
+
 ### Turning it on
 
 1. Send DWS the written data request (#604 operator steps): verified daily
@@ -1737,7 +1752,13 @@ before until the operator turns them on:
    operator's go-ahead for the apply). The first worker tick writes
    `dws/stations.json`; the next 04:00 run fetches every listed station
    (about 2 s each at 1 a second, so ~50 a run inside the fetcher's 120 s;
-   the rest the next day, oldest first) and the tick after loads them.
+   the rest the next day, by last turn, so a station that keeps failing goes
+   behind the others) and the tick after loads them. A station whose page
+   fails (a changed layout, a flow above 100 000 m³/s or a quality code the
+   store refuses, a timeout) is skipped and logged on its own line,
+   `filter message.event = "dws_station_failed"` (`station`, and `detail`
+   naming the check); the others load, and the status is written however
+   the run ends.
    Check: Logs Insights on the fetcher log group,
    `filter message.event = "dws_weekly"`, then
    `filter message.event = "dws_tick"` on the worker's.
@@ -1745,6 +1766,30 @@ before until the operator turns them on:
 4. Apply `dws_source = "store"`. DWS feeds now read the store; their
    series don't change (the store's answer is the page's, test
    `gaugeRecord.db.test.ts`).
+
+**Which stations need the reply first.** A feed reads the store only over
+days some source was asked for (a span): the weekly pass asks for each
+station's newest two years, so a day before that, or in a hole between
+spans, is one nobody has asked DWS for yet. A feed whose window holds such a
+day waits on it (`last_attempt_at` moves, no failure, nothing written, the
+same window next time) rather than reading it as no data and stepping over
+it for good, and fills it once a reply covers it. So before `dws_source =
+"store"`, a station needs DWS's reply covering its feeds' history when any
+of them:
+
+- is still backfilling (its newest day, `last_data_date`, is empty or more
+  than about two years old), or has a `startDate` more than two years back
+  that it hasn't reached: a new feed with no `startDate` starts ten years
+  back, so it too waits on a reply;
+- reads a station that has stopped reporting (its newest day is older than
+  the weekly pass's first window).
+
+A feed that is caught up (its newest day inside the last two years) reads
+the weekly pass's days and needs no reply. To list the stations to ask for:
+`SELECT DISTINCT config->>'station', config->>'startDate', last_data_date
+FROM data_feed WHERE source = 'dws' AND enabled` (as the schema owner),
+those whose `last_data_date` is null or before the first weekly run's
+window.
 
 A run that met HTTP 403, throttling or the ScriptServer page stopped on
 purpose (`message.stopped` is `refused`, `throttled` or `server_error`,

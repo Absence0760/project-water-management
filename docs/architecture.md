@@ -1708,7 +1708,9 @@ EventBridge, daily
   `gefs/index.json`, newest first; the newest 7 are kept and older arrays
   deleted. It runs at 08:38 UTC, just after CHC issues (08:26–08:30) and
   before the forecast feeds fall due at 08:45, then hourly to 11:38 for a
-  late issue; a run that finds the day's issue held asks CHC nothing. With
+  late issue; a run that finds the day's issue held asks CHC nothing, and
+  after a 403 (`gefs/refused.json`, the time CHC refused) neither does any
+  later run that UTC day. With
   `CHIRPS_SOURCE=mirror` a `chirps_gefs` feed_fetch reads that issue at its
   cells in the job (`feeds/fromMirrorGefs.ts`, no fetcher call) and writes
   the forecast the per-feed fetch wrote: the same issue rule, the same mean
@@ -1785,8 +1787,12 @@ feed_fetch (DWS_SOURCE=store) ── gauge_record_current (best source per day) 
   (`sources/dws.ts` `parseDwsRows`), keeping each listed row's quality
   code. It runs daily so the lag metric (`MirrorLagDays{Product=dws}`) is
   published every day, but a station is re-read only once its last good
-  fetch is 6 days old, oldest first, so a long list spreads over days
-  inside the fetcher's 120 s. An HTTP 403, throttling or the ScriptServer
+  fetch is 6 days old, ordered by its last turn (good or failed, never
+  tried first), so a long list spreads over days inside the fetcher's 120 s
+  and a station that keeps failing goes behind the rest. A page past the
+  store's bounds (a flow above 100 000 m³/s, a quality code not 1–8
+  letters or digits) fails that station only, as any format failure does,
+  and the status is written however the run ends. An HTTP 403, throttling or the ScriptServer
   page stops the run at once and is never retried: `dws/status.json` says
   the source is stale and why, the lag grows, and the alarm fires.
 - **Reading the store** (`backend/src/feeds/fromGaugeRecord.ts`, from the
@@ -1795,8 +1801,11 @@ feed_fetch (DWS_SOURCE=store) ── gauge_record_current (best source per day) 
   answer exactly (the listed days laid out from the first, the meta's
   days, gaps, rejected and quality counts), ingested in the job. Days no
   span covers yet wait, as with the CHIRPS copy: with nothing held from the
-  window's first day on, the fetch records only that it looked (no
-  failure, no backoff, the same window next time). Days a span covers with
+  window's first day on, or a day of the window before the earliest span
+  or between two (nobody has asked DWS for it yet: a station only the
+  weekly pass reads holds two years, so an older history waits on DWS's
+  reply), the fetch records only that it looked (no failure, no backoff,
+  the same window next time). Days a span covers with
   no row are DWS's "no data", as the page says it. A backfill window that
   ends before today stops at the store's newest day; the window reaching
   today reads to today, and the year of re-read picks up the next week's
