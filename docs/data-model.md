@@ -3965,7 +3965,7 @@ runbook ([deployment.md § Restoring the database](./deployment.md#restoring-the
 step 6a), which reads it on the old instance and deletes each row again on
 the restored one.
 
-### Reference loads (192_feature_names_reference_load.sql)
+### Reference loads (192_feature_names_reference_load.sql, 248_reference_load_provenance.sql)
 
 `reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
 keyed by `(kind, dataset)`: the reference-bucket object a production load
@@ -3980,8 +3980,30 @@ dataset (a local `pnpm import:*`), so it never outlives the data it
 describes. No foreign key: rivers have no dataset table. Owner-only like
 `erasure_log` (RLS on, no policy, no grant; `catalogue.db.test.ts`
 `OWNER_ONLY`): the migrate Lambda and the import scripts write it as the
-schema owner and the app never reads it
-([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+schema owner, and the app reads it only through `app_reference_provenance()`
+(248, below; [deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+
+**Provenance and the tile archives (248, issue #604 R3-D).** Seven nullable
+columns, for any kind: `upstream_url` (https only), `upstream_version`,
+`upstream_etag` and `upstream_last_modified` (what the operator's download
+saw upstream), `licence` (from the code's table, `TILE_ARCHIVES`, never a
+file), and `originals`, a JSON list of `{key, sha256, bytes}`, the original
+downloads kept in the reference bucket under `originals/<dataset>/…`. Null
+is unknown, never empty. A table load records none of them yet (its dataset
+row carries its source and version). The kind `tiles` records the archives
+the tiles bucket serves, one row each, its dataset the archive's name
+(`basemap`, `fonts`, `terrain`, `water`) and `source_key` its served key
+(`tiles/terrain.pmtiles`, `tiles/fonts/` for the glyph ranges; a CHECK,
+`reference_load_tiles_archive`, holds each name to its key); `source_sha256`
+is our SHA-256 of the archive (of the glyph files' listing for the fonts).
+`backend/scripts/tiles-upload.ts` writes it (`recordTileProvenance`, an
+upsert that returns the record it replaced): locally into the dev database,
+in production through `load-reference.yml`'s `tiles` kind. The table stays
+owner-only; the app's one read is `app_reference_provenance()` (SECURITY
+DEFINER, EXECUTE for `water_app` only), which returns the kind, dataset,
+version, upstream date, licence and when it was recorded, never a key,
+hash or ETag. The Map's dataset lines use it (`withProvenance`: the DEM
+grid's, the delineation sheet's and the trace sheet's labels).
 
 ### The job purge clears links (148_job_purge_clears_links.sql)
 
