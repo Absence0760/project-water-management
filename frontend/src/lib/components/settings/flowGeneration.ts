@@ -1,4 +1,4 @@
-// Settings → Flow generation (issue #553 round 3, docs/ui.md § Settings &
+// Settings → Model selection for flow generation (issue #553 round 3, docs/ui.md § Settings &
 // calibration, docs/model.md §2.4h, §2.4i, §2.5): the one choice of how
 // natural flow is made. Fragmentation is settings.unitRain off (absent, null
 // or `catchment`): GR4J once on the catchment rain, its flow split to the

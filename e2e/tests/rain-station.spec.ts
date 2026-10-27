@@ -24,7 +24,7 @@ test('Add data adds a rainfall station with its MAP and coordinates, and the Dat
 	// Today's catchment rain says where a station is picked instead.
 	await expect(kind).toHaveAccessibleDescription(/For one gauge’s record with its own MAP, pick Rainfall — station\./);
 	await kind.selectOption({ label: 'Rainfall — station' });
-	await expect(kind).toHaveAccessibleDescription(/each can serve one or more hydrological units: Settings → Flow generation says which\. Until a station is assigned to the catchment there, runs read catchment rainfall as before/);
+	await expect(kind).toHaveAccessibleDescription(/each can serve one or more hydrological units: Settings → Model selection for flow generation says which\. Until a station is assigned to the catchment there, runs read catchment rainfall as before/);
 	const name = dialog.getByLabel('Station name', { exact: true });
 	await expect(name).toHaveValue('');
 	const station = dialog.getByRole('group', { name: 'The station' });

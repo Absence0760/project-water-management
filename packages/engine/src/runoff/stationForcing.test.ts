@@ -646,8 +646,8 @@ describe('fit provenance', () => {
 		expect(unitRainFingerprintChanged(fit, unitRainFingerprintOfSummary(runModel(x).summary.unitRain, runModel(x).summary.stations))).toBe(false);
 	});
 
-	// Settings → Flow generation (issue #553 round 3): the form has no run, so the settings alone must say a method switch and a unit's station change.
-	describe('the Flow generation form, without a run', () => {
+	// Settings → Model selection for flow generation (issue #553 round 3): the form has no run, so the settings alone must say a method switch and a unit's station change.
+	describe('the Model selection for flow generation form, without a run', () => {
 		const perUnit = catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'S' } }, sites: SITES } });
 		const perUnitRecord = fitRecordFromReport(calibrate(perUnit, { budget: 10, seed: 1 }), ctxOf(perUnit));
 

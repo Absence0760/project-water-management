@@ -11,15 +11,24 @@
 import { calibrationHref } from '#lib/components/calibration/links.js';
 
 /**
- * The heading of the panel that heads the page (#set-judge, EwrHeadlineField.svelte, issue #444): which EWR the
- * results are judged by. "Judge results by" until issue #586 E14 (R4-B), which read as jargon: judged by what?
+ * The heading of the page's second panel (#set-judge, EwrHeadlineField.svelte, issue #444), right under the model
+ * selection: which EWR the results are judged by. "Judge results by" until issue #586 E14 (R4-B), which read as
+ * jargon: judged by what?
  */
 export const JUDGE_HEADING = 'EWR the results are judged by';
 
+/** The heading of the page's first panel, its lead card (#set-share): how natural flow is made (issue #614). */
+export const FLOW_GENERATION_HEADING = 'Model selection for flow generation';
+
 export const SETTINGS_SECTIONS = [
-	// The page's first panel (issue #444): it reads results and changes none. Its own link, in a group with no
-	// name above the first task's, so the index lists every panel and Find a setting finds it (issue #586 R4-B: it
-	// had no link, and a search for "judged" found nothing).
+	// The lead group, with no name, above the first task's (issue #614). First the model selection: how rain becomes
+	// natural flow, Fragmentation or Per unit (issue #553 round 3; "Flow generation" until issue #614, in a "Runoff"
+	// group of its own). The id is the old Flow share panel's, so its links still land. The runoff parameters and
+	// their fit moved to Calibration (issue #586 round 3).
+	{ id: 'set-share', label: FLOW_GENERATION_HEADING, group: null },
+	// Then the EWR the results are judged by (issue #444): it reads results and changes none, so it comes after the
+	// model input (issue #614; it headed the page before). Its own link, so the index lists every panel and Find a
+	// setting finds it (issue #586 R4-B: it had no link, and a search for "judged" found nothing).
 	{ id: 'set-judge', label: JUDGE_HEADING, group: null },
 	// Data & rain: what the model runs on.
 	{ id: 'set-period', label: 'Simulation period', group: 'Data & rain' },
@@ -32,9 +41,6 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-restrict', label: 'Drought restrictions', group: 'Demand & supply' },
 	// The reporting window and the annual assurance threshold (issue #521, moved from EWR): how supply results are read.
 	{ id: 'set-reporting', label: 'Reporting', group: 'Demand & supply' },
-	// Runoff: how rain becomes natural flow, Fragmentation or Per unit (issue #553 round 3); the id is the Flow share
-	// panel's, so its links still land. The runoff parameters and their fit moved to Calibration (issue #586 round 3).
-	{ id: 'set-share', label: 'Flow generation', group: 'Runoff' },
 	// EWR & Reserve: what must stay in the river.
 	{ id: 'set-ewr', label: 'EWR', group: 'EWR & Reserve' },
 	{ id: 'set-reserve', label: 'Reserve rule tables', group: 'EWR & Reserve' },

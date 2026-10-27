@@ -12,7 +12,7 @@
 	const loadEwrDailySource = () => import('./EwrDailySourceFields.svelte');
 	// Rain for each unit (settings.unitRain, issue #482): out of the tab's chunk, for the same reason; its areal body its own.
 	const loadUnitRain = () => loadSections().then((m) => ({ default: m.UnitRainFields }));
-	// Flow generation → Per unit's station table (issue #553 round 3): in the same chunk, drawn whenever Per unit is chosen.
+	// Model selection for flow generation → Per unit's station table (issue #553 round 3): in the same chunk, drawn whenever Per unit is chosen.
 	const loadFlowGenUnits = () => loadSections().then((m) => ({ default: m.FlowGenerationUnits }));
 	// Split the EWR between units by (settings.ewrSplit, issue #553): out of the tab's chunk, for the same reason.
 	const loadEwrSplit = () => loadSections().then((m) => ({ default: m.EwrSplitFields }));
@@ -65,7 +65,7 @@
 	import { outcomesError } from '#lib/components/outcomes/outcomeSettings.js';
 	import { outlookError } from '#lib/components/outlook/settings.js';
 	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
-	import { settingsElsewhere, settingsNavGroups } from './sections';
+	import { FLOW_GENERATION_HEADING, settingsElsewhere, settingsNavGroups } from './sections';
 	import { periodError, reportingError } from './blockers';
 	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { settingsSummaries, type SummaryInput } from './summaries';
@@ -115,7 +115,7 @@
 		seriesKinds?: string[] | null;
 		/** The catchment rain series a run reads, whose station MAP Rain for each unit reads (issue #553): null = none, undefined = not loaded. */
 		catchmentRain?: CatchmentStation | null;
-		/** The project's catchment rain series, the rainfall stations Flow generation → Per unit assigns (issue #553); undefined = not loaded. */
+		/** The project's catchment rain series, the rainfall stations Model selection for flow generation → Per unit assigns (issue #553); undefined = not loaded. */
 		rainSeries?: (Pick<SeriesMeta, 'id' | 'name' | 'kind' | 'station'> & { siteNodeId?: string | null })[];
 		readonly: boolean;
 		/** A proposal saved to the model on the server (the units' MAP from the grid): the workspace reloads it. */
@@ -132,7 +132,7 @@
 	const cal = $derived(s.calibration);
 	const hiLoSum = $derived((s.hiLoSplit.hi || 0) + (s.hiLoSplit.lo || 0));
 	const dateError = $derived(periodError(s));
-	// Flow generation (issue #553 round 3): the radio is settings.unitRain on or off, as the checkbox it replaced was, so
+	// Model selection for flow generation (issue #553 round 3): the radio is settings.unitRain on or off, as the checkbox it replaced was, so
 	// no stored project changes. The one switched off is kept until saved, so switching back brings it back as it was.
 	const flowMethod = $derived(flowMethodOf(s.unitRain));
 	const stations = $derived(rainSeries ? stationOptions(rainSeries) : undefined);
@@ -291,9 +291,141 @@
      inside the panels would otherwise be nested forms (invalid HTML) whose submit reached this one. -->
 <div class="settings-form explain-scope" class:explained={explainSwitch.on}>
 
+	<!-- The explanations under the fields (issue #468), above the first panel since it has explanations too: off, the controls come first; each field keeps its ⓘ tip,
+	     and the hidden text stays its description for screen readers. Remembered on this device. -->
+	<ExplainSwitch />
+
+	<!-- Model selection for flow generation (issue #553 round 3; "Flow generation" until issue #614) ------------->
+	<!-- First on the page (issue #614: the client's main modelling choice, above the EWR the results are judged by).
+	     How natural flow is made: one choice, Fragmentation or Per unit (settings.unitRain off or `perUnit`, docs/model.md
+	     §2.4h, §2.5), with each method's settings under it. Its id stays set-share, so the links to the flow share and the
+	     panel's notes (settingTarget('share')) still land here. The lead card (data-lead): an accent frame and a tinted
+     head, and the two methods as choice cards, so the main modelling choice stands out (issue #614). -->
+	<section class="panel lead" id="set-share" aria-labelledby="share-h" data-lead>
+		<div class="panel-head">
+			<h2 id="share-h">{FLOW_GENERATION_HEADING}</h2>
+			<NotesDrawer projectId={project.id} target={settingTarget('share')} />
+		</div>
+		<p class="summary" data-testid="summary-share">{summaries['set-share']}</p>
+		<!-- Which "flow" panel is which (issue #586 E14): this one makes natural flow from rain; Calibration's Flow
+		     calibration sets the runoff model's parameters. A where-line, not an explanation, so it stays with the
+		     explanations off, as the comparison band's line under EWR does. -->
+		<p class="hint" data-testid="flowgen-where">
+			The runoff model’s parameters are fitted on Calibration, under <a href={calibrationHref(null, 'set-flow')}>Flow calibration</a>.
+		</p>
+		<fieldset class="plain flowgen-method" data-testid="flowgen-method" aria-describedby="st-flowgen-h">
+			<legend>How natural flow is made <HelpTip key="settings.unitRain" /></legend>
+			<!-- Each method a choice card: its name, then what it does in plain words, always shown (its name alone said
+			     nothing). The radio stays a radio; its label covers the card, so a click anywhere on it picks it. -->
+			<div class="radios">
+				{#each FLOW_METHODS as m (m.value)}
+					<span class="opt">
+						<label class="check">
+							<input type="radio" name="st-flowgen" value={m.value} checked={flowMethod === m.value} disabled={readonly} onchange={() => setFlowMethod(m.value)} aria-describedby="st-flowgen-{m.value}" />
+							{m.label}
+						</label>
+						<span class="opt-what" id="st-flowgen-{m.value}" data-testid="flowgen-what">{m.short}</span>
+					</span>
+				{/each}
+			</div>
+			<span class="hint explain" id="st-flowgen-h">
+				{FLOW_METHODS.find((m) => m.value === flowMethod)?.help} GR4J’s parameters depend on the rain they were fitted on, so switching method needs a refit.
+			</span>
+		</fieldset>
+		{#if fitMismatch}
+			<!-- A state line, not an explanation (it stays when the explanations are off): the fit is the other method's. -->
+			<p class="alert alert-warning" role="status" data-testid="flowgen-refit">
+				Parameters not fitted for this method: the GR4J parameters were fitted under {methodLabel(fitMismatch)}. <a href="?tab=calibration#set-fit">Fit the parameters</a>
+				again on Calibration before relying on the results.
+			</p>
+		{/if}
+		{#if flowMethod === 'perUnit'}
+			<div class="sub-card" data-testid="flowgen-stations-card">
+				<h3 class="sub first">Each unit’s rainfall station <HelpTip key="settings.rainStations" /></h3>
+				<Lazy load={loadFlowGenUnits}>
+					{#snippet children(FlowGenerationUnits)}
+						<FlowGenerationUnits bind:value={s.rainStations} {readonly} nodes={editor?.model.nodes ?? []} {stations} />
+					{/snippet}
+				</Lazy>
+			</div>
+			<div class="sub-card" data-testid="flowgen-chain-card">
+				<!-- What a unit without a station runs on (settings.unitRain, issue #482): the rule from before stations. -->
+				<Lazy load={loadUnitRain}>
+					{#snippet children(UnitRainFields)}
+						<UnitRainFields bind:value={s.unitRain} {readonly} nodes={editor?.model.nodes ?? []} {catchmentRain} />
+					{/snippet}
+				</Lazy>
+				{#if !readonly && editor}
+					<!-- Each unit's MAP from the MAP grid: saves straight to the model, then the workspace reloads it. -->
+					<Lazy load={loadUnitMap}>
+						{#snippet children(UnitMapProposal)}<UnitMapProposal projectId={project.id} modelDirty={editor.dirty} {onModelChanged} />{/snippet}
+					</Lazy>
+				{/if}
+			</div>
+		{/if}
+		<div class="sub-card" data-testid="flowgen-share-card">
+			<h3 class="sub first">{flowMethod === 'perUnit' ? 'Flow share: the EWR between units' : 'Flow share'}</h3>
+			<!-- What the shares split depends on the method (issue #553, docs/model.md §2.4h, §2.5): Fragmentation, GR4J's one
+			     run's flow and the EWR; Per unit, each unit makes its own runoff, so they split the EWR and the land-cover low-flow threshold. -->
+			{#if flowMethod === 'perUnit'}
+				<!-- A state line, not an explanation: it stays when the explanations are off, as the areal rain note does. -->
+				<p class="hint" role="note" data-testid="share-hint" data-unit-rain="on">
+					{#if s.ewrSplit === 'naturalMar'}
+						<!-- The EWR split by each unit's natural MAR (issue #553 round 4): the share then splits neither the flow nor the EWR. -->
+						Each unit makes its own runoff and the EWR is split by each unit’s natural MAR (below); the flow share now splits only the land cover’s low-flow threshold between units.
+					{:else}
+						Each unit makes its own runoff; the flow share now splits only the EWR and the land cover’s low-flow threshold between units, not the flow.
+					{/if}
+				</p>
+			{:else}
+				<p class="hint explain" data-testid="share-hint" data-unit-rain="off">
+					GR4J runs once on the catchment rain; the flow share splits its flow and the EWR between units. To give each unit its own runoff, choose Per unit above.
+				</p>
+			{/if}
+			<div class="fields">
+				<div class="field">
+					<span class="lbl"><label for="st-method">Flow share method</label><HelpTip key="settings.flowShareMethod" /></span>
+					<select id="st-method" disabled={readonly} bind:value={s.flowShareMethod} aria-describedby="st-method-h">
+						{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
+					</select>
+					<span class="hint explain" id="st-method-h">{method?.help} Each hydrological unit's resulting share is in the <a href={withParam(page.url, 'grid', 'nodes')}>hydrological unit table</a>'s In use column.</span>
+					<FieldHistoryLine field="settings:flowShareMethod" />
+				</div>
+				<!-- Only the high/low MAP method reads the split, so it shows only then (issue #174); the saved value is kept. -->
+				{#if s.flowShareMethod === 'hiLo'}
+					<fieldset class="plain hilo" data-testid="hilo-split">
+						<legend>High/low MAP split <HelpTip key="settings.hiLoSplit" /></legend>
+						<div class="form-row">
+							<div class="field">
+								<label for="st-hi">High <span class="u">(%)</span></label>
+								<NumberInput id="st-hi" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.hi} />
+							</div>
+							<div class="field">
+								<label for="st-lo">Low <span class="u">(%)</span></label>
+								<NumberInput id="st-lo" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.lo} />
+							</div>
+							<div class="field">
+								<span class="label">Sum</span>
+								<span class="sum" class:warn={Math.abs(hiLoSum - 1) > 1e-6}>{fmtPct(hiLoSum, 1)}</span>
+							</div>
+						</div>
+						<span class="hint explain">Should add up to 100 %. Default 50 / 50; an imported workbook brings its own.</span>
+					</fieldset>
+				{/if}
+			</div>
+			<!-- Split the EWR between units by (settings.ewrSplit, engine ≥ 1.94.0, issue #553 round 4): the flow share above or each unit's natural MAR. -->
+			<Lazy load={loadEwrSplit}>
+				{#snippet children(EwrSplitFields)}
+					<EwrSplitFields value={s.ewrSplit} perUnit={flowMethod === 'perUnit'} {readonly} onchange={(v) => (s.ewrSplit = v)} />
+				{/snippet}
+			</Lazy>
+			<FieldHistoryLine field="settings:ewrSplit" />
+		</div>
+	</section>
+
 	<!-- EWR the results are judged by (issue #444; "Judge results by" until issue #586 E14): first, as the client
-	     asked; it reads results and changes none. The index's first link, in a group of its own with no name
-	     (sections.ts); the EWR page's "Change" links here (#set-judge). -->
+	     asked, until issue #614 put the model selection above it; it reads results and changes none. In the lead
+	     group with no name, after the model selection (sections.ts); the EWR page's "Change" links here (#set-judge). -->
 	<EwrHeadlineField
 		bind:value={s.ewrHeadline}
 		ewrRules={s.ewrRules}
@@ -303,10 +435,6 @@
 		nodes={editor?.model.nodes ?? []}
 		{readonly}
 	/>
-
-	<!-- The explanations under the fields (issue #468): off, the controls come first; each field keeps its ⓘ tip,
-	     and the hidden text stays its description for screen readers. Remembered on this device. -->
-	<ExplainSwitch />
 
 	<!-- Period ------------------------------------------------------------------------>
 	<!-- Blank (the default) runs over the whole rain record, so the blank fields say that rather than DayInput's
@@ -668,131 +796,6 @@
 		</div>
 	</section>
 
-	<!-- Flow generation (issue #553 round 3) -------------------------------------------->
-	<!-- How natural flow is made: one choice, Fragmentation or Per unit (settings.unitRain off or `perUnit`, docs/model.md
-	     §2.4h, §2.5), with each method's settings under it. Its id stays set-share, so the links to the flow share and the
-	     panel's notes (settingTarget('share')) still land here. -->
-	<section class="panel" id="set-share" aria-labelledby="share-h">
-		<div class="panel-head">
-			<h2 id="share-h">Flow generation</h2>
-			<NotesDrawer projectId={project.id} target={settingTarget('share')} />
-		</div>
-		<p class="summary" data-testid="summary-share">{summaries['set-share']}</p>
-		<!-- Which "flow" panel is which (issue #586 E14): this one makes natural flow from rain; Calibration's Flow
-		     calibration sets the runoff model's parameters. A where-line, not an explanation, so it stays with the
-		     explanations off, as the comparison band's line under EWR does. -->
-		<p class="hint" data-testid="flowgen-where">
-			The runoff model’s parameters are fitted on Calibration, under <a href={calibrationHref(null, 'set-flow')}>Flow calibration</a>.
-		</p>
-		<fieldset class="plain flowgen-method" data-testid="flowgen-method" aria-describedby="st-flowgen-h">
-			<legend>How natural flow is made <HelpTip key="settings.unitRain" /></legend>
-			<!-- Each method's name, then what it does in plain words, always shown (its name alone said nothing). -->
-			<div class="radios">
-				{#each FLOW_METHODS as m (m.value)}
-					<span class="opt">
-						<label class="check">
-							<input type="radio" name="st-flowgen" value={m.value} checked={flowMethod === m.value} disabled={readonly} onchange={() => setFlowMethod(m.value)} aria-describedby="st-flowgen-{m.value}" />
-							{m.label}
-						</label>
-						<span class="opt-what" id="st-flowgen-{m.value}" data-testid="flowgen-what">{m.short}</span>
-					</span>
-				{/each}
-			</div>
-			<span class="hint explain" id="st-flowgen-h">
-				{FLOW_METHODS.find((m) => m.value === flowMethod)?.help} GR4J’s parameters depend on the rain they were fitted on, so switching method needs a refit.
-			</span>
-		</fieldset>
-		{#if fitMismatch}
-			<!-- A state line, not an explanation (it stays when the explanations are off): the fit is the other method's. -->
-			<p class="alert alert-warning" role="status" data-testid="flowgen-refit">
-				Parameters not fitted for this method: the GR4J parameters were fitted under {methodLabel(fitMismatch)}. <a href="?tab=calibration#set-fit">Fit the parameters</a>
-				again on Calibration before relying on the results.
-			</p>
-		{/if}
-		{#if flowMethod === 'perUnit'}
-			<div class="sub-card" data-testid="flowgen-stations-card">
-				<h3 class="sub first">Each unit’s rainfall station <HelpTip key="settings.rainStations" /></h3>
-				<Lazy load={loadFlowGenUnits}>
-					{#snippet children(FlowGenerationUnits)}
-						<FlowGenerationUnits bind:value={s.rainStations} {readonly} nodes={editor?.model.nodes ?? []} {stations} />
-					{/snippet}
-				</Lazy>
-			</div>
-			<div class="sub-card" data-testid="flowgen-chain-card">
-				<!-- What a unit without a station runs on (settings.unitRain, issue #482): the rule from before stations. -->
-				<Lazy load={loadUnitRain}>
-					{#snippet children(UnitRainFields)}
-						<UnitRainFields bind:value={s.unitRain} {readonly} nodes={editor?.model.nodes ?? []} {catchmentRain} />
-					{/snippet}
-				</Lazy>
-				{#if !readonly && editor}
-					<!-- Each unit's MAP from the MAP grid: saves straight to the model, then the workspace reloads it. -->
-					<Lazy load={loadUnitMap}>
-						{#snippet children(UnitMapProposal)}<UnitMapProposal projectId={project.id} modelDirty={editor.dirty} {onModelChanged} />{/snippet}
-					</Lazy>
-				{/if}
-			</div>
-		{/if}
-		<div class="sub-card" data-testid="flowgen-share-card">
-			<h3 class="sub first">{flowMethod === 'perUnit' ? 'Flow share: the EWR between units' : 'Flow share'}</h3>
-			<!-- What the shares split depends on the method (issue #553, docs/model.md §2.4h, §2.5): Fragmentation, GR4J's one
-			     run's flow and the EWR; Per unit, each unit makes its own runoff, so they split the EWR and the land-cover low-flow threshold. -->
-			{#if flowMethod === 'perUnit'}
-				<!-- A state line, not an explanation: it stays when the explanations are off, as the areal rain note does. -->
-				<p class="hint" role="note" data-testid="share-hint" data-unit-rain="on">
-					{#if s.ewrSplit === 'naturalMar'}
-						<!-- The EWR split by each unit's natural MAR (issue #553 round 4): the share then splits neither the flow nor the EWR. -->
-						Each unit makes its own runoff and the EWR is split by each unit’s natural MAR (below); the flow share now splits only the land cover’s low-flow threshold between units.
-					{:else}
-						Each unit makes its own runoff; the flow share now splits only the EWR and the land cover’s low-flow threshold between units, not the flow.
-					{/if}
-				</p>
-			{:else}
-				<p class="hint explain" data-testid="share-hint" data-unit-rain="off">
-					GR4J runs once on the catchment rain; the flow share splits its flow and the EWR between units. To give each unit its own runoff, choose Per unit above.
-				</p>
-			{/if}
-			<div class="fields">
-				<div class="field">
-					<span class="lbl"><label for="st-method">Flow share method</label><HelpTip key="settings.flowShareMethod" /></span>
-					<select id="st-method" disabled={readonly} bind:value={s.flowShareMethod} aria-describedby="st-method-h">
-						{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
-					</select>
-					<span class="hint explain" id="st-method-h">{method?.help} Each hydrological unit's resulting share is in the <a href={withParam(page.url, 'grid', 'nodes')}>hydrological unit table</a>'s In use column.</span>
-					<FieldHistoryLine field="settings:flowShareMethod" />
-				</div>
-				<!-- Only the high/low MAP method reads the split, so it shows only then (issue #174); the saved value is kept. -->
-				{#if s.flowShareMethod === 'hiLo'}
-					<fieldset class="plain hilo" data-testid="hilo-split">
-						<legend>High/low MAP split <HelpTip key="settings.hiLoSplit" /></legend>
-						<div class="form-row">
-							<div class="field">
-								<label for="st-hi">High <span class="u">(%)</span></label>
-								<NumberInput id="st-hi" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.hi} />
-							</div>
-							<div class="field">
-								<label for="st-lo">Low <span class="u">(%)</span></label>
-								<NumberInput id="st-lo" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.lo} />
-							</div>
-							<div class="field">
-								<span class="label">Sum</span>
-								<span class="sum" class:warn={Math.abs(hiLoSum - 1) > 1e-6}>{fmtPct(hiLoSum, 1)}</span>
-							</div>
-						</div>
-						<span class="hint explain">Should add up to 100 %. Default 50 / 50; an imported workbook brings its own.</span>
-					</fieldset>
-				{/if}
-			</div>
-			<!-- Split the EWR between units by (settings.ewrSplit, engine ≥ 1.94.0, issue #553 round 4): the flow share above or each unit's natural MAR. -->
-			<Lazy load={loadEwrSplit}>
-				{#snippet children(EwrSplitFields)}
-					<EwrSplitFields value={s.ewrSplit} perUnit={flowMethod === 'perUnit'} {readonly} onchange={(v) => (s.ewrSplit = v)} />
-				{/snippet}
-			</Lazy>
-			<FieldHistoryLine field="settings:ewrSplit" />
-		</div>
-	</section>
-
 	<!-- Flow calibration, Calibration record, Fit the parameters and the WR2012 check moved to the Calibration page
 	     (issue #586 round 3, CalibrationSettings.svelte): the same draft, saved by the same save bar. -->
 
@@ -1110,33 +1113,85 @@
 		align-items: center;
 		min-height: 36px;
 	}
-	/* Flow generation's two methods, one a line, each name followed by what it does (issue #553; issue #586 E14).
-	   On a phone the words wrap under the name. */
+	/* The page's lead card (issue #614): Model selection for flow generation, the main modelling choice, framed in
+	   the accent with its head tinted, so it reads as the page's first decision rather than one panel among many.
+	   Tokens only (--accent, --accent-soft carry their dark values). The head spans the panel's padding. */
+	.panel.lead {
+		border: 2px solid var(--accent);
+	}
+	.panel.lead > .panel-head {
+		margin: -1rem -1.1rem 0.75rem;
+		padding: 0.75rem 1.1rem;
+		background: var(--accent-soft);
+		border-bottom: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+		border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
+	}
+	/* The summary line's pull toward a bare heading (.settings-form .summary) touched the tinted band's rule. */
+	.panel.lead > .panel-head + .summary {
+		margin-top: 0;
+	}
+	/* Its two methods as choice cards (issue #614), side by side where they fit and one under the other on a phone:
+	   each name, then what it does under it, lined up with the name's words (past the radio's box, its margins and
+	   the gap). The picked card takes the accent. */
 	.radios {
 		display: grid;
-		gap: 0;
-		container: flowgen / inline-size;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+		gap: 0.5rem;
+		margin-top: 0.25rem;
 	}
 	.opt {
-		display: flex;
-		align-items: center;
-		column-gap: 0.5rem;
+		position: relative;
+		/* The lifted radio's z-index orders only inside its card (ui-playbook § 4, stretched links). */
+		isolation: isolate;
+		display: block;
+		padding: 0.35rem 0.75rem 0.6rem;
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius);
+		background: var(--surface);
+	}
+	.opt:has(input:checked) {
+		border-color: var(--accent);
+		box-shadow: inset 0 0 0 1px var(--accent);
+		background: var(--accent-soft);
+	}
+	/* An editor's card says it is one target: the pointer, and a stronger outline on hover (a viewer's radios are disabled). */
+	.opt:has(input:enabled) {
+		cursor: pointer;
+	}
+	.opt:has(input:enabled):hover:not(:has(input:checked)) {
+		border-color: var(--border-input);
+	}
+	/* One focus ring, the card's, clear of the picked card's accent frame. */
+	.opt:has(input:focus-visible) {
+		outline: 2px solid var(--focus);
+		outline-offset: 3px;
+	}
+	.opt input:focus-visible {
+		outline: none;
+	}
+	.opt > .check {
+		font-weight: 600;
+	}
+	/* The label covers the card, so the card is one target; the radio stays above that cover, so a click or a
+	   pointer on the radio itself reaches it directly. The cost, as with a card's stretched link (ui-playbook § 4):
+	   the method's words can't be selected. Don't move them into the label to fix that: they would join the
+	   radio's name, which is the method's name alone (its words are its description, aria-describedby). */
+	.opt > .check::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+	}
+	.opt > .check > input {
+		position: relative;
+		z-index: 1;
 	}
 	.opt-what {
+		display: block;
+		padding-left: calc(21px + 0.4rem);
+		margin-top: -0.35rem;
 		color: var(--text-2);
 		font-size: var(--font-sm);
-	}
-	/* Narrow (a phone): the words under the name, lined up with it (the radio's box, its margins and the gap). */
-	@container flowgen (max-width: 30rem) {
-		.opt {
-			display: block;
-		}
-		.opt-what {
-			display: block;
-			padding-left: calc(21px + 0.4rem);
-			margin-top: -0.35rem;
-			padding-bottom: 0.35rem;
-		}
 	}
 	.flowgen-method + .alert {
 		margin-top: 0.5rem;

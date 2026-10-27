@@ -1,4 +1,4 @@
-// Settings → Flow generation → Per unit → Units without a station (settings.unitRain, issue
+// Settings → Model selection for flow generation → Per unit → Units without a station (settings.unitRain, issue
 // #482): the switch, the gauge MAP, the MAP period in whole years, and the
 // check that blocks Save, which must agree with the API's (engine
 // unitRainError). The form itself: UnitRainFields.test.ts and

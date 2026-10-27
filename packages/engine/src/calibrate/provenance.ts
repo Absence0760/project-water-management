@@ -613,7 +613,7 @@ export interface FitRecordStatus {
 	 */
 	catchmentStationChanged?: true;
 	/**
-	 * The flow generation method (Model settings → Flow generation, issue #553,
+	 * The flow generation method (Model settings → Model selection for flow generation, issue #553,
 	 * docs/model.md §2.4h, §2.5) differs from the one the fit ran under:
 	 * Fragmentation (one GR4J run on the catchment rain, split by flow share;
 	 * settings.unitRain absent, null or `catchment`) or Per unit (GR4J per land
@@ -865,7 +865,7 @@ export function fitFlowMethod(record: Pick<FitRecord, 'forcing'>): FlowGeneratio
 	return record.forcing.unitRain ? 'perUnit' : 'fragmentation';
 }
 
-/** The flow generation method settings.unitRain chooses (Model settings → Flow generation, issue #553): Per unit for `perUnit`, else Fragmentation. */
+/** The flow generation method settings.unitRain chooses (Model settings → Model selection for flow generation, issue #553): Per unit for `perUnit`, else Fragmentation. */
 export function flowMethodOf(unitRain: unknown): FlowGenerationMethod {
 	return resolveUnitRain(unitRain, [])?.mode === 'perUnit' ? 'perUnit' : 'fragmentation';
 }
@@ -1104,7 +1104,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	}
 	if (status.methodChanged) {
 		out.push(
-			'Parameters not fitted for this method: the fit ran under the other flow generation method (Model settings → Flow generation: Fragmentation, one GR4J run on the catchment rain, or Per unit, GR4J on each unit’s own rain). GR4J’s parameters depend on the rain they were fitted on: refit before relying on them.'
+			'Parameters not fitted for this method: the fit ran under the other flow generation method (Model settings → Model selection for flow generation: Fragmentation, one GR4J run on the catchment rain, or Per unit, GR4J on each unit’s own rain). GR4J’s parameters depend on the rain they were fitted on: refit before relying on them.'
 		);
 	}
 	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged && !status.methodChanged) {

@@ -1621,6 +1621,26 @@ Interaction details that bit:
   check a change to it in CI's Linux Chromium, not only on a Mac (e2e
   against the `mcr.microsoft.com/playwright` image's `run-server`, through
   `PW_TEST_CONNECT_WS_ENDPOINT` and `PW_TEST_CONNECT_EXPOSE_NETWORK='<loopback>'`).
+- **A choice between methods is choice cards; a page's main decision is its
+  lead card** (issue #614, Model settings' Model selection for flow
+  generation). Each option is a `<span class="opt">` card holding the radio's
+  `<label class="check">` (radio and name) and, outside the label, what the
+  option does (`aria-describedby`), so the radio's name stays the option's
+  name alone. The label stretches over the card (`::after`, `inset: 0`), the
+  radio lifted above it (`position: relative; z-index: 1`, the card
+  `isolation: isolate`), so a click anywhere picks it and Playwright's
+  `check()` still reaches the radio; the cost is that the words can't be
+  selected. The picked card takes the accent (`:has(input:checked)`), the
+  card draws the one focus ring (`:has(input:focus-visible)`, the radio's own
+  off), and an editor's card shows the pointer and a hover border
+  (`:has(input:enabled)`), a viewer's neither. Cards sit side by side where
+  two fit (`repeat(auto-fit, minmax(min(100%, 18rem), 1fr))`) and stack on a
+  phone. The lead panel is `.panel.lead` with `data-lead`: a 2 px `--accent`
+  frame and its head tinted `--accent-soft`, the head's negative margin
+  matching `.panel`'s padding, and the summary line under it without the
+  usual pull toward the heading (it touched the band's rule). One per page.
+  Click a card's words in a test with `page.mouse.click` at their box: the
+  label lies over them, so a locator click on them reports it intercepted.
 - **A sticky element sticks only inside its parent.** Settings' "On this
   page" menu sat inside the form, so it scrolled away at Data feeds, the
   first panel after the form; the Data page's `.data-page` wrapper ends

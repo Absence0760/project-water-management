@@ -2866,7 +2866,7 @@ Approve it in the `production` environment. Check on the Map tab of the
 client's project: **MAP grid** on lists "WAAS-SWCape-2007" with its source
 line (the authors' credit line whole), and the map's credits show "MAP
 grid: WAAS (2007), Beuster Clarke & Associates", linking to
-`/data-sources#waas-map`. Then Settings → Flow generation, under Per
+`/data-sources#waas-map`. Then Settings → Model selection for flow generation, under Per
 unit, **MAP from the grid** proposes each unit's MAP from it, beside the typed values,
 to check them. A wider box later is a reload under the same label (a load
 replaces its dataset).

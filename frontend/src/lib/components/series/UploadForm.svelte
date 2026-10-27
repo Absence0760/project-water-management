@@ -459,7 +459,7 @@
 		{#if station}
 			<span class="hint muted" id={id('kind-h')} data-testid="station-kind-hint">
 				A rainfall station is one rain gauge’s daily record, with its own MAP and, if known, where it stands. A catchment can have several, and each can
-				serve one or more hydrological units: Settings → Flow generation says which. Until a station is assigned to the catchment there, runs read
+				serve one or more hydrological units: Settings → Model selection for flow generation says which. Until a station is assigned to the catchment there, runs read
 				catchment rainfall as before: the first catchment rain series by name, which may be a station.
 			</span>
 		{:else if kind === STATION_KIND}

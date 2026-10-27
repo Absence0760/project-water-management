@@ -320,7 +320,7 @@
 			</span>
 			{#if s.unitRain?.mode === 'perUnit'}
 				<!-- A state line, not an explanation: it stays when the explanations are off. -->
-				<span class="hint" role="note" data-testid="areal-rain-unit-note">When <a href="?tab=settings#set-share">Flow generation</a> on Model settings runs each unit on its own rain (Per unit), it applies only to the units that fall back to the catchment rain.</span>
+				<span class="hint" role="note" data-testid="areal-rain-unit-note">When <a href="?tab=settings#set-share">Model selection for flow generation</a> on Model settings runs each unit on its own rain (Per unit), it applies only to the units that fall back to the catchment rain.</span>
 			{/if}
 			{#if areal}
 				<!-- Its own chunk (issue #521): most projects leave the correction off. -->

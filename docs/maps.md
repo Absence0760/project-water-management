@@ -2524,7 +2524,7 @@ the points show without their values), then the grid's source line.
 
 ## MAP for each unit
 
-Settings → Flow generation, under Per unit, **MAP from the grid** (issue #482
+Settings → Model selection for flow generation, under Per unit, **MAP from the grid** (issue #482
 follow-up; `geo/unitMap.ts`, `geo/unitMapRoutes.ts`): each land unit's mean
 annual precipitation from one of the loaded MAP grids ([§ MAP
 grid](#map-grid)), proposed beside what its form holds, and written to the

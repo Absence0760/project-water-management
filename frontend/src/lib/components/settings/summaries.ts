@@ -128,7 +128,7 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			`rain threshold ${fmtNum(s.calibration?.rainThresholdMm ?? 0, 1, true)} mm`,
 			s.lakeEvapFactorMonthly ? 'dam evaporation by month' : `dam evaporation ${fmtNum(s.lakeEvapFactor ?? 0, 2, true)} × A-pan`
 		].join(' · '),
-		// Flow generation (issue #553 round 3): the method, then what the flow share splits under it;
+		// Model selection for flow generation (issue #553 round 3): the method, then what the flow share splits under it;
 		// the EWR split (round 4) only when it isn't the flow share.
 		'set-share':
 			s.unitRain?.mode === 'perUnit'

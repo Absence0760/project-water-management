@@ -5162,7 +5162,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       correction by hand in the app.
 
 - [ ] **Rainfall station settings with no field yet** (issue #553 round 3,
-      2026-10-24). Settings → Flow generation sets each land unit's station,
+      2026-10-24). Settings → Model selection for flow generation sets each land unit's station,
       scaling, correcting station and a station's site
       (`settings.rainStations.units`, `.sites`), but three parts round 2's
       engine runs are API-only: `catchment` (Fragmentation's average catchment

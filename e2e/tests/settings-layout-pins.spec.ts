@@ -16,11 +16,13 @@ import { expect, test } from '../support/fixtures.ts';
 import { anySaveBar, isProjectPatch, openCalibration, openSettings, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
 
 /**
- * Every panel on the page, top to bottom, by its anchor and its heading (word for word, without its ⓘ tip): EWR the
- * results are judged by ("Judge results by" until issue #586 E14) heads the page, the form's panels follow,
- * Automatic runs last. settings/sections.ts lists them; SettingsTab.svelte sets the ids.
+ * Every panel on the page, top to bottom, by its anchor and its heading (word for word, without its ⓘ tip): Model
+ * selection for flow generation heads the page (issue #614; "Flow generation" before, after Reporting), EWR the
+ * results are judged by ("Judge results by" until issue #586 E14) under it, the form's panels follow, Automatic runs
+ * last. settings/sections.ts lists them; SettingsTab.svelte sets the ids.
  */
 const PANELS: [id: string, heading: string][] = [
+	['set-share', 'Model selection for flow generation'],
 	['set-judge', 'EWR the results are judged by'],
 	['set-period', 'Simulation period'],
 	['set-rain', 'Rain gaps'],
@@ -28,7 +30,6 @@ const PANELS: [id: string, heading: string][] = [
 	['set-demand', 'Demand'],
 	['set-restrict', 'Drought restrictions'],
 	['set-reporting', 'Reporting'],
-	['set-share', 'Flow generation'],
 	['set-ewr', 'EWR'],
 	['set-reserve', 'Reserve rule tables'],
 	['set-outcomes', 'Outcome matrix'],
@@ -62,11 +63,18 @@ const CAL_PANELS: [id: string, heading: string][] = [
 const INNER: [id: string, heading: string, panel: string][] = [['set-evaporation', 'Evaporation from the map', 'set-flow']];
 
 /**
- * The side index at 1440 px: its groups by task, in page order, each link to its panel's anchor. The panel that heads
- * the page has a group of its own with no name (issue #586 R4-B: with no link, Find a setting couldn't find it).
+ * The side index at 1440 px: its groups by task, in page order, each link to its panel's anchor. The two panels that
+ * head the page share a lead group with no name (issue #614; issue #586 R4-B: with no link, Find a setting couldn't
+ * find the judge panel). The Runoff group, Flow generation's alone, went with it (issue #614).
  */
 const INDEX: [group: string | null, links: [label: string, id: string][]][] = [
-	[null, [['EWR the results are judged by', 'set-judge']]],
+	[
+		null,
+		[
+			['Model selection for flow generation', 'set-share'],
+			['EWR the results are judged by', 'set-judge']
+		]
+	],
 	[
 		'Data & rain',
 		[
@@ -82,11 +90,6 @@ const INDEX: [group: string | null, links: [label: string, id: string][]][] = [
 			['Drought restrictions', 'set-restrict'],
 			['Reporting', 'set-reporting']
 		]
-	],
-	[
-		'Runoff',
-		// The four that set up a fit moved to Calibration (round 3).
-		[['Flow generation', 'set-share']]
 	],
 	[
 		'EWR & Reserve',
@@ -135,6 +138,9 @@ test('the panels, their anchors and the side index, in page order', async ({ pag
 		expect(y, `${heading} sits below the panel before it`).toBeGreaterThan(above);
 		above = y;
 	}
+	// The model selection leads (issue #614): the form's first heading is its own, and its panel the page's first.
+	await expect(page.locator('.settings-form h2').first()).toHaveText('Model selection for flow generation', { useInnerText: true });
+	await expect(page.locator('.settings-form .panel').first()).toHaveId('set-share');
 	// Nothing follows the form now: no panels that save on their own, and no line saying they do.
 	await expect(page.getByText(/save as you change them/)).toHaveCount(0);
 	for (const [old] of MOVED) await expect(page.locator(`#${old}`)).toHaveCount(0);
@@ -186,7 +192,7 @@ test('Calibration’s Set up the fit: the settings panels and their anchors, in 
 	await expect(page.locator('#cal-setup .settings-form.explain-scope')).toHaveCount(1);
 });
 
-test('in Per unit flow generation, the units’ rain and MAP from the grid are cards of Flow generation', async ({ page, owner }) => {
+test('in Per unit flow generation, the units’ rain and MAP from the grid are cards of Model selection for flow generation', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Settings pins per unit');

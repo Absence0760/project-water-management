@@ -1,7 +1,7 @@
 // Rainfall stations and what Flow share splits (issue #553; docs/ui.md §
 // Model settings, § Data; docs/model.md §2.4h, §2.5). On the sample
 // model and its catchment rain series (synthetic):
-// - Settings → Flow generation's flow-share line follows the method:
+// - Settings → Model selection for flow generation's flow-share line follows the method:
 //   Fragmentation, GR4J's one run's flow and the EWR; Per unit, only the EWR
 //   and the land cover's low-flow threshold (issue #553 round 3).
 // - Units without a station reads the gauge's MAP from the catchment rain station:
@@ -14,7 +14,7 @@ import { addMember, seedRunnableProject, updateSettings } from '../support/api.t
 import { expect, test } from '../support/fixtures.ts';
 import { openSettings, saveSettings, showExplanations } from '../support/settings.ts';
 
-test('Flow generation’s flow share says what it splits, by the method, and stays as a state line under Per unit', async ({ page, owner }) => {
+test('Model selection for flow generation’s flow share says what it splits, by the method, and stays as a state line under Per unit', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Flow share hint');
 	await openSettings(page, project.id);

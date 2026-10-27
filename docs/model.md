@@ -2448,7 +2448,9 @@ input or not, and compares the output to the bit. An unusable setting
 (`unitRainError`) runs the catchment rain with a warning.
 
 **In Settings** (issue #553 round 3, [ui.md § Settings &
-calibration](./ui.md)) this is the **Flow generation** method:
+calibration](./ui.md)) this is the **Model selection for flow generation** method (the
+panel was named Flow generation until issue #614, which put it first on
+Model settings):
 **Fragmentation** is `unitRain` absent, null or `catchment`; **Per unit** is
 `perUnit`. The radio writes the same setting the earlier "Runoff from each
 unit's own rain" checkbox did, so the move changed no stored project and no
@@ -3024,7 +3026,7 @@ An assignment without a station id is dropped with a warning
 `MAP_MM_MIN`–`MAP_MM_MAX`), which falls back to the units' mean.
 
 **Where it is set** (issue #553 round 3, [ui.md § Settings &
-calibration](./ui.md)): Settings → Flow generation, with Per unit chosen,
+calibration](./ui.md)): Settings → Model selection for flow generation, with Per unit chosen,
 lists every land unit with its **Station** (the project's stations, or *No
 station*, which keeps the unit on §2.4h's chain; satellite rain is never an
 option, CHIRPS only fills gaps), **Scale to unit MAP** (`scaleToMap`) with
@@ -3238,7 +3240,7 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`); under
   runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0) a land unit's runoff
   is its own GR4J runoff instead, and the share still splits the EWR (and
-  the land cover's low-flow threshold, §2.5a): Settings → Flow generation
+  the land cover's low-flow threshold, §2.5a): Settings → Model selection for flow generation
   says which, by the method chosen (Fragmentation or Per unit, issue #553)
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`);
   from engine 1.94.0 `frag[f]` here is the unit's EWR share, which is its flow
@@ -6732,6 +6734,19 @@ the known limitations keep ISO days on purpose: the evidence report is a
 signed document matching its hashed manifest (ui-playbook § Dates, issue
 #521 round 3), the run report prints ISO (#586 D9), and the limitations are
 docs/engine-audit.md's own words, hashed into every sign-off and pack.
+
+**Flow generation renamed (engine ≥ 1.101.0, issue #614).** The panel that
+chooses Fragmentation or Per unit is now **Model selection for flow
+generation**, first on Model settings, so the warnings that name it say
+"Model settings → Model selection for flow generation": the "Parameters not
+fitted for this method" fit caveat (`calibrate/provenance.ts`) and the
+over-allocated flow shares' error (`network/shares.ts`). `places.ts` keeps
+each panel's former headings (`FORMER_PANELS`, `share: ['Flow
+generation']`), so `placesIn` still finds an older run's "Model settings →
+Flow generation" (1.98.0 to 1.100.0) and "Settings → Flow generation"
+(before 1.98.0) and links them to the panel, and `warningInCurrentWords`
+reads both as the new name. Only words changed: no figure moves, but a
+1.100.0 run made again at 1.101.0 has another results digest.
 
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`

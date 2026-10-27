@@ -291,7 +291,7 @@ export function areaRowInfo(it: AreaItem<Pick<SeriesMeta, 'id' | 'kind' | 'name'
 		(ctx.settings?.rainStations?.units?.[u.id] && !perUnit
 			? 'Runs split the catchment’s flow by the flow share (per-unit rain is off), so its station isn’t read.'
 			: perUnit
-				? 'No rainfall station assigned: its rain follows Model settings → Flow generation → Units without a station.'
+				? 'No rainfall station assigned: its rain follows Model settings → Model selection for flow generation → Units without a station.'
 				: 'Runs split the catchment’s flow by the flow share; this unit has no rain of its own.');
 	return {
 		kind: 'Hydrological unit',
