@@ -1543,7 +1543,14 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
      next worker tick: the API reads the copy's days from the `mirror_copy`
      rows the worker records, and needs no `MIRROR_URL` and no access to the
      bucket. Until that tick the panel says the copy hasn't been checked
-     yet.
+     yet. That first tick also runs the **baseline**, by itself: with no
+     revision of the copy recorded yet, it marks every cached final in the
+     region stale (CHC may have rewritten some before the copy existed,
+     and the copy's `changes` don't go back that far), in parts over a few
+     ticks, and the feeds read them again from the copy over the next
+     fetches. Nothing to do but expect `mirror_revision_partial` then
+     `mirror_revision_applied` in the worker's logs ([data-model.md §
+     Mirror revisions](./data-model.md#mirror-revisions-245_mirror_revisionsql-246_mirror_revision_partssql)).
   5. **Re-enable** the CHIRPS feeds paused since the 403s (#571), and watch
      the first day: feeds catch up from the copy in minutes, and none shows
      **Copy behind** or Failing.

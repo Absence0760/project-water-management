@@ -4229,8 +4229,8 @@ it marks the cached finals stale, and the re-check above does the rest.
 
 | Table | Holds |
 | --- | --- |
-| `mirror_manifest` | One row per `origin` and `product` (primary key): `revision` (≥ 1), the revision of the copy the cache was last brought up to; `applied_at`; `manifest` (`jsonb`, the manifest as applied, `changes` and all: the record of the revision). No foreign keys |
-| `mirror_change` (246) | One row per entry of a revision's `changes` an apply marked: `origin`, `product`, `target_revision` (the revision it was applied for) and `idx` (its place among that revision's entries to mark) as primary key; the entry's own `revision`, `day_from`/`day_to`, the grid cells `r0`–`r1`, `c0`–`c1`; `applied_at` (indexed with origin and product). What a resumed apply skips, and what a fetch queued before `applied_at` checks its finals against. Pruned 30 days after its revision is recorded. No foreign keys |
+| `mirror_manifest` | One row per `origin` and `product` (primary key): `revision` (≥ 1), the revision of the copy the cache was last brought up to; `applied_at`; `manifest` (`jsonb`, the manifest as applied, its `changes` cut to the entries that apply marked, as the tick passes them: the record of the revision). No foreign keys |
+| `mirror_change` (246) | One row per run of days of an entry of a revision's `changes` an apply marked (an entry larger than a part is split by days, a row per run): `origin`, `product`, `target_revision` (the revision it was applied for), `idx` (the entry's place among that revision's entries to mark) and `day_from` as primary key; the entry's own `revision`, the run's `day_from`/`day_to`, the grid cells `r0`–`r1`, `c0`–`c1`; `applied_at` (indexed with origin and product). What a resumed apply skips, and what a fetch queued before `applied_at` checks its finals against. Pruned 30 days after its revision is recorded. No foreign keys |
 | `mirror_copy` (246) | One row per `origin` and `product` (`sat`, `rnl` or `prelim`; primary key): the copy's manifest as the worker's tick last read it: `revision`, `final_through` (null for `prelim`), `prelim_through` (null for `rnl`), `seen_at`. What the API shows of the copy (only the worker can reach it). No foreign keys |
 
 - **RLS**: reference data like `chirps_cell_year`: SELECT for any
@@ -4244,8 +4244,8 @@ it marks the cached finals stale, and the re-check above does the rest.
   nothing and returns the stored one with `applied = false` (a tick that
   raced another, or a manifest read before the last apply). Otherwise each
   entry of `changes` (a list of the manifest's entries; those at or below
-  the stored revision are skipped, so the caller may pass the whole list)
-  with `cellsChanged > 0` marks stale (`chirps_cell_stale`) **every cached
+  the stored revision are skipped, though the tick passes only the newer
+  ones, below) with `cellsChanged > 0` marks stale (`chirps_cell_stale`) **every cached
   final** of its days inside the manifest's `region`, or inside the entry's
   own optional `region` `{w,s,e,n}` (which must sit inside the manifest's);
   then the row takes the new revision and manifest, and `marked` counts the
@@ -4277,18 +4277,56 @@ it marks the cached finals stale, and the re-check above does the rest.
     no later than the manifest's, ISO `days` running forwards over at most
     366 days from the product's first day to today (UTC), a non-negative
     integer `cellsChanged` and a non-negative `maxAbsDiff`. (245 also
-    refused a call of more than 4000 days; 246 applies it in parts.)
+    refused a call of more than 4000 days; 246 applies it in parts.) The
+    1000-entry bound is on what one call is given, not on the manifest:
+    `changes` only grows (neither `ingest/manifest.py` nor the daily run
+    trims it), so the tick passes only the entries above the stored
+    revision, and a backlog of more than 1000 in batches (below).
   - **In parts (246).** The function now returns `(revision, applied,
     marked, remaining)`. The entries to mark (above the stored revision,
-    `cellsChanged > 0`, in list order) are taken up to 4000 days a call
-    (at least one entry; each is at most 366 days); each call marks its
-    part, logs the entries in `mirror_change`, and commits. `remaining` > 0
-    means call again (`revision` is still the old one, `applied` false);
-    the last part records the revision (`applied`, `remaining` 0). A call
-    skips the entries already logged for the same revision, if they match
-    the list at their places (else that log is dropped and it starts over,
-    re-marking: harmless), so a worker that dies between parts resumes on
-    the next tick, and one that dies inside a part rolls it back whole.
+    `cellsChanged > 0`, in list order) are taken day by day, up to **4000
+    days** and **1,000,000 estimated cell-days** a call
+    (`MIRROR_PART_DAYS`, `MIRROR_PART_CELL_DAYS` in
+    `feeds/mirrorRevision.ts`), and always at least one day; an entry that
+    doesn't fit is split by days, and each run of days marked is a
+    `mirror_change` row. Each call marks its part, logs its runs, and
+    commits. `remaining` (entries not wholly marked) > 0 means call again
+    (`revision` is still the old one, `applied` false); the last part
+    records the revision (`applied`, `remaining` 0). A call skips what is
+    already logged for the same revision when it is a prefix of this
+    call's entries, run after run (each entry's runs back to back from
+    its first day, each entry whole before the next, the same revision and
+    cells; else that log is dropped and it starts over, re-marking:
+    harmless), and goes on from the day after the last run, so a worker
+    that dies between parts resumes on the next tick, inside an entry too,
+    and one that dies inside a part rolls it back whole.
+  - **Why a cell-day budget (246).** The days bound alone didn't bound the
+    work: a part's stale rows are its days times every cached final cell
+    of the region, so 4000 days over a few thousand cached cells is tens of
+    millions of rows in one statement. Past the worker's time (300 s, the
+    tick's own 60 s) the part rolls back, logs nothing, and the next tick
+    tries the same part again, for ever. So each call counts the
+    `chirps_cell_year` rows the cache holds inside the region, by year
+    (one grouped index scan), and estimates a day as that year's count: an
+    upper bound on its stale rows (it counts preliminary and empty days
+    too). A million rows is seconds on the minimal tier's database, and
+    with 3000 cached cells still 333 days a part.
+  - **The baseline (246).** With no revision stored (the first manifest of
+    an origin and product the cache sees: the cutover to
+    `CHIRPS_SOURCE=mirror`), the entries are checked but not what is
+    marked: the call marks **every cached final in the region** instead,
+    one entry per year the cache holds a cell of, the whole region, in the
+    same parts, then records the revision, so it happens once. Why: the
+    cache holds finals read from CHC's own files; CHC may have rewritten
+    some before the copy existed, which the copy holds revised, but its
+    `changes` start with the copy's own history, and with the copy as
+    source no fetch HEADs CHC's files any more (`claimRecheck`). Without
+    the baseline such a final would never be read again. It costs one
+    re-read from the copy of each cached final, which clears the mark and
+    logs nothing where the value is the same. A cell first cached during
+    the baseline was read from the copy (or is caught by the race rule
+    below), and a year first cached in the middle changes the entries, so
+    the log starts over (bounded: one restart per year).
     **Why parts, not one transaction:** CHC has rewritten years at once (the
     2024 dailies, the annual NetCDFs); a whole `rnl` rewrite is 16,000 days.
     One transaction would hold every one of those days' file rows, stalling
@@ -4355,9 +4393,18 @@ it marks the cached finals stale, and the re-check above does the rest.
   `CHIRPS_SOURCE=mirror`: per product one manifest request at most (a
   conditional GET on S3, a stat on a `file://` copy), nothing more when its
   ETag (or size and mtime) is the one this process already handled; it
-  records the manifest, and for `rnl`/`sat` applies a newer revision in
-  parts within the tick's time (60 s, 10 parts per product), the rest next
-  tick. A failure is logged (`mirror_revision_failed`, or
+  records the manifest (without its `changes`), and for `rnl`/`sat`
+  applies a newer revision in parts within the tick's time (60 s, 10
+  parts per product), the rest next tick. What each call is given is
+  `nextBatch(manifest, stored)`: with no stored revision no entries (the
+  baseline); else only the entries above the stored revision, all of them
+  to the manifest's revision when they are at most 1000, or else the first
+  ones up to the last revision they hold whole, recorded as that revision
+  (the stored manifest says so), the next batch going on from it. One
+  revision of more than 1000 entries on its own (never seen: CHC's largest
+  rewrite is about 45 entries) is passed as one entry per year it touches,
+  from its first to its last changed day that year over the whole region:
+  more marked than changed, but never stuck. A failure is logged (`mirror_revision_failed`, or
   `mirror_revision_busy` on a lock timeout) and retried next tick; the rest
   of the tick goes on. With `CHIRPS_SOURCE=mirror` a fetch HEADs none of
   CHC's files for the `chc` origin (`claimRecheck`): the copy's revisions
@@ -4365,12 +4412,18 @@ it marks the cached finals stale, and the re-check above does the rest.
 - `feeds/mirrorRevision.db.test.ts` checks the access (positive controls),
   what is marked and what isn't, that the re-check then claims the marked
   days, the revision rules and every bound, a revision of more than 4000
-  days in parts and resumed after a crash, the race both ways (with
-  positive controls), the HEAD guard and `mirror_copy`;
-  `jobs/handlers/mirror-tick.db.test.ts` the tick end to end (nothing with
-  `chc`; a revision marks, the feed re-reads, its series changes with a
-  History event; the same revision again changes nothing; `mirror_copy`
-  recorded, a new month too).
+  days in parts and resumed after a crash (inside an entry too), an entry
+  split by the cell-day budget over 3000 cached cells, the baseline (every
+  cached final in the region once; the next revision only its changes),
+  the race both ways (with positive controls), the HEAD guard and
+  `mirror_copy`; `jobs/handlers/mirror-tick.db.test.ts` the tick end to
+  end (nothing with `chc`; the baseline on first sight marks the finals
+  read from CHC, the feed re-reads them, the second tick does nothing; a
+  revision marks, the feed re-reads, its series changes with a History
+  event; a baseline over several parts moves on tick after tick; a
+  1500-entry list with five new entries; a backlog of 1400 in two
+  batches; `mirror_copy` recorded, a new month too);
+  `jobs/handlers/mirror-tick.test.ts` `nextBatch`.
 
 ### Feed days (031_feed_days.sql)
 
