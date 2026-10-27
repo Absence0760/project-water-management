@@ -8,9 +8,13 @@
 // Fixed in time, unlike the file fixture (which re-dates itself to today): the
 // copy is as the files stood on MIRROR_FIXTURE.today, so finals through
 // 2025-12-31 (2023–2025, one leap year) and preliminary sat days through
-// 2026-02-06. Only the chunks holding the fixture's 8 × 6 grid are written,
-// each with the cells the files cover; every other chunk is unwritten (NaN),
-// which costs nothing. src/mirror/fixture.test.ts regenerates it into a
+// 2026-02-06. Only the chunks holding the fixture's 8 × 6 grid and the band
+// of the same size just south of it are written, each with the cells the
+// files cover; every other chunk is unwritten (NaN), which costs nothing. The
+// band holds one land copy of every cell of the grid's repeating pattern
+// (the files repeat it, with no sea, over their whole cover), so a feed read
+// in fixtures mode anywhere in the cover reads its value from there
+// (src/feeds/fromMirror.ts fixtureSourceCell). src/mirror/fixture.test.ts regenerates it into a
 // temporary directory and compares it with this one by content (the gzip
 // bytes depend on the zlib), so it fails until you re-run this after changing
 // the fixture files, the layout or this script.
@@ -96,7 +100,8 @@ export async function buildMirrorFixture(dir: string): Promise<void> {
 	const store: MirrorStore = openStore(new URL(`file://${dir.endsWith('/') ? dir : `${dir}/`}`).href);
 	const sample = JSON.parse(readFileSync(`${FIXTURE_DIR}chirps-sample.json`, 'utf8')) as SampleFixture;
 	const step = sample.grid.scale;
-	const grid = boxCells(sample.grid, step);
+	// The grid and the band of its size south of it (fixtureSourceCell reads a cover cell's value there).
+	const grid = boxCells({ ...sample.grid, height: sample.grid.height * 2 }, step);
 	const cover = boxCells(sample.cover, step);
 	const http = fixtureHttp(() => MIRROR_FIXTURE.today);
 	const read = async (url: string, pts: { lat: number; lon: number }[]) => {
