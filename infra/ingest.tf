@@ -370,6 +370,8 @@ resource "aws_lambda_function" "ingest" {
       MIRROR_URL     = "s3://${aws_s3_bucket.mirror.bucket}"
       FEED_SOURCE    = "live"
       INGEST_CONTACT = var.ingest_contact
+      # The CDS key's secret, read by ERA5-Land runs (era5land.tf); an ARN, not the key.
+      CDS_KEY_SECRET_ARN = aws_secretsmanager_secret.cds_key.arn
     }
   }
 
