@@ -231,7 +231,11 @@ const READ_ONLY = new Set([
 	'chirps_revision',
 	// The revision of our CHIRPS copy the cache was brought up to (245_mirror_revision): written only by
 	// app_mirror_apply_revision, from the worker's session with no user.
-	'mirror_manifest'
+	'mirror_manifest',
+	// The entries of a revision of the copy an apply marked, and how far each product of the copy runs (246_mirror_revision_parts):
+	// written only by app_mirror_apply_revision and app_mirror_record_copy, from the worker's session with no user.
+	'mirror_change',
+	'mirror_copy'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
