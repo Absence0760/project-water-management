@@ -7,13 +7,14 @@
 // fixes, read from computed styles: the overlay tokens, a disabled main
 // button, the map's controls, the help pictures; and a badge's case.
 // The canvas (uPlot) line charts on Runs & results, Data, EWR,
-// Compare and Hydrological units are held to the same 3:1 (series, lane
-// strips, legend swatches) and their axis labels to 4.5:1, with a positive
+// Compare, Hydrological units and the Dams tab's Seen from space are held to
+// the same 3:1 (series, lane strips, legend swatches) and their axis labels to 4.5:1, with a positive
 // control on a real chart and one on a drawn canvas (issue #521, round 6).
 // Synthetic data only.
 import type { Page } from '@playwright/test';
 import { createProject, createRun, putModel, putSeries, sampleModel, seedRunnableProject, syntheticFlow, updateSettings } from '../support/api.ts';
 import { expectNonTextContrast, nonTextContrast } from '../support/contrast.ts';
+import { seedObservedDam } from '../support/damObserved.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { boundaryGeoJson, openMap, uploadThroughSheet } from '../support/map.ts';
 import { openNodeForm } from '../support/network.ts';
@@ -148,6 +149,21 @@ test.describe('canvas charts', () => {
 				await openRiver(page, id);
 				await drawCharts(page, 1);
 				await expectNonTextContrast(page, { within: 'main' });
+			});
+
+			test('Dams, Seen from space: the modelled area, the views, the full area and the flag strips are at 3:1', async ({ page, owner }) => {
+				void owner;
+				// Seen full, seen empty and (against this run) disagree: all three strips drawn (issue #604 R5-B).
+				const { project, upper } = await seedObservedDam(page.request, `Contrast dam observed ${colorScheme}`);
+				await page.goto(`/projects/${project.id}?tab=dams&dam=${upper.id}`);
+				const box = page.getByTestId('dam-observed');
+				await expect(box).toHaveAttribute('data-ready', 'true');
+				await box.locator('details.fold > summary').click();
+				await expect(box).toHaveAttribute('data-ready', 'true');
+				const chart = box.locator('figure.chart');
+				await expect(chart).toHaveAttribute('data-lanes', '3');
+				await drawCharts(page, 2);
+				await expectNonTextContrast(page, { within: '[data-testid="dam-observed"]' });
 			});
 
 			test('Compare and Hydrological units: both runs, the difference, demand and supply are at 3:1', async ({ page, owner }) => {

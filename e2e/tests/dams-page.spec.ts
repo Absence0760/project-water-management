@@ -405,10 +405,12 @@ test('a card’s Edit dam opens its node sheet, Back returns to Dams with the pi
 	await chartReady(page);
 	await expect(page.getByRole('heading', { level: 2, name: /^Storage: Lower farm/ })).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Each dam' })).toBeAttached();
-	// The h3s are parts of the chart's panel: the dam seen from space (issue #604 R5-B), the picked dam's unit's
-	// assurance of supply (issue #444), then what the register and the map propose for the dam (moved into the panel 2026-10-13).
-	await expect(page.locator('.dams-page h3')).toHaveText(['Seen from space', 'Assurance of supply: Lower farm', /^Proposed from the register and the map/]);
-	await expect(page.locator('.chart-panel h3')).toHaveCount(3);
+	// The h3s are parts of the chart's panel: the picked dam's unit's assurance of supply (issue #444), then what the
+	// register and the map propose for the dam (moved into the panel 2026-10-13). The dam seen from space (issue #604
+	// R5-B) is a one-line fold named by its own line, with no heading, so the panel fits a 1280×800 window.
+	await expect(page.locator('.dams-page h3')).toHaveText(['Assurance of supply: Lower farm', /^Proposed from the register and the map/]);
+	await expect(page.locator('.chart-panel h3')).toHaveCount(2);
+	await expect(page.getByTestId('dam-observed').locator('details.fold > summary')).toContainText('Seen from space:');
 
 	await card(page, 'Lower farm').getByRole('link', { name: 'Edit dam: Lower farm' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=network&edit=${lowerId}&section=dam$`));

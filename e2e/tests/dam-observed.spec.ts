@@ -1,92 +1,76 @@
 // Dams seen from space (issue #604 R5-B; docs/ui.md § Dams and § Farmer view).
 // A unit's dam outline on the map with satellite views loaded the way the
-// worker loads them (249's functions, e2e/support/db.ts): the Dams tab's
-// "Seen from space" fold under the picked dam's storage chart says how many
-// clear views were compared and how many disagree; opened, it says the
+// worker loads them (249's functions, e2e/support/damObserved.ts): the Dams
+// tab's "Seen from space" fold under the picked dam's storage chart says how
+// many clear views were compared and how many disagree; opened, it says the
 // Waterbodies polygon is merged with a neighbour, draws the run's surface
-// area beside the views with the flags as lanes, and lists every view, with
-// the credit. A dam with no outline says so. The farmer's dam page says when
-// a satellite last saw the dam clearly, against its area when full, with the
-// credit. The chart's figures are read from its labels and table, never its
-// pixels. Invented data only.
+// area beside the views with the flags as lanes (the axis making room for
+// them under 0 ha), and lists the newest views, with the credit. A dam with
+// no outline says so, and a viewer is told an editor draws one. A long record
+// shows its newest ten views. The farmer's dam page says when a satellite last
+// saw the dam clearly, its area against its area when full, or that there is
+// no clear view yet, and shows nothing for a dam with no outline. The chart's
+// figures are read from its labels and table, never its pixels. Invented
+// data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { acceptInvites, createRun, putModel, seedRunnableProject } from '../support/api.ts';
-import { plantDamObservations } from '../support/db.ts';
-import { API_URL } from '../support/env.ts';
+import { acceptInvites, addMember } from '../support/api.ts';
+import { manyViews, seedObservedDam } from '../support/damObserved.ts';
+import { API_URL, WEB_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { box } from '../support/map.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 
-const FULL_M2 = 50_000;
-/** Inside the run (1 Oct 2021, 120 days): seen full, seen empty, a plain view, and one under 90 % clear. */
-const VIEWS = [
-	{ date: '2021-10-20', wetAreaM2: FULL_M2, pctObserved: 100 },
-	{ date: '2021-11-15', wetAreaM2: 0, pctObserved: 100 },
-	{ date: '2021-12-10', wetAreaM2: 20_000, pctObserved: 97 },
-	{ date: '2021-12-20', wetAreaM2: 5_000, pctObserved: 40 }
-];
-
 const box1 = (page: Page) => page.getByTestId('dam-observed');
-
-/** A project whose Upper farm has a 50 000 m² dam outline with the satellite views loaded, and a run. */
-async function seed(page: Page, name: string) {
-	const req = page.context().request;
-	const project = await seedRunnableProject(req, name);
-	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')! as { id: string; damAreaFullM2?: number | null };
-	upper.damAreaFullM2 = FULL_M2;
-	await putModel(req, project.id, project.model);
-	const runId = await createRun(req, project.id, 'Baseline');
-	const made = await req.post(`${API_URL}/projects/${project.id}/map/features`, {
-		data: { kind: 'dam', name: 'Upper dam', nodeId: upper.id, geometry: { type: 'Polygon', coordinates: [box(21.32, -33.68, 0.002)] } }
-	});
-	expect(made.status(), await made.text()).toBe(201);
-	await plantDamObservations(((await made.json()) as { feature: { id: string } }).feature.id, { status: 'merged' }, VIEWS);
-	return { project, upper, runId, lower: project.model.nodes.find((n) => n.name === 'Lower farm')! as { id: string } };
-}
+const openBox = async (page: Page) => {
+	await box1(page).locator('details.fold > summary').click();
+	await expect(box1(page)).toHaveAttribute('data-ready', 'true');
+};
 
 test('the Dams tab compares the picked dam’s run area with what the satellite saw, flags spill, empty and disagreement, and credits the data', async ({ page, owner }) => {
 	void owner;
-	const { project, upper, runId, lower } = await seed(page, 'Dams seen from space');
+	const { project, upper, runId, lower } = await seed(page);
 	const api = (await (await page.request.get(`${API_URL}/projects/${project.id}/dams/observations?run=${runId}`)).json()) as {
-		dams: { nodeId: string; summary: { compared: number; mismatches: number; seenFull: number; seenEmpty: number } }[];
+		dams: { nodeId: string; summary: Record<string, unknown> }[];
 	};
-	const s = api.dams.find((d) => d.nodeId === upper.id)!.summary;
-	// The flags the views alone decide: 50 000 m² of a 50 000 m² dam is full, 0 m² is empty.
-	expect(s).toMatchObject({ compared: 3, seenFull: 1, seenEmpty: 1 });
+	// The flags the views alone decide (50 000 m² of a 50 000 m² dam is full, 0 m² empty), and against this run's
+	// surface area (about 3.5 ha all season) both disagree, and none of the three is within ±10 % of the full area.
+	expect(api.dams.find((d) => d.nodeId === upper.id)!.summary).toMatchObject({ compared: 3, seenFull: 1, seenEmpty: 1, mismatches: 2, withinShare: 0 });
 
 	await page.goto(`/projects/${project.id}?tab=dams&dam=${upper.id}`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Dams' })).toBeVisible();
 	await expect(box1(page)).toHaveAttribute('data-ready', 'true');
-	await expect(box1(page).getByRole('heading', { level: 3, name: 'Seen from space' })).toBeVisible();
-	const disagree = s.mismatches === 0 ? 'none disagree' : `${s.mismatches} disagree${s.mismatches === 1 ? 's' : ''}`;
-	await expect(box1(page).getByTestId('dam-observed-line')).toHaveText(new RegExp(`^3 clear views compared · ${disagree} · \\d+% within ±10%$`));
+	// One line, named by the fold itself (no heading of its own): the views compared, the disagreements, the share within ±10 %.
+	await expect(box1(page)).toHaveAccessibleName('Upper farm seen from space');
+	await expect(box1(page).locator('h3')).toHaveCount(0);
+	await expect(box1(page).locator('details.fold > summary')).toContainText('Seen from space:');
+	await expect(box1(page).getByTestId('dam-observed-line')).toHaveText('3 clear views compared · 2 disagree · 0% within ±10%');
 
-	await box1(page).locator('details.fold > summary').click();
-	await expect(box1(page)).toHaveAttribute('data-ready', 'true');
+	await openBox(page);
 	await expect(box1(page).getByTestId('dam-observed-match')).toHaveText('“Upper dam” is merged with a neighbouring water body in DE Africa Waterbodies, so only WOfS views of its own outline are compared.');
 	await expect(box1(page).getByTestId('dam-observed-summary')).toContainText(/^Full area 5\.00 ha, as entered\. 3 clear views from 20 Oct 2021 to 10 Dec 2021: /);
 	await expect(box1(page).getByTestId('dam-observed-summary')).toContainText('Seen full 1 time, seen empty 1 time.');
 
-	// The chart: its title, its points and line, the flags as lanes in its key.
+	// The chart: its title, its points and line, the flags as lanes in its key, with room under 0 ha for them.
 	const chart = box1(page).locator('figure.chart');
 	await expect(chart.locator('figcaption .ttl')).toHaveText('Upper farm: surface area, modelled and seen from space');
 	await expect(chart).toHaveAttribute('data-ready', 'true');
-	// One strip per flag there is: seen full, seen empty, and disagree when the run disagrees somewhere.
-	await expect(chart).toHaveAttribute('data-lanes', String(s.mismatches ? 3 : 2));
+	await expect(chart).toHaveAttribute('data-lanes-room', 'true');
+	await expect(chart).toHaveAttribute('data-lanes', '3');
 	const lanes = chart.locator('.lane-key li');
-	await expect(lanes.filter({ hasText: 'the satellite saw the dam at its full area or more (likely spilling)' })).toHaveAttribute('data-color', '--accent');
-	await expect(lanes.filter({ hasText: 'the satellite saw almost no water' })).toHaveAttribute('data-color', '--warning');
-	await expect(lanes.filter({ hasText: 'the model and the satellite disagree' })).toHaveCount(s.mismatches ? 1 : 0);
+	await expect(lanes.filter({ hasText: 'the satellite saw the dam at its full area or more (likely spilling)' })).toHaveAttribute('data-color', '--lane-seen-full');
+	await expect(lanes.filter({ hasText: 'the satellite saw almost no water' })).toHaveAttribute('data-color', '--lane-seen-empty');
+	await expect(lanes.filter({ hasText: 'the model and the satellite disagree' })).toHaveAttribute('data-color', '--lane-disagree');
 
 	// Every view, newest first, with why the cloudy one wasn't compared.
-	await box1(page).getByText('Show the 4 views').click();
+	await box1(page).getByText('The 4 views, newest first').click();
 	const rows = box1(page).getByTestId('dam-observed-views').locator('tbody tr');
 	await expect(rows).toHaveCount(4);
 	await expect(rows.nth(0)).toContainText('20 Dec 2021');
 	await expect(rows.nth(0)).toContainText('Not compared: partly seen (cloud or shadow)');
 	await expect(rows.nth(2)).toContainText(/seen empty/);
 	await expect(rows.nth(3)).toContainText(/seen full/);
+	// Four views fold nothing away.
+	await expect(box1(page).getByRole('button', { name: /^Show all/ })).toHaveCount(0);
 	await expect(box1(page).getByTestId('dam-observed-credit')).toHaveText('Satellite views: Digital Earth Africa, CC BY 4.0 (Waterbodies and WOfS, from Landsat).');
 	await expectNoViolations(page, { include: '[data-testid="dam-observed"]' });
 
@@ -94,13 +78,15 @@ test('the Dams tab compares the picked dam’s run area with what the satellite 
 	await page.goto(`/projects/${project.id}?tab=dams&dam=${lower.id}`);
 	await expect(box1(page)).toHaveAttribute('data-ready', 'true');
 	await expect(box1(page).getByTestId('dam-observed-line')).toHaveText('no outline of this dam on the map');
+	await openBox(page);
+	await expect(box1(page).getByTestId('dam-observed-no-outline')).toContainText('draw its water surface as a polygon on the Map and link it to Lower farm.');
 
 	// On a phone the open fold and its table fit the width.
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto(`/projects/${project.id}?tab=dams&dam=${upper.id}`);
 	await expect(box1(page)).toHaveAttribute('data-ready', 'true');
-	await box1(page).locator('details.fold > summary').click();
-	await box1(page).getByText('Show the 4 views').click();
+	await openBox(page);
+	await box1(page).getByText('The 4 views, newest first').click();
 	await expect(box1(page).getByTestId('dam-observed-views')).toBeVisible();
 	await expectNoSidewaysScroll(page);
 	const wrap = box1(page).locator('.table-wrap');
@@ -109,24 +95,119 @@ test('the Dams tab compares the picked dam’s run area with what the satellite 
 	await expectNoViolations(page, { include: '[data-testid="dam-observed"]' });
 });
 
-test('the farmer’s dam page says when a satellite last saw the dam clearly, against its area when full, with the credit', async ({ page, owner, signIn }) => {
-	void owner;
-	const req = page.context().request;
-	const { project, upper, runId } = await seed(page, 'Farm dam seen from space');
-	const pub = await req.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId, restriction: { level: 'none' } } });
-	expect(pub.status(), await pub.text()).toBe(201);
-	const farmer = await signIn('Seen from space farmer');
-	const add = await req.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper.id] } });
-	expect(add.status(), await add.text()).toBe(201);
-	await acceptInvites(farmer.user.email, project.id);
+test.describe('dark theme', () => {
+	test.use({ colorScheme: 'dark' });
 
-	const fp = farmer.page;
-	await fp.setViewportSize({ width: 360, height: 740 });
-	await fp.goto(`/farm/${project.id}/dam`);
-	const card = fp.getByRole('region', { name: 'Your dam, seen from space' });
-	// The newest view under 90 % clear (20 Dec) doesn't count: 10 Dec's 2.0 ha of 5.0 ha is.
-	await expect(card.getByTestId('farm-dam-observed-line')).toHaveText(/^On 10 Dec 2021 a satellite saw water over 2[.,]0\sha of your dam, about 40\s%\sof the area it covers when full\.$/);
-	await expect(card.getByTestId('farm-dam-observed-credit')).toHaveText('Satellite views: Digital Earth Africa, CC BY 4.0.');
-	await expectNoSidewaysScroll(fp);
-	await expectNoViolations(fp);
+	test('the open box, its chart, lanes and table pass axe in the dark theme', async ({ page, owner }) => {
+		void owner;
+		const { project, upper } = await seed(page, 'Dams seen from space dark');
+		await page.goto(`/projects/${project.id}?tab=dams&dam=${upper.id}`);
+		await expect(box1(page)).toHaveAttribute('data-ready', 'true');
+		await openBox(page);
+		await expect(box1(page).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+		await box1(page).getByText('The 4 views, newest first').click();
+		await expect(box1(page).getByTestId('dam-observed-views')).toBeVisible();
+		await expectNoViolations(page, { include: '[data-testid="dam-observed"]' });
+	});
 });
+
+test('a viewer is told an editor draws the outline, not to draw it', async ({ page, owner, signIn }) => {
+	void owner;
+	const { project, lower } = await seed(page, 'Dams seen from space viewer');
+	const viewer = await signIn('Seen from space viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const vp = viewer.page;
+	await vp.goto(`/projects/${project.id}?tab=dams&dam=${lower.id}`);
+	await expect(box1(vp)).toHaveAttribute('data-ready', 'true');
+	await expect(box1(vp).locator('details.fold > summary .fold-change')).toHaveText('Show');
+	await openBox(vp);
+	await expect(box1(vp).getByTestId('dam-observed-no-outline')).toHaveText('No outline of Lower farm’s dam on the map. Satellites are compared inside the dam’s outline, which an editor draws on the Map. Open the Map');
+	await expect(box1(vp).getByTestId('dam-observed-no-outline')).not.toContainText('draw its water surface');
+});
+
+test('a long record shows its newest ten views, and Show all opens the rest in place, on a phone with no inner scroll', async ({ page, owner }) => {
+	void owner;
+	const views = manyViews(44);
+	const { project, upper } = await seed(page, 'Dams seen from space long record', views);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`/projects/${project.id}?tab=dams&dam=${upper.id}`);
+	await expect(box1(page)).toHaveAttribute('data-ready', 'true');
+	await expect(box1(page).getByTestId('dam-observed-line')).toHaveText(/^44 clear views compared · none disagree · \d+% within ±10%$/);
+	await openBox(page);
+	await box1(page).getByText('The 44 views, newest first').click();
+	const rows = box1(page).getByTestId('dam-observed-views').locator('tbody tr');
+	await expect(rows).toHaveCount(10);
+	// Newest first: the last of the 44 (every second day from 1 Oct 2021) is 26 Dec 2021.
+	await expect(rows.first().locator('th')).toHaveText('26 Dec 2021');
+	const more = box1(page).getByRole('button', { name: 'Show all 44 views' });
+	await expect(more).toHaveAttribute('aria-expanded', 'false');
+	await more.click();
+	await expect(rows).toHaveCount(44);
+	await expect(rows.last().locator('th')).toHaveText('1 Oct 2021');
+	const back = box1(page).getByRole('button', { name: 'Show the newest 10 views' });
+	await expect(back).toHaveAttribute('aria-expanded', 'true');
+	// The list grows the page; nothing inside it scrolls (a 20rem box showed two views at a time on a phone).
+	const wrap = await box1(page).locator('.table-wrap').evaluate((w) => ({ scroll: w.scrollHeight, client: w.clientHeight, overflow: getComputedStyle(w).overflowY }));
+	expect(wrap.scroll, `the views scroll inside their box: ${wrap.scroll} px in ${wrap.client}`).toBeLessThanOrEqual(wrap.client + 1);
+	await expectNoSidewaysScroll(page);
+	await back.click();
+	await expect(rows).toHaveCount(10);
+});
+
+test.describe('the farmer’s dam page', () => {
+	async function farmerOf(page: Page, signIn: (n: string) => Promise<{ page: Page; user: { email: string } }>, projectId: string, runId: string, nodeId: string) {
+		const req = page.context().request;
+		const pub = await req.post(`${API_URL}/projects/${projectId}/publication`, { data: { runId, restriction: { level: 'none' } } });
+		expect(pub.status(), await pub.text()).toBe(201);
+		const farmer = await signIn('Seen from space farmer');
+		const add = await req.post(`${API_URL}/projects/${projectId}/farmers`, { data: { email: farmer.user.email, nodeIds: [nodeId] } });
+		expect(add.status(), await add.text()).toBe(201);
+		await acceptInvites(farmer.user.email, projectId);
+		return farmer.page;
+	}
+
+	test('says when a satellite last saw the dam clearly, its area against its area when full, after the forecast, with the credit', async ({ page, owner, signIn }) => {
+		void owner;
+		const { project, upper, runId } = await seed(page, 'Farm dam seen from space');
+		const fp = await farmerOf(page, signIn, project.id, runId, upper.id);
+		await fp.setViewportSize({ width: 360, height: 740 });
+		await fp.goto(`/farm/${project.id}/dam`);
+		const card = fp.getByRole('region', { name: 'Your dam, seen from space' });
+		// The newest view under 90 % clear (20 Dec) doesn't count: 10 Dec's 2.0 ha of 5.0 ha is. Area with area, no percentage.
+		await expect(card.getByTestId('farm-dam-observed-line')).toHaveText(/^On 10 Dec 2021 a satellite saw water over 2[.,]0\sha of the 5[.,]0\sha your dam covers when full\.$/);
+		await expect(card.getByTestId('farm-dam-observed-credit')).toHaveText('Satellite views: Digital Earth Africa, CC BY 4.0.');
+		// Just before "Where these figures come from": a check on the model, after the model's own figures.
+		const order = await fp.locator('main h2').allTextContents();
+		expect(order.indexOf('Your dam, seen from space'), order.join(' | ')).toBe(order.indexOf('Where these figures come from') - 1);
+		await expectNoSidewaysScroll(fp);
+		await expectNoViolations(fp);
+	});
+
+	test('says there is no clear view yet when every view was cloudy, and shows nothing once the dam has no outline', async ({ page, owner, signIn }) => {
+		void owner;
+		const { project, upper, runId, featureId } = await seed(page, 'Farm dam cloudy', [
+			{ date: '2021-11-01', wetAreaM2: 20_000, pctObserved: 40 },
+			{ date: '2021-11-17', wetAreaM2: 22_000, pctObserved: 60 }
+		]);
+		const fp = await farmerOf(page, signIn, project.id, runId, upper.id);
+		await fp.goto(`/farm/${project.id}/dam`);
+		const card = fp.getByRole('region', { name: 'Your dam, seen from space' });
+		await expect(card.getByTestId('farm-dam-observed-line')).toHaveText('No clear view of your dam from space yet. Clouds often hide it; the next clear view will show here.');
+		await expectNoViolations(fp);
+
+		// The outline removed from the map: its views go with it, and the page shows no card at all.
+		const del = await page.request.delete(`${API_URL}/projects/${project.id}/map/features/${featureId}`, { headers: { Origin: WEB_URL } });
+		expect(del.status(), await del.text()).toBeLessThan(300);
+		// Wait for the card's own answer (its real signal), then for the page's last card, before saying it drew nothing.
+		const answered = fp.waitForResponse((r) => r.url().endsWith(`/farm/${upper.id}/dam-observed`));
+		await fp.reload();
+		const r = await answered;
+		expect(r.status()).toBe(200);
+		expect(((await r.json()) as { outlines: number }).outlines).toBe(0);
+		await expect(fp.getByRole('heading', { level: 2, name: 'Where these figures come from' })).toBeVisible();
+		await expect(fp.getByRole('region', { name: 'Your dam, seen from space' })).toHaveCount(0);
+		await expect(fp.getByTestId('farm-dam-observed-failed')).toHaveCount(0);
+	});
+});
+
+const seed = (page: Page, name = 'Dams seen from space', views?: Parameters<typeof seedObservedDam>[2]) => seedObservedDam(page.context().request, name, views);
