@@ -23,6 +23,7 @@ import type { DeclaredUncertaintyRule, OptionChange, ResolvedEnsembleOptions } f
 import type { PairedSummary } from '../uncertainty/paired';
 import type { ApplicantPrompts } from './prompts';
 import type { LocalityGeometry, LocalityMapData } from '../geo/localityMap';
+import type { EvidenceDamObservationInput, EvidenceDamObservations } from './damObservations';
 import type { EvidenceAuthorisedImpact } from './authorised';
 
 /**
@@ -146,8 +147,15 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * `notRunNote`), and each listed row says which terms its run applied
  * (`EvidenceCumulativeApplication.terms`: an issued licence's are always its
  * licensed terms). A pack drafted before keeps its document, without them.
+ * evidence-21 (issue #604 R5-C): observed wet days (`damObservations`,
+ * evidence/damObservations.ts): for an applicant's application, each of the
+ * applicant's own traced dams with how many dates in the baseline's period
+ * Digital Earth Africa's WOfS saw it clearly (≥ 90 % of its outline) and on
+ * how many of those it held water, its clear dates frozen so reproduce:pack
+ * counts them again. Null for baseline evidence and a team scenario. A pack
+ * drafted before keeps its document, without them.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-20';
+export const EVIDENCE_REPORT_VERSION = 'evidence-21';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -414,6 +422,8 @@ export interface EvidenceInput {
 	authorisedImpact?: EvidenceAuthorisedImpact | null;
 	/** The project's map features as they are now (152 map_feature, under the reader's RLS), for § 1's locality map (evidence-12); absent or [] = none. */
 	mapFeatures?: EvidenceMapFeatureInput[] | null;
+	/** The project's traced dams with their WOfS rows in the baseline's period (249 dam_observation, under the reader's RLS), for the observed wet days (evidence-21); absent or [] = none. */
+	damObservations?: EvidenceDamObservationInput[] | null;
 }
 
 /** A map feature (152 map_feature) as § 1's locality map reads it. */
@@ -1139,6 +1149,12 @@ export interface EvidenceReport {
 	 * document, which has no figure.
 	 */
 	localityMap?: LocalityMapData | null;
+	/**
+	 * The applicant's own dams' observed wet days (evidence-21, evidence/damObservations.ts): clear
+	 * WOfS dates in the baseline's period and how many were wet. Null for baseline evidence and a
+	 * team scenario; absent from a pack drafted before evidence-21.
+	 */
+	damObservations?: EvidenceDamObservations | null;
 	appendix: {
 		/** The baseline's settings and model, as it ran (the report's Appendix A.1 reads them). */
 		baselineInputs: RunInputsSnapshot;

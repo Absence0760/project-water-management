@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { RunInputsSnapshot } from '../compare';
 import { canonicalJson } from '../manifest';
-import { headlinePackFixture, HEADLINE_KINDS, packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
+import { fixtureObservations, headlinePackFixture, HEADLINE_KINDS, packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
 import { ENGINE_VERSION } from '../version';
 import { crc32, storedZip, zip, ZipArchive } from '../zip';
 import {
@@ -174,6 +174,30 @@ describe('buildPackBundle + checkPackBundle', () => {
 			expect(r.checks.some((c) => c.id === 'figure:locality')).toBe(false);
 			const archive = await ZipArchive.open(built.bytes);
 			expect(new TextDecoder().decode(await archive.read('README.md'))).not.toContain('locality');
+		});
+	});
+
+	describe('observed wet days (evidence-21)', () => {
+		it('counts them again from the manifest’s clear dates; the README says so', async () => {
+			const built = await buildPackBundle(packBundleFixture(hash, { observations: true }), hash);
+			const r = await checkPackBundle(built.bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual([]);
+			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toBe("the observed wet days of 1 dam count again from the manifest's 3 clear dates");
+			const archive = await ZipArchive.open(built.bytes);
+			expect(new TextDecoder().decode(await archive.read('README.md'))).toContain('`observations:wofs`');
+		});
+
+		it('a count the dates don’t give fails observations:wofs alone', async () => {
+			const obs = fixtureObservations();
+			obs.dams[0]!.wetDates = 3;
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual(['observations:wofs']);
+			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toContain('3 wet dates named, 2 counted');
+		});
+
+		it('a pack from before evidence-21 has no such check (positive control above)', async () => {
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash), hash)).bytes, { hash, rerun: false });
+			expect(r.checks.some((c) => c.id === 'observations:wofs')).toBe(false);
 		});
 	});
 

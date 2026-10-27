@@ -33,6 +33,7 @@ import { ENGINE_VERSION, ENSEMBLE_MEASURES_SINCE } from '../version';
 import { licenceImpactSection } from './impact';
 import { authorisedUnavailable } from './authorised';
 import { localitySection } from './locality';
+import { damObservationsSection } from './damObservations';
 import { proposedRiverWorks, riverWorks, riverWorksName, unboundedRiverWorks, type RiverWorks } from './riverWorks';
 import {
 	EVIDENCE_REPORT_VERSION,
@@ -499,6 +500,14 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 			applicant: !!a,
 			ownedNodeIds: a?.scenario.ownedNodeIds ?? [],
 			ewrSiteNodeIds: river.flatMap((s) => (s.isOutlet ? [] : [s.key])),
+			models: [a?.inputs.model, b.inputs.model]
+		}),
+		// The applicant's own dams' observed wet days over the baseline's period (evidence-21); null unless an applicant's application.
+		damObservations: damObservationsSection(input.damObservations, {
+			applicant: !!a && a.scenario.origin === 'applicant',
+			ownNodeIds: a?.scenario.ownedNodeIds ?? [],
+			startDate: b.startDate,
+			endDate: b.endDate,
 			models: [a?.inputs.model, b.inputs.model]
 		}),
 		appendix: {

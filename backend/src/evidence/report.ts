@@ -54,6 +54,7 @@ import { resolveOutcomes } from '../projects/outcomeSettings.js';
 import type { RunScenarioSnapshot } from '../runs/execute.js';
 import { loadBaseInput, type ScenarioOrigin } from '../scenarios/execute.js';
 import { loadAuthorisedImpact } from './authorisedImpact.js';
+import { loadDamObservations } from './damObservations.js';
 import { listNominations } from '../runs/evidence.js';
 
 /** Most other application runs the ledger lists (newest first). */
@@ -674,7 +675,9 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 						baselineInput: baseline.inputs as unknown as ModelInput
 					})
 				: null,
-		mapFeatures: await loadMapFeatures(db, projectId)
+		mapFeatures: await loadMapFeatures(db, projectId),
+		// The applicant's own dams' WOfS rows over the baseline's period (evidence-21); none for a team scenario or baseline evidence.
+		damObservations: await loadDamObservations(db, projectId, ownUnitsForD3(ownOrigin, recorded?.ownedNodeIds), baseline.startDate, baseline.endDate)
 	};
 }
 
