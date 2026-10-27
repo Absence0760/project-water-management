@@ -39,6 +39,10 @@ const ENTRY: Record<Role, string> = {
 };
 /** Terraform's aws_lambda_function resource for each role. */
 const TF_RESOURCE: Record<string, Role> = { backend: 'api', worker: 'worker', fetcher: 'fetcher', renderer: 'renderer', migrate: 'migrate' };
+/** Lambdas that run none of the backend's code, so none of SETTINGS applies (with why). */
+const NOT_BACKEND: Record<string, string> = {
+	ingest: 'the Python mirror ingest job (ingest/, issue #604): its own settings, checked by ingest/lambda_handler.py'
+};
 /** Read by the runtime or the test runner, not by our code: classified, but no module mentions them. */
 const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'NODE_OPTIONS', 'VITEST']);
 
@@ -92,6 +96,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		FEED_FETCHER: 'sqs',
 		FETCH_REQUESTS_QUEUE_URL: SQS('fetch-requests'),
 		FEED_SOURCE: 'live',
+		CHIRPS_SOURCE: 'chc',
+		MIRROR_URL: 's3://water-management-mirror-000000000000',
 		REPORT_RENDERER: 'sqs',
 		RENDER_REQUESTS_QUEUE_URL: SQS('render-requests'),
 		STORAGE: 's3',
@@ -218,6 +224,7 @@ function terraformEnv(): Record<Role, Map<string, string | null>> {
 	for (const file of readdirSync(INFRA).filter((f) => f.endsWith('.tf'))) {
 		const tf = readFileSync(`${INFRA}${file}`, 'utf8');
 		for (const m of tf.matchAll(/^resource "aws_lambda_function" "([a-z_]+)" \{$/gm)) {
+			if (m[1]! in NOT_BACKEND) continue;
 			const role = TF_RESOURCE[m[1]!];
 			expect(role, `infra/${file}: aws_lambda_function.${m[1]} is a Lambda this test doesn't know; add it to TF_RESOURCE and give it a role`).toBeDefined();
 			const body = tf.slice(m.index!, tf.indexOf('\n}\n', m.index!));
@@ -454,6 +461,18 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['api', 'WATER_URL', 'http://localhost:9002/tiles/water.pmtiles']
 		];
 		for (const [role, name, value] of cases) expect(problemNames(role, prod(role, { [name]: value })), `${role} ${name}=${value}`).toContain(name);
+	});
+
+	it('the worker says which CHIRPS it reads, and reads our copy only from its S3 bucket', () => {
+		for (const v of [undefined, '', 'dyn', 'live']) expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: v })), `CHIRPS_SOURCE=${String(v)}`).toContain('CHIRPS_SOURCE');
+		const mirror = (url: string | undefined) => problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'mirror', MIRROR_URL: url }));
+		for (const v of [undefined, '', 'file:///var/task/fixtures/mirror/', 'fixtures/mirror', 'http://localhost:9002/mirror', 's3://'])
+			expect(mirror(v), `mirror with MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
+		// Positive controls: the copy in its bucket; and on chc the URL may be unset, but a set one is still checked.
+		expect(mirror('s3://water-management-mirror-000000000000')).toEqual([]);
+		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'mirror' }))).toEqual([]);
+		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
+		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'chc', MIRROR_URL: 'file:///tmp/mirror/' }))).toContain('MIRROR_URL');
 	});
 
 	it('lets the delineation DEM be off or an S3 object (positive control for the DEM_URL refusals)', () => {

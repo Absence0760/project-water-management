@@ -26,8 +26,13 @@ export const ROLES = ['api', 'worker', 'fetcher', 'renderer', 'migrate'] as cons
 export type Role = (typeof ROLES)[number];
 
 type Env = Record<string, string | undefined>;
-/** A problem with the value (unset included), or null when it is fine. */
-type Check = (value: string | undefined) => string | null;
+/**
+ * A problem with the value (unset included), or null when it is fine. `env`,
+ * the whole environment, is for a check that depends on another setting
+ * (MIRROR_URL on CHIRPS_SOURCE); without it (requiredFor in the guard test)
+ * the check answers for the setting alone.
+ */
+type Check = (value: string | undefined, env?: Env) => string | null;
 
 interface Setting {
 	/** What it is, and why a Lambda that reaches it but has no check needs none. */
@@ -101,6 +106,12 @@ const mailFrom: Check = (v) => {
 
 /** An explicit decision, not the code default. */
 const decision: Check = (v) => (v === 'true' || v === 'false' ? null : 'must be set to true or false (an explicit decision)');
+
+/** An S3 URL (s3://bucket/…): our copy of CHIRPS in its bucket, never the committed fixtures (a file path) or a local store. */
+const s3Url: Check = (v) => (!set(v) ? 'is not set' : /^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](\/.*)?$/.test(v.trim()) ? null : 'is not an s3:// URL');
+
+/** MIRROR_URL on a Lambda that reads the copy when CHIRPS_SOURCE=mirror: required then, else checked only when set. */
+const mirrorUrlFor: Check = (v, env) => (env?.CHIRPS_SOURCE?.trim() === 'mirror' ? s3Url(v) : optional(s3Url)(v));
 
 const host: Check = (v) => (!set(v) ? 'is not set' : isLocalHost(v.trim()) ? 'points at a local host' : null);
 
@@ -269,6 +280,14 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { api: oneOf('live'), worker: oneOf('live'), fetcher: oneOf('live') }
 	},
 	INGEST_RESULTS_QUEUE_URL: { why: 'Where the fetcher answers.', checks: { fetcher: publicHttps } },
+	CHIRPS_SOURCE: {
+		why: 'Which CHIRPS a feed fetch reads (mirror/source.ts, issue #604): chc, CHC’s files through the fetcher, or mirror, our copy read in the worker’s own fetch job (feeds/fromMirror.ts). Unset follows FEED_SOURCE (chc when live), but production says which: Terraform sets it on the worker from var.chirps_source (infra/jobs.tf).',
+		checks: { worker: oneOf('chc', 'mirror') }
+	},
+	MIRROR_URL: {
+		why: 'Where our copy of CHIRPS lives (mirror/source.ts mirrorUrl): s3://<the mirror bucket> (infra/ingest.tf). Unset off Lambda is the committed synthetic copy, which a live process refuses. The worker needs it when CHIRPS_SOURCE=mirror; the ingest Lambdas (the fetcher’s daily ingest, issue #604 R2-B) write it.',
+		checks: { worker: mirrorUrlFor }
+	},
 	FEED_FIXTURE_REWRITE: {
 		why: 'Fixtures only (FEED_SOURCE=fixtures): 1 serves some synthetic CHIRPS finals rewritten in place, to watch the re-check locally. The live client never reads it, and the fetcher refuses the fixtures in production.'
 	},
@@ -330,7 +349,7 @@ export function productionEnvProblems(role: Role, env: Env): string[] {
 	const problems: string[] = [];
 	for (const [name, setting] of Object.entries(SETTINGS)) {
 		const check = setting.checks?.[role];
-		const p = check?.(env[name]);
+		const p = check?.(env[name], env);
 		if (p) problems.push(`${name} ${p}`);
 	}
 	// A committed placeholder in any setting at all (dev-only-…, test-only-…).

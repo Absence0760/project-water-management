@@ -1348,14 +1348,32 @@ row names a source, where to read it and the series it merges into:
   claiming more is refused, and a day before the first month held is `-`
   (`finalsCoverage`). A cell outside the
   region is refused (`MirrorOutsideRegionError`, a format error). Dev, CI and
-  e2e read the committed synthetic copy, `backend/fixtures/mirror/` (~90 KB;
-  the fixture grid's chunks, finals 2023–2025 and preliminary days to
-  2026-02-06, as the synthetic files stood on 2026-02-09), which
-  `pnpm gen:mirror-fixture` writes from the same synthetic GeoTIFFs
-  `FEED_SOURCE=fixtures` serves, so a read from the copy is the files' value
-  bit for bit (`mirror/readCells.test.ts`). The worker reads it when
-  `CHIRPS_SOURCE=mirror`; production stays on `chc` until the cutover
-  ([§ Our copy of the rain data](#our-copy-of-the-rain-data)).
+  e2e read the committed synthetic copy, `backend/fixtures/mirror/` (~110 KB;
+  the chunks of the fixture grid and the band of its size south of it,
+  finals 2023–2025 and preliminary days to 2026-02-06, as the synthetic files
+  stood on 2026-02-09), which `pnpm gen:mirror-fixture` writes from the same
+  synthetic GeoTIFFs `FEED_SOURCE=fixtures` serves, so a read from the copy
+  is the files' value bit for bit (`mirror/readCells.test.ts`). Production
+  stays on `chc` until the cutover ([§ Our copy of the rain data](#our-copy-of-the-rain-data)).
+- **The worker reads the copy** (issue #604 R2-C, D3) when `CHIRPS_SOURCE`
+  is `mirror` (`mirror/source.ts`: the default in dev, CI and e2e; production
+  is `chc`, Terraform's `chirps_source`, until the cutover). A CHIRPS
+  `feed_fetch` plans as before (`planFetch`), then reads the cells and days
+  the cache lacks from the copy **inside the job** and merges them through
+  `chirps_cache_merge` in the same transaction (`feeds/fromMirror.ts`): no
+  `FetchRequest` and no SQS round trip, even with `FEED_FETCHER=sqs`. One job
+  reads one fetch window (at most 120 days), and a backfill's next window
+  follows in `CACHED_NEXT_SECONDS`. A day the copy doesn't hold yet reads as
+  `-`, as a day CHC hasn't published, and a later fetch reads it. No copy at
+  all (no manifest, `MirrorNotReadyError`) writes nothing and records only
+  the attempt (`last_attempt_at`): no failure, no backoff, the same window
+  next time. A cell outside the region fails the feed with a message naming
+  the region. The re-check keeps only its re-reads: a stale day (a revision
+  of the copy, 245) is read again from the copy and applied through
+  `chirps_recheck_apply`; nothing is HEADed. Finals from the copy are tagged
+  `mirror` in `chirps_file`. The cache origin follows `FEED_SOURCE`: `chc`
+  for a live copy, `fixtures` for the committed one, which fixtures mode
+  re-dates to today ([run-locally.md § Data feeds](./run-locally.md#data-feeds)).
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed replaces only the days

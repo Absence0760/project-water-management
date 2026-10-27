@@ -24,6 +24,11 @@
 // caught up, a few final files to HEAD, claimed for this job. With such work
 // the request goes out even when the window needs nothing (its plan all
 // skips).
+//
+// With CHIRPS_SOURCE=mirror (mirror/source.ts; the default in dev, CI and e2e)
+// a CHIRPS fetch reads our own copy of CHIRPS instead, in this job, whatever
+// FEED_FETCHER says: no FetchRequest, no SQS round trip (feeds/fromMirror.ts,
+// issue #604 D3). CHIRPS-GEFS and DWS feeds are unchanged.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import { planFetch, RECHECK_HEAD_DAYS, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from '../../feeds/cellCache.js';
@@ -33,7 +38,9 @@ import { type CellsResult, type FetchRequest, fetchWindow, runFetch, utcToday } 
 import { DAY_SKIP } from '../../feeds/sources/chirps.js';
 import { withUser } from '../../db/tx.js';
 import { feedHttp } from '../../feeds/http.js';
+import { fetchFromMirror } from '../../feeds/fromMirror.js';
 import { ingestResult } from '../../feeds/ingest.js';
+import { chirpsSource } from '../../mirror/source.js';
 import { beginFeedFetch, feedForJob, takeFeedFetch } from '../../feeds/store.js';
 import { defineHandler } from '../registry.js';
 import { feedFetcher, type FetchRequestMessage, sendToQueue } from '../transport.js';
@@ -53,6 +60,10 @@ export const feedFetchHandler = defineHandler({
 		const today = utcToday();
 		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough);
 		const request: FetchRequest = { source: feed.source, config: feed.config, ...window, today };
+		if (feed.source === 'chirps' && chirpsSource() === 'mirror') {
+			await fetchFromMirror(db, feed, window, { jobId: job.id, today });
+			return;
+		}
 		if (feed.source === 'chirps') {
 			const product = chirpsProduct(feed.config);
 			const cells = uniqueCells(gridCells(feed.config as GridConfig));
