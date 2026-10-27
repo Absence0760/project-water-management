@@ -110,8 +110,12 @@ const decision: Check = (v) => (v === 'true' || v === 'false' ? null : 'must be 
 /** An S3 URL (s3://bucket/…): our copy of CHIRPS in its bucket, never the committed fixtures (a file path) or a local store. */
 const s3Url: Check = (v) => (!set(v) ? 'is not set' : /^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](\/.*)?$/.test(v.trim()) ? null : 'is not an s3:// URL');
 
-/** MIRROR_URL on the worker: required when it reads the copy (CHIRPS_SOURCE=mirror) or hands the weekly DWS pass its stations (DWS_WEEKLY=on), else checked only when set. */
-const mirrorUrlFor: Check = (v, env) => (env?.CHIRPS_SOURCE?.trim() === 'mirror' || env?.DWS_WEEKLY?.trim() === 'on' ? s3Url(v) : optional(s3Url)(v));
+/**
+ * MIRROR_URL on the worker: required when it reads the copy (CHIRPS_SOURCE=mirror), hands the weekly DWS pass its stations
+ * (DWS_WEEKLY=on) or runs the dams tick (DAM_OBSERVATIONS=on, which reads the passes' files from the bucket), else checked only when set.
+ */
+const mirrorUrlFor: Check = (v, env) =>
+	env?.CHIRPS_SOURCE?.trim() === 'mirror' || env?.DWS_WEEKLY?.trim() === 'on' || env?.DAM_OBSERVATIONS?.trim() === 'on' ? s3Url(v) : optional(s3Url)(v);
 
 /**
  * Whether the worker's feeds all read our copy and store (CHIRPS_SOURCE=mirror
@@ -311,6 +315,10 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	DWS_WEEKLY: {
 		why: 'on: the worker hands the weekly DWS pass its stations and loads what it fetched (feeds/gaugeRecordLoad.ts), through the mirror bucket, so MIRROR_URL must name it. Terraform sets it from var.dws_weekly_enabled (infra/jobs.tf), with the schedule and the grants. Unset is off (gaugeRecordLoad.ts), today’s production behaviour, so a release can go out before that apply; a value set is checked.',
+		checks: { worker: optional(oneOf('on', 'off')) }
+	},
+	DAM_OBSERVATIONS: {
+		why: 'on: the worker runs the dams tick (dams/observed/tick.ts, issue #604 R5): matches traced dams, writes the passes’ wanted list and loads what they fetched, through the mirror bucket, so MIRROR_URL must name it. Terraform is to set it from var.dam_observations_enabled (infra/jobs.tf; dam_observations.tf refuses the flag until it does). Unset is off (damObservationsOn), today’s production behaviour, so a release can go out before that apply; a value set is checked. The API reaches it through jobs/runner.ts but runs no tick.',
 		checks: { worker: optional(oneOf('on', 'off')) }
 	},
 	FEED_FIXTURE_REWRITE: {
