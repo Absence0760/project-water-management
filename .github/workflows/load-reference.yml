@@ -16,7 +16,9 @@ name: Load a reference dataset
 # WAAS-SWCape-2007, stored with its recorded credit; the Lynch grid stays
 # blocked), and tiles (no data: the provenance of an archive the tiles bucket
 # serves, as `tiles-upload.ts --production` wrote it beside the originals it
-# kept, recorded in reference_load; dataset basemap, fonts, terrain or water).
+# kept, recorded in reference_load; dataset basemap, fonts, terrain or water),
+# and waterbodies (DE Africa Waterbodies polygons, CC BY 4.0, for matching
+# traced dams to their time series; docs/deployment.md § Dam observations).
 # Quaternaries, the register of dams and the gauging
 # stations stay blocked by their licences; the input offers only the allowed
 # kinds, the check job refuses the rest, and so does the Lambda.
@@ -62,6 +64,7 @@ on:
           - gazetteer
           - map-grid
           - tiles
+          - waterbodies
       key:
         description: 'Object key in the reference bucket: reference/<kind>/<file>'
         required: true
@@ -216,8 +219,8 @@ jobs:
             echo "::error::The load failed; the dataset is as it was."
             exit 1
           fi
-          jq -r "$defs"'"Loaded \(.written | count) row(s) of \(.kind | safe("^(land-cover|evaporation|rivers|gazetteer|map-grid|tiles)$")) as dataset \(.dataset | safe("^[A-Za-z0-9][A-Za-z0-9 ._-]{0,49}$"))",
+          jq -r "$defs"'"Loaded \(.written | count) row(s) of \(.kind | safe("^(land-cover|evaporation|rivers|gazetteer|map-grid|tiles|waterbodies)$")) as dataset \(.dataset | safe("^[A-Za-z0-9][A-Za-z0-9 ._-]{0,49}$"))",
             "Skipped (reasons in CloudWatch): \(.skipped | count)", "Below the Strahler order: \(.belowOrder | count)",
-            "Loaded from: \(env.LOAD_KEY | safe("^reference/(land-cover|evaporation|rivers|gazetteer|map-grid|tiles)/[A-Za-z0-9][A-Za-z0-9._-]{0,199}$")) (SHA-256 \(env.LOAD_SHA256 | safe("^[0-9a-f]{64}$"))), recorded with the dataset (reference_load)",
+            "Loaded from: \(env.LOAD_KEY | safe("^reference/(land-cover|evaporation|rivers|gazetteer|map-grid|tiles|waterbodies)/[A-Za-z0-9][A-Za-z0-9._-]{0,199}$")) (SHA-256 \(env.LOAD_SHA256 | safe("^[0-9a-f]{64}$"))), recorded with the dataset (reference_load)",
             (if (.replaced | type) != "object" then "Replaced: no file recorded for this dataset before (a new dataset, or one a local import wrote)"
-             else "Replaced the file loaded \(.replaced.loadedAt | safe("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$")): \(.replaced.key | safe("^(reference/(land-cover|evaporation|rivers|gazetteer|map-grid)/[A-Za-z0-9][A-Za-z0-9._-]{0,199}|tiles/(south-africa|terrain|water)[.]pmtiles|tiles/fonts/)$")) (SHA-256 \(.replaced.sha256 | safe("^[0-9a-f]{64}$"))); to undo this load, load that file again (the bucket version with that SHA-256)" end)' load-result.json
+             else "Replaced the file loaded \(.replaced.loadedAt | safe("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$")): \(.replaced.key | safe("^(reference/(land-cover|evaporation|rivers|gazetteer|map-grid|waterbodies)/[A-Za-z0-9][A-Za-z0-9._-]{0,199}|tiles/(south-africa|terrain|water)[.]pmtiles|tiles/fonts/)$")) (SHA-256 \(.replaced.sha256 | safe("^[0-9a-f]{64}$"))); to undo this load, load that file again (the bucket version with that SHA-256)" end)' load-result.json

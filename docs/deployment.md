@@ -1776,6 +1776,80 @@ decides whether the kind is allowed at all; until then `dws_source` stays
 `live`, or the store holds only the weekly pass's two years.
 
 
+## Dam observations
+
+What satellites saw of each traced dam, into `dam_observation` (issue #604
+R5; the flow: [architecture.md § Dam observations](./architecture.md#dam-observations);
+the tables: [data-model.md § Dam observations](./data-model.md#dam-observations-249_dam_observationsql);
+the source: [data-sources.md](./data-sources.md#deafrica-waterbodies-series)).
+One Terraform variable, off by default:
+
+- **`dam_observations_enabled`** (default `false`, `infra/dam_observations.tf`)
+  turns on the `water-management-dams-weekly` EventBridge rule (daily at
+  05:00 UTC, `{"mode":"dams-weekly"}` to the fetcher, never retried; each
+  key re-read once a week), the fetcher's get and put on `dams/` in the
+  mirror bucket (`dams-handover`), the worker's put of `dams/wanted.json`
+  (`dams-wanted-list`), and the alarms (essential tier):
+  - `water-management-dam-pass-waterbodies` and `…-dam-pass-wofs`:
+    `DamPassCompleted{Source}` (namespace `water-management/DamObservations`)
+    under 1 for two days, or missing (breaching): that source's pass
+    stopped running or fails before it ends.
+  - `water-management-dam-recency-wofs`: `DamObservationAgeDays{Source=wofs}`
+    above `dam_wofs_recency_alarm_days` (default 60) for two days, or
+    missing: no traced dam has a WOfS observation that recent.
+  - **No recency alarm for Waterbodies**: its public series have been
+    frozen upstream since 2024-02 (data-sources.md), so it would fire from
+    the first day.
+- **`dam_wofs_recency_alarm_days`** (default 60, at least 21).
+
+### Turning it on
+
+1. **Two changes outside `infra/dam_observations.tf`, in the data mirror's
+   files (#605's), made before the apply:**
+   - the worker's environment (`infra/jobs.tf`, beside `DWS_WEEKLY`):
+     `DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"`;
+   - the S3 interface endpoint's policy (`infra/packs.tf`, beside
+     `WorkerWritesDwsStationList`): a statement letting the worker role
+     `s3:PutObject` on `${aws_s3_bucket.mirror.arn}/dams/wanted.json`.
+     Without it the worker's write is AccessDenied from the VPC whatever its
+     role allows. The worker's reads under `dams/` are already allowed
+     (`WorkerReadsMirror`), and the fetcher is outside the VPC.
+2. Load the Waterbodies polygons (below).
+3. Deploy a backend release with migration 249 and the `dams-weekly` mode,
+   then apply `dam_observations_enabled = true` (a `terraform plan` first,
+   and the operator's go-ahead for the apply), once at least one dam is
+   traced on a project's map: with none, the WOfS pass has nothing to hold
+   and its recency alarm fires. The first worker tick matches the traced
+   dams and writes `dams/wanted.json`; the next 05:00 run fetches the
+   matched dams' series (a few, at 1 a second) and the WOfS scenes, and the
+   tick after loads them. Check: Logs Insights on the fetcher log group,
+   `filter message.event = "dams_pass"`, then `filter message.event =
+   "dams_tick"` on the worker's.
+
+A pass that met HTTP 403 or throttling stopped on purpose
+(`message.stopped` is `refused` or `throttled`, and its status file says
+`"stopped": true`): it is not retried that day, the other source's pass
+still ran, the invocation fails (the fetcher's Errors alarm), and the next
+day's run asks again. The app keeps the observations it holds.
+
+### Loading the Waterbodies polygons
+
+Clip the v0.0.3 historical extent to the region with ogr2ogr
+([maps.md § Waterbodies](./maps.md#waterbodies)), gzip it, and load it as a
+reference dataset: upload it to the reference bucket under
+`reference/waterbodies/`, then
+
+```bash
+gh workflow run load-reference.yml -f kind=waterbodies -f key=reference/waterbodies/waterbodies-v0.0.3-d1.geojson.gz \
+  -f sha256=<sha256sum of the file> -f dataset=waterbodies-v0.0.3
+```
+
+(`source` is optional; it defaults to "Digital Earth Africa Waterbodies
+v0.0.3, historical extent (CC BY 4.0)"). The file is capped at 64 MB
+(128 MB unzipped): a province or D1's box, not the continent. A reload
+replaces the dataset and makes the worker match every dam again on its
+next ticks (200 a tick).
+
 ## The cutover
 
 Issue #604 moves every feed off its upstream: CHIRPS and CHIRPS-GEFS onto

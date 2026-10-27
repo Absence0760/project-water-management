@@ -161,6 +161,22 @@ describe('liveHttp', () => {
 		await expect(liveHttp(hop as never).head!('https://data.chc.ucsb.edu/a.tif')).rejects.toThrow(/redirected somewhere it may not/);
 	});
 
+	it('asks conditionally with the ETag held: 304 is not-modified, 200 the text with its ETag and Last-Modified (checked), 404 null', async () => {
+		const WB = 'https://deafrica-services.s3.af-south-1.amazonaws.com/waterbodies/v0.0.2/surface_area_change/zzzz/zzzzza0001.csv';
+		const notModified = () => vi.fn(async () => new Response(null, { status: 304 }));
+		const same = notModified();
+		expect(await liveHttp(same).textConditional!(WB, '"e1"')).toEqual({ status: 'not-modified' });
+		expect((same.mock.calls[0] as unknown as [string, RequestInit])[1].headers).toMatchObject({ 'if-none-match': '"e1"', 'user-agent': expect.stringMatching(/^water-management-feeds\//) });
+		const fresh = respond(200, 'date,pc_wet\n', { etag: '"e2"', 'last-modified': 'Mon, 26 Feb 2024 10:00:00 GMT' });
+		expect(await liveHttp(fresh).textConditional!(WB, null)).toEqual({ status: 'ok', text: 'date,pc_wet\n', etag: '"e2"', lastModified: 'Mon, 26 Feb 2024 10:00:00 GMT' });
+		expect((fresh.mock.calls[0] as unknown as [string, RequestInit])[1].headers).not.toHaveProperty('if-none-match');
+		expect(await liveHttp(respond(200, 'x', { etag: '"a\tb"' })).textConditional!(WB, null)).toMatchObject({ etag: null, lastModified: null });
+		expect(await liveHttp(respond(404)).textConditional!(WB, '"e1"')).toBeNull();
+		// A 304 to a request that wasn't conditional is no answer to it.
+		await expect(liveHttp(notModified()).textConditional!(WB, null)).rejects.toThrow(new FeedUnavailableError('HTTP 304'));
+		await expect(liveHttp(respond(403), new Map()).textConditional!(WB, '"e1"')).rejects.toBeInstanceOf(FeedRefusedError);
+	});
+
 	it('refuses a response over 4 MB, declared or streamed', async () => {
 		await expect(liveHttp(respond(200, 'x', { 'content-length': String(5 * 1024 * 1024) })).text('https://data.chc.ucsb.edu/p')).rejects.toThrow(/larger than expected/);
 		const big = new Uint8Array(4 * 1024 * 1024 + 1);

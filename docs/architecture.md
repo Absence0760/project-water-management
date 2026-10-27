@@ -1809,6 +1809,84 @@ feed_fetch (DWS_SOURCE=store) ── gauge_record_current (best source per day) 
   import:dws backend/fixtures/dws/X0H001-reply.synthetic.txt --reference
   SYNTHETIC` loads the invented reply.
 
+### Dam observations
+
+What satellites saw of each traced dam (issue #604 Round 5): the wet area on
+a date, per source, in our own store, `dam_observation` (249,
+[data-model.md § Dam observations](./data-model.md#dam-observations-249_dam_observationsql)),
+for the modelled-vs-observed dam area (R5-B). Two sources, both Digital
+Earth Africa, CC BY 4.0 ([data-sources.md](./data-sources.md#deafrica-waterbodies-series)):
+**Waterbodies**' per-waterbody series for a dam matched to one waterbody
+(R5-A), and **WOfS** summed inside the dam's own outline for every traced
+dam (R5-C). Off until `dam_observations_enabled` (Terraform) and
+`DAM_OBSERVATIONS=on` (the worker).
+
+```
+operator ── pnpm import:waterbodies / load-reference.yml ──► waterbody_reference (polygons)
+
+worker tick (DAM_OBSERVATIONS=on, no user):
+   match each traced dam polygon whose match is missing or stale   (match.ts)
+      app_dam_outlines() ─► app_waterbody_candidates(box) ─► overlap in TS ─► app_dam_match_write
+   put   dams/wanted.json   { waterbodies: uids of matched dams, outlines: EVERY dam + since }
+
+EventBridge, daily 05:00 UTC ──► fetcher, {"mode":"dams-weekly"} (outside the VPC)
+   Waterbodies pass (waterbodies.ts): each wanted uid due (6 days), conditional GET, 1 a second
+      writes dams/waterbodies/<uid>.json, dams/waterbodies-status.json
+   WOfS pass (R5-C): STAC search + COG reads inside each outline since its date
+      writes dams/wofs/<featureId>.json, dams/wofs-status.json
+   each pass: DamPassCompleted{Source} + DamObservationAgeDays{Source} (EMF)
+
+worker tick: each status, then each file whose last good fetch is new to it
+   ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs)
+```
+
+- **Why the fetcher, in Node, for both sources (the compute decision).**
+  The rule wants one scheduled job of ours per source, and the handover the
+  DWS pass already uses fits both: the worker never reaches the public
+  bucket or DE Africa's STAC (so the S3 interface endpoint's policy and the
+  VPC's lack of internet stay as they are), and the fetcher, the one Lambda
+  with internet, has no database. Waterbodies is a small CSV per waterbody.
+  WOfS is a GeoTIFF/COG per Landsat scene in UTM, 30 m, read through STAC
+  search: a tiled DEFLATE TIFF the Node fetcher decodes with `node:zlib`
+  (the CHIRPS reader's own TIFF code), reading only the tiles over a dam.
+  The Python ingest Lambda (`ingest/`) was the alternative and loses on both
+  counts: it would need GDAL/rasterio, or tifffile + imagecodecs + pyproj,
+  in its image for WOfS, and it has no database access either, so it would
+  hand over through the bucket all the same.
+- **Matching a dam to a waterbody** (`backend/src/dams/observed/match.ts`).
+  No PostGIS: the database narrows the candidates by bounding box, and the
+  overlap is measured exactly in TypeScript (geo/geojson.ts
+  `intersectionArea`, the upload checks' clip-and-sweep). With
+  `damShare` = overlap ÷ dam and `waterbodyShare` = overlap ÷ waterbody, for
+  the waterbody of the largest overlap: under 0.3 of the dam covered is
+  **none** (Waterbodies doesn't hold it: under its 0.45 ha minimum, never
+  seen wet, or traced elsewhere); at least 0.7 of the waterbody inside the
+  dam, and no other waterbody holding 0.1 of the dam, is **matched** (its
+  wet area is this dam's; the slack is the historical extent spilling past
+  a traced outline at the inflow and the wall); anything else is **merged**
+  (the waterbody also holds other water, or the dam is split over
+  several). Only matched dams are asked for Waterbodies series; WOfS runs
+  over every outline. A redrawn dam is matched again; a reload of the
+  polygons matches every dam again.
+- **Rows kept from a Waterbodies series**: the wet area (`area_wet_m2`) and
+  the share seen clearly (100 − `pc_invalid`), per date; a date nothing was
+  seen on is dropped (stored as 0 m² it would read as an empty dam), and a
+  partly seen one keeps its share so the reader picks the threshold. The
+  wet area counts only the part seen.
+- **Frozen upstream.** The public Waterbodies series were last written
+  2024-02-26 and end 2023-09-17 (checked 2026-10-27), so WOfS is the
+  current source. The Waterbodies pass still reads them weekly (a 304 each),
+  publishes a heartbeat (alarmed) and its recency (not alarmed).
+- **Politeness**: the feeds' User-Agent and host allowlist
+  (`FEED_HOSTS`, feeds/http.ts), one request a second, a conditional GET on
+  the ETag kept, `Retry-After` honoured, and a 403 or throttling stops the
+  pass for the day (the other source's pass still runs; the invocation fails
+  at the end).
+- **Locally** (`FEED_SOURCE=fixtures`) the pass reads the committed
+  synthetic series (`backend/fixtures/waterbodies/series/`), so dev, CI and
+  e2e need no network. `pnpm dev:dams:run` runs tick → pass → tick once
+  through a scratch directory ([run-locally.md § Dam observations](./run-locally.md#dam-observations)).
+
 ## Server-side reports
 
 The printable report ([ui.md § Report](./ui.md#report)) rendered to a PDF on

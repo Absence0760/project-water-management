@@ -16,7 +16,8 @@
 import type { AbsolutePath } from '@zarrita/storage';
 import { z } from 'zod';
 import { FeedFormatError } from '../../feeds/errors.js';
-import type { MirrorStore } from '../../mirror/store.js';
+import { fixtureMirrorUrl, mirrorStore } from '../../mirror/source.js';
+import { openStore, type MirrorStore } from '../../mirror/store.js';
 
 export type Position = [number, number];
 export type DamOutlineGeometry = { type: 'Polygon'; coordinates: Position[][] } | { type: 'MultiPolygon'; coordinates: Position[][][] };
@@ -64,6 +65,17 @@ export interface PassStatus {
 	perKey: Record<string, { lastGood?: string; newest?: string; error?: string }>;
 }
 
+type Env = Record<string, string | undefined>;
+
+/** The bucket the handover goes through: MIRROR_URL, never the committed synthetic copy (a live process must name one). */
+export function damsStore(env: Env = process.env): MirrorStore {
+	const v = env.MIRROR_URL?.trim();
+	if (!v || v.replace(/\/?$/, '/') === fixtureMirrorUrl()) {
+		throw new Error('MIRROR_URL must name the bucket (or a scratch directory) the dam passes read; the committed synthetic copy is never written');
+	}
+	return env === process.env ? mirrorStore(env) : openStore(v);
+}
+
 // --- Keys -----------------------------------------------------------------------------
 export const WANTED_KEY = '/dams/wanted.json' as AbsolutePath;
 export const statusKey = (source: ObservationSource) => `/dams/${source}-status.json` as AbsolutePath;
@@ -79,7 +91,11 @@ export const WOFS_FIRST_DATE = '1984-01-01';
 /** A Waterbodies uid (a geohash; 249's waterbody_reference.uid). */
 export const WATERBODY_UID = /^[0-9a-z]{6,12}$/;
 const FEATURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const IsoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/** A real calendar date (2023-02-31 is not one), ISO. */
+export const isCalendarDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+const IsoDay = z.string().refine(isCalendarDate, 'not a calendar date');
+/** An observation's date: a calendar date from Landsat's start to tomorrow (UTC), as app_dam_observation_load bounds it. */
+const ObsDay = IsoDay.refine((d) => d >= '1984-01-01' && d <= new Date(Date.now() + 86_400_000).toISOString().slice(0, 10), 'outside 1984 to tomorrow');
 const IsoTime = z.string().datetime({ offset: true });
 const Printable = (max: number) => z.string().min(1).max(max).regex(/^[!-~]+$/);
 const Lon = z.number().finite().min(-180).max(180);
@@ -109,7 +125,7 @@ export const WantedListSchema = z
 
 const Row = z
 	.object({
-		date: IsoDay,
+		date: ObsDay,
 		wetAreaM2: z.number().finite().min(0).max(1e12),
 		pctObserved: z.number().finite().min(0).max(100),
 		upstreamKey: Printable(200)

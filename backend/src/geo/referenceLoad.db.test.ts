@@ -35,6 +35,7 @@ import { loadSyntheticLandCover, parseLandCoverArgs, writeLandCoverJson } from '
 import { SYNTHETIC_RIVERS_FILE } from '../../scripts/import-rivers.js';
 import { SYNTHETIC_GAZETTEER_FILE } from '../../scripts/import-gazetteer.js';
 import { loadSyntheticMapGrid, parseMapGridArgs, writeMapGridJson } from '../../scripts/import-map-grid.js';
+import { POLYGONS_FILE as SYNTHETIC_WATERBODIES_FILE } from '../../scripts/waterbodies-fixture.js';
 import { replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { asOwner } from '../__tests__/helpers.js';
@@ -48,6 +49,7 @@ const GZ = 'test-reference-load-gz';
 const GZN = 'test-reference-load-gz-neighbours';
 // The one MAP grid label production allows (REFERENCE_KINDS['map-grid'].datasets): only this file writes it in water_test.
 const MG = WAAS_MAP.dataset;
+const WB = 'Test-Waterbodies';
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const object = (bytes: Uint8Array): ReadObject => async () => ({ contentLength: bytes.byteLength, bytes: async () => bytes });
 let dir: string;
@@ -78,7 +80,8 @@ afterAll(async () => {
 	await client.query('DELETE FROM evaporation_dataset WHERE dataset = $1', [EV]);
 	await client.query('DELETE FROM gazetteer_reference WHERE dataset = ANY($1::text[])', [[GZ, GZN]]);
 	await client.query('DELETE FROM rain_map_dataset WHERE dataset = $1', [MG]);
-	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN, MG]]);
+	await client.query('DELETE FROM waterbody_reference WHERE dataset = $1', [WB]);
+	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN, MG, WB]]);
 	await client.end();
 	rmSync(dir, { recursive: true, force: true });
 });
@@ -287,5 +290,25 @@ describe('MAP grid, from the file `import:map-grid --out` writes (issue #560)', 
 		// A local import of the same label names no file: the record goes.
 		await replaceRainMapDataset(client, { dataset: MG, source: 'local', version: 'local', attribution: 'local' }, { cellDeg: 0.01, originLon: 0.005, originLat: 0.005, cells: [{ row: 1, col: 1, mapMm: 500 }] });
 		expect(await recorded('map-grid', MG)).toBeUndefined();
+	});
+});
+
+describe('DE Africa Waterbodies polygons (249, issue #604 R5)', () => {
+	it('loads the polygons of a GeoJSON clip, gzipped, with the default source, and records the file', async () => {
+		const bytes = gzipSync(readFileSync(SYNTHETIC_WATERBODIES_FILE));
+		const result = await load({ kind: 'waterbodies', key: 'reference/waterbodies/d1.geojson.gz', dataset: WB }, bytes);
+		const n = (JSON.parse(readFileSync(SYNTHETIC_WATERBODIES_FILE, 'utf8')) as { features: unknown[] }).features.length;
+		expect(result).toEqual({ kind: 'waterbodies', dataset: WB, written: n, skipped: 0, belowOrder: 0, replaced: null });
+		expect(await recorded('waterbodies', WB)).toEqual({ key: 'reference/waterbodies/d1.geojson.gz', sha256: sha(bytes) });
+		const rows = await asOwner('SELECT count(*)::int AS n, min(source) AS source FROM waterbody_reference WHERE dataset = $1', [WB]);
+		expect(rows[0]).toEqual({ n, source: expect.stringContaining('Digital Earth Africa Waterbodies') });
+	});
+
+	it('a file with no waterbody fails and leaves the dataset as it was', async () => {
+		const before = await asOwner('SELECT count(*)::int AS n FROM waterbody_reference WHERE dataset = $1', [WB]);
+		const err = await load({ kind: 'waterbodies', key: 'reference/waterbodies/none.geojson', dataset: WB }, Buffer.from('{"type":"FeatureCollection","features":[]}')).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(LoadError);
+		expect((err as LoadError).code).toBe('empty');
+		expect(await asOwner('SELECT count(*)::int AS n FROM waterbody_reference WHERE dataset = $1', [WB])).toEqual(before);
 	});
 });
