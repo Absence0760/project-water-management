@@ -1,0 +1,6 @@
+.venv/
+.mirror/
+__pycache__/
+fixtures/
+test_*.py
+fakes3.py

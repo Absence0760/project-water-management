@@ -37,6 +37,13 @@
 // `pkg=version`. Dependabot's docker entry (.github/dependabot.yml) moves the
 // tag and digest; the apt pins move by hand with the snapshot.
 //
+// And the bulk ingest job's image (ingestImageProblems, issue #604 D11):
+// ingest/Dockerfile's FROM is AWS's Lambda Python base, arm64 tag, pinned by
+// @sha256 digest, and every pip install in it checks hashes
+// (--require-hashes against ingest/requirements.txt). Dependabot's docker
+// entry for /ingest moves the tag and digest; the pip pins move with its pip
+// entry.
+//
 // And the operator scripts' docker images (scriptImageProblems): every
 // `<NAME>_IMAGE="${<NAME>_IMAGE:-<image>}"` default in bin/*.sh names its image
 // by @sha256 digest (bin/tiles-dev.sh's GDAL image, which `water` runs when
@@ -117,9 +124,9 @@ function instructions(dockerfile) {
  * empty when every base image has a digest and every apt package an exact
  * version from one snapshot.
  */
-export function imageProblems(dockerfile) {
+export function imageProblems(dockerfile, file = 'backend/renderer.Dockerfile') {
 	const problems = [];
-	const where = (ins) => `backend/renderer.Dockerfile:${ins.line}`;
+	const where = (ins) => `${file}:${ins.line}`;
 	const args = new Map();
 	for (const ins of instructions(dockerfile)) {
 		const arg = ins.text.match(/^ARG\s+(\w+)=(\S+)$/i);
@@ -146,6 +153,35 @@ export function imageProblems(dockerfile) {
 					if (!/^[a-z0-9][a-z0-9+.-]*=[^=\s]+$/.test(pkg)) problems.push(`${where(ins)}: apt package ${pkg} is not pinned to an exact version (pkg=version)`);
 				}
 				if (!pkgs.length) problems.push(`${where(ins)}: apt-get install names no packages this guard can read`);
+			}
+		}
+	}
+	return problems;
+}
+
+const INGEST_BASE = /^FROM\s+public\.ecr\.aws\/lambda\/python:[\d.]+-arm64@sha256:[0-9a-f]{64}(\s|$)/i;
+
+/**
+ * What in the ingest Dockerfile is not pinned by content: one line each.
+ * Every FROM must be the Lambda Python base's arm64 tag with a digest (the
+ * shared FROM rule in imageProblems names a missing digest; this names the
+ * wrong image or architecture), and every `pip install` must pass
+ * --require-hashes. An empty file, or one with no FROM, is a problem too.
+ */
+export function ingestImageProblems(dockerfile, file = 'ingest/Dockerfile') {
+	const problems = imageProblems(dockerfile, file);
+	const all = instructions(dockerfile);
+	const froms = all.filter((ins) => /^FROM\s/i.test(ins.text));
+	if (!froms.length) problems.push(`${file}: no FROM line found`);
+	for (const ins of froms) {
+		if (!INGEST_BASE.test(ins.text)) {
+			problems.push(`${file}:${ins.line}: FROM must be public.ecr.aws/lambda/python:<version>-arm64@sha256:<digest> (the Lambda runs on arm64)`);
+		}
+	}
+	for (const ins of all.filter((i) => /^RUN\s/i.test(i.text))) {
+		for (const cmd of ins.text.replace(/^RUN\s+/i, '').split(/&&|;|\|\|/)) {
+			if (/(^|\s)pip3?\s+install\s/.test(cmd.trim()) && !/\s--require-hashes(\s|$)/.test(cmd)) {
+				problems.push(`${file}:${ins.line}: pip install without --require-hashes (install from the hash-pinned requirements.txt)`);
 			}
 		}
 	}
@@ -272,6 +308,8 @@ function main() {
 	const image = imageProblems(readFileSync(join(root, 'backend/renderer.Dockerfile'), 'utf8'));
 	if (problems.length) console.error(`::error::Playwright pins:\n${problems.join('\n')}`);
 	if (image.length) console.error(`::error::Renderer image pins:\n${image.join('\n')}`);
+	const ingest = ingestImageProblems(readFileSync(join(root, 'ingest/Dockerfile'), 'utf8'));
+	if (ingest.length) console.error(`::error::Ingest image pins:\n${ingest.join('\n')}`);
 	const scripts = readdirSync(join(root, 'bin'))
 		.filter((f) => f.endsWith('.sh'))
 		.flatMap((f) => scriptImageProblems(readFileSync(join(root, 'bin', f), 'utf8'), `bin/${f}`));
@@ -280,9 +318,9 @@ function main() {
 	if (compose.length) console.error(`::error::Local-dev service images:\n${compose.join('\n')}`);
 	const tarballs = lockfileTarballProblems(readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8'), 'pnpm-lock.yaml');
 	if (tarballs.length) console.error(`::error::Lockfile tarball pins:\n${tarballs.join('\n')}`);
-	if (problems.length || image.length || scripts.length || compose.length || tarballs.length) process.exit(1);
+	if (problems.length || image.length || ingest.length || scripts.length || compose.length || tarballs.length) process.exit(1);
 	console.log(
-		`Playwright pins agree: ${pins[0].version} in ${pins.length} places. Renderer image: base by digest, apt packages by version and snapshot. Operator script images and docker-compose.yml's: by digest. URL tarballs in pnpm-lock.yaml: by integrity.`
+		`Playwright pins agree: ${pins[0].version} in ${pins.length} places. Renderer image: base by digest, apt packages by version and snapshot. Ingest image: arm64 Lambda base by digest, pip by hash. Operator script images and docker-compose.yml's: by digest. URL tarballs in pnpm-lock.yaml: by integrity.`
 	);
 }
 

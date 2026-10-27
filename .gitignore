@@ -130,3 +130,6 @@ AI/
 data/
 .venv-brand/
 .claude/worktrees/
+
+# The bulk ingest job's local Zarr copy (pnpm dev:ingest:run, ingest/README.md).
+/ingest/.mirror/

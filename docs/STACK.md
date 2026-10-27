@@ -102,6 +102,19 @@ sides share.
   the synthetic workbook fixture for the importer parity test and the
   string-decoding fixture that pins the reader to openpyxl
   (`scripts/wbt-import/fixtures/`, invented data).
+- **ingest/**: the bulk ingest job (issue #604), Python 3.14 as an arm64
+  container-image Lambda (`ingest/Dockerfile`, AWS's Lambda Python base pinned
+  by digest; handler `lambda_handler.handler`). It copies CHC's CHIRPS NetCDF
+  (read with xarray + h5netcdf/h5py; no netCDF4, no GDAL) into our own Zarr v3
+  copy (zarr 3; `MIRROR_URL`: `file://…` locally, `s3://…` in production,
+  written through boto3) with a `manifest.json` per product, through one
+  polite HTTP client (stdlib `urllib`: a descriptive User-Agent with
+  `INGEST_CONTACT`, conditional GETs, 1 request a second, `Retry-After`, and a
+  403 that stops the run). Dependencies hash-pinned in
+  `ingest/requirements.txt`. `FEED_SOURCE=fixtures` reads a committed
+  synthetic NetCDF (`ingest/fixtures/`) and needs no network. Optional
+  locally (`pnpm dev:ingest:run`); pnpm dev, the other CI jobs and e2e never
+  need Python ([ingest/README.md](../ingest/README.md)).
 - **infra/**: Terraform: S3 + CloudFront (+ `/api/*` → Lambda) + WAF + Lambda
   (API, plus a migrate Lambda, `backend/src/lambda-migrate.ts`, and the job
   worker, `backend/src/lambda-worker.ts`, with its SQS queue + DLQ and
@@ -131,6 +144,7 @@ pnpm dev:run:worker         # the job worker alone: polls every 15 s and on LIST
 pnpm dev:jobs:tick          # run every due job once and exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default, no network) and exit
 pnpm dev:ingest:push        # push the synthetic logger CSV to /ingest with the API key in WM_INGEST_KEY (run-locally.md § Ingest)
+pnpm dev:ingest:run [rnl|sat]  # the bulk ingest Lambda once in fixtures mode: synthetic NetCDF → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
 
 pnpm dev:db:up              # Postgres 17 in docker on :5434
 pnpm dev:db:down
@@ -210,13 +224,14 @@ pnpm gen:bundle-budget <slug> <kb> "<why>"  # raise the total ceiling: one new e
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
 pnpm check:migrations       # every migration this branch adds sorts after origin/main's highest (git fetch first; data-model.md § Migrations)
-pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned, bin/tiles-dev.sh's GDAL image and docker-compose.yml's images (Postgres, Mailpit, MinIO) by digest, and every URL tarball in pnpm-lock.yaml (SheetJS) by its integrity hash; bump them together as backend/renderer.Dockerfile's header says
+pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned, the ingest image's arm64 Lambda base by digest and its pip install by hash, bin/tiles-dev.sh's GDAL image and docker-compose.yml's images (Postgres, Mailpit, MinIO) by digest, and every URL tarball in pnpm-lock.yaml (SheetJS) by its integrity hash; bump them together as backend/renderer.Dockerfile's header says
 pnpm check:renderer-image   # build the report renderer's container image and smoke-test it as Lambda runs it (docker; ~3.5 GB)
 pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNAPSHOT) is; a weekly workflow opens an issue past 90 days
                              # check:pins also refuses any workflow `services:` image (serviceImageProblems): one is pulled from its registry on every run, which Docker Hub and ECR Public refused (issues #492, #521); CI starts docker-compose.yml's services through scripts/ci/service-image.sh, so a Dependabot compose bump moves CI with it
 pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the pinned apt versions from it (docker); on every Dependabot docker PR
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
 pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~6 min)
+pnpm test:ingest            # the bulk ingest job's unittest suite (ingest/, Python 3.14; seconds)
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
 pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
 pnpm gen:example            # rewrite the example catchment the empty project list starts from (Kleinberg; no DB; issue #286)
@@ -399,7 +414,7 @@ Prefer reading these over guessing. Update them when behaviour changes.
 
 ## What not to do
 
-- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python's stdlib `unittest` for the importer (`scripts/wbt-import/`) and the cross-check (`verify/`) aside, and the
+- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python's stdlib `unittest` for the importer (`scripts/wbt-import/`), the bulk ingest job (`ingest/`) and the cross-check (`verify/`) aside, and the
   dependency-free CI/release guards under `scripts/` (and `e2e/support/*.test.ts`) use Node's built-in `node:test`
   (the estate pattern), since the root package has no dependencies.
 - Don't replace pnpm, and don't `npm install -g` anything.
