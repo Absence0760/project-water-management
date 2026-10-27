@@ -228,7 +228,10 @@ const READ_ONLY = new Set([
 	// the revision log, written only by chirps_cache_merge, chirps_recheck_claim and chirps_recheck_apply from a running data-feed job.
 	'chirps_file',
 	'chirps_cell_stale',
-	'chirps_revision'
+	'chirps_revision',
+	// The revision of our CHIRPS copy the cache was brought up to (245_mirror_revision): written only by
+	// app_mirror_apply_revision, from the worker's session with no user.
+	'mirror_manifest'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
