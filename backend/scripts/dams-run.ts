@@ -50,7 +50,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		console.log(`tick: ${before?.dams ?? 0} traced dam(s), ${before?.matched ?? 0} matched this run${before?.published ? ', wanted list written' : ''}`);
 		const pass = await runWaterbodiesPass({ store, http: await waterbodiesHttp(mode), today: utcToday(), intervalMs: mode === 'live' ? REQUEST_INTERVAL_MS : 0 });
 		console.log(
-			`Waterbodies pass (${mode}): ${pass.fetched.length} fetched, ${pass.unchanged.length} unchanged, ${pass.failed.length} failed, ${pass.fresh} fresh; stopped: ${pass.stopped}`
+			`Waterbodies pass (${mode}): ${pass.fetched.length} fetched, ${pass.unchanged.length} unchanged, ${pass.failed.length} failed, ${pass.fresh} fresh; stopped: ${pass.stopped}${pass.pausedUntil ? ` until ${pass.pausedUntil}` : ''}`
 		);
 		const live = mode === 'live';
 		const wofs = await runWofsPass({
@@ -61,7 +61,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 			sceneIntervalMs: live ? SCENE_INTERVAL_MS : 0
 		});
 		console.log(
-			`WOfS pass (${mode}): ${wofs.written.length} written, ${wofs.failures.length} failed, ${wofs.fresh} fresh, ${wofs.scenesRead} scenes read; stopped: ${wofs.stopped}`
+			`WOfS pass (${mode}): ${wofs.written.length} written, ${wofs.failures.length} failed, ${wofs.fresh} fresh, ${wofs.scenesRead} scenes read; stopped: ${wofs.stopped}${wofs.pausedUntil ? ` until ${wofs.pausedUntil}` : ''}`
 		);
 		const after = await runDamsTick({ env, store });
 		console.log(`tick: ${after?.loaded ?? 0} file(s) loaded, ${after?.rows ?? 0} row(s) written${after?.failed ? `, ${after.failed} failed` : ''}`);

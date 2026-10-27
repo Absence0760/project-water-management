@@ -61,6 +61,8 @@ export interface PassStatus {
 	/** The run stopped early on the upstream's answer (an HTTP 403, throttling): the copy is not being kept up. */
 	stopped: boolean;
 	reason?: string;
+	/** A throttled stop's Retry-After, in seconds, when the source gave one: the pause (pausedUntil) lasts at least this long. */
+	retryAfterSeconds?: number;
 	/**
 	 * Per key: the last good fetch (ISO time), the newest observation date held, the last error (a fixed code), and
 	 * the last time it was asked for at all (Waterbodies only: a key that keeps failing is asked again a day later, not every run).
@@ -159,6 +161,7 @@ export const PassStatusSchema = z
 		ranAt: IsoTime,
 		stopped: z.boolean(),
 		reason: z.string().max(100).optional(),
+		retryAfterSeconds: z.number().int().min(0).max(31_536_000).optional(),
 		perKey: z.record(
 			z.string().max(64),
 			z.object({ lastGood: IsoTime.optional(), newest: IsoDay.optional(), error: z.string().max(100).optional(), triedAt: IsoTime.optional() }).strict()
@@ -194,6 +197,30 @@ export async function readObservationFile(store: MirrorStore, source: Observatio
 	return f;
 }
 export const writeObservationFile = (store: MirrorStore, f: ObservationFile) => writeJson(store, observationKey(f.source, f.key), ObservationFileSchema.parse(f));
+
+// --- The pause after a refusal ------------------------------------------------------------
+// Issue #604's rule: an HTTP 403 stops the run and alerts, never a retry. So
+// once a pass stopped refused (403) or throttled (429/503), that source is
+// left alone for REFUSED_PAUSE_HOURS from the stopped run's ranAt (or a
+// longer Retry-After the source gave): its pass asks nothing, writes nothing
+// (so the stopped status, and the pause, stand) and publishes no heartbeat,
+// so the heartbeat alarm (infra/dam_observations.tf, 18 h without one) is
+// the alert. Each source pauses on its own; the other goes on.
+/** How long a source is left alone after its pass stopped on a refusal or throttling. */
+export const REFUSED_PAUSE_HOURS = 24;
+
+/** Until when (epoch ms) a source is paused by its last status, or null when it isn't (see above). */
+export function pausedUntil(status: Pick<PassStatus, 'ranAt' | 'stopped' | 'reason' | 'retryAfterSeconds'> | null): number | null {
+	if (!status?.stopped || (status.reason !== 'refused' && status.reason !== 'throttled')) return null;
+	const ran = Date.parse(status.ranAt);
+	return ran + Math.max(REFUSED_PAUSE_HOURS * 3600, status.retryAfterSeconds ?? 0) * 1000;
+}
+
+/** The Retry-After (seconds) a stopping error carries, for the status. */
+export const stopRetryAfter = (err: unknown): number | undefined => {
+	const s = (err as { retryAfterSeconds?: unknown } | null)?.retryAfterSeconds;
+	return typeof s === 'number' && Number.isFinite(s) && s >= 0 ? Math.min(Math.ceil(s), 31_536_000) : undefined;
+};
 
 // --- Metrics (CloudWatch Embedded Metric Format, from the fetcher's log) ---------------
 // infra/dam_observations.tf alarms on them; every completed pass of either

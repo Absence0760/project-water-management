@@ -847,11 +847,11 @@ run "dam_observations_on" {
         a.metric_name == "DamPassCompleted" &&
         a.dimensions["Source"] == k &&
         a.comparison_operator == "LessThanThreshold" && a.threshold == 1 && a.statistic == "Sum" &&
-        a.period == 86400 && a.evaluation_periods == 2 &&
+        a.period == 21600 && a.evaluation_periods == 3 && a.datapoints_to_alarm == 3 &&
         a.alarm_actions == toset([aws_sns_topic.alerts.arn])
       )])
     )
-    error_message = "Each source's heartbeat alarm reads DamPassCompleted{Source}, fires after two days without a completed pass, and treats missing data as breaching."
+    error_message = "Each source's heartbeat alarm reads DamPassCompleted{Source}, fires after 18 hours without a completed pass (inside a refusal's 24-hour pause), and treats missing data as breaching."
   }
   assert {
     condition = (

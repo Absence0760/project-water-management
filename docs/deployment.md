@@ -1836,13 +1836,15 @@ One Terraform variable, off by default:
   newest WOfS scenes once a UTC day, and the rest of every run on the WOfS
   history, so a dam reaches 2013 in about seven hours of runs rather than a
   week of daily ones; a run with nothing due still publishes the heartbeats
-  and recency), the fetcher's get and put on `dams/` in the
+  and recency; a source DE Africa refused or throttled is paused for a day,
+  below), the fetcher's get and put on `dams/` in the
   mirror bucket (`dams-handover`), the worker's put of `dams/wanted.json`
   (`dams-wanted-list`), and the alarms (essential tier):
   - `water-management-dam-pass-waterbodies` and `…-dam-pass-wofs`:
     `DamPassCompleted{Source}` (namespace `water-management/DamObservations`)
-    under 1 for two days, or missing (breaching): that source's pass
-    stopped running or fails before it ends.
+    under 1 for 18 hours (three 6-hour periods), or missing (breaching):
+    that source's pass stopped running, fails before it ends, or is paused
+    after a refusal (below).
   - `water-management-dam-recency-wofs`: `DamObservationAgeDays{Source=wofs}`
     above `dam_wofs_recency_alarm_days` (default 60) for two days, or
     missing: no traced dam has a WOfS observation that recent.
@@ -1885,14 +1887,31 @@ heartbeats stay green.
    `filter message.event = "dams_pass"`, then `filter message.event =
    "dams_tick"` on the worker's.
 
-A pass that met HTTP 403 or throttling stopped on purpose
-(`message.stopped` is `refused` or `throttled`, and its status file says
-`"stopped": true`): it is not retried within the hour, the other source's
-pass still ran, the invocation fails (the fetcher's Errors alarm), and the
-next hour's run asks again (the uid or dam that met it waits a day, like
-any that failed). If it persists, set `dam_observations_enabled = false`
-and ask DE Africa before turning it back on. The app keeps the
-observations it holds.
+**When a dam-pass heartbeat alarm fires.** Logs Insights on the fetcher
+log group: `filter message.event = "dams_pass" and message.source =
+"<source>"`, newest first.
+
+- `message.stopped` is `paused` (with `message.pausedUntil`): an earlier
+  run of that source met HTTP 403 (`refused`) or throttling (`throttled`,
+  429/503) and stopped on purpose; the run before the pauses shows which
+  (`message.reason`, `message.detail`), and the source's status file
+  (`dams/<source>-status.json` in the mirror bucket) says `"stopped": true`
+  with its `ranAt`. Issue #604's rule is that a refusal stops and alerts,
+  never a retry, so that source (only that one; the other goes on) asks
+  nothing and publishes no heartbeat for 24 hours from the stop, or for a
+  longer `Retry-After` it gave, then asks again by itself. Nothing to
+  restart. Find out why before the pause ends: a 403 from DE Africa's
+  bucket or STAC is a block on the fetcher's address or a policy change,
+  so ask DE Africa (data-sources.md has the contact) and, until they
+  answer, set `dam_observations_enabled = false` so the next run doesn't
+  meet it again; throttling that recurs means our pace is too fast for
+  them (`REQUEST_INTERVAL_MS`, `STAC_INTERVAL_MS`, `SCENE_INTERVAL_MS`).
+  The alarm clears with the first heartbeat after the pause.
+- No `dams_pass` line at all: the runs stopped (the EventBridge rule, the
+  fetcher's Errors alarm) or fail before the pass completes
+  (`message.event = "fetcher_event_unknown"`, a mirror error).
+
+The app keeps the observations it holds throughout.
 
 ### Loading the Waterbodies polygons
 

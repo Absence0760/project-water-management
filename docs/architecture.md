@@ -1858,7 +1858,8 @@ worker tick: each status, then each file whose last good fetch is new to it
   uid is still asked once a week (a uid that failed, once a day), each dam's
   newest WOfS scenes once a UTC day, and the pacing doesn't change. A run
   with nothing due asks DE Africa nothing and still publishes each source's
-  heartbeat and recency, so the alarms keep their daily periods.
+  heartbeat and recency, so the alarms always see it (the heartbeat's
+  6-hour periods, the recency's daily ones).
 - **Why the fetcher, in Node, for both sources (the compute decision).**
   The rule wants one scheduled job of ours per source, and the handover the
   DWS pass already uses fits both: the worker never reaches the public
@@ -1899,9 +1900,21 @@ worker tick: each status, then each file whose last good fetch is new to it
 - **Politeness**: the feeds' User-Agent and host allowlist
   (`FEED_HOSTS`, feeds/http.ts), one request a second, a conditional GET on
   the ETag kept, `Retry-After` honoured, and a 403 or throttling stops the
-  pass until the next hour's run (the other source's pass still runs; the
-  invocation fails at the end, never retried); the uid that met it, like any
-  that failed, waits a day.
+  pass (the other source's pass still runs; the invocation fails at the end,
+  never retried) and **pauses that source** (below).
+- **A refusal pauses the source** (issue #604's rule: a 403 stops the run
+  and alerts, never a retry). Once a pass stopped `refused` (403) or
+  `throttled` (429/503), that source alone (Waterbodies or WOfS) is left
+  alone for 24 hours from the stopped run's `ranAt` in its status file, or
+  for the `Retry-After` the source gave (`retryAfterSeconds` in the status)
+  when that is longer (`handover.ts` `pausedUntil`, `REFUSED_PAUSE_HOURS`).
+  While paused, its pass asks nothing, writes nothing (so the stopped
+  status, and with it the pause, stand), logs `stopped: paused` with
+  `pausedUntil`, and publishes **no heartbeat**: the heartbeat alarm (no
+  `DamPassCompleted` for 18 hours, three 6-hour periods) is the alert,
+  inside the pause. Daily periods couldn't see a 24-hour pause, since each
+  UTC day it spans has heartbeats before or after it. The first run after
+  the pause asks again; a source that refuses again pauses again.
 - **Locally** (`FEED_SOURCE=fixtures`) the pass reads the committed
   synthetic series (`backend/fixtures/waterbodies/series/`), so dev, CI and
   e2e need no network. `pnpm dev:dams:run` runs tick → pass → tick once
@@ -1962,8 +1975,15 @@ worker tick: each status, then each file whose last good fetch is new to it
     Lambda's deadline loses nothing. A dam whose newest scenes were checked
     today (`checkedOn` in the state: a forward turn that ended, well or on a
     failure) waits for the next UTC day; one the deadline cut short goes on
-    in the next run. A caught-up dam re-scans its last 45 days each day, for scenes DE
-    Africa publishes late (a row is written again only if it changed). A
+    in the next run. A caught-up dam searches its last 45 days again each
+    day, for scenes DE Africa publishes late, but reads only the new ones:
+    a STAC item id is one processing of one scene and never changes, so a
+    scene whose id the file's `upstream` already holds, or the state's
+    `tailItems` (every scene the tail's turns read, kept 45 days, including
+    one that lost to an overlapping scene or didn't see the dam), keeps its
+    row and costs no request. A late scene on a date that has a row is
+    compared with that date's other scenes again, so the better view still
+    wins (a row is written again only if it changed). A
     redrawn outline (its hash changed) starts again, its file rewritten
     empty at once so the old outline's rows can't be loaded again (249's
     trigger deletes them from the store, and the loader refuses a file
@@ -1974,7 +1994,8 @@ worker tick: each status, then each file whose last good fetch is new to it
   - **Politeness**: STAC at most one request a second, the bucket at most
     five (two or three small ranges a scene), one in flight; a 403 or
     throttling from either stops the pass (the status says stopped and
-    why, the invocation fails). A scene that can't be read is skipped and
+    why, the invocation fails) and pauses WOfS for 24 hours or a longer
+    `Retry-After` (above). A scene that can't be read is skipped and
     counted (`sceneFailed` in the log); a failed search or a timeout ends
     that dam's turn and the next goes on.
   - **Locally** (`FEED_SOURCE=fixtures`) STAC and the scenes are answered

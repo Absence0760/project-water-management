@@ -607,6 +607,39 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		expect(logged).toMatchObject({ fetched: 0, stopped: 'refused', reason: 'refused', detail: 'HTTP 403', stacRequests: 1 });
 	});
 
+	it('pauses a refused source for a day: the next run asks it nothing and publishes no heartbeat for it, the other source goes on', async () => {
+		await bucket();
+		vi.stubEnv('FEED_SOURCE', 'live');
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		const quiet = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, text: refuse, textConditional: refuse };
+		// Waterbodies is refused; WOfS has no dam listed, so it completes.
+		await expect(handler({ mode: 'dams-weekly' } as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		quiet.mockRestore();
+		// The next hourly run.
+		const asked = vi.fn(async () => {
+			throw new Error('nothing should be asked while paused');
+		});
+		httpOverride.next = { range: asked, text: asked, textConditional: asked };
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = (await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer;
+		const metrics = out.mock.calls.map(([l]) => String(l)).filter((l) => l.includes('DamPassCompleted'));
+		out.mockRestore();
+		expect(asked).not.toHaveBeenCalled();
+		expect(res.waterbodies).toEqual({ fetched: 0, unchanged: 0, failed: 0, fresh: 0, recencyDays: null, stopped: 'paused' });
+		expect(res.wofs!.stopped).toBe('done');
+		// Only WOfS's heartbeat: the missing Waterbodies one is the alert.
+		expect(metrics.map((l) => JSON.parse(l).Source)).toEqual(['wofs']);
+		const logged = warn.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'dams_pass' && l.source === 'waterbodies');
+		expect(logged).toMatchObject({ stopped: 'paused', pausedUntil: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) });
+		expect(Date.parse(logged.pausedUntil) - Date.now()).toBeGreaterThan(23 * 3_600_000);
+	});
+
 	it('refuses to write the committed synthetic copy, or no bucket at all', async () => {
 		vi.stubEnv('MIRROR_URL', '');
 		await expect(handler({ mode: 'dams-weekly' } as never)).rejects.toThrow(/MIRROR_URL must name/);

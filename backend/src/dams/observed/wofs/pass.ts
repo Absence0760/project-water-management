@@ -44,10 +44,17 @@
 // goes on from it: a first backfill (about 90 scenes a year over a dam, 2–3
 // requests each) runs over several runs.
 //
-// A dam scanned to within LOOKBACK_DAYS of today re-scans that tail each
+// A dam scanned to within LOOKBACK_DAYS of today re-searches that tail each
 // time: DE Africa publishes a scene days to weeks after it is taken, and the
 // two paths over a dam are processed apart, so a scene can appear behind a
-// date we've passed. Its row is written again only if it changed (the
+// date we've passed. Only scenes not read before are read: a STAC item id is
+// one processing of one scene and never changes, so a scene whose id is in
+// the file's upstream items, or in the state's tailItems (every scene the
+// tail's turns read, kept for LOOKBACK_DAYS, including those that lost to an
+// overlapping scene or didn't see the dam), keeps its stored row and costs no
+// request. A late-published scene (a new id) is read; on a date that already
+// has a row, that date's other scenes are read again with it, so the better
+// view still wins (`better`). A row is written again only if it changed (the
 // loader upserts).
 //
 // An outline that changed (its hash differs from the one in the state file)
@@ -66,7 +73,10 @@
 // (429/503) from either host stops the run at once, never retried: the
 // status says stopped and why, the recency metric grows (R5-A's
 // DamObservationAgeDays{Source=wofs}, alarmed in infra/dam_observations.tf),
-// and the invocation fails. A scene that can't be read (a format the reader
+// and the invocation fails. The source is then left alone for a day (or a
+// longer Retry-After): the next runs ask nothing, write nothing and publish
+// no heartbeat, so the heartbeat alarm is the alert (handover.ts
+// pausedUntil). A scene that can't be read (a format the reader
 // refuses, a missing object) is skipped, counted and logged; a search that
 // fails another way, or a timeout, ends that dam's turn and the next dam
 // goes on. Anything else is a bug and throws (the status is written first).
@@ -88,6 +98,8 @@ import {
 	recencyDays,
 	writeObservationFile,
 	writeStatus,
+	pausedUntil,
+	stopRetryAfter,
 	type ObservationFile,
 	type PassStatus,
 	type WantedOutline
@@ -137,7 +149,12 @@ export const WofsState = z
 					/** The dam's last turn, good or not. */
 					triedAt: IsoTime.optional(),
 					/** The UTC day its newest scenes were last checked: a forward turn that ended (well or on a failure), not one the deadline cut. */
-					checkedOn: IsoDay.optional()
+					checkedOn: IsoDay.optional(),
+					/** The scenes the tail's turns read, [date, STAC item id], kept for LOOKBACK_DAYS: not read again (see the header). */
+					tailItems: z
+						.array(z.tuple([IsoDay, z.string().min(1).max(200)]))
+						.max(5000)
+						.optional()
 				})
 				.strict()
 		)
@@ -180,7 +197,7 @@ export function outlineBbox(o: Pick<WantedOutline, 'geometry'>): [number, number
 }
 
 /** Why the run stopped. */
-export type WofsStop = 'no_list' | 'done' | 'deadline' | 'refused' | 'throttled';
+export type WofsStop = 'no_list' | 'done' | 'deadline' | 'refused' | 'throttled' | 'paused';
 
 export interface WofsPassOptions {
 	store: MirrorStore;
@@ -212,6 +229,8 @@ export interface WofsPassResult {
 	/** Dams whose turn started this run. */
 	turns: number;
 	stopped: WofsStop;
+	/** While paused (the last run stopped refused or throttled), when the pause ends (ISO). */
+	pausedUntil?: string;
 	/** Requests to STAC and to the bucket. */
 	stacRequests: number;
 	sceneRequests: number;
@@ -309,9 +328,12 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 		recencyDays: null,
 		error: null
 	};
+	const previous = await readStatus(store, 'wofs');
+	// Paused after a refusal or throttling: ask nothing, write nothing (the status, and so the pause, stand).
+	const until = pausedUntil(previous);
+	if (until !== null && now() < until) return { ...result, stopped: 'paused', pausedUntil: new Date(until).toISOString(), recencyDays: recencyDays(previous!, today) };
 	const wanted = await readWanted(store);
 	if (!wanted) return { ...result, stopped: 'no_list' };
-	const previous = await readStatus(store, 'wofs');
 	const prevState = await readState(store);
 
 	// Only the listed dams are kept: a dam deleted drops out of the status and the state too.
@@ -360,6 +382,10 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 		const upstream = new Map<string, ObservationFile['upstream'][number]>();
 		for (const r of existing?.rows ?? []) rows.set(r.date, r);
 		for (const u of existing?.upstream ?? []) if (u.itemId) upstream.set(u.itemId, u);
+		// The scenes already read (see the header): the file's, and the tail's that left no row.
+		const tail = addDays(today, -lookbackDays);
+		const tailItems = new Map<string, string>((st.tailItems ?? []).filter(([d]) => d >= tail).map(([d, item]) => [item, d]));
+		const known = (itemId: string) => upstream.has(itemId) || tailItems.has(itemId);
 		// Written when a row is new, changed or dropped, or the outline changed (its old file must not be loaded again).
 		const reset = changed.has(id);
 		let dirty = reset;
@@ -372,12 +398,17 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 
 		/** Reads one date's scenes and keeps the best view as its row. */
 		const readDate = async (date: string, scenes: WofsScene[]) => {
+			// Nothing new on this date: its stored row stands, and no scene is asked for.
+			if (scenes.every((sc) => known(sc.itemId))) return;
+			// A new scene beside a stored row: the date's scenes are compared again, so the better view wins.
+			const toRead = rows.has(date) ? scenes : scenes.filter((sc) => !known(sc.itemId));
 			let best: SceneView | null = null;
-			for (const scene of scenes) {
+			for (const scene of toRead) {
 				let view: SceneView | null;
 				try {
 					view = await viewScene(s3.http, scene, outline, masks);
 					result.scenesRead++;
+					if (date >= tail) tailItems.set(scene.itemId, date);
 				} catch (err) {
 					if (err instanceof FeedFormatError) {
 						result.sceneFailures.push({ featureId: id, itemId: scene.itemId, error: err });
@@ -409,8 +440,7 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 				// First time: the newest weeks (the re-scanned tail's span), so the dam is current at once; the rest is backfilled backward.
 				if (!st.scannedThrough) st.backfilledFrom = maxDay(since, addDays(today, -lookbackDays));
 				const cursor = st.scannedThrough ? maxDay(since, addDays(st.scannedThrough, 1)) : st.backfilledFrom!;
-				// Caught up: re-scan the tail for scenes published late.
-				const tail = addDays(today, -lookbackDays);
+				// Caught up: re-search the tail for scenes published late.
 				const scanFrom = cursor > tail ? maxDay(backfillFrom, tail, st.backfilledFrom) : cursor;
 				for (let from = scanFrom; from <= today; from = addDays(from, WINDOW_DAYS)) {
 					if (pastDeadline()) throw new Deadline();
@@ -453,6 +483,8 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 			}
 		}
 
+		if (tailItems.size) st.tailItems = [...tailItems].map(([item, d]): [string, string] => [d, item]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : 1));
+		else delete st.tailItems;
 		// What was read before a failure is kept: written, and the worker loads it.
 		if (dirty) {
 			const sorted = [...rows.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -526,7 +558,15 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 		result.stacRequests = stac.counter.requests;
 		result.sceneRequests = s3.counter.requests;
 		const stopped = result.stopped === 'refused' || result.stopped === 'throttled';
-		const status: PassStatus = { source: 'wofs', ranAt: isoNow(), stopped, ...(stopped ? { reason: result.stopped } : {}), perKey };
+		const retryAfterSeconds = stopped ? stopRetryAfter(result.error) : undefined;
+		const status: PassStatus = {
+			source: 'wofs',
+			ranAt: isoNow(),
+			stopped,
+			...(stopped ? { reason: result.stopped } : {}),
+			...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+			perKey
+		};
 		result.recencyDays = recencyDays(status, today);
 		try {
 			// The status last: the worker reads it to find the files written.

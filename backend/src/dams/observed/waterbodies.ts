@@ -31,7 +31,10 @@
 // request a second, a conditional GET on the ETag the last fetch kept (a
 // frozen file costs a 304), and an HTTP 403 (refused) or 429/503 (throttled,
 // whose Retry-After the client honours host-wide) stops the run at once,
-// never retried: the status says why, and the invocation fails. A uid whose
+// never retried: the status says why, and the invocation fails. The source is
+// then left alone for a day (or a longer Retry-After): the next runs ask
+// nothing and publish no heartbeat, so the heartbeat alarm is the alert
+// (handover.ts pausedUntil, docs/deployment.md § Dam observations). A uid whose
 // file is missing (404) or unreadable is skipped, recorded, and tried next
 // time; the others go on.
 //
@@ -43,7 +46,20 @@ import { fileURLToPath } from 'node:url';
 import { FeedFormatError, FeedRefusedError, FeedThrottledError, FeedUnavailableError } from '../../feeds/errors.js';
 import type { ConditionalText, FeedHttp } from '../../feeds/http.js';
 import type { MirrorStore } from '../../mirror/store.js';
-import { isCalendarDate, type ObservationFile, type PassStatus, readObservationFile, readStatus, readWanted, recencyDays, WATERBODY_UID, writeObservationFile, writeStatus } from './handover.js';
+import {
+	isCalendarDate,
+	type ObservationFile,
+	type PassStatus,
+	pausedUntil,
+	readObservationFile,
+	readStatus,
+	readWanted,
+	recencyDays,
+	stopRetryAfter,
+	WATERBODY_UID,
+	writeObservationFile,
+	writeStatus
+} from './handover.js';
 import { DEAFRICA_SERVICES_BASE } from './upstream.js';
 
 /** Where the per-waterbody series live (v0.0.2: the newest version with public time series, 2026-10-27). */
@@ -112,7 +128,10 @@ export interface WaterbodiesPassResult {
 	failed: string[];
 	/** Listed uids fetched within REFRESH_DAYS, or asked within RETRY_DAYS, so waiting. */
 	fresh: number;
-	stopped: 'no_list' | 'done' | 'deadline' | 'refused' | 'throttled';
+	/** 'paused': the last run stopped refused or throttled, and the pause hasn't ended (nothing asked, nothing written). */
+	stopped: 'no_list' | 'done' | 'deadline' | 'refused' | 'throttled' | 'paused';
+	/** While paused, when the pause ends (ISO). */
+	pausedUntil?: string;
 	requests: number;
 	/** Days from today back to the newest date any listed uid's file holds; null when none holds one. */
 	recencyDays: number | null;
@@ -145,8 +164,13 @@ export async function runWaterbodiesPass(opts: WaterbodiesPassOptions): Promise<
 		return opts.http.textConditional(url, etag);
 	};
 
-	const wanted = await readWanted(store);
 	const previous = await readStatus(store, 'waterbodies');
+	// Paused after a refusal or throttling: ask nothing, and leave the status (and so the pause) as it stands.
+	const until = pausedUntil(previous);
+	if (until !== null && now() < until) {
+		return { fetched: [], unchanged: [], failed: [], fresh: 0, stopped: 'paused', pausedUntil: new Date(until).toISOString(), requests: 0, recencyDays: recencyDays(previous!, today), error: null };
+	}
+	const wanted = await readWanted(store);
 	const perKey: PassStatus['perKey'] = {};
 	// Only the listed uids are kept: a dam no longer matched drops out of the status too.
 	for (const uid of wanted?.waterbodies ?? []) if (previous?.perKey[uid]) perKey[uid] = previous.perKey[uid]!;
@@ -167,7 +191,15 @@ export async function runWaterbodiesPass(opts: WaterbodiesPassOptions): Promise<
 	let error: unknown = null;
 	const saveStatus = async () => {
 		const stale = stopped === 'refused' || stopped === 'throttled';
-		await writeStatus(store, { source: 'waterbodies', ranAt: new Date(now()).toISOString(), stopped: stale, ...(stale ? { reason: stopped } : {}), perKey });
+		const retryAfterSeconds = stale ? stopRetryAfter(error) : undefined;
+		await writeStatus(store, {
+			source: 'waterbodies',
+			ranAt: new Date(now()).toISOString(),
+			stopped: stale,
+			...(stale ? { reason: stopped } : {}),
+			...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+			perKey
+		});
 	};
 	try {
 		for (const uid of due) {

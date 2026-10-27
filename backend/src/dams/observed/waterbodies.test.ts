@@ -209,6 +209,32 @@ describe('runWaterbodiesPass', () => {
 		}
 	});
 
+	it('leaves the source alone for a day after a 403 or throttling (longer on a longer Retry-After): no request, the status kept', async () => {
+		for (const [err, pauseH] of [
+			[new FeedRefusedError(), 24],
+			[new FeedThrottledError(429, 60), 24],
+			[new FeedThrottledError(503, 3 * 86_400), 72]
+		] as const) {
+			const s = store();
+			await want(s, UIDS.slice(0, 2));
+			const stoppedAt = NOW;
+			await run(s, { textConditional: async () => { throw err; } }, { now: stoppedAt });
+			const stoppedStatus = (await readStatus(s, 'waterbodies'))!;
+			expect(stoppedStatus.retryAfterSeconds).toBe(err instanceof FeedThrottledError ? err.retryAfterSeconds! : undefined);
+			const asked = vi.fn(fixtureWaterbodiesHttp().textConditional);
+			// Every hour of the pause: nothing asked, nothing written.
+			for (const h of [1, pauseH - 1]) {
+				const r = await run(s, { textConditional: asked }, { now: stoppedAt + h * 3_600_000 });
+				expect(r).toMatchObject({ stopped: 'paused', pausedUntil: new Date(stoppedAt + pauseH * 3_600_000).toISOString(), requests: 0, error: null });
+			}
+			expect(asked).not.toHaveBeenCalled();
+			expect(await readStatus(s, 'waterbodies')).toEqual(stoppedStatus);
+			// Then the run goes on.
+			expect(await run(s, { textConditional: asked }, { now: stoppedAt + pauseH * 3_600_000 })).toMatchObject({ stopped: 'done', requests: 2 });
+			expect((await readStatus(s, 'waterbodies'))!.stopped).toBe(false);
+		}
+	});
+
 	it('keeps the status of what it fetched before the mirror failed, then fails', async () => {
 		const s = store();
 		await want(s, UIDS.slice(0, 2));

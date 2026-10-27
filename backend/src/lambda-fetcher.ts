@@ -379,6 +379,17 @@ export interface DamPassAnswer {
 /** What a dams-weekly invocation answers: each source's pass that ran. */
 export type DamsWeeklyAnswer = Partial<Record<'waterbodies' | 'wofs', DamPassAnswer>>;
 
+/**
+ * A source paused after its pass stopped on a 403 or throttling (handover.ts
+ * pausedUntil): nothing asked, and no heartbeat, so the heartbeat alarm fires
+ * (that is the alert, issue #604's rule: a refusal stops and alerts, never a
+ * retry). Logged, and not an error: the stopping run already failed.
+ */
+function pausedAnswer(source: 'waterbodies' | 'wofs', pausedUntil: string | undefined, ms: number): { answer: DamPassAnswer; error: null } {
+	logEvent('warn', { event: 'dams_pass', source, stopped: 'paused', pausedUntil: pausedUntil ?? null, ms });
+	return { answer: { fetched: 0, unchanged: 0, failed: 0, fresh: 0, recencyDays: null, stopped: 'paused' }, error: null };
+}
+
 /** The Waterbodies pass (dams/observed/waterbodies.ts): its metrics whatever happened, then its stop (an HTTP 403, 429/503) as the error. */
 async function waterbodiesPass(deadline: number): Promise<{ answer: DamPassAnswer; error: unknown }> {
 	const { runWaterbodiesPass, waterbodiesHttp, REQUEST_INTERVAL_MS } = await import('./dams/observed/waterbodies.js');
@@ -392,6 +403,7 @@ async function waterbodiesPass(deadline: number): Promise<{ answer: DamPassAnswe
 		deadline,
 		intervalMs: mode === 'live' ? REQUEST_INTERVAL_MS : 0
 	});
+	if (r.stopped === 'paused') return pausedAnswer('waterbodies', r.pausedUntil, Date.now() - started);
 	// The heartbeat goes out for every completed pass: a stop by the upstream is reported by the error below, not by silence.
 	emitMetricLine(damPassMetricLine('waterbodies', r.recencyDays));
 	const message = r.error !== null ? feedErrorMessage(r.error) : null;
@@ -432,6 +444,7 @@ async function wofsPass(deadline: number): Promise<{ answer: DamPassAnswer; erro
 		stacIntervalMs: live ? STAC_INTERVAL_MS : 0,
 		sceneIntervalMs: live ? SCENE_INTERVAL_MS : 0
 	});
+	if (r.stopped === 'paused') return pausedAnswer('wofs', r.pausedUntil, Date.now() - started);
 	emitMetricLine(damPassMetricLine('wofs', r.recencyDays));
 	const message = r.error !== null ? feedErrorMessage(r.error) : null;
 	const unchanged = Math.max(0, r.turns - r.written.length - r.failures.length);
@@ -464,7 +477,9 @@ async function wofsPass(deadline: number): Promise<{ answer: DamPassAnswer; erro
  * next hour's run tries again). Hourly for the WOfS backfill's sake; each
  * pass keeps its own per-key cadence (a Waterbodies uid weekly, a dam's
  * newest WOfS scenes daily), and a run with nothing due still publishes
- * both heartbeats and recencies.
+ * both heartbeats and recencies. A source whose pass stopped on a 403 or
+ * throttling is paused for a day (or a longer Retry-After): its pass asks
+ * nothing and publishes no heartbeat, so its heartbeat alarm fires.
  */
 async function damsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DamsWeeklyAnswer> {
 	const started = Date.now();

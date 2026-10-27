@@ -42,8 +42,8 @@ function clock(start = T0) {
 }
 
 /** The synthetic WOfS as a FeedHttp, logging each URL; `fail` may throw for a URL. */
-function wofsHttp(opts: { spec?: WofsFixtureSpec; fail?: (url: string, n: number) => Error | null; onRequest?: () => void } = {}) {
-	const fx = wofsFixture(() => TODAY, opts.spec ?? SPEC);
+function wofsHttp(opts: { spec?: WofsFixtureSpec; fail?: (url: string, n: number) => Error | null; onRequest?: () => void; today?: string } = {}) {
+	const fx = wofsFixture(() => opts.today ?? TODAY, opts.spec ?? SPEC);
 	const log: string[] = [];
 	const ask = (url: string) => {
 		log.push(url);
@@ -183,9 +183,41 @@ describe('runWofsPass', () => {
 		expect(r2.fresh).toBe(0);
 		const searched = later.log.filter((u) => u.startsWith(WOFS_STAC_SEARCH)).map((u) => new URL(u).searchParams.get('datetime')!);
 		expect(searched).toEqual([`${day(1 - 45)}T00:00:00Z/${day(1)}T23:59:59Z`]);
-		// The fixture's "today" is still TODAY, so nothing new was published: nothing to write.
+		// The fixture's "today" is still TODAY, so nothing new was published: nothing to write, and no scene read again
+		// (a STAC item id is one processing of one scene: the ones read keep their rows).
 		expect(r2.written).toEqual([]);
+		expect(later.log.filter((u) => u.startsWith(WOFS_S3_BASE))).toEqual([]);
+		expect(r2).toMatchObject({ sceneRequests: 0, scenesRead: 0 });
 		expect((await readState(store))!.dams[DAM_A.featureId]!.checkedOn).toBe(day(1));
+	});
+
+	it('reads only the scenes published since in the tail window, and keeps the rows already read', async () => {
+		const store = freshStore();
+		await listed(store, [DAM_A]);
+		const first = wofsHttp();
+		await runWofsPass({ store, http: first.http, today: TODAY, ...fast });
+		const before = (await readObservationFile(store, 'wofs', DAM_A.featureId))!;
+		const readBefore = new Set(first.log.filter((u) => u.startsWith(WOFS_S3_BASE)));
+		// Ten days later the fixture has published the scenes taken since: only those are read.
+		const later = wofsHttp({ today: day(10) });
+		const r = await runWofsPass({ store, http: later.http, today: day(10), ...fast });
+		const read = new Set(later.log.filter((u) => u.startsWith(WOFS_S3_BASE)));
+		expect(read.size).toBeGreaterThan(0);
+		expect([...read].filter((u) => readBefore.has(u))).toEqual([]);
+		expect(r.written).toEqual([DAM_A.featureId]);
+		const after = (await readObservationFile(store, 'wofs', DAM_A.featureId))!;
+		// Every row read before is kept as it was; the new dates come after it.
+		expect(after.rows.slice(0, before.rows.length)).toEqual(before.rows);
+		expect(after.rows.length).toBeGreaterThan(before.rows.length);
+		expect(after.rows.at(-1)!.date > before.rows.at(-1)!.date).toBe(true);
+		// The tail's items are kept for the lookback only.
+		const tailItems = (await readState(store))!.dams[DAM_A.featureId]!.tailItems ?? [];
+		expect(tailItems.length).toBeGreaterThan(0);
+		expect(tailItems.every(([d]) => d >= day(10 - 45))).toBe(true);
+		// The next day, with nothing newer published: still nothing read.
+		const again = wofsHttp({ today: day(10) });
+		await runWofsPass({ store, http: again.http, today: day(11), ...fast });
+		expect(again.log.filter((u) => u.startsWith(WOFS_S3_BASE))).toEqual([]);
 	});
 
 	it('goes on with a forward turn the deadline cut, in the next run the same day', async () => {
@@ -303,6 +335,44 @@ describe('runWofsPass', () => {
 		const r = await runWofsPass({ store, http: wofsHttp({ fail: () => new FeedThrottledError(429, 60) }).http, today: TODAY, ...fast });
 		expect(r.stopped).toBe('throttled');
 		expect((await readStatus(store, 'wofs'))!).toMatchObject({ stopped: true, reason: 'throttled' });
+	});
+
+	it('leaves the source alone for a day after a 403: no request, no status written, then the run goes on', async () => {
+		const store = freshStore();
+		await listed(store, [DAM_A]);
+		const c = clock();
+		const r1 = await runWofsPass({ store, http: wofsHttp({ fail: () => new FeedRefusedError() }).http, today: TODAY, now: c.now, sleep: c.sleep, ...fast });
+		expect(r1.stopped).toBe('refused');
+		const stoppedStatus = (await readStatus(store, 'wofs'))!;
+		// Twenty-three hours on (a later UTC day, so the dam is due again): paused.
+		c.advance(23 * 3_600_000);
+		const paused = wofsHttp();
+		const r2 = await runWofsPass({ store, http: paused.http, today: day(1), now: c.now, sleep: c.sleep, ...fast });
+		expect(r2).toMatchObject({ stopped: 'paused', pausedUntil: new Date(Date.parse(stoppedStatus.ranAt) + 24 * 3_600_000).toISOString(), turns: 0, written: [], stacRequests: 0, sceneRequests: 0, error: null });
+		expect(paused.log).toEqual([]);
+		// The stopped status stands, so the pause does too.
+		expect(await readStatus(store, 'wofs')).toEqual(stoppedStatus);
+		// A day after the stop: the pass runs again.
+		c.advance(2 * 3_600_000);
+		const resumed = wofsHttp();
+		const r3 = await runWofsPass({ store, http: resumed.http, today: day(1), now: c.now, sleep: c.sleep, ...fast });
+		expect(r3.stopped).toBe('done');
+		expect(resumed.log.length).toBeGreaterThan(0);
+		expect((await readStatus(store, 'wofs'))!.stopped).toBe(false);
+	});
+
+	it('honours a Retry-After longer than the day after throttling', async () => {
+		const store = freshStore();
+		await listed(store, [DAM_A]);
+		const c = clock();
+		await runWofsPass({ store, http: wofsHttp({ fail: () => new FeedThrottledError(503, 2 * 86_400) }).http, today: TODAY, now: c.now, sleep: c.sleep, ...fast });
+		expect((await readStatus(store, 'wofs'))!).toMatchObject({ stopped: true, reason: 'throttled', retryAfterSeconds: 2 * 86_400 });
+		c.advance(47 * 3_600_000);
+		const paused = wofsHttp();
+		expect((await runWofsPass({ store, http: paused.http, today: day(2), now: c.now, sleep: c.sleep, ...fast })).stopped).toBe('paused');
+		expect(paused.log).toEqual([]);
+		c.advance(2 * 3_600_000);
+		expect((await runWofsPass({ store, http: wofsHttp().http, today: day(2), now: c.now, sleep: c.sleep, ...fast })).stopped).toBe('done');
 	});
 
 	it('ends a dam’s turn on a bad search or a timeout, and goes on with the next', async () => {

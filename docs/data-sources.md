@@ -286,9 +286,12 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
 - **Limits we keep to:** one request a second; at most 30 % of the run's
   time (the rest is WOfS's); feeds/http.ts's User-Agent, host allowlist,
   20 s timeout and 4 MB cap; a 429/503 pauses the host for its
-  `Retry-After` and stops the run, as does a 403, never retried within
-  the hour (that uid not within the day): the status says `stopped` and why, the invocation fails (the fetcher's
-  Errors alarm), and the heartbeat still goes out. A 404 (a uid with no
+  `Retry-After` and stops the run, as does a 403, never retried: the status
+  says `stopped` and why, the invocation fails (the fetcher's Errors alarm),
+  and the heartbeat still goes out. Then the source is **paused** for 24
+  hours from that run (or the `Retry-After`, if longer): the hourly runs ask
+  it nothing and publish no heartbeat for it, so its heartbeat alarm fires
+  ([architecture.md § Dam observations](./architecture.md#dam-observations)). A 404 (a uid with no
   series) or a changed layout is recorded for that uid, which waits a day,
   and the run goes on.
 - **Rows kept:** `wet_area_m2` = `area_wet_m2`, `pct_observed` =
@@ -296,7 +299,7 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   an empty `pc_wet`) is dropped, since 0 m² wet on a date nobody saw reads
   as an empty dam ([architecture.md § Dam observations](./architecture.md#dam-observations)).
 - **Freshness:** the pass's heartbeat (`DamPassCompleted{Source=waterbodies}`)
-  alarms when missing for two days. **No recency alarm, on purpose.**
+  alarms when missing for 18 hours (a refusal's pause included). **No recency alarm, on purpose.**
   Checked 2026-10-27: the public series objects were last written
   2024-02-26 and a sampled series ends 2023-09-17, though the product says
   it updates weekly. A recency alarm would fire from day one; the metric
@@ -350,17 +353,21 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   (source `wofs`). Every dam's newest scenes come first; the history goes
   back to 2013 (the Landsat 8 era, `WOFS_BACKFILL_FROM`) with the time
   left, newest first, and resumes across runs (about seven hours of hourly
-  runs per dam); after it, a dam re-reads only its last 45 days, once a
-  day, for scenes published late.
+  runs per dam); after it, a dam searches only its last 45 days, once a
+  day, for scenes published late, and reads only scenes whose STAC item id
+  it hasn't read (an item id is one processing of one scene and never
+  changes), so a day with nothing new published costs one search.
 - **Limits we keep to:** STAC at most one request a second, the bucket at
   most five a second, one request in flight; feeds/http.ts's User-Agent,
   host allowlist, 20 s timeout and 4 MB cap; a 403 or 429/503 from either
-  host stops the pass, never retried within the hour (the status says
-  `stopped` and why, the invocation fails, the heartbeat still goes out). A scene
+  host stops the pass, never retried (the status says `stopped` and why,
+  the invocation fails, the heartbeat still goes out), and pauses the WOfS
+  pass for 24 hours from that run (or the `Retry-After`, if longer): no
+  request and no heartbeat, so its heartbeat alarm fires. A scene
   that can't be read is skipped and counted; a failed search or a timeout
   ends that dam's turn.
-- **Freshness:** the pass's heartbeat (`DamPassCompleted{Source=wofs}`)
-  and its recency, the days since the newest observation any dam holds
+- **Freshness:** the pass's heartbeat (`DamPassCompleted{Source=wofs}`,
+  missing for 18 hours) and its recency, the days since the newest observation any dam holds
   (`DamObservationAgeDays{Source=wofs}`), both alarmed
   (`infra/dam_observations.tf`, `treat_missing_data = "breaching"`, off
   until `dam_observations_enabled`).

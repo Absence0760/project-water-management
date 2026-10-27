@@ -105,8 +105,9 @@ resource "terraform_data" "dam_observations_gate" {
 # (REFRESH_DAYS in dams/observed/wofs/pass.ts), every other run's time goes to
 # the WOfS backfill, and the pacing stays (STAC once a second, the bucket five
 # times). A run with nothing due asks DE Africa nothing, and still publishes
-# each source's heartbeat and recency, so the alarms below (daily periods:
-# CloudWatch can't evaluate two weekly ones) see every day.
+# each source's heartbeat and recency, so the alarms below (6-hour periods
+# for the heartbeat, daily for the recency: CloudWatch can't evaluate two
+# weekly ones) see every day.
 resource "aws_cloudwatch_event_rule" "dams_weekly" {
   name                = "${local.project}-dams-weekly"
   description         = "The fetcher's dam observation passes, hourly: DE Africa Waterbodies (each uid re-read once a week) and WOfS (each dam's newest scenes once a day, the rest of the time its history) for every traced dam, into the mirror bucket ({\"mode\":\"dams-weekly\"}). Disabled until dam_observations_enabled is set."
@@ -123,7 +124,8 @@ resource "aws_cloudwatch_event_target" "dams_weekly" {
   input = jsonencode({ mode = "dams-weekly" })
 
   # A run stopped by an HTTP 403 or throttling must not ask again within
-  # minutes: the next hour's run tries (the feeds pause a refused host an hour too).
+  # minutes: no retry here, and the passes themselves leave that source alone
+  # for 24 hours (or a longer Retry-After) after the stop (handover.ts pausedUntil).
   retry_policy {
     maximum_retry_attempts       = 0
     maximum_event_age_in_seconds = 3600
@@ -145,21 +147,26 @@ resource "aws_lambda_permission" "fetcher_dams_weekly" {
 # (a) Heartbeat, one per source: every completed pass publishes
 # DamPassCompleted{Source} = 1 (an embedded metric in the fetcher's log,
 # dams/observed/handover.ts damPassMetricLine), whatever it fetched. No
-# datapoint for two days, the pass stopped running (or fails before it ends):
-# missing data is breaching. Essential tier, like the mirror's freshness.
+# datapoint for 18 hours (three 6-hour periods), the pass stopped running (or
+# fails before it ends): missing data is breaching. Essential tier, like the
+# mirror's freshness. It is also the alert for a refusal: after a pass stops
+# on an HTTP 403 or 429/503, that source is paused for 24 hours (or a longer
+# Retry-After; handover.ts pausedUntil) and publishes no heartbeat, so this
+# fires within the pause. Daily periods couldn't see a 24-hour pause: each UTC
+# day it spans still has heartbeats before or after it.
 resource "aws_cloudwatch_metric_alarm" "dam_pass_heartbeat" {
   for_each = local.dams_enabled && local.alarms_essential ? local.dam_sources : toset([])
 
   alarm_name          = "${local.project}-dam-pass-${each.key}"
   comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 2
-  datapoints_to_alarm = 2
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
   metric_name         = local.dam_pass_metric
   namespace           = local.dam_metric_namespace
-  period              = 86400
+  period              = 21600
   statistic           = "Sum"
   threshold           = 1
-  alarm_description   = "The fetcher's ${each.key} pass of the dam observations published no heartbeat for two days: the hourly dams-weekly runs stopped, or fails before the pass completes. Logs Insights on the fetcher log group: filter message.event = \"dams_pass\" and message.source = \"${each.key}\" | fields message.stopped, message.reason, message.detail, message.fetched, message.failed. stopped refused / throttled = DE Africa answered HTTP 403 or 429/503 (the run stopped on purpose, docs/deployment.md § Dam observations). The app keeps showing the observations it holds."
+  alarm_description   = "The fetcher's ${each.key} pass of the dam observations published no heartbeat for 18 hours: the hourly dams-weekly runs stopped, fail before the pass completes, or the source is paused after DE Africa refused or throttled it (24 h, or a longer Retry-After). Logs Insights on the fetcher log group: filter message.event = \"dams_pass\" and message.source = \"${each.key}\" | fields message.stopped, message.reason, message.detail, message.fetched, message.failed. stopped refused / throttled, then paused = DE Africa answered HTTP 403 or 429/503 (the run stopped on purpose and the source waits out the pause; docs/deployment.md § Dam observations). The app keeps showing the observations it holds."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "breaching"
 
