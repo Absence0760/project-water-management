@@ -147,6 +147,74 @@ class Daily(unittest.TestCase):
                 zarrstore.write_daily(root, "prelim", dt.date(2026, 9, 30), zeros(1))
 
 
+class ProductGrids(unittest.TestCase):
+    """Each product's grid (grid.for_product), as backend/src/mirror/grid.ts PRODUCT_GRIDS has it."""
+
+    def test_the_registry(self):
+        self.assertIs(grid.for_product("rnl"), grid.CHC)
+        self.assertIs(grid.for_product("prelim"), grid.CHC)
+        self.assertIs(grid.for_product("gefs/2026-02-09"), grid.CHC)
+        self.assertEqual((grid.CHC.step, grid.CHC.origin, grid.CHC.rows, grid.CHC.cols), (grid.STEP, grid.ORIGIN, grid.ROWS, grid.COLS))
+        for product in ("era5l", "imerg_late", "ecmwf/2026-02-09"):
+            g = grid.for_product(product)
+            self.assertEqual((g.step, g.origin, g.rows, g.cols, g.daily_chunks), (0.1, {"lat": -35.45, "lon": 10.05}, 275, 310, (1, 55, 62)), product)
+        self.assertEqual(grid.for_product("era5l").first_year, 1950)
+        self.assertEqual(grid.for_product("sat").first_year, 1981)
+        for bad in ("nope", "gefs/latest", "ecmwf/"):
+            with self.assertRaises(ValueError, msg=bad):
+                grid.for_product(bad)
+        # 25 daily chunks a day on either grid.
+        for g in (grid.CHC, grid.TENTH):
+            self.assertEqual(-(-g.rows // g.daily_chunks[1]) * -(-g.cols // g.daily_chunks[2]), 25)
+
+    def test_tenth_indices_corners(self):
+        g = grid.TENTH
+        self.assertEqual((g.row_index(-35.45), g.col_index(10.05)), (0, 0))
+        self.assertEqual((g.row_index(-8.05), g.col_index(40.95)), (274, 309))
+        with self.assertRaises(ValueError):
+            g.row_index(-35.55)
+        with self.assertRaises(ValueError):
+            g.col_index(41.05)
+
+    def test_era5l_finals_and_imerg_daily_on_the_tenth_grid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            v = np.full((1, 275, 310), np.nan, dtype=np.float32)
+            v[0, 274, 309] = 3.5
+            zarrstore.write_finals(root, "era5l", dt.date(2024, 2, 29), v)
+            meta = json.loads((root / "era5l" / "zarr.json").read_text())
+            self.assertEqual(meta["shape"], [75, 366, 275, 310])
+            self.assertEqual(meta["chunk_grid"]["configuration"]["chunk_shape"], [1, 366, 20, 20])
+            self.assertEqual(meta["attributes"]["firstYear"], 1950)
+            self.assertEqual(meta["attributes"]["grid"], {"origin": {"lat": -35.45, "lon": 10.05}, "step": 0.1})
+            self.assertEqual(open_array(root, "era5l")[74, 59, 274, 309], np.float32(3.5))
+            np.testing.assert_array_equal(zarrstore.read_finals(root, "era5l", dt.date(2024, 2, 29), 1), v)
+            # CHC's shape is refused for a 0.1 deg product.
+            with self.assertRaises(ValueError):
+                zarrstore.write_finals(root, "era5l", dt.date(2024, 3, 1), zeros(1))
+
+            d = np.full((1, 275, 310), np.nan, dtype=np.float32)
+            d[0, 54, 61] = 1.25
+            zarrstore.write_daily(root, "imerg_late", dt.date(2026, 2, 8), d, array_first_day=dt.date(2026, 2, 1))
+            meta = json.loads((root / "imerg_late" / "zarr.json").read_text())
+            self.assertEqual(meta["shape"], [8, 275, 310])
+            self.assertEqual(meta["chunk_grid"]["configuration"]["chunk_shape"], [1, 55, 62])
+            self.assertEqual(meta["attributes"]["grid"]["step"], 0.1)
+            self.assertTrue((root / "imerg_late/c/7/0/0").exists())
+            zarrstore.write_daily(root, "imerg_late", dt.date(2026, 2, 9), d)
+            self.assertEqual(open_array(root, "imerg_late").shape, (9, 275, 310))
+
+    def test_an_array_on_another_grid_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            zarrstore.write_daily(root, "prelim", dt.date(2026, 2, 1), zeros(1))
+            # prelim's 0.05 deg array where imerg_late's should be.
+            (root / "imerg_late").mkdir()
+            (root / "imerg_late" / "zarr.json").write_text((root / "prelim" / "zarr.json").read_text())
+            with self.assertRaises(ValueError):
+                zarrstore.write_daily(root, "imerg_late", dt.date(2026, 2, 1), np.zeros((1, 275, 310), np.float32))
+
+
 class S3Staging(unittest.TestCase):
     def test_writes_go_up_and_only_changed_objects_move(self):
         s3 = FakeS3()

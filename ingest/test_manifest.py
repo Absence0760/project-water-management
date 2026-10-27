@@ -19,7 +19,7 @@ import manifest  # noqa: E402
 
 def full():
     m = manifest.new("rnl")
-    m.update(revision=2, years={"first": 1981, "last": 2026}, finalThrough="2024-06-30", prelimThrough="2026-10-26")
+    m.update(revision=2, years={"first": 1981, "last": 2026}, finalThrough="2024-06-30", prelimThrough=None)
     m["files"] = [
         {
             "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/byMonth/chirps-v3.0.2024.06.days_p05.nc",
@@ -116,6 +116,85 @@ class Coverage(unittest.TestCase):
         # A daily product's files are not byMonth files.
         m["product"], m["finalThrough"] = "prelim", None
         manifest.validate(m)
+
+
+def imerg_url(day):
+    d = day.replace("-", "")
+    return f"https://gpm1.gesdisc.eosdis.nasa.gov/data/GPM_L3/GPM_3IMERGDL.07/{day[:4]}/{day[5:7]}/3B-DAY-L.MS.MRG.3IMERG.{d}-S000000-E235959.V07B.nc4"
+
+
+def per_product(product, step, files=(), final_through=None):
+    m = manifest.new(product)
+    m["grid"] = {"origin": {"lat": -35.45, "lon": 10.05}, "step": step}
+    m.update(years={"first": 2024, "last": 2024}, finalThrough=final_through)
+    m["files"] = [dict(full()["files"][0], **f) for f in files]
+    m["changes"] = []
+    return m
+
+
+class PerProduct(unittest.TestCase):
+    """The rules backend/src/mirror/manifest.ts holds too (its tests: manifest.test.ts)."""
+
+    def test_each_product_has_its_grid_step(self):
+        self.assertEqual(manifest.product_step("era5l"), 0.1)
+        self.assertEqual(manifest.product_step("sat"), 0.05)
+        self.assertEqual(manifest.product_step("gefs/2026-02-09"), 0.05)
+        self.assertEqual(manifest.product_step("ecmwf/2026-02-09"), 0.1)
+        self.assertIsNone(manifest.product_step("nope"))
+        manifest.validate(per_product("era5l", 0.1, [{"url": "cds:reanalysis-era5-land/2024-06"}], "2024-06-30"))
+        with self.assertRaisesRegex(ValueError, "grid.step must be 0.1 for era5l"):
+            manifest.validate(per_product("era5l", 0.05))
+        m = full()
+        m["grid"]["step"] = 0.1
+        with self.assertRaisesRegex(ValueError, "grid.step must be 0.05 for rnl"):
+            manifest.validate(m)
+
+    def test_era5l_holds_no_preliminary_days_and_imerg_late_no_final_days(self):
+        m = per_product("era5l", 0.1)
+        m["prelimThrough"] = "2024-06-01"
+        with self.assertRaisesRegex(ValueError, "era5l has no preliminary days"):
+            manifest.validate(m)
+        m = per_product("imerg_late", 0.1, [{"url": imerg_url("2024-06-01"), "version": "V07"}], "2024-06-01")
+        with self.assertRaisesRegex(ValueError, "imerg_late holds no final days"):
+            manifest.validate(m)
+
+    def imerg(self, days, prelim_through):
+        m = per_product("imerg_late", 0.1, [{"url": imerg_url(d), "version": "V07"} for d in days])
+        m["prelimThrough"] = prelim_through
+        return m
+
+    def test_imerg_late_files_name_their_day_and_may_carry_a_version(self):
+        m = self.imerg(["2024-06-01", "2024-06-02", "2024-06-04"], "2024-06-02")
+        manifest.validate(m)
+        self.assertEqual(manifest.imerg_file_day(imerg_url("2024-06-04")), "2024-06-04")
+        self.assertEqual(manifest.imerg_coverage(m["files"]), ("2024-06-01", "2024-06-02"))
+        # The version round-trips, after the spec's keys.
+        doc = json.loads(manifest.dumps(m))
+        self.assertEqual(list(doc["files"][0])[-1], "version")
+        self.assertEqual(manifest.loads(manifest.dumps(m)), m)
+        # prelimThrough past the gap.
+        m["prelimThrough"] = "2024-06-04"
+        with self.assertRaisesRegex(ValueError, "runs past the days"):
+            manifest.validate(m)
+        m["prelimThrough"] = "2024-06-02"
+        # Optional: a file without one is valid (positive control for the pattern below).
+        m["files"][0].pop("version")
+        manifest.validate(m)
+        for v in ("7", "V07B", "v07"):
+            m["files"][0]["version"] = v
+            with self.assertRaisesRegex(ValueError, "IMERG version", msg=v):
+                manifest.validate(m)
+        m["files"][0]["version"] = "V08"
+        manifest.validate(m)
+        m["files"][0]["url"] = "https://example.org/imerg.nc4"
+        with self.assertRaisesRegex(ValueError, "names no day"):
+            manifest.validate(m)
+
+    def test_only_imerg_late_files_carry_a_version(self):
+        m = full()
+        m["files"][0]["version"] = "V07"
+        with self.assertRaisesRegex(ValueError, "only imerg_late"):
+            manifest.validate(m)
 
 
 class Refusals(unittest.TestCase):
