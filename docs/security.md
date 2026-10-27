@@ -2766,6 +2766,17 @@ In short:
     only those two hosts over HTTPS (`FEED_HOSTS`, `feeds/http.ts`) and
     follows redirects itself, at most 3, each re-checked, so a redirect
     can't send the fetcher (open egress) to another host or plain HTTP.
+    The WOfS pass (issue #604 R5-C, `backend/src/dams/observed/wofs/`)
+    adds Digital Earth Africa's STAC search (`explorer.digitalearth.africa`)
+    and its public bucket (`deafrica-services.s3.af-south-1.amazonaws.com`)
+    to `FEED_HOSTS`. What a STAC answer may point the fetcher at is
+    checked too (`stac.ts`): an item's water asset only as a `wofs_ls/…tif`
+    key in that bucket (no `..`, no other bucket or host), and a `next`
+    page only to the same search endpoint, at most 20 pages. A request
+    carries a traced dam's lon/lat box and dates, never its name, project
+    or owner; the scenes are public and read anonymously, and the COG
+    reader refuses anything but the expected format, with every tile's
+    inflated size bounded (`cog.ts`).
     `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
     On Lambda only the fetcher may build a live client at all

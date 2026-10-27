@@ -65,7 +65,10 @@ full authorised use recording how to re-derive its pair (report format
 `evidence-19`, issue #523 G2); and § 4 naming every other application
 that counts but has no run of the ops it counts with, and saying which
 terms each listed run applied (report format `evidence-20`, issue #523
-G3/G4, 2026-10-12; [§ The responsible authority](#the-responsible-authority)). What is left is
+G3/G4, 2026-10-12; [§ The responsible authority](#the-responsible-authority)); and § 7's
+observed wet days of the applicant's own dams from Digital Earth Africa's
+WOfS (report format `evidence-21`, issue #604 R5-C, 2026-10-27;
+[§ Observed wet days](#observed-wet-days)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -131,6 +134,15 @@ manifest version changed, as for `evidence-8`. A pack drafted before it has
 no `localityMap`: its stored manifest still hashes to its recorded hash
 (`packs.db.test.ts` pins one), and its § 1 says the locality map isn't part
 of the pack.
+
+§ 7's observed wet days (report format `evidence-21`, issue #604 R5-C) are
+`report.damObservations`: each of the applicant's own traced dams with its
+clear WOfS dates in the baseline's period, read when the draft is made, so
+the manifest freezes them and its hash covers them, and `reproduce:pack`
+counts them again ([§ Observed wet days](#observed-wet-days)). No manifest
+version changed, as for `evidence-8`. A pack drafted before has no
+`damObservations`: its stored manifest still hashes to its recorded hash,
+and its report prints without § 7.
 
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, the reproduction bundle's key and
@@ -376,6 +388,76 @@ issued pack's bundle reproduces the figure),
 `evidence-report.spec.ts`, `evidence-pack.spec.ts` (the figure's bytes hash
 to the manifest's `svgSha256`) and `evidence-pack-pdf.spec.ts` (the server
 PDF of a pack with a map).
+
+## Observed wet days
+
+An application to build or raise a dam, or to take more from one, is
+stronger with what the dam has actually held. § 7 of an applicant's report
+(report format `evidence-21`, issue #604 R5-C) gives, for each of the
+applicant's own traced dams, how often the satellite water layer saw it and
+how often it held water, over the baseline run's period. It is evidence
+beside the model, never an input to it.
+
+**Where the numbers come from.** Digital Earth Africa's Water Observations
+from Space (WOfS, CC BY 4.0), one Landsat scene at a time, summed inside the
+dam's own outline on the Map by the fetcher's WOfS pass and loaded into
+`dam_observation` (migration 249, source `wofs`; [architecture.md § Dam
+observations](./architecture.md#dam-observations),
+[data-sources.md](./data-sources.md)). One row per dam and date: the wet
+area seen and the share of the outline seen clearly (`pct_observed`).
+History starts in 2013 (the pass's first backfill), so a baseline period
+before that has no observations, and a dam is seen every 8 to 16 days.
+
+**What is counted** (engine `packages/engine/src/evidence/damObservations.ts`,
+`damObservationsSection`, counting `dam-obs-1`, read by
+`loadDamObservations` in `backend/src/evidence/damObservations.ts` as the
+reader, under RLS, when the report is built):
+
+| Column | What |
+| --- | --- |
+| Dates observed | dates in the period with any WOfS row for the dam |
+| Clear dates | dates on which at least 90 % of the outline was seen clearly (`CLEAR_MIN_PCT`, DE Africa Waterbodies' own rule for a valid observation) |
+| Wet on a clear date | clear dates with a wet area above 0 |
+
+A date seen less clearly counts as observed only: a partial view can say
+water was there but not that the dam was dry, so it is in neither count.
+The clear dates themselves are frozen in the report (`clear`: each date
+and its wet area in m²), so the counts can be checked, and an assessor can
+look up the scene for a date (the dam's outline and the date are enough
+in DE Africa's STAC search; `dam_observation.upstream_key` holds the item
+id the app used).
+
+**Whose dams.** Only the applicant's own units' dams in an applicant's
+application, by the same rule as § 5 (decision D3): a team scenario's units
+are an editor's choice, and baseline evidence names no one's farm, so
+neither has § 7 (`damObservations: null`). An applicant with no dam traced
+on their units gets § 7 with *No dam on the applicant's units is traced on
+the map*. A neighbour's dam is never listed. The section is in the
+assessors' copy and the PDF; like the locality map it isn't on the
+allowlists of an applicant's copy or a share link
+([§ Applicants](#applicants), [§ Sharing and comments](#sharing-and-comments)).
+It rests on nothing registered, so a viewer kept from each registered
+volume reads it whole (`backend/src/allocations/verdictsOnly.ts`).
+
+**Attribution.** § 7 prints *Source: Digital Earth Africa WOfS, CC BY 4.0,
+summed inside the dams' traced outlines by this app* (`WOFS_CITATION`).
+
+**Reproduction.** The observations aren't re-fetched: what is checked is
+that the counts follow from the frozen dates (`checkDamObservations`), in
+order, inside the period, under the counting the report names
+(`observations:wofs`, [§ Reproduction](#reproduction)). The bundle gains no
+file and its layout no version.
+
+Tests: `packages/engine/src/evidence/damObservations.test.ts` (the counts,
+the 90 % edge, the period, only the applicant's dams, the check's
+refusals), `evidence/report.test.ts` (`evidence-21`, null for baseline
+evidence and a team scenario), `evidence/bundle.test.ts`
+(`observations:wofs` passes, fails on a count the dates don't give, absent
+for an older pack), `backend/src/evidence/damObservations.db.test.ts` (the
+query, WOfS only, RLS with positive controls: a member and the dam's farmer
+read them, a stranger and a neighbour's farmer don't), and
+`frontend/…/report/evidence/sections.test.ts` (§ 7 listed only for an
+applicant's application).
 
 ## The responsible authority
 
@@ -1013,6 +1095,7 @@ pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [
 | `structure` | fails only for a malformed bundle: a file that matches its hash but isn't what its name says (JSON that doesn't parse, a manifest or results file missing a part). `checkPackBundle` never throws for a bad bundle; this is the check that says so |
 | `manifest` | `manifest.json` is canonical and hashes to the pack's hash (and to `--expect`, the hash verify returned) |
 | `figure:locality` | § 1's locality map drawn again from the manifest's features (this checkout's `localityMapSvg`) hashes to the `svgSha256` the manifest names; only for a pack with a locality map (`evidence-12`); drawn with other drawing rules, it names the engine to check out |
+| `observations:wofs` | § 7's observed wet days count again from the clear dates the manifest freezes (`checkDamObservations`): each dam's clear and wet counts, the dates in order and inside the period, the counting version and threshold; only for a pack with § 7 (`evidence-21`) |
 | `runs` | the runs are the ones the manifest names, with its engine versions |
 | `inputs:<run>` | each series file parses, matches its hash and the manifest's list; the baseline's settings and model are the manifest's |
 | `changes`, `scenario` | the application's inputs differ from the baseline's by exactly the changes the manifest lists, and the scenario's ops hash to the hash it names (application packs) |
