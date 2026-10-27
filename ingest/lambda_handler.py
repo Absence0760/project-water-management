@@ -1,19 +1,33 @@
 """The bulk ingest Lambda (issue #604 D11): `lambda_handler.handler`.
 
-Event: {"product": "rnl" | "sat", "mode": "monthly" | "backfill", "month": "YYYY-MM"?}
+Event: {"product": "rnl" | "sat", "mode": "monthly"}
+       {"product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM"}
 Env:   MIRROR_URL      file:///abs/path or s3://bucket[/prefix] (required)
-       FEED_SOURCE     fixtures (default: the committed synthetic NetCDF,
-                       no network) or live (production)
+       FEED_SOURCE     fixtures (default: the synthetic byMonth directory in
+                       fixtures/chirps/, served by fixturehttp.py, no
+                       network) or live (CHC itself, production)
        INGEST_CONTACT  the contact address in the User-Agent (optional)
+       INGEST_FIXTURE_VARIANT  fixtures mode only: `rewritten` or `changed`
+                       serves that variant of the synthetic directory
 
-Round 1 is the skeleton: in fixtures mode it reads `fixtures/chc/*.nc`
-(make_chc_fixture.py), writes the region into the product's finals array and
-updates its manifest; a re-run with the same values changes nothing but the
-file's `fetchedAt`, and changed values bump the revision with a `changes`
-entry. `finalThrough` is the end of the contiguous run of months copied from
-the first (manifest.finals_coverage), so a gap left by a partial backfill is
-never read as final. Live mode (listing CHC's `byMonth` directory and downloading through
-polite.py) arrives with R2-A, so it refuses for now.
+Both sources run the same code (chirps_final.py): the listing, its diff
+against the manifest, the paced whole-file downloads, the region subset, the
+hash and the write. Fixtures mode differs only in its opener, no pacing, and
+a local metric sink.
+
+**MirrorLagDays on every exit** (cloudwatch.py): once the event is valid and
+the copy is reachable, every way out of the handler publishes the product's
+lag: a 304, a run that copied files or was cut short by the time budget, a
+monthly run another writer held off, and any failure (published before the
+error is re-raised). An invalid event, or a missing MIRROR_URL, can't name a
+product or read its manifest, so it publishes nothing: the errors alarm and
+the lag alarm's missing-data rule both see that run.
+
+**A 403 (polite.StopRun), an implausible value, a listing that doesn't match
+its files**: the error propagates, so the Lambda errors and the event lands
+in the DLQ. infra/ingest.tf sets no retries. A backfill whose product is
+held by another run raises lease.MirrorBusy (the Step Functions map retries
+that); the daily monthly run just ends.
 
 Run locally: `pnpm dev:ingest:run` (ingest/README.md).
 """
@@ -21,27 +35,32 @@ Run locally: `pnpm dev:ingest:run` (ingest/README.md).
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import os
 import re
 import sys
 from pathlib import Path
 
-import numpy as np
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import chcnetcdf  # noqa: E402
-import grid  # noqa: E402
+import chirps_final  # noqa: E402
+import cloudwatch  # noqa: E402
+import lease  # noqa: E402
 import manifest  # noqa: E402
+import polite  # noqa: E402
 import zarrstore  # noqa: E402
+
+# Round 1's names for the single-file path, which now lives in chirps_final.
+ingest_file = chirps_final.ingest_file
+_diff = chirps_final._diff
+REGION_CELLS = chirps_final.REGION_CELLS
 
 PRODUCTS = ("rnl", "sat")
 MODES = ("monthly", "backfill")
-FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "chc"
 _MONTH = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 
-#: cellsChanged when the copy didn't hold the previous file's values (below): every cell of the region.
-REGION_CELLS = grid.ROWS * grid.COLS
+log = logging.getLogger("ingest")
+log.setLevel(logging.INFO)
 
 
 class BadEvent(ValueError):
@@ -49,7 +68,7 @@ class BadEvent(ValueError):
 
 
 def validate_event(event) -> dict:
-    """The event, checked: product and mode required, month optional, nothing else."""
+    """The event, checked: product and mode required; month required for a backfill and refused otherwise; nothing else."""
     if not isinstance(event, dict):
         raise BadEvent("the event must be a JSON object")
     extra = set(event) - {"product", "mode", "month"}
@@ -62,121 +81,100 @@ def validate_event(event) -> dict:
     month = event.get("month")
     if month is not None and not (isinstance(month, str) and _MONTH.match(month)):
         raise BadEvent(f'month must be "YYYY-MM", got {month!r}')
+    if event["mode"] == "backfill" and month is None:
+        raise BadEvent('a backfill names its month ("month": "YYYY-MM")')
+    if event["mode"] == "monthly" and month is not None:
+        raise BadEvent("a monthly run takes no month: it copies whatever the listing has that the copy doesn't")
+    if month is not None:
+        first = chirps_final.FIRST_MONTH[event["product"]]
+        if (int(month[:4]), int(month[5:])) < first:
+            raise BadEvent(f"CHC's {event['product']} byMonth files start at {first[0]:04d}-{first[1]:02d}, not {month}")
     return {"product": event["product"], "mode": event["mode"], "month": month}
 
 
-def fixture_files(month: str | None) -> list[Path]:
-    files = sorted(FIXTURE_DIR.glob("*.nc"))
-    if month is not None:
-        files = [f for f in files if (ym := manifest.file_month(f.name)) and f"{ym[0]:04d}-{ym[1]:02d}" == month]
-        if not files:
-            raise BadEvent(f"no fixture file for {month} in {FIXTURE_DIR}")
-    return files
+def _publish_lag(mirror, product: str, metrics, today: dt.date) -> int:
+    m = manifest.read(mirror, product)
+    value = cloudwatch.lag_days(product, m["finalThrough"] if m else None, today)
+    metrics.publish(product, value)
+    return value
 
 
-def _diff(old: np.ndarray, new: np.ndarray) -> tuple[int, float]:
-    """(cells whose series changed, the largest absolute difference where both have a value)."""
-    both_nan = np.isnan(old) & np.isnan(new)
-    changed = ~both_nan & ((old != new) | (np.isnan(old) != np.isnan(new)))
-    cells = int(np.any(changed, axis=0).sum())
-    finite = ~np.isnan(old) & ~np.isnan(new)
-    max_abs = float(np.max(np.abs(old[finite] - new[finite]), initial=0.0))
-    return cells, max_abs
-
-
-def _check_month(url: str, first_day: dt.date, last_day: dt.date) -> None:
-    """The file's days lie in the month its URL names and run to that month's
-    last day, so manifest.finals_coverage can count the month as held whole."""
-    ym = manifest.file_month(url)
-    if ym is None:
-        raise ValueError(f"{url} names no month (….YYYY.MM.days_p05.nc)")
-    month_end = dt.date(ym[0] + ym[1] // 12, ym[1] % 12 + 1, 1) - dt.timedelta(days=1)
-    if (first_day.year, first_day.month) != ym or last_day != month_end:
-        raise ValueError(f"{url} holds {first_day}..{last_day}, not days of {ym[0]:04d}-{ym[1]:02d} through {month_end}")
-
-
-def ingest_file(mirror: zarrstore.Mirror, product: str, url: str, path: Path, etag=None, last_modified=None, now=manifest.utc_now) -> dict:
-    """Copy one CHC NetCDF file's region into `product` and record it in the manifest."""
-    region = chcnetcdf.read_region(str(path))
-    days = region.values.shape[0]
-    last_day = region.first_day + dt.timedelta(days=days - 1)
-    _check_month(url, region.first_day, last_day)
-    sha = manifest.values_sha256(region.values)
-    m = manifest.read(mirror, product) or manifest.new(product)
-    previous = manifest.file_entry(m, url)
-
-    outcome = "unchanged"
-    if previous is None or previous["valuesSha256"] != sha:
-        prefixes = zarrstore.finals_year_prefixes(product, region.first_day, days)
-        with mirror.stage(prefixes) as root:
-            old = zarrstore.read_finals(root, product, region.first_day, days)
-            zarrstore.write_finals(root, product, region.first_day, region.values)
-        if previous is None:
-            outcome = "added"
-        else:
-            m["revision"] += 1
-            if old is not None and manifest.values_sha256(old) == previous["valuesSha256"]:
-                cells, max_abs = _diff(old, region.values)
-            else:
-                # The copy didn't hold the previous file's values: a run died
-                # after uploading some or all of the new chunks but before the
-                # manifest, and this retry reads them back (or the array is
-                # gone). The old values are unknown, so the diff would claim
-                # fewer cells than changed, 0 after a whole upload, and
-                # 245_mirror_revision skips an entry with cellsChanged 0,
-                # leaving stale cached finals unmarked. Claim every cell of the
-                # region, and as maxAbsDiff the widest difference two plausible
-                # values can have (chcnetcdf's 0–2000 mm): a true upper bound,
-                # never 0.
-                cells, max_abs = REGION_CELLS, chcnetcdf.PLAUSIBLE_MAX_MM - chcnetcdf.PLAUSIBLE_MIN_MM
-            m["changes"].append({"revision": m["revision"], "days": [region.first_day.isoformat(), last_day.isoformat()], "cellsChanged": cells, "maxAbsDiff": max_abs})
-            outcome = "changed"
-
-    manifest.upsert_file(
-        m,
-        {
-            "url": url,
-            "etag": etag,
-            "lastModified": last_modified,
-            "size": path.stat().st_size,
-            "valuesSha256": sha,
-            "revision": m["revision"],
-            "fetchedAt": now(),
-        },
-    )
-    first, last = m["years"]["first"], m["years"]["last"]
-    m["years"] = {"first": min(filter(None, [first, region.first_day.year])), "last": max(filter(None, [last, last_day.year]))}
-    # The end of the contiguous run of months from the first copied, never the
-    # newest day seen: a month not yet copied in between is not held.
-    coverage = manifest.finals_coverage(m["files"])
-    m["finalThrough"] = coverage[1] if coverage else None
-    manifest.write(mirror, m)
-    return {"url": url, "outcome": outcome, "days": [region.first_day.isoformat(), last_day.isoformat()], "revision": m["revision"]}
-
-
-def handler(event, context=None, s3_client=None):
+def handler(event, context=None, s3_client=None, opener=None, metrics=None, clock=None, sleep=None, today=None):
+    """Run one event. `s3_client`, `opener` (polite's), `metrics` (a cloudwatch
+    sink), `clock`/`sleep` (pacing) and `today` (the lag's date) are for tests."""
     ev = validate_event(event)
     source = os.environ.get("FEED_SOURCE", "fixtures")
+    if source not in ("fixtures", "live"):
+        raise RuntimeError(f"FEED_SOURCE must be fixtures or live, got {source!r}")
     mirror_url = os.environ.get("MIRROR_URL")
     if not mirror_url:
         raise RuntimeError("MIRROR_URL is not set (file:///abs/path or s3://bucket)")
     mirror = zarrstore.Mirror.from_url(mirror_url, s3_client=s3_client)
+    product = ev["product"]
+    live = source == "live"
+    if metrics is None:
+        metrics = cloudwatch.CloudWatchSink() if live else cloudwatch.LocalSink()
+    if opener is None and not live:
+        import fixturehttp
 
-    if source == "live":
-        raise NotImplementedError("live fetching from CHC is not built yet (issue #604 R2-A); use FEED_SOURCE=fixtures")
-    if source != "fixtures":
-        raise RuntimeError(f"FEED_SOURCE must be fixtures or live, got {source!r}")
+        opener = fixturehttp.FixtureOpener(variant=os.environ.get("INGEST_FIXTURE_VARIANT") or None)
+    client_kw = {"opener": opener} if opener is not None else {}
+    run = chirps_final.Run(
+        # Fixtures mode has no upstream to be polite to: no pacing, same code.
+        client=polite.PoliteClient(
+            contact=os.environ.get("INGEST_CONTACT"),
+            min_interval=1.0 if live else 0.0,
+            **client_kw,
+            **({"sleep": sleep} if sleep else {}),
+            **({"clock": clock} if clock else {}),
+        ),
+        budget=chirps_final.Budget(context),
+        interval=chirps_final.DOWNLOAD_INTERVAL_S if live else 0.0,
+        **({"clock": clock} if clock else {}),
+        **({"sleep": sleep} if sleep else {}),
+    )
+    today = today or (lambda: dt.datetime.now(dt.UTC).date())
 
-    files = fixture_files(ev["month"])
-    if ev["mode"] == "monthly" and ev["month"] is None:
-        files = files[-1:]
-    results = [ingest_file(mirror, ev["product"], f"fixture:chc/{f.name}", f) for f in files]
+    # Every exit from here on publishes MirrorLagDays (the lag alarms treat
+    # no datapoint as breaching), a failure before re-raising it.
+    try:
+        if ev["mode"] == "monthly":
+            out = chirps_final.run_monthly(mirror, product, run)
+        else:
+            out = chirps_final.run_backfill(mirror, product, ev["month"], run)
+    except lease.MirrorBusy as e:
+        lag = _publish_lag(mirror, product, metrics, today())
+        if ev["mode"] == "backfill":
+            raise
+        log.info("%s: %s; the run holding it does this work", product, e)
+        out = {"busy": str(e), "files": [], "pending": None}
+        return _result(ev, source, mirror, out, lag)
+    except BaseException:
+        try:
+            _publish_lag(mirror, product, metrics, today())
+        except Exception:
+            log.exception("%s: could not publish %s while failing", product, cloudwatch.METRIC)
+        raise
+    lag = _publish_lag(mirror, product, metrics, today())
+    return _result(ev, source, mirror, out, lag)
+
+
+def _result(ev, source, mirror, out, lag) -> dict:
     m = manifest.read(mirror, ev["product"])
-    return {"product": ev["product"], "mode": ev["mode"], "source": source, "revision": m["revision"] if m else None, "finalThrough": m["finalThrough"] if m else None, "files": results}
+    return {
+        "product": ev["product"],
+        "mode": ev["mode"],
+        "source": source,
+        "revision": m["revision"] if m else None,
+        "finalThrough": m["finalThrough"] if m else None,
+        "lagDays": lag,
+        **out,
+    }
 
 
 if __name__ == "__main__":
     import json
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     product = sys.argv[1] if len(sys.argv) > 1 else "rnl"
-    print(json.dumps(handler({"product": product, "mode": "backfill"}), indent=2))
+    print(json.dumps(handler({"product": product, "mode": "monthly"}), indent=2))

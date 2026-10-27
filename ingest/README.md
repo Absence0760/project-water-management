@@ -6,39 +6,105 @@ app never fetches from someone else's server because a feed or a user asked
 (D11), since NetCDF/HDF5 has no good Node reader. The daily TIFF and DWS
 ingest stay in Node (`backend/`).
 
-Round 1 is the skeleton: the modules below, a fixtures mode that runs end to
-end without a network, the image and CI. Listing and downloading CHC's
-`byMonth` files (R2-A, `chirps_final.py`) comes next, so `FEED_SOURCE=live`
-refuses for now.
+Round 1 built the skeleton (the writer, the manifest, the polite client, the
+image and CI); Round 2 (R2-A) added the CHIRPS finals job, `chirps_final.py`,
+which lists CHC's `byMonth` directories and copies new or rewritten months.
+Fixtures mode runs the same code against a synthetic directory.
 
 | File | What it does |
 | --- | --- |
-| `lambda_handler.py` | `handler(event, context)`: validates the event, reads the source, writes the copy and the manifest. |
+| `lambda_handler.py` | `handler(event, context)`: validates the event, runs the finals job, and publishes `MirrorLagDays` on every exit. |
+| `chirps_final.py` | The CHIRPS finals job (below): the listing and its diff, paced whole-file downloads within the time budget, and `ingest_file`, the single-file path. |
+| `cloudwatch.py` | The freshness metric `MirrorLagDays` (CloudWatch live, a local sink in fixtures mode). |
+| `lease.py` | One writer per product: a lease object taken with S3 conditional writes. |
+| `fixturehttp.py` | Fixtures mode's stand-in for CHC's server over `fixtures/chirps/`. Not in the image. |
 | `polite.py` | The one HTTP client (below). |
 | `zarrstore.py` | The Zarr v3 writer for both D2 layouts, against a local directory or S3. |
 | `manifest.py` | `<product>/manifest.json`: read, write, validate, and `valuesSha256`. |
 | `chcnetcdf.py` | Reads one CHC NetCDF file and cuts out the region (D1), refusing any other layout. |
 | `grid.py` | The region, the grid and the index maths every module shares. |
-| `fixtures/make_chc_fixture.py` | Writes `fixtures/chc/chirps-v3.0.2024.02.days_p05.nc`, the synthetic fixture. |
+| `fixtures/make_chc_fixture.py` | Writes `fixtures/chc/chirps-v3.0.2024.02.days_p05.nc`, the reader's synthetic fixture. |
+| `fixtures/chirps/make_chirps_fixtures.py` | Writes the synthetic `byMonth` directory (`fixtures/chirps/`): two months, their listing, and a rewritten and a changed variant. |
+| `tests/roundtrip.ts` | The Node half of the cross-language round trip (`test_roundtrip.py`). |
 | `Dockerfile` | The Lambda image (build context `ingest/`). |
 | `dev.sh` | `pnpm dev:ingest:run` and `pnpm test:ingest`. |
 
 ## The event and the environment
 
 ```json
-{ "product": "rnl" | "sat", "mode": "monthly" | "backfill", "month": "YYYY-MM" }
+{ "product": "rnl" | "sat", "mode": "monthly" }
+{ "product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM" }
 ```
 
-`month` is optional. Any other key is refused.
+A backfill names its month (from 1981-01 for `rnl`, 2000-06 for `sat`); a
+monthly run takes none. Any other key is refused.
 
 | Variable | Meaning |
 | --- | --- |
 | `MIRROR_URL` | Required. `file:///abs/path` locally, `s3://<bucket>[/prefix]` in production. |
-| `FEED_SOURCE` | `fixtures` (the default: the committed synthetic NetCDF, no network) or `live` (production). |
+| `FEED_SOURCE` | `fixtures` (the default: the synthetic `byMonth` directory, no network) or `live` (production: CHC). |
 | `INGEST_CONTACT` | The contact address in the User-Agent. Optional. |
+| `INGEST_FIXTURE_VARIANT` | Fixtures mode only: `rewritten` or `changed` serves that variant of the synthetic directory. |
+| `MIRROR_METRIC_NAMESPACE` | Optional: the metric's namespace, default `water-management/Mirror`. |
 
-In fixtures mode, `monthly` copies the fixture for `month` (or the newest
-fixture when `month` is absent), and `backfill` copies every fixture file.
+Fixtures mode runs exactly the live code with three differences: CHC is
+`fixturehttp.FixtureOpener`, nothing is paced (there is no upstream to be
+polite to), and the metric goes to a local sink that logs it.
+
+## The CHIRPS finals job
+
+CHC publishes each month's finals as one NetCDF per product:
+`https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/<rnl|sat>/netcdf/byMonth/chirps-v3.0.YYYY.MM.days_p05.nc`
+(`rnl` from 1981-01, `sat` from 2000-06), listed on an nginx autoindex page
+with each file's time (UTC, to the minute) and size.
+
+**`monthly`** runs daily per product (EventBridge, `infra/ingest.tf`):
+
+1. One conditional GET of the listing, with the validators the last complete
+   run saved. A 304 ends the run. (If CHC's autoindex sends no ETag or
+   Last-Modified, the run reads the whole page: still one request.)
+2. The listing is diffed against the manifest's `files`. A month the manifest
+   lacks is new. A month whose size or time differs from the manifest's
+   `size` or `lastModified` is changed: CHC rewrites files in place.
+3. Each new or changed month is downloaded whole, oldest first, one at a
+   time. Downloads start at least **a minute apart** (D4), counting across
+   runs: the last download's time is kept in `ingest-state/<product>/state.json`.
+   No download starts with less than 360 s of the Lambda's time left
+   (`context.get_remaining_time_in_millis()`); the rest wait for the next day.
+   The listing's validators are saved only when nothing was left, so a run cut
+   short never becomes a 304 that hides the rest.
+4. Each file is checked against its listing row (size, and its Last-Modified
+   to the minute; a mismatch stops the run, since it means the page and the
+   files disagree, for example a listing in another time zone). Then
+   `ingest_file` subsets it, checks 0–2000 mm, hashes, writes and records it
+   (below). The revision goes up only on a real change of values.
+
+**`backfill`** copies one named month the same way, with one conditional GET
+of its file and no listing (a month already held, unchanged, is a 304).
+R2-B's Step Functions map calls it one month per invocation.
+
+**One writer per product.** A finals chunk holds a whole year, so two runs
+writing two months of one year at once would each upload the year's chunks
+with only their own month changed, and the later upload would put the other
+month's old values back. Every run first takes the product's lease
+(`lease.py`): `ingest-state/<product>/lease.json`, created with S3's
+`If-None-Match: *`, expiring after 20 minutes (longer than Lambda's 15), and
+taken over from a dead run with `If-Match` on its ETag. A monthly run that
+finds it held ends quietly; a backfill raises `MirrorBusy`, for the Step
+Functions map to retry. A conditional put on the manifest alone wouldn't
+do: by then the chunks are already up.
+
+**A 403 stops the run** (`polite.StopRun`) with no retry. The error
+propagates, so the Lambda errors and the DLQ and the errors alarm see it.
+
+**`MirrorLagDays`** (`cloudwatch.py`; namespace `water-management/Mirror`,
+dimension `Product`, value today UTC minus `finalThrough` in days, or since
+the day before the product's first month when nothing is held) is published
+on every exit once the event is valid and `MIRROR_URL` is set: a 304, a run
+that copied, a run the budget cut short, a monthly run held off by the lease,
+and every failure, before the error is re-raised. The lag alarms treat a
+missing datapoint as breaching, and `test_chirps_final.MetricOnEveryExit`
+walks every exit to keep it that way.
 
 ## The copy
 
@@ -139,16 +205,28 @@ They cover:
 - **The polite client:** pacing, the 304 skip, the 403 stop, and `Retry-After` given in seconds or as a date. They run against a fake opener and clock, so nothing touches the network or sleeps.
 - **The writer:** the exact D2 metadata, and where a known cell-day lands, for leap and non-leap years and across New Year. Chunks that are all NaN aren't written, and S3 staging is checked against an in-memory fake.
 - **The manifest:** the round-trip, refusing manifests that don't follow the spec, and a hash that stays stable across NaN payloads, memory layout and byte order.
-- **The handler:** a fixtures-mode run from start to finish, a re-run that changes nothing, a rewrite that bumps the revision, a retry after a crash between the chunk upload and the manifest, a gap in the months that holds `finalThrough` back, and a file whose days aren't its month's.
+- **The handler:** a fixtures-mode run from start to finish, a re-run that is one 304, the variants through the environment, a retry after a crash between the chunk upload and the manifest, a gap in the months that holds `finalThrough` back, a file whose days aren't its month's, and an image whose COPY line lacks a module.
+- **The finals job** (`test_chirps_final.py`): the listing parser, a new month, a rewrite with the same values (no bump), a rewrite with changed values (a bump and its `changes`), the 304, a 403 that stops with no retry, the time budget, the pacing (within and across runs, on a fake clock), a backfill of a named month, the lease (local and S3), and the metric on every exit.
+- **The round trip** (`test_roundtrip.py`): Python writes the copy from the synthetic NetCDF, and Node's `backend/src/mirror/` reads it through `tests/roundtrip.ts`, bit for bit, with the same hash and manifest. It needs the pnpm install (`backend/node_modules/.bin/tsx`) and skips without it, except in CI, where `INGEST_REQUIRE_NODE=1` makes it fail.
 - **The reader:** a value outside 0–2000 mm fails the read and writes nothing.
 - **The fixture:** it still matches its generator.
 
 CI runs them in the `ingest` job, "Bulk ingest (Python)", in
-`.github/workflows/ci.yml`. That job feeds into `CI gate`.
+`.github/workflows/ci.yml`, with Node and the pnpm install for the round
+trip. That job feeds into `CI gate`.
 
-## The fixture
+## The fixtures
 
-`fixtures/chc/chirps-v3.0.2024.02.days_p05.nc` is invented. It covers
+`fixtures/chirps/` is the synthetic `byMonth` directory the finals job and
+fixtures mode read: January and February 2024 (the last three days of each,
+to stay small), `listing.html`, and two variants of February with their
+listings: `rewritten/` (the same values in other bytes, as CHC re-copying a
+file) and `changed/` (two cells changed). Each listing's sizes are the files'
+real sizes. Regenerate them with
+`ingest/.venv/bin/python ingest/fixtures/chirps/make_chirps_fixtures.py` and
+commit the result; a test fails if they drift from the generator.
+
+`fixtures/chc/chirps-v3.0.2024.02.days_p05.nc` is the reader's fixture, also invented. It covers
 2024-02-27 to 2024-02-29 (so the leap day is included) over the region plus a
 10-cell margin, in CHC's real layout from the Round 0 spike:
 
