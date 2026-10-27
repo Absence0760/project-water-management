@@ -13,6 +13,15 @@ C order, with every NaN canonicalised to 0x7FC00000, so the same values hash
 the same however a NaN's payload bits came out.
 
 `dumps` writes the keys in the spec's order, so the file diffs cleanly.
+
+For the finals products (`rnl`, `sat`), each file is one of CHC's `byMonth`
+files and its URL names its month (`….YYYY.MM.days_p05.nc`). `finalThrough`
+is the last day of the **contiguous** run of months from the first month
+copied (`finals_coverage`), never the newest day seen: after a partial
+backfill plus the newest month, the months between are not held, and a day
+read as final there would be cached as final no-data for good. A manifest
+whose `finalThrough` runs past that run is refused, here and by the Node
+reader (backend/src/mirror/manifest.ts).
 """
 
 from __future__ import annotations
@@ -34,6 +43,35 @@ _CHANGE_KEYS = ["revision", "days", "cellsChanged", "maxAbsDiff"]
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 _SHA = re.compile(r"^[0-9a-f]{64}$")
+_FILE_MONTH = re.compile(r"\.(\d{4})\.(0[1-9]|1[0-2])\.days_p05\.nc$")
+
+FINALS_PRODUCTS = ("rnl", "sat")
+
+
+def file_month(url: str) -> tuple[int, int] | None:
+    """The (year, month) a CHC byMonth file's URL names, or None."""
+    m = _FILE_MONTH.search(url)
+    return (int(m[1]), int(m[2])) if m else None
+
+
+def _next_month(ym: tuple[int, int]) -> tuple[int, int]:
+    y, mo = ym
+    return (y + 1, 1) if mo == 12 else (y, mo + 1)
+
+
+def finals_coverage(files: list[dict]) -> tuple[str, str] | None:
+    """(first day, last day) of the contiguous run of months the files hold,
+    from the earliest; None when they hold none. A month counts as held whole:
+    CHC's byMonth file runs to the month's last day (lambda_handler checks)."""
+    months = {ym for f in files if (ym := file_month(f["url"])) is not None}
+    if not months:
+        return None
+    first = min(months)
+    last = first
+    while _next_month(last) in months:
+        last = _next_month(last)
+    ny, nm = _next_month(last)
+    return dt.date(*first, 1).isoformat(), (dt.date(ny, nm, 1) - dt.timedelta(days=1)).isoformat()
 
 
 def values_sha256(values: np.ndarray) -> str:
@@ -129,6 +167,13 @@ def validate(m: dict) -> dict:
         _int(c["cellsChanged"], f"changes[{i}].cellsChanged")
         if not isinstance(c["maxAbsDiff"], (int, float)) or isinstance(c["maxAbsDiff"], bool) or c["maxAbsDiff"] < 0:
             _fail(f"changes[{i}].maxAbsDiff must be a number >= 0")
+    if m["product"] in FINALS_PRODUCTS:
+        for i, f in enumerate(m["files"]):
+            if file_month(f["url"]) is None:
+                _fail(f"files[{i}].url names no month (….YYYY.MM.days_p05.nc), got {f['url']!r}")
+        coverage = finals_coverage(m["files"])
+        if m["finalThrough"] is not None and (coverage is None or m["finalThrough"] > coverage[1]):
+            _fail(f"finalThrough {m['finalThrough']} runs past the months the files hold contiguously (through {coverage[1] if coverage else 'none'})")
     return m
 
 

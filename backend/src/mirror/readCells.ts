@@ -6,7 +6,9 @@
 // Which days are published comes from the manifests, not the arrays: an
 // unwritten chunk is NaN, the same as the sea, so a day reads as `f` only when
 // the product's manifest says its finals reach it (`finalThrough`, within
-// `years`), and a `sat` day after that as `p` when the `prelim` manifest's
+// `years`, and no earlier than the first month its files hold:
+// finalsCoverage; parseManifest already refuses a `finalThrough` past the
+// contiguous run of months), and a `sat` day after that as `p` when the `prelim` manifest's
 // `prelimThrough` reaches it. Every other day is `-` (not read, null values).
 // On a day read, NaN is no data (encodeCellValue's -1); every other value is
 // the stored float32, bit for bit.
@@ -17,7 +19,7 @@ import type { CellsResult } from '../feeds/fetch.js';
 import { DAY_FINAL_ONLY, DAY_SKIP } from '../feeds/sources/chirps.js';
 import { type Block, DAILY_CHUNK, FINALS_CHUNK, type FinalsProduct, openDaily, openFinals, readDailyBlock, readFinalsBlock } from './arrays.js';
 import { cellsByChunk, dayIndex, doyIndex, MIRROR_REGION, mirrorCell } from './grid.js';
-import { type Manifest, readManifest } from './manifest.js';
+import { finalsCoverage, type Manifest, readManifest } from './manifest.js';
 import type { MirrorStore } from './store.js';
 
 /** The copy doesn't hold the product yet (no manifest or no array): the feed tries again later. */
@@ -65,8 +67,14 @@ export async function readCells(
 	}
 
 	const days = Array.from({ length: n }, (_, i) => fromEpochDay(s + i));
+	const held = finalsCoverage(manifest.files);
 	const isFinal = (day: string) =>
-		manifest.finalThrough !== null && day <= manifest.finalThrough && Number(day.slice(0, 4)) >= manifest.years.first && Number(day.slice(0, 4)) <= manifest.years.last;
+		manifest.finalThrough !== null &&
+		held !== null &&
+		day >= held.from &&
+		day <= manifest.finalThrough &&
+		Number(day.slice(0, 4)) >= manifest.years.first &&
+		Number(day.slice(0, 4)) <= manifest.years.last;
 	const isPrelim = (day: string) =>
 		prelim !== null && prelimManifest?.prelimThrough != null && day <= prelimManifest.prelimThrough && day >= prelim.firstDay;
 	const read = days.map((day, i) => (plan[i] === DAY_SKIP ? '-' : isFinal(day) ? 'f' : plan[i] !== DAY_FINAL_ONLY && isPrelim(day) ? 'p' : '-')).join('');

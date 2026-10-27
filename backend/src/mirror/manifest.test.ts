@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { type Manifest, manifestHash, MirrorManifestError, parseManifest, readManifest, writeManifest } from './manifest.js';
+import { finalsCoverage, type Manifest, manifestHash, MirrorManifestError, parseManifest, readManifest, writeManifest } from './manifest.js';
 import { openStore } from './store.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'mirror-manifest-'));
@@ -16,7 +16,7 @@ const sample = (): Manifest => ({
 	region: { w: 10, s: -35.5, e: 41, n: -8 },
 	grid: { origin: { lat: -35.475, lon: 10.025 }, step: 0.05 },
 	years: { first: 1981, last: 2026 },
-	finalThrough: '2026-09-30',
+	finalThrough: '2024-06-30',
 	prelimThrough: null,
 	files: [
 		{
@@ -30,6 +30,21 @@ const sample = (): Manifest => ({
 		}
 	],
 	changes: [{ revision: 2, days: ['2024-06-01', '2024-06-30'], cellsChanged: 12, maxAbsDiff: 0.25 }]
+});
+
+const monthUrl = (y: number, m: number) => `https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/byMonth/chirps-v3.0.${y}.${String(m).padStart(2, '0')}.days_p05.nc`;
+
+describe('finalsCoverage', () => {
+	const files = (...ym: [number, number][]) => ym.map(([y, m]) => ({ url: monthUrl(y, m) }));
+	it('runs from the first month through the contiguous months after it', () => {
+		expect(finalsCoverage([])).toBeNull();
+		expect(finalsCoverage([{ url: 'https://example.org/chirps-v3.0.prelim.2026.01.01.tif' }])).toBeNull();
+		expect(finalsCoverage(files([2024, 2]))).toEqual({ from: '2024-02-01', through: '2024-02-29' });
+		expect(finalsCoverage(files([2023, 2]))).toEqual({ from: '2023-02-01', through: '2023-02-28' });
+		expect(finalsCoverage(files([2024, 1], [2023, 11], [2023, 12]))).toEqual({ from: '2023-11-01', through: '2024-01-31' });
+		// A gap stops the run, however new the month after it.
+		expect(finalsCoverage(files([2000, 1], [2000, 2], [2026, 9]))).toEqual({ from: '2000-01-01', through: '2000-02-29' });
+	});
 });
 
 describe('the manifest', () => {
@@ -58,14 +73,21 @@ describe('the manifest', () => {
 			['a negative diff', (m) => ({ ...m, changes: [{ ...m.changes[0]!, maxAbsDiff: -1 }] }), /maxAbsDiff/],
 			['rnl prelim days', (m) => ({ ...m, prelimThrough: '2026-10-01' }), /rnl has no preliminary/],
 			['finalThrough outside years', (m) => ({ ...m, finalThrough: '1975-01-01' }), /outside years/],
-			['finals in a daily product', (m) => ({ ...m, product: 'prelim' }), /prelim holds no final days/]
+			['finals in a daily product', (m) => ({ ...m, product: 'prelim' }), /prelim holds no final days/],
+			['finalThrough past the files', (m) => ({ ...m, finalThrough: '2024-07-01' }), /runs past the months the files hold contiguously \(through 2024-06-30\)/],
+			['finalThrough over a gap', (m) => ({ ...m, files: [m.files[0]!, { ...m.files[0]!, url: monthUrl(2024, 8) }], finalThrough: '2024-08-31' }), /runs past.*through 2024-06-30/],
+			['finalThrough with no files', (m) => ({ ...m, files: [] }), /runs past.*through none/],
+			['a finals file naming no month', (m) => ({ ...m, files: [{ ...m.files[0]!, url: 'https://example.org/chirps.nc' }] }), /names no month/]
 		];
 		for (const [what, change, msg] of bad) {
 			expect(() => parseManifest(change(sample())), what).toThrow(MirrorManifestError);
 			expect(() => parseManifest(change(sample())), what).toThrow(msg);
 		}
-		// Positive control: the sample itself, and a daily product's shape.
+		// Positive control: the sample itself, a finalThrough short of the run's end or with a later month after a gap, and a daily product's shape.
 		expect(() => parseManifest(sample())).not.toThrow();
+		expect(() => parseManifest({ ...sample(), finalThrough: '2024-06-10' })).not.toThrow();
+		expect(() => parseManifest({ ...sample(), files: [sample().files[0]!, { ...sample().files[0]!, url: monthUrl(2024, 8) }] })).not.toThrow();
+		expect(() => parseManifest({ ...sample(), files: [], finalThrough: null })).not.toThrow();
 		expect(() => parseManifest({ ...sample(), product: 'gefs/2026-10-27', finalThrough: null, prelimThrough: '2026-10-27', changes: [] })).not.toThrow();
 	});
 

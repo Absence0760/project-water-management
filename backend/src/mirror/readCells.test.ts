@@ -11,7 +11,7 @@ import { fixtureHttp } from '../feeds/fixtures.js';
 import { fetchChirpsCells } from '../feeds/sources/chirps.js';
 import { ensureFinals, openFinals, readFinalsBlock, writeFinalsYear } from './arrays.js';
 import { chcCellOf, MirrorOutsideRegionError } from './grid.js';
-import { readManifest, writeManifest } from './manifest.js';
+import { type Manifest, MirrorManifestError, readManifest, writeManifest } from './manifest.js';
 import { MirrorNotReadyError, readCells } from './readCells.js';
 import { openStore } from './store.js';
 
@@ -109,8 +109,45 @@ describe('readCells from other copies', () => {
 		const block = { y0: 309, x0: 300, h: 1, w: 1 };
 		await writeFinalsYear(f, 2024, block, new Float32Array(366).fill(3000));
 		const m = (await readManifest(fixture, 'rnl'))!;
-		await writeManifest(store, { ...m, files: [], years: { first: 2024, last: 2024 }, finalThrough: '2024-12-31' });
+		await writeManifest(store, { ...m, files: m.files.filter((f) => f.url.includes('.2024.')), years: { first: 2024, last: 2024 }, finalThrough: '2024-12-31' });
 		await expect(readCells(store, 'rnl', [LAND_NW], { start: '2024-01-01', end: '2024-01-01' })).rejects.toThrow(FeedFormatError);
 		await expect(readCells(store, 'rnl', [LAND_NW], { start: '2024-01-01', end: '2024-01-01' })).rejects.toThrow(/implausible rainfall of 3000/);
+	});
+
+	describe('a gap in the months copied', () => {
+		// A copy of 2024 with January and March but not February (a partial backfill plus a newer month).
+		const gapped = async (finalThrough: string, months: string[] = ['01', '03']) => {
+			const store = fresh();
+			const f = await ensureFinals(store, 'rnl', 2024);
+			await writeFinalsYear(f, 2024, { y0: 309, x0: 300, h: 1, w: 1 }, new Float32Array(366).fill(4.5));
+			const m = (await readManifest(fixture, 'rnl'))!;
+			const files = months.map((mm) => m.files.find((x) => x.url.endsWith(`.2024.${mm}.days_p05.nc`))!);
+			const doc: Manifest = { ...m, files, years: { first: 2024, last: 2024 }, finalThrough };
+			// Written raw, so a manifest the validation refuses reaches the reader too.
+			await store.set('/rnl/manifest.json', new TextEncoder().encode(JSON.stringify(doc)));
+			return store;
+		};
+
+		it('reads the contiguous months as final and the missing month as not held, never final no-data', async () => {
+			const store = await gapped('2024-01-31');
+			const got = await readCells(store, 'rnl', [LAND_NW], { start: '2024-01-30', end: '2024-02-02' });
+			expect(got.cells.read).toBe('ff--');
+			expect(got.cells.values).toEqual([[4.5, 4.5, null, null].map((v) => (v === null ? null : encodeCellValue(v)))]);
+			// March is copied, but past the gap: not final either.
+			expect((await readCells(store, 'rnl', [LAND_NW], { start: '2024-03-01', end: '2024-03-01' })).cells.read).toBe('-');
+		});
+
+		it('refuses a manifest whose finalThrough runs over the gap', async () => {
+			const store = await gapped('2024-03-31');
+			await expect(readCells(store, 'rnl', [LAND_NW], { start: '2024-02-01', end: '2024-02-01' })).rejects.toThrow(MirrorManifestError);
+			await expect(readCells(store, 'rnl', [LAND_NW], { start: '2024-02-01', end: '2024-02-01' })).rejects.toThrow(/finalThrough runs past/);
+		});
+
+		it('reads no day before the first month copied as final', async () => {
+			const store = await gapped('2024-03-31', ['03']);
+			const got = await readCells(store, 'rnl', [LAND_NW], { start: '2024-02-29', end: '2024-03-01' });
+			expect(got.cells.read).toBe('-f');
+			expect(got.cells.values).toEqual([[null, encodeCellValue(4.5)]]);
+		});
 	});
 });

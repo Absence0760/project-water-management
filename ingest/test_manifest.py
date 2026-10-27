@@ -19,7 +19,7 @@ import manifest  # noqa: E402
 
 def full():
     m = manifest.new("rnl")
-    m.update(revision=2, years={"first": 1981, "last": 2026}, finalThrough="2026-09-30", prelimThrough="2026-10-26")
+    m.update(revision=2, years={"first": 1981, "last": 2026}, finalThrough="2024-06-30", prelimThrough="2026-10-26")
     m["files"] = [
         {
             "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/byMonth/chirps-v3.0.2024.06.days_p05.nc",
@@ -63,6 +63,51 @@ class RoundTrip(unittest.TestCase):
         manifest.upsert_file(m, e)
         self.assertEqual(len(m["files"]), 1)
         self.assertEqual(manifest.file_entry(m, e["url"])["size"], 1)
+
+
+def month_url(y, mo, product="rnl"):
+    return f"https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/{product}/netcdf/byMonth/chirps-v3.0.{y:04d}.{mo:02d}.days_p05.nc"
+
+
+def with_months(months, final_through):
+    m = full()
+    m["files"] = [dict(m["files"][0], url=month_url(y, mo)) for y, mo in months]
+    m["finalThrough"] = final_through
+    return m
+
+
+class Coverage(unittest.TestCase):
+    def test_contiguous_months_from_the_first(self):
+        self.assertIsNone(manifest.finals_coverage([]))
+        files = lambda months: [{"url": month_url(y, mo)} for y, mo in months]  # noqa: E731
+        self.assertEqual(manifest.finals_coverage(files([(2024, 2)])), ("2024-02-01", "2024-02-29"))
+        self.assertEqual(manifest.finals_coverage(files([(2023, 11), (2023, 12), (2024, 1)])), ("2023-11-01", "2024-01-31"))
+        # A gap: the run stops before it, however new the later month.
+        self.assertEqual(manifest.finals_coverage(files([(2000, 1), (2000, 2), (2026, 9)])), ("2000-01-01", "2000-02-29"))
+        self.assertEqual(manifest.file_month("fixture:chc/chirps-v3.0.2024.02.days_p05.nc"), (2024, 2))
+        self.assertIsNone(manifest.file_month("https://example.org/chirps-v3.0.prelim.2026.01.01.tif"))
+
+    def test_finalThrough_must_not_run_past_the_contiguous_months(self):
+        # Positive controls: at the run's end, and before it.
+        manifest.validate(with_months([(2000, 1), (2000, 2), (2026, 9)], "2000-02-29"))
+        manifest.validate(with_months([(2024, 6)], "2024-06-15"))
+        manifest.validate(with_months([], None))
+        for months, through in [
+            ([(2000, 1), (2000, 2), (2026, 9)], "2000-03-01"),  # into the gap
+            ([(2000, 1), (2000, 2), (2026, 9)], "2026-09-30"),  # the newest month's end, past the gap
+            ([], "2024-06-30"),  # no files at all
+        ]:
+            with self.assertRaisesRegex(ValueError, "runs past", msg=f"{months} {through}"):
+                manifest.validate(with_months(months, through))
+
+    def test_finals_files_must_name_their_month(self):
+        m = with_months([(2024, 6)], "2024-06-30")
+        m["files"][0]["url"] = "https://example.org/somefile.nc"
+        with self.assertRaisesRegex(ValueError, "names no month"):
+            manifest.validate(m)
+        # A daily product's files are not byMonth files.
+        m["product"], m["finalThrough"] = "prelim", None
+        manifest.validate(m)
 
 
 class Refusals(unittest.TestCase):

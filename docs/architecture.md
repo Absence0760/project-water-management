@@ -1339,7 +1339,14 @@ row names a source, where to read it and the series it merges into:
   `readCells(store, product, cells, window)` answers in the fetcher's
   `CellsResult` shape: a day is `f` when the product's manifest says its
   finals reach it, a `sat` day after that `p` when the `prelim` manifest's
-  does, else `-`, and on a day read a NaN is no data (-1); a cell outside the
+  does, else `-`, and on a day read a NaN is no data (-1). A finals
+  manifest's `finalThrough` is the end of the **contiguous** run of months
+  its files (CHC's byMonth files, each URL naming its month) hold from the
+  first one copied, never the newest day seen: after a partial backfill plus
+  the newest month, the months between read as `-`, not as final no-data the
+  cell cache would keep for good. The ingest writes it that way, a manifest
+  claiming more is refused, and a day before the first month held is `-`
+  (`finalsCoverage`). A cell outside the
   region is refused (`MirrorOutsideRegionError`, a format error). Dev, CI and
   e2e read the committed synthetic copy, `backend/fixtures/mirror/` (~90 KB;
   the fixture grid's chunks, finals 2023–2025 and preliminary days to

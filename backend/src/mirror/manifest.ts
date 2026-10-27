@@ -12,6 +12,14 @@
 // little-endian in (day, lat, lon) C order, NaN as 0x7FC00000 (manifestHash).
 // The Python ingest (ingest/manifest.py) writes the same shape; both sides
 // validate it on read.
+//
+// For the finals products (`rnl`, `sat`) each file is one of CHC's byMonth
+// files, its URL naming its month, and `finalThrough` may not run past the
+// contiguous run of months from the first one copied (finalsCoverage): a
+// month missing in between (a partial backfill plus the newest month) is not
+// held, and reading its days as final would cache NaN as final no-data for
+// good. The ingest writes `finalThrough` as that run's end; a manifest that
+// claims more is refused here.
 import { createHash } from 'node:crypto';
 import { endianness } from 'node:os';
 import type { AbsolutePath } from '@zarrita/storage';
@@ -58,6 +66,31 @@ const Change = z
 	})
 	.strict();
 
+/** A CHC byMonth file's URL ends `.YYYY.MM.days_p05.nc`. */
+const FILE_MONTH = /\.(\d{4})\.(0[1-9]|1[0-2])\.days_p05\.nc$/;
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * The days a finals product's files hold: the first day of the earliest month
+ * through the last day of the contiguous run of months from it (null when no
+ * file names a month). A later month after a gap doesn't extend it.
+ */
+export function finalsCoverage(files: readonly { url: string }[]): { from: string; through: string } | null {
+	const months = new Set<number>();
+	for (const f of files) {
+		const m = FILE_MONTH.exec(f.url);
+		if (m) months.add(Number(m[1]) * 12 + Number(m[2]) - 1);
+	}
+	if (months.size === 0) return null;
+	const first = Math.min(...months);
+	let last = first;
+	while (months.has(last + 1)) last++;
+	const [ly, lm] = [Math.floor(last / 12), (last % 12) + 1];
+	const lastDay = new Date(Date.UTC(ly, lm, 0)).getUTCDate();
+	return { from: `${Math.floor(first / 12)}-${pad2((first % 12) + 1)}-01`, through: `${ly}-${pad2(lm)}-${pad2(lastDay)}` };
+}
+
 export const Manifest = z
 	.object({
 		product: z.string().regex(PRODUCT_RE),
@@ -85,6 +118,11 @@ export const Manifest = z
 			if (d !== null && (Number(d.slice(0, 4)) < m.years.first || Number(d.slice(0, 4)) > m.years.last)) bad(`${k} is outside years`);
 		}
 		if (!finals && m.finalThrough !== null) bad(`${m.product} holds no final days`);
+		if (finals) {
+			if (m.files.some((f) => !FILE_MONTH.test(f.url))) bad('a finals file whose url names no month (….YYYY.MM.days_p05.nc)');
+			const held = finalsCoverage(m.files);
+			if (m.finalThrough !== null && (held === null || m.finalThrough > held.through)) bad(`finalThrough runs past the months the files hold contiguously (through ${held?.through ?? 'none'})`);
+		}
 	});
 export type Manifest = z.output<typeof Manifest>;
 
