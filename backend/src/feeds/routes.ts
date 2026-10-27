@@ -192,7 +192,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const feed = c.req.query('feed') ?? null;
 		if (feed !== null && !UUID.test(feed)) throw new ApiError(400, 'feed must be a feed id');
-		// At most ten years a request (GAP_VIEW_MAX_DAYS), by default the record's last ten.
+		// At most ten years of days a request (GAP_VIEW_MAX_DAYS), by default the record's last ten; the double mass covers the whole record.
 		const ask = viewWindowQuery(c.req.query('from') ?? null, c.req.query('to') ?? null);
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');

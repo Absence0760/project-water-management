@@ -11,12 +11,23 @@
 // years) a request, by default the last ten years of the record (`from` /
 // `to` reach further back), over the feed's cells, which its config already
 // caps at BBOX_MAX_CELLS (feeds/config.ts; checked again here). Without it a
-// record back to 1950 read some 27,000 days over every cell in one request.
+// record back to 1950 sent some 27,000 days a product in one response.
 // `fill` is what the runs' feed's latest fetch made of each product
 // (last_meta, 254_feed_gap_fill_outcome), so a failed fill says so instead of
 // reading as "nothing held yet".
+//
+// The double mass of catchment rain against each product (`doubleMass`) is
+// not bound by that window: a break shows only over the whole overlapping
+// record, so the server computes it there, with the engine's own doubleMass
+// (the product in CHIRPS' place, as a run's summary.gapRain.products[]
+// .doubleMass is made, engine gapRain.ts) and the project's zero-rain and
+// data-quality settings as a run resolves them. What reaches the client is
+// its water-year (Oct–Sep) totals, segments and breaks: about one row a year,
+// never the days. Each product is read once, over the window and the
+// catchment record's span together, as a run reads it (gapRainInputs reads
+// the whole record too).
 import { fromEpochDay, isIsoDate, toEpochDay } from '@water-management/engine/calendar';
-import { resolveGapRain, type GapRainSettings } from '@water-management/engine';
+import { doubleMass, resolveDataQuality, resolveGapRain, resolveZeroRain, type DoubleMass, type GapRainSettings } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { gapRainFeed, gapRainRecordStart, GAP_PRODUCT_FIRST_DAY } from '../runs/gapRainInput.js';
@@ -70,6 +81,21 @@ export interface GapRainProducts {
 	/** Each product's days over the window, null on a day the cache holds none; `held` = days with a value. */
 	era5l: { startDate: string; values: (number | null)[]; held: number } | null;
 	imergLate: { startDate: string; values: (number | null)[]; versions: (string | null)[]; held: number } | null;
+	/**
+	 * The double mass of the outlet catchment rain (the one a run reads) against
+	 * each product over the whole record both hold, not only `window`; a product
+	 * with too few judged water years for the check is null. Null without a
+	 * catchment rain record.
+	 */
+	doubleMass: { era5l: DoubleMass | null; imergLate: DoubleMass | null } | null;
+}
+
+/** The days of `s` from `start` to `end` (both inside it, or clamped to it). */
+function slice(s: { startDate: string; values: (number | null)[] }, start: string, end: string): { startDate: string; values: (number | null)[] } {
+	const s0 = toEpochDay(s.startDate);
+	const a = Math.max(0, toEpochDay(start) - s0);
+	const b = Math.min(s.values.length, toEpochDay(end) - s0 + 1);
+	return { startDate: fromEpochDay(s0 + a), values: b > a ? s.values.slice(a, b) : [] };
 }
 
 /** Leading and trailing blank days dropped (a product whose cache holds nothing is null). */
@@ -99,7 +125,10 @@ export async function gapRainProducts(
 	today = new Date().toISOString().slice(0, 10),
 	ask: { from?: string | null; to?: string | null } = {}
 ): Promise<GapRainProducts> {
-	const { rows: settings } = await db.query<{ gapRain: unknown }>(`SELECT settings->'gapRain' AS "gapRain" FROM project WHERE id = $1`, [projectId]);
+	const { rows: settings } = await db.query<{ gapRain: unknown; zeroRain: unknown; dq: unknown }>(
+		`SELECT settings->'gapRain' AS "gapRain", settings->'zeroRainRuns' AS "zeroRain", settings->'dataQuality' AS dq FROM project WHERE id = $1`,
+		[projectId]
+	);
 	const gapRain = resolveGapRain(settings[0]?.gapRain ?? null, []);
 	const { rows } = await db.query<{ id: string; config: GridConfig; seriesId: string; seriesName: string; nodeId: string | null; nodeName: string | null }>(
 		`SELECT f.id, f.config, t.id AS "seriesId", t.name AS "seriesName", t.site_node_id AS "nodeId", n.name AS "nodeName"
@@ -124,7 +153,7 @@ export async function gapRainProducts(
 	const fill = { era5l: fillState(meta[0]?.era5l, meta[0]?.at ?? null), imergLate: fillState(meta[0]?.imerg, meta[0]?.at ?? null) };
 	const feeds: GapRainFeedOption[] = rows.map((r) => ({ id: r.id, seriesId: r.seriesId, seriesName: r.seriesName, nodeId: r.nodeId, nodeName: r.nodeName, runsRead: r.id === runs?.feedId }));
 	const pick = rows.find((r) => r.id === feedId) ?? rows.find((r) => r.id === runs?.feedId) ?? rows[0] ?? null;
-	const empty = { gapRain, feeds, feed: pick?.id ?? null, window: null, record: null, fill, era5l: null, imergLate: null };
+	const empty = { gapRain, feeds, feed: pick?.id ?? null, window: null, record: null, fill, era5l: null, imergLate: null, doubleMass: null };
 	const recordStart = pick ? await gapRainRecordStart(db, projectId) : null;
 	if (!pick || !recordStart || recordStart > today) return empty;
 	const cells = gridCells(pick.config);
@@ -135,18 +164,40 @@ export async function gapRainProducts(
 	const start = ask.from ?? fromEpochDay(Math.max(toEpochDay(recordStart), toEpochDay(end) - GAP_VIEW_MAX_DAYS + 1));
 	if (toEpochDay(end) - toEpochDay(start) + 1 > GAP_VIEW_MAX_DAYS) throw new ApiError(400, `at most ${GAP_VIEW_MAX_DAYS} days at a time; narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD`);
 	if (start > end) return { ...empty, record };
-	const from = (first: string) => (start < first ? first : start);
-	const productWindow = (first: string) => ({ start: from(first), end });
-	const eraWindow = productWindow(GAP_PRODUCT_FIRST_DAY.era5l);
-	const imergWindow = productWindow(GAP_PRODUCT_FIRST_DAY.imerg_late);
-	const era = eraWindow.start <= end ? await readProductSeries(db, 'era5l', cells, eraWindow) : { startDate: start, values: [] };
-	const imerg = imergWindow.start <= end ? await readProductSeries(db, 'imerg_late', cells, imergWindow) : { startDate: start, values: [] };
-	const versions = imergWindow.start <= end ? await productVersions(db, 'imerg_late', imergWindow) : [];
+	// The outlet catchment rain a run reads (runs/execute.ts: the first by name), for the double mass over the whole record.
+	const { rows: rain } = await db.query<{ startDate: string; values: (number | null)[] }>(
+		`SELECT to_char(start_date, 'YYYY-MM-DD') AS "startDate", "values" FROM time_series
+		 WHERE project_id = $1 AND site_node_id IS NULL AND kind = 'rain_catchment_mm' ORDER BY name COLLATE "C" LIMIT 1`,
+		[projectId]
+	);
+	const catchment = rain[0] && rain[0].values.length ? rain[0] : null;
+	const catchmentEnd = catchment ? fromEpochDay(toEpochDay(catchment.startDate) + catchment.values.length - 1) : null;
+	const zeroRain = resolveZeroRain(settings[0]?.zeroRain ?? null, []);
+	const dq = resolveDataQuality(settings[0]?.dq ?? null);
+	const later = (a: string, b: string) => (a > b ? a : b);
+	const earlier = (a: string, b: string) => (a < b ? a : b);
+	// One read a product: the daily window, widened to the catchment record's span (the double mass's days); the
+	// response carries only the window's days, and the double mass's water-year totals.
+	const readProduct = async (product: 'era5l' | 'imerg_late') => {
+		const first = GAP_PRODUCT_FIRST_DAY[product];
+		const day = { start: later(start, first), end };
+		const dm = catchment && catchmentEnd ? { start: later(catchment.startDate, first), end: earlier(catchmentEnd, today) } : null;
+		const span = dm && dm.start <= dm.end ? (day.start <= day.end ? { start: earlier(day.start, dm.start), end: later(day.end, dm.end) } : dm) : day;
+		if (span.start > span.end) return { day, daily: { startDate: start, values: [] as (number | null)[] }, mass: null };
+		const s = await readProductSeries(db, product, cells, span);
+		const daily = day.start <= day.end ? slice(s, day.start, day.end) : { startDate: start, values: [] };
+		const mass = catchment && dm && dm.start <= dm.end ? doubleMass({ rain_catchment_mm: catchment, rain_chirps_mm: slice(s, dm.start, dm.end) }, zeroRain, dq) : null;
+		return { day, daily, mass };
+	};
+	const era = await readProduct('era5l');
+	const imerg = await readProduct('imerg_late');
+	const versions = imerg.day.start <= imerg.day.end ? await productVersions(db, 'imerg_late', imerg.day) : [];
 	return {
 		...empty,
 		window: { start, end },
 		record,
-		era5l: trim({ startDate: era.startDate, values: era.values }),
-		imergLate: trim({ startDate: imerg.startDate, values: imerg.values, versions }, (a, b) => ({ versions: versions.slice(a, b) }))
+		era5l: trim({ startDate: era.daily.startDate, values: era.daily.values }),
+		imergLate: trim({ startDate: imerg.daily.startDate, values: imerg.daily.values, versions }, (a, b) => ({ versions: versions.slice(a, b) })),
+		doubleMass: catchment ? { era5l: era.mass, imergLate: imerg.mass } : null
 	};
 }

@@ -1,7 +1,7 @@
 // The gap-filling products beside CHIRPS (issue #604 R4-E): what the Data
 // tab's panel and the per-day preview make of GET …/feeds/gap-rain. Synthetic
 // values only.
-import { defaultProjectSettings, ERA5L_SERIES_KEY, imergSeriesKey, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
+import { defaultProjectSettings, doubleMass, ERA5L_SERIES_KEY, imergSeriesKey, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { Daily } from './coverage';
 import {
@@ -32,6 +32,7 @@ const view = (over: Partial<GapRainView> = {}): GapRainView => ({
 	fill: { era5l: { status: 'ok', error: null, at: '2026-01-10T06:00:00Z' }, imergLate: { status: 'ok', error: null, at: '2026-01-10T06:00:00Z' } },
 	era5l: { startDate: '2026-01-01', values: [1, 2, null, 4], held: 3 },
 	imergLate: { startDate: '2026-01-05', values: [5, null, 7, 8], versions: ['V07', null, 'V07', 'V08'], held: 3 },
+	doubleMass: null,
 	...over
 });
 
@@ -93,17 +94,22 @@ describe('the panel’s helpers', () => {
 		expect(viewCredits(view({ era5l: null, imergLate: null }), '2026-10-27')).toEqual([]);
 	});
 
-	it('checks the double mass against a product with years of record, and leaves out one with none', () => {
-		// Twelve water years of daily rain (the check needs ten): catchment = 2 × ERA5-Land every day.
-		const days = 12 * 365;
+	it('draws the double mass from the response’s block, over the whole record, not from the ten years of days', () => {
+		// Forty water years (the server's, engine doubleMass): catchment = 2 × ERA5-Land every day; the days carried are only the last ten.
+		const days = 40 * 365;
 		const era = Array.from({ length: days }, (_, i) => (i % 3 === 0 ? 6 : 0));
-		const v = view({ era5l: { startDate: '2010-10-01', values: era, held: days } });
-		const catchment = { startDate: '2010-10-01', values: era.map((x) => x * 2) };
-		const dms = productDoubleMass(catchment, v);
+		const dm = doubleMass({ rain_catchment_mm: { startDate: '1985-10-01', values: era.map((x) => x * 2) }, rain_chirps_mm: { startDate: '1985-10-01', values: era } })!;
+		const v = view({ era5l: { startDate: '2015-10-01', values: era.slice(-3650), held: 3650 }, doubleMass: { era5l: dm, imergLate: null } });
+		const dms = productDoubleMass(v);
 		expect(dms.map((d) => d.label)).toEqual(['ERA5-Land']);
+		expect(dms[0]!.dm).toBe(dm);
+		expect(dms[0]!.dm.years[0]!.waterYear).toBe(1985);
+		expect(dms[0]!.dm.years).toHaveLength(40);
 		expect(dms[0]!.dm.wholeSlope).toBeCloseTo(2, 6);
-		expect(dms[0]!.dm.breaks).toEqual([]);
-		expect(productDoubleMass(null, v)).toEqual([]);
+		// No block (no catchment rain), or a product too short to judge: nothing drawn.
+		expect(productDoubleMass(view())).toEqual([]);
+		expect(productDoubleMass(view({ doubleMass: { era5l: null, imergLate: null } }))).toEqual([]);
+		expect(productDoubleMass(null)).toEqual([]);
 	});
 });
 
@@ -149,7 +155,7 @@ describe('fillProblems', () => {
 
 	it('the chart caption names the span when the record is longer than the ten years read', () => {
 		const long = view({ window: { start: '2016-01-11', end: '2026-01-10' }, record: { start: '1990-01-01', end: '2026-01-10' } });
-		expect(productChartCaption(long, null)).toContain('Shown from 2016-01-11, the last ten years of a record from 1990-01-01.');
+		expect(productChartCaption(long, null)).toContain('Shown from 2016-01-11, the last ten years of a record from 1990-01-01; the double mass below covers the whole record.');
 		expect(productChartCaption(view(), null)).not.toContain('Shown from');
 	});
 });

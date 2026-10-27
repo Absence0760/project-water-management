@@ -6,11 +6,9 @@
 	catchment rain against each product (the CHIRPS one is the panel above it),
 	and the credits their values carry. The outlet's feed first, as the runs
 	read it; a land unit's own CHIRPS feed from the picker. It fetches the
-	products itself (GET …/feeds/gap-rain); the CHIRPS and catchment values
-	are the page's. Its own chunk (SeriesTab loads it only with the setting).
+	products itself (GET …/feeds/gap-rain); the CHIRPS values are the page's. Its own chunk (SeriesTab loads it only with the setting).
 -->
 <script lang="ts">
-	import type { DataQualitySettings, ZeroRainSettings } from '@water-management/engine';
 	import { api } from '#lib/api/index.js';
 	import LineChart from '#lib/components/charts/LineChart.svelte';
 	import { followRetry } from '#lib/components/common/loadState.js';
@@ -22,18 +20,11 @@
 	let {
 		projectId,
 		values,
-		catchmentId,
-		zeroRain,
-		dq,
 		gapLine
 	}: {
 		projectId: string;
-		/** The page's loaded series values by id: the picked feed's CHIRPS and the catchment rain are read from it. */
+		/** The page's loaded series values by id: the picked feed's CHIRPS is read from it. */
 		values: Record<string, Daily>;
-		/** The outlet's catchment rain series (the double mass's other side); null without one. */
-		catchmentId: string | null;
-		zeroRain?: ZeroRainSettings;
-		dq?: DataQualitySettings;
 		/** What the settings choose, in words ("ERA5-Land, and IMERG Late for the recent days"). */
 		gapLine: string;
 	} = $props();
@@ -68,7 +59,7 @@
 	const chirps = $derived(feed ? (values[feed.seriesId] ?? null) : null);
 	const lines = $derived(productChartSeries(chirps, view));
 	const held = $derived(!!(view?.era5l || view?.imergLate));
-	const masses = $derived(productDoubleMass(catchmentId ? (values[catchmentId] ?? null) : null, view, zeroRain, dq));
+	const masses = $derived(productDoubleMass(view));
 	const credits = $derived(viewCredits(view, new Date().toISOString().slice(0, 10)));
 	// A failed fill on the runs' feed's latest fetch, said as such rather than as "nothing held yet".
 	const problems = $derived(fillProblems(view));

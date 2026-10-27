@@ -1276,7 +1276,7 @@
 	<div id="data-gap-rain">
 		<Lazy load={loadGapRainPanel}>
 			{#snippet children(GapRainPanel)}
-				<GapRainPanel {projectId} {values} catchmentId={first('rain_catchment_mm')?.id ?? null} zeroRain={resolveZeroRain(zeroRainRuns, [])} {dq} gapLine={gapRainChoiceText(gapRain)} />
+				<GapRainPanel {projectId} {values} gapLine={gapRainChoiceText(gapRain)} />
 			{/snippet}
 		</Lazy>
 	</div>

@@ -3,11 +3,12 @@
 // (backend feeds/gapRainView.ts), the run-input series it stands for (as
 // backend runs/gapRainInput.ts builds them, so the per-day preview fills a
 // day as a run would), the chart's series, the double mass against each
-// product (engine doubleMass with the product in CHIRPS' place, as a run's
-// summary.gapRain.products[].doubleMass is made), and the credits their values
-// carry. Pure: no Svelte, no DOM.
+// product (the response's `doubleMass`: the server runs the engine's
+// doubleMass over the whole record, with the product in CHIRPS' place, as a
+// run's summary.gapRain.products[].doubleMass is made, since the days the
+// response carries stop at ten years), and the credits their values carry.
+// Pure: no Svelte, no DOM.
 import {
-	doubleMass,
 	ERA5L_SERIES_KEY,
 	fromEpochDay,
 	IMERG_VERSION_RE,
@@ -15,12 +16,10 @@ import {
 	rainCredits,
 	toEpochDay,
 	type DailySeries,
-	type DataQualitySettings,
 	type DoubleMass,
 	type GapRainSettings,
 	type GapRainSegment,
-	type RainCredit,
-	type ZeroRainSettings
+	type RainCredit
 } from '@water-management/engine';
 import type { Api } from '#lib/api/client.js';
 import type { ChartSeries } from '#lib/components/charts/series.js';
@@ -55,6 +54,8 @@ export interface GapRainView {
 	fill: { era5l: GapFillState | null; imergLate: GapFillState | null };
 	era5l: { startDate: string; values: (number | null)[]; held: number } | null;
 	imergLate: { startDate: string; values: (number | null)[]; versions: (string | null)[]; held: number } | null;
+	/** The double mass of the outlet catchment rain against each product over the whole record (not only `window`); null without catchment rain. */
+	doubleMass: { era5l: DoubleMass | null; imergLate: DoubleMass | null } | null;
 }
 
 export function gapRainApi(api: Pick<Api, 'request'>, projectId: string) {
@@ -161,8 +162,11 @@ export function productChartSeries(chirps: DailySeries | null, view: GapRainView
 export function productChartCaption(view: GapRainView | null, feed: GapRainFeedOption | null): string {
 	const where = feed ? `over the cells of ${feed.nodeName ? `${feed.nodeName}’s` : 'the outlet’s'} CHIRPS feed (${feed.seriesName})` : 'over the CHIRPS feed’s cells';
 	const held = [view?.era5l ? `ERA5-Land ${view.era5l.held} days` : null, view?.imergLate ? `IMERG Late ${view.imergLate.held} days` : null].filter(Boolean);
-	// The view reads at most ten years: say so when the record is longer.
-	const span = view?.window && view.record && view.window.start > view.record.start ? ` Shown from ${view.window.start}, the last ten years of a record from ${view.record.start}.` : '';
+	// The days read stop at ten years: say so when the record is longer (the double mass below covers it all).
+	const span =
+		view?.window && view.record && view.window.start > view.record.start
+			? ` Shown from ${view.window.start}, the last ten years of a record from ${view.record.start}; the double mass below covers the whole record.`
+			: '';
 	return `Daily rain in mm ${where}, as each product reads it, before any bias correction.${span} ${held.length ? `Held: ${held.join(', ')}.` : ''}`.trim();
 }
 
@@ -174,19 +178,15 @@ export interface ProductDoubleMass {
 
 /**
  * The double mass of catchment rain against each product (§2.10a), as a run
- * checks it (engine gapRain.ts: the product in CHIRPS' place). A product with
- * too few water years for the check is left out (IMERG's 30 days always are).
+ * checks it: the server's, over the whole record (backend feeds/gapRainView.ts).
+ * A product with too few water years for the check is left out (IMERG's few
+ * weeks always are).
  */
-export function productDoubleMass(catchment: DailySeries | null, view: GapRainView | null, zeroRain?: ZeroRainSettings, dq?: DataQualitySettings): ProductDoubleMass[] {
-	if (!catchment || !view) return [];
+export function productDoubleMass(view: GapRainView | null): ProductDoubleMass[] {
 	const out: ProductDoubleMass[] = [];
-	const check = (product: ProductDoubleMass['product'], s: { startDate: string; values: (number | null)[] } | null) => {
-		if (!s) return;
-		const dm = doubleMass({ rain_catchment_mm: catchment, rain_chirps_mm: { startDate: s.startDate, values: s.values } }, zeroRain, dq);
-		if (dm && dm.years.length) out.push({ product, label: GAP_PRODUCT_LABEL[product], dm });
-	};
-	check('era5l', view.era5l);
-	check('imerg_late', view.imergLate);
+	const dm = view?.doubleMass;
+	if (dm?.era5l?.years.length) out.push({ product: 'era5l', label: GAP_PRODUCT_LABEL.era5l, dm: dm.era5l });
+	if (dm?.imergLate?.years.length) out.push({ product: 'imerg_late', label: GAP_PRODUCT_LABEL.imerg_late, dm: dm.imergLate });
 	return out;
 }
 

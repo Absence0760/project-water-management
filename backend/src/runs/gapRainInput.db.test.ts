@@ -15,18 +15,19 @@ import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { ERA5L_SERIES_KEY, imergSeriesKey } from '@water-management/engine';
+import { doubleMass, ERA5L_SERIES_KEY, imergSeriesKey, resolveDataQuality, resolveZeroRain } from '@water-management/engine';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { openStore } from '../mirror/store.js';
-import { productVersions, readProductSeries } from '../feeds/fromMirror.js';
+import { mirrorOrigin, productVersions, readProductSeries } from '../feeds/fromMirror.js';
+import { uniqueCells } from '../feeds/cellCache.js';
 import { fillGapProducts, GAP_FILL_BUDGET_MS, GAP_FILL_MARGIN_MS } from '../feeds/gapRainFill.js';
 import { loadModelInput, loadRunInput } from './execute.js';
-import { gapRainInputs } from './gapRainInput.js';
+import { gapRainFeed, gapRainInputs } from './gapRainInput.js';
 import { GAP_VIEW_MAX_DAYS, gapRainProducts } from '../feeds/gapRainView.js';
-import { toEpochDay } from '@water-management/engine/calendar';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 
 const daysIn = (w: { start: string; end: string }) => toEpochDay(w.end) - toEpochDay(w.start) + 1;
 
@@ -290,6 +291,50 @@ describe('settings.gapRain: the copy to the run', () => {
 		expect((await get('?to=2000-02-30')).status).toBe(400);
 	});
 
+	it('the double mass covers the whole record, not the ten years of days: 40 water years of ERA5-Land, as the engine’s doubleMass makes them', async () => {
+		const p = await project({ product: 'era5l', imergLate: false });
+		// A synthetic ERA5-Land record in the cache over the feed's 0.1° cells, 1985 to 2026, and a catchment rain record
+		// 1985–2025 whose ratio to it changes in 2005, so the check has a break to find (as the copy's fetch would leave them).
+		for (const c of uniqueCells(CELLS, 'era5l'))
+			await asOwner(
+				`INSERT INTO chirps_cell_year (origin, product, row_idx, col_idx, year, vals, final, final_through)
+				 SELECT $1, 'era5l', $2::int, $3::int, y, array(SELECT ((($2::int + $3::int + y + i) % 5) + 0.5)::real FROM generate_series(1, 366) i), array_fill(true, ARRAY[366]), make_date(y, 12, 31)
+				 FROM generate_series(1985, 2026) y`,
+				[mirrorOrigin(), c.row, c.col]
+			);
+		const d0 = toEpochDay('1985-01-01');
+		const values = Array.from({ length: toEpochDay('2025-12-31') - d0 + 1 }, (_, i) => ((i * 7) % 6) * (fromEpochDay(d0 + i) < '2005-01-01' ? 1 : 1.6));
+		await asOwner(`UPDATE time_series SET start_date = '1985-01-01', "values" = $2 WHERE project_id = $1 AND kind = 'rain_catchment_mm'`, [p.pid, values]);
+
+		const view = await withUser(p.owner.id, (db) => gapRainProducts(db, p.pid, null, TODAY));
+		// The daily part keeps its cap: the record's last ten years, no more.
+		expect(view.record).toEqual({ start: '1985-01-01', end: TODAY });
+		expect(daysIn(view.window!)).toBe(GAP_VIEW_MAX_DAYS);
+		expect(view.era5l!.values.length).toBeLessThanOrEqual(GAP_VIEW_MAX_DAYS);
+		expect(view.era5l!.startDate >= view.window!.start).toBe(true);
+		// The double mass: every judged water year of the overlap (1985/86 to 2024/25; the part years either end are too short).
+		const dm = view.doubleMass!.era5l!;
+		expect(dm.years.map((y) => y.waterYear)).toEqual(Array.from({ length: 40 }, (_, i) => 1985 + i));
+		expect(dm.breaks.length).toBeGreaterThan(0);
+		expect(view.doubleMass!.imergLate).toBeNull();
+		// Equal to the engine's own doubleMass over the same days, with the project's settings as a run resolves them.
+		const expected = await withUser(p.owner.id, async (db) => {
+			const feed = (await gapRainFeed(db, p.pid, p.chirps))!;
+			const era = await readProductSeries(db, 'era5l', feed.cells, { start: '1985-01-01', end: '2025-12-31' });
+			return doubleMass({ rain_catchment_mm: { startDate: '1985-01-01', values }, rain_chirps_mm: era }, resolveZeroRain(null, []), resolveDataQuality(null));
+		});
+		expect(dm).toEqual(expected);
+		// And a water year's totals are the days' sums (1990/91), so the block is the record's, not a window's.
+		const era = await withUser(p.owner.id, async (db) => readProductSeries(db, 'era5l', (await gapRainFeed(db, p.pid, p.chirps))!.cells, { start: '1990-10-01', end: '1991-09-30' }));
+		const y = dm.years.find((r) => r.waterYear === 1990)!;
+		const c0 = toEpochDay('1990-10-01') - d0;
+		expect(y.days).toBe(365);
+		expect(y.chirpsMm).toBeCloseTo(era.values.reduce<number>((a, v) => a + (v ?? 0), 0), 6);
+		expect(y.catchmentMm).toBeCloseTo(values.slice(c0, c0 + 365).reduce((a, v) => a + v, 0), 6);
+		// Small: a row a year, never the days.
+		expect(JSON.stringify(view.doubleMass).length).toBeLessThan(20_000);
+	});
+
 	it('the view with no CHIRPS feed: no feed, nothing read', async () => {
 		const owner = await signUp('GapRainNoFeed');
 		const pid = (await owner.call('POST', '/projects', { name: 'No feed' })).body.project.id as string;
@@ -301,7 +346,8 @@ describe('settings.gapRain: the copy to the run', () => {
 			record: null,
 			fill: { era5l: null, imergLate: null },
 			era5l: null,
-			imergLate: null
+			imergLate: null,
+			doubleMass: null
 		});
 	});
 });

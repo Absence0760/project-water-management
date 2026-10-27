@@ -6021,12 +6021,15 @@ feed** picker reads the products over a land unit's own feed instead of the
 outlet's (the one the runs read is marked); then one daily chart, CHIRPS,
 ERA5-Land and IMERG Late (points, its versions in the legend) as each reads,
 before any correction, with 30 days / 1 year / All windows, over the last ten
-years of a longer record (the most the view reads; the caption names the
+years of a longer record (the most days the view reads; the caption names the
 span); then **Double
 mass: catchment rain vs ERA5-Land** (the CHIRPS panel above, generalised:
-`DoubleMassPanel` with `against` and `level` 3), drawn once the product has
-10 judged water years, else one line saying so (IMERG Late's 30 days never
-do); and the credits of what it shows, word for word (Copernicus's notice
+`DoubleMassPanel` with `against` and `level` 3) over the whole record both
+hold, not only those ten years: the server computes it with the engine's
+`doubleMass`, as a run checks the product, and sends its water-year totals,
+segments and breaks (the response's `doubleMass`). It is drawn once the
+product has 10 judged water years, else one line saying so (IMERG Late's 30
+days never do); and the credits of what it shows, word for word (Copernicus's notice
 and ERA5-Land's citation, IMERG's citation per version; docs/data-sources.md).
 Nothing held yet says the runs' CHIRPS feed brings them on its next fetch;
 when that feed's latest fetch couldn't fill a product the settings read
