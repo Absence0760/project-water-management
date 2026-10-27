@@ -2832,7 +2832,11 @@ In short:
     fetch claimed. So a forged answer can't rewrite
     finals the feed never asked about, and at worst marks the claimed days
     stale (they are read again). A revision is logged (`chirps_revision`)
-    and reaches each project's series with a History event.
+    and reaches each project's series with a History event. Our own copy's revisions (issue #604, 245) reach the cache only through
+    `app_mirror_apply_revision`, which only the worker (no user, no API
+    key) may call: it validates the manifest and day bounds, only ever
+    *marks* cached finals stale (never writes a value), and records the
+    revision in `mirror_manifest`, which `water_app` can read but not write.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no
@@ -3395,9 +3399,11 @@ placed points. The server never trusts the browser with geometry:
   (2–100 characters after trimming, at least one letter or digit;
   `SearchQuery`), reads only our own reference tables (no third-party
   geocoder, so what is typed leaves nowhere) and writes nothing. The shared CHIRPS cell cache (`chirps_cell_year`, 208,
-  and 210's `chirps_file`, `chirps_cell_stale`, `chirps_revision`) is read
+  and 210's `chirps_file`, `chirps_cell_stale`, `chirps_revision`, and 245's
+  `mirror_manifest`) is read
   the same way but written by the data feeds, through checked functions
-  (`chirps_cache_merge`, `chirps_recheck_claim`, `chirps_recheck_apply`;
+  (`chirps_cache_merge`, `chirps_recheck_claim`, `chirps_recheck_apply`,
+  `app_mirror_apply_revision`;
   Input handling, above).
 - No third-party origin: MapLibre is bundled, its worker is same-origin
   (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file
