@@ -417,6 +417,33 @@ export function polygonsOverlap(groups: readonly (readonly (readonly Position[])
 	return false;
 }
 
+/**
+ * The area (degrees², planar) inside both of two regions, each its closed
+ * rings read even-odd (a polygon's outer ring and holes, or every ring of a
+ * MultiPolygon whose parts don't overlap): polygonsOverlap's clip and sweep,
+ * for one pair. `spend` counts the work as polygonsOverlap's does, and may
+ * throw to stop it. Used by the dam to waterbody match (dams/observed/match.ts).
+ */
+export function intersectionArea(a: readonly (readonly Position[])[], b: readonly (readonly Position[])[], spend: (n: number) => void = () => {}): number {
+	const boxOf = (rings: readonly (readonly Position[])[]) => {
+		let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
+		for (const r of rings) for (const [x, y] of r) (w = Math.min(w, x)), (e = Math.max(e, x)), (s = Math.min(s, y)), (n = Math.max(n, y));
+		return { w, s, e, n };
+	};
+	const [ba, bb] = [boxOf(a), boxOf(b)];
+	const box = { w: Math.max(ba.w, bb.w), s: Math.max(ba.s, bb.s), e: Math.min(ba.e, bb.e), n: Math.min(ba.n, bb.n) };
+	if (!(box.w < box.e && box.s < box.n)) return 0;
+	const clipped = [a, b].map((rings) =>
+		rings.flatMap((r) => {
+			spend(r.length);
+			const c = clipY(clipX(openRing(r), box.w, box.e), box.s, box.n);
+			return c.length >= 3 ? [c] : [];
+		})
+	);
+	if (!clipped[0]!.length || !clipped[1]!.length) return 0;
+	return twiceCovered(clipped, spend);
+}
+
 /** The area (degrees²) inside both of two groups of open rings (each read even-odd): polygonsOverlap's slab sweep. */
 function twiceCovered(groups: readonly (readonly Position[])[][], spend: (n: number) => void): number {
 	// Each edge from its lower end to its upper (so an edge two groups share is computed identically for both); flat edges cross no slab.

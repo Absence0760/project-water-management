@@ -74,6 +74,7 @@ Every job that fetches from an upstream:
 | [chirps](#chirps) | CHIRPS v3 daily rainfall (`rnl`, `sat` final and preliminary) | live (feeds paused since 2026-10-25, CHC's 403s); the copy in R1–R3 | `data.chc.ucsb.edu` | `chirps` | `backend/src/feeds/sources/chirps.ts`; R2 `ingest/chirps_final.py`, `backend/src/ingest/daily.ts` |
 | [chirps-gefs](#chirps-gefs) | CHIRPS-GEFS v3 16-day forecast | live; the copy built (R3-A), read with `CHIRPS_SOURCE=mirror` | `data.chc.ucsb.edu` | `chirps_gefs` | `backend/src/ingest/gefs.ts` (the copy), `backend/src/feeds/fromMirrorGefs.ts` (feeds read it); `backend/src/feeds/sources/chirps.ts` until the cutover |
 | [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until DWS's written answer | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
+| [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies: v0.0.2 per-waterbody wet-area series and v0.0.3 polygons (built R5-A; replaces the planned row below) | built; off in production until `dam_observations_enabled`; the public series frozen upstream since 2024-02 | `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
 | [dpet](#dpet) | dPET daily potential evapotranspiration | reference load | `data.bris.ac.uk` | – | `bin/evaporation-fetch.sh`, `pnpm import:evaporation` |
 | [worldcover](#worldcover) | ESA WorldCover 10 m 2021 v200 (cropland) | reference load | `esa-worldcover.org` (the operator's download) | – | `pnpm import:land-cover` |
@@ -242,6 +243,68 @@ in `infra/feeds.tf`):
 - **Owner:** the operator; code `backend/src/feeds/sources/dws.ts`,
   `backend/src/ingest/dws.ts`, `backend/src/feeds/fromGaugeRecord.ts`,
   `backend/scripts/import-dws.ts`.
+
+## Dam observations
+
+What satellites saw of each traced dam, into `dam_observation` (migration
+249; [architecture.md § Dam observations](./architecture.md#dam-observations)).
+The same out-of-VPC handover as the weekly DWS pass: the worker writes the
+wanted list to the mirror bucket, the fetcher's daily `dams-weekly` run
+reads the upstream and writes files back, and the worker loads them.
+
+### deafrica-waterbodies-series
+
+- **Source:** Digital Earth Africa Waterbodies. The per-waterbody surface
+  area series, `waterbodies/v0.0.2/surface_area_change/<uid[0..4]>/<uid>.csv`
+  (header `date,px_total,px_wet,area_wet_m2,px_dry,area_dry_m2,px_invalid,area_invalid_m2,pc_wet,pc_dry,pc_invalid`),
+  for each dam matched to a waterbody; and the waterbody polygons,
+  `waterbodies/v0.0.3/historical_extent/waterbodies.gpkg` (about 900 MB, the
+  continent), which the operator clips and loads as a reference dataset
+  ([maps.md § Waterbodies](./maps.md#waterbodies)).
+- **Host:** `deafrica-services.s3.af-south-1.amazonaws.com` (the
+  `deafrica-services` bucket over HTTPS, anonymous; the same region as the
+  app). `FEED_HOSTS` holds it for the fetcher's live client.
+- **Licence:** CC BY 4.0 (Digital Earth Africa, read by the lead
+  2026-10-27; [maps.md § Sources](./maps.md#sources)).
+- **Attribution:** "Contains Digital Earth Africa data (CC BY 4.0)"
+  (`dams/observed/upstream.ts` `DEAFRICA_ATTRIBUTION`) wherever an observed
+  value shows (R5-B's chart and farmer view), and on `/data-sources`.
+- **Contact:** Digital Earth Africa's help desk and community forum
+  (digitalearthafrica.org; docs.digitalearthafrica.org).
+- **Access pattern:** the fetcher's `dams-weekly` mode (run daily at
+  05:00 UTC, `infra/dam_observations.tf`) reads `dams/wanted.json` and asks
+  for each matched dam's uid whose last good fetch is 6 days old or more,
+  oldest first, with `If-None-Match` on the ETag the last fetch kept: an
+  unchanged file costs a 304 and no body. It writes `dams/waterbodies/<uid>.json`
+  and `dams/waterbodies-status.json`; the worker loads them into
+  `dam_observation` for every dam matched to that uid
+  (`backend/src/dams/observed/`). Only uids our dams overlap are ever asked,
+  and the polygons are a reference load, never fetched by the app.
+- **Limits we keep to:** one request a second; at most 30 % of the run's
+  time (the rest is WOfS's); feeds/http.ts's User-Agent, host allowlist,
+  20 s timeout and 4 MB cap; a 429/503 pauses the host for its
+  `Retry-After` and stops the run, as does a 403, never retried that day:
+  the status says `stopped` and why, the invocation fails (the fetcher's
+  Errors alarm), and the heartbeat still goes out. A 404 (a uid with no
+  series) or a changed layout is recorded for that uid and the run goes on.
+- **Rows kept:** `wet_area_m2` = `area_wet_m2`, `pct_observed` =
+  100 − `pc_invalid`; a date with nothing seen clearly (`pc_invalid` 100 or
+  an empty `pc_wet`) is dropped, since 0 m² wet on a date nobody saw reads
+  as an empty dam ([architecture.md § Dam observations](./architecture.md#dam-observations)).
+- **Freshness:** the pass's heartbeat (`DamPassCompleted{Source=waterbodies}`)
+  alarms when missing for two days. **No recency alarm, on purpose.**
+  Checked 2026-10-27: the public series objects were last written
+  2024-02-26 and a sampled series ends 2023-09-17, though the product says
+  it updates weekly. A recency alarm would fire from day one; the metric
+  (`DamObservationAgeDays{Source=waterbodies}`) is still published, so a
+  restart upstream shows. Ask DE Africa whether the public series will be
+  updated again (operator step).
+- **Fallback:** [deafrica-wofs](#deafrica-wofs) (R5-C): WOfS summed inside
+  the dam's own outline, current (the newest Western Cape scene 2026-10-20
+  when checked), and the only source for a dam Waterbodies merges or misses.
+- **Owner:** the operator; code `backend/src/dams/observed/` (`match.ts`,
+  `waterbodies.ts`, `tick.ts`, `handover.ts`), `backend/scripts/import-waterbodies.ts`,
+  `infra/dam_observations.tf`.
 
 ## Planned: the copy's cross-check
 

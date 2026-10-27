@@ -2882,6 +2882,21 @@ In short:
     feeds, `app_dws_feed_stations` (worker only), never a project or a
     user. The fetcher's role reaches `dws/` only (get and put, no delete),
     and its log lines carry counts and a reason, never a station.
+  - **Dam observations** (issue #604 R5, architecture.md § Dam
+    observations) follow the same pattern. The worker writes
+    `dams/wanted.json` to the private mirror bucket: the uids of matched
+    waterbodies (public DE Africa ids) and **every traced dam's outline**
+    with its map feature id, from all projects (`app_dam_outlines`, worker
+    only). An outline is a project's drawing, so it leaves the VPC only to
+    our own bucket, for our own fetcher; what DE Africa receives is a
+    waterbody uid in a public file path (Waterbodies) or a bounding-box STAC
+    search (WOfS), never a project, a name or a user. DE Africa is not a
+    sub-processor. The fetcher's role reaches `dams/` only (get and put, no
+    delete); the files coming back are schema-checked (`handover.ts`) and
+    bounded again by `app_dam_observation_load`, and land only on dams the
+    file's uid is matched to, or the dam its feature id names. The live
+    client's `FEED_HOSTS` gained `deafrica-services.s3.af-south-1.amazonaws.com`
+    only; the log lines carry counts and a reason, never a uid or dam.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no

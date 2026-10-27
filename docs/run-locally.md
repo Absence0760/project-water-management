@@ -470,6 +470,35 @@ The series appears on the Data tab, and History shows the merge by
 `API key “<name>”`. Nothing sensitive is committed: the key lives only in
 your gitignored file.
 
+## Dam observations
+
+What satellites saw of each traced dam (issue #604 R5,
+[architecture.md § Dam observations](./architecture.md#dam-observations)),
+offline: the committed synthetic Waterbodies polygons and series, no
+network.
+
+```bash
+pnpm import:waterbodies   # the synthetic polygons (pnpm setup already ran it)
+pnpm seed:examples        # Sandspruit's traced dams, if not seeded yet
+pnpm dev:dams:run         # tick (match, wanted list) → Waterbodies pass (fixtures) → tick (load)
+```
+
+It prints what each step did; Sandspruit's dams match all but Grootdraai
+(merged: its waterbody runs downstream) and Klipdrift (none), and the
+matched ones get a series ending 2023-09-17, as the public series do. The
+handover goes through `MIRROR_URL` when it names a directory of its own,
+else a scratch directory under the system's temp directory, never the
+committed `backend/fixtures/mirror/`. Run it again and the pass asks with
+each file's ETag and gets 304s.
+
+The worker's tick does the same each time it runs only with
+`DAM_OBSERVATIONS=on` and a `MIRROR_URL` of its own, in a gitignored
+`backend/.env.development.local`; it is off by default. Your own clip of
+the real polygons loads with
+`pnpm import:waterbodies <file.geojson> --dataset <label> [--bbox w,s,e,n]`
+([maps.md § Waterbodies](./maps.md#waterbodies)); `FEED_SOURCE=live` in the
+same file lets `pnpm dev:dams:run` read DE Africa's real series.
+
 ## Reports
 
 The report page's **Generate PDF / Email me the PDF** and Project →

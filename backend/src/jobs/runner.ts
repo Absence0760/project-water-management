@@ -29,6 +29,7 @@ import { logEvent } from '../logging/logEvent.js';
 import { type MfaResetTickResult, runMfaResets } from '../auth/mfaReset.js';
 import { type MirrorTickResult, runMirrorTick } from './handlers/mirror-tick.js';
 import { type DwsTickResult, runDwsTick } from '../feeds/gaugeRecordLoad.js';
+import { type DamsTickResult, runDamsTick } from '../dams/observed/tick.js';
 
 /** Default lease: longer than any job may run (the worker Lambda's timeout is 300 s). */
 export const DEFAULT_LEASE_SECONDS = 360;
@@ -211,6 +212,8 @@ export interface TickResult {
 	mirror?: MirrorTickResult | null;
 	/** The weekly DWS pass's handover (feeds/gaugeRecordLoad.ts): null unless DWS_WEEKLY=on in a live process, absent when feeds were off. */
 	dws?: DwsTickResult | null;
+	/** Dam observations' matches, wanted list and loads (dams/observed/tick.ts): null unless DAM_OBSERVATIONS=on, absent when feeds were off. */
+	dams?: DamsTickResult | null;
 	/** Scheduled reports queued by this tick (absent when reports were off). */
 	reports?: ReportScheduleResult & { purged: number };
 	/** Alert checks queued, alert rows purged (0 when alerts scheduling was off), and alert mails sent by this tick. */
@@ -269,6 +272,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		result.mirror = await runMirrorTick();
 		// The weekly DWS pass's stations out and its fetches in (issue #604 R3-B); never throws either.
 		result.dws = await runDwsTick();
+		// Dam observations: match traced dams, publish the wanted list, load what the passes fetched (issue #604 R5); never throws.
+		result.dams = await runDamsTick();
 		result.feeds = await scheduleDueFeeds({ all: o.allFeeds });
 	}
 	if (o.reports !== false) result.reports = { purged: await purgeReports(), ...(await scheduleDueReports()) };
