@@ -993,6 +993,9 @@ from engine 0.29.0 `settings.chirpsFitPeriod`, which years the factors are
 fitted on ([below](#fit-period-and-per-range-factors-engine--0290-issue-40));
 and from engine 1.53.0 the opt-in `settings.chirpsQuantileMap`, which also
 reshapes the gap fill's wet days ([below](#quantile-map-engine--1530-cr-23)).
+From engine 1.101.0 `settings.gapRain` chooses the product that fills the
+gaps: CHIRPS, ERA5-Land, or both, and IMERG Late for the recent days, each
+with its own fit ([below](#gap-filling-product-engine--11010-issue-604-r4-b)).
 
 **Why.** Rain used (column R, and GR4J's P) falls back to CHIRPS on every day
 the catchment rain is blank. CHIRPS is a 0.05° satellite-and-gauge product.
@@ -1324,7 +1327,9 @@ and the series explorer:
 | `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×; with listed fit ranges, its range's), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
 | `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 | `rain_catchment_spread` (engine ≥ 0.20.0) | 1 on a day whose catchment rain came from a multi-day accumulation window (§2.4d): spread by CHIRPS, or the reading day and the zeros before it when CHIRPS was dry throughout. Only output when the run took at least one day from a window | never missing |
-| `rain_source` (engine ≥ 0.30.0) | Where the day's rain came from (§2.4e): 0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast. Output with rain-source periods from engine 0.30.0, and in every run with rain from engine 1.27.0 (`rainSourceCodes`: without periods, the same pick as `rain_final`), so a series download can say where each day's rain used came from | NaN when no source has a value |
+| `rain_source` (engine ≥ 0.30.0) | Where the day's rain came from (§2.4e): 0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast, and (engine ≥ 1.101.0, [Gap-filling product](#gap-filling-product-engine--11010-issue-604-r4-b)) 5 ERA5-Land, 6 IMERG Late. Output with rain-source periods from engine 0.30.0, and in every run with rain from engine 1.27.0 (`rainSourceCodes`: without periods, the same pick as `rain_final`), so a series download can say where each day's rain used came from | NaN when no source has a value |
+| `rain_era5l` (engine ≥ 1.101.0) | ERA5-Land as read, before its correction, on every day it has a value ([Gap-filling product](#gap-filling-product-engine--11010-issue-604-r4-b)). Only output when `settings.gapRain` reads ERA5-Land and the run has it | NaN |
+| `rain_imerg_late` (engine ≥ 1.101.0) | IMERG Late as read, the newest version with the day, on every day it has a value, not only the days it filled. Only output with `imergLate` and IMERG rain in the run; `summary.gapRain.segments` says which version filled which day | NaN |
 | `rain_areal` (engine ≥ 1.13.0) | `rain_final` × the month's areal rainfall factor (§2.4g): the rain GR4J runs on, and what the catchment's water balance reads. Only output when the settings have an areal rainfall correction | NaN where `rain_final` is |
 
 The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
@@ -1473,6 +1478,138 @@ so no stored run changes.
 Only the warning reads `seriesChoice`: every number the run computes is the
 same with or without it (`seriesChoice.test.ts`). It is a new warning, and a
 run's warnings are in its results digest, so `ENGINE_VERSION` went to 1.90.0.
+
+#### Gap-filling product (engine ≥ 1.101.0, issue #604 R4-B)
+
+`packages/engine/src/gapRain.ts`. Setting: `settings.gapRain`, absent or
+null (the default: CHIRPS alone, every run before 1.101.0), or
+`{ product, imergLate }`:
+
+| `product` | A blank catchment-rain day takes |
+| --- | --- |
+| `'chirps'` | CHIRPS, as everything above describes |
+| `'era5l'` | ERA5-Land × its own factors and quantile map, instead of CHIRPS. CHIRPS' fit is still worked out and reported, but fills nothing |
+| `'chirpsThenEra5l'` | CHIRPS where it has a value; ERA5-Land where it has none |
+
+With `imergLate: true`, IMERG Late fills the **recent days**: a blank day after
+the last reading of the products chosen above (as stored, not only in the
+run), and only there, taking the newest IMERG version that has the day.
+`{ product: 'chirps', imergLate: false }` is the default written out and runs
+as absent. Engine-audit.md GR1–GR6 records the calls.
+
+**Why.** CHIRPS is weakest exactly where the client catchment is: against 22
+SAWS/ARC gauges in South Africa, daily r was 0.57 for ERA5 and 0.25 for
+CHIRPS v2 (de Waal et al. 2025, *J. Hydrometeorology* 26(6), issue #604's
+research comment), the gap being largest in winter frontal and orographic
+rain. ERA5-Land is ERA5's land surface rerun at 0.1°, CC BY 4.0, about 5
+days behind (D15). IMERG Late is about 14 hours behind, so it covers the days
+before CHIRPS' preliminary values appear, 2 to 7 days back (D16).
+
+**Where the products come from.** Our rain data copy holds them as `era5l`
+and `imerg_late` on a 0.1° grid (architecture.md § Our copy of the rain
+data). The fetch of the CHIRPS feed whose cells the runs read fills the
+shared cell cache with them (`backend/src/feeds/gapRainFill.ts`), and a run
+reads them from the cache over that feed's cells, each 0.05° cell taking
+the 0.1° cell that holds it, with its own weight
+(`backend/src/runs/gapRainInput.ts`): the same area's weighted mean as the
+CHIRPS they stand in for. They reach the engine as input series that are not
+stored series, so only the run's input snapshot keeps them, as the
+reference cell's: `rain_era5l_mm`, and one `rain_imerg_late_mm~<version>`
+per IMERG version (`imergSeriesKey`), from each day's version in the copy's
+manifest. A project whose CHIRPS isn't written by a feed (an upload, a
+workbook import) has no cells, so no product, and the run says so.
+
+**One fit per product, and per IMERG version.** Each is corrected against
+the catchment rain by this section's fit with it in CHIRPS' place
+(`fitGapProducts`, `chirpsBiasFactors` with `against`): the calendar-month
+linear scaling, the 90-day / 50 mm minimum sample, the pooled fallback, the
+0.25–4 clamp and the keep-dry guard (judged with that product). The suspect
+days left out are the ones the run sets aside: the low-vs-CHIRPS years and
+the flagged zero runs stay judged against the project's CHIRPS, as the
+run's own zero-run mask judges them, and the listed missing periods,
+accumulation windows and rain-source periods' days are left out as for
+CHIRPS. Two differences from CHIRPS's fit:
+
+- **Always monthly.** `chirpsBiasCorrection: 'none'` is for a CHIRPS series
+  already corrected to the catchment; ERA5-Land and IMERG come raw from our
+  copy, so they are always corrected.
+- **The whole record.** `chirpsFitPeriod`'s ranges mark CHIRPS' eras; another
+  product's homogeneity is its own, and its double-mass check (below) says
+  where it changes.
+
+IMERG is fitted per version because V08 Final is due in late 2026 with a new
+retrieval: a factor fitted on V07's days must not correct V08's. Our copy of
+IMERG Late keeps only 30 days, so a version's record in the cache grows a
+month at a time; until it holds 90 shared days with 50 mm of IMERG in a
+month (or the pooled sample), that version's days run **uncorrected**, and
+the run says so.
+
+**ERA5-Land's wet-day threshold and quantile map.** A reanalysis drizzles: a
+model grid box rains a little on most days and spreads a storm over more
+days at lower intensity (ERA5 had the highest wet-day frequency of the
+products de Waal et al. compared; Beck et al. 2019, *HESS* 23). A monthly
+factor puts the volume right but keeps that shape, and GR4J makes too little
+flow from many light days. So ERA5-Land always gets the gap map of
+[*Quantile map*](#quantile-map-engine--1530-cr-23), whatever
+`chirpsQuantileMap` says, with a **1 mm** wet day (`GAP_ERA5L_WET_DAY_MM`,
+ETCCDI's R1mm convention, Zhang et al. 2011):
+
+1. its own wet-day threshold is raised, month by month, until ERA5-Land ×
+   factor is wet on the same share of the shared days as the catchment
+   (the frequency step of local intensity scaling, Schmidli et al. 2006), so
+   the drizzle days go dry;
+2. its wet days take the catchment's value at their own non-exceedance
+   probability (empirical quantile mapping, which Gudmundsson et al. 2012,
+   *HESS* 16, rank best of the corrections they compare), with the 30-wet-day
+   minimum and season fallback;
+3. each calendar month is rescaled to its factor-corrected total, so the map
+   moves rain between a month's days, never in or out of it.
+
+IMERG gets the factor alone: it fills a few recent days, and its short record
+can't give a month 30 wet days.
+
+**Which day takes which.** `applyGapRain` writes the products into CHIRPS'
+blank gap days, so every reader of the gap fill (rain used, the zero-run
+fill, a rain-source period's fallback, an accumulation set aside after an
+outage) reads the whole fill through the same CHIRPS column, and the
+priority stays catchment, then the gap fill, then forecast. A day a
+rain-source period blocks for CHIRPS (its gauge reports to CHIRPS and its
+named fallback has no value, §2.4e) takes no product either. Under a
+catchment rainfall station (§2.4i) the setting isn't read, with a warning:
+the station's pairing fills its own gaps. A land unit's own CHIRPS under
+per-unit rain (§2.4h) is unchanged. ERA5-Land's and IMERG's series can
+extend the run window's **end**, so IMERG's recent days extend the run to
+them, but never its start: a product record longer than the rain's (the
+cache holds ERA5-Land from 1950) doesn't pull the run back. A version string
+with a number in it is compared as a number (V10 is newer than V9).
+
+**Double mass per product.** The double-mass check (§2.10a) runs against
+each product as it does against CHIRPS (`summary.gapRain.products[].doubleMass`),
+and when it finds a break in a product that fills gap days, the run warns
+with the segments' ratios: a fill in an era whose ratio differs from the
+whole record's may run too wet or too dry.
+
+**Output and provenance.** `rain_source` gains **5 ERA5-Land** and **6 IMERG
+Late** (its label lists them only in a run with a gap-filling product, so a
+CHIRPS-alone run's column is as before). `summary.gapRain` holds the choice;
+per product (and IMERG version) its fit, double-mass check, the days it
+filled and its rain as read and after correction; the gap days CHIRPS
+filled; `tailFrom`, the first day IMERG may fill; and `segments`, the runs of
+consecutive days ERA5-Land or each IMERG version filled, which is where a
+day's IMERG version is read. The daily columns `rain_era5l` and
+`rain_imerg_late` (the newest version with the day) show the products as
+read. Each product adds a run warning with its days, millimetres and factors
+(or that it ran uncorrected), and a chosen product the run has no rain for
+warns too. A model-state snapshot pins the products' fits and ERA5-Land's
+map lead (`PreparedFits.gapRain`), so a resumed run fills as the
+uninterrupted one. Run comparison lists a change of `gapRain` among the
+settings, and a fit record's `forcing.gapRain` (recorded only when it isn't
+CHIRPS alone) flags "Forcing changed since fit".
+
+**What it can't do.** ERA5-Land's timing is a model's: the map reshapes its
+distribution month by month, but a storm it puts on the wrong day stays
+there. With no overlap, a product runs raw. IMERG never fills a day inside
+the record, even one CHIRPS and ERA5-Land both lack.
 
 ### 2.4c Zero-rain runs treated as missing
 

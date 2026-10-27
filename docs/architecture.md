@@ -1779,8 +1779,16 @@ EventBridge, daily
   `productVersions` each IMERG day's version (its `chirps_file` tag). The
   cache keeps both products' days as final: ERA5-Land's are, and IMERG Late
   has no final product to wait for (a new version of a day comes as a
-  revision of the copy). No feed uses them yet: how a project uses ERA5-Land
-  and IMERG is the engine's next piece. Their committed synthetic copy holds
+  revision of the copy). A project uses them through `settings.gapRain`
+  (engine ≥ 1.101.0, model.md §2.4b *Gap-filling product*): the fetch of
+  the CHIRPS feed whose cells its runs read then fills them for those cells
+  in the same job (`feeds/gapRainFill.ts`: ERA5-Land over the record's span
+  in year windows, newest first, at most 12 read from the copy a fetch;
+  IMERG Late's last 30 days), each in its own savepoint so a failure never
+  takes the feed's CHIRPS days with it; and a run reads them from the cache
+  over the same cells into its input (`runs/gapRainInput.ts`: `rain_era5l_mm`,
+  one `rain_imerg_late_mm~<version>` per IMERG version), which its snapshot
+  keeps, as the reference cell's CHIRPS. Their committed synthetic copy holds
   invented values over the 0.1° cells of the fixture grid, at its own dates
   (2024-01-01 to 2025-12-30 for `era5l`, one file per month request,
   2026-01-25 to 2026-02-08 for `imerg_late`), not

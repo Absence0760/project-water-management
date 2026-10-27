@@ -460,6 +460,16 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **The gap-filling product (engine 1.101.0, issue #604 R4-B,
+      model.md §2.4b *Gap-filling product*).** Built off by default
+      (`settings.gapRain` absent runs as before, to the bit). Calls made
+      in the build, to confirm: each product and IMERG version on its own
+      §2.4b fit over the whole record, always monthly; ERA5-Land always
+      thresholded at 1 mm and quantile-mapped, IMERG by its factor alone;
+      IMERG only past the last reading of the chosen products; the choice
+      not read under a catchment station or for a unit's own CHIRPS
+      (engine-audit.md GR1–GR6). Settings → Rain gaps's control for it is
+      R4-E's.
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
