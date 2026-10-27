@@ -313,7 +313,7 @@ data "aws_iam_policy_document" "s3_endpoint" {
   }
   # The worker reads the data mirror (ingest.tf worker_mirror): objects, and
   # the listing that makes a missing (all-NaN) chunk a 404 rather than a 403.
-  # Read only; the ingest job writes it from outside the VPC.
+  # Read only, bar the DWS station list below; the ingest jobs write it from outside the VPC.
   statement {
     sid     = "WorkerReadsMirror"
     actions = ["s3:GetObject", "s3:ListBucket"]
@@ -321,6 +321,17 @@ data "aws_iam_policy_document" "s3_endpoint" {
       aws_s3_bucket.mirror.arn,
       "${aws_s3_bucket.mirror.arn}/*",
     ]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.worker_lambda.arn]
+    }
+  }
+  # The worker's one write to the mirror: the weekly DWS pass's station list
+  # (feeds.tf worker_dws, which the role holds only with dws_weekly_enabled).
+  statement {
+    sid       = "WorkerWritesDwsStationList"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.mirror.arn}/dws/stations.json"]
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.worker_lambda.arn]
