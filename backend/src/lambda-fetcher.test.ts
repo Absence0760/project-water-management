@@ -34,6 +34,7 @@ const {
 	withDeadline
 } =
 	await import('./lambda-fetcher.js');
+type DamsWeeklyAnswer = import('./lambda-fetcher.js').DamsWeeklyAnswer;
 
 afterEach(() => {
 	sent.length = 0;
@@ -553,7 +554,7 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		await bucket(undefined, [dam()]);
 		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
 		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-		const res = await handler({ mode: 'dams-weekly' } as never);
+		const res = (await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer;
 		const metrics = out.mock.calls.map(([l]) => String(l)).filter((l) => l.includes('DamPassCompleted'));
 		out.mockRestore();
 		expect(res.wofs).toEqual({ fetched: 1, unchanged: 0, failed: 0, fresh: 0, recencyDays: expect.any(Number), stopped: 'done' });

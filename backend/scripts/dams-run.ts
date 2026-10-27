@@ -5,7 +5,8 @@
 //
 // The worker's tick (match the traced dams, write dams/wanted.json), the
 // fetcher's Waterbodies pass (FEED_SOURCE=fixtures by default: the committed
-// synthetic series, no network), then the tick again (load what the pass
+// synthetic series, no network) and its WOfS pass (the synthetic STAC and
+// scenes, dams/observed/wofs/fixtures.ts), then the tick again (load what the pass
 // wrote into dam_observation). The handover goes through MIRROR_URL when it
 // names a bucket or directory of its own, else a scratch directory under the
 // system's temp directory (one per dev database), never the committed
@@ -26,6 +27,8 @@ import { fixtureMirrorUrl } from '../src/mirror/source.js';
 import { openStore } from '../src/mirror/store.js';
 import { runDamsTick } from '../src/dams/observed/tick.js';
 import { REQUEST_INTERVAL_MS, runWaterbodiesPass, waterbodiesHttp } from '../src/dams/observed/waterbodies.js';
+import { runWofsPass, SCENE_INTERVAL_MS, STAC_INTERVAL_MS } from '../src/dams/observed/wofs/pass.js';
+import { feedHttp } from '../src/feeds/http.js';
 
 /** MIRROR_URL when it is one of its own, else a scratch directory named after the dev database. */
 export function handoverUrl(env: NodeJS.ProcessEnv = process.env): string {
@@ -49,11 +52,22 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		console.log(
 			`Waterbodies pass (${mode}): ${pass.fetched.length} fetched, ${pass.unchanged.length} unchanged, ${pass.failed.length} failed, ${pass.fresh} fresh; stopped: ${pass.stopped}`
 		);
+		const live = mode === 'live';
+		const wofs = await runWofsPass({
+			store,
+			http: await feedHttp(mode),
+			today: utcToday(),
+			stacIntervalMs: live ? STAC_INTERVAL_MS : 0,
+			sceneIntervalMs: live ? SCENE_INTERVAL_MS : 0
+		});
+		console.log(
+			`WOfS pass (${mode}): ${wofs.written.length} written, ${wofs.failures.length} failed, ${wofs.fresh} fresh, ${wofs.scenesRead} scenes read; stopped: ${wofs.stopped}`
+		);
 		const after = await runDamsTick({ env, store });
 		console.log(`tick: ${after?.loaded ?? 0} file(s) loaded, ${after?.rows ?? 0} row(s) written${after?.failed ? `, ${after.failed} failed` : ''}`);
 		console.log(`handover: ${url}`);
 		await closePool();
-		process.exit(pass.error || after?.failed ? 1 : 0);
+		process.exit(pass.error || wofs.error || after?.failed ? 1 : 0);
 	})().catch(async (err) => {
 		console.error((err as Error).message);
 		await closePool();
