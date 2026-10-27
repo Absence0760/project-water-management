@@ -6712,8 +6712,8 @@ other sections.
   fieldset's legend where it has one), so heading navigation reaches them:
   under Flow generation its cards (Per unit: Each unit's rainfall station,
   then the Flow share card; Units without a station an `h4` in its legend,
-  issue #553); under Rain gaps its two cards, CHIRPS gap filling and Flagged
-  rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
+  issue #553); under Rain gaps its three cards, Gap-filling product (issue
+  #604), CHIRPS gap filling and Flagged rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
   and rain source periods as `h4`s (issue #521). The four panels that moved
   to Calibration (Flow calibration, Calibration record, Fit the parameters,
   WR2012 check) are an `h3` each there, under its *Set up the fit* part

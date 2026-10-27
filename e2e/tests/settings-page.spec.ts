@@ -424,8 +424,8 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	await openSettings(page, project.id);
 	// Flow generation (issue #553 round 3): Fragmentation by default, its one card the flow share.
 	expect(await names('set-share')).toEqual(['Flow generation', 'Flow share']);
-	// Rain gaps: two cards, the second's three topics under it (h4).
-	expect(await names('set-rain')).toEqual(['Rain gaps', 'CHIRPS gap filling', 'Flagged rain']);
+	// Rain gaps: three cards, the gap-filling product first (issue #604: it decides what CHIRPS gap filling corrects), the last's three topics under it (h4).
+	expect(await names('set-rain')).toEqual(['Rain gaps', 'Gap-filling product', 'CHIRPS gap filling', 'Flagged rain']);
 	expect(
 		await page
 			.getByTestId('flagged-rain-card')
