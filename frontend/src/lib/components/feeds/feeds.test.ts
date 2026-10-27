@@ -30,6 +30,9 @@ import {
 	needsAttention,
 	nextTryNote,
 	parseBbox,
+	type RainCopy,
+	rainCopyNote,
+	STATE_LABELS,
 	parseCells,
 	separateName,
 	takeoverOf
@@ -262,6 +265,16 @@ describe('descriptions', () => {
 			expect(healthMessage(h({ code: 'waiting' }))).toBe('Waiting for its first fetch.');
 			expect(healthMessage(h({ code: 'off', newest: null }))).toBe('Switched off; no data yet.');
 			expect(healthMessage(h({ code: 'off', newest: '2026-09-20' }))).toBe('Switched off; newest data 20 Sep 2026.');
+			// Our copy is late (issue #604): the copy's days, that the feed is fine, and its own newest day.
+			expect(healthMessage(h({ code: 'copy-behind', product: 'sat', final: '2026-07-31', preliminary: '2026-10-05', newest: '2026-10-05' }, 12, 'copy-behind'))).toBe(
+				'Our copy of the rain data is behind: it holds final days to 31 Jul 2026 and preliminary days to 5 Oct 2026. The feed itself is fine and fills in the newer days once the copy catches up; there is nothing to do here. Newest data 5 Oct 2026.'
+			);
+			expect(healthMessage(h({ code: 'copy-behind', product: 'rnl', final: null, preliminary: null, newest: null }, 62, 'copy-behind'))).toBe(
+				'Our copy of the rain data is behind: it holds no final days yet. The feed itself is fine and fills in the newer days once the copy catches up; there is nothing to do here. No data yet.'
+			);
+			expect(healthMessage(h({ code: 'copy-behind', product: 'sat', final: '2026-07-31', preliminary: null, newest: '2026-07-31' }, 12, 'copy-behind'))).toMatch(
+				/it holds final days to 31 Jul 2026 and no preliminary days\./
+			);
 		});
 
 		it('falls back to the state for a code this client does not know (a newer server)', () => {
@@ -277,6 +290,63 @@ describe('descriptions', () => {
 	it('count the feeds that need attention', () => {
 		const h = (state: string) => ({ health: { state, stale: false, staleAfterDays: 1, reason: { code: 'waiting' } } }) as never;
 		expect(needsAttention([h('ok'), h('stale'), h('failing'), h('pending'), h('disabled')])).toBe(2);
+		// A late copy isn't the feed's to fix: no warning for it.
+		expect(needsAttention([h('copy-behind')])).toBe(0);
+		expect(STATE_LABELS['copy-behind']).toBe('Copy behind');
+	});
+
+	describe('the line about our copy of the rain data (issue #604)', () => {
+		const tz = process.env.TZ;
+		afterEach(() => {
+			process.env.TZ = tz;
+		});
+		const part = (through: string | null, behind = false) => ({ through, behind });
+		const copy = (over: Partial<Extract<RainCopy, { readable: true }>> = {}): RainCopy => ({
+			readable: true,
+			sample: false,
+			asOf: '2026-10-27',
+			final: { sat: part('2026-08-31'), rnl: part('2026-08-31') },
+			preliminary: part('2026-10-24'),
+			...over
+		});
+		const sat = { source: 'chirps' as const, config: {} };
+		const rnl = { source: 'chirps' as const, config: { product: 'rnl' as const } };
+		const gefs = { source: 'chirps_gefs' as const, config: {} };
+
+		it.each(['UTC', 'Pacific/Kiritimati', 'Pacific/Pago_Pago'])('says how far the copy reaches, for the products the feeds read (TZ %s)', (zone) => {
+			process.env.TZ = zone;
+			expect(rainCopyNote(copy(), [sat])).toEqual({ text: 'Rain data copied to 31 Aug 2026 (final) / 24 Oct 2026 (preliminary).', behind: false });
+			// rnl has no preliminary days.
+			expect(rainCopyNote(copy(), [rnl, gefs])).toEqual({ text: 'Rain data copied to 31 Aug 2026 (final).', behind: false });
+			// Both products, the same final day: one date; different days: each named.
+			expect(rainCopyNote(copy(), [sat, rnl])?.text).toBe('Rain data copied to 31 Aug 2026 (final) / 24 Oct 2026 (preliminary).');
+			expect(rainCopyNote(copy({ final: { sat: part('2026-08-31'), rnl: part('2026-07-31') } }), [sat, rnl])?.text).toBe(
+				'Rain data copied to 31 Aug 2026 (final, sat) and 31 Jul 2026 (final, rnl) / 24 Oct 2026 (preliminary).'
+			);
+			// The sample copy says which day it stands at.
+			expect(rainCopyNote(copy({ sample: true, asOf: '2026-02-09' }), [sat])?.text).toBe(
+				'Rain data copied to 31 Aug 2026 (final) / 24 Oct 2026 (preliminary). This is the sample copy, as it stood on 9 Feb 2026.'
+			);
+		});
+
+		it('says when the copy is behind, only for a part a feed reads', () => {
+			const late = ' The copy is behind the published data: feeds fill in the newer days once it catches up, with nothing to do here.';
+			expect(rainCopyNote(copy({ preliminary: part('2026-10-01', true) }), [sat])).toEqual({ text: `Rain data copied to 31 Aug 2026 (final) / 1 Oct 2026 (preliminary).${late}`, behind: true });
+			// An rnl feed doesn't read the preliminary days.
+			expect(rainCopyNote(copy({ preliminary: part('2026-10-01', true) }), [rnl])?.behind).toBe(false);
+			expect(rainCopyNote(copy({ final: { sat: part('2026-08-31'), rnl: part(null, true) } }), [rnl])).toEqual({ text: `Rain data copied to nothing yet (final).${late}`, behind: true });
+		});
+
+		it('is absent with no CHIRPS feed or no copy, and says so when the copy couldn’t be read', () => {
+			expect(rainCopyNote(copy(), [gefs])).toBeNull();
+			expect(rainCopyNote(copy(), [])).toBeNull();
+			expect(rainCopyNote(null, [sat])).toBeNull();
+			expect(rainCopyNote(undefined, [sat])).toBeNull();
+			expect(rainCopyNote({ readable: false }, [sat])).toEqual({
+				text: 'Couldn’t check our copy of the rain data: the feeds’ newest days may be late. Refresh the status to try again.',
+				behind: true
+			});
+		});
 	});
 	it('say how many days the last fetch kept the user’s own values (last_meta.kept)', () => {
 		expect(keptNote({ days: 60, merged: 58, kept: 2 })).toBe('2 days kept your own values');
