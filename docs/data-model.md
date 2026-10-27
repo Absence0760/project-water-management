@@ -3970,7 +3970,8 @@ the restored one.
 `reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
 keyed by `(kind, dataset)`: the reference-bucket object a production load
 of a map dataset read (`land-cover`, `evaporation`, `rivers`, since
-225 `gazetteer`, and since 238 `map-grid`) and the
+225 `gazetteer`, since 238 `map-grid`, and since 249 `waterbodies`, the
+DE Africa Waterbodies polygons) and the
 SHA-256 it was checked against. Written in the same transaction as the
 dataset by the replace functions (`replaceCroplandDataset`,
 `replaceEvaporationDataset`, `replaceRivers`, `replacePlaces`,
@@ -4519,6 +4520,77 @@ A gap row is a row like any other: DWS listing a day with no value (170
   import of the synthetic reply, a store-backed fetch writing exactly what
   the live path writes, waiting for days the store doesn't hold, the
   tick's handover); `ingest/dws.test.ts`; `scripts/import-dws.test.ts`.
+
+### Dam observations (249_dam_observation.sql)
+
+What satellites saw of each traced dam (issue #604 R5,
+[architecture.md § Dam observations](./architecture.md#dam-observations)):
+the wet area on a date, per source, in our own store. Two sources, both
+Digital Earth Africa (CC BY 4.0): **`waterbodies`**, DE Africa Waterbodies'
+per-waterbody series, for a dam matched to one waterbody; and **`wofs`**,
+Water Observations from Space summed inside the dam's own outline, for
+every traced dam (R5-C). The worker writes them from the files the fetcher's
+passes leave in the mirror bucket; no route writes them.
+
+| Table | Holds |
+| --- | --- |
+| `waterbody_reference` | DE Africa Waterbodies polygons (the v0.0.3 historical extent): `uid` (primary key, the waterbody's geohash, `^[0-9a-z]{6,12}$`, which names its series upstream), `dataset` (`synthetic` for the committed fixture, else the operator's label), `geometry` (Polygon or MultiPolygon jsonb), its bounding box (`min_lon` … `max_lat`, indexed for the match's first pass), `area_m2` (geodesic), `source`, `loaded_at`. Global reference data like `dam_register_reference` (157): loaded by the operator (`pnpm import:waterbodies`, or `load-reference.yml` kind `waterbodies`), read-only to the app |
+| `dam_waterbody_match` | One row per traced dam polygon (`feature_id`, primary key; `project_id`): `status` `matched` (one waterbody is essentially this dam), `merged` (the waterbody also holds other water, or the dam is split over several) or `none`; `uid` (the best overlap's, null for `none`); `dam_share` and `waterbody_share` (0–1: how much of the dam the waterbody covers, and of the waterbody the dam is); `matched_at`. `uid` is no foreign key: a reload of the reference set replaces its rows, and the worker matches every dam again (`matched_at` older than the newest `loaded_at`). Thresholds: `backend/src/dams/observed/match.ts` |
+| `dam_observation` | One row per dam, `source` and `obs_date` (unique): `wet_area_m2` (the wet area seen, of the part seen clearly), `pct_observed` (0–100, the share of the outline seen clearly that date; for Waterbodies 100 − `pc_invalid`), `upstream_key` (the Waterbodies uid, or the WOfS STAC item id), `loaded_at`. `obs_date` from 1984 (Landsat's record) |
+
+- **Same project**: both project tables reach their dam through the
+  composite key `(feature_id, project_id)` → `map_feature (id, project_id)`
+  `ON DELETE CASCADE` (152's pattern for a feature's source and
+  `node.area_feature_id`), so a row can't name another project's feature and
+  goes with it; covering indexes on every foreign key.
+- **RLS**: a project's viewers and above read its matches and
+  observations; a farmer or contributor reads those of the dams on their own
+  farms only (`app_farm_dam_features()`, `SECURITY DEFINER`, the dam
+  features linked to the caller's farms in every project, read once per
+  query); `water_app` holds SELECT and nothing else
+  (`catalogue.db.test.ts` `READ_ONLY`). `waterbody_reference`: any
+  signed-in session reads it.
+- **A redrawn dam** (its geometry or kind changed) loses its match and its
+  observations (`map_feature_outline_changed`, an AFTER UPDATE trigger,
+  `SECURITY DEFINER` since the editor holds no DELETE on them); a rename
+  doesn't. The worker matches it again on its next tick, and the passes
+  observe the new outline.
+- **The worker's functions** (`SECURITY DEFINER`, `water_app` EXECUTE,
+  worker only: no user and no API key, 245's `mirror_worker_context`, else
+  42501):
+  - `app_dam_outlines()`: every dam polygon in any project (at most 5000,
+    the tick logs `dams_outline_cap` at the cap), with its match,
+    `match_stale` and the newest observation date per source: the match's
+    input and the wanted list's outlines.
+  - `app_waterbody_candidates(w, s, e, n)`: the waterbodies whose box meets
+    the dam's (a box of at most 1° a side; at most 200, most shared box
+    area first).
+  - `app_dam_match_write(feature_id, status, uid, dam_share,
+    waterbody_share, feature_at)`: records a match unless the feature
+    changed since it was read (`applied = false`); a dam that was `matched`
+    and isn't now (or is matched to another uid) loses its `waterbodies`
+    rows (`dropped`).
+  - `app_dam_observation_load(source, key, dates[], wet[], pct[],
+    upstream_keys[], fetched_at)`: one pass file. `waterbodies`: `key` is a
+    uid and the rows go to every dam matched to it; `wofs`: `key` is a dam's
+    feature id, refused (`applied = false`) when the feature changed after
+    `fetched_at` (the outline the pass read may be gone) or is no longer a
+    dam polygon. Rows are upserted by (dam, source, date), a row with
+    unchanged values isn't rewritten, and nothing is deleted (a pass may
+    send only the dates since the newest held). The target dams' rows are
+    locked first, so a redraw can't slip between choosing them and writing.
+    Bounds (else 23514): a known source and key; arrays of one length, at
+    most 20 000 rows; each date 1984 to tomorrow (UTC), listed once; wet
+    area 0 to 10¹² m², never NaN; share 0–100; each upstream key 1–200
+    printable characters; `fetched_at` not in the future.
+- **reference_load** takes kind `waterbodies` (249), so a production load
+  records its file like the other reference datasets.
+- **Tests**: `dams/observed/observations.db.test.ts` (RLS with positive
+  controls: a viewer, a farmer's own dam, nothing across projects; refused
+  writes; the worker-only functions; every bound; the loader's targets;
+  unmatching, redrawing and deleting a dam); `dams/observed/tick.db.test.ts`
+  (the tick, the pass and the load end to end on the synthetic set);
+  `catalogue.db.test.ts`.
 
 ### Feed days (031_feed_days.sql)
 

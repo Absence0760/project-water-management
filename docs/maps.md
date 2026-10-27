@@ -1285,6 +1285,53 @@ reads it.
   the reference-dataset path, which refuses the register while its licence
   is unconfirmed ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
 
+### Waterbodies
+
+`waterbody_reference` (249) holds Digital Earth Africa's Waterbodies
+polygons, which the dam observations match each traced dam against
+(issue #604 R5; [architecture.md § Dam observations](./architecture.md#dam-observations),
+[data-model.md § Dam observations](./data-model.md#dam-observations-249_dam_observationsql)).
+Global reference data like the register of dams: the **operator** loads it
+as the schema owner, and only the worker reads it (no route, no map layer).
+
+- **Committed: synthetic only.** `backend/fixtures/waterbodies/waterbodies.synthetic.geojson`
+  is seven invented waterbodies drawn from the seeded Sandspruit dams
+  (`backend/scripts/waterbodies-fixture.ts`): most a little inside their
+  dam's outline (they match), Grootdraai's three dam-widths long (merged),
+  and none at Klipdrift (no waterbody). Each uid is the geohash of its
+  invented outline's centre, and `backend/fixtures/waterbodies/series/`
+  holds an invented wet-area series for each, ending 2023-09-17 as the public
+  series do. `pnpm import:waterbodies` with no argument loads it
+  (`pnpm setup` does), as dataset `synthetic`; `pnpm gen:waterbodies-fixture`
+  rewrites it.
+- **Real data: the operator's own clip** of the v0.0.3 historical extent
+  (CC BY 4.0, § Sources). DE Africa publishes it for the whole continent
+  only (`waterbodies/v0.0.3/historical_extent/waterbodies.gpkg`, about
+  900 MB, anonymous), so cut it to the region first, D1's box
+  (10–41° E, 35.5–8° S) or the client's catchments, with GDAL:
+
+  ```bash
+  curl -O https://deafrica-services.s3.af-south-1.amazonaws.com/waterbodies/v0.0.3/historical_extent/waterbodies.gpkg
+  ogr2ogr -f GeoJSON -t_srs EPSG:4326 -spat 10 -35.5 41 -8 -spat_srs EPSG:4326 \
+    -select uid -lco COORDINATE_PRECISION=6 waterbodies-d1.geojson waterbodies.gpkg
+  pnpm import:waterbodies waterbodies-d1.geojson --dataset waterbodies-v0.0.3 [--bbox w,s,e,n]
+  ```
+
+  (`ogrinfo -so waterbodies.gpkg` lists the layer and its fields first; the
+  loader reads the id from `uid` or `UID`.) D1 holds tens of thousands of
+  waterbodies, so `--bbox` the client's area for a smaller table; a dam
+  outside it simply matches nothing. The loader checks each polygon as an
+  upload is checked (geo/geojson.ts), skips and lists what it can't take,
+  and replaces its dataset in one transaction; a reload makes the worker
+  match every dam again. In production the same file goes through
+  `load-reference.yml` (kind `waterbodies`,
+  [deployment.md § Dam observations](./deployment.md#dam-observations)).
+- **The series are read per uid**, not loaded here: the fetcher's
+  Waterbodies pass reads `waterbodies/v0.0.2/surface_area_change/<uid[0..4]>/<uid>.csv`
+  for each matched dam. The v0.0.3 polygons and the v0.0.2 series are
+  DE Africa's latest of each; a uid with no series answers 404 and is
+  recorded as failed in the pass's status (data-sources.md).
+
 ## Delineation
 
 **Delineate** in the Map's header (editors, only when the server has a DEM;
@@ -2613,6 +2660,8 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | List of Registered Dams (the register of dams) | DWS Dam Safety Office ([publications page](https://www.dws.gov.za/DSO/Publications.aspx)) | None stated on the page or in its "Explanation and Legend for List of Registered Dams" PDF (read 2026-10-01). DWS's data terms elsewhere (the NIWIS pages): copyright stays with DWS, data "may not be sold to third parties", use "restricted to use for academic, research or personal purposes" | "Department of Water and Sanitation" as the copyright proprietor (the NIWIS terms) | July 2025 (XLS, no coordinates) and October 2024 (XLS) | A few times a year, irregular | **Blocked: licence unconfirmed** (and DWS's general data terms are non-commercial). Built against the synthetic fixture; ask DWS for written permission before a client deployment loads it |
 | HydroRIVERS v1.0 (river reaches with Strahler order, upstream area, length, mean discharge): the River network layer and its proposals ([§ River network](#river-network)) | WWF (World Wildlife Fund, Inc.), HydroSHEDS; Lehner, B., Grill, G. (2013), *Hydrological Processes* 27(15): 2171–2186 ([product page](https://www.hydrosheds.org/products/hydrorivers)) | Covered by the HydroSHEDS version 1 License Agreement: "HydroRIVERS data are free for non-commercial and commercial use" ([HydroRIVERS technical documentation v1.0 § 4.1](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf), read 2026-10-01); the agreement itself is Appendix A of the [HydroSHEDS technical documentation v1.4](https://data.hydrosheds.org/file/technical-documentation/HydroSHEDS_TechDoc_v1_4.pdf) (read 2026-10-01): a worldwide, non-exclusive, paid-up licence to use the data and to distribute it *incorporated into derivative works* to end users under terms at least as protective (§ 2.1.2), never as a stand-alone product; no decompiling the data (§ 2.1.3); attribution (§ 2.2); as-is, an indemnity to WWF (§ 5), and WWF may end it at its discretion (§ 7.1) | Exhibit B's statement, "This product [Integrated Catchment - Water Balance Tool] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022) and has been used herein under license. WWF has not evaluated the data as altered and incorporated within [Integrated Catchment - Water Balance Tool], and therefore gives no warranty regarding its accuracy, completeness, currency or suitability for any particular purpose. Portions of the HydroSHEDS v1 database incorporate data which are the intellectual property rights of © USGS (2006-2008), NASA (2000-2005), ESRI (1992-1998), CIAT (2004-2006), UNEP-WCMC (1993), WWF (2004), Commonwealth of Australia (2007), and Her Royal Majesty and the British Crown and are used under license. The HydroSHEDS v1 database and more information are available at https://www.hydrosheds.org.", on the Data sources and credits page (`/data-sources#hydrorivers`, 2026-10-02), and a short credit on the map's attribution control linking to it while its reaches are drawn; the loaded source line names it on every reach and added river; cite Lehner & Grill (2013) in published material | v1.0 (`HydroRIVERS_v10_af_shp.zip`) | none announced (a static v1 product) | **Allowed (commercial use permitted); both conditions met**: the Exhibit B statement is on `/data-sources` (2026-10-02), and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone copying or distribution of the data, no reverse engineering, the licensors' ownership and no warranty; 2026-10-03, pre-counsel, [legal-status.md](./legal-status.md)). Loaded locally from the operator's download; never committed |
 | DWS 1:500 000 rivers (`rivs500k`, Resource Quality Information Services; from the 1994 CDNGI 1:500 000 coverage) | DWS, `https://www.dws.gov.za/iwqs/gis_data/river/rivs500k.aspx` | **Unconfirmed.** Read 2026-10-01: the page and its description (`rivs500txt.html`) answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) shows the coverage offered "as is … for display or modelling", a research mirror listing it with "No License Provided", and DWS's wording on its river reports that they "may be reproduced only for non-commercial purposes and only after appropriate authorisation"; DWS's general data terms (NIWIS) are non-commercial too | "Department of Water and Sanitation" | the operator's download | none (a 1994 coverage, revised by RQIS) | **Blocked: licence unconfirmed** (and DWS's published terms are non-commercial). HydroRIVERS is used instead. To unblock: DWS's written permission for commercial reuse, recorded here with the date |
+| Digital Earth Africa Waterbodies v0.0.3 (historical extent polygons) and v0.0.2 (per-waterbody surface area series): the dam observations ([§ Waterbodies](#waterbodies)) | Digital Earth Africa ([docs.digitalearthafrica.org](https://docs.digitalearthafrica.org)), `s3://deafrica-services/waterbodies/` (af-south-1, anonymous) | **CC BY 4.0** for both (Digital Earth Africa's products; read by the lead 2026-10-27, issue #604 Round 5); commercial use allowed with attribution | "Contains Digital Earth Africa data (CC BY 4.0)" (`dams/observed/upstream.ts` `DEAFRICA_ATTRIBUTION`) wherever an observed value shows, and on the Data sources and credits page | polygons v0.0.3; series v0.0.2 (objects last written 2024-02-26, newest date 2023-09-17, checked 2026-10-27) | weekly per the product; the public series look frozen since 2024-02 ([data-sources.md](./data-sources.md#deafrica-waterbodies-series)) | **Allowed.** Polygons: the operator's clip, loaded (`pnpm import:waterbodies`, `load-reference.yml` kind `waterbodies`), never committed; series: read by the fetcher's weekly pass. Built and tested against the synthetic set |
+| Synthetic Waterbodies fixture (`backend/fixtures/waterbodies/`) | this repo (invented outlines round the Sandspruit example's dams, `pnpm gen:waterbodies-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, `pnpm setup`, `pnpm dev:dams:run`) |
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
 | ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method, and on the Data sources and credits page (`/data-sources#worldcover`) | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | South African National Land Cover (SANLC) 2018 / 2020 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020 (2022 announced) | Every two years, irregular | **Blocked.** Not loaded. To unblock: DFFE's written terms for 2018/2020 allowing derivatives in a commercial service, recorded here with the date |
