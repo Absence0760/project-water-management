@@ -4218,7 +4218,7 @@ signed-in session, no write grant to `water_app` (`catalogue.db.test.ts`
   claim's order and bounds, the apply's rules and refusals, and the loop end
   to end on the rewrite fixture.
 
-### Mirror revisions (245_mirror_revision.sql)
+### Mirror revisions (245_mirror_revision.sql, 246_mirror_revision_parts.sql)
 
 Issue #604 moves CHIRPS onto a copy we control: a Zarr store per product
 with a `manifest.json` beside it, whose `revision` goes up only when CHC
@@ -4230,10 +4230,12 @@ it marks the cached finals stale, and the re-check above does the rest.
 | Table | Holds |
 | --- | --- |
 | `mirror_manifest` | One row per `origin` and `product` (primary key): `revision` (≥ 1), the revision of the copy the cache was last brought up to; `applied_at`; `manifest` (`jsonb`, the manifest as applied, `changes` and all: the record of the revision). No foreign keys |
+| `mirror_change` (246) | One row per entry of a revision's `changes` an apply marked: `origin`, `product`, `target_revision` (the revision it was applied for) and `idx` (its place among that revision's entries to mark) as primary key; the entry's own `revision`, `day_from`/`day_to`, the grid cells `r0`–`r1`, `c0`–`c1`; `applied_at` (indexed with origin and product). What a resumed apply skips, and what a fetch queued before `applied_at` checks its finals against. Pruned 30 days after its revision is recorded. No foreign keys |
+| `mirror_copy` (246) | One row per `origin` and `product` (`sat`, `rnl` or `prelim`; primary key): the copy's manifest as the worker's tick last read it: `revision`, `final_through` (null for `prelim`), `prelim_through` (null for `rnl`), `seen_at`. What the API shows of the copy (only the worker can reach it). No foreign keys |
 
 - **RLS**: reference data like `chirps_cell_year`: SELECT for any
   signed-in session, no write grant to `water_app` (`catalogue.db.test.ts`
-  `READ_ONLY`), written only by the function below.
+  `READ_ONLY`), each table written only by its function below.
 - **`app_mirror_apply_revision(origin, product, revision, changes,
   manifest)`** (`SECURITY DEFINER`, `search_path` pinned, `water_app`
   only, and only from a session with **no user and no API key**, the
@@ -4274,8 +4276,30 @@ it marks the cached finals stale, and the re-check above does the rest.
     column ranges); at most 1000 entries, each with an integer `revision`
     no later than the manifest's, ISO `days` running forwards over at most
     366 days from the product's first day to today (UTC), a non-negative
-    integer `cellsChanged` and a non-negative `maxAbsDiff`; at most 4000
-    distinct days marked in one call (a larger revision is applied in parts).
+    integer `cellsChanged` and a non-negative `maxAbsDiff`. (245 also
+    refused a call of more than 4000 days; 246 applies it in parts.)
+  - **In parts (246).** The function now returns `(revision, applied,
+    marked, remaining)`. The entries to mark (above the stored revision,
+    `cellsChanged > 0`, in list order) are taken up to 4000 days a call
+    (at least one entry; each is at most 366 days); each call marks its
+    part, logs the entries in `mirror_change`, and commits. `remaining` > 0
+    means call again (`revision` is still the old one, `applied` false);
+    the last part records the revision (`applied`, `remaining` 0). A call
+    skips the entries already logged for the same revision, if they match
+    the list at their places (else that log is dropped and it starts over,
+    re-marking: harmless), so a worker that dies between parts resumes on
+    the next tick, and one that dies inside a part rolls it back whole.
+    **Why parts, not one transaction:** CHC has rewritten years at once (the
+    2024 dailies, the annual NetCDFs); a whole `rnl` rewrite is 16,000 days.
+    One transaction would hold every one of those days' file rows, stalling
+    every CHIRPS fetch behind it, and a timeout would throw all of it away.
+    Parts of 4000 days take seconds each, and progress survives.
+  - **Locks (246).** The product's advisory lock is taken exclusive,
+    waiting at most 30 s (`lock_timeout`); the file rows at most 500 ms. An
+    inline fetch holds the file rows of its claimed days and then, in its
+    merge, waits for the same advisory lock shared: without the short
+    timeout the two would deadlock. A timeout (`55P03`) refuses the call
+    whole, and the tick tries again next time.
   - **Locks**: an advisory lock on the origin and product (two ticks never
     apply at once, even before the first row exists), then each day's
     `chirps_file` row in day order, under which its stale rows are written:
@@ -4287,15 +4311,66 @@ it marks the cached finals stale, and the re-check above does the rest.
 - `mirror_worker_context()` (no user, no API key; as 051's
   `alert_worker_context`) and `mirror_region_cells(region)` are the shared
   checks (invoker rights).
-- The typed wrapper is `backend/src/feeds/mirrorRevision.ts`
-  (`applyMirrorRevision`, `mirrorRevision`); the worker tick that calls it
-  is issue #604 R2-D. A known race for R2-D to close: a feed fetch that read
-  the copy *before* a revision and applies its re-read *after* the marking
-  clears the stale rows with the old values. `chirps_cell_stale.marked_at`
-  against the revision the fetch read is the handle.
+- **The stale-mark race (246).** A fetch that read a value from the copy
+  before a revision, and lands it after the revision was marked, used to
+  write the old value back as current, for good. Two ways, both closed:
+  - `chirps_recheck_apply` cleared the revision's marks for the days it
+    re-read. It now clears only a mark whose `marked_at` is no later than
+    `chirps_read_since(fetch job)`: the fetch job's `created_at` (every
+    read of that job, every attempt, comes after it; `started_at` would
+    not do, as an answer to an earlier attempt of the same job can land
+    after a retry). A mark made later stays, and a later fetch reads the
+    day again. The apply, a HEAD that finds a rewritten file, and the
+    merge below refresh the `marked_at` of a mark already there
+    (`ON CONFLICT … DO UPDATE`), so an old mark counts as new.
+  - `chirps_cache_merge` (and the re-check's re-read) could cache an old
+    final for a cell the revision didn't mark because nobody had cached it
+    yet. Each now ends with `mirror_mark_raced(origin, product, since,
+    days, rows, cols)` (owner-only): every final it read on a day and cell
+    inside a `mirror_change` row applied after `since` is marked stale.
+    Both take the product's advisory lock **shared** before writing, and
+    the apply takes it exclusive: so the apply either sees the fetch's
+    committed cells and marks them, or committed its `mirror_change` rows
+    before the fetch looks. For a `feed_ingest` (production's CHC path)
+    `since` is the `created_at` of the `feed_fetch` its answer is to.
+  - Signatures unchanged (piece C calls them as they are). Over-marking
+    costs one more read of an unchanged value; under-marking kept a wrong
+    value cached.
+- **`mirror_copy` and `app_mirror_record_copy(origin, product, manifest)`
+  (246)** (`SECURITY DEFINER`, the same no-user caller only): the worker's
+  tick records each product's manifest (`sat`, `rnl`, `prelim`) whenever
+  it changed, a new month as well as a revision: `revision`,
+  `finalThrough`, `prelimThrough` (bounds, else `23514`: the manifest an
+  object of at most 4 MB naming the product, an integer revision ≥ 1, each
+  day null or an ISO date from 1981-01-01 to today, no `finalThrough` for
+  `prelim`, no `prelimThrough` for `rnl`). The API, which can't reach the
+  copy, reads it as any signed-in session: `SELECT product, revision,
+  final_through, prelim_through, seen_at FROM mirror_copy WHERE origin =
+  $1` (`mirrorCopy(db, origin)` in `feeds/mirrorRevision.ts`, with
+  `cacheOrigin()`).
+- The typed wrappers are `backend/src/feeds/mirrorRevision.ts`
+  (`applyMirrorRevision`, one part; `mirrorRevision`; `recordMirrorCopy`;
+  `mirrorCopy`). The worker tick is `backend/src/jobs/handlers/mirror-tick.ts`,
+  called by `runTick` before it queues the due feeds, only with
+  `CHIRPS_SOURCE=mirror`: per product one manifest request at most (a
+  conditional GET on S3, a stat on a `file://` copy), nothing more when its
+  ETag (or size and mtime) is the one this process already handled; it
+  records the manifest, and for `rnl`/`sat` applies a newer revision in
+  parts within the tick's time (60 s, 10 parts per product), the rest next
+  tick. A failure is logged (`mirror_revision_failed`, or
+  `mirror_revision_busy` on a lock timeout) and retried next tick; the rest
+  of the tick goes on. With `CHIRPS_SOURCE=mirror` a fetch HEADs none of
+  CHC's files for the `chc` origin (`claimRecheck`): the copy's revisions
+  replace that re-check, and its stale days are still read again.
 - `feeds/mirrorRevision.db.test.ts` checks the access (positive controls),
   what is marked and what isn't, that the re-check then claims the marked
-  days, the revision rules and every bound.
+  days, the revision rules and every bound, a revision of more than 4000
+  days in parts and resumed after a crash, the race both ways (with
+  positive controls), the HEAD guard and `mirror_copy`;
+  `jobs/handlers/mirror-tick.db.test.ts` the tick end to end (nothing with
+  `chc`; a revision marks, the feed re-reads, its series changes with a
+  History event; the same revision again changes nothing; `mirror_copy`
+  recorded, a new month too).
 
 ### Feed days (031_feed_days.sql)
 

@@ -2837,6 +2837,15 @@ In short:
     key) may call: it validates the manifest and day bounds, only ever
     *marks* cached finals stale (never writes a value), and records the
     revision in `mirror_manifest`, which `water_app` can read but not write.
+    Since 246 it does so in parts (at most 4000 days a call, logged in
+    `mirror_change`, also read-only to `water_app`), and the worker records
+    how far each product of the copy runs in `mirror_copy` through
+    `app_mirror_record_copy` (the same no-user caller only, bounds-checked
+    dates), so the API reads the copy's dates from the database and never
+    needs the bucket. A fetch that read before a revision can't undo it:
+    `chirps_recheck_apply` clears only a stale mark made before its fetch
+    was queued, and a merge marks the finals it read inside a change
+    applied since (`mirror_mark_raced`, owner-only).
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no
@@ -3399,11 +3408,11 @@ placed points. The server never trusts the browser with geometry:
   (2–100 characters after trimming, at least one letter or digit;
   `SearchQuery`), reads only our own reference tables (no third-party
   geocoder, so what is typed leaves nowhere) and writes nothing. The shared CHIRPS cell cache (`chirps_cell_year`, 208,
-  and 210's `chirps_file`, `chirps_cell_stale`, `chirps_revision`, and 245's
-  `mirror_manifest`) is read
+  and 210's `chirps_file`, `chirps_cell_stale`, `chirps_revision`, 245's
+  `mirror_manifest`, and 246's `mirror_change` and `mirror_copy`) is read
   the same way but written by the data feeds, through checked functions
   (`chirps_cache_merge`, `chirps_recheck_claim`, `chirps_recheck_apply`,
-  `app_mirror_apply_revision`;
+  `app_mirror_apply_revision`, `app_mirror_record_copy`;
   Input handling, above).
 - No third-party origin: MapLibre is bundled, its worker is same-origin
   (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file

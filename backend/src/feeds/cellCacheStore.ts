@@ -8,6 +8,7 @@ import { type CacheView, decodeCellValue, type GridCell, viewKey, windowYears } 
 import type { ChirpsDailyProduct } from './config.js';
 import type { CellsResult } from './fetch.js';
 import { feedSourceMode } from './http.js';
+import { chirpsSource } from '../mirror/source.js';
 
 /**
  * Where the cached values came from: `chc` (the real files) or `fixtures`
@@ -78,6 +79,12 @@ export interface RecheckClaim {
  * chirps_recheck_claim), as the running feed_fetch job's acting user: up to
  * `reads` days to read again for `cells` (their stale days, then files whose
  * tag isn't known) and up to `heads` files to HEAD. Null when there is none.
+ *
+ * With CHIRPS_SOURCE=mirror no file of CHC's is HEADed (`heads` is taken as
+ * 0, for the `chc` origin): the copy's own revisions (246, the worker tick's
+ * jobs/handlers/mirror-tick.ts) mark what CHC rewrote, and a HEAD's ETag
+ * would describe CHC's file, not the copy the feed reads. The stale days are
+ * still read again: that is how a revision reaches the feeds.
  */
 export async function claimRecheck(
 	db: Db,
@@ -85,8 +92,9 @@ export async function claimRecheck(
 	origin: CacheOrigin,
 	product: ChirpsDailyProduct,
 	cells: readonly GridCell[],
-	{ heads, reads, intervalDays }: { heads: number; reads: number; intervalDays: number }
+	{ heads: asked, reads, intervalDays }: { heads: number; reads: number; intervalDays: number }
 ): Promise<RecheckClaim | null> {
+	const heads = origin === 'chc' && chirpsSource() === 'mirror' ? 0 : asked;
 	if (!cells.length || (heads <= 0 && reads <= 0)) return null;
 	const { rows } = await db.query<{ kind: 'reread' | 'verify' | 'head'; day: string }>(
 		`SELECT kind, to_char(day, 'YYYY-MM-DD') AS day FROM chirps_recheck_claim($1, $2, $3, $4, $5, $6, $7, $8)`,
