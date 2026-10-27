@@ -12,7 +12,7 @@
 // Each item is checked: its id (a UUID upstream; printable, bounded), its
 // acquisition time, and its `water` asset, an `s3://deafrica-services/
 // wofs_ls/…tif` object read over HTTPS from the bucket's public endpoint
-// (S3_BASE). Anything else is refused as a FeedFormatError: we never follow
+// (WOFS_S3_BASE). Anything else is refused as a FeedFormatError: we never follow
 // an href to another host. The item's CRS is taken from the scene's own
 // GeoKeys (cog.ts), not from the item.
 import { z } from 'zod';
@@ -20,9 +20,9 @@ import { FeedFormatError } from '../../../feeds/errors.js';
 import type { FeedHttp } from '../../../feeds/http.js';
 
 /** DE Africa's STAC search endpoint (the explorer). */
-export const STAC_SEARCH = 'https://explorer.digitalearth.africa/stac/search';
+export const WOFS_STAC_SEARCH = 'https://explorer.digitalearth.africa/stac/search';
 /** The public HTTPS endpoint of the bucket the scenes are in. */
-export const S3_BASE = 'https://deafrica-services.s3.af-south-1.amazonaws.com';
+export const WOFS_S3_BASE = 'https://deafrica-services.s3.af-south-1.amazonaws.com';
 export const WOFS_COLLECTION = 'wofs_ls';
 /** Items per page: a page is ~4 KB an item, so 100 is ~400 KB, inside the live client's 4 MiB cap. */
 export const PAGE_LIMIT = 100;
@@ -59,14 +59,14 @@ export interface WofsScene {
 /** The HTTPS URL of an `s3://deafrica-services/wofs_ls/…` asset; null for any other href. */
 export function assetUrl(href: string): string | null {
 	const m = /^s3:\/\/deafrica-services\/(.+)$/.exec(href);
-	const key = m?.[1] ?? (href.startsWith(`${S3_BASE}/`) ? href.slice(S3_BASE.length + 1) : null);
+	const key = m?.[1] ?? (href.startsWith(`${WOFS_S3_BASE}/`) ? href.slice(WOFS_S3_BASE.length + 1) : null);
 	if (!key || !ASSET_KEY.test(key) || key.split('/').some((p) => p === '..' || p === '.')) return null;
-	return `${S3_BASE}/${key}`;
+	return `${WOFS_S3_BASE}/${key}`;
 }
 
 /** The search URL for one window's first page. */
 export function searchUrl(bbox: readonly [number, number, number, number], from: string, to: string, limit = PAGE_LIMIT): string {
-	const u = new URL(STAC_SEARCH);
+	const u = new URL(WOFS_STAC_SEARCH);
 	u.searchParams.set('collections', WOFS_COLLECTION);
 	u.searchParams.set('bbox', bbox.map((v) => Number(v.toFixed(6))).join(','));
 	u.searchParams.set('datetime', `${from}T00:00:00Z/${to}T23:59:59Z`);
@@ -96,8 +96,8 @@ export function parsePage(text: string): { scenes: WofsScene[]; next: string | n
 	const nextHref = page.data.links?.find((l) => l.rel === 'next')?.href ?? null;
 	let next: string | null = null;
 	if (nextHref !== null) {
-		const u = URL.parse(nextHref, STAC_SEARCH);
-		const base = new URL(STAC_SEARCH);
+		const u = URL.parse(nextHref, WOFS_STAC_SEARCH);
+		const base = new URL(WOFS_STAC_SEARCH);
 		if (!u || u.origin !== base.origin || u.pathname !== base.pathname || u.username || u.password) {
 			throw new FeedFormatError('the STAC search’s next page is not the same search');
 		}

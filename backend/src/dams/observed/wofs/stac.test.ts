@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FeedFormatError, FeedRefusedError } from '../../../feeds/errors.js';
 import type { FeedHttp } from '../../../feeds/http.js';
-import { assetUrl, MAX_PAGES, parsePage, S3_BASE, searchScenes, searchUrl, STAC_SEARCH } from './stac.js';
+import { assetUrl, MAX_PAGES, parsePage, WOFS_S3_BASE, searchScenes, searchUrl, WOFS_STAC_SEARCH } from './stac.js';
 
 /** A synthetic item in the explorer's shape (invented ids and paths). */
 const item = (id: string, datetime: string, href = `s3://deafrica-services/wofs_ls/1-0-0/900/001/${datetime.slice(0, 4)}/x/${id}_water.tif`) => ({
@@ -13,7 +13,7 @@ const item = (id: string, datetime: string, href = `s3://deafrica-services/wofs_
 	assets: { water: { href, type: 'image/tiff; application=geotiff; profile=cloud-optimized' } }
 });
 const page = (features: unknown[], next?: string) =>
-	JSON.stringify({ type: 'FeatureCollection', features, links: next ? [{ rel: 'next', href: next, method: 'GET' }, { rel: 'search', href: STAC_SEARCH }] : [] });
+	JSON.stringify({ type: 'FeatureCollection', features, links: next ? [{ rel: 'next', href: next, method: 'GET' }, { rel: 'search', href: WOFS_STAC_SEARCH }] : [] });
 
 /** A FeedHttp answering text() from a map of URL → body (or an error to throw). */
 function http(pages: Record<string, string | Error>) {
@@ -35,15 +35,15 @@ const BBOX = [19.0, -34.0, 19.1, -33.9] as const;
 describe('searchUrl', () => {
 	it('asks the explorer for wofs_ls over the box and the whole days', () => {
 		const u = new URL(searchUrl(BBOX, '2025-01-01', '2025-12-31'));
-		expect(u.origin + u.pathname).toBe(STAC_SEARCH);
+		expect(u.origin + u.pathname).toBe(WOFS_STAC_SEARCH);
 		expect(Object.fromEntries(u.searchParams)).toEqual({ collections: 'wofs_ls', bbox: '19,-34,19.1,-33.9', datetime: '2025-01-01T00:00:00Z/2025-12-31T23:59:59Z', limit: '100' });
 	});
 });
 
 describe('assetUrl', () => {
 	it('reads the bucket’s s3:// and https:// forms, and nothing else', () => {
-		expect(assetUrl('s3://deafrica-services/wofs_ls/1-0-0/174/084/2026/09/10/a_water.tif')).toBe(`${S3_BASE}/wofs_ls/1-0-0/174/084/2026/09/10/a_water.tif`);
-		expect(assetUrl(`${S3_BASE}/wofs_ls/a/b.tif`)).toBe(`${S3_BASE}/wofs_ls/a/b.tif`);
+		expect(assetUrl('s3://deafrica-services/wofs_ls/1-0-0/174/084/2026/09/10/a_water.tif')).toBe(`${WOFS_S3_BASE}/wofs_ls/1-0-0/174/084/2026/09/10/a_water.tif`);
+		expect(assetUrl(`${WOFS_S3_BASE}/wofs_ls/a/b.tif`)).toBe(`${WOFS_S3_BASE}/wofs_ls/a/b.tif`);
 		for (const bad of [
 			's3://another-bucket/wofs_ls/a.tif',
 			's3://deafrica-services/waterbodies/a.tif',
@@ -60,10 +60,10 @@ describe('assetUrl', () => {
 
 describe('parsePage', () => {
 	it('reads the scenes, their UTC dates, and a same-search next link', () => {
-		const next = `${STAC_SEARCH}?collections=wofs_ls&_o=100&_full=True`;
+		const next = `${WOFS_STAC_SEARCH}?collections=wofs_ls&_o=100&_full=True`;
 		const got = parsePage(page([item('a1', '2026-09-01T08:35:02.632846Z')], next));
 		expect(got.scenes).toEqual([
-			{ itemId: 'a1', date: '2026-09-01', datetime: '2026-09-01T08:35:02.632Z', url: `${S3_BASE}/wofs_ls/1-0-0/900/001/2026/x/a1_water.tif` }
+			{ itemId: 'a1', date: '2026-09-01', datetime: '2026-09-01T08:35:02.632Z', url: `${WOFS_S3_BASE}/wofs_ls/1-0-0/900/001/2026/x/a1_water.tif` }
 		]);
 		expect(got.next).toBe(next);
 	});
@@ -89,13 +89,13 @@ describe('parsePage', () => {
 describe('searchScenes', () => {
 	it('follows every page, and returns each item once in time order', async () => {
 		const first = searchUrl(BBOX, '2026-01-01', '2026-12-31');
-		const p2 = `${STAC_SEARCH}?_o=2`;
-		const p3 = `${STAC_SEARCH}?_o=4`;
+		const p2 = `${WOFS_STAC_SEARCH}?_o=2`;
+		const p3 = `${WOFS_STAC_SEARCH}?_o=4`;
 		const { h, asked } = http({
 			[first]: page([item('c', '2026-03-01T08:00:00Z'), item('a', '2026-01-01T08:00:00Z')], p2),
 			[p2]: page([item('b', '2026-01-01T08:00:00Z'), item('a', '2026-01-01T08:00:00Z')], p3),
 			// The last page links on, to an empty page: the empty page ends it.
-			[p3]: page([], `${STAC_SEARCH}?_o=6`)
+			[p3]: page([], `${WOFS_STAC_SEARCH}?_o=6`)
 		});
 		const got = await searchScenes(h, BBOX, '2026-01-01', '2026-12-31');
 		expect(got.map((s) => s.itemId)).toEqual(['a', 'b', 'c']);
@@ -105,8 +105,8 @@ describe('searchScenes', () => {
 	it(`stops at ${MAX_PAGES} pages`, async () => {
 		const pages: Record<string, string> = {};
 		const first = searchUrl(BBOX, '2026-01-01', '2026-12-31');
-		pages[first] = page([item('i0', '2026-01-01T00:00:00Z')], `${STAC_SEARCH}?_o=1`);
-		for (let i = 1; i <= MAX_PAGES + 1; i++) pages[`${STAC_SEARCH}?_o=${i}`] = page([item(`i${i}`, '2026-01-01T00:00:00Z')], `${STAC_SEARCH}?_o=${i + 1}`);
+		pages[first] = page([item('i0', '2026-01-01T00:00:00Z')], `${WOFS_STAC_SEARCH}?_o=1`);
+		for (let i = 1; i <= MAX_PAGES + 1; i++) pages[`${WOFS_STAC_SEARCH}?_o=${i}`] = page([item(`i${i}`, '2026-01-01T00:00:00Z')], `${WOFS_STAC_SEARCH}?_o=${i + 1}`);
 		await expect(searchScenes(http(pages).h, BBOX, '2026-01-01', '2026-12-31')).rejects.toThrow(/past 20 pages/);
 	});
 
