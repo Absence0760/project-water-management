@@ -14,7 +14,7 @@ import { unitRainOf } from './unitRain';
 import { stationsOf } from './stationRain';
 import { isModelQualityAnchor } from '#lib/components/calibration/links.js';
 
-type SectionInput = Pick<RunSummary, 'runoff' | 'wr2012' | 'plausibility' | 'unitRain' | 'stations'> & {
+type SectionInput = Pick<RunSummary, 'runoff' | 'wr2012' | 'plausibility' | 'unitRain' | 'stations' | 'gapRain'> & {
 	calibration?: Pick<NonNullable<RunSummary['calibration']>, 'siteNodeId'> | null;
 };
 
@@ -52,6 +52,8 @@ export function modelQualitySections(summary: SectionInput): NavSection[] {
 		...(summary.runoff ? [{ id: 'res-runoff', label: `Runoff model: ${runoffModelName(summary.runoff)}` }] : []),
 		// Rain for each unit: runs with settings.unitRain perUnit (issue #482), or rainfall stations (issue #553).
 		...(unitRainOf(summary) ? [{ id: 'res-unit-rain', label: 'Rain for each unit' }] : stationsOf(summary) ? [{ id: 'res-unit-rain', label: 'Rain from rainfall stations' }] : []),
+		// The gap-filling products: runs whose settings.gapRain chose ERA5-Land or IMERG Late (engine ≥ 1.101.0, issue #604).
+		...(summary.gapRain ? [{ id: 'res-gap-rain', label: 'Rain gaps filled from other products' }] : []),
 		// WR2012 check: only when the project has a reference.
 		...(summary.wr2012 ? [{ id: 'res-wr2012', label: wr2012Heading(summary.wr2012) }] : []),
 		{ id: 'res-ewr-agreement', label: 'EWR test: model against observed flow' },

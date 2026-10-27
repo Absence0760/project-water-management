@@ -21,7 +21,13 @@
 	// (issue #553: the average catchment rainfall and each land unit, the Full
 	// CSV's derived columns, derivedRain.ts): asked for when the dialog opens,
 	// computed by SeriesTab in its own lazily loaded chunk, never stored.
-	import type { ProjectSettings, SeriesMeta } from '@water-management/engine';
+	//
+	// With `loadGapRain` (issue #604 R4-E: settings.gapRain chooses ERA5-Land
+	// or IMERG Late), the dialog asks for the products a run would read over
+	// the CHIRPS feed's cells when it opens, so Rain used fills a gap day as a
+	// run does and names the product (IMERG with its version), with the
+	// products' credits under the table.
+	import { rainCredits, type DailySeries, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import { followRetry } from '#lib/components/common/loadState.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -52,7 +58,8 @@
 		focusSeriesId = null,
 		failed = {},
 		onRetry,
-		loadAreas
+		loadAreas,
+		loadGapRain
 	}: {
 		open?: boolean;
 		list: SeriesMeta[];
@@ -64,7 +71,25 @@
 		onRetry?: () => void;
 		/** Each area's rain under its station (SeriesTab, derivedRain.ts); asked for on every open, so it is never older than its inputs. */
 		loadAreas?: () => Promise<PreviewArea[]>;
+		/** The gap-filling products' input series (SeriesTab, series/gapRain.ts gapRainInputSeries); asked for on every open. */
+		loadGapRain?: () => Promise<Record<string, DailySeries>>;
 	} = $props();
+
+	// The gap-filling products (issue #604 R4-E): none until asked for; a failure says so and the days run on CHIRPS alone.
+	let gapSeries = $state.raw<Record<string, DailySeries>>({});
+	let gapError = $state<string | null>(null);
+	let gapAsk = 0;
+	async function fetchGapRain() {
+		if (!loadGapRain) return;
+		const ask = ++gapAsk;
+		gapError = null;
+		try {
+			const got = await loadGapRain();
+			if (ask === gapAsk) gapSeries = got;
+		} catch (e) {
+			if (ask === gapAsk) gapError = e instanceof Error ? e.message : String(e);
+		}
+	}
 
 	const uid = $props.id();
 
@@ -113,7 +138,13 @@
 	// The first error, as the server or the network gave it (one is enough: they are usually the same).
 	const failedReason = $derived(failedIds.length ? failed[failedIds[0]!] : '');
 
-	const rows = $derived(settings ? buildPreviewRows(list, values, settings) : []);
+	const rows = $derived(settings ? buildPreviewRows(list, values, settings, gapSeries) : []);
+	// The credits a product's days carry, once any row's rain came from it (docs/data-sources.md).
+	const credits = $derived.by(() => {
+		const era5l = rows.some((r) => r.derived.rainSource === 'era5l');
+		const versions = rows.filter((r) => r.derived.rainSource === 'imergLate' && r.derived.rainSourceVersion).map((r) => r.derived.rainSourceVersion!);
+		return era5l || versions.length ? rainCredits({ era5l, imergVersions: versions.sort() }, new Date().toISOString().slice(0, 10)) : [];
+	});
 	const noValues = $derived(rows.length === 0 && list.length > 0 && missingIds.length === list.length);
 	// Still waiting on at least one series and none has failed; once one fails, the error shows instead.
 	const loading = $derived(noValues && failedIds.length === 0);
@@ -132,6 +163,7 @@
 			}
 			query = '';
 			void fetchAreas();
+			void fetchGapRain();
 			missingOnly = false;
 			flaggedOnly = false;
 			scrollTop = 0;
@@ -171,7 +203,8 @@
 	const numText = fmtReading;
 	const flagList = (flags: PreviewFlag[]) => flags.map((f) => FLAG_LABEL[f]).join(', ');
 	// Where Rain used came from, in words beside the value (the colour is never the only cue).
-	const RAIN_SOURCE_LABEL: Record<Exclude<RainSource, 'none'>, string> = { catchment: 'catchment', chirps: 'CHIRPS', forecast: 'forecast' };
+	const RAIN_SOURCE_LABEL: Record<Exclude<RainSource, 'none'>, string> = { catchment: 'catchment', chirps: 'CHIRPS', era5l: 'ERA5-Land', imergLate: 'IMERG Late', forecast: 'forecast' };
+	const sourceText = (s: RainSource, version: string | null | undefined) => (s === 'imergLate' && version ? `${RAIN_SOURCE_LABEL[s]} ${version}` : RAIN_SOURCE_LABEL[s as Exclude<RainSource, 'none'>]);
 
 	// Focus the search when it appears. `autofocus` alone only works if the
 	// search is there when the dialog opens: Svelte applies it only while focus
@@ -190,6 +223,11 @@
 		const button = e.currentTarget as HTMLElement;
 		followRetry(button, { scope: button.closest('[data-retry-scope]') });
 		onRetry?.();
+	}
+	function retryGapRain(e: MouseEvent) {
+		const button = e.currentTarget as HTMLElement;
+		followRetry(button, { scope: button.closest('[data-retry-scope]') });
+		void fetchGapRain();
 	}
 	function retryAreas(e: MouseEvent) {
 		const button = e.currentTarget as HTMLElement;
@@ -223,6 +261,15 @@
 					{#if failedIds.length}{failedIds.length} series couldn't be loaded and show{failedIds.length === 1 ? 's' : ''} blank: {failedNames} ({failedReason}).{/if}
 					{#if pendingIds.length}{pendingIds.length} series {pendingIds.length === 1 ? "isn't" : "aren't"} loaded yet and show{pendingIds.length === 1 ? 's' : ''} blank: {pendingNames}.{/if}
 					{#if onRetry}<button type="button" class="btn btn-sm" data-retry onclick={retryValues}>Try again</button>{/if}
+				</div>
+			{/if}
+		</div>
+
+		<div data-retry-scope>
+			{#if gapError}
+				<div class="alert alert-warning" role="status" data-testid="preview-gap-rain">
+					Couldn’t load ERA5-Land and IMERG Late ({gapError}): Rain used shows the days CHIRPS alone would fill.
+					<button type="button" class="btn btn-sm" data-retry onclick={retryGapRain}>Try again</button>
 				</div>
 			{/if}
 		</div>
@@ -327,7 +374,7 @@
 									<td class="num" class:hl={col.seriesId === focusSeriesId}>{numText(cell?.m3Day ?? null)}</td>
 								{:else if col.id === 'rainUsed'}
 									<td class="num">
-										{numText(row.derived.rainUsedMm)}{#if row.derived.rainSource && row.derived.rainSource !== 'none'}<span class="tag" data-testid="rain-source"> · {RAIN_SOURCE_LABEL[row.derived.rainSource]}</span>{/if}
+										{numText(row.derived.rainUsedMm)}{#if row.derived.rainSource && row.derived.rainSource !== 'none'}<span class="tag" data-testid="rain-source"> · {sourceText(row.derived.rainSource, row.derived.rainSourceVersion)}</span>{/if}
 									</td>
 								{:else if col.id === 'chirpsFactor'}
 									<td class="num">{row.derived.chirpsFactor == null ? '–' : `${fmtNum(row.derived.chirpsFactor, 2)}×`}</td>
@@ -352,6 +399,12 @@
 				<p class="muted none">No days match this search.</p>
 			{/if}
 		</div>
+		{#if credits.length}
+			<!-- Each product's credit wherever its values show (issue #604 R4-E, docs/data-sources.md), word for word. -->
+			<ul class="credits muted" data-testid="preview-credits" aria-label="Rain data credits">
+				{#each credits as c (c.product)}{#each c.lines as l (l)}<li><strong>{c.name}:</strong> {l}</li>{/each}{/each}
+			</ul>
+		{/if}
 	{/if}
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
@@ -359,6 +412,12 @@
 </Dialog>
 
 <style>
+	.credits {
+		margin: 0.5rem 0 0;
+		padding-left: 1.1rem;
+		font-size: var(--font-sm);
+		flex: none;
+	}
 	.period {
 		margin: -0.25rem 0 0.75rem;
 		font-size: 0.85rem;

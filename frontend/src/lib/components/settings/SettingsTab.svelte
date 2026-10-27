@@ -359,7 +359,7 @@
 			<NotesDrawer projectId={project.id} target={settingTarget('rain')} />
 		</div>
 		<p class="summary" data-testid="summary-rain">{summaries['set-rain']}</p>
-		<p class="hint explain">Which days CHIRPS fills in the catchment rain, and how, and periods taken from another gauge.</p>
+		<p class="hint explain">Which product fills blank days in the catchment rain (CHIRPS, or ERA5-Land and IMERG Late), how CHIRPS is corrected, and periods taken from another gauge.</p>
 		<!-- Two cards, CHIRPS gap filling and Flagged rain, each list with its add actions in its own head row; at the
 		     defaults (most projects) both are one line that opens them (ui-playbook.md § 2, "Settings at their defaults
 		     are one line"). Always mounted (once its chunk loads, loadRainGaps), like the other sections that feed the Save blocker: a list left invalid
@@ -367,6 +367,8 @@
 		<Fold {readonly} testid="rain-defaults" name={rainAtDefaults ? 'All defaults:' : 'Now:'} line={rainGapsLine(s)} atDefaults={rainAtDefaults} body="stack" spaced>
 			<Lazy load={loadRainGaps}>
 				{#snippet children(R)}
+			<!-- The gap-filling product (settings.gapRain, engine ≥ 1.101.0, issue #604): first, as it decides what the CHIRPS card corrects. -->
+			<R.GapRainFields bind:value={s.gapRain} {readonly} station={!!s.rainStations?.catchment} />
 			<R.ChirpsFitPeriodSection
 				bind:value={s.chirpsFitPeriod}
 				bind:error={draft.errors.fitPeriod}
