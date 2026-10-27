@@ -83,7 +83,7 @@ import { unitFeedProblem } from './unitFeed.js';
 import { REVISION_REFRESH_DAYS, seriesFromCache, uniqueCells } from './cellCache.js';
 import { applyRecheck, type CacheOrigin, cacheOrigin, mergeCellCache, readCellCache, revisedDays, revisionMarkNow, staleLeft } from './cellCacheStore.js';
 import { bboxCellCount, chirpsProduct, type FeedSource, feedProvenance, feedSourceText, type GridConfig, gridCells, SOURCES } from './config.js';
-import { CellsResult, fetchFailure, FetchResult, type FetchWindow, gridRead, utcToday } from './fetch.js';
+import { CellsResult, chirpsPendingFrom, fetchFailure, FetchResult, type FetchWindow, gridRead, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { type FeedRow, feedFetchDedupeKey, feedReplaceDone, lockFeedIssued, recordFeedChecked, recordFeedResult, seriesAccepts } from './store.js';
@@ -160,8 +160,13 @@ type OkResult = Extract<FetchResult, { ok: true }>;
  * value on every day up to it; anything else is ignored, as if the answer
  * made no claim. The feed's previous marker carries on when it reaches the
  * day before the window (the window started after it, fetchWindow): the
- * later of the two. A marker that stops short of the window says nothing
- * about the days between, so only the answer's claim counts then.
+ * later of the two. A marker that stops short of the window leaves days
+ * between that this answer didn't read: while one of them may still be
+ * preliminary in the series (fetch.ts chirpsPendingFrom, which fetchWindow
+ * starts from, so this is a window that couldn't), the marker stays where it
+ * is, never passing a day not known final (issue #604 R3-C). Otherwise (no
+ * day of the feed's between, or one past CHIRPS_FINAL_REACH_DAYS, given up)
+ * only the answer's claim counts.
  *
  * The ingest can't tell a final value from a preliminary one: the answer's
  * days are only numbers, and in production they come from the fetcher
@@ -183,6 +188,8 @@ export function finalThroughAfter(feed: FeedRow, result: OkResult, window: Fetch
 	}
 	const prev = feed.finalThrough;
 	if (prev !== null && prev >= fromEpochDay(toEpochDay(window.start) - 1)) return reported !== null && reported > prev ? reported : prev;
+	const pending = chirpsPendingFrom(prev, feed.lastDataDate ?? null, (feed.config as GridConfig | undefined)?.startDate);
+	if (pending !== null && pending < window.start) return prev;
 	return reported;
 }
 

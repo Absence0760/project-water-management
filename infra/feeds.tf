@@ -35,9 +35,23 @@
 # what it fetched into gauge_record (feeds/gaugeRecordLoad.ts): the fetcher
 # has no database and the worker no internet, so the bucket carries the
 # handover. A 403 or DWS's ScriptServer page stops the run, never retried.
+#
+# The cutover (issue #604 R3-C; docs/deployment.md § The cutover): once
+# chirps_source = "mirror" and dws_source = "store", every feed fetch reads
+# our copy or store inside the worker's own job, and nothing uses the two
+# queues above. local.per_feed_fetching is then false, and the queues, their
+# DLQs and alarms, both event source mappings, the roles' queue grants, the
+# S3-free SQS endpoint statement (jobs.tf) and the worker's FEED_FETCHER /
+# FETCH_REQUESTS_QUEUE_URL are not created. The fetcher itself stays, for its
+# scheduled modes. Flipping either flag back and applying brings them back.
 # ----------------------------------------------------------------------------
 
 locals {
+  # Whether any feed still fetches through the fetcher (the queues below):
+  # until both CHIRPS and DWS read our copy and store (issue #604 R3-C).
+  per_feed_fetching = !(var.chirps_source == "mirror" && var.dws_source == "store")
+  per_feed_count    = local.per_feed_fetching ? 1 : 0
+
   # A fetch reads up to 120 CHIRPS days (~4 range requests each, 6 at a time).
   fetcher_timeout_seconds              = 120
   fetch_requests_visibility_seconds    = 6 * local.fetcher_timeout_seconds
@@ -48,54 +62,66 @@ locals {
 # --- Queues ------------------------------------------------------------------
 
 resource "aws_sqs_queue" "fetch_requests_dlq" {
+  count = local.per_feed_count
+
   name                      = "${local.project}-fetch-requests-dlq"
   message_retention_seconds = 1209600
   sqs_managed_sse_enabled   = true
 }
 
 resource "aws_sqs_queue" "fetch_requests" {
+  count = local.per_feed_count
+
   name                       = "${local.project}-fetch-requests"
   visibility_timeout_seconds = local.fetch_requests_visibility_seconds
   message_retention_seconds  = local.feed_queue_message_retention_seconds
   sqs_managed_sse_enabled    = true
 
   redrive_policy = jsonencode({
-    deadLetterTargetArn = aws_sqs_queue.fetch_requests_dlq.arn
+    deadLetterTargetArn = aws_sqs_queue.fetch_requests_dlq[0].arn
     maxReceiveCount     = 5
   })
 }
 
 resource "aws_sqs_queue_redrive_allow_policy" "fetch_requests_dlq" {
-  queue_url = aws_sqs_queue.fetch_requests_dlq.id
+  count = local.per_feed_count
+
+  queue_url = aws_sqs_queue.fetch_requests_dlq[0].id
   redrive_allow_policy = jsonencode({
     redrivePermission = "byQueue"
-    sourceQueueArns   = [aws_sqs_queue.fetch_requests.arn]
+    sourceQueueArns   = [aws_sqs_queue.fetch_requests[0].arn]
   })
 }
 
 resource "aws_sqs_queue" "ingest_results_dlq" {
+  count = local.per_feed_count
+
   name                      = "${local.project}-ingest-results-dlq"
   message_retention_seconds = 1209600
   sqs_managed_sse_enabled   = true
 }
 
 resource "aws_sqs_queue" "ingest_results" {
+  count = local.per_feed_count
+
   name                       = "${local.project}-ingest-results"
   visibility_timeout_seconds = local.ingest_results_visibility_seconds
   message_retention_seconds  = local.feed_queue_message_retention_seconds
   sqs_managed_sse_enabled    = true
 
   redrive_policy = jsonencode({
-    deadLetterTargetArn = aws_sqs_queue.ingest_results_dlq.arn
+    deadLetterTargetArn = aws_sqs_queue.ingest_results_dlq[0].arn
     maxReceiveCount     = 5
   })
 }
 
 resource "aws_sqs_queue_redrive_allow_policy" "ingest_results_dlq" {
-  queue_url = aws_sqs_queue.ingest_results_dlq.id
+  count = local.per_feed_count
+
+  queue_url = aws_sqs_queue.ingest_results_dlq[0].id
   redrive_allow_policy = jsonencode({
     redrivePermission = "byQueue"
-    sourceQueueArns   = [aws_sqs_queue.ingest_results.arn]
+    sourceQueueArns   = [aws_sqs_queue.ingest_results[0].arn]
   })
 }
 
@@ -107,24 +133,29 @@ resource "aws_iam_role" "fetcher_lambda" {
 }
 
 # Logs (its own log group only) are in iam.tf; no VPC access, no managed policy.
+# The queue grants only while per-feed fetching is on.
 
 data "aws_iam_policy_document" "fetcher_lambda" {
+  count = local.per_feed_count
+
   statement {
     sid       = "ConsumeFetchRequests"
     actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.fetch_requests.arn]
+    resources = [aws_sqs_queue.fetch_requests[0].arn]
   }
   statement {
     sid       = "SendIngestResults"
     actions   = ["sqs:SendMessage"]
-    resources = [aws_sqs_queue.ingest_results.arn]
+    resources = [aws_sqs_queue.ingest_results[0].arn]
   }
 }
 
 resource "aws_iam_role_policy" "fetcher_lambda" {
+  count = local.per_feed_count
+
   name   = "feed-queues"
   role   = aws_iam_role.fetcher_lambda.id
-  policy = data.aws_iam_policy_document.fetcher_lambda.json
+  policy = data.aws_iam_policy_document.fetcher_lambda[0].json
 }
 
 resource "aws_cloudwatch_log_group" "fetcher" {
@@ -148,7 +179,7 @@ data "archive_file" "fetcher_stub" {
 
 resource "aws_lambda_function" "fetcher" {
   function_name = "${local.project}-fetcher"
-  description   = "Data feeds: downloads CHIRPS / CHIRPS-GEFS / DWS for a fetch request and sends the parsed days back. No VPC, no database (backend/src/lambda-fetcher.ts)."
+  description   = "Data feeds: downloads CHIRPS / CHIRPS-GEFS / DWS for a fetch request and sends the parsed days back, and runs the mirror's daily and weekly passes. No VPC, no database (backend/src/lambda-fetcher.ts)."
   role          = aws_iam_role.fetcher_lambda.arn
 
   filename         = data.archive_file.fetcher_stub.output_path
@@ -176,12 +207,17 @@ resource "aws_lambda_function" "fetcher" {
   # Deliberately no vpc_config: this is the one Lambda with internet access.
 
   environment {
-    variables = {
-      FEED_SOURCE              = "live"
-      INGEST_RESULTS_QUEUE_URL = aws_sqs_queue.ingest_results.url
-      # The copy the daily ingest writes (its role may only once daily_ingest_enabled is set).
-      MIRROR_URL = "s3://${aws_s3_bucket.mirror.bucket}"
-    }
+    variables = merge(
+      {
+        FEED_SOURCE = "live"
+        # The copy the daily ingest writes (its role may only once daily_ingest_enabled is set).
+        MIRROR_URL = "s3://${aws_s3_bucket.mirror.bucket}"
+      },
+      # Where it answers a fetch request, only while there are any (local.per_feed_fetching).
+      local.per_feed_fetching ? {
+        INGEST_RESULTS_QUEUE_URL = one(aws_sqs_queue.ingest_results[*].url)
+      } : {}
+    )
   }
 
   depends_on = [
@@ -199,7 +235,9 @@ resource "aws_lambda_function" "fetcher" {
 }
 
 resource "aws_lambda_event_source_mapping" "fetcher_requests" {
-  event_source_arn = aws_sqs_queue.fetch_requests.arn
+  count = local.per_feed_count
+
+  event_source_arn = aws_sqs_queue.fetch_requests[0].arn
   function_name    = aws_lambda_function.fetcher.arn
   # One fetch per invocation: each can take most of the timeout.
   batch_size              = 1
@@ -425,26 +463,32 @@ resource "aws_lambda_function_event_invoke_config" "fetcher" {
 # --- The worker's side: send requests, consume results -------------------------------
 
 data "aws_iam_policy_document" "worker_feeds" {
+  count = local.per_feed_count
+
   statement {
     sid       = "SendFetchRequests"
     actions   = ["sqs:SendMessage"]
-    resources = [aws_sqs_queue.fetch_requests.arn]
+    resources = [aws_sqs_queue.fetch_requests[0].arn]
   }
   statement {
     sid       = "ConsumeIngestResults"
     actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.ingest_results.arn]
+    resources = [aws_sqs_queue.ingest_results[0].arn]
   }
 }
 
 resource "aws_iam_role_policy" "worker_feeds" {
+  count = local.per_feed_count
+
   name   = "feed-queues"
   role   = aws_iam_role.worker_lambda.id
-  policy = data.aws_iam_policy_document.worker_feeds.json
+  policy = data.aws_iam_policy_document.worker_feeds[0].json
 }
 
 resource "aws_lambda_event_source_mapping" "worker_ingest_results" {
-  event_source_arn                   = aws_sqs_queue.ingest_results.arn
+  count = local.per_feed_count
+
+  event_source_arn                   = aws_sqs_queue.ingest_results[0].arn
   function_name                      = aws_lambda_function.worker.arn
   batch_size                         = 10
   maximum_batching_window_in_seconds = 5
@@ -452,7 +496,7 @@ resource "aws_lambda_event_source_mapping" "worker_ingest_results" {
   function_response_types = ["ReportBatchItemFailures"]
 
   scaling_config {
-    maximum_concurrency = 2 # counted in worker_reserved_concurrency (4 triggers x 2)
+    maximum_concurrency = 2 # counted in worker_reserved_concurrency (4 triggers x 2; 3 after the cutover)
   }
 
   depends_on = [aws_iam_role_policy.worker_feeds]
@@ -461,7 +505,7 @@ resource "aws_lambda_event_source_mapping" "worker_ingest_results" {
 # --- Alarms --------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "fetch_requests_dlq_depth" {
-  count = local.alarms_essential ? 1 : 0
+  count = local.alarms_essential && local.per_feed_fetching ? 1 : 0
   # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
   alarm_name          = "${local.project}-fetch-requests-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
@@ -486,14 +530,14 @@ resource "aws_cloudwatch_metric_alarm" "fetch_requests_dlq_depth" {
       period      = 300
       stat        = "Maximum"
       dimensions = {
-        QueueName = aws_sqs_queue.fetch_requests_dlq.name
+        QueueName = aws_sqs_queue.fetch_requests_dlq[0].name
       }
     }
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "ingest_results_dlq_depth" {
-  count = local.alarms_essential ? 1 : 0
+  count = local.alarms_essential && local.per_feed_fetching ? 1 : 0
   # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
   alarm_name          = "${local.project}-ingest-results-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
@@ -518,7 +562,7 @@ resource "aws_cloudwatch_metric_alarm" "ingest_results_dlq_depth" {
       period      = 300
       stat        = "Maximum"
       dimensions = {
-        QueueName = aws_sqs_queue.ingest_results_dlq.name
+        QueueName = aws_sqs_queue.ingest_results_dlq[0].name
       }
     }
   }
@@ -544,7 +588,8 @@ resource "aws_cloudwatch_metric_alarm" "fetcher_errors" {
 }
 
 # The fetcher hit its reserved concurrency: a throttled SQS poll still counts
-# a receive, so a sustained run dead-letters fetch requests.
+# a receive, so a sustained run dead-letters fetch requests; after the cutover
+# a throttled scheduled run (daily ingest, GEFS, DWS weekly) is simply lost.
 resource "aws_cloudwatch_metric_alarm" "fetcher_throttles" {
   count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-fetcher-throttles"
@@ -555,7 +600,7 @@ resource "aws_cloudwatch_metric_alarm" "fetcher_throttles" {
   period              = 300
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "The fetcher Lambda hit reserved_concurrent_executions (fetcher_reserved_concurrency): throttled SQS messages burn receive counts toward the fetch-requests DLQ. Find what is flooding fetch-requests (a feed schedule, a manual refresh loop) before raising the limit."
+  alarm_description   = "The fetcher Lambda hit reserved_concurrent_executions (fetcher_reserved_concurrency): throttled SQS messages burn receive counts toward the fetch-requests DLQ (while per-feed fetching is on), and a throttled scheduled run (daily ingest, GEFS or DWS weekly pass) is dropped, not retried. Find what is flooding the fetcher (a feed schedule, a manual refresh loop, overlapping schedules) before raising the limit."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
@@ -570,7 +615,7 @@ resource "aws_cloudwatch_metric_alarm" "fetcher_throttles" {
 # visibility timeout (~1 hour) before the DLQ, so an hour-old message is one
 # that isn't being worked; without this it would expire unseen after 4 days.
 resource "aws_cloudwatch_metric_alarm" "fetch_requests_age" {
-  count               = local.alarms_full ? 1 : 0
+  count               = local.alarms_full && local.per_feed_fetching ? 1 : 0
   alarm_name          = "${local.project}-fetch-requests-age"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -584,7 +629,7 @@ resource "aws_cloudwatch_metric_alarm" "fetch_requests_age" {
   treat_missing_data  = "notBreaching"
 
   dimensions = {
-    QueueName = aws_sqs_queue.fetch_requests.name
+    QueueName = aws_sqs_queue.fetch_requests[0].name
   }
 }
 
@@ -600,7 +645,8 @@ resource "aws_cloudwatch_metric_alarm" "fetch_requests_age" {
 # day, and SNS only notifies on the change to ALARM, so a source that stays
 # down alarms once, not on every fetch.
 resource "aws_cloudwatch_log_metric_filter" "feed_fetch_failed" {
-  count          = local.alarms_full ? 1 : 0
+  # Only the per-feed mode logs it.
+  count          = local.alarms_full && local.per_feed_fetching ? 1 : 0
   name           = "${local.project}-feed-fetch-failed"
   log_group_name = aws_cloudwatch_log_group.fetcher.name
   pattern        = "{ $.message.event = \"feed_fetch_failed\" }"
@@ -615,7 +661,7 @@ resource "aws_cloudwatch_log_metric_filter" "feed_fetch_failed" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "feed_fetch_failed" {
-  count               = local.alarms_full ? 1 : 0
+  count               = local.alarms_full && local.per_feed_fetching ? 1 : 0
   alarm_name          = "${local.project}-feed-fetch-failed"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -627,4 +673,49 @@ resource "aws_cloudwatch_metric_alarm" "feed_fetch_failed" {
   alarm_description   = "A data-feed fetch failed (the fetcher answered it as failed; the feed shows failing in the app, then stale). Logs Insights on the fetcher log group: filter message.event = \"feed_fetch_failed\" | stats count() by message.source, message.reason, message.detail. unavailable/timeout = the source is down or slow (wait for the next fetch); throttled = HTTP 429/503, the source is limiting us (the fetcher pauses the host; lower fetcher_reserved_concurrency if it persists); refused = HTTP 403, the source banned this server's address (CHC bans an address for volume: the fetcher pauses the host an hour and the feed backs off hours; if it persists, lower fetcher_reserved_concurrency and contact chc-help@geog.ucsb.edu); format = the source changed its format (a code fix); invalid_request/internal = a bug. Runbook: docs/deployment.md § Data feeds."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
+}
+
+# --- The cutover's state moves (issue #604 R3-C) ------------------------------------
+
+# Each of these gained count = local.per_feed_count: the existing object is
+# instance [0], so an apply with per-feed fetching still on changes nothing.
+moved {
+  from = aws_sqs_queue.fetch_requests_dlq
+  to   = aws_sqs_queue.fetch_requests_dlq[0]
+}
+moved {
+  from = aws_sqs_queue.fetch_requests
+  to   = aws_sqs_queue.fetch_requests[0]
+}
+moved {
+  from = aws_sqs_queue_redrive_allow_policy.fetch_requests_dlq
+  to   = aws_sqs_queue_redrive_allow_policy.fetch_requests_dlq[0]
+}
+moved {
+  from = aws_sqs_queue.ingest_results_dlq
+  to   = aws_sqs_queue.ingest_results_dlq[0]
+}
+moved {
+  from = aws_sqs_queue.ingest_results
+  to   = aws_sqs_queue.ingest_results[0]
+}
+moved {
+  from = aws_sqs_queue_redrive_allow_policy.ingest_results_dlq
+  to   = aws_sqs_queue_redrive_allow_policy.ingest_results_dlq[0]
+}
+moved {
+  from = aws_iam_role_policy.fetcher_lambda
+  to   = aws_iam_role_policy.fetcher_lambda[0]
+}
+moved {
+  from = aws_lambda_event_source_mapping.fetcher_requests
+  to   = aws_lambda_event_source_mapping.fetcher_requests[0]
+}
+moved {
+  from = aws_iam_role_policy.worker_feeds
+  to   = aws_iam_role_policy.worker_feeds[0]
+}
+moved {
+  from = aws_lambda_event_source_mapping.worker_ingest_results
+  to   = aws_lambda_event_source_mapping.worker_ingest_results[0]
 }

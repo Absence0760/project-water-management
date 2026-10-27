@@ -34,6 +34,12 @@
 // With DWS_SOURCE=store (feeds/fromGaugeRecord.ts dwsSource; the default in
 // dev, CI and e2e) a DWS fetch reads its station's days from our gauge record
 // store (247_gauge_record) the same way, in this job (issue #604 R3-B).
+//
+// After the cutover (both of those, issue #604 R3-C) no fetch reaches the
+// SQS or inline paths below, so production sets no FEED_FETCHER and has no
+// fetch-requests queue (infra/feeds.tf local.per_feed_fetching). The inline
+// path stays for local dev; on Lambda its live client refuses (feeds/http.ts),
+// and the job dies saying why.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import { planFetch, RECHECK_HEAD_DAYS, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from '../../feeds/cellCache.js';
@@ -42,7 +48,8 @@ import { chirpsProduct, type GridConfig, gridCells } from '../../feeds/config.js
 import { type CellsResult, type FetchRequest, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
 import { DAY_SKIP } from '../../feeds/sources/chirps.js';
 import { withUser } from '../../db/tx.js';
-import { feedHttp } from '../../feeds/http.js';
+import { feedHttp, LiveFeedRequestRefusedError } from '../../feeds/http.js';
+import { JobError } from '../errors.js';
 import { fetchFromMirror } from '../../feeds/fromMirror.js';
 import { fetchGefsFromMirror } from '../../feeds/fromMirrorGefs.js';
 import { ingestResult } from '../../feeds/ingest.js';
@@ -134,6 +141,21 @@ export const feedFetchHandler = defineHandler({
 		}
 		// Inline: the fetch holds this transaction open for its duration, which
 		// is fine locally (fixtures answer at once); production never does this.
-		await ingestResult(db, feed, await runFetch(request, await feedHttp()), window, { fetchJobId: job.id });
+		// On Lambda a live client refuses (feeds/http.ts): a worker configured to
+		// fetch a source itself is a bug no retry fixes, so the job is dead at once,
+		// saying why (issue #604 R3-C).
+		let http;
+		try {
+			http = await feedHttp();
+		} catch (err) {
+			if (err instanceof LiveFeedRequestRefusedError) {
+				throw new JobError(
+					`this worker may not fetch ${feed.source} from the source itself: production reads it from our copy or store (CHIRPS_SOURCE=mirror, DWS_SOURCE=store) or hands it to the fetcher (FEED_FETCHER=sqs)`,
+					{ retry: false }
+				);
+			}
+			throw err;
+		}
+		await ingestResult(db, feed, await runFetch(request, http), window, { fetchJobId: job.id });
 	}
 });

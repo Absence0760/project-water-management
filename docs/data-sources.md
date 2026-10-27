@@ -99,6 +99,18 @@ Every job that fetches from an upstream:
 Common to all three today (`backend/src/feeds/http.ts`, the fetcher Lambda
 in `infra/feeds.tf`):
 
+- **After the cutover** (issue #604 R3-C; `chirps_source = "mirror"` and
+  `dws_source = "store"`, [deployment.md § The
+  cutover](./deployment.md#the-cutover)) no feed and no user asks an
+  upstream: feeds read our copy and store in the worker's job, and the only
+  requests to `data.chc.ucsb.edu` and `www.dws.gov.za` are the scheduled
+  passes below (the finals job, the daily preliminary and GEFS passes, the
+  weekly DWS pass), each paced and stopped by a 403. Terraform removes the
+  per-feed queues then, and on Lambda only the fetcher may make a live
+  request at all (`assertLiveFeedRequestsAllowed`): the API and the worker
+  are refused whatever their configuration. Until then, the per-feed
+  pattern below stays for each source whose flag is on its old value.
+
 - **What a fetch may ask:** only `FEED_HOSTS`, over HTTPS on 443, with
   manual redirects (at most 3, each checked against the list), a 20 s
   timeout and a 4 MB cap per response.
@@ -135,7 +147,7 @@ in `infra/feeds.tf`):
   requests a file, backfilling from 1981, from the fetcher Lambda's rotating
   addresses. That pattern got the fetcher banned (HTTP 403) on 2026-10-25,
   and the CHIRPS feeds are paused.
-- **Access pattern planned (R1–R3):** one ingest job for the whole region
+- **Access pattern after the cutover (`chirps_source = "mirror"`; built R1–R3):** one ingest job for the whole region
   (D1: 10–41°E, 35.5–8°S), into Zarr `rnl`, `sat` and `prelim` with a
   `manifest.json` each:
   - finals: one `byMonth` NetCDF listing per product around the 20th–25th,
@@ -144,6 +156,8 @@ in `infra/feeds.tf`):
     minute;
   - preliminary `sat`: only new files, as the strip-offset table plus one
     range over the region's rows, about 3 requests a file.
+
+  Feeds read the copy in the worker's job; none asks CHC.
 - **Limits we keep to:** at most 1–2 requests in flight and about 1 a
   second (dynamical.org settled on the same against CHC); about 50–60
   requests a day for prelim and GEFS together, under 10 a month for finals,
@@ -215,7 +229,9 @@ in `infra/feeds.tf`):
   name, the newest 2-year window each, and the worker loads it as `dws-web`.
   With `DWS_SOURCE=store` a feed reads the store and never asks DWS
   ([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
-  Production stays on `live` (and the pass off) until DWS answers.
+  Production stays on `live` (and the pass off) until DWS answers; after
+  the cutover (`dws_source = "store"`) the weekly pass and the operator's
+  loads of DWS's replies are the only access, and no feed asks DWS.
 - **Limits we keep to:** 1 request a second, one User-Agent; a 403,
   throttling (429/503) or the ScriptServer page stops the pass, marks the
   source stale (`dws/status.json`) and alerts (`MirrorLagDays{Product=dws}`),

@@ -1163,6 +1163,20 @@ row names a source, where to read it and the series it merges into:
   before the window), and the next window starts the day after it (one day
   at least, the cap counted from there). Changing the feed's place,
   product or series clears `last_meta`, so the marker starts again.
+  The marker can also fall **more than 50 days** behind the newest day:
+  CHC publishes a month's finals around the 20th–25th of the next, so a
+  month's first days wait about 55 days. Then the window starts the day
+  after the marker instead (`fetch.ts` `chirpsPendingFrom`), so those days,
+  still preliminary in the series, are read again and take their finals,
+  and the ingest never moves the marker past a day the window didn't read
+  while it may still be preliminary (`finalThroughAfter`). Before issue #604
+  R3-C the window started 50 days back regardless and the marker jumped to
+  the answer's claim, so a month's first days could stay preliminary for
+  good. Both the CHC path and the copy path take the window from here. The
+  reach is `CHIRPS_FINAL_REACH_DAYS` (100): a day still not final after
+  that (one with no value blocks the marker) is given up and the window
+  goes back to the 50-day re-read, and a backfill through empty days
+  (#29, readThrough) keeps moving rather than being pulled back.
   A fetch also reads only what can have changed (`fetchChirpsCells`,
   the cell cache's fetch below; `fetchChirps` for a request without cells): CHC
   publishes a month's finals together (`rnl`'s with `sat`'s), about three
@@ -1525,7 +1539,32 @@ row names a source, where to read it and the series it merges into:
   an API key sends (a logger pushing to `/ingest`, which has no feed):
   days with no new value, from its last non-blank day (141, issue #120).
 
-Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
+Where the fetch runs depends first on two flags (issue #604; Terraform's
+`chirps_source` and `dws_source`, [deployment.md § The
+cutover](./deployment.md#the-cutover)):
+
+| `CHIRPS_SOURCE` | `DWS_SOURCE` | CHIRPS, CHIRPS-GEFS | DWS | Per-feed path (`FEED_FETCHER`, queues) |
+| --- | --- | --- | --- | --- |
+| `chc` | `live` | fetcher (CHC) | fetcher (DWS) | on: `sqs`, both queues (production until the cutover) |
+| `mirror` | `live` | our copy, in the worker's job | fetcher (DWS) | on, for DWS only |
+| `chc` | `store` | fetcher (CHC) | our store, in the worker's job | on, for CHIRPS only |
+| `mirror` | `store` | our copy, in the worker's job | our store, in the worker's job | **off**: no `FEED_FETCHER`, no queues, no SQS triggers (`infra/feeds.tf` `local.per_feed_fetching`) |
+
+A source the copy or store serves never reaches the SQS or inline path,
+whatever `FEED_FETCHER` says (`jobs/handlers/feed-fetch.ts`, tested in
+`feed-fetch.cutover.db.test.ts`). The fetcher Lambda stays in every row for
+its scheduled modes (the daily ingest, the GEFS pass, the weekly DWS pass).
+And on Lambda only the fetcher may make a live request at all: the API and
+worker carry `FEED_SOURCE=live` (it names the cell cache they read) and the
+worker's bundle holds the inline path local dev uses, so neither setting
+nor bundle can keep them off CHC and DWS; `feeds/http.ts`
+`assertLiveFeedRequestsAllowed` refuses `liveHttp` on Lambda unless the
+process is the fetcher (`allowLiveFeedRequests`, called once at the
+fetcher's init), and a fetch job that meets the refusal dies at once naming
+the cause, never retried. That is a runtime check rather than a module
+reachability test because the worker legitimately bundles the inline path.
+
+For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
 
 - `inline` (the default: local, CI, e2e): the `feed_fetch` job fetches and
   merges in one transaction. `FEED_SOURCE=fixtures` (the default) answers the

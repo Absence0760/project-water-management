@@ -768,8 +768,8 @@ run "lambda_logs_scoped" {
         data.aws_iam_policy_document.migrate_lambda.statement,
         data.aws_iam_policy_document.worker_lambda.statement,
         data.aws_iam_policy_document.lambda_jobs_send.statement,
-        data.aws_iam_policy_document.fetcher_lambda.statement,
-        data.aws_iam_policy_document.worker_feeds.statement,
+        data.aws_iam_policy_document.fetcher_lambda[0].statement,
+        data.aws_iam_policy_document.worker_feeds[0].statement,
         data.aws_iam_policy_document.renderer_lambda.statement,
         data.aws_iam_policy_document.renderer_packs.statement,
         data.aws_iam_policy_document.renderer_ecr_pull.statement,
@@ -872,7 +872,7 @@ run "sqs_endpoint_send_only" {
       } == {
       ApiSendsWakeUps           = { principal = aws_iam_role.lambda.arn, queue = aws_sqs_queue.jobs.arn, actions = toset(["sqs:SendMessage"]) }
       WorkerSendsRenderRequests = { principal = aws_iam_role.worker_lambda.arn, queue = aws_sqs_queue.render_requests.arn, actions = toset(["sqs:SendMessage"]) }
-      WorkerSendsFetchRequests  = { principal = aws_iam_role.worker_lambda.arn, queue = aws_sqs_queue.fetch_requests.arn, actions = toset(["sqs:SendMessage"]) }
+      WorkerSendsFetchRequests  = { principal = aws_iam_role.worker_lambda.arn, queue = aws_sqs_queue.fetch_requests[0].arn, actions = toset(["sqs:SendMessage"]) }
     }
     error_message = "The SQS endpoint allows SendMessage only: the API to jobs, the worker to render-requests and fetch-requests. Nothing receives or deletes through it."
   }
@@ -881,7 +881,7 @@ run "sqs_endpoint_send_only" {
   assert {
     condition = (
       aws_lambda_event_source_mapping.worker_jobs.event_source_arn == aws_sqs_queue.jobs.arn &&
-      aws_lambda_event_source_mapping.worker_ingest_results.event_source_arn == aws_sqs_queue.ingest_results.arn &&
+      aws_lambda_event_source_mapping.worker_ingest_results[0].event_source_arn == aws_sqs_queue.ingest_results[0].arn &&
       aws_lambda_event_source_mapping.worker_render_results.event_source_arn == aws_sqs_queue.render_results.arn &&
       aws_lambda_event_source_mapping.worker_mail_events.event_source_arn == aws_sqs_queue.mail_events.arn
     )

@@ -401,6 +401,37 @@ describe('feeds through the cell cache (FEED_FETCHER=sqs, the fetcher answering 
 		}
 	});
 
+	// Issue #604 R3-C: CHC's finals come ~55 days out, past the 50-day re-read, so the first days of a month stayed preliminary for good.
+	it('a feed whose final marker is 55 days behind its newest day reads those preliminary days again and takes their finals', async () => {
+		const u = await signUp('FinalGap');
+		const f = await feed(u, { cells: [cell()], startDate: addDays(-70) });
+		const cells: [number, number][] = [[home().row, home().col]];
+		const reply = (msg: FetchMsg, read: string, mm: number[]) => ({
+			ok: true,
+			cells: { product: 'sat', startDate: msg.request.start, read, cells, values: [mm.map(encodeCellValue)] },
+			meta: {}
+		});
+		const m = (await fetchJob())!;
+		expect(m.request).toMatchObject({ start: addDays(-70), end: addDays(-1) });
+		// 15 final days at 1 mm, then 55 preliminary at 3 mm through yesterday: final through 56 days ago.
+		await answer(m, reply(m, `${'f'.repeat(15)}${'p'.repeat(55)}`, [...new Array(15).fill(1), ...new Array(55).fill(3)]));
+		expect((await feedMeta(f.feedId)).last_meta).toMatchObject({ prelimDays: 55, finalThrough: addDays(-56) });
+
+		await u.call('POST', `/projects/${f.pid}/feeds/${f.feedId}/run-now`);
+		const next = (await fetchJob())!;
+		// From the day after the marker, not the 50-day re-read's addDays(-51): every held day asks only for its final.
+		expect(next.request).toMatchObject({ start: addDays(-55), end: addDays(-1), cells: { plan: '2'.repeat(55) } });
+		// The finals are out for the first 30 of them, at 2 mm.
+		await answer(next, reply(next, `${'f'.repeat(30)}${'p'.repeat(25)}`, [...new Array(30).fill(2), ...new Array(25).fill(3)]));
+		const after = (await values(u, f.pid))!.values;
+		expect(after.slice(0, 15)).toEqual(new Array(15).fill(1));
+		// Positive control: the four days the 50-day re-read skipped (55 … 52 days ago) took their finals too.
+		expect(after.slice(15, 19)).toEqual([2, 2, 2, 2]);
+		expect(after.slice(15, 45)).toEqual(new Array(30).fill(2));
+		expect(after.slice(45)).toEqual(new Array(25).fill(3));
+		expect((await feedMeta(f.feedId)).last_meta).toMatchObject({ prelimDays: 25, finalThrough: addDays(-26) });
+	});
+
 	it('refuses an answer with a value past 2000 mm, a cell the feed doesn’t read, or another product: nothing is cached or written', async () => {
 		const u = await signUp('BadAnswers');
 		const f = await feed(u, { cells: [cell()] });

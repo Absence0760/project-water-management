@@ -260,8 +260,10 @@ provenance, `ingest/verify_copy.py`):
       daily runs with `MirrorLagDays` reporting, the backfill (`rnl` from
       1981-01, `sat` from 2000-06, its first byMonth file), verification
       (`ingest/dev.sh verify`), then `chirps_source = "mirror"`
-      and the paused CHIRPS feeds back on (#571). Each `terraform apply` with
-      the operator's go-ahead.
+      and the paused CHIRPS feeds back on (#571), and once DWS answers
+      `dws_source = "store"`, whose apply removes the per-feed queues
+      ([deployment.md § The cutover](./deployment.md#the-cutover)). Each
+      `terraform apply` with the operator's go-ahead.
 - [ ] **The portfolio counts a copy-behind feed as stale.** `portfolio.ts`
       judges feed health without the copy (`feedHealth(f, today, tz)`), so
       a feed the panel shows as **Copy behind** counts there as failing or
@@ -291,6 +293,43 @@ provenance, `ingest/verify_copy.py`):
       load's originals (`originals/<kind>/`) or upstream version. Add
       optional workflow inputs and pass them to the load. Trigger: the next
       refresh of any table dataset (deployment.md § Refreshing a dataset).
+- [ ] **Retire per-feed fetching, stage 2** (R3-C built stage 1: with
+      both flags on the new values Terraform removes the queues, and the
+      worker and API refuse live requests; [deployment.md § The
+      cutover](./deployment.md#the-cutover)). **Trigger:** both
+      `chirps_source = "mirror"` and `dws_source = "store"` in production
+      for 30 days with no rollback. Then delete, in one PR with its tests
+      and docs:
+      - [ ] the per-feed `FetchRequest` mode of `backend/src/lambda-fetcher.ts`
+            (the SQS batch handler, `parseFetchRequest`, the
+            `feed_fetch_failed` log line and its reason codes), keeping its
+            daily-ingest, GEFS and DWS-weekly modes;
+      - [ ] `FEED_FETCHER` (`jobs/transport.ts` `feedFetcher`, its
+            `config/production.ts` entry, the SQS and inline branches of
+            `jobs/handlers/feed-fetch.ts`), `FETCH_REQUESTS_QUEUE_URL`,
+            `INGEST_RESULTS_QUEUE_URL`, the `feed_ingest` job and
+            `feeds/schedule.ts` `acceptIngestResult`, the worker's
+            `ingest-results` routing in `lambda-worker.ts`, and the
+            `FetchRequestMessage` / `IngestResultMessage` types;
+      - [ ] the CHC HEAD re-check of cached finals for origin `chc`
+            (210_chirps_final_recheck, `cellCache.ts` `RECHECK_*`,
+            `claimRecheck`'s HEAD half, `recheckChirpsFinals`): the copy's
+            manifests and revisions replace it (245/246); keep the stale
+            re-reads the revisions mark;
+      - [ ] the refused / throttled backoff branches that only a fetcher's
+            answer reaches (242_feed_refused_backoff, 243_feed_next_attempt)
+            in `feeds/schedule.ts` and the ingest, by a forward migration
+            that keeps the columns the scheduler still reads, or drops them
+            expand/contract;
+      - [ ] the per-feed sources' live readers that only the fetcher's
+            per-feed mode calls (`fetchChirpsCells`, `fetchChirps`,
+            `fetchGefs`, the DWS page fetch) where the scheduled passes
+            don't share them, and their fixtures-mode paths in dev (dev
+            already reads the copy and store by default);
+      - [ ] Terraform's `local.per_feed_fetching` switch and the `moved`
+            blocks (`infra/feeds.tf`), once no state still holds the
+            queues, and the tftests that cover per-feed fetching
+            (`cutover.tftest.hcl` and the queues' assertions elsewhere).
 - [ ] **Two thresholds in two places.** The app's
       `COPY_FINAL_LAG_DAYS` (75, `feeds/health.ts`) matches
       `ingest_lag_alarm_days`'s default by hand; a prod tfvars that changes

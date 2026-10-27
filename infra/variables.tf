@@ -620,7 +620,7 @@ variable "renderer_reserved_concurrency" {
 # --- The data mirror (ingest.tf, issue #604) ------------------------------------
 
 variable "chirps_source" {
-  description = "Which CHIRPS the worker's feed fetches read (CHIRPS_SOURCE, issue #604): chc sends each fetch to the fetcher Lambda, which reads CHC's files; mirror reads our copy in the mirror bucket (ingest.tf) inside the worker's own fetch job, with no request to CHC. The API gets the same value, so the Data feeds panel reports the copy exactly when the feeds read it (it reads the copy's days from the database, never the bucket). chc until the cutover (Round 3, R3-C): switch only once the copy holds the region's finals and preliminary days (docs/deployment.md § The data mirror)."
+  description = "Which CHIRPS the worker's feed fetches read (CHIRPS_SOURCE, issue #604): chc sends each fetch to the fetcher Lambda, which reads CHC's files; mirror reads our copy in the mirror bucket (ingest.tf) inside the worker's own fetch job, with no request to CHC. The API gets the same value, so the Data feeds panel reports the copy exactly when the feeds read it (it reads the copy's days from the database, never the bucket). chc until the cutover: switch only once the copy holds the region's finals and preliminary days (docs/deployment.md § The cutover). With dws_source = \"store\" as well, per-feed fetching is off and Terraform removes the fetch-requests and ingest-results queues, their DLQs and alarms, both SQS triggers and the worker's FEED_FETCHER (feeds.tf local.per_feed_fetching); setting either back brings them back."
   type        = string
   default     = "chc"
   validation {
@@ -686,7 +686,7 @@ variable "daily_ingest_lag_alarm_days" {
 }
 
 variable "dws_source" {
-  description = "Where the worker's DWS feed fetches read (DWS_SOURCE, issue #604 R3-B): live sends each fetch to the fetcher Lambda, which reads DWS's HyData.aspx page; store reads our gauge_record table (migration 247) inside the worker's own fetch job, with no request to DWS. live until the operator has DWS's written answer and has loaded its reply (pnpm import:dws, docs/deployment.md § DWS gauge records)."
+  description = "Where the worker's DWS feed fetches read (DWS_SOURCE, issue #604 R3-B): live sends each fetch to the fetcher Lambda, which reads DWS's HyData.aspx page; store reads our gauge_record table (migration 247) inside the worker's own fetch job, with no request to DWS. live until the operator has DWS's written answer and has loaded its reply (pnpm import:dws, docs/deployment.md § DWS gauge records). With chirps_source = \"mirror\" as well, per-feed fetching is off and Terraform removes the fetch queues (feeds.tf local.per_feed_fetching; docs/deployment.md § The cutover)."
   type        = string
   default     = "live"
   validation {
@@ -734,7 +734,7 @@ variable "jobs_backlog_alarm_seconds" {
 # --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
 
 variable "alarm_tier" {
-  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), and two more with daily_ingest_enabled (the preliminary and GEFS copies'). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
+  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; two fewer after the cutover (chirps_source = \"mirror\" and dws_source = \"store\" remove the fetch-requests and ingest-results queues and their DLQ alarms, feeds.tf), 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), and two more with daily_ingest_enabled (the preliminary and GEFS copies'). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
   type        = string
   default     = "full"
 

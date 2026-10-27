@@ -113,6 +113,20 @@ const s3Url: Check = (v) => (!set(v) ? 'is not set' : /^s3:\/\/[a-z0-9][a-z0-9.-
 /** MIRROR_URL on the worker: required when it reads the copy (CHIRPS_SOURCE=mirror) or hands the weekly DWS pass its stations (DWS_WEEKLY=on), else checked only when set. */
 const mirrorUrlFor: Check = (v, env) => (env?.CHIRPS_SOURCE?.trim() === 'mirror' || env?.DWS_WEEKLY?.trim() === 'on' ? s3Url(v) : optional(s3Url)(v));
 
+/**
+ * Whether the worker's feeds all read our copy and store (CHIRPS_SOURCE=mirror
+ * and DWS_SOURCE=store): then no fetch goes to the fetcher, and Terraform
+ * creates no fetch-requests queue (infra/feeds.tf local.per_feed_fetching).
+ */
+const perFeedFetchingOff = (env?: Env) => env?.CHIRPS_SOURCE?.trim() === 'mirror' && env?.DWS_SOURCE?.trim() === 'store';
+
+/** FEED_FETCHER on the worker: sqs while any feed still fetches through the fetcher; unset only once none does (it then never sends). */
+const feedFetcherFor: Check = (v, env) =>
+	set(v) ? oneOf('sqs')(v) : perFeedFetchingOff(env) ? null : 'is not set (production needs sqs while CHIRPS_SOURCE=chc or DWS_SOURCE=live)';
+
+/** FETCH_REQUESTS_QUEUE_URL on the worker: required with FEED_FETCHER=sqs (a send to no queue fails every fetch), else checked only when set. */
+const fetchRequestsUrlFor: Check = (v, env) => (env === undefined || env.FEED_FETCHER?.trim() === 'sqs' ? publicHttps(v) : optional(publicHttps)(v));
+
 const host: Check = (v) => (!set(v) ? 'is not set' : isLocalHost(v.trim()) ? 'points at a local host' : null);
 
 const port: Check = (v) => {
@@ -271,15 +285,18 @@ export const SETTINGS: Record<string, Setting> = {
 
 	// --- Data feeds ------------------------------------------------------------------------
 	FEED_FETCHER: {
-		why: 'inline (the default) fetches in the job from FEED_SOURCE; the worker has no internet, so production hands fetches to the fetcher. Other Lambdas reach it through jobs/transport.ts but run no fetch job.',
-		checks: { worker: oneOf('sqs') }
+		why: 'inline (the default) fetches in the job from FEED_SOURCE; the worker has no internet, so production hands fetches to the fetcher while any feed fetches per feed (CHIRPS_SOURCE=chc or DWS_SOURCE=live). With both on our copy and store (mirror and store) no fetch leaves the job and Terraform sets it no more (infra/feeds.tf local.per_feed_fetching, issue #604 R3-C); a live request from the worker is refused anyway (feeds/http.ts assertLiveFeedRequestsAllowed). Other Lambdas reach it through jobs/transport.ts but run no fetch job.',
+		checks: { worker: feedFetcherFor }
 	},
-	FETCH_REQUESTS_QUEUE_URL: { why: 'Where the worker sends fetch requests.', checks: { worker: publicHttps } },
+	FETCH_REQUESTS_QUEUE_URL: { why: 'Where the worker sends fetch requests: required with FEED_FETCHER=sqs; Terraform sets it only while the queue exists.', checks: { worker: fetchRequestsUrlFor } },
 	FEED_SOURCE: {
 		why: 'fixtures (the default) is synthetic data. Only the fetcher fetches in production, but it is also which CHIRPS cell cache a process reads (feeds/cellCacheStore.ts cacheOrigin: live reads the chc rows the worker merges, fixtures a set production never fills), so a run started on the API with it unset reads no CHIRPS cell for its reference cell or rainfall stations, and the Data feeds panel calls live feeds sample data. Every Lambda that reaches it must say live.',
 		checks: { api: oneOf('live'), worker: oneOf('live'), fetcher: oneOf('live') }
 	},
-	INGEST_RESULTS_QUEUE_URL: { why: 'Where the fetcher answers.', checks: { fetcher: publicHttps } },
+	INGEST_RESULTS_QUEUE_URL: {
+		why: 'Where the fetcher answers a per-feed fetch request. Terraform sets it only while the queues exist (infra/feeds.tf local.per_feed_fetching, issue #604 R3-C); without them the fetcher has no SQS trigger and runs only its scheduled modes, which never send, so it is checked only when set (a stray request with none still fails loudly: jobs/transport.ts sendToQueue).',
+		checks: { fetcher: optional(publicHttps) }
+	},
 	CHIRPS_SOURCE: {
 		why: 'Which CHIRPS a feed fetch reads (mirror/source.ts, issue #604): chc, CHC’s files through the fetcher, or mirror, our copy read in the worker’s own fetch job (feeds/fromMirror.ts). The API reads it too, only to know whether the Data feeds panel reports the copy (feeds/rainCopy.ts, from the mirror_copy rows the worker records; the API never reaches the copy). Unset follows FEED_SOURCE (chc when live), but production says which, the same on both: Terraform sets it from var.chirps_source (infra/jobs.tf, infra/lambda.tf).',
 		checks: { api: oneOf('chc', 'mirror'), worker: oneOf('chc', 'mirror') }

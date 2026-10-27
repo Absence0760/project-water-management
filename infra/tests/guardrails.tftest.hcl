@@ -2065,7 +2065,7 @@ run "background_jobs" {
   }
   assert {
     condition = alltrue([for s in data.aws_iam_policy_document.sqs_endpoint.statement :
-      length(s.resources) == 1 && contains([aws_sqs_queue.jobs.arn, aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn, aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn, aws_sqs_queue.mail_events.arn], one(s.resources)) &&
+      length(s.resources) == 1 && contains([aws_sqs_queue.jobs.arn, aws_sqs_queue.fetch_requests[0].arn, aws_sqs_queue.ingest_results[0].arn, aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn, aws_sqs_queue.mail_events.arn], one(s.resources)) &&
       alltrue([for a in s.actions : !strcontains(a, "*")])
     ])
     error_message = "The SQS endpoint policy must name only the jobs, data-feed, render and mail-events queues, one per statement, with no wildcard actions."
@@ -2271,22 +2271,22 @@ run "data_feeds" {
 
   # --- Queues: SSE, a DLQ after 5 receives, visibility past the consumer's timeout ---
   assert {
-    condition     = alltrue([for q in [aws_sqs_queue.fetch_requests, aws_sqs_queue.fetch_requests_dlq, aws_sqs_queue.ingest_results, aws_sqs_queue.ingest_results_dlq] : q.sqs_managed_sse_enabled])
+    condition     = alltrue([for q in [aws_sqs_queue.fetch_requests[0], aws_sqs_queue.fetch_requests_dlq[0], aws_sqs_queue.ingest_results[0], aws_sqs_queue.ingest_results_dlq[0]] : q.sqs_managed_sse_enabled])
     error_message = "Every data-feed queue must be encrypted (SSE-SQS)."
   }
   assert {
     condition = (
-      jsondecode(aws_sqs_queue.fetch_requests.redrive_policy).maxReceiveCount == 5 &&
-      jsondecode(aws_sqs_queue.fetch_requests.redrive_policy).deadLetterTargetArn == aws_sqs_queue.fetch_requests_dlq.arn &&
-      jsondecode(aws_sqs_queue.ingest_results.redrive_policy).maxReceiveCount == 5 &&
-      jsondecode(aws_sqs_queue.ingest_results.redrive_policy).deadLetterTargetArn == aws_sqs_queue.ingest_results_dlq.arn
+      jsondecode(aws_sqs_queue.fetch_requests[0].redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(aws_sqs_queue.fetch_requests[0].redrive_policy).deadLetterTargetArn == aws_sqs_queue.fetch_requests_dlq[0].arn &&
+      jsondecode(aws_sqs_queue.ingest_results[0].redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(aws_sqs_queue.ingest_results[0].redrive_policy).deadLetterTargetArn == aws_sqs_queue.ingest_results_dlq[0].arn
     )
     error_message = "Both data-feed queues must dead-letter to their own DLQ after 5 receives."
   }
   assert {
     condition = (
-      aws_sqs_queue.fetch_requests.visibility_timeout_seconds >= 6 * aws_lambda_function.fetcher.timeout &&
-      aws_sqs_queue.ingest_results.visibility_timeout_seconds >= 6 * aws_lambda_function.worker.timeout
+      aws_sqs_queue.fetch_requests[0].visibility_timeout_seconds >= 6 * aws_lambda_function.fetcher.timeout &&
+      aws_sqs_queue.ingest_results[0].visibility_timeout_seconds >= 6 * aws_lambda_function.worker.timeout
     )
     error_message = "Visibility must be at least 6x the consuming Lambda's timeout."
   }
@@ -2309,7 +2309,7 @@ run "data_feeds" {
   assert {
     condition = (
       aws_lambda_function.fetcher.environment[0].variables["FEED_SOURCE"] == "live" &&
-      aws_lambda_function.fetcher.environment[0].variables["INGEST_RESULTS_QUEUE_URL"] == aws_sqs_queue.ingest_results.url &&
+      aws_lambda_function.fetcher.environment[0].variables["INGEST_RESULTS_QUEUE_URL"] == aws_sqs_queue.ingest_results[0].url &&
       aws_lambda_function.fetcher.environment[0].variables["MIRROR_URL"] == "s3://${aws_s3_bucket.mirror.bucket}" &&
       length(aws_lambda_function.fetcher.environment[0].variables) == 3
     )
@@ -2317,9 +2317,9 @@ run "data_feeds" {
   }
   assert {
     condition = (
-      toset(flatten([for s in data.aws_iam_policy_document.fetcher_lambda.statement : s.resources])) == toset([aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn]) &&
-      alltrue([for s in data.aws_iam_policy_document.fetcher_lambda.statement : s.sid != "SendIngestResults" || toset(s.actions) == toset(["sqs:SendMessage"])]) &&
-      alltrue([for s in data.aws_iam_policy_document.fetcher_lambda.statement : alltrue([for a in s.actions : startswith(a, "sqs:") && !strcontains(a, "*")])])
+      toset(flatten([for s in data.aws_iam_policy_document.fetcher_lambda[0].statement : s.resources])) == toset([aws_sqs_queue.fetch_requests[0].arn, aws_sqs_queue.ingest_results[0].arn]) &&
+      alltrue([for s in data.aws_iam_policy_document.fetcher_lambda[0].statement : s.sid != "SendIngestResults" || toset(s.actions) == toset(["sqs:SendMessage"])]) &&
+      alltrue([for s in data.aws_iam_policy_document.fetcher_lambda[0].statement : alltrue([for a in s.actions : startswith(a, "sqs:") && !strcontains(a, "*")])])
     )
     error_message = "The fetcher's role reaches the two feed queues only: receive fetch-requests, send ingest-results."
   }
@@ -2329,10 +2329,10 @@ run "data_feeds" {
   }
   assert {
     condition = (
-      aws_lambda_event_source_mapping.fetcher_requests.event_source_arn == aws_sqs_queue.fetch_requests.arn &&
-      aws_lambda_event_source_mapping.fetcher_requests.function_name == aws_lambda_function.fetcher.arn &&
-      aws_lambda_event_source_mapping.fetcher_requests.batch_size == 1 &&
-      contains(aws_lambda_event_source_mapping.fetcher_requests.function_response_types, "ReportBatchItemFailures")
+      aws_lambda_event_source_mapping.fetcher_requests[0].event_source_arn == aws_sqs_queue.fetch_requests[0].arn &&
+      aws_lambda_event_source_mapping.fetcher_requests[0].function_name == aws_lambda_function.fetcher.arn &&
+      aws_lambda_event_source_mapping.fetcher_requests[0].batch_size == 1 &&
+      contains(aws_lambda_event_source_mapping.fetcher_requests[0].function_response_types, "ReportBatchItemFailures")
     )
     error_message = "fetch-requests triggers the fetcher, one request at a time, retrying only failed sends."
   }
@@ -2341,7 +2341,7 @@ run "data_feeds" {
   assert {
     condition = (
       aws_lambda_function.worker.environment[0].variables["FEED_FETCHER"] == "sqs" &&
-      aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.fetch_requests.url
+      aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.fetch_requests[0].url
     )
     error_message = "The worker hands fetches to the fetcher (it has no internet) and never fetches itself."
   }
@@ -2357,13 +2357,13 @@ run "data_feeds" {
   }
   assert {
     condition = (
-      aws_lambda_event_source_mapping.worker_ingest_results.event_source_arn == aws_sqs_queue.ingest_results.arn &&
-      aws_lambda_event_source_mapping.worker_ingest_results.function_name == aws_lambda_function.worker.arn
+      aws_lambda_event_source_mapping.worker_ingest_results[0].event_source_arn == aws_sqs_queue.ingest_results[0].arn &&
+      aws_lambda_event_source_mapping.worker_ingest_results[0].function_name == aws_lambda_function.worker.arn
     )
     error_message = "ingest-results triggers the worker."
   }
   assert {
-    condition     = toset(flatten([for s in data.aws_iam_policy_document.worker_feeds.statement : s.resources])) == toset([aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn])
+    condition     = toset(flatten([for s in data.aws_iam_policy_document.worker_feeds[0].statement : s.resources])) == toset([aws_sqs_queue.fetch_requests[0].arn, aws_sqs_queue.ingest_results[0].arn])
     error_message = "The worker's feed policy reaches the two feed queues only."
   }
   assert {
@@ -2378,8 +2378,8 @@ run "data_feeds" {
   # --- Alarms -----------------------------------------------------------------------
   assert {
     condition = (
-      one([for m in aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.fetch_requests_dlq.name &&
-      one([for m in aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.ingest_results_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.fetch_requests_dlq[0].name &&
+      one([for m in aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.ingest_results_dlq[0].name &&
       aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0].threshold == 0 &&
       aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0].threshold == 0
     )
@@ -3018,12 +3018,12 @@ run "map_data" {
       data.aws_iam_policy_document.github_deploy,
       data.aws_iam_policy_document.migrate_lambda,
       data.aws_iam_policy_document.worker_lambda,
-      data.aws_iam_policy_document.fetcher_lambda,
+      data.aws_iam_policy_document.fetcher_lambda[0],
       data.aws_iam_policy_document.renderer_lambda,
       data.aws_iam_policy_document.worker_packs,
       data.aws_iam_policy_document.renderer_packs,
       data.aws_iam_policy_document.worker_reports,
-      data.aws_iam_policy_document.worker_feeds,
+      data.aws_iam_policy_document.worker_feeds[0],
       data.aws_iam_policy_document.lambda_jobs_send,
       data.aws_iam_policy_document.lambda_ses,
       data.aws_iam_policy_document.lambda_ses_release,
@@ -3607,7 +3607,7 @@ run "worker_sqs_triggers" {
     condition = aws_lambda_function.worker.reserved_concurrent_executions >= sum([
       for m in [
         aws_lambda_event_source_mapping.worker_jobs,
-        aws_lambda_event_source_mapping.worker_ingest_results,
+        aws_lambda_event_source_mapping.worker_ingest_results[0],
         aws_lambda_event_source_mapping.worker_render_results,
         aws_lambda_event_source_mapping.worker_mail_events,
       ] : m.scaling_config[0].maximum_concurrency
@@ -3616,7 +3616,7 @@ run "worker_sqs_triggers" {
   }
   assert {
     condition = (
-      aws_lambda_function.fetcher.reserved_concurrent_executions >= aws_lambda_event_source_mapping.fetcher_requests.scaling_config[0].maximum_concurrency &&
+      aws_lambda_function.fetcher.reserved_concurrent_executions >= aws_lambda_event_source_mapping.fetcher_requests[0].scaling_config[0].maximum_concurrency &&
       aws_lambda_function.renderer[0].reserved_concurrent_executions >= aws_lambda_event_source_mapping.renderer_requests[0].scaling_config[0].maximum_concurrency
     )
     error_message = "The fetcher's and renderer's reserved concurrency must cover their SQS trigger's maximum_concurrency."
@@ -3625,7 +3625,7 @@ run "worker_sqs_triggers" {
     condition = alltrue([
       for m in [
         aws_lambda_event_source_mapping.worker_jobs,
-        aws_lambda_event_source_mapping.worker_ingest_results,
+        aws_lambda_event_source_mapping.worker_ingest_results[0],
         aws_lambda_event_source_mapping.worker_render_results,
         aws_lambda_event_source_mapping.worker_mail_events,
       ] : m.function_name == aws_lambda_function.worker.arn && try(contains(m.function_response_types, "ReportBatchItemFailures"), false)

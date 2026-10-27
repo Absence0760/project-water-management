@@ -40,7 +40,7 @@ import { z } from 'zod';
 import { assertLambdaEnv } from './config/production.js';
 import { FEED_SERVER_ERROR_PREFIX, FeedFormatError, FeedRefusedError, FeedServerError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
 import { type FetchAnswer, type FetchRequest, runFetch, utcToday } from './feeds/fetch.js';
-import { type FeedHttp, feedHttp, feedSourceMode } from './feeds/http.js';
+import { allowLiveFeedRequests, type FeedHttp, feedHttp, feedSourceMode } from './feeds/http.js';
 import { DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL, dwsFailureLabel } from './feeds/sources/dws.js';
 import { type IngestResultMessage, MAX_MESSAGE_BYTES, parseFetchRequest, sendToQueue } from './jobs/transport.js';
 import { emitMetricLine, logEvent } from './logging/logEvent.js';
@@ -48,6 +48,8 @@ import { safeError } from './logging/safeError.js';
 
 // Refuse to start with a local default, FEED_SOURCE=fixtures above all (config/production.ts).
 assertLambdaEnv('fetcher');
+// The one Lambda that asks CHC and DWS: every other process refuses a live request on Lambda (feeds/http.ts).
+allowLiveFeedRequests();
 
 /** Time kept back from the Lambda's remaining time to send the answer. */
 export const FETCH_SEND_MARGIN_MS = 15_000;
