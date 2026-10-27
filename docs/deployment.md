@@ -1435,8 +1435,9 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
   TLS only, **versioned**, with noncurrent versions expiring after 30 days
   (a monthly refresh rewrites ~130 MB, so a month of old versions is cents)
   and incomplete multipart uploads aborted after a day. It holds one Zarr v3
-  array per product (`rnl/`, `sat/`, later `prelim/` and `gefs/<issue>/`),
-  each with its `manifest.json`.
+  array per product (`rnl/`, `sat/`, `prelim/` and `gefs/<issue>/`), each
+  with its `manifest.json`, and `gefs/index.json` listing the forecast
+  issues held.
 - **The ingest job** `water-management-mirror-ingest`: a Python 3.14
   container-image Lambda (`ingest/Dockerfile`, handler
   `lambda_handler.handler`), arm64, 3 GB memory, 2 GB of `/tmp`, 900 s,
@@ -1597,12 +1598,42 @@ alarm `mirror-lag-prelim` (essential tier) fires past
 arrives for two days.
 
 **Turning it on:** after a backend release with the daily mode is deployed,
-set `daily_ingest_enabled = true` and apply. That enables the rule, gives the
-fetcher's role get/put/list/delete on the mirror bucket, and creates the
-alarm; off (the default), none of them exist, so production doesn't alarm for
+set `daily_ingest_enabled = true` and apply. That enables both rules (this
+one and the GEFS pass's, below), gives the fetcher's role get/put/list/delete
+on the mirror bucket, and creates both freshness alarms; off (the default), none of them exist, so production doesn't alarm for
 a job that isn't running. The fetcher reads `MIRROR_URL` (set by Terraform
 either way). Run the [backfill](#backfill) of `sat` first: without `sat`
 finals the daily ingest starts 30 days back.
+
+### The GEFS pass (the forecast)
+
+A second rule (`water-management-gefs-ingest`, 08:38 UTC and hourly to
+11:38) invokes the fetcher with `{"mode":"daily-ingest","pass":"gefs"}`, and
+it copies the newest complete CHIRPS-GEFS issue into `gefs/<issue>/`
+(`backend/src/ingest/gefs.ts`): today's, else yesterday's, the 16th day's
+file read first so a partly published issue costs one request and is never
+copied. Per file, the header and strip table and one range over the region's
+rows (about 3 requests, at most one a second: about 48 an issue, under a
+minute). The issue's manifest, then `gefs/index.json` (the issues held,
+newest first), are written only once all 16 days are in; the newest 7 issues
+are kept and older arrays deleted, with any array a cut-short run left. A
+run that finds the day's issue held asks CHC nothing. It runs apart from the
+03:00 preliminary pass because CHC issues at about 08:30 UTC, and the two
+passes together could need more than the fetcher's 120 s. The first run is
+at 08:38 so the forecast feeds, due at 08:45, read the day's issue. A 403
+stops the run, not retried.
+
+Each run logs `mirror_daily_ingest` with `product: "gefs"` (`copied`,
+`partial` for an issue found half published, `newest`, `stopped`, and for a
+failure `reason`/`detail`) and publishes `MirrorLagDays{Product=gefs}`,
+today minus the newest issue held, as an embedded metric. The alarm
+`mirror-lag-gefs` (essential tier) fires at **2 days** (neither today's nor
+yesterday's issue held, so the forecast feeds reading the copy wait, keeping
+the forecast they have) on two days running, or when no datapoint arrives
+for two days. Runbook: the run's log line; a `refused` stopped on purpose
+(as above); `partial` on several runs means CHC is publishing late. It is
+turned on with the daily ingest (`daily_ingest_enabled`): the rule, its
+target and permission, and the alarm exist only then.
 
 ### Backfill
 

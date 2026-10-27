@@ -45,8 +45,9 @@
 # Freshness (issue #604 rule 4): each run publishes, per product,
 #   namespace  <project>/Mirror   (water-management/Mirror)
 #   metric     MirrorLagDays      (Unit: None; days, a number)
-#   dimension  Product = rnl | sat   (prelim: the fetcher's daily ingest, feeds.tf,
-#                                     as an embedded metric; its alarm below)
+#   dimension  Product = rnl | sat   (prelim and gefs: the fetcher's daily ingest
+#                                     and GEFS pass, feeds.tf, as embedded
+#                                     metrics; their alarms below)
 #   value      today (UTC) minus the product's manifest finalThrough, in days
 # with cloudwatch:PutMetricData (its role may publish to that namespace only).
 # A lag past ingest_lag_alarm_days alarms, and so does NO datapoint for two
@@ -77,6 +78,8 @@ locals {
   # The custom metric the job publishes (see the header).
   mirror_metric_namespace = "${local.project}/Mirror"
   mirror_lag_metric       = "MirrorLagDays"
+  # MirrorLagDays{Product=gefs} at or past this alarms (mirror_lag_gefs): neither today's nor yesterday's issue held.
+  gefs_lag_alarm_days = 2
 
   # Old object versions (a revision CHC rewrote, a chunk the job replaced)
   # stay recoverable this long.
@@ -519,6 +522,34 @@ resource "aws_cloudwatch_metric_alarm" "mirror_lag_prelim" {
 
   dimensions = {
     Product = "prelim"
+  }
+}
+
+# The forecast copy's freshness (issue #604 R3-A): the fetcher's GEFS pass
+# (feeds.tf gefs_ingest, backend/src/ingest/gefs.ts) publishes MirrorLagDays
+# with Product = gefs, today minus the newest CHIRPS-GEFS issue the copy
+# holds. A healthy copy reads 0 after the morning's run, 1 before it; at 2
+# neither today's nor yesterday's issue is held, so every CHIRPS-GEFS feed
+# reading the copy waits (backend/src/feeds/fromMirrorGefs.ts). Gated on
+# daily_ingest_enabled like the prelim alarm, and breaching on missing data.
+resource "aws_cloudwatch_metric_alarm" "mirror_lag_gefs" {
+  count = var.daily_ingest_enabled && local.alarms_essential ? 1 : 0
+
+  alarm_name          = "${local.project}-mirror-lag-gefs"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  metric_name         = local.mirror_lag_metric
+  namespace           = local.mirror_metric_namespace
+  period              = 86400
+  statistic           = "Maximum"
+  threshold           = local.gefs_lag_alarm_days
+  alarm_description   = "The data mirror's newest CHIRPS-GEFS issue is ${local.gefs_lag_alarm_days} or more days old (forecast feeds reading the copy wait), or the fetcher's GEFS pass published no lag for two days (it stopped running, or fails before it measures). Logs Insights on the fetcher log group: filter message.event = \"mirror_daily_ingest\" and message.product = \"gefs\" | fields message.stopped, message.partial, message.reason, message.detail, message.newest. reason refused = CHC answered HTTP 403 (the run stopped on purpose; docs/deployment.md § The data mirror). Feeds keep the forecast they have meanwhile."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    Product = "gefs"
   }
 }
 

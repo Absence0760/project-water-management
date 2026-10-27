@@ -23,7 +23,9 @@
 // copies the new CHIRPS preliminary days into the rain data copy
 // (ingest/daily.ts), publishing the copy's MirrorLagDays for Product=prelim.
 // That run writes the mirror bucket (MIRROR_URL); the per-feed mode above
-// stays as it is until the worker reads the copy everywhere (R3-C).
+// stays as it is until the worker reads the copy everywhere (R3-C). The same
+// mode with `"pass":"gefs"` copies the newest CHIRPS-GEFS issue instead
+// (ingest/gefs.ts, issue #604 R3-A), on its own rule.
 //
 // Like lambda.ts, this must never import a module that loads dotenv
 // (lambda-fetcher.test.ts bundles it to check).
@@ -166,6 +168,55 @@ export function isDailyIngestEvent(event: unknown): event is DailyIngestEvent {
 	return typeof event === 'object' && event !== null && !Array.isArray(event) && !('Records' in event) && (event as { mode?: unknown }).mode === DAILY_INGEST_EVENT.mode;
 }
 
+// --- The GEFS pass (issue #604 R3-A) ------------------------------------------------------
+// `{"mode":"daily-ingest","pass":"gefs"}` (infra/feeds.tf, its own rule, ~08:38 UTC and hourly
+// after): the newest complete CHIRPS-GEFS issue into the copy (ingest/gefs.ts). Its own
+// invocation, not after the preliminary pass: CHC issues at ~08:30 UTC, and the two passes'
+// requests at one a second don't fit one 120 s run.
+export const GEFS_INGEST_EVENT = { mode: 'daily-ingest', pass: 'gefs' } as const;
+const isGefsPass = (event: DailyIngestEvent) => (event as { pass?: unknown }).pass === GEFS_INGEST_EVENT.pass;
+
+async function gefsIngest(context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<GefsIngestAnswer> {
+	const { runGefsIngest, gefsLagMetricLine } = await import('./ingest/gefs.js');
+	const { dailyMirrorUrl, REQUEST_INTERVAL_MS } = await import('./ingest/daily.js');
+	const { openStore } = await import('./mirror/store.js');
+	const started = Date.now();
+	const budget = context ? context.getRemainingTimeInMillis() - DAILY_SAVE_MARGIN_MS : DEFAULT_BUDGET_MS;
+	const r = await runGefsIngest({
+		store: openStore(dailyMirrorUrl()),
+		http: await feedHttp(),
+		today: utcToday(),
+		deadline: started + budget,
+		intervalMs: feedSourceMode() === 'live' ? REQUEST_INTERVAL_MS : 0
+	});
+	if (r.lagDays !== null) emitMetricLine(gefsLagMetricLine(r.lagDays));
+	const message = r.error !== null ? feedErrorMessage(r.error) : null;
+	logEvent(message !== null ? 'error' : 'info', {
+		event: 'mirror_daily_ingest',
+		product: 'gefs',
+		copied: r.copied,
+		partial: r.partial,
+		held: r.held.length,
+		newest: r.held[0] ?? null,
+		deleted: r.deleted.length,
+		lagDays: r.lagDays,
+		stopped: r.stopped,
+		requests: r.requests,
+		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
+		ms: Date.now() - started
+	});
+	if (r.error !== null) throw r.error;
+	return { copied: r.copied, newest: r.held[0] ?? null, lagDays: r.lagDays, stopped: r.stopped };
+}
+
+/** What a GEFS pass answers (the schedule ignores it; a manual invoke shows it). */
+export interface GefsIngestAnswer {
+	copied: string | null;
+	newest: string | null;
+	lagDays: number | null;
+	stopped: string;
+}
+
 /** What a daily-ingest invocation answers (the schedule ignores it; a manual invoke shows it). */
 export interface DailyIngestAnswer {
 	copied: number;
@@ -216,9 +267,9 @@ async function dailyIngest(context?: Pick<Context, 'getRemainingTimeInMillis'>):
 }
 
 export async function handler(event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse>;
-export async function handler(event: DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DailyIngestAnswer>;
-export async function handler(event: SQSEvent | DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse | DailyIngestAnswer> {
-	if (isDailyIngestEvent(event)) return dailyIngest(context);
+export async function handler(event: DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DailyIngestAnswer | GefsIngestAnswer>;
+export async function handler(event: SQSEvent | DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer> {
+	if (isDailyIngestEvent(event)) return isGefsPass(event) ? gefsIngest(context) : dailyIngest(context);
 	if (!Array.isArray((event as SQSEvent | undefined)?.Records)) {
 		// Neither mode: nothing to answer, and a retry can't help. Fail loudly (the Errors alarm), naming no payload.
 		logEvent('error', { event: 'fetcher_event_unknown' });

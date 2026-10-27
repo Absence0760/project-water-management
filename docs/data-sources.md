@@ -72,7 +72,7 @@ Every job that fetches from an upstream:
 | Id | Source | Status | Hosts | Feed source | Code |
 | --- | --- | --- | --- | --- | --- |
 | [chirps](#chirps) | CHIRPS v3 daily rainfall (`rnl`, `sat` final and preliminary) | live (feeds paused since 2026-10-25, CHC's 403s); the copy in R1–R3 | `data.chc.ucsb.edu` | `chirps` | `backend/src/feeds/sources/chirps.ts`; R2 `ingest/chirps_final.py`, `backend/src/ingest/daily.ts` |
-| [chirps-gefs](#chirps-gefs) | CHIRPS-GEFS v3 16-day forecast | live; the copy in R3-A | `data.chc.ucsb.edu` | `chirps_gefs` | `backend/src/feeds/sources/chirps.ts`; R3 `backend/src/ingest/gefs.ts` |
+| [chirps-gefs](#chirps-gefs) | CHIRPS-GEFS v3 16-day forecast | live; the copy built (R3-A), read with `CHIRPS_SOURCE=mirror` | `data.chc.ucsb.edu` | `chirps_gefs` | `backend/src/ingest/gefs.ts` (the copy), `backend/src/feeds/fromMirrorGefs.ts` (feeds read it); `backend/src/feeds/sources/chirps.ts` until the cutover |
 | [dws-flow](#dws-flow) | DWS verified daily flow | live; the weekly job and the written request in R3-B | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`; R3 `backend/src/ingest/dws.ts` |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
 | [dpet](#dpet) | dPET daily potential evapotranspiration | reference load | `data.bris.ac.uk` | – | `bin/evaporation-fetch.sh`, `pnpm import:evaporation` |
@@ -170,16 +170,21 @@ in `infra/feeds.tf`):
 - **Licence and attribution:** as [chirps](#chirps); cite Harrison et al.
   (2022) for the method.
 - **Contact:** chc-help@geog.ucsb.edu.
-- **Access pattern today:** each feed reads today's issue (else yesterday's,
-  complete issues only) for its cells.
-- **Access pattern planned (R3-A):** one issue a day for the region, the
-  strip-offset table plus one range over the region's rows per file, into
-  Zarr `gefs/<issue>`; the newest 7 issues kept.
-- **Limits we keep to:** 16 files a day at about 1 request a second; a 403
-  stops the run.
+- **Access pattern:** the copy (R3-A). The fetcher's GEFS pass reads one
+  issue a day for the region (today's, else yesterday's, complete issues
+  only: the 16th day's file first), the header and strip-offset table plus
+  one range over the region's rows per file, into Zarr `gefs/<issue>`
+  listed in `gefs/index.json`; the newest 7 issues kept. Feeds read the copy
+  (`CHIRPS_SOURCE=mirror`), never CHC. Until the cutover production keeps
+  the old pattern: each feed reads today's issue (else yesterday's) for its
+  cells.
+- **Limits we keep to:** 16 files a day, about 48 requests, at about 1
+  request a second; a run that finds the day's issue held sends none; a 403
+  stops the run and alerts.
 - **Fallback:** ECMWF ENS (R4-C), then a day-old issue, labelled as such.
-- **Owner:** the operator; code `backend/src/feeds/sources/chirps.ts`, then
-  R3-A `backend/src/ingest/gefs.ts`.
+- **Owner:** the operator; code `backend/src/ingest/gefs.ts` and
+  `backend/src/feeds/fromMirrorGefs.ts` (R3-A), `backend/src/feeds/sources/chirps.ts`
+  for the per-feed path until the cutover.
 
 ### dws-flow
 

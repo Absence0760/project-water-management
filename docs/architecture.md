@@ -1623,17 +1623,21 @@ EventBridge, daily
   ├─► mirror-ingest (Python 3.14 container Lambda, outside the VPC)
   │     rnl, sat finals: CHC's byMonth NetCDF, one conditional GET a day, the new
   │     or rewritten month downloaded whole, subset to the region, hashed (D8)
-  └─► daily ingest (the fetcher Lambda's new mode, Node, outside the VPC)
-        preliminary sat: only new daily TIFFs, the region's rows; drops days whose finals landed
+  ├─► daily ingest (the fetcher Lambda's new mode, Node, outside the VPC)
+  │     preliminary sat: only new daily TIFFs, the region's rows; drops days whose finals landed
+  └─► GEFS pass (the same mode, "pass":"gefs", 08:38 UTC and hourly to 11:38)
+        the newest complete CHIRPS-GEFS issue, its 16 TIFFs' region rows; keeps 7 issues
   (once) backfill: Step Functions over the byMonth list from 1981, 2 at a time
                 │  polite client: one User-Agent, conditional GETs, ~1 request/s, 403 = stop
                 ▼
   s3://<project>-mirror-<account> (private, versioned)
-        rnl/, sat/  (year, doy, lat, lon) Zarr v3 · prelim/ (day, lat, lon) · manifest.json each
+        rnl/, sat/  (year, doy, lat, lon) Zarr v3 · prelim/, gefs/<issue>/ (day, lat, lon) · manifest.json each
+        gefs/index.json (the issues held, newest first)
                 │
   worker (in the VPC, S3 interface endpoint)
         feed_fetch for a CHIRPS feed reads its cells' days from the copy in-process
-        (no fetcher call), at most one year per job, into the chirps_cell_year cache
+        (no fetcher call), at most one year per job, into the chirps_cell_year cache;
+        for a CHIRPS-GEFS feed, the newest issue's 16 days at its cells
         mirror tick: a manifest revision newer than mirror_manifest's marks the
         changed days stale, and feeds replay them (the re-check loop above)
                 ▼
@@ -1654,6 +1658,26 @@ EventBridge, daily
   doesn't hold yet is "not published yet", as a 404 was: no failure, no
   backoff. A product the copy doesn't hold at all (no manifest) is
   unavailable. The cache, the feed windows, the merge and runs don't change.
+- **The forecast.** The fetcher's GEFS pass (`ingest/gefs.ts`, its own
+  invocation `{"mode":"daily-ingest","pass":"gefs"}`) copies the newest
+  complete CHIRPS-GEFS issue, today's else yesterday's, the rule the
+  per-feed fetch kept: the 16th day's file first (CHC writes the days in
+  order, so without it the issue isn't complete), then the other 15, each
+  file's region rows in about 3 requests at one a second. The issue becomes
+  `gefs/<issue>` (the daily layout, `firstDay` the issue date) with its
+  manifest, and only once all 16 are written is it listed in
+  `gefs/index.json`, newest first; the newest 7 are kept and older arrays
+  deleted. It runs at 08:38 UTC, just after CHC issues (08:26–08:30) and
+  before the forecast feeds fall due at 08:45, then hourly to 11:38 for a
+  late issue; a run that finds the day's issue held asks CHC nothing. With
+  `CHIRPS_SOURCE=mirror` a `chirps_gefs` feed_fetch reads that issue at its
+  cells in the job (`feeds/fromMirrorGefs.ts`, no fetcher call) and writes
+  the forecast the per-feed fetch wrote: the same issue rule, the same mean
+  (`meanOf`), the same result and ingest. A copy holding neither today's
+  nor yesterday's issue is behind, not the feed broken: the fetch writes
+  nothing and records only that it looked, and the forecast series keeps
+  the issue it has. Locally the committed copy holds two synthetic issues,
+  re-dated to today the way the synthetic files are.
 - **Revisions** reach the cache without a feed: the worker's mirror tick
   reads each manifest and applies a newer revision through
   `app_mirror_apply_revision` (above, *A revision of our copy*); the
