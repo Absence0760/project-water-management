@@ -2461,6 +2461,16 @@ grid's kind, and **nothing is converted between them**:
 - **Datasets.** The default is a real dataset before the synthetic one, then
   the newest load; the API takes `?dataset=`, and the panel offers a choice
   when more than one is loaded.
+- **The current season, day by day** (issue #604 R5-E). The grid's 12
+  values are a climatology. For the season as it runs, add an **AgERA5
+  daily reference evapotranspiration** data feed over the catchment
+  (Data → Data feeds, Area: grid cells or a bounding box; the boundary's
+  proposal is CHIRPS's only for now, followups.md): its daily FAO-56 ET₀ (AgERA5 v2.0 from our copy,
+  NASA POWER's on the newest days) is GR4J's PE on the days it covers,
+  as it stands, and this monthly row stays the PE on every other day
+  ([model.md §2.4a](./model.md) *Daily reference ET*). Both are reference
+  ET, so neither is converted; the feed changes nothing under pan
+  coefficient × A-pan.
 
 ### The evaporation grid
 

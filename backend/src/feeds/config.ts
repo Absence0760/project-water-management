@@ -9,7 +9,7 @@ import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, type SeriesProvenance } from '@water-mana
 import { z } from 'zod';
 import { SeriesStartDate } from '../series/limits.js';
 
-export const FEED_SOURCES = ['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens'] as const;
+export const FEED_SOURCES = ['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0'] as const;
 export type FeedSource = (typeof FEED_SOURCES)[number];
 
 /**
@@ -60,6 +60,10 @@ export const SOURCES: Record<FeedSource, SourceSpec> = {
 	// The ECMWF ENS mean from our copy (issue #604 R4-C): 15 days from each
 	// day's 00 UTC run; at least 11 days ahead means an issue of the last few days.
 	ecmwf_ens: { label: 'ECMWF ENS rainfall forecast', kinds: ['rain_forecast_mm'], unit: 'mm', staleAfterDays: -11, staleAlertDays: 2 },
+	// Daily FAO-56 reference ET from our copy (issue #604 R5-E, feeds/fromMirrorEt0.ts): AgERA5, about a week behind
+	// and copied a month at a time, with NASA POWER's computed ET₀ on the newest days (2–7 days behind); 15 days is
+	// POWER's lag plus a margin, so a feed goes stale when both copies have stopped.
+	agera5_et0: { label: 'AgERA5 daily reference evapotranspiration', kinds: ['evap_et0_mm'], unit: 'mm', staleAfterDays: 15, staleAlertDays: 7 },
 	// Verified DWS flow lags by months (docs/architecture.md § Data feeds).
 	dws: { label: 'DWS gauge flow', kinds: ['flow_observed_m3s', 'flow_reference_m3s', 'flow_logger_m3s'], unit: 'm³/s', staleAfterDays: 240, staleAlertDays: 30 }
 };

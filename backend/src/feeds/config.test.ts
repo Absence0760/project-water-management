@@ -37,7 +37,7 @@ describe('FeedInput', () => {
 	});
 
 	it('an ECMWF ENS forecast feed (issue #604 R4-C): grid cells or a box, writing the forecast series, no CHIRPS product', () => {
-		expect(FEED_SOURCES).toEqual(['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens']);
+		expect(FEED_SOURCES).toEqual(['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0']);
 		expect(FeedInput.parse({ source: 'ecmwf_ens', config: { cells } })).toMatchObject({ source: 'ecmwf_ens', targetKind: 'rain_forecast_mm', config: { cells: [{ ...cells[0], weight: 1 }] } });
 		expect(FeedInput.safeParse({ source: 'ecmwf_ens', config: { bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 }, skipNoData: true } }).success).toBe(true);
 		expect(FeedInput.safeParse({ source: 'ecmwf_ens', config: { cells, product: 'sat' } }).error?.issues[0]?.message).toBe('only a CHIRPS feed has a daily product');
@@ -50,6 +50,17 @@ describe('FeedInput', () => {
 		expect(feedProvenance('ecmwf_ens', { cells: [{ ...cells[0]!, weight: 1 }] })).toBeNull();
 		expect(feedSourceText('ecmwf_ens', { cells: [{ ...cells[0]!, weight: 1 }] })).toBe('ECMWF ENS rainfall forecast data feed');
 		expect(SOURCES.ecmwf_ens.label).toBe('ECMWF ENS rainfall forecast');
+	});
+
+	it('an AgERA5 reference ET feed (issue #604 R5-E): grid cells or a box, writing the daily ET₀ series only, not a forecast', () => {
+		expect(FeedInput.parse({ source: 'agera5_et0', config: { cells } })).toMatchObject({ source: 'agera5_et0', targetKind: 'evap_et0_mm' });
+		expect(FeedInput.safeParse({ source: 'agera5_et0', config: { bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 } } }).success).toBe(true);
+		expect(FeedInput.safeParse({ source: 'agera5_et0', config: { cells, product: 'sat' } }).error?.issues[0]?.message).toBe('only a CHIRPS feed has a daily product');
+		expect(FeedInput.safeParse({ source: 'agera5_et0', config: { cells }, targetKind: 'evap_apan_mm' }).error?.issues[0]?.message).toBe('a agera5_et0 feed writes one of evap_et0_mm');
+		expect(isForecastSource('agera5_et0')).toBe(false);
+		expect(feedStaleAfterDays('agera5_et0', { cells: [{ ...cells[0]!, weight: 1 }] })).toBe(15);
+		expect(feedProvenance('agera5_et0', { cells: [{ ...cells[0]!, weight: 1 }] })).toBeNull();
+		expect(feedSourceText('agera5_et0', { cells: [{ ...cells[0]!, weight: 1 }] })).toBe('AgERA5 daily reference evapotranspiration data feed');
 	});
 
 	it('takes listed cells with the land unit’s polygon they came from (issue #482)', () => {

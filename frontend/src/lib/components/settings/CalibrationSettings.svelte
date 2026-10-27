@@ -88,6 +88,7 @@
 		chirpsSource,
 		observedOrigins,
 		apanDaily,
+		et0Daily,
 		flowRecordId = null,
 		readonly,
 		onProjectChange
@@ -113,6 +114,8 @@
 		 * whole series), once for both its header and these panels.
 		 */
 		apanDaily?: ApanDailyFingerprint | null;
+		/** The daily reference ET series now (issue #604 R5-E), the same way; undefined while not known. */
+		et0Daily?: ApanDailyFingerprint | null;
 		/** A flow record the calibration can score against, for the link to where its site is set (the Data tab). */
 		flowRecordId?: string | null;
 		readonly: boolean;
@@ -207,7 +210,12 @@
 	const hasRecord = $derived(recordKinds === null || recordKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k)));
 	const nodeName = (id: string) => editor?.model.nodes.find((n) => n.id === id)?.name;
 	const petMissing = $derived(
-		!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }, apanSource?.daily ?? false)
+		!hasPotentialEvaporation(
+			{ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined },
+			apanSource?.daily ?? false,
+			// A daily reference ET series (issue #604 R5-E) is PE under a monthly row, on the days it covers.
+			seriesKinds?.includes('evap_et0_mm') ?? false
+		)
 	);
 	// Each panel's line of what it is set to now (summaries.ts).
 	const summaries = $derived(
@@ -579,6 +587,7 @@
 			context="form"
 			{chirpsSource}
 			{apanDaily}
+			{et0Daily}
 			observedOrigin={observedOrigins ? (observedOrigins[calibrationSeriesKey(s.fitRecord.flowKind as CalibrationFlowKind, s.fitRecord.siteNodeId)] ?? null) : undefined}
 			{nodeName}
 		/>

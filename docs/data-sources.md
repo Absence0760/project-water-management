@@ -92,7 +92,8 @@ Every job that fetches from an upstream:
 | [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS 15-day precipitation (0.1°) | built (R4-C); the copy's job off in production until `ecmwf_enabled` | `ecmwf-forecasts.s3.eu-central-1.amazonaws.com` | `ecmwf_ens` | `ingest/ecmwf.py` (the copy), `ingest/ecmwf_qm_fit.py` (the fit), `backend/src/feeds/fromMirrorEcmwf.ts` (feeds read it) |
 | [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | the copy built (R4-D), off until `imerg_enabled` (needs the operator's Earthdata token) | `cmr.earthdata.nasa.gov`, `opendap.earthdata.nasa.gov` | – | `ingest/imerg.py`, `infra/imerg.tf` |
 | [sanlc](#sanlc) | SANLC orchard and vine classes | built R5-D; blocked in production until its terms are recorded (synthetic grid in dev, CI and e2e) | `egis.environment.gov.za` | `crop_type_dataset` | `pnpm import:crop-types` |
-| [agera5](#agera5) | AgERA5 daily reference ET (NASA POWER fallback) | planned R5-E | `cds.climate.copernicus.eu`; `power.larc.nasa.gov` | – | R5 |
+| [agera5](#agera5) | AgERA5 v2.0 daily FAO-56 reference ET | built R5-E; the copy's job off in production until `agera5_enabled` (the CDS key is ERA5-Land's) | `cds.climate.copernicus.eu` | `agera5_et0` | `ingest/agera5.py` (the copy), `backend/src/feeds/fromMirrorEt0.ts` (feeds read it), `infra/agera5.tf` |
+| [nasa-power](#nasa-power) | NASA POWER daily weather, our FAO-56 ET₀ from it (AgERA5's fallback) | built R5-E; off until `power_et0_enabled` | `power.larc.nasa.gov` | – (read by `agera5_et0` feeds) | `ingest/nasapower.py`, `ingest/fao56.py`, `infra/agera5.tf` |
 
 ## Live feeds
 
@@ -541,6 +542,107 @@ in the reference bucket.
 | <a id="dam-register"></a>dam-register | **blocked:** no terms on the DSO page; DWS's general terms are non-commercial | "Department of Water and Sanitation" | DWS Dam Safety Office | the operator's XLS and KMZ download | – | the synthetic list | – (never loaded in production) | operator; `pnpm import:dam-register`  |
 | <a id="gauge-stations"></a>gauge-stations | **blocked:** unconfirmed (the Verified pages answer 403 outside South Africa) | "Department of Water and Sanitation" | GeoRequests@dws.gov.za | the operator's catalogue download | – | the synthetic stations | – (never loaded in production) | operator; `pnpm import:gauge-stations`  |
 
+## The copy's reference evaporation
+
+Issue #604 R5-E: a current-season evaporation option beside dPET's
+climatology (§ dpet below). GR4J reads it only under a monthly PE row,
+as it stands ([model.md §2.4a](./model.md) *Daily reference ET*).
+
+### agera5
+
+- **Source:** AgERA5 v2.0, *Agrometeorological indicators from 1979 to
+  present derived from reanalysis* (Copernicus C3S, CDS dataset
+  `sis-agrometeorological-indicators`, DOI 10.24381/cds.6c68c9bb),
+  variable `reference_evapotranspiration`: daily FAO-56 Penman-Monteith
+  reference ET in mm/day on a 0.1° grid from 1979, computed from ERA5's
+  2 m weather. v2.0 was published on the CDS on 2025-05-15 and added the
+  reference ET layer; v1.1 is being deprecated
+  ([forum](https://forum.ecmwf.int/t/new-agera5-version-2-now-available-on-the-cds/13088),
+  read 2026-10-27). The dataset page gives a daily update, no latency; we
+  assume about a week, **unverified until the first live run** (the
+  request's exact form, the file's variable name and units are checked by
+  the reader, which refuses anything else; `ingest/README.md`).
+- **Host:** `cds.climate.copernicus.eu` (the CDS API).
+- **Licence:** CC BY 4.0 ("CC-BY licence" on the dataset page, read
+  2026-10-27). The dataset's licence is accepted once on the CDS account
+  (operator step, #618 7b–7d), the same account and key as ERA5-Land's.
+- **Attribution:** "Contains modified Copernicus Climate Change Service
+  information [year]. Neither the European Commission nor ECMWF is
+  responsible for any use that may be made of the Copernicus information or
+  data it contains." and "Boogaard, H., Schubert, J., De Wit, A.,
+  Lazebnik, J., Hutjes, R., Van der Grijn, G. (2020): Agrometeorological
+  indicators from 1979 to present derived from reanalysis. Copernicus
+  Climate Change Service (C3S) Climate Data Store (CDS). DOI:
+  10.24381/cds.6c68c9bb". The array carries it (`attrs.attribution`); the
+  feed card shows the credit (`et0Note`), and the series is labelled
+  "AgERA5 daily reference evapotranspiration data feed".
+- **Contact:** ECMWF support (CDS).
+- **Access pattern:** the mirror-ingest Lambda once a day
+  (`{"product":"agera5_et0","mode":"monthly"}`), ERA5-Land's
+  submit-then-collect machinery: one CDS request per month for region D1,
+  submitted on one run and collected on a later one, into Zarr
+  `agera5_et0` (finals layout, 0.1°). A backfill names its month (from
+  1979-01). Projects read it through `agera5_et0` data feeds in the
+  worker's own job (`feeds/fromMirrorEt0.ts`), never from the CDS.
+- **Limits we keep to:** as ERA5-Land's: at most one request per month and
+  4 queued in all; one API call a second; a failed request backs off 1–8
+  days and stops after 5; a 401/403 stops the run for the UTC day; never
+  waits inside a Lambda.
+- **Fallback:** [nasa-power](#nasa-power) for the newest days, and for any
+  day AgERA5's copy doesn't hold; dPET's monthly climatology (the PE row)
+  for every other day.
+- **Owner:** the operator; code `ingest/agera5.py`, `infra/agera5.tf`.
+
+### nasa-power
+
+- **Source:** NASA Prediction of Worldwide Energy Resources (POWER),
+  daily, Agroclimatology community: `T2M_MAX`, `T2M_MIN`, `T2MDEW`,
+  `WS2M`, `ALLSKY_SFC_SW_DWN` (MJ/m²/day) and `PS`, on POWER's 0.5° grid
+  (MERRA-2-based meteorology), 2 to 7 days behind ("Latency: 2 to 7 days
+  depending on source provider",
+  [power.larc.nasa.gov/llms.txt](https://power.larc.nasa.gov/llms.txt),
+  read 2026-10-27). POWER publishes **no FAO-56 reference ET**: its
+  parameter list (AG, daily) has only `EVLAND` and `EVPTRNS`, actual
+  evaporation, so we compute ET₀ ourselves with FAO-56 eq. 6
+  (`ingest/fao56.py`, tested against FAO-56 Examples 8 and 18).
+- **Host:** `power.larc.nasa.gov` (the REST API's regional daily
+  endpoint, no sign-in). The same data is on AWS
+  (`registry.opendata.aws/nasa-power`, us-west-2), which we don't use yet.
+- **Licence:** CC BY 4.0 (POWER's own summary,
+  [llms.txt](https://power.larc.nasa.gov/llms.txt), read 2026-10-27). The
+  AWS registry says "There are no restrictions on the use, access, and/or
+  download of data from the NASA POWER Project. We request that you cite
+  the NASA POWER Project when using the data"
+  ([registry](https://registry.opendata.aws/nasa-power/), read
+  2026-10-27). Commercial use allowed either way; we credit as CC BY asks,
+  without implying NASA's endorsement.
+- **Attribution:** "NASA Prediction of Worldwide Energy Resources (POWER)
+  Project, CC BY 4.0; FAO-56 Penman-Monteith reference evapotranspiration
+  computed by us from its daily meteorology", on the array and on the feed
+  card when a fetch took days from it ("N newer days from NASA POWER").
+  POWER's referencing guide is
+  [power.larc.nasa.gov/docs/referencing](https://power.larc.nasa.gov/docs/referencing/).
+- **Contact:** the POWER team, through the contact link on
+  power.larc.nasa.gov and the Earthdata forum.
+- **Access pattern:** the mirror-ingest Lambda once a day
+  (`{"product":"power_et0","mode":"recent","days":30}`): the last 30 days
+  ending three days ago, region D1 cut into tiles of at most 10° × 10°,
+  **one parameter per request** (POWER's rule for regional requests), JSON.
+  Each 0.1° cell takes the ET₀ of the POWER point nearest its centre. Into
+  Zarr `power_et0` (daily layout, 0.1°), a rolling 120 days in the
+  manifest.
+- **Limits we keep to:** at most 1 request a second, one at a time, about
+  70 requests a run (12 tiles × 6 parameters), one run a day; POWER sets no
+  rate limit but monitors use and may restrict it (POWER team on the
+  Earthdata forum), and warns that repeating requests for one place can get
+  an application blocked, which one region-wide daily run avoids.
+  `Retry-After` honoured; a 403 stops the run with no retry and a same-day
+  marker.
+- **Fallback:** AgERA5 once its month lands (the feed replaces POWER's days
+  then); else the monthly PE row.
+- **Owner:** the operator; code `ingest/nasapower.py`, `ingest/fao56.py`,
+  `infra/agera5.tf`.
+
 ## Planned sources
 
 From #604's Rounds 4 and 5. Each gets its full section here when its round
@@ -550,7 +652,6 @@ starts.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | <a id="era5-land"></a>era5-land | CC BY 4.0 ("CC-BY licence" on the dataset page, read 2026-10-27; Copernicus, since 2025-07-02); the licence is accepted once on the account (operator step) | wherever its values show (UI, reports, exports): "Contains modified Copernicus Climate Change Service information [year]. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains." and the dataset citation, [below](#era5-land-r4-a) | ECMWF support (CDS); a CDS account and API key in `water-management/ingest/cds-key` (operator step) | CDS API (`reanalysis-era5-land`, `total_precipitation` at 00 UTC, area D1), one request a month into Zarr `era5l` (finals, 0.1°); submitted on one run, collected on a later one | at most one request per month and 4 queued in all; one API call a second; a failed request backs off 1–8 days and stops after 5; a 401/403 stops the run for the UTC day; never waits inside a Lambda | the CDS for the backfill too (`nsf-ncar-era5` holds ERA5, not ERA5-Land, checked 2026-10-27); NCAR GDEX d633008 has ERA5-Land (not used) | operator; `ingest/era5land.py`, `infra/era5land.tf` |
 | <a id="sanlc"></a>sanlc | **gated:** fails D-B on the terms we could read (2013/14: no derivatives, no competing products); the 2018–2022 terms on EGIS still to be read (operator step) | "© GEOTERRAIMAGE" with the year, if allowed | DFFE (EGIS) | the operator's download, warped to EPSG:4326 and pre-summarised by `pnpm import:crop-types` into orchard, vine and new-planting shares per cell (maps.md § Orchards and vines from SANLC); local evaluation only, the production load (kind `crop-types`) refused until allowed | – | WorldCover | operator; R5-D |
-| <a id="agera5"></a>agera5 | CC BY (Copernicus); NASA POWER: no restrictions, CC BY 4.0 on AWS | Copernicus; NASA POWER | ECMWF support; NASA POWER | CDS API, daily FAO-56 reference ET for the region | as era5-land | NASA POWER (REST, usage monitored, or S3) | operator; R5-E |
 
 ### ERA5-Land (R4-A)
 

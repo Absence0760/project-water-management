@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { apanDailyOfInput, apanDailyOfValues, asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, feedMark, observedOriginsOf, originOfFit, originOfInput, provenanceFields, rebuildingNote, runChirpsFactors, seriesProvenance } from './provenance';
+import { apanDailyOfInput, apanDailyOfValues, et0DailyOfValues, asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, feedMark, observedOriginsOf, originOfFit, originOfInput, provenanceFields, rebuildingNote, runChirpsFactors, seriesProvenance } from './provenance';
 
 describe('series provenance choices', () => {
 	it('asks only for a CHIRPS series, offering v2.0 and v3.0’s two daily products', () => {
@@ -73,6 +73,16 @@ describe('the daily A-pan fingerprint (issue #45)', () => {
 		const want = createHash('sha256').update(JSON.stringify(values)).digest('hex');
 		expect(await apanDailyOfValues({ startDate: '2020-10-01', values })).toEqual({ startDate: '2020-10-01', length: 4, valuesSha256: want });
 		expect(await apanDailyOfValues(undefined)).toBeNull();
+	});
+
+	it('fingerprints a daily reference ET series only through the fit’s last day (issue #604 R5-E), so days added after never count', async () => {
+		const values = [5, null, 6.25, 0];
+		const head = createHash('sha256').update(JSON.stringify(values.slice(0, 3))).digest('hex');
+		const want = { startDate: '2020-10-01', length: 3, valuesSha256: head, through: '2020-10-03' };
+		expect(await et0DailyOfValues({ startDate: '2020-10-01', values }, '2020-10-03')).toEqual(want);
+		expect(await et0DailyOfValues({ startDate: '2020-10-01', values: [...values, 7, 7] }, '2020-10-03')).toEqual(want);
+		expect(await et0DailyOfValues({ startDate: '2020-10-01', values }, '2020-09-30')).toBeNull();
+		expect(await et0DailyOfValues(null, '2020-10-03')).toBeNull();
 	});
 
 	it('reads it from a run snapshot: null without the series, undefined when unknown or unhashed', () => {

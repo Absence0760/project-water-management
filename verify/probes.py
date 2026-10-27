@@ -1613,6 +1613,26 @@ def station_catchment_rule2_no_map() -> dict:
     return station_catchment_rule2(None)
 
 
+def daily_et0_monthly_pe(pe_kind: str = "monthly", zero_row: bool = False) -> dict:
+    """A daily reference ET record under a monthly PE row (§2.4a, engine ≥
+    1.103.0, issue #604 R5-E): on the days it has a value ≥ 0 GR4J's PE is the
+    value as it stands; a missing day and a negative one fall back to the row's
+    share of the month; the record ends before the run, so its last days are
+    the row's. `pe_kind` "pan": the record is never read. `zero_row`: the row
+    is 0, and the record alone gives GR4J evaporation (no GR4J_NO_PET)."""
+    rain = [0.0, 12.0, 3.0, 0.0, 25.0, 0.0, 0.0, 8.0] * 8
+    et0 = [5.0, 4.5, None, 6.25, -1.0, 3.0] * 8
+    nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=5)]
+    series = {
+        "rain_catchment_mm": {"startDate": "2020-01-01", "values": rain},
+        "evap_et0_mm": {"startDate": "2020-01-03", "values": et0},
+    }
+    row = [0] * 12 if zero_row else [150, 140, 120, 90, 60, 45, 40, 55, 80, 110, 130, 150]
+    pe = {"kind": "monthly", "mm": row, "source": "invented climatology"} if pe_kind == "monthly" else {"kind": "pan"}
+    s = _settings(pe=pe, gr4j={"x1": 200, "x2": 0, "x3": 60, "x4": 1.5, "warmupDays": 30})
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -1670,4 +1690,8 @@ PROBES = {
     # The EWR split (issue #553 round 4).
     "ewr-split-station-units": ewr_split_station_units(),
     "ewr-split-short-run": ewr_split_short_run(),
+    # Daily reference ET (issue #604 R5-E).
+    "daily-et0-monthly-pe": daily_et0_monthly_pe(),
+    "daily-et0-pan-pe": daily_et0_monthly_pe("pan"),
+    "daily-et0-zero-row": daily_et0_monthly_pe(zero_row=True),
 }

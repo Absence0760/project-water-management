@@ -37,8 +37,8 @@ import type { MirrorStore } from './store.js';
 /** The copy doesn't hold the product yet (no manifest or no array): the feed tries again later. */
 export class MirrorNotReadyError extends FeedUnavailableError {}
 
-/** The products readCells reads: the finals layout's, and IMERG Late's daily one. */
-export type CellsProduct = FinalsProduct | 'imerg_late';
+/** The products readCells reads: the cache's rain products (the finals layout's, and IMERG Late's daily one; never an ET₀ product, feeds/fromMirrorEt0.ts). */
+export type CellsProduct = Exclude<FinalsProduct, 'agera5_et0'> | 'imerg_late';
 
 /** What readCells answers: CellsResult's `cells` (no file tags: the mirror has revisions instead), and the revisions it read. */
 export interface MirrorCells {

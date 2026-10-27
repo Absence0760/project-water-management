@@ -10,18 +10,16 @@ from __future__ import annotations
 import datetime as dt
 
 import grid
+from cdsjob import CDS_URL, CdsError  # noqa: F401  (one CdsError for every CDS product; cdsjob imports no job module)
 
 DATASET = "reanalysis-era5-land"
 VARIABLE = "total_precipitation"
-CDS_URL = "https://cds.climate.copernicus.eu/api"
+#: The product this request module serves (fakecds names it in a refusal).
+PRODUCT = "era5l"
 
 #: Re-request a preliminary (or unknown) month this long after its end (the consolidated data are ~2 months behind);
 #: era5land.RECHECK_EVERY_DAYS says how often after that.
 RECHECK_AFTER_DAYS = 75
-
-
-class CdsError(RuntimeError):
-    """The CDS answered something other than a refusal that this run can't use (a 5xx, a 429)."""
 
 
 def month_str(ym: tuple[int, int]) -> str:

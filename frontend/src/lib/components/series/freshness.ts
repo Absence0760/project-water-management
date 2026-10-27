@@ -37,8 +37,8 @@ export function dataSpan(
 	return { from: stats?.firstValueDate ?? s.startDate, to: stats?.lastValueDate ?? seriesEnd(s) };
 }
 
-/** Kinds that drive a run (rainfall, daily A-pan evaporation); observed flow only scores it. */
-export const isDriver = (kind: string) => kind.startsWith('rain_') || kind === 'evap_apan_mm';
+/** Kinds that drive a run (rainfall, daily A-pan evaporation, daily reference ET); observed flow only scores it. */
+export const isDriver = (kind: string) => kind.startsWith('rain_') || kind === 'evap_apan_mm' || kind === 'evap_et0_mm';
 
 /**
  * Recorded rain: what a run is driven by, so what freshness measures. A

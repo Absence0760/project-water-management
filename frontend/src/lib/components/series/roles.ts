@@ -42,6 +42,11 @@ export const KIND_ROLES: Record<string, KindRole> = {
 		help: 'Daily Class-A pan evaporation (mm), e.g. from a nearby weather station. On the days it has a value it replaces the monthly A-pan means (Settings → Demand) for crop demand, dam evaporation and GR4J\'s potential evaporation (pan coefficient × A-pan); other days use the monthly means, and the run says how many.',
 		driver: true
 	},
+	evap_et0_mm: {
+		role: 'Daily reference ET',
+		help: 'Daily FAO-56 reference evapotranspiration (mm), e.g. an AgERA5 data feed (NASA POWER on its newest days) or a station\'s own. Read only by GR4J, and only when its potential evaporation is a monthly PE row (Calibration → Flow calibration): on the days it has a value it is that day\'s PE as it stands; other days use the row, and the run says how many. Crop demand and dam evaporation never read it.',
+		driver: true
+	},
 	flow_observed_m3s: {
 		role: 'Calibration target',
 		help: 'Observed flow at the outflow gauge (m³/s, daily mean). Not an input to the water balance: runs compare simulated outflow with it (NSE, PBIAS). A record attached to a gauge inside the network is checked against the simulated flow there (Plausibility checks), and calibrated against only when Calibration → Calibration record scores the fit at that gauge.',

@@ -64,6 +64,9 @@ sides share.
   (`file://` or `s3://`, the latter through `@aws-sdk/client-s3`); the
   committed synthetic copy is `backend/fixtures/mirror/` (`pnpm
   gen:mirror-fixture`; [architecture.md § Data feeds](./architecture.md#data-feeds)).
+  Besides rain it holds daily FAO-56 reference evapotranspiration (AgERA5,
+  with NASA POWER's computed ET₀ on the newest days), which `agera5_et0`
+  data feeds read into `evap_et0_mm` (issue #604 R5-E, `feeds/fromMirrorEt0.ts`).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has four projects: `unit` (no DB),
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
@@ -158,7 +161,7 @@ pnpm dev:jobs:tick          # run every due job once and exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default, no network) and exit
 pnpm dev:dams:run           # dam observations once: match traced dams, both passes, Waterbodies and WOfS (fixtures by default, no network), load (run-locally.md § Dam observations)
 pnpm dev:ingest:push        # push the synthetic logger CSV to /ingest with the API key in WM_INGEST_KEY (run-locally.md § Ingest)
-pnpm dev:ingest:run [rnl|sat|era5l|imerg_late]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
+pnpm dev:ingest:run [rnl|sat|era5l|imerg_late|ecmwf|agera5_et0|power_et0]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
 
 pnpm dev:db:up              # Postgres 17 in docker on :5434
 pnpm dev:db:down
@@ -257,7 +260,7 @@ pnpm test:ingest            # the bulk ingest job's unittest suite (ingest/, Pyt
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
 pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
 pnpm gen:waterbodies-fixture # rewrite the synthetic Waterbodies polygons and series round the Sandspruit dams (backend/fixtures/waterbodies/; no DB; maps.md § Waterbodies)
-pnpm gen:mirror-fixture     # rewrite the synthetic rain data copy (backend/fixtures/mirror/: Zarr arrays + manifests from the synthetic CHIRPS files; no DB; architecture.md § Data feeds)
+pnpm gen:mirror-fixture     # rewrite the synthetic rain data copy (backend/fixtures/mirror/: Zarr arrays + manifests from the synthetic CHIRPS files, plus invented ERA5-Land, IMERG, ECMWF and reference ET products; no DB; architecture.md § Data feeds)
 pnpm gen:example            # rewrite the example catchment the empty project list starts from (Kleinberg; no DB; issue #286)
 pnpm gen:help-art           # re-render the help pictures, by day and at dusk for dark mode (optional: Blender 5 + ImageMagick 7; HELP_ART_ONLY, HELP_ART_LIGHT, HELP_ART_DEVICE; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)

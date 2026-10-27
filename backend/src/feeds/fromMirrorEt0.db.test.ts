@@ -1,0 +1,166 @@
+// A daily reference evapotranspiration feed read from our copy
+// (fromMirrorEt0.ts, issue #604 R5-E), end to end through the job queue: the
+// feed writes `evap_et0_mm` from AgERA5, with NASA POWER on the newest days,
+// no FetchRequest leaves even with FEED_FETCHER=sqs, a day POWER filled is
+// replaced by AgERA5's once the copy holds its month (the merge replaces the
+// feed's own days), a copy holding neither product waits without a failure,
+// and a cell outside the region fails naming it.
+//
+// DB test files run one at a time; this one removes every feed and feed job
+// after each test.
+import { cpSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+
+const { sent } = vi.hoisted(() => ({ sent: [] as unknown[] }));
+vi.mock('../jobs/transport.js', async (orig) => ({
+	...(await orig<typeof import('../jobs/transport.js')>()),
+	sendToQueue: async (_url: string | undefined, _name: string, message: unknown) => void sent.push(message)
+}));
+import { et0FixtureValue, ET0_FIXTURE_HOLDS } from '../../scripts/et0-fixture.js';
+import { MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
+import { asOwner, signUp } from '../__tests__/helpers.js';
+import { runTick } from '../jobs/runner.js';
+import { type Block, ensureFinals, writeFinalsYear } from '../mirror/arrays.js';
+import { PRODUCT_GRIDS } from '../mirror/grid.js';
+import { readManifest, writeManifest } from '../mirror/manifest.js';
+import { openStore } from '../mirror/store.js';
+import { utcToday } from './fetch.js';
+import { ET0_FIXTURE } from './fromMirrorEt0.js';
+
+type User = Awaited<ReturnType<typeof signUp>>;
+
+const tmp: string[] = [];
+afterAll(() => tmp.forEach((d) => rmSync(d, { recursive: true, force: true })));
+afterEach(async () => {
+	sent.length = 0;
+	vi.unstubAllEnvs();
+	await asOwner('DELETE FROM data_feed');
+	await asOwner(`DELETE FROM job WHERE kind IN ('feed_fetch', 'feed_ingest')`);
+});
+
+const tick = () => runTick({ feeds: false, reports: false, alerts: false });
+
+async function feed(owner: User, config: Record<string, unknown>) {
+	const pid = (await owner.call('POST', '/projects', { name: 'Reference ET from the copy' })).body.project.id as string;
+	const r = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'agera5_et0', config });
+	expect(r.status, JSON.stringify(r.body)).toBe(201);
+	const feedId = r.body.feed.id as string;
+	await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+	return { pid, feedId };
+}
+const et0 = async (u: User, pid: string) => {
+	const list = (await u.call('GET', `/projects/${pid}/series`)).body.series as { id: string; kind: string }[];
+	const meta = list.find((s) => s.kind === 'evap_et0_mm');
+	return meta ? ((await u.call('GET', `/projects/${pid}/series/${meta.id}`)).body as { startDate: string; values: (number | null)[] }) : null;
+};
+const feedRow = async (id: string) =>
+	(await asOwner('SELECT consecutive_failures, last_error, last_meta, last_attempt_at, last_success_at, to_char(last_data_date, $2) AS last_data_date FROM data_feed WHERE id = $1', [id, 'YYYY-MM-DD']))[0] as {
+		consecutive_failures: number;
+		last_error: string | null;
+		last_meta: Record<string, unknown> | null;
+		last_attempt_at: Date | null;
+		last_success_at: Date | null;
+		last_data_date: string | null;
+	};
+
+const { y0, x0 } = ET0_FIXTURE.block;
+/** A 0.05° cell centre inside the fixture block's 0.1° cell (y0 + 1, x0 + 2). */
+const CELL = { lat: -35.5 + (y0 + 1) * 0.1 + 0.025, lon: 10 + (x0 + 2) * 0.1 + 0.025, weight: 1 };
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/** A private copy of the committed fixture, read as the live copy. */
+function liveCopy() {
+	const dir = mkdtempSync(join(tmpdir(), 'wm-et0-db-'));
+	tmp.push(dir);
+	cpSync(MIRROR_FIXTURE_DIR, dir, { recursive: true });
+	vi.stubEnv('FEED_SOURCE', 'live');
+	vi.stubEnv('MIRROR_URL', pathToFileURL(`${dir}/`).href);
+	return openStore(pathToFileURL(`${dir}/`).href);
+}
+
+describe('a reference ET feed reads our copy', () => {
+	it('fixtures mode: a year of AgERA5 to the newest days, POWER after, sending nothing even with FEED_FETCHER=sqs', async () => {
+		vi.stubEnv('FEED_FETCHER', 'sqs');
+		vi.stubEnv('FETCH_REQUESTS_QUEUE_URL', 'https://sqs.test/fetch-requests');
+		const today = utcToday();
+		const shift = toEpochDay(today) - toEpochDay(ET0_FIXTURE.today);
+		const owner = await signUp('Et0Mirror');
+		const f = await feed(owner, { cells: [CELL] });
+		expect((await tick()).done).toBe(1);
+		expect(sent).toEqual([]);
+		const got = (await et0(owner, f.pid))!;
+		const powerThrough = fromEpochDay(toEpochDay(ET0_FIXTURE_HOLDS.power.through) + shift);
+		const agera5Through = fromEpochDay(toEpochDay(ET0_FIXTURE_HOLDS.agera5.finalThrough) + shift);
+		expect(fromEpochDay(toEpochDay(got.startDate) + got.values.length - 1)).toBe(powerThrough);
+		const at = (day: string) => got.values[toEpochDay(day) - toEpochDay(got.startDate)];
+		const fixtureDay = (day: string) => fromEpochDay(toEpochDay(day) - shift);
+		expect(at(agera5Through)).toBe(round2(et0FixtureValue(fixtureDay(agera5Through), 1, 2, 'agera5')));
+		expect(at(powerThrough)).toBe(round2(et0FixtureValue(fixtureDay(powerThrough), 1, 2, 'power')));
+		const row = await feedRow(f.feedId);
+		expect(row).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: powerThrough });
+		expect(row.last_meta).toMatchObject({ agera5Through, powerDays: toEpochDay(powerThrough) - toEpochDay(agera5Through) });
+	});
+
+	it('a day NASA POWER filled is replaced by AgERA5’s once the copy holds its month', async () => {
+		const store = liveCopy();
+		const owner = await signUp('Et0Replace');
+		const f = await feed(owner, { cells: [CELL], startDate: '2025-12-01' });
+		// As the copy stood: the feed is read on the copy's own day, so stub the clock to it.
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date(`${ET0_FIXTURE.today}T06:00:00Z`));
+		try {
+			expect((await tick()).done).toBe(1);
+			const before = (await et0(owner, f.pid))!;
+			const jan5 = toEpochDay('2026-01-05') - toEpochDay(before.startDate);
+			expect(before.values[jan5]).toBe(round2(et0FixtureValue('2026-01-05', 1, 2, 'power')));
+			// The copy gains AgERA5's January (8 mm a day at every block cell), as ingest/agera5.py would write it.
+			const finals = await ensureFinals(store, 'agera5_et0', 2026, { firstYear: PRODUCT_GRIDS.agera5_et0.firstYear });
+			const block: Block = { ...ET0_FIXTURE.block };
+			const n = block.h * block.w;
+			const values = new Float32Array(366 * n).fill(Number.NaN);
+			values.fill(8, 0, 31 * n);
+			await writeFinalsYear(finals, 2026, block, values);
+			const m = (await readManifest(store, 'agera5_et0'))!;
+			m.files.push({ url: 'cds://sis-agrometeorological-indicators/reference_evapotranspiration/2026-01', etag: null, lastModified: null, size: null, valuesSha256: '0'.repeat(64), revision: 1, fetchedAt: `${ET0_FIXTURE.today}T00:00:00Z` });
+			m.years = { first: 2025, last: 2026 };
+			m.finalThrough = '2026-01-31';
+			await writeManifest(store, m);
+			await owner.call('POST', `/projects/${f.pid}/feeds/${f.feedId}/run-now`);
+			expect((await tick()).done).toBe(1);
+			const after = (await et0(owner, f.pid))!;
+			expect(after.values[toEpochDay('2026-01-05') - toEpochDay(after.startDate)]).toBe(8);
+			// A day past AgERA5's month is still POWER's.
+			expect(after.values[toEpochDay('2026-02-03') - toEpochDay(after.startDate)]).toBe(round2(et0FixtureValue('2026-02-03', 1, 2, 'power')));
+			expect((await feedRow(f.feedId)).last_meta).toMatchObject({ agera5Through: '2026-01-31' });
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('a copy holding neither product: the feed waits, with no failure and nothing written', async () => {
+		const dir = mkdtempSync(join(tmpdir(), 'wm-et0-empty-'));
+		tmp.push(dir);
+		vi.stubEnv('FEED_SOURCE', 'live');
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${dir}/`).href);
+		const owner = await signUp('Et0Empty');
+		const f = await feed(owner, { cells: [CELL] });
+		expect((await tick()).done).toBe(1);
+		expect(await et0(owner, f.pid)).toBeNull();
+		const row = await feedRow(f.feedId);
+		expect(row).toMatchObject({ consecutive_failures: 0, last_error: null, last_success_at: null, last_data_date: null });
+		expect(row.last_attempt_at).not.toBeNull();
+	});
+
+	it('a cell outside the copy’s region fails the fetch, naming the region', async () => {
+		const owner = await signUp('Et0Outside');
+		const f = await feed(owner, { cells: [{ lat: -5.025, lon: 30.025 }] });
+		expect((await tick()).done).toBe(1);
+		const row = await feedRow(f.feedId);
+		expect(row.consecutive_failures).toBe(1);
+		expect(row.last_error).toMatch(/outside the region/);
+	});
+});

@@ -1689,6 +1689,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['series.evap_apan_mm']
 	},
 	{
+		id: 'evap-et0-daily',
+		term: 'Daily reference evapotranspiration',
+		short: 'A daily FAO-56 reference ET record (mm/day): GR4J’s PE, as it stands, under a monthly PE row on the days it has a value.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['series.evap_et0_mm']
+	},
+	{
 		id: 'rain-forecast',
 		term: 'Forecast rainfall',
 		short: 'Forecast daily rain in mm: fills gaps in the record, and runs past its end only in a forecast run, to look ahead a few days.',

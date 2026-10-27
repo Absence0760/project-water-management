@@ -2158,7 +2158,7 @@ describe('validateScenarioOps', () => {
 			'ops[0].field: is not a hydrological unit field a scenario can set',
 			'ops[1].value: must be at most 1',
 			'ops[2].value: must be an ISO date (YYYY-MM-DD)',
-			'ops[3].kind: must be one of rain_catchment_mm, rain_chirps_mm, rain_forecast_mm, rain_catchment_alt_mm, rain_reanalysis_mm, evap_apan_mm, or a unit\'s own rain record (rain_catchment_mm@<unit id>, rain_chirps_mm@<unit id>)',
+			'ops[3].kind: must be one of rain_catchment_mm, rain_chirps_mm, rain_forecast_mm, rain_catchment_alt_mm, rain_reanalysis_mm, evap_apan_mm, evap_et0_mm, or a unit\'s own rain record (rain_catchment_mm@<unit id>, rain_chirps_mm@<unit id>)',
 			'ops[4].factor: must be at most 10',
 			'ops[4]: from 1 Jan 2022 is after to 1 Jan 2021',
 			'ops[5].crop.name: must be a name of 1–100 characters',

@@ -359,6 +359,29 @@ provenance, `ingest/verify_copy.py`):
       members' rain source named in `run_uncertainty`. **Trigger:** the
       first client project that sets `settings.gapRain` to a product, or an
       evidence pack on one.
+- [ ] **Confirm AgERA5's and NASA POWER's live shape** (R5-E). Built on
+      synthetic fixtures only (operator decision, 2026-10-27): the AgERA5
+      request (`variable: reference_evapotranspiration`, `version: 2_0`,
+      the area subset), its file's variable name, units and grid lattice,
+      and its lag (assumed about a week), and POWER's regional JSON shape
+      and its largest tile, are checked by the readers, which refuse
+      anything else. **Trigger:** the CDS account (#618 7b–7d), then one
+      `agera5_et0` backfill month and one `power_et0` run with the
+      operator; fix what the reader refuses, then switch the schedules on.
+- [ ] **The catchment boundary's proposal for a reference ET feed.** The
+      Data feeds form proposes the boundary's cells (and each unit's) for
+      CHIRPS only, so an `agera5_et0` feed is attached by cells or a box.
+      **Durable fix:** offer the boundary's proposal for `agera5_et0` too
+      (`feeds/fromBoundary.ts` is CHIRPS-specific in its source and target).
+      **Trigger:** the first project that adds a reference ET feed.
+- [ ] **Credit AgERA5 and NASA POWER in a run's report and exports.** The
+      feed card credits them and the series is labelled by its feed, but
+      the run's data credits (`engine/liability/rainCredits.ts`) name the
+      rain products only. **Durable fix:** a credit per evaporation product
+      a run read (from the `evap_et0_mm` series' feed and its days, as
+      `forecastRainEcmwf` does for ECMWF), in the report, the workbook and
+      the data sources page. **Trigger:** before the first report or
+      evidence pack on a project with a reference ET feed.
 
 ## Observing dams (issue #604 Round 5)
 
@@ -537,6 +560,13 @@ runs and accumulations are real) can't be decided without the client.
       (engine-audit.md GR1–GR6). Its control is Settings → Rain gaps →
       Gap-filling product (R4-E, ui.md § Model settings), and Data draws
       the products beside CHIRPS (ui.md § Data).
+- [ ] **Daily reference ET (engine 1.103.0, issue #604 R5-E, model.md
+      §2.4a *Daily reference ET*).** Built opt-in (a project without an
+      `evap_et0_mm` series runs as before, to the bit). Calls made in the
+      build, to confirm: read only under a monthly PE row and as it
+      stands; NASA POWER's computed ET₀ on the newest days, replaced by
+      AgERA5's once its month lands, with no correction between them; sea
+      cells left out of the feed's mean (engine-audit.md ET1–ET3).
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent

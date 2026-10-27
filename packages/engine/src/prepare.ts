@@ -43,6 +43,7 @@ import {
 	type ZeroRainMask
 } from './rain';
 import { apanDailyInfo, type ApanDailyInfo } from './evaporation/apanDaily';
+import { et0DailyInfo, type Et0DailyInfo } from './evaporation/et0Daily';
 import { applyGapRain, fitGapProducts, gapRainKeys, type GapRainFits, type GapRainRun } from './gapRain';
 import { doubleMass as doubleMassOf, doubleMassRunWarning, type DoubleMass } from './doublemass';
 import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
@@ -185,6 +186,8 @@ export interface PreparedRun {
 	rainSource: { info: RainSourceInfo; column: Float64Array } | null;
 	/** How the daily A-pan series is used (engine ≥ 0.38.0, issue #45; null without one). */
 	apanDaily: ApanDailyInfo | null;
+	/** The daily reference ET series' use (engine ≥ 1.103.0, ./evaporation/et0Daily.ts); null without one. */
+	et0Daily: Et0DailyInfo | null;
 	/**
 	 * settings.gapRain as applied (engine ≥ 1.101.0, ./gapRain.ts): which
 	 * product filled each blank day of the catchment rain, the products' fits
@@ -340,7 +343,8 @@ const OTHER_SERIES_LABEL: [SeriesKind, string][] = [
 	['flow_observed_m3s', 'observed flow'],
 	['flow_logger_m3s', 'logger flow'],
 	['flow_reference_m3s', 'reference flow'],
-	['evap_apan_mm', 'daily A-pan evaporation']
+	['evap_apan_mm', 'daily A-pan evaporation'],
+	['evap_et0_mm', 'daily reference evapotranspiration']
 ];
 
 /**
@@ -502,6 +506,15 @@ function alignToWindow(
 
 	// Daily A-pan (issue #45): every consumer reads it through `aligned`; this only counts and warns.
 	const apanDaily = apanDailyInfo(series.evap_apan_mm, alignSeries(series.evap_apan_mm, start, days), start, settings.apanMm.every((v) => v === 0), warnings);
+	// Daily reference ET (issue #604 R5-E): GR4J reads it through `aligned` under a monthly PE row; this only counts and warns.
+	const et0Daily = et0DailyInfo(
+		series.evap_et0_mm,
+		alignSeries(series.evap_et0_mm, start, days),
+		start,
+		settings.pe,
+		settings.pe?.kind === 'monthly' && settings.pe.mm.every((v) => v === 0),
+		warnings
+	);
 
 	if (!plan && !hasRainInput(series, settings.rainSource)) {
 		warnings.push('no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain');
@@ -521,6 +534,7 @@ function alignToWindow(
 		doubleMass,
 		rainSource: rainSource ? { info: rainSource.info, column: rainSourceColumn! } : null,
 		apanDaily,
+		et0Daily,
 		flowFill,
 		gapRain,
 		stationForcing: station?.forcing ?? null,

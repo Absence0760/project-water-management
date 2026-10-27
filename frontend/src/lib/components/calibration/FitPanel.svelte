@@ -21,7 +21,8 @@
 		type ProjectSettings
 	} from '@water-management/engine';
 	import { tick, untrack, type Snippet } from 'svelte';
-	import { apanDailyOfValues, chirpsSourceOfInput } from '#lib/series/provenance.js';
+	import { apanDailyOfValues, chirpsSourceOfInput, et0DailyOfValues } from '#lib/series/provenance.js';
+	import { fitScoredThrough } from '@water-management/engine';
 	import { api } from '#lib/api/index.js';
 	import {
 		benchmarkColumns,
@@ -151,7 +152,9 @@
 					validate,
 					validationRecord,
 					chirpsSource: chirpsSourceOfInput(server.series),
-					apanDaily: await apanDailyOfValues(server.series.evap_apan_mm)
+					apanDaily: await apanDailyOfValues(server.series.evap_apan_mm),
+					// And the daily reference ET series (issue #604 R5-E), fingerprinted at Apply through the fit's last scored day.
+					et0Series: server.series.evap_et0_mm ?? null
 				};
 			},
 			() => {
@@ -175,10 +178,11 @@
 		heading?.focus();
 	}
 
-	function apply() {
+	async function apply() {
 		const { report: r, ran } = session;
 		if (!r || !ran) return;
-		onApply(r, fitRecordFor(r, ran.settings, ran));
+		const et0Daily = ran.et0Series === undefined ? undefined : await et0DailyOfValues(ran.et0Series, fitScoredThrough(r));
+		onApply(r, fitRecordFor(r, ran.settings, { ...ran, ...(et0Daily !== undefined ? { et0Daily } : {}) }));
 		session.applied = true;
 	}
 

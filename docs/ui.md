@@ -6381,7 +6381,16 @@ editors run one now and read the map's proposals, viewers read.
   "· quantile-mapped to our rain (fit of 2027-03-01)" (`calibrationNote` in
   `feeds.ts`, from the fetch's `last_meta.calibration`). It reads only our
   copy, so it never fails for ECMWF's sake: a copy with no issue of today or
-  yesterday leaves it waiting.
+  yesterday leaves it waiting. An **AgERA5 daily reference
+  evapotranspiration** feed (`agera5_et0`, issue #604 R5-E; Area: grid cells or a bounding box,
+  the boundary's proposal being CHIRPS's only; writing `evap_et0_mm`, which the form's hint says GR4J reads only
+  under a monthly PE row) adds its credit and where its days came from:
+  "AgERA5 (Copernicus), CC BY 4.0 · AgERA5 to 2026-09-30 · 10 newer days
+  from NASA POWER, CC BY 4.0" (`et0Note` in `feeds.ts`, from the fetch's
+  `last_meta`). It too reads only our copy and waits when the copy holds
+  neither product. A GR4J fit record shows the daily reference ET series it
+  ran on (Calibration → the fit record, "Daily reference ET series", once a
+  fit has recorded it), and says when it was replaced since.
 - **A version conflict** (issue #40 part c): when the feed's series holds
   another CHIRPS product or version, or an unrecorded one, the card says
   every fetch is refused and why ("The series holds CHIRPS v2.0 and this feed

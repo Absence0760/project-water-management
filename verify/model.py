@@ -1341,8 +1341,16 @@ def run(doc: dict) -> dict:
     g = settings["gr4j"]
     apan = [float(x) for x in settings["apanMm"]]
     pe = settings["pe"]
+    # §2.4a (engine ≥ 1.103.0, issue #604 R5-E): under a monthly PE row a daily
+    # reference ET record (evap_et0_mm) is the day's PE as it stands wherever it
+    # has a value ≥ 0; never read under pan coefficient × A-pan.
+    et0 = Series(series.get("evap_et0_mm")) if pe.get("kind") == "monthly" else Series(None)
     pet = []
     for o, m in zip(days, wm):
+        e = et0.get(o)
+        if e is not None and e >= 0:
+            pet.append(float(e))
+            continue
         if pe.get("kind") == "monthly":
             monthly = pe["mm"][m]
         else:
@@ -1359,7 +1367,7 @@ def run(doc: dict) -> dict:
             diag["forecast_tail"] = n - hist
     # §2.4a: no evaporation, no run (GR4J_NO_PET).
     if pe.get("kind") == "monthly":
-        no_pet = all(x == 0 for x in pe["mm"])
+        no_pet = all(x == 0 for x in pe["mm"]) and not any((v := et0.get(o)) is not None and v > 0 for o in days)
     else:
         no_pet = all(settings["panCoefficient"][m] * apan[m] == 0 for m in range(12))
     if no_pet:
