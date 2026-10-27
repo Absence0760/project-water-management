@@ -1,4 +1,11 @@
-"""An in-memory stand-in for the few boto3 S3 client calls zarrstore.S3Mirror makes (tests only)."""
+"""An in-memory stand-in for the few boto3 S3 client calls zarrstore.S3Mirror
+and lease.py make (tests only): ETags, and S3's conditional writes
+(IfNoneMatch="*", IfMatch=<etag>) answering 412 PreconditionFailed as a
+botocore ClientError, as S3 does."""
+
+import hashlib
+
+from botocore.exceptions import ClientError
 
 
 class _NoSuchKey(Exception):
@@ -28,11 +35,20 @@ class FakeS3:
         self.calls.append(("get", Key))
         if (Bucket, Key) not in self.objects:
             raise _NoSuchKey(Key)
-        return {"Body": _Body(self.objects[(Bucket, Key)])}
+        data = self.objects[(Bucket, Key)]
+        return {"Body": _Body(data), "ETag": self.etag(data)}
 
-    def put_object(self, Bucket, Key, Body, **_):
+    @staticmethod
+    def etag(data: bytes) -> str:
+        return f'"{hashlib.md5(data).hexdigest()}"'
+
+    def put_object(self, Bucket, Key, Body, IfNoneMatch=None, IfMatch=None, **_):
         self.calls.append(("put", Key))
+        held = self.objects.get((Bucket, Key))
+        if (IfNoneMatch == "*" and held is not None) or (IfMatch is not None and (held is None or self.etag(held) != IfMatch)):
+            raise ClientError({"Error": {"Code": "PreconditionFailed", "Message": "At least one of the pre-conditions you specified did not hold"}}, "PutObject")
         self.objects[(Bucket, Key)] = bytes(Body)
+        return {"ETag": self.etag(bytes(Body))}
 
     def delete_object(self, Bucket, Key):
         self.calls.append(("delete", Key))

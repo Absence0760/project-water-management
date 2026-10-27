@@ -1457,6 +1457,19 @@ copy yet, so production behaves as before.
   until `ingest_image_tag` is set. A failed run is not retried (a run that
   met an HTTP 403 must stop, not retry); its event goes to the
   `mirror-ingest-dlq` and the next day's run tries again.
+- **What a daily run does** (`ingest/chirps_final.py`, ingest/README.md §
+  The CHIRPS finals job): it takes the product's lease
+  (`ingest-state/<product>/lease.json`, so a backfill and the daily run never
+  write one year's chunks at once), makes one conditional GET of CHC's
+  `byMonth` listing, and diffs it against the manifest by size and time.
+  Each new or rewritten month is downloaded whole, oldest first, at most one
+  file a minute, and only while 6 minutes of the run's 15 remain; the rest
+  wait for the next day. A month's values are hashed, and the revision goes
+  up only when they changed (a re-copy with the same values doesn't count).
+  An HTTP 403 stops the run at once, with no retry. Every run, 304 and
+  failure included, publishes `MirrorLagDays`. A `backfill` event
+  (`{"product":…,"mode":"backfill","month":"YYYY-MM"}`) copies one named
+  month the same way; one that finds the lease held fails with `MirrorBusy`.
 - **The worker reads the copy** (from Round 2): its role may `GetObject` and
   `ListBucket` on the mirror bucket (`ListBucket` so a missing, all-NaN
   chunk answers 404, not 403), and the **S3 interface endpoint's policy**

@@ -1,4 +1,7 @@
-"""lambda_handler.py: the event shape, and the fixtures-mode run end to end into a temp copy.
+"""lambda_handler.py: the event shape, the single-file path (ingest_file), and
+the fixtures-mode run end to end into a temp copy. The monthly/backfill logic
+itself (listing, pacing, budget, 403, the metric on every exit) is in
+test_chirps_final.py.
 
     ingest/.venv/bin/python -m unittest discover -s ingest
 """
@@ -18,9 +21,13 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "fixtures"))
 
 import chcnetcdf  # noqa: E402
+import chirps_final  # noqa: E402
 import grid  # noqa: E402
+import polite  # noqa: E402
 import lambda_handler  # noqa: E402
 import make_chc_fixture as fx  # noqa: E402
+sys.path.insert(0, str(HERE / "fixtures" / "chirps"))
+import make_chirps_fixtures as chirps_fx  # noqa: E402
 import manifest  # noqa: E402
 import zarrstore  # noqa: E402
 from fakes3 import FakeS3  # noqa: E402
@@ -39,6 +46,7 @@ class Event(unittest.TestCase):
     def test_valid_events(self):
         self.assertEqual(lambda_handler.validate_event({"product": "rnl", "mode": "monthly"}), {"product": "rnl", "mode": "monthly", "month": None})
         self.assertEqual(lambda_handler.validate_event({"product": "sat", "mode": "backfill", "month": "2000-06"})["month"], "2000-06")
+        self.assertEqual(lambda_handler.validate_event({"product": "rnl", "mode": "backfill", "month": "1981-01"})["month"], "1981-01")
 
     def test_invalid_events(self):
         for ev in [
@@ -48,10 +56,14 @@ class Event(unittest.TestCase):
             {"mode": "monthly"},
             {"product": "prelim", "mode": "monthly"},
             {"product": "rnl", "mode": "daily"},
-            {"product": "rnl", "mode": "monthly", "month": "2024-13"},
-            {"product": "rnl", "mode": "monthly", "month": "2024-6"},
-            {"product": "rnl", "mode": "monthly", "month": 202406},
+            {"product": "rnl", "mode": "backfill", "month": "2024-13"},
+            {"product": "rnl", "mode": "backfill", "month": "2024-6"},
+            {"product": "rnl", "mode": "backfill", "month": 202406},
             {"product": "rnl", "mode": "monthly", "extra": 1},
+            {"product": "rnl", "mode": "backfill"},  # a backfill names its month
+            {"product": "rnl", "mode": "monthly", "month": "2024-02"},  # a monthly run takes none
+            {"product": "sat", "mode": "backfill", "month": "2000-05"},  # before sat's first file
+            {"product": "rnl", "mode": "backfill", "month": "1980-12"},
         ]:
             with self.assertRaises(lambda_handler.BadEvent, msg=repr(ev)):
                 lambda_handler.validate_event(ev)
@@ -115,51 +127,48 @@ class FixturesRun(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_writes_the_copy_and_its_manifest(self):
-        out = lambda_handler.handler({"product": "rnl", "mode": "backfill"}, None)
+        out = lambda_handler.handler({"product": "rnl", "mode": "monthly"}, None)
         self.assertEqual(out["revision"], 1)
         self.assertEqual(out["finalThrough"], "2024-02-29")
-        self.assertEqual([f["outcome"] for f in out["files"]], ["added"])
+        self.assertEqual([f["outcome"] for f in out["files"]], ["added", "added"])
 
         import zarr
 
         a = zarr.open_array(store=zarr.storage.LocalStore(self.root), path="rnl", mode="r")
-        # 29 Feb 2024 (fixture day 2) at doy index 59 of year index 43, south-west corner.
-        self.assertEqual(a[43, 59, 0, 0], np.float32(fx.value(2, 0, 0)))
-        self.assertEqual(a[43, 57, 100, 350], np.float32(fx.value(0, 100, 350)))
+        feb = chirps_fx.month_values(2024, 2)
+        # 29 Feb 2024 (the file's day 2) at doy index 59 of year index 43, south-west corner.
+        self.assertEqual(a[43, 59, 0, 0], feb[2, 0, 0])
+        self.assertEqual(a[43, 57, 100, 350], feb[0, 100, 350])
+        self.assertEqual(a[43, 30, 100, 350], chirps_fx.month_values(2024, 1)[2, 100, 350])  # 31 Jan
         self.assertTrue(np.isnan(a[43, 60, 0, 0]))
 
         m = manifest.loads((self.root / "rnl" / "manifest.json").read_text())
         self.assertEqual(m["years"], {"first": 2024, "last": 2024})
-        self.assertEqual(m["files"][0]["url"], f"fixture:chc/{fx.NAME}")
-        self.assertEqual(m["files"][0]["valuesSha256"], manifest.values_sha256(fx.region_values()))
+        self.assertEqual([f["url"] for f in m["files"]], [chirps_final.file_url("rnl", 2024, 1), chirps_final.file_url("rnl", 2024, 2)])
+        self.assertEqual(m["files"][1]["valuesSha256"], manifest.values_sha256(feb))
+        self.assertEqual(m["files"][1]["lastModified"], "Wed, 17 Apr 2024 14:05:00 GMT")
         self.assertEqual(m["changes"], [])
 
-    def test_a_rerun_with_the_same_values_keeps_the_revision(self):
-        lambda_handler.handler({"product": "sat", "mode": "monthly", "month": "2024-02"})
+    def test_a_rerun_is_one_304_and_rewrites_nothing(self):
+        lambda_handler.handler({"product": "sat", "mode": "monthly"})
         before = sorted(p.stat().st_mtime_ns for p in (self.root / "sat" / "c").rglob("*") if p.is_file())
         out = lambda_handler.handler({"product": "sat", "mode": "monthly"})
-        self.assertEqual(out["files"][0]["outcome"], "unchanged")
+        self.assertEqual(out["listing"], "not-modified")
+        self.assertEqual(out["files"], [])
         self.assertEqual(out["revision"], 1)
         after = sorted(p.stat().st_mtime_ns for p in (self.root / "sat" / "c").rglob("*") if p.is_file())
         self.assertEqual(before, after)  # no chunk rewritten
 
-    def test_changed_values_bump_the_revision_with_a_change(self):
-        lambda_handler.handler({"product": "rnl", "mode": "backfill"})
-        real = chcnetcdf.read_region
-
-        def rewritten(path):
-            r = real(path)
-            r.values[1, 100, 350] += 1.5
-            r.values[2, 0, 0] = np.nan
-            return r
-
-        with unittest.mock.patch.object(chcnetcdf, "read_region", rewritten):
-            out = lambda_handler.handler({"product": "rnl", "mode": "backfill"})
-        self.assertEqual(out["files"][0]["outcome"], "changed")
-        m = manifest.loads((self.root / "rnl" / "manifest.json").read_text())
-        self.assertEqual(m["revision"], 2)
-        self.assertEqual(m["files"][0]["revision"], 2)
-        self.assertEqual(m["changes"], [{"revision": 2, "days": ["2024-02-27", "2024-02-29"], "cellsChanged": 2, "maxAbsDiff": 1.5}])
+    def test_variants_through_the_environment(self):
+        lambda_handler.handler({"product": "rnl", "mode": "monthly"})
+        with unittest.mock.patch.dict(os.environ, {"INGEST_FIXTURE_VARIANT": "rewritten"}):
+            out = lambda_handler.handler({"product": "rnl", "mode": "monthly"})
+        self.assertEqual([(f["outcome"], f["reason"]) for f in out["files"]], [("unchanged", "changed")])
+        self.assertEqual(out["revision"], 1)
+        with unittest.mock.patch.dict(os.environ, {"INGEST_FIXTURE_VARIANT": "changed"}):
+            out = lambda_handler.handler({"product": "rnl", "mode": "monthly"})
+        self.assertEqual([f["outcome"] for f in out["files"]], ["changed"])
+        self.assertEqual(out["revision"], 2)
 
     def test_finalThrough_stops_at_a_gap_in_the_months(self):
         mirror = zarrstore.Mirror.from_url(f"file://{self.root}")
@@ -199,29 +208,29 @@ class FixturesRun(unittest.TestCase):
 
     def test_a_retry_after_a_crash_between_upload_and_manifest_claims_every_cell(self):
         s3 = FakeS3()
-        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": "s3://mirror"}):
-            lambda_handler.handler({"product": "rnl", "mode": "backfill"}, None, s3_client=s3)
-            real = chcnetcdf.read_region
+        mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
+        url = f"fixture:chc/{fx.NAME}"
+        lambda_handler.ingest_file(mirror, "rnl", url, FIXTURE)
+        real = chcnetcdf.read_region
 
-            def rewritten(path):
-                r = real(path)
-                r.values[1, 100, 350] += 1.5
-                return r
+        def rewritten(path):
+            r = real(path)
+            r.values[1, 100, 350] += 1.5
+            return r
 
+        with unittest.mock.patch.object(chcnetcdf, "read_region", rewritten):
             # The run dies after the chunks went up but before the manifest did.
-            with unittest.mock.patch.object(chcnetcdf, "read_region", rewritten):
-                with unittest.mock.patch.object(manifest, "write", side_effect=RuntimeError("Lambda timed out")):
-                    with self.assertRaises(RuntimeError):
-                        lambda_handler.handler({"product": "rnl", "mode": "backfill"}, None, s3_client=s3)
-                mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
-                m = manifest.read(mirror, "rnl")
-                self.assertEqual(m["revision"], 1)  # the manifest still names the old values
-                with mirror.stage(zarrstore.finals_year_prefixes("rnl", fx.FIRST_DAY, fx.DAYS)) as root:
-                    held = zarrstore.read_finals(root, "rnl", fx.FIRST_DAY, fx.DAYS)
-                self.assertEqual(held[1, 100, 350], np.float32(fx.value(1, 100, 350) + 1.5))  # ...but the new chunks are up
+            with unittest.mock.patch.object(manifest, "write", side_effect=RuntimeError("Lambda timed out")):
+                with self.assertRaises(RuntimeError):
+                    lambda_handler.ingest_file(mirror, "rnl", url, FIXTURE)
+            m = manifest.read(mirror, "rnl")
+            self.assertEqual(m["revision"], 1)  # the manifest still names the old values
+            with mirror.stage(zarrstore.finals_year_prefixes("rnl", fx.FIRST_DAY, fx.DAYS)) as root:
+                held = zarrstore.read_finals(root, "rnl", fx.FIRST_DAY, fx.DAYS)
+            self.assertEqual(held[1, 100, 350], np.float32(fx.value(1, 100, 350) + 1.5))  # ...but the new chunks are up
 
-                out = lambda_handler.handler({"product": "rnl", "mode": "backfill"}, None, s3_client=s3)
-        self.assertEqual(out["files"][0]["outcome"], "changed")
+            out = lambda_handler.ingest_file(mirror, "rnl", url, FIXTURE)
+        self.assertEqual(out["outcome"], "changed")
         m = manifest.read(mirror, "rnl")
         self.assertEqual(m["revision"], 2)
         # The old values are unknown, so the entry claims the whole region and the widest plausible difference, never 0.
@@ -230,18 +239,17 @@ class FixturesRun(unittest.TestCase):
     def test_the_same_run_through_s3(self):
         s3 = FakeS3()
         with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": "s3://mirror"}):
-            out = lambda_handler.handler({"product": "rnl", "mode": "monthly", "month": "2024-02"}, None, s3_client=s3)
+            out = lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-02"}, None, s3_client=s3)
         self.assertEqual(out["revision"], 1)
         keys = s3.keys("mirror")
         self.assertIn("rnl/manifest.json", keys)
         self.assertIn("rnl/zarr.json", keys)
         self.assertIn("rnl/c/43/0/0/0", keys)
-        self.assertTrue(all(k == "zarr.json" or k.startswith("rnl/") for k in keys))
+        self.assertIn("ingest-state/rnl/state.json", keys)
+        self.assertNotIn("ingest-state/rnl/lease.json", keys)  # released
+        self.assertTrue(all(k == "zarr.json" or k.startswith(("rnl/", "ingest-state/rnl/")) for k in keys), keys)
 
-    def test_live_and_unknown_sources_refuse(self):
-        with unittest.mock.patch.dict(os.environ, {"FEED_SOURCE": "live"}):
-            with self.assertRaises(NotImplementedError):
-                lambda_handler.handler({"product": "rnl", "mode": "monthly"})
+    def test_unknown_source_and_missing_mirror_refuse(self):
         with unittest.mock.patch.dict(os.environ, {"FEED_SOURCE": "nope"}):
             with self.assertRaises(RuntimeError):
                 lambda_handler.handler({"product": "rnl", "mode": "monthly"})
@@ -249,9 +257,27 @@ class FixturesRun(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 lambda_handler.handler({"product": "rnl", "mode": "monthly"})
 
-    def test_a_month_with_no_fixture_is_refused(self):
-        with self.assertRaises(lambda_handler.BadEvent):
-            lambda_handler.handler({"product": "rnl", "mode": "monthly", "month": "1999-01"})
+    def test_a_month_chc_does_not_list_is_a_404(self):
+        with self.assertRaises(polite.HttpError) as caught:
+            lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "1999-01"})
+        self.assertEqual(caught.exception.status, 404)
+
+
+class Image(unittest.TestCase):
+    def test_the_dockerfile_copies_every_module_the_handler_imports(self):
+        """The image ships only the files its COPY line names: a module the
+        handler imports but the image lacks would fail every production run."""
+        import re
+        import shutil
+        import subprocess
+
+        line = next(ln for ln in (HERE / "Dockerfile").read_text().splitlines() if ln.startswith("COPY ") and "lambda_handler.py" in ln)
+        files = re.findall(r"(\S+\.py)", line)
+        with tempfile.TemporaryDirectory() as tmp:
+            for f in files:
+                shutil.copy(HERE / f, tmp)
+            p = subprocess.run([sys.executable, "-E", "-s", "-c", "import lambda_handler, chirps_final, lease, cloudwatch"], cwd=tmp, capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
 
 
 class Diff(unittest.TestCase):
