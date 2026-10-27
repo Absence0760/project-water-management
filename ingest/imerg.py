@@ -28,9 +28,10 @@ places every cell from its coordinates, never from the file's order: rows
 come out south first and columns west first, the copy's layout, whatever
 order and orientation the file has.
 
-**The copy** (the shared brief's 0.1 deg grid): shape (days, 275, 310), chunk
-(1, 55, 62), dims (day, lat, lon), `[0, 0]` the south-west cell centred at
-−35.45, 10.05, rows growing northwards; float32, NaN fill, bytes + gzip 6.
+**The copy** (grid.for_product, the 0.1 deg grid, written by
+zarrstore.write_daily): shape (days, 275, 310), chunk (1, 55, 62), dims
+(day, lat, lon), `[0, 0]` the south-west cell centred at −35.45, 10.05, rows
+growing northwards; float32, NaN fill, bytes + gzip 6.
 `firstDay` is set when the array is made (30 days before that run's day).
 
 **The manifest** (`imerg_late/manifest.json`): `finalThrough` is always null
@@ -39,8 +40,9 @@ days from the oldest, and each `files` entry is one day's granule (its
 OPeNDAP URL) with **`version`**: the collection's version, `V07` or `V08`
 (the per-day version the bias correction is fitted by, D16). The minor
 letter stays in the URL. ingest/manifest.py and backend/src/mirror/manifest.ts
-don't yet accept that field (piece R4-B adds it), so this module validates
-the rest of the manifest with manifest.validate and the version itself.
+both accept that field and check the rest (the grid, the per-day URLs, the
+contiguous days); this job also insists every file carries its version and
+that it agrees with the granule's tag.
 
 **A run** (`{"product": "imerg_late", "mode": "recent"}`, a few times a day):
 1. A refusal earlier this UTC day (`ingest-state/imerg_late/refused.json`,
@@ -103,21 +105,16 @@ SHORT_NAME = "GPM_3IMERGDL"
 #: The collection versions searched; the newest a day has wins.
 VERSIONS = ("07", "08")
 
-# --- the 0.1 deg grid over region D1 (the shared brief) ----------------------------
-STEP = 0.1
-ORIGIN = {"lat": -35.45, "lon": 10.05}
-ROWS = 275
-COLS = 310
-CHUNKS = (1, 55, 62)
-DIMS = ("day", "lat", "lon")
+#: The product's 0.1 deg grid over region D1 (grid.py, the same as backend/src/mirror/grid.ts PRODUCT_GRIDS).
+GRID = grid.for_product(PRODUCT)
 
 # --- IMERG's global grid, for the OPeNDAP index ranges ----------------------------
 IMERG_LON0 = -179.95
 IMERG_LAT0 = -89.95
 IMERG_NLON = 3600
 IMERG_NLAT = 1800
-LON_I0 = round((ORIGIN["lon"] - IMERG_LON0) / STEP)  # 1900
-LAT_I0 = round((ORIGIN["lat"] - IMERG_LAT0) / STEP)  # 545
+LON_I0 = round((GRID.origin["lon"] - IMERG_LON0) / GRID.step)  # 1900
+LAT_I0 = round((GRID.origin["lat"] - IMERG_LAT0) / GRID.step)  # 545
 
 #: The days a run looks back over (through yesterday), newest first.
 RECENT_DAYS = 10
@@ -137,7 +134,6 @@ UNITS_MM_PER_DAY = frozenset({"mm/day", "mm day-1", "mm d-1", "mm/d", "mm day^-1
 
 _GRANULE = re.compile(r"3B-DAY-L\.MS\.MRG\.3IMERG\.(\d{8})-S000000-E235959\.(V(\d{2})[A-Z]?)\.nc4$")
 _GRANULE_UR = re.compile(r"^GPM_3IMERGDL\.(\d{2}):(3B-DAY-L\.MS\.MRG\.3IMERG\.\d{8}-S000000-E235959\.V\d{2}[A-Z]?\.nc4)$")
-_VERSION = re.compile(r"^V\d{2}$")
 _TIME_UNITS = re.compile(r"^\s*(days|hours|minutes|seconds) since (\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?\s*Z?\s*(?:UTC)?\s*$")
 
 HDF5_SIGNATURE = b"\x89HDF\r\n\x1a\n"
@@ -157,10 +153,6 @@ def refused_key() -> str:
 
 def array_key() -> str:
     return f"{PRODUCT}/zarr.json"
-
-
-def _attributes(extra: dict | None = None) -> dict:
-    return {**(extra or {}), "region": dict(grid.REGION), "grid": {"origin": dict(ORIGIN), "step": STEP}}
 
 
 # --- the event ------------------------------------------------------------------
@@ -243,8 +235,8 @@ def parse_search(body: bytes, first: dt.date, last: dt.date) -> dict[dt.date, Gr
 def subset_url(g: Granule) -> str:
     """OPeNDAP's DAP4 NetCDF-4 response for region D1 of one day: precipitation
     and its coordinates. Index order is the variable's, (time, lon, lat)."""
-    x = f"[{LON_I0}:1:{LON_I0 + COLS - 1}]"
-    y = f"[{LAT_I0}:1:{LAT_I0 + ROWS - 1}]"
+    x = f"[{LON_I0}:1:{LON_I0 + GRID.cols - 1}]"
+    y = f"[{LAT_I0}:1:{LAT_I0 + GRID.rows - 1}]"
     ce = f"/precipitation[0:1:0]{x}{y};/lon{x};/lat{y};/time[0:1:0]"
     return f"{g.url}.dap.nc4?dap4.ce={urllib.parse.quote(ce, safe='/')}"
 
@@ -257,17 +249,18 @@ def _positions(coords: np.ndarray, origin: float, count: int, name: str) -> np.n
     growing), its position in the file's coordinate array. Any order or
     orientation; every coordinate must be on the 0.1 deg centres."""
     c = np.asarray(coords, dtype=np.float64).ravel()
-    k = np.round((c - origin) / STEP)
-    if c.size == 0 or np.any(np.abs(c - (origin + k * STEP)) > STEP / 4):
+    step = GRID.step
+    k = np.round((c - origin) / step)
+    if c.size == 0 or np.any(np.abs(c - (origin + k * step)) > step / 4):
         raise ImergFormatError(f"{name} is not on IMERG's 0.1 deg cell centres (x.x5)")
     pos = np.full(count, -1, dtype=np.int64)
     for p, ki in enumerate(k.astype(np.int64)):
         if 0 <= ki < count:
             if pos[ki] != -1:
-                raise ImergFormatError(f"{name} repeats the cell centred at {origin + ki * STEP:.2f}")
+                raise ImergFormatError(f"{name} repeats the cell centred at {origin + ki * step:.2f}")
             pos[ki] = p
     if np.any(pos < 0):
-        missing = origin + int(np.argmax(pos < 0)) * STEP
+        missing = origin + int(np.argmax(pos < 0)) * step
         raise ImergFormatError(f"{name} ({c.min():.2f}..{c.max():.2f}) does not cover the region (no cell at {missing:.2f})")
     return pos
 
@@ -284,7 +277,7 @@ def _time_day(var) -> dt.datetime:
 
 
 def read_region(path: str, day: dt.date) -> np.ndarray:
-    """Region D1's values for `day`, (ROWS, COLS) float32 in the copy's layout
+    """Region D1's values for `day`, (GRID.rows, GRID.cols) float32 in the copy's layout
     (row 0 the southernmost, col 0 the westernmost), NaN where IMERG holds
     its fill. From a global file or an OPeNDAP subset alike."""
     import h5netcdf
@@ -318,8 +311,8 @@ def read_region(path: str, day: dt.date) -> np.ndarray:
             raise ImergFormatError(f"a daily file holds one time, this one {raw.shape[dims.index('time')]}")
         # (lat, lon), whatever order the file keeps them in.
         a = np.transpose(raw, (dims.index("time"), dims.index("lat"), dims.index("lon")))[0]
-        rows = _positions(f.variables["lat"][...], ORIGIN["lat"], ROWS, "lat")
-        cols = _positions(f.variables["lon"][...], ORIGIN["lon"], COLS, "lon")
+        rows = _positions(f.variables["lat"][...], GRID.origin["lat"], GRID.rows, "lat")
+        cols = _positions(f.variables["lon"][...], GRID.origin["lon"], GRID.cols, "lon")
         values = np.array(a[np.ix_(rows, cols)], dtype=np.float32)
     for fill in fills | {float(np.float32(-9999.9))}:
         values[values == np.float32(fill)] = np.nan
@@ -334,7 +327,7 @@ def check_plausible(values: np.ndarray, day: dt.date, source: str) -> None:
         row, col = (int(i) for i in np.argwhere(bad)[0])
         raise chcnetcdf.ImplausibleValueError(
             f"{source} has {int(bad.sum())} implausible value(s) outside {chcnetcdf.PLAUSIBLE_MIN_MM:g}–{chcnetcdf.PLAUSIBLE_MAX_MM:g} mm, "
-            f"the first {float(values[row, col])} mm on {day} at {ORIGIN['lat'] + row * STEP:.2f}, {ORIGIN['lon'] + col * STEP:.2f} (region row {row}, col {col})"
+            f"the first {float(values[row, col])} mm on {day} at {GRID.origin['lat'] + row * GRID.step:.2f}, {GRID.origin['lon'] + col * GRID.step:.2f} (region row {row}, col {col})"
         )
 
 
@@ -342,32 +335,25 @@ def check_plausible(values: np.ndarray, day: dt.date, source: str) -> None:
 
 
 def new_manifest() -> dict:
-    m = manifest.new(PRODUCT)
-    m["grid"] = {"origin": dict(ORIGIN), "step": STEP}
-    return m
+    return manifest.new(PRODUCT)
 
 
 def _checked(m: dict) -> dict:
-    """The spec's checks (manifest.validate, on the manifest less `version`)
-    plus this product's own: the 0.1 deg grid, no final days, one file per
-    day whose name says its day, and a `version` V07/V08 that agrees with it."""
-    bare = json.loads(json.dumps(m))
-    for i, f in enumerate(bare.get("files") or []):
-        if not isinstance(f, dict) or "version" not in f:
+    """manifest.validate (the spec, the 0.1 deg grid, no final days, one file a
+    day naming its day, an optional `version` V07/V08), plus what this job
+    always writes: every file carries its `version`, agreeing with the
+    granule's own tag, and no day is listed twice."""
+    manifest.validate(m)
+    if m["product"] != PRODUCT:
+        raise ValueError(f"manifest: not the {PRODUCT} manifest")
+    for i, f in enumerate(m["files"]):
+        if "version" not in f:
             raise ValueError(f"manifest: files[{i}] of {PRODUCT} must carry its version")
-        v = f.pop("version")
-        if not isinstance(v, str) or not _VERSION.match(v):
-            raise ValueError(f"manifest: files[{i}].version must be V and two digits (V07, V08), got {v!r}")
-        named = granule_day(f.get("url", ""))
+        named = granule_day(f["url"])
         if named is None:
-            raise ValueError(f"manifest: files[{i}].url names no IMERG day, got {f.get('url')!r}")
-        if named[1][:3] != v:
-            raise ValueError(f"manifest: files[{i}] is a {named[1]} file but says version {v}")
-    manifest.validate(bare)
-    if m["product"] != PRODUCT or m["grid"] != {"origin": ORIGIN, "step": STEP}:
-        raise ValueError(f"manifest: not the {PRODUCT} manifest on the 0.1 deg grid")
-    if m["finalThrough"] is not None:
-        raise ValueError(f"manifest: {PRODUCT} holds no final days")
+            raise ValueError(f"manifest: files[{i}].url names no IMERG granule, got {f['url']!r}")
+        if named[1][:3] != f["version"]:
+            raise ValueError(f"manifest: files[{i}] is a {named[1]} file but says version {f['version']}")
     days = [granule_day(f["url"])[0] for f in m["files"]]
     if len(set(days)) != len(days):
         raise ValueError(f"manifest: {PRODUCT} lists a day twice")
@@ -375,15 +361,12 @@ def _checked(m: dict) -> dict:
 
 
 def read_manifest(mirror: zarrstore.Mirror) -> dict | None:
-    doc = mirror.read_json(manifest.key(PRODUCT))
-    return None if doc is None else _checked(doc)
+    m = manifest.read(mirror, PRODUCT)
+    return None if m is None else _checked(m)
 
 
 def write_manifest(mirror: zarrstore.Mirror, m: dict) -> None:
-    _checked(m)
-    out = json.loads(manifest.dumps({**m, "files": [{k: v for k, v in f.items() if k != "version"} for f in m["files"]]}))
-    out["files"] = [{**o, "version": f["version"]} for o, f in zip(out["files"], m["files"])]
-    mirror.write_json(manifest.key(PRODUCT), out)
+    manifest.write(mirror, _checked(m))
 
 
 def held_days(m: dict) -> dict[dt.date, dict]:
@@ -423,28 +406,19 @@ def array_first_day(mirror: zarrstore.Mirror) -> dt.date | None:
     return dt.date.fromisoformat(meta["attributes"]["firstDay"])
 
 
-def _open(root: Path, rows_days: int | None = None, first_day: dt.date | None = None):
-    if (root / PRODUCT / "zarr.json").exists():
-        return zarrstore._open_or_create(root, PRODUCT, None, CHUNKS, DIMS, _attributes())
-    return zarrstore._open_or_create(root, PRODUCT, (rows_days, ROWS, COLS), CHUNKS, DIMS, _attributes({"firstDay": first_day.isoformat()}))
-
-
 def write_day(mirror: zarrstore.Mirror, day: dt.date, values: np.ndarray, first_day_if_new: dt.date) -> np.ndarray | None:
-    """Write one day into `imerg_late`, creating the array (firstDay
-    `first_day_if_new`) when absent. Returns the values it held before (NaN
-    where unwritten), or None when that day was past the array's end."""
-    if values.shape != (ROWS, COLS):
-        raise ValueError(f"a day is ({ROWS}, {COLS}), got {values.shape}")
+    """Write one day into `imerg_late` (zarrstore.write_daily), creating the
+    array (firstDay `first_day_if_new`) when absent. Returns the values it held
+    before (NaN where unwritten), or None when that day was past the array's end."""
+    if values.shape != (GRID.rows, GRID.cols):
+        raise ValueError(f"a day is ({GRID.rows}, {GRID.cols}), got {values.shape}")
     origin = array_first_day(mirror) or first_day_if_new
     i = (day - origin).days
     if i < 0:
         raise ValueError(f"{day} is before {PRODUCT}'s firstDay {origin}")
     with mirror.stage([array_key(), f"{PRODUCT}/c/{i}/"]) as root:
-        arr = _open(root, i + 1, origin)
-        old = np.array(arr[i]) if i < arr.shape[0] else None
-        if arr.shape[0] <= i:
-            arr.resize((i + 1, ROWS, COLS))
-        arr[i] = values.astype(np.float32)
+        old = zarrstore.read_daily_day(root, PRODUCT, day)
+        zarrstore.write_daily(root, PRODUCT, day, values[None], array_first_day=origin)
     return old
 
 
@@ -608,7 +582,7 @@ def _record(mirror, m: dict, g: Granule, values: np.ndarray, r: polite.Response,
             else:
                 # The copy didn't hold the previous values (a run died between chunks and manifest):
                 # claim every cell and the widest plausible difference, never 0 (chirps_final.ingest_file).
-                cells, max_abs = ROWS * COLS, chcnetcdf.PLAUSIBLE_MAX_MM - chcnetcdf.PLAUSIBLE_MIN_MM
+                cells, max_abs = GRID.rows * GRID.cols, chcnetcdf.PLAUSIBLE_MAX_MM - chcnetcdf.PLAUSIBLE_MIN_MM
             m["changes"].append({"revision": m["revision"], "days": [g.day.isoformat(), g.day.isoformat()], "cellsChanged": cells, "maxAbsDiff": max_abs})
             outcome = "changed"
     entry = {"url": g.url, "etag": r.etag, "lastModified": r.last_modified, "size": r.size, "valuesSha256": sha, "revision": m["revision"], "fetchedAt": now(), "version": g.version}

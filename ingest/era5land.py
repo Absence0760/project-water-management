@@ -107,6 +107,7 @@ import numpy as np
 
 import chirps_final
 import cloudwatch
+import grid
 import lease
 import manifest
 import polite
@@ -119,23 +120,15 @@ DATASET = "reanalysis-era5-land"
 VARIABLE = "total_precipitation"
 CDS_URL = "https://cds.climate.copernicus.eu/api"
 
-#: The copy's 0.1 deg grid on region D1 (r4-shared.md).
-REGION = {"w": 10.0, "s": -35.5, "e": 41.0, "n": -8.0}
-STEP = 0.1
-ORIGIN = {"lat": -35.45, "lon": 10.05}
-ROWS = 275
-COLS = 310
-#: ERA5-Land's points over the region: on x.x0 deg, one more each way than the cells.
-POINT_ORIGIN = {"lat": -35.5, "lon": 10.0}
-POINT_ROWS = ROWS + 1
-POINT_COLS = COLS + 1
+#: The product's 0.1 deg grid on region D1, from 1950 (grid.py; backend/src/mirror/grid.ts PRODUCT_GRIDS).
+GRID = grid.for_product(PRODUCT)
+#: ERA5-Land's points over the region: on x.x0 deg (the region's edges), one more each way than the cells.
+POINT_ORIGIN = {"lat": grid.REGION["s"], "lon": grid.REGION["w"]}
+POINT_ROWS = GRID.rows + 1
+POINT_COLS = GRID.cols + 1
 
-FIRST_YEAR = 1950
-FIRST_MONTH = (1950, 1)
-FIRST_DAY = dt.date(1950, 1, 1)
-DOYS = 366
-FINALS_CHUNKS = (1, DOYS, 20, 20)
-REGION_CELLS = ROWS * COLS
+FIRST_MONTH = (GRID.first_year, 1)
+FIRST_DAY = manifest.ERA5L_FIRST_DAY
 
 #: A month's last 00 UTC step is on the CDS this many days after it (ERA5-Land-T is ~5 days behind).
 AVAILABLE_AFTER_DAYS = 6
@@ -170,7 +163,6 @@ ATTRIBUTION = (
 )
 
 _MONTH = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
-_URL_MONTH = re.compile(r"/(\d{4})-(0[1-9]|1[0-2])$")
 
 
 class BadEvent(ValueError):
@@ -218,9 +210,8 @@ def month_end(ym) -> dt.date:
 
 
 def written_days(ym) -> tuple[dt.date, dt.date]:
-    """The days month `ym`'s request writes: the totals its 00 UTC steps hold."""
-    first = max(dt.date(*ym, 1) - dt.timedelta(days=1), FIRST_DAY)
-    return first, month_end(ym) - dt.timedelta(days=1)
+    """The days month `ym`'s request writes: the totals its 00 UTC steps hold (manifest.era5l_written_days)."""
+    return manifest.era5l_written_days(tuple(ym))
 
 
 def newest_complete_month(today: dt.date) -> tuple[int, int]:
@@ -237,8 +228,8 @@ def file_url(ym) -> str:
 
 
 def url_month(url: str) -> tuple[int, int] | None:
-    m = _URL_MONTH.search(url)
-    return (int(m[1]), int(m[2])) if m and url.startswith(f"cds://{DATASET}/") else None
+    """The month a manifest file's URL (file_url) names: manifest.era5l_file_month."""
+    return manifest.era5l_file_month(url)
 
 
 def month_request(ym) -> dict:
@@ -252,7 +243,7 @@ def month_request(ym) -> dict:
         "time": ["00:00"],
         "data_format": "netcdf",
         "download_format": "unarchived",
-        "area": [REGION["n"], REGION["w"], REGION["s"], REGION["e"]],
+        "area": [grid.REGION["n"], grid.REGION["w"], grid.REGION["s"], grid.REGION["e"]],
     }
 
 
@@ -278,7 +269,7 @@ def request_month(req: dict) -> tuple[int, int] | None:
 @dataclasses.dataclass
 class MonthValues:
     first_day: dt.date
-    values: np.ndarray  # float32 mm, (days, ROWS, COLS), south-up
+    values: np.ndarray  # float32 mm, (days, GRID.rows, GRID.cols), south-up
     preliminary: bool | None  # None when the file says nothing about expver
 
     @property
@@ -294,16 +285,17 @@ def _axis_offset(coords, origin: float, count: int, name: str) -> tuple[int, boo
     desc = c[0] > c[-1]
     if desc:
         c = c[::-1]
-    if not np.allclose(np.diff(c), STEP, atol=1e-4):
-        raise ValueError(f"{name} is not in {STEP} deg steps")
-    i0 = round((origin - c[0]) / STEP)
-    if i0 < 0 or i0 + count > c.size or abs(c[i0] - origin) > STEP / 4:
+    step = GRID.step
+    if not np.allclose(np.diff(c), step, atol=1e-4):
+        raise ValueError(f"{name} is not in {step} deg steps")
+    i0 = round((origin - c[0]) / step)
+    if i0 < 0 or i0 + count > c.size or abs(c[i0] - origin) > step / 4:
         raise ValueError(f"{name} ({c[0]:.3f}..{c[-1]:.3f}) does not hold the region's points from {origin}")
     return i0, desc
 
 
 def remap(points_mm: np.ndarray) -> np.ndarray:
-    """(days, POINT_ROWS, POINT_COLS) south-up points -> (days, ROWS, COLS) cells:
+    """(days, POINT_ROWS, POINT_COLS) south-up points -> (days, GRID.rows, GRID.cols) cells:
     each cell the mean of its four corner points that have a value, NaN if none do."""
     p = np.asarray(points_mm, dtype=np.float64)
     corners = [p[:, :-1, :-1], p[:, 1:, :-1], p[:, :-1, 1:], p[:, 1:, 1:]]
@@ -324,7 +316,7 @@ def check_plausible(values: np.ndarray, first_day: dt.date, source: str) -> None
         d, r, c = (int(i) for i in np.argwhere(bad)[0])
         raise ImplausibleValueError(
             f"{source} has {int(bad.sum())} value(s) outside {PLAUSIBLE_MIN_MM:g}-{PLAUSIBLE_MAX_MM:g} mm, the first "
-            f"{float(values[d, r, c])} mm on {first_day + dt.timedelta(days=d)} at {ORIGIN['lat'] + r * STEP:.2f}, {ORIGIN['lon'] + c * STEP:.2f}"
+            f"{float(values[d, r, c])} mm on {first_day + dt.timedelta(days=d)} at {GRID.origin['lat'] + r * GRID.step:.2f}, {GRID.origin['lon'] + c * GRID.step:.2f}"
         )
 
 
@@ -384,67 +376,13 @@ def read_month(path: str, ym) -> MonthValues:
 # --- the 0.1 deg finals array ---------------------------------------------------
 
 
-def _attributes() -> dict:
-    return {
-        "firstYear": FIRST_YEAR,
-        "region": dict(REGION),
-        "grid": {"origin": dict(ORIGIN), "step": STEP},
-        "attribution": ATTRIBUTION,
-    }
-
-
-def read_finals(root: Path, first_day: dt.date, days: int) -> np.ndarray | None:
-    import zarr
-
-    if not (root / PRODUCT / "zarr.json").exists():
-        return None
-    arr = zarr.open_array(store=zarr.storage.LocalStore(root), path=PRODUCT, mode="r", zarr_format=3)
-    out = np.full((days, ROWS, COLS), np.nan, dtype=np.float32)
-    for year, d0, d1, off in zarrstore.finals_spans(first_day, days):
-        yi = year - arr.attrs["firstYear"]
-        if 0 <= yi < arr.shape[0]:
-            out[off : off + d1 - d0] = arr[yi, d0:d1]
-    return out
-
-
-def write_finals(root: Path, first_day: dt.date, values: np.ndarray):
-    """Write consecutive days into `era5l`'s finals array, (years, 366, 275, 310), chunk (1, 366, 20, 20)."""
-    values = np.asarray(values, dtype=np.float32)
-    if values.ndim != 3 or values.shape[1:] != (ROWS, COLS):
-        raise ValueError(f"values must be (days, {ROWS}, {COLS}), got {values.shape}")
-    spans = zarrstore.finals_spans(first_day, values.shape[0])
-    years = spans[-1][0] - FIRST_YEAR + 1
-    arr = zarrstore._open_or_create(root, PRODUCT, (years, DOYS, ROWS, COLS), FINALS_CHUNKS, ("year", "doy", "lat", "lon"), _attributes())
-    if arr.shape[0] < years:
-        arr.resize((years, DOYS, ROWS, COLS))
-    for year, d0, d1, off in spans:
-        if year < FIRST_YEAR:
-            raise ValueError(f"{year} is before {PRODUCT}'s first year {FIRST_YEAR}")
-        arr[year - FIRST_YEAR, d0:d1] = values[off : off + d1 - d0]
-    return arr
-
-
-def year_prefixes(first_day: dt.date, days: int) -> list[str]:
-    return [f"{PRODUCT}/zarr.json", *(f"{PRODUCT}/c/{y - FIRST_YEAR}/" for y, *_ in zarrstore.finals_spans(first_day, days))]
+#: The attribute the finals array carries beside zarrstore's own (firstYear, region, grid): the credit travels with the values.
+ARRAY_ATTRS = {"attribution": ATTRIBUTION}
 
 
 def coverage(files: list[dict]) -> tuple[str, str] | None:
-    """(first day, last day) of the contiguous run of months held, from the earliest."""
-    months = {ym for f in files if (ym := url_month(f["url"])) is not None}
-    if not months:
-        return None
-    first = min(months)
-    last = first
-    while next_month(last) in months:
-        last = next_month(last)
-    return written_days(first)[0].isoformat(), written_days(last)[1].isoformat()
-
-
-def new_manifest() -> dict:
-    m = manifest.new(PRODUCT)
-    m["region"] = dict(REGION)
-    m["grid"] = {"origin": dict(ORIGIN), "step": STEP}
-    return m
+    """(first day, last day) of the contiguous run of days the months held write (manifest.era5l_coverage)."""
+    return manifest.era5l_coverage(files)
 
 
 def ingest_month(mirror: zarrstore.Mirror, ym, path: Path, now: Callable[[], str] = manifest.utc_now) -> dict:
@@ -453,14 +391,14 @@ def ingest_month(mirror: zarrstore.Mirror, ym, path: Path, now: Callable[[], str
     days = mv.values.shape[0]
     url = file_url(ym)
     sha = manifest.values_sha256(mv.values)
-    m = manifest.read(mirror, PRODUCT) or new_manifest()
+    m = manifest.read(mirror, PRODUCT) or manifest.new(PRODUCT)
     previous = manifest.file_entry(m, url)
 
     outcome = "unchanged"
     if previous is None or previous["valuesSha256"] != sha:
-        with mirror.stage(year_prefixes(mv.first_day, days)) as root:
-            old = read_finals(root, mv.first_day, days)
-            write_finals(root, mv.first_day, mv.values)
+        with mirror.stage(zarrstore.finals_year_prefixes(PRODUCT, mv.first_day, days)) as root:
+            old = zarrstore.read_finals(root, PRODUCT, mv.first_day, days)
+            zarrstore.write_finals(root, PRODUCT, mv.first_day, mv.values, attrs=ARRAY_ATTRS)
         if previous is None:
             outcome = "added"
         else:
@@ -471,7 +409,7 @@ def ingest_month(mirror: zarrstore.Mirror, ym, path: Path, now: Callable[[], str
                 # The copy didn't hold the previous values (a run died between
                 # the chunks and the manifest): claim every cell and the widest
                 # plausible difference, never 0 (chirps_final.ingest_file says why).
-                cells, max_abs = REGION_CELLS, PLAUSIBLE_MAX_MM - PLAUSIBLE_MIN_MM
+                cells, max_abs = GRID.rows * GRID.cols, PLAUSIBLE_MAX_MM - PLAUSIBLE_MIN_MM
             m["changes"].append({"revision": m["revision"], "days": [mv.first_day.isoformat(), mv.last_day.isoformat()], "cellsChanged": cells, "maxAbsDiff": max_abs})
             outcome = "changed"
 

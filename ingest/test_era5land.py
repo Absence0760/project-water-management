@@ -92,7 +92,7 @@ class ReadMonth(unittest.TestCase):
         # The 1 March 00 UTC step is 29 February's total (2024 is a leap year).
         self.assertEqual(mv.first_day, dt.date(2024, 2, 29))
         self.assertEqual(mv.last_day, dt.date(2024, 3, 30))
-        self.assertEqual(mv.values.shape, (31, e5.ROWS, e5.COLS))
+        self.assertEqual(mv.values.shape, (31, e5.GRID.rows, e5.GRID.cols))
         self.assertEqual(mv.values.dtype, np.float32)
         land = ~np.isnan(mv.values[0])
         np.testing.assert_allclose(mv.values[0][land], 1.0, rtol=1e-6)  # step 1 Mar: 0.001 m = 1 mm
@@ -116,7 +116,7 @@ class ReadMonth(unittest.TestCase):
         # A cell whose four corners are all sea is NaN; a coastal cell takes its land corners.
         sea = fx.sea()
         self.assertTrue(np.isnan(mv.values[0, 0, 0]))
-        coast = next((r, c) for r in range(e5.ROWS) for c in range(e5.COLS) if 0 < (~sea[r : r + 2, c : c + 2]).sum() < 4)
+        coast = next((r, c) for r in range(e5.GRID.rows) for c in range(e5.GRID.cols) if 0 < (~sea[r : r + 2, c : c + 2]).sum() < 4)
         corners = [(coast[0] + a, coast[1] + b) for a in (0, 1) for b in (0, 1) if not sea[coast[0] + a, coast[1] + b]]
         expect = np.mean([i + j / 100 for i, j in corners])
         self.assertAlmostEqual(float(mv.values[0, coast[0], coast[1]]), expect, places=3)
@@ -148,7 +148,7 @@ class Placement(Base):
     def test_a_known_cell_and_day_land_at_the_right_index_and_chunk(self):
         # Cell (lat -33.95, lon 18.45) is row 15, column 84; 9 March 2024 (the
         # 10 March step) is doy 68; 2024 is year index 74 from 1950.
-        r, c = round((-33.95 - e5.ORIGIN["lat"]) / e5.STEP), round((18.45 - e5.ORIGIN["lon"]) / e5.STEP)
+        r, c = round((-33.95 - e5.GRID.origin["lat"]) / e5.GRID.step), round((18.45 - e5.GRID.origin["lon"]) / e5.GRID.step)
         self.assertEqual((r, c), (15, 84))
         marker = 123.0
 
@@ -220,7 +220,7 @@ class SubmitThenCollect(Base):
 
     def test_months_between_the_newest_held_and_the_newest_complete_are_requested(self):
         cds = fakecds.FakeCds(today=TODAY, ready_after=100)
-        m = e5.new_manifest()
+        m = manifest.new(e5.PRODUCT)
         m["files"] = [{"url": e5.file_url((2023, 12)), "etag": None, "lastModified": None, "size": 1, "valuesSha256": "0" * 64, "revision": 1, "fetchedAt": "2024-03-20T00:00:00Z"}]
         manifest.write(self.mirror, m)
         self.call(cds)

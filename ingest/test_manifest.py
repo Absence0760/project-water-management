@@ -4,6 +4,7 @@
 """
 
 import copy
+import datetime as dt
 import hashlib
 import json
 import sys
@@ -132,6 +133,10 @@ def per_product(product, step, files=(), final_through=None):
     return m
 
 
+def era5l_file(y, mo):
+    return {"url": f"cds://reanalysis-era5-land/total_precipitation/{y:04d}-{mo:02d}", "etag": None, "lastModified": None}
+
+
 class PerProduct(unittest.TestCase):
     """The rules backend/src/mirror/manifest.ts holds too (its tests: manifest.test.ts)."""
 
@@ -141,7 +146,7 @@ class PerProduct(unittest.TestCase):
         self.assertEqual(manifest.product_step("gefs/2026-02-09"), 0.05)
         self.assertEqual(manifest.product_step("ecmwf/2026-02-09"), 0.1)
         self.assertIsNone(manifest.product_step("nope"))
-        manifest.validate(per_product("era5l", 0.1, [{"url": "cds:reanalysis-era5-land/2024-06"}], "2024-06-30"))
+        manifest.validate(per_product("era5l", 0.1, [era5l_file(2024, 6)], "2024-06-29"))
         with self.assertRaisesRegex(ValueError, "grid.step must be 0.1 for era5l"):
             manifest.validate(per_product("era5l", 0.05))
         m = full()
@@ -189,6 +194,36 @@ class PerProduct(unittest.TestCase):
         m["files"][0]["url"] = "https://example.org/imerg.nc4"
         with self.assertRaisesRegex(ValueError, "names no day"):
             manifest.validate(m)
+
+    def test_era5l_files_are_cds_month_requests_and_bound_final_through(self):
+        # Month M's request holds the last day of M-1 through the second-last day of M.
+        self.assertEqual(manifest.era5l_written_days((2024, 3)), (dt.date(2024, 2, 29), dt.date(2024, 3, 30)))
+        self.assertEqual(manifest.era5l_written_days((1950, 1)), (dt.date(1950, 1, 1), dt.date(1950, 1, 30)))
+        m = per_product("era5l", 0.1, [era5l_file(2024, 1), era5l_file(2024, 2), era5l_file(2024, 4)], "2024-02-28")
+        manifest.validate(m)  # positive control: the end of the run
+        self.assertEqual(manifest.era5l_coverage(m["files"]), ("2023-12-31", "2024-02-28"))
+        for past in ("2024-02-29", "2024-04-29"):  # the day month 03 would hold; past the gap
+            m["finalThrough"] = past
+            with self.assertRaisesRegex(ValueError, "runs past the days", msg=past):
+                manifest.validate(m)
+        m["finalThrough"] = "2024-02-28"
+        for url in ("cds:reanalysis-era5-land/2024-06", "cds://reanalysis-era5-land/2m_temperature/2024-06", "cds://reanalysis-era5-land/total_precipitation/2024-13", "https://example.org/2024-06"):
+            bad = json.loads(json.dumps(m))
+            bad["files"][0]["url"] = url
+            with self.assertRaisesRegex(ValueError, "not an era5l month request", msg=url):
+                manifest.validate(bad)
+        for k in ("etag", "lastModified"):
+            bad = json.loads(json.dumps(m))
+            bad["files"][0][k] = '"x"'
+            with self.assertRaisesRegex(ValueError, "the CDS gives neither", msg=k):
+                manifest.validate(bad)
+
+    def test_new_takes_the_products_grid(self):
+        self.assertEqual(manifest.new("era5l")["grid"], {"origin": {"lat": -35.45, "lon": 10.05}, "step": 0.1})
+        self.assertEqual(manifest.new("imerg_late")["grid"]["step"], 0.1)
+        self.assertEqual(manifest.new("rnl")["grid"], {"origin": {"lat": -35.475, "lon": 10.025}, "step": 0.05})
+        for p in ("era5l", "imerg_late", "rnl", "sat", "prelim"):
+            manifest.validate(manifest.new(p))
 
     def test_only_imerg_late_files_carry_a_version(self):
         m = full()

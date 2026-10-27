@@ -228,11 +228,13 @@ def read_finals(mirror_root: Path, product: str, first_day: dt.date, days: int) 
     return out
 
 
-def write_finals(mirror_root: Path, product: str, first_day: dt.date, values: np.ndarray, first_year: int | None = None):
+def write_finals(mirror_root: Path, product: str, first_day: dt.date, values: np.ndarray, first_year: int | None = None, attrs: dict | None = None):
     """Write consecutive days of the region (on the product's grid) into the
     finals array at `<mirror_root>/<product>/`, creating it (D2 metadata) when
     absent and growing its year axis as needed. Days outside the write keep
-    their values. `first_year` defaults to the product's (1981, era5l's 1950)."""
+    their values. `first_year` defaults to the product's (1981, era5l's 1950).
+    `attrs` are the product's own attributes beside the layout's (era5l's
+    `attribution`); an existing array must already carry them."""
     g = grid.for_product(product)
     if first_year is None:
         first_year = g.first_year
@@ -246,13 +248,27 @@ def write_finals(mirror_root: Path, product: str, first_day: dt.date, values: np
         shape=(years, grid.DOYS, g.rows, g.cols),
         chunks=g.finals_chunks,
         dims=("year", "doy", "lat", "lon"),
-        attrs=_attributes({"firstYear": first_year}, g),
+        attrs=_attributes({**(attrs or {}), "firstYear": first_year}, g),
     )
     if arr.shape[0] < years:
         arr.resize((years, grid.DOYS, g.rows, g.cols))
     for year, d0, d1, off in spans:
         arr[grid.year_index(year, first_year), d0:d1] = values[off : off + d1 - d0]
     return arr
+
+
+def read_daily_day(mirror_root: Path, product: str, day: dt.date) -> np.ndarray | None:
+    """One day of a daily array, (rows, cols) with NaN where unwritten; None
+    when the array doesn't exist yet or ends before `day`."""
+    import zarr
+
+    if not (mirror_root / product / "zarr.json").exists():
+        return None
+    arr = zarr.open_array(store=zarr.storage.LocalStore(mirror_root), path=product, mode="r", zarr_format=3)
+    i = (day - dt.date.fromisoformat(arr.attrs["firstDay"])).days
+    if i < 0:
+        raise ValueError(f"{day} is before {product}'s firstDay {arr.attrs['firstDay']}")
+    return np.array(arr[i]) if i < arr.shape[0] else None
 
 
 def write_daily(mirror_root: Path, product: str, first_day: dt.date, values: np.ndarray, array_first_day: dt.date | None = None):

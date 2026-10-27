@@ -46,12 +46,12 @@ EVENT = {"product": "imerg_late", "mode": "recent"}
 
 def region_expected(day: dt.date) -> np.ndarray:
     """The copy's (lat, lon) values for `day`, built cell by cell from the fixture's own coordinates."""
-    out = np.empty((imerg.ROWS, imerg.COLS), dtype=np.float32)
+    out = np.empty((imerg.GRID.rows, imerg.GRID.cols), dtype=np.float32)
     g = fx.global_values(day)
-    for r in range(imerg.ROWS):
-        j = fx.lat_index(imerg.ORIGIN["lat"] + r * imerg.STEP)
-        for c in range(imerg.COLS):
-            out[r, c] = g[fx.lon_index(imerg.ORIGIN["lon"] + c * imerg.STEP), j]
+    for r in range(imerg.GRID.rows):
+        j = fx.lat_index(imerg.GRID.origin["lat"] + r * imerg.GRID.step)
+        for c in range(imerg.GRID.cols):
+            out[r, c] = g[fx.lon_index(imerg.GRID.origin["lon"] + c * imerg.GRID.step), j]
     return out
 
 
@@ -116,7 +116,7 @@ class Layout(unittest.TestCase):
         values[fx.lon_index(lon), fx.lat_index(lat + 0.1)] = 9.0  # its northern neighbour
         path = fx.write(Path(self.tmp.name) / "one.nc4", self.day, values)
         got = imerg.read_region(str(path), self.day)
-        row, col = round((lat - imerg.ORIGIN["lat"]) / imerg.STEP), round((lon - imerg.ORIGIN["lon"]) / imerg.STEP)
+        row, col = round((lat - imerg.GRID.origin["lat"]) / imerg.GRID.step), round((lon - imerg.GRID.origin["lon"]) / imerg.GRID.step)
         self.assertEqual((row, col), (15, 84))
         self.assertEqual(got[row, col], 123.5)
         self.assertEqual(got[row, col + 1], 7.0)  # east is the next column
@@ -144,15 +144,15 @@ class Layout(unittest.TestCase):
         self.assertTrue(np.isnan(got).any() and not np.isnan(got).all())
 
     def test_an_opendap_subset_reads_the_same_as_the_global_file(self):
-        sub = fx.write(Path(self.tmp.name) / "sub.nc4", self.day, None, slice(imerg.LON_I0, imerg.LON_I0 + imerg.COLS), slice(imerg.LAT_I0, imerg.LAT_I0 + imerg.ROWS))
+        sub = fx.write(Path(self.tmp.name) / "sub.nc4", self.day, None, slice(imerg.LON_I0, imerg.LON_I0 + imerg.GRID.cols), slice(imerg.LAT_I0, imerg.LAT_I0 + imerg.GRID.rows))
         np.testing.assert_array_equal(imerg.read_region(str(sub), self.day), imerg.read_region(str(self.path), self.day))
 
     def test_the_opendap_index_ranges(self):
         self.assertEqual((imerg.LON_I0, imerg.LAT_I0), (1900, 545))
         self.assertAlmostEqual(fx.lons()[imerg.LON_I0], 10.05, places=4)
         self.assertAlmostEqual(fx.lats()[imerg.LAT_I0], -35.45, places=4)
-        self.assertAlmostEqual(fx.lons()[imerg.LON_I0 + imerg.COLS - 1], 40.95, places=4)
-        self.assertAlmostEqual(fx.lats()[imerg.LAT_I0 + imerg.ROWS - 1], -8.05, places=4)
+        self.assertAlmostEqual(fx.lons()[imerg.LON_I0 + imerg.GRID.cols - 1], 40.95, places=4)
+        self.assertAlmostEqual(fx.lats()[imerg.LAT_I0 + imerg.GRID.rows - 1], -8.05, places=4)
         g = imerg.Granule(self.day, "V07", "V07C", imerg_fixture.opendap_url(self.day, "07"))
         ce = urllib.parse.parse_qs(urllib.parse.urlparse(imerg.subset_url(g)).query)["dap4.ce"][0]
         self.assertEqual(ce, "/precipitation[0:1:0][1900:1:2209][545:1:819];/lon[1900:1:2209];/lat[545:1:819];/time[0:1:0]")
@@ -394,7 +394,7 @@ class Versions(Base):
         with self.assertRaisesRegex(ValueError, "is a V07C file but says version V08"):
             imerg._checked(m)
         m["files"][0]["version"] = "7"
-        with self.assertRaisesRegex(ValueError, "V and two digits"):
+        with self.assertRaisesRegex(ValueError, "must be an IMERG version"):
             imerg._checked(m)
 
 

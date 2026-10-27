@@ -34,6 +34,15 @@ do (`3IMERG.YYYYMMDD-S000000-E235959.`), each optionally with the IMERG
 collection `version` it came from (`V07`, later `V08`; the minor letter stays
 in the URL), the per-day version the bias correction is fitted by (D16). No
 other product's file carries a `version`.
+
+`era5l`'s files are its CDS month requests (era5land.py), each URL naming
+what was asked, exactly `cds://reanalysis-era5-land/total_precipitation/YYYY-MM`,
+with no ETag or Last-Modified (the CDS gives none). Month M's request holds
+the 00 UTC steps of M's days, which total the last day of M-1 through the
+second-last day of M (`era5l_written_days`; the 1950-01 request starts at the
+record, 1950-01-01). `finalThrough` may not run past the end of the
+contiguous run of those days from the earliest month (`era5l_coverage`), as
+for the CHIRPS finals.
 """
 
 from __future__ import annotations
@@ -58,6 +67,9 @@ _SHA = re.compile(r"^[0-9a-f]{64}$")
 _FILE_MONTH = re.compile(r"\.(\d{4})\.(0[1-9]|1[0-2])\.days_p05\.nc$")
 _FILE_DAY = re.compile(r"3IMERG\.(\d{4})(\d{2})(\d{2})-S000000-E235959\.")
 IMERG_VERSION = re.compile(r"^V\d{2}$")
+_ERA5L_URL = re.compile(r"^cds://reanalysis-era5-land/total_precipitation/(\d{4})-(0[1-9]|1[0-2])$")
+#: ERA5-Land's record starts here: the 1950-01 request's first step is the record's start.
+ERA5L_FIRST_DAY = dt.date(1950, 1, 1)
 
 FINALS_PRODUCTS = ("rnl", "sat")
 # The step of each product's grid; a forecast issue (`gefs/<issue>`, `ecmwf/<issue>`) by its prefix.
@@ -123,6 +135,33 @@ def finals_coverage(files: list[dict]) -> tuple[str, str] | None:
     return dt.date(*first, 1).isoformat(), (dt.date(ny, nm, 1) - dt.timedelta(days=1)).isoformat()
 
 
+def era5l_file_month(url: str) -> tuple[int, int] | None:
+    """The (year, month) an era5l file's URL (its CDS request) names, or None."""
+    m = _ERA5L_URL.match(url)
+    return (int(m[1]), int(m[2])) if m else None
+
+
+def era5l_written_days(ym: tuple[int, int]) -> tuple[dt.date, dt.date]:
+    """The days month `ym`'s request holds: the last day of the month before
+    through the second-last day of `ym` (each 00 UTC step is the previous
+    day's total), never before ERA5L_FIRST_DAY."""
+    first = max(dt.date(*ym, 1) - dt.timedelta(days=1), ERA5L_FIRST_DAY)
+    return first, dt.date(*_next_month(ym), 1) - dt.timedelta(days=2)
+
+
+def era5l_coverage(files: list[dict]) -> tuple[str, str] | None:
+    """(first day, last day) of the contiguous run of days era5l's files hold,
+    from the earliest month's; None when none names a month."""
+    months = {ym for f in files if (ym := era5l_file_month(f["url"])) is not None}
+    if not months:
+        return None
+    first = min(months)
+    last = first
+    while _next_month(last) in months:
+        last = _next_month(last)
+    return era5l_written_days(first)[0].isoformat(), era5l_written_days(last)[1].isoformat()
+
+
 def values_sha256(values: np.ndarray) -> str:
     """The manifest's hash of a region subset (days, lat, lon)."""
     a = np.ascontiguousarray(values, dtype="<f4")
@@ -136,12 +175,13 @@ def utc_now() -> str:
 
 
 def new(product: str) -> dict:
-    """An empty manifest for a product: revision 1, nothing copied yet."""
+    """An empty manifest for a product on its grid (grid.for_product): revision 1, nothing copied yet."""
+    attrs = grid.for_product(product).attrs
     return {
         "product": product,
         "revision": 1,
-        "region": dict(grid.REGION),
-        "grid": {"origin": dict(grid.ORIGIN), "step": grid.STEP},
+        "region": attrs["region"],
+        "grid": attrs["grid"],
         "years": {"first": None, "last": None},
         "finalThrough": None,
         "prelimThrough": None,
@@ -237,6 +277,15 @@ def validate(m: dict) -> dict:
         for i, f in enumerate(m["files"]):
             if "version" in f:
                 _fail(f"files[{i}] of {m['product']} carries a version: only imerg_late's do")
+    if m["product"] == "era5l":
+        for i, f in enumerate(m["files"]):
+            if era5l_file_month(f["url"]) is None:
+                _fail(f"files[{i}].url is not an era5l month request (cds://reanalysis-era5-land/total_precipitation/YYYY-MM), got {f['url']!r}")
+            if f["etag"] is not None or f["lastModified"] is not None:
+                _fail(f"files[{i}] of era5l has an etag or lastModified: the CDS gives neither")
+        days = era5l_coverage(m["files"])
+        if m["finalThrough"] is not None and (days is None or m["finalThrough"] > days[1]):
+            _fail(f"finalThrough {m['finalThrough']} runs past the days the files hold contiguously (through {days[1] if days else 'none'})")
     if m["product"] in FINALS_PRODUCTS:
         for i, f in enumerate(m["files"]):
             if file_month(f["url"]) is None:
