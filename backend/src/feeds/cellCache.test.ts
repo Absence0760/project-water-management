@@ -147,6 +147,14 @@ describe('seriesFromCache', () => {
 	it('nothing cached is no days', () => {
 		expect(seriesFromCache(cells, new Map(), w)).toEqual({ startDate: '2026-01-01', values: [], prelimDays: 0 });
 	});
+
+	// A startDate in the future asks for a window that ends before it starts: no days, never a throw (it once read year 0).
+	it('a window that ends before it starts is no days', () => {
+		const view = new Map();
+		row(view, a, 2026, { '2026-01-01': 1 });
+		row(view, b, 2026, { '2026-01-01': 2 });
+		expect(seriesFromCache(cells, view, { start: '2026-01-05', end: '2026-01-04' })).toEqual({ startDate: '2026-01-05', values: [], prelimDays: 0 });
+	});
 });
 
 describe('cacheOrigin', () => {

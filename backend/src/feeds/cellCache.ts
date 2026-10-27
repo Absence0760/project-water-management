@@ -173,7 +173,9 @@ export function seriesFromCache(
 	const n = Math.max(0, toEpochDay(window.end) - s + 1);
 	const got: { v: number | null; prelim: boolean }[] = new Array(n);
 	const vals: (number | null)[] = new Array(keys.length);
-	let year = n ? Number(window.start.slice(0, 4)) : 0;
+	// The window's own first year, even when it holds no days (an end before its start: a startDate in the
+	// future): a made-up year 0 is no ISO date, and toEpochDay refuses it.
+	let year = Number(window.start.slice(0, 4));
 	let y0 = toEpochDay(`${year}-01-01`);
 	let y1 = toEpochDay(`${year + 1}-01-01`);
 	let rows = keys.map((k) => view.get(viewKey(k, year)));
