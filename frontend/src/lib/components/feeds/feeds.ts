@@ -9,7 +9,7 @@ import { ApiError } from '#lib/api/client.js';
 import { fmtDay, fmtNum, fmtStamp, fmtWhen, localIsoDate } from '#lib/format/number.js';
 import { kindLabel } from '#lib/series/kinds.js';
 
-export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws';
+export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws' | 'ecmwf_ens';
 /** CHIRPS v3's two daily products (backend/src/feeds/config.ts CHIRPS_DAILY_PRODUCTS). */
 export type ChirpsProduct = 'sat' | 'rnl';
 export type FeedState = 'ok' | 'stale' | 'failing' | 'pending' | 'disabled' | 'copy-behind';
@@ -555,6 +555,21 @@ export function healthMessage(h: FeedHealth): string {
 }
 
 /**
+ * An ECMWF forecast feed's credit and calibration (issue #604 R4-C,
+ * backend feeds/fromMirrorEcmwf.ts last_meta.calibration): ECMWF's
+ * CC BY 4.0 attribution, then "not yet calibrated" until the operator's
+ * quantile-mapping fit is in the copy, or the fit's date once it is.
+ * Null for every other source.
+ */
+export function calibrationNote(f: Pick<FeedMeta, 'source' | 'lastMeta'>): string | null {
+	if (f.source !== 'ecmwf_ens') return null;
+	const c = f.lastMeta?.calibration;
+	const fitted = typeof c === 'string' && c.startsWith('quantile-mapped ') ? c.slice('quantile-mapped '.length, 'quantile-mapped '.length + 10) : null;
+	const how = fitted ? `quantile-mapped to our rain (fit of ${fitted})` : typeof c === 'string' ? 'not yet calibrated' : null;
+	return `ECMWF open data, CC BY 4.0${how ? ` · ${how}` : ''}`;
+}
+
+/**
  * The days the last fetch left alone because the series already held a value
  * the feed didn't write (last_meta.kept, issue #30), or null when none.
  */
@@ -594,7 +609,8 @@ export function separateName(
 	series: readonly (Pick<SeriesMeta, 'kind' | 'name' | 'length'> & { siteNodeId?: string | null })[],
 	feeds: readonly Pick<FeedMeta, 'targetKind' | 'targetName'>[]
 ): string {
-	const base = 'station' in body.config ? `DWS ${body.config.station}` : body.source === 'chirps_gefs' ? 'CHIRPS-GEFS' : 'CHIRPS';
+	const base =
+		'station' in body.config ? `DWS ${body.config.station}` : body.source === 'chirps_gefs' ? 'CHIRPS-GEFS' : body.source === 'ecmwf_ens' ? 'ECMWF ENS' : 'CHIRPS';
 	const taken = new Set([...series.filter((s) => s.kind === body.targetKind).map((s) => s.name), ...feeds.filter((f) => f.targetKind === body.targetKind).map((f) => f.targetName)]);
 	const pick = series
 		.filter((s) => s.kind === body.targetKind && !s.siteNodeId)

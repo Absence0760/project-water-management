@@ -2929,7 +2929,7 @@ export interface SeriesMeta {
 	rebuilding?: boolean;
 	/**
 	 * The data feed that wrote days of this series (time_series.feed_id,
-	 * 031_feed_days.sql): its source ('chirps', 'chirps_gefs', 'dws') and how
+	 * 031_feed_days.sql): its source ('chirps', 'chirps_gefs', 'dws', 'ecmwf_ens') and how
 	 * many of the series' days are still the feed's own; null = none (or the
 	 * reader can't see the project's feeds), absent = not known here.
 	 */

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # The bulk ingest job on this machine (ingest/README.md):
 #
-#   pnpm dev:ingest:run [rnl|sat|era5l|imerg_late]
+#   pnpm dev:ingest:run [rnl|sat|era5l|imerg_late|ecmwf]
 #                                   run the Lambda handler once in fixtures mode
 #                                   (synthetic files and fake upstreams, no network) into
 #                                   MIRROR_URL, default file://<repo>/ingest/.mirror (gitignored):
 #                                   rnl, sat and era5l a monthly run (era5l's first run
 #                                   submits to the fake CDS, the next collects), imerg_late
-#                                   a recent run (the last ten days from the fake Earthdata)
+#                                   a recent run (the last ten days from the fake Earthdata), ecmwf
+#                                   a daily run (the committed synthetic GRIB2)
 #   pnpm test:ingest                the package's unittest suite
 #   ingest/dev.sh verify [args]     verify_copy.py: check a backfilled copy at
 #                                   MIRROR_URL against CHC and dynamical.org
@@ -43,8 +44,9 @@ run)
 	case "$product" in
 	rnl | sat | era5l) mode=monthly ;;
 	imerg_late) mode=recent ;;
+	ecmwf) mode=daily ;;
 	*)
-		echo "ingest: dev:ingest:run runs rnl, sat, era5l or imerg_late, not $product" >&2
+		echo "ingest: dev:ingest:run runs rnl, sat, era5l, imerg_late or ecmwf, not $product" >&2
 		exit 2
 		;;
 	esac
@@ -75,7 +77,7 @@ verify)
 	exec "$here/.venv-verify/bin/python" "$here/verify_copy.py" "$@"
 	;;
 *)
-	echo "usage: ingest/dev.sh run [rnl|sat|era5l|imerg_late] | test | verify [verify_copy.py args]" >&2
+	echo "usage: ingest/dev.sh run [rnl|sat|era5l|imerg_late|ecmwf] | test | verify [verify_copy.py args]" >&2
 	exit 2
 	;;
 esac

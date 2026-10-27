@@ -100,7 +100,7 @@ function ewrRuleWords(r: Record<string, unknown>): string {
 	}
 }
 
-const FEEDS: Record<string, string> = { chirps: 'CHIRPS', chirps_gefs: 'CHIRPS-GEFS forecast', dws: 'DWS' };
+const FEEDS: Record<string, string> = { chirps: 'CHIRPS', chirps_gefs: 'CHIRPS-GEFS forecast', dws: 'DWS', ecmwf_ens: 'ECMWF ENS forecast' };
 const feedName = (s: unknown) => FEEDS[str(s)] ?? str(s);
 
 /** "the Rainfall — catchment series", "the Flow — observed gauge “upper” series". */

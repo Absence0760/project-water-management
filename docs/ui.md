@@ -6236,7 +6236,15 @@ editors run one now and read the map's proposals, viewers read.
   from the scheduler's own rule (`nextTryNote` in `feeds.ts`), and
   "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
   calendar day, never shifted by the time zone). CHIRPS says how many of the
-  days are preliminary.
+  days are preliminary. An **ECMWF ENS rainfall forecast** feed (`ecmwf_ens`,
+  issue #604 R4-C; picked from the Source list like any other, with the same
+  Area choices as CHIRPS-GEFS, and writing the forecast series) adds its
+  credit and calibration to that line: "ECMWF open data, CC BY 4.0 · not yet
+  calibrated" until the operator's quantile-mapping fit is in the copy, then
+  "· quantile-mapped to our rain (fit of 2027-03-01)" (`calibrationNote` in
+  `feeds.ts`, from the fetch's `last_meta.calibration`). It reads only our
+  copy, so it never fails for ECMWF's sake: a copy with no issue of today or
+  yesterday leaves it waiting.
 - **A version conflict** (issue #40 part c): when the feed's series holds
   another CHIRPS product or version, or an unrecorded one, the card says
   every fetch is refused and why ("The series holds CHIRPS v2.0 and this feed

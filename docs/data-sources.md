@@ -87,7 +87,7 @@ Every job that fetches from an upstream:
 | [dam-register](#dam-register) | DWS List of Registered Dams and its overlay | blocked | `www.dws.gov.za` | – | `pnpm import:dam-register` |
 | [gauge-stations](#gauge-stations) | DWS hydrological station catalogue | blocked | `www.dws.gov.za` | – | `pnpm import:gauge-stations` |
 | [era5-land](#era5-land) | ERA5-Land daily precipitation | built R4-A; off until `era5l_enabled` (the operator's CDS key first) | `cds.climate.copernicus.eu` (backfill too) | – | `ingest/era5land.py`, `infra/era5land.tf` |
-| [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS / AIFS-ENS precipitation | planned R4-C | `s3://ecmwf-forecasts` (eu-central-1) | `ecmwf_ens` (planned) | R4 `ingest/ecmwf.py` |
+| [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS 15-day precipitation (0.1°) | built (R4-C); the copy's job off in production until `ecmwf_enabled` | `ecmwf-forecasts.s3.eu-central-1.amazonaws.com` | `ecmwf_ens` | `ingest/ecmwf.py` (the copy), `ingest/ecmwf_qm_fit.py` (the fit), `backend/src/feeds/fromMirrorEcmwf.ts` (feeds read it) |
 | [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | the copy built (R4-D), off until `imerg_enabled` (needs the operator's Earthdata token) | `cmr.earthdata.nasa.gov`, `opendap.earthdata.nasa.gov` | – | `ingest/imerg.py`, `infra/imerg.tf` |
 | [deafrica-waterbodies](#deafrica-waterbodies) | DE Africa Waterbodies area series | planned R5-A | `s3://deafrica-services` (af-south-1) | – | R5 |
 | [deafrica-wofs](#deafrica-wofs) | DE Africa WOfS inside our own outlines | planned R5-C | `s3://deafrica-services`, `explorer.digitalearth.africa` | – | R5 |
@@ -297,6 +297,43 @@ in `infra/feeds.tf`):
   after registration) is the second near-real-time option if IMERG stops.
 - **Owner:** the operator; code `ingest/imerg.py`, `infra/imerg.tf`.
 
+### ecmwf-ens
+
+- **Source:** ECMWF open data, the IFS ensemble (ENS) 00 UTC run, total
+  precipitation `tp`, at 0.1° (published from 2026-10-20, about two hours
+  after the 0.25° files; the 00 UTC run's 0.1° files appeared at 09:40 UTC
+  on 2026-10-26), 50 perturbed members, steps 24 to 360 h. AIFS-ENS is not
+  used: its open data is 0.25° only.
+- **Host:** `ecmwf-forecasts.s3.eu-central-1.amazonaws.com`, the AWS
+  mirror of data.ecmwf.int (the bulk path ECMWF documents), anonymous. ECMWF
+  keeps only the last ~12 runs, so what we keep, we copy.
+- **Licence and attribution:** CC BY 4.0 and the ECMWF Terms of Use, read on
+  ECMWF's open data page 2026-10-27: commercial use and redistribution
+  allowed with attribution. Credit "ECMWF open data, CC BY 4.0" wherever its
+  values show: the feed's line in Data → Data feeds says so today
+  (`frontend/src/lib/components/feeds/feeds.ts` calibrationNote); a report
+  or export that shows a forecast from it should too (R4-E).
+- **Contact:** ECMWF support (Support Portal); no account needed.
+- **Access pattern:** the copy only (`ingest/ecmwf.py`, the Python ingest
+  Lambda, `infra/ecmwf.tf`): each step's `.index` (JSON lines with each
+  field's byte offset and length), then one range request per member for its
+  `tp` field, never the 3–4 GB step file. Decoded with eccodes, the region
+  cut out on our 0.1° grid, de-accumulated to daily mm, and stored as the
+  ensemble mean and p10/p50/p90 in Zarr `ecmwf/<issue>`, listed in
+  `ecmwf/index.json`; the newest 7 issues kept whole, older ones archived as
+  their mean for the quantile-mapping fit (`ingest/ecmwf_qm_fit.py`, the
+  operator's). Feeds (`ecmwf_ens`) read only the copy: there is no per-feed
+  path to ECMWF.
+- **Limits we keep to:** 1 + 50 requests a step, 765 an issue (~1.1 GB), at
+  most one a second, one run at a time (a lease), spread over the runs of
+  one morning (every 20 minutes from 10:00 to 13:40 UTC; a run that finds
+  the day's issue held asks nothing); a 403 stops the run, never retried,
+  and a same-day marker (`ecmwf/refused.json`) stops the day's later runs.
+- **Fallback:** CHIRPS-GEFS; then a day-old issue (a feed reads today's,
+  else yesterday's).
+- **Owner:** the operator; code `ingest/ecmwf.py`, `ingest/ecmwf_qm_fit.py`,
+  `backend/src/ingest/ecmwf.ts`, `backend/src/feeds/fromMirrorEcmwf.ts`.
+
 ## Planned: the copy's cross-check
 
 ### dynamical
@@ -361,7 +398,6 @@ starts.
 | Id | Licence | Attribution | Contact | Access pattern | Limits we keep to | Fallback | Owner |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | <a id="era5-land"></a>era5-land | CC BY 4.0 ("CC-BY licence" on the dataset page, read 2026-10-27; Copernicus, since 2025-07-02); the licence is accepted once on the account (operator step) | wherever its values show (UI, reports, exports): "Contains modified Copernicus Climate Change Service information [year]. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains." and the dataset citation, [below](#era5-land-r4-a) | ECMWF support (CDS); a CDS account and API key in `water-management/ingest/cds-key` (operator step) | CDS API (`reanalysis-era5-land`, `total_precipitation` at 00 UTC, area D1), one request a month into Zarr `era5l` (finals, 0.1°); submitted on one run, collected on a later one | at most one request per month and 4 queued in all; one API call a second; a failed request backs off 1–8 days and stops after 5; a 401/403 stops the run for the UTC day; never waits inside a Lambda | the CDS for the backfill too (`nsf-ncar-era5` holds ERA5, not ERA5-Land, checked 2026-10-27); NCAR GDEX d633008 has ERA5-Land (not used) | operator; `ingest/era5land.py`, `infra/era5land.tf` |
-| <a id="ecmwf-ens"></a>ecmwf-ens | CC BY 4.0 (ECMWF open data) | ECMWF, CC BY 4.0 | ECMWF support | `tp` for the region from each 00 UTC ENS/AIFS-ENS run, anonymous S3, archived as `ecmwf/<issue>` (ECMWF keeps only ~12 runs) | one run a day; subset at the source before copying to af-south-1 | CHIRPS-GEFS | operator; R4-C |
 | <a id="deafrica-waterbodies"></a>deafrica-waterbodies | CC BY 4.0 | Digital Earth Africa | Digital Earth Africa | weekly read of the Waterbodies area series for our traced dams into `dam_observation`; same region as the app, unsigned | weekly; only the waterbodies our dams overlap | [deafrica-wofs](#deafrica-wofs) | operator; R5-A |
 | <a id="deafrica-wofs"></a>deafrica-wofs | CC BY 4.0 | Digital Earth Africa | Digital Earth Africa | WOfS scenes from the STAC catalogue, summed inside our own dam outlines | only scenes over our dams | none (Sentinel-1/2 masks are a Round 6 candidate) | operator; R5-C |
 | <a id="sanlc"></a>sanlc | **gated:** fails D-B on the terms we could read (2013/14: no derivatives, no competing products); the 2018–2022 terms on EGIS still to be read (operator step) | "© GEOTERRAIMAGE" with the year, if allowed | DFFE (EGIS) | the operator's download, once allowed | – | WorldCover | operator; R5-D |

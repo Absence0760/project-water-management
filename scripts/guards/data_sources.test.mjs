@@ -77,6 +77,17 @@ describe('migrationSources', () => {
 		assert.deepEqual(migrationSources(files), { file: '300.sql', values: ['chirps', 'ecmwf_ens'] });
 	});
 
+	it('reads a DROP and ADD in one ALTER TABLE statement (253_feed_source_ecmwf.sql)', () => {
+		const files = [
+			{ name: '018.sql', text: create },
+			{
+				name: '253.sql',
+				text: "-- a comment with source IN ('x')\nALTER TABLE data_feed\n\tDROP CONSTRAINT data_feed_source_check,\n\tADD CONSTRAINT data_feed_source_check CHECK (source IN ('chirps', 'chirps_gefs', 'dws', 'ecmwf_ens'));"
+			}
+		];
+		assert.deepEqual(migrationSources(files), { file: '253.sql', values: ['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens'] });
+	});
+
 	it("ignores another table's check on a source column, and comments", () => {
 		const files = [
 			{ name: '018.sql', text: create },

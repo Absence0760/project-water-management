@@ -1439,9 +1439,10 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
   TLS only, **versioned**, with noncurrent versions expiring after 30 days
   (a monthly refresh rewrites ~130 MB, so a month of old versions is cents)
   and incomplete multipart uploads aborted after a day. It holds one Zarr v3
-  array per product (`rnl/`, `sat/`, `prelim/`, `gefs/<issue>/` and `imerg_late/`), each
-  with its `manifest.json`, and `gefs/index.json` listing the forecast
-  issues held.
+  array per product (`rnl/`, `sat/`, `prelim/`, `gefs/<issue>/`,
+  `ecmwf/<issue>/`, `era5l/` and `imerg_late/`), each with its
+  `manifest.json`, and `gefs/index.json` and `ecmwf/index.json` listing the
+  forecast issues held.
 - **The ingest job** `water-management-mirror-ingest`: a Python 3.14
   container-image Lambda (`ingest/Dockerfile`, handler
   `lambda_handler.handler`), arm64, 3 GB memory, 2 GB of `/tmp`, 900 s,
@@ -1647,6 +1648,64 @@ for two days. Runbook: the run's log line; a `refused` stopped on purpose
 (as above); `partial` on several runs means CHC is publishing late. It is
 turned on with the daily ingest (`daily_ingest_enabled`): the rule, its
 target and permission, and the alarm exist only then.
+
+### ECMWF (the second forecast)
+
+Issue #604 D17 (R4-C): the ECMWF ENS forecast, copied by the same
+mirror-ingest Lambda (`ingest/ecmwf.py`) and read by `ecmwf_ens` feeds
+(`backend/src/feeds/fromMirrorEcmwf.ts`). The source, its licence and the
+limits we keep to are in [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-ens).
+
+- **What a run does.** The rule `water-management-mirror-ingest-ecmwf`
+  (`infra/ecmwf.tf`) invokes the job with `{"product":"ecmwf","mode":"daily"}`
+  every 20 minutes from 10:00 to 13:40 UTC. ECMWF publishes the 00 UTC run's
+  0.1° files about 09:40 UTC (two hours after the 0.25° ones). A run tries
+  today's issue, else yesterday's: it reads each step's `.index` and then
+  one range request per member for that member's `tp` field (765 requests
+  an issue, one a second, ~1.1 GB), never a whole 4 GB step file. It saves
+  each finished step under `ingest-state/ecmwf/work/<issue>/`, stops
+  starting steps with under 2 minutes of the Lambda's time left, and the
+  next run picks up from there; with all 15 steps in (and 5 minutes left)
+  it writes `ecmwf/<issue>/` (the ensemble mean and p10/p50/p90, 0.1°), its
+  manifest and `ecmwf/index.json`, keeps 7 issues whole and archives older
+  ones as their mean. One run at a time (the `ecmwf` lease): a run that
+  meets the lease ends at once. A run that finds the day's issue held asks
+  ECMWF nothing.
+- **A 403** stops the run at once, never retried, writes
+  `ecmwf/refused.json` (the time), and the Lambda errors (the event goes to
+  the mirror-ingest DLQ, which alarms). The day's later runs see the marker
+  and ask nothing (`stopped: "refused_today"`); the next UTC day tries again.
+- **Logs and the alarm.** Each run logs one JSON line, `event:
+  "mirror_ingest"`, `product: "ecmwf"`, with `stopped` (`copied`,
+  `up_to_date`, `deadline`: resumed next run, `partial`: ECMWF hasn't
+  published every step yet, `not_published`, `busy`, `refused`,
+  `refused_today`), `working`, `stepsDone`, `newest` and `lagDays`, and
+  publishes `MirrorLagDays{Product=ecmwf}` (today minus the newest issue
+  held; nothing while the copy holds none). The alarm `mirror-lag-ecmwf`
+  (essential tier) fires at **2 days** on two days running, or when no
+  datapoint arrives for two days. Feeds keep the forecast they have
+  meanwhile.
+- **Turning it on.** Build an ingest image whose `requirements.txt` includes
+  eccodes (`ingest/requirements.c.in`: eccodes and eccodeslib, binary
+  wheels for arm64, no system package), deploy it (`ingest_image_tag`),
+  then set `ecmwf_enabled = true` and apply. Without both, the rule stays
+  disabled with no target and there is no alarm. ECMWF's open data needs no
+  key. The feeds fall due at 14:00 UTC (253_feed_source_ecmwf.sql).
+- **Quantile mapping** (D17, "quantile-mapped to our corrected rain"). Once
+  the copy has archived a few months of issues, the operator fits the
+  mapping offline and writes `ecmwf/qm.json` into the mirror; feeds apply it
+  from their next fetch, and until then they write the model's own values,
+  labelled "not yet calibrated":
+
+  ```bash
+  aws s3 sync s3://<mirror bucket>/ecmwf ./copy/ecmwf --exclude "*/c/1/*" --exclude "*/c/2/*" --exclude "*/c/3/*" && aws s3 sync s3://<mirror bucket>/sat ./copy/sat && aws s3 sync s3://<mirror bucket>/prelim ./copy/prelim && ingest/.venv/bin/python ingest/ecmwf_qm_fit.py --copy ./copy --mirror s3://<mirror bucket> --dry-run
+  ```
+
+  `--dry-run` prints the file; run it again without to write
+  `ecmwf/qm.json`. `--scale` applies a CHIRPS bias correction to the
+  observed rain first, `--regions` fits per region (default the whole
+  region D1), and each group (region × season) needs `--min-samples` pairs
+  (default 2,000). Removing `ecmwf/qm.json` returns feeds to uncalibrated.
 
 ### Backfill
 

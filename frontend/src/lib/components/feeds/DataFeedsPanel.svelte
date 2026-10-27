@@ -1,7 +1,7 @@
 <!--
 	Data → Data feeds (roadmap WP-2.10; docs/ui.md § Data feeds; on Settings
 	until issue #586 moved it beside the series it fills): the
-	project's scheduled feeds (CHIRPS rainfall, the CHIRPS-GEFS forecast, DWS
+	project's scheduled feeds (CHIRPS rainfall, the CHIRPS-GEFS and ECMWF ENS forecasts, DWS
 	gauge flow) with their health, "Run now", and a card to attach one. Owners
 	attach, switch off and remove feeds; editors can run one now; viewers read.
 	The add action sits in the panel's head (issue #521) and opens the card
@@ -23,6 +23,7 @@
 	import BoundaryRain from './BoundaryRain.svelte';
 	import UnitRain from './UnitRain.svelte';
 	import {
+		calibrationNote,
 		cellsUsedNote,
 		conflictMessage,
 		describePlace,
@@ -631,7 +632,7 @@
 						{#if conflictMessage(f)}
 							<p class="alert alert-warning version" data-testid="feed-version-conflict">{conflictMessage(f)}</p>
 						{/if}
-						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}{#if keptNote(f.lastMeta)}{' '}· {keptNote(f.lastMeta)}{/if}{#if cellsUsedNote(f)}{' '}· {cellsUsedNote(f)} with data{/if}</p>
+						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}{#if keptNote(f.lastMeta)}{' '}· {keptNote(f.lastMeta)}{/if}{#if cellsUsedNote(f)}{' '}· {cellsUsedNote(f)} with data{/if}{#if calibrationNote(f)}{' '}· {calibrationNote(f)}{/if}</p>
 						{#if data.canRun || data.canEdit}
 							<div class="act">
 								{#if data.canRun && f.enabled}

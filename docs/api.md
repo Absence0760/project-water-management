@@ -1965,7 +1965,7 @@ counts the blank days a merge stores (the Data page's freshness, "Data now runs 
 `siteNodeId` is the gauge a flow record was measured at (`null` = the outlet; only the plausibility checks read a gauge's record), or the land unit a rain series is the own rain of (`null` = the catchment's; a run reads it under `<kind>@<unit id>`, and only `settings.unitRain` `perUnit` uses it);
 `rebuilding` is true while a data feed backfills a confirmed replacement of the
 series (its values stay as they are until the swap);
-`feed` is the data feed that wrote days of the series, `{ source, days }` (`source` the feed's `chirps`, `chirps_gefs` or `dws`;
+`feed` is the data feed that wrote days of the series, `{ source, days }` (`source` the feed's `chirps`, `chirps_gefs`, `dws` or `ecmwf_ens`;
 `days` how many of the series' days are still the feed's, `time_series.feed_days`, 031, [data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)),
 or `null` when no day is a feed's, and always `null` to an API key (below viewer, it can't read `data_feed`; the Data tab's mark);
 `handDays` is the days a person typed in by hand, `[from, to][]` inclusive dates in date order (`time_series.hand_days`, 212), or `null` for none;
@@ -4427,8 +4427,8 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 
 - `FeedInput = { source, config, targetKind?, targetName?, schedule?, enabled?, replaceSeries? }`,
   strict (unknown fields are `400`):
-  - `source` ∈ `chirps`, `chirps_gefs`, `dws`;
-  - `config` for `chirps` / `chirps_gefs`: exactly one of `{ cells: { lat, lon, weight? }[] }`,
+  - `source` ∈ `chirps`, `chirps_gefs`, `dws`, `ecmwf_ens` (the ECMWF ENS mean, read only from the rain data copy);
+  - `config` for `chirps` / `chirps_gefs` / `ecmwf_ens`: exactly one of `{ cells: { lat, lon, weight? }[] }`,
     1–100 cells in at most 25 grid rows (issue #326 B-rain raised it from 25, the box's limit), lat −60…60, lon −180…180, weight > 0 (default 1), or
     `{ bbox: { south, west, north, east } }` in degrees (south < north, west <
     east, no crossing of 180°, the same ranges), read as the area-weighted mean
@@ -4447,7 +4447,7 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
     `chirps` also takes `product`: `sat` (the default) or `rnl`, CHIRPS v3's
     two daily products, read end to end, never one spliced onto the other;
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
-    `rain_catchment_mm`; `chirps_gefs`: `rain_forecast_mm`; `dws`:
+    `rain_catchment_mm`; `chirps_gefs` and `ecmwf_ens`: `rain_forecast_mm`; `dws`:
     `flow_observed_m3s`, `flow_reference_m3s`, `flow_logger_m3s`), default the
     first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (the default and
     the only value: no source publishes more often, 111_feed_daily_only;

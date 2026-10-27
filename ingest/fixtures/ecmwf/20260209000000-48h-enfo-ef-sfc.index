@@ -1,0 +1,8 @@
+{"domain": "g", "date": "20260209", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levtype": "sfc", "number": "1", "step": "48", "param": "2t", "_offset": 0, "_length": 182}
+{"domain": "g", "date": "20260209", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levtype": "sfc", "number": "1", "step": "48", "param": "tp", "_offset": 182, "_length": 206}
+{"domain": "g", "date": "20260209", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levtype": "sfc", "number": "4", "step": "48", "param": "2t", "_offset": 388, "_length": 182}
+{"domain": "g", "date": "20260209", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levtype": "sfc", "number": "4", "step": "48", "param": "tp", "_offset": 570, "_length": 206}
+{"domain": "g", "date": "20260209", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levtype": "sfc", "number": "3", "step": "48", "param": "2t", "_offset": 776, "_length": 182}
+{"domain": "g", "date": "20260209", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levtype": "sfc", "number": "3", "step": "48", "param": "tp", "_offset": 958, "_length": 206}
+{"domain": "g", "date": "20260209", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levtype": "sfc", "number": "2", "step": "48", "param": "2t", "_offset": 1164, "_length": 182}
+{"domain": "g", "date": "20260209", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levtype": "sfc", "number": "2", "step": "48", "param": "tp", "_offset": 1346, "_length": 206}
