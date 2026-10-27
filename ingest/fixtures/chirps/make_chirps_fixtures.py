@@ -123,8 +123,8 @@ def listing_html(entries: list[tuple[str, dt.datetime, int]]) -> str:
         lines.append(f'<a href="{n}">{shown}</a>{" " * max(1, 51 - len(shown))}{when.strftime("%d-%b-%Y %H:%M")} {size:>19}')
     body = "\n".join(lines)
     return (
-        f"<html>\r\n<head><title>Index of {LISTING_PATH}</title></head>\r\n<body>\r\n"
-        f"<h1>Index of {LISTING_PATH}</h1><hr><pre>{body}\n</pre><hr></body>\r\n</html>\r\n"
+        f"<html>\n<head><title>Index of {LISTING_PATH}</title></head>\n<body>\n"
+        f"<h1>Index of {LISTING_PATH}</h1><hr><pre>{body}\n</pre><hr></body>\n</html>\n"
     )
 
 
