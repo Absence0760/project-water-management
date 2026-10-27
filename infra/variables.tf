@@ -670,7 +670,7 @@ variable "ingest_lag_alarm_days" {
 }
 
 variable "daily_ingest_enabled" {
-  description = "Turn on the fetcher's daily ingest (feeds.tf, issue #604 R2-B): the daily EventBridge rule that copies CHIRPS preliminary days into the data mirror, the fetcher role's write to the mirror bucket, and the preliminary copy's freshness alarm (ingest.tf, breaching on missing data). Off (the default) until a backend release with the daily mode is deployed, or the alarm would fire for a job that doesn't exist yet. Runbook: docs/deployment.md § The data mirror."
+  description = "Turn on the fetcher's daily ingest (feeds.tf, issue #604 R2-B): the daily EventBridge rule that copies CHIRPS preliminary days into the data mirror and the GEFS rule that copies the day's forecast issue (R3-A, 08:38–11:38 UTC), the fetcher role's write to the mirror bucket, and the preliminary and GEFS copies' freshness alarms (ingest.tf, breaching on missing data). Off (the default) until a backend release with the daily mode is deployed, or the alarm would fire for a job that doesn't exist yet. Runbook: docs/deployment.md § The data mirror."
   type        = bool
   default     = false
 }
@@ -708,7 +708,7 @@ variable "jobs_backlog_alarm_seconds" {
 # --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
 
 variable "alarm_tier" {
-  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), and one more with daily_ingest_enabled (the preliminary copy's). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
+  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), and two more with daily_ingest_enabled (the preliminary and GEFS copies'). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
   type        = string
   default     = "full"
 
