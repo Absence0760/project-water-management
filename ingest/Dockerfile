@@ -10,7 +10,7 @@
 #   docker buildx imagetools inspect public.ecr.aws/lambda/python:3.14-arm64
 # and put the tag and the new digest here together. Dependabot's docker entry
 # for /ingest (.github/dependabot.yml) proposes the same move.
-FROM public.ecr.aws/lambda/python:3.14-arm64@sha256:9b353a9c5d361d322f58ce176f1322deb983ecd8da367a52256a20e1ccc7ad06
+FROM public.ecr.aws/lambda/python:3.14-arm64@sha256:3cb99eff2a8eda5b7f7a160d52e42a996ad2236c40e27243778c1c4baea9b3c6
 
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
 RUN pip install --no-cache-dir --require-hashes -r ${LAMBDA_TASK_ROOT}/requirements.txt
