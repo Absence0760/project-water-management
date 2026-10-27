@@ -1609,7 +1609,11 @@ CHIRPS alone) flags "Forcing changed since fit".
 **What it can't do.** ERA5-Land's timing is a model's: the map reshapes its
 distribution month by month, but a storm it puts on the wrong day stays
 there. With no overlap, a product runs raw. IMERG never fills a day inside
-the record, even one CHIRPS and ERA5-Land both lack.
+the record, even one CHIRPS and ERA5-Land both lack. The uncertainty
+ensemble (§2.10e) varies CHIRPS only: its CHIRPS-only members run with
+`gapRain: null` (`uncertainty/ensemble.ts`), so for a project that fills
+from ERA5-Land or IMERG Late the bands don't cover the uncertainty in those
+products or their corrections ([followups.md § The rain data copy](./followups.md#the-rain-data-copy-issue-604)).
 
 ### 2.4c Zero-rain runs treated as missing
 
@@ -9181,7 +9185,10 @@ it never changes a run's results.
     correction and map then off, the run window pinned; under per-unit rain
     each land unit keeps the base run's rule, MAP ratio and CHIRPS level,
     pinned, as §2.4h says, engine ≥ 1.95.0, ER-30). The spread between them is the rain-data uncertainty
-    the record can't settle.
+    the record can't settle. Only CHIRPS is varied: those members run with
+    `gapRain: null`, so a project filling gaps from ERA5-Land or IMERG Late
+    (§2.4b, *Gap-filling product*) gets no band for those products or their
+    corrections (followups.md § The rain data copy).
   - **Observed record**, when both a gauge and a logger record have at least
     30 scored days: half the members are judged against each. A record that
     measures a different river belongs in

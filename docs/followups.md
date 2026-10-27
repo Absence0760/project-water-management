@@ -347,6 +347,18 @@ provenance, `ingest/verify_copy.py`):
       one fit per group), and check it against the per-cell fit on held-out
       days. **Trigger:** when the first QM fit is run, once the archive
       (`ecmwf/`'s archived issue means) holds a season.
+- [ ] **The uncertainty bands don't vary ERA5-Land or IMERG Late**
+      (R4-B, [model.md § 2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)).
+      The ensemble's rain-source members run CHIRPS alone with
+      `gapRain: null` (`packages/engine/src/uncertainty/ensemble.ts`), so a
+      project that fills its gaps from ERA5-Land or IMERG Late gets bands
+      that leave out the uncertainty in those products and their
+      corrections. **Durable fix:** a rain-source member per product the
+      run reads (that product alone, every day corrected by its own fit, as
+      the CHIRPS-only member is), split evenly with the others, and the
+      members' rain source named in `run_uncertainty`. **Trigger:** the
+      first client project that sets `settings.gapRain` to a product, or an
+      evidence pack on one.
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 

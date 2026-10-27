@@ -439,7 +439,7 @@ starts.
   source, reports and evidence packs, and exports.
 
   **Where the credits show** (issue #604 R4-E), each from one place, the
-  engine's `packages/engine/src/liability/disclaimer.ts` (`copernicusEra5lNotice`,
+  engine's `packages/engine/src/liability/rainCredits.ts` (`@water-management/engine/credits`, a module with no imports; `copernicusEra5lNotice`,
   `ERA5L_CITATION`, `imergCitation`, `ECMWF_CREDIT`, `rainCredits`,
   `runRainCredits`), word for word, with the day the values were read (a
   run's creation day; today on a live view): the Data sources and credits
@@ -453,7 +453,9 @@ starts.
   `Credit:` rows in the summary's Gap-filling products block, `ECMWF` in its
   forecast block); the workbook's first sheet; and an evidence pack's
   reproduction bundle README (its series hold the products' values). A run
-  on CHIRPS alone and an uploaded forecast print none of them.
+  on CHIRPS alone and an uploaded forecast print none of them; a forecast
+  an ECMWF feed wrote only some days of (one edited by hand) still prints
+  ECMWF's (the run's `forecastRainEcmwf`, backend `runs/execute.ts`).
 - **How a day is defined:** the UTC day. ERA5-Land's `tp` accumulates from
   00 UTC, so the 00 UTC step of D+1 is the whole of day D, stored under D.
 - **Against CHIRPS's day:** CHIRPS v3 splits pentad totals into days with

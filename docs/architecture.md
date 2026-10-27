@@ -1784,8 +1784,16 @@ EventBridge, daily
   the CHIRPS feed whose cells its runs read then fills them for those cells
   in the same job (`feeds/gapRainFill.ts`: ERA5-Land over the record's span
   in year windows, newest first, at most 12 read from the copy a fetch;
-  IMERG Late's last 30 days), each in its own savepoint so a failure never
-  takes the feed's CHIRPS days with it; and a run reads them from the cache
+  IMERG Late's last 30 days), each in its own savepoint so an expected
+  failure (the copy's format, the copy not answering, the cache refusing
+  the values) never takes the feed's CHIRPS days with it: it is rolled back,
+  logged by class and recorded on the feed (`last_meta.gapEra5l` /
+  `gapImergLate`, 254_feed_gap_fill_outcome), which Data → Rain products
+  side by side shows; any other error fails the job. The fill also stops in
+  time: at most 60 s a fetch (`GAP_FILL_BUDGET_MS`) and 20 s before the
+  job's deadline (the worker Lambda's 300 s timeout less 10 s), leaving
+  older windows for the next fetch, so it can't time out the job and lose
+  the CHIRPS days; and a run reads them from the cache
   over the same cells into its input (`runs/gapRainInput.ts`: `rain_era5l_mm`,
   one `rain_imerg_late_mm~<version>` per IMERG version), which its snapshot
   keeps, as the reference cell's CHIRPS. Their committed synthetic copy holds

@@ -6020,15 +6020,22 @@ the gaps, with a link to Rain gaps; with more than one CHIRPS feed a **CHIRPS
 feed** picker reads the products over a land unit's own feed instead of the
 outlet's (the one the runs read is marked); then one daily chart, CHIRPS,
 ERA5-Land and IMERG Late (points, its versions in the legend) as each reads,
-before any correction, with 30 days / 1 year / All windows; then **Double
+before any correction, with 30 days / 1 year / All windows, over the last ten
+years of a longer record (the most the view reads; the caption names the
+span); then **Double
 mass: catchment rain vs ERA5-Land** (the CHIRPS panel above, generalised:
 `DoubleMassPanel` with `against` and `level` 3), drawn once the product has
 10 judged water years, else one line saying so (IMERG Late's 30 days never
 do); and the credits of what it shows, word for word (Copernicus's notice
 and ERA5-Land's citation, IMERG's citation per version; docs/data-sources.md).
-Nothing held yet says the runs' CHIRPS feed brings them on its next fetch; no
-CHIRPS feed says there are no cells to read them over, with a link to Data
-feeds. A failed load says so with Try again.
+Nothing held yet says the runs' CHIRPS feed brings them on its next fetch;
+when that feed's latest fetch couldn't fill a product the settings read
+(`fill`, last_meta 254) a warning says so instead, "Couldn’t fill ERA5-Land
+on the last fetch: <why>", or that the copy holds none yet (`gapRain.ts`
+`fillProblems`), above the chart too once some days are held; Data feeds'
+card adds "couldn’t fill ERA5-Land" to the feed's line (`feeds.ts`
+`gapFillNote`). No CHIRPS feed says there are no cells to read them over,
+with a link to Data feeds. A failed load says so with Try again.
 "What the model uses" explains every kind. A **reference gauge (other
 catchment)** series (`flow_reference_m3s`, e.g. imported with
 `--gauge-as-reference`) is badged *Reference only*: it can be charted here as a
@@ -11446,7 +11453,8 @@ baseline card links to the published run's report (**Report**, beside
   `forecastNote`); it names "(CHIRPS-GEFS, Climate Hazards Center,
   doi:10.15780/G2PH2M)" only when the run's `forecastRainSource` is
   `chirps_gefs` (a CHIRPS-GEFS feed wrote every forecast day), never for an
-  uploaded forecast; a **Read this first** box above the summary sentence
+  uploaded forecast (the Rain data credits still credit ECMWF when any
+  forecast day was an ECMWF feed's, `forecastRainEcmwf`); a **Read this first** box above the summary sentence
   (`report/sections.ts` `readFirst`, the engine's `REPORT_READ_FIRST`): the
   disclaimer's key points with the Disclaimer's section number, then who
   signed the run, "Signed off by <name> (<body> <number>)", or "Not signed

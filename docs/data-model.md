@@ -646,7 +646,13 @@ can't be. `GET /compare/runs` returns the whole snapshot, and
 `forecastRainSource`): `chirps_gefs` only when the forecast series'
 `feed_id` is a CHIRPS-GEFS feed and its `feed_days` cover every day from
 the first forecast day to the series' end (031_feed_days), read when the
-run is made; the report's forecast line credits CHIRPS-GEFS only then.
+run is made; the report's forecast line credits CHIRPS-GEFS only then
+(`ecmwf_ens` likewise for an ECMWF ENS feed, issue #604 R4-E). Beside it,
+`forecastRainEcmwf: true` (`runs/execute.ts` `forecastRainEcmwf`) when any
+forecast day is still an ECMWF ENS feed's (its `feed_days` overlap the
+forecast days), even with a day edited by hand: not a model input, only
+the flag ECMWF's CC BY credit reads (engine `runRainCredits`: the report,
+the CSVs, the workbook and an evidence pack's bundle).
 The engine reads it too (§2.4h's forecast days), so a reproduction, a
 scenario on the run and an evidence pack's re-run carry it. A
 run of a project with two or more CHIRPS series at the outlet or at a land
@@ -4039,7 +4045,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
-| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30); `last_meta.finalThrough` (CHIRPS) the last day through which the series holds final values, checked by the ingest and not re-read by the next window (#69); `last_meta.filesChecked` / `recheckDaysRead` / `revisionXmin` (CHIRPS) the re-check of cached finals, § Re-checking cached finals (210) |
+| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30); `last_meta.finalThrough` (CHIRPS) the last day through which the series holds final values, checked by the ingest and not re-read by the next window (#69); `last_meta.filesChecked` / `recheckDaysRead` / `revisionXmin` (CHIRPS) the re-check of cached finals, § Re-checking cached finals (210); `last_meta.gapEra5l` / `gapImergLate` (the CHIRPS feed whose cells the runs read, while `settings.gapRain` asks for the product) what that fetch's fill made of it, `ok`, `not_ready` or `failed:<format\|unavailable\|refused>`, merged in after the ingest by `app_record_gap_fill` (254_feed_gap_fill_outcome; only the running feed_fetch job of that feed, queued as the caller; never an error's text) |
 | `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
