@@ -227,7 +227,11 @@ describe('a CHIRPS feed reads our copy (CHIRPS_SOURCE=mirror)', () => {
 		const year = (await readFinalsBlock(finals, 2024, 0, 365, block)).values.slice();
 		year[40] = 7.75;
 		await writeFinalsYear(finals, 2024, block, year);
-		await asOwner(`INSERT INTO chirps_cell_stale (origin, product, row_idx, col_idx, day) VALUES ('chc', 'rnl', $1, $2, '2024-02-10')`, [home().row, home().col]);
+		// Marked before the fetch job that re-reads it was queued (246's race rule keeps a mark made after: that job may have read before it).
+		await asOwner(
+			`INSERT INTO chirps_cell_stale (origin, product, row_idx, col_idx, day, marked_at) VALUES ('chc', 'rnl', $1, $2, '2024-02-10', now() - interval '1 hour')`,
+			[home().row, home().col]
+		);
 
 		await runNext(f.feedId);
 		const after = (await series(owner, f.pid))!;

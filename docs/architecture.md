@@ -1321,7 +1321,7 @@ row names a source, where to read it and the series it merges into:
   changed HEAD tag does in step 3, and records the revision; steps 1, 3 and
   4 then re-read those days from the copy, log what really changed in
   `chirps_revision` and refresh each feed's series. Details and bounds:
-  [data-model.md § Mirror revisions](./data-model.md#mirror-revisions-245_mirror_revisionsql).
+  [data-model.md § Mirror revisions](./data-model.md#mirror-revisions-245_mirror_revisionsql-246_mirror_revision_partssql).
 
 - **The rain data copy (in progress, issue #604).** `backend/src/mirror/`
   reads and writes our own copy of CHIRPS for the D1 region (10–41° E,
