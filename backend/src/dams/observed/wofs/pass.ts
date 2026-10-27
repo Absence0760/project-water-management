@@ -18,8 +18,13 @@
 // left, older history, so every dam is current before any time goes on the
 // past (and the recency alarm doesn't fire through a first backfill). The
 // dams go in turn (never tried first, then by their last turn, oldest first,
-// so one that keeps failing goes behind the rest); a dam scanned to within
-// refreshDays of today waits. Per dam, `dams/wofs-state.json` keeps the span
+// so one that keeps failing goes behind the rest). The fetcher runs the pass
+// every hour (infra/dam_observations.tf), but a dam's newest scenes are
+// checked at most once a UTC day (REFRESH_DAYS, the state's checkedOn): a
+// forward turn that ended, well or on a failure, waits until the next day,
+// and only one the deadline cut short goes on in the next run. Every other
+// run's time goes to the backward backfill, so a dam's history from 2013
+// fills in days, not weeks. Per dam, `dams/wofs-state.json` keeps the span
 // read so far, [backfilledFrom, scannedThrough]:
 //
 //   forward   from scannedThrough + 1 (or the worker's `since`) to today; a
@@ -93,8 +98,13 @@ import { observation, outlineMask, sceneWindow, tally, type OutlineMask } from '
 
 /** The first-backfill window's start: the Landsat 8 era (Landsat 7 beside it). Earlier history isn't fetched. */
 export const WOFS_BACKFILL_FROM = '2013-01-01';
-/** A dam scanned to within this many days of today waits. The pass runs daily; scenes come every ~8 days. */
-export const REFRESH_DAYS = 6;
+/**
+ * Days between two checks of a dam's newest scenes (the forward turn): once a
+ * UTC day. The pass runs hourly for the backfill's sake; scenes come every
+ * ~8 days and are published days late, so checking more often asks STAC for
+ * nothing new.
+ */
+export const REFRESH_DAYS = 1;
 /** The tail re-scanned each time a dam is caught up: scenes are published days to weeks late. */
 export const LOOKBACK_DAYS = 45;
 /** One STAC search's dates. */
@@ -125,7 +135,9 @@ export const WofsState = z
 					/** The oldest date read back to: the history before it is still to come (until WOFS_BACKFILL_FROM). */
 					backfilledFrom: IsoDay.optional(),
 					/** The dam's last turn, good or not. */
-					triedAt: IsoTime.optional()
+					triedAt: IsoTime.optional(),
+					/** The UTC day its newest scenes were last checked: a forward turn that ended (well or on a failure), not one the deadline cut. */
+					checkedOn: IsoDay.optional()
 				})
 				.strict()
 		)
@@ -180,6 +192,7 @@ export interface WofsPassOptions {
 	/** 0 in fixtures mode. */
 	stacIntervalMs?: number;
 	sceneIntervalMs?: number;
+	/** Days between two checks of a dam's newest scenes (REFRESH_DAYS). */
 	refreshDays?: number;
 	lookbackDays?: number;
 	backfillFrom?: string;
@@ -194,7 +207,7 @@ export interface WofsPassResult {
 	failures: { featureId: string; code: string; error: unknown }[];
 	/** Scenes skipped because they couldn't be read, for the log. */
 	sceneFailures: { featureId: string; itemId: string; error: unknown }[];
-	/** Listed dams scanned recently enough to wait. */
+	/** Listed dams whose newest scenes were checked within the refresh days, so had no forward turn. */
 	fresh: number;
 	/** Dams whose turn started this run. */
 	turns: number;
@@ -316,8 +329,9 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 
 	const turn = (id: string) => state.dams[id]!.triedAt ?? '';
 	const byTurn = (a: WantedOutline, b: WantedOutline) => (turn(a.featureId) < turn(b.featureId) ? -1 : turn(a.featureId) > turn(b.featureId) ? 1 : a.featureId < b.featureId ? -1 : 1);
-	const freshFrom = addDays(today, -refreshDays);
-	const isFresh = (id: string) => (state.dams[id]!.scannedThrough ?? '') >= freshFrom && !changed.has(id);
+	// Checked on a day after this one: no forward turn yet (refreshDays 1 = once a UTC day).
+	const freshAfter = addDays(today, -refreshDays);
+	const isFresh = (id: string) => (state.dams[id]!.checkedOn ?? '') > freshAfter && !changed.has(id);
 	const due = wanted.outlines.filter((o) => !isFresh(o.featureId)).sort(byTurn);
 	result.fresh = wanted.outlines.length - due.length;
 	const touched = new Set<string>();
@@ -468,6 +482,9 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 			const { error: _, ...rest } = perKey[id]!;
 			perKey[id] = rest;
 		}
+		// The newest scenes count as checked today unless the deadline cut the turn (the next run goes on from it);
+		// a failure (a 403 too) waits for tomorrow rather than asking again within the hour.
+		if (direction === 'forward' && !deadline) st.checkedOn = today;
 		if (deadline) result.stopped = 'deadline';
 		if (stop) result.stopped = stop;
 		return !deadline && !stop;

@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { FeedFormatError, FeedRefusedError, FeedThrottledError } from '../../feeds/errors.js';
 import { openStore } from '../../mirror/store.js';
 import { readObservationFile, readStatus, writeWanted } from './handover.js';
@@ -150,18 +150,42 @@ describe('runWaterbodiesPass', () => {
 		expect(Object.keys((await readStatus(s, 'waterbodies'))!.perKey).sort()).toEqual(UIDS.slice(1, 3));
 	});
 
+	it('asks a uid again a week after its last good fetch, not an hour sooner, under the hourly schedule', async () => {
+		const s = store();
+		await want(s, [UIDS[0]!]);
+		await run(s, fixtureWaterbodiesHttp());
+		const asked = vi.fn(fixtureWaterbodiesHttp().textConditional);
+		// Every hour of the week but the last: nothing asked.
+		for (const h of [1, 24, 6 * 24, 7 * 24 - 1]) {
+			expect(await run(s, { textConditional: asked }, { now: NOW + h * 3_600_000 })).toMatchObject({ fresh: 1, requests: 0 });
+		}
+		expect(asked).not.toHaveBeenCalled();
+		expect(await run(s, { textConditional: asked }, { now: NOW + 7 * 86_400_000 })).toMatchObject({ unchanged: [UIDS[0]], requests: 1 });
+	});
+
+	it('asks a uid that failed again a day later, not every hour', async () => {
+		const s = store();
+		await want(s, ['zzzzzzzzzz']);
+		const asked = vi.fn(fixtureWaterbodiesHttp().textConditional);
+		expect(await run(s, { textConditional: asked })).toMatchObject({ failed: ['zzzzzzzzzz'], requests: 1 });
+		expect(await run(s, { textConditional: asked }, { now: NOW + 3_600_000 })).toMatchObject({ failed: [], fresh: 1, requests: 0 });
+		expect(await run(s, { textConditional: asked }, { now: NOW + 23 * 3_600_000 })).toMatchObject({ requests: 0 });
+		expect(await run(s, { textConditional: asked }, { now: NOW + 86_400_000 })).toMatchObject({ failed: ['zzzzzzzzzz'], requests: 1 });
+		expect(asked).toHaveBeenCalledTimes(2);
+	});
+
 	it('records a missing or unreadable series and goes on', async () => {
 		const s = store();
 		await want(s, ['zzzzzzzzzz', UIDS[0]!]);
 		const r = await run(s, fixtureWaterbodiesHttp());
 		expect(r).toMatchObject({ failed: ['zzzzzzzzzz'], fetched: [UIDS[0]], stopped: 'done' });
-		expect((await readStatus(s, 'waterbodies'))!.perKey.zzzzzzzzzz).toEqual({ error: 'HTTP 404' });
+		expect((await readStatus(s, 'waterbodies'))!.perKey.zzzzzzzzzz).toEqual({ error: 'HTTP 404', triedAt: new Date(NOW).toISOString() });
 		const bad = await run(store(), { textConditional: async () => ({ status: 'ok', text: 'nope', etag: null, lastModified: null }) });
 		expect(bad.stopped).toBe('no_list');
 		const s2 = store();
 		await want(s2, [UIDS[0]!]);
 		expect(await run(s2, { textConditional: async () => ({ status: 'ok', text: 'nope', etag: null, lastModified: null }) })).toMatchObject({ failed: [UIDS[0]] });
-		expect((await readStatus(s2, 'waterbodies'))!.perKey[UIDS[0]!]).toEqual({ error: 'format' });
+		expect((await readStatus(s2, 'waterbodies'))!.perKey[UIDS[0]!]).toEqual({ error: 'format', triedAt: new Date(NOW).toISOString() });
 	});
 
 	it('stops at once on an HTTP 403 or throttling, says so in the status, and keeps the last good fetch', async () => {
@@ -217,5 +241,37 @@ describe('runWaterbodiesPass', () => {
 		});
 		expect(slept).toEqual([1000]);
 		expect(r).toMatchObject({ stopped: 'deadline', fetched: UIDS.slice(0, 2), requests: 2 });
+	});
+});
+
+// CLAUDE.md rule 7: a row's date is its UTC day, and the pass's times are UTC,
+// whatever the server's zone. The clock is pinned late in the UTC day.
+describe.each(['Pacific/Kiritimati', 'Pacific/Pago_Pago'])('under a skewed TZ (%s)', (tz) => {
+	const zone = process.env.TZ;
+	afterEach(() => {
+		vi.useRealTimers();
+		process.env.TZ = zone;
+	});
+	const LATE = Date.parse('2026-10-27T23:30:00Z');
+
+	it('reads a timestamped row as its UTC date', () => {
+		vi.useFakeTimers({ toFake: ['Date'], now: LATE });
+		process.env.TZ = tz;
+		const rows = parseWaterbodiesCsv([HEAD, '2023-02-18T23:30:00Z,100,10,9000,90,81000,0,0,10,90,0', '2023-02-19T00:30:00Z,100,10,9000,90,81000,0,0,10,90,0'].join('\n'), 'zzzzza0001');
+		expect(rows.map((r) => r.date)).toEqual(['2023-02-18', '2023-02-19']);
+	});
+
+	it('stamps the status in UTC, counts the recency in UTC days, and is due a week on to the hour', async () => {
+		vi.useFakeTimers({ toFake: ['Date'], now: LATE });
+		process.env.TZ = tz;
+		const s = store();
+		await want(s, [UIDS[0]!]);
+		let t = LATE;
+		const run = (at: number) => ((t = at), runWaterbodiesPass({ store: s, http: fixtureWaterbodiesHttp(), today: '2026-10-27', now: () => t, sleep: async () => {}, intervalMs: 0 }));
+		const first = await run(LATE);
+		expect(first.recencyDays).toBe(1136);
+		expect((await readStatus(s, 'waterbodies'))!.perKey[UIDS[0]!]).toMatchObject({ lastGood: '2026-10-27T23:30:00.000Z', triedAt: '2026-10-27T23:30:00.000Z', newest: '2023-09-17' });
+		expect(await run(LATE + 7 * 86_400_000 - 3_600_000)).toMatchObject({ fresh: 1, requests: 0 });
+		expect(await run(LATE + 7 * 86_400_000)).toMatchObject({ unchanged: [UIDS[0]], requests: 1 });
 	});
 });

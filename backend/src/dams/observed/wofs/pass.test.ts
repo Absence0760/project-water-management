@@ -165,21 +165,42 @@ describe('runWofsPass', () => {
 		expect(c.sleeps).toContain(SCENE_INTERVAL_MS);
 	});
 
-	it('waits on a dam scanned within the refresh days, and re-scans the tail once due', async () => {
+	it('checks a dam’s newest scenes at most once a UTC day, and re-scans the tail the next day', async () => {
 		const store = freshStore();
 		await listed(store, [DAM_A]);
 		await runWofsPass({ store, http: wofsHttp().http, today: TODAY, ...fast });
+		expect((await readState(store))!.dams[DAM_A.featureId]!.checkedOn).toBe(TODAY);
+		// The next hourly run, the same day, with no history left: nothing asked, but the status (the heartbeat's recency) is written.
 		const again = wofsHttp();
 		const r = await runWofsPass({ store, http: again.http, today: TODAY, ...fast });
-		expect(r).toMatchObject({ fresh: 1, written: [] });
+		expect(r).toMatchObject({ fresh: 1, written: [], turns: 0, stopped: 'done' });
+		expect(r.recencyDays).not.toBeNull();
 		expect(again.log).toEqual([]);
-		// A week on: only the tail is searched, and unchanged rows don't rewrite the file.
+		expect((await readStatus(store, 'wofs'))!.ranAt).toBeDefined();
+		// The next day: only the tail is searched, and unchanged rows don't rewrite the file.
 		const later = wofsHttp();
-		const r2 = await runWofsPass({ store, http: later.http, today: day(7), ...fast });
+		const r2 = await runWofsPass({ store, http: later.http, today: day(1), ...fast });
+		expect(r2.fresh).toBe(0);
 		const searched = later.log.filter((u) => u.startsWith(WOFS_STAC_SEARCH)).map((u) => new URL(u).searchParams.get('datetime')!);
-		expect(searched).toEqual([`${day(7 - 45)}T00:00:00Z/${day(7)}T23:59:59Z`]);
+		expect(searched).toEqual([`${day(1 - 45)}T00:00:00Z/${day(1)}T23:59:59Z`]);
 		// The fixture's "today" is still TODAY, so nothing new was published: nothing to write.
 		expect(r2.written).toEqual([]);
+		expect((await readState(store))!.dams[DAM_A.featureId]!.checkedOn).toBe(day(1));
+	});
+
+	it('goes on with a forward turn the deadline cut, in the next run the same day', async () => {
+		const store = freshStore();
+		await listed(store, [DAM_A]);
+		const c = clock();
+		// Every request takes a second; the first run gets three.
+		const first = wofsHttp({ onRequest: () => c.advance(1000) });
+		const r1 = await runWofsPass({ store, http: first.http, today: TODAY, deadline: c.now() + 3000, now: c.now, sleep: c.sleep, ...fast });
+		expect(r1.stopped).toBe('deadline');
+		expect((await readState(store))!.dams[DAM_A.featureId]!.checkedOn).toBeUndefined();
+		const r2 = await runWofsPass({ store, http: wofsHttp().http, today: TODAY, ...fast });
+		expect(r2.fresh).toBe(0);
+		expect(r2.stopped).toBe('done');
+		expect((await readState(store))!.dams[DAM_A.featureId]!.checkedOn).toBe(TODAY);
 	});
 
 	it('resumes across runs under the deadline, newest first, ending with what one long run writes', async () => {
@@ -195,6 +216,7 @@ describe('runWofsPass', () => {
 		const store = freshStore();
 		await listed(store, [DAM_A]);
 		let runs = 0;
+		let checked = false;
 		let stopped = 'deadline';
 		const spans: [string, string][] = [];
 		while (stopped === 'deadline') {
@@ -205,7 +227,10 @@ describe('runWofsPass', () => {
 			const { http } = wofsHttp({ spec, onRequest: () => c.advance(1000) });
 			const r = await runWofsPass({ store, http, today: TODAY, backfillFrom, deadline: c.now() + 20_000, now: c.now, sleep: c.sleep, ...fast });
 			stopped = r.stopped;
+			// Once the newest scenes were checked today, every later (hourly) run spends its time on the backfill.
+			if (checked) expect(r.fresh).toBe(1);
 			const st = (await readState(store))!.dams[DAM_A.featureId]!;
+			checked ||= st.checkedOn === TODAY;
 			spans.push([st.backfilledFrom ?? '', st.scannedThrough ?? '']);
 			if (runs === 1) {
 				// The first run reads the newest scenes first: the dam is current before any history comes in.
@@ -295,8 +320,14 @@ describe('runWofsPass', () => {
 		expect(status.perKey[DAM_A.featureId]).toEqual({ error: 'unavailable' });
 		expect(status.perKey[DAM_B.featureId]!.lastGood).toBeDefined();
 
-		// Next run: the failed dam's error clears once its turn goes cleanly.
-		const r2 = await runWofsPass({ store, http: wofsHttp().http, today: TODAY, ...fast });
+		// The next hourly run doesn't ask about the failed dam again the same day.
+		const same = wofsHttp();
+		const r1 = await runWofsPass({ store, http: same.http, today: TODAY, ...fast });
+		expect(r1).toMatchObject({ fresh: 2, written: [] });
+		expect(same.log.filter((u) => u.startsWith(WOFS_STAC_SEARCH) && new URL(u).searchParams.get('bbox') === bboxA)).toEqual([]);
+
+		// The next day: the failed dam's error clears once its turn goes cleanly.
+		const r2 = await runWofsPass({ store, http: wofsHttp().http, today: day(1), ...fast });
 		expect(r2.written).toEqual([DAM_A.featureId]);
 		expect((await readStatus(store, 'wofs'))!.perKey[DAM_A.featureId]!.error).toBeUndefined();
 	});

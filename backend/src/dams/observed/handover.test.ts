@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { FeedFormatError } from '../../feeds/errors.js';
 import { openStore } from '../../mirror/store.js';
 import {
@@ -63,7 +63,12 @@ describe('the dams handover files', () => {
 		const wanted = { generatedAt: '2026-10-27T04:00:00.000Z', waterbodies: ['zzzzza0001'], outlines: [{ featureId: FID, geometry: { type: 'Polygon' as const, coordinates: [square] }, since: '1984-01-01' }] };
 		await writeWanted(s, wanted);
 		expect(await readWanted(s)).toEqual(wanted);
-		const status = { source: 'waterbodies' as const, ranAt: '2026-10-27T04:00:00.000Z', stopped: false, perKey: { zzzzza0001: { lastGood: '2026-10-27T04:00:00.000Z', newest: '2023-09-17' } } };
+		const status = {
+			source: 'waterbodies' as const,
+			ranAt: '2026-10-27T04:00:00.000Z',
+			stopped: false,
+			perKey: { zzzzza0001: { lastGood: '2026-10-27T04:00:00.000Z', newest: '2023-09-17', triedAt: '2026-10-27T04:00:00.000Z' } }
+		};
 		await writeStatus(s, status);
 		expect(await readStatus(s, 'waterbodies')).toEqual(status);
 		await writeObservationFile(s, file());
@@ -119,5 +124,44 @@ describe('the pass metrics', () => {
 	it('counts the recency from the newest date any key holds', () => {
 		expect(recencyDays({ perKey: {} }, '2026-10-27')).toBeNull();
 		expect(recencyDays({ perKey: { a: { newest: '2026-10-20' }, b: { newest: '2026-09-01' }, c: { error: 'x' } } }, '2026-10-27')).toBe(7);
+	});
+});
+
+// CLAUDE.md rule 7: the dates here are UTC days whatever the server's zone.
+// The clock is pinned late in the UTC day, where a zone far east is already
+// on the next day and one far west still on this one.
+describe.each(['Pacific/Kiritimati', 'Pacific/Pago_Pago'])('under a skewed TZ (%s)', (tz) => {
+	const zone = process.env.TZ;
+	afterEach(() => {
+		vi.useRealTimers();
+		process.env.TZ = zone;
+	});
+	const at = (iso: string) => {
+		vi.useFakeTimers({ toFake: ['Date'], now: Date.parse(iso) });
+		process.env.TZ = tz;
+	};
+	const row = (date: string) => file({ rows: [{ date, wetAreaM2: 1, pctObserved: 1, upstreamKey: 'k' }] });
+
+	it('takes an observation dated up to tomorrow (UTC) and refuses the day after, at 23:30 UTC', async () => {
+		at('2026-10-27T23:30:00Z');
+		const s = store();
+		await writeObservationFile(s, row('2026-10-28'));
+		expect((await readObservationFile(s, 'waterbodies', 'zzzzza0001'))!.rows[0]!.date).toBe('2026-10-28');
+		expect(() => writeObservationFile(s, row('2026-10-29'))).toThrow();
+		// A file already in the bucket with that date is refused on read too.
+		await s.set(observationKey('waterbodies', 'zzzzza0001'), new TextEncoder().encode(JSON.stringify(row('2026-10-29'))));
+		await expect(readObservationFile(s, 'waterbodies', 'zzzzza0001')).rejects.toBeInstanceOf(FeedFormatError);
+	});
+
+	it('moves tomorrow’s bound at 00:00 UTC, not at local midnight', async () => {
+		at('2026-10-28T00:30:00Z');
+		const s = store();
+		await writeObservationFile(s, row('2026-10-29'));
+		expect(() => writeObservationFile(s, row('2026-10-30'))).toThrow();
+	});
+
+	it('counts the recency in UTC days', () => {
+		at('2026-10-27T23:30:00Z');
+		expect(recencyDays({ perKey: { a: { newest: '2026-10-20' } } }, '2026-10-27')).toBe(7);
 	});
 });

@@ -2,8 +2,10 @@
 // dam matched to a waterbody, into the mirror bucket for the worker to load
 // (issue #604 R5; handover.ts for the files, docs/architecture.md § Dam
 // observations, docs/data-sources.md for the source). The fetcher Lambda runs
-// it daily (lambda-fetcher.ts `{"mode":"dams-weekly"}`, infra/dam_observations.tf),
-// outside the VPC; each uid is asked again once a week (REFRESH_DAYS).
+// it hourly (lambda-fetcher.ts `{"mode":"dams-weekly"}`, infra/dam_observations.tf,
+// hourly for the WOfS backfill's sake), outside the VPC; each uid is asked
+// again once a week (REFRESH_DAYS), and one that failed a day later
+// (RETRY_DAYS), never every run.
 //
 // The series: one public CSV per waterbody,
 //   <DEAFRICA_SERVICES_BASE>waterbodies/v0.0.2/surface_area_change/<uid[0..4]>/<uid>.csv
@@ -49,8 +51,10 @@ export const WATERBODIES_SERIES_BASE = `${DEAFRICA_SERVICES_BASE}waterbodies/v0.
 export const waterbodiesUrl = (uid: string) => `${WATERBODIES_SERIES_BASE}${uid.slice(0, 4)}/${uid}.csv`;
 export const WATERBODIES_HEADER = ['date', 'px_total', 'px_wet', 'area_wet_m2', 'px_dry', 'area_dry_m2', 'px_invalid', 'area_invalid_m2', 'pc_wet', 'pc_dry', 'pc_invalid'] as const;
 
-/** A uid is asked again once its last good fetch is this many days old (the schedule is daily: a day's slack on a week). */
-export const REFRESH_DAYS = 6;
+/** A uid is asked again once its last good fetch is this many days old (the schedule is hourly, so a week to within the hour). */
+export const REFRESH_DAYS = 7;
+/** A uid whose last ask failed (or was refused) is asked again only this many days later, whatever the schedule. */
+export const RETRY_DAYS = 1;
 /** The least gap between two requests' starts. */
 export const REQUEST_INTERVAL_MS = 1000;
 
@@ -104,9 +108,9 @@ export interface WaterbodiesPassResult {
 	fetched: string[];
 	/** uids the upstream answered 304 for: the file held is still theirs. */
 	unchanged: string[];
-	/** uids whose request failed another way (404, a changed layout, a timeout): skipped, tried next run. */
+	/** uids whose request failed another way (404, a changed layout, a timeout): skipped, asked again RETRY_DAYS later. */
 	failed: string[];
-	/** Listed uids fetched recently enough to wait. */
+	/** Listed uids fetched within REFRESH_DAYS, or asked within RETRY_DAYS, so waiting. */
 	fresh: number;
 	stopped: 'no_list' | 'done' | 'deadline' | 'refused' | 'throttled';
 	requests: number;
@@ -129,6 +133,7 @@ export async function runWaterbodiesPass(opts: WaterbodiesPassOptions): Promise<
 	const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 	const interval = opts.intervalMs ?? REQUEST_INTERVAL_MS;
 	const refreshMs = (opts.refreshDays ?? REFRESH_DAYS) * 86_400_000;
+	const retryMs = RETRY_DAYS * 86_400_000;
 	const { store, today } = opts;
 	let requests = 0;
 	let last = -Infinity;
@@ -149,7 +154,11 @@ export async function runWaterbodiesPass(opts: WaterbodiesPassOptions): Promise<
 	if (!wanted) return done({ fetched: [], unchanged: [], failed: [], fresh: 0, stopped: 'no_list', error: null });
 
 	const lastGood = (uid: string) => (perKey[uid]?.lastGood ? Date.parse(perKey[uid]!.lastGood!) : -Infinity);
-	const due = wanted.waterbodies.filter((u) => WATERBODY_UID.test(u) && lastGood(u) <= now() - refreshMs).sort((a, b) => lastGood(a) - lastGood(b) || (a < b ? -1 : 1));
+	const lastTried = (uid: string) => (perKey[uid]?.triedAt ? Date.parse(perKey[uid]!.triedAt!) : -Infinity);
+	// Due a week after its last good fetch, and never within a day of its last ask (a failing uid isn't asked every hour).
+	const due = wanted.waterbodies
+		.filter((u) => WATERBODY_UID.test(u) && lastGood(u) <= now() - refreshMs && lastTried(u) <= now() - retryMs)
+		.sort((a, b) => lastGood(a) - lastGood(b) || (a < b ? -1 : 1));
 
 	const fetched: string[] = [];
 	const unchanged: string[] = [];
@@ -174,7 +183,7 @@ export async function runWaterbodiesPass(opts: WaterbodiesPassOptions): Promise<
 				const got = await paced(url, held?.upstream[0]?.etag ?? null);
 				if (got === null) throw new FeedUnavailableError('HTTP 404');
 				if (got.status === 'not-modified') {
-					perKey[uid] = { ...perKey[uid], lastGood: triedAt, ...(held?.rows.length ? { newest: held.rows.at(-1)!.date } : {}) };
+					perKey[uid] = { ...perKey[uid], lastGood: triedAt, triedAt, ...(held?.rows.length ? { newest: held.rows.at(-1)!.date } : {}) };
 					delete perKey[uid]!.error;
 					unchanged.push(uid);
 					continue;
@@ -188,18 +197,18 @@ export async function runWaterbodiesPass(opts: WaterbodiesPassOptions): Promise<
 					rows
 				};
 				await writeObservationFile(store, file);
-				perKey[uid] = { lastGood: triedAt, ...(rows.length ? { newest: rows.at(-1)!.date } : {}) };
+				perKey[uid] = { lastGood: triedAt, triedAt, ...(rows.length ? { newest: rows.at(-1)!.date } : {}) };
 				fetched.push(uid);
 			} catch (err) {
 				if (err instanceof FeedRefusedError || err instanceof FeedThrottledError) {
 					stopped = err instanceof FeedRefusedError ? 'refused' : 'throttled';
 					error = err;
-					perKey[uid] = { ...perKey[uid], error: stopped };
+					perKey[uid] = { ...perKey[uid], error: stopped, triedAt };
 					break;
 				}
 				// The upstream's answer for this uid; anything else (the mirror write failing) is ours: stop and fail.
 				if (!(err instanceof FeedFormatError || err instanceof FeedUnavailableError)) throw err;
-				perKey[uid] = { ...perKey[uid], error: errorCode(err) };
+				perKey[uid] = { ...perKey[uid], error: errorCode(err), triedAt };
 				failed.push(uid);
 			}
 		}

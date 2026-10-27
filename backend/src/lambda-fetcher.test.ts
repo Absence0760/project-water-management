@@ -565,6 +565,33 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		expect(lines.join('\n')).not.toContain(dam().featureId);
 	});
 
+	it('an hourly run with nothing due asks nothing, and still publishes both heartbeats and recencies', async () => {
+		await bucket(undefined, [dam()]);
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		const quiet = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		await handler({ mode: 'dams-weekly' } as never);
+		quiet.mockRestore();
+		// The next run, the same day: every uid was fetched within the week and the dam's newest scenes checked today.
+		vi.stubEnv('FEED_SOURCE', 'live');
+		const asked = vi.fn(async () => {
+			throw new Error('nothing should be asked');
+		});
+		httpOverride.next = { range: asked, text: asked, textConditional: asked };
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = (await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer;
+		const metrics = out.mock.calls.map(([l]) => String(l)).filter((l) => l.includes('DamPassCompleted'));
+		out.mockRestore();
+		expect(asked).not.toHaveBeenCalled();
+		expect(res).toEqual({
+			waterbodies: { fetched: 0, unchanged: 0, failed: 0, fresh: 2, recencyDays: expect.any(Number), stopped: 'done' },
+			wofs: { fetched: 0, unchanged: 0, failed: 0, fresh: 1, recencyDays: expect.any(Number), stopped: 'done' }
+		});
+		expect(metrics.map((l) => JSON.parse(l))).toEqual([
+			expect.objectContaining({ Source: 'waterbodies', DamPassCompleted: 1, DamObservationAgeDays: expect.any(Number) }),
+			expect.objectContaining({ Source: 'wofs', DamPassCompleted: 1, DamObservationAgeDays: expect.any(Number) })
+		]);
+	});
+
 	it('fails the invocation when STAC refuses the WOfS pass, after its heartbeat', async () => {
 		await bucket([], [dam()]);
 		vi.stubEnv('FEED_SOURCE', 'live');

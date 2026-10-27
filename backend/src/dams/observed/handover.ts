@@ -5,7 +5,7 @@
 // internet, and both reach the mirror bucket (MIRROR_URL), so it carries:
 //
 //   worker tick ──put──► dams/wanted.json            uids of matched dams + every dam outline
-//   fetcher, daily ─get─► dams/wanted.json
+//   fetcher, hourly ─get─► dams/wanted.json
 //     Waterbodies pass ──► dams/waterbodies/<uid>.json, dams/waterbodies-status.json   (waterbodies.ts)
 //     WOfS pass        ──► dams/wofs/<featureId>.json,  dams/wofs-status.json          (R5-C)
 //   worker tick ──get──► each status, then every file whose last good fetch is newer than what it loaded
@@ -61,8 +61,11 @@ export interface PassStatus {
 	/** The run stopped early on the upstream's answer (an HTTP 403, throttling): the copy is not being kept up. */
 	stopped: boolean;
 	reason?: string;
-	/** Per key: the last good fetch (ISO time), the newest observation date held, the last error (a fixed code). */
-	perKey: Record<string, { lastGood?: string; newest?: string; error?: string }>;
+	/**
+	 * Per key: the last good fetch (ISO time), the newest observation date held, the last error (a fixed code), and
+	 * the last time it was asked for at all (Waterbodies only: a key that keeps failing is asked again a day later, not every run).
+	 */
+	perKey: Record<string, { lastGood?: string; newest?: string; error?: string; triedAt?: string }>;
 }
 
 type Env = Record<string, string | undefined>;
@@ -158,7 +161,7 @@ export const PassStatusSchema = z
 		reason: z.string().max(100).optional(),
 		perKey: z.record(
 			z.string().max(64),
-			z.object({ lastGood: IsoTime.optional(), newest: IsoDay.optional(), error: z.string().max(100).optional() }).strict()
+			z.object({ lastGood: IsoTime.optional(), newest: IsoDay.optional(), error: z.string().max(100).optional(), triedAt: IsoTime.optional() }).strict()
 		)
 	})
 	.strict();

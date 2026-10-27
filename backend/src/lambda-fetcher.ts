@@ -33,7 +33,7 @@
 // (ingest/dws.ts), for the worker to load into the gauge record store,
 // publishing MirrorLagDays for Product=dws.
 //
-// A fourth (issue #604 R5): a daily schedule invokes it with
+// A fourth (issue #604 R5): an hourly schedule invokes it with
 // `{"mode":"dams-weekly"}` (DAMS_WEEKLY_EVENT, infra/dam_observations.tf), and
 // it runs the dam observation passes (dams/observed/): each reads the wanted
 // list the worker wrote (dams/wanted.json) and writes its files and status
@@ -461,7 +461,10 @@ async function wofsPass(deadline: number): Promise<{ answer: DamPassAnswer; erro
  * WATERBODIES_BUDGET_SHARE of the time), then WOfS. A pass stopped by its
  * upstream doesn't keep the other from running; the invocation fails at the
  * end if either was stopped, and is not retried (dam_observations.tf: the
- * next day's run tries again).
+ * next hour's run tries again). Hourly for the WOfS backfill's sake; each
+ * pass keeps its own per-key cadence (a Waterbodies uid weekly, a dam's
+ * newest WOfS scenes daily), and a run with nothing due still publishes
+ * both heartbeats and recencies.
  */
 async function damsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DamsWeeklyAnswer> {
 	const started = Date.now();

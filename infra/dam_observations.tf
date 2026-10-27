@@ -12,7 +12,10 @@
 #
 # Everything here is gated on dam_observations_enabled (default false): the
 # rule stays disabled, no IAM is granted and no alarm fires for passes that
-# don't exist yet.
+# don't exist yet. Turning it on needs the worker side too: the plan fails
+# unless the worker Lambda's environment has DAM_OBSERVATIONS = "on" (set in
+# jobs.tf; the gate below), since without it the worker never writes the
+# wanted list nor loads what the passes fetch.
 
 locals {
   dams_enabled = var.dam_observations_enabled
@@ -69,20 +72,47 @@ resource "aws_iam_role_policy" "worker_dams" {
   policy = data.aws_iam_policy_document.worker_dams.json
 }
 
+# --- The gate: the worker side must be on -------------------------------------------
+
+# The worker's DAM_OBSERVATIONS (jobs.tf, #605's file) is what writes
+# dams/wanted.json and loads what the passes fetched. With the flag on and that
+# variable unset, the passes would run against no list, the heartbeats would
+# stay green, and no dam would ever get an observation: so the plan fails
+# instead. A resource of its own (nothing depends on it), so the tests can
+# expect this failure and still check the rest of the plan; it holds nothing
+# and costs nothing.
+resource "terraform_data" "dam_observations_gate" {
+  count = local.dams_enabled ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = try(aws_lambda_function.worker.environment[0].variables["DAM_OBSERVATIONS"], "") == "on"
+      error_message = "dam_observations_enabled needs the worker Lambda's DAM_OBSERVATIONS = \"on\" (infra/jobs.tf, beside DWS_WEEKLY: DAM_OBSERVATIONS = var.dam_observations_enabled ? \"on\" : \"off\"). Without it the worker never writes dams/wanted.json nor loads what the passes fetch. docs/deployment.md § Dam observations."
+    }
+  }
+}
+
 # --- The schedule -------------------------------------------------------------------
 
-# Daily at 05:00 UTC (07:00 in South Africa, after the DWS pass's 04:00),
-# though each key is asked again only once a week (REFRESH_DAYS in
-# dams/observed/waterbodies.ts, and the WOfS pass's own): a daily run spreads
-# the work over the fetcher's time limit, and publishes each source's
-# heartbeat every day, so the alarms below can treat a missing day as
-# breaching (CloudWatch can't evaluate two weekly periods: an alarm's periods
-# may span at most 7 days). A day with nothing due asks DE Africa nothing.
+# Hourly at :20 (clear of the daily ingest at 03:00, the DWS pass at 04:00
+# and the GEFS pass at :38), because the WOfS history is long: the fetcher's
+# 120 s limit, less Waterbodies' share (up to 30%), reads a year or two of one
+# dam's scenes a run, so daily runs would take about a week per dam to reach
+# 2013 (about a year for 50 dams); hourly, about seven hours per dam (about two
+# weeks for 50). Politeness doesn't change with it: each
+# Waterbodies uid is still asked again only once a week (REFRESH_DAYS in
+# dams/observed/waterbodies.ts), each dam's newest WOfS scenes once a UTC day
+# (REFRESH_DAYS in dams/observed/wofs/pass.ts), every other run's time goes to
+# the WOfS backfill, and the pacing stays (STAC once a second, the bucket five
+# times). A run with nothing due asks DE Africa nothing, and still publishes
+# each source's heartbeat and recency, so the alarms below (daily periods:
+# CloudWatch can't evaluate two weekly ones) see every day.
 resource "aws_cloudwatch_event_rule" "dams_weekly" {
   name                = "${local.project}-dams-weekly"
-  description         = "The fetcher's dam observation passes: DE Africa Waterbodies and WOfS for every traced dam, each re-read once a week into the mirror bucket ({\"mode\":\"dams-weekly\"}). Disabled until dam_observations_enabled is set."
-  schedule_expression = "cron(0 5 * * ? *)"
+  description         = "The fetcher's dam observation passes, hourly: DE Africa Waterbodies (each uid re-read once a week) and WOfS (each dam's newest scenes once a day, the rest of the time its history) for every traced dam, into the mirror bucket ({\"mode\":\"dams-weekly\"}). Disabled until dam_observations_enabled is set."
+  schedule_expression = "cron(20 * * * ? *)"
   state               = local.dams_enabled ? "ENABLED" : "DISABLED"
+
 }
 
 resource "aws_cloudwatch_event_target" "dams_weekly" {
@@ -92,7 +122,8 @@ resource "aws_cloudwatch_event_target" "dams_weekly" {
   arn   = aws_lambda_function.fetcher.arn
   input = jsonencode({ mode = "dams-weekly" })
 
-  # A run stopped by an HTTP 403 must not ask again within minutes: the next day's run tries.
+  # A run stopped by an HTTP 403 or throttling must not ask again within
+  # minutes: the next hour's run tries (the feeds pause a refused host an hour too).
   retry_policy {
     maximum_retry_attempts       = 0
     maximum_event_age_in_seconds = 3600
@@ -128,7 +159,7 @@ resource "aws_cloudwatch_metric_alarm" "dam_pass_heartbeat" {
   period              = 86400
   statistic           = "Sum"
   threshold           = 1
-  alarm_description   = "The fetcher's ${each.key} pass of the dam observations published no heartbeat for two days: the daily dams-weekly run stopped, or fails before the pass completes. Logs Insights on the fetcher log group: filter message.event = \"dams_pass\" and message.source = \"${each.key}\" | fields message.stopped, message.reason, message.detail, message.fetched, message.failed. stopped refused / throttled = DE Africa answered HTTP 403 or 429/503 (the run stopped on purpose, docs/deployment.md § Dam observations). The app keeps showing the observations it holds."
+  alarm_description   = "The fetcher's ${each.key} pass of the dam observations published no heartbeat for two days: the hourly dams-weekly runs stopped, or fails before the pass completes. Logs Insights on the fetcher log group: filter message.event = \"dams_pass\" and message.source = \"${each.key}\" | fields message.stopped, message.reason, message.detail, message.fetched, message.failed. stopped refused / throttled = DE Africa answered HTTP 403 or 429/503 (the run stopped on purpose, docs/deployment.md § Dam observations). The app keeps showing the observations it holds."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "breaching"
 

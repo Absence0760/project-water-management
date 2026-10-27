@@ -1,7 +1,8 @@
 # Plan-only tests (mocked providers, no AWS credentials) for the dam
 # observations (dam_observations.tf, issue #604 R5): everything stays off until
-# dam_observations_enabled is set; then the daily rule sends
-# {"mode":"dams-weekly"} to the fetcher, never retried; the fetcher reaches
+# dam_observations_enabled is set, and the plan refuses it while the worker's
+# environment lacks DAM_OBSERVATIONS = "on" (the gate); with it on, the hourly
+# rule sends {"mode":"dams-weekly"} to the fetcher, never retried; the fetcher reaches
 # only dams/ in the mirror bucket and the worker only dams/wanted.json; each
 # source's heartbeat alarm and the WOfS recency alarm treat missing data as
 # breaching, and waterbodies has no recency alarm (its public series are
@@ -765,10 +766,31 @@ run "dam_observations_off_by_default" {
       length(aws_iam_role_policy.fetcher_dams) == 0 &&
       length(aws_iam_role_policy.worker_dams) == 0 &&
       length(aws_cloudwatch_metric_alarm.dam_pass_heartbeat) == 0 &&
-      length(aws_cloudwatch_metric_alarm.dam_recency_wofs) == 0
+      length(aws_cloudwatch_metric_alarm.dam_recency_wofs) == 0 &&
+      length(terraform_data.dam_observations_gate) == 0
     )
     error_message = "Until dam_observations_enabled is set the dams rule is disabled, targets nothing, may invoke nothing, neither Lambda may write dams/, and no alarm fires for passes that don't exist."
   }
+}
+
+# The gate (dam_observations.tf terraform_data.dam_observations_gate): the
+# worker's DAM_OBSERVATIONS lives in jobs.tf, which doesn't set it yet, so
+# turning the flag on fails the plan. A test can't fake the worker's
+# environment (override_resource sets computed attributes only), so every run
+# with the flag on expects the gate's failure and checks the rest of the plan,
+# which still resolves (nothing depends on the gate). When jobs.tf gains
+# DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off", these
+# expect_failures stop failing and the runs fail: drop them then, and turn the
+# refusal run into a check that the gate passes (docs/followups.md § Observing
+# dams).
+run "dam_observations_refused_without_the_worker_side" {
+  command = plan
+
+  variables {
+    dam_observations_enabled = true
+  }
+
+  expect_failures = [terraform_data.dam_observations_gate]
 }
 
 run "dam_observations_on" {
@@ -778,15 +800,19 @@ run "dam_observations_on" {
     dam_observations_enabled = true
   }
 
+  expect_failures = [terraform_data.dam_observations_gate]
+
   assert {
     condition = (
       aws_cloudwatch_event_rule.dams_weekly.state == "ENABLED" &&
       aws_cloudwatch_event_target.dams_weekly[0].arn == aws_lambda_function.fetcher.arn &&
       jsondecode(aws_cloudwatch_event_target.dams_weekly[0].input) == { mode = "dams-weekly" } &&
       one(aws_cloudwatch_event_target.dams_weekly[0].retry_policy).maximum_retry_attempts == 0 &&
+      aws_cloudwatch_event_rule.dams_weekly.schedule_expression == "cron(20 * * * ? *)" &&
+      alltrue([for r in [aws_cloudwatch_event_rule.daily_ingest, aws_cloudwatch_event_rule.dws_weekly, aws_cloudwatch_event_rule.gefs_ingest] : !startswith(r.schedule_expression, "cron(20 ")]) &&
       !contains([aws_cloudwatch_event_rule.daily_ingest.schedule_expression, aws_cloudwatch_event_rule.dws_weekly.schedule_expression], aws_cloudwatch_event_rule.dams_weekly.schedule_expression)
     )
-    error_message = "With dam_observations_enabled the dams rule sends {\"mode\":\"dams-weekly\"} to the fetcher, never retried, at another time than the daily ingest and the DWS pass."
+    error_message = "With dam_observations_enabled the dams rule sends {\"mode\":\"dams-weekly\"} to the fetcher hourly at :20 (the WOfS backfill's pace; each pass keeps its own once-a-week or once-a-day per key), never retried, clear of the daily ingest, the DWS pass and the GEFS pass."
   }
   assert {
     condition = (
@@ -851,6 +877,8 @@ run "dam_alarms_follow_the_alarm_tier" {
     dam_observations_enabled = true
     alarm_tier               = "none"
   }
+
+  expect_failures = [terraform_data.dam_observations_gate]
 
   assert {
     condition     = length(aws_cloudwatch_metric_alarm.dam_pass_heartbeat) == 0 && length(aws_cloudwatch_metric_alarm.dam_recency_wofs) == 0 && aws_cloudwatch_event_rule.dams_weekly.state == "ENABLED"
