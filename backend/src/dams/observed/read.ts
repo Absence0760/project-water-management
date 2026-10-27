@@ -4,10 +4,11 @@
 // observation and match tables (249) let a project's viewers read them, and a
 // farmer only their own farm's dams.
 import type { Db } from '../../db/tx.js';
+import { DEAFRICA_ATTRIBUTION } from './upstream.js';
 import { compareDam, fullAreaOf, type CompareResult, type DamNodeIn, type FullArea, type MatchStatus, type ObservationIn } from './compare.js';
 
 /** The credit every view of the observations carries (CC BY 4.0 asks for it where the values show). */
-export const OBSERVED_ATTRIBUTION = 'Digital Earth Africa, CC BY 4.0';
+export const OBSERVED_ATTRIBUTION = DEAFRICA_ATTRIBUTION;
 
 /** A dam polygon on the map and how it matched a Waterbodies polygon. */
 export interface ObservedFeature {

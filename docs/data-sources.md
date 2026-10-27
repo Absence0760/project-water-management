@@ -268,7 +268,7 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   app). `FEED_HOSTS` holds it for the fetcher's live client.
 - **Licence:** CC BY 4.0 (Digital Earth Africa, read by the lead
   2026-10-27; [maps.md § Sources](./maps.md#sources)).
-- **Attribution:** "Contains Digital Earth Africa data (CC BY 4.0)"
+- **Attribution:** "Digital Earth Africa, CC BY 4.0"
   (`dams/observed/upstream.ts` `DEAFRICA_ATTRIBUTION`) wherever an observed
   value shows (R5-B's chart and farmer view), and on `/data-sources`.
 - **Contact:** Digital Earth Africa's help desk and community forum

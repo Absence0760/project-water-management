@@ -6,4 +6,4 @@
 export const DEAFRICA_SERVICES_BASE = 'https://deafrica-services.s3.af-south-1.amazonaws.com/';
 
 /** The attribution shown wherever their values show (CC BY 4.0). */
-export const DEAFRICA_ATTRIBUTION = 'Contains Digital Earth Africa data (CC BY 4.0)';
+export const DEAFRICA_ATTRIBUTION = 'Digital Earth Africa, CC BY 4.0';
