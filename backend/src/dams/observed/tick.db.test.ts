@@ -5,18 +5,23 @@
 // next tick loading them; plus a WOfS file loaded by the same path, and a
 // reload of the reference set matching every dam again.
 //
+// The whole file runs under a skewed TZ (CLAUDE.md rule 7): the observation
+// dates, the wanted list's `since` (the day after the newest WOfS row) and the
+// pass's today are UTC days whatever the server's zone.
+//
 // DB test files run one at a time; this one removes the reference rows and its project after.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildExamples } from '../../../scripts/examples/catchments.js';
 import { sandspruitMap } from '../../../scripts/examples/map.js';
 import { importWaterbodies, parseArgs } from '../../../scripts/import-waterbodies.js';
 import { caseOf } from '../../../scripts/waterbodies-fixture.js';
 import { asOwner, signUp } from '../../__tests__/helpers.js';
 import { withUser } from '../../db/tx.js';
+import { runTick } from '../../jobs/runner.js';
 import { openStore } from '../../mirror/store.js';
 import { readWanted, writeObservationFile, writeStatus } from './handover.js';
 import { resetDamsTick, runDamsTick } from './tick.js';
@@ -33,8 +38,11 @@ let dir: string;
 let url: string;
 const env = () => ({ DAM_OBSERVATIONS: 'on', MIRROR_URL: url });
 const store = () => openStore(url);
+const zone = process.env.TZ;
 
 beforeAll(async () => {
+	// Far east of UTC: a date taken in the server's zone instead would be a day out for half of every day.
+	process.env.TZ = 'Pacific/Kiritimati';
 	owner = await signUp('Dtick');
 	projectId = (await owner.call('POST', '/projects', { name: 'Observed Sandspruit' })).body.project.id;
 	const sandspruit = buildExamples().find((e) => e.name.includes('Sandspruit'))!;
@@ -51,6 +59,7 @@ beforeEach(() => {
 	url = pathToFileURL(`${dir}/`).href;
 });
 afterAll(async () => {
+	process.env.TZ = zone;
 	rmSync(dir, { recursive: true, force: true });
 	await asOwner('DELETE FROM project WHERE id = $1', [projectId]);
 	await asOwner('DELETE FROM waterbody_reference');
@@ -129,10 +138,59 @@ describe('the dams tick', () => {
 		expect((await readWanted(store()))!.outlines.find((o) => o.featureId === none)!.since).toBe('2026-09-18');
 	});
 
+	it('takes a WOfS row dated tomorrow (UTC) late in the UTC day, and its since is the day after', async () => {
+		const none = dams.get('Klipdrift dam')!;
+		await runDamsTick({ env: env(), store: store() });
+		// The server's zone (UTC+14) is already a day ahead of UTC here: tomorrow is UTC's.
+		const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+		const fetchedAt = new Date().toISOString();
+		await writeObservationFile(store(), {
+			source: 'wofs',
+			key: none,
+			fetchedAt,
+			upstream: [{ url: 'https://example.invalid/stac/item-3', itemId: 'item-3' }],
+			rows: [{ date: tomorrow, wetAreaM2: 800, pctObserved: 90, upstreamKey: 'item-3' }]
+		});
+		await writeStatus(store(), { source: 'wofs', ranAt: fetchedAt, stopped: false, perKey: { [none]: { lastGood: fetchedAt, newest: tomorrow } } });
+		expect(await runDamsTick({ env: env(), store: store() })).toMatchObject({ loaded: 1, failed: 0 });
+		expect((await observed('wofs')).get(none)!.newest).toBe(tomorrow);
+		resetDamsTick();
+		await runDamsTick({ env: env(), store: store() });
+		const after = new Date(Date.parse(`${tomorrow}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+		expect((await readWanted(store()))!.outlines.find((o) => o.featureId === none)!.since).toBe(after);
+	});
+
 	it('matches every dam again after the reference set is reloaded', async () => {
 		await runDamsTick({ env: env(), store: store() });
 		expect((await runDamsTick({ env: env(), store: store() }))!.matched).toBe(0);
 		await importWaterbodies(OWNER_URL(), parseArgs([]) as Exclude<ReturnType<typeof parseArgs>, string>);
 		expect((await runDamsTick({ env: env(), store: store() }))!.matched).toBeGreaterThanOrEqual(dams.size);
+	});
+});
+
+// The worker's tick (jobs/runner.ts runTick) runs the dams tick beside the DWS one, from the process env.
+describe('runTick', () => {
+	afterEach(() => vi.unstubAllEnvs());
+	const tick = (feeds = true) => runTick({ feeds, reports: false, alerts: false });
+
+	it('reports the dams tick in result.dams with DAM_OBSERVATIONS=on', async () => {
+		vi.stubEnv('DAM_OBSERVATIONS', 'on');
+		vi.stubEnv('MIRROR_URL', url);
+		const r = await tick();
+		expect(r.dams).toMatchObject({ published: true, failed: 0 });
+		expect(r.dams!.dams).toBeGreaterThanOrEqual(dams.size);
+		expect((await readWanted(store()))!.outlines.map((o) => o.featureId)).toEqual(expect.arrayContaining([...dams.values()]));
+	});
+
+	it('reports null with it off or unset, and leaves it out with feeds off', async () => {
+		vi.stubEnv('MIRROR_URL', url);
+		vi.stubEnv('DAM_OBSERVATIONS', 'off');
+		expect((await tick()).dams).toBeNull();
+		vi.stubEnv('DAM_OBSERVATIONS', '');
+		expect((await tick()).dams).toBeNull();
+		vi.stubEnv('DAM_OBSERVATIONS', 'on');
+		expect((await tick(false)).dams).toBeUndefined();
+		// Nothing was written while it was off.
+		expect(await readWanted(store())).toBeNull();
 	});
 });

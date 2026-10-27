@@ -1,18 +1,17 @@
 // What satellites saw of each traced dam (249_dam_observation, issue #604
-// R5): who reads the waterbody reference, the matches and the observations;
-// that only the worker's functions write them; the loader's bounds and
-// targets; and a redrawn dam losing its match and observations.
+// R5): the worker's functions (the outlines, the candidates, the loader's
+// bounds and targets, the match write), and a redrawn dam losing its match
+// and observations. Who may read and write the tables (RLS, grants, the
+// functions refusing a signed-in user) is observations.security.db.test.ts.
 //
 // DB test files run one at a time; this one removes its reference rows after each test.
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, node, signUp } from '../../__tests__/helpers.js';
-import { type Db, withoutUser, withUser } from '../../db/tx.js';
+import { type Db, withoutUser } from '../../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
 let owner: User;
-let viewer: User;
-let farmer: User;
 let stranger: User;
 let projectId: string;
 let otherProjectId: string;
@@ -28,8 +27,6 @@ const box = (x: number, y: number, d: number) => [
 	[x, y]
 ];
 const code = async (p: Promise<unknown>) => ((await p.then(() => null, (e: { code?: string }) => e)) as { code?: string } | null)?.code ?? 'ok';
-const rowsAs = async <T = Record<string, unknown>>(u: User, sql: string, params: unknown[] = []) =>
-	withUser(u.id, async (db) => (await db.query<T & Record<string, unknown>>(sql, params)).rows);
 
 /** A dam polygon in a project, as an editor (the owner) through the API. */
 async function dam(u: User, pid: string, name: string, x: number, nodeId: string | null = null): Promise<string> {
@@ -56,11 +53,9 @@ let damB: string;
 let damOther: string;
 
 beforeAll(async () => {
-	[owner, viewer, farmer, stranger] = (await Promise.all(['Oowner', 'Oviewer', 'Ofarmer', 'Ostranger'].map((n) => signUp(n)))) as [User, User, User, User];
+	[owner, stranger] = (await Promise.all(['Oowner', 'Ostranger'].map((n) => signUp(n)))) as [User, User];
 	projectId = (await owner.call('POST', '/projects', { name: 'Observed dams' })).body.project.id;
 	expect((await owner.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, farmA, farmB], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
-	expect((await owner.call('POST', `/projects/${projectId}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
-	expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farmA.id] })).status).toBe(201);
 	otherProjectId = (await stranger.call('POST', '/projects', { name: 'Elsewhere dams' })).body.project.id;
 	damA = await dam(owner, projectId, 'Dam A', 21.31, farmA.id);
 	damB = await dam(owner, projectId, 'Dam B', 21.35, farmB.id);
@@ -87,63 +82,6 @@ async function seed() {
 		for (const f of [damA, damB, damOther]) expect((await load(db, 'wofs', f, [['2020-01-06', 500, 80, 'ga_ls_wofs_synthetic_1']])).written).toBe(1);
 	});
 }
-
-describe('dam observations: read by the project, written only by the worker', () => {
-	it('a viewer reads every dam’s match and observations (positive control); another project’s member, nothing', async () => {
-		await seed();
-		const seen = await rowsAs<{ feature_id: string; source: string }>(viewer, 'SELECT feature_id, source FROM dam_observation ORDER BY feature_id, source');
-		expect(seen.length).toBe(4);
-		expect(new Set(seen.map((r) => r.feature_id))).toEqual(new Set([damA, damB]));
-		expect((await rowsAs(viewer, 'SELECT feature_id FROM dam_waterbody_match')).length).toBe(2);
-		const theirs = await rowsAs<{ feature_id: string }>(stranger, 'SELECT feature_id FROM dam_observation');
-		expect(theirs.map((r) => r.feature_id)).toEqual([damOther]);
-		expect(await rowsAs(stranger, 'SELECT feature_id FROM dam_observation WHERE project_id = $1', [projectId])).toEqual([]);
-		expect(await rowsAs(stranger, 'SELECT feature_id FROM dam_waterbody_match WHERE project_id = $1', [projectId])).toEqual([]);
-	});
-
-	it('a farmer reads their own farm’s dam (positive control), never a neighbour’s', async () => {
-		await seed();
-		const obs = await rowsAs<{ feature_id: string }>(farmer, 'SELECT DISTINCT feature_id FROM dam_observation');
-		expect(obs.map((r) => r.feature_id)).toEqual([damA]);
-		const m = await rowsAs<{ feature_id: string }>(farmer, 'SELECT feature_id FROM dam_waterbody_match');
-		expect(m.map((r) => r.feature_id)).toEqual([damA]);
-	});
-
-	it('with no user, RLS shows nothing of the tables themselves', async () => {
-		await seed();
-		await asOwner(`INSERT INTO waterbody_reference (uid, dataset, geometry, min_lon, min_lat, max_lon, max_lat, area_m2, source)
-			VALUES ('zzzzzc0001', 'test', '{"type":"Polygon","coordinates":[]}', 21, -34, 21.1, -33.9, 1000, 'test')`);
-		expect(await withoutUser(async (db) => (await db.query('SELECT count(*)::int AS n FROM dam_observation')).rows[0].n)).toBe(0);
-		expect(await withoutUser(async (db) => (await db.query('SELECT count(*)::int AS n FROM waterbody_reference')).rows[0].n)).toBe(0);
-		expect((await rowsAs(viewer, 'SELECT uid FROM waterbody_reference')).length).toBe(1);
-	});
-
-	it('water_app can’t write the tables, as a member or the worker', async () => {
-		await seed();
-		const as = (sql: string) => code(withUser(owner.id, (db) => db.query(sql)));
-		expect(await as(`UPDATE dam_observation SET wet_area_m2 = 9`)).toBe('42501');
-		expect(await as(`DELETE FROM dam_observation`)).toBe('42501');
-		expect(
-			await as(
-				`INSERT INTO dam_observation (project_id, feature_id, source, obs_date, wet_area_m2, pct_observed, upstream_key) VALUES ('${projectId}', '${damA}', 'wofs', '2021-01-01', 1, 100, 'x')`
-			)
-		).toBe('42501');
-		expect(await as(`UPDATE dam_waterbody_match SET status = 'none', uid = NULL, dam_share = NULL, waterbody_share = NULL`)).toBe('42501');
-		expect(await as(`DELETE FROM waterbody_reference`)).toBe('42501');
-		expect(await code(withoutUser((db) => db.query(`DELETE FROM dam_observation`)))).toBe('42501');
-	});
-
-	it('the worker’s functions refuse a signed-in user, and run with no user (positive control)', async () => {
-		const at = await updatedAt(damA);
-		expect(await code(withUser(owner.id, (db) => match(db, damA, 'none', null, at)))).toBe('42501');
-		expect(await code(withUser(owner.id, (db) => load(db, 'wofs', damA, [['2020-01-01', 1, 100, 'k']])))).toBe('42501');
-		expect(await code(withUser(owner.id, (db) => db.query('SELECT * FROM app_dam_outlines()')))).toBe('42501');
-		expect(await code(withUser(owner.id, (db) => db.query('SELECT * FROM app_waterbody_candidates(21, -34, 21.5, -33.5)')))).toBe('42501');
-		const outlines = await withoutUser(async (db) => (await db.query<{ feature_id: string; match_stale: boolean }>('SELECT feature_id, match_stale FROM app_dam_outlines()')).rows);
-		expect(outlines.map((o) => o.feature_id)).toEqual(expect.arrayContaining([damA, damB, damOther]));
-		expect(outlines.find((o) => o.feature_id === damA)!.match_stale).toBe(true);
-	});
-});
 
 describe('the worker’s functions', () => {
 	it('lists each dam’s match and newest observation per source; a reload of the reference set makes every match stale', async () => {
@@ -244,14 +182,19 @@ describe('the worker’s functions', () => {
 
 	it('redrawing a dam drops its match and observations; renaming it doesn’t', async () => {
 		await seed();
+		const matchOf = async (f: string) => (await asOwner('SELECT status, uid FROM dam_waterbody_match WHERE feature_id = $1', [f])) as { status: string; uid: string | null }[];
+		expect(await matchOf(damB)).toEqual([{ status: 'matched', uid: 'zzzzzb0001' }]);
+		// A rename keeps the match and every observation (positive control for the redraw below).
 		expect((await owner.call('PATCH', `/projects/${projectId}/map/features/${damB}`, { name: 'Dam B renamed' })).status).toBe(200);
 		expect(((await asOwner('SELECT count(*)::int AS n FROM dam_observation WHERE feature_id = $1', [damB]))[0] as { n: number }).n).toBe(2);
+		expect(await matchOf(damB)).toEqual([{ status: 'matched', uid: 'zzzzzb0001' }]);
 		const redraw = await owner.call('PATCH', `/projects/${projectId}/map/features/${damB}`, { geometry: { type: 'Polygon', coordinates: [box(21.351, -33.68, 0.002)] } });
 		expect(redraw.status, JSON.stringify(redraw.body)).toBe(200);
 		expect(((await asOwner('SELECT count(*)::int AS n FROM dam_observation WHERE feature_id = $1', [damB]))[0] as { n: number }).n).toBe(0);
-		expect(((await asOwner('SELECT count(*)::int AS n FROM dam_waterbody_match WHERE feature_id = $1', [damB]))[0] as { n: number }).n).toBe(0);
+		expect(await matchOf(damB)).toEqual([]);
 		// Dam A untouched.
 		expect(((await asOwner('SELECT count(*)::int AS n FROM dam_observation WHERE feature_id = $1', [damA]))[0] as { n: number }).n).toBe(2);
+		expect(await matchOf(damA)).toEqual([{ status: 'matched', uid: 'zzzzza0001' }]);
 	});
 
 	it('deleting a dam deletes its match and observations', async () => {

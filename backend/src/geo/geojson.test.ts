@@ -11,6 +11,7 @@ import {
 	GEO_MAX_VERTICES,
 	holesNested,
 	interiorPoint,
+	intersectionArea,
 	kindFromWord,
 	parseGeoJson,
 	pointInGeometry,
@@ -419,5 +420,73 @@ describe('the Map upload’s example file (issue #456)', () => {
 			{ kind: 'river', from: 'property' },
 			{ kind: 'gauge', from: 'property' }
 		]);
+	});
+});
+
+// The dam to waterbody match's measure (dams/observed/match.ts): the area
+// inside both of two regions, each its rings read even-odd.
+describe('intersectionArea', () => {
+	/** A rectangle w × h degrees from (x, y), closed. */
+	const rect = (x: number, y: number, w: number, h = w): [number, number][] => [
+		[x, y],
+		[x + w, y],
+		[x + w, y + h],
+		[x, y + h],
+		[x, y]
+	];
+
+	it('measures the overlap of two squares, either way round', () => {
+		expect(intersectionArea([rect(0, 0, 2)], [rect(1, 1, 2)])).toBeCloseTo(1, 9);
+		expect(intersectionArea([rect(1, 1, 2)], [rect(0, 0, 2)])).toBeCloseTo(1, 9);
+		// One inside the other: the smaller's area.
+		expect(intersectionArea([rect(0, 0, 4)], [rect(1, 1, 1)])).toBeCloseTo(1, 9);
+	});
+
+	it('leaves out a hole, on either side', () => {
+		const holed = [rect(0, 0, 2), rect(0.5, 0.5, 1)];
+		expect(intersectionArea(holed, [rect(0, 0, 2)])).toBeCloseTo(3, 9);
+		expect(intersectionArea([rect(0, 0, 2)], holed)).toBeCloseTo(3, 9);
+		// The right half: 2, less the hole's half (0.5).
+		expect(intersectionArea(holed, [rect(1, 0, 1, 2)])).toBeCloseTo(1.5, 9);
+		// Wholly inside the hole: nothing.
+		expect(intersectionArea(holed, [rect(0.6, 0.6, 0.5)])).toBeCloseTo(0, 9);
+	});
+
+	it('adds up every part of a MultiPolygon', () => {
+		// Two unit squares 1° apart; a 2 × 1 band over half of each.
+		const parts = [rect(0, 0, 1), rect(2, 0, 1)];
+		expect(intersectionArea(parts, [rect(0.5, 0, 2, 1)])).toBeCloseTo(1, 9);
+		expect(intersectionArea(parts, parts)).toBeCloseTo(2, 9);
+		// The band between the parts touches neither.
+		expect(intersectionArea(parts, [rect(1.2, 0, 0.6, 1)])).toBeCloseTo(0, 9);
+	});
+
+	it('is 0 for disjoint regions, boxes apart or overlapping', () => {
+		expect(intersectionArea([rect(0, 0, 1)], [rect(2, 2, 1)])).toBe(0);
+		// Two triangles in one box, either side of a gap.
+		const lower: [number, number][] = [[0, 0], [1, 0], [0, 1], [0, 0]];
+		const upper: [number, number][] = [[1, 1], [0.2, 1], [1, 0.2], [1, 1]];
+		expect(intersectionArea([lower], [upper])).toBeCloseTo(0, 9);
+	});
+
+	it('is 0 for regions that only share an edge', () => {
+		// Side by side: the boxes meet along x = 1.
+		expect(intersectionArea([rect(0, 0, 1)], [rect(1, 0, 1)])).toBe(0);
+		// One box, split along its diagonal.
+		const below: [number, number][] = [[0, 0], [2, 0], [0, 2], [0, 0]];
+		const above: [number, number][] = [[2, 0], [2, 2], [0, 2], [2, 0]];
+		expect(intersectionArea([below], [above])).toBeCloseTo(0, 9);
+		expect(intersectionArea([below], [rect(0, 0, 2)])).toBeCloseTo(2, 9);
+	});
+
+	it('counts its work through spend, which may stop it', () => {
+		let steps = 0;
+		intersectionArea([rect(0, 0, 2)], [rect(1, 1, 2)], (n) => void (steps += n));
+		expect(steps).toBeGreaterThan(0);
+		expect(() =>
+			intersectionArea([rect(0, 0, 2)], [rect(1, 1, 2)], () => {
+				throw new Error('too much');
+			})
+		).toThrow('too much');
 	});
 });

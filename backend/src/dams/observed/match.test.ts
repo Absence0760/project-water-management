@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { intersectionArea } from '../../geo/geojson.js';
 import type { DamOutlineGeometry, Position } from './handover.js';
 import { bboxOf, MATCH_WATERBODY_SHARE, matchDam, MIN_DAM_SHARE, planarArea } from './match.js';
 
@@ -14,14 +13,6 @@ const rect = (x: number, y: number, w: number, h = w): Position[] => [
 const poly = (...rings: Position[][]): DamOutlineGeometry => ({ type: 'Polygon', coordinates: rings });
 const multi = (...polys: Position[][][]): DamOutlineGeometry => ({ type: 'MultiPolygon', coordinates: polys });
 const dam = poly(rect(21.3, -33.7, 0.01));
-
-describe('intersectionArea', () => {
-	it('measures the overlap of two squares, a hole, and none', () => {
-		expect(intersectionArea([rect(0, 0, 2)], [rect(1, 1, 2)])).toBeCloseTo(1, 9);
-		expect(intersectionArea([rect(0, 0, 2), rect(0.5, 0.5, 1)], [rect(0, 0, 2)])).toBeCloseTo(3, 9);
-		expect(intersectionArea([rect(0, 0, 1)], [rect(2, 2, 1)])).toBe(0);
-	});
-});
 
 describe('matchDam', () => {
 	it('matches the waterbody that is essentially the dam', () => {
