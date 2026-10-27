@@ -24,6 +24,8 @@ import { isStale } from '../portfolio/status.js';
 import { projectPrivacyContact } from '../teams/privacyContact.js';
 import type { StoredCatchmentView } from '../publish/publish.js';
 import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
+import { compareDam, fullAreaOf, type ObservedSource } from '../dams/observed/compare.js';
+import { OBSERVED_ATTRIBUTION, observationsOf, observedFeatures } from '../dams/observed/read.js';
 
 const isoDate = z
 	.string()
@@ -266,6 +268,44 @@ function creditOf(r: { kind: FarmMapKind; ref: string | null; description: strin
 	return {};
 }
 
+/** GET /projects/:id/farm/:nodeId/dam-observed (issue #604 R5-B): the farm's dam seen from space. */
+export interface FarmDamObserved {
+	/** How many of the farm's dams are drawn on the map as an outline (a satellite can only see an outline). 0: the page says nothing. */
+	outlines: number;
+	/** The newest clear view of all of them together, by the comparison's own rule (dams/observed/compare.ts latestClear). */
+	latest: { date: string; wetAreaM2: number; source: ObservedSource } | null;
+	/** The area the dam covers when full, as the model has it (survey curve, entered, or estimated); null with no dam capacity. */
+	fullAreaM2: number | null;
+	attribution: string;
+}
+
+/**
+ * The farm's dam seen from space: only this farm's dam polygons (the query
+ * names the farm, and RLS keeps a farmer to their own), the newest clear view
+ * of them, and the full area from the farm's own node. No upstream id, no
+ * match detail, nothing of a neighbour's.
+ */
+export async function farmDamObserved(db: Db, projectId: string, nodeId: string): Promise<FarmDamObserved> {
+	const features = await observedFeatures(db, projectId, nodeId);
+	const { rows } = await db.query<{ damCapacityM3: number; damAreaFullM2: number | null; damCurve: unknown }>(
+		'SELECT dam_capacity_m3 AS "damCapacityM3", dam_area_full_m2 AS "damAreaFullM2", dam_curve AS "damCurve" FROM node WHERE project_id = $1 AND id = $2',
+		[projectId, nodeId]
+	);
+	const full = fullAreaOf(rows[0]);
+	const r = compareDam({
+		features: features.map((f) => ({ id: f.id, match: f.match?.status ?? null })),
+		observations: await observationsOf(
+			db,
+			projectId,
+			features.map((f) => f.id)
+		),
+		modelled: null,
+		full
+	});
+	const l = r.summary.latestClear;
+	return { outlines: features.length, latest: l ? { date: l.date, wetAreaM2: l.wetAreaM2, source: l.source } : null, fullAreaM2: full?.areaM2 ?? null, attribution: OBSERVED_ATTRIBUTION };
+}
+
 export const farmViewRoutes = new Hono<AuthEnv>()
 	// Who decides about this project's information (POPIA s18(1)(b), 168): its team's name and privacy contact,
 	// for every member, farmers included (the farm menu's "Who decides about your farm's information").
@@ -351,6 +391,14 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireFarm(db, id, nodeId);
 			return c.json(await farmMap(db, id, nodeId), 200, { 'Cache-Control': 'no-store' });
+		});
+	})
+	// The farm's dam seen from space (issue #604 R5-B): the newest clear satellite view, with its credit.
+	.get('/:id/farm/:nodeId/dam-observed', async (c) => {
+		const { id, nodeId } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireFarm(db, id, nodeId);
+			return c.json(await farmDamObserved(db, id, nodeId), 200, { 'Cache-Control': 'no-store' });
 		});
 	})
 	// "Who can see my farm" (design §10.2): names and roles, never emails.
