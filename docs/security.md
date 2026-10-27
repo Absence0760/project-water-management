@@ -3432,7 +3432,30 @@ placed points. The server never trusts the browser with geometry:
   `farms/farm-map.db.test.ts` (neighbour as the negative, each farmer's own
   as the positive control) and the farmer-privacy sweep, which now seeds a
   neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
-  orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207), `river_reference` (171) and the gazetteer (`gazetteer_reference`, 225) are public reference data, readable by any
+  orientation kinds only). The farm dam page's satellite views,
+  `GET /projects/:id/farm/:nodeId/dam-observed` (issue #604 R5-B), work the
+  same way: `requireFarm` first (another farm answers 404, a viewer kept from
+  the volumes the same 403 as the rest of the farm view), then queries that
+  name the farm (`observedFeatures(…, nodeId)`: only this farm's own `dam`
+  polygons, and `dam_observation` only for those feature ids), summed over
+  them as the comparison does; the answer is the count of outlines, the
+  newest clear view (date, area, source), the full area from the farm's own
+  node, and the credit, with no feature id, node id, Waterbodies uid,
+  upstream key, match status or per-polygon figure. 249's farmer policies
+  (`dam_observation_select_farmer`, `dam_waterbody_match_select_farmer`,
+  through `app_farm_dam_features()`) are the second layer. The credit,
+  "Digital Earth Africa, CC BY 4.0", is shown on the card wherever the
+  figure is (the licence asks for it). Guarded by
+  `farms/farmer-privacy.security.db.test.ts` (two farms' dam polygons with
+  views and matches; the exact answer for the farmer's own, none of the
+  neighbour's ids, uid, upstream key or area; the neighbour's farm 404; the
+  neighbour reading their own as the positive control; RLS rows per table)
+  and `dams/observed/observed.db.test.ts`. The sweep's `FARMER_MAY_READ`
+  did need `dam_observation` and `dam_waterbody_match`: they are keyed by
+  the map feature, not a node, so the sweep can't tie a row to a farm
+  without them, and once it seeds views it sees each farmer read their own
+  dam's rows (the entries allow exactly the `dam` features on the farmer's
+  own farms). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207), `river_reference` (171) and the gazetteer (`gazetteer_reference`, 225) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
   schema owner). The gazetteer's read policy is `FOR SELECT USING (true)`
   with `SELECT` granted to `water_app` and no write policy or grant; it is
