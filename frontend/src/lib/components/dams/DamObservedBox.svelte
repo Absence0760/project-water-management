@@ -102,7 +102,7 @@
 	const withinShare = $derived(data?.thresholds.withinShare ?? 0.1);
 	const line = $derived(observedLine(dam, loading, error, withinShare));
 	const waiting = $derived(!!dam?.inRun && !modelled && !modelledError);
-	const series = $derived(dam && !waiting ? observedChartSeries(dam, modelled) : []);
+	const series = $derived(dam && !waiting ? observedChartSeries(dam, modelled, data?.run?.forecastFrom) : []);
 	const lanes = $derived(dam ? observedLanes(dam) : []);
 	const rows = $derived(dam ? viewRows(dam) : []);
 	// The newest views, the rest behind "Show all N views" (ui-playbook.md § 2, fold every long list); a new dam shuts it.

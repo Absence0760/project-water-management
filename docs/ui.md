@@ -1888,7 +1888,8 @@ for every workspace tab. Its own chunk.
   where it comes from (survey curve's top, as entered, or estimated from the
   capacity) with a summary in words (the span, the mean difference as a share
   of the full area, the share within ±10 %, how often seen full or empty); the
-  chart (`LineChart`, ha: the run's area as a line, the compared views as
+  chart (`LineChart`, ha: the run's area as a line, ending before a forecast
+  run's forecast, whose views aren't compared either, the compared views as
   dots, the views not compared as fainter dots off until the legend shows
   them, the full area dashed, 30 days / 1 year / All opening on All) with the
   flags as lanes along its foot (**Disagree** `--lane-disagree`, **Seen full**

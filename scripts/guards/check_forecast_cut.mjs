@@ -68,6 +68,7 @@ export const INVENTORY = [
 	{ path: 'frontend/src/lib/components/calibration/CalibrationResults.svelte', reads: 1, how: 'passes-on', evidence: ['prefetchSeries('], note: 'warms the cache Model quality’s charts read' },
 	{ path: 'frontend/src/lib/components/compare/CompareOverlay.svelte', reads: 1, how: 'cut+band', evidence: ['recordOf(pair.a, forecastA)', '{band}'] },
 	{ path: 'frontend/src/lib/components/compare/ReserveYearsChart.svelte', reads: 1, how: 'cut', evidence: ['reserveDaysByWaterYear(x.value.startDate, x.value.values, list[i]!.forecastFrom'] },
+	{ path: 'frontend/src/lib/components/dams/DamObservedBox.svelte', reads: 1, how: 'cut', evidence: ['observedChartSeries(dam, modelled, data?.run?.forecastFrom)'], note: 'observed.ts observedChartSeries ends the modelled surface area before the forecast (issue #604 R5-B)' },
 	{ path: 'frontend/src/lib/components/dams/DamsTab.svelte', reads: 1, how: 'cut+band', evidence: ['beforeForecast(s.values', 'band={forecastBand('] },
 	{ path: 'frontend/src/lib/components/map/mapResults.svelte.ts', reads: 1, how: 'cut', evidence: ['meta.forecastFrom ?? null'], note: 'loadDamLevels cuts (overview/damLevels.ts)' },
 	{ path: 'frontend/src/lib/components/network/NetworkTab.svelte', reads: 2, how: 'cut', evidence: ['latestRun?.forecastFrom ?? null', 'damLevel(dam, s, latestRun?.forecastFrom'] },
@@ -101,6 +102,7 @@ export const INVENTORY = [
 		note: 'the FDC table, the printed charts, and the licence-impact board (licenceImpact.ts)'
 	},
 	// --- backend ----------------------------------------------------------------
+	{ path: 'backend/src/dams/observed/read.ts', reads: 1, how: 'cut', evidence: ['(input.forecastFrom && date >= input.forecastFrom)'], in: 'backend/src/dams/observed/compare.ts', note: 'views on a forecast run’s forecast days are left out of the comparison (outside-run)' },
 	{ path: 'backend/src/allocations/runUse.ts', reads: 1, how: 'cut', evidence: ['beforeForecast(values, startDate, forecastFrom)'] },
 	{ path: 'backend/src/compare/routes.ts', reads: 1, how: 'no-values', evidence: ["SELECT key, meta->>'label' AS label, meta->>'unit' AS unit"] },
 	{ path: 'backend/src/evidence/bundle.ts', reads: 1, how: 'whole', evidence: ['FORECAST_NOT_SIGNABLE'], in: 'backend/src/evidence/packs.ts', note: 'a pack’s reproduction bundle, bit-exact; a forecast run can’t be in a signed pack' },

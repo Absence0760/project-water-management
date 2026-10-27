@@ -131,6 +131,15 @@ describe('the chart', () => {
 		expect(late.find((x) => x.label === 'Modelled area')!.values).toEqual([3, 3.1, 3.2]);
 	});
 
+	it('ends a forecast run’s modelled area before its forecast, and keeps the views', () => {
+		const d = dam([point('2022-01-02', 20_000)]);
+		const s = observedChartSeries(d, { startDate: '2022-01-01', values: [30_000, 31_000, 32_000, 33_000] }, '2022-01-03');
+		expect(s.find((x) => x.label === 'Modelled area')!.values).toEqual([3, 3.1]);
+		expect(s.find((x) => x.label === 'Seen from space')!.values).toEqual([null, 2]);
+		// No forecast: the whole series.
+		expect(observedChartSeries(d, { startDate: '2022-01-01', values: [30_000, 31_000, 32_000] }, null).find((x) => x.label === 'Modelled area')!.values).toEqual([3, 3.1, 3.2]);
+	});
+
 	it('draws the views alone with no run, and nothing with neither', () => {
 		const s = observedChartSeries(dam([point('2022-01-02', 20_000, { compared: false, skip: 'no-run' })], { fullArea: null }), null);
 		expect(s.map((x) => [x.label, x.values])).toEqual([['Seen, not compared', [1 * 2]]]);

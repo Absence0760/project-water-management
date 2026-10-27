@@ -4,7 +4,7 @@
 // mismatch flags the API worked out (backend dams/observed/compare.ts). Pure:
 // the fold's one line, the chart's series and flag lanes, the summary
 // sentence, the match notes and the table of views.
-import { fromEpochDay, toEpochDay, type DailySeries } from '@water-management/engine';
+import { beforeForecast, fromEpochDay, toEpochDay, type DailySeries } from '@water-management/engine';
 import type { DamObservations, ObservedDam, ObservedPoint, ObservedSkip, ObservedSource } from '#lib/api/types.js';
 import type { ChartSeries } from '#lib/components/charts/series.js';
 import { fmtDay, fmtNum } from '#lib/format/number.js';
@@ -102,8 +102,12 @@ function sparse(points: readonly ObservedPoint[], from: string, to: string, valu
  * The chart: the run's modelled surface area as a line (ha), the compared
  * views as points, the views not compared as fainter points (off until the
  * legend shows them), and the full area dashed. null with nothing to draw.
+ * A forecast run's modelled area ends before its forecast (`forecastFrom`):
+ * those days aren't modelled history, and the comparison leaves views on them
+ * out too (backend dams/observed/compare.ts, 'outside-run').
  */
-export function observedChartSeries(dam: ObservedDam, modelled: DailySeries | null): ChartSeries[] {
+export function observedChartSeries(dam: ObservedDam, stored: DailySeries | null, forecastFrom: string | null = null): ChartSeries[] {
+	const modelled = stored && { startDate: stored.startDate, values: Array.from(beforeForecast(stored.values, stored.startDate, forecastFrom)) };
 	const pts = dam.points;
 	const series: ChartSeries[] = [];
 	const ends = [pts[0]?.date, pts.at(-1)?.date, modelled?.startDate, modelled ? fromEpochDay(toEpochDay(modelled.startDate) + modelled.values.length - 1) : undefined].filter((d): d is string => !!d).sort();
