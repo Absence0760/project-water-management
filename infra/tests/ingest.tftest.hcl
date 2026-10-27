@@ -1253,9 +1253,15 @@ run "backfill_one_month_at_a_time_paced_and_never_retrying_a_refusal" {
   }
   assert {
     condition = alltrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
-      alltrue([for e in r.ErrorEquals : startswith(e, "Lambda.") && e != "Lambda.Unknown"])
+      alltrue([for e in r.ErrorEquals : (startswith(e, "Lambda.") && e != "Lambda.Unknown") || e == "MirrorBusy"])
     ])
-    error_message = "Only Lambda's own service errors are retried: never States.ALL or States.TaskFailed, so a month that met HTTP 403 fails the execution at once."
+    error_message = "Only Lambda's own service errors and MirrorBusy are retried: never States.ALL, States.TaskFailed or StopRun, so a month that met HTTP 403 fails the execution at once."
+  }
+  assert {
+    condition = anytrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
+      contains(r.ErrorEquals, "MirrorBusy") && r.IntervalSeconds * r.MaxAttempts >= 1200
+    ])
+    error_message = "A month that meets the daily run's lease (MirrorBusy) is retried for longer than the lease's 20 minutes, not failed."
   }
   assert {
     condition = (

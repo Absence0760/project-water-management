@@ -8,7 +8,7 @@ prints the state machine's input,
     {"items": [{"product": "rnl", "mode": "backfill", "month": "1981-01"}, …]}
 
 one item per month from `--from` (default: the product's first month, rnl
-1981-01, sat 1998-01) through `--to`, oldest first, leaving out every month
+1981-01, sat 2000-06: CHC's first byMonth files) through `--to`, oldest first, leaving out every month
 the product's manifest already holds (a file of that month in `files`). So a
 backfill that stopped part way (a 403, a timeout) is resumed by fetching the
 manifest again and re-running this: only the months still missing are asked
@@ -28,7 +28,10 @@ import sys
 
 PRODUCTS = ("rnl", "sat")
 # The first month CHC publishes each daily product (backend/src/feeds/sources/chirps.ts).
-FIRST_MONTH = {"rnl": "1981-01", "sat": "1998-01"}
+# The first byMonth file of each product (Round 0: sat's NetCDFs start in
+# 2000-06 though the product's days start in 1998). chirps_final.FIRST_MONTH is
+# what the handler accepts; test_backfill_plan checks the two agree.
+FIRST_MONTH = {"rnl": "1981-01", "sat": "2000-06"}
 # A CHC byMonth file's URL names its month: the same pattern as manifest.py file_month.
 _FILE_MONTH = re.compile(r"\.(\d{4})\.(0[1-9]|1[0-2])\.days_p05\.nc$")
 _MONTH = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")

@@ -109,14 +109,22 @@ resource "aws_sfn_state_machine" "ingest_backfill" {
               # A little over the function's own 900 s.
               TimeoutSeconds = local.ingest_timeout_s + 60
               ResultPath     = null
-              # Lambda's service errors only (throttled by the ingest's reserved
-              # concurrency, a transient API failure). The function's own errors,
-              # a 403 above all, are not retried: they fail the execution.
+              # Lambda's service errors (throttled by the ingest's reserved
+              # concurrency, a transient API failure), and MirrorBusy: the daily
+              # monthly run holds the product's lease (ingest/lease.py, at most
+              # 20 minutes), so wait it out (5 × 300 s outlasts it). The
+              # function's other errors, StopRun on a 403 above all, are not
+              # retried: they fail the execution.
               Retry = [{
                 ErrorEquals     = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
                 IntervalSeconds = 60
                 MaxAttempts     = 3
                 BackoffRate     = 2
+                }, {
+                ErrorEquals     = ["MirrorBusy"]
+                IntervalSeconds = 300
+                MaxAttempts     = 5
+                BackoffRate     = 1
               }]
               Next = "Pace"
             }

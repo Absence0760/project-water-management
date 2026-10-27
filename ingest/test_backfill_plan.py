@@ -28,11 +28,18 @@ class Plan(unittest.TestCase):
 
     def test_starts_at_the_products_first_month_by_default(self):
         self.assertEqual(backfill_plan.plan("rnl", "1981-02")[0]["month"], "1981-01")
-        self.assertEqual(backfill_plan.plan("sat", "1998-02")[0]["month"], "1998-01")
+        self.assertEqual(backfill_plan.plan("sat", "2000-07")[0]["month"], "2000-06")
+
+    def test_first_months_are_the_ones_the_handler_accepts(self):
+        try:
+            import chirps_final
+        except ImportError:  # backfill_plan is stdlib only; chirps_final needs numpy
+            self.skipTest("chirps_final needs the ingest venv")
+        self.assertEqual({p: tuple(int(x) for x in m.split("-")) for p, m in backfill_plan.FIRST_MONTH.items()}, chirps_final.FIRST_MONTH)
 
     def test_skips_the_months_the_manifest_holds(self):
-        m = manifest("sat", ["1998-01", "1998-03"])
-        self.assertEqual([i["month"] for i in backfill_plan.plan("sat", "1998-04", manifest=m)], ["1998-02", "1998-04"])
+        m = manifest("sat", ["2000-06", "2000-08"])
+        self.assertEqual([i["month"] for i in backfill_plan.plan("sat", "2000-09", manifest=m)], ["2000-07", "2000-09"])
 
     def test_a_fully_held_range_is_empty(self):
         m = manifest("rnl", ["2024-01", "2024-02"])
@@ -46,7 +53,7 @@ class Plan(unittest.TestCase):
         for args, message in [
             (("rnl", "1981-13"), "YYYY-MM"),
             (("rnl", "1981-02", "1981-03"), "after --to"),
-            (("sat", "1998-02", "1997-12"), "starts in 1998-01"),
+            (("sat", "2000-07", "2000-05"), "starts in 2000-06"),
             (("era5", "2000-01"), "product must be"),
         ]:
             with self.subTest(args=args), self.assertRaisesRegex(backfill_plan.PlanError, message):
