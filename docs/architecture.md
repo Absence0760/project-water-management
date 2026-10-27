@@ -1053,6 +1053,7 @@ row names a source, where to read it and the series it merges into:
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Data → Data feeds → Attach a feed → Area: the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default for a catchment feed, from 1998) or `rnl` (from 1981; the feeds a project sets up for its hydrological units read `rnl`, so each unit's record covers the whole 1991–2020 MAP period its rain level is computed over, issue #500 item 3, [maps.md § Rain for each unit](./maps.md#rain-for-each-unit), [model.md §2.4h](./model.md#24h-runoff-from-each-units-own-rain-engine--1780-issue-482)) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, no preliminary product, published a month at a time with the `sat` finals (11–26 days after the month ends in 2026), so its newest day is 2–8 weeks old (on 2026-10-09 `daily/final/rnl/` ended at 2026-08-31 and `daily/prelim/sat/` at 2026-10-05). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `ecmwf_ens` | The ECMWF ENS ensemble mean, 15 days from each 00 UTC run, from **our copy only** (`ecmwf/<issue>`, 0.1°): each feed cell's centre falls in a 0.1° cell, weighted as listed (same cells or box as CHIRPS) | `rain_forecast_mm`, mm, quantile-mapped to our rain once the operator's fit is in the copy, else labelled not yet calibrated | Zarr written by the Python ingest job from ECMWF's open data GRIB2 (`ingest/ecmwf.py`, below); no feed ever asks ECMWF |
+| `agera5_et0` | Daily FAO-56 reference evapotranspiration from **our copy only** (issue #604 R5-E): AgERA5 v2.0 (`agera5_et0`, 0.1°) on the days its copy holds, else the ET₀ the ingest computes from NASA POWER's daily weather (`power_et0`, 0.1°) on the newest days; each feed cell's centre falls in a 0.1° cell, weighted as listed, cells with no value left out (same cells or box as CHIRPS) | `evap_et0_mm`, mm/day, read by GR4J only under a monthly PE row (model.md §2.4a *Daily reference ET*) | Zarr written by the Python ingest job (`ingest/agera5.py`, `ingest/nasapower.py`); the feed re-reads the last 75 days, so a day POWER filled becomes AgERA5's once its month lands |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); the site allows 20 years per request, the feed asks for two (`DWS_WINDOW_DAYS`, the window below). Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
 - **Rain for each unit** (issue #482, `feeds/fromUnits.ts`,
@@ -1824,6 +1825,26 @@ EventBridge, daily
   without a failure. The feeds fall due at 14:00 UTC
   (253_feed_source_ecmwf.sql). Locally the committed copy holds one
   invented issue over a 4 × 4 block, read as today's anywhere in the region.
+- **Reference evapotranspiration** (issue #604 R5-E): the same Python job
+  copies AgERA5 v2.0's daily FAO-56 reference ET a month at a time through
+  ERA5-Land's CDS submit-then-collect machinery (`ingest/agera5.py`,
+  `agera5_et0`, finals layout, 0.1°, from 1979), and computes FAO-56 ET₀
+  for the last 30 days from NASA POWER's daily weather (`ingest/nasapower.py`,
+  `ingest/fao56.py`: six regional requests per 10° tile, one parameter each,
+  the nearest POWER point to each 0.1° cell; `power_et0`, daily layout, a
+  rolling 120 days). Neither enters the cell cache: an `agera5_et0`
+  feed_fetch reads both in the job (`feeds/fromMirrorEt0.ts`, at most a year
+  a window, one read per year chunk), AgERA5 where its copy holds the day,
+  POWER after it, and writes `evap_et0_mm`; there is no per-feed path to the
+  CDS or NASA, and the fetcher refuses one. A copy with neither product
+  waits without a failure (as ECMWF's). The feeds fall due on the default
+  daily rule (256_feed_source_agera5_et0.sql). Both jobs are off in
+  production until `agera5_enabled` / `power_et0_enabled`
+  ([deployment.md](./deployment.md)). Locally the committed copy holds a
+  year of invented AgERA5 values and two months of POWER's over a 4 × 4
+  block (`backend/scripts/et0-fixture.ts`), read shifted to today anywhere
+  in the region, so a dev feed's newest days come from POWER as in
+  production.
 - **Revisions** reach the cache without a feed: the worker's mirror tick
   reads each manifest (`era5l` and `imerg_late` too) and applies a newer revision through
   `app_mirror_apply_revision` (above, *A revision of our copy*); the

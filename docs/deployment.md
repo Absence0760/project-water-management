@@ -1947,6 +1947,110 @@ show wherever its values do (docs/data-sources.md § era5-land has the text).
 **Cost:** cents a month: the secret (~$0.40), a few seconds of Lambda a day,
 a month's download of a few MB, and the array's chunks (about 1–2 GB in S3 from 1981, under $0.05).
 
+### AgERA5 reference evaporation
+
+Daily FAO-56 reference evapotranspiration (issue #604 R5-E): AgERA5 v2.0's
+Penman-Monteith ET₀ from the Copernicus Climate Data Store, copied as product
+`agera5_et0` (finals layout, 0.1° grid, from 1979) by the same
+`mirror-ingest` function (`ingest/agera5.py`; how it works:
+ingest/README.md). It is the current-season evaporation option beside dPET's
+climatology: projects read it through a data feed of source `agera5_et0`
+(Settings → Data feeds), which writes the daily reference ET series GR4J uses
+under a monthly PE (model.md §2.4a), with [NASA POWER](#nasa-power-reference-evaporation-fallback)
+for the newest days AgERA5 doesn't hold yet. Like ERA5-Land, a month's request
+is submitted on one run and collected on a later one.
+
+**No new secret.** AgERA5 is on the same Copernicus account as ERA5-Land, so
+its runs read the key from ERA5-Land's `water-management/ingest/cds-key`
+(`infra/era5land.tf`; the read grant and `CDS_KEY_SECRET_ARN` are there
+whether or not `era5l_enabled` is on). The daily rule (05:00 UTC,
+`{"product":"agera5_et0","mode":"monthly"}`) and the `mirror-lag-agera5-et0`
+alarm exist only with `agera5_enabled = true` (default false,
+`infra/agera5.tf`), which needs `ingest_image_tag` set to a release that has
+`agera5.py`.
+
+The operator, once (issue #618 steps 7b–7d):
+
+1. **The CDS account and key**: [§ ERA5-Land](#era5-land) steps 1, 3 and 4.
+   Done once for both products; skip what is already done.
+2. **Accept AgERA5's licence.** Signed in, open the dataset
+   "Agrometeorological indicators from 1979 to present derived from
+   reanalysis" (`sis-agrometeorological-indicators`), go to its Download tab,
+   and accept the licence under "Terms of use". Each dataset has its own
+   acceptance: ERA5-Land's doesn't cover it, and until this one is accepted
+   every AgERA5 request answers 403, which stops the run on purpose.
+3. **Turn it on:** `agera5_enabled = true` in the prod tfvars, then `plan`
+   and, with the operator's go-ahead, `apply`. The next 05:00 UTC run
+   submits the newest complete month; the one after collects it.
+4. **Check the first live collection** against what the job expects (it has
+   only met the synthetic fixture): the run's log line names the month, its
+   days and the revision. A failure that names the file's variable, units or
+   grid means the CDS's layout differs from the fixture's; record what the
+   file holds in issue #604 before changing `agera5.py`.
+
+**Backfill**, by month events, as ERA5-Land's: one synchronous invocation per
+month marks it wanted, and the daily run drains about four months a day.
+AgERA5 starts in 1979-01, but copy only as far back as projects need: a
+current-season option needs the run's own years, so from 1991 (dPET's normal)
+is plenty:
+`for y in $(seq 1991 2025); do for m in 01 02 03 04 05 06 07 08 09 10 11 12; do aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload "{\"product\":\"agera5_et0\",\"mode\":\"backfill\",\"month\":\"$y-$m\"}" --cli-read-timeout 900 --region af-south-1 --profile water-management /dev/null >/dev/null || echo "$y-$m failed"; done; done`
+
+**When it alarms** (`mirror-lag-agera5-et0`, past `agera5_lag_alarm_days`,
+default 50; a healthy copy runs up to about 43 days behind, since a month is
+requested about 10 days after it ends and collected a day or two later): read
+the `mirror-ingest` log group's `agera5_et0:` lines and
+`ingest-state/agera5_et0/requests.json` in the mirror bucket. A **401/403**
+is refused on purpose: 401 a wrong or expired key (ERA5-Land's step 4 again,
+which fixes both products), 403 the AgERA5 licence not accepted (step 2); the
+run writes `ingest-state/agera5_et0/refused.json` and no run calls the CDS
+again that UTC day. **`RequestsFailed`**: a month failed five times; fix the
+cause, then delete that month's entry from `requests.json`, as for
+ERA5-Land. Meanwhile feeds keep taking the newest days from NASA POWER, so a
+late AgERA5 month shows as more POWER days on the feed, not as a gap.
+
+**Attribution:** CC BY (Copernicus); its credit shows wherever its values do
+(docs/data-sources.md § agera5).
+
+**Cost:** cents a month: a few seconds of Lambda a day, a month's download of
+a few MB, the array's chunks (under 1 GB in S3 from 1991), and no new secret.
+
+### NASA POWER reference evaporation (fallback)
+
+The fallback for the days AgERA5 doesn't hold yet (issue #604 R5-E): NASA
+POWER's daily weather for the region (T2M_MAX, T2M_MIN, T2MDEW, WS2M,
+ALLSKY_SFC_SW_DWN, PS, one regional request per parameter and tile), with
+FAO-56 Penman-Monteith ET₀ computed from it in the job, copied as product
+`power_et0` (daily layout, 0.1° grid, each cell its 0.5° POWER cell's value)
+by `ingest/nasapower.py`. POWER publishes 2–7 days behind, so it covers the
+recent weeks a monthly AgERA5 request can't; feeds read it only for days
+AgERA5 doesn't have. **No key**: the POWER API takes none, so there is no
+secret. The daily rule (05:20 UTC,
+`{"product":"power_et0","mode":"recent","days":30}`) and the
+`mirror-lag-power-et0` alarm exist only with `power_et0_enabled = true`
+(default false, `infra/agera5.tf`), which needs `ingest_image_tag` set.
+
+Turn it on with `power_et0_enabled = true`, `plan`, and with the operator's
+go-ahead `apply`, together with `agera5_enabled` (on its own it gives feeds
+only the last days). Each run re-reads the last 30 days (POWER revises its
+newest days), a few dozen requests one second apart; a day whose values
+didn't change moves no revision.
+
+**When it alarms** (`mirror-lag-power-et0`, past `power_et0_lag_alarm_days`,
+default 10; a healthy copy runs 3–8 days behind, since the job asks for days
+up to today − 3): read the `mirror-ingest` log group's `power_et0:` lines. A
+**403** (or 429) stops the run on purpose and is never retried: POWER says it
+monitors usage and limits clients for equitable access, so don't invoke it
+again by hand; check the job's request count against
+docs/data-sources.md § agera5's limits and write to the POWER team
+(power.larc.nasa.gov) before turning it back on. Days AgERA5 already holds are
+unaffected; only the newest days of each feed wait.
+
+**Attribution:** CC BY 4.0; cite the NASA POWER Project wherever its values
+show (docs/data-sources.md § agera5).
+
+**Cost:** cents a month: under a minute of Lambda a day and the array's
+chunks (a few MB).
+
 ## DWS gauge records
 
 DWS feeds move onto a store of ours too (issue #604 R3-B, design D14; the

@@ -713,6 +713,67 @@ setting, so run comparison reads it as legacy.
     PE row: converting between them is the pan coefficient's job (ET₀ = Kp ×
     Epan), which stays the modeller's. The engine is unchanged by this; it
     only ever sees the accepted values.
+  - **Daily reference ET** (engine ≥ 1.102.0, issue #604 R5-E,
+    `packages/engine/src/evaporation/et0Daily.ts`). A monthly PE row is a
+    climatology (dPET's 1991–2020 means, say), so a dry, hot current season
+    runs on an average year's evaporation. A project may also hold a daily
+    FAO-56 reference ET record, the series `evap_et0_mm` (mm/day): an
+    AgERA5 data feed (`agera5_et0`, AgERA5 v2.0 from our copy, with ET₀ we
+    compute from NASA POWER's daily weather on the newest days AgERA5
+    doesn't have yet; [architecture.md § Our copy of the rain
+    data](./architecture.md), [data-sources.md](./data-sources.md) `agera5`,
+    `nasa-power`), or a station's own record uploaded on the Data tab.
+    **Under `pe.kind: 'monthly'` only**, on each run day the series has a
+    value ≥ 0 GR4J's PE is that day's ET₀ **as it stands** (factor 1, the
+    convention of a reference-ET row from the map); every other day (no
+    value, a negative value, a day outside the record) is
+    the row's share of the month, exactly as without the series. Under
+    `pe.kind: 'pan'` the series is **not read**: reference ET is never
+    multiplied by a pan coefficient nor stands in for A-pan, and the run
+    warns that it isn't read. Crop demand (§2.3) and dam evaporation
+    (§2.7a) never read it under either kind.
+    - **Counted and reported**, as the daily A-pan is (§2.3a):
+      `summary.et0Daily = { used, dailyDays, fallbackDays, invalidDays,
+      first, last }`, and a warning when any day falls back ("daily
+      reference evapotranspiration covers 98 of 730 run days (…); the other
+      632 use the monthly PE row spread over the month"), or when no day in
+      the run has a usable value.
+    - **No series, no change.** Without an `evap_et0_mm` series nothing
+      runs: no summary, no warning, and every result is bit-identical to
+      engine 1.101.0 (`et0Daily.test.ts`, with its positive control; the
+      client catchment regression suite and the invariant suites run
+      unchanged). Under `pe.kind: 'pan'` a series changes nothing but the
+      summary and the warning (tested).
+    - **Every path sees the same input**: runs, calibration (browser and
+      server), the uncertainty ensemble, forecast mode, scenarios
+      (`series.scale` scales it: it is in `SCALABLE_SERIES_KINDS`; a
+      `settings.set` on `pe.mm` reaches only the days it doesn't cover),
+      firm yield and the seasonal outlook (an analogue season takes the
+      analogue year's ET₀, as it takes its A-pan). "No evaporation, no run"
+      (`GR4J_NO_PET`) counts a value above 0 under a monthly row as
+      evaporation, so an all-zero row with a daily record runs.
+    - **Fit provenance**: a fit records the series it ran on as
+      `forcing.et0Daily`: start, length and SHA-256 of its values **through
+      the last day the fit scored** (`through`, `fitScoredThrough`: the fit's
+      and its validation tests' last day; `et0FitWindow`), not the whole
+      series. A feed appends a day most days and re-reads its newest weeks,
+      so a whole-series fingerprint would mark every fit stale the next day
+      though no day it read changed. Changing, adding or removing the days
+      up to `through` after a GR4J fit made under a monthly row marks the fit
+      "Forcing changed since fit" (`et0DailyChanged`). The Calibration page
+      compares the series now through the record's `through`; a stored
+      run's views don't (its input snapshot hashes the whole series), so
+      they never flag it.
+    - **Why as it stands, and only for GR4J.** FAO-56 ET₀ is a grass
+      reference surface's loss, the same quantity a reference-ET monthly row
+      holds, so a day's ET₀ replaces that row's share without conversion.
+      AgERA5 computes it from ERA5's 2 m weather (Boogaard et al. 2020), and
+      our POWER fallback computes it with FAO-56 eq. 6 from MERRA-2-based
+      daily weather (`ingest/fao56.py`), so the two differ by their inputs:
+      on the days POWER fills, the PE is a second product's until AgERA5's
+      month lands and the feed replaces those days. The `verify/` mirror
+      implements the same rule (`verify/model.py`, probes
+      `daily-et0-monthly-pe`, `daily-et0-pan-pe`, `daily-et0-zero-row`).
 
   Irrigation demand (§2.3) and dam evaporation (§2.7a) always read A-pan
   (`apanMm`, and the daily A-pan series where it has a value, §2.3a),

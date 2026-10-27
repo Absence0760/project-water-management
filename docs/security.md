@@ -2871,6 +2871,17 @@ In short:
     feeds, `app_dws_feed_stations` (worker only), never a project or a
     user. The fetcher's role reaches `dws/` only (get and put, no delete),
     and its log lines carry counts and a reason, never a station.
+  - **Reference evaporation in the copy** (issue #604 R5-E). The
+    mirror-ingest Lambda (outside the VPC) also calls the Copernicus CDS for
+    AgERA5, with ERA5-Land's CDS key read from Secrets Manager at run time
+    (never logged; Terraform creates the secret empty), and NASA POWER's
+    public API (no key), at most a request a second, region-wide, never for a
+    project or a person. The worker reads the two products from the private
+    bucket as untrusted input: each manifest is schema-checked
+    (`mirror/manifest.ts`, the URLs and coverage per product) and each value
+    is refused outside 0–30 mm a day (`feeds/fromMirrorEt0.ts`) before a feed
+    writes it. The fetcher refuses an `agera5_et0` request: no per-feed path
+    reaches either upstream.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no

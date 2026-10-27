@@ -71,7 +71,8 @@ Terraform defaults.
   5-minute EventBridge tick.
 - The data mirror (issue #604, `infra/ingest.tf`): its private, versioned
   bucket and the mirror ingest Lambda (once `ingest_image_tag` is set) with
-  its two daily schedules and DLQ; under $1/month
+  its daily schedules (CHIRPS; ERA5-Land, IMERG, ECMWF, AgERA5 and NASA
+  POWER each off until its variable turns it on) and DLQ; under $1/month
   ([deployment.md § The data mirror](./deployment.md#the-data-mirror)).
 - SES for account, alert and report email.
 - One ENI each for the Secrets Manager, SES, SQS and S3 interface endpoints

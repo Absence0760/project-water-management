@@ -711,6 +711,25 @@ and are **provisional, to be confirmed by the client's hydrologist**.
 | **GR5** | The **double-mass check** runs against each product as against CHIRPS (§2.10a), reported per product, with a warning when a break sits in a record the product fills. | A break in either series moves the factor of the era it fills; CHIRPS' check can't see ERA5-Land's. | `summary.gapRain.products[].doubleMass`. |
 | **GR6** | Not under a catchment rainfall station (§2.4i: its pairing fills its own gaps from CHIRPS), nor for a land unit's own CHIRPS under per-unit rain (§2.4h): the choice is the outlet gap fill's. | Those paths fit their own CHIRPS factors at a point or a unit; a product there would need its own pairing, which issue #604 doesn't ask for. | A warning under a station. |
 
+## Provisional decisions 2026-10-27: daily reference ET (issue #604 R5-E)
+
+Engine 1.102.0 lets GR4J run on a **daily FAO-56 reference ET** record
+(`evap_et0_mm`, model.md §2.4a *Daily reference ET*, `et0Daily.ts`):
+AgERA5 v2.0 from our copy through an `agera5_et0` data feed, with ET₀ we
+compute from NASA POWER's daily weather on the newest days, or a station's
+own record. **Opt-in**: a project without the series runs bit for bit as
+before (`et0Daily.test.ts` › "without the series: bit-identical …"), and one
+under pan coefficient × A-pan changes only by a summary and a warning. Not a
+workbook column (b023 has monthly A-pan only), so the regression suite's
+deviation list is unchanged. The calls below are **provisional, to be
+confirmed by the client's hydrologist**.
+
+| ID | Decision | Why (source) | What changed |
+| --- | --- | --- | --- |
+| **ET1** | Read **only under a monthly PE row**, and **as it stands** (factor 1), replacing the row's share on the days it has a value ≥ 0; the row on every other day. Never under pan coefficient × A-pan, never for crop demand or dam evaporation. | FAO-56 ET₀ is the quantity a reference-ET row from the map holds (maps.md § Evaporation from the map), so no conversion is needed; turning it into A-pan needs the pan coefficient, which is the modeller's call (question 4). Demand and the dams are calibrated on pan values (§2.3, §2.7a). | `runoffForcing`; `summary.et0Daily`; a warning under pan. |
+| **ET2** | On the newest days AgERA5 doesn't hold yet, the feed writes **ET₀ we compute with FAO-56 eq. 6 from NASA POWER's daily weather** (MERRA-2-based, 0.5°, nearest point to each 0.1° cell), and replaces those days with AgERA5's once its month lands (a 75-day re-read). No bias correction between the two. | AgERA5 is copied a month at a time about a week behind (issue #604 R5-E); POWER is 2–7 days behind with no sign-in. Both are FAO-56 Penman-Monteith on reanalysis weather, so they differ by their inputs, not their method; a fit between them would need years of overlap the fallback window (120 days) doesn't keep. The difference reaches only the last few weeks of a run. | `feeds/fromMirrorEt0.ts`; the feed's `powerDays`. |
+| **ET3** | The feed's value is the **area-weighted mean of the 0.1° cells** holding the catchment boundary's 0.05° cells, leaving out cells with no value (the sea) and renormalising; to 0.01 mm. | ET₀ varies smoothly in space; a coastal catchment's sea cell has no ET₀ and shouldn't count as 0. | `et0FromMirror`. |
+
 ## Open questions for the hydrologist
 
 1. **H1 (closed 2026-09-26):** the base-flow reset was never replaced; engine
