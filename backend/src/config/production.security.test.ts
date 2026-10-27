@@ -100,6 +100,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		CHIRPS_SOURCE: 'chc',
 		DWS_SOURCE: 'live',
 		DWS_WEEKLY: 'off',
+		DAM_OBSERVATIONS: 'off',
 		MIRROR_URL: 's3://water-management-mirror-000000000000',
 		REPORT_RENDERER: 'sqs',
 		RENDER_REQUESTS_QUEUE_URL: SQS('render-requests'),
