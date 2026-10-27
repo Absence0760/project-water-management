@@ -663,6 +663,8 @@ variables {
   # which the variable refuses: the site's own domain, and a plan-only test
   # never subscribes it.
   budget_alert_email = "ops@icwbt.jaredhoward.com"
+  # The fetcher's user-agent contact (feeds.tf); required, no default.
+  feeds_contact = "ops@icwbt.jaredhoward.com"
 }
 
 
@@ -773,24 +775,30 @@ run "dam_observations_off_by_default" {
   }
 }
 
-# The gate (dam_observations.tf terraform_data.dam_observations_gate): the
-# worker's DAM_OBSERVATIONS lives in jobs.tf, which doesn't set it yet, so
-# turning the flag on fails the plan. A test can't fake the worker's
-# environment (override_resource sets computed attributes only), so every run
-# with the flag on expects the gate's failure and checks the rest of the plan,
-# which still resolves (nothing depends on the gate). When jobs.tf gains
-# DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off", these
-# expect_failures stop failing and the runs fail: drop them then, and turn the
-# refusal run into a check that the gate passes (docs/followups.md § Observing
-# dams).
-run "dam_observations_refused_without_the_worker_side" {
+# The gate (dam_observations.tf terraform_data.dam_observations_gate) refuses
+# the flag unless the worker's environment turns the dams tick on. jobs.tf sets
+# DAM_OBSERVATIONS from the same flag, so the gate passes with it on and the
+# worker's tick follows it either way.
+run "dam_observations_turn_the_worker_tick_on_with_the_flag" {
   command = plan
 
   variables {
     dam_observations_enabled = true
   }
 
-  expect_failures = [terraform_data.dam_observations_gate]
+  assert {
+    condition     = aws_lambda_function.worker.environment[0].variables["DAM_OBSERVATIONS"] == "on" && length(terraform_data.dam_observations_gate) == 1
+    error_message = "With dam_observations_enabled the worker runs the dams tick (DAM_OBSERVATIONS=on), so the gate passes."
+  }
+}
+
+run "dam_observations_leave_the_worker_tick_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = aws_lambda_function.worker.environment[0].variables["DAM_OBSERVATIONS"] == "off"
+    error_message = "Until dam_observations_enabled is set the worker's dams tick is off."
+  }
 }
 
 run "dam_observations_on" {
@@ -799,8 +807,6 @@ run "dam_observations_on" {
   variables {
     dam_observations_enabled = true
   }
-
-  expect_failures = [terraform_data.dam_observations_gate]
 
   assert {
     condition = (
@@ -877,8 +883,6 @@ run "dam_alarms_follow_the_alarm_tier" {
     dam_observations_enabled = true
     alarm_tier               = "none"
   }
-
-  expect_failures = [terraform_data.dam_observations_gate]
 
   assert {
     condition     = length(aws_cloudwatch_metric_alarm.dam_pass_heartbeat) == 0 && length(aws_cloudwatch_metric_alarm.dam_recency_wofs) == 0 && aws_cloudwatch_event_rule.dams_weekly.state == "ENABLED"

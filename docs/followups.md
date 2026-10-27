@@ -367,24 +367,10 @@ Round 5 built the dam observations, off in production
 [deployment.md § Dam observations](./deployment.md#dam-observations)). What's
 open:
 
-- [ ] **The worker's `DAM_OBSERVATIONS` line in `infra/jobs.tf`.** Broken:
-      `jobs.tf` is #605's file, so this round couldn't set the worker's
-      `DAM_OBSERVATIONS`, and with `dam_observations_enabled = true` the
-      worker would never write the wanted list nor load anything. The plan
-      now refuses the flag until it's there
-      (`terraform_data.dam_observations_gate`). Durable fix: add
-      `DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"`
-      beside `DWS_WEEKLY` in the worker's environment, then drop the
-      `expect_failures` on the gate from `infra/tests/dam_observations.tftest.hcl`
-      (its runs with the flag on fail once the gate passes) and make the
-      refusal run assert the gate passes with the flag on. Trigger: #605
-      merges (or before step 1 of the production steps below, whichever is
-      first).
 - [ ] **The operator's production steps.** Broken: nothing observes a dam in
       production until the operator runs
       [deployment.md § Dam observations](./deployment.md#dam-observations),
-      *Turning it on*: the
-      jobs.tf line above, the Waterbodies polygons loaded for the region
+      *Turning it on*: the Waterbodies polygons loaded for the region
       (`load-reference.yml` kind `waterbodies`), a backend release with
       migration 249 and the `dams-weekly` mode, at least one traced dam,
       then `dam_observations_enabled = true` (plan, then the operator's
@@ -415,15 +401,6 @@ open:
       matching instead (or map v0.0.3 uids to v0.0.2 by overlap at load).
       Trigger: the first production load of the polygons, before turning
       the flag on.
-- [ ] **Stale planned rows in data-sources.md.** Broken: the source
-      register's inventory still lists `deafrica-waterbodies` and
-      `deafrica-wofs` as `planned R5-A` / `planned R5-C`, and § Planned
-      sources keeps their rows, beside the built `deafrica-waterbodies-series`
-      and `deafrica-wofs-scenes`. They are #605's existing rows, which this
-      round adds beside but doesn't edit. Durable fix: delete both planned
-      rows and their § Planned sources entries, pointing any link at them
-      (`#deafrica-waterbodies`, `#deafrica-wofs`) to the built sections.
-      Trigger: #605 merges.
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 

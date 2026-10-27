@@ -2151,23 +2151,18 @@ One Terraform variable, off by default:
     the first day.
 - **`dam_wofs_recency_alarm_days`** (default 60, at least 21).
 
-The flag can't go on without the worker's side: with
-`dam_observations_enabled = true`, `terraform plan` fails (a precondition
-on `terraform_data.dam_observations_gate`) unless the worker Lambda's
-environment has `DAM_OBSERVATIONS = "on"`, since without it the worker
-never writes the wanted list nor loads what the passes fetch, while the
+The flag also turns on the worker's side (`DAM_OBSERVATIONS`, `infra/jobs.tf`).
+The plan refuses the flag (a precondition on
+`terraform_data.dam_observations_gate`) if the worker Lambda's environment
+ever lacks `DAM_OBSERVATIONS = "on"`, since without it the worker never
+writes the wanted list nor loads what the passes fetch, while the
 heartbeats stay green.
 
 ### Turning it on
 
-1. **One change in the data mirror's files (#605's), made before the apply
-   (the plan refuses the flag without it):**
-   the worker's environment (`infra/jobs.tf`, beside `DWS_WEEKLY`):
-   `DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"`. Then
-   drop the `expect_failures` on the gate from
-   `infra/tests/dam_observations.tftest.hcl`'s runs with the flag on (they
-   fail once the gate passes) and make its refusal run assert the gate
-   passes instead. The S3
+1. Nothing to change in the worker: `infra/jobs.tf` sets its
+   `DAM_OBSERVATIONS` from the same flag, and the plan refuses the flag if
+   that line is ever lost (`terraform_data.dam_observations_gate`). The S3
    interface endpoint's policy already lets the worker put
    `dams/wanted.json` (`infra/packs.tf`, `WorkerWritesDamWantedList`); its
    reads under `dams/` are `WorkerReadsMirror`'s, and the fetcher is outside
