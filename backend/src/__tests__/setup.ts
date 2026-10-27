@@ -28,6 +28,10 @@ process.env.REGISTRATION_CHECK_REQUIRED = 'false';
 // our copy (mirror/source.ts). The tests of the copy's path set mirror
 // themselves (feeds/fromMirror.db.test.ts).
 process.env.CHIRPS_SOURCE = 'chc';
+// DWS feeds likewise read DWS's page (through the fixtures), production's path
+// until the operator has DWS's written answer (issue #604 R3-B); the store's
+// tests set store themselves (feeds/fromGaugeRecord.db.test.ts).
+process.env.DWS_SOURCE = 'live';
 // DB-backed tests (*.db.test.ts) use a dedicated test database, water_test in
 // the main checkout and water_test_w<tag> in a git worktree (test-db.ts); see
 // db-global-setup.ts. DEV-ONLY docker credentials.

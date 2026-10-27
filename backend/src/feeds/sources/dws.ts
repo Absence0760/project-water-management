@@ -40,7 +40,7 @@
 // isn't a non-negative number is a gap (null), counted in the result. A gap
 // row can leave the flow column blank and still carry a quality code
 // ("20210102             170"): the code is read by its column, never as a flow.
-import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
+import { toEpochDay } from '@water-management/engine/calendar';
 import { DWS_GAP_CODES, DWS_HEADER, DWS_ROW, dwsColumns, dwsTableText, parseDwsRow, stripHtmlComments } from '@water-management/engine/dws';
 import { DWS_RIVER_GAUGE, DWS_RIVER_GAUGE_MESSAGE } from '../config.js';
 import { FeedFormatError, FeedServerError } from '../errors.js';
@@ -142,22 +142,37 @@ const MAX_ROWS = 20 * 366 + 10;
 const M3S = /cubic met(re|er)s?\s*(\/|per)\s*s(ec(ond)?)?\b|\bm(3|³)\s*\/\s*s\b|\bcumecs\b/i;
 const DAILY_HEADER = /^DATE (D AVG F\/R|D_AVG_FR) QUAL( |$)/;
 
+/** One listed day of a DWS daily table: its flow (null for a gap) and its quality code as listed (null when none). */
+export interface DwsRowDay {
+	day: string;
+	value: number | null;
+	quality: string | null;
+}
+
+/** A DWS daily table's rows, oldest first, with the counts DwsDays carries. */
+export interface DwsRows {
+	rows: DwsRowDay[];
+	quality: Record<string, number>;
+	rejected: number;
+	outside: number;
+}
+
 /**
- * Parse a HyData.aspx daily page. Rows are placed by date; a missing date is a
- * gap. With a window, rows dated outside it are dropped (and counted): a page
- * that ignores the dates asked for, or carries a mistyped future date, must
- * not write days nobody asked for or move the feed's newest day past today.
+ * Parse a HyData.aspx daily page into its listed rows, each with its own
+ * quality code: what the gauge record store keeps (247_gauge_record,
+ * ingest/dws.ts). The checks are parseDwsDaily's (below), which is built on
+ * it. With a window, rows dated outside it are dropped (and counted).
  */
-export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
+export function parseDwsRows(raw: string, window?: DwsWindow): DwsRows {
 	// A comment is not content: one that mentions <pre> must not be taken for the table.
 	const page = stripHtmlComments(raw);
 	if (SERVER_ERROR.test(page)) throw new FeedServerError(DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL);
 	const body = dwsTableText(page);
 	if (body === null) {
-		if (/no data for this period/i.test(page)) return { startDate: null, values: [], quality: {}, rejected: 0, outside: 0 };
+		if (/no data for this period/i.test(page)) return { rows: [], quality: {}, rejected: 0, outside: 0 };
 		throw new FeedFormatError(F.noTable[0]);
 	}
-	if (/no data for this period/i.test(body)) return { startDate: null, values: [], quality: {}, rejected: 0, outside: 0 };
+	if (/no data for this period/i.test(body)) return { rows: [], quality: {}, rejected: 0, outside: 0 };
 	// Lines keep their leading spaces: a row's columns are read against the header's.
 	const lines = body.split(/\r?\n/).map((l) => l.trimEnd());
 	const h = lines.findIndex((l) => DWS_HEADER.test(l));
@@ -178,7 +193,7 @@ export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 	const from = window ? toEpochDay(window.start) : -Infinity;
 	const to = window ? toEpochDay(window.end) : Infinity;
 
-	const byDay = new Map<number, number | null>();
+	const byDay = new Map<number, DwsRowDay>();
 	const quality: Record<string, number> = {};
 	let rejected = 0;
 	let outside = 0;
@@ -195,16 +210,35 @@ export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 		if (byDay.has(day)) throw new FeedFormatError(`${F.twice[0]}: ${iso}`);
 		if (byDay.size >= MAX_ROWS) throw new FeedFormatError(F.tooManyRows[0]);
 		// A missing-data code, a blank, text or a negative (-999) value is a gap (parseDwsRow).
-		byDay.set(day, row.value);
+		byDay.set(day, { day: iso, value: row.value, quality: row.quality ?? null });
 		if (row.gap !== null) rejected++;
 		if (row.quality) quality[row.quality] = (quality[row.quality] ?? 0) + 1;
 	}
-	if (byDay.size === 0) return { startDate: null, values: [], quality, rejected, outside };
+	if (byDay.size === 0) return { rows: [], quality, rejected, outside };
 	const days = [...byDay.keys()];
 	const first = Math.min(...days);
 	const last = Math.max(...days);
 	// Rows are few, but their dates come from the page: bound the span before allocating it.
 	if (last - first + 1 > MAX_ROWS) throw new FeedFormatError(F.tooLong[0]);
-	const values = Array.from({ length: last - first + 1 }, (_, i) => byDay.get(first + i) ?? null);
-	return { startDate: fromEpochDay(first), values, quality, rejected, outside };
+	return { rows: days.sort((a, b) => a - b).map((d) => byDay.get(d)!), quality, rejected, outside };
+}
+
+/** Rows (oldest first) laid out by date from the first: a day not listed is a gap. */
+export function dwsRowValues(rows: readonly DwsRowDay[]): { startDate: string | null; values: (number | null)[] } {
+	if (!rows.length) return { startDate: null, values: [] };
+	const first = toEpochDay(rows[0]!.day);
+	const values = new Array<number | null>(toEpochDay(rows.at(-1)!.day) - first + 1).fill(null);
+	for (const r of rows) values[toEpochDay(r.day) - first] = r.value;
+	return { startDate: rows[0]!.day, values };
+}
+
+/**
+ * Parse a HyData.aspx daily page. Rows are placed by date; a missing date is a
+ * gap. With a window, rows dated outside it are dropped (and counted): a page
+ * that ignores the dates asked for, or carries a mistyped future date, must
+ * not write days nobody asked for or move the feed's newest day past today.
+ */
+export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
+	const r = parseDwsRows(raw, window);
+	return { ...dwsRowValues(r.rows), quality: r.quality, rejected: r.rejected, outside: r.outside };
 }

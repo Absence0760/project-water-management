@@ -40,7 +40,8 @@
 		"import:land-cover": "tsx scripts/import-land-cover.ts",
 		"import:evaporation": "tsx scripts/import-evaporation.ts",
 		"import:map-grid": "tsx scripts/import-map-grid.ts",
-		"import:gazetteer": "tsx scripts/import-gazetteer.ts"
+		"import:gazetteer": "tsx scripts/import-gazetteer.ts",
+		"import:dws": "tsx scripts/import-dws.ts"
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "3.1152.0",

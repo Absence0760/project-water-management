@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { FeedFormatError, FeedServerError, FeedUnavailableError, feedErrorMessage } from '../errors.js';
 import { FIXTURE_DIR } from '../fixtures.js';
-import { DWS_FORMAT_FAILURES, DWS_SERVER_ERROR_LABEL, dwsFailureLabel, dwsSiteType, dwsUrl, parseDwsDaily } from './dws.js';
+import { DWS_FORMAT_FAILURES, DWS_SERVER_ERROR_LABEL, dwsFailureLabel, dwsRowValues, dwsSiteType, dwsUrl, parseDwsDaily, parseDwsRows } from './dws.js';
 
 const sample = readFileSync(`${FIXTURE_DIR}dws-sample.html`, 'utf8');
 const page = (table: string) => `<html><body><pre>\nStation : X0H000100.00\n\n${table}\n</pre></body></html>`;
@@ -235,5 +235,27 @@ describe('parseDwsDaily on the shared DWS export fixture', () => {
 		expect(r.values).toEqual([0.412, 0.398, 1.897, null, null, null, 12.5, 0.371, null, 0.355, 0.349]);
 		expect(r.rejected).toBe(3);
 		expect(r.quality).toEqual({ '1': 6, '2': 1, '60': 1, '170': 1, '255': 1 });
+	});
+});
+
+// The gauge record store keeps each listed row with its own quality code (247_gauge_record, ingest/dws.ts).
+describe('parseDwsRows: the listed rows, each with its quality code', () => {
+	it('lists the fixture page’s rows oldest first, a gap row as null with its code, and lays them out as parseDwsDaily does', () => {
+		const r = parseDwsRows(sample);
+		const daily = parseDwsDaily(sample);
+		expect(r.rows.find((x) => x.day === '2021-01-26')).toEqual({ day: '2021-01-26', value: null, quality: '170' });
+		expect(r.rows.find((x) => x.day === '2021-01-01')).toEqual({ day: '2021-01-01', value: 0.359, quality: '1' });
+		// The two days with no row aren't listed.
+		expect(r.rows.some((x) => x.day === '2021-01-18' || x.day === '2021-01-19')).toBe(false);
+		expect(r.rows.map((x) => x.day)).toEqual([...r.rows.map((x) => x.day)].sort());
+		expect({ ...dwsRowValues(r.rows), quality: r.quality, rejected: r.rejected, outside: r.outside }).toEqual(daily);
+	});
+
+	it('drops and counts rows outside a window, and reads a page with no data as no rows', () => {
+		const r = parseDwsRows(sample, { start: '2021-01-10', end: '2021-01-12' });
+		expect(r.rows.map((x) => x.day)).toEqual(['2021-01-10', '2021-01-11', '2021-01-12']);
+		expect(r.outside).toBeGreaterThan(0);
+		expect(parseDwsRows(page('No data for this period'))).toEqual({ rows: [], quality: {}, rejected: 0, outside: 0 });
+		expect(dwsRowValues([])).toEqual({ startDate: null, values: [] });
 	});
 });

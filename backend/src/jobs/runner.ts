@@ -28,6 +28,7 @@ import type { ClaimedJob, HandlerRegistry } from './registry.js';
 import { logEvent } from '../logging/logEvent.js';
 import { type MfaResetTickResult, runMfaResets } from '../auth/mfaReset.js';
 import { type MirrorTickResult, runMirrorTick } from './handlers/mirror-tick.js';
+import { type DwsTickResult, runDwsTick } from '../feeds/gaugeRecordLoad.js';
 
 /** Default lease: longer than any job may run (the worker Lambda's timeout is 300 s). */
 export const DEFAULT_LEASE_SECONDS = 360;
@@ -208,6 +209,8 @@ export interface TickResult {
 	feeds?: ScheduleResult;
 	/** Our CHIRPS copy's revisions brought to the cache (handlers/mirror-tick.ts): null with CHIRPS_SOURCE=chc, absent when feeds were off. */
 	mirror?: MirrorTickResult | null;
+	/** The weekly DWS pass's handover (feeds/gaugeRecordLoad.ts): null unless DWS_WEEKLY=on in a live process, absent when feeds were off. */
+	dws?: DwsTickResult | null;
 	/** Scheduled reports queued by this tick (absent when reports were off). */
 	reports?: ReportScheduleResult & { purged: number };
 	/** Alert checks queued, alert rows purged (0 when alerts scheduling was off), and alert mails sent by this tick. */
@@ -264,6 +267,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	if (o.feeds !== false) {
 		// Never throws: a revision that can't be applied now is logged and tried next tick.
 		result.mirror = await runMirrorTick();
+		// The weekly DWS pass's stations out and its fetches in (issue #604 R3-B); never throws either.
+		result.dws = await runDwsTick();
 		result.feeds = await scheduleDueFeeds({ all: o.allFeeds });
 	}
 	if (o.reports !== false) result.reports = { purged: await purgeReports(), ...(await scheduleDueReports()) };

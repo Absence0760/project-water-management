@@ -28,7 +28,11 @@
 // With CHIRPS_SOURCE=mirror (mirror/source.ts; the default in dev, CI and e2e)
 // a CHIRPS fetch reads our own copy of CHIRPS instead, in this job, whatever
 // FEED_FETCHER says: no FetchRequest, no SQS round trip (feeds/fromMirror.ts,
-// issue #604 D3). CHIRPS-GEFS and DWS feeds are unchanged.
+// issue #604 D3). CHIRPS-GEFS feeds are unchanged.
+//
+// With DWS_SOURCE=store (feeds/fromGaugeRecord.ts dwsSource; the default in
+// dev, CI and e2e) a DWS fetch reads its station's days from our gauge record
+// store (247_gauge_record) the same way, in this job (issue #604 R3-B).
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import { planFetch, RECHECK_HEAD_DAYS, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from '../../feeds/cellCache.js';
@@ -41,6 +45,7 @@ import { feedHttp } from '../../feeds/http.js';
 import { fetchFromMirror } from '../../feeds/fromMirror.js';
 import { ingestResult } from '../../feeds/ingest.js';
 import { chirpsSource } from '../../mirror/source.js';
+import { dwsSource, fetchFromGaugeRecord } from '../../feeds/fromGaugeRecord.js';
 import { beginFeedFetch, feedForJob, takeFeedFetch } from '../../feeds/store.js';
 import { defineHandler } from '../registry.js';
 import { feedFetcher, type FetchRequestMessage, sendToQueue } from '../transport.js';
@@ -62,6 +67,11 @@ export const feedFetchHandler = defineHandler({
 		const request: FetchRequest = { source: feed.source, config: feed.config, ...window, today };
 		if (feed.source === 'chirps' && chirpsSource() === 'mirror') {
 			await fetchFromMirror(db, feed, window, { jobId: job.id, today });
+			return;
+		}
+		// DWS from our gauge record store (issue #604 R3-B).
+		if (feed.source === 'dws' && dwsSource() === 'store') {
+			await fetchFromGaugeRecord(db, feed, window, { jobId: job.id, today });
 			return;
 		}
 		if (feed.source === 'chirps') {

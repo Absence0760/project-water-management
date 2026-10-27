@@ -110,8 +110,8 @@ const decision: Check = (v) => (v === 'true' || v === 'false' ? null : 'must be 
 /** An S3 URL (s3://bucket/…): our copy of CHIRPS in its bucket, never the committed fixtures (a file path) or a local store. */
 const s3Url: Check = (v) => (!set(v) ? 'is not set' : /^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](\/.*)?$/.test(v.trim()) ? null : 'is not an s3:// URL');
 
-/** MIRROR_URL on a Lambda that reads the copy when CHIRPS_SOURCE=mirror: required then, else checked only when set. */
-const mirrorUrlFor: Check = (v, env) => (env?.CHIRPS_SOURCE?.trim() === 'mirror' ? s3Url(v) : optional(s3Url)(v));
+/** MIRROR_URL on the worker: required when it reads the copy (CHIRPS_SOURCE=mirror) or hands the weekly DWS pass its stations (DWS_WEEKLY=on), else checked only when set. */
+const mirrorUrlFor: Check = (v, env) => (env?.CHIRPS_SOURCE?.trim() === 'mirror' || env?.DWS_WEEKLY?.trim() === 'on' ? s3Url(v) : optional(s3Url)(v));
 
 const host: Check = (v) => (!set(v) ? 'is not set' : isLocalHost(v.trim()) ? 'points at a local host' : null);
 
@@ -287,6 +287,14 @@ export const SETTINGS: Record<string, Setting> = {
 	MIRROR_URL: {
 		why: 'Where our copy of CHIRPS lives (mirror/source.ts mirrorUrl): s3://<the mirror bucket> (infra/ingest.tf). Unset off Lambda is the committed synthetic copy, which a live process refuses. The worker needs it when CHIRPS_SOURCE=mirror; the ingest Lambdas (the fetcher’s daily ingest, issue #604 R2-B) write it, and Terraform sets it on the fetcher always (infra/feeds.tf), so the fetcher must name the bucket.',
 		checks: { worker: mirrorUrlFor, fetcher: s3Url }
+	},
+	DWS_SOURCE: {
+		why: 'Where a DWS feed fetch reads its station’s days (feeds/fromGaugeRecord.ts, issue #604 R3-B): live, DWS’s site through the fetcher, or store, our gauge_record table in the worker’s own fetch job. Unset follows FEED_SOURCE (live when live), but production says which: Terraform sets it from var.dws_source (infra/jobs.tf), live until the operator has DWS’s written answer and has loaded its reply.',
+		checks: { worker: oneOf('store', 'live') }
+	},
+	DWS_WEEKLY: {
+		why: 'on: the worker hands the weekly DWS pass its stations and loads what it fetched (feeds/gaugeRecordLoad.ts), through the mirror bucket, so MIRROR_URL must name it. Terraform sets it from var.dws_weekly_enabled (infra/jobs.tf), with the schedule and the grants.',
+		checks: { worker: oneOf('on', 'off') }
 	},
 	FEED_FIXTURE_REWRITE: {
 		why: 'Fixtures only (FEED_SOURCE=fixtures): 1 serves some synthetic CHIRPS finals rewritten in place, to watch the re-check locally. The live client never reads it, and the fetcher refuses the fixtures in production.'
