@@ -29,6 +29,7 @@ import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import { declaredRuleText } from './uncertainty/options';
 import {
 	defaultProjectSettings,
+	resolveGapRain,
 	RETIRED_CALIBRATION_KEYS,
 	resolveArealRain,
 	resolveUnitRain,
@@ -858,6 +859,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 			return w === undefined ? 'off (the monthly factor alone)' : `on (wet days ≥ ${fmtValue(w)} mm)`;
 		}
 	},
+	// Engine ≥ 1.101.0 (issue #604 R4-B); a snapshot without it ran on CHIRPS alone (null, the default).
+	gapRain: { label: 'Gap-filling product', fmt: gapRainText },
 	// Engine ≥ 0.30.0; a snapshot without it had none.
 	rainSource: { label: 'Rain-source periods', fmt: rainSourceText },
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'first day with rain') },
@@ -978,6 +981,8 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		},
 		// Likewise dams evaporated only from engine 0.16.0 (audit N2).
 		lakeEvapFactor: r.lakeEvapFactor ?? 0,
+		// Engine ≥ 1.101.0: the gap-filling product as a run takes it (absent, null and CHIRPS alone written out are the same).
+		gapRain: resolveGapRain(r.gapRain, []),
 		// Engine ≥ 0.32.0: absent means the default; it only changes a reported figure.
 		assuranceAnnualThreshold: r.assuranceAnnualThreshold ?? DEFAULT_ANNUAL_THRESHOLD,
 		allocationMode: r.allocationMode ?? 'none',
@@ -1016,6 +1021,13 @@ function diffFlowGapFill(ra: unknown, rb: unknown): InputChange[] {
 		out.push({ area: 'settings', kind: 'changed', subject, text: `${subject}: ${gapFillText(a[k])} → ${gapFillText(b[k])}` });
 	}
 	return out;
+}
+
+/** settings.gapRain in words: absent and null (and the default written out) are CHIRPS alone. */
+function gapRainText(v: unknown): string {
+	const g = v && typeof v === 'object' ? (v as { product?: unknown; imergLate?: unknown }) : {};
+	const product = g.product === 'era5l' ? 'ERA5-Land' : g.product === 'chirpsThenEra5l' ? 'CHIRPS, then ERA5-Land where CHIRPS has none' : g.product === undefined || g.product === 'chirps' ? 'CHIRPS' : String(g.product);
+	return g.imergLate === true ? `${product}, and IMERG Late for the recent days` : product;
 }
 
 function diffSettings(

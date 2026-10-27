@@ -73,7 +73,8 @@ function stationCheckSettings(settings: ProjectSettings): ProjectSettings {
 		...settings,
 		zeroRainRuns: { ...settings.zeroRainRuns, keepDry: [], missing: [], keepReadings: [], addAccumulations: [] },
 		rainSource: [],
-		chirpsQuantileMap: null
+		chirpsQuantileMap: null,
+		gapRain: null
 	};
 }
 
@@ -114,7 +115,7 @@ export function checkedStationRecord(
 	let n = stored.values.length;
 	let r: ReturnType<typeof checkedRain>;
 	if (opts.isCatchmentGauge) {
-		const full: ProjectSettings = { ...settings, chirpsQuantileMap: null };
+		const full: ProjectSettings = { ...settings, chirpsQuantileMap: null, gapRain: null };
 		const sub: ModelInput['series'] = { ...series, rain_catchment_mm: stored };
 		// checkedCatchmentRainRecord's span: the record and every rain-source period's replacement days.
 		let last = s0 + n - 1;
