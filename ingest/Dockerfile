@@ -18,4 +18,10 @@ RUN pip install --no-cache-dir --require-hashes -r ${LAMBDA_TASK_ROOT}/requireme
 # The job's modules only: no tests, no fixtures (production runs FEED_SOURCE=live).
 COPY chcnetcdf.py chirps_final.py cloudwatch.py grid.py lambda_handler.py lease.py manifest.py polite.py zarrstore.py ${LAMBDA_TASK_ROOT}/
 
+# Not root (Trivy DS-0002). Lambda runs the image as its own unprivileged
+# user anyway; this covers a local `docker run`. 65534 is nobody: numeric, so
+# it needs no /etc/passwd entry, and the code and packages above are
+# world-readable, the only writes go to /tmp.
+USER 65534
+
 CMD ["lambda_handler.handler"]

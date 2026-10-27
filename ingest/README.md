@@ -316,6 +316,10 @@ docker buildx build --platform linux/arm64 -f ingest/Dockerfile ingest
 
 - **Base:** AWS's Lambda Python 3.14 image, using the arm64 tag pinned by
   digest.
+- **User:** `USER 65534` (nobody), so the image never runs as root (Trivy
+  DS-0002; `test_lambda_handler.py` checks it). Lambda runs it as its own
+  unprivileged user anyway; this covers a local `docker run`. The code and
+  packages are world-readable and the job writes only to `/tmp`.
 - **Pin checks:** `pnpm check:pins` refuses a `FROM` that isn't
   `public.ecr.aws/lambda/python:<version>-arm64@sha256:…`, and a
   `pip install` without `--require-hashes`.

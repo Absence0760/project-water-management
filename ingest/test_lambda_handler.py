@@ -279,6 +279,12 @@ class Image(unittest.TestCase):
             p = subprocess.run([sys.executable, "-E", "-s", "-c", "import lambda_handler, chirps_final, lease, cloudwatch"], cwd=tmp, capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stderr)
 
+    def test_the_image_does_not_run_as_root(self):
+        """Trivy's DS-0002: the last USER names a user other than root."""
+        users = [ln.split()[1] for ln in (HERE / "Dockerfile").read_text().splitlines() if ln.startswith("USER ")]
+        self.assertTrue(users, "the Dockerfile sets no USER")
+        self.assertNotIn(users[-1].split(":")[0], ("root", "0"))
+
 
 class Diff(unittest.TestCase):
     def test_diff_counts_cells_not_cell_days(self):
