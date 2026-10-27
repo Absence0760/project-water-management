@@ -269,6 +269,13 @@ export interface FitRecord {
 		 * Absent on a record made before it was tracked, which is never flagged.
 		 */
 		apanDaily?: ApanDailyFingerprint | null;
+		/**
+		 * The daily reference ET series the fit ran on (engine ≥ 1.102.0, issue
+		 * #604 R5-E, docs/model.md §2.4a): the same fingerprint as `apanDaily`;
+		 * null = the project had none. Absent on a record made before it was
+		 * tracked, which is never flagged.
+		 */
+		et0Daily?: Et0DailyFingerprint | null;
 		/** settings.dataQuality's rain-check limits (engine ≥ 1.20.0); absent = the defaults. */
 		rainChecks?: RainCheckLimits;
 		/**
@@ -384,6 +391,34 @@ export interface ApanDailyFingerprint {
 	valuesSha256: string;
 }
 
+/**
+ * Which part of the daily reference ET series (`evap_et0_mm`, engine ≥
+ * 1.102.0) a fit ran on: the A-pan's fingerprint over its days through
+ * `through`, the last day the fit scored (et0FitWindow). A caller saying what
+ * it is now fingerprints the series through the record's own `through`, so
+ * days a feed appended after the fit never count as a change.
+ */
+export interface Et0DailyFingerprint extends ApanDailyFingerprint {
+	through: string;
+}
+
+/**
+ * The last day a fit scored, of the fit and of its validation tests (every
+ * `end` of their scored periods): what a daily reference ET fingerprint runs
+ * through (Et0DailyFingerprint).
+ */
+export function fitScoredThrough(r: Pick<CalibrationReport, 'fit' | 'splitSample' | 'differential' | 'independentRecord'>): string {
+	let last = r.fit.end;
+	const walk = (v: unknown, depth: number) => {
+		if (!v || typeof v !== 'object' || depth > 4) return;
+		const o = v as Record<string, unknown>;
+		if (typeof o.end === 'string' && typeof o.start === 'string' && o.end > last && /^\d{4}-\d{2}-\d{2}$/.test(o.end)) last = o.end;
+		for (const x of Object.values(o)) walk(x, depth + 1);
+	};
+	walk([r.splitSample, r.differential, r.independentRecord], 0);
+	return last;
+}
+
 const sameApanDaily = (a: ApanDailyFingerprint | null, b: ApanDailyFingerprint | null): boolean =>
 	a === null || b === null ? a === b : a.startDate === b.startDate && a.length === b.length && a.valuesSha256 === b.valuesSha256;
 
@@ -418,6 +453,8 @@ export interface FitContext {
 	chirpsSource?: SeriesProvenance | null;
 	/** The daily A-pan series the fit ran on (null = none); omit when not known. */
 	apanDaily?: ApanDailyFingerprint | null;
+	/** The daily reference ET series the fit ran on, through the fit's last scored day (null = none); omit when not known. */
+	et0Daily?: Et0DailyFingerprint | null;
 	/** The fitted record's source and unit (null = not recorded); omit when not known. */
 	observedOrigin?: SeriesOrigin | null;
 	/** How automated calibration chose the fit; omit for a fit a person chose. */
@@ -484,6 +521,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			...(resolveGapRain(ctx.settings.gapRain, []) ? { gapRain: resolveGapRain(ctx.settings.gapRain, []) } : {}),
 			...(ctx.settings.panCoefficientSource ? { panCoefficientSource: ctx.settings.panCoefficientSource } : {}),
 			...(ctx.apanDaily !== undefined ? { apanDaily: ctx.apanDaily ? { ...ctx.apanDaily } : null } : {}),
+			...(ctx.et0Daily !== undefined ? { et0Daily: ctx.et0Daily ? { ...ctx.et0Daily } : null } : {}),
 			rainChecks: rainChecksOf(ctx.settings.dataQuality),
 			...(r.unitRain ? { unitRain: structuredClone(r.unitRain) } : {}),
 			...(r.catchmentStation ? { catchmentStation: structuredClone(r.catchmentStation) } : {})
@@ -591,6 +629,15 @@ export interface FitRecordStatus {
 	 * `forcingChanged`.
 	 */
 	apanDailyChanged: boolean;
+	/**
+	 * The daily reference ET series (engine ≥ 1.102.0, issue #604 R5-E) was
+	 * added, removed or changed since a GR4J fit that ran on a monthly PE row,
+	 * and GR4J still does: the PE on the days it covers changed. False when
+	 * the record or the caller doesn't know the series, and under pan
+	 * coefficient × A-pan (the series doesn't reach GR4J). Also sets
+	 * `forcingChanged`.
+	 */
+	et0DailyChanged: boolean;
 	/**
 	 * The monthly CHIRPS factors the run applies drifted from those the fit
 	 * recorded (`forcing.chirpsFactors`) by more than CHIRPS_FACTOR_TOLERANCE
@@ -883,6 +930,12 @@ export interface FitForcingNow {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The daily A-pan series a run would read now (null = none); omit when not known. */
 	apanDaily?: ApanDailyFingerprint | null;
+	/**
+	 * The daily reference ET series now, fingerprinted through the record's
+	 * `forcing.et0Daily.through` (et0FitWindow; null = none on or before it);
+	 * omit when not known, as a run's whole-series snapshot hash can't say it.
+	 */
+	et0Daily?: ApanDailyFingerprint | null;
 	/** The fitted record's source and unit now (null = not recorded); omit when not known. */
 	observedOrigin?: SeriesOrigin | null;
 	/**
@@ -963,6 +1016,15 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		apanThen !== undefined &&
 		now.apanDaily !== undefined &&
 		!sameApanDaily(apanThen, now.apanDaily);
+	// The daily reference ET reaches GR4J only under a monthly PE row, then and now.
+	const et0Then = record.forcing?.et0Daily;
+	const et0DailyChanged =
+		record.model === 'gr4j' &&
+		resolvePe(settings.pe, []).kind === 'monthly' &&
+		resolvePe(record.forcing?.pe, []).kind === 'monthly' &&
+		et0Then !== undefined &&
+		now.et0Daily !== undefined &&
+		!sameApanDaily(et0Then, now.et0Daily);
 	// The catchment's rainfall station (engine ≥ 1.91.0, §2.4i): assigned or removed since the fit, another station or
 	// scaling, or (when a run says what it is now) its ratio, MAP or pairing factors moving. Only on a forcing recorded.
 	const stationThen = record.forcing?.catchmentStation ?? null;
@@ -1005,6 +1067,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 			catchmentStationChanged ||
 			chirpsSourceChanged ||
 			apanDailyChanged ||
+			et0DailyChanged ||
 			chirpsFactorsChanged ||
 			unitRainChanged ||
 			(!!forcing &&
@@ -1022,6 +1085,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 					forcing.unitRain)),
 		chirpsSourceChanged,
 		apanDailyChanged,
+		et0DailyChanged,
 		chirpsFactorsChanged,
 		observedOriginChanged: record.observedOrigin !== undefined && now.observedOrigin !== undefined && !sameOrigin(record.observedOrigin, now.observedOrigin),
 		flowFillChanged: flowFillDiffers(record, settings, record.flowKind),
@@ -1082,6 +1146,11 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 			'The daily A-pan evaporation series has been added, replaced or removed since the fit, so the potential evaporation GR4J runs on changed on the days it covers. GR4J’s parameters trade off against evaporation: refit before relying on them.'
 		);
 	}
+	if (status.et0DailyChanged) {
+		out.push(
+			'The daily reference evapotranspiration series has been added, replaced or removed since the fit, so the potential evaporation GR4J runs on changed on the days it covers. GR4J’s parameters trade off against evaporation: refit before relying on them.'
+		);
+	}
 	if (status.chirpsFactorsChanged) {
 		out.push(
 			`The monthly CHIRPS factors this run applies differ by more than ${CHIRPS_FACTOR_TOLERANCE * 100} % in some month from those the fit ran on: new days shared by the catchment rain and CHIRPS, or preliminary CHIRPS turned final, moved them, and with them the rain on every day CHIRPS fills. Refit, or fit the factors on fixed water years (Model settings → Rain gaps → CHIRPS gap filling → Fit ranges).`
@@ -1107,7 +1176,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 			'Parameters not fitted for this method: the fit ran under the other flow generation method (Model settings → Flow generation: Fragmentation, one GR4J run on the catchment rain, or Per unit, GR4J on each unit’s own rain). GR4J’s parameters depend on the rain they were fitted on: refit before relying on them.'
 		);
 	}
-	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged && !status.methodChanged) {
+	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.et0DailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged && !status.methodChanged) {
 		out.push(
 			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, gap-filling product, rain-source periods, zero-rain run handling or the rain each unit runs on (runoff from each unit’s own rain, its records, MAPs and factors) has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS, gap-filling, rain-source and per-unit rain settings change the rain fed to it, so refit before relying on them.'
 		);

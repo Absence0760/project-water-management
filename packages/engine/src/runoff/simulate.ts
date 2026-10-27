@@ -2,6 +2,7 @@
 // evaporation, warms the stores up, steps every day and converts mm to m³/day.
 import { monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
 import { apanDailyMm, hasDailyApanValue } from '../evaporation/apanDaily';
+import { et0DailyMm, hasDailyEt0Value, readsEt0Daily } from '../evaporation/et0Daily';
 import { arealRainFactors, gr4jPeMonthlyMm, type ArealRain, type PeInput, type ProjectSettings } from '../project';
 import { MM_KM2_TO_M3, requireCatchmentAreaKm2 } from './area';
 import { gr4j } from './gr4j';
@@ -49,7 +50,9 @@ function daysInMonth(day: number): number {
  * coefficient × A-pan, or `settings.pe`'s monthly row, issue #39), spread
  * evenly over the month's days, so a month's PET totals exactly that. Under
  * `pe.kind: 'pan'`, a day the daily A-pan series covers (engine ≥ 0.38.0,
- * issue #45) is pan coefficient × that day's A-pan instead. Negative inputs
+ * issue #45) is pan coefficient × that day's A-pan instead; under `pe.kind:
+ * 'monthly'`, a day the daily reference ET series covers (engine ≥ 1.102.0,
+ * issue #604 R5-E) is that day's ET₀ as it stands. Negative inputs
  * count as 0. With `settings.arealRain` (engine ≥ 1.13.0, docs/model.md
  * §2.4g) each day's rain is × its water-year month's areal factor; demand
  * and the dams never read this rain.
@@ -68,13 +71,16 @@ export function runoffForcing(
 	const peMm = gr4jPeMonthlyMm(settings);
 	// A monthly PE row replaces A-pan for GR4J altogether, the daily series too.
 	const apan = settings.pe?.kind === 'monthly' ? null : apanDailyMm(ctx.aligned('evap_apan_mm'));
+	// Under a monthly PE row, a daily reference ET record replaces the row's share on the days it covers (engine ≥ 1.102.0).
+	const et0 = readsEt0Daily(settings.pe) ? et0DailyMm(ctx.aligned('evap_et0_mm')) : null;
 	// The areal rainfall correction (engine ≥ 1.13.0, §2.4g): runoff's rain only.
 	const areal = arealRainFactors(settings.arealRain);
 	for (let t = 0; t < days; t++) {
 		const wy = waterYearIndex(monthOfEpochDay(d0 + t));
 		rainMm[t] = Math.max(0, c[t] ?? ch[t] ?? f[t] ?? 0) * (areal ? areal[wy]! : 1);
 		const a = apan ? apan[t]! : NaN;
-		petMm[t] = a === a ? Math.max(0, (settings.panCoefficient[wy] ?? 0) * a) : Math.max(0, peMm[wy]! / daysInMonth(d0 + t));
+		const e = et0 ? et0[t]! : NaN;
+		petMm[t] = a === a ? Math.max(0, (settings.panCoefficient[wy] ?? 0) * a) : e === e ? e : Math.max(0, peMm[wy]! / daysInMonth(d0 + t));
 	}
 	return { rainMm, petMm };
 }
@@ -174,7 +180,7 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 	const warnings: string[] = [];
 	// With no evaporation the production store only fills, so nearly all rain
 	// becomes flow: refuse, as a run with no rainfall is refused.
-	if (!hasPotentialEvaporation(ctx.settings, hasDailyApanValue(ctx.aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
+	if (!hasPotentialEvaporation(ctx.settings, hasDailyApanValue(ctx.aligned('evap_apan_mm')), hasDailyEt0Value(ctx.aligned('evap_et0_mm')))) throw new Error(GR4J_NO_PET);
 	const areaKm2 = requireCatchmentAreaKm2(ctx.settings.calibration, input);
 	const p = resolveParams<Gr4jParams>(GR4J_PARAMS, ctx.settings.gr4j, 'GR4J', warnings);
 	const warmupDays = resolveWarmupDays(ctx.settings.gr4j?.warmupDays, warnings);

@@ -35,6 +35,7 @@ import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
+import { hasDailyEt0Value } from '../evaporation/et0Daily';
 import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { simulateUnits, unitRainFingerprint, unitRainForcing, type UnitRainFingerprint } from '../runoff/unitRain';
 import { rainStationSummary } from '../runoff/stationForcing';
@@ -404,7 +405,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const { settings, days, startDate, aligned, month, warnings, start } = run;
 	const modelId = model ?? settings.runoffModel;
 	// Refused as runModel refuses it (runoff/simulate.ts).
-	if (!hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
+	if (!hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')), hasDailyEt0Value(aligned('evap_et0_mm')))) throw new Error(GR4J_NO_PET);
 	const area = requireCatchmentAreaKm2(settings.calibration, input);
 	const startParams: ParamSet = { ...resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings) };
 	const natural = new Float64Array(days);

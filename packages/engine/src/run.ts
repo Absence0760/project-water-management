@@ -299,7 +299,7 @@ function runNetwork(
 		...(resume ? { pinned: resume.pinned.fits, resumedFill: { kinds: resume.flowFillHistory ?? [] } } : {}),
 		...(capturing ? { captureFits: true } : {})
 	});
-	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill, gapRain } = prepared;
+	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, et0Daily, flowFill, gapRain } = prepared;
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
 	// The days before a forecast tail (engine ≥ 1.28.0, engine-audit.md K1): the record-wide
 	// statistics (GR4J's cycled warm-up, the land-cover Q75, the Reserve's assessed months and
@@ -1291,6 +1291,7 @@ function runNetwork(
 			rainSource: rainSource?.info ?? null,
 			rainAccumulation: accumulation?.info ?? null,
 			...(apanDaily ? { apanDaily } : {}),
+			...(et0Daily ? { et0Daily } : {}),
 			...(assurance ? { supplyAssurance: assurance } : {}),
 			warnings
 		}

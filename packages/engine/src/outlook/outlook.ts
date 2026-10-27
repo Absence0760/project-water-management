@@ -197,7 +197,7 @@ export function outlookLevelProblems(level: OutlookLevel): string[] {
  * One member's input: `input`'s record cut at the decision date (every
  * series ends the day before it), the analogue's rain (the base run's
  * rain_final on the analogue's days, which is already gap-filled and
- * bias-corrected) as the forecast rain of the season, its daily A-pan when
+ * bias-corrected) as the forecast rain of the season, its daily A-pan (and daily reference ET) when
  * the project has one, the run window pinned to the base run's start and the
  * season end, rain-source periods clipped to the history, and the level's
  * ops applied with their demand factors from the decision date on
@@ -228,6 +228,7 @@ export function outlookMemberInput(
 	series.rain_forecast_mm = historyThen(input.series.rain_forecast_mm, s.from, seasonRain);
 	Object.assign(series, unitSeasonRain(baseRun, s, a));
 	if (input.series.evap_apan_mm) series.evap_apan_mm = historyThen(input.series.evap_apan_mm, s.from, valuesOn(input.series.evap_apan_mm, a, s.days));
+	if (input.series.evap_et0_mm) series.evap_et0_mm = historyThen(input.series.evap_et0_mm, s.from, valuesOn(input.series.evap_et0_mm, a, s.days));
 
 	const settings = memberSettings(input, s, baseRun.startDate, start);
 	// Under per-unit rain (engine ≥ 1.78.0, §2.4h): the base input's unit rules and factors, so the history cut at the decision
@@ -254,7 +255,7 @@ function baseUnitRecipes(input: ModelInput, prep: ReturnType<typeof prepareRun>)
  * the decision date (runModelFrom(captureModelState(input, decisionDate),
  * …), engine ≥ 1.1.0): outlookMemberInput's member without the history. Its
  * only series are the season's: the analogue's rain as the forecast rain and
- * its daily A-pan when the project has one, both from the decision date; the
+ * its daily A-pan and daily reference ET when the project has them, all from the decision date; the
  * window is the season; the settings, the ops (demand factors from the
  * decision date) and the storage `start` are outlookMemberInput's, so a
  * member run from the snapshot is that member's season with the history's
@@ -272,6 +273,7 @@ export function outlookSeasonInput(
 	const { s, a, seasonRain } = memberSeason(input, baseRun, season, analogue);
 	const series: ModelInput['series'] = { rain_forecast_mm: { startDate: s.decisionDate, values: seasonRain }, ...unitSeasonRain(baseRun, s, a) };
 	if (input.series.evap_apan_mm) series.evap_apan_mm = { startDate: s.decisionDate, values: valuesOn(input.series.evap_apan_mm, a, s.days) };
+	if (input.series.evap_et0_mm) series.evap_et0_mm = { startDate: s.decisionDate, values: valuesOn(input.series.evap_et0_mm, a, s.days) };
 	// No forecastRainSource, on purpose: this member's "forecast" is an analogue season's recorded rain, not CHIRPS-GEFS,
 	// so it must not take the CHIRPS-GEFS levelling (§2.4h). Not a field to carry over from the base input.
 	// The stations' details carry over (engine ≥ 1.91.0): a unit's pinned station recipe names them.

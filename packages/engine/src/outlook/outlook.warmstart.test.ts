@@ -21,6 +21,40 @@ const col = (out: Pick<ModelOutput, 'series'>, nodeId: string | null, key: strin
 const input = testCatchment({ dailyApan: true });
 const base = runModelWithoutChecks(input);
 
+describe('a member with a daily reference ET record (issue #604 R5-E)', () => {
+	// The test catchment under a monthly PE row with a daily ET₀ series: GR4J reads it, so the season's PE is the
+	// analogue year's ET₀, from the decision date, in both the re-run member and the one from the snapshot.
+	const et0Input = structuredClone(input);
+	const ev = input.series.evap_apan_mm!;
+	et0Input.series.evap_et0_mm = { startDate: ev.startDate, values: ev.values.map((v, i) => (v == null ? null : 2 + (i % 11) * 0.4)) };
+	et0Input.settings = { ...et0Input.settings, pe: { kind: 'monthly', mm: [120, 140, 160, 170, 150, 120, 80, 50, 35, 35, 50, 90] as never, source: 'invented' } };
+	const et0Base = runModelWithoutChecks(et0Input);
+	const snap = captureModelState(et0Input, SEASON.decisionDate);
+	const a = outlookAnalogue(resolveSeason(SEASON), 2005);
+
+	it('carries the analogue year’s ET₀ through the season, and the member from the snapshot is the re-run member to the bit', () => {
+		const full = outlookMemberInput(et0Input, et0Base, SEASON, a, scale(0.7)).input;
+		const d0 = toEpochDay(et0Base.startDate);
+		const from = toEpochDay(SEASON.decisionDate) - d0;
+		const aFrom = toEpochDay(a.from) - d0;
+		const days = toEpochDay(SEASON.seasonEnd) - toEpochDay(SEASON.decisionDate) + 1;
+		const e = full.series.evap_et0_mm!;
+		expect(e.values.slice(0, from)).toEqual(et0Input.series.evap_et0_mm!.values.slice(0, from));
+		expect(e.values.slice(from)).toEqual(et0Input.series.evap_et0_mm!.values.slice(aFrom, aFrom + days));
+		const m = outlookSeasonInput(et0Input, et0Base, SEASON, a, scale(0.7));
+		expect(m.input.series.evap_et0_mm!.values).toEqual(e.values.slice(from));
+		const warm = runModelFrom(snap, m.input);
+		const cold = runModelWithoutChecks(full);
+		// GR4J's PE on the season's days is the analogue's ET₀ as it stands (positive control: the series is read).
+		expect(col(cold, null, 'pet')!.slice(from)).toEqual(e.values.slice(from).map((v) => v ?? Number.NaN).map((v, i) => (Number.isNaN(v) ? col(cold, null, 'pet')![from + i]! : v)));
+		for (const x of warm.series) {
+			const c = col(cold, x.nodeId, x.key);
+			if (!c) continue;
+			expect(x.values, `${x.nodeId}/${x.key}`).toEqual(c.slice(from));
+		}
+	});
+});
+
 describe('a member from the snapshot', () => {
 	const snapshot = captureModelState(input, SEASON.decisionDate);
 	const a = outlookAnalogue(resolveSeason(SEASON), 2005);

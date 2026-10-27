@@ -12,6 +12,7 @@ import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { GapRainInfo } from './gapRain';
 import type { RainSourceInfo } from './rainSourcePeriods';
 import type { ApanDailyInfo } from './evaporation/apanDaily';
+import type { Et0DailyInfo } from './evaporation/et0Daily';
 import type { FlowFillSummary, FlowGapFillSettings } from './flowGapFill';
 import type { SeriesOrigin } from './seriesProvenance';
 import type { RainAccumulationInfo } from './accumulation';
@@ -1504,6 +1505,14 @@ export const userPriorityWord = (p: UserPriority | null | undefined): string => 
  * month` wherever A-pan is read: GR4J's PE under `pe.kind: 'pan'`, crop
  * demand and dam evaporation; every other day falls back to the monthly
  * mean (./evaporation/apanDaily.ts, docs/model.md §2.3a).
+ *
+ * `evap_et0_mm` (engine ≥ 1.102.0, issue #604 R5-E) is a daily FAO-56
+ * reference evapotranspiration record (mm/day): an AgERA5 data feed (with
+ * NASA POWER's computed ET₀ on the days AgERA5 doesn't have yet) or a
+ * station's own. Only GR4J reads it, only under `pe.kind: 'monthly'`, as it
+ * stands: on the days it has a value it replaces the monthly PE row's share;
+ * every other day falls back to the row (./evaporation/et0Daily.ts,
+ * docs/model.md §2.4a). Crop demand and dam evaporation never read it.
  */
 export const SERIES_KINDS = [
 	'rain_catchment_mm',
@@ -1514,7 +1523,8 @@ export const SERIES_KINDS = [
 	'flow_observed_m3s',
 	'flow_logger_m3s',
 	'flow_reference_m3s',
-	'evap_apan_mm'
+	'evap_apan_mm',
+	'evap_et0_mm'
 ] as const;
 export type SeriesKind = (typeof SERIES_KINDS)[number];
 
@@ -1532,7 +1542,8 @@ export const SERIES_KIND_LABELS: Readonly<Record<SeriesKind, string>> = Object.f
 	flow_observed_m3s: 'Flow — observed gauge',
 	flow_logger_m3s: 'Flow — logger',
 	flow_reference_m3s: 'Flow — reference gauge (other catchment)',
-	evap_apan_mm: 'Evaporation — A-pan, daily'
+	evap_apan_mm: 'Evaporation — A-pan, daily',
+	evap_et0_mm: 'Evaporation — reference ET (FAO-56), daily'
 });
 
 /** A series as the Data page names it: its own name, else its kind's label (an unknown kind as written). */
@@ -3003,7 +3014,7 @@ export interface SeriesMeta {
 	rebuilding?: boolean;
 	/**
 	 * The data feed that wrote days of this series (time_series.feed_id,
-	 * 031_feed_days.sql): its source ('chirps', 'chirps_gefs', 'dws', 'ecmwf_ens') and how
+	 * 031_feed_days.sql): its source ('chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0') and how
 	 * many of the series' days are still the feed's own; null = none (or the
 	 * reader can't see the project's feeds), absent = not known here.
 	 */
@@ -4368,6 +4379,13 @@ export interface RunSummary {
 	 * A-pan series, and on older runs.
 	 */
 	apanDaily?: ApanDailyInfo;
+	/**
+	 * How the daily reference ET series was used (engine ≥ 1.102.0, issue
+	 * #604 R5-E, ./evaporation/et0Daily.ts): whether GR4J read it (only under
+	 * a monthly PE row), the run days it covered and the days that fell back
+	 * to the row. Absent when the project has no such series, and on older runs.
+	 */
+	et0Daily?: Et0DailyInfo;
 	/**
 	 * Untagged multi-day accumulations in the catchment rain (engine ≥ 0.20.0,
 	 * ./accumulation.ts, audit B4): the windows detected or listed, what the
