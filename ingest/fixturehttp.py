@@ -30,7 +30,6 @@ from pathlib import Path
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "chirps"
 BASE = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final"
 _FILE = re.compile(r"^" + re.escape(BASE) + r"/(rnl|sat)/netcdf/byMonth/([^/]*)$")
-_ROW = re.compile(r'<a href="([^"]+)">[^<]*</a>\s+(\d{2}-[A-Z][a-z]{2}-\d{4} \d{2}:\d{2})\s+(\d+)')
 
 
 class _Response(io.BytesIO):
@@ -58,13 +57,16 @@ class FixtureOpener:
         return (self.root / (f"listing-{self.variant}.html" if self.variant else "listing.html")).read_text()
 
     def _entries(self) -> dict[str, tuple[str, int]]:
-        import datetime as dt
+        """Each byMonth file the listing names: its Last-Modified (the
+        listing's time) and its real byte count (the listing's size is
+        rounded, as CHC's fancy index shows it). The job's own parser reads
+        it, so the fixture listing can't drift from what the job accepts."""
+        import chirps_final  # here, not at the top: chirps_final reaches this module in fixtures mode
 
-        out = {}
-        for href, when, size in _ROW.findall(self._listing()):
-            t = dt.datetime.strptime(when, "%d-%b-%Y %H:%M").replace(tzinfo=dt.UTC)
-            out[href] = (email.utils.format_datetime(t, usegmt=True), int(size))
-        return out
+        return {
+            e.name: (email.utils.format_datetime(e.modified, usegmt=True), self._path(e.name).stat().st_size)
+            for e in chirps_final.parse_listing(self._listing(), "rnl")
+        }
 
     def _path(self, name: str) -> Path:
         if self.variant and (self.root / self.variant / name).is_file():
@@ -93,8 +95,6 @@ class FixtureOpener:
             raise urllib.error.HTTPError(url, 404, "Not Found", _headers({}), None)
         last_modified, size = entry
         path = self._path(name)
-        if path.stat().st_size != size:
-            raise AssertionError(f"the fixture listing says {name} is {size} bytes, the file is {path.stat().st_size}: re-run make_chirps_fixtures.py")
         etag = f'"{int(email.utils.parsedate_to_datetime(last_modified).timestamp()):x}-{size:x}"'
         h = {"Last-Modified": last_modified, "ETag": etag, "Content-Length": str(size)}
         if headers.get("If-None-Match") == etag or (

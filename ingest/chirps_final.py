@@ -80,7 +80,17 @@ DOWNLOAD_RESERVE_S = 360.0
 REGION_CELLS = grid.ROWS * grid.COLS
 
 _NAME = re.compile(r"^chirps-v3\.0\.(\d{4})\.(0[1-9]|1[0-2])\.days_p05\.nc$")
+# Two nginx index styles. CHC serves the "fancy" table (checked against its
+# byMonth listings on 2026-10-27): <tr><td class="link"><a href="NAME"
+# title="NAME">NAME</a></td><td class="size">346.0 MiB</td><td
+# class="date">2026-May-27 18:19</td></tr>, times in UTC (the same file's
+# Last-Modified was 18:19:55 GMT) and sizes rounded. Plain autoindex
+# (<pre>, 27-May-2026 18:19, exact or rounded size) is read too, should the
+# server's index module change back.
 _ROW = re.compile(r'<a href="([^"?#]+)">[^<]*</a>\s+(\d{2}-[A-Z][a-z]{2}-\d{4} \d{2}:\d{2})\s+(\S+)')
+_FANCY_ROW = re.compile(
+    r'<a href="([^"?#]+)"[^>]*>[^<]*</a></td>\s*<td class="size">([^<]*)</td>\s*<td class="date">(\d{4}-[A-Z][a-z]{2}-\d{2} \d{2}:\d{2})</td>'
+)
 
 
 class ListingError(ValueError):
@@ -117,7 +127,9 @@ def parse_listing(html: str, product: str) -> list[ListingEntry]:
     lists no byMonth file at all is refused, since that means the layout moved."""
     first = FIRST_MONTH[product]
     out: dict[str, ListingEntry] = {}
-    for href, when, size in _ROW.findall(html):
+    rows = [(h, dt.datetime.strptime(w, "%d-%b-%Y %H:%M"), s) for h, w, s in _ROW.findall(html)]
+    rows += [(h, dt.datetime.strptime(w, "%Y-%b-%d %H:%M"), s.strip()) for h, s, w in _FANCY_ROW.findall(html)]
+    for href, when, size in rows:
         m = _NAME.match(href)
         if not m:
             continue
@@ -126,7 +138,7 @@ def parse_listing(html: str, product: str) -> list[ListingEntry]:
             continue
         if href in out:
             raise ListingError(f"the {product} listing names {href} twice")
-        modified = dt.datetime.strptime(when, "%d-%b-%Y %H:%M").replace(tzinfo=dt.UTC)
+        modified = when.replace(tzinfo=dt.UTC)
         out[href] = ListingEntry(href, listing_url(product) + href, month, modified, int(size) if size.isdigit() else None)
     if not out:
         raise ListingError(f"the {product} byMonth listing names no chirps-v3.0.YYYY.MM.days_p05.nc file: has CHC's layout changed?")

@@ -131,14 +131,20 @@ class Listing(unittest.TestCase):
         self.assertEqual(entries[1].url, FEB)
         self.assertEqual(entries[1].month, (2024, 2))
         self.assertEqual(entries[1].modified, dt.datetime(2024, 4, 17, 14, 5, tzinfo=dt.UTC))
-        self.assertEqual(entries[1].size, (fx.HERE / fx.name(2024, 2)).stat().st_size)
+        self.assertIsNone(entries[1].size)  # the fancy index rounds sizes (28.1 KiB)
 
     def test_committed_listings_match_their_files(self):
         for variant in (None, "rewritten", "changed"):
             o = fixturehttp.FixtureOpener(variant=variant)
             listing = (fx.HERE / (f"listing-{variant}.html" if variant else "listing.html")).read_text()
-            for e in chirps_final.parse_listing(listing, "rnl"):
-                self.assertEqual(o._path(e.name).stat().st_size, e.size, (variant, e.name))
+            names = [e.name for e in chirps_final.parse_listing(listing, "rnl")]
+            self.assertEqual(names, [fx.name(2024, 1), fx.name(2024, 2)], variant)
+            for n in names:
+                self.assertTrue(o._path(n).is_file(), (variant, n))
+            with tempfile.TemporaryDirectory() as tmp:
+                fresh = [p for p in fx.write(Path(tmp)) if p.suffix == ".html"]
+                for p in fresh:
+                    self.assertEqual(p.read_text(), (fx.HERE / p.name).read_text(), p.name)
 
     def test_committed_files_match_their_generator(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -165,6 +171,25 @@ class Listing(unittest.TestCase):
         entries = chirps_final.parse_listing(html, "sat")
         self.assertEqual([(e.month, e.size) for e in entries], [((2000, 6), None)])  # sat starts 2000-06
         self.assertEqual(len(chirps_final.parse_listing(html, "rnl")), 2)
+
+    def test_parses_chcs_fancy_index_rows(self):
+        # The structure of CHC's byMonth listing on 2026-10-27 (sizes and times invented).
+        html = (
+            '<tr><td class="link"><a href="../">Parent directory/</a></td><td class="size">-</td><td class="date">-</td></tr>\n'
+            '<tr><td class="link"><a href="chirps-v3.0.1981.01.days_p05.nc" title="chirps-v3.0.1981.01.days_p05.nc">chirps-v3.0.1981.01.days_p05.nc</a></td>'
+            '<td class="size">354.2 MiB</td><td class="date">2025-Sep-15 18:09</td></tr>\n'
+            '<tr><td class="link"><a href="chirps-v3.0.2024.06.days_p05.nc" title="chirps-v3.0.2024.06.days_p05.nc">chirps-v3.0.2024.06.days_p05.nc</a></td>'
+            '<td class="size">346.0 MiB</td><td class="date">2026-May-27 18:19</td></tr>\n'
+        )
+        entries = chirps_final.parse_listing(html, "rnl")
+        self.assertEqual([(e.month, e.size) for e in entries], [((1981, 1), None), ((2024, 6), None)])
+        self.assertEqual(entries[1].modified, dt.datetime(2026, 5, 27, 18, 19, tzinfo=dt.UTC))
+        self.assertIsNone(chirps_final.needs_copy(entries[1], {"size": 362853441, "lastModified": "Wed, 27 May 2026 18:19:55 GMT"}))
+
+    def test_parses_plain_autoindex_too(self):
+        html = fx.autoindex_html([(fx.name(2024, 1), dt.datetime(2024, 3, 18, 9, 41, tzinfo=dt.UTC), 28723)])
+        [e] = chirps_final.parse_listing(html, "rnl")
+        self.assertEqual((e.month, e.size, e.modified), ((2024, 1), 28723, dt.datetime(2024, 3, 18, 9, 41, tzinfo=dt.UTC)))
 
     def test_a_listing_with_no_byMonth_file_is_refused(self):
         for html in ("", "<html><body>Maintenance</body></html>", '<a href="../">../</a>'):
@@ -291,7 +316,7 @@ class Monthly(Base):
         self.assertGreaterEqual(opener.log[0][1] - starts[1], 60.0)
 
     def test_a_listing_time_that_is_not_the_files_time_stops_the_run(self):
-        listing = (fx.HERE / "listing.html").read_text().replace("17-Apr-2024 14:05", "17-Apr-2024 16:05")
+        listing = (fx.HERE / "listing.html").read_text().replace("2024-Apr-17 14:05", "2024-Apr-17 16:05")
         opener = Opener(self.clock)
         entries = opener.inner._entries()  # the files keep their real Last-Modified; only the page shifts by two hours
         with unittest.mock.patch.object(fixturehttp.FixtureOpener, "_listing", lambda self: listing):

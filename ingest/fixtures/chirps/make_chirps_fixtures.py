@@ -13,7 +13,7 @@ file runs to its month's last day, not that it starts on the 1st.
 What it writes (no client or real data):
 
 - `chirps-v3.0.2024.01.days_p05.nc`, `chirps-v3.0.2024.02.days_p05.nc`: two
-  months, and `listing.html`, an nginx autoindex page listing them (with a
+  months, and `listing.html`, an nginx "fancy" index table listing them, as CHC serves it (with a
   parent link and a file that isn't a byMonth NetCDF, both ignored).
 - `rewritten/chirps-v3.0.2024.02.days_p05.nc`: February written again with
   the **same values** but other HDF5 chunking and title, so its bytes, size
@@ -23,8 +23,8 @@ What it writes (no client or real data):
   29th), and `listing-changed.html`.
 
 `month_values()` says what each file holds, so the tests compare without
-re-deriving it. Each listing's size column is the file's real byte count,
-and its time (UTC, to the minute) is what fixturehttp.py serves as the
+re-deriving it. Each listing's size column is the file's size rounded as
+nginx's fancy index shows it, and its time (UTC, to the minute) is what fixturehttp.py serves as the
 file's Last-Modified.
 """
 
@@ -53,6 +53,9 @@ MONTHS = {(2024, 1): 5, (2024, 2): 0}
 #: The listing's times (UTC, to the minute).
 MTIME = {(2024, 1): dt.datetime(2024, 3, 18, 9, 41, tzinfo=dt.UTC), (2024, 2): dt.datetime(2024, 4, 17, 14, 5, tzinfo=dt.UTC)}
 MTIME_REWRITTEN = dt.datetime(2026, 8, 3, 6, 12, tzinfo=dt.UTC)
+#: A later rewrite with changed values. Its own time: CHC's fancy index rounds
+#: sizes, so the listing tells two rewrites apart by their times alone.
+MTIME_CHANGED = dt.datetime(2026, 9, 14, 8, 30, tzinfo=dt.UTC)
 
 #: The changed variant: (day, row, col) → new value. Row 50/col 350 is land; row 500/col 600 is sea in the original.
 CHANGES = {(1, 50, 350): None, (2, 500, 600): 7.5}
@@ -116,7 +119,21 @@ def write_nc(path: Path, day0: dt.date, region: np.ndarray, chunks=(DAYS, 190, 3
 
 
 def listing_html(entries: list[tuple[str, dt.datetime, int]]) -> str:
-    """nginx autoindex (autoindex_exact_size on, times in UTC)."""
+    """nginx's "fancy" index table, the style CHC serves (times in UTC, sizes
+    rounded to 0.1 KiB/MiB, so a listing's size is never exact)."""
+    rows = ['<tr><td class="link"><a href="../">Parent directory/</a></td><td class="size">-</td><td class="date">-</td></tr>']
+    for n, when, size in entries:
+        shown = f"{size / 2**20:.1f} MiB" if size >= 2**20 else f"{size / 2**10:.1f} KiB"
+        rows.append(f'<tr><td class="link"><a href="{n}" title="{n}">{n}</a></td><td class="size">{shown}</td><td class="date">{when.strftime("%Y-%b-%d %H:%M")}</td></tr>')
+    body = "\n".join(rows)
+    return (
+        f"<!DOCTYPE html>\n<html>\n<head><title>Index of {LISTING_PATH}</title></head>\n<body>\n<h1>Index of {LISTING_PATH}</h1>\n"
+        f'<table id="list"><thead><tr><th>File Name</th><th>File Size</th><th>Date</th></tr></thead>\n<tbody>\n{body}\n</tbody></table>\n</body>\n</html>\n'
+    )
+
+
+def autoindex_html(entries: list[tuple[str, dt.datetime, int]]) -> str:
+    """Plain nginx autoindex (autoindex_exact_size on, times in UTC): the other style parse_listing reads."""
     lines = ['<a href="../">../</a>']
     for n, when, size in entries:
         shown = n if len(n) <= 50 else n[:47] + "..&gt;"
@@ -144,7 +161,7 @@ def write(outdir: Path = HERE) -> list[Path]:
     for fname, feb_entry in [
         ("listing.html", base[1]),
         ("listing-rewritten.html", (feb, MTIME_REWRITTEN, rewritten.stat().st_size)),
-        ("listing-changed.html", (feb, MTIME_REWRITTEN, changed.stat().st_size)),
+        ("listing-changed.html", (feb, MTIME_CHANGED, changed.stat().st_size)),
     ]:
         p = outdir / fname
         p.write_text(listing_html([readme, base[0], feb_entry]))
