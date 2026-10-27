@@ -26,8 +26,9 @@
 // first day, with a value on every day up to it. Only our own value is
 // stored, never the fetcher's key.
 //
-// A CHIRPS-GEFS result is one whole issue, keyed by its issue date: its days
-// start on that date and number at most GEFS_DAYS. The newest issue merged
+// A forecast result (CHIRPS-GEFS, or the ECMWF ENS mean, config.ts
+// FORECAST_DAYS) is one whole issue, keyed by its issue date: its days
+// start on that date and number at most the source's FORECAST_DAYS. The newest issue merged
 // wins: an older one (the ingest-results queue does not keep order, and a
 // fetch before ~08:30 UTC reads yesterday's issue) is dropped without
 // touching the series, so it never overwrites a newer forecast's days; the
@@ -82,9 +83,8 @@ import { replaceSeries } from '../series/replace.js';
 import { unitFeedProblem } from './unitFeed.js';
 import { REVISION_REFRESH_DAYS, seriesFromCache, uniqueCells } from './cellCache.js';
 import { applyRecheck, type CacheOrigin, cacheOrigin, mergeCellCache, readCellCache, revisedDays, revisionMarkNow, staleLeft } from './cellCacheStore.js';
-import { bboxCellCount, chirpsProduct, type FeedSource, feedProvenance, feedSourceText, type GridConfig, gridCells, SOURCES } from './config.js';
+import { bboxCellCount, chirpsProduct, FORECAST_DAYS, type FeedSource, feedProvenance, feedSourceText, type GridConfig, gridCells, isForecastSource, SOURCES } from './config.js';
 import { CellsResult, chirpsPendingFrom, fetchFailure, FetchResult, type FetchWindow, gridRead, utcToday } from './fetch.js';
-import { GEFS_DAYS } from './sources/chirps.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { type FeedRow, feedFetchDedupeKey, feedReplaceDone, lockFeedIssued, recordFeedChecked, recordFeedResult, seriesAccepts } from './store.js';
 
@@ -114,7 +114,7 @@ const caughtUp = (feed: FeedRow, window: FetchWindow) =>
 
 async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow, delaySeconds: number, more = false): Promise<void> {
 	// `more`: a caught-up CHIRPS feed with re-check work left (stale finals to read, revised days to refresh).
-	if (feed.source === 'chirps_gefs' || (caughtUp(feed, window) && !more)) return;
+	if (isForecastSource(feed.source) || (caughtUp(feed, window) && !more)) return;
 	await enqueueJob(db, {
 		projectId: feed.projectId,
 		kind: 'feed_fetch',
@@ -124,9 +124,9 @@ async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow, dela
 	});
 }
 
-/** The newest day a source can have on `today` (UTC): a forecast's 16th day, else today. */
+/** The newest day a source can have on `today` (UTC): a forecast's last day (CHIRPS-GEFS's 16th, ECMWF's 15th), else today. */
 export function latestDay(source: FeedSource, today: string): string {
-	return source === 'chirps_gefs' ? fromEpochDay(toEpochDay(today) + GEFS_DAYS - 1) : today;
+	return isForecastSource(source) ? fromEpochDay(toEpochDay(today) + FORECAST_DAYS[source] - 1) : today;
 }
 
 export interface IngestOutcome {
@@ -136,9 +136,9 @@ export interface IngestOutcome {
 
 const INVALID = 'the fetcher’s answer was not valid, so nothing was written';
 
-/** A forecast result is one issue: days from its issue date (meta.issued), at most GEFS_DAYS of them. */
-const isKeyedIssue = (r: { startDate: string | null; values: unknown[]; meta: Record<string, string | number> }) =>
-	r.startDate === null || (r.meta.issued === r.startDate && r.values.length <= GEFS_DAYS);
+/** A forecast result is one issue: days from its issue date (meta.issued), at most the source's FORECAST_DAYS of them. */
+const isKeyedIssue = (r: { startDate: string | null; values: unknown[]; meta: Record<string, string | number> }, days: number) =>
+	r.startDate === null || (r.meta.issued === r.startDate && r.values.length <= days);
 
 /** Record a failed fetch; the first failure after a success (or ever) goes in the project's history too. */
 async function failed(db: Db, feed: FeedRow, error: string): Promise<IngestOutcome> {
@@ -435,6 +435,27 @@ async function fromCells(db: Db, feed: FeedRow, raw: unknown, window: FetchWindo
 }
 
 /**
+ * The window a cell-cache answer covers: the one asked for, or, when the
+ * fetcher's time budget cut the fetch short (sources/chirps.ts
+ * fetchChirpsCells: at about a request a second a long backfill window
+ * doesn't fit in one invocation), the days from its start through the last
+ * day it finished. Every day of that shorter window was read as planned, so
+ * it is recorded as `through` and the backfill goes on from after it
+ * (continueBackfill: the window no longer reaches yesterday), instead of the
+ * fetch failing at the deadline and asking for the same window forever. An
+ * answer that isn't a cell-cache answer of at least one day is left to
+ * fromCells to refuse.
+ */
+export function cutWindow(raw: unknown, window: FetchWindow): FetchWindow {
+	const parsed = CellsResult.safeParse(raw);
+	if (!parsed.success) return window;
+	const { startDate, read } = parsed.data.cells;
+	if (startDate !== window.start || read.length === 0) return window;
+	const last = fromEpochDay(toEpochDay(startDate) + read.length - 1);
+	return last < window.end ? { start: window.start, end: last } : window;
+}
+
+/**
  * `window` is what the fetch asked for. A forecast is checked by its issue
  * instead (it reads the newest issue, whatever the window), and records no
  * `through`. `origin` is where a cell-cache answer's values came from: the
@@ -452,9 +473,13 @@ export async function ingestResult(
 ): Promise<IngestOutcome> {
 	const nextSeconds = opts.cacheOnly ? CACHED_NEXT_SECONDS : BACKFILL_NEXT_SECONDS;
 	const origin = opts.origin ?? cacheOrigin();
-	if (feed.source === 'chirps' && typeof raw === 'object' && raw !== null && 'cells' in raw) raw = await fromCells(db, feed, raw, window, origin, opts.fetchJobId ?? null);
+	if (feed.source === 'chirps' && typeof raw === 'object' && raw !== null && 'cells' in raw) {
+		// A fetch the fetcher's time budget cut short answered fewer days than the window: they are the window now.
+		window = cutWindow(raw, window);
+		raw = await fromCells(db, feed, raw, window, origin, opts.fetchJobId ?? null);
+	}
 	const parsed = FetchResult.safeParse(raw);
-	if (!parsed.success || (feed.source === 'chirps_gefs' && parsed.data.ok && !isKeyedIssue(parsed.data))) {
+	if (!parsed.success || (isForecastSource(feed.source) && parsed.data.ok && !isKeyedIssue(parsed.data, FORECAST_DAYS[feed.source]))) {
 		return failed(db, feed, INVALID);
 	}
 	const result = parsed.data;
@@ -470,13 +495,13 @@ export async function ingestResult(
 	// A day the fetch didn't ask for: a bug, or an answer for another request.
 	// Merging it could overwrite days the feed doesn't own (before startDate).
 	if (
-		feed.source !== 'chirps_gefs' &&
+		!isForecastSource(feed.source) &&
 		result.startDate !== null &&
 		(result.startDate < window.start || fromEpochDay(toEpochDay(result.startDate) + result.values.length - 1) > window.end)
 	) {
 		return failed(db, feed, `the fetcher’s answer had days outside ${window.start} to ${window.end}, the days it was asked for, so nothing was written`);
 	}
-	if (feed.source === 'chirps_gefs' && result.startDate !== null) {
+	if (isForecastSource(feed.source) && result.startDate !== null) {
 		// ISO calendar dates compare as strings (startDate is checked; meta.issued equals it).
 		const newest = await lockFeedIssued(db, feed.id);
 		if (newest !== null && result.startDate < newest) {
@@ -573,7 +598,7 @@ export async function ingestResult(
 	// finalThrough: how far the series is final (CHIRPS; finalThroughAfter).
 	// revisionXmin: where the next refresh of revised days looks from (CHIRPS; refreshRevisedDays).
 	const meta =
-		feed.source === 'chirps_gefs'
+		isForecastSource(feed.source)
 			? { ...fetcherMeta(checked), merged, kept }
 			: withRevision(withFinal({ ...fetcherMeta(checked), merged, kept, through: window.end }, finalThroughAfter(feed, checked, window)), revision);
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });

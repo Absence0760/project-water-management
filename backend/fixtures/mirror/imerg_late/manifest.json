@@ -1,0 +1,176 @@
+{
+  "product": "imerg_late",
+  "revision": 1,
+  "region": {
+    "w": 10,
+    "s": -35.5,
+    "e": 41,
+    "n": -8
+  },
+  "grid": {
+    "origin": {
+      "lat": -35.45,
+      "lon": 10.05
+    },
+    "step": 0.1
+  },
+  "years": {
+    "first": 2026,
+    "last": 2026
+  },
+  "finalThrough": null,
+  "prelimThrough": "2026-02-08",
+  "files": [
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/01/3B-DAY-L.MS.MRG.3IMERG.20260125-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-61b7cfe12a8dc075\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "3d833d47d6ee377b521e5afb2090ce4a81f97379b01ca9b8e385a4e96ed78834",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/01/3B-DAY-L.MS.MRG.3IMERG.20260126-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-a6378a68b2aaeb08\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "dc61e4420eb64145fd939fe4af427996140e792facc40904ae3489f5f742536b",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/01/3B-DAY-L.MS.MRG.3IMERG.20260127-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-dd4187538bd03372\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "244a5b128a2c75d99b5f6cb474d16b67a9a6cd486687d9468415822ec129b814",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/01/3B-DAY-L.MS.MRG.3IMERG.20260128-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-bb7bc85092108bd5\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "aff9f6506991352de078d2f8cc3f6abde929705d6b8227a6195196b48ddcf2d4",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/01/3B-DAY-L.MS.MRG.3IMERG.20260129-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-164560cce1577eba\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "305cb393e07075ec9c77a8b3ee1a742f995e3f9eb087b7de573cd5bf2c60d587",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/01/3B-DAY-L.MS.MRG.3IMERG.20260130-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-fe0ff996ac4c654a\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "7f91a5a7ccac18e2dffa8cdc565d0ef6a77e885e3c8508421c0e4a90bdc65132",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/01/3B-DAY-L.MS.MRG.3IMERG.20260131-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-f5f5e0b3cd91f1cc\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "2e1d0dcc88c4eb6553350ac910d2bae8a60cc8361a1c2cf7f05a6485568ea630",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/02/3B-DAY-L.MS.MRG.3IMERG.20260201-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-eaef05aa24ed9d90\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "a88eb51bfe7bcb2c6d25512b9bda47ae7cd4586b302d6831c1d8f898f5387232",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/02/3B-DAY-L.MS.MRG.3IMERG.20260202-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-4c8cb187a194d632\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "e8277a7da0e23a4c1a31d515621b8dda42a9f297da7f1a99999a5aed2f393ec9",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/02/3B-DAY-L.MS.MRG.3IMERG.20260203-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-72b7f668cf61f811\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "83f36cf4083b9bee6369b04ef2efb295bedce404876672ce6447493e082267dd",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/02/3B-DAY-L.MS.MRG.3IMERG.20260204-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-d9c70fd9b64726b0\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "62ea1ca6fe7ad13c899c3b8d8549a803dccd0882985715e59dfb0a03d52d0dfb",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/02/3B-DAY-L.MS.MRG.3IMERG.20260205-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-b52acaa14994845b\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "54f5cc6007a3a14d4f2aaa5fbdf09964dbbb782192814d96f4ff0fa93fa2a3bf",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.07/2026/02/3B-DAY-L.MS.MRG.3IMERG.20260206-S000000-E235959.V07B.nc4",
+      "etag": "\"fx-be533c5c2a676563\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "02395b515a9e82d36240b03ee8916d74a5f2123608fb2eb686ff830e02432ab3",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V07"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.08/2026/02/3B-DAY-L.MS.MRG.3IMERG.20260207-S000000-E235959.V08B.nc4",
+      "etag": "\"fx-e7d22d85c680b5f2\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "ae3119d665a8d30483d9f4a9859bc11d4f42f39257bc6079b1c4337a7afede31",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V08"
+    },
+    {
+      "url": "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.08/2026/02/3B-DAY-L.MS.MRG.3IMERG.20260208-S000000-E235959.V08B.nc4",
+      "etag": "\"fx-e1e7bc973db518c7\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "38e86cc6990d92e533064434208ba4fad62710e0fcfb6a04ffd095fb9263e32c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "V08"
+    }
+  ],
+  "changes": []
+}

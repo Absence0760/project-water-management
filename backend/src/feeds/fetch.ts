@@ -14,7 +14,7 @@ import type { FeedHttp } from './http.js';
 import { CELL_VALUE_MAX_BITS, CHC_COLS, CHC_ROWS, cellCentre, encodeCellValue, RECHECK_HEAD_DAYS, RECHECK_READ_DAYS } from './cellCache.js';
 import { BBOX_MAX_CELLS, BBOX_MAX_ROWS, CHIRPS_DAILY_PRODUCTS, CHIRPS_PRODUCT_FIRST_DAY } from './config.js';
 import { FILE_TAG_MAX, FILE_TAG_RE } from './http.js';
-import { cellsUsed, fetchChirps, fetchChirpsCells, fetchGefs, type NoDataPolicy, recheckChirpsFinals } from './sources/chirps.js';
+import { cellsUsed, CHC_CONCURRENCY, type FetchBudget, fetchChirps, fetchChirpsCells, fetchGefs, type NoDataPolicy, recheckChirpsFinals } from './sources/chirps.js';
 import { dwsUrl, DWS_FORMAT_FAILURES, DWS_WINDOW_DAYS, parseDwsDaily } from './sources/dws.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/limits.js';
 
@@ -180,6 +180,8 @@ export function fetchWindow(
 		}
 		case 'chirps_gefs':
 			return { start: today, end: addDays(today, 15) };
+		case 'ecmwf_ens':
+			return { start: today, end: addDays(today, 14) };
 		case 'dws': {
 			// After `mark` (the newest day, or the last day read): the day after it,
 			// or, when a window from there would reach today, up to a year before
@@ -326,7 +328,7 @@ export type FetchAnswer = FetchResult | CellsResult;
  * DWS_WINDOW_DAYS (up to 20 years) is refused here: the feed records the
  * failure and its retry asks for the shorter window.
  */
-const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: DWS_WINDOW_DAYS };
+const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: DWS_WINDOW_DAYS, ecmwf_ens: 15 };
 
 /** A fetch request as the fetcher Lambda receives it: the config is checked against its source's schema again. */
 export const FetchRequestSchema = z
@@ -417,8 +419,16 @@ export function gridRead(config: GridConfig): { cells: ReturnType<typeof gridCel
 	return { cells, noData, used: () => (cellsUsed(noData) === null ? {} : { cellsUsed: cellsUsed(noData)! }) };
 }
 
-/** Run one fetch. Never throws: a failure is a result, with a message written by us. */
-export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<FetchAnswer> {
+/**
+ * Run one fetch. Never throws: a failure is a result, with a message written by us.
+ *
+ * `budget` (the fetcher Lambda's time left, lambda-fetcher.ts): a cell-cache
+ * CHIRPS fetch stops starting new days when it runs short and answers with
+ * the days it finished (fetchChirpsCells), and then skips the re-check,
+ * whose claims come due again. A forecast is used whole or not at all, and
+ * DWS is one request, so neither cuts.
+ */
+export async function runFetch(req: FetchRequest, http: FeedHttp, budget: FetchBudget = {}): Promise<FetchAnswer> {
 	try {
 		switch (req.source) {
 			case 'chirps': {
@@ -426,16 +436,17 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 				if (req.cells) {
 					// The cell cache's fetch: each planned cell's own values, read at its centre.
 					const cells = req.cells.cells;
-					const r = await fetchChirpsCells(http, cells.map(([row, col]) => cellCentre({ row, col })), req.start, req.cells.plan, product, { today: req.today });
+					const r = await fetchChirpsCells(http, cells.map(([row, col]) => cellCentre({ row, col })), req.start, req.cells.plan, product, { today: req.today, ...budget });
+					const cut = r.read.length < req.cells.plan.length;
 					const read = [...r.read].filter((d) => d !== '-').length;
 					const answer: CellsResult = {
 						ok: true,
 						cells: { product, startDate: r.startDate, read: r.read, cells, values: r.values.map((row) => row.map(encodeCellValue)), tags: r.tags },
 						meta: { product, daysRead: read, cellDaysRead: read * cells.length }
 					};
-					if (req.recheck) {
+					if (req.recheck && !cut) {
 						const rc = req.recheck;
-						const got = await recheckChirpsFinals(http, rc.cells.map(([row, col]) => cellCentre({ row, col })), product, rc.head, rc.read);
+						const got = await recheckChirpsFinals(http, rc.cells.map(([row, col]) => cellCentre({ row, col })), product, rc.head, rc.read, CHC_CONCURRENCY, budget);
 						answer.recheck = { head: got.head, read: got.read.map((d) => ({ ...d, values: d.values && d.values.map((v) => encodeCellValue(v)!) })) };
 						// A failed HEAD or read is left out (its claim comes due again) and counted, never failing the feed's own fetch.
 						answer.meta = { ...answer.meta, filesChecked: got.head.length, recheckDaysRead: got.read.filter((d) => d.values).length, ...(got.failed ? { recheckFailed: got.failed } : {}) };
@@ -456,6 +467,9 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 				if (!r) throw new FeedFormatError('no forecast was issued today or yesterday');
 				return { ok: true, startDate: r.startDate, values: r.values, meta: { days: r.values.length, issued: r.issued, ...used() } };
 			}
+			case 'ecmwf_ens':
+				// Read only from our copy, in the worker's job (fromMirrorEcmwf.ts): no request ever goes to ECMWF from a feed.
+				throw new FeedFormatError('ECMWF forecasts are read only from the rain data copy, never by the fetcher');
 			case 'dws': {
 				const page = await http.text(dwsUrl((req.config as DwsConfig).station, req.start, req.end));
 				if (page === null) throw new FeedFormatError(DWS_FORMAT_FAILURES.notFound[0]);

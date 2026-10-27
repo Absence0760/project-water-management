@@ -20,9 +20,9 @@
 # release's image by deploy-backend.yml (ignore_changes = [image_uri]).
 #
 # It runs OUTSIDE the VPC, like the fetcher (feeds.tf): it needs the internet,
-# and has no database and no secret. Its role may write the mirror bucket and
-# nothing else (plus its own log group, its image, its DLQ and its one metric
-# namespace). 3 GB memory and 2 GB of /tmp hold one ~330 MiB monthly NetCDF
+# and has no database. Its role may write the mirror bucket and nothing else
+# (plus its own log group, its image, its DLQ, its one metric namespace and
+# the one secret it reads, IMERG's Earthdata token, imerg.tf). 3 GB memory and 2 GB of /tmp hold one ~330 MiB monthly NetCDF
 # while it is decoded and subset; 900 s is Lambda's maximum. Reserved
 # concurrency 2: one run per product at most, which is also the "1-2
 # requests at a time" the polite client promises upstream.
@@ -367,9 +367,14 @@ resource "aws_lambda_function" "ingest" {
 
   environment {
     variables = {
-      MIRROR_URL     = "s3://${aws_s3_bucket.mirror.bucket}"
-      FEED_SOURCE    = "live"
-      INGEST_CONTACT = var.ingest_contact
+      MIRROR_URL  = "s3://${aws_s3_bucket.mirror.bucket}"
+      FEED_SOURCE = "live"
+      # The one contact the operator sets for every upstream (variables.tf feeds_contact).
+      INGEST_CONTACT = var.feeds_contact
+      # IMERG Late's Earthdata token, read at run time in live mode (imerg.tf).
+      EARTHDATA_TOKEN_SECRET_ARN = aws_secretsmanager_secret.earthdata_token.arn
+      # The CDS key's secret, read by ERA5-Land runs (era5land.tf); an ARN, not the key.
+      CDS_KEY_SECRET_ARN = aws_secretsmanager_secret.cds_key.arn
     }
   }
 

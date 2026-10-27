@@ -82,6 +82,8 @@ const RUN_KEYS = [
 	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
 	// A dam's capacity on the day, when sediment or an in-service date changes it (engine 1.30.0, issue #67)
 	'dam_capacity',
+	// The gap-filling products as read (engine 1.101.0, issue #604)
+	'rain_era5l', 'rain_imerg_late',
 	// EWR attribution (engine 0.17.0, audit Q17)
 	'ewr_charged', 'ewr_natural', 'ewr_charge', 'ewr_charge_irrigation',
 	// The EWR site that set a farm's charge each day (engine 1.5.0)
@@ -400,6 +402,8 @@ describe('searchHelp', () => {
 		expect(searchHelp('nse')[0]!.id).toBe('nse');
 		expect(searchHelp('Reserve')[0]!.id).toBe('ewr'); // alias
 		expect(searchHelp('kc')[0]!.id).toBe('crop-factor');
+		expect(searchHelp('load crop factors')[0]!.id).toBe('load-crop-factors');
+		expect(searchHelp('crop library')[0]!.id).toBe('load-crop-factors'); // alias
 		expect(searchHelp('dam spill').map((e) => e.id)).toContain('spill');
 		expect(searchHelp('zzzz')).toEqual([]);
 	});

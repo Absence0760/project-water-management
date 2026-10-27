@@ -1078,7 +1078,7 @@ reads `bundle-1` and `bundle-2`):
 | `runs/<run>/results.json` | the run's stored summary and the SHA-256 of each daily output (results `results-1`) |
 | `series/<sha256>.csv` | each input series' values, `date,value` one row a day, a missing day empty, named by the SHA-256 of the values (runs that share a series share its file) |
 | `scenario.json` | the application's scenario as its run recorded it: the ops, their hash, the base run (application packs only) |
-| `README.md` | how to reproduce it, and which engine to check out |
+| `README.md` | how to reproduce it, and which engine to check out; and, when a run's input series hold rain from ERA5-Land or IMERG Late (`settings.gapRain`) or its forecast came from an ECMWF ENS feed, a **Data credits** section with each source's credit word for word (engine `bundleRainCredits`, issue #604 R4-E; docs/data-sources.md). The manifest itself lists no data sources: the report it carries and the runs' inputs name them |
 
 The **results digest** of a run is the SHA-256 of `runResultsText`: RFC 8785
 JSON of the first day, the summary as JSON stores it, and each daily output's

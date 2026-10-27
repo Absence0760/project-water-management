@@ -147,8 +147,10 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
   ([docs/deployment.md § Background jobs](../docs/deployment.md#background-jobs)).
   `water-management-fetcher` (`backend/src/lambda-fetcher.ts`, `feeds.tf`)
   downloads the data feeds' sources: no VPC, no database URL or secret, 512
-  MB, 120 s, reserved concurrency `fetcher_reserved_concurrency` (2), its role
-  limited to receiving `fetch-requests` and sending `ingest-results`
+  MB, 900 s, reserved concurrency `fetcher_reserved_concurrency` (2), its role
+  limited to receiving `fetch-requests` (a FIFO queue, one message group per
+  source host, so CHC sees one fetch at a time) and sending `ingest-results`,
+  its user agent naming `feeds_contact`
   ([docs/deployment.md § Data feeds](../docs/deployment.md#data-feeds)).
   `water-management-renderer` (`backend/src/lambda-renderer.ts`,
   `reports.tf`) prints report PDFs: a **container image**
@@ -213,7 +215,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | File | What |
 | --- | --- |
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
-| `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `redirect_domains` (former hostnames → their zones, `{}` for none), `github_repo`, `budget_alert_email`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
+| `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `redirect_domains` (former hostnames → their zones, `{}` for none), `github_repo`, `budget_alert_email`, `feeds_contact`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
 | `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
 | `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint (`secretsmanager_endpoint_az_count`) and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
@@ -223,6 +225,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: `SendMessage` only, two roles, three queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms. The daily ingest (issue #604 R2-B): a daily EventBridge rule sending `{"mode":"daily-ingest"}` to the fetcher, its invoke permission and the fetcher's mirror-bucket write, all off until `daily_ingest_enabled`; the fetcher's async invoke config (no retries). The cutover (issue #604 R3-C): `local.per_feed_fetching` is false once `chirps_source = "mirror"` and `dws_source = "store"`, and then the two queues, their DLQs, both SQS triggers, both roles' queue policies, the queues' alarms, `feed-fetch-failed` and the worker's `FEED_FETCHER` are not created (`moved` blocks map the old state to instance `[0]`; `tests/cutover.tftest.hcl`; docs/deployment.md § The cutover) |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, downloads through CloudFront (the trusted public keys from `report_download_public_keys` and their key group, the reports OAC, the origin request policy that forwards only the file name, and the bucket policy that lets only this distribution read `reports/`; the `/reports/*` behaviour itself is in `s3_cloudfront.tf`), and the DLQ / renderer-errors / renderer-duration alarms |
+| `imerg.tf` | IMERG Late for the recent days (issue #604 R4-D, `ingest/imerg.py`): the Earthdata token secret (created with no value; the operator puts the token in, docs/deployment.md § IMERG Late), the ingest role's `GetSecretValue` on it alone, its ARN in the ingest Lambda's `EARTHDATA_TOKEN_SECRET_ARN`, and, with `imerg_enabled` and `ingest_image_tag`, a 4-times-a-day EventBridge rule sending `{"product":"imerg_late","mode":"recent"}` plus its freshness alarm (`mirror-lag-imerg-late`, `MirrorLagDays{Product=imerg_late}` over `imerg_lag_alarm_days`, breaching on missing data) |
 | `ingest.tf` | The data mirror (issue #604): the private mirror bucket (SSE-S3, TLS only, ACLs off, versioned, old versions kept 30 days, incomplete uploads aborted after a day), the ingest job's ECR repository (immutable, scanned) and Lambda (Python container image, arm64, outside the VPC, created once `ingest_image_tag` is set; role: the mirror bucket, its DLQ and the `water-management/Mirror` metric namespace only), its async-invoke DLQ, the daily EventBridge rules per product (disabled until the tag is set), the worker's read of the mirror (the matching S3 endpoint statement is in `packs.tf`), and the freshness (`MirrorLagDays`, breaching on missing data), errors and DLQ alarms; the preliminary copy's freshness alarm (`mirror-lag-prelim`, on with `daily_ingest_enabled`) |
 | `ingest_backfill.tf` | The data mirror's one-off backfill (issue #604 R2-B): a Standard Step Functions state machine, started by the operator with `ingest/backfill_plan.py`'s month list, that invokes the ingest Lambda one month at a time (MaxConcurrency 1: a finals chunk holds a year) with a wait of `ingest_backfill_wait_seconds` after each, never retrying the function's own errors (a 403 stops it); its role may invoke that function only. Created once `ingest_image_tag` is set |
 | `dam_observations.tf` | Dam observations (issue #604 R5, [deployment.md § Dam observations](../docs/deployment.md#dam-observations)), all off until `dam_observations_enabled`: the `dams-weekly` EventBridge rule (hourly at :20, `{"mode":"dams-weekly"}` to the fetcher, never retried; the WOfS backfill's pace, each key keeping its own weekly or daily cadence), its target and invoke permission; the fetcher's get and put on `dams/` in the mirror bucket (`dams-handover`) and the worker's put of `dams/wanted.json` (`dams-wanted-list`; the matching S3 endpoint statement is in `packs.tf`); the gate (`terraform_data.dam_observations_gate`, a precondition that fails the plan unless the worker's environment has `DAM_OBSERVATIONS = "on"`, set in `jobs.tf`); and the alarms, essential tier, missing data breaching: each source's `DamPassCompleted` heartbeat (`dam-pass-waterbodies`, `dam-pass-wofs`) and WOfS's `DamObservationAgeDays` recency (`dam-recency-wofs`, `dam_wofs_recency_alarm_days`; none for Waterbodies, frozen upstream). Tests: `tests/dam_observations.tftest.hcl` |
@@ -780,6 +783,10 @@ Claude does not run any of these, and none of them print a secret. Replace
    the first frontend release (step 10).
    `budget_alert_email` is required and must be a real mailbox; plan
    refuses an empty, malformed or reserved (`example.com` etc.) address.
+   `feeds_contact` is required too: the address the data feeds' fetcher
+   names in its user agent, which CHC asked for (issue #604); the same
+   refusals, and a template's (`you@…`). The repo is public, so it lives only
+   in the tfvars.
    Then check that the budgets accepted the topic (no "Invalid SNS topic"
    in the console, or `aws budgets describe-notifications-for-budget --account-id <acct> --budget-name water-management-daily --profile water-management`
    answering without an error).
@@ -917,9 +924,9 @@ Claude does not run any of these, and none of them print a secret. Replace
     publishes `MirrorLagDays`, Round 2: its freshness alarms treat missing
     data as breaching and would fire daily before then). A backend release
     pushes the ingest image as `<version>-<sha12>` and leaves a notice naming
-    the tag. **Set `ingest_image_tag` after the first image push**, and
-    `ingest_contact` (a role address for the User-Agent), in `prod.tfvars`,
-    then plan and apply (step 8): the function, its two daily schedules'
+    the tag. **Set `ingest_image_tag` after the first image push**
+    in `prod.tfvars` (its User-Agent names `feeds_contact`, the one contact
+    the fetcher uses too), then plan and apply (step 8): the function, its two daily schedules'
     targets and the `mirror-lag-*` alarms appear, and the rules switch to
     ENABLED. The ECR lifecycle policy never expires the tagged image, as for
     the renderer (10a). Runbook: [docs/deployment.md § The data
@@ -1158,7 +1165,11 @@ address fails the plan (example.com/.org/.net and their subdomains, and the
 in any case); `dmarc_report_email` may be empty but is held to the same rule
 when set. A positive control (`accepts_real_alert_mailboxes`) accepts a
 domain that only contains "example". The suite's own address is at the
-site's domain, since the rule refuses every reserved one. Six more refuse an unreserved (`-1`) concurrency on each
+site's domain, since the rule refuses every reserved one. Five refuse a
+`feeds_contact` CHC couldn't write to: empty, malformed, reserved, a
+template's (`you@…`), or with characters that would break out of the user
+agent (`data_feeds` checks it reaches the fetcher as `FEEDS_CONTACT`, and
+that `fetch-requests` and its DLQ are FIFO). Six more refuse an unreserved (`-1`) concurrency on each
 Lambda and a worker cap below the sum of its SQS triggers'
 `maximum_concurrency`; two refuse an API or worker cap whose cap × pool sum
 passes 70 database connections (§ Connections), with 26 accepted as the

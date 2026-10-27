@@ -3,7 +3,7 @@
 // then one bulk request per node (more for a record too long for one page,
 // docs/api.md § Bulk run series), reporting progress per node. `fetchFn` is
 // injected so collect.test.ts runs without a server.
-import type { RunSummary } from '@water-management/engine';
+import { runRainCredits, type RunSummary } from '@water-management/engine';
 import { DownloadError } from '#lib/export/download.js';
 import { exportUrls, filenameFromDisposition, type WorkbookRequest } from '#lib/export/urls.js';
 import type { DailyTable, WorkbookInput } from './workbook';
@@ -18,7 +18,7 @@ export interface ExportProgress {
 }
 
 interface RunResponse {
-	run: { summary: RunSummary; settings?: Record<string, unknown>; model?: { nodes?: { id: string; name: string }[] } & Record<string, unknown> };
+	run: { summary: RunSummary; createdAt?: string; forecastRainSource?: string | null; forecastRainEcmwf?: boolean; settings?: Record<string, unknown>; model?: { nodes?: { id: string; name: string }[] } & Record<string, unknown> };
 	series: { nodeId: string | null }[];
 }
 
@@ -126,6 +126,8 @@ export async function collectWorkbookInput(
 		input: {
 			summaryCsv,
 			summary: run.summary,
+			// The rain sources' credits on the first sheet (issue #604 R4-E), read on the run's day.
+			credits: runRainCredits(run, (run.createdAt ?? new Date().toISOString()).slice(0, 10)),
 			settings: run.settings,
 			model: run.model,
 			catchment: flagged(catchment),

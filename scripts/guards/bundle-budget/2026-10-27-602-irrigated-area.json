@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "PR #602 via #608, the allocation form's irrigated area field, its import column and help: measured 2095 KB locally against main's 2094 KB @ f4999b189 (+1 KB); CI reads ~3 KB above local, 2098 KB on run 40567572458. Headroom 0 KB after this entry."
+}

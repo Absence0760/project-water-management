@@ -171,6 +171,28 @@ const demUrl: Check = (v) => {
 	return 'must be empty (off) or s3://<bucket>/<key> (or https://)';
 };
 
+/**
+ * An email address's shape (FEEDS_CONTACT): a plain local part, a dotted
+ * domain of letters, digits and hyphens. Nothing that could break out of the
+ * user agent it goes into (feeds/http.ts userAgent reads it with this too).
+ */
+export const FEEDS_CONTACT_RE = /^[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
+/** Domains no one reads mail at (RFC 2606 / 6761), refused as infra/variables.tf refuses them for budget_alert_email and feeds_contact. */
+const RESERVED_MAIL_DOMAIN = /(^|\.)(example\.(com|org|net)|example|test|invalid|localhost|local)$/i;
+/** A template's local part, left unedited: you@…, your-email@…, changeme@…. */
+const PLACEHOLDER_LOCAL = /^(you|your|yourname|your[._-]?(e-?mail|name|address)|e-?mail|name|user|someone|somebody|changeme|change[._-]me|replace[._-]?me|todo|xxx+|foo|test)$/i;
+
+/** A contact CHC can write to (feeds/http.ts userAgent): an address, not a reserved domain or a template's. */
+const contactEmail: Check = (v) => {
+	if (!set(v)) return 'is not set';
+	const t = v.trim();
+	if (!FEEDS_CONTACT_RE.test(t)) return 'is not an email address (name@domain.tld)';
+	const [local, domain] = t.split('@') as [string, string];
+	if (RESERVED_MAIL_DOMAIN.test(domain) || isLocalHost(domain)) return 'is at a reserved domain no one reads mail at';
+	if (PLACEHOLDER_LOCAL.test(local)) return 'is a placeholder address';
+	return null;
+};
+
 const ALL = (check: Check): Partial<Record<Role, Check>> => Object.fromEntries(ROLES.map((r) => [r, check]));
 
 export const SETTINGS: Record<string, Setting> = {
@@ -312,6 +334,10 @@ export const SETTINGS: Record<string, Setting> = {
 	DWS_WEEKLY: {
 		why: 'on: the worker hands the weekly DWS pass its stations and loads what it fetched (feeds/gaugeRecordLoad.ts), through the mirror bucket, so MIRROR_URL must name it. Terraform sets it from var.dws_weekly_enabled (infra/jobs.tf), with the schedule and the grants. Unset is off (gaugeRecordLoad.ts), today’s production behaviour, so a release can go out before that apply; a value set is checked.',
 		checks: { worker: optional(oneOf('on', 'off')) }
+	},
+	FEEDS_CONTACT: {
+		why: 'The contact address in the live feed client\'s user agent (feeds/http.ts userAgent), which CHC asked for (2026-10-27, issue #604): who they write to before blocking us. Only the fetcher asks a source in production (feeds/http.ts assertLiveFeedRequestsAllowed), for per-feed fetches and its scheduled modes alike, so only it must have one (Terraform var.feeds_contact); elsewhere it is optional and the agent goes without.',
+		checks: { fetcher: contactEmail }
 	},
 	FEED_FIXTURE_REWRITE: {
 		why: 'Fixtures only (FEED_SOURCE=fixtures): 1 serves some synthetic CHIRPS finals rewritten in place, to watch the re-check locally. The live client never reads it, and the fetcher refuses the fixtures in production.'

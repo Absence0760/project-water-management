@@ -9,7 +9,8 @@
 // one-at-a-time order. With a CHIRPS feed the panel says how far our copy of
 // the rain data reaches (issue #604; the committed sample copy here, on time
 // as of the day it was made, once a worker tick has recorded it), and a feed
-// whose copy is late says so instead of looking stale.
+// whose copy is late says so instead of looking stale. An ECMWF forecast
+// feed (issue #604 R4-C) reads the copy's ECMWF issue and credits ECMWF.
 import { readFileSync } from 'node:fs';
 import type { APIRequestContext } from '@playwright/test';
 import { addMember, createProject, createRun, putSeries, seedRunnableProject } from '../support/api.ts';
@@ -154,6 +155,34 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 	await expect(forecast.getByTestId('series-feed')).toHaveText('Written by the CHIRPS-GEFS rainfall forecast feed');
 	// The count is the section header's since the list's own summary line went (issue #174).
 	await expect(page.getByTestId('section-context')).toHaveText('1 daily input series');
+});
+
+test('an ECMWF forecast feed reads our copy, credits ECMWF and says it is not yet calibrated (issue #604 R4-C)', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Feeds');
+	await page.clock.install();
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	await panel.getByLabel('Source').selectOption({ label: 'ECMWF ENS rainfall forecast' });
+	await expect(panel.getByLabel('Into series')).toHaveValue('rain_forecast_mm');
+	await panel.getByLabel('Grid cells').fill('-20.12, 25.17');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toHaveCount(1);
+	await expect(feed).toContainText('ECMWF ENS rainfall forecast → Rainfall — forecast');
+	// Before its first fetch: the credit alone.
+	await expect(feed).toContainText('ECMWF open data, CC BY 4.0');
+	await expect(feed).not.toContainText('calibrated');
+
+	await feed.getByRole('button', { name: 'Run now: Rainfall — forecast' }).click();
+	const fetched = await fetchOnce(project.id);
+	await nextPoll(page);
+	await expect(feed).toHaveAttribute('data-state', 'ok');
+	// 15 days from the issue (today, in the committed sample copy re-dated), and no fit in the copy yet.
+	await expect(feed).toContainText(datedIn(fetched, (at) => `Last data ${day(14, at)} · checked `));
+	await expect(feed).toContainText('ECMWF open data, CC BY 4.0 · not yet calibrated');
 });
 
 test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area’s rainfall', async ({ page, owner }) => {

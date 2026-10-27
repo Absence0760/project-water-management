@@ -107,6 +107,11 @@ describe('forecastNote', () => {
 		expect(forecastNote(forecastRun('chirps_gefs'))).toMatch(/^From 2022-01-29, this run uses forecast rain \(CHIRPS-GEFS/);
 	});
 
+	it('credits ECMWF open data, CC BY 4.0, on a forecast an ECMWF ENS feed wrote (issue #604 R4-E)', () => {
+		expect(forecastNote(forecastRun('ecmwf_ens'))).toBe(FORECAST_RAIN_NOTE('2022-01-29', 'ecmwf_ens'));
+		expect(forecastNote(forecastRun('ecmwf_ens'))).toContain('(the ECMWF ENS forecast; ECMWF open data, CC BY 4.0)');
+	});
+
 	it('gives any other forecast run (uploaded, or its source not recorded) the plain line', () => {
 		const plain = /^From 2022-01-29, this run uses forecast rain, not recorded rain\./;
 		expect(forecastNote(forecastRun('other'))).toMatch(plain);

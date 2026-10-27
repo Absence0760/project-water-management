@@ -1,0 +1,161 @@
+{
+  "product": "ecmwf/2026-02-09",
+  "revision": 1,
+  "region": {
+    "w": 10,
+    "s": -35.5,
+    "e": 41,
+    "n": -8
+  },
+  "grid": {
+    "origin": {
+      "lat": -35.45,
+      "lon": 10.05
+    },
+    "step": 0.1
+  },
+  "years": {
+    "first": 2026,
+    "last": 2026
+  },
+  "finalThrough": null,
+  "prelimThrough": null,
+  "files": [
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-24h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "15a7b7a14d869df853328735378b2ecefa86454d0e64b6142dd90c033e67634b",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-48h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d7d19ece3b21a97e30eb9f5c61eee8457cd365b3a8c6ce36c0d9021cf7a86e68",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-72h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "231fb957973bac3bab0dd80d639e444dff231863aa09cd51195df1a961406a04",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-96h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1047c6d5c427550865d4523ffe00478414ce85a4cf42689255d85c7c9c41c46e",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-120h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "6203800a026ca582856132bf932df0ff364189c96fd92de45fdfa75224d6e9d1",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-144h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "57e22dbe4f256c6984e3100feb6af51a29bae6fa9f187ad86e6b031eb51ef84f",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-168h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "eaba3ede5e29ef545d5fbddaabcfc259a996559d675969ef63bc9643830b1c84",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-192h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f4bef5d767f5f76749b711cd7871f1a71e1409b817ca79ce12737edb1f68f279",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-216h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9d52f47537abf20627d9c20880a5104116d726607f3cc9fe7ee4aa58ee1b0de0",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-240h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "15a7b7a14d869df853328735378b2ecefa86454d0e64b6142dd90c033e67634b",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-264h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d7d19ece3b21a97e30eb9f5c61eee8457cd365b3a8c6ce36c0d9021cf7a86e68",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-288h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "231fb957973bac3bab0dd80d639e444dff231863aa09cd51195df1a961406a04",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-312h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1047c6d5c427550865d4523ffe00478414ce85a4cf42689255d85c7c9c41c46e",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-336h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "6203800a026ca582856132bf932df0ff364189c96fd92de45fdfa75224d6e9d1",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    },
+    {
+      "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260209/00z/ifs/0p1/enfo/20260209000000-360h-enfo-ef-sfc.grib2",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "57e22dbe4f256c6984e3100feb6af51a29bae6fa9f187ad86e6b031eb51ef84f",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T10:00:00Z"
+    }
+  ],
+  "changes": []
+}

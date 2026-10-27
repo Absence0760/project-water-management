@@ -5,7 +5,7 @@
 // (settings.allocationMode, engine 1.18.0) end to end. Since issue #507 a cap
 // is a scenario's (settings.set allocationMode): the baseline compares only,
 // and a PATCH that caps or fully allocates it is refused.
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -114,13 +114,17 @@ describe('licence conditions (103)', () => {
 		].join('\n');
 		const res = await owner.call('POST', `/projects/${projectId}/allocations/import/commit`, { kind: 'csv', fileName: 'conditions.csv', text });
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		// Removed even when an assertion below fails, so the run-input tests that follow still start from one allocation.
+		onTestFinished(async () => {
+			await owner.call('DELETE', `/projects/${projectId}/allocations/sources/${res.body.source.id}`);
+		});
 		const list = (await owner.call('GET', `/projects/${projectId}/allocations`)).body.allocations;
 		expect(list[0]).toMatchObject({ registrationNo: 'IMP-1', months: [1, 2, 3, 10, 11, 12], maxRateM3s: 0.01, conditions: ['Stop below 0.1 m3/s', 'Meter monthly'] });
 		const csv = await app.request(`/projects/${projectId}/allocations/export.csv`, { headers: { cookie: owner.cookie, origin: 'http://localhost:7777' } });
 		const [head, row] = (await csv.text()).split('\r\n');
-		expect(head).toContain('months,max_rate_m3s,conditions,water_use,source_file');
-		expect(row).toContain('1 2 3 10 11 12,0.01,Stop below 0.1 m3/s | Meter monthly,21a,conditions.csv');
-		await owner.call('DELETE', `/projects/${projectId}/allocations/sources/${res.body.source.id}`);
+		// The registered irrigated area (244) sits between water_use and source_file; this row states none.
+		expect(head).toContain('months,max_rate_m3s,conditions,water_use,irrigated_area_ha,source_file');
+		expect(row).toContain('1 2 3 10 11 12,0.01,Stop below 0.1 m3/s | Meter monthly,21a,,conditions.csv');
 	});
 });
 

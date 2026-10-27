@@ -9,6 +9,7 @@ import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
 import type { DoubleMass } from './doublemass';
 import type { PlausibilityChecks } from './plausibility';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
+import type { GapRainInfo } from './gapRain';
 import type { RainSourceInfo } from './rainSourcePeriods';
 import type { ApanDailyInfo } from './evaporation/apanDaily';
 import type { FlowFillSummary, FlowGapFillSettings } from './flowGapFill';
@@ -113,6 +114,71 @@ export interface RainSourceQuantileMap {
 export interface ChirpsQuantileMap {
 	/** Wet-day threshold, mm (QM_WET_DAY_MM_MIN … QM_WET_DAY_MM_MAX): a day below it is dry and keeps its factor-corrected value. */
 	wetDayMm: number;
+}
+
+/**
+ * settings.gapRain (engine ≥ 1.101.0, issue #604 R4-B, docs/model.md §2.4b
+ * *Gap-filling product*): which product fills the catchment rain's blank
+ * days. `chirps` (the default, every run before it), `era5l` (ERA5-Land
+ * instead), or `chirpsThenEra5l` (CHIRPS, and ERA5-Land only on a blank day
+ * CHIRPS has no value for). `imergLate`: IMERG Late fills the recent days
+ * past the last reading of those products, each day with its own version's
+ * factors. Absent or null = `{ product: 'chirps', imergLate: false }`.
+ */
+export const GAP_RAIN_PRODUCTS = ['chirps', 'era5l', 'chirpsThenEra5l'] as const;
+export type GapRainProduct = (typeof GAP_RAIN_PRODUCTS)[number];
+export interface GapRainSettings {
+	product: GapRainProduct;
+	imergLate: boolean;
+}
+
+/**
+ * The run input's key for ERA5-Land daily rain over the CHIRPS feed's cells
+ * (engine ≥ 1.101.0): read from the shared cell cache by the backend
+ * (runs/gapRainInput.ts), not a stored series, so only the run's input
+ * snapshot keeps it, as the reference cell's.
+ */
+export const ERA5L_SERIES_KEY = 'rain_era5l_mm';
+/** The run input's key prefix for IMERG Late, one series per IMERG version (`rain_imerg_late_mm~V07`): each version has its own fit. */
+export const IMERG_SERIES_PREFIX = 'rain_imerg_late_mm~';
+/** An IMERG version as the copy labels it (V07, V08, V07B …): letters, digits, `.`, `_` or `-`, at most 16. */
+export const IMERG_VERSION_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,15}$/;
+export type ImergSeriesKey = `rain_imerg_late_mm~${string}`;
+export const imergSeriesKey = (version: string): ImergSeriesKey => `${IMERG_SERIES_PREFIX}${version}`;
+/** The IMERG version of an input key, or null for any other key (or a version IMERG_VERSION_RE refuses). */
+export function imergVersionOf(key: string): string | null {
+	if (!key.startsWith(IMERG_SERIES_PREFIX)) return null;
+	const v = key.slice(IMERG_SERIES_PREFIX.length);
+	return IMERG_VERSION_RE.test(v) ? v : null;
+}
+
+/** Why a stored settings.gapRain can't be used, or null (absent and null are fine: CHIRPS alone). The API applies the same rules. */
+export function gapRainError(raw: unknown): string | null {
+	if (raw === null || raw === undefined) return null;
+	if (typeof raw !== 'object' || Array.isArray(raw)) return 'is not { product, imergLate }';
+	const extra = Object.keys(raw).filter((k) => k !== 'product' && k !== 'imergLate');
+	if (extra.length) return `has unknown field${extra.length === 1 ? '' : 's'} ${extra.join(', ')}`;
+	const r = raw as { product?: unknown; imergLate?: unknown };
+	if (!(GAP_RAIN_PRODUCTS as readonly unknown[]).includes(r.product)) return `product must be one of ${GAP_RAIN_PRODUCTS.join(', ')}`;
+	if (typeof r.imergLate !== 'boolean') return 'imergLate must be true or false';
+	return null;
+}
+
+/**
+ * settings.gapRain as the engine runs it: null for CHIRPS alone (absent, null,
+ * the default choice written out, or unusable with a warning), so a project
+ * that never chose runs exactly as before.
+ */
+export function resolveGapRain(raw: unknown, warnings: string[]): GapRainSettings | null {
+	const err = gapRainError(raw);
+	if (err) {
+		warnings.push(`gap-filling product ignored (${err}): CHIRPS alone fills the catchment rain's gaps`);
+		return null;
+	}
+	if (!raw) return null;
+	const r = raw as GapRainSettings;
+	if (r.product === 'chirps' && !r.imergLate) return null;
+	return { product: r.product, imergLate: r.imergLate };
 }
 
 export interface RainSourcePeriod {
@@ -439,6 +505,13 @@ export interface ProjectSettings {
 	 * monthly factor alone, as every run before 1.53.0.
 	 */
 	chirpsQuantileMap?: ChirpsQuantileMap | null;
+	/**
+	 * The product that fills the catchment rain's blank days (engine ≥
+	 * 1.101.0, issue #604 R4-B, ./gapRain.ts, docs/model.md §2.4b
+	 * *Gap-filling product*): CHIRPS, ERA5-Land or both, and IMERG Late for
+	 * the recent days. Absent or null = CHIRPS alone, as every run before it.
+	 */
+	gapRain?: GapRainSettings | null;
 	/**
 	 * Periods whose catchment rain comes from another series × monthly factors
 	 * (engine ≥ 0.30.0, ./rain.ts, issue #40 (b)). Default none.
@@ -879,6 +952,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		chirpsBiasCorrection: 'monthly',
 		chirpsFitPeriod: 'all',
 		chirpsQuantileMap: null,
+		gapRain: null,
 		rainSource: [],
 		zeroRainRuns: defaultZeroRainSettings(),
 		calibration: { rainThresholdMm: 2, catchmentAreaKm2: null },
@@ -2929,7 +3003,7 @@ export interface SeriesMeta {
 	rebuilding?: boolean;
 	/**
 	 * The data feed that wrote days of this series (time_series.feed_id,
-	 * 031_feed_days.sql): its source ('chirps', 'chirps_gefs', 'dws') and how
+	 * 031_feed_days.sql): its source ('chirps', 'chirps_gefs', 'dws', 'ecmwf_ens') and how
 	 * many of the series' days are still the feed's own; null = none (or the
 	 * reader can't see the project's feeds), absent = not known here.
 	 */
@@ -2997,7 +3071,7 @@ export interface ModelInput {
 	 * node's own observed records (engine ≥ 1.4.0) are keyed GaugeSeriesKey,
 	 * and a land unit's own rain (issue #482) UnitRainSeriesKey.
 	 */
-	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries } & { [key: UnitForecastSeriesKey]: DailySeries } & { [key: StationSeriesKey]: DailySeries };
+	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries } & { [key: UnitForecastSeriesKey]: DailySeries } & { [key: StationSeriesKey]: DailySeries } & { [key: ImergSeriesKey]: DailySeries } & { rain_era5l_mm?: DailySeries };
 	/**
 	 * Where the forecast rain (`rain_forecast_mm`) came from (engine ≥ 1.85.0,
 	 * docs/model.md §2.4h): 'chirps_gefs' when a CHIRPS-GEFS feed wrote every
@@ -3005,9 +3079,11 @@ export interface ModelInput {
 	 * own CHIRPS level (the reference factor × k_unit, its MAP factor or the
 	 * §2.4b factors), as its CHIRPS history does. Absent, null or 'other' (an
 	 * upload, maybe already at gauge level): the forecast × the unit's gauge
-	 * MAP ratio, as before.
+	 * MAP ratio, as before. 'ecmwf_ens' (issue #604 R4-E: an ECMWF ENS feed
+	 * wrote every forecast day) runs as 'other' does; it only names the
+	 * source, so the report credits ECMWF.
 	 */
-	forecastRainSource?: 'chirps_gefs' | 'other' | null;
+	forecastRainSource?: 'chirps_gefs' | 'ecmwf_ens' | 'other' | null;
 	/**
 	 * The series of a kind the run read, by name, and the others of that kind
 	 * it didn't (engine ≥ 1.90.0, issue #561, docs/model.md § Which CHIRPS
@@ -4257,6 +4333,12 @@ export interface RunSummary {
 	 * when the project has no CHIRPS series; absent on older runs.
 	 */
 	chirpsCorrection?: ChirpsCorrection | null;
+	/**
+	 * The gap-filling product (engine ≥ 1.101.0, ./gapRain.ts,
+	 * settings.gapRain): each product's fit and double-mass check, and which
+	 * product filled each day. Absent with CHIRPS alone and on older runs.
+	 */
+	gapRain?: GapRainInfo | null;
 	/**
 	 * The days whose rain came from the forecast because neither catchment
 	 * rain nor CHIRPS had a value (engine ≥ 0.28.0): a forecast can extend the

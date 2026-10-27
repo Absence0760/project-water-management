@@ -162,3 +162,58 @@ describe('the daily layout', () => {
 		expect((await openDaily(store, 'prelim'))!.firstDay).toBe('2026-01-01');
 	});
 });
+
+describe('the 0.1° products’ layouts (issue #604 R4-B)', () => {
+	it('makes era5l a finals array on the 0.1° grid from 1950, and imerg_late a daily one chunked (1, 55, 62)', async () => {
+		const { dir, store } = fresh();
+		const f = await ensureFinals(store, 'era5l', 2025);
+		expect(f.firstYear).toBe(1950);
+		expect(f.grid).toEqual({ origin: { lat: -35.45, lon: 10.05 }, step: 0.1 });
+		const fm = JSON.parse(readFileSync(join(dir, 'era5l/zarr.json'), 'utf8'));
+		expect(fm.shape).toEqual([76, 366, 275, 310]);
+		expect(fm.chunk_grid.configuration.chunk_shape).toEqual([1, 366, 20, 20]);
+		const d = await ensureDaily(store, 'imerg_late', '2026-01-01', 3);
+		expect(d.grid.step).toBe(0.1);
+		const dm = JSON.parse(readFileSync(join(dir, 'imerg_late/zarr.json'), 'utf8'));
+		expect(dm.shape).toEqual([3, 275, 310]);
+		expect(dm.chunk_grid.configuration.chunk_shape).toEqual([1, 55, 62]);
+		// Written and read back on its own grid, the corner cells too.
+		const block = { y0: 274, x0: 309, h: 1, w: 1 };
+		await writeDailyDays(d, 2, block, Float32Array.of(1.5));
+		expect(Array.from((await readDailyBlock(d, 2, 2, block)).values)).toEqual([1.5]);
+		await expect(writeDailyDays(d, 0, { y0: 275, x0: 0, h: 1, w: 1 }, Float32Array.of(1))).rejects.toThrow(RangeError);
+	});
+
+	it('takes era5l’s Copernicus attribution and its 1950 year axis, and nothing else of the kind', async () => {
+		const { dir, store } = fresh();
+		await ensureFinals(store, 'era5l', 2025);
+		await ensureFinals(store, 'rnl', 2025);
+		const meta = (p: string) => JSON.parse(readFileSync(join(dir, `${p}/zarr.json`), 'utf8'));
+		const put = (p: string, m: unknown) => store.set(`/${p}/zarr.json`, new TextEncoder().encode(JSON.stringify(m)));
+		const era5l = meta('era5l');
+		// As ingest/era5land.py writes it: the credit beside firstYear, region and grid.
+		await put('era5l', { ...era5l, attributes: { ...era5l.attributes, attribution: 'Contains modified Copernicus Climate Change Service information [year].' } });
+		expect((await openFinals(store, 'era5l'))!.firstYear).toBe(1950);
+		for (const attribution of ['', 7, ['Copernicus']]) {
+			await put('era5l', { ...era5l, attributes: { ...era5l.attributes, attribution } });
+			await expect(openFinals(store, 'era5l'), JSON.stringify(attribution)).rejects.toThrow(/attribution/);
+		}
+		await put('era5l', { ...era5l, attributes: { ...era5l.attributes, firstYear: 1981 } });
+		await expect(openFinals(store, 'era5l')).rejects.toThrow(/starts in 1981, not 1950/);
+		// No other product carries an attribution.
+		const rnl = meta('rnl');
+		await put('rnl', { ...rnl, attributes: { ...rnl.attributes, attribution: 'x' } });
+		await expect(openFinals(store, 'rnl')).rejects.toThrow(/attribution/);
+	});
+
+	it('refuses an array of one product laid out on another’s grid', async () => {
+		const { dir, store } = fresh();
+		// A 0.05° daily array where imerg_late's should be: its grid, chunks and shape are CHC's.
+		await ensureDaily(store, 'prelim', '2026-01-01', 2);
+		const src = readFileSync(join(dir, 'prelim/zarr.json'), 'utf8');
+		await store.set('/imerg_late/zarr.json', new TextEncoder().encode(src));
+		await expect(openDaily(store, 'imerg_late')).rejects.toThrow(MirrorFormatError);
+		// Positive control: the same array as prelim opens.
+		expect(await openDaily(store, 'prelim')).not.toBeNull();
+	});
+});

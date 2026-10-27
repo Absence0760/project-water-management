@@ -335,6 +335,30 @@ provenance, `ingest/verify_copy.py`):
       `ingest_lag_alarm_days`'s default by hand; a prod tfvars that changes
       the alarm doesn't move the app. Pass it to the API as a variable at
       the cutover if the operator ever tunes it.
+- [ ] **ECMWF quantile mapping is fitted on cells, applied to area means**
+      (R4-C, [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-ens)).
+      `ingest/ecmwf_qm_fit.py` pairs the ensemble mean with observed rain
+      per 0.1° cell, but `fromMirrorEcmwf.ts` applies the fit to a
+      catchment's area-weighted mean, whose distribution has more
+      small-rain days and fewer extremes, so the mapping can over-correct
+      the tails and under-correct drizzle. **Durable fix:** fit on area
+      means for the feed's region (the forecast mean and the observed rain
+      averaged over the same cells, per feed or per catchment-sized block,
+      one fit per group), and check it against the per-cell fit on held-out
+      days. **Trigger:** when the first QM fit is run, once the archive
+      (`ecmwf/`'s archived issue means) holds a season.
+- [ ] **The uncertainty bands don't vary ERA5-Land or IMERG Late**
+      (R4-B, [model.md § 2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)).
+      The ensemble's rain-source members run CHIRPS alone with
+      `gapRain: null` (`packages/engine/src/uncertainty/ensemble.ts`), so a
+      project that fills its gaps from ERA5-Land or IMERG Late gets bands
+      that leave out the uncertainty in those products and their
+      corrections. **Durable fix:** a rain-source member per product the
+      run reads (that product alone, every day corrected by its own fit, as
+      the CHIRPS-only member is), split evenly with the others, and the
+      members' rain source named in `run_uncertainty`. **Trigger:** the
+      first client project that sets `settings.gapRain` to a product, or an
+      evidence pack on one.
 
 ## Observing dams (issue #604 Round 5)
 
@@ -525,6 +549,17 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **The gap-filling product (engine 1.101.0, issue #604 R4-B,
+      model.md §2.4b *Gap-filling product*).** Built off by default
+      (`settings.gapRain` absent runs as before, to the bit). Calls made
+      in the build, to confirm: each product and IMERG version on its own
+      §2.4b fit over the whole record, always monthly; ERA5-Land always
+      thresholded at 1 mm and quantile-mapped, IMERG by its factor alone;
+      IMERG only past the last reading of the chosen products; the choice
+      not read under a catchment station or for a unit's own CHIRPS
+      (engine-audit.md GR1–GR6). Its control is Settings → Rain gaps →
+      Gap-filling product (R4-E, ui.md § Model settings), and Data draws
+      the products beside CHIRPS (ui.md § Data).
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
@@ -3528,6 +3563,25 @@ role and not before it.
         those listed under a reservoir's HyDataSets page) with
         `SiteType=DC`; if RIV fails for one, derive DC from the catalogue
         rather than the code letter, which can't tell them apart.
+  - [ ] **CHC blocked the fetcher (HTTP 403, 2026-10-25; #571, #604).** CHC's
+        bot protection blocked the fetcher's addresses for reading about 3.6
+        requests a second (6 files at a time, two Lambdas); the CHIRPS feeds
+        were switched off, and #585 made a 403 pause the host and back the
+        feed off. CHC replied 2026-10-27: their limits are per address (a
+        block for hours above ~2 requests a second, 429 past 20
+        connections), and they asked for one file at a time, about one
+        request a second in total, and a contact in the user agent. Done
+        (`fix/chc-polite-fetch`): the live client paces each host (one in
+        flight, 1 s + 0–0.5 s between starts), `fetch-requests` is a FIFO
+        queue with one message group per host (one fetch at a time across
+        instances), every CHC read is one at a time, a fetch short of time
+        answers the days it finished, and the user agent names
+        `FEEDS_CONTACT` (Terraform `feeds_contact`, required on the
+        fetcher). Left: the operator steps in [deployment.md § Re-enabling
+        the CHIRPS feeds](./deployment.md#re-enabling-the-chirps-feeds-issue-604)
+        (set `feeds_contact`, apply, release, switch the feeds on, watch the
+        first day). Trigger: that release. Then tick this. (#605's ingest job reads
+        the same `feeds_contact`, as `INGEST_CONTACT`.)
   - [ ] **Terms of use (operator decision, roadmap D7):** DWS's terms for
         automated retrieval, and CHIRPS-GEFS's licence (CHIRPS itself is
         public domain). Decide before a DWS or GEFS feed is used for a client.

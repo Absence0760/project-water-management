@@ -9,7 +9,15 @@
 // copy is as the files stood on MIRROR_FIXTURE.today, so finals through
 // 2025-12-31 (2023–2025, one leap year) and preliminary sat days through
 // 2026-02-06, and the CHIRPS-GEFS issues of 2026-02-08 and 2026-02-09
-// (`gefs/<issue>` and `gefs/index.json`). Only the chunks holding the fixture's 8 × 6 grid and the band
+// (`gefs/<issue>` and `gefs/index.json`). Two 0.1° products too (issue #604
+// R4-B), with invented values of their own (no file fixture stands behind
+// them): `era5l` (finals layout, 2024-01-01 to 2025-12-30, one file per CDS
+// month request as ingest/era5land.py writes them: month M holds the last day
+// of M−1 through the second-last day of M, so the first file lacks
+// 2023-12-31 and finalThrough is the second-last day of 2025-12) and `imerg_late`
+// (daily layout, 2026-01-25 to 2026-02-08 through prelimThrough, a file a
+// day, each V07 but the last two V08), each over the 0.1° cells holding the fixture grid and its
+// band, every other chunk unwritten; and one ECMWF ENS issue (scripts/ecmwf-fixture.ts, `ecmwf/<issue>`, `ecmwf/index.json`). Only the chunks holding the fixture's 8 × 6 grid and the band
 // of the same size just south of it are written, each with the cells the
 // files cover; every other chunk is unwritten (NaN), which costs nothing. The
 // band holds one land copy of every cell of the grid's repeating pattern
@@ -25,12 +33,13 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
-import { cellCentre, chcCell } from '../src/feeds/cellCache.js';
+import { cellCentre, chcCell, productCell } from '../src/feeds/cellCache.js';
 import { FIXTURE_DIR, fixtureHttp, fixtureTag } from '../src/feeds/fixtures.js';
 import { CHC_BASE, chirpsFinalFileUrl, chirpsPrelimUrl, GEFS_DAYS, gefsUrl, gridValues } from '../src/feeds/sources/chirps.js';
 import { gefsProduct, writeGefsIndex } from '../src/ingest/gefs.js';
+import { writeEcmwfFixture } from './ecmwf-fixture.js';
 import { type Block, DAILY_CHUNK, ensureDaily, ensureFinals, FINALS_CHUNK, writeDailyDays, writeFinalsYear } from '../src/mirror/arrays.js';
-import { chcCellOf, dateOfDoy, gridOf, MIRROR_REGION, mirrorCell, regionSize } from '../src/mirror/grid.js';
+import { chcCellOf, dateOfDoy, gridOf, isLeapYear, MIRROR_REGION, mirrorCell, PRODUCT_GRIDS, regionSize } from '../src/mirror/grid.js';
 import { type Manifest, manifestHash, writeManifest } from '../src/mirror/manifest.js';
 import { openStore, type MirrorStore } from '../src/mirror/store.js';
 
@@ -44,7 +53,11 @@ export const MIRROR_FIXTURE = {
 	prelimFirst: '2026-01-01',
 	prelimThrough: '2026-02-06',
 	/** CHIRPS-GEFS issues held, newest first: two, so their 32 days hold every place of the 17-day pattern (fromMirrorGefs.ts). */
-	gefsIssues: ['2026-02-09', '2026-02-08']
+	gefsIssues: ['2026-02-09', '2026-02-08'],
+	/** ERA5-Land: finals from 2024 (a leap year) through 2025-12-30, the last day month 2025-12's request holds. */
+	era5l: { years: { first: 2024, last: 2025 }, finalThrough: '2025-12-30' },
+	/** IMERG Late: about 14 hours behind, so through the day before yesterday on MIRROR_FIXTURE.today; V08 from v08From. */
+	imerg: { first: '2026-01-25', through: '2026-02-08', v08From: '2026-02-07' }
 } as const;
 
 interface SampleFixture {
@@ -82,9 +95,9 @@ const blockPoints = (b: Block) => {
 	return pts;
 };
 
-/** One day of the region, NaN where the copy holds nothing: what valuesSha256 hashes. */
-function regionDay(parts: { block: Block; values: Float32Array }[]): Float32Array {
-	const { rows, cols } = regionSize(MIRROR_REGION);
+/** One day of the region (on the grid of `step`), NaN where the copy holds nothing: what valuesSha256 hashes. */
+function regionDay(parts: { block: Block; values: Float32Array }[], step = 0.05): Float32Array {
+	const { rows, cols } = regionSize(MIRROR_REGION, step);
 	const day = new Float32Array(rows * cols).fill(Number.NaN);
 	for (const { block, values } of parts) for (let j = 0; j < block.h; j++) day.set(values.subarray(j * block.w, (j + 1) * block.w), (block.y0 + j) * cols + block.x0);
 	return day;
@@ -207,6 +220,87 @@ export async function buildMirrorFixture(dir: string): Promise<void> {
 		});
 	}
 	await writeGefsIndex(store, MIRROR_FIXTURE.gefsIssues);
+
+	await buildTenthProducts(store, sample);
+	// ECMWF ENS (issue #604 R4-C): one invented issue, scripts/ecmwf-fixture.ts.
+	await writeEcmwfFixture(store);
+}
+
+/**
+ * An invented daily rain value (mm) for mirror cell (y, x) on epoch day `e`:
+ * dry about one day in three, else up to about 25 mm, varying cell to cell
+ * and day to day; `salt` makes each product's values its own.
+ */
+export function inventedRain(y: number, x: number, e: number, salt: number): number {
+	const k = (e * 7 + y * 13 + x * 29 + salt * 31) % 37;
+	return k < 12 ? 0 : Math.fround(((k - 11) * (3 + ((y + x + salt) % 5))) / 5);
+}
+
+/** The 0.1° products: era5l (finals) and imerg_late (daily) over the 0.1° cells holding the fixture grid and its band. */
+async function buildTenthProducts(store: MirrorStore, sample: SampleFixture): Promise<void> {
+	const step = 0.1;
+	const half = sample.grid.scale / 2;
+	// The fixture grid's north-west 0.05° cell, and the south-east one of the band south of it, as 0.1° mirror cells.
+	const nw = mirrorCell(productCell('era5l', sample.grid.originLat - half, sample.grid.originLon + half), MIRROR_REGION, step);
+	const se = mirrorCell(
+		productCell('era5l', sample.grid.originLat - (2 * sample.grid.height - 0.5) * sample.grid.scale, sample.grid.originLon + (sample.grid.width - 0.5) * sample.grid.scale),
+		MIRROR_REGION,
+		step
+	);
+	const block: Block = { y0: se.y, x0: nw.x, h: nw.y - se.y + 1, w: se.x - nw.x + 1 };
+	const n = block.h * block.w;
+	const base = { revision: 1, region: { ...MIRROR_REGION }, grid: gridOf(MIRROR_REGION, step), changes: [] };
+	const dayValues = (day: string, salt: number) => {
+		const out = new Float32Array(n);
+		for (let j = 0; j < block.h; j++) for (let i = 0; i < block.w; i++) out[j * block.w + i] = inventedRain(block.y0 + j, block.x0 + i, toEpochDay(day), salt);
+		return out;
+	};
+
+	// era5l: a year chunk per year, one file per CDS month request: a day's total is the next day's 00 UTC step, so it is in the request of the month of the day after it.
+	const e = MIRROR_FIXTURE.era5l;
+	const era5l = await ensureFinals(store, 'era5l', e.years.last, { firstYear: PRODUCT_GRIDS.era5l.firstYear });
+	const monthDays = new Map<string, Float32Array[]>();
+	for (let year = e.years.first; year <= e.years.last; year++) {
+		const values = new Float32Array(366 * n).fill(Number.NaN);
+		for (let doy = 0; doy < (isLeapYear(year) ? 366 : 365); doy++) {
+			const day = dateOfDoy(year, doy)!;
+			if (day > e.finalThrough) continue;
+			const v = dayValues(day, 1);
+			values.set(v, doy * n);
+			const month = fromEpochDay(toEpochDay(day) + 1).slice(0, 7);
+			const list = monthDays.get(month) ?? monthDays.set(month, []).get(month)!;
+			list.push(regionDay([{ block, values: v }], step));
+		}
+		await writeFinalsYear(era5l, year, block, values);
+	}
+	const era5lFiles = [...monthDays.keys()].sort().map((month) => {
+		const sha = manifestHash(monthDays.get(month)!);
+		return { url: `cds://reanalysis-era5-land/total_precipitation/${month}`, etag: null, lastModified: null, size: null, valuesSha256: sha, revision: 1, fetchedAt };
+	});
+	await writeManifest(store, { ...base, product: 'era5l', years: { ...e.years }, finalThrough: e.finalThrough, prelimThrough: null, files: era5lFiles });
+
+	// imerg_late: a day at a time, one file a day with its version.
+	const im = MIRROR_FIXTURE.imerg;
+	const imDays = days(im.first, im.through);
+	const imerg = await ensureDaily(store, 'imerg_late', im.first, imDays.length);
+	const imergFiles: Manifest['files'] = [];
+	for (const [d, day] of imDays.entries()) {
+		const v = dayValues(day, 2);
+		await writeDailyDays(imerg, d, block, v);
+		const sha = manifestHash([regionDay([{ block, values: v }], step)]);
+		const version = day >= im.v08From ? 'V08' : 'V07';
+		// The granule's own version carries a minor letter (V07B); the manifest's `version` is the collection's.
+		const url = `https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDL.${version.slice(1)}/${day.slice(0, 4)}/${day.slice(5, 7)}/3B-DAY-L.MS.MRG.3IMERG.${day.replaceAll('-', '')}-S000000-E235959.${version}B.nc4`;
+		imergFiles.push({ url, etag: etagOf(sha), lastModified: null, size: null, valuesSha256: sha, revision: 1, fetchedAt, version });
+	}
+	await writeManifest(store, {
+		...base,
+		product: 'imerg_late',
+		years: { first: Number(im.first.slice(0, 4)), last: Number(im.through.slice(0, 4)) },
+		finalThrough: null,
+		prelimThrough: im.through,
+		files: imergFiles
+	});
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

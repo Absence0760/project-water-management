@@ -31,6 +31,10 @@
 // issue #604 D3). So does a CHIRPS-GEFS fetch: it reads the newest issue the
 // daily GEFS pass copied (feeds/fromMirrorGefs.ts, R3-A).
 //
+// A CHIRPS fetch from the copy then fills the gap-filling products its
+// project's runs read over the feed's cells, ERA5-Land and IMERG Late, when
+// settings.gapRain asks for them (feeds/gapRainFill.ts, issue #604 R4-B).
+//
 // With DWS_SOURCE=store (feeds/fromGaugeRecord.ts dwsSource; the default in
 // dev, CI and e2e) a DWS fetch reads its station's days from our gauge record
 // store (247_gauge_record) the same way, in this job (issue #604 R3-B).
@@ -44,14 +48,16 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import { planFetch, RECHECK_HEAD_DAYS, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from '../../feeds/cellCache.js';
 import { cacheOrigin, claimRecheck, readCellCache } from '../../feeds/cellCacheStore.js';
-import { chirpsProduct, type GridConfig, gridCells } from '../../feeds/config.js';
+import { chirpsProduct, type FeedSource, type GridConfig, gridCells } from '../../feeds/config.js';
 import { type CellsResult, type FetchRequest, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
 import { DAY_SKIP } from '../../feeds/sources/chirps.js';
 import { withUser } from '../../db/tx.js';
 import { feedHttp, LiveFeedRequestRefusedError } from '../../feeds/http.js';
 import { JobError } from '../errors.js';
 import { fetchFromMirror } from '../../feeds/fromMirror.js';
+import { fillGapProducts } from '../../feeds/gapRainFill.js';
 import { fetchGefsFromMirror } from '../../feeds/fromMirrorGefs.js';
+import { fetchEcmwfFromMirror } from '../../feeds/fromMirrorEcmwf.js';
 import { ingestResult } from '../../feeds/ingest.js';
 import { chirpsSource } from '../../mirror/source.js';
 import { dwsSource, fetchFromGaugeRecord } from '../../feeds/fromGaugeRecord.js';
@@ -64,10 +70,21 @@ export const FeedFetchPayload = z.object({ feedId: z.string().uuid() }).strict()
 // One pending fetch per feed: the key lives in feeds/store.ts, so the ingest (which queues a backfill's next window) shares it.
 export { feedFetchDedupeKey } from '../../feeds/store.js';
 
+/**
+ * The fetch-requests FIFO queue's message group for a source: its host. SQS
+ * delivers one message of a group at a time, so the fetcher runs at most one
+ * fetch per host at once, across all its instances: CHC (CHIRPS and
+ * CHIRPS-GEFS) asked for one file at a time and about one request a second in
+ * total (2026-10-27, issue #604), which the live client's own pacing
+ * (feeds/http.ts PACE_*) holds within an instance. DWS is its own group, so a
+ * CHIRPS backfill doesn't hold up a gauge's fetch.
+ */
+export const fetchGroup = (source: FeedSource): 'chc' | 'dws' => (source === 'dws' ? 'dws' : 'chc');
+
 export const feedFetchHandler = defineHandler({
 	role: 'editor',
 	payload: FeedFetchPayload,
-	async run({ db, job, payload }) {
+	async run({ db, job, payload, deadline }) {
 		const feed = await feedForJob(db, job.projectId, payload.feedId);
 		// Removed or switched off since it was queued: nothing to do.
 		if (!feed || !feed.enabled) return;
@@ -76,11 +93,19 @@ export const feedFetchHandler = defineHandler({
 		const request: FetchRequest = { source: feed.source, config: feed.config, ...window, today };
 		if (feed.source === 'chirps' && chirpsSource() === 'mirror') {
 			await fetchFromMirror(db, feed, window, { jobId: job.id, today });
+			// The gap-filling products its project's runs read over this feed's cells (issue #604 R4-B, feeds/gapRainFill.ts):
+			// each product's outcome is recorded on the feed (last_meta, 254), and the fill stops in time for this job's deadline.
+			await fillGapProducts(db, feed, { jobId: job.id, today, deadline: deadline ?? null });
 			return;
 		}
 		// CHIRPS-GEFS from the copy too (issue #604 R3-A): the newest issue the daily GEFS pass copied, read in this job.
 		if (feed.source === 'chirps_gefs' && chirpsSource() === 'mirror') {
 			await fetchGefsFromMirror(db, feed, window, { jobId: job.id, today });
+			return;
+		}
+		// ECMWF ENS (issue #604 R4-C): only ever from the copy, whatever CHIRPS_SOURCE says (there is no per-feed path).
+		if (feed.source === 'ecmwf_ens') {
+			await fetchEcmwfFromMirror(db, feed, window, { jobId: job.id, today });
 			return;
 		}
 		// DWS from our gauge record store (issue #604 R3-B).
@@ -129,7 +154,8 @@ export const feedFetchHandler = defineHandler({
 			await withUser(job.actingUserId, (tx) => beginFeedFetch(tx, feed.id, job.id, window));
 			const message: FetchRequestMessage = { v: 1, type: 'fetch', fetchJobId: job.id, feedId: feed.id, feedVersion: feed.version, request };
 			try {
-				await sendToQueue(process.env.FETCH_REQUESTS_QUEUE_URL, 'FETCH_REQUESTS_QUEUE_URL', message);
+				// One message group per source host (fetchGroup): the FIFO queue hands the fetcher one fetch per group at a time (infra/feeds.tf).
+				await sendToQueue(process.env.FETCH_REQUESTS_QUEUE_URL, 'FETCH_REQUESTS_QUEUE_URL', message, { group: fetchGroup(feed.source), dedupe: job.id });
 			} catch (err) {
 				// Nothing went out: withdraw the record, so the feed isn't held as
 				// "a fetch is still out" (fromBoundary.ts, fromUnits.ts) by an

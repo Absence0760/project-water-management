@@ -477,7 +477,8 @@ describe('GET /projects/:id/reports/:jobId/pdf', () => {
 		);
 		expect(Number(expires) - before).toBeGreaterThanOrEqual(59);
 		expect(Number(expires) - before).toBeLessThanOrEqual(61);
-		expect(location).not.toMatch(/X-Amz-|amazonaws\.com|9002/);
+		// MinIO's port as a port: the URL's ids and signature can hold the digits 9002 by chance.
+		expect(location).not.toMatch(/X-Amz-|amazonaws\.com|:9002\b/);
 		// CloudFront's check: the canned policy rebuilt from the URL verifies with the public key.
 		const sig = Buffer.from(signature!.replace(/-/g, '+').replace(/_/g, '=').replace(/~/g, '/'), 'base64');
 		expect(createVerify('RSA-SHA256').update(cannedPolicy(resource!, Number(expires))).verify(publicKey, sig)).toBe(true);

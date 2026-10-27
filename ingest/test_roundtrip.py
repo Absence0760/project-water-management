@@ -6,6 +6,12 @@ through tests/roundtrip.ts. Every value of the region on every day must be
 bit-equal to what chcnetcdf decoded, sea (NaN) included, and Node's hash and
 manifest must agree with Python's.
 
+The 0.1 deg products (issue #604 R4) go the same way through the app's cell
+reader: era5land.py (fake CDS) and imerg.py (fake Earthdata) write their
+copies, and Node validates each manifest (readManifest) and reads known
+cells on known days through readCells, which must give the stored float32's
+bits, the days held and no others, and imerg_late's per-day versions.
+
 Needs the pnpm install (backend/node_modules/.bin/tsx). Without it the test
 skips, unless INGEST_REQUIRE_NODE=1 (CI's ingest job sets it), when it fails.
 """
@@ -26,11 +32,18 @@ ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "fixtures"))
 sys.path.insert(0, str(HERE / "fixtures" / "chirps"))
+sys.path.insert(0, str(HERE / "fixtures" / "imerg"))
+
+import numpy as np  # noqa: E402
 
 import chcnetcdf  # noqa: E402
 import chirps_final  # noqa: E402
 import cloudwatch  # noqa: E402
+import era5land  # noqa: E402
+import fakecds  # noqa: E402
 import grid  # noqa: E402
+import imerg  # noqa: E402
+import imerg_fixture  # noqa: E402
 import lambda_handler  # noqa: E402
 import make_chirps_fixtures as fx  # noqa: E402
 import manifest  # noqa: E402
@@ -98,6 +111,91 @@ class RoundTrip(unittest.TestCase):
         self.check_manifest(out, url)
         self.assertEqual(out["manifest"]["revision"], 2)
         self.assertEqual(out["manifest"]["changes"][0]["cellsChanged"], 2)
+
+    def node_cells(self, mirror_url: str, product: str, window: tuple[dt.date, dt.date], cells: list[tuple[int, int]]) -> dict:
+        spec = self.dir / f"cells-{product}.json"
+        spec.write_text(json.dumps({"mode": "cells", "product": product, "window": {"start": window[0].isoformat(), "end": window[1].isoformat()}, "cells": [{"y": y, "x": x} for y, x in cells]}))
+        p = subprocess.run([str(TSX), str(SCRIPT), mirror_url, str(spec)], cwd=ROOT / "backend", capture_output=True, text=True, timeout=300)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return json.loads(p.stdout)
+
+    @staticmethod
+    def cell_bits(v) -> int:
+        """readCells' encoding of a stored value: its float32 bits, -1 for NaN (no data), +0 for -0."""
+        v = np.float32(v)
+        return -1 if np.isnan(v) else int((v if v != 0 else np.float32(0)).view(np.uint32))
+
+    def check_cells(self, out: dict, expected: np.ndarray, cells: list[tuple[int, int]], read: str) -> None:
+        """`expected` (days held, rows, cols) is what Python stored for the window's days marked f in `read`."""
+        self.assertEqual(out["read"], read)
+        held = [i for i, c in enumerate(read) if c == "f"]
+        for k, (y, x) in enumerate(cells):
+            want = [None] * len(read)
+            for n, i in enumerate(held):
+                want[i] = self.cell_bits(expected[n, y, x])
+            self.assertEqual(out["values"][k], want, f"cell (y {y}, x {x})")
+
+    def test_era5l_python_writes_node_validates_and_reads_its_cells_bit_for_bit(self):
+        url = f"file://{self.dir / 'mirror'}"
+        today = dt.date(2024, 4, 20)  # 2024-03 is the newest complete month
+        cds = fakecds.FakeCds(today=today, ready_after=0)
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": url, "FEED_SOURCE": "fixtures"}):
+            for _ in range(2):  # submit, then collect
+                out = era5land.handler({"product": "era5l", "mode": "monthly"}, cds=cds, metrics=cloudwatch.LocalSink(), clock=lambda: 1_800_000_000.0, today=lambda: today)
+        # 2024-03's request holds 29 February (its 1 March 00 UTC step) through 30 March.
+        self.assertEqual(out["finalThrough"], "2024-03-30")
+        mirror = zarrstore.Mirror.from_url(url)
+        py = manifest.read(mirror, "era5l")
+        first, days = dt.date(2024, 2, 29), 31
+        stored = zarrstore.read_finals(Path(url[len("file://") :]), "era5l", first, days)
+        sea = tuple(int(i) for i in np.argwhere(np.isnan(stored[0]))[0])
+        cells = [(15, 84), (0, 0), (274, 309), (137, 155), sea]
+        self.assertFalse(np.isnan(stored[:, 15, 84]).any())
+        node = self.node_cells(url, "era5l", (dt.date(2024, 2, 28), dt.date(2024, 3, 31)), cells)
+        self.assertEqual(node["manifest"]["files"], [{"url": "cds://reanalysis-era5-land/total_precipitation/2024-03", "valuesSha256": py["files"][0]["valuesSha256"]}])
+        self.assertEqual((node["manifest"]["finalThrough"], node["manifest"]["prelimThrough"], node["manifest"]["years"]), ("2024-03-30", None, {"first": 2024, "last": 2024}))
+        # Not the day before the request's first, nor the day its successor brings.
+        self.check_cells(node, stored, cells, "-" + "f" * days + "-")
+        self.assertNotIn("versions", node)
+
+    def test_imerg_late_python_writes_node_validates_and_reads_its_cells_bit_for_bit(self):
+        url = f"file://{self.dir / 'mirror'}"
+        today = dt.date(2024, 10, 12)
+        v08 = today - dt.timedelta(days=2)
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": url, "FEED_SOURCE": "fixtures"}):
+            lambda_handler.handler({"product": "imerg_late", "mode": "recent"}, opener=imerg_fixture.FakeEarthdata(latest=today - dt.timedelta(days=1), v08_from=v08), metrics=cloudwatch.LocalSink(), today=lambda: today)
+        mirror = zarrstore.Mirror.from_url(url)
+        py = manifest.read(mirror, "imerg_late")
+        first, last = imerg.granule_day(py["files"][0]["url"])[0], dt.date.fromisoformat(py["prelimThrough"])
+        self.assertEqual((first, last), (today - dt.timedelta(days=imerg.RECENT_DAYS), today - dt.timedelta(days=1)))
+        days = (last - first).days + 1
+        root = Path(url[len("file://") :])
+        stored = np.stack([zarrstore.read_daily_day(root, "imerg_late", first + dt.timedelta(days=i)) for i in range(days)])
+        cells = [(15, 84), (0, 0), (274, 309), (137, 155)]
+        node = self.node_cells(url, "imerg_late", (first - dt.timedelta(days=1), last + dt.timedelta(days=1)), cells)
+        # The manifest Node validated is the one Python wrote, version and all.
+        self.assertEqual(node["manifest"]["files"], [{"url": f["url"], "valuesSha256": f["valuesSha256"], "version": f["version"]} for f in py["files"]])
+        self.assertEqual((node["manifest"]["finalThrough"], node["manifest"]["prelimThrough"]), (None, last.isoformat()))
+        self.check_cells(node, stored, cells, "-" + "f" * days + "-")
+        self.assertEqual(node["versions"], [None] + ["V08" if first + dt.timedelta(days=i) >= v08 else "V07" for i in range(days)] + [None])
+
+    def test_imerg_late_a_missing_day_is_not_held_and_blocks_no_later_day_in_python_or_node(self):
+        url = f"file://{self.dir / 'mirror'}"
+        today = dt.date(2024, 10, 12)
+        gap = today - dt.timedelta(days=5)
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": url, "FEED_SOURCE": "fixtures"}):
+            lambda_handler.handler({"product": "imerg_late", "mode": "recent"}, opener=imerg_fixture.FakeEarthdata(latest=today - dt.timedelta(days=1), missing={gap}), metrics=cloudwatch.LocalSink(), today=lambda: today)
+        py = manifest.read(zarrstore.Mirror.from_url(url), "imerg_late")
+        first, last = today - dt.timedelta(days=imerg.RECENT_DAYS), today - dt.timedelta(days=1)
+        self.assertEqual(py["prelimThrough"], last.isoformat())
+        window = [first + dt.timedelta(days=i) for i in range((last - first).days + 1)]
+        held = [d for d in window if d != gap]
+        root = Path(url[len("file://") :])
+        stored = np.stack([zarrstore.read_daily_day(root, "imerg_late", d) for d in held])
+        cells = [(15, 84), (137, 155)]
+        node = self.node_cells(url, "imerg_late", (first, last), cells)
+        self.assertEqual(node["manifest"]["prelimThrough"], last.isoformat())
+        self.check_cells(node, stored, cells, "".join("-" if d == gap else "f" for d in window))
 
     def test_the_s3_staging_path_writes_the_same_objects(self):
         """zarrstore.S3Mirror stages through a temporary directory: its objects, laid out as files, read the same."""

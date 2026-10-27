@@ -97,6 +97,11 @@ describe('fetchWindow', () => {
 		expect(fetchWindow('chirps_gefs', grid, '2026-10-05', '2026-09-25')).toEqual({ start: '2026-09-25', end: '2026-10-10' });
 	});
 
+	it('ECMWF ENS: the 15 days from today (issue #604 R4-C)', () => {
+		expect(fetchWindow('ecmwf_ens', grid, '2026-10-05', '2026-09-25')).toEqual({ start: '2026-09-25', end: '2026-10-09' });
+		expect(fetchWindow('ecmwf_ens', grid, null, '2026-12-20')).toEqual({ start: '2026-12-20', end: '2027-01-03' });
+	});
+
 	it('DWS: ten years back at first, asked for two years at a time; then a year of revisions before the newest', () => {
 		// Production, 2026-10-26: the first fetch asked for all ten years in one request and got the ScriptServer error page.
 		expect(DWS_WINDOW_DAYS).toBe(730);
@@ -247,10 +252,12 @@ describe('fetchWindow with the final marker (CHIRPS)', () => {
 	// final, and only the final file of a day it holds preliminary, as the
 	// held days did before it; rnl probes its finals as sat does, so the day
 	// after the marker, not out yet, is the one file it asks for (reading to
-	// yesterday asked for all 39).
+	// yesterday asked for all 39). One file at a time since CHC's reply (#604:
+	// CHC_CONCURRENCY), the probe stops at the first final not out yet rather
+	// than finishing a batch of six, so the files alone take 4 fewer (sat; 3 for rnl).
 	it.each([
-		['sat', 160, 3],
-		['rnl', 157, 1]
+		['sat', 156, 3],
+		['rnl', 154, 1]
 	] as const)('a caught-up %s feed’s daily fetch: %i range requests without them, %i with them', async (product, before, after) => {
 		const day = '2026-03-10';
 		const fixtures = fixtureHttp(() => day);
@@ -443,6 +450,11 @@ describe('runFetch failures: a result with our message, never a throw or an upst
 			ok: false,
 			error: 'the source’s data could not be read: the grid has no data at -20.275, 25.375 (the sea, or outside the product’s coverage), inside the bounding box: shrink the box to the land, list the cells instead, or let the feed leave out sea cells (skipNoData)'
 		});
+	});
+
+	it('an ECMWF request is refused: those forecasts are read only from the copy, never fetched', async () => {
+		const r = await runFetch({ source: 'ecmwf_ens', config: grid, start: '2026-03-10', end: '2026-03-24', today: '2026-03-10' }, broken({}));
+		expect(r).toEqual({ ok: false, error: 'the source’s data could not be read: ECMWF forecasts are read only from the rain data copy, never by the fetcher' });
 	});
 
 	it('no GEFS issue today or yesterday', async () => {

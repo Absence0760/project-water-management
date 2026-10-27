@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cacheOrigin } from './cellCacheStore.js';
-import { type CacheView, CELL_VALUE_MAX_BITS, cellCentre, chcCell, decodeCellValue, encodeCellValue, planFetch, seriesFromCache, uniqueCells, viewKey } from './cellCache.js';
+import { type CacheView, CELL_VALUE_MAX_BITS, cellCentre, chcCell, decodeCellValue, encodeCellValue, planFetch, productCell, seriesFromCache, uniqueCells, viewKey } from './cellCache.js';
 import { bboxCells } from './config.js';
 import { FeedFormatError, FeedNoDataError } from './errors.js';
 import { meanOf } from './sources/chirps.js';
@@ -147,6 +147,14 @@ describe('seriesFromCache', () => {
 	it('nothing cached is no days', () => {
 		expect(seriesFromCache(cells, new Map(), w)).toEqual({ startDate: '2026-01-01', values: [], prelimDays: 0 });
 	});
+
+	// A startDate in the future asks for a window that ends before it starts: no days, never a throw (it once read year 0).
+	it('a window that ends before it starts is no days', () => {
+		const view = new Map();
+		row(view, a, 2026, { '2026-01-01': 1 });
+		row(view, b, 2026, { '2026-01-01': 2 });
+		expect(seriesFromCache(cells, view, { start: '2026-01-05', end: '2026-01-04' })).toEqual({ startDate: '2026-01-05', values: [], prelimDays: 0 });
+	});
 });
 
 describe('cacheOrigin', () => {
@@ -161,5 +169,34 @@ describe('cacheOrigin', () => {
 		vi.stubEnv('FEED_FETCHER', 'sqs');
 		vi.stubEnv('FEED_SOURCE', 'fixtures');
 		expect(cacheOrigin()).toBe('chc');
+	});
+});
+
+describe('seriesFromCache on a 0.1° product (issue #604 R4-B)', () => {
+	const year = (vals: Record<number, number>, final = true) => {
+		const v: (number | null)[] = new Array(366).fill(null);
+		for (const [i, x] of Object.entries(vals)) v[Number(i)] = x;
+		return { vals: v, final: v.map((x) => x !== null && final) };
+	};
+
+	it('reads each 0.05° cell at the 0.1° cell holding it, with its own weight', () => {
+		// Two of the feed's cells share one 0.1° cell (weights 1 and 3), a third lies in the next one east (weight 1).
+		const cells = [
+			{ lat: -20.025, lon: 25.025, weight: 1 },
+			{ lat: -20.075, lon: 25.075, weight: 3 },
+			{ lat: -20.025, lon: 25.125, weight: 1 }
+		];
+		const a = productCell('era5l', -20.05, 25.05);
+		const b = productCell('era5l', -20.05, 25.15);
+		expect(b).toEqual({ row: a.row, col: a.col + 1 });
+		const view: CacheView = new Map([
+			[viewKey(a, 2025), year({ 0: 2, 1: 0 })],
+			[viewKey(b, 2025), year({ 0: 7, 1: 0 })]
+		]);
+		const got = seriesFromCache(cells, view, { start: '2025-01-01', end: '2025-01-03' }, undefined, 'era5l');
+		// (2 × 1 + 2 × 3 + 7 × 1) / 5 = 3: the shared cell weighs the sum of its feed cells' weights.
+		expect(got).toEqual({ startDate: '2025-01-01', values: [3, 0], prelimDays: 0, finalThrough: '2025-01-02' });
+		// The same view read as a CHIRPS product finds none of the feed's 0.05° cells.
+		expect(seriesFromCache(cells, view, { start: '2025-01-01', end: '2025-01-03' }).values).toEqual([]);
 	});
 });

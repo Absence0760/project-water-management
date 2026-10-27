@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
+import { copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION } from '@water-management/engine';
 import { TERRAIN_ATTRIBUTION } from '#lib/components/map/mapStyle.js';
 import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '#lib/components/map/delineation.js';
 
@@ -62,6 +63,17 @@ describe('the data credits', () => {
 		expect(backend('geo/rainMap.ts')).toContain(`WAAS_MAP_ATTRIBUTION = '${WAAS_MAP_STATEMENT}'`);
 		// GeoNames' attribution, stored on every place a load takes without a source of its own (the Map's search shows it).
 		expect(backend('geo/gazetteer.ts')).toContain(`GEONAMES_SOURCE = '${GEONAMES_STATEMENT}'`);
+	});
+
+	it('credit the rain copy’s other products with the engine’s notices, as docs/maps.md and docs/data-sources.md quote them (issue #604 R4-E)', () => {
+		const maps = doc('maps.md');
+		const byId = (id: string) => DATA_CREDITS.find((c) => c.id === id)!;
+		expect(byId('era-land').statements).toEqual([copernicusEra5lNotice(new Date().getUTCFullYear())]);
+		expect(maps).toContain(copernicusEra5lNotice('[year]'));
+		expect(byId('era-land').citation).toBe(ERA5L_CITATION);
+		expect(byId('imerg').statements[0]).toMatch(/^Huffman, G\.J\..* accessed \d{4}-\d{2}-\d{2}, doi:10\.5067\/GPM\/IMERGDL\/DAY\/07\.$/);
+		expect(byId('ecmwf-ens').statements).toEqual([ECMWF_CREDIT]);
+		expect(maps).toContain(`"${ECMWF_CREDIT}"`);
 	});
 
 	it('say what the map’s own notices say: the relief’s attribution and a delineated polygon’s notice', () => {

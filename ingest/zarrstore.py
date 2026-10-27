@@ -9,11 +9,17 @@ Both layouts store float32 with NaN as the fill (sea or no data), codecs
 [bytes little-endian, gzip 6] and the default "/" chunk key encoding. Chunks
 that are all NaN are never written, and readers treat a missing chunk as NaN.
 
-- Finals (`rnl`, `sat`): shape (years, 366, 550, 620), chunk (1, 366, 20, 20),
-  dims (year, doy, lat, lon), year index = year - firstYear, doy index = days
-  since 1 January (so index 365 stays NaN in a non-leap year).
-- Daily (`prelim`, `gefs/<issue>`): shape (days, 550, 620), chunk
-  (1, 110, 124), dims (day, lat, lon), day index = days since `firstDay`.
+- Finals (`rnl`, `sat`, `era5l`): shape (years, 366, rows, cols), chunk
+  (1, 366, 20, 20), dims (year, doy, lat, lon), year index = year -
+  firstYear, doy index = days since 1 January (so index 365 stays NaN in a
+  non-leap year).
+- Daily (`prelim`, `imerg_late`, `gefs/<issue>`): shape (days, rows, cols),
+  chunk (1, 110, 124) at 0.05 deg or (1, 55, 62) at 0.1 deg, dims (day, lat,
+  lon), day index = days since `firstDay`.
+
+rows x cols is the product's grid (grid.for_product): 550 x 620 at 0.05 deg
+for CHIRPS, 275 x 310 at 0.1 deg for `era5l` and `imerg_late`. The arrays'
+`grid` attribute carries the step, so a writer refuses an array of another grid.
 
 S3 is reached through boto3 by staging: the objects a write can touch (the
 hierarchy's root `zarr.json`, the array's `zarr.json` and the chunks of the
@@ -37,13 +43,13 @@ import numpy as np
 
 import grid
 
-FINALS_CHUNKS = (1, grid.DOYS, 20, 20)
-DAILY_CHUNKS = (1, 110, 124)
+FINALS_CHUNKS = grid.CHC.finals_chunks
+DAILY_CHUNKS = grid.CHC.daily_chunks
 GZIP_LEVEL = 6
 
 
-def _attributes(extra: dict) -> dict:
-    return {**extra, "region": dict(grid.REGION), "grid": {"origin": dict(grid.ORIGIN), "step": grid.STEP}}
+def _attributes(extra: dict, g: grid.Grid = grid.CHC) -> dict:
+    return {**extra, **g.attrs}
 
 
 class Mirror:
@@ -197,8 +203,10 @@ def finals_spans(first_day: dt.date, days: int) -> list[tuple[int, int, int, int
     return spans
 
 
-def finals_year_prefixes(product: str, first_day: dt.date, days: int, first_year: int = grid.FIRST_YEAR) -> list[str]:
-    """The chunk key prefixes a finals write touches (one per year)."""
+def finals_year_prefixes(product: str, first_day: dt.date, days: int, first_year: int | None = None) -> list[str]:
+    """The chunk key prefixes a finals write touches (one per year); `first_year` defaults to the product's."""
+    if first_year is None:
+        first_year = grid.for_product(product).first_year
     return [f"{product}/zarr.json", *(f"{product}/c/{grid.year_index(y, first_year)}/" for y, *_ in finals_spans(first_day, days))]
 
 
@@ -211,7 +219,8 @@ def read_finals(mirror_root: Path, product: str, first_day: dt.date, days: int) 
         return None
     arr = zarr.open_array(store=zarr.storage.LocalStore(mirror_root), path=product, mode="r", zarr_format=3)
     first_year = arr.attrs["firstYear"]
-    out = np.full((days, grid.ROWS, grid.COLS), np.nan, dtype=np.float32)
+    g = grid.for_product(product)
+    out = np.full((days, g.rows, g.cols), np.nan, dtype=np.float32)
     for year, d0, d1, off in finals_spans(first_day, days):
         yi = grid.year_index(year, first_year)
         if yi < arr.shape[0]:
@@ -219,45 +228,66 @@ def read_finals(mirror_root: Path, product: str, first_day: dt.date, days: int) 
     return out
 
 
-def write_finals(mirror_root: Path, product: str, first_day: dt.date, values: np.ndarray, first_year: int = grid.FIRST_YEAR):
-    """Write consecutive days of the region into the finals array at
-    `<mirror_root>/<product>/`, creating it (D2 metadata) when absent and
-    growing its year axis as needed. Days outside the write keep their values."""
-    values = _check_values(values)
+def write_finals(mirror_root: Path, product: str, first_day: dt.date, values: np.ndarray, first_year: int | None = None, attrs: dict | None = None):
+    """Write consecutive days of the region (on the product's grid) into the
+    finals array at `<mirror_root>/<product>/`, creating it (D2 metadata) when
+    absent and growing its year axis as needed. Days outside the write keep
+    their values. `first_year` defaults to the product's (1981, era5l's 1950).
+    `attrs` are the product's own attributes beside the layout's (era5l's
+    `attribution`); an existing array must already carry them."""
+    g = grid.for_product(product)
+    if first_year is None:
+        first_year = g.first_year
+    values = _check_values(values, g.rows, g.cols)
     spans = finals_spans(first_day, values.shape[0])
     last_year = spans[-1][0]
     years = grid.year_index(last_year, first_year) + 1
     arr = _open_or_create(
         mirror_root,
         product,
-        shape=(years, grid.DOYS, grid.ROWS, grid.COLS),
-        chunks=FINALS_CHUNKS,
+        shape=(years, grid.DOYS, g.rows, g.cols),
+        chunks=g.finals_chunks,
         dims=("year", "doy", "lat", "lon"),
-        attrs=_attributes({"firstYear": first_year}),
+        attrs=_attributes({**(attrs or {}), "firstYear": first_year}, g),
     )
     if arr.shape[0] < years:
-        arr.resize((years, grid.DOYS, grid.ROWS, grid.COLS))
+        arr.resize((years, grid.DOYS, g.rows, g.cols))
     for year, d0, d1, off in spans:
         arr[grid.year_index(year, first_year), d0:d1] = values[off : off + d1 - d0]
     return arr
 
 
+def read_daily_day(mirror_root: Path, product: str, day: dt.date) -> np.ndarray | None:
+    """One day of a daily array, (rows, cols) with NaN where unwritten; None
+    when the array doesn't exist yet or ends before `day`."""
+    import zarr
+
+    if not (mirror_root / product / "zarr.json").exists():
+        return None
+    arr = zarr.open_array(store=zarr.storage.LocalStore(mirror_root), path=product, mode="r", zarr_format=3)
+    i = (day - dt.date.fromisoformat(arr.attrs["firstDay"])).days
+    if i < 0:
+        raise ValueError(f"{day} is before {product}'s firstDay {arr.attrs['firstDay']}")
+    return np.array(arr[i]) if i < arr.shape[0] else None
+
+
 def write_daily(mirror_root: Path, product: str, first_day: dt.date, values: np.ndarray, array_first_day: dt.date | None = None):
     """Write consecutive days into the daily array at `<mirror_root>/<product>/`
     (day index = days since its `firstDay` attribute, which is `array_first_day`,
-    or `first_day`, when the array is created)."""
-    values = _check_values(values)
+    or `first_day`, when the array is created), on the product's grid."""
+    g = grid.for_product(product)
+    values = _check_values(values, g.rows, g.cols)
     if (mirror_root / product / "zarr.json").exists():
-        arr = _open_or_create(mirror_root, product, None, DAILY_CHUNKS, ("day", "lat", "lon"), {})
+        arr = _open_or_create(mirror_root, product, None, g.daily_chunks, ("day", "lat", "lon"), {"grid": g.attrs["grid"]})
     else:
         start = array_first_day or first_day
         arr = _open_or_create(
             mirror_root,
             product,
-            shape=(max(0, (first_day - start).days) + values.shape[0], grid.ROWS, grid.COLS),
-            chunks=DAILY_CHUNKS,
+            shape=(max(0, (first_day - start).days) + values.shape[0], g.rows, g.cols),
+            chunks=g.daily_chunks,
             dims=("day", "lat", "lon"),
-            attrs=_attributes({"firstDay": start.isoformat()}),
+            attrs=_attributes({"firstDay": start.isoformat()}, g),
         )
     origin = dt.date.fromisoformat(arr.attrs["firstDay"])
     i0 = (first_day - origin).days
@@ -265,6 +295,6 @@ def write_daily(mirror_root: Path, product: str, first_day: dt.date, values: np.
         raise ValueError(f"{first_day} is before {product}'s firstDay {origin}")
     end = i0 + values.shape[0]
     if arr.shape[0] < end:
-        arr.resize((end, grid.ROWS, grid.COLS))
+        arr.resize((end, g.rows, g.cols))
     arr[i0:end] = values
     return arr

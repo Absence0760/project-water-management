@@ -60,8 +60,8 @@ allowLiveFeedRequests();
 
 /** Time kept back from the Lambda's remaining time to send the answer. */
 export const FETCH_SEND_MARGIN_MS = 15_000;
-/** Without a Lambda context (tests, a local call): the fetch's own budget. */
-const DEFAULT_BUDGET_MS = 100_000;
+/** Without a Lambda context (tests, a local call): the fetch's own budget, the Lambda's timeout (infra/feeds.tf, 900 s) less the margin. */
+const DEFAULT_BUDGET_MS = 885_000;
 
 const TOO_SLOW = feedErrorMessage(new FeedUnavailableError('it did not answer in time'));
 const INVALID_REQUEST = 'the fetch request was not valid, so nothing was fetched';
@@ -158,14 +158,22 @@ export function withDeadline(http: FeedHttp, deadline: number): FeedHttp {
 	};
 }
 
-/** runFetch, answered as a failure if it hasn't finished within `ms`. */
+/**
+ * runFetch within `ms`. The fetch is told the deadline (its budget): a CHIRPS
+ * cell-cache fetch stops starting days short of it and answers with the days
+ * it finished, which matters since the live client keeps to about a request a
+ * second (feeds/http.ts PACE_*) and a long window no longer fits. Past the
+ * deadline itself no new request starts (withDeadline), and a fetch still
+ * running is answered as a failure.
+ */
 async function fetchWithin(req: FetchRequest, http: FeedHttp, ms: number): Promise<FetchAnswer> {
 	let timer: NodeJS.Timeout | undefined;
 	const late = new Promise<FetchAnswer>((resolve) => {
 		timer = setTimeout(() => resolve({ ok: false, error: TOO_SLOW }), Math.max(0, ms));
 	});
+	const deadline = Date.now() + ms;
 	try {
-		return await Promise.race([runFetch(req, withDeadline(http, Date.now() + ms)), late]);
+		return await Promise.race([runFetch(req, withDeadline(http, deadline), { stopAt: deadline }), late]);
 	} finally {
 		clearTimeout(timer);
 	}

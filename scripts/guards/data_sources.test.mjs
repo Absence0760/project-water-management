@@ -77,6 +77,17 @@ describe('migrationSources', () => {
 		assert.deepEqual(migrationSources(files), { file: '300.sql', values: ['chirps', 'ecmwf_ens'] });
 	});
 
+	it('reads a DROP and ADD in one ALTER TABLE statement (253_feed_source_ecmwf.sql)', () => {
+		const files = [
+			{ name: '018.sql', text: create },
+			{
+				name: '253.sql',
+				text: "-- a comment with source IN ('x')\nALTER TABLE data_feed\n\tDROP CONSTRAINT data_feed_source_check,\n\tADD CONSTRAINT data_feed_source_check CHECK (source IN ('chirps', 'chirps_gefs', 'dws', 'ecmwf_ens'));"
+			}
+		];
+		assert.deepEqual(migrationSources(files), { file: '253.sql', values: ['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens'] });
+	});
+
 	it("ignores another table's check on a source column, and comments", () => {
 		const files = [
 			{ name: '018.sql', text: create },
@@ -152,9 +163,15 @@ describe('the real tree', () => {
 	it('reads the real FEED_HOSTS and sources', () => {
 		const { hosts, problems } = feedHosts();
 		assert.deepEqual(problems, []);
-		assert.ok(hosts.includes('data.chc.ucsb.edu') && hosts.includes('www.dws.gov.za'), hosts.join(', '));
-		// Digital Earth Africa's bucket (Waterbodies, WOfS scenes) and its STAC search (WOfS, issue #604 R5).
-		assert.ok(hosts.includes('deafrica-services.s3.af-south-1.amazonaws.com') && hosts.includes('explorer.digitalearth.africa'), hosts.join(', '));
+		// Whole hostnames, compared exactly: a host that only contains one of these is a different host.
+		const listed = new Set(hosts);
+		for (const host of [
+			'data.chc.ucsb.edu',
+			'www.dws.gov.za',
+			// Digital Earth Africa's bucket (Waterbodies, WOfS scenes) and its STAC search (WOfS, issue #604 R5).
+			'deafrica-services.s3.af-south-1.amazonaws.com',
+			'explorer.digitalearth.africa'
+		]) assert.ok(listed.has(host), `${host} not in ${hosts.join(', ')}`);
 	});
 
 	it('has a register row for every live host and every data_feed.source', () => {

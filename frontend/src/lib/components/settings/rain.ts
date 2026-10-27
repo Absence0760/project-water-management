@@ -1,6 +1,7 @@
 // CHIRPS fallback bias correction picker (settings.chirpsBiasCorrection,
 // engine ≥ 0.7.0; docs/model.md §2.4b).
-import { QM_WET_DAY_MM_DEFAULT, resolveChirpsFitPeriod, type AccumulationMode, type ChirpsBiasMode, type ChirpsFitRange, type ChirpsQuantileMap, type ZeroRainMode, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '@water-management/engine';
+import { gapRainChoiceText } from '#lib/components/series/gapRain.js';
+import { QM_WET_DAY_MM_DEFAULT, type GapRainProduct, type GapRainSettings, resolveChirpsFitPeriod, type AccumulationMode, type ChirpsBiasMode, type ChirpsFitRange, type ChirpsQuantileMap, type ZeroRainMode, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '@water-management/engine';
 
 export const CHIRPS_BIAS_OPTIONS: { value: ChirpsBiasMode; label: string; help: string }[] = [
 	{
@@ -14,6 +15,33 @@ export const CHIRPS_BIAS_OPTIONS: { value: ChirpsBiasMode; label: string; help: 
 		help: 'CHIRPS is used as stored. Only for a CHIRPS series that is already corrected to the catchment; raw CHIRPS can read well below catchment rain.'
 	}
 ];
+
+// The gap-filling product (settings.gapRain, engine ≥ 1.101.0, issue #604;
+// docs/model.md §2.4b *Gap-filling product*): CHIRPS (the default, null),
+// ERA5-Land instead, or ERA5-Land only where CHIRPS has none; and IMERG Late
+// for the recent days. Each choice's words say what it does and why pick it.
+export const GAP_RAIN_OPTIONS: { value: GapRainProduct; label: string; help: string }[] = [
+	{
+		value: 'chirps',
+		label: 'CHIRPS (default)',
+		help: 'Blank catchment-rain days take CHIRPS, bias-corrected as set below, as every run did before. The fits and checks on this page are CHIRPS’s.'
+	},
+	{
+		value: 'chirpsThenEra5l',
+		label: 'CHIRPS, then ERA5-Land where CHIRPS has none',
+		help: 'CHIRPS fills as before; a blank day CHIRPS has no value for takes ERA5-Land, corrected to the catchment rain on its own monthly fit and quantile map. Keeps the record the project was fitted on, with ERA5-Land as the fallback.'
+	},
+	{
+		value: 'era5l',
+		label: 'ERA5-Land instead of CHIRPS',
+		help: 'Every blank day takes ERA5-Land (0.1°, about 5 days behind), corrected to the catchment rain on its own monthly fit and quantile map, which take its drizzle away. ERA5, which ERA5-Land reruns at 0.1°, matched South African gauges best of the open products day by day (daily r 0.57 against 0.25 for CHIRPS), most of all in winter frontal rain like the Western Cape’s, where CHIRPS is weakest.'
+	}
+];
+
+/** settings.gapRain from the form's two controls: null when both are the defaults (CHIRPS, no IMERG), so a project that never chose stays as it was. */
+export function withGapRain(product: GapRainProduct, imergLate: boolean): GapRainSettings | null {
+	return product === 'chirps' && !imergLate ? null : { product, imergLate };
+}
 
 // The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.53.0, CR-23;
 // docs/model.md §2.4b *Quantile map*): off (null) by default. Turning it on
@@ -125,12 +153,15 @@ export interface RainGapSettings {
 	chirpsFitPeriod?: unknown;
 	zeroRainRuns?: Partial<ZeroRainSettings>;
 	rainSource?: RainSourcePeriod[] | null;
+	/** The gap-filling product (engine ≥ 1.101.0); absent or null is CHIRPS alone. */
+	gapRain?: GapRainSettings | null;
 }
 
-/** Every Rain gaps setting at its default: bias-corrected per month, no gap map, the whole record, zero runs missing above the default threshold, accumulations spread, nothing listed. */
+/** Every Rain gaps setting at its default: CHIRPS fills the gaps, bias-corrected per month, no gap map, the whole record, zero runs missing above the default threshold, accumulations spread, nothing listed. */
 export function rainGapsAtDefaults(s: RainGapSettings): boolean {
 	const z = s.zeroRainRuns ?? {};
 	return (
+		withGapRain(s.gapRain?.product ?? 'chirps', s.gapRain?.imergLate ?? false) === null &&
 		(s.chirpsBiasCorrection ?? 'monthly') === 'monthly' &&
 		!s.chirpsQuantileMap &&
 		!Array.isArray(s.chirpsFitPeriod) &&
@@ -150,7 +181,10 @@ export function rainGapsLine(s: RainGapSettings): string {
 	const z = s.zeroRainRuns ?? {};
 	const raw = s.chirpsBiasCorrection === 'none';
 	const listed = (z.keepDry?.length ?? 0) + (z.missing?.length ?? 0) + (z.keepReadings?.length ?? 0) + (z.addAccumulations?.length ?? 0);
+	const gap = s.gapRain ? withGapRain(s.gapRain.product, s.gapRain.imergLate) : null;
 	return [
+		// The gap-filling product first, only when one is chosen (issue #604): the line reads as before otherwise.
+		gap ? `gaps from ${gapRainChoiceText(gap)}` : null,
 		raw ? 'raw CHIRPS' : `bias-corrected per month${s.chirpsQuantileMap ? ', quantile-mapped' : ''}`,
 		raw ? null : Array.isArray(s.chirpsFitPeriod) ? count(s.chirpsFitPeriod.length, 'fit range') : 'whole record',
 		z.mode === 'asRecorded' ? 'zero runs as recorded' : 'zero runs missing',

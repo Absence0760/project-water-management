@@ -37,6 +37,10 @@ const NEEDS: Record<string, MissingPanel> = {
 		text: 'This run has no rain for each unit. It needs Per unit flow generation, with rain for each unit or rainfall stations, set under Flow generation.',
 		link: { href: '?tab=settings#set-share', label: 'Flow generation' }
 	},
+	'res-gap-rain': {
+		text: 'This run filled no rain gaps from another product. It needs ERA5-Land or IMERG Late chosen as the gap-filling product, under Rain gaps.',
+		link: { href: '?tab=settings#set-rain', label: 'Rain gaps' }
+	},
 	'res-wr2012': {
 		text: 'This run has no WR2012 check. It needs a WR2012 reference for the catchment, set under WR2012 check.',
 		link: { href: calibrationHref(null, 'set-wr2012'), label: 'WR2012 check' }

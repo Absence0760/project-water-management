@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays, unitRainError } from '@water-management/engine';
+import { chirpsQuantileMapError, dayQuality, gapRainError, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays, unitRainError } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { autoFitRecordError, baselineAllocationModeError, dataQualityPatchError, ewrOutletTableError, importedAutoFitError, mergeSettings, nextCalibrationRules, normaliseBaselineAllocationMode, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
@@ -538,6 +538,38 @@ describe('SettingsPatch.chirpsQuantileMap (engine ≥ 1.53.0, CR-23)', () => {
 		const base = { panCoefficient: new Array(12).fill(0.7), apanMm: new Array(12).fill(150) };
 		expect(forcing.safeParse({ ...base, chirpsQuantileMap: { wetDayMm: 1 } }).success).toBe(true);
 		expect(forcing.safeParse({ ...base, chirpsQuantileMap: { wetDayMm: 20 } }).success).toBe(false);
+	});
+});
+
+describe('SettingsPatch.gapRain (engine ≥ 1.101.0, issue #604 R4-B)', () => {
+	const ok = (gapRain: unknown) => SettingsPatch.safeParse({ gapRain }).success;
+
+	it('accepts exactly what the engine runs (a table test holds the two together)', () => {
+		for (const [name, v] of [
+			['CHIRPS alone', null],
+			['CHIRPS written out', { product: 'chirps', imergLate: false }],
+			['ERA5-Land', { product: 'era5l', imergLate: false }],
+			['both, with IMERG', { product: 'chirpsThenEra5l', imergLate: true }],
+			['an unknown product', { product: 'mswep', imergLate: false }],
+			['no imergLate', { product: 'era5l' }],
+			['imergLate a string', { product: 'era5l', imergLate: 'true' }],
+			['an extra key', { product: 'era5l', imergLate: false, wetDayMm: 1 }],
+			['a bare string', 'era5l']
+		] as [string, unknown][]) {
+			expect(ok(v), name).toBe(gapRainError(v) === null);
+		}
+	});
+
+	it('is CHIRPS alone by default, replaced whole by a patch, and recorded in a fit record’s forcing, optionally', () => {
+		expect(mergeSettings({}).gapRain).toBeNull();
+		const stored = patchSettings({}, { gapRain: { product: 'era5l', imergLate: true } });
+		expect(stored.gapRain).toEqual({ product: 'era5l', imergLate: true });
+		expect(patchSettings(stored, { gapRain: null }).gapRain).toBeNull();
+		expect(patchSettings(stored, { lakeEvapFactor: 0.8 }).gapRain).toEqual({ product: 'era5l', imergLate: true });
+		const forcing = FitRecord.shape.forcing.unwrap();
+		const base = { panCoefficient: new Array(12).fill(0.7), apanMm: new Array(12).fill(150) };
+		expect(forcing.safeParse({ ...base, gapRain: { product: 'chirpsThenEra5l', imergLate: false } }).success).toBe(true);
+		expect(forcing.safeParse({ ...base, gapRain: { product: 'gpm', imergLate: false } }).success).toBe(false);
 	});
 });
 

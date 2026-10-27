@@ -9,12 +9,19 @@ ingest stay in Node (`backend/`).
 Round 1 built the skeleton (the writer, the manifest, the polite client, the
 image and CI); Round 2 (R2-A) added the CHIRPS finals job, `chirps_final.py`,
 which lists CHC's `byMonth` directories and copies new or rewritten months.
-Fixtures mode runs the same code against a synthetic directory.
+Fixtures mode runs the same code against a synthetic directory. Round 4
+(R4-A) added ERA5-Land, `era5land.py` (product `era5l`, § The ERA5-Land
+job), whose CDS requests are submitted on one run and collected on a later
+one.
 
 | File | What it does |
 | --- | --- |
 | `lambda_handler.py` | `handler(event, context)`: validates the event, runs the finals job, and publishes `MirrorLagDays` on every exit. |
 | `chirps_final.py` | The CHIRPS finals job (below): the listing and its diff, paced whole-file downloads within the time budget, and `ingest_file`, the single-file path. |
+| `era5land.py` | The ERA5-Land job (§ The ERA5-Land job): submit a month's CDS request, collect it on a later run, the 0.1° remap, the revision rule, and its own handler (`lambda_handler.py` hands `era5l` events to it). |
+| `era5request.py` | ERA5-Land's CDS request (dataset, a month's request, the month a request names), shared by `era5land.py` and `fakecds.py` so neither imports the other's importer. |
+| `fakecds.py` | Fixtures mode's stand-in for the CDS: submit, status, find and download, serving `fixtures/era5land/`'s synthetic NetCDF. Not in the image. |
+| `requirements.a.in` | R4-A's direct dependency (`ecmwf-datastores-client`, the CDS client), to be hash-pinned into `requirements.txt` at the round's merge. |
 | `cloudwatch.py` | The freshness metric `MirrorLagDays` (CloudWatch live, a local sink in fixtures mode). |
 | `lease.py` | One writer per product: a lease object taken with S3 conditional writes. |
 | `fixturehttp.py` | Fixtures mode's stand-in for CHC's server over `fixtures/chirps/`. Not in the image. |
@@ -28,7 +35,15 @@ Fixtures mode runs the same code against a synthetic directory.
 | `tiffread.py` | A stdlib GeoTIFF strip reader: one pixel of a CHC daily file through range requests, for `verify_copy.py`. Not in the image. |
 | `requirements-verify.txt` | `verify_copy.py`'s hash-pinned packages (the image's plus icechunk), for `ingest/.venv-verify` only. |
 | `fixtures/make_chc_fixture.py` | Writes `fixtures/chc/chirps-v3.0.2024.02.days_p05.nc`, the reader's synthetic fixture. |
+| `fixtures/era5land/make_era5land_fixture.py` | Writes a synthetic ERA5-Land month in the CDS's NetCDF layout; `fakecds.py` calls it for each download, so nothing binary is committed. |
+| `ecmwf.py` | The ECMWF ENS forecast job (below): index-based range reads of `tp`, decoding with eccodes, the region on the 0.1° grid, daily totals, the ensemble statistics, `ecmwf/<issue>` and its index, resumed across runs. |
+| `ecmwf_qm_fit.py` | The operator's offline quantile-mapping fit of the ECMWF forecast to our rain; writes `ecmwf/qm.json`. Not in the image. |
+| `ecmwf_fixturehttp.py` | Fixtures mode's stand-in for ECMWF's open data bucket over `fixtures/ecmwf/`, re-dated to any issue. Not in the image. |
+| `fixtures/ecmwf/make_ecmwf_fixtures.py` | Writes the synthetic ECMWF step files (`fixtures/ecmwf/`: 15 GRIB2 files and their `.index`), and builds the tests' structured ones. |
 | `fixtures/chirps/make_chirps_fixtures.py` | Writes the synthetic `byMonth` directory (`fixtures/chirps/`): two months, their listing, and a rewritten and a changed variant. |
+| `imerg.py` | IMERG Late's recent days into `imerg_late` (§ IMERG Late): the CMR search, the OPeNDAP region subset, the reader that places cells by coordinate, the per-day version, the refusal marker and the Earthdata token. |
+| `imerg_fixture.py` | Fixtures mode's fake CMR and OPeNDAP: UMM-G search results and NetCDF-4 subsets cut from `fixtures/imerg/`'s synthetic field. Not in the image. |
+| `fixtures/imerg/make_imerg_fixture.py` | The synthetic IMERG Late daily field and file writer, in GPM_3IMERGDL V07's real layout (a global file from the command line). |
 | `tests/roundtrip.ts` | The Node half of the cross-language round trip (`test_roundtrip.py`). |
 | `Dockerfile` | The Lambda image (build context `ingest/`). |
 | `dev.sh` | `pnpm dev:ingest:run`, `pnpm test:ingest` and `ingest/dev.sh verify`. |
@@ -38,10 +53,20 @@ Fixtures mode runs the same code against a synthetic directory.
 ```json
 { "product": "rnl" | "sat", "mode": "monthly" }
 { "product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM" }
+{ "product": "imerg_late", "mode": "recent", "days": 10 }
+{ "product": "ecmwf", "mode": "daily" }
 ```
 
 A backfill names its month (from 1981-01 for `rnl`, 2000-06 for `sat`); a
-monthly run takes none. Any other key is refused.
+monthly run takes none. An `imerg_late` event takes an optional `days`
+(1–30, default 10; § IMERG Late). Any other key is refused.
+{ "product": "era5l", "mode": "monthly" }
+{ "product": "era5l", "mode": "backfill", "month": "YYYY-MM" }
+```
+
+A backfill names its month (from 1981-01 for `rnl`, 2000-06 for `sat`); a
+monthly run takes none. Any other key is refused. An `era5l` backfill
+names a month from 1950-01 to the newest complete one.
 
 | Variable | Meaning |
 | --- | --- |
@@ -49,6 +74,8 @@ monthly run takes none. Any other key is refused.
 | `FEED_SOURCE` | `fixtures` (the default: the synthetic `byMonth` directory, no network) or `live` (production: CHC). |
 | `INGEST_CONTACT` | The contact address in the User-Agent. Optional. |
 | `INGEST_FIXTURE_VARIANT` | Fixtures mode only: `rewritten` or `changed` serves that variant of the synthetic directory. |
+| `EARTHDATA_TOKEN_SECRET_ARN` | Live mode, `imerg_late` only: the Secrets Manager secret holding the Earthdata token (`infra/imerg.tf`). Read at run time, never logged; fixtures mode reads nothing. |
+| `CDS_KEY_SECRET_ARN` | Live `era5l` runs only: the Secrets Manager secret holding the CDS API key (`infra/era5land.tf`), read at run time and never logged. Fixtures mode never reads it. |
 | `MIRROR_METRIC_NAMESPACE` | Optional: the metric's namespace, default `water-management/Mirror`. |
 
 Fixtures mode runs exactly the live code with three differences: CHC is
@@ -109,6 +136,190 @@ that copied, a run the budget cut short, a monthly run held off by the lease,
 and every failure, before the error is re-raised. The lag alarms treat a
 missing datapoint as breaching, and `test_chirps_final.MetricOnEveryExit`
 walks every exit to keep it that way.
+
+## IMERG Late
+
+`imerg.py` (issue #604 R4-D) copies NASA's GPM IMERG Late daily rain
+(`GPM_3IMERGDL`, about 14 h behind) for the last few days into
+`imerg_late/`, for the days CHIRPS has no preliminary value for yet. Which
+days the engine takes from it is decided later, in the engine; this job only
+keeps the copy. Runbook: docs/deployment.md § IMERG Late; source:
+docs/data-sources.md § imerg.
+
+**A run** (`recent`, 4 times a day):
+
+1. A refusal earlier the same UTC day (`ingest-state/imerg_late/refused.json`)
+   ends it with no request (`stopped: "refused_today"`).
+2. It holds the product's lease (`lease.py`); held by another run, it ends
+   (`stopped: "busy"`).
+3. Days older than 30 are dropped: out of the manifest, then their chunks.
+4. One CMR search (`cmr.earthdata.nasa.gov/search/granules.umm_json`,
+   `short_name=GPM_3IMERGDL`, versions 07 and 08, no sign-in) for the last
+   `days` days through yesterday. For each day the newest version listed
+   wins; a day already held from the same granule URL costs nothing.
+5. Each remaining day, newest first, is one OPeNDAP DAP4 request for region
+   D1 only (`<granule>.dap.nc4?dap4.ce=/precipitation[0:1:0][1900:1:2209][545:1:819];…`,
+   ~0.2 MB instead of the 26 MB global file), at most one request a second,
+   while the Lambda has 60 s left. The Earthdata token goes in
+   `Authorization: Bearer`, to `opendap.earthdata.nasa.gov` and
+   `data.gesdisc.earthdata.nasa.gov` only, as an unredirected header (never
+   copied onto a redirect); landing on Earthdata Login's page counts as a 401.
+6. Each day is read, checked (0–2000 mm), hashed (`valuesSha256`) and
+   written; the manifest is saved after every day.
+
+**The file.** `precipitation(time, lon, lat)` float32, **lon before lat**,
+lon −179.95…179.95 and lat −89.95…89.95 ascending (centres on x.x5),
+`_FillValue` −9999.9, units `mm/day` (the day's mean rate, so the day's mm).
+The reader places every cell from the coordinates, so the copy's row 0 is the
+southernmost and column 0 the westernmost whatever the file's order; it
+refuses another variable name (V06's `precipitationCal` by name), units
+other than mm/day, a time not on the day, packed values, and anything that
+isn't HDF5 (a login page).
+
+**The copy** `imerg_late/`: the 0.1° daily layout, shape (days, 275, 310),
+chunk (1, 55, 62), `[0, 0]` centred at −35.45, 10.05; `firstDay` is 30 days
+before the run that made it. The manifest's `grid.step` is 0.1,
+`finalThrough` is always null, and `prelimThrough` is the end of the
+contiguous run of held days from the oldest. **Each `files` entry carries
+`version`** (`V07`, `V08`): the collection version the day came from, for
+fitting bias correction per version; the file's minor letter (V07C) stays
+in its URL. `imerg.py` checks that field itself until `manifest.py` knows
+it (R4-B). A held day whose granule changes (V08 arrives) is fetched again:
+the same values move only the URL and version, other values bump the
+revision with a one-day `changes` entry.
+
+**Refusals.** A 403 from either host, or a 401 (a token that expired or was
+never approved for GES DISC), stops the run, never retried, writes
+`refused.json` (`{v, day, at, status, host}`) and re-raises, so the Lambda
+errors and the DLQ sees it. The marker keeps the day's later runs from
+asking; the next UTC day tries again. A marker that isn't one never blocks.
+
+**`MirrorLagDays{Product=imerg_late}`** on every exit once the event is
+valid and `MIRROR_URL` set: today minus `prelimThrough`, or 11 with nothing
+held.
+
+**Locally**, fixtures mode reads no token and touches no network:
+`imerg_fixture.FakeEarthdata` answers the search with one granule a day up
+to yesterday and cuts each subset from `fixtures/imerg`'s synthetic field:
+
+```sh
+MIRROR_URL=file://$PWD/ingest/.mirror ingest/.venv/bin/python ingest/imerg.py 3
+```
+
+## The ERA5-Land job
+
+Product `era5l`: ERA5-Land daily total precipitation from the Copernicus
+Climate Data Store (dataset `reanalysis-era5-land`, CC BY 4.0, about 5 days
+behind), into a **finals** array on the **0.1° grid** (r4-shared.md): shape
+(years from 1950, 366, 275, 310), chunk (1, 366, 20, 20), cell [0, 0]
+centred at lat -35.45, lon 10.05, attributes `firstYear` 1950, `region`,
+`grid` (step 0.1) and `attribution` (Copernicus's text). The manifest is the
+usual one with `grid.step` 0.1; each `files` entry is one month's request,
+`url` `cds://reanalysis-era5-land/total_precipitation/YYYY-MM`, with no ETag.
+The module's docstring is the full design; in short:
+
+- **A day is the UTC day.** ERA5-Land's `tp` accumulates from 00 UTC, so the
+  00 UTC step of D+1 is day D's total: one field a day, m × 1000 = mm. A
+  month's request asks for the 00 UTC steps of its own days, so it writes
+  the last day of the previous month through its own second-last day; the
+  month's last day comes with the next month's request. `finalThrough` is
+  the end of the contiguous run of days the months held write (ERA5-Land-T
+  days included: a revision later marks them, as below); both manifest
+  validators (`manifest.py`, `backend/src/mirror/manifest.ts`) refuse a
+  manifest that claims more, or a file URL, ETag or Last-Modified other
+  than a month request's.
+- **The remap.** ERA5-Land's points are on x.x0°; the copy's cells are
+  centred on x.x5°, so each cell is the mean of its four corner points (a
+  quarter of each box: the area-weighted remap). Sea points have no value;
+  a coastal cell averages the corners that do.
+- **Submit, then collect.** A run never waits for the CDS's queue. It writes
+  its intent to `ingest-state/era5l/requests.json`, submits, and records the
+  request's id; a later run asks its status and, once it is `successful`,
+  downloads the result (polite client) and writes it. At most one request
+  per month and `MAX_IN_FLIGHT` (4) in all. If the state is lost, or a run
+  died between the intent and the id, the next run looks for its own queued
+  request among the account's ten newest jobs before submitting again.
+- **A failed request** (failed, rejected, deleted, gone) is resubmitted after
+  1, 2, 4, then 8 days. After 5 failures the run stops resubmitting it and
+  raises `RequestsFailed` every run (the errors alarm). To try again, read
+  its `lastError`, fix the cause, and delete that month's entry from the
+  state file.
+- **monthly** (the daily rule): collect; then request the newest complete
+  month (its last day 6 days old) and any month after the newest held one,
+  at most 12 back; then re-request each held month that may still change.
+- **ERA5-Land-T revisions.** The newest months are preliminary (the file's
+  `expver` is not 0001), replaced by the consolidated data about two months
+  on. Such a month (or one whose phase is unknown) is requested again 75
+  days after it ends, then every 30 days while still preliminary. A month
+  whose phase stays unknown (no `expver`) is asked for every 30 days too,
+  until a read says consolidated or 180 days after its end
+  (`RECHECK_UNKNOWN_CAP_DAYS`), when it counts as final: without `expver`
+  the copy can't tell, so it keeps asking through the window in which
+  ECMWF consolidates, with room for a late one. CHIRPS's
+  revision rule applies: a new revision with a `changes` entry only when the
+  values' hash changed.
+- **backfill** marks its month wanted and submits it when a slot is free;
+  every later run, the daily one included, keeps submitting wanted months
+  (newest first) as slots free up. AWS's `nsf-ncar-era5` holds ERA5, not
+  ERA5-Land, so the backfill goes through the CDS too.
+- **Checks and stops:** the 0–2000 mm check after the remap (negative
+  packing noise above -0.001 mm becomes 0), the values hash, the lease, a
+  401 or 403 that stops the run (never retried) and writes
+  `ingest-state/era5l/refused.json` so no other run that UTC day calls the
+  CDS, and `MirrorLagDays{Product=era5l}` on every exit (before any month is
+  held it counts from 1949-12-31).
+- **The key** is read from Secrets Manager (`CDS_KEY_SECRET_ARN`) in live
+  mode, only when the run first calls the CDS. `LiveCds` wraps
+  `ecmwf-datastores-client` with our User-Agent, one call a second and no
+  client-side retry loop; the result file comes through `polite.py`.
+
+Operator steps (the CDS account, the licence, the key, turning it on, the
+backfill): docs/deployment.md § ERA5-Land.
+
+## The ECMWF forecast job
+
+`ecmwf.py` (issue #604 D17, R4-C; its docstring is the spec) copies each
+00 UTC run of ECMWF's ensemble from its open data bucket
+(`https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/<YYYYMMDD>/00z/ifs/0p1/enfo/<YYYYMMDD>000000-<step>h-enfo-ef-sfc.{index,grib2}`,
+the 0.1° files ECMWF publishes from 2026-10-20, about 09:40 UTC):
+
+1. **Today's issue, else yesterday's.** One held already ends the run. With
+   no work saved for it, the last step's index is asked for first: a 404
+   means the issue isn't out.
+2. **Each step** (24 … 360 h): the `.index` (JSON lines, one per field,
+   with `_offset`/`_length`), then one range request per member for its
+   `tp` field only, one request a second. Each field is decoded with
+   eccodes and checked (`tp` in m, this run, accumulated from 0 h to the
+   step, this member, a regular lat/lon grid); our 0.1° cells (centred on
+   .05) take the mean of the four field points at their corners. The step's
+   members are saved to `ingest-state/ecmwf/work/<issue>/step-<h>.npy`, so
+   a run stopped by its time budget is resumed by the next.
+3. **The issue.** Day d is `1000 × (tp[24(d+1) h] − tp[24d h])` mm, the UTC
+   day issue + d (day 0 is the issue date, as for CHIRPS-GEFS); a round-off
+   below zero is 0, a real drop, a gap or over 2000 mm fails. Per cell and
+   day the ensemble mean, p10, p50 and p90 go into Zarr `ecmwf/<issue>`
+   (dims stat, day, lat, lon; chunk (1, 1, 55, 62)), then its manifest, then
+   `ecmwf/index.json`.
+4. **Keeping:** the newest 7 issues whole; older ones keep only their mean
+   (listed as `archived`) for the quantile-mapping fit.
+
+A 403 stops the run (never retried) and writes `ecmwf/refused.json`; later
+runs that UTC day ask nothing. The lease is `ingest-state/ecmwf/lease.json`.
+`MirrorLagDays{Product=ecmwf}` (today minus the newest issue held) goes out on
+every exit once an issue is held. `pnpm dev:ingest:run ecmwf` runs it in
+fixtures mode (`ecmwf_fixturehttp.py`).
+
+**The fit** (`ecmwf_qm_fit.py`, the operator, offline): empirical quantile
+mapping of the archived ensemble means against the copy's `sat` rain (else
+`prelim`) for the same 0.1° cell and day, per region and season, written to
+`ecmwf/qm.json`; the feed applies it (`backend/src/feeds/fromMirrorEcmwf.ts`)
+and labels the forecast "not yet calibrated" without it. Runbook:
+docs/deployment.md § ECMWF.
+
+**eccodes** comes as binary wheels (`eccodes` plus `eccodeslib`, which
+bundles libeccodes, libaec, OpenJPEG, libpng and eckit): cp314
+manylinux_2_28 wheels exist for x86_64 (CI) and aarch64 (the image), so
+nothing is built and no system package is needed.
 
 ## The copy
 
@@ -249,6 +460,9 @@ file changes.
 
 ```sh
 pnpm dev:ingest:run          # rnl into ingest/.mirror (gitignored); `pnpm dev:ingest:run sat` for sat
+pnpm dev:ingest:run era5l    # ERA5-Land from the fake CDS: the first run submits, the second collects
+pnpm dev:ingest:run imerg_late  # IMERG Late's last ten days from the fake Earthdata (a recent run)
+pnpm dev:ingest:run ecmwf    # the ECMWF forecast from the committed synthetic GRIB2 (a daily run)
 pnpm test:ingest             # the unittest suite
 ```
 
@@ -271,7 +485,11 @@ They cover:
 - **The manifest:** the round-trip, refusing manifests that don't follow the spec, and a hash that stays stable across NaN payloads, memory layout and byte order.
 - **The handler:** a fixtures-mode run from start to finish, a re-run that is one 304, the variants through the environment, a retry after a crash between the chunk upload and the manifest, a gap in the months that holds `finalThrough` back, a file whose days aren't its month's, and an image whose COPY line lacks a module.
 - **The finals job** (`test_chirps_final.py`): the listing parser, a new month, a rewrite with the same values (no bump), a rewrite with changed values (a bump and its `changes`), the 304, a 403 that stops with no retry, the time budget, the pacing (within and across runs, on a fake clock), a backfill of a named month, the lease (local and S3), and the metric on every exit.
+- **IMERG Late** (`test_imerg.py`): a known cell of a synthetic *global* file in IMERG's layout lands at its lat/lon (neighbours east and north, the region's four corners, nothing from outside), the whole region cell by cell, an OPeNDAP subset reading the same as the global file, a north-first (lat, lon) file still placed by coordinate, the units (mm/day read as the day's mm; mm/hr, V06's `precipitationCal`, the wrong day, 2500 mm and a login page refused), the CMR search (the newest version wins, a missing OPeNDAP link or a wrong time stops), the last 10 days newest first, held days skipped with no request, a gap (not held, `prelimThrough` still the newest day, and one older than the 10-day search blocking no later day), the time budget, keeping 30 days (manifest and chunks), the per-day version (V08 replacing V07 with and without a change of values), a 403 or 401 from either host stopping with the same-day marker, the lease (local and S3), the metric on every exit, and the token read from Secrets Manager and sent only to OPeNDAP, never on a redirect.
+- **ERA5-Land** (`test_era5land.py`): each 00 UTC step as the day before's total, m to mm, the record's first day, the four-corner remap (inland and coastal), packing noise and a real negative, the 2000 mm bound, the phase from `expver`; a known cell and day at its array index and chunk; submit on one run and collect on a later one, one submit per month however often it runs, a held month never requested again, the gap after the newest held month, state lost while queued (adopted, not resubmitted), an intent without an id, state lost after collecting, a failed request's 1/2/4/8-day backoff and the loud stop after 5, the in-flight cap and the queue it drains; a re-check with the same values (no bump), with changed values (a bump with its `changes`), one still preliminary, and one with no `expver` (asked again every 30 days, up to the 180-day cap, and no more once a read says consolidated); a 401 and a 403 that stop the run and the rest of the UTC day; `LiveCds`'s 401/403/404/5xx mapping; the lease; the metric on every exit; the key read by ARN and not at all when no CDS call is needed; and the event through `lambda_handler.py`. The CDS is `fakecds.FakeCds`; nothing touches the network or needs a key.
 - **The round trip** (`test_roundtrip.py`): Python writes the copy from the synthetic NetCDF, and Node's `backend/src/mirror/` reads it through `tests/roundtrip.ts`, bit for bit, with the same hash and manifest. It needs the pnpm install (`backend/node_modules/.bin/tsx`) and skips without it, except in CI, where `INGEST_REQUIRE_NODE=1` makes it fail.
+- **The ECMWF job** (`test_ecmwf.py`): the index filter (only the members' `tp`, sorted, the ranges being the messages), refusals (another run or step, a member twice, the wrong field), the corner mean at 0.1° on a structured field (and one wet point shared by its four cells), longitudes that wrap, de-accumulation to daily mm (round-off, a drop, over 2000 mm, a gap), the statistics, a fixtures run end to end (the array, its metadata, the manifest, the index, the request count), the time budget and the resumed run, keeping 7 and archiving the rest as their mean, a 403 that stops with no retry, writes the marker and silences the day, the lease, the metric on every exit, a partial issue never listed, the sweep, the S3 path, the handler's routing, the image's COPY lines and the committed fixture against its generator.
+- **The fit** (`test_ecmwf_qm_fit.py`, synthetic data only): a doubled forecast mapped back, identity, the rule beyond the pairs (the same vectors as the Node side's `applyQm`), seasons, and a fit from a small synthetic copy with its provenance.
 - **The reader:** a value outside 0–2000 mm fails the read and writes nothing.
 - **The fixture:** it still matches its generator.
 - **The copy's verification** (`test_verify_copy.py`): `tiffread.py` against synthetic GeoTIFFs written by the test (LZW in TIFF's early-change variant, deflate and none; one and several rows per strip; both byte orders; every pixel, no data included), with the formats it refuses. Sampling is seeded and stratified across products and years. The CHC check runs against a fake CHC serving TIFFs of a `zarrstore`-written copy: a pass at one request a second, a one-ulp mismatch failing with both values, a 404 and a 403 that stops after one request. The dynamical.org comparison runs on synthetic arrays: the units, the row flip, the mask, the tolerance and dry cells, with `main` reading the region from the copy against a fake store. The coverage check covers a gap, the first month, `finalThrough` and the lag, plus the committed fixture copy offline. Nothing touches CHC or dynamical.org.
@@ -291,6 +509,14 @@ real sizes. Regenerate them with
 `ingest/.venv/bin/python ingest/fixtures/chirps/make_chirps_fixtures.py` and
 commit the result; a test fails if they drift from the generator.
 
+`fixtures/imerg/make_imerg_fixture.py` writes IMERG Late daily files in
+GPM_3IMERGDL V07's layout for any day, from an invented field that differs
+between neighbouring cells in both directions and between days (so a
+transposed or flipped read can't pass), with a block of fill inside the
+region. Nothing is committed but the script: the tests and the fake server
+write what they need (`ingest/.venv/bin/python ingest/fixtures/imerg/make_imerg_fixture.py <dir> [YYYY-MM-DD]`
+writes one global file, ~3 MB).
+
 `fixtures/chc/chirps-v3.0.2024.02.days_p05.nc` is the reader's fixture, also invented. It covers
 2024-02-27 to 2024-02-29 (so the leap day is included) over the region plus a
 10-cell margin, in CHC's real layout from the Round 0 spike:
@@ -308,6 +534,14 @@ the result:
 ingest/.venv/bin/python ingest/fixtures/make_chc_fixture.py
 ```
 
+`fixtures/ecmwf/` holds one invented ECMWF issue, 15 step files with their
+`.index`, on ECMWF's real 0.1° global grid, 4 members each with a 2 m
+temperature field between their `tp` fields. Each field is constant (GRIB
+packs a constant in no bits, so a file is about 1.5 KB); the tests write
+their own structured fields. Regenerate with
+`ingest/.venv/bin/python ingest/fixtures/ecmwf/make_ecmwf_fixtures.py`; a
+test fails if they drift.
+
 ## The image
 
 ```sh
@@ -316,6 +550,10 @@ docker buildx build --platform linux/arm64 -f ingest/Dockerfile ingest
 
 - **Base:** AWS's Lambda Python 3.14 image, using the arm64 tag pinned by
   digest.
+- **User:** `USER 65534` (nobody), so the image never runs as root (Trivy
+  DS-0002; `test_lambda_handler.py` checks it). Lambda runs it as its own
+  unprivileged user anyway; this covers a local `docker run`. The code and
+  packages are world-readable and the job writes only to `/tmp`.
 - **Pin checks:** `pnpm check:pins` refuses a `FROM` that isn't
   `public.ecr.aws/lambda/python:<version>-arm64@sha256:…`, and a
   `pip install` without `--require-hashes`.

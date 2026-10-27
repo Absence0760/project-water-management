@@ -540,12 +540,27 @@ variable "s3_endpoint_az_count" {
 }
 
 variable "fetcher_reserved_concurrency" {
-  description = "Max concurrent fetcher Lambda executions (data feeds, feeds.tf): bounds spend and how hard the public sources are hit at once. At least 2, its SQS trigger's maximum_concurrency. Never -1: raise the account quota instead (lambda_reserved_concurrency)."
+  description = "Max concurrent fetcher Lambda executions (data feeds, feeds.tf): bounds spend. At least 2, its SQS trigger's maximum_concurrency. How hard a source is hit is set elsewhere: fetch-requests is FIFO with one message group per source host, so each host sees one fetch at a time whatever this is (issue #604). Never -1: raise the account quota instead (lambda_reserved_concurrency)."
   type        = number
   default     = 2
   validation {
     condition     = var.fetcher_reserved_concurrency >= 2
     error_message = "Must be at least 2, its SQS trigger's maximum_concurrency; -1 (unreserved) is refused too. Raise the account's Lambda concurrency quota instead (infra/README.md § Operator steps)."
+  }
+}
+
+variable "feeds_contact" {
+  description = "The contact email the data feeds' fetcher puts in its user agent (feeds.tf, backend/src/feeds/http.ts): CHC asked for one (2026-10-27, issue #604), to write to before blocking our addresses. Required, no default: the repo is public, so the address lives only in the operator's tfvars. The fetcher refuses to start without a good one (backend/src/config/production.ts)."
+  type        = string
+
+  validation {
+    condition = (
+      can(regex("^[A-Za-z0-9._%+-]{1,64}@([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$", var.feeds_contact)) &&
+      !can(regex("(?i)(@([^@]+\\.)?example\\.(com|org|net)|\\.(example|test|invalid|localhost|local))$", var.feeds_contact)) &&
+      # A template's address left unedited (the same list backend/src/config/production.ts refuses).
+      !can(regex("(?i)^(you|your|yourname|your[._-]?(e-?mail|name|address)|e-?mail|name|user|someone|somebody|changeme|change[._-]me|replace[._-]?me|todo|xxx+|foo|test)@", var.feeds_contact))
+    )
+    error_message = "feeds_contact must be an email address (name@domain.tld) someone reads: not empty, not at a reserved domain (example.com/.org/.net, .example, .test, .invalid, .localhost, .local), and not a template's (you@, your-email@, changeme@)."
   }
 }
 
@@ -639,16 +654,6 @@ variable "ingest_image_tag" {
   }
 }
 
-variable "ingest_contact" {
-  description = "Contact address the mirror ingest job puts in its User-Agent (INGEST_CONTACT), so an upstream (CHC) can reach us before banning us. Not secret, and seen by every upstream: use a role address, not a personal one. Empty sends the User-Agent without one."
-  type        = string
-  default     = ""
-  validation {
-    condition     = var.ingest_contact == "" || can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.ingest_contact))
-    error_message = "ingest_contact must be empty or an email address."
-  }
-}
-
 variable "ingest_reserved_concurrency" {
   description = "Max concurrent mirror ingest runs (ingest.tf): one per product, and never more than two requests at once against an upstream (issue #604's polite client). Counted in the account's Lambda concurrency quota (infra/README.md § Operator steps, step 3)."
   type        = number
@@ -734,7 +739,7 @@ variable "jobs_backlog_alarm_seconds" {
 # --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
 
 variable "alarm_tier" {
-  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; two fewer after the cutover (chirps_source = \"mirror\" and dws_source = \"store\" remove the fetch-requests and ingest-results queues and their DLQ alarms, feeds.tf), 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), and two more with daily_ingest_enabled (the preliminary and GEFS copies'). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
+  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; two fewer after the cutover (chirps_source = \"mirror\" and dws_source = \"store\" remove the fetch-requests and ingest-results queues and their DLQ alarms, feeds.tf), 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), two more with daily_ingest_enabled (the preliminary and GEFS copies'), one more with era5l_enabled (ERA5-Land's lag, era5land.tf) and one more with imerg_enabled (IMERG Late's lag, imerg.tf). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
   type        = string
   default     = "full"
 

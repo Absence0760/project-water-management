@@ -962,11 +962,14 @@ export interface Run extends RunMeta {
 	inputSeries?: Partial<Record<string, RunSeriesSnapshot>> | null;
 	/**
 	 * A forecast run's rain source (GET …/runs/:runId only): 'chirps_gefs'
-	 * when a CHIRPS-GEFS feed wrote every forecast day, 'other' otherwise; null
-	 * for any other run and a forecast run stored before it was recorded. The
-	 * report credits CHIRPS-GEFS only on 'chirps_gefs'.
+	 * when a CHIRPS-GEFS feed wrote every forecast day, 'ecmwf_ens' when an
+	 * ECMWF ENS feed did (issue #604 R4-E), 'other' otherwise; null for any
+	 * other run and a forecast run stored before it was recorded. The report
+	 * credits CHIRPS-GEFS or ECMWF only on its own value.
 	 */
 	forecastRainSource?: ForecastRainSource | null;
+	/** GET …/runs/:runId: any forecast day held an ECMWF ENS feed's value (backend runs/execute.ts forecastRainEcmwf), so ECMWF's credit is owed even when `forecastRainSource` is 'other'. */
+	forecastRainEcmwf?: boolean;
 	/**
 	 * Its server stamp still matches its rows (GET …/runs/:runId only;
 	 * docs/security.md § Run stamps): false for a run written past the model
@@ -2368,6 +2371,8 @@ export interface Allocation {
 	waterSource: AllocationWaterSourceKind;
 	volumeM3PerYear: number;
 	storageM3: number | null;
+	/** The registered irrigated area, ha (244); null = none stated. A take (21a) only; the model never reads it. */
+	irrigatedAreaHa: number | null;
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
@@ -2461,6 +2466,8 @@ export interface AllocationInput {
 	waterSource: AllocationWaterSourceKind;
 	volumeM3PerYear: number;
 	storageM3?: number | null;
+	/** Registered irrigated area, ha; a take (21a) only. */
+	irrigatedAreaHa?: number | null;
 	validFrom?: string | null;
 	validTo?: string | null;
 	reference?: string;
@@ -2490,6 +2497,7 @@ export interface AllocationPreviewRow {
 	maxRateM3s: number | null;
 	conditions: string[];
 	waterUse: AllocationWaterUse;
+	irrigatedAreaHa: number | null;
 	errors: string[];
 	nodeId: string | null;
 	matchedBy: 'registration' | 'property' | 'name' | 'manual' | null;

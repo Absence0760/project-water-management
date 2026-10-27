@@ -17,7 +17,8 @@ import {
 	seriesChecks
 } from './quality';
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
-import { hasRainInput, RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
+import { hasRainInput, RAIN_SOURCE_COLUMN, RAIN_SOURCE_COLUMN_GAP_LABEL, rainSourceCodes } from './rainSourcePeriods';
+import { summaryGapRain } from './gapRain';
 import { aboveRainThreshold } from './rainThreshold';
 import { chirpsFactorOn, chirpsQuantileMapper, type ChirpsCorrection, withChirpsGapMapLead, ZERO_RAIN_COLUMN } from './rain';
 import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind } from './flowGapFill';
@@ -298,7 +299,7 @@ function runNetwork(
 		...(resume ? { pinned: resume.pinned.fits, resumedFill: { kinds: resume.flowFillHistory ?? [] } } : {}),
 		...(capturing ? { captureFits: true } : {})
 	});
-	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill } = prepared;
+	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill, gapRain } = prepared;
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
 	// The days before a forecast tail (engine ≥ 1.28.0, engine-audit.md K1): the record-wide
 	// statistics (GR4J's cycled warm-up, the land-cover Q75, the Reserve's assessed months and
@@ -659,11 +660,16 @@ function runNetwork(
 	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, s.unit, s.values);
 	if (zeroRain && zeroRain.infill.days > 0) push(null, ZERO_RAIN_COLUMN.key, ZERO_RAIN_COLUMN.label, ZERO_RAIN_COLUMN.unit, zeroRain.mask);
 	// Where each day's rain came from: with rain-source periods their column, else (engine ≥ 1.27.0) the same pick as rain_final.
-	if (rainSource) push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, rainSource.column);
+	// With a gap-filling product (engine ≥ 1.101.0, settings.gapRain) 5 marks ERA5-Land's days and 6 IMERG Late's.
+	const sourceLabel = gapRain ? RAIN_SOURCE_COLUMN_GAP_LABEL : RAIN_SOURCE_COLUMN.label;
+	if (rainSource) push(null, RAIN_SOURCE_COLUMN.key, sourceLabel, RAIN_SOURCE_COLUMN.unit, rainSource.column);
 	else if (finalRain) {
-		const codes = rainSourceCodes(aligned('rain_catchment_mm'), aligned('rain_chirps_mm'), aligned('rain_forecast_mm'));
-		push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, codes);
+		const codes = rainSourceCodes(aligned('rain_catchment_mm'), aligned('rain_chirps_mm'), aligned('rain_forecast_mm'), undefined, gapRain?.code);
+		push(null, RAIN_SOURCE_COLUMN.key, sourceLabel, RAIN_SOURCE_COLUMN.unit, codes);
 	}
+	// The gap-filling products as read (engine ≥ 1.101.0), beside rain_chirps: IMERG Late is the newest version with the day.
+	if (gapRain?.rawEra5l) push(null, 'rain_era5l', 'ERA5-Land rain as read (before bias correction)', 'mm', gapRain.rawEra5l.map((v) => v ?? NaN));
+	if (gapRain?.rawImerg) push(null, 'rain_imerg_late', 'IMERG Late rain as read (newest version with the day, before bias correction)', 'mm', gapRain.rawImerg.map((v) => v ?? NaN));
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
 	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'reachLoss' | 'baseflowLoss' | 'baseflowGain'>, string, string][] = [
@@ -1221,6 +1227,10 @@ function runNetwork(
 				fits: {
 					...prepared.fits!,
 					chirpsCorrection: withChirpsGapMapLead(prepared.fits!.chirpsCorrection, series.rain_chirps_mm, warm.captureDay!),
+					// ERA5-Land's gap map likewise (engine ≥ 1.101.0): its month before the day, from its own series.
+					...(prepared.fits!.gapRain
+						? { gapRain: prepared.fits!.gapRain.map((f) => ({ key: f.key, correction: withChirpsGapMapLead(f.correction, (series as Record<string, DailySeries | undefined>)[f.key], warm.captureDay!) })) }
+						: {}),
 					// Every pairing the run used, the units' included (engine ≥ 1.91.0, §2.4i).
 					...(prepared.stations ? { stationFactors: pairingFactors(prepared.stations.context) } : {})
 				}
@@ -1273,6 +1283,8 @@ function runNetwork(
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
 			...(checked ? { plausibility: checked.checks } : {}),
 			chirpsCorrection: summaryCorrection(chirpsCorrection),
+			// The gap-filling product (engine ≥ 1.101.0): absent with CHIRPS alone, as every run before it.
+			...(gapRain ? { gapRain: summaryGapRain(gapRain.info) } : {}),
 			...(forecastRain !== undefined ? { forecastRain } : {}),
 			zeroRainInfill: zeroRain?.infill ?? null,
 			...(flowFill ? { flowGapFill: Object.values(flowFill).map((f) => f.summary) } : {}),

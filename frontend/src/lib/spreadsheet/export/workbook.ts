@@ -10,7 +10,7 @@
 // millions of cells, so the writer streams each daily sheet's rows into bytes
 // rather than holding an object or a string per cell, and ./zip.ts packs the
 // parts with the platform's real deflate.
-import { DISCLAIMER, DISCLAIMER_DRAFT_NOTE, withSite, type RunSummary } from '@water-management/engine';
+import { DISCLAIMER, DISCLAIMER_DRAFT_NOTE, withSite, type RainCredit, type RunSummary } from '@water-management/engine';
 import type { Cell } from './csv';
 import { parseCsv } from './csv';
 import { cellFormat, DATE_FORMAT, numberFormat, unitOf } from './formats';
@@ -49,6 +49,8 @@ export interface WorkbookInput {
 	nodes: DailyTable[];
 	/** The site's address, for the disclaimer's Terms URL (the worker's own origin); '' leaves the path. */
 	site?: string;
+	/** The credits the run's rain owes (engine runRainCredits, issue #604 R4-E): on the first sheet, word for word. Absent or empty: none. */
+	credits?: readonly RainCredit[];
 }
 
 type Row = Cell[];
@@ -215,14 +217,16 @@ export function inputRows(settings: Record<string, unknown> | null | undefined, 
  * report disclaimer, all five paragraphs, and its version, so a workbook
  * passed on without its report still carries it.
  */
-export function readFirstRows(site = ''): Row[] {
+export function readFirstRows(site = '', credits: readonly RainCredit[] = []): Row[] {
 	return [
 		['Read this first: these are model results. The disclaimer below applies to every sheet of this workbook.'],
 		...(DISCLAIMER.status === 'draft' ? [[DISCLAIMER_DRAFT_NOTE]] : []),
 		[],
 		...DISCLAIMER.paragraphs.map((p, i) => [`${i + 1}. ${withSite(p, site)}`]),
 		[],
-		[`Disclaimer version ${DISCLAIMER.version}.`]
+		[`Disclaimer version ${DISCLAIMER.version}.`],
+		// The rain sources whose values the sheets hold (issue #604 R4-E, docs/data-sources.md), each as it asks.
+		...(credits.length ? [[], ['Rain data credits'], ...credits.flatMap((c) => c.lines.map((l) => [`${c.name}: ${l}`]))] : [])
 	];
 }
 
@@ -255,7 +259,7 @@ export function workbookPlan(input: WorkbookInput): SheetPlan[] {
 	for (const f of fixed) name(f);
 
 	const plan: SheetPlan[] = [
-		{ name: 'Read this first', rows: readFirstRows(input.site), widths: [120] },
+		{ name: 'Read this first', rows: readFirstRows(input.site, input.credits), widths: [120] },
 		{ name: 'Summary', rows: byName.get('Summary') ?? [], widths: [44] }
 	];
 	if (input.catchment) plan.push({ name: 'Catchment', daily: input.catchment });

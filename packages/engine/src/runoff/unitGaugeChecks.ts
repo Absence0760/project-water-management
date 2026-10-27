@@ -46,7 +46,8 @@ function unitCheckSettings(settings: ProjectSettings): ProjectSettings {
 		...settings,
 		zeroRainRuns: { ...settings.zeroRainRuns, keepDry: [], missing: [], keepReadings: [], addAccumulations: [] },
 		rainSource: [],
-		chirpsQuantileMap: null
+		chirpsQuantileMap: null,
+		gapRain: null
 	};
 }
 

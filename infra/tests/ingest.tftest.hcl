@@ -668,6 +668,8 @@ variables {
   # which the variable refuses: the site's own domain, and a plan-only test
   # never subscribes it.
   budget_alert_email = "ops@icwbt.jaredhoward.com"
+  # The fetcher's user-agent contact (feeds.tf); required, no default.
+  feeds_contact = "ops@icwbt.jaredhoward.com"
 }
 
 
@@ -849,7 +851,6 @@ run "ingest_on_with_a_tag" {
 
   variables {
     ingest_image_tag = "0.7.0-0123456789ab"
-    ingest_contact   = "data@icwbt.jaredhoward.com"
   }
 
   assert {
@@ -873,9 +874,9 @@ run "ingest_on_with_a_tag" {
     condition = (
       aws_lambda_function.ingest[0].environment[0].variables["MIRROR_URL"] == "s3://water-management-mirror-000000000000" &&
       aws_lambda_function.ingest[0].environment[0].variables["FEED_SOURCE"] == "live" &&
-      aws_lambda_function.ingest[0].environment[0].variables["INGEST_CONTACT"] == "data@icwbt.jaredhoward.com"
+      aws_lambda_function.ingest[0].environment[0].variables["INGEST_CONTACT"] == var.feeds_contact
     )
-    error_message = "The job writes s3://<mirror bucket>, live, with the contact address in its User-Agent."
+    error_message = "The job writes s3://<mirror bucket>, live, with the operator's one contact (feeds_contact) in its User-Agent."
   }
   assert {
     condition = (
@@ -1059,16 +1060,6 @@ run "rejects_an_ingest_tag_without_its_commit" {
   }
 
   expect_failures = [var.ingest_image_tag]
-}
-
-run "rejects_an_ingest_contact_that_is_not_an_email" {
-  command = plan
-
-  variables {
-    ingest_contact = "not an address"
-  }
-
-  expect_failures = [var.ingest_contact]
 }
 
 run "rejects_a_lag_alarm_that_fires_on_a_healthy_copy" {

@@ -123,6 +123,22 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		]);
 	});
 
+	it('answers a CHIRPS window too long for its time with the days it finished, not a failure (issue #604: about a request a second)', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		const start = new Date(Date.now() - 100 * 86_400_000).toISOString().slice(0, 10);
+		const end = new Date(Date.now() - 61 * 86_400_000).toISOString().slice(0, 10);
+		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] }, start, end, today, cells: { cells: [[1602, 4103]], plan: '0'.repeat(40) } } };
+		// 20 s left past the send margin: inside CUT_RESERVE_MIN_MS, so it stops after its first day.
+		expect(await handler({ Records: [record('m1', req)] } as never, { getRemainingTimeInMillis: () => FETCH_SEND_MARGIN_MS + 10_000 })).toEqual({ batchItemFailures: [] });
+		const result = (sent[0]!.message as { result: { ok: boolean; cells: { read: string; startDate: string } } }).result;
+		expect(result).toMatchObject({ ok: true, cells: { startDate: start, read: 'f' } });
+		// Positive control: with the time for it, the whole window.
+		sent.length = 0;
+		await handler({ Records: [record('m2', req)] } as never, { getRemainingTimeInMillis: () => 300_000 });
+		expect((sent[0]!.message as { result: { cells: { read: string } } }).result.cells.read).toHaveLength(40);
+	});
+
 	it('refuses further requests once the deadline has passed (the abandoned fetch stops)', async () => {
 		const inner: FeedHttp = { range: async () => new Uint8Array(1), text: async () => 'page' };
 		const d = withDeadline(inner, Date.now() - 1);

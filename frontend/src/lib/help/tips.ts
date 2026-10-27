@@ -374,6 +374,13 @@ export const TIPS: HelpTipText[] = [
 		category: 'licensing'
 	},
 	{
+		id: 'registered-irrigated-area',
+		term: 'Registered irrigated area',
+		short: 'The area a take is registered or licensed to irrigate, from WARMS or typed in. Kept beside the volume; the model never reads it.',
+		units: 'ha',
+		category: 'licensing'
+	},
+	{
 		id: 'authorisation-type',
 		term: 'Authorisation',
 		short: 'How a volume is held: a WARMS registration, a licence, a general authorisation, Schedule 1, or existing lawful use, claimed or verified.',
@@ -948,6 +955,12 @@ export const TIPS: HelpTipText[] = [
 		units: 'dimensionless',
 		category: 'crops',
 		fields: ['crop.cropFactor', 'crop.name']
+	},
+	{
+		id: 'load-crop-factors',
+		term: 'Load crop factors',
+		short: 'Overwrites the project’s crop factors from the reference library or a workbook. Nothing changes until you apply and save the model.',
+		category: 'crops'
 	},
 	{
 		id: 'crop-area',
@@ -1603,6 +1616,13 @@ export const TIPS: HelpTipText[] = [
 		short: 'Opt-in: gives the CHIRPS that fills gaps the catchment rain’s wet-day frequency and intensity, keeping each month’s total.',
 		category: 'data',
 		fields: ['settings.chirpsQuantileMap', 'run.rain_chirps_mapped']
+	},
+	{
+		id: 'gap-rain',
+		term: 'Gap-filling product',
+		short: 'Which product fills blank catchment-rain days (CHIRPS, ERA5-Land, or both), and IMERG Late for the last few days, each on its own fit.',
+		category: 'data',
+		fields: ['settings.gapRain', 'run.rain_era5l', 'run.rain_imerg_late']
 	},
 	{
 		id: 'double-mass',

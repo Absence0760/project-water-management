@@ -126,10 +126,11 @@ export const runRoutes = new Hono<AuthEnv>()
 			// series' dates, hashes and product/version (inputSeries; the values
 			// are in series_blob): the fit record compares the CHIRPS version.
 			// forecastRainSource: a forecast run's rain source ('chirps_gefs' |
-			// 'other', runs/execute.ts forecastRainSource), null otherwise.
+			// 'ecmwf_ens' | 'other', runs/execute.ts forecastRainSource), null otherwise;
+			// forecastRainEcmwf: any of its forecast days was an ECMWF feed's (ECMWF's credit, execute.ts forecastRainEcmwf).
 			const { rows } = await db.query(
 				`SELECT ${RUN_META}, r.summary, r.inputs->'settings' AS settings, r.inputs->'model' AS model, r.inputs->'series' AS "inputSeries",
-					r.inputs->>'forecastRainSource' AS "forecastRainSource" ${FROM_RUN}
+					r.inputs->>'forecastRainSource' AS "forecastRainSource", r.inputs->'forecastRainEcmwf' = 'true'::jsonb IS TRUE AS "forecastRainEcmwf" ${FROM_RUN}
 				 WHERE r.project_id = $1 AND r.id = $2`,
 				[
 					id,

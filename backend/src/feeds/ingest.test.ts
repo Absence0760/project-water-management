@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedSource } from './config.js';
-import { finalThroughAfter, latestDay } from './ingest.js';
+import { cutWindow, finalThroughAfter, latestDay } from './ingest.js';
 import type { FeedRow } from './store.js';
 
 describe('latestDay (the newest day an answer may hold; feeds.db.test.ts covers the refusal)', () => {
@@ -10,6 +10,9 @@ describe('latestDay (the newest day an answer may hold; feeds.db.test.ts covers 
 		expect(latestDay('chirps_gefs', '2026-09-25')).toBe('2026-10-10');
 		expect(latestDay('chirps_gefs', '2026-12-20')).toBe('2027-01-04');
 		expect(latestDay('chirps_gefs', '2028-02-20')).toBe('2028-03-06');
+		// The ECMWF ENS mean: its 15th day (issue #604 R4-C).
+		expect(latestDay('ecmwf_ens', '2026-09-25')).toBe('2026-10-09');
+		expect(latestDay('ecmwf_ens', '2026-12-20')).toBe('2027-01-03');
 	});
 });
 
@@ -64,5 +67,30 @@ describe('finalThroughAfter (the CHIRPS final marker the ingest keeps)', () => {
 	it('is CHIRPS only', () => {
 		expect(finalThroughAfter(feed(null, 'dws'), answer('2026-01-12'), window)).toBeNull();
 		expect(finalThroughAfter(feed('2026-01-09', 'chirps_gefs'), answer('2026-01-12'), window)).toBeNull();
+	});
+});
+
+// Issue #604: at about a request a second the fetcher answers a long window
+// with the days it finished; cellCache.db.test.ts covers it end to end.
+describe('cutWindow (a cell-cache answer the fetcher’s time budget cut short)', () => {
+	const window = { start: '2026-01-01', end: '2026-01-10' };
+	const answer = (read: string, startDate = window.start) => ({
+		ok: true,
+		cells: { product: 'sat', startDate, read, cells: [[100, 200]], values: [[...read].map((d) => (d === '-' ? null : 0))] },
+		meta: {}
+	});
+
+	it('is the days from the window’s start through the last one answered', () => {
+		expect(cutWindow(answer('ff-p'), window)).toEqual({ start: '2026-01-01', end: '2026-01-04' });
+		expect(cutWindow(answer('f'), window)).toEqual({ start: '2026-01-01', end: '2026-01-01' });
+	});
+
+	it('leaves a whole answer’s window as it is (positive control), and anything else for fromCells to refuse', () => {
+		expect(cutWindow(answer('ffffffffff'), window)).toEqual(window);
+		expect(cutWindow(answer('ffffffffff--'), window)).toEqual(window);
+		expect(cutWindow(answer(''), window)).toEqual(window);
+		expect(cutWindow(answer('ff', '2026-01-02'), window)).toEqual(window);
+		expect(cutWindow({ ok: true, values: [1] }, window)).toEqual(window);
+		expect(cutWindow(null, window)).toEqual(window);
 	});
 });

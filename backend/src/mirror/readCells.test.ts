@@ -1,17 +1,18 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { MIRROR_FIXTURE, MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
-import { cellCentre, encodeCellValue, type GridCell } from '../feeds/cellCache.js';
+import { toEpochDay } from '@water-management/engine/calendar';
+import { inventedRain, MIRROR_FIXTURE, MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
+import { cellCentre, encodeCellValue, type GridCell, productCell } from '../feeds/cellCache.js';
 import { FeedFormatError } from '../feeds/errors.js';
 import { CellsResult } from '../feeds/fetch.js';
 import { fixtureHttp } from '../feeds/fixtures.js';
 import { fetchChirpsCells } from '../feeds/sources/chirps.js';
 import { ensureFinals, openFinals, readFinalsBlock, writeFinalsYear } from './arrays.js';
-import { chcCellOf, MirrorOutsideRegionError } from './grid.js';
-import { type Manifest, MirrorManifestError, readManifest, writeManifest } from './manifest.js';
+import { chcCellOf, MIRROR_REGION, mirrorCell, MirrorOutsideRegionError } from './grid.js';
+import { imergFileDay, type Manifest, MirrorManifestError, readManifest, writeManifest } from './manifest.js';
 import { MirrorNotReadyError, readCells } from './readCells.js';
 import { openStore } from './store.js';
 
@@ -149,5 +150,80 @@ describe('readCells from other copies', () => {
 			expect(got.cells.read).toBe('-f');
 			expect(got.cells.values).toEqual([[null, encodeCellValue(4.5)]]);
 		});
+	});
+});
+
+describe('readCells of the 0.1° products (issue #604 R4-B)', () => {
+	// Two 0.1° cells of the fixture's written block (the fixture grid's north-west 0.05° cell's, and the one south-east
+	// of it), and one in an unwritten chunk.
+	const NW = productCell('era5l', -20.025, 25.025);
+	const SE = { row: NW.row + 1, col: NW.col + 1 };
+	const FAR = chcCellOf({ y: 5, x: 5 }, MIRROR_REGION, 0.1);
+	const at = (c: GridCell) => mirrorCell(c, MIRROR_REGION, 0.1);
+	const expected = (c: GridCell, day: string, salt: number) => encodeCellValue(inventedRain(at(c).y, at(c).x, toEpochDay(day), salt));
+
+	it('reads era5l finals across a leap year’s end on the 0.1° grid, nothing past finalThrough', async () => {
+		const got = await readCells(fixture, 'era5l', [NW, SE, FAR], { start: '2024-12-30', end: '2026-01-01' }, {});
+		expect(got.cells.product).toBe('era5l');
+		// finalThrough is 2025-12-30, the last day month 2025-12's request holds (2025-12-31 comes with 2026-01's).
+		expect(got.cells.read).toBe(`${'f'.repeat(366)}--`);
+		for (const [i, day] of ['2024-12-30', '2024-12-31', '2025-01-01'].entries()) {
+			expect(got.cells.values[0]![i]).toBe(expected(NW, day, 1));
+			expect(got.cells.values[1]![i]).toBe(expected(SE, day, 1));
+		}
+		// An unwritten chunk is no data; past finalThrough nothing is read.
+		expect(got.cells.values[2]![0]).toBe(-1);
+		expect(got.cells.values[0]!.at(-1)).toBeNull();
+		expect(got.versions).toBeUndefined();
+		expect(got.revision).toEqual({ final: 1, prelim: null });
+		// 29 February 2024 is a day; the year axis starts in 1950, so 1950 reads (unwritten: no data).
+		expect((await readCells(fixture, 'era5l', [NW], { start: '2024-02-29', end: '2024-02-29' })).cells.values[0]).toEqual([expected(NW, '2024-02-29', 1)]);
+	});
+
+	it('reads no era5l day before the first month request the manifest holds, though its year is within years', async () => {
+		// The copy without its first two months: it holds from 2024-02-29 (month 2024-03's first day).
+		const m = (await readManifest(fixture, 'era5l'))!;
+		const later = { ...m, files: m.files.filter((f) => !/\/2024-0[12]$/.test(f.url)) };
+		const bytes = new TextEncoder().encode(JSON.stringify(later));
+		const store = { get: (k: string) => (k === '/era5l/manifest.json' ? Promise.resolve(bytes) : fixture.get(k as never)), set: fixture.set.bind(fixture) } as typeof fixture;
+		const got = await readCells(store, 'era5l', [NW], { start: '2024-02-27', end: '2024-03-01' });
+		expect(got.cells.read).toBe('--ff');
+		expect(got.cells.values[0]).toEqual([null, null, expected(NW, '2024-02-29', 1), expected(NW, '2024-03-01', 1)]);
+	});
+
+	it('reads imerg_late’s daily days with their versions, nothing before its first day or past finalThrough', async () => {
+		const got = await readCells(fixture, 'imerg_late', [NW, SE], { start: '2026-01-24', end: '2026-02-09' });
+		expect(got.cells.read).toBe(`-${'f'.repeat(15)}-`);
+		expect(got.cells.values[0]![1]).toBe(expected(NW, '2026-01-25', 2));
+		expect(got.cells.values[1]![15]).toBe(expected(SE, '2026-02-08', 2));
+		expect(got.versions).toEqual([null, ...Array<string>(13).fill('V07'), 'V08', 'V08', null]);
+		// A skipped day is unread, as for CHIRPS.
+		expect((await readCells(fixture, 'imerg_late', [NW], { start: '2026-02-07', end: '2026-02-08' }, { plan: '10' })).cells.read).toBe('-f');
+	});
+
+	it('reads an imerg_late day with no file as not held, and the days after it as usual (each day stands on its own)', async () => {
+		// The fixture copy, with one day more than 10 days before prelimThrough (out of the search's look-back) gone from
+		// the manifest: CMR never listed it, so no later run fills it.
+		const dir = mkdtempSync(join(tmpdir(), 'mirror-read-'));
+		tmp.push(dir);
+		cpSync(MIRROR_FIXTURE_DIR, dir, { recursive: true });
+		const store = openStore(pathToFileURL(dir).href);
+		const m = (await readManifest(store, 'imerg_late'))!;
+		const gap = '2026-01-26';
+		expect(toEpochDay(m.prelimThrough!) - toEpochDay(gap)).toBeGreaterThan(10);
+		await writeManifest(store, { ...m, files: m.files.filter((f) => imergFileDay(f.url) !== gap) });
+		const got = await readCells(store, 'imerg_late', [NW], { start: '2026-01-25', end: '2026-02-08' });
+		expect(got.cells.read).toBe(`f-${'f'.repeat(13)}`);
+		expect(got.cells.values[0]![1]).toBeNull();
+		expect(got.cells.values[0]![2]).toBe(expected(NW, '2026-01-27', 2));
+		expect(got.cells.values[0]![14]).toBe(expected(NW, '2026-02-08', 2));
+		expect(got.versions![1]).toBeNull();
+	});
+
+	it('refuses a 0.1° cell outside the region, and is not ready while the copy has no such product', async () => {
+		await expect(readCells(fixture, 'era5l', [{ row: 600, col: 1800 }], { start: '2025-01-01', end: '2025-01-01' })).rejects.toThrow(MirrorOutsideRegionError);
+		const dir = mkdtempSync(join(tmpdir(), 'mirror-read-'));
+		tmp.push(dir);
+		await expect(readCells(openStore(pathToFileURL(dir).href), 'imerg_late', [NW], { start: '2025-01-01', end: '2025-01-01' })).rejects.toThrow(MirrorNotReadyError);
 	});
 });

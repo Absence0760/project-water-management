@@ -27,6 +27,8 @@ import {
 	type HealthReason,
 	healthMessage,
 	keptNote,
+	calibrationNote,
+	gapFillNote,
 	needsAttention,
 	nextTryNote,
 	parseBbox,
@@ -356,6 +358,15 @@ describe('descriptions', () => {
 		expect(keptNote({ kept: 'x' })).toBeNull();
 		expect(keptNote(null)).toBeNull();
 	});
+	it('credit an ECMWF forecast and say whether it is calibrated yet (last_meta.calibration, issue #604 R4-C)', () => {
+		expect(calibrationNote({ source: 'ecmwf_ens', lastMeta: { days: 15, calibration: 'not yet calibrated' } })).toBe('ECMWF open data, CC BY 4.0 · not yet calibrated');
+		expect(calibrationNote({ source: 'ecmwf_ens', lastMeta: { calibration: 'quantile-mapped 2027-03-01T10:00:00Z' } })).toBe(
+			'ECMWF open data, CC BY 4.0 · quantile-mapped to our rain (fit of 2027-03-01)'
+		);
+		// Before its first fetch: the credit alone.
+		expect(calibrationNote({ source: 'ecmwf_ens', lastMeta: null })).toBe('ECMWF open data, CC BY 4.0');
+		expect(calibrationNote({ source: 'chirps_gefs', lastMeta: { calibration: 'not yet calibrated' } })).toBeNull();
+	});
 });
 
 describe('taking over an existing series (issue #30)', () => {
@@ -382,6 +393,7 @@ describe('taking over an existing series (issue #30)', () => {
 		expect(separateName(chirps, [s('rain_chirps_mm', 'CHIRPS')], [])).toBe('CHIRPS');
 		expect(separateName(chirps, [s('rain_catchment_mm', 'CHIRPS')], [{ targetKind: 'rain_catchment_mm', targetName: 'CHIRPS 2' }])).toBe('CHIRPS 3');
 		expect(separateName({ ...chirps, source: 'chirps_gefs' }, [], [])).toBe('CHIRPS-GEFS');
+		expect(separateName({ ...chirps, source: 'ecmwf_ens', targetKind: 'rain_forecast_mm' }, [s('rain_forecast_mm', 'CHIRPS-GEFS')], [])).toBe('ECMWF ENS');
 		expect(separateName({ source: 'dws', config: { station: 'A2H012' }, targetKind: 'flow_observed_m3s' }, [], [])).toBe('DWS A2H012');
 	});
 
@@ -541,5 +553,14 @@ describe('nextTryNote: when a failing feed tries again (issue #586 Round 4)', ()
 		expect(nextTryNote({ ...failing, consecutiveFailures: 0, nextAttemptAt: at }, now)).toBeNull();
 		expect(nextTryNote({ ...failing, enabled: false, nextAttemptAt: null }, now)).toBeNull();
 		expect(nextTryNote({ ...failing, actingUser: null, nextAttemptAt: null }, now)).toBeNull();
+	});
+});
+
+describe('gapFillNote', () => {
+	it('names the gap-filling products the last fetch couldn’t fill (last_meta, 254), and nothing when they went through', () => {
+		expect(gapFillNote({ gapEra5l: 'failed:format', gapImergLate: 'ok' })).toBe('couldn’t fill ERA5-Land');
+		expect(gapFillNote({ gapEra5l: 'failed:refused', gapImergLate: 'failed:unavailable' })).toBe('couldn’t fill ERA5-Land or IMERG Late');
+		expect(gapFillNote({ gapEra5l: 'ok', gapImergLate: 'not_ready' })).toBeNull();
+		expect(gapFillNote(null)).toBeNull();
 	});
 });

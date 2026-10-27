@@ -3,16 +3,20 @@
 // calls it once per tick, with no user, before it queues the due feeds.
 //
 // Only with CHIRPS_SOURCE=mirror (mirror/source.ts). For each product (rnl,
-// sat, prelim) it reads the manifest from the copy (mirrorStore) and, when it
-// changed, records how far the product runs in mirror_copy (246,
-// app_mirror_record_copy): the API's data feeds panel reads that, since only
-// the worker reaches the copy. For the finals products (rnl, sat), when its
+// sat, prelim, and since 252 era5l and imerg_late) it reads the manifest from
+// the copy (mirrorStore) and, when it changed, records how far the product
+// runs in mirror_copy (246, app_mirror_record_copy): the API's data feeds
+// panel reads that, since only the worker reaches the copy. For the products
+// the cell cache keeps (rnl, sat, era5l, imerg_late: an IMERG reprocessing to
+// a new version is a revision too), when its
 // revision is newer than the one the cache was brought up to
 // (app_mirror_revision) it applies it (app_mirror_apply_revision, 245/246):
 // every cached final of the changed days is marked stale, and each CHIRPS
 // feed over those cells reads them again on its next fetch, and refreshes its
 // series from what changed (210's re-check, feeds/ingest.ts
-// refreshRevisedDays), with a History event.
+// refreshRevisedDays), with a History event. For era5l and imerg_late the
+// next fill of those cells reads them again (feeds/fromMirror.ts
+// fillProductCache), the same parts and baseline.
 //
 // What it passes the apply (nextBatch): with no revision stored yet (the first
 // manifest this cache sees, at the cutover) no entries at all, as the
@@ -48,8 +52,8 @@ import { parseManifest } from '../../mirror/manifest.js';
 import { chirpsSource, mirrorStore, mirrorUrl } from '../../mirror/source.js';
 import { type S3Sender, S3Store } from '../../mirror/store.js';
 
-/** The finals products whose revisions reach the cache (the preliminary values replace themselves). */
-export const MIRROR_FINALS = ['rnl', 'sat'] as const;
+/** The products whose revisions reach the cache (the preliminary values replace themselves). */
+export const MIRROR_FINALS = ['rnl', 'sat', 'era5l', 'imerg_late'] as const;
 export type MirrorFinalsProduct = (typeof MIRROR_FINALS)[number];
 /** Every product whose manifest is recorded in mirror_copy. */
 export const MIRROR_PRODUCTS = [...MIRROR_FINALS, 'prelim'] as const;

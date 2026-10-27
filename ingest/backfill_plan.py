@@ -96,7 +96,11 @@ def main(argv: list[str] | None = None, stdin=sys.stdin, stdout=sys.stdout) -> i
     a = p.parse_args(argv)
     manifest = None
     if a.manifest:
-        text = stdin.read() if a.manifest == "-" else open(a.manifest, encoding="utf-8").read()
+        if a.manifest == "-":
+            text = stdin.read()
+        else:
+            with open(a.manifest, encoding="utf-8") as f:
+                text = f.read()
         manifest = json.loads(text)
     try:
         items = plan(a.product, a.to, a.first, manifest)
