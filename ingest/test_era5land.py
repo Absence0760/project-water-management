@@ -224,7 +224,10 @@ class SubmitThenCollect(Base):
         m["files"] = [{"url": e5.file_url((2023, 12)), "etag": None, "lastModified": None, "size": 1, "valuesSha256": "0" * 64, "revision": 1, "fetchedAt": "2024-03-20T00:00:00Z"}]
         manifest.write(self.mirror, m)
         self.call(cds)
-        self.assertEqual(cds.submits, ["2024-01", "2024-02", "2024-03"])
+        # The gap first; then 2023-12 itself, held with no state entry and so of unknown phase,
+        # is rechecked (its recheck fell due on 19 April, inside RECHECK_UNKNOWN_CAP_DAYS).
+        self.assertEqual(cds.submits, ["2024-01", "2024-02", "2024-03", "2023-12"])
+        self.assertEqual(self.state()["2023-12"]["purpose"], "recheck")
 
     def test_state_lost_while_a_request_is_queued_adopts_it(self):
         cds = fakecds.FakeCds(today=TODAY, ready_after=0)
@@ -369,6 +372,44 @@ class Revisions(Base):
         self.today = dt.date(2024, 6, 14)
         self.collect_march(fakecds.FakeCds(today=self.today, preliminary=lambda y, m: True))
         self.assertEqual(self.state()["2024-03"]["recheckAt"], (self.today + dt.timedelta(days=e5.RECHECK_EVERY_DAYS)).isoformat())
+
+    def test_a_month_without_expver_is_checked_again_until_the_cap(self):
+        no_expver = lambda y, m: None  # noqa: E731
+        end = dt.date(2024, 3, 31)
+        cap = end + dt.timedelta(days=e5.RECHECK_UNKNOWN_CAP_DAYS)
+        self.today = TODAY
+        self.collect_march(fakecds.FakeCds(today=self.today, preliminary=no_expver))
+        e = self.state()["2024-03"]
+        self.assertIsNone(e["preliminary"])
+        self.assertEqual(e["recheckAt"], (end + dt.timedelta(days=e5.RECHECK_AFTER_DAYS)).isoformat())
+
+        # The first recheck (day 75) still reads no expver: asked again in RECHECK_EVERY_DAYS, not final.
+        self.today = dt.date.fromisoformat(e["recheckAt"])
+        cds = fakecds.FakeCds(today=self.today, preliminary=no_expver)
+        self.collect_march(cds)
+        self.assertEqual(cds.submits, ["2024-03"])
+        e = self.state()["2024-03"]
+        self.assertIsNone(e["preliminary"])
+        self.assertEqual(e["recheckAt"], (self.today + dt.timedelta(days=e5.RECHECK_EVERY_DAYS)).isoformat())
+
+        # The second recheck still unknown: again.
+        self.today = dt.date.fromisoformat(e["recheckAt"])
+        self.collect_march(fakecds.FakeCds(today=self.today, preliminary=no_expver))
+        self.assertEqual(self.state()["2024-03"]["recheckAt"], (self.today + dt.timedelta(days=e5.RECHECK_EVERY_DAYS)).isoformat())
+
+        # Near the cap, the next recheck lands on the cap, not past it; a read on the cap is the last.
+        self.assertEqual(e5.recheck_at(MARCH, None, cap - dt.timedelta(days=5)), cap.isoformat())
+        self.assertIsNone(e5.recheck_at(MARCH, None, cap))
+        self.today = cap
+        self.collect_march(fakecds.FakeCds(today=self.today, preliminary=no_expver))
+        self.assertIsNone(self.state()["2024-03"]["recheckAt"], "past the cap a month of unknown phase counts as final")
+
+    def test_a_consolidated_read_ends_the_rechecks_of_an_unknown_month(self):
+        self.today = TODAY
+        self.collect_march(fakecds.FakeCds(today=self.today, preliminary=lambda y, m: None))
+        self.today = dt.date(2024, 6, 14)
+        self.collect_march(fakecds.FakeCds(today=self.today, preliminary=lambda y, m: False))
+        self.assertIsNone(self.state()["2024-03"]["recheckAt"])
 
 
 # --- refusals, the lease, the metric ----------------------------------------------------------

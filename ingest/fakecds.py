@@ -35,7 +35,7 @@ class FakeCds:
         self.ready_after = ready_after
         self.fail = set(fail)  # months ("YYYY-MM") whose jobs end failed
         self.refuse = refuse
-        self.preliminary = preliminary  # a callable (y, m) -> bool; default: months ending under 75 days ago
+        self.preliminary = preliminary  # a callable (y, m) -> bool, or None for a file without expver; default: months ending under 75 days ago
         self.values = values  # make_era5land_fixture.write_month's values hook
         self.jobs: dict[str, dict] = {}
         self.calls: list[tuple] = []
@@ -81,9 +81,10 @@ class FakeCds:
                 return rid
         return None
 
-    def _preliminary(self, ym) -> bool:
+    def _preliminary(self, ym) -> bool | None:
         if self.preliminary is not None:
-            return bool(self.preliminary(*ym))
+            p = self.preliminary(*ym)
+            return None if p is None else bool(p)
         return (self.today - era5land.month_end(ym)).days < era5land.RECHECK_AFTER_DAYS
 
     def download(self, rid, dest) -> int:

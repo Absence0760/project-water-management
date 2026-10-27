@@ -66,7 +66,13 @@ consolidated ERA5-Land replaces them about two months later; ECMWF says the
 values can differ. The CDS gives no ETag, so a month whose file carried
 preliminary data (`expver` other than 0001), or whose phase is unknown, is
 requested once more `RECHECK_AFTER_DAYS` after its end, and again every
-`RECHECK_EVERY_DAYS` while it stays preliminary. The revision rule is
+`RECHECK_EVERY_DAYS` while it stays preliminary. A month whose phase stays
+unknown (a file without `expver`) is asked for every `RECHECK_EVERY_DAYS`
+too, until a read says it is consolidated or `RECHECK_UNKNOWN_CAP_DAYS`
+after its end: without `expver` the copy cannot tell ERA5-Land-T from
+ERA5-Land, so it keeps asking through the window in which ECMWF replaces
+ERA5-Land-T (about two months, so 180 days leaves room for a late
+consolidation) and then treats the month as final. The revision rule is
 CHIRPS's (chirps_final.ingest_file): a new revision, with a `changes` entry,
 only when the values' hash changed; the same values only move `fetchedAt`.
 
@@ -134,8 +140,11 @@ FIRST_DAY = manifest.ERA5L_FIRST_DAY
 AVAILABLE_AFTER_DAYS = 6
 #: Re-request a preliminary (or unknown) month this long after its end (the consolidated data are ~2 months behind)...
 RECHECK_AFTER_DAYS = 75
-#: ...and again this often while it stays preliminary.
+#: ...and again this often while it stays preliminary (or unknown).
 RECHECK_EVERY_DAYS = 30
+#: A month whose files never say their phase (no `expver`) stops being rechecked this long after its end:
+#: ERA5-Land replaces ERA5-Land-T about two months on, so 180 days covers a late consolidation with room to spare.
+RECHECK_UNKNOWN_CAP_DAYS = 180
 #: The monthly run fills a gap after the newest held month back this far at most; older gaps are the backfill's.
 CATCH_UP_MONTHS = 12
 #: The most requests queued at the CDS at once, across months.
@@ -473,13 +482,20 @@ def backoff_seconds(attempts: int) -> float:
 
 
 def recheck_at(ym, preliminary: bool | None, today: dt.date) -> str | None:
-    """When to ask for a held month again: never once it is consolidated."""
+    """When to ask for a held month again: never once it is consolidated.
+    A preliminary month: from RECHECK_AFTER_DAYS after its end, then every
+    RECHECK_EVERY_DAYS. A month of unknown phase (no `expver`): the same, but
+    not past RECHECK_UNKNOWN_CAP_DAYS after its end, when it counts as final."""
     due = month_end(ym) + dt.timedelta(days=RECHECK_AFTER_DAYS)
     if preliminary is False:
         return None
+    nxt = max(due, today + dt.timedelta(days=RECHECK_EVERY_DAYS))
     if preliminary is True:
-        return max(due, today + dt.timedelta(days=RECHECK_EVERY_DAYS)).isoformat()
-    return due.isoformat() if today < due else None
+        return nxt.isoformat()
+    cap = month_end(ym) + dt.timedelta(days=RECHECK_UNKNOWN_CAP_DAYS)
+    if today >= cap:
+        return None
+    return min(nxt, cap).isoformat()
 
 
 # --- the CDS clients ------------------------------------------------------------------

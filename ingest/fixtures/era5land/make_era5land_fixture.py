@@ -68,8 +68,9 @@ def month_steps(year: int, month: int) -> list[dt.date]:
     return [dt.date(year, month, 1) + dt.timedelta(days=d) for d in range((nxt - dt.date(year, month, 1)).days)]
 
 
-def write_month(path, year: int, month: int, *, revised: bool = False, preliminary: bool = False, values=None) -> Path:
-    """Write the month's 00 UTC steps to `path`. `values(step, i, j)` (m) replaces value_m for a test."""
+def write_month(path, year: int, month: int, *, revised: bool = False, preliminary: bool | None = False, values=None) -> Path:
+    """Write the month's 00 UTC steps to `path`. `values(step, i, j)` (m) replaces value_m for a test;
+    `preliminary=None` writes no `expver` (a file that does not say its phase)."""
     import xarray as xr
 
     steps = month_steps(year, month)
@@ -84,7 +85,6 @@ def write_month(path, year: int, month: int, *, revised: bool = False, prelimina
     ds = xr.Dataset(
         {
             "tp": (("valid_time", "latitude", "longitude"), data, {"units": "m", "long_name": "Total precipitation", "GRIB_paramId": 228}),
-            "expver": (("valid_time",), np.array(["0005" if preliminary else "0001"] * len(steps), dtype="<U4")),
         },
         coords={
             "valid_time": ("valid_time", secs, {"units": "seconds since 1970-01-01", "calendar": "proleptic_gregorian"}),
@@ -94,6 +94,8 @@ def write_month(path, year: int, month: int, *, revised: bool = False, prelimina
         },
         attrs={"Conventions": "CF-1.7", "institution": "synthetic fixture (ingest/fixtures/era5land), not ECMWF data"},
     )
+    if preliminary is not None:
+        ds["expver"] = (("valid_time",), np.array(["0005" if preliminary else "0001"] * len(steps), dtype="<U4"))
     path = Path(path)
     ds.to_netcdf(path, engine="h5netcdf", encoding={"tp": {"zlib": True, "complevel": 4, "_FillValue": np.float32(np.nan)}})
     return path
