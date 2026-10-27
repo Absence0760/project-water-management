@@ -1052,6 +1052,7 @@ row names a source, where to read it and the series it merges into:
 | --- | --- | --- | --- |
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Data → Data feeds → Attach a feed → Area: the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default for a catchment feed, from 1998) or `rnl` (from 1981; the feeds a project sets up for its hydrological units read `rnl`, so each unit's record covers the whole 1991–2020 MAP period its rain level is computed over, issue #500 item 3, [maps.md § Rain for each unit](./maps.md#rain-for-each-unit), [model.md §2.4h](./model.md#24h-runoff-from-each-units-own-rain-engine--1780-issue-482)) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, no preliminary product, published a month at a time with the `sat` finals (11–26 days after the month ends in 2026), so its newest day is 2–8 weeks old (on 2026-10-09 `daily/final/rnl/` ended at 2026-08-31 and `daily/prelim/sat/` at 2026-10-05). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
+| `ecmwf_ens` | The ECMWF ENS ensemble mean, 15 days from each 00 UTC run, from **our copy only** (`ecmwf/<issue>`, 0.1°): each feed cell's centre falls in a 0.1° cell, weighted as listed (same cells or box as CHIRPS) | `rain_forecast_mm`, mm, quantile-mapped to our rain once the operator's fit is in the copy, else labelled not yet calibrated | Zarr written by the Python ingest job from ECMWF's open data GRIB2 (`ingest/ecmwf.py`, below); no feed ever asks ECMWF |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); the site allows 20 years per request, the feed asks for two (`DWS_WINDOW_DAYS`, the window below). Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
 - **Rain for each unit** (issue #482, `feeds/fromUnits.ts`,
@@ -1719,6 +1720,28 @@ EventBridge, daily
   nothing and records only that it looked, and the forecast series keeps
   the issue it has. Locally the committed copy holds two synthetic issues,
   re-dated to today the way the synthetic files are.
+- **The second forecast** (issue #604 D17, R4-C). The mirror-ingest
+  Lambda's ECMWF runs (`ingest/ecmwf.py`, `{"product":"ecmwf","mode":"daily"}`,
+  every 20 minutes 10:00–13:40 UTC, `infra/ecmwf.tf`) copy each 00 UTC ENS
+  run's total precipitation from ECMWF's open data bucket
+  (`ecmwf-forecasts`, eu-central-1): per step (24 … 360 h) the `.index`,
+  then a range request per member for its `tp` field, one a second, resumed
+  across runs from saved steps. Decoded with eccodes onto our 0.1° grid
+  (each cell the mean of the four 0.1° points at its corners),
+  de-accumulated into 15 UTC days (day 0 is the issue date, as for
+  CHIRPS-GEFS), and stored as the ensemble mean and p10/p50/p90 in
+  `ecmwf/<issue>` (dims stat, day, lat, lon), listed in `ecmwf/index.json`
+  once whole; 7 issues kept, older ones archived as their mean for the
+  quantile-mapping fit. An `ecmwf_ens` feed_fetch reads the mean at its
+  cells in the job (`feeds/fromMirrorEcmwf.ts`), whatever `CHIRPS_SOURCE`
+  says: there is no per-feed path to ECMWF, and the fetcher refuses one. It
+  maps each day through `ecmwf/qm.json` (the operator's offline fit,
+  `ingest/ecmwf_qm_fit.py`) when that covers the place and season, else
+  writes the model's own value with `last_meta.calibration` = `not yet
+  calibrated`. Today's issue, else yesterday's; a copy with neither waits
+  without a failure. The feeds fall due at 14:00 UTC
+  (253_feed_source_ecmwf.sql). Locally the committed copy holds one
+  invented issue over a 4 × 4 block, read as today's anywhere in the region.
 - **Revisions** reach the cache without a feed: the worker's mirror tick
   reads each manifest and applies a newer revision through
   `app_mirror_apply_revision` (above, *A revision of our copy*); the
