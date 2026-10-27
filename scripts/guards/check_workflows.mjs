@@ -36,9 +36,11 @@
 //              ones that execute untrusted code on main, and a release build
 //              ships what it builds with deploy credentials.
 //   image      every `docker build` / `docker buildx build` in a workflow
-//              says --provenance=false --sbom=false --platform linux/amd64
-//              (on the command's first line). Lambda accepts one image
-//              manifest, never the image index attestations produce.
+//              says --provenance=false --sbom=false and exactly one
+//              --platform, linux/amd64 (the renderer) or linux/arm64 (the
+//              data mirror's ingest job), on the command's first line.
+//              Lambda accepts one image manifest, never the image index
+//              attestations or a multi-platform build produce.
 //   image-sha  a step that runs `docker push` names the commit it built from
 //              (`${{ needs.<job>.outputs.sha }}` or `${{ github.sha }}`), so
 //              its tag can carry it. The renderer's ECR tags are immutable
@@ -460,7 +462,8 @@ export function checkWorkflow(file, text, repo = {}) {
 
 	lines.forEach((l, i) => {
 		if (/^\s*#/.test(l) || !/\bdocker\s+(buildx\s+)?build\b/.test(l)) return;
-		const missing = ['--provenance=false', '--sbom=false', '--platform linux/amd64'].filter((f) => !l.includes(f));
+		const missing = ['--provenance=false', '--sbom=false'].filter((f) => !l.includes(f));
+		if (!/--platform[ =]linux\/(amd64|arm64)(\s|$)/.test(l)) missing.push('--platform linux/amd64 (or linux/arm64, one platform)');
 		if (missing.length) {
 			out.push({ file, line: i + 1, rule: 'image', message: `docker build without ${missing.join(' ')}: an attestation-carrying image index is what Lambda rejects` });
 		}

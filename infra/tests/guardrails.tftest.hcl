@@ -480,10 +480,28 @@ override_resource {
 }
 
 override_resource {
+  target          = aws_s3_bucket.mirror
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-mirror-000000000000"
+    bucket = "water-management-mirror-000000000000"
+  }
+}
+
+override_resource {
   target          = aws_cloudfront_origin_request_policy.report_downloads
   override_during = plan
   values = {
     id = "report-downloads-origin-request-policy-id"
+  }
+}
+
+override_resource {
+  target          = aws_ecr_repository.ingest
+  override_during = plan
+  values = {
+    arn            = "arn:aws:ecr:af-south-1:000000000000:repository/water-management-mirror-ingest"
+    repository_url = "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-mirror-ingest"
   }
 }
 
@@ -2879,7 +2897,7 @@ run "packs" {
       length(aws_vpc_endpoint.s3.subnet_ids) == 1 &&
       length(aws_vpc_endpoint.s3.security_group_ids) == 1 &&
       can(regex("security_group_ids\\s*=\\s*\\[aws_security_group\\.vpce_s3\\.id\\]", regex("(?s)resource \"aws_vpc_endpoint\" \"s3\" \\{.*?\\n\\}", file("packs.tf")))) &&
-      length(data.aws_iam_policy_document.s3_endpoint.statement) == 5 &&
+      length(data.aws_iam_policy_document.s3_endpoint.statement) == 6 &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*"]) &&
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[0].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn]) &&
@@ -2894,9 +2912,12 @@ run "packs" {
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[3].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[4].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[4].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
-      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[4].principals).identifiers) == toset([aws_iam_role.migrate_lambda.arn])
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[4].principals).identifiers) == toset([aws_iam_role.migrate_lambda.arn]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[5].actions) == toset(["s3:GetObject", "s3:ListBucket"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[5].resources) == toset([aws_s3_bucket.mirror.arn, "${aws_s3_bucket.mirror.arn}/*"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[5].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn])
     )
-    error_message = "The worker, the API and migrate reach S3 through one interface endpoint whose policy allows only the worker's read of packs/, the API's put of a bundle (packs/*.zip), the API's and the worker's reads of the delineation DEM (tiles/terrain.pmtiles), the API's of the dam-trace water (tiles/water.pmtiles), and migrate's read of a reference file (reference/*)."
+    error_message = "The worker, the API and migrate reach S3 through one interface endpoint whose policy allows only the worker's read of packs/, the API's put of a bundle (packs/*.zip), the API's and the worker's reads of the delineation DEM (tiles/terrain.pmtiles), the API's of the dam-trace water (tiles/water.pmtiles), migrate's read of a reference file (reference/*), and the worker's read of the data mirror (ingest.tf)."
   }
   assert {
     condition = (

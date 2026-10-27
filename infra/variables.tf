@@ -617,6 +617,48 @@ variable "renderer_reserved_concurrency" {
   }
 }
 
+# --- The data mirror (ingest.tf, issue #604) ------------------------------------
+
+variable "ingest_image_tag" {
+  description = "Tag of the mirror ingest image (ingest/Dockerfile) in its ECR repository that the mirror-ingest Lambda is created from: <release version>-<first 12 hex of its commit>, e.g. 0.7.0-0123456789ab, as deploy-backend.yml pushes it and prints it. Empty (the default) creates the mirror bucket, the repository, the DLQ and the (disabled) schedules but not the function or its freshness alarms: push an image with a backend release first (docs/deployment.md § The data mirror). Setting it enables the daily schedules and the alarms; the ECR lifecycle policy never expires this image (ingest.tf)."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.ingest_image_tag == "" || can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9a-f]{12}$", var.ingest_image_tag))
+    error_message = "ingest_image_tag must be empty or the tag deploy-backend.yml pushed, <version>-<12 hex of the commit>, like 0.7.0-0123456789ab."
+  }
+}
+
+variable "ingest_contact" {
+  description = "Contact address the mirror ingest job puts in its User-Agent (INGEST_CONTACT), so an upstream (CHC) can reach us before banning us. Not secret, and seen by every upstream: use a role address, not a personal one. Empty sends the User-Agent without one."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.ingest_contact == "" || can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.ingest_contact))
+    error_message = "ingest_contact must be empty or an email address."
+  }
+}
+
+variable "ingest_reserved_concurrency" {
+  description = "Max concurrent mirror ingest runs (ingest.tf): one per product, and never more than two requests at once against an upstream (issue #604's polite client). Counted in the account's Lambda concurrency quota (infra/README.md § Operator steps, step 3)."
+  type        = number
+  default     = 2
+  validation {
+    condition     = var.ingest_reserved_concurrency >= 1 && var.ingest_reserved_concurrency <= 2 && floor(var.ingest_reserved_concurrency) == var.ingest_reserved_concurrency
+    error_message = "1 or 2: more would hit CHC with more than two runs at once (and -1, unreserved, is refused too)."
+  }
+}
+
+variable "ingest_lag_alarm_days" {
+  description = "Alarm when a mirrored product's finals end more than this many days ago (MirrorLagDays). CHC publishes month M's finals during month M+1, usually by the 25th, so a healthy copy runs up to ~56 days behind just before a release; the default 75 fires once a monthly release is about three weeks late."
+  type        = number
+  default     = 75
+  validation {
+    condition     = var.ingest_lag_alarm_days >= 60 && floor(var.ingest_lag_alarm_days) == var.ingest_lag_alarm_days
+    error_message = "A whole number of days, at least 60, or the alarm fires on a healthy copy just before CHC's monthly release."
+  }
+}
+
 variable "jobs_backlog_alarm_seconds" {
   description = "Alarm when the oldest due job has waited this long. The schedule ticks every 5 minutes, so anything under ~10 minutes would fire on a normal wait."
   type        = number
@@ -630,7 +672,7 @@ variable "jobs_backlog_alarm_seconds" {
 # --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
 
 variable "alarm_tier" {
-  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends. \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
+  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
   type        = string
   default     = "full"
 

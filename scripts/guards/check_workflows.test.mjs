@@ -268,9 +268,15 @@ test('a workflow with a production job may not restore a dependency cache', () =
 	assert.deepEqual(rules(good + '      - run: aws s3 sync --cache-control "max-age=60" x y\n'), []);
 });
 
-test('a docker build must produce one linux/amd64 manifest without attestations', () => {
+test('a docker build must produce one single-platform manifest without attestations', () => {
 	const ok = '      - run: docker buildx build --provenance=false --sbom=false --platform linux/amd64 --load -t x .\n';
 	assert.deepEqual(rules(good + ok), []);
+	// arm64 (the data mirror's ingest Lambda) is one platform too.
+	assert.deepEqual(rules(good + ok.replace('linux/amd64', 'linux/arm64')), []);
+	// No platform, or two (an image index), is refused.
+	assert.deepEqual(rules(good + ok.replace(' --platform linux/amd64', '')), ['image']);
+	assert.deepEqual(rules(good + ok.replace('linux/amd64', 'linux/amd64,linux/arm64')), ['image']);
+	assert.deepEqual(rules(good + ok.replace('linux/amd64', 'linux/arm')), ['image']);
 	assert.deepEqual(rules(good + '      - run: docker build -t x .\n'), ['image']);
 	assert.deepEqual(rules(good + ok.replace(' --sbom=false', '')), ['image']);
 	assert.deepEqual(rules(good + '      # docker build -t x .\n'), []);

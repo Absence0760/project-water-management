@@ -37,6 +37,11 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
                                                                   ├──PutObject──► S3 reports (private, SSE, 7 days) ◄── CloudFront /reports/* (OAC, signed URLs the API mints)
                                                                   └──PutObject──► S3 packs (private, SSE, Object Lock 10 y; packs.tf) ◄── CloudFront /packs/*
                      (each queue: a DLQ after 5 receives; alarms)
+   EventBridge daily (rnl, sat) ──async──► mirror-ingest Lambda (container image, Python, arm64;
+                                            NO VPC, no DB; ingest.tf) ──HTTPS──► data.chc.ucsb.edu
+                                            ├──Put/Get/List/Delete──► S3 mirror (private, versioned, SSE)
+                                            └── a failed run ──► mirror-ingest-dlq (alarms)
+   worker ──GetObject/ListBucket (S3 endpoint)──► S3 mirror      (Round 2 reads it; issue #604)
 ```
 
 - **Runtime secrets.** The API, worker and migrate Lambdas each read their own
@@ -155,7 +160,16 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
   under `packs/` in the packs bucket (`packs.tf`). It is created only once its first
   image is pushed (`renderer_image_tag`;
   [docs/deployment.md § Reports](../docs/deployment.md#reports)).
-  The image is pinned by content: its Playwright base by tag *and* digest
+  `water-management-mirror-ingest` (`ingest/lambda_handler.py`, `ingest.tf`,
+  issue #604) copies CHC's CHIRPS finals into the private mirror bucket on a
+  daily schedule: a Python 3.14 **container image** (`ingest/Dockerfile`,
+  arm64) in its own ECR repository, no VPC, no database or secret, 3 GB, 2
+  GB of `/tmp`, 900 s, reserved concurrency `ingest_reserved_concurrency`
+  (2), its role limited to the mirror bucket, its DLQ and the
+  `water-management/Mirror` metric namespace. Created only once its first
+  image is pushed (`ingest_image_tag`;
+  [docs/deployment.md § The data mirror](../docs/deployment.md#the-data-mirror)).
+  The renderer's image is pinned by content: its Playwright base by tag *and* digest
   (`mcr.microsoft.com/playwright:v<version>-noble@sha256:…`, both `FROM`
   lines), its npm packages (playwright-core, aws-lambda-ric) by
   `backend/renderer-deps/package-lock.json`, installed with `npm ci`, and
@@ -209,6 +223,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: `SendMessage` only, two roles, three queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, downloads through CloudFront (the trusted public keys from `report_download_public_keys` and their key group, the reports OAC, the origin request policy that forwards only the file name, and the bucket policy that lets only this distribution read `reports/`; the `/reports/*` behaviour itself is in `s3_cloudfront.tf`), and the DLQ / renderer-errors / renderer-duration alarms |
+| `ingest.tf` | The data mirror (issue #604): the private mirror bucket (SSE-S3, TLS only, ACLs off, versioned, old versions kept 30 days, incomplete uploads aborted after a day), the ingest job's ECR repository (immutable, scanned) and Lambda (Python container image, arm64, outside the VPC, created once `ingest_image_tag` is set; role: the mirror bucket, its DLQ and the `water-management/Mirror` metric namespace only), its async-invoke DLQ, the daily EventBridge rules per product (disabled until the tag is set), the worker's read of the mirror (the matching S3 endpoint statement is in `packs.tf`), and the freshness (`MirrorLagDays`, breaching on missing data), errors and DLQ alarms |
 | `packs.tf` | Issued evidence packs' PDFs (119_pack_render): the private packs bucket (versioned, Object Lock default retention GOVERNANCE for `pack_retention_days`, 10 years by default, no lifecycle; SSE-S3, TLS only), its bucket policy (only this distribution reads `packs/`), the renderer's PutObject under `packs/` and nothing else, the worker's GetObject (HEAD only) on `packs/` through an S3 interface endpoint (`s3_endpoint_az_count`) whose policy allows only that and the four reads and writes the API and migrate make through it (a pack bundle's put, the delineation DEM, the dam-trace water raster, a reference file), and the packs OAC; the `/packs/*` behaviour is in `s3_cloudfront.tf`, signed with the report-download key group |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions (`spa_rewrite`, `api_strip_prefix`, `tiles_range`), distribution (incl. the `/tiles/*` behaviour), A/AAAA records |
@@ -229,6 +244,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
 | `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (89 runs, among them `full_tier`, the full tier's tfvars; see [Validating locally](#validating-locally)) |
 | `tests/data.tftest.hcl` | The database's and frontend bucket's data-protection controls (5 runs; [Validating locally](#validating-locally)) |
+| `tests/ingest.tftest.hcl` | Plan-only: the mirror bucket is private, versioned and TLS only; the ingest Lambda, its schedule targets and freshness alarms exist only with `ingest_image_tag`; its role is scoped to the mirror; the worker and the S3 endpoint policy name the mirror; the freshness alarms breach on missing data |
 | `tests/logging.tftest.hcl` | Plan-only: every Lambda's JSON log format and levels, and every log metric filter matching `$.message.event` (see [Logs](#logs)) |
 
 ## Decisions
@@ -506,6 +522,7 @@ Idle to light use, on-demand, us-east-1:
 | SQS + EventBridge (the 5-minute tick: ~8,600 invocations) | ~0 |
 | SQS polling by the six event sources (`jobs`, `fetch-requests`, `ingest-results`, `render-requests`, `render-results`, `mail-events`: ~0.65 M receives a month each, ~2.9 M past the free tier) | ~1.16 |
 | ECR: the renderer image (~0.7 GB compressed; up to 10 releases kept, mostly shared layers) | ~0.10–0.30 |
+| The data mirror (`ingest.tf`): ~6 GB of Zarr in S3 + 30 days of old versions, the ingest image in ECR, a few seconds of Lambda a day; its two freshness alarms are in the CloudWatch line once `ingest_image_tag` is set | ~0.30–0.60 |
 | S3 reports bucket (PDFs of ~1 MB, 7 days) | ~0 |
 | S3 packs bucket (an issued pack's PDF, ~1 MB, kept 10 years) | ~0 |
 | S3 interface endpoint, 1 AZ (the worker's check of a pack PDF before recording its hash, `packs.tf`; also the API's DEM reads and migrate's reference loads, at $0.01/GB) | 7.30 |
@@ -654,7 +671,7 @@ Claude does not run any of these, and none of them print a secret. Replace
    concurrent-executions quota is 10 and AWS keeps 10 unreserved, so any
    reservation fails until it is raised. The quota must cover the sum of the
    reservations plus 10: at the defaults 25 (API) + 1 (migrate) + 8 (worker)
-   + 2 (fetcher) + 2 (renderer) + 10 = **48**. Ask for 1000 (the usual
+   + 2 (fetcher) + 2 (renderer) + 2 (mirror ingest) + 10 = **50**. Ask for 1000 (the usual
    default) and wait for it to be granted before planning the first apply.
    **Raising a reservation on a live account** (issue #541 took the API
    from 10 to 25, so 33 → 48) needs the same check first: an apply asking
@@ -783,11 +800,11 @@ Claude does not run any of these, and none of them print a secret. Replace
    `dmarc_report_email`, set `dmarc_policy = "quarantine"` and apply.
 9. **Wire CI:** `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`.
    This sets `AWS_REGION`, `FRONTEND_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`,
-   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, **`WORKER_FUNCTION_NAME`**, **`FETCHER_FUNCTION_NAME`**, **`RENDERER_FUNCTION_NAME`**, **`RENDERER_ECR_REPOSITORY`**, `PUBLIC_SITE_URL` and
+   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, **`WORKER_FUNCTION_NAME`**, **`FETCHER_FUNCTION_NAME`**, **`RENDERER_FUNCTION_NAME`**, **`RENDERER_ECR_REPOSITORY`**, **`INGEST_FUNCTION_NAME`**, **`INGEST_ECR_REPOSITORY`**, `PUBLIC_SITE_URL` and
    `WAF_CAPTCHA_SCRIPT_URL` (the sign-in CAPTCHA, read by
    `deploy-frontend.yml`) as variables, plus `CLOUDFRONT_DOMAIN_NAME`,
-   `REPORTS_BUCKET`, `PACKS_BUCKET`, `TILES_BUCKET`, `REFERENCE_BUCKET` and
-   the `DB_*` names (unused by the workflows); and `AWS_DEPLOY_ROLE_ARN`,
+   `REPORTS_BUCKET`, `PACKS_BUCKET`, `TILES_BUCKET`, `REFERENCE_BUCKET`,
+   `MIRROR_BUCKET` and the `DB_*` names (unused by the workflows); and `AWS_DEPLOY_ROLE_ARN`,
    `WAF_CAPTCHA_API_KEY` and `LAMBDA_FUNCTION_URL` (debugging only) as
    secrets (every sensitive output). The release preflight (`scripts/release/preflight.mjs`) refuses
    to deploy while any value that deploy reads is empty (`REQUIRED_CONFIG` in
@@ -894,6 +911,17 @@ Claude does not run any of these, and none of them print a secret. Replace
     the `aws:SourceArn` condition to the event subscription's ARN
     (`arn:aws:rds:<region>:<account>:es:water-management-db-events`) or drop it,
     keeping `aws:SourceAccount`, then apply and repeat.
+10d. **The data mirror's ingest job** (issue #604; only once the job
+    publishes `MirrorLagDays`, Round 2: its freshness alarms treat missing
+    data as breaching and would fire daily before then). A backend release
+    pushes the ingest image as `<version>-<sha12>` and leaves a notice naming
+    the tag. **Set `ingest_image_tag` after the first image push**, and
+    `ingest_contact` (a role address for the User-Agent), in `prod.tfvars`,
+    then plan and apply (step 8): the function, its two daily schedules'
+    targets and the `mirror-lag-*` alarms appear, and the rules switch to
+    ENABLED. The ECR lifecycle policy never expires the tagged image, as for
+    the renderer (10a). Runbook: [docs/deployment.md § The data
+    mirror](../docs/deployment.md#the-data-mirror).
 
 11. **Turn on Cost Anomaly Detection** (after the first apply; it needs ~10
     days of billing history before it flags anything, so nothing is lost by

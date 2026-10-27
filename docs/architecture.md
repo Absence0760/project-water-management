@@ -29,6 +29,9 @@ flowchart LR
     RQ[[SQS render-requests<br/>render-results]]
     RL[Renderer Lambda<br/>container, Chromium<br/>no VPC, no DB]
     RB[(S3 reports<br/>private, 7 days)]
+    IT[EventBridge<br/>daily per product]
+    IL[Mirror ingest Lambda<br/>container, Python<br/>no VPC, no DB]
+    MB[(S3 mirror<br/>Zarr v3, versioned)]
     L --- EL
   end
   SRC[(CHIRPS · GEFS · DWS<br/>public sources)]
@@ -47,6 +50,10 @@ flowchart LR
   RL -- "PDF" --> RB
   L -- "302: CloudFront signed URL" --> UI
   CF -- "/reports/* (signed URLs, OAC)" --> RB
+  IT --> IL
+  IL -- "HTTPS (whole files, polite)" --> SRC
+  IL -- "Zarr chunks + manifest" --> MB
+  W -. "reads the copy (Round 2, issue #604)" .-> MB
 ```
 
 Locally the same pieces run as `vite dev` on `:7777`, a Node server
