@@ -11,7 +11,7 @@
 //
 // DB test files run one at a time; this one removes every feed, feed job,
 // cached cell and mirror row after each test.
-import { cpSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -22,10 +22,13 @@ import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { openStore } from '../mirror/store.js';
 import { productVersions, readProductSeries } from '../feeds/fromMirror.js';
-import { fillGapProducts } from '../feeds/gapRainFill.js';
+import { fillGapProducts, GAP_FILL_BUDGET_MS, GAP_FILL_MARGIN_MS } from '../feeds/gapRainFill.js';
 import { loadModelInput, loadRunInput } from './execute.js';
 import { gapRainInputs } from './gapRainInput.js';
-import { gapRainProducts } from '../feeds/gapRainView.js';
+import { GAP_VIEW_MAX_DAYS, gapRainProducts } from '../feeds/gapRainView.js';
+import { toEpochDay } from '@water-management/engine/calendar';
+
+const daysIn = (w: { start: string; end: string }) => toEpochDay(w.end) - toEpochDay(w.start) + 1;
 
 const tmp: string[] = [];
 afterAll(() => tmp.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -36,11 +39,15 @@ afterEach(async () => {
 });
 
 function copy() {
+	return copyAt().store;
+}
+function copyAt() {
 	const dir = mkdtempSync(join(tmpdir(), 'wm-gap-rain-'));
 	tmp.push(dir);
 	cpSync(MIRROR_FIXTURE_DIR, dir, { recursive: true });
-	return openStore(pathToFileURL(`${dir}/`).href);
+	return { dir, store: openStore(pathToFileURL(`${dir}/`).href) };
 }
+const lastMeta = async (feed: string) => (await asOwner('SELECT last_meta FROM data_feed WHERE id = $1', [feed]))[0].last_meta as Record<string, unknown> | null;
 
 const CELLS = [
 	{ lat: -20.025, lon: 25.025, weight: 1 },
@@ -91,9 +98,11 @@ describe('settings.gapRain: the copy to the run', () => {
 		const jobId = await p.job();
 		const outcome = await withUser(p.owner.id, (db) => fillGapProducts(db, { id: p.feed, projectId: p.pid }, { jobId, today: TODAY, store, origin }));
 		expect(outcome).toEqual([
-			{ product: 'era5l', windows: 1, status: 'done' },
-			{ product: 'imerg_late', windows: 1, status: 'done' }
+			{ product: 'era5l', windows: 1, status: 'ok' },
+			{ product: 'imerg_late', windows: 1, status: 'ok' }
 		]);
+		// Each product's outcome on the feed (254), where GET …/feeds and the Data tab read it.
+		expect(await lastMeta(p.feed)).toMatchObject({ gapEra5l: 'ok', gapImergLate: 'ok' });
 		const inputs = (await withUser(p.owner.id, (db) => gapRainInputs(db, p.pid, { gapRain: { product: 'chirpsThenEra5l', imergLate: true } }, p.chirps, TODAY)))!;
 		expect(Object.keys(inputs).sort()).toEqual([ERA5L_SERIES_KEY, imergSeriesKey('V07'), imergSeriesKey('V08')].sort());
 		// ERA5-Land: the feed's weighted mean from the record's first day, as the cache serves it.
@@ -109,7 +118,7 @@ describe('settings.gapRain: the copy to the run', () => {
 		expect(versions.filter((v) => v === 'V08')).toHaveLength(2);
 		// A second fetch reads the one window again: its days past ERA5-Land's last (2025-12-30) wait for the copy.
 		const again = await withUser(p.owner.id, async (db) => fillGapProducts(db, { id: p.feed, projectId: p.pid }, { jobId: await p.job(), today: TODAY, store, origin }));
-		expect(again.find((o) => o.product === 'era5l')).toEqual({ product: 'era5l', windows: 1, status: 'done' });
+		expect(again.find((o) => o.product === 'era5l')).toEqual({ product: 'era5l', windows: 1, status: 'ok' });
 	});
 
 	it('does nothing with CHIRPS alone, nor on another CHIRPS feed’s fetch (the runs’ feed is the positive control)', async () => {
@@ -123,7 +132,7 @@ describe('settings.gapRain: the copy to the run', () => {
 		const other = await p.addFeed([{ lat: -20.025, lon: 25.025, weight: 1 }], 'Other CHIRPS');
 		expect(await withUser(p.owner.id, async (db) => fillGapProducts(db, { id: other, projectId: p.pid }, { jobId: await p.job(other), today: TODAY, store, origin }))).toEqual([]);
 		expect(await asOwner('SELECT count(*)::int AS n FROM chirps_cell_year')).toEqual([{ n: 0 }]);
-		expect((await withUser(p.owner.id, async (db) => fillGapProducts(db, { id: p.feed, projectId: p.pid }, { jobId: await p.job(), today: TODAY, store, origin })))[0]!.status).toBe('done');
+		expect((await withUser(p.owner.id, async (db) => fillGapProducts(db, { id: p.feed, projectId: p.pid }, { jobId: await p.job(), today: TODAY, store, origin })))[0]!.status).toBe('ok');
 	});
 
 	it('a copy without the product writes nothing and the run input simply lacks it', async () => {
@@ -131,7 +140,74 @@ describe('settings.gapRain: the copy to the run', () => {
 		const p = await project({ product: 'era5l', imergLate: true });
 		const out = await withUser(p.owner.id, async (db) => fillGapProducts(db, { id: p.feed, projectId: p.pid }, { jobId: await p.job(), today: TODAY, store: empty, origin }));
 		expect(out.map((o) => o.status)).toEqual(['not_ready', 'not_ready']);
+		expect(await lastMeta(p.feed)).toMatchObject({ gapEra5l: 'not_ready', gapImergLate: 'not_ready' });
 		expect(await withUser(p.owner.id, (db) => gapRainInputs(db, p.pid, { gapRain: { product: 'era5l', imergLate: true } }, p.chirps, TODAY))).toEqual({});
+	});
+
+	it('a broken ERA5-Land copy: the fill is rolled back to its savepoint, the CHIRPS days commit, the failure is recorded and the view says so', async () => {
+		const { dir, store } = copyAt();
+		writeFileSync(join(dir, 'era5l', 'zarr.json'), 'not json');
+		const p = await project({ product: 'era5l', imergLate: true });
+		const out = await withUser(p.owner.id, async (db) => {
+			// The CHIRPS days the same fetch wrote first (fetchFromMirror), in the same transaction.
+			await db.query(`UPDATE time_series SET "values" = '{1,2,3,4}' WHERE id = $1`, [p.chirps]);
+			return fillGapProducts(db, { id: p.feed, projectId: p.pid }, { jobId: await p.job(), today: TODAY, store, origin });
+		});
+		// ERA5-Land failed, as the copy's format; IMERG Late, in its own savepoint, still filled (the positive control).
+		expect(out).toEqual([
+			{ product: 'era5l', windows: 0, status: 'failed', error: 'format' },
+			{ product: 'imerg_late', windows: 1, status: 'ok' }
+		]);
+		expect((await asOwner('SELECT "values" FROM time_series WHERE id = $1', [p.chirps]))[0].values).toEqual([1, 2, 3, 4]);
+		expect(await asOwner(`SELECT count(*)::int AS n FROM chirps_cell_year WHERE product = 'era5l'`)).toEqual([{ n: 0 }]);
+		expect(await lastMeta(p.feed)).toMatchObject({ gapEra5l: 'failed:format', gapImergLate: 'ok' });
+		// The Data tab's data: "couldn't fill ERA5-Land", not "nothing held yet"; GET …/feeds carries it as lastMeta.
+		const view = await p.owner.call('GET', `/projects/${p.pid}/feeds/gap-rain`);
+		expect(view.status).toBe(200);
+		expect(view.body.era5l).toBeNull();
+		expect(view.body.fill.era5l).toMatchObject({ status: 'failed', error: 'format' });
+		expect(view.body.fill.imergLate).toMatchObject({ status: 'ok', error: null });
+		const feeds = (await p.owner.call('GET', `/projects/${p.pid}/feeds`)).body.feeds as { id: string; lastMeta: Record<string, unknown> | null }[];
+		expect(feeds.find((f) => f.id === p.feed)!.lastMeta).toMatchObject({ gapEra5l: 'failed:format' });
+	});
+
+	it('an unexpected error in the fill is not swallowed: rolled back to its savepoint and thrown, so the fetch fails', async () => {
+		const store = copy();
+		const broken = { get: async (key: string, o?: unknown) => (key.startsWith('/era5l/') ? Promise.reject(new Error('a bug')) : store.get(key as never, o as never)), set: store.set.bind(store) } as typeof store;
+		const p = await project({ product: 'era5l', imergLate: false });
+		await expect(
+			withUser(p.owner.id, async (db) => {
+				await db.query(`UPDATE time_series SET "values" = '{9}' WHERE id = $1`, [p.chirps]);
+				return fillGapProducts(db, { id: p.feed, projectId: p.pid }, { jobId: await p.job(), today: TODAY, store: broken, origin });
+			})
+		).rejects.toThrow('a bug');
+		// The job's transaction rolled back whole: nothing recorded, the job retries.
+		expect((await asOwner('SELECT "values" FROM time_series WHERE id = $1', [p.chirps]))[0].values).toEqual([1, 2, 3]);
+		expect((await lastMeta(p.feed))?.gapEra5l).toBeUndefined();
+	});
+
+	it('stops in time: past its budget or the job’s deadline it leaves the older windows for the next fetch, which reads them', async () => {
+		const store = copy();
+		const p = await project({ product: 'era5l', imergLate: false });
+		// A record from 2023: four year-long windows back from TODAY.
+		await asOwner(`UPDATE time_series SET start_date = '2023-01-01' WHERE project_id = $1 AND kind = 'rain_catchment_mm'`, [p.pid]);
+		const fill = (opts: { deadline?: number; now?: () => number }) =>
+			withUser(p.owner.id, async (db) => fillGapProducts(db, { id: p.feed, projectId: p.pid }, { jobId: await p.job(), today: TODAY, store, origin, ...opts }));
+		// The job's deadline closer than the margin: no window is read, and the rest waits.
+		const t0 = 1_000_000;
+		expect(await fill({ now: () => t0, deadline: t0 + GAP_FILL_MARGIN_MS - 1 })).toEqual([{ product: 'era5l', windows: 0, status: 'ok', more: true }]);
+		expect(await asOwner(`SELECT count(*)::int AS n FROM chirps_cell_year WHERE product = 'era5l'`)).toEqual([{ n: 0 }]);
+		// The budget spent after the newest window: one read, the rest waits.
+		// The clock: read at the start and before the first window, then the budget is gone.
+		let calls = 0;
+		const clock = () => (++calls <= 2 ? t0 : t0 + GAP_FILL_BUDGET_MS);
+		expect(await fill({ now: clock })).toEqual([{ product: 'era5l', windows: 1, status: 'ok', more: true }]);
+		// The next fetch, with time to spare, reads the older windows the copy holds (2024–2025) and finishes.
+		const next = await fill({});
+		expect(next).toHaveLength(1);
+		expect(next[0]).toMatchObject({ product: 'era5l', status: 'ok' });
+		expect(next[0]!.windows).toBeGreaterThanOrEqual(1);
+		expect(next[0]!.more).toBeUndefined();
 	});
 
 	it('a project’s live run input carries them, and only with the setting', async () => {
@@ -172,6 +248,7 @@ describe('settings.gapRain: the copy to the run', () => {
 			['Other CHIRPS', false]
 		]);
 		expect(view.window).toEqual({ start: '2025-11-01', end: TODAY });
+		expect(view.record).toEqual({ start: '2025-11-01', end: TODAY });
 		// ERA5-Land: what the run's input reads, to the day.
 		const inputs = (await withUser(p.owner.id, (db) => gapRainInputs(db, p.pid, { gapRain: view.gapRain }, p.chirps, TODAY)))!;
 		expect(view.era5l!.startDate).toBe(inputs[ERA5L_SERIES_KEY]!.startDate);
@@ -194,9 +271,37 @@ describe('settings.gapRain: the copy to the run', () => {
 		expect((await p.owner.call('GET', `/projects/${p.pid}/feeds/gap-rain?feed=nope`)).status).toBe(400);
 	});
 
+	it('the view reads at most ten years: the record’s last ten by default, `from`/`to` further back, and refuses more', async () => {
+		const p = await project({ product: 'era5l', imergLate: true });
+		await asOwner(`UPDATE time_series SET start_date = '1990-01-01' WHERE project_id = $1 AND kind = 'rain_catchment_mm'`, [p.pid]);
+		const get = (q = '') => p.owner.call('GET', `/projects/${p.pid}/feeds/gap-rain${q}`);
+		const today = new Date().toISOString().slice(0, 10);
+		const byDefault = await get();
+		expect(byDefault.status).toBe(200);
+		expect(byDefault.body.record).toEqual({ start: '1990-01-01', end: today });
+		expect(byDefault.body.window.end).toBe(today);
+		expect(daysIn(byDefault.body.window)).toBe(GAP_VIEW_MAX_DAYS);
+		// Further back, as asked (ten years at most).
+		expect((await get('?from=1990-01-01&to=1999-12-31')).body.window).toEqual({ start: '1990-01-01', end: '1999-12-31' });
+		// More than ten years, a `from` alone that reaches past them, after `to`, or not a date: 400.
+		expect((await get('?from=1990-01-01&to=2005-01-01')).status).toBe(400);
+		expect((await get('?from=1990-01-01')).status).toBe(400);
+		expect((await get('?from=2000-01-02&to=2000-01-01')).status).toBe(400);
+		expect((await get('?to=2000-02-30')).status).toBe(400);
+	});
+
 	it('the view with no CHIRPS feed: no feed, nothing read', async () => {
 		const owner = await signUp('GapRainNoFeed');
 		const pid = (await owner.call('POST', '/projects', { name: 'No feed' })).body.project.id as string;
-		expect(await withUser(owner.id, (db) => gapRainProducts(db, pid, null, TODAY))).toEqual({ gapRain: null, feeds: [], feed: null, window: null, era5l: null, imergLate: null });
+		expect(await withUser(owner.id, (db) => gapRainProducts(db, pid, null, TODAY))).toEqual({
+			gapRain: null,
+			feeds: [],
+			feed: null,
+			window: null,
+			record: null,
+			fill: { era5l: null, imergLate: null },
+			era5l: null,
+			imergLate: null
+		});
 	});
 });

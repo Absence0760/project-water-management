@@ -28,6 +28,7 @@ import {
 	healthMessage,
 	keptNote,
 	calibrationNote,
+	gapFillNote,
 	needsAttention,
 	nextTryNote,
 	parseBbox,
@@ -552,5 +553,14 @@ describe('nextTryNote: when a failing feed tries again (issue #586 Round 4)', ()
 		expect(nextTryNote({ ...failing, consecutiveFailures: 0, nextAttemptAt: at }, now)).toBeNull();
 		expect(nextTryNote({ ...failing, enabled: false, nextAttemptAt: null }, now)).toBeNull();
 		expect(nextTryNote({ ...failing, actingUser: null, nextAttemptAt: null }, now)).toBeNull();
+	});
+});
+
+describe('gapFillNote', () => {
+	it('names the gap-filling products the last fetch couldn’t fill (last_meta, 254), and nothing when they went through', () => {
+		expect(gapFillNote({ gapEra5l: 'failed:format', gapImergLate: 'ok' })).toBe('couldn’t fill ERA5-Land');
+		expect(gapFillNote({ gapEra5l: 'failed:refused', gapImergLate: 'failed:unavailable' })).toBe('couldn’t fill ERA5-Land or IMERG Late');
+		expect(gapFillNote({ gapEra5l: 'ok', gapImergLate: 'not_ready' })).toBeNull();
+		expect(gapFillNote(null)).toBeNull();
 	});
 });

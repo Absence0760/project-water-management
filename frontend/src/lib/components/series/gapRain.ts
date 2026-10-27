@@ -36,12 +36,23 @@ export interface GapRainFeedOption {
 	runsRead: boolean;
 }
 
+/** What the runs' CHIRPS feed's latest fetch made of a product (backend feeds/gapRainView.ts GapFillState). */
+export interface GapFillState {
+	status: 'ok' | 'not_ready' | 'failed';
+	error: 'format' | 'unavailable' | 'refused' | null;
+	at: string | null;
+}
+
 /** GET …/feeds/gap-rain (docs/api.md § Data feeds). */
 export interface GapRainView {
 	gapRain: GapRainSettings | null;
 	feeds: GapRainFeedOption[];
 	feed: string | null;
+	/** The days read: by default the record's last ten years (the most one request reads). */
 	window: { start: string; end: string } | null;
+	/** The record's whole span. */
+	record: { start: string; end: string } | null;
+	fill: { era5l: GapFillState | null; imergLate: GapFillState | null };
 	era5l: { startDate: string; values: (number | null)[]; held: number } | null;
 	imergLate: { startDate: string; values: (number | null)[]; versions: (string | null)[]; held: number } | null;
 }
@@ -50,6 +61,30 @@ export function gapRainApi(api: Pick<Api, 'request'>, projectId: string) {
 	return {
 		get: (feed?: string | null) => api.request<GapRainView>('GET', `/projects/${encodeURIComponent(projectId)}/feeds/gap-rain${feed ? `?feed=${encodeURIComponent(feed)}` : ''}`)
 	};
+}
+
+/** Why a fill failed, in words (the backend sends only the code, never an error's text). */
+const FILL_ERROR: Record<NonNullable<GapFillState['error']>, string> = {
+	format: 'the rain data copy’s files aren’t in the form the app reads',
+	unavailable: 'the rain data copy didn’t answer',
+	refused: 'the cache refused the values the copy gave'
+};
+
+/**
+ * The lines saying a product the settings read couldn't be filled on the
+ * runs' feed's latest fetch ("Couldn’t fill ERA5-Land: …"), or that the copy
+ * doesn't hold it yet; none for a product filled fine or not asked for.
+ */
+export function fillProblems(view: GapRainView | null): string[] {
+	if (!view?.gapRain) return [];
+	const out: string[] = [];
+	const say = (name: string, s: GapFillState | null | undefined) => {
+		if (s?.status === 'failed') out.push(`Couldn’t fill ${name} on the last fetch: ${s.error ? FILL_ERROR[s.error] : 'it failed'}. The next fetch tries again.`);
+		else if (s?.status === 'not_ready') out.push(`The rain data copy holds no ${name} yet, so there is none to fill.`);
+	};
+	if (view.gapRain.product !== 'chirps') say('ERA5-Land', view.fill?.era5l);
+	if (view.gapRain.imergLate) say('IMERG Late', view.fill?.imergLate);
+	return out;
 }
 
 /** The products' names, as runs and exports name them. */
@@ -126,7 +161,9 @@ export function productChartSeries(chirps: DailySeries | null, view: GapRainView
 export function productChartCaption(view: GapRainView | null, feed: GapRainFeedOption | null): string {
 	const where = feed ? `over the cells of ${feed.nodeName ? `${feed.nodeName}’s` : 'the outlet’s'} CHIRPS feed (${feed.seriesName})` : 'over the CHIRPS feed’s cells';
 	const held = [view?.era5l ? `ERA5-Land ${view.era5l.held} days` : null, view?.imergLate ? `IMERG Late ${view.imergLate.held} days` : null].filter(Boolean);
-	return `Daily rain in mm ${where}, as each product reads it, before any bias correction. ${held.length ? `Held: ${held.join(', ')}.` : ''}`.trim();
+	// The view reads at most ten years: say so when the record is longer.
+	const span = view?.window && view.record && view.window.start > view.record.start ? ` Shown from ${view.window.start}, the last ten years of a record from ${view.record.start}.` : '';
+	return `Daily rain in mm ${where}, as each product reads it, before any bias correction.${span} ${held.length ? `Held: ${held.join(', ')}.` : ''}`.trim();
 }
 
 export interface ProductDoubleMass {

@@ -570,6 +570,17 @@ export function calibrationNote(f: Pick<FeedMeta, 'source' | 'lastMeta'>): strin
 }
 
 /**
+ * A CHIRPS feed's latest fill of the gap-filling products that failed
+ * (last_meta.gapEra5l / gapImergLate, backend feeds/gapRainFill.ts):
+ * "couldn't fill ERA5-Land", or null when every fill went through (or none
+ * was asked for). Data → Rain products side by side says why.
+ */
+export function gapFillNote(meta: FeedMeta['lastMeta']): string | null {
+	const failed = [meta?.gapEra5l, meta?.gapImergLate].map((v, i) => (typeof v === 'string' && v.startsWith('failed') ? ['ERA5-Land', 'IMERG Late'][i] : null)).filter(Boolean);
+	return failed.length ? `couldn’t fill ${failed.join(' or ')}` : null;
+}
+
+/**
  * The days the last fetch left alone because the series already held a value
  * the feed didn't write (last_meta.kept, issue #30), or null when none.
  */

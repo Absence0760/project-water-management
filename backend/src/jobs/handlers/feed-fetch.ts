@@ -73,7 +73,7 @@ export { feedFetchDedupeKey } from '../../feeds/store.js';
 export const feedFetchHandler = defineHandler({
 	role: 'editor',
 	payload: FeedFetchPayload,
-	async run({ db, job, payload }) {
+	async run({ db, job, payload, deadline }) {
 		const feed = await feedForJob(db, job.projectId, payload.feedId);
 		// Removed or switched off since it was queued: nothing to do.
 		if (!feed || !feed.enabled) return;
@@ -82,8 +82,9 @@ export const feedFetchHandler = defineHandler({
 		const request: FetchRequest = { source: feed.source, config: feed.config, ...window, today };
 		if (feed.source === 'chirps' && chirpsSource() === 'mirror') {
 			await fetchFromMirror(db, feed, window, { jobId: job.id, today });
-			// The gap-filling products its project's runs read over this feed's cells (issue #604 R4-B, feeds/gapRainFill.ts).
-			await fillGapProducts(db, feed, { jobId: job.id, today });
+			// The gap-filling products its project's runs read over this feed's cells (issue #604 R4-B, feeds/gapRainFill.ts):
+			// each product's outcome is recorded on the feed (last_meta, 254), and the fill stops in time for this job's deadline.
+			await fillGapProducts(db, feed, { jobId: job.id, today, deadline: deadline ?? null });
 			return;
 		}
 		// CHIRPS-GEFS from the copy too (issue #604 R3-A): the newest issue the daily GEFS pass copied, read in this job.

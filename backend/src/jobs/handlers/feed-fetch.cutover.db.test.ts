@@ -10,7 +10,7 @@
 //
 // DB test files run one at a time; this one removes every feed and feed job
 // after each test.
-import { cpSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -80,6 +80,7 @@ function cutoverWorker(feedFetcher: 'sqs' | undefined) {
 		vi.stubEnv('FEED_FETCHER', feedFetcher);
 		vi.stubEnv('FETCH_REQUESTS_QUEUE_URL', 'https://sqs.test/fetch-requests');
 	} else vi.stubEnv('FEED_FETCHER', '');
+	return dir;
 }
 
 /** Run the queued fetch as the worker Lambda would (AWS_LAMBDA_FUNCTION_NAME only for the tick: sign-up is the API's). */
@@ -126,5 +127,23 @@ describe('after the cutover (CHIRPS_SOURCE=mirror, DWS_SOURCE=store) no feed fet
 		const [job] = await asOwner(`SELECT status, last_error FROM job WHERE kind = 'feed_fetch' ORDER BY created_at DESC LIMIT 1`);
 		expect(job.status).toBe('dead');
 		expect(job.last_error).toMatch(/^this worker may not fetch chirps from the source itself/);
+	});
+});
+
+describe('a CHIRPS fetch from the copy then fills the gap-filling products (issue #604 R4-B)', () => {
+	it('a broken ERA5-Land copy: the CHIRPS days still commit, the job is done, and the feed records the failed fill', async () => {
+		const dir = cutoverWorker(undefined);
+		writeFileSync(join(dir, 'era5l', 'zarr.json'), 'not json');
+		const owner = await signUp('CutoverGapFill');
+		const feedId = await feed(owner, 'chirps');
+		const [{ project_id: pid }] = await asOwner('SELECT project_id FROM data_feed WHERE id = $1', [feedId]);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { gapRain: { product: 'era5l', imergLate: false } } })).status).toBe(200);
+		expect(await tickOnLambda()).toMatchObject({ done: 1, failed: 0 });
+		const [row] = await asOwner('SELECT consecutive_failures, last_error, last_meta FROM data_feed WHERE id = $1', [feedId]);
+		expect(row).toMatchObject({ consecutive_failures: 0, last_error: null });
+		// The CHIRPS answer's own meta (the ingest wrote it), and the fill's outcome merged in after it.
+		expect(row.last_meta).toMatchObject({ product: 'sat', gapEra5l: 'failed:format' });
+		const [series] = await asOwner(`SELECT cardinality("values") AS n FROM time_series WHERE feed_id = $1`, [feedId]);
+		expect(series.n).toBeGreaterThan(0);
 	});
 });

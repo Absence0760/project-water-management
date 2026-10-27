@@ -17,7 +17,7 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { Daily } from './coverage';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
-	import { feedOptionLabel, gapRainApi, productChartCaption, productChartSeries, productDoubleMass, viewCredits, type GapRainView } from './gapRain';
+	import { feedOptionLabel, fillProblems, gapRainApi, productChartCaption, productChartSeries, productDoubleMass, viewCredits, type GapRainView } from './gapRain';
 
 	let {
 		projectId,
@@ -70,6 +70,8 @@
 	const held = $derived(!!(view?.era5l || view?.imergLate));
 	const masses = $derived(productDoubleMass(catchmentId ? (values[catchmentId] ?? null) : null, view, zeroRain, dq));
 	const credits = $derived(viewCredits(view, new Date().toISOString().slice(0, 10)));
+	// A failed fill on the runs' feed's latest fetch, said as such rather than as "nothing held yet".
+	const problems = $derived(fillProblems(view));
 	const WINDOWS = [
 		{ label: '30 days', days: 30 },
 		{ label: '1 year', days: 365 },
@@ -117,11 +119,14 @@
 		<p class="muted" role="status" data-loading>Loading ERA5-Land and IMERG Late…</p>
 	{:else if view && !view.feeds.length}
 		<p class="muted" data-testid="gap-rain-empty">No CHIRPS feed writes this project’s CHIRPS, so there are no cells to read ERA5-Land or IMERG Late over. <a href="#data-feeds">Attach a CHIRPS feed</a> first.</p>
+	{:else if view && !held && problems.length}
+		{#each problems as p (p)}<p class="alert alert-warning" role="note" data-testid="gap-rain-fill-failed">{p}</p>{/each}
 	{:else if view && !held}
 		<p class="muted" data-testid="gap-rain-empty">
 			Nothing held for these cells yet. The CHIRPS feed the runs read brings ERA5-Land and IMERG Late on its next fetch{feed && !feed.runsRead ? '; this feed’s cells are only filled where they share the runs’ cells' : ''}.
 		</p>
 	{:else if view}
+		{#each problems as p (p)}<p class="alert alert-warning" role="note" data-testid="gap-rain-fill-failed">{p}</p>{/each}
 		<LineChart
 			title="Daily rain: CHIRPS, ERA5-Land and IMERG Late"
 			unit="mm"

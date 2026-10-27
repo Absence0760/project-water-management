@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { Daily } from './coverage';
 import {
 	feedOptionLabel,
+	fillProblems,
 	gapRainChoiceText,
 	gapRainInputSeries,
 	imergVersionOn,
@@ -27,6 +28,8 @@ const view = (over: Partial<GapRainView> = {}): GapRainView => ({
 	],
 	feed: 'f1',
 	window: { start: '2026-01-01', end: '2026-01-10' },
+	record: { start: '2026-01-01', end: '2026-01-10' },
+	fill: { era5l: { status: 'ok', error: null, at: '2026-01-10T06:00:00Z' }, imergLate: { status: 'ok', error: null, at: '2026-01-10T06:00:00Z' } },
 	era5l: { startDate: '2026-01-01', values: [1, 2, null, 4], held: 3 },
 	imergLate: { startDate: '2026-01-05', values: [5, null, 7, 8], versions: ['V07', null, 'V07', 'V08'], held: 3 },
 	...over
@@ -128,5 +131,25 @@ describe('the per-day preview with a gap-filling product (engine ≥ 1.101.0)', 
 		const plain = buildPreviewRows(list, values, defaultProjectSettings());
 		expect(plain.map((r) => r.derived.rainSource)).not.toContain('era5l');
 		expect(plain.map((r) => r.derived.rainSource)).not.toContain('imergLate');
+	});
+});
+
+describe('fillProblems', () => {
+	it('says a failed fill, in words from its code, instead of "nothing held yet"; nothing when every fill went through', () => {
+		expect(fillProblems(view())).toEqual([]);
+		const failed = view({ era5l: null, fill: { era5l: { status: 'failed', error: 'format', at: null }, imergLate: { status: 'not_ready', error: null, at: null } } });
+		expect(fillProblems(failed)).toEqual([
+			'Couldn’t fill ERA5-Land on the last fetch: the rain data copy’s files aren’t in the form the app reads. The next fetch tries again.',
+			'The rain data copy holds no IMERG Late yet, so there is none to fill.'
+		]);
+		// A product the settings don't read is never mentioned, and CHIRPS alone has none.
+		expect(fillProblems({ ...failed, gapRain: { product: 'era5l', imergLate: false } })).toHaveLength(1);
+		expect(fillProblems({ ...failed, gapRain: null })).toEqual([]);
+	});
+
+	it('the chart caption names the span when the record is longer than the ten years read', () => {
+		const long = view({ window: { start: '2016-01-11', end: '2026-01-10' }, record: { start: '1990-01-01', end: '2026-01-10' } });
+		expect(productChartCaption(long, null)).toContain('Shown from 2016-01-11, the last ten years of a record from 1990-01-01.');
+		expect(productChartCaption(view(), null)).not.toContain('Shown from');
 	});
 });
