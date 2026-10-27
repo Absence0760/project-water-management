@@ -76,6 +76,8 @@ const FIELDS = {
 	waterSource: z.enum(WATER_SOURCES as [string, ...string[]]),
 	volumeM3PerYear: volume,
 	storageM3: volume.nullable(),
+	/** The registered irrigated area, ha (244); a take (21a) only. Not a model input. */
+	irrigatedAreaHa: z.number().finite().min(0).lt(1e7).nullable(),
 	validFrom: isoDate.nullable(),
 	validTo: isoDate.nullable(),
 	reference: text(500),
@@ -97,9 +99,10 @@ const FIELDS = {
  * or null: 137's allocation_storage_only_check, said in words before the
  * database refuses it.
  */
-export function storageOnlyProblem(a: { waterUse: string; volumeM3PerYear: number; storageM3: number | null; waterSource: string }): string | null {
+export function storageOnlyProblem(a: { waterUse: string; volumeM3PerYear: number; storageM3: number | null; waterSource: string; irrigatedAreaHa?: number | null }): string | null {
 	if (a.waterUse !== '21b') return null;
 	if (a.volumeM3PerYear !== 0) return 'a storage-only (21b) row registers no take: its volume is 0';
+	if (a.irrigatedAreaHa != null) return 'a storage-only (21b) row registers no irrigated area: give it on the take (21a)';
 	if (a.storageM3 === null) return 'a storage-only (21b) row needs its storage';
 	if (a.waterSource !== 'surface') return 'a storage-only (21b) row is a dam, so surface water';
 	return null;
@@ -113,6 +116,7 @@ const CreateBody = z
 		holder: FIELDS.holder.default(''),
 		purpose: FIELDS.purpose.default('irrigation'),
 		storageM3: FIELDS.storageM3.default(null),
+		irrigatedAreaHa: FIELDS.irrigatedAreaHa.default(null),
 		validFrom: FIELDS.validFrom.default(null),
 		validTo: FIELDS.validTo.default(null),
 		reference: FIELDS.reference.default(''),
@@ -173,7 +177,7 @@ async function touchRunInputs(db: Db, projectId: string) {
 const ALLOCATION_SELECT = `SELECT a.id, a.node_id AS "nodeId", n.name AS "nodeName", a.source_id AS "sourceId",
 	a.registration_no AS "registrationNo", a.property_ref AS "propertyRef", h.user_display AS holder,
 	a.authorisation, a.purpose, a.water_source AS "waterSource", a.volume_m3_year AS "volumeM3PerYear",
-	a.storage_m3 AS "storageM3", a.valid_from AS "validFrom", a.valid_to AS "validTo", a.reference,
+	a.storage_m3 AS "storageM3", a.irrigated_area_ha AS "irrigatedAreaHa", a.valid_from AS "validFrom", a.valid_to AS "validTo", a.reference,
 	a.months::int[] AS months, a.max_rate_m3s AS "maxRateM3s", a.conditions, a.water_use AS "waterUse",
 	a.created_at AS "createdAt", a.updated_at AS "updatedAt"
 	FROM allocation a
@@ -194,6 +198,8 @@ export interface AllocationRow {
 	waterSource: 'surface' | 'groundwater';
 	volumeM3PerYear: number;
 	storageM3: number | null;
+	/** The registered irrigated area, ha (244); null = none stated. */
+	irrigatedAreaHa: number | null;
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
@@ -356,9 +362,9 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				throw new ApiError(409, `this project has reached the limit of ${ALLOCATIONS_PER_PROJECT_MAX} allocations`);
 			const { rows } = await db.query<{ id: string }>(
 				`INSERT INTO allocation (project_id, node_id, registration_no, property_ref, authorisation, purpose, water_source,
-					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions, water_use)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16) RETURNING id`,
-				[id, body.nodeId, body.registrationNo, body.propertyRef, body.authorisation, body.purpose, body.waterSource, body.volumeM3PerYear, body.storageM3, body.validFrom, body.validTo, body.reference, body.months, body.maxRateM3s, JSON.stringify(body.conditions), body.waterUse]
+					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions, water_use, irrigated_area_ha)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17) RETURNING id`,
+				[id, body.nodeId, body.registrationNo, body.propertyRef, body.authorisation, body.purpose, body.waterSource, body.volumeM3PerYear, body.storageM3, body.validFrom, body.validTo, body.reference, body.months, body.maxRateM3s, JSON.stringify(body.conditions), body.waterUse, body.irrigatedAreaHa]
 			);
 			await touchRunInputs(db, id);
 			const aid = rows[0]!.id;
@@ -376,9 +382,15 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const before = await loadAllocation(db, id, aid);
 			if (!datesInOrder({ validFrom: body.validFrom !== undefined ? body.validFrom : before.validFrom, validTo: body.validTo !== undefined ? body.validTo : before.validTo }))
 				throw new ApiError(400, 'valid from is after valid to');
-			// The row as it would be stored: a storage-only (21b) row stays one only with volume 0, a storage and surface water.
-			const after = <K extends 'waterUse' | 'volumeM3PerYear' | 'storageM3' | 'waterSource'>(k: K) => (body[k] !== undefined ? body[k] : before[k]);
-			const problem = storageOnlyProblem({ waterUse: after('waterUse')!, volumeM3PerYear: after('volumeM3PerYear')!, storageM3: after('storageM3') ?? null, waterSource: after('waterSource')! });
+			// The row as it would be stored: a storage-only (21b) row stays one only with volume 0, a storage, surface water and no irrigated area.
+			const after = <K extends 'waterUse' | 'volumeM3PerYear' | 'storageM3' | 'waterSource' | 'irrigatedAreaHa'>(k: K) => (body[k] !== undefined ? body[k] : before[k]);
+			const problem = storageOnlyProblem({
+				waterUse: after('waterUse')!,
+				volumeM3PerYear: after('volumeM3PerYear')!,
+				storageM3: after('storageM3') ?? null,
+				waterSource: after('waterSource')!,
+				irrigatedAreaHa: after('irrigatedAreaHa') ?? null
+			});
 			if (problem) throw new ApiError(400, problem);
 			await checkNode(db, id, body.nodeId);
 			const cols: Record<string, string> = {
@@ -390,6 +402,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				waterSource: 'water_source',
 				volumeM3PerYear: 'volume_m3_year',
 				storageM3: 'storage_m3',
+				irrigatedAreaHa: 'irrigated_area_ha',
 				validFrom: 'valid_from',
 				validTo: 'valid_to',
 				reference: 'reference',
@@ -460,14 +473,14 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const ids = valid.map(() => crypto.randomUUID());
 			await db.query(
 				`INSERT INTO allocation (id, project_id, source_id, node_id, registration_no, property_ref, authorisation, purpose, water_source,
-					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions, water_use)
+					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions, water_use, irrigated_area_ha)
 				 SELECT x.id, $1, $2, x.node_id, x.registration_no, x.property_ref, x.authorisation, x.purpose, x.water_source,
 					x.volume_m3_year, x.storage_m3, x.valid_from, x.valid_to, x.reference,
 					CASE WHEN jsonb_typeof(x.months) = 'array' THEN (SELECT array_agg(m::smallint ORDER BY m::int) FROM jsonb_array_elements_text(x.months) m) END, x.max_rate_m3s, x.conditions,
-					x.water_use
+					x.water_use, x.irrigated_area_ha
 				 FROM jsonb_to_recordset($3::jsonb) AS x(id uuid, node_id uuid, registration_no text, property_ref text, authorisation text, purpose text,
 					water_source text, volume_m3_year double precision, storage_m3 double precision, valid_from date, valid_to date, reference text,
-					months jsonb, max_rate_m3s double precision, conditions jsonb, water_use text)`,
+					months jsonb, max_rate_m3s double precision, conditions jsonb, water_use text, irrigated_area_ha double precision)`,
 				[
 					id,
 					sourceId,
@@ -488,7 +501,8 @@ export const allocationRoutes = new Hono<AuthEnv>()
 							months: r.months,
 							max_rate_m3s: r.maxRateM3s,
 							conditions: r.conditions,
-							water_use: r.waterUse
+							water_use: r.waterUse,
+							irrigated_area_ha: r.irrigatedAreaHa
 						}))
 					)
 				]
@@ -580,6 +594,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 						a.maxRateM3s,
 						a.conditions.join(CONDITIONS_SEPARATOR),
 						a.waterUse,
+						a.irrigatedAreaHa,
 						s?.fileName ?? '',
 						s?.sha256 ?? ''
 					]);

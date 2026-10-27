@@ -1802,7 +1802,12 @@ water-use volumes per farm or water user.
   water: a dam's registered storage only); `allocation_storage_only_check`
   holds a `21b` row to `volume_m3_year = 0`, a `storage_m3` and `surface`
   water, so it can never be read as a take. WARMS registers per water use, so
-  a dam arrives as its own 21(b) row.
+  a dam arrives as its own 21(b) row. `irrigated_area_ha` (244): the
+  irrigated area the authorisation registers, ha (0 to < 10⁷; NULL = none
+  stated, every row before 244); `allocation_irrigated_area_take_check` keeps
+  it to a `21a` row, since on a dam's row it would be counted again beside
+  the property's take. Never a model input: runs don't carry it, and changing
+  it leaves `project.updated_at` alone.
 - **`allocation_holder`**: `allocation_id` (primary key; composite key
   `(allocation_id, project_id)` → `allocation`, cascade), `project_id`,
   `user_display` (1–200). The registered user's name, in its own table so RLS

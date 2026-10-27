@@ -45,6 +45,9 @@ export const WATER_USE_LABEL: Record<AllocationWaterUse, string> = {
  */
 export const volumeCell = (a: { waterUse: AllocationWaterUse; volumeM3PerYear: number | null }): string => (a.waterUse === '21b' ? 'Storage only (s21b)' : `${fmtNum(a.volumeM3PerYear)} m³/a`);
 
+/** A registered irrigated area (244): up to two decimals, as the authorisation states it ("42.5 ha"); a whole-number round would read 42.5 as 43. */
+export const areaHa = (ha: number): string => `${fmtNum(ha, 2, true)} ha`;
+
 /**
  * The dam against its registered storage (engine compareAllocations
  * `storage`, issue #72), in words, or null when there is neither. Arithmetic
@@ -337,8 +340,8 @@ export const MATCHED_BY_LABEL: Record<NonNullable<AllocationPreviewRow['matchedB
 
 /** The CSV template's header line (backend TEMPLATE_HEADERS) and one invented example row. */
 export const TEMPLATE_CSV =
-	'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions,water_use\r\n' +
-	'EXAMPLE-001,Portion 1 of Example 1,Farm A,Example Holdings,licence,irrigation,surface,120000,150000,2020-01-01,2040-12-31,example row: replace,Oct-Mar,0.05,No abstraction below 0.2 m3/s at the weir | Meter and report monthly,21a\r\n';
+	'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions,water_use,irrigated_area_ha\r\n' +
+	'EXAMPLE-001,Portion 1 of Example 1,Farm A,Example Holdings,licence,irrigation,surface,120000,150000,2020-01-01,2040-12-31,example row: replace,Oct-Mar,0.05,No abstraction below 0.2 m3/s at the weir | Meter and report monthly,21a,15\r\n';
 
 /**
  * The import sheet's "Expected format" example (issue #456): the template's
@@ -363,6 +366,7 @@ export const ALLOCATIONS_FORMAT: FileFormat = {
 		'Each row needs a registration number, property or farm to match it by; its volume in m³ a year (a 21(b) row: the dam’s storage in m³); and its water source, surface or groundwater (a 21(b) row is surface). The template’s rows need their authorisation too (registration, licence, general authorisation, Schedule 1, existing lawful use); a WARMS extract without that column is read as registrations.',
 		'Units: m³ a year, unless a Unit column says otherwise (m3/a, Ml/a, kl/a; a megalitre is 1 000 m³). A volume per month or day is refused.',
 		'Numbers: in a comma-separated file a point is the decimal mark (1500.5, 1,500); in a semicolon-separated file a comma (1500,5, 1.500).',
+		'An irrigated area column (`irrigated_area_ha`, or a WARMS “Irrigated Area (ha)”; a bare “Area (ha)” isn’t read, as it may be the property’s extent) is optional: hectares, on a 21(a) take row only; a 21(b) storage row with an area is refused.',
 		'Dates as YYYY-MM-DD (or YYYY/MM/DD); months as `Oct-Mar` or `10 11 12 1 2 3`; licence conditions separated by |.',
 		'A column headed ID number, passport, phone, cell, fax or email refuses the whole file: delete it first.',
 		'The preview lists every row with its line number; a row with a problem says what it is and isn’t imported.'
