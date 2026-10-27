@@ -340,7 +340,7 @@ test('Add a rule table sits above the tables; a paste over typed values shows th
 	await expect(table).toHaveCount(0);
 });
 
-test('the EWR results are judged by is chosen first thing in Settings, and the headline follows without a re-run (issue #444)', async ({ page, owner }) => {
+test('the EWR results are judged by is chosen near the top of Settings, under the model selection, and the headline follows without a re-run (issue #444)', async ({ page, owner }) => {
 	void owner;
 	const id = await seedThreeYears(page.request, 'Judge results by');
 	await updateSettings(page.request, id, { ewrRules: [janOnlyTable(1000)] });
@@ -366,8 +366,9 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 	await judged.getByRole('link', { name: 'Change' }).click();
 	await expect(page).toHaveURL(/[?&]tab=settings#set-judge$/);
 
-	// The picker is the page's first panel, and lists only what exists.
-	await expect(page.locator('.settings-form > .panel').first()).toHaveAttribute('id', 'set-judge');
+	// The picker is the page's second panel, right under the model selection (issue #614), and lists only what exists.
+	await expect(page.locator('.settings-form > .panel').nth(0)).toHaveAttribute('id', 'set-share');
+	await expect(page.locator('.settings-form > .panel').nth(1)).toHaveAttribute('id', 'set-judge');
 	const pick = page.getByRole('combobox', { name: 'EWR the results are judged by' });
 	await expect(pick.locator('option')).toHaveText([
 		'Automatic: now the Reserve rule table at the outlet, Outflow gauge',

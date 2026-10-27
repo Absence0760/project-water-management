@@ -1456,7 +1456,7 @@ same way on every screen:
   no site) with station details (`SeriesMeta.station`,
   239_rain_stations.sql). A catchment may have several, by name, and each can
   serve one or more hydrological units. The kind's hint says so, and that
-  until Settings has a Flow generation section runs read catchment rainfall
+  until Settings has a Flow generation section (now Model selection for flow generation) runs read catchment rainfall
   as today (the first catchment rain series by name, which may be a
   station); *Rainfall — catchment*'s hint points to the station kind. For a
   new station the form asks for a **Station name** (required), and in *The
@@ -3265,7 +3265,7 @@ itself.
   unit's Catchment area section, after the areas, an optional **MAP**
   (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, once it is set,
   a required **Source of the MAP** (`node.mapMm`, `node.mapSource`). It is
-  read only under Settings' Flow generation, Per unit, where **MAP from the
+  read only under Model settings' Model selection for flow generation, Per unit, where **MAP from the
   grid** can fill it and its source from a loaded MAP grid for every unit
   at once. Clearing the MAP clears
   its source. A MAP out of range or without its source is marked
@@ -5819,7 +5819,7 @@ which shows under the fields: *Say where the station's MAP comes from …*,
 *A station's coordinates need both a latitude and a longitude, or
 neither.*). It says *Saved the station.*, or *Not saved: &lt;reason&gt;*.
 Viewers read the MAP with its source and where it stands, or *Not
-recorded*. Settings → Flow generation, Per unit, reads the run's catchment rain
+recorded*. Settings → Model selection for flow generation, Per unit, reads the run's catchment rain
 station's MAP from here, and History says *Recorded … as a rainfall
 station: MAP 745 mm (…)*, *Changed the rainfall station details of …* or
 *Cleared …*. **Edit a day** (issue #477 (a), `series/EditDay.svelte`,
@@ -6185,7 +6185,7 @@ editors run one now and read the map's proposals, viewers read.
   automatically … → Data feeds** (in-page, `#data-feeds`), the Map's
   Getting started step and the Start sheet's data step
   (`?tab=series&rain=boundary#data-feeds`, and **Observed flow**
-  `?tab=series#data-feeds`), Model settings' Rain for each unit line (Flow generation)
+  `?tab=series#data-feeds`), Model settings' Rain for each unit line (Model selection for flow generation)
   (`?tab=series&rain=units#data-feeds`) and Runs & results' stub for a run
   with no forecast (`res-forecast`, `runs/missingPanel.ts`). Each lands
   through `landOnAnchor` (`help/anchor.ts`): once the lazy panel's heading
@@ -6438,9 +6438,11 @@ other sections.
   `settings/EwrHeadlineField.svelte`, its heading `JUDGE_HEADING` in
   `settings/sections.ts`, helpers in `ewr/headline.ts`; issue #444: the client
   asked where to choose which EWR to use, at the top). Named **Judge results
-  by** until issue #586 R4-B (finding E14: judged by what?). The first panel
-  of the form, and the side index's first link, in a group of its own with no
-  name above Data & rain, so Find a setting finds it ("judged"; it had no
+  by** until issue #586 R4-B (finding E14: judged by what?). The second panel
+  of the form, right under **Model selection for flow generation** (it was
+  the first until issue #614, which put the model input above it: the judge
+  choice only reads results), and the side index's second link, in the lead
+  group with no name above Data & rain, so Find a setting finds it ("judged"; it had no
   link, and nothing to find it by). Its heading sits in a `.panel-head` as
   every other panel's, so the line under it keeps the same gap (it ran into
   the heading at 1440). One select,
@@ -6487,7 +6489,7 @@ other sections.
   from the Calibration page, § Calibration) land on
   that group once the tab's chunk has drawn it, held while the page settles
   (`holdAnchor`), with focus on its heading. The panels and cards that are
-  lazy chunks (`settings/lazySections.ts`: Rain gaps' cards, Flow generation's
+  lazy chunks (`settings/lazySections.ts`: Rain gaps' cards, Model selection for flow generation's
   station table, the evidence rule; on Calibration, Evaporation from the map)
   are waited for, then their heading (`landOnAnchor`, help/anchor.ts;
   a card's h4, as Units without a station's in its legend, counts), until the
@@ -6512,16 +6514,14 @@ other sections.
   wraps the whole tab. From a content width of 80rem (a 1440 px window) it is
   a **side index**: a sticky column on the left listing every panel by its
   heading, word for word, under its task, in page order (`settings/sections.ts`,
-  `settingsNavGroups`): **Data & rain** (Simulation period `#set-period`, Rain
+  `settingsNavGroups`): a lead group with no name (Model selection for flow
+  generation `#set-share`, the id it had as the Flow share panel, kept so its
+  links and notes still land, issue #553; then EWR the results are judged by
+  `#set-judge`; issue #614), **Data & rain** (Simulation period `#set-period`, Rain
   gaps `#set-rain`, Data quality `#set-quality`: its zero-rain and
   low-vs-CHIRPS limits change results, issue #173), **Demand & supply**
   (Demand `#set-demand`, Drought restrictions
-  `#set-restrict`, Reporting `#set-reporting`), **Runoff** (Flow generation
-  `#set-share`, the id it had as the Flow share panel, kept so its links and notes still land, issue #553;
-  Flow calibration, Calibration record, Fit the parameters and WR2012 check
-  moved to [Calibration](#calibration) in issue #586 round 3, sharing this
-  page's draft and save bar: `CALIBRATION_SETTINGS_SECTIONS`, whose Save
-  blockers `saveBlockers` lists after this page's), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
+  `#set-restrict`, Reporting `#set-reporting`), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
   tables `#set-reserve`), **Reading results** (Outcome matrix
   `#set-outcomes`, Seasonal outlook `#set-outlook`, Evidence
   `#set-evidence`: they change no result) and **Automatic runs**
@@ -6530,9 +6530,15 @@ other sections.
   own, moved to the Data page (`?tab=series#data-feeds`) and the Project page
   (`?tab=project#project-api-keys` and `#project-report-schedules`, [§
   Project](#project)) in issue #586 round 1; nothing follows the form now.
-  EWR the results are judged by (`#set-judge`) heads the form above them all,
-  as the client asked (issue #444), the menu's first link, in a group with no
-  name (issue #586 R4-B).
+  Model selection for flow generation (`#set-share`) heads the form above
+  them all, the client's main modelling choice (issue #614), with EWR the
+  results are judged by (`#set-judge`, issue #444) right under it, the
+  menu's first two links in a group with no name (issue #586 R4-B). The
+  **Runoff** group, the model selection's alone, went with that move. Flow
+  calibration, Calibration record, Fit the parameters and WR2012 check moved
+  to [Calibration](#calibration) in issue #586 round 3, sharing this page's
+  draft and save bar: `CALIBRATION_SETTINGS_SECTIONS`, whose Save blockers
+  `saveBlockers` lists after this page's.
   The panels sit in that order on the page, so the marked link moves down the
   column as you read. Beside the index, every 12-month row still fits (the
   month cells' padding is slim: twelve months and a year total at 1440 px,
@@ -6654,7 +6660,7 @@ other sections.
   shortened to the menu's words; the summary line under each says the rest);
   inside the long ones each sub-group is an `h3` in the order shown (in its
   fieldset's legend where it has one), so heading navigation reaches them:
-  under Flow generation its cards (Per unit: Each unit's rainfall station,
+  under Model selection for flow generation its cards (Per unit: Each unit's rainfall station,
   then the Flow share card; Units without a station an `h4` in its legend,
   issue #553); under Rain gaps its two cards, CHIRPS gap filling and Flagged
   rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
@@ -6732,11 +6738,12 @@ two.
 - **The calibration panels are on the Calibration page** (issue #586
   round 3): Flow calibration, Calibration record, Fit the parameters and
   the WR2012 check, documented under [§ Calibration](#calibration), *Set up
-  the fit*. They sat here, after Flow generation, until then. They edit the
+  the fit*. They sat here, after Flow generation (now Model selection for
+  flow generation, at the top), until then. They edit the
   same draft as this page, so an edit here and one there are saved together
   from the one save bar, and a Save blocker on either page is listed on both,
   linked to its panel on its own page. Links on this page to them point
-  there directly: Flow generation's "Parameters not fitted for this method"
+  there directly: the model selection's "Parameters not fitted for this method"
   goes to `?tab=calibration#set-fit`, and Demand's **Evaporation from the
   map** to `?tab=calibration#set-evaporation`. Find a setting lists the four
   as "…, on Calibration" (`SETTINGS_ELSEWHERE`), by their names and their
@@ -6840,9 +6847,24 @@ two.
   have different fields, and it is the second list with water-year fields
   (the CHIRPS fit period is the first), short of the third caller that
   would justify a shared editor.
-- **Flow generation** (`#set-share`, issue #553 round 3; [model.md §2.4h,
-  §2.4i, §2.5](./model.md)): how natural flow is made, one choice, the
-  Runoff group's one panel. It replaced the Flow share panel and the
+- **Model selection for flow generation** (`#set-share`, issue #553 round 3;
+  [model.md §2.4h, §2.4i, §2.5](./model.md)): how natural flow is made, one
+  choice. Named **Flow generation** until issue #614, the Runoff group's one
+  panel, after Reporting; since then the **first panel** on the page, above
+  EWR the results are judged by, in the lead group with no name, at the
+  client's asking (the heading is their wording, in the app's sentence case;
+  their capitals were for emphasis, which the card's styling gives). It is
+  the page's **lead card** (`.panel.lead`, `data-lead`): a 2 px `--accent`
+  frame and its head tinted `--accent-soft`, both tokens with dark values,
+  and its two methods are **choice cards**, side by side where two 18rem
+  cards fit and one under the other on a phone, the picked one in the
+  accent (`:has(input:checked)`), each a radio still (`name="st-flowgen"`,
+  arrow keys move the pick) whose label covers the card, so a click anywhere
+  on it picks it. The explanations switch sits above it, since it has
+  explanations too. The engine's warnings name it "Model settings → Model
+  selection for flow generation"; an older run's "Model settings → Flow
+  generation" and "Settings → Flow generation" still link to it ([model.md §
+  Where a warning sends the reader](./model.md)). It replaced the Flow share panel and the
   "Runoff from each unit's own rain" checkbox, which the operator found read as
   two separate settings (2026-10-23). Under its line of values, a line that
   stays with the explanations off says where the runoff model's parameters
@@ -6850,9 +6872,9 @@ two.
   calibration." (`flowgen-where`, linking to `?tab=calibration#set-flow`), so
   the panel isn't taken for Calibration's Flow calibration (issue #586 E14).
   A radio pair, **How natural flow is made** ("Method" until E14), each
-  method's name followed by what it does in plain words, always shown and
-  its radio's description (`FLOW_METHODS` `short`, `flowGeneration.ts`; on a
-  phone the words sit under the name, lined up with it):
+  method's name with what it does in plain words under it, in its card,
+  always shown and its radio's description (`FLOW_METHODS` `short`,
+  `flowGeneration.ts`; the words lined up with the name, past the radio):
   **Fragmentation**, "one runoff run on the catchment rain, split between the
   units" (the default: `settings.unitRain` null, absent or `catchment`; GR4J
   once on the catchment rain, its flow split by the flow share) or **Per
@@ -7445,7 +7467,7 @@ dialog (`settings/MonthlyPasteDialog.svelte`) and fills only its own row:
 Flow calibration's pan coefficients here (**Paste monthly pan
 coefficients**), Demand's A-pan on Model settings (**Paste monthly A-pan
 evaporation**). Their links to Model settings' panels say so ("Demand, on
-Model settings"; the areal rainfall note: "When Flow generation on Model
+Model settings"; the areal rainfall note: "When Model selection for flow generation on Model
 settings runs each unit on its own rain (Per unit)…", issue #586 E14), and Flow
 calibration's line points at *How the shown run fits* for NSE and PBIAS.
 
@@ -7458,7 +7480,7 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   line is one line here (cut with an ellipsis; the whole text is its link's
   name and title), so a changed field's cell is as tall as its neighbours'.
   **Rain into GR4J**: the areal rainfall correction, one switch while off
-  (rain for each unit and the MAP-grid proposal moved to Flow generation →
+  (rain for each unit and the MAP-grid proposal moved to Model selection for flow generation →
   Per unit, issue #553).
   **GR4J potential evaporation**: the choice, the annual figure and the
   monthly row; under the pan row, **Fill or edit the row: preset, FAO-56
@@ -7502,15 +7524,15 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     of range or a blank source blocks Save, with the message beside the
     source and in the save bar. The fit record lists the correction it ran
     under ("Areal rainfall correction"), and the report's inputs table
-    shows it. Under Flow generation's Per unit, a note under it (shown even with
-    the explanations off, linking to Flow generation) says it applies only to the units that fall back
+    shows it. Under Model selection for flow generation's Per unit, a note under it (shown even with
+    the explanations off, linking to Model selection for flow generation) says it applies only to the units that fall back
     to the catchment rain, and the report's inputs table adds a "Rain for
     each unit (GR4J rain)" row (`report/inputs.ts`).
     **Units without a station** (`settings.unitRain`, issue #482,
     `settings/UnitRainFields.svelte`, its own chunk, helpers in
     `settings/unitRain.ts`; [model.md §2.4h](./model.md)) was this card's
     "Rain for each unit" until issue #553 round 3 moved it, without its
-    checkbox, to Flow generation → Per unit (below): what a land unit with no
+    checkbox, to Model selection for flow generation → Per unit (below): what a land unit with no
     rainfall station runs on, the rule from before stations. A line says how many units with
     land have a MAP ("1 of 2 units with land has a MAP."), with a link that
     opens Data feeds' Rain for each unit on the Data page
@@ -7546,7 +7568,7 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     reference unit the model no longer has with land says so under the
     field (runs ignore the reference until another is picked). The Settings
     tab checks it itself (`unitRainFormError`), so Save is blocked before the
-    chunk has loaded; the problem is listed against Flow generation.
+    chunk has loaded; the problem is listed against Model selection for flow generation.
     Under Per unit, editors also get **MAP from the grid**
     (`settings/UnitMapProposal.svelte`, its own chunk, helpers in
     `settings/unitMapProposal.ts`; `GET`/`POST …/map/unit-map`, [maps.md § MAP
@@ -11251,7 +11273,7 @@ March") is kept against what it is about.
     (the run notes stay the modeller's one explanation; these are comments
     from anyone on the team, and the line under the heading says so);
   - in the head of each **Settings** group (Demand, Flow calibration, Rain
-    gaps, Calibration record, Fit the parameters, WR2012 check, Flow generation (keyed `share`, its Flow share name before issue #553), EWR, Reserve rule
+    gaps, Calibration record, Fit the parameters, WR2012 check, Model selection for flow generation (keyed `share`, its Flow share name before issue #553, Flow generation before issue #614), EWR, Reserve rule
     tables, Drought restrictions, Reporting, Simulation period, Data quality,
     Outcome matrix, Seasonal outlook, Evidence, Automatic runs), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`),
     always last in the head, after the panel's own action (**Propose from the

@@ -157,7 +157,7 @@ describe('areaRowInfo and areaNames', () => {
 	});
 
 	it('a unit without a station says what its rain is instead, and offers its series only when it has some', () => {
-		expect(areaRowInfo(unitItem(), ctx({ unitRain: { mode: 'perUnit' } }))).toMatchObject({ sentence: 'No rainfall station assigned: its rain follows Model settings → Flow generation → Units without a station.', toggle: null });
+		expect(areaRowInfo(unitItem(), ctx({ unitRain: { mode: 'perUnit' } }))).toMatchObject({ sentence: 'No rainfall station assigned: its rain follows Model settings → Model selection for flow generation → Units without a station.', toggle: null });
 		const off = { rainStations: { units: { A: { stationId: 'Bergwater' } } } };
 		expect(areaRowInfo(unitItem([ser('x', 'rain_chirps_mm', { siteNodeId: 'A' })]), ctx(off))).toMatchObject({
 			sentence: 'Runs split the catchment’s flow by the flow share (per-unit rain is off), so its station isn’t read.',

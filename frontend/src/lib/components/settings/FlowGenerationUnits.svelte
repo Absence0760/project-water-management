@@ -1,5 +1,5 @@
 <!--
-	Settings → Flow generation → Per unit (issue #553 round 3, docs/ui.md § Model settings, docs/model.md §2.4i):
+	Settings → Model selection for flow generation → Per unit (issue #553 round 3, docs/ui.md § Model settings, docs/model.md §2.4i):
 	one row per land unit with its rainfall station (settings.rainStations.units), whether the station's rain is scaled
 	to the unit's MAP (the ratio shown beside it), and the station whose monthly factors correct the unit's CHIRPS on
 	the station's gaps; then each station in use, once, with its MAP and where its CHIRPS is read (its coordinates, or

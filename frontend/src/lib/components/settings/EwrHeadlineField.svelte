@@ -1,7 +1,8 @@
 <!--
 	Model settings → EWR the results are judged by (issue #444; "Judge results
 	by" until issue #586 E14, plainer now): which EWR test the results are
-	judged by, the first thing on the page. Bind `value` (settings.ewrHeadline).
+	judged by, right under the model selection for flow generation (it headed
+	the page until issue #614). Bind `value` (settings.ewrHeadline).
 	Changes no result: it decides which test the EWR page's headline tile (the
 	Summary's card until issue #558), the run sentence, the printable report and
 	the "days below" wording report.

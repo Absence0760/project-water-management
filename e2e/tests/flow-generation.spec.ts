@@ -1,4 +1,4 @@
-// Model settings → Flow generation (issue #553 round 3; docs/ui.md § Model settings; docs/model.md §2.4h, §2.4i,
+// Model settings → Model selection for flow generation (issue #553 round 3; docs/ui.md § Model settings; docs/model.md §2.4h, §2.4i,
 // §2.5). On the sample model with two invented rainfall stations beside its catchment rain series:
 // - The panel leads Runoff & calibration with the Fragmentation / Per unit radio. Fragmentation (the default) shows
 //   the flow share; Per unit shows a row per land unit: its station (stations only, no satellite option), Scale to
@@ -46,11 +46,11 @@ const row = (page: Page, unit: string) => panel(page).getByTestId('flowgen-row')
 const storedSettings = async (request: APIRequestContext, id: string) =>
 	((await (await request.get(`${API_URL}/projects/${id}`)).json()) as { project: { settings: { unitRain?: unknown; rainStations?: unknown } } }).project.settings;
 
-test('Flow generation switches between Fragmentation and Per unit, and assigns each unit a rainfall station', async ({ page, owner }) => {
+test('Model selection for flow generation switches between Fragmentation and Per unit, and assigns each unit a rainfall station', async ({ page, owner }) => {
 	void owner;
 	const { id, upper, lower, ridge, vlei } = await seed(page.request, 'Flow generation');
 	await openSettings(page, id);
-	await expect(panel(page).getByRole('heading', { level: 2 })).toHaveText('Flow generation');
+	await expect(panel(page).getByRole('heading', { level: 2 })).toHaveText('Model selection for flow generation');
 	const method = panel(page).getByRole('group', { name: /^How natural flow is made/ });
 	const fragmentation = method.getByRole('radio', { name: 'Fragmentation' });
 	const perUnit = method.getByRole('radio', { name: 'Per unit' });
@@ -159,7 +159,7 @@ test('switching method marks the fit as not fitted for this method, until its ow
 	void owner;
 	const { id } = await seed(page.request, 'Flow generation fit');
 	await updateSettings(page.request, id, { runoffModel: 'gr4j' });
-	// The fit is on Calibration (issue #586 round 3); Flow generation stays on Model settings.
+	// The fit is on Calibration (issue #586 round 3); the model selection for flow generation stays on Model settings.
 	await openCalibration(page, id);
 	await fitAndApply(page);
 	await saveSettings(page);

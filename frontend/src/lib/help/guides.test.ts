@@ -360,7 +360,9 @@ describe('Settings paths named in help and in the app', () => {
 		expect(pathProblem(['Fit the parameters', 'Fit automatically'], 'calibration')).toBeNull();
 		expect(pathProblem(['Rain gaps'], 'calibration')).toMatch(/no panel on Calibration/);
 		expect(pathProblem(['Plausibility checks lists the signatures'], 'calibration')).toBeNull();
-		expect(pathProblem(['Flow generation', 'Units without a station'])).toBeNull();
+		expect(pathProblem(['Model selection for flow generation', 'Units without a station'])).toBeNull();
+		// Its name before issue #614 is no panel now.
+		expect(pathProblem(['Flow generation', 'Units without a station'])).toMatch(/no Settings panel/);
 		expect(pathProblem(['Rain gaps', 'Nowhere in particular'])).toMatch(/isn’t shown under Rain gaps/);
 	});
 

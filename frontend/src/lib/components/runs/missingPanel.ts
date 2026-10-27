@@ -30,12 +30,12 @@ const NEEDS: Record<string, MissingPanel> = {
 		link: { href: '?tab=series', label: 'Data' }
 	},
 	'res-runoff': {
-		text: 'This run has no runoff model balance. It is shown for a conceptual runoff model (GR4J), chosen under Flow generation.',
-		link: { href: '?tab=settings#set-share', label: 'Flow generation' }
+		text: 'This run has no runoff model balance. It is shown for a conceptual runoff model (GR4J), chosen under Model selection for flow generation.',
+		link: { href: '?tab=settings#set-share', label: 'Model selection for flow generation' }
 	},
 	'res-unit-rain': {
-		text: 'This run has no rain for each unit. It needs Per unit flow generation, with rain for each unit or rainfall stations, set under Flow generation.',
-		link: { href: '?tab=settings#set-share', label: 'Flow generation' }
+		text: 'This run has no rain for each unit. It needs Per unit flow generation, with rain for each unit or rainfall stations, set under Model selection for flow generation.',
+		link: { href: '?tab=settings#set-share', label: 'Model selection for flow generation' }
 	},
 	'res-wr2012': {
 		text: 'This run has no WR2012 check. It needs a WR2012 reference for the catchment, set under WR2012 check.',

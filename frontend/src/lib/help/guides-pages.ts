@@ -437,7 +437,7 @@ export const PAGE_GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'One long form, under **Build the model**, before **Calibration**. **EWR the results are judged by** comes first, the side index’s first link; then the panels by task: **Data & rain** (Simulation period, Rain gaps, Data quality), **Demand & supply** (Demand, Drought restrictions, Reporting), **Runoff** (Flow generation: how rain becomes each unit’s natural flow, not the runoff model’s parameters, which are fitted under **Calibration → Flow calibration**), **EWR & Reserve** (EWR, Reserve rule tables), **Reading results** (Outcome matrix, Seasonal outlook, Evidence) and **Automatic runs**. Each panel says what it is set to under its heading.'
+						text: 'One long form, under **Build the model**, before **Calibration**. **Model selection for flow generation** comes first, the lead card and the side index’s first link: how rain becomes each unit’s natural flow, Fragmentation or Per unit, not the runoff model’s parameters, which are fitted under **Calibration → Flow calibration**. **EWR the results are judged by** follows it; then the panels by task: **Data & rain** (Simulation period, Rain gaps, Data quality), **Demand & supply** (Demand, Drought restrictions, Reporting), **EWR & Reserve** (EWR, Reserve rule tables), **Reading results** (Outcome matrix, Seasonal outlook, Evidence) and **Automatic runs**. Each panel says what it is set to under its heading.'
 					},
 					{
 						type: 'p',
@@ -477,7 +477,7 @@ export const PAGE_GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**Flow calibration** here is not **Flow generation** on **Model settings**: Flow calibration holds the runoff model’s parameters (how rain becomes flow), Flow generation how the rain reaches each hydrological unit.'
+						text: '**Flow calibration** here is not **Model selection for flow generation** on **Model settings**: Flow calibration holds the runoff model’s parameters (how rain becomes flow), the model selection how the rain reaches each hydrological unit.'
 					}
 				]
 			},

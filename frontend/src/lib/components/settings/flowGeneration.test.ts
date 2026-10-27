@@ -1,4 +1,4 @@
-// Settings → Flow generation (flowGeneration.ts, issue #553 round 3): the
+// Settings → Model selection for flow generation (flowGeneration.ts, issue #553 round 3): the
 // method from settings.unitRain, the Per unit table's rows and their writes
 // into settings.rainStations (a fit made under the other method is the
 // engine's FitRecordStatus.methodChanged, tested in stationForcing.test.ts). The

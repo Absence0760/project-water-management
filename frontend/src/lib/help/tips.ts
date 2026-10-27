@@ -1154,7 +1154,7 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'unit-rain',
-		term: 'Flow generation: fragmentation or per unit',
+		term: 'Model selection for flow generation: fragmentation or per unit',
 		short: 'Fragmentation runs GR4J once on the catchment rain; Per unit runs it on each unit’s rain (its station × MAP ratio) and sums the flow.',
 		units: 'mm/day',
 		category: 'flow',

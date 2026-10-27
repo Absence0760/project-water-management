@@ -35,6 +35,14 @@ describe('placesIn', () => {
 		expect(named('history; the Plausibility checks panel has the table.')).toEqual([['the Plausibility checks panel', 'plausibility']]);
 	});
 
+	it('finds a panel by its former heading, as runs before its rename named it (issue #614, engine 1.101.0)', () => {
+		expect(placeName('share')).toBe('Model settings → Model selection for flow generation');
+		// 1.98.0 to 1.100.0, and before 1.98.0.
+		expect(named('the other method (Model settings → Flow generation: Fragmentation)')).toEqual([['Model settings → Flow generation', 'share']]);
+		expect(named('or the high/low MAP split (Settings → Flow generation) so')).toEqual([['Settings → Flow generation', 'share']]);
+		expect(named('see Model settings → Model selection for flow generation.')).toEqual([['Model settings → Model selection for flow generation', 'share']]);
+	});
+
 	it('finds nothing in a sentence that names no place, nor a panel’s name without its page, nor a longer word', () => {
 		expect(placesIn('The calibration record’s window is short.')).toEqual([]);
 		expect(placesIn('Flow calibration is GR4J.')).toEqual([]);
@@ -91,6 +99,13 @@ describe('warningInCurrentWords', () => {
 		expect(warningInCurrentWords('Validation signatures (provisional limits): on the 3 scored days')).toBe('Hydrological signatures (provisional limits): on the 3 scored days');
 		expect(warningInCurrentWords('Set the monthly A-pan (Settings) or load a daily A-pan series')).toBe('Set the monthly A-pan (Model settings → Demand) or load a daily A-pan series');
 		expect(warningInCurrentWords('An editor declares the rule under Settings › Evidence.')).toBe('An editor declares the rule under Model settings → Evidence.');
+	});
+
+	it('reads a warning from before engine 1.101.0 by the flow generation panel’s heading now (issue #614)', () => {
+		const now = 'Model settings → Model selection for flow generation';
+		expect(warningInCurrentWords('the other flow generation method (Model settings → Flow generation: Fragmentation, one GR4J run)')).toBe(`the other flow generation method (${now}: Fragmentation, one GR4J run)`);
+		expect(warningInCurrentWords('Correct the high/low MAP split (Settings → Flow generation) so they add up to 100%')).toBe(`Correct the high/low MAP split (${now}) so they add up to 100%`);
+		expect(warningInCurrentWords('Correct the high/low MAP split (Settings) so')).toBe(`Correct the high/low MAP split (${now}) so`);
 	});
 
 	it('reads a data check from before engine 1.99.0, its dates year first, in today’s words (issue #586)', () => {
