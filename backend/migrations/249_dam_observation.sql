@@ -144,16 +144,32 @@ COMMENT ON COLUMN dam_observation.pct_observed IS
 -- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
+-- The dam features on the caller's own farms, in every project they farm in:
+-- the farmer policies below, as map_feature_select_farmer (152) reads them
+-- through app_farm_nodes. No argument, so a policy runs it once per query,
+-- not once per row (a dam's series is thousands of rows).
+CREATE FUNCTION app_farm_dam_features() RETURNS SETOF uuid
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+	AS $$
+		SELECT f.id FROM map_feature f
+		JOIN farm_link l ON l.project_id = f.project_id AND l.node_id = f.node_id
+		WHERE l.user_id = app_current_user_id() AND f.kind = 'dam'
+	$$;
+COMMENT ON FUNCTION app_farm_dam_features() IS
+	'The dam map features on the calling user''s own farms, in every project (249): the farmer policies of dam_waterbody_match and dam_observation.';
+REVOKE ALL ON FUNCTION app_farm_dam_features() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_farm_dam_features() TO water_app;
+
 ALTER TABLE dam_waterbody_match ENABLE ROW LEVEL SECURITY;
 CREATE POLICY dam_waterbody_match_select ON dam_waterbody_match FOR SELECT USING (app_has_role(project_id, 'viewer'));
 -- A farmer or contributor: the dams on their own farms only (map_feature_select_farmer, 152).
 CREATE POLICY dam_waterbody_match_select_farmer ON dam_waterbody_match FOR SELECT
-	USING (feature_id IN (SELECT f.id FROM map_feature f WHERE f.project_id = dam_waterbody_match.project_id AND f.node_id IN (SELECT app_farm_nodes(f.project_id))));
+	USING (feature_id IN (SELECT app_farm_dam_features()));
 
 ALTER TABLE dam_observation ENABLE ROW LEVEL SECURITY;
 CREATE POLICY dam_observation_select ON dam_observation FOR SELECT USING (app_has_role(project_id, 'viewer'));
 CREATE POLICY dam_observation_select_farmer ON dam_observation FOR SELECT
-	USING (feature_id IN (SELECT f.id FROM map_feature f WHERE f.project_id = dam_observation.project_id AND f.node_id IN (SELECT app_farm_nodes(f.project_id))));
+	USING (feature_id IN (SELECT app_farm_dam_features()));
 
 -- Read only: every write goes through the worker's functions below.
 GRANT SELECT ON dam_waterbody_match, dam_observation TO water_app;
@@ -174,7 +190,7 @@ CREATE FUNCTION map_feature_outline_changed() RETURNS trigger
 	$$;
 REVOKE ALL ON FUNCTION map_feature_outline_changed() FROM PUBLIC;
 CREATE TRIGGER map_feature_outline_changed AFTER UPDATE OF geometry, kind ON map_feature
-	FOR EACH ROW WHEN (OLD.geometry IS DISTINCT FROM NEW.geometry OR OLD.kind IS DISTINCT FROM NEW.kind)
+	FOR EACH ROW WHEN ((OLD.kind = 'dam' OR NEW.kind = 'dam') AND (OLD.geometry IS DISTINCT FROM NEW.geometry OR OLD.kind IS DISTINCT FROM NEW.kind))
 	EXECUTE FUNCTION map_feature_outline_changed();
 
 -- ---------------------------------------------------------------------------
@@ -185,7 +201,8 @@ CREATE TRIGGER map_feature_outline_changed AFTER UPDATE OF geometry, kind ON map
 -- outline for the wanted list and the match, its match as it stands
 -- (match_stale when there is none, or the reference set was loaded since),
 -- and the newest observation held per source. The outlines leave the VPC
--- only to our own mirror bucket, for the fetcher (docs/security.md).
+-- only to our own mirror bucket, for the fetcher (docs/security.md). Past the
+-- cap the newest dams wait: the tick logs it (dams/observed/tick.ts).
 CREATE FUNCTION app_dam_outlines()
 	RETURNS TABLE (
 		feature_id uuid, project_id uuid, geometry jsonb, area_m2 double precision, updated_at timestamptz,
@@ -215,8 +232,9 @@ COMMENT ON FUNCTION app_dam_outlines() IS
 REVOKE ALL ON FUNCTION app_dam_outlines() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_dam_outlines() TO water_app;
 
--- The waterbodies whose bounding box meets the box given (at most 200), for
--- the match's overlap in the backend. Worker only (the table's policy needs a user).
+-- The waterbodies whose bounding box meets the box given (at most 200, those
+-- whose boxes share the most area with it first), for the match's overlap in
+-- the backend. Worker only (the table's policy needs a user).
 CREATE FUNCTION app_waterbody_candidates(p_w double precision, p_s double precision, p_e double precision, p_n double precision)
 	RETURNS TABLE (uid text, geometry jsonb, area_m2 double precision)
 	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
@@ -232,7 +250,7 @@ CREATE FUNCTION app_waterbody_candidates(p_w double precision, p_s double precis
 			SELECT r.uid, r.geometry, r.area_m2
 			FROM waterbody_reference r
 			WHERE r.min_lon <= p_e AND r.max_lon >= p_w AND r.min_lat <= p_n AND r.max_lat >= p_s
-			ORDER BY r.uid
+			ORDER BY greatest(0, least(r.max_lon, p_e) - greatest(r.min_lon, p_w)) * greatest(0, least(r.max_lat, p_n) - greatest(r.min_lat, p_s)) DESC, r.uid
 			LIMIT 200;
 	END
 	$$;
@@ -254,19 +272,20 @@ CREATE FUNCTION app_dam_match_write(
 	AS $$
 	DECLARE
 		f map_feature%ROWTYPE;
-		old dam_waterbody_match%ROWTYPE;
+		prev dam_waterbody_match%ROWTYPE;
 	BEGIN
 		IF NOT mirror_worker_context() THEN
 			RAISE EXCEPTION 'only the worker matches dams to waterbodies' USING ERRCODE = 'insufficient_privilege';
 		END IF;
 		dropped := 0;
-		SELECT * INTO f FROM map_feature WHERE id = p_feature_id FOR UPDATE;
+		-- Serialised with a redraw (the PATCH's row lock) and with the loader, which locks the same row first.
+		SELECT * INTO f FROM map_feature WHERE id = p_feature_id FOR NO KEY UPDATE;
 		IF f.id IS NULL OR f.kind <> 'dam' OR f.geometry ->> 'type' NOT IN ('Polygon', 'MultiPolygon') OR date_trunc('milliseconds', f.updated_at) IS DISTINCT FROM date_trunc('milliseconds', p_feature_at) THEN
 			applied := false;
 			RETURN;
 		END IF;
-		SELECT * INTO old FROM dam_waterbody_match WHERE feature_id = p_feature_id;
-		IF old.feature_id IS NOT NULL AND old.status = 'matched' AND (p_status <> 'matched' OR p_uid IS DISTINCT FROM old.uid) THEN
+		SELECT * INTO prev FROM dam_waterbody_match WHERE feature_id = p_feature_id;
+		IF prev.feature_id IS NOT NULL AND prev.status = 'matched' AND (p_status <> 'matched' OR p_uid IS DISTINCT FROM prev.uid) THEN
 			DELETE FROM dam_observation WHERE feature_id = p_feature_id AND source = 'waterbodies';
 			GET DIAGNOSTICS dropped = ROW_COUNT;
 		END IF;
@@ -287,7 +306,8 @@ GRANT EXECUTE ON FUNCTION app_dam_match_write(uuid, text, text, double precision
 --   p_source 'waterbodies': p_key is a uid; the rows go to every dam matched to it.
 --   p_source 'wofs':        p_key is a dam feature's id; the rows go to it, unless the feature
 --                           changed after p_fetched_at (its outline may be another), or it is no
---                           longer a dam polygon (applied = false).
+--                           longer a dam polygon (applied = false). p_fetched_at is when the
+--                           fetch started, so a redraw during the fetch counts as after it.
 -- Rows are upserted by (feature, source, date): a file never removes a row (a
 -- pass may cover only the days since the newest held), and a row whose
 -- values are unchanged isn't rewritten. `written` counts the rows inserted or
@@ -346,14 +366,25 @@ CREATE FUNCTION app_dam_observation_load(
 			RAISE EXCEPTION 'an upstream key is not 1 to 200 printable characters' USING ERRCODE = 'check_violation';
 		END IF;
 
+		-- The target dams' rows are locked first, so a redraw (which drops the
+		-- dam's match and observations) can't commit between choosing them and
+		-- writing: it waits, or the dam is chosen against the state it left.
 		IF p_source = 'waterbodies' THEN
-			SELECT coalesce(array_agg(m.feature_id ORDER BY m.feature_id), '{}') INTO targets
-				FROM dam_waterbody_match m WHERE m.uid = p_key AND m.status = 'matched';
+			SELECT coalesce(array_agg(l.id), '{}') INTO targets FROM (
+				SELECT f.id FROM map_feature f JOIN dam_waterbody_match m ON m.feature_id = f.id
+				WHERE m.uid = p_key AND m.status = 'matched'
+				ORDER BY f.id FOR NO KEY UPDATE OF f
+			) l;
+			-- Read the matches again under the locks: one redrawn meanwhile is gone.
+			SELECT coalesce(array_agg(m.feature_id), '{}') INTO targets
+				FROM dam_waterbody_match m WHERE m.feature_id = ANY (targets) AND m.uid = p_key AND m.status = 'matched';
 		ELSE
 			fid := p_key::uuid;
-			SELECT coalesce(array_agg(f.id), '{}') INTO targets
-				FROM map_feature f
-				WHERE f.id = fid AND f.kind = 'dam' AND f.geometry ->> 'type' IN ('Polygon', 'MultiPolygon') AND date_trunc('milliseconds', f.updated_at) <= p_fetched_at;
+			SELECT coalesce(array_agg(l.id), '{}') INTO targets FROM (
+				SELECT f.id FROM map_feature f
+				WHERE f.id = fid AND f.kind = 'dam' AND f.geometry ->> 'type' IN ('Polygon', 'MultiPolygon') AND date_trunc('milliseconds', f.updated_at) <= p_fetched_at
+				FOR NO KEY UPDATE
+			) l;
 		END IF;
 		dams := cardinality(targets);
 		IF dams = 0 THEN
