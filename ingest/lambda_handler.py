@@ -1,6 +1,7 @@
 """The bulk ingest Lambda (issue #604 D11): `lambda_handler.handler`.
 
 Event: {"product": "rnl" | "sat", "mode": "monthly"}
+       {"product": "era5l", "mode": "monthly" | "backfill", "month"?}  (era5land.py)
        {"product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM"}
 Env:   MIRROR_URL      file:///abs/path or s3://bucket[/prefix] (required)
        FEED_SOURCE     fixtures (default: the synthetic byMonth directory in
@@ -49,6 +50,11 @@ import lease  # noqa: E402
 import manifest  # noqa: E402
 import polite  # noqa: E402
 import zarrstore  # noqa: E402
+
+# --- era5l (issue #604 R4-A): ERA5-Land, era5land.py -------------------------
+import era5land  # noqa: E402
+
+# --- end era5l ---------------------------------------------------------------
 
 # Round 1's names for the single-file path, which now lives in chirps_final.
 ingest_file = chirps_final.ingest_file
@@ -102,6 +108,11 @@ def _publish_lag(mirror, product: str, metrics, today: dt.date) -> int:
 def handler(event, context=None, s3_client=None, opener=None, metrics=None, clock=None, sleep=None, today=None):
     """Run one event. `s3_client`, `opener` (polite's), `metrics` (a cloudwatch
     sink), `clock`/`sleep` (pacing) and `today` (the lag's date) are for tests."""
+    # --- era5l (issue #604 R4-A): its own submit-then-collect run, era5land.handler.
+    # Event {"product": "era5l", "mode": "monthly" | "backfill", "month"?}.
+    if isinstance(event, dict) and event.get("product") == era5land.PRODUCT:
+        return era5land.handler(event, context, s3_client=s3_client, metrics=metrics, **({"clock": clock} if clock else {}), **({"today": today} if today else {}))
+    # --- end era5l ---
     ev = validate_event(event)
     source = os.environ.get("FEED_SOURCE", "fixtures")
     if source not in ("fixtures", "live"):

@@ -9,12 +9,18 @@ ingest stay in Node (`backend/`).
 Round 1 built the skeleton (the writer, the manifest, the polite client, the
 image and CI); Round 2 (R2-A) added the CHIRPS finals job, `chirps_final.py`,
 which lists CHC's `byMonth` directories and copies new or rewritten months.
-Fixtures mode runs the same code against a synthetic directory.
+Fixtures mode runs the same code against a synthetic directory. Round 4
+(R4-A) added ERA5-Land, `era5land.py` (product `era5l`, § The ERA5-Land
+job), whose CDS requests are submitted on one run and collected on a later
+one.
 
 | File | What it does |
 | --- | --- |
 | `lambda_handler.py` | `handler(event, context)`: validates the event, runs the finals job, and publishes `MirrorLagDays` on every exit. |
 | `chirps_final.py` | The CHIRPS finals job (below): the listing and its diff, paced whole-file downloads within the time budget, and `ingest_file`, the single-file path. |
+| `era5land.py` | The ERA5-Land job (§ The ERA5-Land job): submit a month's CDS request, collect it on a later run, the 0.1° remap, the revision rule, and its own handler (`lambda_handler.py` hands `era5l` events to it). |
+| `fakecds.py` | Fixtures mode's stand-in for the CDS: submit, status, find and download, serving `fixtures/era5land/`'s synthetic NetCDF. Not in the image. |
+| `requirements.a.in` | R4-A's direct dependency (`ecmwf-datastores-client`, the CDS client), to be hash-pinned into `requirements.txt` at the round's merge. |
 | `cloudwatch.py` | The freshness metric `MirrorLagDays` (CloudWatch live, a local sink in fixtures mode). |
 | `lease.py` | One writer per product: a lease object taken with S3 conditional writes. |
 | `fixturehttp.py` | Fixtures mode's stand-in for CHC's server over `fixtures/chirps/`. Not in the image. |
@@ -28,6 +34,7 @@ Fixtures mode runs the same code against a synthetic directory.
 | `tiffread.py` | A stdlib GeoTIFF strip reader: one pixel of a CHC daily file through range requests, for `verify_copy.py`. Not in the image. |
 | `requirements-verify.txt` | `verify_copy.py`'s hash-pinned packages (the image's plus icechunk), for `ingest/.venv-verify` only. |
 | `fixtures/make_chc_fixture.py` | Writes `fixtures/chc/chirps-v3.0.2024.02.days_p05.nc`, the reader's synthetic fixture. |
+| `fixtures/era5land/make_era5land_fixture.py` | Writes a synthetic ERA5-Land month in the CDS's NetCDF layout; `fakecds.py` calls it for each download, so nothing binary is committed. |
 | `fixtures/chirps/make_chirps_fixtures.py` | Writes the synthetic `byMonth` directory (`fixtures/chirps/`): two months, their listing, and a rewritten and a changed variant. |
 | `tests/roundtrip.ts` | The Node half of the cross-language round trip (`test_roundtrip.py`). |
 | `Dockerfile` | The Lambda image (build context `ingest/`). |
@@ -38,10 +45,13 @@ Fixtures mode runs the same code against a synthetic directory.
 ```json
 { "product": "rnl" | "sat", "mode": "monthly" }
 { "product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM" }
+{ "product": "era5l", "mode": "monthly" }
+{ "product": "era5l", "mode": "backfill", "month": "YYYY-MM" }
 ```
 
 A backfill names its month (from 1981-01 for `rnl`, 2000-06 for `sat`); a
-monthly run takes none. Any other key is refused.
+monthly run takes none. Any other key is refused. An `era5l` backfill
+names a month from 1950-01 to the newest complete one.
 
 | Variable | Meaning |
 | --- | --- |
@@ -49,6 +59,7 @@ monthly run takes none. Any other key is refused.
 | `FEED_SOURCE` | `fixtures` (the default: the synthetic `byMonth` directory, no network) or `live` (production: CHC). |
 | `INGEST_CONTACT` | The contact address in the User-Agent. Optional. |
 | `INGEST_FIXTURE_VARIANT` | Fixtures mode only: `rewritten` or `changed` serves that variant of the synthetic directory. |
+| `CDS_KEY_SECRET_ARN` | Live `era5l` runs only: the Secrets Manager secret holding the CDS API key (`infra/era5land.tf`), read at run time and never logged. Fixtures mode never reads it. |
 | `MIRROR_METRIC_NAMESPACE` | Optional: the metric's namespace, default `water-management/Mirror`. |
 
 Fixtures mode runs exactly the live code with three differences: CHC is
@@ -109,6 +120,68 @@ that copied, a run the budget cut short, a monthly run held off by the lease,
 and every failure, before the error is re-raised. The lag alarms treat a
 missing datapoint as breaching, and `test_chirps_final.MetricOnEveryExit`
 walks every exit to keep it that way.
+
+## The ERA5-Land job
+
+Product `era5l`: ERA5-Land daily total precipitation from the Copernicus
+Climate Data Store (dataset `reanalysis-era5-land`, CC BY 4.0, about 5 days
+behind), into a **finals** array on the **0.1° grid** (r4-shared.md): shape
+(years from 1950, 366, 275, 310), chunk (1, 366, 20, 20), cell [0, 0]
+centred at lat -35.45, lon 10.05, attributes `firstYear` 1950, `region`,
+`grid` (step 0.1) and `attribution` (Copernicus's text). The manifest is the
+usual one with `grid.step` 0.1; each `files` entry is one month's request,
+`url` `cds://reanalysis-era5-land/total_precipitation/YYYY-MM`, with no ETag.
+The module's docstring is the full design; in short:
+
+- **A day is the UTC day.** ERA5-Land's `tp` accumulates from 00 UTC, so the
+  00 UTC step of D+1 is day D's total: one field a day, m × 1000 = mm. A
+  month's request asks for the 00 UTC steps of its own days, so it writes
+  the last day of the previous month through its own second-last day; the
+  month's last day comes with the next month's request. `finalThrough` is
+  the end of the contiguous run of months held (ERA5-Land-T days included:
+  a revision later marks them, as below).
+- **The remap.** ERA5-Land's points are on x.x0°; the copy's cells are
+  centred on x.x5°, so each cell is the mean of its four corner points (a
+  quarter of each box: the area-weighted remap). Sea points have no value;
+  a coastal cell averages the corners that do.
+- **Submit, then collect.** A run never waits for the CDS's queue. It writes
+  its intent to `ingest-state/era5l/requests.json`, submits, and records the
+  request's id; a later run asks its status and, once it is `successful`,
+  downloads the result (polite client) and writes it. At most one request
+  per month and `MAX_IN_FLIGHT` (4) in all. If the state is lost, or a run
+  died between the intent and the id, the next run looks for its own queued
+  request among the account's ten newest jobs before submitting again.
+- **A failed request** (failed, rejected, deleted, gone) is resubmitted after
+  1, 2, 4, then 8 days. After 5 failures the run stops resubmitting it and
+  raises `RequestsFailed` every run (the errors alarm). To try again, read
+  its `lastError`, fix the cause, and delete that month's entry from the
+  state file.
+- **monthly** (the daily rule): collect; then request the newest complete
+  month (its last day 6 days old) and any month after the newest held one,
+  at most 12 back; then re-request each held month that may still change.
+- **ERA5-Land-T revisions.** The newest months are preliminary (the file's
+  `expver` is not 0001), replaced by the consolidated data about two months
+  on. Such a month (or one whose phase is unknown) is requested again 75
+  days after it ends, then every 30 days while still preliminary. CHIRPS's
+  revision rule applies: a new revision with a `changes` entry only when the
+  values' hash changed.
+- **backfill** marks its month wanted and submits it when a slot is free;
+  every later run, the daily one included, keeps submitting wanted months
+  (newest first) as slots free up. AWS's `nsf-ncar-era5` holds ERA5, not
+  ERA5-Land, so the backfill goes through the CDS too.
+- **Checks and stops:** the 0–2000 mm check after the remap (negative
+  packing noise above -0.001 mm becomes 0), the values hash, the lease, a
+  401 or 403 that stops the run (never retried) and writes
+  `ingest-state/era5l/refused.json` so no other run that UTC day calls the
+  CDS, and `MirrorLagDays{Product=era5l}` on every exit (before any month is
+  held it counts from 1949-12-31).
+- **The key** is read from Secrets Manager (`CDS_KEY_SECRET_ARN`) in live
+  mode, only when the run first calls the CDS. `LiveCds` wraps
+  `ecmwf-datastores-client` with our User-Agent, one call a second and no
+  client-side retry loop; the result file comes through `polite.py`.
+
+Operator steps (the CDS account, the licence, the key, turning it on, the
+backfill): docs/deployment.md § ERA5-Land.
 
 ## The copy
 
@@ -249,6 +322,7 @@ file changes.
 
 ```sh
 pnpm dev:ingest:run          # rnl into ingest/.mirror (gitignored); `pnpm dev:ingest:run sat` for sat
+pnpm dev:ingest:run era5l    # ERA5-Land from the fake CDS: the first run submits, the second collects
 pnpm test:ingest             # the unittest suite
 ```
 
@@ -271,6 +345,7 @@ They cover:
 - **The manifest:** the round-trip, refusing manifests that don't follow the spec, and a hash that stays stable across NaN payloads, memory layout and byte order.
 - **The handler:** a fixtures-mode run from start to finish, a re-run that is one 304, the variants through the environment, a retry after a crash between the chunk upload and the manifest, a gap in the months that holds `finalThrough` back, a file whose days aren't its month's, and an image whose COPY line lacks a module.
 - **The finals job** (`test_chirps_final.py`): the listing parser, a new month, a rewrite with the same values (no bump), a rewrite with changed values (a bump and its `changes`), the 304, a 403 that stops with no retry, the time budget, the pacing (within and across runs, on a fake clock), a backfill of a named month, the lease (local and S3), and the metric on every exit.
+- **ERA5-Land** (`test_era5land.py`): each 00 UTC step as the day before's total, m to mm, the record's first day, the four-corner remap (inland and coastal), packing noise and a real negative, the 2000 mm bound, the phase from `expver`; a known cell and day at its array index and chunk; submit on one run and collect on a later one, one submit per month however often it runs, a held month never requested again, the gap after the newest held month, state lost while queued (adopted, not resubmitted), an intent without an id, state lost after collecting, a failed request's 1/2/4/8-day backoff and the loud stop after 5, the in-flight cap and the queue it drains; a re-check with the same values (no bump), with changed values (a bump with its `changes`), and one still preliminary; a 401 and a 403 that stop the run and the rest of the UTC day; `LiveCds`'s 401/403/404/5xx mapping; the lease; the metric on every exit; the key read by ARN and not at all when no CDS call is needed; and the event through `lambda_handler.py`. The CDS is `fakecds.FakeCds`; nothing touches the network or needs a key.
 - **The round trip** (`test_roundtrip.py`): Python writes the copy from the synthetic NetCDF, and Node's `backend/src/mirror/` reads it through `tests/roundtrip.ts`, bit for bit, with the same hash and manifest. It needs the pnpm install (`backend/node_modules/.bin/tsx`) and skips without it, except in CI, where `INGEST_REQUIRE_NODE=1` makes it fail.
 - **The reader:** a value outside 0–2000 mm fails the read and writes nothing.
 - **The fixture:** it still matches its generator.
