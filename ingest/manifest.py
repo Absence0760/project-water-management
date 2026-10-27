@@ -147,7 +147,8 @@ def validate(m: dict) -> dict:
         for k in ("etag", "lastModified"):
             if f[k] is not None and not isinstance(f[k], str):
                 _fail(f"files[{i}].{k} must be a string or null")
-        _int(f["size"], f"files[{i}].size")
+        if f["size"] is not None:  # null when the upstream gave no Content-Length (the Node validator, backend/src/mirror/manifest.ts, agrees)
+            _int(f["size"], f"files[{i}].size")
         if not isinstance(f["valuesSha256"], str) or not _SHA.match(f["valuesSha256"]):
             _fail(f"files[{i}].valuesSha256 must be 64 lowercase hex digits")
         _int(f["revision"], f"files[{i}].revision", 1)

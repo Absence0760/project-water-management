@@ -57,6 +57,14 @@ class RoundTrip(unittest.TestCase):
         self.assertEqual(m["grid"], {"origin": {"lat": -35.475, "lon": 10.025}, "step": 0.05})
         self.assertEqual(m["region"], {"w": 10.0, "s": -35.5, "e": 41.0, "n": -8.0})
 
+    def test_a_file_without_a_size_is_valid_as_in_node(self):
+        m = full()
+        m["files"][0]["size"] = None
+        manifest.validate(m)  # backend/src/mirror/manifest.ts: size is nullable
+        m["files"][0]["size"] = -1
+        with self.assertRaisesRegex(ValueError, "size"):
+            manifest.validate(m)
+
     def test_upsert_replaces_by_url(self):
         m = full()
         e = dict(m["files"][0], size=1)
