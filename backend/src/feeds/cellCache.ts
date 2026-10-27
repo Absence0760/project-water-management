@@ -167,24 +167,46 @@ export function seriesFromCache(
 ): GridDays {
 	// Each of the feed's cells, with its own weight, reads its product cell: on a coarser grid several read the same one.
 	const keys = cells.map((c) => productCell(product, c.lat, c.lon));
-	const days = windowDays(window);
-	const got = days.map((day) => {
-		const cds = keys.map((k) => cellDay(view, k, day));
-		if (cds.some((cd) => cd.v === null)) return { v: null, prelim: false };
-		const v = meanOf(
-			cds.map((cd) => (Number.isNaN(cd.v) ? null : cd.v)),
-			cells,
-			noData
-		);
-		return { v, prelim: cds.some((cd) => !cd.final) };
-	});
+	// cellDay's reading, a year at a time: each cell's row looked up once a year, not once a day, so a whole
+	// record (27,000 days over 100 cells, the Data tab's double mass) costs array reads, not string keys.
+	const s = toEpochDay(window.start);
+	const n = Math.max(0, toEpochDay(window.end) - s + 1);
+	const got: { v: number | null; prelim: boolean }[] = new Array(n);
+	const vals: (number | null)[] = new Array(keys.length);
+	let year = n ? Number(window.start.slice(0, 4)) : 0;
+	let y0 = toEpochDay(`${year}-01-01`);
+	let y1 = toEpochDay(`${year + 1}-01-01`);
+	let rows = keys.map((k) => view.get(viewKey(k, year)));
+	for (let t = 0; t < n; t++) {
+		const e = s + t;
+		if (e >= y1) {
+			year++;
+			y0 = y1;
+			y1 = toEpochDay(`${year + 1}-01-01`);
+			rows = keys.map((k) => view.get(viewKey(k, year)));
+		}
+		const i = e - y0;
+		let missing = false;
+		let prelim = false;
+		for (let c = 0; c < rows.length; c++) {
+			const row = rows[c];
+			const v = row ? (row.vals[i] ?? null) : null;
+			if (v === null) {
+				missing = true;
+				break;
+			}
+			if (row!.final[i] !== true) prelim = true;
+			vals[c] = Number.isNaN(v) ? null : v;
+		}
+		got[t] = missing ? { v: null, prelim: false } : { v: meanOf(vals, cells, noData), prelim };
+	}
 	let last = got.length - 1;
 	while (last >= 0 && got[last]!.v === null) last--;
 	const kept = got.slice(0, last + 1);
 	let final = 0;
 	while (final < kept.length && kept[final]!.v !== null && !kept[final]!.prelim) final++;
 	const out: GridDays = { startDate: window.start, values: kept.map((g) => g.v), prelimDays: kept.filter((g) => g.v !== null && g.prelim).length };
-	if (final > 0) out.finalThrough = days[final - 1]!;
+	if (final > 0) out.finalThrough = fromEpochDay(s + final - 1);
 	return out;
 }
 
