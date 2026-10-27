@@ -1895,6 +1895,73 @@ worker tick: each status, then each file whose last good fetch is new to it
   synthetic series (`backend/fixtures/waterbodies/series/`), so dev, CI and
   e2e need no network. `pnpm dev:dams:run` runs tick → pass → tick once
   through a scratch directory ([run-locally.md § Dam observations](./run-locally.md#dam-observations)).
+- **WOfS, summed inside our own outlines** (R5-C,
+  `backend/src/dams/observed/wofs/`). The current source: DE Africa's
+  `wofs_ls` collection, one item per Landsat path/row scene, each a COG of
+  WOfS's per-pixel bit flags. The pass (`pass.ts`) takes the dams in turn
+  (never tried first, then the oldest turn) and, per dam, searches STAC
+  (`stac.ts`, `explorer.digitalearth.africa/stac/search`, the outline's
+  lon/lat box, a year a search, 100 items a page, following `next` only to
+  the same search) from where it left off, then reads each scene's header
+  and only the tiles under the outline (`cog.ts`) and sums them (`sum.ts`).
+  - **The scenes** (checked on a live 2026-09 Landsat 8 scene, 2026-10-27):
+    classic little-endian TIFF in GDAL's COG layout, one uint8 band, 512 ×
+    512 tiles, DEFLATE with the horizontal predictor, `GDAL_NODATA` 1,
+    30 m, GeoKeys for WGS 84 / UTM (EPSG 326xx; DE Africa writes the
+    southern hemisphere in the **north** zone codes, so northings are
+    negative). The reader takes that and its legal variants (big-endian,
+    no compression or predictor, PixelIsPoint, an empty sparse tile, the
+    south codes) and refuses anything else with a reason: BigTIFF, strips,
+    other sample types or bands, another CRS or units, a rotation matrix,
+    a GDAL scale/offset, implausible sizes; a tile never inflates past its
+    pixels. No dependency (`geotiff` would bring a decoder zoo; the CHIRPS
+    reader, `feeds/sources/tiff.ts`, refuses tiles on purpose and stays
+    so). `cog.test.ts` round-trips it through `cogWrite.ts`.
+  - **Projection** (`utm.ts`): WGS 84 → UTM by Krüger's series to n⁶
+    (Karney 2011), checked against PROJ to a millimetre, with the point
+    scale factor k. No dependency: proj4js would carry a CRS database for
+    one projection.
+  - **Summing**: a pixel counts when its centre is inside the outline
+    (projected vertex by vertex, scanline crossings, even-odd per polygon
+    so holes are out, polygons of a MultiPolygon unioned). Exactly 128 is
+    clear wet, exactly 0 clear dry, anything else (cloud, shadow, no data,
+    water under a flag) not clear; a pixel inside the outline but off the
+    scene isn't either. `wet_area_m2` = wet pixels × 900 m² ÷ k² (the grid
+    stretches ground by k; ~0.2 % at a zone's edge), `pct_observed` = clear
+    ÷ inside × 100. An outline no pixel centre falls in (smaller than a
+    pixel, or a sliver) gives no row, and so does a scene whose footprint
+    missed the dam (every inside pixel no-data); a scene that saw it under
+    cloud gives a 0 % row.
+  - **Two scenes on one date** (neighbouring Landsat rows overlap): one
+    row, from the scene that saw most of the dam clearly, then the one
+    covering most of it, then the lower item id. Not combined pixel by
+    pixel: the rows' grids needn't line up, and the better view is what a
+    reader would pick.
+  - **Resuming.** `dams/wofs-state.json` (the pass's own, never read by the
+    worker) keeps per dam the SHA-256 of its outline and the date every
+    scene up to which has been read (`scannedThrough`). A run stops at the
+    Lambda's deadline between dates and the next run goes on from there;
+    the first backfill (from 2013, the Landsat 8 era, `WOFS_BACKFILL_FROM`;
+    about 90 scenes a year over a dam, 2–3 requests each) takes several
+    runs. A dam scanned to within 6 days waits; a caught-up dam re-scans
+    its last 45 days each time, for scenes DE Africa publishes late (its
+    rows are written again only if they change). A redrawn outline (its
+    hash changed) starts again, its file rewritten empty at once so the
+    old outline's rows can't be loaded again (249's trigger deletes them
+    from the store). The file keeps the rows from the worker's `since` on
+    and the re-scanned tail; each row names its STAC item, and `upstream`
+    each item's URL and ETag.
+  - **Politeness**: STAC at most one request a second, the bucket at most
+    five (two or three small ranges a scene), one in flight; a 403 or
+    throttling from either stops the pass (the status says stopped and
+    why, the invocation fails). A scene that can't be read is skipped and
+    counted (`sceneFailed` in the log); a failed search or a timeout ends
+    that dam's turn and the next goes on.
+  - **Locally** (`FEED_SOURCE=fixtures`) STAC and the scenes are answered
+    by `wofs/fixtures.ts` from `backend/fixtures/feeds/wofs-sample.json`:
+    invented overlapping scenes in every UTM zone, two paths, a seasonal
+    water field and cloud on some dates, written as real tiled DEFLATE
+    COGs, so the production reader runs offline.
 
 ## Server-side reports
 

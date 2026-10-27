@@ -75,6 +75,7 @@ Every job that fetches from an upstream:
 | [chirps-gefs](#chirps-gefs) | CHIRPS-GEFS v3 16-day forecast | live; the copy built (R3-A), read with `CHIRPS_SOURCE=mirror` | `data.chc.ucsb.edu` | `chirps_gefs` | `backend/src/ingest/gefs.ts` (the copy), `backend/src/feeds/fromMirrorGefs.ts` (feeds read it); `backend/src/feeds/sources/chirps.ts` until the cutover |
 | [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until DWS's written answer | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
 | [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies: v0.0.2 per-waterbody wet-area series and v0.0.3 polygons (built R5-A; replaces the planned row below) | built; off in production until `dam_observations_enabled`; the public series frozen upstream since 2024-02 | `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
+| [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C; replaces the planned row below) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `cog.ts`, `sum.ts`, `utm.ts`) |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
 | [dpet](#dpet) | dPET daily potential evapotranspiration | reference load | `data.bris.ac.uk` | – | `bin/evaporation-fetch.sh`, `pnpm import:evaporation` |
 | [worldcover](#worldcover) | ESA WorldCover 10 m 2021 v200 (cropland) | reference load | `esa-worldcover.org` (the operator's download) | – | `pnpm import:land-cover` |
@@ -305,6 +306,69 @@ reads the upstream and writes files back, and the worker loads them.
 - **Owner:** the operator; code `backend/src/dams/observed/` (`match.ts`,
   `waterbodies.ts`, `tick.ts`, `handover.ts`), `backend/scripts/import-waterbodies.ts`,
   `infra/dam_observations.tf`.
+
+### deafrica-wofs-scenes
+
+- **Source:** Digital Earth Africa Water Observations from Space, Landsat
+  collection `wofs_ls` (1-0-0): one item per Landsat 5/7/8/9 path/row scene,
+  its `water` asset a cloud-optimised GeoTIFF of WOfS's per-pixel bit flags
+  (128 clear water, 0 clear dry, anything else not a clear observation),
+  30 m, in UTM. Found through DE Africa's STAC search; summed inside each of
+  our traced dam outlines by us, for every dam, matched to a waterbody or
+  not. The newest Western Cape scene was 2026-10-20 when checked
+  (2026-10-27): current, unlike the Waterbodies series.
+- **Hosts:** `explorer.digitalearth.africa` (`/stac/search`; its
+  `/stac/collections/wofs_ls` answered 500 that day, the search works) and
+  `deafrica-services.s3.af-south-1.amazonaws.com` (the scenes, anonymous
+  range reads, same region as the app). Both are in `FEED_HOSTS`; a STAC
+  answer may only point at a `wofs_ls/…tif` key in that bucket and at its
+  own next page ([security.md § Data feeds](./security.md)).
+- **Licence:** CC BY 4.0 (Digital Earth Africa, read by the lead
+  2026-10-27).
+- **Attribution:** "Digital Earth Africa WOfS, CC BY 4.0" wherever the
+  values show: the evidence report's § 7
+  ([evidence-pack.md § Observed wet days](./evidence-pack.md#observed-wet-days)),
+  R5-B's chart and farmer view, and `/data-sources`.
+- **Contact:** Digital Earth Africa's help desk and community forum
+  (digitalearthafrica.org; docs.digitalearthafrica.org).
+- **Access pattern:** the fetcher's daily `dams-weekly` run, after the
+  Waterbodies pass, with the rest of the run's time
+  ([architecture.md § Dam observations](./architecture.md#dam-observations)).
+  For each dam in turn whose scan is 6 days old or more: one STAC search per
+  year window over the outline's box (100 items a page), then per scene its
+  header (16 KB) and the tiles under the outline, as one range where they
+  sit together: about 2–3 requests a scene, a few KB to tens of KB each,
+  never a whole scene. It writes `dams/wofs/<featureId>.json` (each row's
+  STAC item id, each item's URL and ETag), `dams/wofs-status.json`, and its
+  own `dams/wofs-state.json` (how far each dam is scanned, and its
+  outline's hash); the worker loads the rows into `dam_observation`
+  (source `wofs`). The first backfill goes back to 2013 (the Landsat 8
+  era, `WOFS_BACKFILL_FROM`) and resumes across runs; after it, a dam
+  re-reads only its last 45 days, for scenes published late.
+- **Limits we keep to:** STAC at most one request a second, the bucket at
+  most five a second, one request in flight; feeds/http.ts's User-Agent,
+  host allowlist, 20 s timeout and 4 MB cap; a 403 or 429/503 from either
+  host stops the pass, never retried that day (the status says `stopped`
+  and why, the invocation fails, the heartbeat still goes out). A scene
+  that can't be read is skipped and counted; a failed search or a timeout
+  ends that dam's turn.
+- **Freshness:** the pass's heartbeat (`DamPassCompleted{Source=wofs}`)
+  and its recency, the days since the newest observation any dam holds
+  (`DamObservationAgeDays{Source=wofs}`), both alarmed
+  (`infra/dam_observations.tf`, `treat_missing_data = "breaching"`, off
+  until `dam_observations_enabled`).
+- **Rows kept:** per dam and date, the wet area (wet pixels × the pixel's
+  ground area) and the share of the outline seen clearly; two scenes on one
+  date give the one that saw more. No row for a date the dam's outline
+  holds no pixel centre or the scene's footprint missed it.
+- **Fallback:** none current: Waterbodies' public series are frozen
+  ([deafrica-waterbodies-series](#deafrica-waterbodies-series)), and
+  Sentinel-1/2 water masks are a Round 6 candidate. The values already
+  loaded stay in `dam_observation`.
+- **Offline:** `FEED_SOURCE=fixtures` answers STAC and the scenes from
+  invented ones (`backend/fixtures/feeds/wofs-sample.json`,
+  `wofs/fixtures.ts`), so dev, CI and e2e never reach either host.
+- **Owner:** the operator; code `backend/src/dams/observed/wofs/`.
 
 ## Planned: the copy's cross-check
 
