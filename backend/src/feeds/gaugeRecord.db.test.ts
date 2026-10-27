@@ -327,6 +327,48 @@ describe('a DWS feed reading the store (DWS_SOURCE=store)', () => {
 			});
 		});
 
+		// A station only the weekly pass reads holds its newest two years; the feed's history starts long before. Those
+		// days aren't "DWS has no data": nobody has asked yet. Read as gaps, the walk would step over them for good.
+		it('waits on days before the earliest span (a web-only station, an old startDate), and fills them once a reply covers them', async () => {
+			live();
+			const owner = await signUp('Before');
+			await withoutUser((db) =>
+				loadWebFile(db, 'dws', { station: 'X0H000', from: add(today(), -729), to: today(), fetchedAt: new Date().toISOString(), rows: [[add(today(), -100), 3, '1']] })
+			);
+			const { pid, feedId } = await dwsFeed(owner, { station: 'X0H000', startDate: '2006-01-01' });
+			expect((await tick()).done).toBe(1);
+			// Waited: nothing written, no failure, no newest day (so the same window next time).
+			const waited = await feedRow(feedId);
+			expect(waited).toMatchObject({ consecutive_failures: 0, last_error: null, last_meta: null, last_data_date: null });
+			expect(waited.last_attempt_at).not.toBeNull();
+			expect(await flow(owner, pid)).toBeNull();
+
+			// DWS's reply lands, covering 2006 to the web pass.
+			await write({ source: 'dws-request', from: '2006-01-01', to: add(today(), -730), rows: [['2006-01-01', 7, '1'], ['2006-01-03', 8, '1']] });
+			await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+			expect((await tick()).done).toBe(1);
+			// The first window's old days fill, a day the reply doesn't list a gap; no failure.
+			const got = await flow(owner, pid);
+			expect(got).toMatchObject({ startDate: '2006-01-01' });
+			expect(got!.values.slice(0, 3)).toEqual([7, null, 8]);
+			expect(await feedRow(feedId)).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: '2006-01-03' });
+		});
+
+		it('waits on a hole between two spans, and reads the window once it is covered (positive control: a covered window reads)', async () => {
+			live();
+			const owner = await signUp('Hole');
+			await write({ source: 'dws-request', from: '2005-01-01', to: '2005-06-30', rows: [['2005-01-02', 1, '1']] });
+			await write({ source: 'dws-request', from: '2005-08-01', to: '2007-12-31', rows: [['2006-01-02', 2, '1']] });
+			const { pid, feedId } = await dwsFeed(owner, { station: 'X0H000', startDate: '2005-01-01' });
+			expect((await tick()).done).toBe(1);
+			expect(await feedRow(feedId)).toMatchObject({ consecutive_failures: 0, last_meta: null, last_data_date: null });
+			await write({ source: 'dws-request', from: '2005-07-01', to: '2005-07-31', rows: [] });
+			await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+			expect((await tick()).done).toBe(1);
+			expect((await flow(owner, pid))!.values.filter((v) => v !== null)).toEqual([1, 2]);
+			expect(await feedRow(feedId)).toMatchObject({ consecutive_failures: 0, last_data_date: '2006-01-02' });
+		});
+
 		it('waits for a window that starts after the store’s newest day, and a backfill window stops at it', async () => {
 			live();
 			const owner = await signUp('Walks');

@@ -20,8 +20,15 @@
 //     on: the store hasn't reached these days. The fetch writes nothing and
 //     records only that it looked (last_attempt_at): no failure, no backoff,
 //     and the same window next time, as with the CHIRPS copy (fromMirror.ts).
-//   * Days the spans skip, or before the first: DWS has no data there (the
-//     page lists none), read as gaps, as the live path reads them.
+//   * Days inside a span that no row lists: DWS has no data there (the page
+//     listed none), read as gaps, as the live path reads them.
+//   * Days before the earliest span, or between two spans: nobody has asked
+//     DWS for them yet. The fetch waits as above (not_ready, the same window
+//     next time) until a span covers them, usually a DWS reply loaded with
+//     pnpm import:dws: read as gaps, the walk would step over them and never
+//     come back. A station only the weekly pass reads holds its newest two
+//     years, so its feed's history waits on a reply (docs/deployment.md
+//     § DWS gauge records).
 //   * The days after the store's newest: a window that reaches today reads
 //     to today (they come with the next weekly pass, and the feed's year of
 //     re-read picks them up); a backfill window that ends before today is cut
@@ -129,6 +136,23 @@ export async function fetchFromGaugeRecord(db: Db, feed: FeedRow, window: FetchW
 	}
 	// A backfill window past the store's newest day stops there (see the header); the window reaching today reads to its end.
 	const read: FetchWindow = newest < end && window.end < opts.today ? { start: window.start, end: newest } : window;
+	// Every day up to the store's newest must lie in a span some source was asked for. One that doesn't (before the
+	// earliest span: a station only the weekly pass reads holds its newest two years, while a feed's startDate can be
+	// decades back) is a day nobody has asked DWS for yet, not a day DWS has no data for: read as a gap, the walk
+	// would step over it for good, since it never comes back. So the feed waits on that window, as above, until a
+	// DWS reply (pnpm import:dws, dws-request) covers it (docs/deployment.md § DWS gauge records).
+	const coveredTo = read.end < end ? read.end : end;
+	const { rows: holes } = await db.query<{ uncovered: boolean }>(
+		`SELECT EXISTS (
+		   SELECT 1 FROM generate_series($3::date, LEAST($4::date, $5::date), interval '1 day') AS d
+		   WHERE NOT EXISTS (SELECT 1 FROM gauge_record_span s WHERE s.origin = $1 AND s.station = $2 AND d::date BETWEEN s.day_from AND s.day_to)
+		 ) AS uncovered`,
+		[origin, station, read.start, coveredTo, newest]
+	);
+	if (holes[0]?.uncovered) {
+		await recordFeedChecked(db, feed.id);
+		return 'not_ready';
+	}
 	const { rows } = await db.query<{ day: string; value: number | null; quality: string | null }>(
 		`SELECT to_char(day, 'YYYY-MM-DD') AS day, value, quality FROM gauge_record_current
 		 WHERE origin = $1 AND station = $2 AND day BETWEEN $3 AND $4 ORDER BY day`,
