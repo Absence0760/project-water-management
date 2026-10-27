@@ -18,11 +18,12 @@
 import { z } from 'zod';
 import { FeedFormatError } from '../../../feeds/errors.js';
 import type { FeedHttp } from '../../../feeds/http.js';
+import { DEAFRICA_SERVICES_BASE } from '../upstream.js';
 
 /** DE Africa's STAC search endpoint (the explorer). */
 export const WOFS_STAC_SEARCH = 'https://explorer.digitalearth.africa/stac/search';
-/** The public HTTPS endpoint of the bucket the scenes are in. */
-export const WOFS_S3_BASE = 'https://deafrica-services.s3.af-south-1.amazonaws.com';
+/** The public HTTPS endpoint of the bucket the scenes are in (no trailing slash). */
+export const WOFS_S3_BASE = DEAFRICA_SERVICES_BASE.replace(/\/+$/, '');
 export const WOFS_COLLECTION = 'wofs_ls';
 /** Items per page: a page is ~4 KB an item, so 100 is ~400 KB, inside the live client's 4 MiB cap. */
 export const PAGE_LIMIT = 100;

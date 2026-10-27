@@ -413,6 +413,50 @@ async function waterbodiesPass(deadline: number): Promise<{ answer: DamPassAnswe
 }
 
 /**
+ * The WOfS pass (dams/observed/wofs/pass.ts): DE Africa's per-scene water
+ * layer summed inside every traced dam's outline. Its metrics whatever
+ * happened, then its stop (an HTTP 403, 429/503) as the error. A scene it
+ * couldn't read is counted (`sceneFailed`), never named.
+ */
+async function wofsPass(deadline: number): Promise<{ answer: DamPassAnswer; error: unknown }> {
+	const { runWofsPass, STAC_INTERVAL_MS, SCENE_INTERVAL_MS } = await import('./dams/observed/wofs/pass.js');
+	const { damPassMetricLine, damsStore } = await import('./dams/observed/handover.js');
+	const started = Date.now();
+	const mode = feedSourceMode();
+	const live = mode === 'live';
+	const r = await runWofsPass({
+		store: damsStore(),
+		http: await feedHttp(mode),
+		today: utcToday(),
+		deadline,
+		stacIntervalMs: live ? STAC_INTERVAL_MS : 0,
+		sceneIntervalMs: live ? SCENE_INTERVAL_MS : 0
+	});
+	emitMetricLine(damPassMetricLine('wofs', r.recencyDays));
+	const message = r.error !== null ? feedErrorMessage(r.error) : null;
+	const unchanged = Math.max(0, r.turns - r.written.length - r.failures.length);
+	// Counts and reason codes, never a dam, an item or an upstream body.
+	logEvent(message !== null ? 'error' : r.failures.length || r.sceneFailures.length ? 'warn' : 'info', {
+		event: 'dams_pass',
+		source: 'wofs',
+		fetched: r.written.length,
+		unchanged,
+		failed: r.failures.length,
+		failedCodes: [...new Set(r.failures.map((f) => f.code))],
+		sceneFailed: r.sceneFailures.length,
+		fresh: r.fresh,
+		recencyDays: r.recencyDays,
+		stopped: r.stopped,
+		stacRequests: r.stacRequests,
+		sceneRequests: r.sceneRequests,
+		scenesRead: r.scenesRead,
+		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
+		ms: Date.now() - started
+	});
+	return { answer: { fetched: r.written.length, unchanged, failed: r.failures.length, fresh: r.fresh, recencyDays: r.recencyDays, stopped: r.stopped }, error: r.error };
+}
+
+/**
  * One run of the dam observation passes: Waterbodies first (at most
  * WATERBODIES_BUDGET_SHARE of the time), then WOfS. A pass stopped by its
  * upstream doesn't keep the other from running; the invocation fails at the
@@ -427,8 +471,10 @@ async function damsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): 
 	const wb = await waterbodiesPass(started + budget * WATERBODIES_BUDGET_SHARE);
 	answer.waterbodies = wb.answer;
 	if (wb.error !== null) errors.push(wb.error);
-	// R5-C: the WOfS pass goes here, with the rest of the budget (deadline started + budget), its answer in
-	// answer.wofs and its stop, if any, pushed to errors; it publishes damPassMetricLine('wofs', …) itself.
+	// WOfS with the rest of the budget.
+	const wofs = await wofsPass(started + budget);
+	answer.wofs = wofs.answer;
+	if (wofs.error !== null) errors.push(wofs.error);
 	if (errors.length) throw errors[0];
 	return answer;
 }

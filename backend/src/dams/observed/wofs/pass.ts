@@ -180,6 +180,8 @@ export interface WofsPassResult {
 	sceneFailures: { featureId: string; itemId: string; error: unknown }[];
 	/** Listed dams scanned recently enough to wait. */
 	fresh: number;
+	/** Dams whose turn started this run. */
+	turns: number;
 	stopped: WofsStop;
 	/** Requests to STAC and to the bucket. */
 	stacRequests: number;
@@ -267,6 +269,7 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 		failures: [],
 		sceneFailures: [],
 		fresh: 0,
+		turns: 0,
 		stopped: 'done',
 		stacRequests: 0,
 		sceneRequests: 0,
@@ -307,6 +310,7 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 			const id = outline.featureId;
 			const st = state.dams[id]!;
 			st.triedAt = isoNow();
+			result.turns++;
 			const since = maxDay(backfillFrom, outline.since);
 			const cursor = st.scannedThrough ? maxDay(since, addDays(st.scannedThrough, 1)) : since;
 			// Caught up: re-scan the tail for scenes published late.
