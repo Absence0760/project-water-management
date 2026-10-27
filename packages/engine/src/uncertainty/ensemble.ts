@@ -261,7 +261,7 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 				}
 			: null;
 	return {
-		input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null, ...(unitRain ? { unitRain } : {}), ...(rainStations ? { rainStations } : {}) }, series },
+		input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null, gapRain: null, ...(unitRain ? { unitRain } : {}), ...(rainStations ? { rainStations } : {}) }, series },
 		reason: null
 	};
 }

@@ -32,6 +32,7 @@ import {
 } from '@water-management/engine';
 import { isUnitRainKind } from '../series/site.js';
 import { referenceCellInput } from './referenceCell.js';
+import { gapRainInputs } from './gapRainInput.js';
 import { stationInputs } from './stationInput.js';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -150,6 +151,12 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		Object.assign(series, stationed.series);
 		for (const id of Object.keys(stationed.stations)) (seriesIds as Record<string, string>)[stationSeriesKey(id)] = id;
 	}
+	// The gap-filling products (engine ≥ 1.101.0, issue #604 R4-B, runs/gapRainInput.ts): ERA5-Land and IMERG Late over
+	// the CHIRPS feed's cells, from the cell cache; only when settings.gapRain asks for one, so other inputs are as before.
+	// Not stored series: the run's input snapshot keeps them, as the reference cell's.
+	const chirpsRead = s.find((r) => r.site_node_id === null && r.kind === 'rain_chirps_mm');
+	const gapRain = await gapRainInputs(db, projectId, settings, chirpsRead?.id ?? null);
+	if (gapRain) Object.assign(series, gapRain);
 	// The EWR is assessed and reported in the baseline, never applied (issue #523 B4, projects/ewrRules.ts): the
 	// rules that keep water for it are a scenario's, so whatever the store holds, the baseline runs without them.
 	// A save refuses them and 220 switched the stored ones off, so this normally changes nothing.

@@ -84,7 +84,7 @@ export const HEAVY_SHARE_BAND = 0.05;
 export { QM_MIN_WET_DAYS, QM_WET_DAY_MM_DEFAULT, QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN, seasonOf } from './quantileMap';
 
 /** Where a day's rain came from: the values of the per-day `rain_source` column. */
-export const RAIN_SOURCE_CODE = { catchment: 0, series: 1, chirps: 2, reanalysis: 3, forecast: 4 } as const;
+export const RAIN_SOURCE_CODE = { catchment: 0, series: 1, chirps: 2, reanalysis: 3, forecast: 4, era5l: 5, imergLate: 6 } as const;
 export type RainSourceCode = (typeof RAIN_SOURCE_CODE)[keyof typeof RAIN_SOURCE_CODE];
 
 export const RAIN_SOURCE_COLUMN = {
@@ -92,6 +92,9 @@ export const RAIN_SOURCE_COLUMN = {
 	label: 'Rain source (0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast; blank = none)',
 	unit: ''
 } as const;
+
+/** The `rain_source` column's label in a run whose gaps another product fills (engine ≥ 1.101.0, settings.gapRain): the two codes it adds. Other runs keep RAIN_SOURCE_COLUMN's. */
+export const RAIN_SOURCE_COLUMN_GAP_LABEL = 'Rain source (0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast, 5 ERA5-Land, 6 IMERG Late; blank = none)';
 
 const KIND_NAME: Record<string, string> = {
 	rain_catchment_alt_mm: 'alternative catchment gauge',
@@ -399,6 +402,10 @@ export interface RainSourcePeriodInfo {
 	reanalysisDays: number;
 	forecastDays: number;
 	noneDays: number;
+	/** Days ERA5-Land filled (engine ≥ 1.101.0, settings.gapRain); absent when none did. */
+	era5lDays?: number;
+	/** Days IMERG Late filled (engine ≥ 1.101.0, settings.gapRain); absent when none did. */
+	imergLateDays?: number;
 }
 
 export interface RainSourceInfo {
@@ -740,13 +747,15 @@ export function rainSourceCodes(
 	catchment: readonly (number | null)[],
 	chirps: readonly (number | null)[],
 	forecast: readonly (number | null)[],
-	set?: ArrayLike<number>
+	set?: ArrayLike<number>,
+	/** Per run day, the gap-filling product's code where ERA5-Land or IMERG Late filled the gap (engine ≥ 1.101.0, ./gapRain.ts), else −1. */
+	gap?: ArrayLike<number> | null
 ): Float64Array {
 	const col = new Float64Array(catchment.length);
 	for (let t = 0; t < col.length; t++) {
 		if (set && set[t]! >= 0) col[t] = set[t]!;
 		else if (catchment[t] != null) col[t] = RAIN_SOURCE_CODE.catchment;
-		else if (chirps[t] != null) col[t] = RAIN_SOURCE_CODE.chirps;
+		else if (chirps[t] != null) col[t] = gap && gap[t]! >= 0 ? gap[t]! : RAIN_SOURCE_CODE.chirps;
 		else if (forecast[t] != null) col[t] = RAIN_SOURCE_CODE.forecast;
 		else col[t] = NaN;
 	}
@@ -763,9 +772,10 @@ export function finishRainSource(
 	catchment: readonly (number | null)[],
 	chirps: readonly (number | null)[],
 	forecast: readonly (number | null)[],
-	start: number
+	start: number,
+	gap?: ArrayLike<number> | null
 ): Float64Array {
-	const col = rainSourceCodes(catchment, chirps, forecast, rs.code);
+	const col = rainSourceCodes(catchment, chirps, forecast, rs.code, gap);
 	for (const p of rs.info.periods) {
 		const from = Math.max(toEpochDay(p.start), start);
 		const to = Math.min(toEpochDay(p.end), start + col.length - 1);
@@ -773,6 +783,8 @@ export function finishRainSource(
 			const c = col[day - start]!;
 			if (c === RAIN_SOURCE_CODE.chirps) p.chirpsDays++;
 			else if (c === RAIN_SOURCE_CODE.forecast) p.forecastDays++;
+			else if (c === RAIN_SOURCE_CODE.era5l) p.era5lDays = (p.era5lDays ?? 0) + 1;
+			else if (c === RAIN_SOURCE_CODE.imergLate) p.imergLateDays = (p.imergLateDays ?? 0) + 1;
 			else if (Number.isNaN(c)) p.noneDays++;
 		}
 	}
@@ -882,6 +894,8 @@ function periodWarning(p: RainSourcePeriodInfo): string {
 	}
 	const through: string[] = [];
 	if (p.chirpsDays) through.push(`${p.chirpsDays} from CHIRPS (bias-corrected)`);
+	if (p.era5lDays) through.push(`${p.era5lDays} from ERA5-Land (bias-corrected)`);
+	if (p.imergLateDays) through.push(`${p.imergLateDays} from IMERG Late (bias-corrected)`);
 	if (p.reanalysisDays) through.push(`${p.reanalysisDays} from the reanalysis`);
 	if (p.forecastDays) through.push(`${p.forecastDays} from forecast rain`);
 	if (p.noneDays) through.push(`${p.noneDays} with no value (run as 0 mm)`);

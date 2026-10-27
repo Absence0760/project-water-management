@@ -56,6 +56,7 @@ import {
 	rainSourceError,
 	QM_WET_DAY_MM_MAX,
 	QM_WET_DAY_MM_MIN,
+	GAP_RAIN_PRODUCTS,
 	ZERO_RAIN_MODES,
 	ZERO_RAIN_FILL_ABOVE_CHIRPS_MAX_MM,
 	zeroFlowMonthsError,
@@ -210,7 +211,7 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * are one set, entered together. And the rainfall stations' assignments
  * (issue #553): a unit left out of a save is unassigned, not kept.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -628,6 +629,15 @@ export const ChirpsQuantileMap = z
 	.object({ wetDayMm: z.number().finite().min(QM_WET_DAY_MM_MIN).max(QM_WET_DAY_MM_MAX) })
 	.strict();
 
+/**
+ * settings.gapRain (engine ≥ 1.101.0, issue #604 R4-B, docs/model.md §2.4b
+ * *Gap-filling product*): which product fills the catchment rain's blank
+ * days, and whether IMERG Late fills the recent ones; null = CHIRPS alone.
+ * Replaced whole on a patch. The engine's gapRainError applies the same
+ * rules to a stored value.
+ */
+export const GapRain = z.object({ product: z.enum(GAP_RAIN_PRODUCTS), imergLate: z.boolean() }).strict();
+
 const scoreValue = z.number().finite().nullable();
 const scoreSet = z.record(z.string().max(40), scoreValue).refine((o) => Object.keys(o).length <= 30, 'too many scores');
 const scoreInterval = z.object({ lo: z.number().finite(), hi: z.number().finite() }).strict().nullable();
@@ -959,6 +969,8 @@ export const FitRecord = z
 				arealRain: ArealRain.nullable().optional(),
 				// Engine ≥ 1.53.0 (CR-23): the CHIRPS gap map, recorded only when on. Optional, as above; absent = off.
 				chirpsQuantileMap: ChirpsQuantileMap.nullable().optional(),
+				// Engine ≥ 1.101.0 (issue #604 R4-B): the gap-filling product, recorded only when not CHIRPS alone. Optional, as above.
+				gapRain: GapRain.nullable().optional(),
 				// Engine ≥ 0.31.1: where the pan-coefficient row came from (provenance only). Optional, as above.
 				panCoefficientSource: z.string().max(PE_SOURCE_MAX).optional(),
 				// Engine ≥ 0.15.0 (CR-20): which zero-rain days CHIRPS fills. Optional, as above.
@@ -1097,6 +1109,8 @@ export const SettingsPatch = z
 		chirpsFitPeriod: ChirpsFitPeriod,
 		// The CHIRPS gap map (engine ≥ 1.53.0, CR-23); replaced whole, null = off.
 		chirpsQuantileMap: ChirpsQuantileMap.nullable(),
+		// The gap-filling product (engine ≥ 1.101.0, issue #604 R4-B, engine gapRain.ts); replaced whole, null = CHIRPS alone.
+		gapRain: GapRain.nullable(),
 		// Periods whose catchment rain comes from another series (engine rainSourcePeriods.ts, issue #40 (b)); replaced whole.
 		rainSource: RainSource,
 		// Flagged zero-rain runs (engine rain.ts, CR-20): any subset may be

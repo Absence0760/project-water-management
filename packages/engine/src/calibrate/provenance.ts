@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { dayText, toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar';
-import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, stationSeriesKey, type RainStationAssignment, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '../project';
+import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, stationSeriesKey, type RainStationAssignment, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolveGapRain, resolvePe, type GapRainSettings, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import { unitRainFingerprintChanged, unitRainFingerprintOfSummary, type UnitRainFingerprint } from '../runoff/unitRainFingerprint';
@@ -253,6 +253,13 @@ export interface FitRecord {
 		 * off, as every fit before it ran, so a map turned on since is a change.
 		 */
 		chirpsQuantileMap?: ChirpsQuantileMap | null;
+		/**
+		 * The gap-filling product the fit ran under (engine ≥ 1.101.0, issue
+		 * #604 R4-B, settings.gapRain). Recorded only when not CHIRPS alone:
+		 * absent = CHIRPS alone, as every fit before it ran, so a product chosen
+		 * since is a change.
+		 */
+		gapRain?: GapRainSettings | null;
 		/** Where the pan-coefficient row came from (engine ≥ 0.31.1); provenance only, never a forcing change. */
 		panCoefficientSource?: string;
 		/**
@@ -395,6 +402,8 @@ export interface FitContext {
 		arealRain?: ArealRain | null;
 		/** The CHIRPS gap map (engine ≥ 1.53.0); absent = off. */
 		chirpsQuantileMap?: ChirpsQuantileMap | null;
+		/** The gap-filling product (engine ≥ 1.101.0); absent = CHIRPS alone. */
+		gapRain?: GapRainSettings | null;
 		panCoefficientSource?: string;
 		/** Gap filling of the observed flow records (engine ≥ 1.23.0); absent = none. */
 		flowGapFill?: FlowGapFillSettings | null;
@@ -472,6 +481,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			pe: structuredClone(resolvePe(ctx.settings.pe, [])),
 			arealRain: resolveArealRain(ctx.settings.arealRain, []),
 			...(gapMapOf(ctx.settings) ? { chirpsQuantileMap: gapMapOf(ctx.settings) } : {}),
+			...(resolveGapRain(ctx.settings.gapRain, []) ? { gapRain: resolveGapRain(ctx.settings.gapRain, []) } : {}),
 			...(ctx.settings.panCoefficientSource ? { panCoefficientSource: ctx.settings.panCoefficientSource } : {}),
 			...(ctx.apanDaily !== undefined ? { apanDaily: ctx.apanDaily ? { ...ctx.apanDaily } : null } : {}),
 			rainChecks: rainChecksOf(ctx.settings.dataQuality),
@@ -761,6 +771,7 @@ function forcingDiff(
 	zeroRainRuns: boolean;
 	chirpsFitPeriod: boolean;
 	chirpsQuantileMap: boolean;
+	gapRain: boolean;
 	rainSource: boolean;
 	rainChecks: boolean;
 	unitRain: boolean;
@@ -787,6 +798,8 @@ function forcingDiff(
 		chirpsFitPeriod: record.forcing.chirpsFitPeriod !== undefined && !sameJson(settings.chirpsFitPeriod ?? 'all', record.forcing.chirpsFitPeriod),
 		// Engine ≥ 1.53.0. A forcing without it ran without the gap map, so one turned on since is a change.
 		chirpsQuantileMap: !sameJson(gapMapOf(settings), gapMapOf({ chirpsQuantileMap: record.forcing.chirpsQuantileMap, chirpsBiasCorrection: record.forcing.chirpsBiasCorrection })),
+		// Engine ≥ 1.101.0. A forcing without it ran on CHIRPS alone, so a product chosen since is a change.
+		gapRain: !sameJson(resolveGapRain(settings.gapRain, []), resolveGapRain(record.forcing.gapRain, [])),
 		// Engine ≥ 0.30.0. A forcing without it predates rain-source periods, so it ran with none.
 		rainSource: !sameJson(settings.rainSource ?? [], record.forcing.rainSource ?? []),
 		// Engine ≥ 1.20.0. A forcing without it ran the defaults, so a limit changed since is a change.
@@ -1003,6 +1016,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 					forcing.zeroRainRuns ||
 					forcing.chirpsFitPeriod ||
 					forcing.chirpsQuantileMap ||
+					forcing.gapRain ||
 					forcing.rainSource ||
 					forcing.rainChecks ||
 					forcing.unitRain)),
@@ -1095,7 +1109,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	}
 	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged && !status.methodChanged) {
 		out.push(
-			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, rain-source periods, zero-rain run handling or the rain each unit runs on (runoff from each unit’s own rain, its records, MAPs and factors) has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS, rain-source and per-unit rain settings change the rain fed to it, so refit before relying on them.'
+			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, gap-filling product, rain-source periods, zero-rain run handling or the rain each unit runs on (runoff from each unit’s own rain, its records, MAPs and factors) has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS, gap-filling, rain-source and per-unit rain settings change the rain fed to it, so refit before relying on them.'
 		);
 	}
 	return out;
