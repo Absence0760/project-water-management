@@ -106,6 +106,8 @@ data "aws_iam_policy_document" "github_deploy" {
       aws_lambda_function.fetcher.arn,
       # By name: the renderer exists only once renderer_image_tag is set (reports.tf).
       local.renderer_function_arn,
+      # The same for the mirror ingest job and ingest_image_tag (ingest.tf).
+      local.ingest_function_arn,
     ]
   }
 
@@ -134,6 +136,24 @@ data "aws_iam_policy_document" "github_deploy" {
     resources = [aws_ecr_repository.renderer.arn]
   }
 
+  # The mirror ingest job's image (ingest.tf), the same actions on its own
+  # repository.
+  statement {
+    sid = "IngestImagePush"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:PutImage",
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:DescribeRepositories",
+      "ecr:DescribeImages",
+    ]
+    resources = [aws_ecr_repository.ingest.arn]
+  }
+
   # Read-only: when UpdateFunctionCode moves the renderer to a new image,
   # Lambda checks the repository policy for its pull statement (reports.tf
   # renderer_ecr) and, finding none, tries to add one. AWS lists
@@ -146,6 +166,13 @@ data "aws_iam_policy_document" "github_deploy" {
     sid       = "RendererImageLambdaCheck"
     actions   = ["ecr:GetRepositoryPolicy"]
     resources = [aws_ecr_repository.renderer.arn]
+  }
+
+  # The same read on the mirror ingest job's repository (ingest.tf ingest_ecr).
+  statement {
+    sid       = "IngestImageLambdaCheck"
+    actions   = ["ecr:GetRepositoryPolicy"]
+    resources = [aws_ecr_repository.ingest.arn]
   }
 
   # The backend deploy runs the migrate Lambda before shipping new API code.

@@ -608,9 +608,11 @@ environment's job is the required reviewer (§ 1), not storage.
 | `FETCHER_FUNCTION_NAME` | `fetcher_function_name` (data feeds; the release preflight requires it) |
 | `RENDERER_FUNCTION_NAME` | `renderer_function_name` (report renderer; always an output, even before the function exists, so the preflight requires it) |
 | `RENDERER_ECR_REPOSITORY` | `renderer_ecr_repository` (the renderer image's ECR repository; the release preflight requires it) |
+| `INGEST_FUNCTION_NAME` | `ingest_function_name` (the data mirror's ingest job; always an output, even before the function exists, so the preflight requires it) |
+| `INGEST_ECR_REPOSITORY` | `ingest_ecr_repository` (the ingest image's ECR repository; the release preflight requires it) |
 | `PUBLIC_SITE_URL` | `public_site_url` |
 | `CLOUDFRONT_DOMAIN_NAME` | `cloudfront_domain_name` (not read by the workflows) |
-| `REPORTS_BUCKET`, `PACKS_BUCKET`, `TILES_BUCKET`, `REFERENCE_BUCKET`, `DB_INSTANCE_IDENTIFIER`, `DB_SUBNET_GROUP_NAME`, `DB_SECURITY_GROUP_ID`, `DB_PARAMETER_GROUP_NAME` | the outputs of the same names (not read by the workflows; the bucket names are for the operator's uploads, the `db_*` ones for `restore-db.sh`, which reads them from Terraform) |
+| `REPORTS_BUCKET`, `PACKS_BUCKET`, `TILES_BUCKET`, `REFERENCE_BUCKET`, `MIRROR_BUCKET`, `DB_INSTANCE_IDENTIFIER`, `DB_SUBNET_GROUP_NAME`, `DB_SECURITY_GROUP_ID`, `DB_PARAMETER_GROUP_NAME` | the outputs of the same names (not read by the workflows; the bucket names are for the operator's uploads, the `db_*` ones for `restore-db.sh`, which reads them from Terraform) |
 | secret `AWS_DEPLOY_ROLE_ARN` | `aws_deploy_role_arn` |
 | secret `LAMBDA_FUNCTION_URL` | `lambda_function_url` (debugging only) |
 | `WAF_CAPTCHA_SCRIPT_URL` | `waf_captcha_script_url` (the sign-in CAPTCHA's jsapi.js; empty until `waf_captcha_integration_url` is set) |
@@ -665,6 +667,10 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   § Reports; the renderer only once `renderer_image_tag` is set), the
   renderer's ECR repository, and the reports, packs, tiles and reference
   buckets (§ Evidence packs, § The Map tab).
+- The data mirror (`ingest.tf`, § The data mirror): its private, versioned
+  bucket, the ingest job's ECR repository, its DLQ and its daily schedules
+  (disabled), and the ingest Lambda outside the VPC once `ingest_image_tag`
+  is set.
 - No CORS block on the Function URL (the browser never calls it).
 - SES (above), CloudFront security headers and CSP, PriceClass_All.
 - Background jobs (`jobs.tf`, § Background jobs below): the SQS `jobs`
@@ -713,7 +719,8 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   arrivals, the worker heartbeat, RDS free storage, CloudFront 5xx, API
   Lambda errors and throttles (`lambda-throttles`: the API at its reserved
   concurrency, issue #541), `unhandled_error` and `mail_send_failed`, 13
-  alarm metrics.
+  alarm metrics; 15 once `ingest_image_tag` is set, with the data mirror's
+  two freshness alarms (§ The data mirror).
   Everything else listed above is declared but not created; its metrics and
   log lines are still there, just unpaged. Set `alarm_tier = "full"` in the
   prod tfvars to page on all of it (~$5/month in af-south-1). The RDS event
@@ -847,7 +854,9 @@ the real plan stays an operator step
   `build` job, no AWS credentials) is pushed to ECR and the renderer Lambda
   moved to it; until the operator has created the function (§ Reports) the
   step pushes the image and says what to do, and any other `get-function`
-  error fails the deploy. Then the job calls `/api/health` through
+  error fails the deploy. The data mirror's ingest image goes the same way
+  (built in the `build-ingest` job on GitHub's arm64 runner, no AWS
+  credentials; § The data mirror). Then the job calls `/api/health` through
   CloudFront and fails unless it answers `{"ok":true}`.
 - **Release builds install cold**: no dependency cache is restored in either
   deploy workflow (the workflow guard's `no-cache` rule), since a cache is
@@ -1023,7 +1032,7 @@ Each deployable has its own release line, named `<component>@<semver>`
 
 | Tag | Workflow | Deploys |
 | --- | --- | --- |
-| `backend@X.Y.Z` | `deploy-backend.yml` | migrate Lambda (runs the migrations), then the API, worker and fetcher Lambdas, then the renderer's image (pushed to ECR; the renderer moved to it once it exists), then the health check |
+| `backend@X.Y.Z` | `deploy-backend.yml` | migrate Lambda (runs the migrations), then the API, worker and fetcher Lambdas, then the renderer's and the mirror ingest job's images (pushed to ECR; each function moved to its image once it exists), then the health check |
 | `web@X.Y.Z` | `deploy-frontend.yml` | the engine suite and a 1 600-case soak (a failure stops the release; the result is the build record the report's validation statement prints, model.md §2.10f), then the static build to S3, then a CloudFront invalidation |
 
 **Publishing a GitHub Release is the trigger.** Pushing a tag on its own does
@@ -1408,6 +1417,89 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
   256 KB (`fetch.test.ts`). The tables add ~100 bytes per cached final
   file (~3 MB for both products' whole archives) plus the stale rows of a
   rewrite until they are read.
+
+## The data mirror
+
+Issue #604's rule: the app never fetches from someone else's server because a
+feed or a user asked. One scheduled job of ours copies what our projects need
+into our own store, and the app reads only that copy (issue #604 R1-A's
+source register, `docs/data-sources.md`, lists the upstreams). Round 1 builds
+the store and the job's infrastructure (`infra/ingest.tf`); nothing reads the
+copy yet, so production behaves as before.
+
+- **The mirror bucket** `water-management-mirror-<account>` (output
+  `mirror_bucket`): private (every public access block on, ACLs off), SSE-S3,
+  TLS only, **versioned**, with noncurrent versions expiring after 30 days
+  (a monthly refresh rewrites ~130 MB, so a month of old versions is cents)
+  and incomplete multipart uploads aborted after a day. It holds one Zarr v3
+  array per product (`rnl/`, `sat/`, later `prelim/` and `gefs/<issue>/`),
+  each with its `manifest.json`.
+- **The ingest job** `water-management-mirror-ingest`: a Python 3.14
+  container-image Lambda (`ingest/Dockerfile`, handler
+  `lambda_handler.handler`), arm64, 3 GB memory, 2 GB of `/tmp`, 900 s,
+  reserved concurrency 2, **outside the VPC** (it reaches CHC over the
+  internet; no NAT). Environment: `MIRROR_URL=s3://<mirror bucket>`,
+  `FEED_SOURCE=live`, and `INGEST_CONTACT` from `ingest_contact` (the
+  address in its User-Agent; use a role address, every upstream sees it).
+  Its role may get, put, list and delete in the mirror bucket only, send to
+  its DLQ, write its own log group, pull its own image, and publish metrics
+  in the `water-management/Mirror` namespace only. No database, no secret.
+  Its 2 reserved executions come out of the account's Lambda concurrency
+  quota (infra/README.md § Operator steps).
+- **Schedules:** one EventBridge rule per product, daily (`rnl` at 02:00
+  UTC, `sat` at 02:20), invoking the job with `{"product":"rnl","mode":"monthly"}`
+  and the same for `sat`. The monthly mode is idempotent: CHC publishes a
+  month's finals during the next month, usually by the 25th, and a daily run
+  picks the file up the day it appears with one conditional request (a 304)
+  on the other days. A daily run also gives the freshness alarms a datapoint
+  every day, which a run only on the 25th could not (a CloudWatch alarm
+  can't look back a month). The rules exist from the first apply, disabled
+  until `ingest_image_tag` is set. A failed run is not retried (a run that
+  met an HTTP 403 must stop, not retry); its event goes to the
+  `mirror-ingest-dlq` and the next day's run tries again.
+- **The worker reads the copy** (from Round 2): its role may `GetObject` and
+  `ListBucket` on the mirror bucket (`ListBucket` so a missing, all-NaN
+  chunk answers 404, not 403), and the **S3 interface endpoint's policy**
+  (`infra/packs.tf`, `WorkerReadsMirror`) allows the same. Without that
+  endpoint statement every read from the VPC fails with AccessDenied, whatever
+  the role says.
+- **Alarms:**
+  - `mirror-lag-rnl`, `mirror-lag-sat` (essential tier): the job publishes,
+    per product and per run, **namespace `water-management/Mirror`, metric
+    `MirrorLagDays`, dimension `Product` = `rnl` | `sat`**, the days between
+    today (UTC) and the product's manifest `finalThrough`, with
+    `cloudwatch:PutMetricData`. The alarm fires when the lag passes
+    `ingest_lag_alarm_days` (75: a healthy copy runs up to ~56 days behind
+    just before CHC's monthly release) on two days running, **and when no
+    datapoint arrives for two days** (`treat_missing_data = "breaching"`): a
+    job that stopped running, or fails before it measures, alarms too.
+  - `mirror-ingest-errors` and `mirror-ingest-dlq-arrivals` (full tier): a
+    run raised or timed out.
+  - *Runbook.* Read the run in the `/aws/lambda/water-management-mirror-ingest`
+    log group. A run that met HTTP 403 stopped on purpose: don't redrive;
+    write to the upstream's contact (the source register) and wait. A DLQ
+    message needs no redrive either: the next day's run does the same work.
+    Meanwhile feeds keep serving the days already cached.
+- **Turning it on** (after Round 2 makes the job publish `MirrorLagDays`;
+  until then a breaching freshness alarm would fire every day):
+  1. Apply once with `ingest_image_tag` empty: the bucket, repository, DLQ
+     and disabled schedules appear. Run `export-tf-vars.sh infra/` so
+     `INGEST_FUNCTION_NAME` and `INGEST_ECR_REPOSITORY` reach GitHub: the
+     backend release preflight requires both, so no backend release passes
+     its preflight between merging this and that apply.
+  2. Cut a backend release: `deploy-backend.yml` pushes the ingest image as
+     `<version>-<sha12>` and prints a notice with the tag.
+  3. **Set `ingest_image_tag` after the first image push**, with
+     `ingest_contact`, in the prod tfvars, and apply: the function, its
+     schedules' targets and its freshness alarms appear. Later releases
+     move the function to their own image; the ECR lifecycle policy never
+     expires the image the tag pins.
+  4. The one-off 1981 backfill (`mode: "backfill"`) is Round 2's runbook.
+- **Cost:** under $1/month in steady state. ~6 GB of Zarr in S3 Standard
+  (~$0.20) plus a month of old versions, a few seconds of Lambda a day and a
+  couple of minutes once a month, a few images in ECR (cents), two custom
+  metrics and the two essential alarms (about $0.30 each past the free
+  tier, in af-south-1). The one-off backfill is about $3.
 
 ## Alert emails
 

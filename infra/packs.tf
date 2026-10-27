@@ -248,7 +248,8 @@ resource "aws_vpc_endpoint" "s3" {
 
   # Only the worker's read of packs/ (PDF checks, bundle re-runs) and the API's put of a bundle
   # (pack_bundles.tf), in the packs bucket; the API's and the worker's read of the delineation DEM and the migrate
-  # Lambda's read of a reference file (map_data.tf).
+  # Lambda's read of a reference file (map_data.tf); the worker's read of the
+  # data mirror (ingest.tf).
   policy = data.aws_iam_policy_document.s3_endpoint.json
 
   tags = { Name = "${local.project}-s3" }
@@ -308,6 +309,21 @@ data "aws_iam_policy_document" "s3_endpoint" {
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.migrate_lambda.arn]
+    }
+  }
+  # The worker reads the data mirror (ingest.tf worker_mirror): objects, and
+  # the listing that makes a missing (all-NaN) chunk a 404 rather than a 403.
+  # Read only; the ingest job writes it from outside the VPC.
+  statement {
+    sid     = "WorkerReadsMirror"
+    actions = ["s3:GetObject", "s3:ListBucket"]
+    resources = [
+      aws_s3_bucket.mirror.arn,
+      "${aws_s3_bucket.mirror.arn}/*",
+    ]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.worker_lambda.arn]
     }
   }
 }

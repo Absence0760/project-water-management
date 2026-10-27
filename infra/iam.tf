@@ -32,6 +32,7 @@ locals {
     worker   = { role = aws_iam_role.worker_lambda, log_group = aws_cloudwatch_log_group.worker.name }
     fetcher  = { role = aws_iam_role.fetcher_lambda, log_group = aws_cloudwatch_log_group.fetcher.name }
     renderer = { role = aws_iam_role.renderer_lambda, log_group = aws_cloudwatch_log_group.renderer.name }
+    ingest   = { role = aws_iam_role.ingest_lambda, log_group = aws_cloudwatch_log_group.ingest.name }
   }
 
   # The VPC Lambdas, by function ARN (built from the name: referencing the
