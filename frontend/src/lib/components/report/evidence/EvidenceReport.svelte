@@ -806,6 +806,43 @@
 						</table>
 					</div>
 				{/if}
+			{:else if s.id === 'damObservations' && report.damObservations}
+				<!-- evidence-21: the applicant's own dams as DE Africa's WOfS saw them (satellite evidence beside the model, not an input to it). -->
+				{@const dov = report.damObservations}
+				<p class="small muted">
+					How many dates from {fmtDate(dov.startDate)} to {fmtDate(dov.endDate)} (the baseline’s period) the satellite water layer saw each of the applicant’s dams clearly
+					(at least {dov.clearMinPct} % of its traced outline free of cloud and shadow), and on how many of those any of it was water. A date seen less clearly is counted as
+					observed only: a partial view can’t show the dam was dry. Landsat sees a dam every 8 to 16 days, so these are counts of dates seen, not of days.
+				</p>
+				{#if dov.dams.length}
+					<div class="table-wrap">
+						<table class="data compact" data-testid="evidence-dam-observations">
+							<thead>
+								<tr>
+									<th scope="col">Dam</th>
+									<th scope="col" class="num">Dates observed</th>
+									<th scope="col" class="num">Clear dates</th>
+									<th scope="col" class="num">Wet on a clear date</th>
+									<th scope="col">Clear dates span</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each dov.dams as d (d.featureId)}
+									<tr>
+										<th scope="row">{d.name || 'Unnamed dam'}</th>
+										<td class="num">{fmtNum(d.observedDates)}</td>
+										<td class="num">{fmtNum(d.clearDates)}</td>
+										<td class="num">{fmtNum(d.wetDates)}{d.clearDates ? ` (${fmtNum((d.wetDates / d.clearDates) * 100)} %)` : ''}</td>
+										<td>{d.clear.length ? `${fmtDate(d.clear[0]![0])} to ${fmtDate(d.clear.at(-1)![0])}` : '–'}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{:else}
+					<p class="na" data-testid="evidence-dam-observations-na">No dam on the applicant’s units is traced on the map, so none was observed.</p>
+				{/if}
+				<p class="small muted" data-testid="evidence-dam-observations-credit">Source: {dov.citation}, summed inside the dams’ traced outlines by this app.</p>
 			{:else if s.id === 'appendixInputs'}
 				<h3>A.1 Settings that drive the results</h3>
 				<dl class="kv">
