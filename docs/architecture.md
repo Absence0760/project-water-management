@@ -1035,8 +1035,11 @@ on their account and alert pages, until they turn mail back on. Locally,
 
 Rainfall and gauge flow that arrive by themselves (roadmap WP-2.10;
 `backend/src/feeds/`, `018_feeds.sql`, the `feed_fetch` / `feed_ingest`
-jobs). A `data_feed` row names a source, where to read it and the series it
-merges into:
+jobs). Every upstream a feed reads, with its licence, contact, access
+pattern, the limits we keep to and its fallback, is in the source register,
+[data-sources.md](./data-sources.md) (issue #604; a guard fails a host in
+`FEED_HOSTS` or a `data_feed.source` value with no row there). A `data_feed`
+row names a source, where to read it and the series it merges into:
 
 | Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
 | --- | --- | --- | --- |

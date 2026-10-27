@@ -313,6 +313,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
 - `docs/maps.md`: the Map tab: the self-hosted basemap and its fetch recipe, GeoJSON upload checks, server-side areas, the quaternary lookup and loading its dataset, the cultivated area from land cover, the evaporation from the map, the sources table, CSP
+- `docs/data-sources.md`: the source register: every upstream we use or plan (feeds, reference datasets, #604's planned sources) with host, licence and attribution, contact, access pattern, limits, fallback and owner, and the polite-client rules (`scripts/guards/data_sources.mjs` keeps it in step with `FEED_HOSTS` and `data_feed.source`)
 - `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
 - `docs/evidence-pack.md`: licensing evidence packs: the manifest and its hash, the short code, the lifecycle (draft, sign, issue, supersede, withdraw) and the public verify lookup
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
