@@ -23,7 +23,7 @@ import { ecmwfFixtureMean } from '../../scripts/ecmwf-fixture.js';
 import { MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
-import { forecastRainSource } from '../runs/execute.js';
+import { forecastRainEcmwf, forecastRainSource } from '../runs/execute.js';
 import { ECMWF_STATS, writeEcmwfIndex, writeEcmwfIssue } from '../ingest/ecmwf.js';
 import { runTick } from '../jobs/runner.js';
 import { openStore } from '../mirror/store.js';
@@ -103,6 +103,16 @@ describe('an ECMWF ENS feed reads our copy', () => {
 		const seriesId = ((await owner.call('GET', `/projects/${f.pid}/series`)).body.series as { id: string; kind: string }[]).find((x) => x.kind === 'rain_forecast_mm')!.id;
 		expect(await withUser(owner.id, (db) => forecastRainSource(db, seriesId, today))).toBe('ecmwf_ens');
 		expect(await withUser(owner.id, (db) => forecastRainSource(db, seriesId, fromEpochDay(toEpochDay(today) - 1)))).toBe('other');
+		expect(await withUser(owner.id, (db) => forecastRainEcmwf(db, seriesId, today))).toBe(true);
+		// One forecast day edited by hand: the model's source is 'other' (not every day the feed's), but the other 14 are
+		// still ECMWF's values, so the run's credit is owed (issue #604 round 4 review).
+		const edit = await owner.call('PUT', `/projects/${f.pid}/series/${seriesId}/days/${fromEpochDay(toEpochDay(today) + 3)}`, { value: 7 });
+		expect(edit.status, JSON.stringify(edit.body)).toBe(200);
+		expect(await withUser(owner.id, (db) => forecastRainSource(db, seriesId, today))).toBe('other');
+		expect(await withUser(owner.id, (db) => forecastRainEcmwf(db, seriesId, today))).toBe(true);
+		// Every forecast day written over: no ECMWF value is left, and no credit.
+		for (let d = 0; d < 15; d++) await owner.call('PUT', `/projects/${f.pid}/series/${seriesId}/days/${fromEpochDay(toEpochDay(today) + d)}`, { value: 1 });
+		expect(await withUser(owner.id, (db) => forecastRainEcmwf(db, seriesId, today))).toBe(false);
 	});
 
 	it('a live copy: today’s issue, quantile-mapped once the fit is in the copy', async () => {

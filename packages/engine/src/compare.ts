@@ -84,6 +84,8 @@ export interface RunInputsSnapshot {
 	seriesChoice?: SeriesChoice | null;
 	/** A forecast run's forecast rain source (ModelInput.forecastRainSource, engine ≥ 1.85.0); absent on every other run. */
 	forecastRainSource?: 'chirps_gefs' | 'ecmwf_ens' | 'other' | null;
+	/** A forecast run: true when any forecast day held an ECMWF ENS feed's value (backend runs/execute.ts forecastRainEcmwf), so its credit is owed; absent otherwise. Not a model input. */
+	forecastRainEcmwf?: boolean;
 	/** The rainfall stations' names and details (ModelInput.stations, engine ≥ 1.91.0, issue #553); absent unless settings.rainStations assigns a station. */
 	stations?: RainStationInputs | null;
 }

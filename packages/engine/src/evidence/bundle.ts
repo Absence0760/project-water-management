@@ -239,7 +239,7 @@ export const bundleSeriesPath = (valuesSha256: string) => `series/${valuesSha256
 export function bundleRainCredits(input: Pick<PackBundleInput, 'manifest' | 'baseline' | 'application'>): RainCredit[] {
 	const accessed = (input.manifest.report.identity?.baseline?.createdAt ?? '').slice(0, 10);
 	const all = [input.baseline, input.application].flatMap((r) =>
-		r ? runRainCredits({ summary: r.summary as Parameters<typeof runRainCredits>[0]['summary'], forecastRainSource: r.inputs.forecastRainSource }, accessed) : []
+		r ? runRainCredits({ summary: r.summary as Parameters<typeof runRainCredits>[0]['summary'], forecastRainSource: r.inputs.forecastRainSource, forecastRainEcmwf: r.inputs.forecastRainEcmwf }, accessed) : []
 	);
 	const out: RainCredit[] = [];
 	for (const c of all) {

@@ -968,6 +968,8 @@ export interface Run extends RunMeta {
 	 * credits CHIRPS-GEFS or ECMWF only on its own value.
 	 */
 	forecastRainSource?: ForecastRainSource | null;
+	/** GET …/runs/:runId: any forecast day held an ECMWF ENS feed's value (backend runs/execute.ts forecastRainEcmwf), so ECMWF's credit is owed even when `forecastRainSource` is 'other'. */
+	forecastRainEcmwf?: boolean;
 	/**
 	 * Its server stamp still matches its rows (GET …/runs/:runId only;
 	 * docs/security.md § Run stamps): false for a run written past the model

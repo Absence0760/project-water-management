@@ -1934,5 +1934,11 @@ describe('gapRainLines (engine ≥ 1.101.0, issue #604 R4-E)', () => {
 		expect([...forecastLines(forecast, 'ecmwf_ens')].map((l) => splitCsv(l, ',')[0]!.cells)[1]).toEqual(['Forecast rain from', 'the ECMWF ENS forecast (ECMWF open data, CC BY 4.0)']);
 		expect([...forecastLines(forecast, 'chirps_gefs')].join('\n')).not.toContain('ECMWF');
 		expect([...forecastLines(forecast)].join('\n')).not.toContain('Forecast rain from');
+		// Some of its days an ECMWF feed's, the rest written over: the source is 'other', the credit still owed.
+		expect([...forecastLines(forecast, 'other', true)].map((l) => splitCsv(l, ',')[0]!.cells)[1]).toEqual([
+			'Forecast rain from',
+			'the ECMWF ENS forecast on some days, the rest written over (ECMWF open data, CC BY 4.0)'
+		]);
+		expect([...forecastLines(forecast, 'other', false)].join('\n')).not.toContain('ECMWF');
 	});
 });

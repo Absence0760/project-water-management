@@ -167,6 +167,12 @@ export interface SummaryMeta {
 	 * not a forecast run, or one stored before it was recorded.
 	 */
 	forecastRainSource?: string | null;
+	/**
+	 * Any forecast day held an ECMWF feed's value (runs/execute.ts
+	 * forecastRainEcmwf): with a source other than 'ecmwf_ens' (a day edited
+	 * or uploaded over), the forecast block still credits ECMWF.
+	 */
+	forecastRainEcmwf?: boolean;
 }
 
 /**
@@ -957,10 +963,12 @@ export function* evidenceLines(e: RunEvidence | null): Generator<string> {
  * A forecast run's forecast days (WP-2.12, summary.forecast): kept out of
  * every other block of the sheet, which covers the days before them.
  */
-export function* forecastLines(f: NonNullable<RunSummary['forecast']>, source?: string | null): Generator<string> {
+export function* forecastLines(f: NonNullable<RunSummary['forecast']>, source?: string | null, ecmwf = false): Generator<string> {
 	yield csvRow(['Forecast days (modelled on forecast rain, not recorded rain; every other figure in this sheet covers the days before them)']);
-	// The forecast an ECMWF feed wrote carries ECMWF's credit (CC BY 4.0, issue #604 R4-E).
-	if (source === 'ecmwf_ens') yield csvRow(['Forecast rain from', `the ECMWF ENS forecast (${rainCredits({ ecmwf: true }, '')[0]!.lines[0]})`]);
+	// The forecast an ECMWF feed wrote carries ECMWF's credit (CC BY 4.0, issue #604 R4-E), and so does one it wrote only some days of.
+	const credit = rainCredits({ ecmwf: true }, '')[0]!.lines[0];
+	if (source === 'ecmwf_ens') yield csvRow(['Forecast rain from', `the ECMWF ENS forecast (${credit})`]);
+	else if (ecmwf) yield csvRow(['Forecast rain from', `the ECMWF ENS forecast on some days, the rest written over (${credit})`]);
 	yield csvRow(['First forecast day', f.from]);
 	yield csvRow(['Last forecast day', f.to]);
 	yield csvRow(['Days', f.days]);
@@ -1237,7 +1245,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	}
 
 	if (summary.forecast) {
-		yield* forecastLines(summary.forecast, meta.forecastRainSource);
+		yield* forecastLines(summary.forecast, meta.forecastRainSource, meta.forecastRainEcmwf === true);
 		yield '';
 	}
 

@@ -116,6 +116,9 @@ describe('the rain data credits (issue #604 R4-E)', () => {
 		expect(runRainCredits({ summary: { gapRain: { products } }, forecastRainSource: 'other' }, '2026-10-27').map((c) => c.product)).toEqual(['imerg_late']);
 		expect(runRainCredits({ summary: {}, forecastRainSource: 'ecmwf_ens' }, '2026-10-27').map((c) => c.product)).toEqual(['ecmwf_ens']);
 		expect(runRainCredits({ summary: { gapRain: null } }, '2026-10-27')).toEqual([]);
+		// A forecast an ECMWF feed wrote only some days of (one edited by hand): 'other' for the model, the credit still owed.
+		expect(runRainCredits({ summary: {}, forecastRainSource: 'other', forecastRainEcmwf: true }, '2026-10-27').map((c) => c.product)).toEqual(['ecmwf_ens']);
+		expect(runRainCredits({ summary: {}, forecastRainSource: 'other', forecastRainEcmwf: 'true' }, '2026-10-27')).toEqual([]);
 	});
 });
 

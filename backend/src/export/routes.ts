@@ -81,6 +81,8 @@ interface RunRow {
 	notesUpdatedBy: string | null;
 	/** A forecast run's rain source as it stored it (runs/execute.ts forecastRainSource); null otherwise. */
 	forecastRainSource: string | null;
+	/** Any of a forecast run's forecast days was an ECMWF feed's (runs/execute.ts forecastRainEcmwf): ECMWF's credit is owed. */
+	forecastRainEcmwf: boolean;
 }
 
 /**
@@ -99,7 +101,8 @@ async function loadRun(db: Db, projectId: string, runId: string): Promise<RunRow
 			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel",
 			notes, notes_updated_at AS "notesUpdatedAt",
 			(SELECT display_name FROM app_user WHERE id = notes_updated_by) AS "notesUpdatedBy",
-			inputs->>'forecastRainSource' AS "forecastRainSource"
+			inputs->>'forecastRainSource' AS "forecastRainSource",
+			inputs->'forecastRainEcmwf' = 'true'::jsonb IS TRUE AS "forecastRainEcmwf"
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
@@ -349,6 +352,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 					damCapacityEndM3: await loadDamCapacitiesOn(db, runId, summaryEnd(run)),
 					// An ECMWF forecast's credit in the forecast block (issue #604 R4-E).
 					forecastRainSource: run.forecastRainSource,
+					forecastRainEcmwf: run.forecastRainEcmwf,
 					// The drought restriction rule's dams, units and EWR site by name (engine ≥ 1.54.0).
 					...(run.summary.droughtRestriction ? { nodeNames: await loadNodeNames(db, id) } : {})
 				},

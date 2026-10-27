@@ -6,7 +6,8 @@
 // test checks each against docs/maps.md, where the licence was read).
 // Plain text, never HTML: the page renders it as text.
 
-import { copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION, imergCitation } from '@water-management/engine';
+// From the credits' own subpath, not the engine's barrel: this module is on the public Data sources page and the map's attribution, which need nothing else of the engine.
+import { copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION, imergCitation } from '@water-management/engine/credits';
 import { APP_NAME } from '#lib/brand.js';
 
 /** A `YYYY-MM-DD` day in words, "1 October 2026" (UTC, so the day never shifts). */
@@ -171,7 +172,7 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		statements: ['Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025).']
 	},
 	// The rain data copy's other products (issue #604 R4-E, docs/data-sources.md): ERA5-Land and IMERG Late fill catchment-rain gaps where a
-	// project chooses them, and the ECMWF ENS forecast feeds the rain forecast. Each notice is the engine's (liability/disclaimer.ts), the
+	// project chooses them, and the ECMWF ENS forecast feeds the rain forecast. Each notice is the engine's (liability/rainCredits.ts), the
 	// one every other place their values show prints; read now, so Copernicus's year and IMERG's day accessed are today's.
 	{
 		id: 'era-land',

@@ -18,7 +18,7 @@ export interface ExportProgress {
 }
 
 interface RunResponse {
-	run: { summary: RunSummary; createdAt?: string; forecastRainSource?: string | null; settings?: Record<string, unknown>; model?: { nodes?: { id: string; name: string }[] } & Record<string, unknown> };
+	run: { summary: RunSummary; createdAt?: string; forecastRainSource?: string | null; forecastRainEcmwf?: boolean; settings?: Record<string, unknown>; model?: { nodes?: { id: string; name: string }[] } & Record<string, unknown> };
 	series: { nodeId: string | null }[];
 }
 

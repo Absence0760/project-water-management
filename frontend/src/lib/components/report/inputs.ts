@@ -274,6 +274,6 @@ export function stationPairingRows(summary: unknown): string[][] {
  * for word; read on the run's creation day. Empty for a run on CHIRPS alone
  * and an uploaded forecast, whose reports read as before.
  */
-export function reportRainCredits(run: { createdAt: string; forecastRainSource?: string | null; summary?: Parameters<typeof runRainCredits>[0]['summary'] }): RainCredit[] {
+export function reportRainCredits(run: { createdAt: string; forecastRainSource?: string | null; forecastRainEcmwf?: boolean; summary?: Parameters<typeof runRainCredits>[0]['summary'] }): RainCredit[] {
 	return runRainCredits(run, run.createdAt.slice(0, 10));
 }

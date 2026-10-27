@@ -461,6 +461,8 @@ export interface RunPlan {
 	seriesIds?: InputSeriesIds;
 	/** A forecast run of the live model: where its forecast days' rain came from (inputs.forecastRainSource, forecastRainSource below). */
 	forecastRainSource?: ForecastRainSource;
+	/** A forecast run whose forecast days hold an ECMWF ENS feed's values, some or all (inputs.forecastRainEcmwf, forecastRainEcmwf below): ECMWF's credit is owed. */
+	forecastRainEcmwf?: boolean;
 	/** A run of the live model: its outlet flow records a DWS feed wrote whole (#523 G8, runs/publishedRecords.ts); storeRun marks their series. */
 	publishedRecords?: PublishedRecords;
 }
@@ -496,6 +498,8 @@ export async function prepareRun(
 	const plan: RunPlan = { projectId, label: typeof label === 'function' ? label(input) : label, input, trigger, seriesIds, publishedRecords };
 	if (forecastFrom) {
 		plan.forecastRainSource = await forecastRainSource(db, seriesIds.rain_forecast_mm, forecastFrom);
+		// Not the model's (it reads only the source above): the credit's, owed for any day of ECMWF's values (issue #604 R4-E).
+		if (await forecastRainEcmwf(db, seriesIds.rain_forecast_mm, forecastFrom)) plan.forecastRainEcmwf = true;
 		// The engine reads it too (engine ≥ 1.85.0): under per-unit rain a CHIRPS-GEFS forecast takes each unit's CHIRPS level.
 		plan.input = { ...plan.input, forecastRainSource: plan.forecastRainSource };
 	}
@@ -520,6 +524,26 @@ export async function forecastRainSource(db: Db, seriesId: string | undefined, f
 	);
 	const r = rows[0];
 	return r?.whole === true && (r.source === 'chirps_gefs' || r.source === 'ecmwf_ens') ? r.source : 'other';
+}
+
+/**
+ * Whether any forecast day of the series, from `from` to its end, still holds
+ * an ECMWF ENS feed's value (time_series.feed_id + feed_days, 031_feed_days:
+ * the days the feed wrote and no person has since). forecastRainSource asks
+ * for every day, which the model needs; ECMWF's CC BY credit (docs/data-
+ * sources.md § ecmwf-ens) is owed for any one of them, so a forecast with a
+ * day edited by hand still credits it (the report, the CSV, the workbook and
+ * an evidence pack's bundle, engine runRainCredits).
+ */
+export async function forecastRainEcmwf(db: Db, seriesId: string | undefined, from: string): Promise<boolean> {
+	if (!seriesId) return false;
+	const { rows } = await db.query<{ any: boolean | null }>(
+		`SELECT f.source = 'ecmwf_ens' AND s.feed_days && datemultirange(daterange($2::date, s.start_date + cardinality(s."values"))) AS any
+		 FROM time_series s JOIN data_feed f ON f.project_id = s.project_id AND f.id = s.feed_id
+		 WHERE s.id = $1`,
+		[seriesId, from]
+	);
+	return rows[0]?.any === true;
 }
 
 /**
@@ -658,6 +682,8 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		...(scenario ? { scenario } : {}),
 		// A forecast run: where its forecast rain came from (the report credits CHIRPS-GEFS only on 'chirps_gefs').
 		...(plan.forecastRainSource ? { forecastRainSource: plan.forecastRainSource } : {}),
+		// …and whether any of its forecast days held ECMWF's values: the credit's flag, not the model's.
+		...(plan.forecastRainEcmwf ? { forecastRainEcmwf: true } : {}),
 		// The CHIRPS series the run read and the others (engine ≥ 1.90.0, issue #561): its warning reads them, so a reproduction needs them.
 		...(input.seriesChoice ? { seriesChoice: input.seriesChoice } : {}),
 		// The rainfall stations' names and details (engine ≥ 1.91.0, issue #553): the forcing reads their MAPs, so a reproduction needs them.

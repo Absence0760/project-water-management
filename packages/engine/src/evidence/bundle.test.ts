@@ -95,6 +95,10 @@ describe('buildPackBundle + checkPackBundle', () => {
 		withProducts.application!.inputs = { ...withProducts.application!.inputs, forecastRainSource: 'ecmwf_ens' };
 		const credits = bundleRainCredits(withProducts);
 		expect(credits.map((c) => c.product)).toEqual(['era5l', 'imerg_late', 'ecmwf_ens']);
+		// A forecast an ECMWF feed wrote only some days of still owes its credit.
+		const partly = structuredClone(input);
+		partly.application!.inputs = { ...partly.application!.inputs, forecastRainSource: 'other', forecastRainEcmwf: true };
+		expect(bundleRainCredits(partly).map((c) => c.product)).toEqual(['ecmwf_ens']);
 		// The fixture's report records no creation day; a real pack's is the baseline run's, whose year Copernicus's line takes.
 		withProducts.manifest = { ...withProducts.manifest, report: { ...withProducts.manifest.report, identity: { ...withProducts.manifest.report.identity, baseline: { ...withProducts.manifest.report.identity?.baseline, createdAt: '2026-10-27T08:00:00.000Z' } } } } as typeof withProducts.manifest;
 		const year = '2026';
