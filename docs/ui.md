@@ -6144,7 +6144,36 @@ stored series outside it is blank (`preview.ts` `buildAreaColumns`,
 `areaCell`; help `preview.areaStationScaled`, `preview.areaChirpsCorrected`,
 `preview.areaRainUsed`, `preview.areaRainFrom`). The search's value
 comparison and *Missing only* / *Flagged only* still look only at the stored
-series. A flagged value says
+series.
+
+A **View** select above the table (issue #613, `preview.ts` `previewViews`,
+`columnsForView`, `areaViewColumns`; help `preview.view`) picks the column set,
+and the column picker then lists, and hides, only that view's columns:
+**All** (the default: every column above, unchanged); **each land unit** (listed under *Units with land*) by
+name, in the model's order, showing only what its rain is made of, side by
+side: *<station> raw*, *<station> adjusted to <unit> (× r)* with r to three
+decimals, *<unit> CHIRPS raw*, *<unit> CHIRPS bias-corrected (f(m) against
+<station>)*, *<unit> rain used* and *<unit> rain used from*, then the other
+series stored at the unit (a gauge with its m³/day; its CHIRPS series is the
+raw line already; the raw lines read their stored series, so the search, *Missing only*, *Flagged only* and the check flags work on them), with the twelve monthly factors, the station they were
+fitted against, or why the pairing was refused, listed above the table
+(`data-testid="preview-factors"`); and the groups **All rainfall stations**,
+**Average catchment rainfall** (when Settings assigns the catchment a station:
+its lines as for a unit, then the catchment's own stored rain) and **All
+flow** (every flow record with its m³/day, and Excluded from calibration),
+each offered only when it would show something. The raw station and raw
+CHIRPS lines (help `preview.areaStationRaw`, `preview.areaChirpsRaw`) are in
+an area's own view only: in All they are stored series columns already
+(issue #619's recommendation). A unit with no station a run reads has no
+derived lines yet (issue #613 slice 2), so its view says so and shows the
+series stored at it. The view is in the URL while the dialog is open
+(`preview=<all|unit:<id>|stations|catchment|flow>`, written with `replace`), so
+a reload or a link opens the dialog on it; closing drops the parameter, and
+reopening in the same visit keeps the view. A row's own **Preview** switches
+to All when the view doesn't hold that series. A view the project no longer
+offers (a deleted unit) reads as All, and the URL is rewritten to `preview=all`. `series-preview-unit.spec.ts` covers it.
+
+A flagged value says
 which check flagged it beside it (*12.4 · Outlier*), Rain used its source
 and Excluded its reason, in small text on screen, not only to a screen
 reader; the row stays 28 px. Every column header,

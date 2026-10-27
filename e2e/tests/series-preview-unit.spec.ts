@@ -1,0 +1,153 @@
+// Preview all data's View select (issue #613, docs/ui.md § Data): pick a hydrological unit and see only what its rain
+// is made of, side by side (its station raw and adjusted, its CHIRPS raw and bias-corrected with the twelve factors,
+// the rain used and where each day came from), with the view kept in the URL through a reload and a close and reopen.
+// Synthetic catchment: invented names and values only (public repo).
+import type { APIRequestContext } from '@playwright/test';
+import { expectNoViolations } from '../support/a11y.ts';
+import { createProject, node, putModel, updateSettings } from '../support/api.ts';
+import { openData, seriesRow } from '../support/data.ts';
+import { API_URL } from '../support/env.ts';
+import { expect, test } from '../support/fixtures.ts';
+
+const START = '2015-01-01';
+const DAYS = 2192; // 2015 … 2020, so the CHIRPS pairing has its five whole years
+const rain = (k: number, phase = 0) => Array.from({ length: DAYS }, (_, i) => Math.round(((i + phase) % 11 === 0 ? 24 * k : (i + phase) % 4 === 0 ? 2 * k : 0) * 10) / 10);
+
+async function put(request: APIRequestContext, projectId: string, s: Record<string, unknown>, siteNodeId?: string): Promise<string> {
+	const res = await request.put(`${API_URL}/projects/${projectId}/series`, { data: { unit: 'mm', startDate: START, ...s } });
+	expect(res.status()).toBe(200);
+	const { series } = (await (await request.get(`${API_URL}/projects/${projectId}/series`)).json()) as { series: { id: string; name: string }[] };
+	const id = series.find((x) => x.name === s.name)!.id;
+	if (siteNodeId) expect((await request.patch(`${API_URL}/projects/${projectId}/series/${id}`, { data: { siteNodeId } })).status()).toBe(200);
+	return id;
+}
+
+/** Two land units under per-unit rain, both on Bergwater (MAP 745 mm), each with its own CHIRPS; a flow record at the outlet. */
+async function seed(request: APIRequestContext) {
+	const project = await createProject(request, 'Unit view');
+	const gauge = node('Outflow gauge', 'gauge', null, 1, { areaKm2: 0, pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
+	const a = node('Upper unit', 'farm', gauge.id, 2, { mapMm: 863.1, mapSource: 'invented' });
+	const b = node('Lower unit', 'farm', gauge.id, 3, { mapMm: 600, mapSource: 'invented' });
+	await putModel(request, project.id, { nodes: [gauge, a, b], crops: [], cropAreas: [], transfers: [] });
+	// Bergwater misses ten days in 2015, which Upper unit fills from its CHIRPS corrected against it.
+	const bergId = await put(request, project.id, {
+		kind: 'rain_catchment_mm',
+		name: 'Bergwater',
+		values: rain(1.6, 1).map((v, i) => (i >= 40 && i < 50 ? null : v)),
+		station: { mapMm: 745, mapSource: 'Station record, 1991–2020', lat: null, lon: null }
+	});
+	await put(request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS Upper unit', values: rain(0.8, 1) }, a.id);
+	await put(request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS Lower unit', values: rain(0.5, 3) }, b.id);
+	await put(request, project.id, { kind: 'flow_observed_m3s', name: 'Outlet weir', unit: 'm³/s', values: Array.from({ length: DAYS }, (_, i) => 0.1 + (i % 11) / 50) });
+	await updateSettings(request, project.id, {
+		apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110],
+		unitRain: { mode: 'perUnit' },
+		// Bergwater stands in Upper unit, so its CHIRPS pairing is fitted against that unit's CHIRPS.
+		rainStations: { units: { [a.id]: { stationId: bergId }, [b.id]: { stationId: bergId } }, sites: { [bergId]: { unitId: a.id } } }
+	});
+	return { project, a };
+}
+
+test('Preview all data’s View picks one unit: its station raw and adjusted, its CHIRPS raw and corrected with the factors, kept in the URL', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const { project, a } = await seed(page.request);
+	await openData(page, project.id);
+	await page.getByRole('button', { name: 'Preview all data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	const headers = dialog.locator('thead th');
+	await expect(dialog.getByTestId('derived-tag').first()).toBeVisible();
+
+	// All, as before: the stored series and the four derived lines per unit, no raw lines.
+	const view = dialog.getByLabel('View', { exact: true });
+	await expect(view).toHaveValue('all');
+	await expect(page).toHaveURL(/[?&]preview=all(&|$)/);
+	await expect(headers.filter({ hasText: /raw/ })).toHaveCount(0);
+	await expect(view.locator('option')).toHaveText(['All', 'Upper unit', 'Lower unit', 'All rainfall stations', 'All flow']);
+
+	// Upper unit: only its lines, in order, labelled with what they are made of; the factors above the table.
+	await view.selectOption({ label: 'Upper unit' });
+	await expect(page).toHaveURL(new RegExp(`[?&]preview=unit%3A${a.id}(&|$)`));
+	await expect(headers).toHaveText([
+		/^Date/,
+		/^Bergwater raw/,
+		/^Bergwater adjusted to Upper unit \(× 1\.159\)/,
+		/^Upper unit CHIRPS raw/,
+		/^Upper unit CHIRPS bias-corrected \(f\(m\) against Bergwater\)/,
+		/^Upper unit rain used/,
+		/^Upper unit rain used from/
+	]);
+	const factors = dialog.getByTestId('preview-factors');
+	await expect(factors).toContainText('CHIRPS bias factors f(m) against Bergwater, January to December');
+	await expect(factors.getByRole('listitem')).toHaveCount(12);
+	await expect(factors.getByRole('listitem').first()).toHaveText('Jan 2.00');
+
+	// A Bergwater gap day: no raw station, so the rain used is the corrected CHIRPS (raw × January's 2.00).
+	await dialog.getByLabel('Search by date or value').fill('2015-02-13');
+	const cells = dialog.getByRole('table').getByRole('row').filter({ has: page.getByRole('cell', { name: '13 Feb 2015', exact: true }) }).getByRole('cell');
+	await expect(cells).toHaveCount(7);
+	await expect(cells.nth(1)).toHaveText('–');
+	const raw = Number((await cells.nth(3).innerText()).trim());
+	const corrected = (await cells.nth(4).innerText()).trim();
+	expect(Number(corrected)).toBeCloseTo(raw * 2, 1);
+	await expect(cells.nth(5)).toHaveText(corrected);
+	await expect(cells.nth(6)).toHaveText('corrected CHIRPS');
+	await expectNoViolations(page);
+
+	// Missing only reads the raw lines' stored series: Bergwater's ten missing days.
+	await dialog.getByLabel('Search by date or value').fill('');
+	await dialog.getByRole('checkbox', { name: 'Missing only' }).check();
+	await expect(dialog).toContainText(/\b10 of [\d\s]+ days shown/);
+	await dialog.getByRole('checkbox', { name: 'Missing only' }).uncheck();
+
+	// The column checkboxes hide a column within the view.
+	await dialog.locator('summary', { hasText: 'Columns' }).click();
+	await dialog.getByRole('checkbox', { name: 'Upper unit CHIRPS raw' }).uncheck();
+	await dialog.locator('summary', { hasText: 'Columns' }).click();
+	await expect(headers).toHaveCount(6);
+
+	// A reload reopens the dialog on the same view.
+	await page.reload();
+	await expect(dialog).toBeVisible();
+	await expect(dialog.getByLabel('View', { exact: true })).toHaveValue(`unit:${a.id}`);
+	await expect(headers.nth(1)).toHaveText(/^Bergwater raw/);
+
+	// Closed, the parameter goes; reopened in the same visit, the view is kept.
+	await dialog.getByRole('button', { name: 'Close' }).last().click();
+	await expect(dialog).toBeHidden();
+	await expect(page).not.toHaveURL(/preview=/);
+	await page.getByRole('button', { name: 'Preview all data' }).click();
+	await expect(dialog.getByLabel('View', { exact: true })).toHaveValue(`unit:${a.id}`);
+	await expect(page).toHaveURL(new RegExp(`[?&]preview=unit%3A${a.id}(&|$)`));
+
+	// All flow: the outlet's record with its m³/day and the calibration exclusions.
+	await dialog.getByLabel('View', { exact: true }).selectOption({ label: 'All flow' });
+	await expect(headers).toHaveText([/^Date/, /^Flow — observed gauge · Outlet weir/, /^Flow — observed gauge · Outlet weir \(m³\/day\)/, /^Excluded from calibration/]);
+	await expect(dialog.getByTestId('preview-factors')).toHaveCount(0);
+});
+
+test('a link to a view the project doesn’t offer opens on All; a row’s own Preview of a series outside the view switches to All', async ({ page, owner }) => {
+	void owner;
+	const { project, a } = await seed(page.request);
+	await openData(page, project.id, '&preview=unit%3Agone');
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	const view = dialog.getByLabel('View', { exact: true });
+	await expect(view).toHaveValue('all');
+	await expect(page).toHaveURL(/[?&]preview=all(&|$)/);
+
+	// Upper unit's view holds no flow record, so the weir's own Preview shows All with the weir highlighted.
+	await view.selectOption({ label: 'Upper unit' });
+	await expect(page).toHaveURL(new RegExp(`[?&]preview=unit%3A${a.id}(&|$)`));
+	await dialog.getByRole('button', { name: 'Close' }).last().click();
+	await expect(page).not.toHaveURL(/preview=/);
+	await seriesRow(page, 'Outlet weir').getByRole('button', { name: 'Preview' }).click();
+	await expect(view).toHaveValue('all');
+	await expect(dialog.locator('thead th.hl').first()).toContainText('Outlet weir');
+
+	// A phone: the View select and the factors fit, no sideways scroll, no a11y violations.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await view.selectOption({ label: 'Upper unit' });
+	await expect(dialog.getByTestId('preview-factors').getByRole('listitem')).toHaveCount(12);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	await expectNoViolations(page);
+});

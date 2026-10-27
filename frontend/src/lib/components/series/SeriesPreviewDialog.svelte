@@ -27,7 +27,13 @@
 	// the CHIRPS feed's cells when it opens, so Rain used fills a gap day as a
 	// run does and names the product (IMERG with its version), with the
 	// products' credits under the table.
-	import { rainCredits, type DailySeries, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
+	// The View select (issue #613) picks the column set: All (every column, as
+	// before), one land unit (its station raw and adjusted, its CHIRPS raw and
+	// bias-corrected with the factors, its rain used and source, then the series
+	// stored at it), or a group (stations, the average catchment rainfall, flow).
+	// The column checkboxes hide columns within the view. SeriesTab keeps the
+	// view in the URL (`preview=`) while the dialog is open.
+	import { rainCredits, type DailySeries, type NetworkNode, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import { followRetry } from '#lib/components/common/loadState.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -40,10 +46,15 @@
 		buildAreaColumns,
 		buildPreviewColumns,
 		buildPreviewRows,
+		columnsForView,
 		FLAG_LABEL,
 		filterPreviewRows,
 		headerUnit,
+		previewViews,
+		PREVIEW_ALL,
+		resolveView,
 		seriesColumnId,
+		shownSeriesIds,
 		type PreviewArea,
 		type PreviewFlag,
 		type RainSource
@@ -59,7 +70,9 @@
 		failed = {},
 		onRetry,
 		loadAreas,
-		loadGapRain
+		loadGapRain,
+		nodes = [],
+		view = $bindable(PREVIEW_ALL)
 	}: {
 		open?: boolean;
 		list: SeriesMeta[];
@@ -73,6 +86,10 @@
 		loadAreas?: () => Promise<PreviewArea[]>;
 		/** The gap-filling products' input series (SeriesTab, series/gapRain.ts gapRainInputSeries); asked for on every open. */
 		loadGapRain?: () => Promise<Record<string, DailySeries>>;
+		/** The model's nodes: the land units the View select offers, in the model's order. */
+		nodes?: readonly NetworkNode[];
+		/** The view's id (preview.ts previewViews): `all`, `unit:<id>`, `stations`, `catchment` or `flow`; one not offered reads as All. */
+		view?: string;
 	} = $props();
 
 	// The gap-filling products (issue #604 R4-E): none until asked for; a failure says so and the days run on CHIRPS alone.
@@ -123,8 +140,27 @@
 	const areasFailed = $derived((areas ?? []).filter((a) => a.error));
 
 	const columns = $derived([...buildPreviewColumns(list), ...buildAreaColumns(areas ?? [])]);
-	const visibleColumns = $derived(columns.filter((c) => !hidden.has(c.id)));
-	const visibleSeriesIds = $derived(visibleColumns.filter((c) => c.group === 'series').map((c) => c.seriesId!));
+	const views = $derived(previewViews(nodes, settings, list));
+	const activeView = $derived(resolveView(views, view));
+	const unitViews = $derived(views.filter((v) => v.kind === 'unit'));
+	const groupViews = $derived(views.filter((v) => v.kind === 'group'));
+	// A view this project doesn't offer (a stale link to a deleted unit) reads as All, and says so in the URL too.
+	$effect(() => {
+		if (open && list.length && view !== activeView) view = activeView;
+	});
+	const viewColumns = $derived(columnsForView(activeView, columns, { list, areas: areas ?? [] }));
+	const visibleColumns = $derived(viewColumns.filter((c) => !hidden.has(c.id)));
+	// The area a unit's or the catchment's view is about (its lines, or why not), for the factors panel.
+	const viewArea = $derived.by(() => {
+		if (activeView === 'catchment') return { nodeId: null, name: 'the catchment', found: (areas ?? []).find((a) => a.nodeId === null) ?? null };
+		if (!activeView.startsWith('unit:')) return null;
+		const nodeId = activeView.slice('unit:'.length);
+		return { nodeId, name: views.find((v) => v.id === activeView)?.label ?? '', found: (areas ?? []).find((a) => a.nodeId === nodeId) ?? null };
+	});
+	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+	const stationNameOf = (id: string) => list.find((s) => s.id === id)?.name || 'a station no longer in the project';
+	// A unit's view shows its station and CHIRPS as raw lines: the search and the toggles read those series there too.
+	const visibleSeriesIds = $derived(shownSeriesIds(visibleColumns));
 	const missingIds = $derived(list.filter((s) => !values[s.id]).map((s) => s.id));
 	const failedIds = $derived(missingIds.filter((id) => id in failed));
 	const pendingIds = $derived(missingIds.filter((id) => !(id in failed)));
@@ -155,6 +191,7 @@
 	let wasOpen = false;
 	$effect(() => {
 		if (open && !wasOpen) {
+			if (focusSeriesId !== null && !columnsForView(activeView, columns, { list, areas: areas ?? [] }).some((c) => c.id === seriesColumnId(focusSeriesId))) view = PREVIEW_ALL;
 			if (focusSeriesId === null) hidden = new Set();
 			else if (hidden.has(seriesColumnId(focusSeriesId))) {
 				const next = new Set(hidden);
@@ -286,6 +323,23 @@
 		</div>
 
 		<div class="controls">
+			<div class="view-pick">
+				<label for="{uid}-view">View</label>
+				<select id="{uid}-view" bind:value={() => activeView, (v) => (view = v)} data-testid="preview-view">
+					<option value={PREVIEW_ALL}>All</option>
+					{#if unitViews.length}
+						<optgroup label="Units with land">
+							{#each unitViews as v (v.id)}<option value={v.id}>{v.label}</option>{/each}
+						</optgroup>
+					{/if}
+					{#if groupViews.length}
+						<optgroup label="Groups">
+							{#each groupViews as v (v.id)}<option value={v.id}>{v.label}</option>{/each}
+						</optgroup>
+					{/if}
+				</select>
+				<HelpTip key="preview.view" label="About the View select" />
+			</div>
 			<div class="search-row">
 				<label for="{uid}-q" class="visually-hidden">Search by date or value</label>
 				<!-- svelte-ignore a11y_autofocus -->
@@ -306,22 +360,22 @@
 			<details class="picker">
 				<summary class="btn btn-sm">Columns</summary>
 				<div class="picker-panel">
-					<fieldset>
+					{#if viewColumns.some((c) => c.group === 'series')}<fieldset>
 						<legend>Series</legend>
-						{#each columns.filter((c) => c.group === 'series') as col (col.id)}
+						{#each viewColumns.filter((c) => c.group === 'series') as col (col.id)}
 							<label><input type="checkbox" checked={!hidden.has(col.id)} onchange={() => toggleColumn(col.id)} /> {col.label}</label>
 						{/each}
-					</fieldset>
-					<fieldset>
+					</fieldset>{/if}
+					{#if viewColumns.some((c) => c.group === 'derived')}<fieldset>
 						<legend>How the model used it</legend>
-						{#each columns.filter((c) => c.group === 'derived') as col (col.id)}
+						{#each viewColumns.filter((c) => c.group === 'derived') as col (col.id)}
 							<label><input type="checkbox" checked={!hidden.has(col.id)} onchange={() => toggleColumn(col.id)} /> {col.label}</label>
 						{/each}
-					</fieldset>
-					{#if columns.some((c) => c.group === 'area')}
+					</fieldset>{/if}
+					{#if viewColumns.some((c) => c.group === 'area')}
 						<fieldset>
 							<legend>Each area’s rain (derived, not stored)</legend>
-							{#each columns.filter((c) => c.group === 'area') as col (col.id)}
+							{#each viewColumns.filter((c) => c.group === 'area') as col (col.id)}
 								<label><input type="checkbox" checked={!hidden.has(col.id)} onchange={() => toggleColumn(col.id)} /> {col.label}</label>
 							{/each}
 						</fieldset>
@@ -329,6 +383,29 @@
 				</div>
 			</details>
 		</div>
+
+		{#if viewArea && !areasLoading && !areasError}
+			{@const lines = viewArea.found?.lines ?? null}
+			<div class="factors" data-testid="preview-factors">
+				{#if lines}
+					{#if lines.refused}
+						<p>The pairing that corrects {viewArea.name}’s CHIRPS against {stationNameOf(lines.correctAgainst)} is refused: {lines.refused}. Its CHIRPS isn’t corrected, so its gaps fall to the next fallback.</p>
+					{:else if lines.factors}
+						<p>CHIRPS bias factors f(m) against {stationNameOf(lines.correctAgainst)}, January to December{lines.chirpsRaw ? '' : ` (${viewArea.name} has no CHIRPS of its own to correct)`}:</p>
+						<ul aria-label="CHIRPS bias factors by month">
+							{#each lines.factors as k, m (m)}<li><span class="muted">{MONTHS[m]}</span> {fmtNum(k, 2)}</li>{/each}
+						</ul>
+					{:else}
+						<p>No CHIRPS bias factors were fitted against {stationNameOf(lines.correctAgainst)}.</p>
+					{/if}
+				{:else if !viewArea.found?.error}
+					<p class="muted">A run reads no rainfall station for {viewArea.name} with the settings as saved, so it has no derived rain lines; the series stored for it are shown.</p>
+				{/if}
+			</div>
+		{/if}
+		{#if viewColumns.length === 0 && !areasLoading}
+			<p class="muted" data-testid="preview-view-empty">Nothing is stored or derived for this view yet.</p>
+		{/if}
 
 		<!-- Focusable, so the table scrolls from the keyboard (arrows, Page Up/Down) with nothing to focus inside it. -->
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -342,7 +419,7 @@
 			aria-label="Input time series: the daily table"
 		>
 			<table class="data compact" aria-rowcount={filtered.length + 1}>
-				<caption class="visually-hidden">Daily values for every input series, plus how the model used them</caption>
+				<caption class="visually-hidden">{activeView === PREVIEW_ALL ? 'Daily values for every input series, plus how the model used them' : `Daily values: ${views.find((v) => v.id === activeView)?.label ?? ''}`}</caption>
 				<thead>
 					<tr aria-rowindex="1">
 						<th scope="col" class="datecol">Date <HelpTip key="preview.date" label="About the date column" /></th>
@@ -383,7 +460,11 @@
 								{:else if col.area}
 									{@const lines = areaLines.get(col.area.nodeId)}
 									{@const v = lines ? areaCell(lines, col.area.line, row.date) : null}
-									<td class:num={col.area.line !== 'source'} class="area">{typeof v === 'string' ? v : numText(v)}</td>
+									{@const stored = col.seriesId ? row.series[col.seriesId] : undefined}
+									{@const flags = v !== null && stored ? stored.flags.filter((f) => f !== 'missing') : []}
+									<td class:num={col.area.line !== 'source'} class="area" class:flag={flags.length > 0}>
+										{typeof v === 'string' ? v : numText(v)}{#if flags.length}<span class="tag" data-testid="cell-flags"> · {flagList(flags)}</span>{/if}
+									</td>
 								{:else if col.id === 'excluded'}
 									<td class:flag={row.derived.excluded}>
 										{row.derived.excluded ? 'Excluded' : '–'}{#if row.derived.exclusionReason}<span class="tag" data-testid="exclusion-reason"> · {row.derived.exclusionReason}</span>{/if}
@@ -432,6 +513,33 @@
 	}
 	.search-row {
 		flex: 1 1 260px;
+	}
+	.view-pick {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.85rem;
+		min-width: 0;
+	}
+	.view-pick select {
+		min-width: 0;
+		max-width: 22rem;
+	}
+	.factors {
+		font-size: 0.85rem;
+		margin: 0 0 0.6rem;
+	}
+	.factors p {
+		margin: 0 0 0.3rem;
+	}
+	.factors ul {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.9rem;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		font-variant-numeric: tabular-nums;
 	}
 	.search-row input {
 		width: 100%;

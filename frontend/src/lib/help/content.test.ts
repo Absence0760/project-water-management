@@ -15,7 +15,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildAreaColumns, buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series/preview';
+import { areaViewColumns, buildAreaColumns, buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series/preview';
 import { ARTICLES } from './articles';
 import { DATA_ARTICLES } from './articles-data';
 import { EWR_ARTICLES } from './articles-ewr';
@@ -134,7 +134,10 @@ const PREVIEW_KEYS = [
 		.map((c) => c.helpKey)
 		.filter((k) => k.startsWith('preview.')),
 	// Each area's derived rain (issue #553), every line present.
-	...buildAreaColumns([{ nodeId: null, name: '', lines: { startDate: '2020-01-01', rainUsed: [], source: [], stationScaled: [], chirpsCorrected: [] } as never }]).map((c) => c.helpKey)
+	...buildAreaColumns([{ nodeId: null, name: '', lines: { startDate: '2020-01-01', rainUsed: [], source: [], stationScaled: [], chirpsCorrected: [] } as never }]).map((c) => c.helpKey),
+	// A unit's own view (issue #613): every line, and the View select.
+	...areaViewColumns({ nodeId: 'u', name: 'U', lines: { startDate: '2020-01-01', rainUsed: [], source: [], stationRaw: [], stationScaled: [], chirpsRaw: [], chirpsCorrected: [], correctAgainst: 's', forcing: { stationId: 's', stationName: 'S', ratio: 1 } } as never }).map((c) => c.helpKey),
+	'preview.view'
 ];
 
 const settings = defaultProjectSettings();

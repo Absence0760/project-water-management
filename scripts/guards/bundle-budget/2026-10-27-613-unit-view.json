@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Issue #613 slice 1, Preview all data's View select (unit, station, catchment and flow views, the factors list, two raw area lines and three help articles). Measured 2098 KB on main @ 9a33504a4 and 2101 KB with this change (+3 KB). Headroom 0 KB."
+}

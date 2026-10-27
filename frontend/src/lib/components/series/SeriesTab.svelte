@@ -208,6 +208,32 @@
 	let previewMounted = $state(false);
 	const warmPreview = () => prefetch(loadPreviewDialog);
 	let previewFocusSeriesId = $state<string | null>(null);
+	// The preview's View (issue #613, preview.ts previewViews): in the URL (`preview=<view>`, written with replace)
+	// while the dialog is open, so a reload reopens it on that view; kept here once it closes, so reopening it in the
+	// same visit shows the view it had. The dialog reads a view it doesn't offer (a deleted unit) as All.
+	const previewParam = $derived(page.url.searchParams.get('preview'));
+	let previewView = $state(untrack(() => page.url.searchParams.get('preview') ?? 'all'));
+	// A `preview=` link opens the dialog once the list is in, then the dialog's state writes the URL.
+	let previewLinkRead = $state(false);
+	$effect(() => {
+		if (previewLinkRead || loading) return;
+		previewLinkRead = true;
+		untrack(() => {
+			if (previewParam === null) return;
+			previewView = previewParam;
+			if (list.length) openPreviewAll();
+			else void goto(withoutParam(page.url, 'preview'), { reset: false, replace: true });
+		});
+	});
+	$effect(() => {
+		if (!previewLinkRead) return;
+		const want = previewOpen ? previewView : null;
+		const have = previewParam;
+		untrack(() => {
+			if (want === have) return;
+			void goto(want === null ? withoutParam(page.url, 'preview') : withParam(page.url, 'preview', want), { reset: false, replace: true });
+		});
+	});
 	/** The card header's "Preview all data": every column, nothing highlighted. */
 	function openPreviewAll() {
 		previewFocusSeriesId = null;
@@ -1336,7 +1362,7 @@
 {#if previewMounted}
 	<Lazy load={loadPreviewDialog}>
 		{#snippet children(SeriesPreviewDialog)}
-			<SeriesPreviewDialog bind:open={previewOpen} {list} {values} failed={valuesFailed} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} loadAreas={derivedAreas} loadGapRain={gapRain ? loadGapRain : undefined} />
+			<SeriesPreviewDialog bind:open={previewOpen} bind:view={previewView} {nodes} {list} {values} failed={valuesFailed} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} loadAreas={derivedAreas} loadGapRain={gapRain ? loadGapRain : undefined} />
 		{/snippet}
 	</Lazy>
 {/if}
