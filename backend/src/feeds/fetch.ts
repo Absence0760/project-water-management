@@ -180,6 +180,8 @@ export function fetchWindow(
 		}
 		case 'chirps_gefs':
 			return { start: today, end: addDays(today, 15) };
+		case 'ecmwf_ens':
+			return { start: today, end: addDays(today, 14) };
 		case 'dws': {
 			// After `mark` (the newest day, or the last day read): the day after it,
 			// or, when a window from there would reach today, up to a year before
@@ -326,7 +328,7 @@ export type FetchAnswer = FetchResult | CellsResult;
  * DWS_WINDOW_DAYS (up to 20 years) is refused here: the feed records the
  * failure and its retry asks for the shorter window.
  */
-const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: DWS_WINDOW_DAYS };
+const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: DWS_WINDOW_DAYS, ecmwf_ens: 15 };
 
 /** A fetch request as the fetcher Lambda receives it: the config is checked against its source's schema again. */
 export const FetchRequestSchema = z
@@ -456,6 +458,9 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 				if (!r) throw new FeedFormatError('no forecast was issued today or yesterday');
 				return { ok: true, startDate: r.startDate, values: r.values, meta: { days: r.values.length, issued: r.issued, ...used() } };
 			}
+			case 'ecmwf_ens':
+				// Read only from our copy, in the worker's job (fromMirrorEcmwf.ts): no request ever goes to ECMWF from a feed.
+				throw new FeedFormatError('ECMWF forecasts are read only from the rain data copy, never by the fetcher');
 			case 'dws': {
 				const page = await http.text(dwsUrl((req.config as DwsConfig).station, req.start, req.end));
 				if (page === null) throw new FeedFormatError(DWS_FORMAT_FAILURES.notFound[0]);

@@ -52,6 +52,7 @@ import { feedHttp, LiveFeedRequestRefusedError } from '../../feeds/http.js';
 import { JobError } from '../errors.js';
 import { fetchFromMirror } from '../../feeds/fromMirror.js';
 import { fetchGefsFromMirror } from '../../feeds/fromMirrorGefs.js';
+import { fetchEcmwfFromMirror } from '../../feeds/fromMirrorEcmwf.js';
 import { ingestResult } from '../../feeds/ingest.js';
 import { chirpsSource } from '../../mirror/source.js';
 import { dwsSource, fetchFromGaugeRecord } from '../../feeds/fromGaugeRecord.js';
@@ -81,6 +82,11 @@ export const feedFetchHandler = defineHandler({
 		// CHIRPS-GEFS from the copy too (issue #604 R3-A): the newest issue the daily GEFS pass copied, read in this job.
 		if (feed.source === 'chirps_gefs' && chirpsSource() === 'mirror') {
 			await fetchGefsFromMirror(db, feed, window, { jobId: job.id, today });
+			return;
+		}
+		// ECMWF ENS (issue #604 R4-C): only ever from the copy, whatever CHIRPS_SOURCE says (there is no per-feed path).
+		if (feed.source === 'ecmwf_ens') {
+			await fetchEcmwfFromMirror(db, feed, window, { jobId: job.id, today });
 			return;
 		}
 		// DWS from our gauge record store (issue #604 R3-B).

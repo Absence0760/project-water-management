@@ -9,7 +9,8 @@
 // copy is as the files stood on MIRROR_FIXTURE.today, so finals through
 // 2025-12-31 (2023–2025, one leap year) and preliminary sat days through
 // 2026-02-06, and the CHIRPS-GEFS issues of 2026-02-08 and 2026-02-09
-// (`gefs/<issue>` and `gefs/index.json`). Only the chunks holding the fixture's 8 × 6 grid and the band
+// (`gefs/<issue>` and `gefs/index.json`), and one ECMWF ENS issue
+// (scripts/ecmwf-fixture.ts, `ecmwf/<issue>`, `ecmwf/index.json`). Only the chunks holding the fixture's 8 × 6 grid and the band
 // of the same size just south of it are written, each with the cells the
 // files cover; every other chunk is unwritten (NaN), which costs nothing. The
 // band holds one land copy of every cell of the grid's repeating pattern
@@ -29,6 +30,7 @@ import { cellCentre, chcCell } from '../src/feeds/cellCache.js';
 import { FIXTURE_DIR, fixtureHttp, fixtureTag } from '../src/feeds/fixtures.js';
 import { CHC_BASE, chirpsFinalFileUrl, chirpsPrelimUrl, GEFS_DAYS, gefsUrl, gridValues } from '../src/feeds/sources/chirps.js';
 import { gefsProduct, writeGefsIndex } from '../src/ingest/gefs.js';
+import { writeEcmwfFixture } from './ecmwf-fixture.js';
 import { type Block, DAILY_CHUNK, ensureDaily, ensureFinals, FINALS_CHUNK, writeDailyDays, writeFinalsYear } from '../src/mirror/arrays.js';
 import { chcCellOf, dateOfDoy, gridOf, MIRROR_REGION, mirrorCell, regionSize } from '../src/mirror/grid.js';
 import { type Manifest, manifestHash, writeManifest } from '../src/mirror/manifest.js';
@@ -207,6 +209,9 @@ export async function buildMirrorFixture(dir: string): Promise<void> {
 		});
 	}
 	await writeGefsIndex(store, MIRROR_FIXTURE.gefsIssues);
+
+	// ECMWF ENS (issue #604 R4-C): one invented issue, scripts/ecmwf-fixture.ts.
+	await writeEcmwfFixture(store);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
