@@ -56,7 +56,7 @@ describe('load: a reference load’s inputs', () => {
 		// The Southwestern Cape MAP surface: its credit is stored with the dataset and shown with the layer (docs/maps.md § MAP grid).
 		const mapGrid = { ...landCover, LOAD_KIND: 'map-grid', LOAD_KEY: 'reference/map-grid/waas-swcape.json.gz', LOAD_DATASET: 'WAAS-SWCape-2007' };
 		assert.deepEqual(loadProblems(mapGrid, lacks), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles']);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies']);
 	});
 
 	it('a MAP grid loads only a dataset whose licence is recorded, with no source of its own', () => {
