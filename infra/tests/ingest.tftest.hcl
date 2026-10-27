@@ -733,6 +733,14 @@ override_resource {
 }
 
 override_resource {
+  target          = aws_cloudwatch_event_rule.gefs_ingest
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-gefs-ingest"
+  }
+}
+
+override_resource {
   target          = aws_iam_role.ingest_backfill
   override_during = plan
   values = {
@@ -1101,6 +1109,15 @@ run "daily_ingest_off_by_default" {
   }
   assert {
     condition = (
+      aws_cloudwatch_event_rule.gefs_ingest.state == "DISABLED" &&
+      length(aws_cloudwatch_event_target.gefs_ingest) == 0 &&
+      length(aws_lambda_permission.fetcher_gefs_ingest) == 0 &&
+      length(aws_cloudwatch_metric_alarm.mirror_lag_gefs) == 0
+    )
+    error_message = "Until daily_ingest_enabled is set the GEFS pass's rule is disabled, targets nothing, may invoke nothing, and its breaching freshness alarm doesn't exist."
+  }
+  assert {
+    condition = (
       aws_lambda_function_event_invoke_config.fetcher.maximum_retry_attempts == 0 &&
       aws_lambda_function_event_invoke_config.fetcher.function_name == aws_lambda_function.fetcher.function_name
     )
@@ -1160,6 +1177,32 @@ run "daily_ingest_on" {
     error_message = "The preliminary copy's freshness alarm reads MirrorLagDays{Product=prelim}, pages through the alerts topic, and treats missing data as breaching."
   }
   assert {
+    condition = (
+      aws_cloudwatch_event_rule.gefs_ingest.state == "ENABLED" &&
+      aws_cloudwatch_event_target.gefs_ingest[0].arn == aws_lambda_function.fetcher.arn &&
+      jsondecode(aws_cloudwatch_event_target.gefs_ingest[0].input) == { mode = "daily-ingest", pass = "gefs" } &&
+      one(aws_cloudwatch_event_target.gefs_ingest[0].retry_policy).maximum_retry_attempts == 0 &&
+      aws_cloudwatch_event_rule.gefs_ingest.schedule_expression == "cron(38 8-11 * * ? *)" &&
+      aws_lambda_permission.fetcher_gefs_ingest[0].principal == "events.amazonaws.com" &&
+      aws_lambda_permission.fetcher_gefs_ingest[0].source_arn == aws_cloudwatch_event_rule.gefs_ingest.arn &&
+      aws_lambda_permission.fetcher_gefs_ingest[0].function_name == aws_lambda_function.fetcher.function_name
+    )
+    error_message = "With daily_ingest_enabled the GEFS rule sends {\"mode\":\"daily-ingest\",\"pass\":\"gefs\"} to the fetcher at 08:38 UTC (before the 08:45 forecast feeds) and hourly to 11:38, never retried, and only it may invoke for that."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.mirror_lag_gefs[0].treat_missing_data == "breaching" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_gefs[0].namespace == "water-management/Mirror" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_gefs[0].metric_name == "MirrorLagDays" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_gefs[0].dimensions["Product"] == "gefs" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_gefs[0].threshold == 2 &&
+      aws_cloudwatch_metric_alarm.mirror_lag_gefs[0].comparison_operator == "GreaterThanOrEqualToThreshold" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_gefs[0].period == 86400 &&
+      aws_cloudwatch_metric_alarm.mirror_lag_gefs[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
+    )
+    error_message = "The forecast copy's freshness alarm reads MirrorLagDays{Product=gefs}, fires at 2 days (neither today's nor yesterday's issue held), pages through the alerts topic, and treats missing data as breaching."
+  }
+  assert {
     condition     = length(aws_lambda_function.ingest) == 0 && length(aws_cloudwatch_metric_alarm.mirror_lag) == 0
     error_message = "The daily ingest is the Node fetcher's: turning it on doesn't need (or create) the Python ingest function or its alarms."
   }
@@ -1174,8 +1217,8 @@ run "essential_tier_keeps_the_prelim_freshness_alarm" {
   }
 
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.mirror_lag_prelim) == 1
-    error_message = "alarm_tier = \"essential\" keeps the preliminary copy's freshness alarm."
+    condition     = length(aws_cloudwatch_metric_alarm.mirror_lag_prelim) == 1 && length(aws_cloudwatch_metric_alarm.mirror_lag_gefs) == 1
+    error_message = "alarm_tier = \"essential\" keeps the preliminary and forecast copies' freshness alarms."
   }
 }
 

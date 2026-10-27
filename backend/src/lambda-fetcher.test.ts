@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -19,7 +19,7 @@ vi.mock('./feeds/http.js', async (orig) => {
 	return { ...real, feedHttp: async () => httpOverride.next ?? real.feedHttp() };
 });
 
-const { DAILY_INGEST_EVENT, FETCH_SEND_MARGIN_MS, failureDetail, fetchFailureReason, handler, isDailyIngestEvent, withDeadline } = await import('./lambda-fetcher.js');
+const { DAILY_INGEST_EVENT, FETCH_SEND_MARGIN_MS, GEFS_INGEST_EVENT, failureDetail, fetchFailureReason, handler, isDailyIngestEvent, withDeadline } = await import('./lambda-fetcher.js');
 
 afterEach(() => {
 	sent.length = 0;
@@ -316,6 +316,37 @@ describe('the fetcher’s daily-ingest mode (issue #604 R2-B)', () => {
 	it('refuses to run without MIRROR_URL (it never writes the committed synthetic copy)', async () => {
 		vi.stubEnv('MIRROR_URL', '');
 		await expect(handler({ mode: 'daily-ingest' } as never)).rejects.toThrow(/MIRROR_URL is not set/);
+	});
+
+	it('runs the GEFS pass on {"mode":"daily-ingest","pass":"gefs"} (issue #604 R3-A): today’s issue into the copy, its own lag metric and log line', async () => {
+		const dir = mirrorDir();
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${dir}/`).href);
+		expect(isDailyIngestEvent(GEFS_INGEST_EVENT)).toBe(true);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = await handler(GEFS_INGEST_EVENT as never);
+		const metric = out.mock.calls.map(([l]) => String(l)).find((l) => l.includes('MirrorLagDays'));
+		out.mockRestore();
+		expect(res).toEqual({ copied: today, newest: today, lagDays: 0, stopped: 'copied' });
+		expect(JSON.parse(metric!)).toMatchObject({ Product: 'gefs', MirrorLagDays: 0 });
+		const logged = info.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ product: 'gefs', copied: today, held: 1, stopped: 'copied', requests: 48 });
+		// The preliminary pass didn't run: no prelim array.
+		expect(existsSync(join(dir, 'prelim'))).toBe(false);
+		expect(existsSync(join(dir, 'gefs', today, 'manifest.json'))).toBe(true);
+		expect(sent).toHaveLength(0);
+	});
+
+	it('fails the GEFS pass on an HTTP 403 after logging it as refused, with no request after it', async () => {
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${mirrorDir()}/`).href);
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, rangeTagged: refuse, text: refuse };
+		await expect(handler(GEFS_INGEST_EVENT as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		const logged = error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ product: 'gefs', copied: null, stopped: 'error', reason: 'refused', detail: 'HTTP 403', requests: 1 });
 	});
 
 	it('fails an event of neither mode, naming no payload', async () => {

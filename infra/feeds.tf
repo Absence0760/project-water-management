@@ -261,6 +261,44 @@ resource "aws_lambda_permission" "fetcher_daily_ingest" {
   source_arn    = aws_cloudwatch_event_rule.daily_ingest.arn
 }
 
+# The GEFS pass (issue #604 R3-A, backend/src/ingest/gefs.ts): the newest
+# complete CHIRPS-GEFS issue into the mirror, on its own rule with
+# {"mode":"daily-ingest","pass":"gefs"}. Not after the preliminary pass at
+# 03:00: CHC issues each forecast around 08:26-08:30 UTC, so a 03:00 run would
+# always copy yesterday's, and the two passes' requests at one a second (up to
+# ~80 + ~64) don't fit the fetcher's 120 s. 08:38, before the CHIRPS-GEFS
+# feeds fall due at 08:45 (111_feed_daily_only), then hourly to 11:38 for a
+# late issue; a run that finds the day's issue held asks CHC nothing.
+resource "aws_cloudwatch_event_rule" "gefs_ingest" {
+  name                = "${local.project}-gefs-ingest"
+  description         = "The fetcher's GEFS pass: the newest complete CHIRPS-GEFS issue into the data mirror ({\"mode\":\"daily-ingest\",\"pass\":\"gefs\"}). Disabled until daily_ingest_enabled is set."
+  schedule_expression = "cron(38 8-11 * * ? *)"
+  state               = var.daily_ingest_enabled ? "ENABLED" : "DISABLED"
+}
+
+resource "aws_cloudwatch_event_target" "gefs_ingest" {
+  count = var.daily_ingest_enabled ? 1 : 0
+
+  rule  = aws_cloudwatch_event_rule.gefs_ingest.name
+  arn   = aws_lambda_function.fetcher.arn
+  input = jsonencode({ mode = "daily-ingest", pass = "gefs" })
+
+  retry_policy {
+    maximum_retry_attempts       = 0
+    maximum_event_age_in_seconds = 3600
+  }
+}
+
+resource "aws_lambda_permission" "fetcher_gefs_ingest" {
+  count = var.daily_ingest_enabled ? 1 : 0
+
+  statement_id  = "AllowEventBridgeGefsIngest"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.fetcher.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.gefs_ingest.arn
+}
+
 # The schedule invokes asynchronously, and Lambda would retry a failed run
 # twice by default: a run that met HTTP 403 must stop, not ask again within
 # minutes. The SQS mode is a synchronous poll, so this doesn't touch it.
