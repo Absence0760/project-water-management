@@ -127,7 +127,7 @@ describe('data_feed RLS and the routes', () => {
 		expect(list.status).toBe(200);
 		expect(list.body.feeds.map((f: { id: string }) => f.id)).toEqual([id]);
 		expect(list.body).toMatchObject({ mode: 'fixtures', canEdit: false, canRun: false, schedules: ['daily'] });
-		expect(list.body.sources.map((s: { source: string }) => s.source)).toEqual(['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens']);
+		expect(list.body.sources.map((s: { source: string }) => s.source)).toEqual(['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0']);
 		// Our CHIRPS copy (issue #604), as the worker's tick records it (mirror_copy): not checked before a tick, then,
 		// off a live process, the committed sample copy, on time as of the day it was made.
 		expect(list.body.rainCopy).toEqual({ readable: false });
@@ -529,6 +529,9 @@ describe('the scheduler', () => {
 			expect(await next('ecmwf_ens', 1, '2026-03-01T10:00:00Z', outage)).toBe('2026-03-01T10:14:00.000Z');
 			expect(await next('ecmwf_ens', 1, '2026-03-01T10:00:00Z', refused)).toBe('2026-03-01T11:59:00.000Z');
 			expect(await next('ecmwf_ens', 3, '2026-03-01T10:00:00Z', refused)).toBe('2026-03-01T14:00:00.000Z');
+			// Reference ET (256): no slot of its own, the day's rule and the usual backoff.
+			expect(await next('agera5_et0', 0, '2026-03-01T06:00:00Z')).toBe('2026-03-02T05:59:00.000Z');
+			expect(await next('agera5_et0', 1, '2026-03-01T09:00:00Z', outage)).toBe('2026-03-01T09:14:00.000Z');
 
 			// 242's app_feed_is_due, frozen: the rewrite must agree with it everywhere, not only with itself.
 			await client.query(`CREATE FUNCTION pg_temp.feed_is_due_242(p_source text, p_schedule text, p_failures integer, p_last timestamptz, p_now timestamptz, p_last_error text)
@@ -1924,6 +1927,26 @@ describe('daily only, and the "Run now" limit (111_feed_daily_only)', () => {
 		expect(r.body.feed).toMatchObject({ source: 'ecmwf_ens', targetKind: 'rain_forecast_mm' });
 		const sources = (await owner.call('GET', `/projects/${pid}/feeds`)).body.sources as { source: string; label: string }[];
 		expect(sources.find((s) => s.source === 'ecmwf_ens')?.label).toBe('ECMWF ENS rainfall forecast');
+	});
+
+	it('data_feed.source takes the AgERA5 reference ET feed beside the other four, and nothing else (256)', async () => {
+		const owner = await signUp('Et0Source');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		// Positive controls: every source the API takes is one the table takes.
+		for (const source of ['chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0', 'chirps']) {
+			await asOwner(`UPDATE data_feed SET source = $2 WHERE id = $1`, [id, source]);
+			expect((await asOwner('SELECT source FROM data_feed WHERE id = $1', [id]))[0].source).toBe(source);
+		}
+		await expect(asOwner(`UPDATE data_feed SET source = 'agera5' WHERE id = $1`, [id])).rejects.toMatchObject({ code: '23514', constraint: 'data_feed_source_check' });
+		// Through the API, as an owner: grid cells, writing the daily reference ET series and nothing else.
+		const r = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'agera5_et0', config: { cells: [{ lat: -20.12, lon: 25.17 }] } });
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		expect(r.body.feed).toMatchObject({ source: 'agera5_et0', targetKind: 'evap_et0_mm' });
+		const wrong = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'agera5_et0', targetKind: 'evap_apan_mm', config: { cells: [{ lat: -20.12, lon: 25.17 }] } });
+		expect(wrong.status).toBe(400);
+		const sources = (await owner.call('GET', `/projects/${pid}/feeds`)).body.sources as { source: string; label: string }[];
+		expect(sources.find((s) => s.source === 'agera5_et0')?.label).toBe('AgERA5 daily reference evapotranspiration');
 	});
 
 	it('the table holds only daily feeds, and the migration turned hourly ones daily without touching their health or acting user', async () => {
