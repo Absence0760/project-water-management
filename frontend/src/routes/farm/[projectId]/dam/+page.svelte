@@ -68,11 +68,12 @@
 			</section>
 
 			<DamChart farm={view.farm} caption={d.chartCaption} />
-			<!-- "Your dam, seen from space" (issue #604 R5-B): only when the dam is drawn as an outline on the map. -->
-			<DamObservedCard {projectId} nodeId={view.farm.nodeId} />
 			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
 			{@const forecast = forecastCard(view.farm, farmToday(view))}
 			{#if forecast}<ForecastCard vm={forecast} />{/if}
+			<!-- "Your dam, seen from space" (issue #604 R5-B): only when the dam is drawn as an outline on the map; a check on
+			     the model, so after the model's own figures and forecast, just before where they come from. -->
+			<DamObservedCard {projectId} nodeId={view.farm.nodeId} />
 
 			<section class="card" aria-labelledby="about-h">
 				<h2 id="about-h">{t('Where these figures come from')}</h2>

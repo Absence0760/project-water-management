@@ -805,8 +805,6 @@ export const af: Catalogue = {
 	'294b89aa': 'As jou peilplaat heel anders lees, of jou pomp by ’n ander vlak stop, sê vir jou WGV. Dit help hulle om die model reg te stel.',
 	// No clear view of your dam from space yet. Clouds often hide it; the next clear view will show here.
 	'48093517': 'Nog geen helder beeld van jou dam uit die ruimte nie. Wolke steek dit dikwels weg; die volgende helder beeld sal hier verskyn.',
-	// On {date} a satellite saw water over {area} of your dam, about {pct} of the area it covers when full.
-	'5b23de54': 'Op {date} het ’n satelliet water oor {area} van jou dam gesien, ongeveer {pct} van die dam se oppervlakte as dit vol is.',
 	// On {date} a satellite saw water over {area} of your dam.
 	'068f0c4b': 'Op {date} het ’n satelliet water oor {area} van jou dam gesien.',
 	// Your dam, seen from space
