@@ -37,6 +37,8 @@ export type SyncHash = (data: string | Uint8Array) => string;
 
 export const PACK_FIXTURE_ID = '00000000-0000-4000-8000-00000000b001';
 const START = '2001-10-01';
+/** The fixture baseline's last day as the manifest records it (identity.baseline.endDate). */
+const END = '2030-01-01';
 const OPS = [{ op: 'crop_area', nodeId: 'F1', cropId: 'c', areaM2: 600_000 }];
 
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
@@ -170,7 +172,7 @@ export function packBundleFixture(
 		identity: {
 			title: 'Catchment',
 			project,
-			baseline: { runId: baseline.runId, engineVersion: baseline.engineVersion },
+			baseline: { runId: baseline.runId, engineVersion: baseline.engineVersion, startDate: START, endDate: END },
 			application: application
 				? { runId: application.runId, engineVersion: application.engineVersion, scenarioId: '00000000-0000-4000-8000-0000000000c1', opsSha256: hash(canonicalJson(OPS)) }
 				: null
@@ -191,7 +193,7 @@ export function packBundleFixture(
 	return { manifest: JSON.parse(JSON.stringify(manifest)), baseline, application };
 }
 
-/** Observed wet days (evidence-21) of one invented dam on Farm one, as the report freezes them: 3 clear dates, 2 wet. */
+/** Observed wet days (evidence-21) of one invented dam on Farm one, as the report freezes them: 5 dates, 2 wet, 1 dry, 2 inconclusive. */
 export function fixtureObservations(): EvidenceDamObservations {
 	return damObservationsSection(
 		[
@@ -200,14 +202,15 @@ export function fixtureObservations(): EvidenceDamObservations {
 				name: 'Farm one dam',
 				nodeId: 'F1',
 				rows: [
-					{ date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 },
-					{ date: '2020-01-13', wetAreaM2: 900, pctObserved: 40 },
-					{ date: '2020-01-21', wetAreaM2: 0, pctObserved: 95 },
-					{ date: '2020-01-29', wetAreaM2: 2700, pctObserved: 90 }
+					{ date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 }, // wet
+					{ date: '2020-01-13', wetAreaM2: 900, pctObserved: 40 }, // one wet pixel: inconclusive
+					{ date: '2020-01-21', wetAreaM2: 0, pctObserved: 99.5 }, // dry
+					{ date: '2020-01-29', wetAreaM2: 2700, pctObserved: 30 }, // wet at any clear share
+					{ date: '2020-02-06', wetAreaM2: 0, pctObserved: 95 } // no water on a 95 % view: inconclusive
 				]
 			}
 		],
-		{ applicant: true, ownNodeIds: ['F1'], startDate: START, endDate: '2030-01-01', models: [] }
+		{ applicant: true, ownNodeIds: ['F1'], startDate: START, endDate: END, models: [] }
 	)!;
 }
 
@@ -276,7 +279,7 @@ export async function headlinePackFixture(hash: SyncHash, opts: { legacy?: boole
 		identity: {
 			title: 'Catchment',
 			project,
-			baseline: { runId: baseline.runId, engineVersion: baseline.engineVersion },
+			baseline: { runId: baseline.runId, engineVersion: baseline.engineVersion, startDate: START, endDate: END },
 			application: { runId: application.runId, engineVersion: application.engineVersion, scenarioId, opsSha256 }
 		},
 		issuable: true,

@@ -1894,7 +1894,16 @@ describe('observed wet days (evidence-21, issue #604 R5-C)', () => {
 	// Invented WOfS rows on Farm two's dam (the applicant's) and Farm one's (a neighbour's), inside the baseline's period.
 	const day = (n: number) => new Date(Date.parse(`${input().baseline.startDate}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 	const dams = [
-		{ featureId: 'd2', name: '', nodeId: 'F2', rows: [ { date: day(3), wetAreaM2: 900, pctObserved: 100 }, { date: day(11), wetAreaM2: 0, pctObserved: 97 }, { date: day(19), wetAreaM2: 400, pctObserved: 30 } ] },
+		{
+			featureId: 'd2',
+			name: '',
+			nodeId: 'F2',
+			rows: [
+				{ date: day(3), wetAreaM2: 1800, pctObserved: 100 },
+				{ date: day(11), wetAreaM2: 0, pctObserved: 99.5 },
+				{ date: day(19), wetAreaM2: 0, pctObserved: 97 }
+			]
+		},
 		{ featureId: 'd1', name: 'Neighbour dam', nodeId: 'F1', rows: [{ date: day(3), wetAreaM2: 1, pctObserved: 100 }] }
 	];
 
@@ -1902,7 +1911,23 @@ describe('observed wet days (evidence-21, issue #604 R5-C)', () => {
 		const r = evidenceReport(input({ damObservations: dams }));
 		const s = r.damObservations!;
 		expect(s).toMatchObject({ source: 'wofs', citation: 'Digital Earth Africa WOfS, CC BY 4.0', startDate: r.identity.baseline.startDate, endDate: r.identity.baseline.endDate });
-		expect(s.dams).toEqual([{ featureId: 'd2', name: 'Farm two', nodeId: 'F2', observedDates: 3, clearDates: 2, wetDates: 1, clear: [[day(3), 900], [day(11), 0]] }]);
+		expect(s).toMatchObject({ wetMinPixels: 2, dryMinClearPct: 99, pixelAreaM2: 900 });
+		expect(s.dams).toEqual([
+			{
+				featureId: 'd2',
+				name: 'Farm two',
+				nodeId: 'F2',
+				observedDates: 3,
+				wetDates: 1,
+				dryDates: 1,
+				inconclusiveDates: 1,
+				dates: [
+					[day(3), 1800, 100],
+					[day(11), 0, 99.5],
+					[day(19), 0, 97]
+				]
+			}
+		]);
 	});
 
 	it('is null for baseline evidence and a team scenario, which name no one’s farm', () => {

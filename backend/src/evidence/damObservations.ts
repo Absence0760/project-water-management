@@ -3,7 +3,7 @@
 // days): the project's traced dams on the given units, each with its WOfS
 // rows (249 dam_observation, source 'wofs') in the period. Read under the
 // reader's RLS (withUser): a reader who can't see a dam or its rows gets
-// neither. The engine counts the clear and wet dates and freezes them.
+// neither. The engine classifies each date (wet, dry, inconclusive) and freezes them.
 import type { EvidenceDamObservationInput } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { UUID } from '../projects/access.js';

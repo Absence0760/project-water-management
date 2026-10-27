@@ -178,11 +178,11 @@ describe('buildPackBundle + checkPackBundle', () => {
 	});
 
 	describe('observed wet days (evidence-21)', () => {
-		it('counts them again from the manifest’s clear dates; the README says so', async () => {
+		it('classifies them again from the manifest’s dates over the baseline’s period; the README says so', async () => {
 			const built = await buildPackBundle(packBundleFixture(hash, { observations: true }), hash);
 			const r = await checkPackBundle(built.bytes, { hash, rerun: false });
 			expect(failing(r)).toEqual([]);
-			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toBe("the observed wet days of 1 dam count again from the manifest's 3 clear dates");
+			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toBe("the observed wet days of 1 dam over the baseline run's period (2001-10-01 to 2030-01-01) classify again from the manifest's 5 observed dates");
 			const archive = await ZipArchive.open(built.bytes);
 			expect(new TextDecoder().decode(await archive.read('README.md'))).toContain('`observations:wofs`');
 		});
@@ -193,6 +193,20 @@ describe('buildPackBundle + checkPackBundle', () => {
 			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
 			expect(failing(r)).toEqual(['observations:wofs']);
 			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toContain('3 wet dates named, 2 counted');
+		});
+
+		it('a period other than the baseline run’s the manifest records fails observations:wofs alone, though the manifest hashes', async () => {
+			// Counted over a shorter span than the baseline: consistent with itself, and the manifest's hash covers it, but not the report's period.
+			const obs = { ...fixtureObservations(), endDate: '2020-12-31' };
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual(['observations:wofs']);
+			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toContain("not the baseline run's period 2001-10-01–2030-01-01 the manifest records");
+		});
+
+		it('another counting version names the engine that built the report', async () => {
+			const obs = { ...fixtureObservations(), version: 'dam-obs-0' } as unknown as ReturnType<typeof fixtureObservations>;
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
+			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toMatch(/counted by dam-obs-0; this code counts dam-obs-1: check out the engine that built the report \(\d+\.\d+\.\d+/);
 		});
 
 		it('a pack from before evidence-21 has no such check (positive control above)', async () => {

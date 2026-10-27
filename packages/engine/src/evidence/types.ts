@@ -150,9 +150,9 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * evidence-21 (issue #604 R5-C): observed wet days (`damObservations`,
  * evidence/damObservations.ts): for an applicant's application, each of the
  * applicant's own traced dams with how many dates in the baseline's period
- * Digital Earth Africa's WOfS saw it clearly (≥ 90 % of its outline) and on
- * how many of those it held water, its clear dates frozen so reproduce:pack
- * counts them again. Null for baseline evidence and a team scenario. A pack
+ * Digital Earth Africa's WOfS saw it wet (≥ 2 wet pixels), dry (no wet pixel,
+ * ≥ 99 % of its outline seen clearly) or neither, every observed date frozen
+ * so reproduce:pack classifies them again. Null for baseline evidence and a team scenario. A pack
  * drafted before keeps its document, without them.
  */
 export const EVIDENCE_REPORT_VERSION = 'evidence-21';
@@ -1150,8 +1150,8 @@ export interface EvidenceReport {
 	 */
 	localityMap?: LocalityMapData | null;
 	/**
-	 * The applicant's own dams' observed wet days (evidence-21, evidence/damObservations.ts): clear
-	 * WOfS dates in the baseline's period and how many were wet. Null for baseline evidence and a
+	 * The applicant's own dams' observed wet days (evidence-21, evidence/damObservations.ts): every
+	 * WOfS date in the baseline's period, and how many were wet, dry and inconclusive. Null for baseline evidence and a
 	 * team scenario; absent from a pack drafted before evidence-21.
 	 */
 	damObservations?: EvidenceDamObservations | null;

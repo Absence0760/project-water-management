@@ -810,9 +810,11 @@
 				<!-- evidence-21: the applicant's own dams as DE Africa's WOfS saw them (satellite evidence beside the model, not an input to it). -->
 				{@const dov = report.damObservations}
 				<p class="small muted">
-					How many dates from {fmtDate(dov.startDate)} to {fmtDate(dov.endDate)} (the baseline’s period) the satellite water layer saw each of the applicant’s dams clearly
-					(at least {dov.clearMinPct} % of its traced outline free of cloud and shadow), and on how many of those any of it was water. A date seen less clearly is counted as
-					observed only: a partial view can’t show the dam was dry. Landsat sees a dam every 8 to 16 days, so these are counts of dates seen, not of days.
+					For each of the applicant’s dams, the dates from {fmtDate(dov.startDate)} to {fmtDate(dov.endDate)} (the baseline’s period) on which the satellite water layer saw
+					it, read by one rule (provisional). <strong>Wet:</strong> at least {dov.wetMinPixels} pixels of its traced outline were water (about {fmtNum(dov.wetMinPixels * dov.pixelAreaM2)} m²),
+					however much of it was seen: proof of water needs no full view. <strong>Dry:</strong> no water at all, with at least {dov.dryMinClearPct} % of the outline seen
+					free of cloud and shadow, so the last pool at the wall can’t hide. <strong>Inconclusive:</strong> anything else. Landsat sees a dam every 8 to 16 days, so these are
+					counts of dates seen, not of days.
 				</p>
 				{#if dov.dams.length}
 					<div class="table-wrap">
@@ -821,9 +823,10 @@
 								<tr>
 									<th scope="col">Dam</th>
 									<th scope="col" class="num">Dates observed</th>
-									<th scope="col" class="num">Clear dates</th>
-									<th scope="col" class="num">Wet on a clear date</th>
-									<th scope="col">Clear dates span</th>
+									<th scope="col" class="num">Wet</th>
+									<th scope="col" class="num">Dry</th>
+									<th scope="col" class="num">Inconclusive</th>
+									<th scope="col">Dates span</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -831,9 +834,10 @@
 									<tr>
 										<th scope="row">{d.name || 'Unnamed dam'}</th>
 										<td class="num">{fmtNum(d.observedDates)}</td>
-										<td class="num">{fmtNum(d.clearDates)}</td>
-										<td class="num">{fmtNum(d.wetDates)}{d.clearDates ? ` (${fmtNum((d.wetDates / d.clearDates) * 100)} %)` : ''}</td>
-										<td>{d.clear.length ? `${fmtDate(d.clear[0]![0])} to ${fmtDate(d.clear.at(-1)![0])}` : '–'}</td>
+										<td class="num">{fmtNum(d.wetDates)}</td>
+										<td class="num">{fmtNum(d.dryDates)}</td>
+										<td class="num">{fmtNum(d.inconclusiveDates)}</td>
+										<td>{d.dates.length ? `${fmtDate(d.dates[0]![0])} to ${fmtDate(d.dates.at(-1)![0])}` : '–'}</td>
 									</tr>
 								{/each}
 							</tbody>
