@@ -2585,6 +2585,9 @@ the publisher's own page (decision D-B in #326: commercial use allowed,
 attribution fine; non-commercial or share-alike-on-output terms rejected).
 Real data is the operator's own download; the repo commits synthetic
 fixtures only.
+The source register, [data-sources.md](./data-sources.md), lists each of
+these upstreams with its host, contact, access pattern, the limits we keep
+to, the fallback and the owner, beside the rain and flow feeds' sources.
 
 | Dataset | Publisher | Licence (read) | Attribution | Version | Update cadence | Status |
 | --- | --- | --- | --- | --- | --- | --- |
