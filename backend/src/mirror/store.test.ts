@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { afterAll, describe, expect, it } from 'vitest';
 import { MirrorUrlError, NodeGzip, openStore, S3Store } from './store.js';
 
@@ -17,6 +17,11 @@ function fakeS3() {
 			if (cmd instanceof PutObjectCommand) {
 				sent.push(`put ${cmd.input.Bucket}/${cmd.input.Key}`);
 				objects.set(`${cmd.input.Bucket}/${cmd.input.Key}`, cmd.input.Body as Uint8Array);
+				return {};
+			}
+			if (cmd instanceof DeleteObjectCommand) {
+				sent.push(`delete ${cmd.input.Bucket}/${cmd.input.Key}`);
+				objects.delete(`${cmd.input.Bucket}/${cmd.input.Key}`);
 				return {};
 			}
 			if (cmd instanceof GetObjectCommand) {
@@ -64,6 +69,15 @@ describe('S3Store', () => {
 		await store.set('/rnl/c/0/0/0/0', new Uint8Array([9]));
 		expect(await store.get('/rnl/c/0/0/0/0')).toEqual(new Uint8Array([9]));
 		expect(s3.sent).toEqual(['get b-mirror/p/rnl/c/0/0/0/0', 'put b-mirror/p/rnl/c/0/0/0/0', 'get b-mirror/p/rnl/c/0/0/0/0']);
+	});
+
+	it('deletes under its prefix, after which the key reads as missing', async () => {
+		const s3 = fakeS3();
+		const store = new S3Store('b-mirror', 'p', s3);
+		await store.set('/prelim/c/5/0/0', new Uint8Array([1]));
+		await store.delete('/prelim/c/5/0/0');
+		expect(await store.get('/prelim/c/5/0/0')).toBeUndefined();
+		expect(s3.sent).toContain('delete b-mirror/p/prelim/c/5/0/0');
 	});
 
 	it('throws any failure other than a missing key (never reads it as all-NaN)', async () => {

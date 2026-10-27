@@ -113,7 +113,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		DEM_URL: 's3://water-management-tiles-000000000000/tiles/terrain.pmtiles',
 		OPERATOR_EMAIL: 'operator@water.example.org'
 	},
-	fetcher: { FEED_SOURCE: 'live', INGEST_RESULTS_QUEUE_URL: SQS('ingest-results') },
+	fetcher: { FEED_SOURCE: 'live', INGEST_RESULTS_QUEUE_URL: SQS('ingest-results'), MIRROR_URL: 's3://water-management-mirror-000000000000' },
 	renderer: {
 		RENDER_SITE_URL: SITE,
 		RENDER_API_URL: `${SITE}/api`,
@@ -472,7 +472,9 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		expect(mirror('s3://water-management-mirror-000000000000')).toEqual([]);
 		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'mirror' }))).toEqual([]);
 		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
-		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'chc', MIRROR_URL: 'file:///tmp/mirror/' }))).toContain('MIRROR_URL');
+		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'chc', MIRROR_URL: 'file:///tmp/mirror/' }))).toContain('MIRROR_URL');	// The fetcher writes the copy (its daily ingest): Terraform always sets the bucket, and nothing else will do.
+		for (const v of [undefined, 'file:///var/task/fixtures/mirror/', 's3://']) expect(problemNames('fetcher', prod('fetcher', { MIRROR_URL: v })), `fetcher MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
+		expect(problemNames('fetcher', prod('fetcher', {}))).toEqual([]);
 	});
 
 	it('lets the delineation DEM be off or an S3 object (positive control for the DEM_URL refusals)', () => {

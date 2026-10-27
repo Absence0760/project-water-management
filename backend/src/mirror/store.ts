@@ -57,6 +57,12 @@ export class S3Store implements AsyncMutable {
 		const { s3, sdk } = await this.#client;
 		await s3.send(new sdk.PutObjectCommand({ Bucket: this.bucket, Key: this.key(path), Body: value }));
 	}
+
+	/** Remove an object (the daily ingest drops a preliminary day's chunks once its finals land). S3 answers a missing key with success too. */
+	async delete(path: AbsolutePath): Promise<void> {
+		const { s3, sdk } = await this.#client;
+		await s3.send(new sdk.DeleteObjectCommand({ Bucket: this.bucket, Key: this.key(path) }));
+	}
 }
 
 /** MIRROR_URL is neither file:///… nor s3://bucket[/prefix]. */

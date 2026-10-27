@@ -285,8 +285,8 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { worker: oneOf('chc', 'mirror') }
 	},
 	MIRROR_URL: {
-		why: 'Where our copy of CHIRPS lives (mirror/source.ts mirrorUrl): s3://<the mirror bucket> (infra/ingest.tf). Unset off Lambda is the committed synthetic copy, which a live process refuses. The worker needs it when CHIRPS_SOURCE=mirror; the ingest Lambdas (the fetcher’s daily ingest, issue #604 R2-B) write it.',
-		checks: { worker: mirrorUrlFor }
+		why: 'Where our copy of CHIRPS lives (mirror/source.ts mirrorUrl): s3://<the mirror bucket> (infra/ingest.tf). Unset off Lambda is the committed synthetic copy, which a live process refuses. The worker needs it when CHIRPS_SOURCE=mirror; the ingest Lambdas (the fetcher’s daily ingest, issue #604 R2-B) write it, and Terraform sets it on the fetcher always (infra/feeds.tf), so the fetcher must name the bucket.',
+		checks: { worker: mirrorUrlFor, fetcher: s3Url }
 	},
 	FEED_FIXTURE_REWRITE: {
 		why: 'Fixtures only (FEED_SOURCE=fixtures): 1 serves some synthetic CHIRPS finals rewritten in place, to watch the re-check locally. The live client never reads it, and the fetcher refuses the fixtures in production.'
