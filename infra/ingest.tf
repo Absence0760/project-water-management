@@ -367,9 +367,10 @@ resource "aws_lambda_function" "ingest" {
 
   environment {
     variables = {
-      MIRROR_URL     = "s3://${aws_s3_bucket.mirror.bucket}"
-      FEED_SOURCE    = "live"
-      INGEST_CONTACT = var.ingest_contact
+      MIRROR_URL  = "s3://${aws_s3_bucket.mirror.bucket}"
+      FEED_SOURCE = "live"
+      # The one contact the operator sets for every upstream (variables.tf feeds_contact).
+      INGEST_CONTACT = var.feeds_contact
     }
   }
 

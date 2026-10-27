@@ -16,11 +16,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // every other test fetches inline and sends nothing.
 // `onSend.fn`, when set, runs as the message is sent, inside the fetch job's
 // transaction: what the fetcher's answer meets if it comes back before that commits.
-const { sent, onSend } = vi.hoisted(() => ({ sent: [] as unknown[], onSend: {} as { fn?: (message: unknown) => Promise<void> } }));
+// `fifos`: the FIFO message group and deduplication id each send carried (fetch-requests is a FIFO queue, issue #604).
+const { sent, fifos, onSend } = vi.hoisted(() => ({ sent: [] as unknown[], fifos: [] as unknown[], onSend: {} as { fn?: (message: unknown) => Promise<void> } }));
 vi.mock('../jobs/transport.js', async (orig) => ({
 	...(await orig<typeof import('../jobs/transport.js')>()),
-	sendToQueue: async (_url: string | undefined, _name: string, message: unknown) => {
+	sendToQueue: async (_url: string | undefined, _name: string, message: unknown, fifo?: unknown) => {
 		sent.push(message);
+		fifos.push(fifo);
 		await onSend.fn?.(message);
 	}
 }));
@@ -751,6 +753,7 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		vi.stubEnv('FEED_FETCHER', 'sqs');
 		vi.stubEnv('FETCH_REQUESTS_QUEUE_URL', 'https://sqs.test/fetch-requests');
 		sent.length = 0;
+		fifos.length = 0;
 		expect((await tick()).done).toBe(1);
 		vi.unstubAllEnvs();
 		expect(sent).toHaveLength(1);
@@ -784,6 +787,16 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 	const result = (o: { window: { start: string } }, values: (number | null)[] = [1.5, null, 2.5]) => ({ ok: true, startDate: o.window.start, values, meta: { days: values.length } });
 	const msg = (o: { feedId: string; jobId: string; version: string }, r: unknown) => ({ v: 1 as const, type: 'ingest' as const, fetchJobId: o.jobId, feedId: o.feedId, feedVersion: o.version, result: r });
 	const plus = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+	it('sends each fetch in its source host’s FIFO message group, deduplicated by the fetch job, so the fetcher runs one fetch per host at a time (issue #604)', async () => {
+		const chirps = await fetchJob();
+		expect(fifos).toEqual([{ group: 'chc', dedupe: chirps.jobId }]);
+		const gefs = await fetchJob({ source: 'chirps_gefs' });
+		expect(fifos).toEqual([{ group: 'chc', dedupe: gefs.jobId }]);
+		// Positive control: DWS is another host, so another group.
+		const dws = await fetchJob({ source: 'dws', config: { station: 'X0H000' } });
+		expect(fifos).toEqual([{ group: 'dws', dedupe: dws.jobId }]);
+	});
 
 	it('queues a feed_ingest job as the fetch job’s user, which merges the days and records how far it read', async () => {
 		const o = await fetchJob();

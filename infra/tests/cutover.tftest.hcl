@@ -661,6 +661,8 @@ variables {
   # which the variable refuses: the site's own domain, and a plan-only test
   # never subscribes it.
   budget_alert_email = "ops@icwbt.jaredhoward.com"
+  # The fetcher's user-agent contact (feeds.tf); required, no default.
+  feeds_contact = "ops@icwbt.jaredhoward.com"
 }
 
 

@@ -4753,6 +4753,17 @@ logic in `crops/loadFactors.ts`, its presentation helpers in
 `crops/loadFactorsView.ts`, data in `crops/library.ts`). Which crop set a
 catchment uses is the hydrologist's call (issue #54 Q9/Q10).
 
+Its lead line is the first thing read: the model uses the crop factors
+already in the project (Crops & demand › Tables › Crop factors, or as
+imported), and the dialog only overwrites them from another source, the
+reference library or a workbook, with nothing changing until the user
+applies and then saves the model with a reason. It ends with a help tip
+(**About Load crop factors**) for the glossary entry `load-crop-factors`
+(`lib/help/tips.ts`, its long text in `lib/help/articles.ts`: what the
+dialog overwrites, the four steps, Kp, Apply then save, and that the set is
+the hydrologist's call); the `crop-factor` entry links to it rather than
+repeating it. `e2e/tests/crop-library.spec.ts` checks the line and the tip.
+
 The dialog is a full dialog laid out as the task's four numbered steps.
 Wide (its body from 64rem, 896 px), steps 1–3 scroll in the left column and
 step 4, the effect on demand, sits in its own column beside them, so the
@@ -10616,7 +10627,10 @@ volume** (`volume=new`), each a side sheet that closes in place, so Back goes
 to where it was opened from. A viewer opening a sheet link gets the page.
 The volume sheet's **Water use** picks a take (s21a) or a dam's storage
 (s21b, issue #72); a storage row has no volume field, its water source is
-surface and its storage is required.
+surface and its storage is required. A take has an optional **Irrigated
+area (ha)** (244), the area it is registered to irrigate, kept to two
+decimals; a storage row has no area field, and switching back to a take
+brings the typed area back.
 
 **Under the header**, a sentence naming the run and saying modelled use is
 *modelled, not metered* and a difference is something to look into, not a
@@ -10720,7 +10734,9 @@ offered to a viewer who sees totals only. Tests: `allocations/useMap.test.ts`,
 fits at 1280 without sideways scroll: unit (or **Not matched**, highlighted)
 with the registration number under it, the registered user for editors only,
 authorisation with purpose, volume with source (**Storage only (s21b)** for a
-dam's registered storage, which is never a take, issue #72), storage, validity with where
+dam's registered storage, which is never a take, issue #72), storage with the
+registered irrigated area under it (`areaHa`, "42.5 ha", or – when none is
+stated; the picked unit's volumes say "· 42.5 ha irrigated"), validity with where
 it came from (the file name and the first 12 hex digits of its SHA-256, or
 "Entered by hand") and, when it states any, its licence conditions in one
 line ("Oct–Mar only · at most 0.05 m³/s · 2 conditions", `conditionsSummary`,

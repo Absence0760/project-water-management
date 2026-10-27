@@ -1,7 +1,7 @@
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AllocationPreviewRow } from '#lib/api/types.js';
-import { allocationsContext, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, judgementSentence, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, totalsSentence, VIEWER_UNITS_NOTE, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
+import { allocationsContext, areaHa, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, judgementSentence, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, totalsSentence, VIEWER_UNITS_NOTE, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
 import { fmtNum } from '#lib/format/number.js';
 
 const comparison = () =>
@@ -203,10 +203,18 @@ describe('previewOrder', () => {
 	});
 });
 
+describe('areaHa (244)', () => {
+	it('keeps the area’s decimals, up to two, and drops trailing zeros', () => {
+		expect(areaHa(42.5)).toBe('42.5 ha');
+		expect(areaHa(12)).toBe('12 ha');
+		expect(areaHa(0.125)).toBe('0.13 ha');
+	});
+});
+
 describe('TEMPLATE_CSV', () => {
 	it('has the backend template header', () => {
 		expect(TEMPLATE_CSV.split('\r\n')[0]).toBe(
-			'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions,water_use'
+			'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions,water_use,irrigated_area_ha'
 		);
 	});
 });

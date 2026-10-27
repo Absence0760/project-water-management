@@ -257,8 +257,8 @@ describe('licence conditions (103, issue #72)', () => {
 		expect(t.rows[1]!.errors).toContain("conditions looks like an ID number; the app doesn't keep those");
 	});
 
-	it('the template has the three condition columns, then the s21 water use (issue #72)', () => {
-		expect(TEMPLATE_HEADERS.slice(-4)).toEqual(['months', 'max_rate_m3s', 'conditions', 'water_use']);
+	it('the template has the three condition columns, the s21 water use (issue #72), then the irrigated area (244)', () => {
+		expect(TEMPLATE_HEADERS.slice(-5)).toEqual(['months', 'max_rate_m3s', 'conditions', 'water_use', 'irrigated_area_ha']);
 	});
 });
 
@@ -364,6 +364,60 @@ describe('the s21 water use, unit and frequency (issue #72)', () => {
 	it('reads the export’s own storage rows back (volume 0, the storage, water_use 21b)', () => {
 		const [row] = parseAllocationTable(`${TEMPLATE}\nR1,,Farm A,,registration,irrigation,surface,0,150000,,,,,,,21b`, 'csv').rows;
 		expect(row).toMatchObject({ waterUse: '21b', volumeM3PerYear: 0, storageM3: 150000, errors: [] });
+	});
+});
+
+// 244: a registration of irrigation states the area irrigated beside the volume.
+describe('the registered irrigated area (244)', () => {
+	const HEAD = 'Registration Number,Farm Name,Resource Type,Water Use,Registered Volume,Unit,Dam Capacity (m3),Irrigated Area (ha)';
+	const warms = (...rows: string[]) => parseAllocationTable([HEAD, ...rows].join('\n'), 'warms_extract');
+
+	it('reads a WARMS extract’s irrigated area on the take, with its dam capacity on the storage row', () => {
+		const t = warms('R1,Farm A,Surface,21(a),"120,000",m3/a,,"42.5"', 'R1,Farm A,Surface,21(b),"150,000",m3/a,,');
+		expect(t.columns.irrigatedAreaHa).toBe('Irrigated Area (ha)');
+		expect(t.columns.storageM3).toBe('Dam Capacity (m3)');
+		expect(t.rows[0]).toMatchObject({ waterUse: '21a', volumeM3PerYear: 120000, irrigatedAreaHa: 42.5, errors: [] });
+		expect(t.rows[1]).toMatchObject({ waterUse: '21b', storageM3: 150000, irrigatedAreaHa: null, errors: [] });
+	});
+
+	it('reads the other area headings, and leaves a file without one at null', () => {
+		for (const h of ['Irrigation Area', 'Area under irrigation (ha)', 'Registered irrigated area', 'irrigated_area_ha']) {
+			const t = parseAllocationTable(`registration_no,authorisation,water_source,volume_m3_year,${h}\nR1,licence,surface,100,7`, 'csv');
+			expect(t.rows[0]!.irrigatedAreaHa, h).toBe(7);
+		}
+		const [row] = parseAllocationTable('registration_no,authorisation,water_source,volume_m3_year\nR1,licence,surface,100', 'csv').rows;
+		expect(row!.irrigatedAreaHa).toBeNull();
+	});
+
+	it('doesn’t read a bare area heading, which may be the property’s extent', () => {
+		const t = parseAllocationTable('registration_no,authorisation,water_source,volume_m3_year,Area (ha)\nR1,licence,surface,100,700', 'csv');
+		expect(t.columns.irrigatedAreaHa).toBeUndefined();
+		expect(t.ignoredColumns).toContain('Area (ha)');
+		expect(t.rows[0]).toMatchObject({ irrigatedAreaHa: null, errors: [] });
+	});
+
+	it('doesn’t read an area in another unit as hectares', () => {
+		const t = parseAllocationTable('registration_no,authorisation,water_source,volume_m3_year,Area (m2)\nR1,licence,surface,100,70000', 'csv');
+		expect(t.ignoredColumns).toContain('Area (m2)');
+		expect(t.rows[0]!.irrigatedAreaHa).toBeNull();
+	});
+
+	it('reads a decimal comma in a ; file', () => {
+		const [row] = parseAllocationTable('registration_no;authorisation;water_source;volume_m3_year;irrigated_area_ha\nR1;licence;surface;100;12,5', 'csv').rows;
+		expect(row).toMatchObject({ irrigatedAreaHa: 12.5, errors: [] });
+	});
+
+	it('refuses an area that isn’t hectares ≥ 0, and one on a 21(b) storage row', () => {
+		const t = warms('R1,Farm A,Surface,21(a),100,m3/a,,-3', 'R2,Farm A,Surface,21(a),100,m3/a,,lots', 'R3,Farm A,Surface,21(b),100,m3/a,,10', 'R4,Farm A,Surface,21(a),100,m3/a,,10000000');
+		expect(t.rows[0]!.errors).toContain('irrigated area “-3” is not a number of hectares ≥ 0');
+		expect(t.rows[1]!.errors[0]).toMatch(/^irrigated area “lots” is not a number of hectares/);
+		expect(t.rows[2]!.errors).toContain('a 21(b) storage row registers no irrigated area: give it on the 21(a) take row');
+		expect(t.rows[3]!.errors[0]).toMatch(/^irrigated area “10000000”/);
+	});
+
+	it('reads the export’s own area back', () => {
+		const [row] = parseAllocationTable(`${TEMPLATE}\nR1,,Farm A,,licence,irrigation,surface,100,,,,,,,,21a,33.25`, 'csv').rows;
+		expect(row).toMatchObject({ irrigatedAreaHa: 33.25, errors: [] });
 	});
 });
 

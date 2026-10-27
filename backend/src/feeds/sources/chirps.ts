@@ -110,6 +110,35 @@ export function meanOf(values: readonly (number | null)[], cells: readonly Cell[
 }
 
 /**
+ * How many CHC files a fetch reads at once: one. CHC asked for one file at a
+ * time and about one request a second in total (2026-10-27, issue #604); the
+ * live client paces each request itself (feeds/http.ts PACE_*), so reading
+ * more at once would only queue them there. The old 6 at a time is what got
+ * the fetcher blocked.
+ */
+export const CHC_CONCURRENCY = 1;
+
+/**
+ * When a fetch with a time budget stops starting new days (fetchChirpsCells
+ * `stopAt`): once less than twice its slowest batch so far is left, and never
+ * with less than this. At about a request a second a CHIRPS day is 3–10
+ * requests for one cell (a final file, and a preliminary one when the final
+ * isn't out) plus one per extra grid row of a box, so a 120-day window over
+ * a box no longer fits in one fetcher invocation (infra/feeds.tf, 900 s).
+ */
+export const CUT_RESERVE_MIN_MS = 15_000;
+
+/** A fetch's time budget: when it should stop starting new work (epoch ms), and its clock. */
+export interface FetchBudget {
+	stopAt?: number;
+	now?: () => number;
+}
+
+/** Whether the budget can't take another piece of work as slow as `slowest` ms. */
+const outOfTime = (budget: FetchBudget, slowest: number) =>
+	budget.stopAt !== undefined && (budget.now ?? Date.now)() + Math.max(CUT_RESERVE_MIN_MS, 2 * slowest) > budget.stopAt;
+
+/**
  * Runs `fn` over `items` with at most `limit` in flight, keeping order. The
  * first failure rejects, and no item is started after it: the other workers
  * finish the one they hold and stop, so a fetch that has already failed (a
@@ -223,7 +252,7 @@ export async function fetchChirps(
 	product: 'sat' | 'rnl' = 'sat',
 	opts: { concurrency?: number; heldThrough?: string | null; today?: string; noData?: NoDataPolicy } = {}
 ): Promise<GridDays> {
-	const concurrency = opts.concurrency ?? 6;
+	const concurrency = opts.concurrency ?? CHC_CONCURRENCY;
 	const heldThrough = opts.heldThrough ?? null;
 	const noData = opts.noData;
 	// Without a today, the day after the window: its last month is the one still being published.
@@ -323,12 +352,21 @@ export interface CellDays {
  * fetchChirps for the cell cache: each point's own value per day, never their
  * mean, and only the days `plan` asks for (one DAY_* character per day from
  * `start`). The same reading as fetchChirps otherwise: both products probe
- * their finals in date order (probeFinals: the first day alone, then
- * `concurrency` at a time, stopping after a batch whose last day has none in
- * a month whose finals may still be on their way); `sat` then reads the
- * preliminary file of each DAY_READ day that had no final. A DAY_FINAL_ONLY
- * day without a final is left unread: the cache's preliminary value stands.
- * Every point is the centre of one grid cell (feeds/cellCache.ts cellCentre).
+ * their finals in date order (the first day alone, then `concurrency` at a
+ * time, stopping after a batch whose last day has none in a month whose
+ * finals may still be on their way, as probeFinals does); `sat` reads the
+ * preliminary file of each DAY_READ day of a batch that had no final, before
+ * the next batch. A DAY_FINAL_ONLY day without a final is left unread: the
+ * cache's preliminary value stands. Every point is the centre of one grid
+ * cell (feeds/cellCache.ts cellCentre).
+ *
+ * With a budget (`stopAt`), the days go batch by batch until the next might
+ * not fit (outOfTime), and the answer stops there: `read` (and every row of
+ * values) is shorter than `plan`, ending with the last day it finished. The
+ * days it covers are complete, so the ingest takes them as a shorter window
+ * and the next fetch starts after them (feeds/ingest.ts), rather than the
+ * whole fetch failing at the deadline and asking for the same window again.
+ * The first batch always runs, so every fetch moves on at least a day.
  */
 export async function fetchChirpsCells(
 	http: FeedHttp,
@@ -336,30 +374,46 @@ export async function fetchChirpsCells(
 	start: string,
 	plan: string,
 	product: 'sat' | 'rnl',
-	opts: { concurrency?: number; today?: string } = {}
+	opts: { concurrency?: number; today?: string } & FetchBudget = {}
 ): Promise<CellDays> {
-	const concurrency = opts.concurrency ?? 6;
+	const concurrency = opts.concurrency ?? CHC_CONCURRENCY;
+	const now = opts.now ?? Date.now;
 	const s = toEpochDay(start);
 	const days = Array.from({ length: plan.length }, (_, i) => fromEpochDay(s + i));
 	const today = toEpochDay(opts.today ?? fromEpochDay(s + plan.length));
 	const reads: ({ kind: 'f' | 'p'; v: (number | null)[]; tag: string | null } | null)[] = new Array(plan.length).fill(null);
 	const want = days.map((_, i) => i).filter((i) => plan[i] !== DAY_SKIP);
-	const finals = await probeFinals(want, concurrency, today, (i) => days[i]!, (i) => gridValuesTagged(http, chirpsFinalFileUrl(product, days[i]!), points));
-	finals.forEach((r, k) => {
-		if (r) reads[want[k]!] = { kind: 'f', v: r.values, tag: r.tag };
-	});
-	if (product === 'sat') {
-		const prelim = want.filter((i) => reads[i] === null && plan[i] === DAY_READ);
-		await mapLimit(prelim, concurrency, async (i) => {
-			const v = await gridValues(http, chirpsPrelimUrl(days[i]!), points);
-			if (v) reads[i] = { kind: 'p', v, tag: null };
-		});
+	let probing = true;
+	let slowest = 0;
+	let done = 0;
+	for (let size = 1; done < want.length; size = concurrency) {
+		if (done > 0 && outOfTime(opts, slowest)) break;
+		const began = now();
+		const batch = want.slice(done, done + size);
+		if (probing) {
+			const finals = await mapLimit(batch, concurrency, (i) => gridValuesTagged(http, chirpsFinalFileUrl(product, days[i]!), points));
+			finals.forEach((r, k) => {
+				if (r) reads[batch[k]!] = { kind: 'f', v: r.values, tag: r.tag };
+			});
+			if (finals.at(-1) === null && !finalExpected(days[batch.at(-1)!]!, today)) probing = false;
+		}
+		if (product === 'sat') {
+			const prelim = batch.filter((i) => reads[i] === null && plan[i] === DAY_READ);
+			await mapLimit(prelim, concurrency, async (i) => {
+				const v = await gridValues(http, chirpsPrelimUrl(days[i]!), points);
+				if (v) reads[i] = { kind: 'p', v, tag: null };
+			});
+		}
+		done += batch.length;
+		slowest = Math.max(slowest, now() - began);
 	}
+	// Cut short: through the day before the first one not finished.
+	const kept = done < want.length ? reads.slice(0, want[done]!) : reads;
 	return {
 		startDate: start,
-		read: reads.map((r) => (r ? r.kind : '-')).join(''),
-		values: points.map((_, c) => reads.map((r) => (r ? (r.v[c] ?? Number.NaN) : null))),
-		tags: reads.map((r) => (r?.kind === 'f' ? r.tag : null))
+		read: kept.map((r) => (r ? r.kind : '-')).join(''),
+		values: points.map((_, c) => kept.map((r) => (r ? (r.v[c] ?? Number.NaN) : null))),
+		tags: kept.map((r) => (r?.kind === 'f' ? r.tag : null))
 	};
 }
 
@@ -372,7 +426,7 @@ export interface RecheckDays {
 	head: { day: string; tag: string | null }[];
 	/** Each day read again: its final file's tag and each point's value (NaN = no data), or values null when the file is gone. */
 	read: { day: string; tag: string | null; values: number[] | null }[];
-	/** HEADs and reads that failed (left out of the two lists above). */
+	/** HEADs and reads that failed (left out of the two lists above; one the time budget never started isn't counted). */
 	failed: number;
 }
 
@@ -393,13 +447,23 @@ export async function recheckChirpsFinals(
 	product: 'sat' | 'rnl',
 	head: readonly string[],
 	read: readonly string[],
-	concurrency = 6
+	concurrency = CHC_CONCURRENCY,
+	budget: FetchBudget = {}
 ): Promise<RecheckDays> {
+	const now = budget.now ?? Date.now;
+	let slowest = 0;
+	let failed = 0;
+	// A failure is counted; a HEAD or read the budget left no time for is just left out (its claim comes due again).
 	const settle = async <T>(f: () => Promise<T>): Promise<T | null> => {
+		if (outOfTime(budget, slowest)) return null;
+		const began = now();
 		try {
 			return await f();
 		} catch {
+			failed++;
 			return null;
+		} finally {
+			slowest = Math.max(slowest, now() - began);
 		}
 	};
 	const heads = await mapLimit(head, concurrency, (day) =>
@@ -412,9 +476,7 @@ export async function recheckChirpsFinals(
 		})
 	);
 	const kept = <T>(xs: (T | null)[]) => xs.filter((x): x is T => x !== null);
-	const h = kept(heads);
-	const r = kept(reads);
-	return { head: h, read: r, failed: head.length + read.length - h.length - r.length };
+	return { head: kept(heads), read: kept(reads), failed };
 }
 
 export interface Forecast {
@@ -435,7 +497,7 @@ export interface Forecast {
  * way to yesterday's complete one, and when neither is complete the fetch
  * fails as unavailable, which retries in 15 minutes.
  */
-export async function fetchGefs(http: FeedHttp, cells: readonly Cell[], today: string, concurrency = 6, noData?: NoDataPolicy): Promise<Forecast | null> {
+export async function fetchGefs(http: FeedHttp, cells: readonly Cell[], today: string, concurrency = CHC_CONCURRENCY, noData?: NoDataPolicy): Promise<Forecast | null> {
 	let partial: { issued: string; days: number } | null = null;
 	for (const back of [0, 1]) {
 		const issued = fromEpochDay(toEpochDay(today) - back);

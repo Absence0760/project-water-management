@@ -75,6 +75,7 @@ export type Field =
 	| 'maxRateM3s'
 	| 'conditions'
 	| 'waterUse'
+	| 'irrigatedAreaHa'
 	| 'unit'
 	| 'frequency';
 
@@ -98,6 +99,22 @@ export const HEADER_ALIASES: Record<Field, readonly string[]> = {
 	conditions: ['conditions', 'licenceconditions', 'licenseconditions', 'otherconditions'],
 	// The NWA s21 water use (issue #72): 21(a) taking, 21(b) storing.
 	waterUse: ['wateruse', 'waterusecode', 'waterusetype', 'wateruses21', 's21', 's21code', 's21use', 'section21', 'section21use', 'nwas21', 'usecode', 'usetype'],
+	// The registered irrigated area (244), in hectares: a heading in another unit (m², acres) isn't read,
+	// and only a heading that says irrigat…: a bare "Area (ha)" in a WARMS extract may be the property's extent.
+	irrigatedAreaHa: [
+		'irrigatedareaha',
+		'irrigatedarea',
+		'irrigationarea',
+		'irrigationareaha',
+		'areairrigated',
+		'areairrigatedha',
+		'areaunderirrigation',
+		'areaunderirrigationha',
+		'registeredirrigatedarea',
+		'registeredirrigatedareaha',
+		'irrigatedhectares',
+		'hectaresirrigated'
+	],
 	// The volume column's unit and frequency (m3/a, Ml/a, …), per row.
 	unit: ['unit', 'units', 'volumeunit', 'volumeunits', 'unitofmeasure', 'measurementunit', 'uom'],
 	frequency: ['frequency', 'period', 'volumeperiod', 'volumefrequency', 'timeunit', 'per']
@@ -120,7 +137,8 @@ export const TEMPLATE_HEADERS = [
 	'months',
 	'max_rate_m3s',
 	'conditions',
-	'water_use'
+	'water_use',
+	'irrigated_area_ha'
 ] as const;
 
 /** Most conditions in words on one allocation, and the longest one (103). */
@@ -160,6 +178,8 @@ export interface ParsedRow {
 	conditions: string[];
 	/** The s21 water use (142): 21b = storage only (volume 0, storageM3 the dam's registered storage). */
 	waterUse: WaterUse;
+	/** The registered irrigated area, ha (244); null = none stated. A take (21a) only. */
+	irrigatedAreaHa: number | null;
 	/** Why this row can't be imported; empty = valid. */
 	errors: string[];
 }
@@ -517,6 +537,7 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 			maxRateM3s: null,
 			conditions: [],
 			waterUse: '21a',
+			irrigatedAreaHa: null,
 			errors
 		};
 		for (const f of ['holder', 'reference', 'propertyRef', 'farm', 'conditions'] as const)
@@ -572,6 +593,14 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 			else row.volumeM3PerYear = vol;
 			if (!stoBad) row.storageM3 = sto;
 		}
+
+		// The registered irrigated area (244): hectares, on a take only. WARMS states it on the 21(a) row;
+		// on a 21(b) row it would be counted again beside the property's take, so it is refused, not dropped.
+		const area = parseNumber(get('irrigatedAreaHa'), delimiter);
+		if (area !== null && (!Number.isFinite(area) || area < 0 || area >= 1e7))
+			errors.push(`irrigated area “${get('irrigatedAreaHa')}” is not a number of hectares ≥ 0${separatorHint(get('irrigatedAreaHa'), delimiter)}`);
+		else if (area !== null && storageRow) errors.push('a 21(b) storage row registers no irrigated area: give it on the 21(a) take row');
+		else row.irrigatedAreaHa = area;
 
 		for (const f of ['validFrom', 'validTo'] as const) {
 			const d = parseDate(get(f));

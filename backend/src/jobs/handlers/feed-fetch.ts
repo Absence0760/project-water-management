@@ -44,7 +44,7 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import { planFetch, RECHECK_HEAD_DAYS, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from '../../feeds/cellCache.js';
 import { cacheOrigin, claimRecheck, readCellCache } from '../../feeds/cellCacheStore.js';
-import { chirpsProduct, type GridConfig, gridCells } from '../../feeds/config.js';
+import { chirpsProduct, type FeedSource, type GridConfig, gridCells } from '../../feeds/config.js';
 import { type CellsResult, type FetchRequest, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
 import { DAY_SKIP } from '../../feeds/sources/chirps.js';
 import { withUser } from '../../db/tx.js';
@@ -63,6 +63,17 @@ export const FeedFetchPayload = z.object({ feedId: z.string().uuid() }).strict()
 
 // One pending fetch per feed: the key lives in feeds/store.ts, so the ingest (which queues a backfill's next window) shares it.
 export { feedFetchDedupeKey } from '../../feeds/store.js';
+
+/**
+ * The fetch-requests FIFO queue's message group for a source: its host. SQS
+ * delivers one message of a group at a time, so the fetcher runs at most one
+ * fetch per host at once, across all its instances: CHC (CHIRPS and
+ * CHIRPS-GEFS) asked for one file at a time and about one request a second in
+ * total (2026-10-27, issue #604), which the live client's own pacing
+ * (feeds/http.ts PACE_*) holds within an instance. DWS is its own group, so a
+ * CHIRPS backfill doesn't hold up a gauge's fetch.
+ */
+export const fetchGroup = (source: FeedSource): 'chc' | 'dws' => (source === 'dws' ? 'dws' : 'chc');
 
 export const feedFetchHandler = defineHandler({
 	role: 'editor',
@@ -129,7 +140,8 @@ export const feedFetchHandler = defineHandler({
 			await withUser(job.actingUserId, (tx) => beginFeedFetch(tx, feed.id, job.id, window));
 			const message: FetchRequestMessage = { v: 1, type: 'fetch', fetchJobId: job.id, feedId: feed.id, feedVersion: feed.version, request };
 			try {
-				await sendToQueue(process.env.FETCH_REQUESTS_QUEUE_URL, 'FETCH_REQUESTS_QUEUE_URL', message);
+				// One message group per source host (fetchGroup): the FIFO queue hands the fetcher one fetch per group at a time (infra/feeds.tf).
+				await sendToQueue(process.env.FETCH_REQUESTS_QUEUE_URL, 'FETCH_REQUESTS_QUEUE_URL', message, { group: fetchGroup(feed.source), dedupe: job.id });
 			} catch (err) {
 				// Nothing went out: withdraw the record, so the feed isn't held as
 				// "a fetch is still out" (fromBoundary.ts, fromUnits.ts) by an
