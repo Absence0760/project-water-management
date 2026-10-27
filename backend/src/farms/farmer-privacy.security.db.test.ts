@@ -143,7 +143,7 @@ beforeAll(async () => {
 	]) {
 		const r = await owner.call('POST', `/projects/${projectId}/map/features`, f);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
-		if (f.kind === 'dam' && 'geometry' in f && 'nodeId' in f) damFeature.set(f.nodeId, r.body.feature.id);
+		if (f.kind === 'dam' && 'geometry' in f && 'nodeId' in f && f.nodeId) damFeature.set(f.nodeId, r.body.feature.id);
 	}
 	// Each dam polygon's Waterbodies match and WOfS views, loaded as the worker loads them (249's definer functions):
 	// the neighbour's with the marker in its uid and upstream key, and an area no other row has.
