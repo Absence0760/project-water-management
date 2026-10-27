@@ -6199,9 +6199,23 @@ editors run one now and read the map's proposals, viewers read.
   extent) stays, the reasoning behind it is hidden and still the field's
   description.
 
+- **Our copy of the rain data** (issue #604): with a CHIRPS feed in the
+  list and CHIRPS read from our own copy (`CHIRPS_SOURCE=mirror`), one line
+  above the list says how far the copy reaches, for the products the
+  project's feeds read: "Rain data copied to 31 Aug 2026 (final) / 24 Oct
+  2026 (preliminary)." (no preliminary days for an `rnl`-only project; the
+  two final days named apart, "(final, sat) and … (final, rnl)", only when
+  they differ). When a part is late it becomes a warning box adding "The
+  copy is behind the published data: feeds fill in the newer days once it
+  catches up, with nothing to do here.", never `role="alert"` (nothing on
+  the page can fix it); a copy the server couldn't read says so. The
+  committed sample copy adds "This is the sample copy, as it stood on 9 Feb
+  2026." (`rainCopyNote` in `feeds.ts`, `data-testid="rain-copy"`,
+  `data-behind`). No line while the server reads CHC directly.
 - **The list**, one card per feed: a state chip in words (**OK**, **Stale**,
-  **Failing**, **Waiting**, **Off**; colour is never the only signal, and the
-  card carries `data-state`), the source, the series it writes ("→ Rainfall —
+  **Failing**, **Waiting**, **Off**, **Copy behind**; colour is never the
+  only signal, and the card carries `data-state`; the chip is a badge's
+  rounded box, so a wrapped "Copy behind" on a phone stays readable), the source, the series it writes ("→ Rainfall —
   forecast"), where it reads ("cell -20.12, 25.17" or "station X0H000"), the
   what a CHIRPS feed writes ("· CHIRPS sat v3.0"), the schedule and who it
   runs as, the health sentence ("The last fetch
@@ -6232,8 +6246,16 @@ editors run one now and read the map's proposals, viewers read.
   record runs 1 Jan 2001 to 30 Apr 2001 so far …"), or that it stalled; the
   Data tab marks the series **Being replaced** and both the Data and Runs
   tabs note that runs use the current series until it completes.
+- **Copy behind**: a CHIRPS feed whose part of our copy is late (health
+  `copy-behind`, architecture.md § Our copy of the rain data) says so
+  instead of "No new data": "Our copy of the rain data is behind: it holds
+  final days to 31 Jul 2026 and preliminary days to 5 Oct 2026. The feed
+  itself is fine and fills in the newer days once the copy catches up; there
+  is nothing to do here. Newest data 5 Oct 2026." Its chip is neutral, not a
+  warning colour.
 - **A warning** above the list counts the feeds that are stale or failing
-  ("1 feed needs attention: …", `role="alert"`).
+  ("1 feed needs attention: …", `role="alert"`); a feed whose copy is
+  behind isn't counted, since nothing here can fix it.
 - **Run now** (editors) queues a fetch at once and says so ("Fetch queued.
   …"), then follows it (issue #586 Round 4, `feeds/follow.ts`): the panel
   re-reads the list every 2 s for the first 10 s, then every 5 s, then every
