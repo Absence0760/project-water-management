@@ -319,7 +319,7 @@ export function liveHttp(
 		headers: Record<string, string>,
 		method: 'GET' | 'HEAD',
 		hopTo: (next: URL) => Promise<void>
-	): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null } | null> => {
+	): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null; headers: Headers } | 'not-modified' | null> => {
 		let target = first;
 		// One deadline for the whole exchange: every hop and the body (from when it holds its first slot, not while it queues).
 		const signal = AbortSignal.timeout(TIMEOUT_MS);
