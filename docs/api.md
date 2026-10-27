@@ -641,10 +641,21 @@ alongside teams, e.g. to give an outside client `viewer` access.
   tableAreaKm2: number > 0 | null, tabM3s: number[12] | null,
   naturalPctM3s: number[12][10] | null, reservePctM3s: number[12][10] | null,
   lowFlowPctM3s?: number[12][10] | null, reserveTable?: 'total' |
-  'withoutHighFlows' }`
+  'withoutHighFlows', tabFile?: { name, generated, title, runoff, annual:
+  { label, value }[], category, ifr: { label, mcm, pctMar }[],
+  distributionType, monthlyMcm: number[12][7] }, rulFile?: { name, generated,
+  unit: 'm3s' | 'mcm', category, edited?: true } }`
   (m³/s, water-year months Oct … Sep, the ten DRM points 0.1 … 0.99; every
   value 0 … 10⁶), or `null` (the default) for the pragmatic EWR. Every key but
-  the last two is required (`null` when not entered) and no other is accepted.
+  the last four is required (`null` when not entered) and no other is accepted.
+  `tabFile` (the .tab the TAB flows or the table MAR came from, parsed; its
+  monthly table in Mm³ a month) and `rulFile` (the .rul's header) are optional
+  and **display only** (issue #617): no run reads them, and a run comparison
+  ignores them. Every key of each but `rulFile.edited` (true once a table was typed or pasted over) is required (text `null` when the file has
+  no such line); names and header text are at most 255 characters, labels 60,
+  `annual` and `ifr` at most 30 lines each, no control characters, numbers
+  0 … 10⁶ (`pctMar` may be `null`), and no other key is accepted
+  (`400 daily EWR source: tabFile: …`).
   `lowFlowPctM3s` (the `.rul`'s Reserve Flows without High Flows) and
   `reserveTable` (which Reserve table `percentile` reads; absent = `'total'`)
   are optional, engine ≥ 1.90.0, issue #552. `tab` needs `tabM3s`,

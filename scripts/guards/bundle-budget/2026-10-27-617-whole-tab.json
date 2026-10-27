@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Issue #617, the whole DRM .tab parsed, kept and shown (DrmTabFileView, the parser's annual/IFR blocks, the engine's tabFile/rulFile checks) and the outlet rule table's Grids fold: measured 2103 KB locally against main's 2098 KB @ 9a33504a4 (+5 KB). Headroom 0 KB after this entry."
+}

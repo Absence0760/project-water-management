@@ -283,7 +283,8 @@ EWR's source, whole (`method` `pragmatic` | `tab` | `percentile`, `scaling`
 `mar` | `area`, the table MAR or area, the DRM tables it reads and, from
 engine 1.90.0 (issue #552), the `.rul`'s Reserve flows without high flows
 `lowFlowPctM3s` and `reserveTable`, which Reserve table the percentile method
-reads), or
+reads, and (issue #617) the kept `.tab` and `.rul` header, `tabFile` and
+`rulFile`, display only), or
 `null` for the pragmatic EWR ([model.md §2.9f](./model.md)); a `null` over
 no source changes nothing. So "judge this application by the TAB file
 instead of the pragmatic EWR" is a scenario, not a copy of the project. The
