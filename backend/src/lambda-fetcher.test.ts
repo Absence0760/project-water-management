@@ -1,4 +1,7 @@
-import { fileURLToPath } from 'node:url';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FeedRefusedError, FeedThrottledError } from './feeds/errors.js';
 import type { FeedHttp } from './feeds/http.js';
@@ -16,7 +19,7 @@ vi.mock('./feeds/http.js', async (orig) => {
 	return { ...real, feedHttp: async () => httpOverride.next ?? real.feedHttp() };
 });
 
-const { FETCH_SEND_MARGIN_MS, failureDetail, fetchFailureReason, handler, withDeadline } = await import('./lambda-fetcher.js');
+const { DAILY_INGEST_EVENT, FETCH_SEND_MARGIN_MS, failureDetail, fetchFailureReason, handler, isDailyIngestEvent, withDeadline } = await import('./lambda-fetcher.js');
 
 afterEach(() => {
 	sent.length = 0;
@@ -260,6 +263,65 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'dws', config: { station: 'X0H000' }, start: '2020-01-01', end: '2020-01-10', today } };
 		const res = await handler({ Records: [record('m1', req), record('m2', req)] } as never);
 		expect(res).toEqual({ batchItemFailures: [{ itemIdentifier: 'm1' }] });
+	});
+});
+
+describe('the fetcher’s daily-ingest mode (issue #604 R2-B)', () => {
+	const dirs: string[] = [];
+	afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
+	const mirrorDir = () => {
+		const d = mkdtempSync(join(tmpdir(), 'wm-fetcher-daily-'));
+		dirs.push(d);
+		return d;
+	};
+
+	it('routes the scheduled event to the daily ingest, and an SQS batch to the per-feed fetch', () => {
+		expect(isDailyIngestEvent(DAILY_INGEST_EVENT)).toBe(true);
+		expect(isDailyIngestEvent({ mode: 'daily-ingest', 'detail-type': 'Scheduled Event' })).toBe(true);
+		expect(isDailyIngestEvent({ Records: [], mode: 'daily-ingest' })).toBe(false);
+		expect(isDailyIngestEvent({ Records: [] })).toBe(false);
+		expect(isDailyIngestEvent({ mode: 'monthly' })).toBe(false);
+		expect(isDailyIngestEvent(null)).toBe(false);
+		expect(isDailyIngestEvent([DAILY_INGEST_EVENT])).toBe(false);
+	});
+
+	it('runs the daily ingest into the copy MIRROR_URL names (fixtures here), publishes the lag metric and logs the outcome, sending nothing to a queue', async () => {
+		const dir = mirrorDir();
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${dir}/`).href);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = await handler({ mode: 'daily-ingest' } as never);
+		const metric = out.mock.calls.map(([l]) => String(l)).find((l) => l.includes('MirrorLagDays'));
+		out.mockRestore();
+		// A fresh copy, no finals: it starts PRELIM_LOOKBACK_DAYS back and copies at most DAILY_MAX_FILES days a run.
+		expect(res).toMatchObject({ copied: 20, dropped: 0, stopped: 'max_files' });
+		expect(JSON.parse(metric!)).toMatchObject({ Product: 'prelim', MirrorLagDays: (res as unknown as { lagDays: number }).lagDays });
+		const logged = info.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ event: 'mirror_daily_ingest', product: 'prelim', copied: 20, stopped: 'max_files', ms: expect.any(Number) });
+		expect(sent).toHaveLength(0);
+	});
+
+	it('fails the invocation on an HTTP 403, after logging it as refused (no retry: the schedule tries again tomorrow)', async () => {
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${mirrorDir()}/`).href);
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, rangeTagged: refuse, text: refuse };
+		await expect(handler({ mode: 'daily-ingest' } as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		const logged = error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ copied: 0, stopped: 'error', reason: 'refused', detail: 'HTTP 403', requests: 1 });
+	});
+
+	it('refuses to run without MIRROR_URL (it never writes the committed synthetic copy)', async () => {
+		vi.stubEnv('MIRROR_URL', '');
+		await expect(handler({ mode: 'daily-ingest' } as never)).rejects.toThrow(/MIRROR_URL is not set/);
+	});
+
+	it('fails an event of neither mode, naming no payload', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		await expect(handler({ mode: 'something-else' } as never)).rejects.toThrow(/does not know/);
+		expect(error).toHaveBeenCalledWith(JSON.stringify({ event: 'fetcher_event_unknown' }));
 	});
 });
 

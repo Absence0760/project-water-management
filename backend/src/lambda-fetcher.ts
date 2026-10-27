@@ -18,17 +18,24 @@
 // one retried case: it is reported as a batch item failure, so SQS retries
 // that message and, after 5 receives, dead-letters it (alarmed).
 //
+// A second mode (issue #604 R2-B): an EventBridge schedule invokes it with
+// `{"mode":"daily-ingest"}` (DAILY_INGEST_EVENT, infra/feeds.tf), and it
+// copies the new CHIRPS preliminary days into the rain data copy
+// (ingest/daily.ts), publishing the copy's MirrorLagDays for Product=prelim.
+// That run writes the mirror bucket (MIRROR_URL); the per-feed mode above
+// stays as it is until the worker reads the copy everywhere (R3-C).
+//
 // Like lambda.ts, this must never import a module that loads dotenv
 // (lambda-fetcher.test.ts bundles it to check).
 import type { Context, SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { z } from 'zod';
 import { assertLambdaEnv } from './config/production.js';
 import { FEED_SERVER_ERROR_PREFIX, FeedFormatError, FeedRefusedError, FeedServerError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
-import { type FetchAnswer, type FetchRequest, runFetch } from './feeds/fetch.js';
-import { type FeedHttp, feedHttp } from './feeds/http.js';
+import { type FetchAnswer, type FetchRequest, runFetch, utcToday } from './feeds/fetch.js';
+import { type FeedHttp, feedHttp, feedSourceMode } from './feeds/http.js';
 import { DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL, dwsFailureLabel } from './feeds/sources/dws.js';
 import { type IngestResultMessage, MAX_MESSAGE_BYTES, parseFetchRequest, sendToQueue } from './jobs/transport.js';
-import { logEvent } from './logging/logEvent.js';
+import { emitMetricLine, logEvent } from './logging/logEvent.js';
 import { safeError } from './logging/safeError.js';
 
 // Refuse to start with a local default, FEED_SOURCE=fixtures above all (config/production.ts).
@@ -147,7 +154,80 @@ async function fetchWithin(req: FetchRequest, http: FeedHttp, ms: number): Promi
 	}
 }
 
-export const handler = async (event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse> => {
+/** The scheduled event that runs the daily ingest (infra/feeds.tf, the daily-ingest rule's input). */
+export const DAILY_INGEST_EVENT = { mode: 'daily-ingest' } as const;
+export type DailyIngestEvent = typeof DAILY_INGEST_EVENT;
+
+/** Time kept back from the Lambda's remaining time for the daily ingest's last save and its log. */
+export const DAILY_SAVE_MARGIN_MS = 20_000;
+
+/** Whether `event` is the daily ingest's scheduled event (and not an SQS batch). */
+export function isDailyIngestEvent(event: unknown): event is DailyIngestEvent {
+	return typeof event === 'object' && event !== null && !Array.isArray(event) && !('Records' in event) && (event as { mode?: unknown }).mode === DAILY_INGEST_EVENT.mode;
+}
+
+/** What a daily-ingest invocation answers (the schedule ignores it; a manual invoke shows it). */
+export interface DailyIngestAnswer {
+	copied: number;
+	dropped: number;
+	prelimThrough: string | null;
+	lagDays: number | null;
+	stopped: string;
+}
+
+/**
+ * One daily ingest run (ingest/daily.ts): the copy MIRROR_URL names, the
+ * client FEED_SOURCE names (live in production, the synthetic files locally,
+ * where pacing is off). The lag metric goes out whatever happened, then a
+ * failure (an HTTP 403 above all) fails the invocation, which is not retried
+ * (feeds.tf: the next day's run tries again).
+ */
+async function dailyIngest(context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DailyIngestAnswer> {
+	// Loaded only for this mode: the per-feed mode never opens the copy.
+	const { dailyMirrorUrl, lagMetricLine, REQUEST_INTERVAL_MS, runDailyIngest } = await import('./ingest/daily.js');
+	const { openStore } = await import('./mirror/store.js');
+	const started = Date.now();
+	const budget = context ? context.getRemainingTimeInMillis() - DAILY_SAVE_MARGIN_MS : DEFAULT_BUDGET_MS;
+	const r = await runDailyIngest({
+		store: openStore(dailyMirrorUrl()),
+		http: await feedHttp(),
+		today: utcToday(),
+		deadline: started + budget,
+		intervalMs: feedSourceMode() === 'live' ? REQUEST_INTERVAL_MS : 0
+	});
+	if (r.lagDays !== null) emitMetricLine(lagMetricLine(r.lagDays));
+	const failed = r.error !== null;
+	const message = failed ? feedErrorMessage(r.error) : null;
+	// Counts, days and a reason code, never an upstream body.
+	logEvent(failed ? 'error' : 'info', {
+		event: 'mirror_daily_ingest',
+		product: 'prelim',
+		copied: r.copied.length,
+		dropped: r.dropped.length,
+		prelimThrough: r.prelimThrough,
+		lagDays: r.lagDays,
+		stopped: r.stopped,
+		requests: r.requests,
+		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
+		ms: Date.now() - started
+	});
+	if (failed) throw r.error;
+	return { copied: r.copied.length, dropped: r.dropped.length, prelimThrough: r.prelimThrough, lagDays: r.lagDays, stopped: r.stopped };
+}
+
+export async function handler(event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse>;
+export async function handler(event: DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DailyIngestAnswer>;
+export async function handler(event: SQSEvent | DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse | DailyIngestAnswer> {
+	if (isDailyIngestEvent(event)) return dailyIngest(context);
+	if (!Array.isArray((event as SQSEvent | undefined)?.Records)) {
+		// Neither mode: nothing to answer, and a retry can't help. Fail loudly (the Errors alarm), naming no payload.
+		logEvent('error', { event: 'fetcher_event_unknown' });
+		throw new Error('the fetcher was invoked with an event it does not know (expected an SQS batch or {"mode":"daily-ingest"})');
+	}
+	return fetchBatch(event as SQSEvent, context);
+}
+
+async function fetchBatch(event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse> {
 	const failures: SQSBatchResponse['batchItemFailures'] = [];
 	const http = await feedHttp();
 	for (const record of event.Records) {
@@ -207,4 +287,4 @@ export const handler = async (event: SQSEvent, context?: Pick<Context, 'getRemai
 	}
 	// Only the failed sends are retried (the event source reports partial failures).
 	return { batchItemFailures: failures };
-};
+}
