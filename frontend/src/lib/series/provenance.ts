@@ -170,7 +170,12 @@ export const describeProvenance = (s: Pick<SeriesMeta, 'product' | 'productVersi
 };
 
 /** A data feed's source as the Data tab names it (backend feeds/config.ts SOURCES labels). */
-const FEED_LABELS: Record<string, string> = { chirps: 'CHIRPS daily rainfall', chirps_gefs: 'CHIRPS-GEFS rainfall forecast', dws: 'DWS gauge flow' };
+const FEED_LABELS: Record<string, string> = {
+	chirps: 'CHIRPS daily rainfall',
+	chirps_gefs: 'CHIRPS-GEFS rainfall forecast',
+	dws: 'DWS gauge flow',
+	ecmwf_ens: 'ECMWF ENS rainfall forecast'
+};
 
 /**
  * The Data tab's mark on a series a data feed wrote (SeriesMeta.feed,

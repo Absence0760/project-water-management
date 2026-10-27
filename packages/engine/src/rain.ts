@@ -408,6 +408,15 @@ export interface ChirpsFitOptions {
 	dq?: DataQualitySettings;
 	/** settings.chirpsQuantileMap (engine ≥ 1.53.0): fit the gap map too; only in mode 'monthly'. */
 	quantileMap?: ChirpsQuantileMap | null;
+	/**
+	 * Fit against this series in CHIRPS' place (engine ≥ 1.101.0, ./gapRain.ts:
+	 * ERA5-Land, or one IMERG version). Everything that judges the catchment
+	 * rain (the low-vs-CHIRPS years, the flagged zero runs) still reads the
+	 * project's CHIRPS, as the run's own handling does, so every product's fit
+	 * leaves out the same suspect days; the factors, the keep-dry guard and the
+	 * quantile map read this series. Absent: CHIRPS, as before.
+	 */
+	against?: DailySeries;
 }
 
 type SegmentPlan = Pick<ChirpsFitSegment, 'fromWaterYear' | 'toWaterYear' | 'reason' | 'fillFrom' | 'fillTo'>;
@@ -468,12 +477,13 @@ export function chirpsBiasFactors(
 	accumulations: AccumulationSpans = [],
 	opts: ChirpsFitOptions = {}
 ): ChirpsCorrection | null {
-	const sb = series.rain_chirps_mm;
+	const sb = opts.against ?? series.rain_chirps_mm;
 	if (!sb) return null;
 	const sa = series.rain_catchment_mm;
 	// The low-vs-CHIRPS years are judged without the replaced days (engine ≥ 0.30.0): a replaced era far below CHIRPS mustn't take the rest of its water years out too.
 	const lowYears = sa ? (rainVsChirps(withoutReplaced(series, opts.replaced), opts.dq)?.flaggedYears ?? []) : [];
-	const suspect = suspectRainDays(sa, zeroRain, accumulations, opts.replaced, { dq: opts.dq, chirps: sb });
+	// Another product's fit (engine ≥ 1.101.0) judges the zero runs against the project's CHIRPS, as the run's mask does.
+	const suspect = suspectRainDays(sa, zeroRain, accumulations, opts.replaced, { dq: opts.dq, chirps: opts.against ? (series.rain_chirps_mm ?? null) : sb });
 	const b0 = toEpochDay(sb.startDate);
 
 	// Shared days (both a reading) outside the low-vs-CHIRPS years, with their

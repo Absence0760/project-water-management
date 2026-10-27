@@ -27,6 +27,8 @@ const STARTS: [title: string | RegExp, sheet: SummarySheet][] = [
 	[/^Stress classes by month/, 'Curtailment'],
 	[/^Water account by water year/, 'Annual volumes'],
 	['CHIRPS bias correction', 'Data checks'],
+	// The gap-filling products (engine ≥ 1.101.0, issue #604): with the CHIRPS fit they stand beside.
+	['Gap-filling products', 'Data checks'],
 	['Catchment rain treated as missing', 'Data checks'],
 	['Multi-day rain accumulations', 'Data checks'],
 	[/^Double-mass check/, 'Data checks'],

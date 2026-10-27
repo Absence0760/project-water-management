@@ -2,6 +2,8 @@
 	const loadPreviewDialog = () => import('./SeriesPreviewDialog.svelte');
 	// Data feeds (issue #586: moved here from Settings) is its own chunk, as it was there.
 	const loadDataFeeds = () => import('#lib/components/feeds/DataFeedsPanel.svelte');
+	// Rain products side by side (issue #604 R4-E): its own chunk, drawn only while settings.gapRain chooses a product.
+	const loadGapRainPanel = () => import('./GapRainPanel.svelte');
 </script>
 
 <script lang="ts">
@@ -43,6 +45,7 @@
 		resolveDataQuality,
 		resolveChirpsFitPeriod,
 		resolveZeroRain,
+		resolveGapRain,
 		SERIES_KINDS,
 		toEpochDay,
 		type CalibrationFlowKind,
@@ -94,6 +97,7 @@
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
+	import { gapRainApi, gapRainChoiceText, gapRainInputSeries } from './gapRain';
 	import EditDay from './EditDay.svelte';
 	import { handDayCount, handPoints, handRangesText } from '#lib/series/editDay.js';
 	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, renameEffect, renameEffectText, roleBadge, seriesInUse, SITED_KINDS } from './roles';
@@ -479,6 +483,13 @@
 		const vh = h && values[h.id];
 		return vc && vh ? { series: c!, result: doubleMass({ rain_catchment_mm: vc, rain_chirps_mm: vh }, resolveZeroRain(zeroRainRuns, []), dq) } : null;
 	});
+	// The gap-filling product (engine ≥ 1.101.0, settings.gapRain): the products panel, and the preview's days as a run fills them.
+	const gapRain = $derived(resolveGapRain(settings?.gapRain, []));
+	async function loadGapRain() {
+		const g = gapRain;
+		if (!g) return {};
+		return gapRainInputSeries(await gapRainApi(api, projectId).get(), g);
+	}
 	const dmCheck = $derived.by(() => {
 		const fp = resolveChirpsFitPeriod(settings?.chirpsFitPeriod, []);
 		const check = dm ? doubleMassCheck(dm.result, Array.isArray(fp) ? 'ranges' : fp) : null;
@@ -752,7 +763,7 @@
 	const hasChecks = $derived(list.length > 0 && Object.keys(values).length > 0);
 	let usesOpen = $state(false);
 	const navGroups = $derived(
-		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks })
+		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, gapRain: !!gapRain, checks: hasChecks })
 	);
 	// A link to a panel (`?tab=series#data-checks`, `?rain=units#data-feeds`, the menu's own links reloaded),
 	// on load or a #fragment typed or followed while the page is open (finding R2-D): the tab is a lazy chunk,
@@ -1260,6 +1271,17 @@
 	<div id="data-double-mass"><DoubleMassPanel dm={dm.result} /></div>
 {/if}
 
+{#if gapRain}
+	<!-- The id outside the lazy panel, so a #data-gap-rain link and the section menu find it while the chunk loads. -->
+	<div id="data-gap-rain">
+		<Lazy load={loadGapRainPanel}>
+			{#snippet children(GapRainPanel)}
+				<GapRainPanel {projectId} {values} gapLine={gapRainChoiceText(gapRain)} />
+			{/snippet}
+		</Lazy>
+	</div>
+{/if}
+
 {#if hasChecks}
 	<section class="panel" id="data-checks" aria-labelledby="chk-h" data-testid="series-checks">
 		<div class="panel-head">
@@ -1314,7 +1336,7 @@
 {#if previewMounted}
 	<Lazy load={loadPreviewDialog}>
 		{#snippet children(SeriesPreviewDialog)}
-			<SeriesPreviewDialog bind:open={previewOpen} {list} {values} failed={valuesFailed} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} loadAreas={derivedAreas} />
+			<SeriesPreviewDialog bind:open={previewOpen} {list} {values} failed={valuesFailed} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} loadAreas={derivedAreas} loadGapRain={gapRain ? loadGapRain : undefined} />
 		{/snippet}
 	</Lazy>
 {/if}

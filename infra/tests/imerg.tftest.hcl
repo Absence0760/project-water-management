@@ -1,0 +1,887 @@
+# Plan-only tests (mocked providers, no AWS credentials) for IMERG Late's
+# copy (imerg.tf, issue #604 R4-D): the Earthdata token secret exists with
+# no value in Terraform; the ingest role may read that one secret; the job
+# gets its ARN, never the token; the 4-times-a-day schedule, its target and
+# the freshness alarm exist only with imerg_enabled AND the ingest function,
+# send the recent-mode event, never retry, and the alarm breaches on missing
+# data.
+#
+# The mocks, overrides and variables below are copied from
+# ingest.tftest.hcl (itself from guardrails.tftest.hcl; a test file can't
+# share them); keep them in step.
+#
+#   pnpm check:infra          (bin/check-infra.sh: fmt + validate + test)
+
+mock_provider "aws" {
+  # A mocked policy document renders a random string, which IAM/SNS/S3 policy
+  # arguments then reject as invalid JSON. Any well-formed document does.
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+    }
+  }
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["af-south-1a", "af-south-1b", "af-south-1c"]
+      zone_ids = ["afs1-az1", "afs1-az2", "afs1-az3"]
+    }
+  }
+  mock_data "aws_caller_identity" {
+    defaults = {
+      account_id = "000000000000"
+    }
+  }
+  mock_data "aws_iam_role" {
+    defaults = {
+      arn  = "arn:aws:iam::000000000000:role/water-management-deploy"
+      name = "water-management-deploy"
+      # The bootstrap's trust policy as IAM returns it (single values
+      # collapsed to strings) — templates infra/modules/project-baseline.
+      assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":\"arn:aws:iam::000000000000:oidc-provider/token.actions.githubusercontent.com\"},\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\",\"token.actions.githubusercontent.com:sub\":\"repo:Absence0760/project-water-management:environment:production\"}}}]}"
+    }
+  }
+}
+
+mock_provider "aws" {
+  alias = "us_east_1"
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+    }
+  }
+}
+
+mock_provider "archive" {}
+mock_provider "random" {}
+
+# Mocked RDS has no provider logic, so the computed master secret and
+# endpoint would stay unknown/empty. Supply what RDS really returns.
+override_resource {
+  target          = aws_db_instance.main
+  override_during = plan
+  values = {
+    address = "water-management.abc123.af-south-1.rds.amazonaws.com"
+    port    = 5432
+    master_user_secret = [{
+      secret_arn    = "arn:aws:secretsmanager:af-south-1:000000000000:secret:rds!db-00000000-0000-0000-0000-000000000000-AbCdEf"
+      kms_key_id    = "arn:aws:kms:af-south-1:000000000000:key/00000000-0000-0000-0000-000000000000"
+      secret_status = "active"
+    }]
+  }
+}
+
+override_resource {
+  target          = aws_acm_certificate.frontend
+  override_during = plan
+  values = {
+    arn = "arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"
+    domain_validation_options = [{
+      domain_name           = "icwbt.jaredhoward.com"
+      resource_record_name  = "_0123abcd.icwbt.jaredhoward.com."
+      resource_record_type  = "CNAME"
+      resource_record_value = "_4567efab.acm-validations.aws."
+    }]
+  }
+}
+
+# Easy DKIM returns three tokens only after create; the DKIM records index them.
+override_resource {
+  target          = aws_sesv2_email_identity.domain
+  override_during = plan
+  values = {
+    arn = "arn:aws:ses:af-south-1:000000000000:identity/icwbt.jaredhoward.com"
+    dkim_signing_attributes = {
+      next_signing_key_length = "RSA_2048_BIT"
+      tokens                  = ["tok1", "tok2", "tok3"]
+    }
+  }
+}
+
+override_resource {
+  target          = aws_sesv2_configuration_set.main
+  override_during = plan
+  values = {
+    arn = "arn:aws:ses:af-south-1:000000000000:configuration-set/water-management"
+  }
+}
+
+# Known ARNs / IDs so wiring (WAF → distribution, header policy → behaviour,
+# alarm → topic) can be asserted by equality at plan time.
+override_resource {
+  target          = aws_wafv2_web_acl.frontend
+  override_during = plan
+  values = {
+    arn = "arn:aws:wafv2:us-east-1:000000000000:global/webacl/water-management-frontend-acl/00000000-0000-0000-0000-000000000000"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_response_headers_policy.site
+  override_during = plan
+  values = {
+    id = "site-headers-policy-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_response_headers_policy.api
+  override_during = plan
+  values = {
+    id = "api-headers-policy-id"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.lambda
+  override_during = plan
+  values = {
+    id  = "water-management-backend-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-backend-lambda"
+  }
+}
+
+override_resource {
+  target          = aws_s3_bucket.frontend
+  override_during = plan
+  values = {
+    arn = "arn:aws:s3:::water-management-frontend-000000000000"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_distribution.frontend
+  override_during = plan
+  values = {
+    arn = "arn:aws:cloudfront::000000000000:distribution/E0000000000000"
+    id  = "E0000000000000"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_function.backend
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:af-south-1:000000000000:function:water-management-backend"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_function.migrate
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:af-south-1:000000000000:function:water-management-migrate"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_function.worker
+  override_during = plan
+  values = {
+    arn           = "arn:aws:lambda:af-south-1:000000000000:function:water-management-worker"
+    function_name = "water-management-worker"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.worker_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-worker-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-worker-lambda"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.jobs
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-jobs"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-jobs"
+  }
+}
+
+override_resource {
+  target          = aws_cloudwatch_event_rule.worker_tick
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-worker-tick"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.worker_lambda
+  override_during = plan
+  values = {
+    id = "sg-0000000000worker"
+  }
+}
+
+# Known IDs for the rest of the security groups and the route table, so the
+# network run can assert which group a rule, Lambda or DB points at.
+override_resource {
+  target          = aws_security_group.api_lambda
+  override_during = plan
+  values = {
+    id = "sg-000000000000api"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.migrate_lambda
+  override_during = plan
+  values = {
+    id = "sg-00000000migrate"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.rds
+  override_during = plan
+  values = {
+    id = "sg-000000000000rds"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.vpce
+  override_during = plan
+  values = {
+    id = "sg-00000000000vpce"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.vpce_sqs
+  override_during = plan
+  values = {
+    id = "sg-000000000vpcesqs"
+  }
+}
+
+override_resource {
+  target          = aws_route_table.private
+  override_during = plan
+  values = {
+    id = "rtb-00000000private"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.jobs_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-jobs-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-jobs-dlq"
+  }
+}
+
+# Data feeds (feeds.tf, WP-2.10)
+override_resource {
+  target          = aws_sqs_queue.fetch_requests
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.fetch_requests_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests-dlq"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.ingest_results
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-ingest-results"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-ingest-results"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.ingest_results_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-ingest-results-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-ingest-results-dlq"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_function.fetcher
+  override_during = plan
+  values = {
+    arn           = "arn:aws:lambda:af-south-1:000000000000:function:water-management-fetcher"
+    function_name = "water-management-fetcher"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.fetcher_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-fetcher-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-fetcher-lambda"
+  }
+}
+
+# Server-side reports (reports.tf, WP-2.15 Phase B)
+override_resource {
+  target          = aws_sqs_queue.render_requests
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-render-requests"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-render-requests"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.render_requests_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-render-requests-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-render-requests-dlq"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.render_results
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-render-results"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-render-results"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.render_results_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-render-results-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-render-results-dlq"
+  }
+}
+
+override_resource {
+  target          = aws_s3_bucket.reports
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-reports-000000000000"
+    bucket = "water-management-reports-000000000000"
+    # The /reports/* origin (s3_cloudfront.tf).
+    bucket_regional_domain_name = "water-management-reports-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+# Report downloads through CloudFront (reports.tf): known values so the key
+# pair, key group, OAC and origin request policy can be matched by equality.
+# Placeholder text, not a key: nothing is generated in a test.
+# One id per trusted public key (the overlap run uses both), so a key-id
+# check can tell them apart.
+override_resource {
+  target          = aws_cloudfront_public_key.report_downloads["2026-09"]
+  override_during = plan
+  values = {
+    id = "K2026090000000A"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_public_key.report_downloads["2027-03"]
+  override_during = plan
+  values = {
+    id = "K2027030000000B"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_key_group.report_downloads
+  override_during = plan
+  values = {
+    id = "report-downloads-key-group-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.reports
+  override_during = plan
+  values = {
+    id = "reports-oac-id"
+  }
+}
+
+# Evidence pack PDFs (packs.tf, 119_pack_render)
+override_resource {
+  target          = aws_s3_bucket.packs
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-packs-000000000000"
+    bucket = "water-management-packs-000000000000"
+    # The /packs/* origin (s3_cloudfront.tf).
+    bucket_regional_domain_name = "water-management-packs-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.packs
+  override_during = plan
+  values = {
+    id = "packs-oac-id"
+  }
+}
+
+# The map's data (map_data.tf, s3_cloudfront.tf's /tiles/*)
+override_resource {
+  target          = aws_s3_bucket.tiles
+  override_during = plan
+  values = {
+    arn                         = "arn:aws:s3:::water-management-tiles-000000000000"
+    bucket                      = "water-management-tiles-000000000000"
+    bucket_regional_domain_name = "water-management-tiles-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.tiles
+  override_during = plan
+  values = {
+    id = "tiles-oac-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_function.tiles_range
+  override_during = plan
+  values = {
+    arn = "arn:aws:cloudfront::000000000000:function/water-management-tiles-range"
+  }
+}
+
+override_resource {
+  target          = aws_s3_bucket.reference
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-reference-000000000000"
+    bucket = "water-management-reference-000000000000"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_request_policy.report_downloads
+  override_during = plan
+  values = {
+    id = "report-downloads-origin-request-policy-id"
+  }
+}
+
+override_resource {
+  target          = aws_ecr_repository.renderer
+  override_during = plan
+  values = {
+    arn            = "arn:aws:ecr:af-south-1:000000000000:repository/water-management-renderer"
+    repository_url = "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-renderer"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.renderer_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-renderer-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-renderer-lambda"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.vpce_ses
+  override_during = plan
+  values = {
+    id = "sg-00000000000vpceses"
+  }
+}
+
+override_resource {
+  target          = aws_sns_topic.alerts
+  override_during = plan
+  values = {
+    arn = "arn:aws:sns:af-south-1:000000000000:water-management-prod-alerts"
+  }
+}
+
+override_resource {
+  target          = aws_sns_topic.alerts_us_east_1
+  override_during = plan
+  values = {
+    arn = "arn:aws:sns:us-east-1:000000000000:water-management-prod-alerts"
+  }
+}
+
+override_resource {
+  target          = aws_ce_anomaly_monitor.services
+  override_during = plan
+  values = {
+    arn = "arn:aws:ce::000000000000:anomalymonitor/00000000-0000-0000-0000-000000000000"
+  }
+}
+
+# SES bounces and complaints → the worker (ses.tf, WP-2.13 follow-up)
+override_resource {
+  target          = aws_sns_topic.ses_events
+  override_during = plan
+  values = {
+    arn = "arn:aws:sns:af-south-1:000000000000:water-management-ses-events"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.mail_events
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-mail-events"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-mail-events"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.mail_events_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-mail-events-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-mail-events-dlq"
+  }
+}
+
+# Runtime secrets (secrets.tf, issue #126): distinct known ARNs, so each
+# role's grant and each endpoint statement can be matched to its own secret.
+override_resource {
+  target          = aws_iam_role.migrate_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-migrate-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-migrate-lambda"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret.runtime["api"]
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/api-AaAaAa"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/api-AaAaAa"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret.runtime["worker"]
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/worker-WwWwWw"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/worker-WwWwWw"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret.runtime["migrate"]
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/migrate-MmMmMm"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/migrate-MmMmMm"
+  }
+}
+
+# Distinct version IDs, so matching each Lambda's RUNTIME_SECRET_VERSION to its
+# own secret's version can fail.
+override_resource {
+  target          = aws_secretsmanager_secret_version.runtime["api"]
+  override_during = plan
+  values = {
+    version_id = "aaaaaaaa-0000-0000-0000-000000000001"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret_version.runtime["worker"]
+  override_during = plan
+  values = {
+    version_id = "bbbbbbbb-0000-0000-0000-000000000002"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret_version.runtime["migrate"]
+  override_during = plan
+  values = {
+    version_id = "cccccccc-0000-0000-0000-000000000003"
+  }
+}
+
+# A known CloudFront header, for the ephemerality check's positive control.
+override_resource {
+  target          = random_password.cloudfront_shared_secret
+  override_during = plan
+  values = {
+    result = "synthetic0cloudfront0header0000000000000000000000"
+  }
+}
+
+variables {
+  aws_region      = "af-south-1"
+  route53_zone_id = "Z0000000000000000000"
+  # The hostname before issue #551, kept as a redirect, in its own zone.
+  redirect_domains = { "water-management.jaredhoward.com" = "Z1111111111111111111" }
+  github_repo      = "Absence0760/project-water-management"
+  # Synthetic runtime secrets (ephemeral variables, secrets.tf).
+  auth_jwt_secret     = "0123456789abcdef0123456789abcdef0123456789abcdef"
+  db_app_password     = "abcdef0123456789abcdef0123456789abcdef01234567"
+  alerts_token_secret = "fedcba9876543210fedcba9876543210fedcba9876543210"
+  app_encryption_key  = "0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd"
+  # PEM armour around a placeholder: the shape the variable checks, not a key.
+  cloudfront_private_key = "-----BEGIN PRIVATE KEY-----\ntestonlynotakey\n-----END PRIVATE KEY-----"
+  # Report downloads (reports.tf): a public key generated for these tests (its
+  # private half was never kept). Public keys aren't secret.
+  report_download_public_keys = {
+    "2026-09" = <<-EOT
+      -----BEGIN PUBLIC KEY-----
+      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsaz6UBDgol3d4/RdJsAq
+      BpgFgFKJjgs+6dXsDOL946Mw+N2ulW4LT/k6DEkGZuCJkef1Lqi0JtuVyjhcEwq8
+      hfWgorTT3zNc9JMudwCkUwaqLoPBwYKFai8AhIICqxjlnUm1dmVZTcENYDLF4/aS
+      EYLj2o4Wap+A8s+FVItY8Q8Vs4LpqiGI/ue0crfDTSERns+h08kIlp2Q6FKwXy/6
+      t/h8nqn67PlOHRqo9I6WmH1yCNuyTwjbVKQLQGA91hLbCaKAw1zbKpPS1kgq+eWr
+      qajzJK9XcdRlxS3aSSBU66/3tYik4WNlmrzIopEDCJDkgdwFkNBdFkPesowLlwt9
+      nQIDAQAB
+      -----END PUBLIC KEY-----
+    EOT
+  }
+  report_download_signing_key = "2026-09"
+  # Required and validated. Not an example.* (or other RFC 2606) address,
+  # which the variable refuses: the site's own domain, and a plan-only test
+  # never subscribes it.
+  budget_alert_email = "ops@icwbt.jaredhoward.com"
+}
+
+
+
+# --- This file's own overrides: known ARNs for the mirror's resources -------------
+
+override_resource {
+  target          = aws_s3_bucket.mirror
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-mirror-000000000000"
+    bucket = "water-management-mirror-000000000000"
+  }
+}
+
+override_resource {
+  target          = aws_ecr_repository.ingest
+  override_during = plan
+  values = {
+    arn            = "arn:aws:ecr:af-south-1:000000000000:repository/water-management-mirror-ingest"
+    repository_url = "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-mirror-ingest"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.ingest_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-mirror-ingest-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-mirror-ingest-dlq"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.ingest_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-mirror-ingest-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-mirror-ingest-lambda"
+  }
+}
+
+override_resource {
+  target          = aws_cloudwatch_event_rule.ingest["rnl"]
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-mirror-ingest-rnl"
+  }
+}
+
+override_resource {
+  target          = aws_cloudwatch_event_rule.ingest["sat"]
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-mirror-ingest-sat"
+  }
+}
+
+override_resource {
+  target          = aws_cloudwatch_event_rule.daily_ingest
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-daily-ingest"
+  }
+}
+
+override_resource {
+  target          = aws_cloudwatch_event_rule.gefs_ingest
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-gefs-ingest"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.ingest_backfill
+  override_during = plan
+  values = {
+    id  = "water-management-mirror-backfill"
+    arn = "arn:aws:iam::000000000000:role/water-management-mirror-backfill"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret.earthdata_token
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/ingest/earthdata-token-EeEeEe"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/ingest/earthdata-token-EeEeEe"
+  }
+}
+
+override_resource {
+  target          = aws_cloudwatch_event_rule.imerg
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-mirror-ingest-imerg-late"
+  }
+}
+
+# --- The secret, always; never a value ---------------------------------------------------
+
+run "earthdata_secret_without_a_value" {
+  command = plan
+
+  assert {
+    condition     = aws_secretsmanager_secret.earthdata_token.name == "water-management/ingest/earthdata-token"
+    error_message = "The Earthdata token secret is <project>/ingest/earthdata-token."
+  }
+  assert {
+    condition = (
+      aws_iam_role_policy.ingest_earthdata_token.role == aws_iam_role.ingest_lambda.id &&
+      length(data.aws_iam_policy_document.ingest_earthdata_token.statement) == 1 &&
+      data.aws_iam_policy_document.ingest_earthdata_token.statement[0].actions == toset(["secretsmanager:GetSecretValue"]) &&
+      data.aws_iam_policy_document.ingest_earthdata_token.statement[0].resources == toset([aws_secretsmanager_secret.earthdata_token.arn])
+    )
+    error_message = "The ingest role may read the Earthdata token secret and no other secret."
+  }
+  assert {
+    condition     = length(aws_cloudwatch_event_rule.imerg) == 0 && length(aws_cloudwatch_event_target.imerg) == 0 && length(aws_lambda_permission.imerg) == 0 && length(aws_cloudwatch_metric_alarm.mirror_lag_imerg) == 0
+    error_message = "IMERG is off by default: no schedule, target, permission or alarm (a breaching alarm would fire before the token exists)."
+  }
+}
+
+run "imerg_off_without_the_function" {
+  command = plan
+
+  variables {
+    imerg_enabled = true
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_event_rule.imerg) == 0 && length(aws_cloudwatch_metric_alarm.mirror_lag_imerg) == 0
+    error_message = "imerg_enabled without ingest_image_tag creates nothing: there is no function to invoke."
+  }
+}
+
+run "imerg_off_with_the_function" {
+  command = plan
+
+  variables {
+    ingest_image_tag = "0.7.0-0123456789ab"
+  }
+
+  assert {
+    condition     = aws_lambda_function.ingest[0].environment[0].variables["EARTHDATA_TOKEN_SECRET_ARN"] == aws_secretsmanager_secret.earthdata_token.arn
+    error_message = "The ingest Lambda gets the secret's ARN (the job reads the token at run time, live mode only)."
+  }
+  assert {
+    condition     = length(aws_cloudwatch_event_rule.imerg) == 0 && length(aws_cloudwatch_metric_alarm.mirror_lag_imerg) == 0
+    error_message = "The function alone doesn't turn IMERG on: imerg_enabled does."
+  }
+}
+
+run "imerg_on" {
+  command = plan
+
+  variables {
+    ingest_image_tag = "0.7.0-0123456789ab"
+    imerg_enabled    = true
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_rule.imerg[0].schedule_expression == "cron(40 4,10,16,22 * * ? *)" &&
+      aws_cloudwatch_event_rule.imerg[0].name == "water-management-mirror-ingest-imerg-late" &&
+      !contains([for r in aws_cloudwatch_event_rule.ingest : r.schedule_expression], aws_cloudwatch_event_rule.imerg[0].schedule_expression)
+    )
+    error_message = "IMERG runs 4 times a day, at minutes the finals' rules don't use."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_cloudwatch_event_target.imerg[0].input) == { product = "imerg_late", mode = "recent" } &&
+      aws_cloudwatch_event_target.imerg[0].rule == aws_cloudwatch_event_rule.imerg[0].name &&
+      one(aws_cloudwatch_event_target.imerg[0].retry_policy).maximum_retry_attempts == 0
+    )
+    error_message = "The rule sends the recent-mode event and is never retried (a refusal must stop)."
+  }
+  assert {
+    condition = (
+      aws_lambda_permission.imerg[0].principal == "events.amazonaws.com" &&
+      aws_lambda_permission.imerg[0].source_arn == aws_cloudwatch_event_rule.imerg[0].arn &&
+      aws_lambda_permission.imerg[0].function_name == aws_lambda_function.ingest[0].function_name
+    )
+    error_message = "Only IMERG's own rule may invoke the job for it."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.mirror_lag_imerg[0].treat_missing_data == "breaching" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_imerg[0].namespace == "water-management/Mirror" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_imerg[0].metric_name == "MirrorLagDays" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_imerg[0].dimensions["Product"] == "imerg_late" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_imerg[0].threshold == 3 &&
+      aws_cloudwatch_metric_alarm.mirror_lag_imerg[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
+    )
+    error_message = "The IMERG freshness alarm reads MirrorLagDays{Product=imerg_late}, pages through the alerts topic and treats missing data as breaching."
+  }
+}
+
+run "essential_tier_keeps_the_imerg_alarm" {
+  command = plan
+
+  variables {
+    ingest_image_tag = "0.7.0-0123456789ab"
+    imerg_enabled    = true
+    alarm_tier       = "essential"
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.mirror_lag_imerg) == 1
+    error_message = "alarm_tier = \"essential\" keeps IMERG's freshness alarm."
+  }
+}
+
+run "rejects_an_imerg_lag_alarm_that_fires_on_a_healthy_copy" {
+  command = plan
+
+  variables {
+    imerg_lag_alarm_days = 1
+  }
+
+  expect_failures = [var.imerg_lag_alarm_days]
+}

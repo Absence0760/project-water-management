@@ -12,7 +12,7 @@
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { hashId } from '#lib/help/anchor.js';
-	import { FLOW_QUALITY_COLUMN, resolveQualityFlags, runForcingOfSummary, type DailySeries } from '@water-management/engine';
+	import { FLOW_QUALITY_COLUMN, resolveQualityFlags, runForcingOfSummary, runRainCredits, type DailySeries } from '@water-management/engine';
 	import { api, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
 	import { beforeForecast, FDC_RECORDS, fdcPercentileTable, flowDurationCurves, onDaysOf } from '@water-management/engine';
 	import LineChart from '#lib/components/charts/LineChart.svelte';
@@ -44,6 +44,8 @@
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
 	// Rain for each unit (issue #482): its own chunk, only a run that ran per unit loads it.
 	const loadUnitRainPanel = () => import('./UnitRainPanel.svelte');
+	// Rain gaps filled from other products (engine ≥ 1.101.0, issue #604): its own chunk, on runs that chose one.
+	const loadGapRainRunPanel = () => import('./GapRainRunPanel.svelte');
 
 	let {
 		projectId,
@@ -434,6 +436,15 @@
 					<Lazy load={loadUnitRainPanel}>
 						{#snippet children(UnitRainPanel)}
 							<UnitRainPanel result={unitRainOf(summary)} stations={stationsOf(summary)} order={summary.farms.map((f) => f.nodeId)} />
+						{/snippet}
+					</Lazy>
+				</div>
+			{/if}
+			{#if summary.gapRain}
+				<div class="panel" id="res-gap-rain">
+					<Lazy load={loadGapRainRunPanel}>
+						{#snippet children(GapRainRunPanel)}
+							<GapRainRunPanel info={summary.gapRain!} credits={runRainCredits(run, run.createdAt.slice(0, 10))} />
 						{/snippet}
 					</Lazy>
 				</div>

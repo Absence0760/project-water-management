@@ -1500,9 +1500,10 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
   TLS only, **versioned**, with noncurrent versions expiring after 30 days
   (a monthly refresh rewrites ~130 MB, so a month of old versions is cents)
   and incomplete multipart uploads aborted after a day. It holds one Zarr v3
-  array per product (`rnl/`, `sat/`, `prelim/` and `gefs/<issue>/`), each
-  with its `manifest.json`, and `gefs/index.json` listing the forecast
-  issues held.
+  array per product (`rnl/`, `sat/`, `prelim/`, `gefs/<issue>/`,
+  `ecmwf/<issue>/`, `era5l/` and `imerg_late/`), each with its
+  `manifest.json`, and `gefs/index.json` and `ecmwf/index.json` listing the
+  forecast issues held.
 - **The ingest job** `water-management-mirror-ingest`: a Python 3.14
   container-image Lambda (`ingest/Dockerfile`, handler
   `lambda_handler.handler`), arm64, 3 GB memory, 2 GB of `/tmp`, 900 s,
@@ -1514,7 +1515,9 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
   upstream sees it).
   Its role may get, put, list and delete in the mirror bucket only, send to
   its DLQ, write its own log group, pull its own image, and publish metrics
-  in the `water-management/Mirror` namespace only. No database, no secret.
+  in the `water-management/Mirror` namespace only. No database; its one
+  secret is IMERG's Earthdata token (§ IMERG Late), read at run time by the
+  ARN in `EARTHDATA_TOKEN_SECRET_ARN`.
   Its 2 reserved executions come out of the account's Lambda concurrency
   quota (infra/README.md § Operator steps).
 - **Schedules:** one EventBridge rule per product, daily (`rnl` at 02:00
@@ -1709,6 +1712,77 @@ for two days. Runbook: the run's log line; a `refused` stopped on purpose
 turned on with the daily ingest (`daily_ingest_enabled`): the rule, its
 target and permission, and the alarm exist only then.
 
+### ECMWF (the second forecast)
+
+Issue #604 D17 (R4-C): the ECMWF ENS forecast, copied by the same
+mirror-ingest Lambda (`ingest/ecmwf.py`) and read by `ecmwf_ens` feeds
+(`backend/src/feeds/fromMirrorEcmwf.ts`). The source, its licence and the
+limits we keep to are in [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-ens).
+
+- **What a run does.** The rule `water-management-mirror-ingest-ecmwf`
+  (`infra/ecmwf.tf`) invokes the job with `{"product":"ecmwf","mode":"daily"}`
+  every 20 minutes from 10:00 to 13:40 UTC. ECMWF publishes the 00 UTC run's
+  0.1° files about 09:40 UTC (two hours after the 0.25° ones). A run tries
+  today's issue, else yesterday's: it reads each step's `.index` and then
+  one range request per member for that member's `tp` field (765 requests
+  an issue, one a second, ~1.1 GB), never a whole 4 GB step file. It saves
+  each finished step under `ingest-state/ecmwf/work/<issue>/`, stops
+  starting steps with under 2 minutes of the Lambda's time left, and the
+  next run picks up from there; with all 15 steps in (and 5 minutes left)
+  it writes `ecmwf/<issue>/` (the ensemble mean and p10/p50/p90, 0.1°), its
+  manifest and `ecmwf/index.json`, keeps 7 issues whole and archives older
+  ones as their mean. One run at a time (the `ecmwf` lease): a run that
+  meets the lease ends at once. A run that finds the day's issue held asks
+  ECMWF nothing.
+- **Is the issue out?** A run first asks for the issue's last step's
+  `.index` (ECMWF writes a run's steps in order). Checked 2026-10-27: a key
+  not yet published on the `ecmwf-forecasts` bucket answers **404**
+  (`NoSuchKey`), not 403, so the job reads a 404 there as "not published
+  yet" (`stopped: "not_published"`) and a 404 on a later step as
+  `partial`. S3 also answered **503** now and then to such probes:
+  `polite.py` retries a 503 (or 429) up to **3 times**, honouring
+  `Retry-After` and otherwise waiting 30, 60 and 120 s (one wait over 300 s
+  gives up at once). A probe that still answers 503 after the third retry
+  fails the run with `RetryLater`, having written nothing and no refusal
+  marker; the target doesn't retry it (the failed event goes to the
+  mirror-ingest DLQ), and the next scheduled run, 20 minutes on, asks again
+  (`ingest/test_ecmwf.py` covers both).
+- **A 403** stops the run at once, never retried, writes
+  `ecmwf/refused.json` (the time), and the Lambda errors (the event goes to
+  the mirror-ingest DLQ, which alarms). The day's later runs see the marker
+  and ask nothing (`stopped: "refused_today"`); the next UTC day tries again.
+- **Logs and the alarm.** Each run logs one JSON line, `event:
+  "mirror_ingest"`, `product: "ecmwf"`, with `stopped` (`copied`,
+  `up_to_date`, `deadline`: resumed next run, `partial`: ECMWF hasn't
+  published every step yet, `not_published`, `busy`, `refused`,
+  `refused_today`), `working`, `stepsDone`, `newest` and `lagDays`, and
+  publishes `MirrorLagDays{Product=ecmwf}` (today minus the newest issue
+  held; nothing while the copy holds none). The alarm `mirror-lag-ecmwf`
+  (essential tier) fires at **2 days** on two days running, or when no
+  datapoint arrives for two days. Feeds keep the forecast they have
+  meanwhile.
+- **Turning it on.** Build an ingest image whose `requirements.txt` includes
+  eccodes (`ingest/requirements.c.in`: eccodes and eccodeslib, binary
+  wheels for arm64, no system package), deploy it (`ingest_image_tag`),
+  then set `ecmwf_enabled = true` and apply. Without both, the rule stays
+  disabled with no target and there is no alarm. ECMWF's open data needs no
+  key. The feeds fall due at 14:00 UTC (253_feed_source_ecmwf.sql).
+- **Quantile mapping** (D17, "quantile-mapped to our corrected rain"). Once
+  the copy has archived a few months of issues, the operator fits the
+  mapping offline and writes `ecmwf/qm.json` into the mirror; feeds apply it
+  from their next fetch, and until then they write the model's own values,
+  labelled "not yet calibrated":
+
+  ```bash
+  aws s3 sync s3://<mirror bucket>/ecmwf ./copy/ecmwf --exclude "*/c/1/*" --exclude "*/c/2/*" --exclude "*/c/3/*" && aws s3 sync s3://<mirror bucket>/sat ./copy/sat && aws s3 sync s3://<mirror bucket>/prelim ./copy/prelim && ingest/.venv/bin/python ingest/ecmwf_qm_fit.py --copy ./copy --mirror s3://<mirror bucket> --dry-run
+  ```
+
+  `--dry-run` prints the file; run it again without to write
+  `ecmwf/qm.json`. `--scale` applies a CHIRPS bias correction to the
+  observed rain first, `--regions` fits per region (default the whole
+  region D1), and each group (region × season) needs `--min-samples` pairs
+  (default 2,000). Removing `ecmwf/qm.json` returns feeds to uncalibrated.
+
 ### Backfill
 
 The one-off copy of CHC's `byMonth` finals since 1981 (D4) runs through the
@@ -1774,6 +1848,167 @@ the operator starts it.
    difference beyond tolerance is a bug in the copy to find before
    anything reads it (re-copy the month with a `backfill` event once
    fixed, then verify again).
+
+### IMERG Late
+
+The near-real-time rain for the days CHIRPS has no preliminary value for
+yet (issue #604 R4-D, D16): NASA's IMERG Late daily, `GPM_3IMERGDL` V07,
+about 14 h behind, into `imerg_late/` (0.1°, the last 30 days, each day's
+version in the manifest; `ingest/imerg.py`, ingest/README.md § IMERG Late,
+the source register's [imerg](./data-sources.md#imerg)). It runs in the same
+ingest Lambda, from `infra/imerg.tf`: a rule 4 times a day (04:40, 10:40,
+16:40, 22:40 UTC) sending `{"product":"imerg_late","mode":"recent"}`. A run
+asks CMR which granules exist (no sign-in), then GES DISC's OPeNDAP service
+for region D1 of each day it doesn't hold, with an Earthdata Login token.
+Off until `imerg_enabled`, which needs the token first.
+
+**The token.** Terraform creates the secret `water-management/ingest/earthdata-token`
+with no value and gives the ingest role `GetSecretValue` on it alone; the
+token itself never passes through Terraform, the repo or a chat. Once,
+by the operator:
+
+1. **An Earthdata Login account** at https://urs.earthdata.nasa.gov, on the
+   estate's owner identity (`~/github/project-mgmt/docs/vendor-accounts.md`
+   and its Runbook H; add the registry row).
+2. **Approve GES DISC's application**: Profile → Applications → Authorized
+   Apps → Approve More Applications → "NASA GESDISC DATA ARCHIVE", and agree
+   to its terms. Without it every request answers 401.
+3. **Create a user token**: Profile → Generate Token. It is valid for 60
+   days. Save it to a file only you can read, for example
+   `~/earthdata-token` with mode 0600, and never print it.
+4. **Put it in the secret**, from that file, with the prod profile
+   (`aws sso login` first):
+   `aws secretsmanager put-secret-value --secret-id water-management/ingest/earthdata-token --secret-string file://$HOME/earthdata-token && shred -u $HOME/earthdata-token`.
+   Check without reading it back: `aws secretsmanager describe-secret --secret-id water-management/ingest/earthdata-token --query VersionIdsToStages`
+   shows one `AWSCURRENT` version.
+5. **Check one real CMR granule record first.** The job (`imerg.py`
+   `parse_search`) requires each granule's `RelatedUrls` to hold **exactly
+   one** URL starting `https://opendap.earthdata.nasa.gov/`, and refuses
+   the run (`ImergFormatError`) on none or several. CMR's search needs no
+   sign-in, so look at yesterday's granule:
+   `curl -s "https://cmr.earthdata.nasa.gov/search/granules.umm_json?short_name=GPM_3IMERGDL&version=07&temporal=$(date -u -d yesterday +%Y-%m-%d)T00:00:00Z,$(date -u -d yesterday +%Y-%m-%d)T23:59:59Z" | jq '.items[0].umm | {GranuleUR, urls: [.RelatedUrls[].URL]}'`
+   The `GranuleUR` should name the day (`3IMERG.YYYYMMDD-S000000-E235959.`)
+   and a `V07` tag, and among the URLs exactly one should start
+   `https://opendap.earthdata.nasa.gov/` (the others are the data archive's
+   HTTPS link, the `.xml` and browse links, which the job ignores). Two
+   OPeNDAP links (say a second one for a cloud copy), or one on another
+   host, means `parse_search` needs changing before turning it on.
+6. **Turn it on**: `imerg_enabled = true` in the prod tfvars (with an
+   `ingest_image_tag` whose release has `ingest/imerg.py`), `terraform plan`,
+   then apply with the operator's go-ahead. That creates the rule, its
+   target and permission, and the `mirror-lag-imerg-late` alarm.
+7. **First run** without waiting for the schedule:
+   `aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload '{"product":"imerg_late","mode":"recent"}' /tmp/imerg.json && cat /tmp/imerg.json`
+   should list 10 days `copied`, each with `"version": "V07"`. A 401 means
+   step 2 or the token is wrong (below).
+
+**Rotating the token** every 60 days (put a reminder in the calendar when
+creating it): repeat steps 3 and 4; the next run reads the new value. A run
+that met a 401 or 403 wrote `ingest-state/imerg_late/refused.json` and asks
+nothing more that UTC day; after fixing the token the same day, remove it:
+`aws s3 rm s3://<mirror bucket>/ingest-state/imerg_late/refused.json`.
+
+**Watching it.** Each run publishes `MirrorLagDays{Product=imerg_late}`,
+today minus the newest day held (`prelimThrough`): 1 on a healthy copy (2 before
+the day's file lands). The `mirror-lag-imerg-late` alarm (essential tier)
+fires above `imerg_lag_alarm_days` (default 3; the day's lowest reading) on
+two days running, or when no datapoint arrives for two days. Runbook: the
+`mirror-ingest` log group and its DLQ. `refused_today` in a run's result,
+or an `HTTP 401` error, is almost always the token's 60 days running out;
+a 403 means GES DISC refused us (stop and write to them, as for CHC). An
+`ImergFormatError` means a file or CMR's answer changed shape (a new
+version's layout, say): the run stopped before writing anything wrong.
+When V08 arrives, CMR lists it beside V07 and the job takes the newer
+version for each day, re-copying a held day once (its revision moves only
+if its values changed). A day CMR never lists (or lists only after it has
+left the 10-day search) stays a gap: the readers treat it as not held, and
+the days after it are read as usual, so one missing day blocks nothing.
+
+### ERA5-Land
+
+A second rain source (issue #604 R4-A, D15): ERA5-Land daily total
+precipitation from the Copernicus Climate Data Store, copied as product
+`era5l` on the 0.1° grid by the same `mirror-ingest` function
+(`ingest/era5land.py`; how it works: ingest/README.md § The ERA5-Land job).
+The CDS needs an account and an API key. Terraform creates the secret
+`water-management/ingest/cds-key` with **no value** (`infra/era5land.tf`),
+gives the ingest role `GetSecretValue` on that secret only, and passes its
+ARN (never the key) as `CDS_KEY_SECRET_ARN`. The daily rule (02:40 UTC,
+`{"product":"era5l","mode":"monthly"}`) and the `mirror-lag-era5l` alarm
+exist only with `era5l_enabled = true` (default false), which needs
+`ingest_image_tag` set to a release that has `era5land.py`.
+
+The operator, once:
+
+1. **The CDS account.** Register at cds.climate.copernicus.eu (an ECMWF
+   account) with the project's role mailbox, not a personal address, and
+   record it in the vendor registry (`project-mgmt` docs/vendor-accounts.md).
+2. **Accept the dataset's licence.** Signed in, open the dataset
+   "ERA5-Land hourly data from 1950 to present" (`reanalysis-era5-land`),
+   go to its Download tab, and accept the licence under "Terms of use"
+   (CC-BY). Until it is accepted every request answers 403, which stops the
+   run on purpose.
+3. **Save the key to a file only you can read.** Copy the API key from your
+   CDS profile page into a new file with a text editor (not `echo`, which
+   would put it in the shell history), e.g. `~/cds-key.txt`, holding the key
+   alone, then `chmod 600 ~/cds-key.txt`.
+4. **Put it in the secret**, from that file (the job strips a trailing
+   newline):
+   `aws secretsmanager put-secret-value --secret-id water-management/ingest/cds-key --secret-string file://$HOME/cds-key.txt --region af-south-1 --profile water-management`
+   Check it landed without reading it back:
+   `aws secretsmanager describe-secret --secret-id water-management/ingest/cds-key --query '{changed:LastChangedDate,versions:VersionIdsToStages}' --region af-south-1 --profile water-management`
+   shows a version staged `AWSCURRENT`. Then delete the file:
+   `shred -u ~/cds-key.txt`. To rotate, repeat steps 3–4 with the new key;
+   the next run reads it.
+5. **Turn it on:** `era5l_enabled = true` in the prod tfvars, then `plan`
+   and, with the operator's go-ahead, `apply`. The next 02:40 UTC run
+   submits the newest complete month; the one after collects it.
+6. **Confirm on the first live collection that the CDS file carries
+   `expver`.** The collected month's result (the run's log line and the
+   `collected` entry) has `"preliminary": true` or `false` when it does,
+   and `null` when it doesn't; `ingest-state/era5l/requests.json` shows the
+   same as the month's `preliminary`. The synthetic fixture writes `expver`,
+   but the job has only been checked against it. With `null` the copy
+   can't tell ERA5-Land-T from ERA5-Land, so it re-requests the month every
+   30 days until 180 days after its end (`RECHECK_UNKNOWN_CAP_DAYS`,
+   ingest/README.md § The ERA5-Land job) instead of stopping once a read
+   says consolidated: harmless but more requests, so record what you saw
+   in issue #604, and if it is `null`, find where the CDS now puts the
+   phase.
+
+**Backfill** (`nsf-ncar-era5` on AWS holds ERA5, not ERA5-Land, so it goes
+through the CDS too). Each invocation marks one month wanted and submits it
+while fewer than four requests are queued; every later run, the daily one
+included, keeps submitting wanted months, newest first, as slots free. So
+mark the months once, one synchronous invocation at a time (never async: a
+run that finds another holding the lease fails), e.g. 1981 to 2025 to match
+CHIRPS:
+`for y in $(seq 1981 2025); do for m in 01 02 03 04 05 06 07 08 09 10 11 12; do aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload "{\"product\":\"era5l\",\"mode\":\"backfill\",\"month\":\"$y-$m\"}" --cli-read-timeout 900 --region af-south-1 --profile water-management /dev/null >/dev/null || echo "$y-$m failed"; done; done`
+The daily run alone then drains about four months a day (~550 months in
+four to five months); invoking any backfill month again during the day
+collects and refills sooner. The array grows from 1950 whatever range you
+pick (unwritten chunks cost nothing).
+
+**When it alarms** (`mirror-lag-era5l`, past `era5l_lag_alarm_days`, default
+50; a healthy copy runs 32–45 days behind, since a month's last day comes
+with the next month's request): read the `mirror-ingest` log group's
+`era5l:` lines and `ingest-state/era5l/requests.json` in the mirror bucket
+(`aws s3 cp s3://<mirror bucket>/ingest-state/era5l/requests.json -`).
+- **Refused** (`StopRun`, HTTP 401 or 403): 401 is a wrong or expired key
+  (step 4 again); 403 is the licence not accepted (step 2) or the account
+  blocked (write to ECMWF support). The run writes
+  `ingest-state/era5l/refused.json`, and no run calls the CDS again that UTC
+  day; the next day's run tries again, or delete that object once fixed.
+- **`RequestsFailed`**: a month's request failed five times (backing off 1,
+  2, 4 and 8 days). Its entry's `lastError` says how it ended; once the cause
+  is fixed, delete that month's entry from `requests.json` (download, edit,
+  upload) and the next run submits it again.
+
+**Attribution:** ERA5-Land is CC BY 4.0, and Copernicus's attribution must
+show wherever its values do (docs/data-sources.md § era5-land has the text).
+
+**Cost:** cents a month: the secret (~$0.40), a few seconds of Lambda a day,
+a month's download of a few MB, and the array's chunks (about 1–2 GB in S3 from 1981, under $0.05).
 
 ## DWS gauge records
 

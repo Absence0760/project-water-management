@@ -86,9 +86,9 @@ Every job that fetches from an upstream:
 | [quaternaries](#quaternaries) | Quaternary outlines and WR2012 values | blocked | `www.dws.gov.za`, WRC (the operator's download) | – | `pnpm import:quaternaries` |
 | [dam-register](#dam-register) | DWS List of Registered Dams and its overlay | blocked | `www.dws.gov.za` | – | `pnpm import:dam-register` |
 | [gauge-stations](#gauge-stations) | DWS hydrological station catalogue | blocked | `www.dws.gov.za` | – | `pnpm import:gauge-stations` |
-| [era5-land](#era5-land) | ERA5-Land daily precipitation | planned R4-A | `cds.climate.copernicus.eu`, `s3://nsf-ncar-era5` (backfill) | – | R4 `ingest/era5land.py` |
-| [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS / AIFS-ENS precipitation | planned R4-C | `s3://ecmwf-forecasts` (eu-central-1) | `ecmwf_ens` (planned) | R4 `ingest/ecmwf.py` |
-| [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | planned R4-D | NASA GES DISC (Earthdata) | – | R4 `ingest/imerg.py` |
+| [era5-land](#era5-land) | ERA5-Land daily precipitation | built R4-A; off until `era5l_enabled` (the operator's CDS key first) | `cds.climate.copernicus.eu` (backfill too) | – | `ingest/era5land.py`, `infra/era5land.tf` |
+| [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS 15-day precipitation (0.1°) | built (R4-C); the copy's job off in production until `ecmwf_enabled` | `ecmwf-forecasts.s3.eu-central-1.amazonaws.com` | `ecmwf_ens` | `ingest/ecmwf.py` (the copy), `ingest/ecmwf_qm_fit.py` (the fit), `backend/src/feeds/fromMirrorEcmwf.ts` (feeds read it) |
+| [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | the copy built (R4-D), off until `imerg_enabled` (needs the operator's Earthdata token) | `cmr.earthdata.nasa.gov`, `opendap.earthdata.nasa.gov` | – | `ingest/imerg.py`, `infra/imerg.tf` |
 | [deafrica-waterbodies](#deafrica-waterbodies) | DE Africa Waterbodies area series | planned R5-A | `s3://deafrica-services` (af-south-1) | – | R5 |
 | [deafrica-wofs](#deafrica-wofs) | DE Africa WOfS inside our own outlines | planned R5-C | `s3://deafrica-services`, `explorer.digitalearth.africa` | – | R5 |
 | [sanlc](#sanlc) | SANLC orchard and vine classes | planned R5-D (gated on its terms; blocked today) | `egis.environment.gov.za` | – | R5 |
@@ -243,6 +243,110 @@ in `infra/feeds.tf`):
   `backend/src/ingest/dws.ts`, `backend/src/feeds/fromGaugeRecord.ts`,
   `backend/scripts/import-dws.ts`.
 
+## The copy's recent days
+
+### imerg
+
+- **Source:** NASA GPM IMERG Late Run, daily, version 07
+  (`GPM_3IMERGDL`, DOI 10.5067/GPM/IMERGDL/DAY/07), 0.1° grid, about 14 h
+  after the day ends. One NetCDF-4 file a day,
+  `3B-DAY-L.MS.MRG.3IMERG.YYYYMMDD-S000000-E235959.V07C.nc4`; variable
+  `precipitation(time, lon, lat)`, the day's mean rate in mm/day (V06
+  called it `precipitationCal`). V07 Final stopped at 2025-09-30 and V08
+  is due "fall 2026" ([Earthdata](https://www.earthdata.nasa.gov/data/alerts-outages/transition-gpm-imerg-products-v08));
+  Early and Late stay in V07 "hybrid" mode until at least winter 2026. The
+  copy records each day's collection version (`V07`, later `V08`) in its
+  manifest, because bias correction is fitted per version (D16).
+- **Hosts:** `cmr.earthdata.nasa.gov` (the granule search, no sign-in) and
+  `opendap.earthdata.nasa.gov` (Hyrax OPeNDAP in AWS us-west-2, behind an
+  Earthdata Login bearer token). The whole file is also on
+  `data.gesdisc.earthdata.nasa.gov`; we don't fetch it.
+- **Licence:** NASA's data use guidance says data from a NASA-led mission is
+  CC0 unless marked otherwise
+  ([Earthdata](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance),
+  read 2026-10-27); the AWS Open Data registry lists the collection as CC BY
+  4.0 ([registry](https://registry.opendata.aws/nasa-gpm3imergdl/), read
+  2026-10-27). Commercial use allowed either way. We attribute as CC BY
+  asks, which also meets NASA's "NASA should be acknowledged as the
+  source" and its request to cite, without implying NASA's endorsement.
+- **Attribution:** "Huffman, G.J., E.F. Stocker, D.T. Bolvin, E.J. Nelkin,
+  J. Tan (2024), GPM IMERG Late Precipitation L3 1 day 0.1 degree x 0.1
+  degree V07, edited by Andrey Savtchenko, Greenbelt, MD, Goddard Earth
+  Sciences Data and Information Services Center (GES DISC), accessed
+  [date], doi:10.5067/GPM/IMERGDL/DAY/07." (CMR's collection citation,
+  release date 2024-06-07.) Series are labelled `IMERG Late` with the
+  day's version, and the citation is given once per version the values
+  carry; where it shows: as ERA5-Land's, [below](#era5-land-r4-a).
+- **Contact:** GES DISC user services (the help link on disc.gsfc.nasa.gov)
+  and the Earthdata forum. Needs an Earthdata Login account and a user token
+  (operator step, docs/deployment.md § IMERG Late).
+- **Access pattern:** the mirror-ingest Lambda, 4 times a day
+  (`{"product":"imerg_late","mode":"recent"}`): one CMR search for the
+  last 10 days, then for each day not held from the same granule one
+  OPeNDAP DAP4 request returning only region D1 (310 × 275 cells, about
+  0.2 MB, instead of the 26 MB global file), newest day first, into Zarr
+  `imerg_late` (0.1°, daily layout). 30 days kept, then dropped. Which days
+  the engine takes from IMERG (only where CHIRPS has no preliminary value)
+  is decided later, in the engine, not by the copy.
+- **Limits we keep to:** about 1 request a second, at most 11 requests a
+  run and usually 1 or 2 (the search, plus the day that landed), about 10
+  a day. A 403 or 401 stops the run with no retry, alarms, and writes a
+  same-day marker (`ingest-state/imerg_late/refused.json`) so the day's
+  later runs ask nothing. GES DISC publishes no rate limit for OPeNDAP.
+- **Fallback:** CHIRPS preliminary, then finals, cover every day within a
+  week or so; GSMaP Gauge-NRT (commercial use allowed with credit, FTP
+  after registration) is the second near-real-time option if IMERG stops.
+- **Owner:** the operator; code `ingest/imerg.py`, `infra/imerg.tf`.
+
+### ecmwf-ens
+
+- **Source:** ECMWF open data, the IFS ensemble (ENS) 00 UTC run, total
+  precipitation `tp`, at 0.1° (published from 2026-10-20, about two hours
+  after the 0.25° files; the 00 UTC run's 0.1° files appeared at 09:40 UTC
+  on 2026-10-26), 50 perturbed members, steps 24 to 360 h. AIFS-ENS is not
+  used: its open data is 0.25° only.
+- **Host:** `ecmwf-forecasts.s3.eu-central-1.amazonaws.com`, the AWS
+  mirror of data.ecmwf.int (the bulk path ECMWF documents), anonymous. ECMWF
+  keeps only the last ~12 runs, so what we keep, we copy.
+- **Licence and attribution:** CC BY 4.0 and the ECMWF Terms of Use, read on
+  ECMWF's open data page 2026-10-27: commercial use and redistribution
+  allowed with attribution. Credit "ECMWF open data, CC BY 4.0" wherever its
+  values show: the feed's line in Data → Data feeds
+  (`frontend/src/lib/components/feeds/feeds.ts` calibrationNote), and from
+  R4-E a forecast run whose every forecast day an `ecmwf_ens` feed wrote
+  records `forecastRainSource: 'ecmwf_ens'` (backend `runs/execute.ts`), so
+  its report, summary CSV, daily CSV, workbook and pack credit it: as
+  ERA5-Land's, [below](#era5-land-r4-a).
+- **Contact:** ECMWF support (Support Portal); no account needed.
+- **Access pattern:** the copy only (`ingest/ecmwf.py`, the Python ingest
+  Lambda, `infra/ecmwf.tf`): each step's `.index` (JSON lines with each
+  field's byte offset and length), then one range request per member for its
+  `tp` field, never the 3–4 GB step file. Decoded with eccodes, the region
+  cut out on our 0.1° grid, de-accumulated to daily mm, and stored as the
+  ensemble mean and p10/p50/p90 in Zarr `ecmwf/<issue>`, listed in
+  `ecmwf/index.json`; the newest 7 issues kept whole, older ones archived as
+  their mean for the quantile-mapping fit (`ingest/ecmwf_qm_fit.py`, the
+  operator's). Feeds (`ecmwf_ens`) read only the copy: there is no per-feed
+  path to ECMWF.
+- **Limits we keep to:** 1 + 50 requests a step, 765 an issue (~1.1 GB), at
+  most one a second, one run at a time (a lease), spread over the runs of
+  one morning (every 20 minutes from 10:00 to 13:40 UTC; a run that finds
+  the day's issue held asks nothing); a 403 stops the run, never retried,
+  and a same-day marker (`ecmwf/refused.json`) stops the day's later runs.
+- **Fallback:** CHIRPS-GEFS; then a day-old issue (a feed reads today's,
+  else yesterday's).
+- **Limitation of the calibration:** the quantile-mapping fit
+  (`ingest/ecmwf_qm_fit.py`) pairs the ensemble mean with observed rain per
+  0.1° cell, but the feed applies it to a catchment's area-weighted mean
+  (`backend/src/feeds/fromMirrorEcmwf.ts`), whose distribution differs:
+  averaging over cells gives more small-rain days and fewer extremes, so a
+  per-cell mapping can push an area mean's tails too far and leave its
+  drizzle under-corrected. The durable fix is to fit on area means for the
+  feed's region, tracked in [followups.md § The rain data copy](./followups.md#the-rain-data-copy-issue-604),
+  to be done when the first fit is run, once the archive holds a season.
+- **Owner:** the operator; code `ingest/ecmwf.py`, `ingest/ecmwf_qm_fit.py`,
+  `backend/src/ingest/ecmwf.ts`, `backend/src/feeds/fromMirrorEcmwf.ts`.
+
 ## Planned: the copy's cross-check
 
 ### dynamical
@@ -306,13 +410,64 @@ starts.
 
 | Id | Licence | Attribution | Contact | Access pattern | Limits we keep to | Fallback | Owner |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| <a id="era5-land"></a>era5-land | CC BY 4.0 (Copernicus, since 2025-07-02) | Copernicus's attribution text wherever its values show (UI, reports, exports) | ECMWF support (CDS); needs a CDS account and API key (operator step) | CDS API with area subsetting, monthly into Zarr `era5l` (0.1°); a request is submitted on one run and collected on a later one (queues of hours) | one request in flight; never waits inside a Lambda | AWS `nsf-ncar-era5` for backfill (3–4 months behind) | operator; R4-A |
-| <a id="ecmwf-ens"></a>ecmwf-ens | CC BY 4.0 (ECMWF open data) | ECMWF, CC BY 4.0 | ECMWF support | `tp` for the region from each 00 UTC ENS/AIFS-ENS run, anonymous S3, archived as `ecmwf/<issue>` (ECMWF keeps only ~12 runs) | one run a day; subset at the source before copying to af-south-1 | CHIRPS-GEFS | operator; R4-C |
-| <a id="imerg"></a>imerg | CC BY 4.0 | NASA GPM IMERG, with its version | NASA GES DISC / Earthdata forum; needs an Earthdata login and token (operator step) | `GPM_3IMERGDL` daily, region subset, product `imerg_late`, only days with no CHIRPS preliminary value | Earthdata allows about 20–60 requests a minute; we keep to 1 a second | GSMaP Gauge-NRT (commercial use allowed with credit; FTP after registration) | operator; R4-D |
+| <a id="era5-land"></a>era5-land | CC BY 4.0 ("CC-BY licence" on the dataset page, read 2026-10-27; Copernicus, since 2025-07-02); the licence is accepted once on the account (operator step) | wherever its values show (UI, reports, exports): "Contains modified Copernicus Climate Change Service information [year]. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains." and the dataset citation, [below](#era5-land-r4-a) | ECMWF support (CDS); a CDS account and API key in `water-management/ingest/cds-key` (operator step) | CDS API (`reanalysis-era5-land`, `total_precipitation` at 00 UTC, area D1), one request a month into Zarr `era5l` (finals, 0.1°); submitted on one run, collected on a later one | at most one request per month and 4 queued in all; one API call a second; a failed request backs off 1–8 days and stops after 5; a 401/403 stops the run for the UTC day; never waits inside a Lambda | the CDS for the backfill too (`nsf-ncar-era5` holds ERA5, not ERA5-Land, checked 2026-10-27); NCAR GDEX d633008 has ERA5-Land (not used) | operator; `ingest/era5land.py`, `infra/era5land.tf` |
 | <a id="deafrica-waterbodies"></a>deafrica-waterbodies | CC BY 4.0 | Digital Earth Africa | Digital Earth Africa | weekly read of the Waterbodies area series for our traced dams into `dam_observation`; same region as the app, unsigned | weekly; only the waterbodies our dams overlap | [deafrica-wofs](#deafrica-wofs) | operator; R5-A |
 | <a id="deafrica-wofs"></a>deafrica-wofs | CC BY 4.0 | Digital Earth Africa | Digital Earth Africa | WOfS scenes from the STAC catalogue, summed inside our own dam outlines | only scenes over our dams | none (Sentinel-1/2 masks are a Round 6 candidate) | operator; R5-C |
 | <a id="sanlc"></a>sanlc | **gated:** fails D-B on the terms we could read (2013/14: no derivatives, no competing products); the 2018–2022 terms on EGIS still to be read (operator step) | "© GEOTERRAIMAGE" with the year, if allowed | DFFE (EGIS) | the operator's download, once allowed | – | WorldCover | operator; R5-D |
 | <a id="agera5"></a>agera5 | CC BY (Copernicus); NASA POWER: no restrictions, CC BY 4.0 on AWS | Copernicus; NASA POWER | ECMWF support; NASA POWER | CDS API, daily FAO-56 reference ET for the region | as era5-land | NASA POWER (REST, usage monitored, or S3) | operator; R5-E |
+
+### ERA5-Land (R4-A)
+
+- **Source:** ERA5-Land hourly data from 1950 to present, ECMWF for the
+  Copernicus Climate Change Service, 0.1° on the CDS; about 5 days behind
+  real time as ERA5-Land-T (preliminary), consolidated about two months
+  later. Product `era5l` in the copy: daily totals in mm, finals layout on
+  the 0.1° grid (ingest/README.md § The ERA5-Land job).
+- **Attribution, quoted exactly** (C3S's "How to acknowledge and cite a
+  Climate Data Store (CDS) catalogue entry", read 2026-10-27; "Contains
+  modified" because the copy remaps and converts it):
+  > Contains modified Copernicus Climate Change Service information [year].
+  > Neither the European Commission nor ECMWF is responsible for any use
+  > that may be made of the Copernicus information or data it contains.
+
+  and the dataset citation: "Muñoz Sabater, J. (2019): ERA5-Land hourly
+  data from 1950 to present. Copernicus Climate Change Service (C3S) Climate
+  Data Store (CDS). DOI: 10.24381/cds.e2161bac". `[year]` is the year the
+  data were accessed. The copy's array carries the text in its
+  `attribution` attribute (`era5land.ATTRIBUTION`). It must show wherever
+  ERA5-Land's values do: the Data sources and credits page, a run's rain
+  source, reports and evidence packs, and exports.
+
+  **Where the credits show** (issue #604 R4-E), each from one place, the
+  engine's `packages/engine/src/liability/rainCredits.ts` (`@water-management/engine/credits`, a module with no imports; `copernicusEra5lNotice`,
+  `ERA5L_CITATION`, `imergCitation`, `ECMWF_CREDIT`, `rainCredits`,
+  `runRainCredits`), word for word, with the day the values were read (a
+  run's creation day; today on a live view): the Data sources and credits
+  page (`/data-sources`, `legal/dataCredits.ts`); Data → Rain products side
+  by side and the per-day preview, once a product's values show; Model
+  quality's Rain gaps filled from other products (a run that read them); the
+  run report's Inputs, **Rain data credits** (and an ECMWF forecast's cover
+  line, `FORECAST_RAIN_NOTE`), which the server's report PDF prints; the
+  run's CSVs (`# credit <name>: <text>` lines under the provenance line of
+  the catchment's daily file and of catchment rain's series file, and
+  `Credit:` rows in the summary's Gap-filling products block, `ECMWF` in its
+  forecast block); the workbook's first sheet; and an evidence pack's
+  reproduction bundle README (its series hold the products' values). A run
+  on CHIRPS alone and an uploaded forecast print none of them; a forecast
+  an ECMWF feed wrote only some days of (one edited by hand) still prints
+  ECMWF's (the run's `forecastRainEcmwf`, backend `runs/execute.ts`).
+- **How a day is defined:** the UTC day. ERA5-Land's `tp` accumulates from
+  00 UTC, so the 00 UTC step of D+1 is the whole of day D, stored under D.
+- **Against CHIRPS's day:** CHIRPS v3 splits pentad totals into days with
+  ERA5's (`rnl`) or IMERG's (`sat`) daily fractions, both UTC days, so the
+  same date is the same UTC day in both. But CHIRPS's pentad totals blend in
+  gauges read in the local morning (about 06 UTC), so close to a pentad's
+  edge a storm can sit a day apart in the two. Compare them over a pentad or
+  longer, not day by day.
+- **The grid:** ERA5-Land's points are on x.x0°, the copy's 0.1° cells are
+  centred on x.x5°; each cell is the mean of its four corner points (the
+  area-weighted remap), and a coastal cell the mean of its land corners
+  (ERA5-Land has no values over sea).
 
 ## Candidates for Round 6 and later
 

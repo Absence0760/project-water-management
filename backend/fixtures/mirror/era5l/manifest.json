@@ -1,0 +1,242 @@
+{
+  "product": "era5l",
+  "revision": 1,
+  "region": {
+    "w": 10,
+    "s": -35.5,
+    "e": 41,
+    "n": -8
+  },
+  "grid": {
+    "origin": {
+      "lat": -35.45,
+      "lon": 10.05
+    },
+    "step": 0.1
+  },
+  "years": {
+    "first": 2024,
+    "last": 2025
+  },
+  "finalThrough": "2025-12-30",
+  "prelimThrough": null,
+  "files": [
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-01",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "129e6eae2701ec33c99a8586307a49984fa35e739e0f5412ab6be316b2f10352",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-02",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "447b1f7cf476335e9fdc40701f339c0b1e583c7043cb5f650922524706779958",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-03",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "dda320c38a622a9f3ab500816f8e2716a6424676c5e91e4bdd022722a9d5867e",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-04",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "c971da40ae0f2c2f1900b9a14912045d4603cd734915920ed33c92fea57a84d2",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-05",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "595aebfaa85286421fbf022225440cf9d13efe6c83a3f145e179c761a7244579",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-06",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "5b11d33d58e892b60e7f943a574ed84f1c631efdb5df0931cfdeeadb7d3dc270",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-07",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9bbec9f071016be7f6c128c4314bf8080285c6c36f86e0515e1d34a7e9ec1e1d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-08",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "6863d78eacf49759aedab66f9588620128cd4320531389201854e2f39da9213e",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-09",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "bd8bc1444afd03d2cc2362754406ba3370880789965516f907d6fd59f4e5d39e",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-10",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "088626a534c418e488cb8153c34a9491e7ae6da9a5e9c79905d3d21b09bbd065",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-11",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "56a42417fe6d7277bab1d01a95c2196d5775c51172fcc34040b4dc3018351274",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2024-12",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "8d913b313cca4e5a605e6ef2271ec2b7fd8a4da3bcf7e77421858c9311c222d1",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-01",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "bd85a244d56d87639f6ed6281ab0e6ab1c05080b96774ec81ce3978d543dfb8f",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-02",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "2b753e4bc50de2effcfa2b6979e00e2711e7b45b9632a2f344273c6289678f0f",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-03",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "ed15588133dd48cad837c32f5483c8c524f190770a7310128a074292478f32a0",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-04",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "bb615de450053a95c0040d223ff276756fafe3d6bb618f973326f1b9c80d982e",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-05",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "92422f8b1f3c4e2b4aeb937048b8a35bbd887fa219432f11acab81009c367ed1",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-06",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "ba7b1233e897677f20d097db0124e15457b15921f0d7fb240d5d613c2b325ff6",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-07",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "a5c7d63f8b4120473f04673f3eb5994c07d2be37c6dee0d97dd972271801d19d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-08",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "dda320c38a622a9f3ab500816f8e2716a6424676c5e91e4bdd022722a9d5867e",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-09",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "c971da40ae0f2c2f1900b9a14912045d4603cd734915920ed33c92fea57a84d2",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-10",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "595aebfaa85286421fbf022225440cf9d13efe6c83a3f145e179c761a7244579",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-11",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "5b11d33d58e892b60e7f943a574ed84f1c631efdb5df0931cfdeeadb7d3dc270",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://reanalysis-era5-land/total_precipitation/2025-12",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9bbec9f071016be7f6c128c4314bf8080285c6c36f86e0515e1d34a7e9ec1e1d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    }
+  ],
+  "changes": []
+}

@@ -5759,7 +5759,9 @@ with the table the data needs).
   **Input time series** (`#data-series`), **Series chart** (`#data-chart`,
   with a series picked), **Data feeds** (`#data-feeds`, always), **Gauge vs
   logger agreement** (`#data-agreement`), **Double mass: catchment rain vs
-  CHIRPS** (`#data-double-mass`), **Data checks** (`#data-checks`) and
+  CHIRPS** (`#data-double-mass`), **Rain products side by side**
+  (`#data-gap-rain`, while `settings.gapRain` chooses a product, issue #604),
+  **Data checks** (`#data-checks`) and
   **What the model uses** (`#data-uses`), each only when the page draws it
   (`series/sections.ts`, `dataNavGroups`), in three groups (Series, Checks,
   Reference), named on the bar too. Each link says its panel's heading word
@@ -6020,6 +6022,34 @@ collapsible table of the water-year totals (the charts' text equivalent).
 It needs 10 judged water years; without them the panel is absent. A break
 also shows in Data checks with a **Double mass vs CHIRPS** badge
 ([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
+
+While Model settings → Rain gaps chooses ERA5-Land or IMERG Late
+(`settings.gapRain`, engine ≥ 1.101.0, issue #604 R4-E), a **Rain products
+side by side** panel follows it (`series/GapRainPanel.svelte`, its own chunk,
+data from `GET …/feeds/gap-rain` and `series/gapRain.ts`). It says what fills
+the gaps, with a link to Rain gaps; with more than one CHIRPS feed a **CHIRPS
+feed** picker reads the products over a land unit's own feed instead of the
+outlet's (the one the runs read is marked); then one daily chart, CHIRPS,
+ERA5-Land and IMERG Late (points, its versions in the legend) as each reads,
+before any correction, with 30 days / 1 year / All windows, over the last ten
+years of a longer record (the most days the view reads; the caption names the
+span); then **Double
+mass: catchment rain vs ERA5-Land** (the CHIRPS panel above, generalised:
+`DoubleMassPanel` with `against` and `level` 3) over the whole record both
+hold, not only those ten years: the server computes it with the engine's
+`doubleMass`, as a run checks the product, and sends its water-year totals,
+segments and breaks (the response's `doubleMass`). It is drawn once the
+product has 10 judged water years, else one line saying so (IMERG Late's 30
+days never do); and the credits of what it shows, word for word (Copernicus's notice
+and ERA5-Land's citation, IMERG's citation per version; docs/data-sources.md).
+Nothing held yet says the runs' CHIRPS feed brings them on its next fetch;
+when that feed's latest fetch couldn't fill a product the settings read
+(`fill`, last_meta 254) a warning says so instead, "Couldn’t fill ERA5-Land
+on the last fetch: <why>", or that the copy holds none yet (`gapRain.ts`
+`fillProblems`), above the chart too once some days are held; Data feeds'
+card adds "couldn’t fill ERA5-Land" to the feed's line (`feeds.ts`
+`gapFillNote`). No CHIRPS feed says there are no cells to read them over,
+with a link to Data feeds. A failed load says so with Try again.
 "What the model uses" explains every kind. A **reference gauge (other
 catchment)** series (`flow_reference_m3s`, e.g. imported with
 `--gauge-as-reference`) is badged *Reference only*: it can be charted here as a
@@ -6043,7 +6073,11 @@ column (same label, unit and order as the table above, with its
 `checkSeries`/`seriesRowFlags` quality flags on the value) is a **column
 picker** grouped into *Series* and *How the model used it*: a m³/day column
 for every flow series; **Rain used (model)** and its source (catchment / CHIRPS /
-forecast) after gap-fill, in words beside the value; the **CHIRPS bias factor** for that calendar
+ERA5-Land / IMERG Late with its version / forecast) after gap-fill, in words beside the value (with
+`settings.gapRain`, issue #604 R4-E, the dialog asks for the products a run
+would read, `GET …/feeds/gap-rain`, when it opens, fills a day as a run would,
+and lists the products' credits under the table; a failed load says so with
+Try again and the days run on CHIRPS alone); the **CHIRPS bias factor** for that calendar
 month and the **CHIRPS (corrected)** value (respecting Settings → *CHIRPS bias
 correction*); and **Excluded from calibration**, with its reason, for any day
 inside a Calibration → *Calibration record* exclusion period. A third group, *Each
@@ -6247,7 +6281,15 @@ editors run one now and read the map's proposals, viewers read.
   from the scheduler's own rule (`nextTryNote` in `feeds.ts`), and
   "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
   calendar day, never shifted by the time zone). CHIRPS says how many of the
-  days are preliminary.
+  days are preliminary. An **ECMWF ENS rainfall forecast** feed (`ecmwf_ens`,
+  issue #604 R4-C; picked from the Source list like any other, with the same
+  Area choices as CHIRPS-GEFS, and writing the forecast series) adds its
+  credit and calibration to that line: "ECMWF open data, CC BY 4.0 · not yet
+  calibrated" until the operator's quantile-mapping fit is in the copy, then
+  "· quantile-mapped to our rain (fit of 2027-03-01)" (`calibrationNote` in
+  `feeds.ts`, from the fetch's `last_meta.calibration`). It reads only our
+  copy, so it never fails for ECMWF's sake: a copy with no issue of today or
+  yesterday leaves it waiting.
 - **A version conflict** (issue #40 part c): when the feed's series holds
   another CHIRPS product or version, or an unrecorded one, the card says
   every fetch is refused and why ("The series holds CHIRPS v2.0 and this feed
@@ -6681,8 +6723,8 @@ other sections.
   fieldset's legend where it has one), so heading navigation reaches them:
   under Flow generation its cards (Per unit: Each unit's rainfall station,
   then the Flow share card; Units without a station an `h4` in its legend,
-  issue #553); under Rain gaps its two cards, CHIRPS gap filling and Flagged
-  rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
+  issue #553); under Rain gaps its three cards, Gap-filling product (issue
+  #604), CHIRPS gap filling and Flagged rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
   and rain source periods as `h4`s (issue #521). The four panels that moved
   to Calibration (Flow calibration, Calibration record, Fit the parameters,
   WR2012 check) are an `h3` each there, under its *Set up the fit* part
@@ -6767,7 +6809,21 @@ two.
   as "…, on Calibration" (`SETTINGS_ELSEWHERE`), by their names and their
   fields' words (warm-up, pan coefficient, exclusions, fit automatically,
   quaternary).
-- **Rain gaps** (`#set-rain`, CHIRPS and the rest; issue #521): two cards,
+- **Rain gaps** (`#set-rain`, CHIRPS and the rest; issue #521): first the
+  **Gap-filling product** card (`settings/GapRainFields.svelte`,
+  `settings.gapRain`, engine ≥ 1.101.0, issue #604 R4-E): **Fill blank
+  catchment-rain days from** CHIRPS (the default), *CHIRPS, then ERA5-Land
+  where CHIRPS has none* or *ERA5-Land instead of CHIRPS*, each choice's words
+  saying what it does and why to pick it (ERA5 matched South African gauges
+  best of the open products day by day, most of all in the Western Cape's
+  winter rain), and **Fill the last few days from IMERG Late** (it covers the
+  days before CHIRPS' first values). The reasons are under the explain
+  switch; once a product is chosen a state line says where the products come
+  from and links to Data → Rain products side by side (under a catchment
+  rainfall station: that a run ignores it). Both at their defaults store
+  `null` (`rain.ts` `withGapRain`), so the fold stays one line; a chosen
+  product leads the fold's line and the panel's summary ("Gaps from
+  ERA5-Land, …"). Then two cards,
   **CHIRPS gap filling** (the bias correction, the quantile map and the fit
   period, with **Propose from the double-mass breaks** in the card's head;
   the card is `ChirpsFitPeriodSection.svelte`, the first two coming in as
@@ -8853,7 +8909,7 @@ read it before.
   unit, WR2012; `landOnAnchor`) before landing and focusing it. A link to a
   panel the run doesn't have (`#res-wr2012` on a run without a WR2012
   reference, `#res-gauges`, `#res-forecast`, `#res-runoff`, `#res-unit-rain`,
-  `#res-plausibility`) shows a focused line saying what
+  `#res-gap-rain`, `#res-plausibility`) shows a focused line saying what
   the panel needs, with a link to where it is set (`runs/missingPanel.ts`,
   issue #586): under the run header on Runs & results for `#res-forecast`,
   above Model quality on Calibration for the rest; picking another run removes it. The menu names the same groups. The river's panels (Reserve compliance,
@@ -9439,6 +9495,16 @@ read it before.
   the chart beside the table only where the panel is 44rem wide or more (a
   container query on the panel, so at 1024 px, with the sidebar and the runs
   rail, it stacks under the table)),
+  **Rain gaps filled from other products** for a run whose `settings.gapRain`
+  chose ERA5-Land or IMERG Late (`GapRainRunPanel`, its own chunk,
+  `#res-gap-rain`, from `summary.gapRain`, engine ≥ 1.101.0, issue #604
+  R4-E): the choice and the gap days CHIRPS filled, then a table of each
+  product (and IMERG version) with the days it filled, its rain as read and
+  as used, its pooled factor and its double-mass breaks, then **Which product
+  filled which days** (`summary.gapRain.segments`, the days `rain_source` 5
+  and 6 mark, each IMERG run with its version; the first 8, the rest behind
+  **Show all N runs of days**), and the credits of the products the run read,
+  word for word, read on the run's day,
   **Rain for each unit** for a run with `settings.unitRain` per unit
   (`UnitRainPanel`, its own chunk, `#res-unit-rain`, helpers in
   `runs/unitRain.ts`; shown only when the summary carries
@@ -11406,7 +11472,8 @@ baseline card links to the published run's report (**Report**, beside
   `forecastNote`); it names "(CHIRPS-GEFS, Climate Hazards Center,
   doi:10.15780/G2PH2M)" only when the run's `forecastRainSource` is
   `chirps_gefs` (a CHIRPS-GEFS feed wrote every forecast day), never for an
-  uploaded forecast; a **Read this first** box above the summary sentence
+  uploaded forecast (the Rain data credits still credit ECMWF when any
+  forecast day was an ECMWF feed's, `forecastRainEcmwf`); a **Read this first** box above the summary sentence
   (`report/sections.ts` `readFirst`, the engine's `REPORT_READ_FIRST`): the
   disclaimer's key points with the Disclaimer's section number, then who
   signed the run, "Signed off by <name> (<body> <number>)", or "Not signed

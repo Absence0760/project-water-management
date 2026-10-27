@@ -9,6 +9,7 @@
 // pass for the agreed one. Change the words → bump `version` (a sign-off
 // records the version it was shown).
 
+import { ECMWF_CREDIT } from './rainCredits';
 import { registrationBody } from './registration';
 
 export interface Disclaimer {
@@ -82,19 +83,34 @@ export const DISCLAIMER_DRAFT_NOTE = 'Draft wording, pending the client’s lega
 /**
  * Where a forecast run's forecast rain came from (stored with the run,
  * backend runs/execute.ts): 'chirps_gefs' when every forecast day was written
- * by a CHIRPS-GEFS data feed, 'other' otherwise (an uploaded forecast, or
- * days a person wrote over).
+ * by a CHIRPS-GEFS data feed, 'ecmwf_ens' (issue #604 R4-E) when an ECMWF ENS
+ * feed wrote every one, 'other' otherwise (an uploaded forecast, a mix, or
+ * days a person wrote over). Runs before R4-E recorded an ECMWF forecast as
+ * 'other'.
  */
-export type ForecastRainSource = 'chirps_gefs' | 'other';
+export type ForecastRainSource = 'chirps_gefs' | 'ecmwf_ens' | 'other';
+/** The values ForecastRainSource takes, for checking a stored one. */
+export const FORECAST_RAIN_SOURCES: readonly ForecastRainSource[] = ['chirps_gefs', 'ecmwf_ens', 'other'];
+/** A stored forecast rain source, or undefined for anything else (absent, null, an unknown string). */
+export const forecastRainSourceOf = (v: unknown): ForecastRainSource | undefined => (FORECAST_RAIN_SOURCES as readonly unknown[]).includes(v) ? (v as ForecastRainSource) : undefined;
 
 /**
  * The line a report of a forecast run prints (WP-2.12): from `from` (its
  * first forecast day, YYYY-MM-DD as the report prints dates) the run uses
- * forecast rain, not recorded rain. It credits CHIRPS-GEFS only when the
- * run recorded that source; any other or unknown source gets the plain line,
- * so an uploaded forecast is never attributed to it.
+ * forecast rain, not recorded rain. It credits CHIRPS-GEFS, or ECMWF's ENS
+ * with the CC BY 4.0 credit ECMWF asks for (docs/data-sources.md §
+ * ecmwf-ens), only when the run recorded that source; any other or unknown
+ * source gets the plain line, so an uploaded forecast is never attributed.
  */
 export function FORECAST_RAIN_NOTE(from: string, source?: ForecastRainSource | null): string {
-	const what = source === 'chirps_gefs' ? 'forecast rain (CHIRPS-GEFS, Climate Hazards Center, doi:10.15780/G2PH2M)' : 'forecast rain';
+	const what =
+		source === 'chirps_gefs'
+			? 'forecast rain (CHIRPS-GEFS, Climate Hazards Center, doi:10.15780/G2PH2M)'
+			: source === 'ecmwf_ens'
+				? `forecast rain (the ECMWF ENS forecast; ${ECMWF_CREDIT})`
+				: 'forecast rain';
 	return `From ${from}, this run uses ${what}, not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.`;
 }
+
+// The rain data credits (issue #604 R4-E) live in ./rainCredits.ts, a module with no imports, so a page that shows only them (the public Data sources page, the map's attribution) loads nothing else: engine `@water-management/engine/credits`.
+export { copernicusEra5lNotice, type CreditedRainProduct, ECMWF_CREDIT, ERA5L_CITATION, imergCitation, type RainCredit, rainCredits, runRainCredits } from './rainCredits';

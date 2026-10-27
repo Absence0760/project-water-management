@@ -31,6 +31,10 @@
 // issue #604 D3). So does a CHIRPS-GEFS fetch: it reads the newest issue the
 // daily GEFS pass copied (feeds/fromMirrorGefs.ts, R3-A).
 //
+// A CHIRPS fetch from the copy then fills the gap-filling products its
+// project's runs read over the feed's cells, ERA5-Land and IMERG Late, when
+// settings.gapRain asks for them (feeds/gapRainFill.ts, issue #604 R4-B).
+//
 // With DWS_SOURCE=store (feeds/fromGaugeRecord.ts dwsSource; the default in
 // dev, CI and e2e) a DWS fetch reads its station's days from our gauge record
 // store (247_gauge_record) the same way, in this job (issue #604 R3-B).
@@ -51,7 +55,9 @@ import { withUser } from '../../db/tx.js';
 import { feedHttp, LiveFeedRequestRefusedError } from '../../feeds/http.js';
 import { JobError } from '../errors.js';
 import { fetchFromMirror } from '../../feeds/fromMirror.js';
+import { fillGapProducts } from '../../feeds/gapRainFill.js';
 import { fetchGefsFromMirror } from '../../feeds/fromMirrorGefs.js';
+import { fetchEcmwfFromMirror } from '../../feeds/fromMirrorEcmwf.js';
 import { ingestResult } from '../../feeds/ingest.js';
 import { chirpsSource } from '../../mirror/source.js';
 import { dwsSource, fetchFromGaugeRecord } from '../../feeds/fromGaugeRecord.js';
@@ -78,7 +84,7 @@ export const fetchGroup = (source: FeedSource): 'chc' | 'dws' => (source === 'dw
 export const feedFetchHandler = defineHandler({
 	role: 'editor',
 	payload: FeedFetchPayload,
-	async run({ db, job, payload }) {
+	async run({ db, job, payload, deadline }) {
 		const feed = await feedForJob(db, job.projectId, payload.feedId);
 		// Removed or switched off since it was queued: nothing to do.
 		if (!feed || !feed.enabled) return;
@@ -87,11 +93,19 @@ export const feedFetchHandler = defineHandler({
 		const request: FetchRequest = { source: feed.source, config: feed.config, ...window, today };
 		if (feed.source === 'chirps' && chirpsSource() === 'mirror') {
 			await fetchFromMirror(db, feed, window, { jobId: job.id, today });
+			// The gap-filling products its project's runs read over this feed's cells (issue #604 R4-B, feeds/gapRainFill.ts):
+			// each product's outcome is recorded on the feed (last_meta, 254), and the fill stops in time for this job's deadline.
+			await fillGapProducts(db, feed, { jobId: job.id, today, deadline: deadline ?? null });
 			return;
 		}
 		// CHIRPS-GEFS from the copy too (issue #604 R3-A): the newest issue the daily GEFS pass copied, read in this job.
 		if (feed.source === 'chirps_gefs' && chirpsSource() === 'mirror') {
 			await fetchGefsFromMirror(db, feed, window, { jobId: job.id, today });
+			return;
+		}
+		// ECMWF ENS (issue #604 R4-C): only ever from the copy, whatever CHIRPS_SOURCE says (there is no per-feed path).
+		if (feed.source === 'ecmwf_ens') {
+			await fetchEcmwfFromMirror(db, feed, window, { jobId: job.id, today });
 			return;
 		}
 		// DWS from our gauge record store (issue #604 R3-B).

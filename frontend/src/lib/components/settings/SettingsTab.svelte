@@ -18,7 +18,7 @@
 	const loadEwrSplit = () => loadSections().then((m) => ({ default: m.EwrSplitFields }));
 	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
-	// Rain gaps' two cards, CHIRPS gap filling and Flagged rain (issue #521), inside the fold that is one closed
+	// Rain gaps' three cards, Gap-filling product (issue #604), CHIRPS gap filling and Flagged rain (issue #521), inside the fold that is one closed
 	// line at the defaults (most projects): out of the tab's chunk for the same reason, with its three sections.
 	const loadRainGaps = () => loadSections().then((m) => ({ default: m }));
 </script>
@@ -247,7 +247,7 @@
 		const m = s.fitRecord ? fitFlowMethod(s.fitRecord) : null;
 		return m !== null && m !== fitMethodOf(s.unitRain) ? m : null;
 	});
-	// Rain gaps at its defaults: one line that opens its two cards (rain.ts).
+	// Rain gaps at its defaults: one line that opens its three cards (rain.ts).
 	const rainAtDefaults = $derived(rainGapsAtDefaults(s));
 	// Each panel's line of what it is set to now (summaries.ts).
 	const summaries = $derived(
@@ -359,14 +359,16 @@
 			<NotesDrawer projectId={project.id} target={settingTarget('rain')} />
 		</div>
 		<p class="summary" data-testid="summary-rain">{summaries['set-rain']}</p>
-		<p class="hint explain">Which days CHIRPS fills in the catchment rain, and how, and periods taken from another gauge.</p>
-		<!-- Two cards, CHIRPS gap filling and Flagged rain, each list with its add actions in its own head row; at the
-		     defaults (most projects) both are one line that opens them (ui-playbook.md § 2, "Settings at their defaults
+		<p class="hint explain">Which product fills blank days in the catchment rain (CHIRPS, or ERA5-Land and IMERG Late), how CHIRPS is corrected, and periods taken from another gauge.</p>
+		<!-- Three cards, Gap-filling product, CHIRPS gap filling and Flagged rain, the last two's lists each with its add actions in its own head row; at the
+		     defaults (most projects) all are one line that opens them (ui-playbook.md § 2, "Settings at their defaults
 		     are one line"). Always mounted (once its chunk loads, loadRainGaps), like the other sections that feed the Save blocker: a list left invalid
 		     after turning bias correction off must stay in the page, where the fold's line says it needs fixing. -->
 		<Fold {readonly} testid="rain-defaults" name={rainAtDefaults ? 'All defaults:' : 'Now:'} line={rainGapsLine(s)} atDefaults={rainAtDefaults} body="stack" spaced>
 			<Lazy load={loadRainGaps}>
 				{#snippet children(R)}
+			<!-- The gap-filling product (settings.gapRain, engine ≥ 1.101.0, issue #604): first, as it decides what the CHIRPS card corrects. -->
+			<R.GapRainFields bind:value={s.gapRain} {readonly} station={!!s.rainStations?.catchment} />
 			<R.ChirpsFitPeriodSection
 				bind:value={s.chirpsFitPeriod}
 				bind:error={draft.errors.fitPeriod}

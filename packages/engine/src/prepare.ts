@@ -43,6 +43,7 @@ import {
 	type ZeroRainMask
 } from './rain';
 import { apanDailyInfo, type ApanDailyInfo } from './evaporation/apanDaily';
+import { applyGapRain, fitGapProducts, gapRainKeys, type GapRainFits, type GapRainRun } from './gapRain';
 import { doubleMass as doubleMassOf, doubleMassRunWarning, type DoubleMass } from './doublemass';
 import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
@@ -62,6 +63,7 @@ import {
 	resolveArealRain,
 	resolveUnitRain,
 	resolveChirpsQuantileMap,
+	resolveGapRain,
 	AREAL_RAIN_FITTED_WARNING,
 	PE_SOURCE_MAX,
 	PAN_COEFFICIENT_TYPICAL_MAX,
@@ -118,6 +120,12 @@ export interface PreparedFits {
 	 * without settings.rainStations.
 	 */
 	stationFactors?: Record<string, number[]>;
+	/**
+	 * The gap-filling products' fits by input key (engine ≥ 1.101.0, ./gapRain.ts,
+	 * settings.gapRain): ERA5-Land's and each IMERG version's. Absent on a
+	 * snapshot from before, and with CHIRPS alone.
+	 */
+	gapRain?: GapRainFits;
 }
 
 export interface PrepareOptions {
@@ -178,6 +186,13 @@ export interface PreparedRun {
 	/** How the daily A-pan series is used (engine ≥ 0.38.0, issue #45; null without one). */
 	apanDaily: ApanDailyInfo | null;
 	/**
+	 * settings.gapRain as applied (engine ≥ 1.101.0, ./gapRain.ts): which
+	 * product filled each blank day of the catchment rain, the products' fits
+	 * and checks. Null with CHIRPS alone (the default), so such a run is as
+	 * before; `aligned('rain_chirps_mm')` is the whole gap fill either way.
+	 */
+	gapRain: GapRainRun | null;
+	/**
 	 * The observed flow records settings.flowGapFill fills (engine ≥ 1.23.0,
 	 * ./flowGapFill.ts), each aligned to the run: null when no record is
 	 * filled. `aligned` returns the filled record only when
@@ -230,6 +245,13 @@ export function prepareRun(input: ModelInput, options: PrepareOptions = {}): Pre
 		first = Math.min(first, d0);
 		last = Math.max(last, d0 + s.values.length - 1);
 	}
+	// The gap-filling products extend its end, never its start (engine ≥ 1.101.0, settings.gapRain): IMERG Late's recent
+	// days reach past CHIRPS', while a product record longer than the rain's (ERA5-Land from 1950) doesn't pull the start back.
+	if (settings.gapRain && !plan && Number.isFinite(first))
+		for (const k of gapRainKeys(settings.gapRain, series)) {
+			const s = (series as Record<string, DailySeries | undefined>)[k.key];
+			if (s && s.values.length) last = Math.max(last, toEpochDay(s.startDate) + s.values.length - 1);
+		}
 	// A rain-source period's series drives the run too, inside its period (engine ≥ 0.30.0).
 	for (const p of work.settings.rainSource) {
 		const s = series[p.series];
@@ -385,19 +407,50 @@ function alignToWindow(
 	// settings.dataQuality (engine ≥ 1.20.0): its zero-run and low-vs-CHIRPS limits decide which rain is suspect, everywhere below.
 	const dq = settings.dataQuality;
 	const doubleMass = doubleMassOf(series, settings.zeroRainRuns, dq);
-	const { chirpsCorrection, chirpsFit, zeroRain, catchment, accumulation, rsFit, rainSource } = checkedRain(settings, series, start, days, options);
+	const { chirpsCorrection, chirpsFit, zeroRain, catchment, accumulation, rsFit, rainSource, gapFits, gapFitsCaptured } = checkedRain(
+		plan && settings.gapRain ? { ...settings, gapRain: null } : settings,
+		series,
+		start,
+		days,
+		options
+	);
+	// settings.gapRain (engine ≥ 1.101.0, ./gapRain.ts): not under a catchment station, whose pairing fills its own gaps (§2.4i).
+	const gap = settings.gapRain && !plan ? settings.gapRain : null;
+	if (settings.gapRain && plan) warnings.push('gap-filling product ignored: the catchment runs on a rainfall station, whose pairing fills its gaps with CHIRPS (Model settings → Rain gaps)');
 	// CHIRPS has no negative rain: a value below 0 is a no-data code (the product's −9999), missing as the factor
 	// fit and the accumulation check already read it, so it neither blocks the forecast fallback nor runs as rain
 	// (engine ≥ 1.69.0, §2.4b). The series checks already warn about each negative value.
 	const chirpsClean = alignSeries(series.rain_chirps_mm, start, days).map((v) => (v !== null && !(v >= 0) ? null : v));
 	const chirpsRaw = chirpsClean.slice();
 	if (rainSource) for (let t = 0; t < days; t++) if (rainSource.blockChirps[t]) chirpsRaw[t] = null;
+	// ERA5-Land in CHIRPS' place: CHIRPS fills no gap (its fit is still reported, against the same catchment rain).
+	if (gap?.product === 'era5l') chirpsRaw.fill(null);
 	const chirpsCorrected = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start, series.rain_chirps_mm) : null;
 	// The catchment's station (engine ≥ 1.91.0, §2.4i): its days × the MAP ratio are the catchment rain, and the CHIRPS
 	// × its pairing's factors fills the others (null where it can't, so the forecast does).
 	const station = plan ? catchmentStationForcing(plan, start, days, chirpsClean, alignSeries(series.rain_forecast_mm, start, days)) : null;
 	if (station) for (let t = 0; t < days; t++) catchment[t] = station.catchment[t]!;
-	const chirpsUsed = station ? station.chirps : chirpsCorrected;
+	const chirpsBase = station ? station.chirps : chirpsCorrected;
+	// The other products write into CHIRPS' blank gap days, so every reader of the gap fill (rain used, the zero-run fill,
+	// the rain-source fallback, the accumulations) reads the whole fill through aligned('rain_chirps_mm').
+	const gapRain = gap
+		? applyGapRain({
+				gap,
+				fits: gapFits,
+				series,
+				base: chirpsBase ?? (gap.product === 'era5l' ? chirpsRaw : chirpsClean),
+				catchment,
+				block: rainSource?.blockChirps ?? null,
+				month,
+				start,
+				days,
+				zeroRain: settings.zeroRainRuns,
+				dq,
+				align: alignSeries,
+				warnings
+			})
+		: null;
+	const chirpsUsed = gapRain ? gapRain.values : chirpsBase;
 	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): read in place of the record only when settings.qualityFlags.infilled scores infilled days.
 	const flowFill = flowFillsFor(settings, series, start, days, warnings, options.resumedFill);
 	// One control for scoring filled days (engine ≥ 1.23.0): the quality flags' infilled treatment.
@@ -418,7 +471,8 @@ function alignToWindow(
 	if (qmNote) warnings.push(qmNote);
 	warnings.push(...keepDryDoubtWarnings(chirpsCorrection));
 	// A double-mass break: does CHIRPS fill days in an era whose ratio differs from the fit's?
-	const dmNote = doubleMassRunWarning(doubleMass, chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), start);
+	// Under ERA5-Land in its place (engine ≥ 1.101.0) CHIRPS fills no day, so its break warns of none; ERA5-Land's own check warns.
+	const dmNote = doubleMassRunWarning(doubleMass, chirpsCorrection, catchment, gap?.product === 'era5l' ? chirpsRaw : alignSeries(series.rain_chirps_mm, start, days), start);
 	if (dmNote) warnings.push(dmNote);
 	if (zeroRain) {
 		const chirps = aligned('rain_chirps_mm');
@@ -426,7 +480,7 @@ function alignToWindow(
 		finishZeroRainInfill(zeroRain, (t) => chirps[t] ?? forecast[t] ?? null);
 		warnings.push(...zeroRainWarnings(zeroRain.infill));
 	}
-	const rainSourceColumn = rainSource ? finishRainSource(rainSource, catchment, aligned('rain_chirps_mm'), aligned('rain_forecast_mm'), start) : null;
+	const rainSourceColumn = rainSource ? finishRainSource(rainSource, catchment, aligned('rain_chirps_mm'), aligned('rain_forecast_mm'), start, gapRain?.code) : null;
 	if (rainSource) warnings.push(...rainSourcePeriodWarnings(rainSource.info));
 	if (accumulation) {
 		// What CHIRPS (then forecast) put on a reading set aside after a blank outage (engine ≥ 1.70.0, §2.4d).
@@ -468,8 +522,9 @@ function alignToWindow(
 		rainSource: rainSource ? { info: rainSource.info, column: rainSourceColumn! } : null,
 		apanDaily,
 		flowFill,
+		gapRain,
 		stationForcing: station?.forcing ?? null,
-		...(options.captureFits ? { fits: { chirpsCorrection: chirpsFit, rainSourceFactors: rsFit } } : {})
+		...(options.captureFits ? { fits: { chirpsCorrection: chirpsFit, rainSourceFactors: rsFit, ...(gapFitsCaptured ? { gapRain: gapFitsCaptured } : {}) } } : {})
 	};
 }
 
@@ -483,6 +538,10 @@ export interface CheckedRain {
 	accumulation: AccumulationRun | null;
 	rsFit: PreparedFits['rainSourceFactors'];
 	rainSource: ReturnType<typeof applyRainSource> | null;
+	/** settings.gapRain's product fits (engine ≥ 1.101.0); empty with CHIRPS alone. */
+	gapFits: GapRainFits;
+	/** Their copy before any run counts, with PrepareOptions.captureFits and settings.gapRain; else null. */
+	gapFitsCaptured: GapRainFits | null;
 }
 
 /**
@@ -528,7 +587,12 @@ export function checkedRain(settings: ProjectSettings, series: ModelInput['serie
 	}
 	const rsFit = options.captureFits ? rsKeys.map((key, k) => ({ key, factors: clonePlain(rsFactors[k]!) })) : [];
 	const rainSource = settings.rainSource.length ? applyRainSource(series, settings.rainSource, rsFactors, catchment, start) : null;
-	return { chirpsCorrection, chirpsFit, zeroRain, catchment, accumulation, rsFit, rainSource };
+	// The gap-filling products' fits (engine ≥ 1.101.0, ./gapRain.ts): §2.4b's fit against each, on the same suspect days left out.
+	const gapFits = settings.gapRain
+		? fitGapProducts(settings.gapRain, series, settings.zeroRainRuns, fitExcludedWindows(acc), { ...(replaced.length ? { replaced } : {}), dq }, pinned?.gapRain)
+		: [];
+	const gapFitsCaptured = options.captureFits && settings.gapRain ? clonePlain(gapFits) : null;
+	return { chirpsCorrection, chirpsFit, zeroRain, catchment, accumulation, rsFit, rainSource, gapFits, gapFitsCaptured };
 }
 
 /**
@@ -561,7 +625,8 @@ export function checkedCatchmentRainRecord(settings: ProjectSettings, series: Mo
 		last = Math.max(last, b);
 	}
 	if (!Number.isFinite(first)) return null;
-	const r = checkedRain(settings, series, first, last - first + 1);
+	// Only the catchment rain is read here, so no gap-filling product is fitted (engine ≥ 1.101.0).
+	const r = checkedRain({ ...settings, gapRain: null }, series, first, last - first + 1);
 	if (opts.fitExcludeAccumulations) blankFitExcluded(r, first);
 	return { startDate: fromEpochDay(first), values: r.catchment };
 }
@@ -821,6 +886,8 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	}
 	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23): maps the factor-corrected CHIRPS, so it needs the monthly correction.
 	s.chirpsQuantileMap = resolveChirpsQuantileMap(raw?.chirpsQuantileMap, warnings);
+	// The gap-filling product (engine ≥ 1.101.0, issue #604 R4-B): null = CHIRPS alone, the default.
+	s.gapRain = resolveGapRain(raw?.gapRain, warnings);
 	if (s.chirpsQuantileMap && s.chirpsBiasCorrection !== 'monthly') {
 		warnings.push('CHIRPS quantile map ignored: it maps bias-corrected CHIRPS, and CHIRPS bias correction is off (Model settings → Rain gaps → CHIRPS gap filling → CHIRPS bias correction)');
 		s.chirpsQuantileMap = null;

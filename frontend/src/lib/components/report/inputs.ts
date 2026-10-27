@@ -2,7 +2,8 @@
 // and transfers the run used (its own snapshot, never today's model), and the
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
-import { arealRainText, DEFAULT_UNIT_MAP_PERIOD, defaultProjectSettings, describeEwrDailySource, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer, type EwrSplitInfo } from '@water-management/engine';
+import { gapRainChoiceText } from '#lib/components/series/gapRain.js';
+import { arealRainText, resolveGapRain, runRainCredits, type RainCredit, DEFAULT_UNIT_MAP_PERIOD, defaultProjectSettings, describeEwrDailySource, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer, type EwrSplitInfo } from '@water-management/engine';
 import { findSystem, systemLabel } from '#lib/model/systems.js';
 import { describeWindow, FLOW_KIND_LABEL } from '#lib/components/calibration/metrics.js';
 import { describeMonths, WATER_YEAR_MONTHS } from '#lib/format/months.js';
@@ -82,6 +83,8 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 				: // Engine ≥ 1.53.0 (CR-23): the gap map; a snapshot without it ran without.
 					`monthly factors, fit period: ${fitPeriodText(s.chirpsFitPeriod)}${s.chirpsQuantileMap ? `; gap days quantile-mapped onto the catchment rain (wet days ≥ ${s.chirpsQuantileMap.wetDayMm} mm)` : ''}`
 		],
+		// Engine ≥ 1.101.0 (issue #604): only on a run that chose a gap-filling product, so older reports read as before.
+		...(resolveGapRain(s.gapRain, []) ? [['Gap-filling product', `${gapRainChoiceText(resolveGapRain(s.gapRain, []))}; each product corrected on its own fit (provisional, pending the hydrologist’s review)`] as [string, string]] : []),
 		// Engine ≥ 0.30.0 (issue #40 b); a snapshot without it had none.
 		['Rain source periods', rainSourceText(s.rainSource ?? [])],
 		['Effective rainfall', `${fmtPct(s.effectiveRainFraction, 0)} of rain, soil-water store ${fmtNum(s.effectiveRainStoreMm, 1, true)} mm`],
@@ -262,4 +265,15 @@ export const PAIRING_NUMS = [3];
 /** Each station's CHIRPS pairing: where its CHIRPS came from, the fit period, the shared days, the 12 factors or why it was refused. */
 export function stationPairingRows(summary: unknown): string[][] {
 	return (stationsOf(summary)?.pairings ?? []).map((p) => [p.stationName, chirpsAtText(p), pairingPeriodText(p), fmtNum(p.days), pairingFactorsText(p) + (p.pinned ? ' (pinned)' : '')]);
+}
+
+/**
+ * The credits a run's report owes (issue #604 R4-E, docs/data-sources.md):
+ * ERA5-Land's Copernicus notice and citation and IMERG Late's citation when
+ * the run read them, ECMWF's for a forecast an ECMWF feed wrote, each word
+ * for word; read on the run's creation day. Empty for a run on CHIRPS alone
+ * and an uploaded forecast, whose reports read as before.
+ */
+export function reportRainCredits(run: { createdAt: string; forecastRainSource?: string | null; forecastRainEcmwf?: boolean; summary?: Parameters<typeof runRainCredits>[0]['summary'] }): RainCredit[] {
+	return runRainCredits(run, run.createdAt.slice(0, 10));
 }

@@ -87,6 +87,33 @@ describe('POST /runs { forecast }', () => {
 		// (feeds/forecast.db.test.ts has the positive control); an ordinary run records none.
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${f.body.run.id}`)).body.run.forecastRainSource).toBe('other');
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${o.body.run.id}`)).body.run.forecastRainSource).toBeNull();
+		// No ECMWF value in it either (the positive control is the next test).
+		expect((await viewer.call('GET', `/projects/${projectId}/runs/${f.body.run.id}`)).body.run.forecastRainEcmwf).toBe(false);
+	});
+
+	it('a forecast an ECMWF feed wrote, with one day edited by hand: the model reads it as other, and the run still owes ECMWF’s credit', async () => {
+		const pid = await makeProject(owner, 'ECMWF edited', true, freshIds());
+		const feed = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'ecmwf_ens', config: { cells: [{ lat: -33.5, lon: 19.5 }] }, targetKind: 'rain_forecast_mm' });
+		expect(feed.status, JSON.stringify(feed.body)).toBe(201);
+		// As if the feed had written every forecast day (031_feed_days): its days, under its id.
+		await asOwner(
+			`UPDATE time_series SET feed_id = $2, feed_days = datemultirange(daterange($3::date, $3::date + $4::int))
+			 WHERE project_id = $1 AND kind = 'rain_forecast_mm'`,
+			[pid, feed.body.feed.id, FORECAST_FROM, FORECAST_DAYS]
+		);
+		const seriesId = (await asOwner(`SELECT id FROM time_series WHERE project_id = $1 AND kind = 'rain_forecast_mm'`, [pid]))[0].id as string;
+		const whole = await post(owner, pid, { forecast: true });
+		expect(whole.status).toBe(201);
+		expect((await owner.call('GET', `/projects/${pid}/runs/${whole.body.run.id}`)).body.run).toMatchObject({ forecastRainSource: 'ecmwf_ens', forecastRainEcmwf: true });
+		// A person corrects one forecast day: that day is theirs, the other 13 still ECMWF's.
+		expect((await owner.call('PUT', `/projects/${pid}/series/${seriesId}/days/2022-11-08`, { value: 4 })).status).toBe(200);
+		const edited = await post(owner, pid, { forecast: true });
+		expect(edited.status).toBe(201);
+		expect((await owner.call('GET', `/projects/${pid}/runs/${edited.body.run.id}`)).body.run).toMatchObject({ forecastRainSource: 'other', forecastRainEcmwf: true });
+		// The summary CSV's forecast block credits it (the report, the workbook and a pack read the same flag, engine runRainCredits).
+		const csv = await text(owner, `/projects/${pid}/runs/${edited.body.run.id}/export/summary.csv`);
+		expect(csv.status).toBe(200);
+		expect(csv.body).toContain('the ECMWF ENS forecast on some days, the rest written over (ECMWF open data, CC BY 4.0)');
 	});
 
 	it('refuses a forecast run with no forecast tail (409, nothing stored), and a viewer (403)', async () => {

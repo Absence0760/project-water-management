@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode, ProjectModel, SeriesMeta } from '@water-management/engine';
 import { lakeFactorPresetFill, withMonthlyRates } from '@water-management/engine';
-import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, settingsRows, STATION_HEAD, stationPairingRows, stationRows, transferRows } from './inputs';
+import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, reportRainCredits, settingsRows, STATION_HEAD, stationPairingRows, stationRows, transferRows } from './inputs';
 import type { RainStationSummary, StationAreaForcing } from '@water-management/engine';
 import { fmtNum } from '#lib/format/number.js';
 
@@ -330,5 +330,24 @@ describe('stationRows and stationPairingRows (issue #553)', () => {
 	it('is empty on a run without stations', () => {
 		expect(stationRows({ farms: [] })).toEqual([]);
 		expect(stationPairingRows(null)).toEqual([]);
+	});
+});
+
+describe('the gap-filling product and the rain credits in the report (issue #604 R4-E)', () => {
+	const run = { startDate: '2020-01-01', endDate: '2020-12-31' };
+	it('names the product only on a run that chose one, so older reports read as before', () => {
+		const key = 'Gap-filling product';
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j' }), run))[key]).toBeUndefined();
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', gapRain: { product: 'chirps', imergLate: false } }), run))[key]).toBeUndefined();
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', gapRain: { product: 'era5l', imergLate: true } }), run))[key]).toMatch(/^ERA5-Land, and IMERG Late for the recent days; each product corrected on its own fit/);
+	});
+
+	it('credits ERA5-Land, IMERG Late and the ECMWF forecast the run used, read on its day; none on CHIRPS alone', () => {
+		const gapRain = { products: [{ product: 'era5l', version: null, present: true }, { product: 'imerg_late', version: 'V07', present: true }] };
+		const c = reportRainCredits({ createdAt: '2026-10-27T09:00:00Z', forecastRainSource: 'ecmwf_ens', summary: { gapRain } });
+		expect(c.map((x) => x.product)).toEqual(['era5l', 'imerg_late', 'ecmwf_ens']);
+		expect(c[0]!.lines[0]).toContain('information 2026.');
+		expect(c[1]!.lines[0]).toContain('accessed 2026-10-27');
+		expect(reportRainCredits({ createdAt: '2026-10-27T09:00:00Z', forecastRainSource: 'chirps_gefs', summary: {} })).toEqual([]);
 	});
 });

@@ -1,0 +1,4 @@
+{
+	"addKb": 16,
+	"why": "The gap-filling products' UI (issue #604 R4-E): Settings → Rain gaps' Gap-filling product card (in the shared lazySections chunk), Data's Rain products side by side (its own chunk, about 2.5 KB, drawn only with settings.gapRain, now with the failed-fill notes) and Model quality's Rain gaps filled from other products (its own chunk, about 1.9 KB), the preview's product sources and credits, the feed card's couldn't-fill note, the rain credits in the engine (their own module, @water-management/engine/credits, 0.8 KB, so the public data sources page and the map's attribution load it alone and no longer pull the disclaimer and registration texts, about 3.9 KB, on first load), the gap-rain help article; measured 2113 KB against 2097 KB"
+}

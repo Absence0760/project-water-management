@@ -14,6 +14,7 @@ import { crc32, storedZip, zip, ZipArchive } from '../zip';
 import {
 	BUNDLE_ZIP_LIMITS,
 	buildPackBundle,
+	bundleRainCredits,
 	bundleRunInput,
 	checkPackBundle,
 	HEADLINE_NOT_INCLUDED,
@@ -81,6 +82,33 @@ describe('buildPackBundle + checkPackBundle', () => {
 		const archive = await ZipArchive.open(built.bytes);
 		expect(hash(await archive.read('manifest.json'))).toBe(manifestSha256);
 		expect(new TextDecoder().decode(await archive.read('README.md'))).toContain(`pnpm reproduce:pack path/to/pack-${packShortCode(manifestSha256)}.zip`);
+	});
+
+	it('credits the rain sources its input series hold in the README (issue #604 R4-E), and none on CHIRPS alone', async () => {
+		const plain = new TextDecoder().decode(await (await ZipArchive.open((await buildPackBundle(input, hash)).bytes)).read('README.md'));
+		expect(plain).not.toContain('## Data credits');
+		expect(bundleRainCredits(input)).toEqual([]);
+		// The baseline filled gaps from ERA5-Land and IMERG Late V07; the application's forecast came from an ECMWF feed.
+		const gapRain = { products: [{ product: 'era5l', version: null, present: true }, { product: 'imerg_late', version: 'V07', present: true }, { product: 'imerg_late', version: 'V08', present: false }] };
+		const withProducts = structuredClone(input);
+		withProducts.baseline.summary = { ...(withProducts.baseline.summary as object), gapRain };
+		withProducts.application!.inputs = { ...withProducts.application!.inputs, forecastRainSource: 'ecmwf_ens' };
+		const credits = bundleRainCredits(withProducts);
+		expect(credits.map((c) => c.product)).toEqual(['era5l', 'imerg_late', 'ecmwf_ens']);
+		// A forecast an ECMWF feed wrote only some days of still owes its credit.
+		const partly = structuredClone(input);
+		partly.application!.inputs = { ...partly.application!.inputs, forecastRainSource: 'other', forecastRainEcmwf: true };
+		expect(bundleRainCredits(partly).map((c) => c.product)).toEqual(['ecmwf_ens']);
+		// The fixture's report records no creation day; a real pack's is the baseline run's, whose year Copernicus's line takes.
+		withProducts.manifest = { ...withProducts.manifest, report: { ...withProducts.manifest.report, identity: { ...withProducts.manifest.report.identity, baseline: { ...withProducts.manifest.report.identity?.baseline, createdAt: '2026-10-27T08:00:00.000Z' } } } } as typeof withProducts.manifest;
+		const year = '2026';
+		const readme = new TextDecoder().decode(await (await ZipArchive.open((await buildPackBundle(withProducts, hash)).bytes)).read('README.md'));
+		expect(readme).toContain('## Data credits');
+		expect(readme).toContain(`- ERA5-Land: Contains modified Copernicus Climate Change Service information ${year}. Neither the European Commission nor ECMWF is responsible`);
+		expect(readme).toContain('GPM IMERG Late Precipitation L3 1 day 0.1 degree x 0.1 degree V07');
+		// A version the run's input didn't have is not credited.
+		expect(readme).not.toContain('degree V08');
+		expect(readme).toContain('- ECMWF ENS forecast: ECMWF open data, CC BY 4.0');
 	});
 
 	it('is deterministic: the same pack gives the same bytes and SHA-256', async () => {

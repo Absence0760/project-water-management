@@ -62,7 +62,8 @@ describe('modelQualitySections', () => {
 			runoff: { model: 'gr4j' } as RunSummary['runoff'],
 			wr2012: {} as RunSummary['wr2012'],
 			plausibility: { gauges: [gauge('a')] } as RunSummary['plausibility'],
-			unitRain: { mode: 'perUnit', gaugeMapMm: null, gaugeMapSource: null, mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, units: [] }
+			unitRain: { mode: 'perUnit', gaugeMapMm: null, gaugeMapSource: null, mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, units: [] },
+			gapRain: { product: 'era5l', imergLate: true, chirpsDays: 0, tailFrom: null, products: [], segments: [] }
 		});
 		expect(all).toEqual([...MODEL_QUALITY_ANCHORS]);
 		const onRuns = resultSections({ farms: [] }, true).map((s) => s.id);

@@ -255,11 +255,18 @@ export function checkRainSource(out: ModelOutput): string | null {
 	if (!final || !source) return null;
 	if (source.length !== final.length) return `rain_source has ${source.length} days, rain_final ${final.length}`;
 	const periods = (out.summary.rainSource?.periods.length ?? 0) > 0;
-	const plain: readonly number[] = [RAIN_SOURCE_CODE.catchment, RAIN_SOURCE_CODE.chirps, RAIN_SOURCE_CODE.forecast];
+	// A gap-filling product (engine ≥ 1.101.0, settings.gapRain) adds its own codes: ERA5-Land only when chosen, IMERG Late
+	// only with imergLate and from the first day it may fill (the day after the chosen products' last reading).
+	const gap = out.summary.gapRain ?? null;
+	const tailFrom = gap?.tailFrom ? toEpochDay(gap.tailFrom) - toEpochDay(out.startDate) : Infinity;
+	const plain: number[] = [RAIN_SOURCE_CODE.catchment, RAIN_SOURCE_CODE.chirps, RAIN_SOURCE_CODE.forecast];
+	if (gap && gap.product !== 'chirps') plain.push(RAIN_SOURCE_CODE.era5l);
+	if (gap?.product === 'era5l') plain.splice(plain.indexOf(RAIN_SOURCE_CODE.chirps), 1);
 	for (let t = 0; t < final.length; t++) {
 		const v = source[t]!;
 		if (Number.isNaN(v) !== Number.isNaN(final[t]!)) return `rain_source[${t}] is ${v} where rain_final is ${final[t]}`;
-		if (!periods && !Number.isNaN(v) && !plain.includes(v)) return `rain_source[${t}] is ${v} in a run without rain-source periods`;
+		if (v === RAIN_SOURCE_CODE.imergLate && gap?.imergLate && t >= tailFrom) continue;
+		if (!periods && !Number.isNaN(v) && !plain.includes(v)) return `rain_source[${t}] is ${v} in a run without rain-source periods${gap ? ' that its gap-filling product allows' : ''}`;
 	}
 	return null;
 }

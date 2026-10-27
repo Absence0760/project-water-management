@@ -10,6 +10,9 @@ describe('latestDay (the newest day an answer may hold; feeds.db.test.ts covers 
 		expect(latestDay('chirps_gefs', '2026-09-25')).toBe('2026-10-10');
 		expect(latestDay('chirps_gefs', '2026-12-20')).toBe('2027-01-04');
 		expect(latestDay('chirps_gefs', '2028-02-20')).toBe('2028-03-06');
+		// The ECMWF ENS mean: its 15th day (issue #604 R4-C).
+		expect(latestDay('ecmwf_ens', '2026-09-25')).toBe('2026-10-09');
+		expect(latestDay('ecmwf_ens', '2026-12-20')).toBe('2027-01-03');
 	});
 });
 

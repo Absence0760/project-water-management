@@ -48,24 +48,47 @@
 // scripts/gen-mirror-fixture.ts). So the feeds screens show the values the
 // files gave. FEED_FIXTURE_REWRITE doesn't reach the copy: a revision of the
 // copy is a manifest's (mirror-tick, R2-D). A live copy is never shifted.
+//
+// The other rain products of the copy (issue #604 R4-B: `era5l`, ERA5-Land,
+// and `imerg_late`, IMERG Late, each on a 0.1° grid) go through the same
+// cache, by the same rules, for whatever cells and window a caller names
+// (fillProductCache, then readProductSeries). No CHIRPS feed's config names
+// them: the engine piece decides how a project uses them. Filling is a feed's
+// fetch's (the cache is written only by a running feed_fetch job of a CHIRPS
+// feed, 252); reading is any signed-in session's. A day the copy doesn't hold
+// yet reads as `-` and waits, and no manifest at all is MirrorNotReadyError
+// ('not_ready', nothing written), as for CHIRPS. Each day is final (neither
+// has preliminary days); its tag is MIRROR_TAG for era5l and the day's IMERG
+// version for imerg_late (productVersions reads it back). These read the
+// copy at its own dates in fixtures mode too: the re-dating above is the
+// CHIRPS feeds screens'.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 import { feedFetcher } from '../jobs/transport.js';
-import { type FinalsProduct, openDaily } from '../mirror/arrays.js';
-import { MIRROR_REGION, mirrorCell } from '../mirror/grid.js';
+import { type ChcFinalsProduct, openDaily } from '../mirror/arrays.js';
+import { MIRROR_REGION, mirrorCell, productStep } from '../mirror/grid.js';
 import { finalsCoverage, readManifest } from '../mirror/manifest.js';
-import { MirrorNotReadyError, readCells } from '../mirror/readCells.js';
+import { type CellsProduct, MirrorNotReadyError, readCells } from '../mirror/readCells.js';
 import { mirrorStore } from '../mirror/source.js';
 import type { MirrorStore } from '../mirror/store.js';
-import { chcCell, type GridCell, planFetch, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from './cellCache.js';
-import { type CacheOrigin, claimRecheck, readCellCache } from './cellCacheStore.js';
-import { CHIRPS_PRODUCT_FIRST_DAY, chirpsProduct, type GridConfig, gridCells } from './config.js';
+import {
+	type CacheProduct,
+	chcCell,
+	type GridCell,
+	planFetch,
+	RECHECK_INTERVAL_DAYS,
+	RECHECK_READ_DAYS,
+	seriesFromCache,
+	uniqueCells
+} from './cellCache.js';
+import { applyRecheck, type CacheOrigin, claimRecheck, mergeCellCache, readCellCache } from './cellCacheStore.js';
+import { CHIRPS_PRODUCT_FIRST_DAY, chirpsProduct, type GridConfig, gridCells, type WeightedCell } from './config.js';
 import { type CellsResult, fetchFailure, type FetchWindow } from './fetch.js';
 import { feedSourceMode } from './http.js';
 import { ingestResult } from './ingest.js';
-import { DAY_FINAL_ONLY, DAY_READ, DAY_SKIP } from './sources/chirps.js';
+import { DAY_FINAL_ONLY, DAY_READ, DAY_SKIP, type GridDays, type NoDataPolicy } from './sources/chirps.js';
 import { beginFeedFetch, type FeedRow, recordFeedChecked, takeFeedFetch } from './store.js';
 
 /** The file tag of a final read from the copy (210 chirps_file.tag): known, so the re-check never reads it again unasked. */
@@ -78,16 +101,18 @@ export const mirrorOrigin = (): CacheOrigin => (feedSourceMode() === 'live' ? 'c
 interface Read {
 	read: string;
 	values: (number | null)[][];
+	/** imerg_late: each day's IMERG version (null on a day not read). */
+	versions?: (string | null)[];
 }
 
 type Reader = (cells: readonly GridCell[], window: FetchWindow, plan: string) => Promise<Read>;
 
 /** A live copy: its own dates and cells. */
 const liveReader =
-	(store: MirrorStore, product: FinalsProduct): Reader =>
+	(store: MirrorStore, product: CellsProduct): Reader =>
 	async (cells, window, plan) => {
 		const r = await readCells(store, product, cells, window, { plan });
-		return { read: r.cells.read, values: r.cells.values };
+		return { read: r.cells.read, values: r.cells.values, versions: r.versions };
 	};
 
 // --- Fixtures mode: the committed copy re-dated to today --------------------------------
@@ -108,7 +133,7 @@ const fixtureSample = (): FixtureSample =>
 	(sample ??= JSON.parse(readFileSync(fileURLToPath(new URL('../../fixtures/feeds/chirps-sample.json', import.meta.url)), 'utf8')) as FixtureSample);
 
 /** What the fixture files publish for `day` on `today`: `f` final, `p` preliminary (sat only), `-` nothing (fixtures.ts fixtureHttp). */
-export function fixtureKind(product: FinalsProduct, day: string, today: string): 'f' | 'p' | '-' {
+export function fixtureKind(product: ChcFinalsProduct, day: string, today: string): 'f' | 'p' | '-' {
 	const s = fixtureSample();
 	const d = toEpochDay(day);
 	const t = toEpochDay(today);
@@ -154,7 +179,7 @@ function fixtureDay(day: string, shift: number, lo: number, period: number): num
 }
 
 /** The committed copy read as the fixture files stand on `today`: each day's kind from their lags, its values from a day of the copy of that kind. */
-function fixtureReader(store: MirrorStore, product: FinalsProduct, today: string): Reader {
+function fixtureReader(store: MirrorStore, product: ChcFinalsProduct, today: string): Reader {
 	const period = fixtureSample().pattern.length;
 	return async (cells, window, plan) => {
 		const n = toEpochDay(window.end) - toEpochDay(window.start) + 1;
@@ -221,7 +246,7 @@ function fixtureReader(store: MirrorStore, product: FinalsProduct, today: string
 }
 
 /** The reader for this process: the live copy as it is, or the committed one re-dated to `today`. */
-export function mirrorReader(product: FinalsProduct, today: string, store: MirrorStore = mirrorStore()): Reader {
+export function mirrorReader(product: ChcFinalsProduct, today: string, store: MirrorStore = mirrorStore()): Reader {
 	return feedSourceMode() === 'live' ? liveReader(store, product) : fixtureReader(store, product, today);
 }
 
@@ -299,4 +324,114 @@ export async function fetchFromMirror(db: Db, feed: FeedRow, window: FetchWindow
 	// cacheOnly: nothing was asked of CHC, so a backfill's next window follows in CACHED_NEXT_SECONDS.
 	await ingestResult(db, feed, answer, window, { origin, cacheOnly: true, fetchJobId: opts.jobId });
 	return 'ingested';
+}
+
+// --- The other rain products: ERA5-Land and IMERG Late ---------------------------------------
+
+/** The rain products of the copy a caller fills and reads for any cells, besides a CHIRPS feed's own. */
+export const OTHER_RAIN_PRODUCTS = ['era5l', 'imerg_late'] as const;
+export type OtherRainProduct = (typeof OTHER_RAIN_PRODUCTS)[number];
+
+/** The most days one fill reads: the cache's merge takes at most 366 days a call. */
+export const FILL_MAX_DAYS = 366;
+
+/** What a fill did: read and merged (`filled`), nothing to read (`cached`), or the copy doesn't hold the product yet (`not_ready`, nothing written). */
+export interface FillResult {
+	status: 'filled' | 'cached' | 'not_ready';
+	/** Cell-days whose cached value changed. */
+	merged: number;
+	/** Days logged as revised (a stale day read again, its value changed: chirps_revision). */
+	revised: number;
+}
+
+/** The tag a day read from the copy carries into chirps_file: its IMERG version for imerg_late, else MIRROR_TAG. */
+const tagOf = (product: CacheProduct, version: string | null | undefined) => (product === 'imerg_late' && version ? version : MIRROR_TAG);
+
+/**
+ * Fill `product`'s cell cache for `cells` (cells of the product's grid,
+ * feeds/cellCache.ts uniqueCells(…, product), in (row, column) order, at
+ * most 100) over `window` (at most FILL_MAX_DAYS days, its end no later than
+ * `today`) from the copy, as a running feed_fetch job (`jobId`) of the CHIRPS
+ * feed `feedId` (252: the cache is written only by a feed's fetch). As
+ * fetchFromMirror does for a CHIRPS product: plan against the cache (a day
+ * every cell holds final is not read), claim the cells' stale days (a
+ * revision of the copy, mirror-tick) and read them again, merge, apply. The
+ * caller's transaction holds the work: on MirrorNotReadyError nothing is
+ * written. A cell outside the copy's region throws MirrorOutsideRegionError.
+ */
+export async function fillProductCache(
+	db: Db,
+	opts: { feedId: string; jobId: string; product: OtherRainProduct; cells: readonly GridCell[]; window: FetchWindow; today: string; store?: MirrorStore; origin?: CacheOrigin }
+): Promise<FillResult> {
+	const { feedId, jobId, product, cells } = opts;
+	const origin = opts.origin ?? mirrorOrigin();
+	const window = { start: opts.window.start, end: opts.window.end < opts.today ? opts.window.end : opts.today };
+	const n = toEpochDay(window.end) - toEpochDay(window.start) + 1;
+	if (!(n >= 1)) throw new RangeError('the window ends before it starts, or after today');
+	if (n > FILL_MAX_DAYS) throw new RangeError(`at most ${FILL_MAX_DAYS} days a fill`);
+	// Refused before anything is read or claimed.
+	for (const c of cells) mirrorCell(c, MIRROR_REGION, productStep(product));
+	const store = opts.store ?? mirrorStore();
+	const reader = liveReader(store, product);
+	const plan = planFetch(cells, await readCellCache(db, origin, product, cells, window), window);
+	const recheck = await claimRecheck(db, feedId, origin, product, cells, { heads: 0, reads: RECHECK_READ_DAYS, intervalDays: RECHECK_INTERVAL_DAYS });
+	let merged = 0;
+	let revised = 0;
+	try {
+		// Every read first, then the writes: a copy that isn't ready writes nothing.
+		const r = plan ? await reader(plan.cells, window, plan.plan) : null;
+		const reread: NonNullable<CellsResult['recheck']>['read'] = [];
+		for (const day of recheck?.read ?? []) {
+			const d = await reader(cells, { start: day, end: day }, DAY_FINAL_ONLY);
+			reread.push(d.read === 'f' ? { day, tag: tagOf(product, d.versions?.[0]), values: d.values.map((row) => row[0]!) } : { day, tag: null, values: null });
+		}
+		if (plan && r) {
+			merged = await mergeCellCache(db, feedId, origin, {
+				product,
+				startDate: window.start,
+				read: r.read,
+				cells: plan.cells.map((c) => [c.row, c.col]),
+				values: r.values,
+				tags: [...r.read].map((k, i) => (k === 'f' ? tagOf(product, r.versions?.[i]) : null))
+			});
+		}
+		if (reread.length) revised = await applyRecheck(db, feedId, jobId, origin, product, cells, { head: [], read: reread });
+	} catch (err) {
+		if (err instanceof MirrorNotReadyError) return { status: 'not_ready', merged: 0, revised: 0 };
+		throw err;
+	}
+	return { status: plan || recheck?.read.length ? 'filled' : 'cached', merged, revised };
+}
+
+/**
+ * A series of `product` for weighted cells (a feed's own, feeds/config.ts
+ * gridCells: 0.05° cells with their weights) over `window`, from the cache
+ * alone, by the CHIRPS feeds' arithmetic (cellCache.ts seriesFromCache): each
+ * 0.05° cell reads the 0.1° cell holding it, with its own weight. A day any
+ * cell lacks is null (fill it first, fillProductCache). Any signed-in session.
+ */
+export async function readProductSeries(
+	db: Db,
+	product: OtherRainProduct,
+	cells: readonly WeightedCell[],
+	window: FetchWindow,
+	opts: { origin?: CacheOrigin; noData?: NoDataPolicy } = {}
+): Promise<GridDays> {
+	const view = await readCellCache(db, opts.origin ?? mirrorOrigin(), product, uniqueCells(cells, product), window);
+	return seriesFromCache(cells, view, window, opts.noData, product);
+}
+
+/** imerg_late: the IMERG version of each day of `window` the cache holds (its chirps_file tag), null where none is held. Any signed-in session. */
+export async function productVersions(db: Db, product: 'imerg_late', window: FetchWindow, opts: { origin?: CacheOrigin } = {}): Promise<(string | null)[]> {
+	if (window.start > window.end) return [];
+	const { rows } = await db.query<{ day: string; tag: string | null }>(
+		`SELECT to_char(day, 'YYYY-MM-DD') AS day, tag FROM chirps_file WHERE origin = $1 AND product = $2 AND day BETWEEN $3::date AND $4::date`,
+		[opts.origin ?? mirrorOrigin(), product, window.start, window.end]
+	);
+	const by = new Map(rows.map((r) => [r.day, r.tag]));
+	const s = toEpochDay(window.start);
+	return Array.from({ length: toEpochDay(window.end) - s + 1 }, (_, i) => {
+		const t = by.get(fromEpochDay(s + i));
+		return t && t !== MIRROR_TAG ? t : null;
+	});
 }
