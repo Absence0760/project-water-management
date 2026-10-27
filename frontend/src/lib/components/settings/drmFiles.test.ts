@@ -1,7 +1,7 @@
 // Desktop Reserve Model output files (issue #455): the .rul and .tab parsers on
 // synthetic files of the DRM's layout, both units, CRLF and LF, a missing
 // block and a bad line, and what each fills.
-import { blankEwrRuleTable, ewrDailySourceIssues, ewrRuleTableIssues, blankEwrDailySource } from '@water-management/engine';
+import { blankEwrRuleTable, ewrDailySourceIssues, ewrRuleTableIssues, blankEwrDailySource, rulFileIssue, tabFileIssue } from '@water-management/engine';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
@@ -17,6 +17,11 @@ import {
 	percentileTablesFromRul,
 	ruleTableFromRul,
 	ruleTableFromTab,
+	rulFileRecord,
+	tabFileM3s,
+	tabFileRecord,
+	tabFlowsEdited,
+	TAB_COLUMNS,
 	type RulFile,
 	type TabFile
 } from './drmFiles';
@@ -141,12 +146,100 @@ describe('parseTabFile', () => {
 	it('names the line that didn’t parse, and a file without the table', () => {
 		const l = lines(exampleTabFile());
 		const bad = [...l];
-		bad[16] = '         Nov    2.000   1.600   0.800    0.700   0.100     0.000';
-		expect(parseTabFile(bad.join('\r\n'))).toEqual({ error: expect.stringMatching(/^line 17: the Nov row of the monthly distributions block needs 7 numbers; it has 6/) });
+		expect(l[27]).toMatch(/^ +Nov /);
+		bad[27] = '         Nov    2.000   1.600   0.800    0.700   0.100     0.000';
+		expect(parseTabFile(bad.join('\r\n'))).toEqual({ error: expect.stringMatching(/^line 28: the Nov row of the monthly distributions block needs 7 numbers; it has 6/) });
 		const mar = [...l];
-		mar[4] = '        MAR               =  lots';
-		expect(parseTabFile(mar.join('\r\n'))).toEqual({ error: expect.stringMatching(/^line 5: the MAR/) });
-		expect(parseTabFile(l.slice(0, 8).join('\r\n'))).toEqual({ error: expect.stringMatching(/No “Monthly Distributions” table/) });
+		mar[5] = '        MAR               =  lots';
+		expect(parseTabFile(mar.join('\r\n'))).toEqual({ error: expect.stringMatching(/^line 6: the MAR/) });
+		expect(parseTabFile(l.slice(0, 20).join('\r\n'))).toEqual({ error: expect.stringMatching(/No “Monthly Distributions” table/) });
+	});
+
+	it('reads the whole file (issue #617): header lines, annual flows, REC, IFR summary, distribution type, all 7 columns', () => {
+		const t = ok(parseTabFile(exampleTabFile()));
+		expect(t).toMatchObject({ title: 'SYNTHETIC EXAMPLE', runoff: 'Synthetic incremental', distributionType: 'Synthetic', category: 'C' });
+		expect(t.annual).toEqual([
+			{ label: 'MAR', value: 49.8 },
+			{ label: 'S.Dev.', value: 21.3 },
+			{ label: 'CV', value: 0.428 },
+			{ label: 'Q75', value: 0.29 },
+			{ label: 'Q75/MMF', value: 0.07 },
+			{ label: 'BFI Index', value: 0.31 },
+			{ label: 'CV(JJA+JFM) Index', value: 1.9 }
+		]);
+		expect(t.ifr).toEqual([
+			{ label: 'Total IFR', mcm: 23.49, pctMar: 47.17 },
+			{ label: 'Maint. Lowflow', mcm: 17.43, pctMar: 35 },
+			{ label: 'Drought Lowflow', mcm: 2.49, pctMar: 5 },
+			{ label: 'Maint. Highflow', mcm: 6.06, pctMar: 12.17 }
+		]);
+		expect(t.monthlyMcm).toHaveLength(12);
+		expect(t.monthlyMcm.every((r) => r.length === TAB_COLUMNS.length)).toBe(true);
+		// Oct: natural mean, SD, CV; low maint., drought; high maint.; total maint. (the TAB flows).
+		expect(t.monthlyMcm[0]).toEqual([3.6, 2.88, 0.8, 1.26, 0.18, 0, 1.26]);
+		expect(t.monthlyMcm.map((r) => r[6])).toEqual(t.totalMaintMcm);
+	});
+
+	it('still reads the short layout: no runoff line, only the MAR under Annual Flows, no IFR summary', () => {
+		const l = lines(exampleTabFile());
+		const short = [...l.slice(0, 2), ...l.slice(3, 6), ...l.slice(12, 15), ...l.slice(20)].join('\r\n');
+		const t = ok(parseTabFile(short));
+		expect(t).toMatchObject({ marMm3: 49.8, category: 'C', runoff: null, annual: [{ label: 'MAR', value: 49.8 }], ifr: [] });
+		expect(t.totalMaintMcm).toEqual(ok(parseTabFile(exampleTabFile())).totalMaintMcm);
+		// No Annual Flows heading at all: the MAR line still gives the MAR.
+		const bare = ['MAR = 10', ...l.slice(20)].join('\r\n');
+		expect(ok(parseTabFile(bare))).toMatchObject({ marMm3: 10, annual: [], ifr: [], title: null, generated: null });
+	});
+
+	it('names a bad annual or IFR line, and refuses an over-long label', () => {
+		const l = lines(exampleTabFile());
+		const annual = [...l];
+		annual[7] = '        CV                =  wet';
+		expect(parseTabFile(annual.join('\r\n'))).toEqual({ error: expect.stringMatching(/^line 8: the annual flows line “CV {16}= {2}wet”/) });
+		const negative = [...l];
+		negative[8] = '        Q75               =   -0.290';
+		expect(parseTabFile(negative.join('\r\n'))).toEqual({ error: expect.stringMatching(/^line 9: the annual flows line/) });
+		const ifr = [...l];
+		ifr[16] = '        Maint. Lowflow    =   lots (35.00 %MAR)';
+		expect(parseTabFile(ifr.join('\r\n'))).toEqual({ error: expect.stringMatching(/^line 17: the IFR summary line “Maint\. Lowflow/) });
+		const long = [...l];
+		long[6] = `        ${'S'.repeat(70)} = 1`;
+		expect(parseTabFile(long.join('\r\n'))).toEqual({ error: expect.stringMatching(/^line 7: the label .* longer than 60 characters/) });
+	});
+
+	it('keeps the file as the daily EWR’s source stores it, within the engine’s bounds', () => {
+		const t = ok(parseTabFile(exampleTabFile()));
+		const rec = tabFileRecord(t, 'drm-example.tab');
+		expect(rec).toEqual({
+			name: 'drm-example.tab',
+			generated: '01/01/2026',
+			title: 'SYNTHETIC EXAMPLE',
+			runoff: 'Synthetic incremental',
+			annual: t.annual,
+			category: 'C',
+			ifr: t.ifr,
+			distributionType: 'Synthetic',
+			monthlyMcm: t.monthlyMcm
+		});
+		expect(tabFileIssue(rec)).toBeNull();
+		expect(tabFileRecord(t, `${'x'.repeat(300)}\u0007.tab`).name).toHaveLength(255);
+		expect(tabFileIssue(tabFileRecord(t, `${'x'.repeat(300)}.tab`))).toBeNull();
+		expect(ewrDailySourceIssues({ ...blankEwrDailySource(), method: 'tab', tabM3s: t.totalMaintM3s, tableAreaKm2: 5, tabFile: rec })).toEqual([]);
+		const r = ok(parseRulFile(exampleRulFile('mcm')));
+		const rul = rulFileRecord(r, 'drm-example-mcm.rul');
+		expect(rul).toEqual({ name: 'drm-example-mcm.rul', generated: '01/01/2026', unit: 'mcm', category: 'C' });
+		expect(rulFileIssue(rul)).toBeNull();
+	});
+
+	it('tells TAB flows changed after loading from the file’s own', () => {
+		const rec = tabFileRecord(ok(parseTabFile(exampleTabFile())), 'a.tab');
+		const flows = tabFileM3s(rec);
+		expect(flows).toEqual(ok(parseTabFile(exampleTabFile())).totalMaintM3s);
+		expect(tabFlowsEdited(flows, rec)).toBe(false);
+		expect(tabFlowsEdited(flows.map((v) => v * (1 + 1e-12)), rec)).toBe(false);
+		expect(tabFlowsEdited(flows.map((v, i) => (i === 3 ? v + 0.001 : v)), rec)).toBe(true);
+		expect(tabFlowsEdited(flows.map((v, i) => (i === 3 ? null : v)), rec)).toBe(true);
+		expect(tabFlowsEdited(null, rec)).toBe(true);
 	});
 });
 

@@ -861,6 +861,7 @@
 			{readonly}
 			nodes={editor?.model.nodes ?? []}
 			projectId={project.id}
+			daily={s.ewrDailySource}
 		/>
 	</div>
 

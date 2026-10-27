@@ -84,7 +84,9 @@ export type FoldId =
 	| 'feb-advanced'
 	| 'ewr-scaled'
 	| 'pan-coefficient-helper'
-	| 'fit-record-fold';
+	| 'fit-record-fold'
+	| 'ewr-tab-file'
+	| 'rule-grids-repeat';
 export async function openFold(scope: Page | Locator, testId: FoldId) {
 	const fold = scope.getByTestId(testId);
 	// Its own summary: a fold can hold another <details> (the pan row's tools hold the FAO-56 helper).

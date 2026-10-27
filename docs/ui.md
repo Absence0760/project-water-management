@@ -7181,16 +7181,48 @@ two.
   result** and **Paste result** status lines and the **Expected format**
   under it; the source's own explanation is behind the switch too, while
   the table catchment area's hint keeps the modelled area visible. The file
-  load reads the DRM's own output: a `.tab` shows its last column, *Total Flows,
-  Maint.*, in Mm³ and converted to m³/s (÷ the month's days × 86 400 s,
-  February 28 days) in a preview with **Use these values** (which fills the TAB
-  flows and the table MAR from its `MAR =` line; under the percentile tables
-  the button is **Use its MAR only**, since a .tab and a .rul from one
-  determination go together) and Cancel; a `.rul` fills the three percentile
+  load reads the DRM's own output: a `.tab` shows **the whole file** (issue
+  #617, `settings/DrmTabFileView.svelte`, read only): its header lines
+  (generated, what the estimate is for, Total runoff, the REC, the
+  distribution type) as a list, **Annual flows** (every `label = value`
+  line, MAR, S.Dev., CV, Q75 and the rest) and the **IFR summary** (Total IFR,
+  Maint. Lowflow, Drought Lowflow, Maint. Highflow, Mm³/a and % MAR) as two
+  small tables side by side, and the **Monthly distributions** table, 12
+  months × the seven columns under the DRM's two headings (*Natural flows*:
+  Mean, SD, CV; *Modified flows (IFR)*: Low flows maint. and drought, High
+  flows maint., Total flows maint.) plus *Total flows, maint.* in m³/s (÷ the
+  month's days × 86 400 s, February 28 days). The column the TAB flows are is
+  marked in words under its heading, "used: the TAB flows" (a tint only as a
+  second cue); the eight-column table scrolls inside its own box on a phone,
+  its month column sticky. That view is the preview, with **Use these values**
+  (which fills the TAB flows and the table MAR from its `MAR =` line; under
+  the percentile tables the button is **Use its MAR only**, the MAR line marked
+  "used: the table MAR", since a .tab and a .rul from one determination go
+  together) and Cancel. The file used is kept with the source
+  (`ewrDailySource.tabFile`, parsed, display only) and shows after a reload:
+  under the TAB flows row in an open fold, **The .tab file:** "<name> · REC C ·
+  Total flows, maint. are the TAB flows"; under the percentile tables, when it
+  gave only the table MAR, folded closed after the tables as **The .tab this
+  table MAR came from:** (issue #617, open question 1). When the TAB row no
+  longer matches the file's converted column (typed or pasted since), a line
+  says "The TAB flows were changed after loading <file>; the file is shown as
+  loaded" (`drmFiles.ts tabFlowsEdited`, derived, not stored). A file kept
+  for its MAR only and then seen under the TAB method gave no TAB flow, so it
+  says "<file> gave only the table MAR", marks its MAR line, and offers **Use
+  its TAB flows**. A source saved
+  before the file was kept keeps its 12 values and says "These TAB flows were
+  saved without their .tab file. Load the .tab again to see the whole file."
+  A `.rul` fills the three percentile
   tables (the natural duration curves, the total Reserve and the Reserve flows
   without high flows, converted from Mm³ a month when its unit line says so;
   a file without the last block empties that table, and says so when it is
-  the one the daily EWR reads), asking first over tables already there. A file never changes **Daily EWR from**: a `.rul` loaded under the
+  the one the daily EWR reads), asking first over tables already there, and
+  keeps its header (`ewrDailySource.rulFile`: name, date, unit and REC), said
+  above the three tables: "From <file>, generated …, in m³/s · Recommended
+  ecological category (REC) C." The REC shows there even when the project has
+  no outlet rule table. Typing or pasting over a percentile table after that
+  marks the header `edited`, and the line ends "; the tables were changed
+  since". A file never changes **Daily EWR from**: a `.rul` loaded under the
   TAB file fills the percentile tables and says the daily EWR still comes
   from the DRM TAB file, with a **Use the percentile tables** button to switch
   on the person's say (`ewrDailySource.ts rulLoad`); a `.tab` under the
@@ -7268,7 +7300,27 @@ two.
   90, 99; changing them keeps each value under its point and leaves a new
   point blank). Then the **EWR** grid (Oct … Sep rows × one input per point,
   each labelled "EWR, Oct, 10 %, Mm³"), and the **Natural flow** grid when the
-  table is the natural source. The explanations under the fields are behind
+  table is the natural source. The outlet's table, while the daily EWR reads
+  the percentile tables (shown above it), holds its grids in a **Grids:** fold
+  (issue #617, `ewrRules.ts dailyRepeat`): when they equal the daily EWR's .rul
+  tables (the DRM's ten % points, a total-flow table, the EWR = the total
+  Reserve, the low flows = the Reserve flows without high flows and the
+  natural flows, when the table reads its own, = the natural percentiles, in
+  m³/s to a relative 1e-9 after converting a Mm³ table) the fold is closed,
+  its line "the daily EWR's .rul tables · EWR, low flows", with a line
+  linking to **The daily EWR at the outlet**;
+  when they differ it is open, its line "not the daily EWR's tables", under
+  "These grids differ from the tables of The daily EWR at the outlet above:
+  monthly compliance reads these, the daily EWR those." With the percentile
+  method picked but no Reserve table entered yet there is nothing to compare,
+  and the grids show as before. The two stay separate
+  inputs (a gazetted table beside a desktop .rul is a legitimate setup), so
+  only the display changes: the site, source, kind, REC, covers, Table
+  settings, high flows and notes stay shown, and opening the fold edits the
+  grids as before. The fold's open state is set once per table and after a
+  file load, never while a grid is typed in, so an edit that makes the grids
+  differ keeps the field in place. A gauge's table, and every table when the
+  daily EWR isn't the percentile tables, is unchanged. The explanations under the fields are behind
   the explain switch; a problem replaces its field's line and stays visible.
   **Paste…** opens the shared paste dialog (`ewrPaste.ts
   planRuleTablePaste`, the same `parseGrid` and `applyPaste` as the old paste

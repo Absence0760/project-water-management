@@ -7544,9 +7544,34 @@ settings.ewrDailySource = null (absent: the pragmatic EWR, every run before 1.77
   naturalPctM3s: number[12][10] | null,      // RUL "Natural Duration curves", m³/s
   reservePctM3s: number[12][10] | null,      // RUL total Reserve flows (the first, unheaded table, with high flows), m³/s
   lowFlowPctM3s?: number[12][10] | null,     // RUL "Reserve Flows without High Flows", m³/s (engine ≥ 1.90.0; absent = null)
-  reserveTable?: 'total' | 'withoutHighFlows' // the Reserve table 'percentile' reads (engine ≥ 1.90.0; absent = 'total')
+  reserveTable?: 'total' | 'withoutHighFlows', // the Reserve table 'percentile' reads (engine ≥ 1.90.0; absent = 'total')
+  tabFile?: { name, generated, title, runoff, annual: { label, value }[], category,
+              ifr: { label, mcm, pctMar }[], distributionType, monthlyMcm: number[12][7] }, // the .tab, parsed (issue #617; display only)
+  rulFile?: { name, generated, unit: 'm3s' | 'mcm', category, edited?: true }          // the .rul's header (issue #617; display only)
 }
 ```
+
+**The kept DRM files (issue #617).** `tabFile` is the DRM summary (.tab) the
+TAB flows or the table MAR were read from, parsed, so Settings can show the
+whole file: its header lines, every Annual Flows `label = value` line, the
+REC, the IFR summary (Mm³/a and % MAR), the distribution type and the 12 × 7
+monthly table in Mm³ a month (natural mean, SD, CV; low flows maintenance and
+drought; high flows maintenance; total flows maintenance, the TAB flows'
+column). `rulFile` is the .rul's name, date, unit and REC. Both are stored as
+parsed data, never raw text, and bounded (`tabFileIssue`, `rulFileIssue`:
+names ≤ 255 characters, header text ≤ 255, labels ≤ 60, ≤ 30 lines a block,
+no control characters, numbers finite, ≥ 0 and ≤ 10⁶, no unknown fields), so
+`ewrDailySourceIssues` refuses a malformed one as it does any other field.
+**No run reads them**: `resolveEwrDailySource` leaves them out, so a source
+with them resolves to the same object, and runs bit-identically, as one
+without (a test pins it), and a run comparison sees no change when only they
+differ. No result moves, as with the REC (§2.9c), but engine 1.100.1 is
+a patch bump all the same: an earlier build refuses a source carrying either
+field as an unknown one and runs the pragmatic EWR, so the stamp says which
+inputs a run's engine accepts (an evidence pack's reproduction re-runs at the
+pack's own version, evidence-pack.md). The
+TAB row stays editable, so the stored file can drift from `tabM3s`; Settings
+says so rather than either following the other.
 
 **The Reserve table (engine ≥ 1.90.0, issue #552).** A DRM `.rul` holds three
 percentile tables: the total Reserve flows (its first table, with high flows),
