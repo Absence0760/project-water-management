@@ -2,6 +2,8 @@
 
 - One descriptive User-Agent with a contact address (`INGEST_CONTACT`).
 - Conditional GETs (If-None-Match / If-Modified-Since); a 304 is a skip.
+- Range requests (`byte_range`), for reading a few pixels of a TIFF
+  (verify_copy.py), paced like every other request.
 - Pacing: at most one request every `min_interval` seconds (1 by default),
   retries included, so the job never runs more than one request at a time.
 - 429 and 503 honour `Retry-After` (seconds or an HTTP date), up to
@@ -113,10 +115,26 @@ class PoliteClient:
                 self.sleep(wait)
         self._last = self.clock()
 
-    def get(self, url: str, etag: str | None = None, last_modified: str | None = None, dest: str | None = None) -> Response:
+    def get(
+        self,
+        url: str,
+        etag: str | None = None,
+        last_modified: str | None = None,
+        dest: str | None = None,
+        byte_range: tuple[int, int] | None = None,
+    ) -> Response:
         """GET `url`, conditionally when `etag`/`last_modified` are given.
-        With `dest`, the body streams to that file instead of memory."""
+        With `dest`, the body streams to that file instead of memory. With
+        `byte_range` (first, last), inclusive, only those bytes are asked for
+        (`Range`; a 206 answers it, and a server may clip it at the end of the
+        file). A server that ignores Range answers 200 with the whole body:
+        the caller slices it (verify_copy.py does)."""
         headers = {"User-Agent": self.user_agent}
+        if byte_range is not None:
+            first, last = byte_range
+            if not 0 <= first <= last:
+                raise ValueError(f"byte range {byte_range} is not first <= last")
+            headers["Range"] = f"bytes={first}-{last}"
         if etag:
             headers["If-None-Match"] = etag
         if last_modified:

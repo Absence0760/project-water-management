@@ -1,4 +1,5 @@
 .venv/
+.venv-verify/
 .mirror/
 __pycache__/
 fixtures/
