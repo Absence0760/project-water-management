@@ -962,9 +962,10 @@ export interface Run extends RunMeta {
 	inputSeries?: Partial<Record<string, RunSeriesSnapshot>> | null;
 	/**
 	 * A forecast run's rain source (GET …/runs/:runId only): 'chirps_gefs'
-	 * when a CHIRPS-GEFS feed wrote every forecast day, 'other' otherwise; null
-	 * for any other run and a forecast run stored before it was recorded. The
-	 * report credits CHIRPS-GEFS only on 'chirps_gefs'.
+	 * when a CHIRPS-GEFS feed wrote every forecast day, 'ecmwf_ens' when an
+	 * ECMWF ENS feed did (issue #604 R4-E), 'other' otherwise; null for any
+	 * other run and a forecast run stored before it was recorded. The report
+	 * credits CHIRPS-GEFS or ECMWF only on its own value.
 	 */
 	forecastRainSource?: ForecastRainSource | null;
 	/**

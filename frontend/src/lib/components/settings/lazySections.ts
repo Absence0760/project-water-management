@@ -6,6 +6,7 @@
 // The panels a visit may never draw (the pan helper, the areal rain body, a unit's MAP proposal,
 // the calibration rules) keep chunks of their own; so do the ones the Scenarios tab loads too (drought
 // restrictions, the daily EWR source), which would otherwise drag this chunk into a scenario's form.
+export { default as GapRainFields } from './GapRainFields.svelte';
 export { default as ChirpsFitPeriodSection } from './ChirpsFitPeriodSection.svelte';
 export { default as RainSourceSection } from './RainSourceSection.svelte';
 export { default as ZeroRainSection } from './ZeroRainSection.svelte';

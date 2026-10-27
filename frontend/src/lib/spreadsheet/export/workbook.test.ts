@@ -1,4 +1,4 @@
-import { DISCLAIMER, withSite, type RunSummary } from '@water-management/engine';
+import { DISCLAIMER, rainCredits, withSite, type RunSummary } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import { parseCsv } from './csv';
@@ -123,6 +123,41 @@ describe('buildWorkbook', () => {
 		DISCLAIMER.paragraphs.forEach((p, i) => expect(rows).toContain(`${i + 1}. ${withSite(p, 'https://water.example.com')}`));
 		expect(rows.some((r) => String(r).endsWith('Terms of use: https://water.example.com/terms.'))).toBe(true);
 		expect(rows).toContain(`Disclaimer version ${DISCLAIMER.version}.`);
+	});
+
+	it('credits the rain sources under the disclaimer, word for word, only when the run owes them (issue #604 R4-E)', async () => {
+		const credits = rainCredits({ era5l: true, imergVersions: ['V07'], ecmwf: true }, '2026-10-27');
+		const rows = aoa(read(await buildWorkbook(input({ credits }))).Sheets['Read this first']!).map((r) => r[0]);
+		const at = rows.indexOf('Rain data credits');
+		expect(at).toBeGreaterThan(rows.indexOf(`Disclaimer version ${DISCLAIMER.version}.`));
+		expect(rows.slice(at + 1, at + 5)).toEqual([`ERA5-Land: ${credits[0]!.lines[0]}`, `ERA5-Land: ${credits[0]!.lines[1]}`, `IMERG Late: ${credits[1]!.lines[0]}`, 'ECMWF ENS forecast: ECMWF open data, CC BY 4.0']);
+		// None owed: the sheet is as before.
+		expect(aoa(wb.Sheets['Read this first']!).map((r) => r[0])).not.toContain('Rain data credits');
+	});
+
+	it('keeps the products’ daily columns and puts the gap-filling block with the data checks (issue #604 R4-E)', async () => {
+		const gapCsv = summaryCsv.replace('CHIRPS bias correction\r\nNo CHIRPS series — nothing to correct\r\n', 'CHIRPS bias correction\r\nNo CHIRPS series — nothing to correct\r\n\r\nGap-filling products\r\nFills the catchment rain’s blank days,ERA5-Land\r\nFilled from,To,Product,IMERG version\r\n2021-10-02,2021-10-03,IMERG Late,V07\r\n');
+		const withProducts: DailyTable = {
+			...catchment,
+			columns: [
+				...catchment.columns,
+				{ key: 'rain_era5l', header: 'ERA5-Land rain as read (before bias correction) (mm)', unit: 'mm', values: [1.5, null, 0, 2] },
+				{ key: 'rain_imerg_late', header: 'IMERG Late rain as read (newest version with the day, before bias correction) (mm)', unit: 'mm', values: [null, 3.25, 4, null] }
+			]
+		};
+		const book = read(await buildWorkbook(input({ summaryCsv: gapCsv, catchment: withProducts })));
+		const daily = aoa(book.Sheets['Catchment']!);
+		expect(daily[0]!.slice(-2)).toEqual(['ERA5-Land rain as read (before bias correction) (mm)', 'IMERG Late rain as read (newest version with the day, before bias correction) (mm)']);
+		expect(daily.slice(1, 5).map((r) => r.slice(-2))).toEqual([
+			[1.5, null],
+			[null, 3.25],
+			[0, 4],
+			[2, null]
+		]);
+		const checks = aoa(book.Sheets['Data checks']!).map((r) => r.filter((c) => c !== null));
+		expect(checks).toContainEqual(['Gap-filling products']);
+		expect(checks).toContainEqual(['2021-10-02', '2021-10-03', 'IMERG Late', 'V07']);
+		expect(aoa(book.Sheets['Summary']!).flat()).not.toContain('Gap-filling products');
 	});
 
 	it('names the sheets in order, Excel-safe and unique', () => {

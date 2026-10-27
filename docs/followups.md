@@ -480,8 +480,9 @@ runs and accumulations are real) can't be decided without the client.
       thresholded at 1 mm and quantile-mapped, IMERG by its factor alone;
       IMERG only past the last reading of the chosen products; the choice
       not read under a catchment station or for a unit's own CHIRPS
-      (engine-audit.md GR1–GR6). Settings → Rain gaps's control for it is
-      R4-E's.
+      (engine-audit.md GR1–GR6). Its control is Settings → Rain gaps →
+      Gap-filling product (R4-E, ui.md § Model settings), and Data draws
+      the products beside CHIRPS (ui.md § Data).
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent

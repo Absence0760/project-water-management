@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DATA_ANCHORS, dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 
 const ids = (p: Parameters<typeof dataNavGroups>[0]) => dataNavGroups(p).flatMap((g) => g.sections.map((s) => s.id));
-const ALL = { chart: true, agreement: true, doubleMass: true, checks: true };
+const ALL = { chart: true, agreement: true, doubleMass: true, gapRain: true, checks: true };
 
 describe('dataNavGroups', () => {
 	it('links every panel, in page order, when the page draws them all', () => {
@@ -15,7 +15,9 @@ describe('dataNavGroups', () => {
 		const none = { chart: false, agreement: false, doubleMass: false, checks: false };
 		expect(ids(none)).toEqual(['data-series', 'data-feeds', 'data-uses']);
 		expect(dataNavGroups(none).map((g) => g.label)).toEqual(['Series', 'Reference']);
-		expect(ids({ ...ALL, agreement: false })).toEqual(['data-series', 'data-chart', 'data-feeds', 'data-double-mass', 'data-checks', 'data-uses']);
+		expect(ids({ ...ALL, agreement: false, gapRain: false })).toEqual(['data-series', 'data-chart', 'data-feeds', 'data-double-mass', 'data-checks', 'data-uses']);
+		// Rain products side by side only while settings.gapRain chooses a product (issue #604 R4-E); absent is off.
+		expect(ids({ chart: false, agreement: false, doubleMass: true, checks: false })).toEqual(['data-series', 'data-feeds', 'data-double-mass', 'data-uses']);
 	});
 
 	it('names each link as its panel’s heading, on the bar too (issue #462, #586 R4-M)', () => {
@@ -26,6 +28,7 @@ describe('dataNavGroups', () => {
 			'Data feeds',
 			'Gauge vs logger agreement',
 			'Double mass: catchment rain vs CHIRPS',
+			'Rain products side by side',
 			'Data checks',
 			'What the model uses'
 		]);

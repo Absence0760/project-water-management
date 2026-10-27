@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
 	type AllocationEntry,
+	forecastRainSourceOf,
 	type ForecastRainSource,
 	forecastSplit,
 	gaugeSeriesKey,
@@ -503,20 +504,22 @@ export async function prepareRun(
 
 /**
  * Where a forecast run's forecast rain came from, for the report's line
- * (engine FORECAST_RAIN_NOTE): 'chirps_gefs' only when a CHIRPS-GEFS data
- * feed wrote every day of the forecast series from the first forecast day to
- * its end (time_series.feed_id + feed_days, 031_feed_days: a person's upload
- * or edit releases the days it covers, so any such day makes it 'other').
+ * (engine FORECAST_RAIN_NOTE): 'chirps_gefs' or 'ecmwf_ens' (issue #604
+ * R4-E) only when a feed of that source wrote every day of the forecast
+ * series from the first forecast day to its end (time_series.feed_id +
+ * feed_days, 031_feed_days: a person's upload or edit releases the days it
+ * covers, so any such day makes it 'other').
  */
 export async function forecastRainSource(db: Db, seriesId: string | undefined, from: string): Promise<ForecastRainSource> {
 	if (!seriesId) return 'other';
-	const { rows } = await db.query<{ gefs: boolean | null }>(
-		`SELECT f.source = 'chirps_gefs' AND s.feed_days @> daterange($2::date, s.start_date + cardinality(s."values")) AS gefs
+	const { rows } = await db.query<{ source: string | null; whole: boolean | null }>(
+		`SELECT f.source, s.feed_days @> daterange($2::date, s.start_date + cardinality(s."values")) AS whole
 		 FROM time_series s LEFT JOIN data_feed f ON f.project_id = s.project_id AND f.id = s.feed_id
 		 WHERE s.id = $1`,
 		[seriesId, from]
 	);
-	return rows[0]?.gefs === true ? 'chirps_gefs' : 'other';
+	const r = rows[0];
+	return r?.whole === true && (r.source === 'chirps_gefs' || r.source === 'ecmwf_ens') ? r.source : 'other';
 }
 
 /**
@@ -878,7 +881,7 @@ function rebuildRunInput(r: StoredRun, refs: StoredRef[]): ModelInput {
 		settings: r.inputs.settings,
 		model: r.inputs.model,
 		series,
-		...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {}),
+		...(forecastRainSourceOf(source) ? { forecastRainSource: forecastRainSourceOf(source)! } : {}),
 		...(choice ? { seriesChoice: choice } : {}),
 		...(stations ? { stations } : {})
 	};

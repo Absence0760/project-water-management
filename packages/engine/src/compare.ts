@@ -83,7 +83,7 @@ export interface RunInputsSnapshot {
 	/** The CHIRPS series the run read and the others (engine ≥ 1.90.0, ModelInput.seriesChoice); absent when there were no others. */
 	seriesChoice?: SeriesChoice | null;
 	/** A forecast run's forecast rain source (ModelInput.forecastRainSource, engine ≥ 1.85.0); absent on every other run. */
-	forecastRainSource?: 'chirps_gefs' | 'other' | null;
+	forecastRainSource?: 'chirps_gefs' | 'ecmwf_ens' | 'other' | null;
 	/** The rainfall stations' names and details (ModelInput.stations, engine ≥ 1.91.0, issue #553); absent unless settings.rainStations assigns a station. */
 	stations?: RainStationInputs | null;
 }

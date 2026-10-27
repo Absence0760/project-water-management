@@ -4,7 +4,7 @@
 // route loads what it needs inside its transaction, and the body is written
 // from memory as the client reads it. export.json is built in memory and
 // keeps the JSON cap (MAX_JSON_EXPORT_BYTES), so it always imports back.
-import { damCapacityOn, fromEpochDay, parseGaugeSeriesKey, parseUnitRainSeriesKey, toEpochDay, type NetworkNode, type RunSummary, dayText, isIsoDate } from '@water-management/engine';
+import { damCapacityOn, fromEpochDay, parseGaugeSeriesKey, parseUnitRainSeriesKey, runRainCredits, toEpochDay, type NetworkNode, type RunSummary, dayText, isIsoDate } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -79,7 +79,16 @@ interface RunRow {
 	notes: string;
 	notesUpdatedAt: Date | null;
 	notesUpdatedBy: string | null;
+	/** A forecast run's rain source as it stored it (runs/execute.ts forecastRainSource); null otherwise. */
+	forecastRainSource: string | null;
 }
+
+/**
+ * The credits a run's catchment values owe (issue #604 R4-E): ERA5-Land's and
+ * IMERG Late's when the run read them, ECMWF's for its ECMWF forecast. The
+ * day the data were read: the run's creation day.
+ */
+const runCredits = (run: RunRow) => runRainCredits(run, new Date(run.createdAt).toISOString().slice(0, 10));
 
 async function loadRun(db: Db, projectId: string, runId: string): Promise<RunRow> {
 	if (!UUID.test(runId)) throw new ApiError(404, 'not found');
@@ -89,7 +98,8 @@ async function loadRun(db: Db, projectId: string, runId: string): Promise<RunRow
 			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
 			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel",
 			notes, notes_updated_at AS "notesUpdatedAt",
-			(SELECT display_name FROM app_user WHERE id = notes_updated_by) AS "notesUpdatedBy"
+			(SELECT display_name FROM app_user WHERE id = notes_updated_by) AS "notesUpdatedBy",
+			inputs->>'forecastRainSource' AS "forecastRainSource"
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
@@ -228,7 +238,9 @@ async function loadReadingRun(
 			rainThresholdMm: hit.threshold,
 			catchment,
 			gaugeFlow,
-			unitRain: unitRainUsed
+			unitRain: unitRainUsed,
+			// Which product (and IMERG version) filled which days (engine ≥ 1.101.0): the rain source column names them.
+			gapRainSegments: run.summary.gapRain?.segments ?? []
 		}
 	};
 }
@@ -259,7 +271,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const parts = [run.label || 'run', scope, 'daily'];
 			return csvDownload(
 				c,
-				() => withRunComments(run.legacy, provenance(run, dam), withWithheldNote(withheld, dailyCsvLines(run.startDate, columns, range))),
+				// The catchment's file holds the rain columns, so it credits their sources (issue #604 R4-E).
+				() => withRunComments(run.legacy, provenance(run, dam), withWithheldNote(withheld, dailyCsvLines(run.startDate, columns, range)), q.nodeId ? [] : runCredits(run)),
 				exportFilename(name, parts, 'csv', timeZone),
 				csvTooLarge(NARROW)
 			);
@@ -334,6 +347,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 					runoffModel: run.runoffModel,
 					damCapacityM3: await loadDamCapacities(db, runId),
 					damCapacityEndM3: await loadDamCapacitiesOn(db, runId, summaryEnd(run)),
+					// An ECMWF forecast's credit in the forecast block (issue #604 R4-E).
+					forecastRainSource: run.forecastRainSource,
 					// The drought restriction rule's dams, units and EWR site by name (engine ≥ 1.54.0).
 					...(run.summary.droughtRestriction ? { nodeNames: await loadNodeNames(db, id) } : {})
 				},
@@ -375,7 +390,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const lines = () => dailyCsvLines(s.startDate, columns, range);
 			return csvDownload(
 				c,
-				() => (reading ? withRunComments(reading.run.legacy, provenance(reading.run), withChangedNote(reading.changed, lines())) : lines()),
+				// Catchment rain's run columns (rain used, its source) take the gap-filling products' values: credited (issue #604 R4-E).
+				() => (reading ? withRunComments(reading.run.legacy, provenance(reading.run), withChangedNote(reading.changed, lines()), reading.columns.inputKey === 'rain_catchment_mm' ? runCredits(reading.run) : []) : lines()),
 				exportFilename(name, [s.name ? `${s.kind}-${s.name}` : s.kind], 'csv', timeZone),
 				csvTooLarge(NARROW)
 			);

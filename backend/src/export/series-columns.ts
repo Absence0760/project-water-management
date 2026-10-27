@@ -29,6 +29,7 @@ import {
 	seriesRowFlags,
 	toEpochDay,
 	ZERO_RAIN_COLUMN,
+	type GapRainSegment,
 	type ProjectSettings,
 	type SeriesKind
 } from '@water-management/engine';
@@ -69,6 +70,12 @@ export interface ReadingRun {
 	gaugeFlow: (RunColumn & { gaugeName: string }) | null;
 	/** A land unit's own rain (issue #482): the rain the run used on the unit (its `rain_unit`); null otherwise, or a run that made none. Optional: older callers set none. */
 	unitRain?: (RunColumn & { unitName: string }) | null;
+	/**
+	 * The runs of days ERA5-Land and each IMERG Late version filled (engine ≥
+	 * 1.101.0, summary.gapRain.segments): where the rain source column reads a
+	 * day's IMERG version. Optional: absent or empty on other runs.
+	 */
+	gapRainSegments?: readonly GapRainSegment[];
 }
 
 /** The `rain_source` codes in words (engine RAIN_SOURCE_CODE); a missing day is blank. */
@@ -77,8 +84,17 @@ const SOURCE_NAME: Record<number, string> = {
 	[RAIN_SOURCE_CODE.series]: 'alternative gauge',
 	[RAIN_SOURCE_CODE.chirps]: 'CHIRPS',
 	[RAIN_SOURCE_CODE.reanalysis]: 'reanalysis',
-	[RAIN_SOURCE_CODE.forecast]: 'forecast'
+	[RAIN_SOURCE_CODE.forecast]: 'forecast',
+	// Engine ≥ 1.101.0 (settings.gapRain): the gap-filling products; IMERG Late with its version (segments).
+	[RAIN_SOURCE_CODE.era5l]: 'ERA5-Land',
+	[RAIN_SOURCE_CODE.imergLate]: 'IMERG Late'
 };
+
+/** The IMERG version of a run day (an epoch day) from the run's segments, or null. */
+export function imergVersionOn(segments: readonly GapRainSegment[], day: number): string | null {
+	for (const s of segments) if (s.product === 'imerg_late' && toEpochDay(s.from) <= day && day <= toEpochDay(s.to)) return s.version;
+	return null;
+}
 
 const finite = (v: number | null | undefined): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -137,7 +153,19 @@ function runColumns(s: ExportSeries, run: ReadingRun): DailyColumn[] {
 		const source = c[RAIN_SOURCE_COLUMN.key];
 		if (source) {
 			const get = at(source.values);
-			out.push({ header: `Rain source ${tag}`, values: [], text: (i) => { const v = get(i); return finite(v) ? (SOURCE_NAME[v] ?? '') : ''; } });
+			const segments = run.gapRainSegments ?? [];
+			const d0 = toEpochDay(s.startDate);
+			out.push({
+				header: `Rain source ${tag}`,
+				values: [],
+				text: (i) => {
+					const v = get(i);
+					if (!finite(v)) return '';
+					const name = SOURCE_NAME[v] ?? '';
+					const version = v === RAIN_SOURCE_CODE.imergLate ? imergVersionOn(segments, d0 + i) : null;
+					return version ? `${name} ${version}` : name;
+				}
+			});
 		}
 		if (final && run.rainThresholdMm !== null) {
 			const get = at(final.values);

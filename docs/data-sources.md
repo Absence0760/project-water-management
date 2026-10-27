@@ -275,7 +275,8 @@ in `infra/feeds.tf`):
   Sciences Data and Information Services Center (GES DISC), accessed
   [date], doi:10.5067/GPM/IMERGDL/DAY/07." (CMR's collection citation,
   release date 2024-06-07.) Series are labelled `IMERG Late` with the
-  day's version.
+  day's version, and the citation is given once per version the values
+  carry; where it shows: as ERA5-Land's, [below](#era5-land-r4-a).
 - **Contact:** GES DISC user services (the help link on disc.gsfc.nasa.gov)
   and the Earthdata forum. Needs an Earthdata Login account and a user token
   (operator step, docs/deployment.md § IMERG Late).
@@ -310,9 +311,12 @@ in `infra/feeds.tf`):
 - **Licence and attribution:** CC BY 4.0 and the ECMWF Terms of Use, read on
   ECMWF's open data page 2026-10-27: commercial use and redistribution
   allowed with attribution. Credit "ECMWF open data, CC BY 4.0" wherever its
-  values show: the feed's line in Data → Data feeds says so today
-  (`frontend/src/lib/components/feeds/feeds.ts` calibrationNote); a report
-  or export that shows a forecast from it should too (R4-E).
+  values show: the feed's line in Data → Data feeds
+  (`frontend/src/lib/components/feeds/feeds.ts` calibrationNote), and from
+  R4-E a forecast run whose every forecast day an `ecmwf_ens` feed wrote
+  records `forecastRainSource: 'ecmwf_ens'` (backend `runs/execute.ts`), so
+  its report, summary CSV, daily CSV, workbook and pack credit it: as
+  ERA5-Land's, [below](#era5-land-r4-a).
 - **Contact:** ECMWF support (Support Portal); no account needed.
 - **Access pattern:** the copy only (`ingest/ecmwf.py`, the Python ingest
   Lambda, `infra/ecmwf.tf`): each step's `.index` (JSON lines with each
@@ -432,7 +436,24 @@ starts.
   data were accessed. The copy's array carries the text in its
   `attribution` attribute (`era5land.ATTRIBUTION`). It must show wherever
   ERA5-Land's values do: the Data sources and credits page, a run's rain
-  source, reports and evidence packs, and exports (R4-E's UI).
+  source, reports and evidence packs, and exports.
+
+  **Where the credits show** (issue #604 R4-E), each from one place, the
+  engine's `packages/engine/src/liability/disclaimer.ts` (`copernicusEra5lNotice`,
+  `ERA5L_CITATION`, `imergCitation`, `ECMWF_CREDIT`, `rainCredits`,
+  `runRainCredits`), word for word, with the day the values were read (a
+  run's creation day; today on a live view): the Data sources and credits
+  page (`/data-sources`, `legal/dataCredits.ts`); Data → Rain products side
+  by side and the per-day preview, once a product's values show; Model
+  quality's Rain gaps filled from other products (a run that read them); the
+  run report's Inputs, **Rain data credits** (and an ECMWF forecast's cover
+  line, `FORECAST_RAIN_NOTE`), which the server's report PDF prints; the
+  run's CSVs (`# credit <name>: <text>` lines under the provenance line of
+  the catchment's daily file and of catchment rain's series file, and
+  `Credit:` rows in the summary's Gap-filling products block, `ECMWF` in its
+  forecast block); the workbook's first sheet; and an evidence pack's
+  reproduction bundle README (its series hold the products' values). A run
+  on CHIRPS alone and an uploaded forecast print none of them.
 - **How a day is defined:** the UTC day. ERA5-Land's `tp` accumulates from
   00 UTC, so the 00 UTC step of D+1 is the whole of day D, stored under D.
 - **Against CHIRPS's day:** CHIRPS v3 splits pentad totals into days with

@@ -4,7 +4,8 @@
 // unsaved form. Pure: SettingsTab (Model settings, settingsSummaries) and
 // CalibrationSettings (the Calibration page's four panels, calibrationSummaries)
 // pass the derived figures in.
-import { defaultDataQualitySettings, zeroFlowMonthsText, type ProjectSettings } from '@water-management/engine';
+import { defaultDataQualitySettings, resolveGapRain, zeroFlowMonthsText, type ProjectSettings } from '@water-management/engine';
+import { gapRainChoiceText } from '#lib/components/series/gapRain.js';
 import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
 import { fmtDay, fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 import type { SettingsSectionId } from './sections';
@@ -20,6 +21,8 @@ export interface SummaryInput {
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** settings.gapRain as a run takes it: null for CHIRPS alone (absent, null or the default written out). */
+const gapRainOf = (s: Pick<ProjectSettings, 'gapRain'>) => resolveGapRain(s.gapRain, []);
 
 /** "1 Oct 2015 – 30 Sep 2020", "from 1 Oct 2015", "to …", or null for neither. */
 export function dateSpan(start: string | null | undefined, end: string | null | undefined): string | null {
@@ -108,6 +111,8 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 	return {
 		'set-period': dateSpan(s.simulationStart, s.simulationEnd) ?? 'The whole rain record',
 		'set-rain': [
+			// The gap-filling product (engine ≥ 1.101.0, issue #604): first, only when one is chosen, so the line reads as before otherwise.
+			gapRainOf(s) ? `Gaps from ${gapRainChoiceText(gapRainOf(s))}` : null,
 			bias + (s.chirpsBiasCorrection !== 'none' && s.chirpsQuantileMap ? ', quantile-mapped' : ''),
 			s.chirpsBiasCorrection === 'none' ? null : ranges ? `fitted on ${plural(ranges, 'range')} of years` : 'fitted on the whole record',
 			zr?.mode === 'asRecorded' ? 'zero runs as recorded' : 'zero runs treated as missing',

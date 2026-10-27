@@ -3079,9 +3079,11 @@ export interface ModelInput {
 	 * own CHIRPS level (the reference factor × k_unit, its MAP factor or the
 	 * §2.4b factors), as its CHIRPS history does. Absent, null or 'other' (an
 	 * upload, maybe already at gauge level): the forecast × the unit's gauge
-	 * MAP ratio, as before.
+	 * MAP ratio, as before. 'ecmwf_ens' (issue #604 R4-E: an ECMWF ENS feed
+	 * wrote every forecast day) runs as 'other' does; it only names the
+	 * source, so the report credits ECMWF.
 	 */
-	forecastRainSource?: 'chirps_gefs' | 'other' | null;
+	forecastRainSource?: 'chirps_gefs' | 'ecmwf_ens' | 'other' | null;
 	/**
 	 * The series of a kind the run read, by name, and the others of that kind
 	 * it didn't (engine ≥ 1.90.0, issue #561, docs/model.md § Which CHIRPS

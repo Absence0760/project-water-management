@@ -1,0 +1,4 @@
+{
+	"addKb": 15,
+	"why": "The gap-filling products' UI (issue #604 R4-E): Settings → Rain gaps' Gap-filling product card (in the shared lazySections chunk), Data's Rain products side by side (its own chunk, about 2.3 KB, drawn only with settings.gapRain) and Model quality's Rain gaps filled from other products (its own chunk, about 1.9 KB), the preview's product sources and credits, the rain credits in the engine (shared by the report, the workbook and the data sources page), the gap-rain help article; measured 2112 KB against 2097 KB"
+}

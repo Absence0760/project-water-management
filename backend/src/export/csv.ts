@@ -1,6 +1,6 @@
 // Pure helpers for the CSV / JSON download endpoints (export/routes.ts).
 // No I/O: everything here is unit-tested in csv.test.ts.
-import { CSV_DISCLAIMER_COMMENT, fromEpochDay, toEpochDay } from '@water-management/engine';
+import { CSV_DISCLAIMER_COMMENT, fromEpochDay, toEpochDay, type RainCredit } from '@water-management/engine';
 import { localDate } from '../projects/timeZone.js';
 
 /**
@@ -110,9 +110,21 @@ export function runProvenanceComment(p: RunProvenance): string {
  * legacy (so row 1 still says so, as on summary.csv), the disclaimer line,
  * then the provenance line, then `lines` (the header row and the days).
  */
-export function* withRunComments(legacy: boolean, provenance: RunProvenance, lines: Iterable<string>): Generator<string> {
-	yield* withResultComments(legacy, [runProvenanceComment(provenance)]);
+export function* withRunComments(legacy: boolean, provenance: RunProvenance, lines: Iterable<string>, credits: readonly RainCredit[] = []): Generator<string> {
+	yield* withResultComments(legacy, [runProvenanceComment(provenance), ...creditComments(credits)]);
 	yield* lines;
+}
+
+/**
+ * The `#` lines that credit the rain sources a file's values come from
+ * (issue #604 R4-E, docs/data-sources.md): one per line of each credit, word
+ * for word, `# credit <name>: <text>`. The texts are the licensors' own and
+ * fixed (engine rainCredits), never typed by a user: they hold no `"`, `=` or
+ * line break, so a reader that doesn't skip comments sees text cells (the
+ * citations' commas split them, each later cell starting with a space).
+ */
+export function creditComments(credits: readonly RainCredit[]): string[] {
+	return credits.flatMap((c) => c.lines.map((l) => `# credit ${c.name}: ${l}`));
 }
 
 /** A number cell: empty for null / NaN / ±Infinity (missing days). */

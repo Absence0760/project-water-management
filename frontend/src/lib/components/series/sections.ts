@@ -7,7 +7,7 @@
 import type { NavGroup } from '#lib/components/common/sectionNav.js';
 
 /** Every panel id, in page order. */
-export const DATA_ANCHORS = ['data-series', 'data-chart', 'data-feeds', 'data-agreement', 'data-double-mass', 'data-checks', 'data-uses'] as const;
+export const DATA_ANCHORS = ['data-series', 'data-chart', 'data-feeds', 'data-agreement', 'data-double-mass', 'data-gap-rain', 'data-checks', 'data-uses'] as const;
 
 /** True for a fragment (without the `#`) naming one of the Data page's panels. */
 export function dataAnchor(hash: string): boolean {
@@ -31,6 +31,8 @@ export interface DataPanels {
 	agreement: boolean;
 	/** Double mass: catchment rain and CHIRPS, long enough to compare. */
 	doubleMass: boolean;
+	/** Rain products side by side: settings.gapRain chooses ERA5-Land or IMERG Late (issue #604 R4-E). Optional: absent is off. */
+	gapRain?: boolean;
 	/** Data checks: once the series' values are in. */
 	checks: boolean;
 }
@@ -54,6 +56,7 @@ export function dataNavGroups(p: DataPanels): NavGroup[] {
 			sections: [
 				...(p.agreement ? [{ id: 'data-agreement', label: 'Gauge vs logger agreement' }] : []),
 				...(p.doubleMass ? [{ id: 'data-double-mass', label: 'Double mass: catchment rain vs CHIRPS' }] : []),
+				...(p.gapRain ? [{ id: 'data-gap-rain', label: 'Rain products side by side' }] : []),
 				...(p.checks ? [{ id: 'data-checks', label: 'Data checks' }] : [])
 			]
 		},

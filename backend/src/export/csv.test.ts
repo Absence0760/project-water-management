@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CSV_DISCLAIMER_COMMENT } from '@water-management/engine';
+import { CSV_DISCLAIMER_COMMENT, rainCredits } from '@water-management/engine';
 import { localDate } from '../projects/timeZone.js';
 import {
 	attachment,
@@ -8,6 +8,7 @@ import {
 	csvChunks,
 	csvStream,
 	MAX_CSV_EXPORT_BYTES,
+	creditComments,
 	csvRow,
 	dailyCsvLines,
 	dayRange,
@@ -309,5 +310,30 @@ describe('file names', () => {
 	it('builds an attachment header without injectable characters', () => {
 		expect(attachment('a_b-1.csv')).toBe('attachment; filename="a_b-1.csv"');
 		expect(attachment('x"; y\r\n.csv')).toBe('attachment; filename="x___y__.csv"');
+	});
+});
+
+describe('creditComments (issue #604 R4-E)', () => {
+	const credits = rainCredits({ era5l: true, imergVersions: ['V07'], ecmwf: true }, '2026-10-27');
+
+	it('one # line per credit line, the licensor’s text word for word, after the provenance line', () => {
+		const lines = creditComments(credits);
+		expect(lines).toHaveLength(4);
+		expect(lines[0]).toBe(`# credit ERA5-Land: ${credits[0]!.lines[0]}`);
+		expect(lines.at(-1)).toBe('# credit ECMWF ENS forecast: ECMWF open data, CC BY 4.0');
+		const p: RunProvenance = { label: 'R', engineVersion: '1', runoffModel: 'gr4j', createdAt: '2026-10-27T00:00:00.000Z', startDate: '2020-01-01', endDate: '2020-01-02' };
+		const out = [...withRunComments(false, p, ['date,x'], credits)];
+		expect(out.slice(0, 2)).toEqual([CSV_DISCLAIMER_COMMENT, runProvenanceComment(p)]);
+		expect(out.slice(2, 6)).toEqual(lines);
+		expect(out.at(-1)).toBe('date,x');
+		// None by default: every other file is as before.
+		expect([...withRunComments(false, p, ['date,x'])]).toHaveLength(3);
+	});
+
+	it('stays harmless to a reader that doesn’t skip comments: no quote, no =, no line break, and no later cell a formula', () => {
+		for (const l of creditComments(credits)) {
+			expect(l).not.toMatch(/["=\r\n]/);
+			for (const cell of l.split(',').slice(1)) expect(cell).toMatch(/^ [^=+\-@]/);
+		}
 	});
 });
