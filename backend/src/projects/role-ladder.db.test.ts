@@ -143,6 +143,7 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['GET /projects/:id/farm/:nodeId/series', { min: 'farmer', why: "one of the farm view's own allowlisted series, the same 404s" }],
 	['GET /projects/:id/farm/:nodeId/history', { min: 'farmer', why: "the farm's own figures across publications, the same 404s" }],
 	['GET /projects/:id/farm/:nodeId/map', { min: 'farmer', why: "the farm's own parcels and dams plus the boundary, rivers and gauges, never a neighbour's (#326 A3; farm-map.db.test.ts), the same 404s" }],
+	['GET /projects/:id/farm/:nodeId/dam-observed', { min: 'farmer', why: "the farm's own dam polygons seen from space, the newest clear view and its full area, never a neighbour's (#604 R5-B; dams/observed/observed.db.test.ts), the same 404s" }],
 	// Notes (WP-2.7): RLS limits a farmer or contributor to farm notes on their own farms.
 	['GET /projects/:id/notes', { min: 'farmer', why: 'notes RLS lets the caller read (a farmer: farm notes on their farms)' }],
 	['GET /projects/:id/notes/counts', { min: 'farmer', why: 'per-target counts of the same RLS-limited notes' }],

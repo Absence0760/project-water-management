@@ -185,7 +185,7 @@
 			value: (_u: uPlot, v: number | null) => fmtReading(v)
 		};
 		if (s.style === 'points') {
-			return { ...base, width: 0, paths: () => null, points: { show: true, size: 3 * k, width: 0, fill: stroke, stroke } };
+			return { ...base, width: 0, paths: () => null, points: { show: true, size: (s.pointSize ?? 3) * k, width: 0, fill: stroke, stroke } };
 		}
 		if (s.style === 'step' || s.style === 'dashed') {
 			return {

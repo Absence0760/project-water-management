@@ -239,7 +239,13 @@ const READ_ONLY = new Set([
 	// Our store of DWS gauge flow and the days each source covered (247_gauge_record): written only by gauge_record_write
 	// (the operator's import, as the schema owner) and app_gauge_record_load_web (the worker, with no user).
 	'gauge_record',
-	'gauge_record_span'
+	'gauge_record_span',
+	// DE Africa's Waterbodies polygons (249_dam_observation), loaded by the operator (`pnpm import:waterbodies`), and what
+	// satellites saw of each traced dam: its waterbody match and its observations, written only by app_dam_match_write and
+	// app_dam_observation_load (the worker, with no user) and dropped by map_feature_outline_changed when a dam is redrawn.
+	'waterbody_reference',
+	'dam_waterbody_match',
+	'dam_observation'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).

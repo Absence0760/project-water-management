@@ -10059,6 +10059,62 @@ table's monthly requirement is not used here, as at the outlet. A project
 without such a site has no key. The summary CSV writes each site's table
 after the outlet's.
 
+### 2.10l Modelled vs observed dam area (app, issue #604 R5-B)
+
+A check of a run against satellites, not part of the engine: nothing here
+changes `runModel` or its output (`backend/src/dams/observed/compare.ts`,
+pure, unit-tested; screens in [ui.md § Dams](./ui.md#dams) and the farm dam
+page; API in [api.md § Dams seen from space](./api.md#dams-seen-from-space)).
+The thresholds are provisional, chosen from the sources' own resolution and
+guidance, and live in one place (`OBSERVED`); change them there and here
+together.
+
+- **Modelled.** The run's `dam_area` column for the unit the dam polygons
+  stand for (`map_feature.node_id`): m², at the start of each day, from the
+  survey curve (`damCurve`, linear between rows) or the power law
+  `A = A_full (S/C)^b` (§2.7a). A satellite pass (Landsat, about 10:30 local)
+  is compared with that day's value; the day's own change is small beside
+  the observation's error.
+- **Observed.** `dam_observation` (249, R5-A): per dam polygon, source
+  (`waterbodies`: DE Africa Waterbodies' area series for the polygon it
+  matched; `wofs`: WOfS water pixels inside the app's own outline, R5-C),
+  date, wet area (m²) and the share of the outline seen clearly.
+- **Clear views only.** A view is compared when at least **90 %** of the dam
+  was seen clearly (`minPctObserved`): the wet area counts the part seen, so
+  a partly clouded view understates the water. DE Africa's Waterbodies
+  guidance filters its series on the share observed the same way.
+- **The composite dam.** A unit's dam is all its farm dams (geo/damRoutes.ts),
+  so with several polygons linked to one unit a day's observed area is their
+  sum, compared only when every polygon was seen clearly by the same source
+  that day (else `partial-unit`).
+- **Which source.** A Waterbodies view counts only for a polygon matched to
+  that waterbody alone (`matched`); `merged` (the waterbody also holds other
+  water) or `none` leaves only WOfS (`not-this-dam`). When both saw the dam
+  on one day, WOfS inside the dam's own outline wins (`other-source`).
+- **Full area F.** The run's own: the survey curve's top area when the curve
+  is usable, else `damAreaFullM2`, else the estimate from the capacity that
+  run's engine used (`estimatedDamAreaForEngine`). Sedimentation's loss of
+  capacity (§2.7g) isn't applied to F.
+- **Flags** (on compared views; O observed, M modelled):
+  - **seen full** (likely spilling): O ≥ 0.95 F; **model full**: M ≥ 0.95 F;
+  - **seen empty**: O ≤ max(0.05 F, 900 m²) (one 30 m pixel: less water than
+    that can't be told from none); **model empty**: M ≤ 0.05 F;
+  - **mismatch**, the first that holds: the model full while O < 0.8 F
+    (`model-full`); the model empty while O > 0.2 F (`model-empty`); seen
+    full while M < 0.8 F (`seen-full`); seen empty while M > 0.2 F
+    (`seen-empty`). The gap between 0.95 and 0.8 (and 0.05 and 0.2) keeps a
+    day at the edge of full or empty from being called a disagreement.
+- **Summary.** Over the compared views: the bias, mean(M − O) ÷ F × 100
+  (+: the model holds more water surface than seen; as a share of F so an
+  empty dam's view doesn't divide by zero), and the share within
+  ±10 % of F (|M − O| ≤ 0.1 F), with the counts of each flag.
+- **What it can't say.** A satellite sees surface, not volume: through the
+  curve or the power law, a surface error at a shallow edge is a small volume
+  error, and a dam whose area hardly changes as it fills (steep sides) shows
+  little either way. A disagreement points at the inputs (capacity, full
+  area, the curve, what flows in, the demand), never at a correction: the
+  hydrologist decides.
+
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
 The `[Shortfalls]` sheet answers *how much must each farm cut (or may it

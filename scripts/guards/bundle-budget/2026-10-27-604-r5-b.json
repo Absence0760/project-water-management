@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Dams → Seen from space (dams/DamObservedBox.svelte, observed.ts: the fold, its chart, flag lanes and table of views) and the farm dam page's Your dam, seen from space (farm/DamObservedCard.svelte, damObserved.ts), issue #604 R5-B; measured 2098 KB against the 2097 KB ceiling once merged, the new modules about 4 KB gzipped (their sources 6.7 KB and 1.5 KB gzipped with comments and CSS)"
+}
