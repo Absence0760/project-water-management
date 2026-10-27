@@ -111,6 +111,24 @@ describe('dam observations: read by the project, written only by the worker', ()
 		expect(m.map((r) => r.feature_id)).toEqual([damA]);
 	});
 
+	it('an applicant (a contributor linked to their farm) reads their own dam’s rows (positive control), never another applicant’s', async () => {
+		await seed();
+		const [applicantA, applicantB] = (await Promise.all(['Sapplicanta', 'Sapplicantb'].map((n) => signUp(n)))) as [User, User];
+		for (const [u, farm] of [
+			[applicantA, farmA],
+			[applicantB, farmB]
+		] as const) {
+			expect((await owner.call('POST', `/projects/${projectId}/members`, { email: u.email, role: 'contributor' })).status).toBe(201);
+			expect((await owner.call('PUT', `/projects/${projectId}/farmers/${u.id}`, { nodeIds: [farm.id] })).status).toBe(200);
+		}
+		const seen = async (u: User) => (await rowsAs<{ feature_id: string }>(u, 'SELECT DISTINCT feature_id FROM dam_observation ORDER BY feature_id')).map((r) => r.feature_id);
+		expect(await seen(applicantA)).toEqual([damA]);
+		expect(await seen(applicantB)).toEqual([damB]);
+		// Asked for by id, the other applicant's dam is still nothing.
+		expect(await rowsAs(applicantA, 'SELECT id FROM dam_observation WHERE feature_id = $1', [damB])).toEqual([]);
+		expect(await rowsAs(applicantB, 'SELECT id FROM dam_observation WHERE feature_id = $1', [damA])).toEqual([]);
+	});
+
 	it('with no user, RLS shows nothing of the tables themselves', async () => {
 		await seed();
 		await asOwner(`INSERT INTO waterbody_reference (uid, dataset, geometry, min_lon, min_lat, max_lon, max_lat, area_m2, source)

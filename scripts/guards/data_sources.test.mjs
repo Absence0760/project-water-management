@@ -153,6 +153,8 @@ describe('the real tree', () => {
 		const { hosts, problems } = feedHosts();
 		assert.deepEqual(problems, []);
 		assert.ok(hosts.includes('data.chc.ucsb.edu') && hosts.includes('www.dws.gov.za'), hosts.join(', '));
+		// Digital Earth Africa's bucket (Waterbodies, WOfS scenes) and its STAC search (WOfS, issue #604 R5).
+		assert.ok(hosts.includes('deafrica-services.s3.af-south-1.amazonaws.com') && hosts.includes('explorer.digitalearth.africa'), hosts.join(', '));
 	});
 
 	it('has a register row for every live host and every data_feed.source', () => {

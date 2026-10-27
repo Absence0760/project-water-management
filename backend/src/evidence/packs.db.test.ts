@@ -49,7 +49,7 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 
 import { actForAuthority, anon, app, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { minioUp, S3_ENDPOINT } from '../__tests__/minio.js';
-import { withUser } from '../db/tx.js';
+import { withoutUser, withUser } from '../db/tx.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { runTick } from '../jobs/runner.js';
 import { PackRenderRequestMessage, type PackRenderResult } from '../jobs/transport.js';
@@ -1742,5 +1742,98 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 		// Positive controls: the editor reads the full mix and passes the PDF check (a draft: 409).
 		expect((await editor.call('GET', packPath(both))).body.manifest.report.licenceImpactAuthorised.mix).toEqual(full);
 		expect((await editor.call('GET', `${packPath(both)}/pdf`)).status).toBe(409);
+	});
+});
+
+describe.skipIf(!minio)('an applicant’s application pack with observed wet days (evidence-21, issue #604 R5-C)', () => {
+	let applicant: User;
+	let damId: string;
+	let runId: string;
+
+	beforeAll(async () => {
+		applicant = await signUp('PkWetApplicant');
+		expect((await owner.call('POST', `${at()}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+		expect((await owner.call('PUT', `${at()}/farmers/${applicant.id}`, { nodeIds: [farmId] })).status).toBe(200);
+		// An application's base must be published.
+		const pubs = await owner.call('GET', `${at()}/publication`);
+		if (!JSON.stringify(pubs.body).includes(baseRun)) expect((await owner.call('POST', `${at()}/publication`, { runId: baseRun })).status).toBe(201);
+		damId = await addFeature({ kind: 'dam', name: 'Upper dam', nodeId: farmId, geometry: { type: 'Polygon', coordinates: [square(21.31, -33.69, 0.002)] } });
+		// Invented WOfS rows in the baseline's period, loaded as the worker does (app_dam_observation_load, 249): wet, dry, inconclusive.
+		const rows: [string, number, number][] = [
+			['2019-02-03', 2700, 60],
+			['2019-02-11', 0, 100],
+			['2019-02-19', 0, 80]
+		];
+		await withoutUser((db) =>
+			db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
+				'wofs',
+				damId,
+				rows.map((r) => r[0]),
+				rows.map((r) => r[1]),
+				rows.map((r) => r[2]),
+				rows.map(() => 'synthetic-wofs-item'),
+				new Date()
+			])
+		);
+		const created = await applicant.call('POST', `${at()}/scenarios`, { name: 'Applicant dam', baseRunId: baseRun, ops: [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 150_000 }] });
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		const sid = created.body.scenario.id as string;
+		const ran = await applicant.call('POST', `${at()}/scenarios/${sid}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		runId = ran.body.run.id as string;
+		expect((await applicant.call('POST', `${at()}/scenarios/${sid}/submit`, {})).status).toBe(200);
+		// Its paired band on the cited ensemble, so only its own checks can fail.
+		const cited = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report.uncertainty.cited.id as string;
+		const base = (await owner.call('GET', `${runPath(baseRun)}/uncertainty/${cited}`)).body.ensemble;
+		await ensemble(runId, { baselineId: cited }, { options: base.options, header: base.result.header, members: base.result.members });
+	}, 300_000);
+	afterAll(async () => {
+		await asOwner('DELETE FROM dam_observation WHERE feature_id = $1', [damId]);
+		await dropFeatures([damId]);
+	});
+
+	it('freezes § 7 in the manifest its hash covers, and the stored bundle checks observations:wofs', async () => {
+		const p = await draft(editor, runId);
+		const [row] = await asOwner('SELECT manifest, manifest_sha256 FROM evidence_pack WHERE id = $1', [p.id]);
+		const manifest = row!.manifest as PackManifest;
+		const obs = manifest.report.damObservations!;
+		expect(obs).toMatchObject({ source: 'wofs', startDate: manifest.report.identity.baseline.startDate, endDate: manifest.report.identity.baseline.endDate });
+		expect(obs.dams).toEqual([
+			{
+				featureId: damId,
+				name: 'Upper dam',
+				nodeId: farmId,
+				observedDates: 3,
+				wetDates: 1,
+				dryDates: 1,
+				inconclusiveDates: 1,
+				dates: [
+					['2019-02-03', 2700, 60],
+					['2019-02-11', 0, 100],
+					['2019-02-19', 0, 80]
+				]
+			}
+		]);
+		// The hash covers § 7: the stored manifest hashes to it, and without § 7 it wouldn't.
+		expect(sha256(packManifestText(manifest))).toBe(row!.manifest_sha256);
+		expect(p.manifestSha256).toBe(row!.manifest_sha256);
+		const { damObservations: _, ...withoutObs } = manifest.report;
+		expect(sha256(packManifestText({ ...manifest, report: withoutObs as PackManifest['report'] }))).not.toBe(row!.manifest_sha256);
+
+		await sign(editor, p.id);
+		const res = await issue(editor, p.id);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		try {
+			const { bytes } = await downloadBundle(editor, p.id);
+			expect(bytesSha256(bytes)).toBe(res.body.pack.bundleSha256);
+			const hash = (d: string | Uint8Array) => createHash('sha256').update(d).digest('hex');
+			const checked = await checkPackBundle(bytes as Uint8Array<ArrayBuffer>, { hash, expectManifestSha256: p.manifestSha256 });
+			expect(checked.checks.filter((k) => !k.ok)).toEqual([]);
+			expect(checked.checks.find((k) => k.id === 'observations:wofs')).toMatchObject({ ok: true });
+			expect(checked.ok).toBe(true);
+		} finally {
+			// Withdrawn, so no later test finds an application pack issued.
+			expect((await editor.call('POST', `${packPath(p.id)}/withdraw`, { reason: 'test observed wet days pack' })).status).toBe(200);
+		}
 	});
 });
