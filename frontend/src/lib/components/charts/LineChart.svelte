@@ -10,7 +10,7 @@
 	import 'uplot/dist/uPlot.min.css';
 	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
-	import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, logFloor, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
+	import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, laneRoom, logFloor, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
 	import { zoomHint } from './zoomHint';
 
 	let {
@@ -34,6 +34,7 @@
 		lanes = [],
 		lanesLabel = 'Flagged days',
 		lanesNote = '',
+		lanesRoom = false,
 		band,
 		pannable = true,
 		print = false,
@@ -89,6 +90,13 @@
 		lanesLabel?: string;
 		/** What the lanes' looks mean, after the heading ("solid: …; double line: …"); none when ''. */
 		lanesNote?: string;
+		/**
+		 * Give the lanes room under the lowest value (linear axis only): the y axis starts below it by the
+		 * strips' height, so a reading at 0 sits above them instead of under them (the Dams tab's Seen from
+		 * space, where 0 ha is a view of an empty dam; series.ts laneRoom). Off by default: a flow chart's
+		 * strips sit under its lowest flows, as before.
+		 */
+		lanesRoom?: boolean;
 		/**
 		 * Daily charts: one labelled band behind the lines from `from` (to `to`,
 		 * else the end), hatched, named on the plot and in a text key under it,
@@ -244,7 +252,11 @@
 			scales: {
 				x: isTime ? { time: true } : { time: false },
 				// A log axis spans at most LOG_DECADES decades under its top (series.ts logFloor).
-				y: log ? { distr: 3, log: 10, range: (_u: uPlot, lo: number | null, hi: number | null) => (lo == null || hi == null ? [lo, hi] : uPlot.rangeLog(logFloor(lo, hi), hi, 10, true)) } : {}
+				y: log
+					? { distr: 3, log: 10, range: (_u: uPlot, lo: number | null, hi: number | null) => (lo == null || hi == null ? [lo, hi] : uPlot.rangeLog(logFloor(lo, hi), hi, 10, true)) }
+					: roomy
+						? { range: (u: uPlot, lo: number | null, hi: number | null) => (lo == null || hi == null ? [lo, hi] : roomFor(u, lo, hi)) }
+						: {}
 			},
 			legend: {
 				show: !print,
@@ -291,7 +303,11 @@
 					grid: { stroke: gridColor, width: k },
 					ticks: { stroke: gridColor, size: 4 * k, width: 2 * k },
 					// On a log scale keep only the decades, thinned to what fits one label per `space`, so the grid stays readable.
-					filter: log ? (u, splits) => decadeTicks(splits, u.bbox.height / (30 * k * uPlot.pxRatio)) : undefined,
+					filter: log
+						? (u, splits) => decadeTicks(splits, u.bbox.height / (30 * k * uPlot.pxRatio))
+						: roomy
+							? (_u, splits) => splits.map((v) => (v < roomFloor - 1e-9 ? null : v))
+							: undefined,
 					values: (_u, vals) => vals.map((v) => (v == null ? '' : fmtCompact(v))),
 					label: unit || undefined,
 					labelFont: font,
@@ -375,6 +391,19 @@
 	const LANE_H = 6;
 	/** A doubled lane's two lines, each this many CSS pixels of its LANE_H - 1 = 5 (the 1 px between is the ground; the key swatch's gradient is the same 2 + 1 + 2). */
 	const LANE_DOUBLE_EDGE = 2;
+
+	/** With `lanesRoom`, a linear daily chart with lanes starts its y axis under its lowest value by the strips' height. */
+	const roomy = $derived(lanesRoom && isTime && !log && lanes.length > 0);
+	/** The lowest value the axis would have started at without the room: ticks under it go unlabelled (no "−1 ha"). */
+	let roomFloor = 0;
+	function roomFor(u: uPlot, lo: number, hi: number): [number, number] {
+		const [a, b] = uPlot.rangeNum(lo, hi, { min: { pad: 0.1, soft: 0, mode: 3 }, max: { pad: 0.1, soft: 0, mode: 3 } }) as [number, number];
+		roomFloor = a;
+		const px = print ? k : uPlot.pxRatio;
+		// The plot's height once laid out, else the box less the x axis (the first range is worked out before the layout).
+		const plotPx = u.bbox?.height > 0 ? u.bbox.height : (height - 60) * px;
+		return laneRoom(a, b, plotPx, (lanes.length * LANE_H + 2) * px);
+	}
 
 	/** Each lane a strip LANE_H high along the plot's foot, the first on top, its ranges a day wide at each end. */
 	function drawLanes(u: uPlot) {
@@ -504,7 +533,7 @@
 
 	// Rebuild when data, unit, scale, height, theme or the loaded fonts change…
 	$effect(() => {
-		void [plotted, unit, height, themeTick, fontsTick, hasData, host, log, series, shade, band, lanes];
+		void [plotted, unit, height, themeTick, fontsTick, hasData, host, log, series, shade, band, lanes, lanesRoom];
 		untrack(build);
 	});
 	// …and only resize in place when the container width changes.
@@ -528,6 +557,7 @@
 	class="chart"
 	data-shaded={shade.length || undefined}
 	data-lanes={(isTime && lanes.length) || undefined}
+	data-lanes-room={roomy || undefined}
 	data-band-from={band && isTime && bandSpan(band, aligned.x) ? band.from : undefined}
 	data-view-start={isTime && view ? isoDay(view.min) : undefined}
 	data-view-end={isTime && view ? isoDay(view.max) : undefined}

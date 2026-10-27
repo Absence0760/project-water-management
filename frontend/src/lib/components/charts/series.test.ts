@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import uPlot from 'uplot';
-import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, logFloor, panWindow, printScale, TIME_TICKS } from './series';
+import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, laneRoom, logFloor, panWindow, printScale, TIME_TICKS } from './series';
 
 describe('printScale', () => {
 	it('lays a chart out twice as large on a 1× screen, so its canvas has 2 device pixels per CSS pixel', () => {
@@ -187,5 +187,26 @@ describe('log axis (issue #521)', () => {
 		// Twenty decades never draw more than the room allows.
 		const wide = Array.from({ length: 21 }, (_, i) => 10 ** (i - 19));
 		expect(decadeTicks(wide, 8).filter((v) => v !== null).length).toBeLessThanOrEqual(8);
+	});
+});
+
+describe('laneRoom (the y axis makes room for the lanes, issue #604 R5-B)', () => {
+	/** Where a value lands, in px above the plot's foot, on an axis from lo to hi over plotPx. */
+	const above = (v: number, [lo, hi]: [number, number], plotPx: number) => ((v - lo) / (hi - lo)) * plotPx;
+
+	it('lifts the lowest value above the strips: 0 ha sits exactly the lanes’ height over the foot', () => {
+		const r = laneRoom(0, 6, 180, 20);
+		expect(r[1]).toBe(6);
+		expect(r[0]).toBeLessThan(0);
+		expect(above(0, r, 180)).toBeCloseTo(20, 9);
+		// A top value stays at the top.
+		expect(above(6, r, 180)).toBeCloseTo(180, 9);
+	});
+
+	it('works on a flat series and leaves the axis alone with no room to give', () => {
+		const flat = laneRoom(0, 0, 100, 10);
+		expect(above(0, flat, 100)).toBeCloseTo(10, 9);
+		expect(laneRoom(0, 6, 10, 20)).toEqual([0, 6]);
+		expect(laneRoom(0, 6, 180, 0)).toEqual([0, 6]);
 	});
 });

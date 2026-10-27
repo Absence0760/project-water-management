@@ -1,9 +1,19 @@
 // Dams → Seen from space (./observed.ts, issue #604 R5-B): the fold's line,
 // the summary, the match notes, the chart's series and flag lanes, and the
-// table of views.
-import { describe, expect, it } from 'vitest';
+// table of views. Dates, so under a skewed TZ (CLAUDE.md rule 7): UTC+14
+// would move a local-midnight date a day.
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ObservedDam, ObservedPoint } from '#lib/api/types.js';
-import { fullAreaWords, matchNotes, observedChartSeries, observedFor, observedLanes, observedLine, summaryWords, viewRows } from './observed';
+import { fullAreaWords, matchNotes, OBSERVED_LANE_COLOR, observedChartSeries, observedFor, observedLanes, observedLine, summaryWords, viewRows } from './observed';
+
+let tz: string | undefined;
+beforeAll(() => {
+	tz = process.env.TZ;
+	process.env.TZ = 'Pacific/Kiritimati';
+});
+afterAll(() => {
+	process.env.TZ = tz;
+});
 
 const sp = (s: string | null | undefined) => s?.replace(/[  ]/g, ' ');
 
@@ -48,16 +58,18 @@ const dam = (points: ObservedPoint[], more: Partial<ObservedDam> = {}): Observed
 describe('observedLine', () => {
 	it('says how many clear views were compared, how many disagree and how many agree within 10 %', () => {
 		const d = dam([point('2022-01-05', 25_000), point('2022-01-21', 39_000, { seenFull: true, mismatch: 'seen-full' }), point('2022-02-06', 1, { compared: false, skip: 'partly-seen' })]);
-		expect(observedLine(d, false, null)).toBe('2 clear views compared · 1 disagrees · 75% within ±10%');
-		expect(observedLine(dam([point('2022-01-05', 25_000)]), false, null)).toBe('1 clear view compared · none disagree · 75% within ±10%');
+		expect(observedLine(d, false, null, 0.1)).toBe('2 clear views compared · 1 disagrees · 75% within ±10%');
+		expect(observedLine(dam([point('2022-01-05', 25_000)]), false, null, 0.1)).toBe('1 clear view compared · none disagree · 75% within ±10%');
+		// The threshold is the API's, not a fixed 10 %.
+		expect(observedLine(dam([point('2022-01-05', 25_000)]), false, null, 0.15)).toBe('1 clear view compared · none disagree · 75% within ±15%');
 	});
 
 	it('says why there is nothing: loading, a failure, no outline, no views, none compared', () => {
-		expect(observedLine(null, true, null)).toBe('loading…');
-		expect(observedLine(null, false, 'boom')).toBe('couldn’t be loaded');
-		expect(observedLine(null, false, null)).toBe('no outline of this dam on the map');
-		expect(observedLine(dam([]), false, null)).toBe('no satellite views yet');
-		expect(observedLine(dam([point('2022-03-01', 5, { compared: false, skip: 'no-run' })]), false, null)).toBe('none compared · latest clear view 1 Mar 2022');
+		expect(observedLine(null, true, null, 0.1)).toBe('loading…');
+		expect(observedLine(null, false, 'boom', 0.1)).toBe('couldn’t be loaded');
+		expect(observedLine(null, false, null, 0.1)).toBe('no outline of this dam on the map');
+		expect(observedLine(dam([]), false, null, 0.1)).toBe('no satellite views yet');
+		expect(observedLine(dam([point('2022-03-01', 5, { compared: false, skip: 'no-run' })]), false, null, 0.1)).toBe('none compared · latest clear view 1 Mar 2022');
 	});
 });
 
@@ -104,6 +116,19 @@ describe('the chart', () => {
 			['Seen, not compared', 'points', '2022-01-01', [null, null, null, 1], true],
 			['Full area', 'dashed', '2022-01-01', [4, 4, 4, 4], false]
 		]);
+		// Sparse views read better as larger dots than a line's 3 px: the compared ones larger than the rest.
+		expect(s.map((x) => x.pointSize)).toEqual([undefined, 8, 6, undefined]);
+	});
+
+	it('pairs each view with its own day, at the run’s first and last day, whatever the zone', () => {
+		// A run of three days: a view on the first and on the last land on their own index, not a day either side.
+		const d = dam([point('2022-01-01', 10_000), point('2022-01-03', 20_000)]);
+		const s = observedChartSeries(d, { startDate: '2022-01-01', values: [30_000, 31_000, 32_000] });
+		expect(s.find((x) => x.label === 'Seen from space')!.values).toEqual([1, null, 2]);
+		// A view a day after the run's end widens the axis by exactly that day.
+		const late = observedChartSeries(dam([point('2022-01-04', 10_000)]), { startDate: '2022-01-01', values: [30_000, 31_000, 32_000] });
+		expect(late.find((x) => x.label === 'Seen from space')!.values).toEqual([null, null, null, 1]);
+		expect(late.find((x) => x.label === 'Modelled area')!.values).toEqual([3, 3.1, 3.2]);
 	});
 
 	it('draws the views alone with no run, and nothing with neither', () => {
@@ -115,9 +140,9 @@ describe('the chart', () => {
 	it('marks the flags as lanes, each a day, only the ones there are', () => {
 		const d = dam([point('2022-01-02', 39_000, { seenFull: true }), point('2022-01-03', 100, { seenEmpty: true, mismatch: 'seen-empty' }), point('2022-01-04', 100, { compared: false, skip: 'partly-seen', seenEmpty: true })]);
 		expect(observedLanes(d).map((l) => [l.label, l.color, l.ranges])).toEqual([
-			['Disagree', '--danger', [{ start: '2022-01-03', end: '2022-01-03' }]],
-			['Seen full', '--accent', [{ start: '2022-01-02', end: '2022-01-02' }]],
-			['Seen empty', '--warning', [{ start: '2022-01-03', end: '2022-01-03' }]]
+			['Disagree', OBSERVED_LANE_COLOR.disagree, [{ start: '2022-01-03', end: '2022-01-03' }]],
+			['Seen full', OBSERVED_LANE_COLOR.seenFull, [{ start: '2022-01-02', end: '2022-01-02' }]],
+			['Seen empty', OBSERVED_LANE_COLOR.seenEmpty, [{ start: '2022-01-03', end: '2022-01-03' }]]
 		]);
 		expect(observedLanes(dam([point('2022-01-02', 20_000)]))).toEqual([]);
 	});

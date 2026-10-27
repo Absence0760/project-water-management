@@ -1876,9 +1876,11 @@ for every workspace tab. Its own chunk.
   curve's or the power law's) beside what Digital Earth Africa's satellites
   saw of the unit's dam outlines on the Map (`GET …/dams/observations?run=`,
   [api.md § Dams seen from space](./api.md#dams-seen-from-space); one request
-  for the run, every dam). An `h3`, then a fold (`common/Fold.svelte`) of one
-  line: "Upper farm: 12 clear views compared · 2 disagree · 75% within ±10%",
-  or why there is nothing ("no outline of this dam on the map", "no satellite
+  for the run, every dam). One fold (`common/Fold.svelte`, `readonly`: its
+  action is **Show**) of one line, with no heading of its own (an `h3` over it
+  pushed the sticky panel past a 1280×800 window): "Seen from space: 12 clear
+  views compared · 2 disagree · 75% within ±10%" (the ±10 % is the API's
+  `thresholds.withinShare`), or why there is nothing ("no outline of this dam on the map", "no satellite
   views yet", "none compared · latest clear view …"). **Show** opens, in order:
   a line per outline DE Africa Waterbodies merged with a neighbouring water
   body, has no polygon for, or hasn't been matched to yet (its Waterbodies
@@ -1889,15 +1891,23 @@ for every workspace tab. Its own chunk.
   chart (`LineChart`, ha: the run's area as a line, the compared views as
   dots, the views not compared as fainter dots off until the legend shows
   them, the full area dashed, 30 days / 1 year / All opening on All) with the
-  flags as lanes along its foot (**Disagree** `--danger`, **Seen full**
-  `--accent`, **Seen empty** `--warning`, each named in the lanes key); **Show
-  the N views**, a table newest first (date, source, seen, % seen clearly,
+  flags as lanes along its foot (**Disagree** `--lane-disagree`, **Seen full**
+  `--lane-seen-full`, **Seen empty** `--lane-seen-empty`, each named in the
+  lanes key; their own tokens, computed apart for colour-blind readers from
+  each other and from every line the chart draws,
+  `dams/observedLaneColours.test.ts`), the y axis starting under 0 ha by the
+  strips' height (`LineChart` `lanesRoom`, `charts/series.ts` `laneRoom`) so a
+  view of an empty dam sits above them, not under; **The N views, newest
+  first**, a table of the newest ten (`VIEWS_SHOWN`) with **Show all N views**
+  opening the rest in place and no scroll inside it (date, source, seen, % seen clearly,
   modelled, and the difference and flags or why it wasn't compared; a row that
   disagrees in `--danger` with the words "Disagree: …"), which stacks each
   view as a block in a narrow column (36rem) rather than scrolling sideways;
   and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0 (Waterbodies
   and WOfS, from Landsat)". The run's area loads through the Runs cache only
-  once the fold opens. A dam with no outline says so, with **Open the Map**.
+  once the fold opens. A dam with no outline says so, with **Open the Map**;
+  to an editor it says to draw the water surface as a polygon and link it, to
+  a viewer that an editor draws the outline.
   Beside the cards the plot gives up the fold's closed height, as for the
   proposals, and an opened fold grows the sticky panel (it sticks by its
   foot). e2e: `dam-observed.spec.ts`.
@@ -12525,12 +12535,15 @@ published.
   links back, with no estimate line (there is no figure for it to precede).
   **Your dam, seen from space** (issue #604 R5-B, `farm/DamObservedCard.svelte`,
   wording in `farm/damObserved.ts`, section `farm.damPage`) follows the dam
-  page's chart, only when the farm's dam is drawn as an outline on the Map
+  page's forecast card, just before "Where these figures come from", only when
+  the farm's dam is drawn as an outline on the Map
   (`GET …/farm/:nodeId/dam-observed`, api.md § Farm): "On 10 Dec 2021 a
-  satellite saw water over 2.0 ha of your dam, about 40 % of the area it
-  covers when full." (the newest view at least 90 % clear, by the comparison's
+  satellite saw water over 2.0 ha of the 5.0 ha your dam covers when full."
+  (area against area, never a percentage, since the page's big figure is the
+  dam's % full by volume; the newest view at least 90 % clear, by the comparison's
   own rule; the full area from the farm's own node: survey curve, entered or
-  estimated; without one, the sentence stops at the area), or "No clear view of
+  estimated; past it, "…over 4.4 ha, more than the 4.0 ha your dam covers when
+  full."; without one, the sentence stops at the area), or "No clear view of
   your dam from space yet. …"; then "A satellite sees the water’s surface, not
   how deep it is: a check on the model, not a measurement of the water in your
   dam." and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0." A

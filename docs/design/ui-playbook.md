@@ -1117,7 +1117,17 @@ section it belongs to, with the example that taught it.
   a pixel on a decade's view, where hatching can't show and the strip would
   no longer match its key. `calibration/flowFlagColours.test.ts` computes
   every lane pair and each lane's contrast from `app.css`, so a token change
-  that brings two together fails.
+  that brings two together fails. The Dams tab's Seen from space strips
+  (issue #604 R5-B) first borrowed `--danger`, `--accent` and `--warning`:
+  a deuteranope saw the light danger and warning as one colour (ΔE00 0.7),
+  and the dark danger sat 9.8 from the chart's `--series-2` points for a
+  tritanope. They have their own `--lane-*` tokens now, held for every
+  reader, not only normal vision (each pair ≥ 12, each strip ≥ 13 from every
+  line and point the chart draws; `dams/observedLaneColours.test.ts`; the
+  maths in `lib/a11y/colourVision.ts`, which both tests share). **A strip
+  must not hide a reading of 0:** where 0 is a value worth seeing (a dam seen
+  empty), pass `lanesRoom` to `LineChart`, which starts the y axis under 0
+  by the strips' height.
 - **A disabled main button is plainly off.** `.btn:disabled`'s fade turned
   the dark theme's accent into a mid teal that read as a live secondary
   button; `.btn-primary:disabled` is the plain surface, the strong border and
