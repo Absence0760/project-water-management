@@ -391,6 +391,8 @@ export const af: Catalogue = {
 	'a8761ba5': 'Maand',
 	// Dam full
 	'9309471e': 'Dam vol',
+	// The view of your dam from space could not be loaded. Check your connection, then reload the page.
+	'2dadf580': 'Die beeld van jou dam uit die ruimte kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
 	// Alerts
 	'18996e5e': 'Waarskuwings',
 	// Choose your alert emails
@@ -801,6 +803,18 @@ export const af: Catalogue = {
 	'096438fe': 'Niemand meet jou dam hiervoor nie. Die model bereken die vlak elke dag uit reën, die rivier wat invloei, en die water wat jou gewasse nodig het.',
 	// If your gauge plate reads very differently, or your pump stops at another level, tell your WUA. It helps them correct the model.
 	'294b89aa': 'As jou peilplaat heel anders lees, of jou pomp by ’n ander vlak stop, sê vir jou WGV. Dit help hulle om die model reg te stel.',
+	// No clear view of your dam from space yet. Clouds often hide it; the next clear view will show here.
+	'48093517': 'Nog geen helder beeld van jou dam uit die ruimte nie. Wolke steek dit dikwels weg; die volgende helder beeld sal hier verskyn.',
+	// On {date} a satellite saw water over {area} of your dam, about {pct} of the area it covers when full.
+	'5b23de54': 'Op {date} het ’n satelliet water oor {area} van jou dam gesien, ongeveer {pct} van die dam se oppervlakte as dit vol is.',
+	// On {date} a satellite saw water over {area} of your dam.
+	'068f0c4b': 'Op {date} het ’n satelliet water oor {area} van jou dam gesien.',
+	// Your dam, seen from space
+	'5e5e1f57': 'Jou dam, uit die ruimte gesien',
+	// A satellite sees the water’s surface, not how deep it is: a check on the model, not a measurement of the water in your dam.
+	'ef2498f7': '’n Satelliet sien die water se oppervlak, nie hoe diep dit is nie: ’n kontrole op die model, nie ’n meting van die water in jou dam nie.',
+	// Satellite views: {credit}.
+	'd4509ba5': 'Satellietbeelde: {credit}.',
 	// Your land
 	'61a5a97f': 'Jou grond',
 	// Gauge
