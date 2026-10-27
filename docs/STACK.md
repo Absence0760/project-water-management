@@ -36,8 +36,10 @@ sides share.
   production, where a container-image renderer Lambda does the printing).
   Dam observations (`src/dams/observed/`, issue #604 R5): the tick matches
   traced dams to DE Africa Waterbodies polygons and loads what the fetcher's
-  hourly `dams-weekly` passes wrote to the mirror bucket (synthetic series under
-  `fixtures/waterbodies/` with `FEED_SOURCE=fixtures`; off unless
+  hourly `dams-weekly` passes wrote to the mirror bucket: the Waterbodies
+  series, and WOfS summed inside each traced outline (`src/dams/observed/wofs/`;
+  with `FEED_SOURCE=fixtures`, the synthetic series under `fixtures/waterbodies/`
+  and the synthetic WOfS scenes of `fixtures/feeds/wofs-sample.json`); off unless
   `DAM_OBSERVATIONS=on`; architecture.md § Dam observations).
   Alert emails (`src/alerts/`) are evaluated by an `alert_eval` job and sent
   by the tick, each built as its recipient under RLS (Mailpit locally;
@@ -154,7 +156,7 @@ pnpm dev:run:backend
 pnpm dev:run:worker         # the job worker alone: polls every 15 s and on LISTEN job_queued
 pnpm dev:jobs:tick          # run every due job once and exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default, no network) and exit
-pnpm dev:dams:run           # dam observations once: match traced dams, the Waterbodies pass (fixtures by default, no network), load (run-locally.md § Dam observations)
+pnpm dev:dams:run           # dam observations once: match traced dams, both passes, Waterbodies and WOfS (fixtures by default, no network), load (run-locally.md § Dam observations)
 pnpm dev:ingest:push        # push the synthetic logger CSV to /ingest with the API key in WM_INGEST_KEY (run-locally.md § Ingest)
 pnpm dev:ingest:run [rnl|sat]  # the bulk ingest Lambda once in fixtures mode: synthetic NetCDF → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
 
