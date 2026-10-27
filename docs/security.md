@@ -2768,6 +2768,12 @@ In short:
     can't send the fetcher (open egress) to another host or plain HTTP.
     `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
+    On Lambda only the fetcher may build a live client at all
+    (`assertLiveFeedRequestsAllowed`, `allowLiveFeedRequests` at the
+    fetcher's init): the API and the worker, which carry
+    `FEED_SOURCE=live` for the cell cache, are refused whatever
+    `FEED_FETCHER` and the cutover's flags say (issue #604 R3-C,
+    `feeds/http.test.ts`, `jobs/handlers/feed-fetch.cutover.db.test.ts`).
   - Every response is bounded: 20 s timeout (all hops and the body), 4 MB cap whether declared or
     streamed, range reads for the grids (`feeds/http.test.ts`). A GeoTIFF is parsed by our own
     bounds-checked reader (dimensions up to 100 000 pixels, strips up to 8 MB

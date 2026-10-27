@@ -1300,7 +1300,11 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 
 - **The worker** (`FEED_FETCHER=sqs`) never fetches: a `feed_fetch` job sends
   a versioned request to the `fetch-requests` queue
-  (`FETCH_REQUESTS_QUEUE_URL`) and is done.
+  (`FETCH_REQUESTS_QUEUE_URL`) and is done. This per-feed path, the two
+  queues and everything below that serves them, lasts until the cutover
+  ([§ The cutover](#the-cutover)): with `chirps_source = "mirror"` and
+  `dws_source = "store"` every fetch is read in the worker's own job and
+  Terraform removes them.
 - **The API and the worker** both set `FEED_SOURCE=live`, though neither
   fetches: it is also which CHIRPS cell cache a process reads
   (`cacheOrigin`, `backend/src/feeds/cellCacheStore.ts`). The fetcher's
@@ -1770,6 +1774,71 @@ and the migrate Lambda's reference load (`load-reference.yml`,
 `gauge_record_write` with origin `dws`) waits on DWS's written answer, which
 decides whether the kind is allowed at all; until then `dws_source` stays
 `live`, or the store holds only the weekly pass's two years.
+
+
+## The cutover
+
+Issue #604 moves every feed off its upstream: CHIRPS and CHIRPS-GEFS onto
+our copy ([§ The data mirror](#the-data-mirror)), DWS onto our store
+([§ DWS gauge records](#dws-gauge-records)). Each has its own flag, flipped
+on its own evidence, in either order:
+
+1. **CHIRPS:** after the backfill and a **PASS** from `verify_copy.py`
+   ([§ Backfill](#backfill), step 5), apply `chirps_source = "mirror"` and
+   cut a backend release. CHIRPS and CHIRPS-GEFS feeds read the copy in the
+   worker's job; DWS still goes to the fetcher.
+2. **DWS:** once DWS's written answer allows it and its reply is loaded
+   ([§ Turning it on](#turning-it-on), step 4), apply `dws_source = "store"`.
+
+While either flag is on its old value (`chc`, `live`), per-feed fetching
+stays exactly as [§ Data feeds](#data-feeds) describes, and the worker
+still refuses to send a source the copy or store serves (a CHIRPS or GEFS
+fetch never reaches SQS with `chirps_source = "mirror"`, nor a DWS fetch
+with `dws_source = "store"`; `backend/src/jobs/handlers/feed-fetch.ts`).
+
+**What the second flag removes.** With both on the new values,
+`local.per_feed_fetching` (`infra/feeds.tf`) is false, and the same apply
+plans to destroy:
+
+- the `fetch-requests` and `ingest-results` queues, their DLQs and redrive
+  policies;
+- the fetcher's SQS trigger and the worker's `ingest-results` trigger, and
+  both roles' `feed-queues` policies;
+- the SQS endpoint's `WorkerSendsFetchRequests` statement (`infra/jobs.tf`);
+- the alarms on them: the two DLQ-arrival alarms (essential tier, so it
+  drops from 13 alarm metrics to 11), `fetch-requests-age` and
+  `feed-fetch-failed` with its log filter (only the per-feed mode logs it);
+- the worker's `FEED_FETCHER` and `FETCH_REQUESTS_QUEUE_URL`, and the
+  fetcher's `INGEST_RESULTS_QUEUE_URL`.
+
+The fetcher Lambda stays, for its scheduled modes (the daily ingest, the
+GEFS pass and the weekly DWS pass), with its errors and throttles alarms.
+Read the plan before the apply: it should destroy only the list above and
+change the two functions' environments. Check that both queues are empty
+first (`ApproximateNumberOfMessages` 0 on `fetch-requests` and
+`ingest-results`; an answer still in flight is lost with its queue, and the
+feed simply fetches again from the copy or store). **The running backend
+release must include issue #604 R3-C** before this apply: its production
+check accepts a worker with no `FEED_FETCHER` once both flags are on the
+new values, and a fetcher with no `INGEST_RESULTS_QUEUE_URL`
+(`backend/src/config/production.ts`); an older release refuses to start
+both Lambdas. With it deployed, apply with the operator's go-ahead; no
+further release is needed. On Lambda a live request from the API
+or worker is refused whatever the configuration
+(`backend/src/feeds/http.ts`), so a mistake fails a fetch job loudly
+("this worker may not fetch … from the source itself") rather than asking
+CHC or DWS from an address they don't know.
+
+**Rollback.** Flip either flag back (`chirps_source = "chc"` or
+`dws_source = "live"`) and apply: the queues, triggers, grants, alarms and
+the worker's `FEED_FETCHER=sqs` come back in that apply, and feeds of that
+source fetch through the fetcher again from their next fetch. New queues
+have new URLs, which the same apply hands both functions. The cell cache and
+the store stay valid either way.
+
+**Afterwards** (stage 2, not built): once both flags have run in production
+for 30 days with no rollback, the per-feed code is deleted
+([followups.md § The rain data copy](./followups.md#the-rain-data-copy)).
 
 ## Alert emails
 
