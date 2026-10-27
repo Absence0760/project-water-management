@@ -47,7 +47,7 @@ function tempCopy(): string {
 	const dir = mkdtempSync(join(tmpdir(), 'wm-mirror-tick-'));
 	dirs.push(dir);
 	const src = new URL(fixtureMirrorUrl()).pathname;
-	for (const p of ['rnl', 'sat', 'prelim']) cpSync(join(src, p, 'manifest.json'), join(dir, p, 'manifest.json'));
+	for (const p of ['rnl', 'sat', 'prelim', 'era5l', 'imerg_late']) cpSync(join(src, p, 'manifest.json'), join(dir, p, 'manifest.json'));
 	vi.stubEnv('MIRROR_URL', pathToFileURL(`${dir}/`).href);
 	return dir;
 }
@@ -71,7 +71,7 @@ describe('runMirrorTick', () => {
 		// Positive control: the same copy with mirror is read and recorded.
 		vi.stubEnv('CHIRPS_SOURCE', 'mirror');
 		expect(await runMirrorTick()).toMatchObject({ rnl: { status: 'applied' }, sat: { status: 'applied' }, prelim: { status: 'current' } });
-		expect(await copyRows()).toHaveLength(3);
+		expect(await copyRows()).toHaveLength(5);
 	});
 
 	it('records each product for the API; skips a manifest it already handled; records a new month without a revision', async () => {
@@ -79,8 +79,16 @@ describe('runMirrorTick', () => {
 		vi.stubEnv('CHIRPS_SOURCE', 'mirror');
 		const r = (await runTick({ reports: false, alerts: false, maxJobs: 0 })).mirror;
 		// The sample copy is revision 1 with no changes: brought up to it, nothing to mark.
-		expect(r).toMatchObject({ rnl: { status: 'applied', revision: 1, marked: 0 }, sat: { status: 'applied', revision: 1, marked: 0 }, prelim: { status: 'current' } });
+		expect(r).toMatchObject({
+			rnl: { status: 'applied', revision: 1, marked: 0 },
+			sat: { status: 'applied', revision: 1, marked: 0 },
+			era5l: { status: 'applied', revision: 1, marked: 0 },
+			imerg_late: { status: 'applied', revision: 1, marked: 0 },
+			prelim: { status: 'current' }
+		});
 		expect(await mirrorRows()).toEqual([
+			{ origin: 'fixtures', product: 'era5l', revision: 1 },
+			{ origin: 'fixtures', product: 'imerg_late', revision: 1 },
 			{ origin: 'fixtures', product: 'rnl', revision: 1 },
 			{ origin: 'fixtures', product: 'sat', revision: 1 }
 		]);
@@ -89,10 +97,18 @@ describe('runMirrorTick', () => {
 		expect(await withUser(u.id, (db) => mirrorCopy(db, 'fixtures'))).toMatchObject({
 			sat: { revision: 1, finalThrough: '2025-12-31' },
 			rnl: { revision: 1 },
-			prelim: { revision: 1, prelimThrough: '2026-02-06', finalThrough: null }
+			prelim: { revision: 1, prelimThrough: '2026-02-06', finalThrough: null },
+			era5l: { revision: 1, finalThrough: '2025-12-31', prelimThrough: null },
+			imerg_late: { revision: 1, finalThrough: null, prelimThrough: '2026-02-08' }
 		});
 		// Nothing changed: no manifest is read again.
-		expect(await runMirrorTick()).toEqual({ rnl: { status: 'unchanged' }, sat: { status: 'unchanged' }, prelim: { status: 'unchanged' } });
+		expect(await runMirrorTick()).toEqual({
+			rnl: { status: 'unchanged' },
+			sat: { status: 'unchanged' },
+			era5l: { status: 'unchanged' },
+			imerg_late: { status: 'unchanged' },
+			prelim: { status: 'unchanged' }
+		});
 		// The ingest adds a month: finalThrough moves, the revision doesn't.
 		editManifest(dir, 'rnl', (m) => {
 			(m.files as { url: string }[]).push({ ...(m.files as { url: string }[]).at(-1)!, url: (m.files as { url: string }[]).at(-1)!.url.replace('2025.12', '2026.01') });

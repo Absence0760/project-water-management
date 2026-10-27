@@ -1729,8 +1729,44 @@ EventBridge, daily
   Secrets Manager (`ingest/imerg.py`, `infra/imerg.tf`, off until
   `imerg_enabled`). Nothing reads it yet: the engine will take a day from
   it only where CHIRPS has no preliminary value (R4-B).
+- **Products and grids** (issue #604 R4-B; `mirror/grid.ts`
+  `PRODUCT_GRIDS`, mirrored by `ingest/grid.py` `for_product`, so the
+  writers and the reader share one definition). Every product holds the
+  same region on its own grid, and each array's `grid` attribute and
+  manifest carry the step, which the readers and writers check against the
+  product's:
+
+  | Product | Layout | Grid | Rows × columns | Daily chunk | Days held |
+  |---|---|---|---|---|---|
+  | `rnl`, `sat` | finals | 0.05° (CHC's) | 550 × 620 | (1, 110, 124) | through `finalThrough` (sat's preliminary days in `prelim`) |
+  | `prelim`, `gefs/<issue>` | daily | 0.05° | 550 × 620 | (1, 110, 124) | through `prelimThrough` / the issue's 16 days |
+  | `era5l` (ERA5-Land, from 1950) | finals | 0.1° | 275 × 310 | (finals: 1, 366, 20, 20) | through `finalThrough` |
+  | `imerg_late` (IMERG Late, from June 2000) | daily | 0.1° | 275 × 310 | (1, 55, 62) | through `prelimThrough`, a file a day with its `version` (V07, V08) |
+
+  The 0.1° grid's `[0, 0]` is centred at 35.45° S, 10.05° E. The cell cache
+  (`chirps_cell_year`, 252) keys a row by its product's global grid (row 0
+  at 60° N, column 0 at 180° W): 2400 × 7200 cells at 0.05°, 1200 × 3600
+  at 0.1°. A feed's cells are 0.05° CHIRPS cells; for a 0.1° product each
+  maps to the 0.1° cell that contains it (`feeds/cellCache.ts`
+  `productCell`: 0.05° cell (r, c) lies in 0.1° cell (⌊r/2⌋, ⌊c/2⌋)), and
+  the series keeps the feed's weights cell by cell (`seriesFromCache`), so a
+  0.1° cell weighs the sum of the weights of the feed's cells inside it.
+  `feeds/fromMirror.ts` `fillProductCache` fills `era5l` or `imerg_late`
+  for a cell list and window from the copy, from a running fetch of any
+  CHIRPS feed (the cache's writers allow that for these two), with the same
+  rules as a CHIRPS feed: a day the copy doesn't hold yet waits, no manifest
+  writes nothing, and stale days (a revision) are read again;
+  `readProductSeries` is the weighted series from the cache, and
+  `productVersions` each IMERG day's version (its `chirps_file` tag). The
+  cache keeps both products' days as final: ERA5-Land's are, and IMERG Late
+  has no final product to wait for (a new version of a day comes as a
+  revision of the copy). No feed uses them yet: how a project uses ERA5-Land
+  and IMERG is the engine's next piece. Their committed synthetic copy holds
+  invented values over the 0.1° cells of the fixture grid, at its own dates
+  (2024–2025 for `era5l`, 2026-01-25 to 2026-02-08 for `imerg_late`), not
+  re-dated to today as the CHIRPS products are.
 - **Revisions** reach the cache without a feed: the worker's mirror tick
-  reads each manifest and applies a newer revision through
+  reads each manifest (`era5l` and `imerg_late` too) and applies a newer revision through
   `app_mirror_apply_revision` (above, *A revision of our copy*); the
   per-file HEAD re-check retires while the copy is the source.
 - **Health.** A late copy is not the feed's fault, so it is not a failure:

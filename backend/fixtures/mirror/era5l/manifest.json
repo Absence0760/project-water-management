@@ -1,0 +1,242 @@
+{
+  "product": "era5l",
+  "revision": 1,
+  "region": {
+    "w": 10,
+    "s": -35.5,
+    "e": 41,
+    "n": -8
+  },
+  "grid": {
+    "origin": {
+      "lat": -35.45,
+      "lon": 10.05
+    },
+    "step": 0.1
+  },
+  "years": {
+    "first": 2024,
+    "last": 2025
+  },
+  "finalThrough": "2025-12-31",
+  "prelimThrough": null,
+  "files": [
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-01.nc",
+      "etag": "\"fx-09726b6328e6c388\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9d4791f372763ac02846561571c2b6b41b4131f711eac4e7444f9beb5e71f402",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-02.nc",
+      "etag": "\"fx-bb31ac4c73a73a7e\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "2ef3ec0c75a37e05279b249511b5855b342bd8340495a2029faa2cdf8507b854",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-03.nc",
+      "etag": "\"fx-319d3a6863bbccff\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "5af5cade8368c316cb31274d9aee2bc2449ce63639c86eb521209d1fa6e30423",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-04.nc",
+      "etag": "\"fx-da984276274ff916\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "8a015d1798c93c6ca87ad399150a3cac44e579e7827d36f200f31f3de2e2567a",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-05.nc",
+      "etag": "\"fx-caf1c0037afd2682\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9b083b15475106cda6ee91d6b473a3227185d1c7ccf1dc0d210f11008634b519",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-06.nc",
+      "etag": "\"fx-ac5586836ba50211\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "fe2e61f533a8e300f60ec0706faf23c226d044843b49be42f54ab758b8e4612f",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-07.nc",
+      "etag": "\"fx-d613df93dd6005bb\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9dca3c635b1ca687e42d6977dcea8b53ef9161b4d9d051921633835af9c271c6",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-08.nc",
+      "etag": "\"fx-dd8e1249455c042d\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "a5c7d63f8b4120473f04673f3eb5994c07d2be37c6dee0d97dd972271801d19d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-09.nc",
+      "etag": "\"fx-eacf480670d3eb31\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1662bd41df5d3e6c3e87b04d482b5d8d31b765205c2c8c6ba75e8eb4e05c1c45",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-10.nc",
+      "etag": "\"fx-6192e0419aed5b01\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "8de968e3923b909c66faa8588a111ce9b3a63bd062095ec107a3888f7d1374b4",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-11.nc",
+      "etag": "\"fx-6357e1ccf1211a4d\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d357c98a6a7603975b2e32d5ef93037e63e471caffda9fbc8aabdddb2a284be5",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2024-12.nc",
+      "etag": "\"fx-4c1124a49464bba2\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "2a4cad063dff2a0707d03eb504ebc2d939ad7411073ff616b5d772c83c1c0245",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-01.nc",
+      "etag": "\"fx-2899dbc5a155257d\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9bbec9f071016be7f6c128c4314bf8080285c6c36f86e0515e1d34a7e9ec1e1d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-02.nc",
+      "etag": "\"fx-8b5676f6246b69f1\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "e9e5290fbfef13204d5fe3c32b952f5fcb76c0e2870a7d903bf995396e371a43",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-03.nc",
+      "etag": "\"fx-5c3882a06a0c5198\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "03353dee2673098db790d14f20cf6f84e0206f3e86935808a782ac991969621d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-04.nc",
+      "etag": "\"fx-d21ce7a8d7a1c47c\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f9dfcb6318c98dc6c47eac3141b9a5b20c3194b972acb28f13c7530165206b45",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-05.nc",
+      "etag": "\"fx-de41f3f60ba9e120\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b32111ce8eaae12bd100e88da6ae076ce9b61b27b2e92a61020fb78b8f4c639",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-06.nc",
+      "etag": "\"fx-12b0ea39944ff3db\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "3914cfa656030fa22743e59dfdd2d7e9e533e7e2f10e3521e4955e1a73c4e98b",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-07.nc",
+      "etag": "\"fx-71ca8e8e1b0df692\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "a1807eac29641b48e26ebc91c2baa1a10e989755f8238d27ee89bec17ef9b566",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-08.nc",
+      "etag": "\"fx-319d3a6863bbccff\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "5af5cade8368c316cb31274d9aee2bc2449ce63639c86eb521209d1fa6e30423",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-09.nc",
+      "etag": "\"fx-da984276274ff916\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "8a015d1798c93c6ca87ad399150a3cac44e579e7827d36f200f31f3de2e2567a",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-10.nc",
+      "etag": "\"fx-caf1c0037afd2682\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9b083b15475106cda6ee91d6b473a3227185d1c7ccf1dc0d210f11008634b519",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-11.nc",
+      "etag": "\"fx-ac5586836ba50211\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "fe2e61f533a8e300f60ec0706faf23c226d044843b49be42f54ab758b8e4612f",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "fixture:era5l/reanalysis-era5-land.2025-12.nc",
+      "etag": "\"fx-d613df93dd6005bb\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9dca3c635b1ca687e42d6977dcea8b53ef9161b4d9d051921633835af9c271c6",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    }
+  ],
+  "changes": []
+}

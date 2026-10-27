@@ -3,7 +3,7 @@
 
     { product, revision, region: {w, s, e, n}, grid: {origin: {lat, lon}, step},
       years: {first, last}, finalThrough, prelimThrough,
-      files: [{ url, etag, lastModified, size, valuesSha256, revision, fetchedAt }],
+      files: [{ url, etag, lastModified, size, valuesSha256, revision, fetchedAt, version? }],
       changes: [{ revision, days: [from, to], cellsChanged, maxAbsDiff }] }
 
 `revision` is an integer from 1, dates are ISO `YYYY-MM-DD` (or null before
@@ -22,6 +22,18 @@ backfill plus the newest month, the months between are not held, and a day
 read as final there would be cached as final no-data for good. A manifest
 whose `finalThrough` runs past that run is refused, here and by the Node
 reader (backend/src/mirror/manifest.ts).
+
+Per product (the same rules as the Node validator; backend/src/mirror/grid.ts
+PRODUCT_GRIDS): `grid.step` is the product's (`PRODUCT_STEPS`: 0.05 for the
+CHIRPS products, 0.1 for `era5l` and `imerg_late`), and `rnl` and `era5l`
+hold no preliminary days. `imerg_late` holds no final days (IMERG Late is
+never final): its days run through `prelimThrough`, which may not run past
+the contiguous run of days its files hold from the first (`imerg_coverage`).
+Its files are one a day, each URL naming its day as GPM's daily granule names
+do (`3IMERG.YYYYMMDD-S000000-E235959.`), each optionally with the IMERG
+collection `version` it came from (`V07`, later `V08`; the minor letter stays
+in the URL), the per-day version the bias correction is fitted by (D16). No
+other product's file carries a `version`.
 """
 
 from __future__ import annotations
@@ -44,8 +56,45 @@ _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 _SHA = re.compile(r"^[0-9a-f]{64}$")
 _FILE_MONTH = re.compile(r"\.(\d{4})\.(0[1-9]|1[0-2])\.days_p05\.nc$")
+_FILE_DAY = re.compile(r"3IMERG\.(\d{4})(\d{2})(\d{2})-S000000-E235959\.")
+IMERG_VERSION = re.compile(r"^V\d{2}$")
 
 FINALS_PRODUCTS = ("rnl", "sat")
+# The step of each product's grid; a forecast issue (`gefs/<issue>`, `ecmwf/<issue>`) by its prefix.
+PRODUCT_STEPS = {"rnl": 0.05, "sat": 0.05, "prelim": 0.05, "era5l": 0.1, "imerg_late": 0.1}
+_FORECAST_STEPS = {"gefs": 0.05, "ecmwf": 0.1}
+_NO_PRELIM = ("rnl", "era5l")
+
+
+def product_step(product: str) -> float | None:
+    """The step of `product`'s grid, or None for a product the copy doesn't know."""
+    if product in PRODUCT_STEPS:
+        return PRODUCT_STEPS[product]
+    m = re.match(r"^(gefs|ecmwf)/\d{4}-\d{2}-\d{2}$", product)
+    return _FORECAST_STEPS[m[1]] if m else None
+
+
+def imerg_file_day(url: str) -> str | None:
+    """The ISO day an IMERG daily file's URL names, or None."""
+    m = _FILE_DAY.search(url)
+    if not m:
+        return None
+    try:
+        return dt.date(int(m[1]), int(m[2]), int(m[3])).isoformat()
+    except ValueError:
+        return None
+
+
+def imerg_coverage(files: list[dict]) -> tuple[str, str] | None:
+    """(first day, last day) of the contiguous run of days the files name, from the earliest; None when none."""
+    days = {dt.date.fromisoformat(d) for f in files if (d := imerg_file_day(f["url"])) is not None}
+    if not days:
+        return None
+    first = min(days)
+    last = first
+    while last + dt.timedelta(days=1) in days:
+        last += dt.timedelta(days=1)
+    return first.isoformat(), last.isoformat()
 
 
 def file_month(url: str) -> tuple[int, int] | None:
@@ -141,7 +190,7 @@ def validate(m: dict) -> dict:
     if not isinstance(m["files"], list):
         _fail("files must be a list")
     for i, f in enumerate(m["files"]):
-        _exact_keys(f, _FILE_KEYS, f"files[{i}]")
+        _exact_keys(f, [*_FILE_KEYS, "version"] if isinstance(f, dict) and "version" in f else _FILE_KEYS, f"files[{i}]")
         if not isinstance(f["url"], str) or not f["url"]:
             _fail(f"files[{i}].url must be a non-empty string")
         for k in ("etag", "lastModified"):
@@ -154,6 +203,8 @@ def validate(m: dict) -> dict:
         _int(f["revision"], f"files[{i}].revision", 1)
         if not isinstance(f["fetchedAt"], str) or not _UTC.match(f["fetchedAt"]):
             _fail(f"files[{i}].fetchedAt must be ISO UTC (…Z)")
+        if "version" in f and not (isinstance(f["version"], str) and IMERG_VERSION.match(f["version"])):
+            _fail(f"files[{i}].version must be an IMERG version (V07, V08, …), got {f['version']!r}")
     if not isinstance(m["changes"], list):
         _fail("changes must be a list")
     for i, c in enumerate(m["changes"]):
@@ -168,6 +219,24 @@ def validate(m: dict) -> dict:
         _int(c["cellsChanged"], f"changes[{i}].cellsChanged")
         if not isinstance(c["maxAbsDiff"], (int, float)) or isinstance(c["maxAbsDiff"], bool) or c["maxAbsDiff"] < 0:
             _fail(f"changes[{i}].maxAbsDiff must be a number >= 0")
+    step = product_step(m["product"])
+    if step is not None and m["grid"]["step"] != step:
+        _fail(f"grid.step must be {step} for {m['product']}, got {m['grid']['step']!r}")
+    if m["product"] in _NO_PRELIM and m["prelimThrough"] is not None:
+        _fail(f"{m['product']} has no preliminary days")
+    if m["product"] == "imerg_late":
+        for i, f in enumerate(m["files"]):
+            if imerg_file_day(f["url"]) is None:
+                _fail(f"files[{i}].url names no day (…3IMERG.YYYYMMDD-S000000-E235959.…), got {f['url']!r}")
+        if m["finalThrough"] is not None:
+            _fail("imerg_late holds no final days")
+        days = imerg_coverage(m["files"])
+        if m["prelimThrough"] is not None and (days is None or m["prelimThrough"] > days[1]):
+            _fail(f"prelimThrough {m['prelimThrough']} runs past the days the files hold contiguously (through {days[1] if days else 'none'})")
+    else:
+        for i, f in enumerate(m["files"]):
+            if "version" in f:
+                _fail(f"files[{i}] of {m['product']} carries a version: only imerg_late's do")
     if m["product"] in FINALS_PRODUCTS:
         for i, f in enumerate(m["files"]):
             if file_month(f["url"]) is None:
@@ -183,7 +252,7 @@ def _ordered(m: dict) -> dict:
     out["region"] = {k: m["region"][k] for k in ("w", "s", "e", "n")}
     out["grid"] = {"origin": {k: m["grid"]["origin"][k] for k in ("lat", "lon")}, "step": m["grid"]["step"]}
     out["years"] = {k: m["years"][k] for k in ("first", "last")}
-    out["files"] = [{k: f[k] for k in _FILE_KEYS} for f in m["files"]]
+    out["files"] = [{k: f[k] for k in [*_FILE_KEYS, *(["version"] if "version" in f else [])]} for f in m["files"]]
     out["changes"] = [{k: c[k] for k in _CHANGE_KEYS} for c in m["changes"]]
     return out
 
