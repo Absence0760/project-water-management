@@ -1,4 +1,4 @@
--- 249_dam_observation — what satellites saw of each traced dam: the wet area
+-- 257_dam_observation — what satellites saw of each traced dam: the wet area
 -- on a date, per source (issue #604 Round 5; docs/data-model.md § Dam
 -- observations, docs/architecture.md § Dam observations).
 --
@@ -88,7 +88,7 @@ CREATE INDEX waterbody_reference_bbox_idx ON waterbody_reference (min_lon, max_l
 CREATE INDEX waterbody_reference_dataset_idx ON waterbody_reference (dataset);
 
 COMMENT ON TABLE waterbody_reference IS
-	'Digital Earth Africa Waterbodies polygons (historical extent), loaded by the operator (pnpm import:waterbodies), read-only to the app (249, issue #604 R5). The repo ships a synthetic set only.';
+	'Digital Earth Africa Waterbodies polygons (historical extent), loaded by the operator (pnpm import:waterbodies), read-only to the app (257, issue #604 R5). The repo ships a synthetic set only.';
 
 ALTER TABLE waterbody_reference ENABLE ROW LEVEL SECURITY;
 -- Public reference data: anyone signed in reads it; the app never writes it.
@@ -125,7 +125,7 @@ CREATE INDEX dam_waterbody_match_project_idx ON dam_waterbody_match (project_id)
 CREATE INDEX dam_waterbody_match_uid_idx ON dam_waterbody_match (uid) WHERE status = 'matched';
 
 COMMENT ON TABLE dam_waterbody_match IS
-	'Which DE Africa waterbody a traced dam polygon is, by overlap (249; backend/src/dams/observed/match.ts): matched, merged (the waterbody also holds other water) or none (with a reason when it could not be compared). Written only by app_dam_match_write (the worker).';
+	'Which DE Africa waterbody a traced dam polygon is, by overlap (257; backend/src/dams/observed/match.ts): matched, merged (the waterbody also holds other water) or none (with a reason when it could not be compared). Written only by app_dam_match_write (the worker).';
 
 -- ---------------------------------------------------------------------------
 -- dam_observation_load_mark
@@ -155,7 +155,7 @@ CREATE TABLE dam_observation_load_mark (
 );
 CREATE INDEX dam_observation_load_mark_feature_idx ON dam_observation_load_mark (feature_id);
 COMMENT ON TABLE dam_observation_load_mark IS
-	'Per pass file (source, key), what the dams tick last loaded: the status''s lastGood, the file''s fetchedAt and the matched dams, so a restart reloads nothing (249). Owner only; the worker reads and writes it through app_dam_load_marks and app_dam_load_mark_write.';
+	'Per pass file (source, key), what the dams tick last loaded: the status''s lastGood, the file''s fetchedAt and the matched dams, so a restart reloads nothing (257). Owner only; the worker reads and writes it through app_dam_load_marks and app_dam_load_mark_write.';
 ALTER TABLE dam_observation_load_mark ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON dam_observation_load_mark FROM water_app;
 
@@ -184,7 +184,7 @@ CREATE INDEX dam_observation_feature_idx ON dam_observation (feature_id, project
 CREATE INDEX dam_observation_project_idx ON dam_observation (project_id);
 
 COMMENT ON TABLE dam_observation IS
-	'The wet area satellites saw of a traced dam on a date, per source (249, issue #604 R5): DE Africa Waterbodies for a matched dam, WOfS over every dam''s outline. Written only by app_dam_observation_load (the worker), from the weekly pass''s files.';
+	'The wet area satellites saw of a traced dam on a date, per source (257, issue #604 R5): DE Africa Waterbodies for a matched dam, WOfS over every dam''s outline. Written only by app_dam_observation_load (the worker), from the weekly pass''s files.';
 COMMENT ON COLUMN dam_observation.pct_observed IS
 	'The share of the outline seen clearly that date, 0–100 (Waterbodies: 100 − pc_invalid). wet_area_m2 counts the part seen only, so a low share understates the water.';
 
@@ -203,7 +203,7 @@ CREATE FUNCTION app_farm_dam_features() RETURNS SETOF uuid
 		WHERE l.user_id = app_current_user_id() AND f.kind = 'dam'
 	$$;
 COMMENT ON FUNCTION app_farm_dam_features() IS
-	'The dam map features on the calling user''s own farms, in every project (249): the farmer policies of dam_waterbody_match and dam_observation.';
+	'The dam map features on the calling user''s own farms, in every project (257): the farmer policies of dam_waterbody_match and dam_observation.';
 REVOKE ALL ON FUNCTION app_farm_dam_features() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_farm_dam_features() TO water_app;
 
@@ -278,7 +278,7 @@ CREATE FUNCTION app_dam_outlines()
 	END
 	$$;
 COMMENT ON FUNCTION app_dam_outlines() IS
-	'Every traced dam polygon with its waterbody match and newest observation per source (249), for the worker (no user) only.';
+	'Every traced dam polygon with its waterbody match and newest observation per source (257), for the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_dam_outlines() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_dam_outlines() TO water_app;
 
@@ -305,7 +305,7 @@ CREATE FUNCTION app_waterbody_candidates(p_w double precision, p_s double precis
 	END
 	$$;
 COMMENT ON FUNCTION app_waterbody_candidates(double precision, double precision, double precision, double precision) IS
-	'The waterbodies whose box meets a box (249): the dam match''s first pass, for the worker (no user) only.';
+	'The waterbodies whose box meets a box (257): the dam match''s first pass, for the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_waterbody_candidates(double precision, double precision, double precision, double precision) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_waterbody_candidates(double precision, double precision, double precision, double precision) TO water_app;
 
@@ -352,7 +352,7 @@ CREATE FUNCTION app_dam_match_write(
 	END
 	$$;
 COMMENT ON FUNCTION app_dam_match_write(uuid, text, text, double precision, double precision, timestamptz, text) IS
-	'Record which waterbody a traced dam is (249), for the worker (no user) only; a dam no longer matched loses its Waterbodies observations.';
+	'Record which waterbody a traced dam is (257), for the worker (no user) only; a dam no longer matched loses its Waterbodies observations.';
 REVOKE ALL ON FUNCTION app_dam_match_write(uuid, text, text, double precision, double precision, timestamptz, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_dam_match_write(uuid, text, text, double precision, double precision, timestamptz, text) TO water_app;
 
@@ -461,7 +461,7 @@ CREATE FUNCTION app_dam_observation_load(
 	END
 	$$;
 COMMENT ON FUNCTION app_dam_observation_load(text, text, date[], double precision[], double precision[], text[], timestamptz) IS
-	'Load one weekly pass file of dam observations (249): a Waterbodies uid''s series into every dam matched to it, or a dam''s WOfS rows. For the worker (no user) only.';
+	'Load one weekly pass file of dam observations (257): a Waterbodies uid''s series into every dam matched to it, or a dam''s WOfS rows. For the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_dam_observation_load(text, text, date[], double precision[], double precision[], text[], timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_dam_observation_load(text, text, date[], double precision[], double precision[], text[], timestamptz) TO water_app;
 
@@ -480,7 +480,7 @@ CREATE FUNCTION app_dam_load_marks()
 	END
 	$$;
 COMMENT ON FUNCTION app_dam_load_marks() IS
-	'What the dams tick last loaded per pass file (249), for the worker (no user) only.';
+	'What the dams tick last loaded per pass file (257), for the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_dam_load_marks() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_dam_load_marks() TO water_app;
 
@@ -534,6 +534,6 @@ CREATE FUNCTION app_dam_load_mark_write(
 	END
 	$$;
 COMMENT ON FUNCTION app_dam_load_mark_write(text, text, timestamptz, timestamptz, text, boolean) IS
-	'Record what the dams tick loaded, or that it failed, for one pass file (249), for the worker (no user) only.';
+	'Record what the dams tick loaded, or that it failed, for one pass file (257), for the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_dam_load_mark_write(text, text, timestamptz, timestamptz, text, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_dam_load_mark_write(text, text, timestamptz, timestamptz, text, boolean) TO water_app;

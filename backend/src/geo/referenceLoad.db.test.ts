@@ -293,7 +293,7 @@ describe('MAP grid, from the file `import:map-grid --out` writes (issue #560)', 
 	});
 });
 
-describe('DE Africa Waterbodies polygons (249, issue #604 R5)', () => {
+describe('DE Africa Waterbodies polygons (257, issue #604 R5)', () => {
 	it('loads the polygons of a GeoJSON clip, gzipped, with the default source, and records the file', async () => {
 		const bytes = gzipSync(readFileSync(SYNTHETIC_WATERBODIES_FILE));
 		const result = await load({ kind: 'waterbodies', key: 'reference/waterbodies/d1.geojson.gz', dataset: WB }, bytes);

@@ -1,7 +1,7 @@
 // Reading a project's dam observations and the run to compare them with
 // (issue #604 R5-B; docs/api.md § Dams seen from space). Every query runs in
 // the caller's withUser transaction, so RLS decides what is read: the
-// observation and match tables (249) let a project's viewers read them, and a
+// observation and match tables (257) let a project's viewers read them, and a
 // farmer only their own farm's dams.
 import type { Db } from '../../db/tx.js';
 import { DEAFRICA_ATTRIBUTION } from './upstream.js';

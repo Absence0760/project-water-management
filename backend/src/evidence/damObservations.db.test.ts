@@ -37,7 +37,7 @@ async function dam(u: User, pid: string, name: string, x: number, nodeId: string
 	expect(res.status, JSON.stringify(res.body)).toBe(201);
 	return res.body.feature.id as string;
 }
-/** Loads rows for a dam as the worker does (app_dam_observation_load, 249). */
+/** Loads rows for a dam as the worker does (app_dam_observation_load, 257). */
 const load = (source: 'wofs' | 'waterbodies', key: string, rows: [string, number, number][]) =>
 	withoutUser((db) =>
 		db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [

@@ -21,7 +21,7 @@ const NO_RLS = new Set(['schema_migrations']);
  */
 // A reset's cancel-link hashes and the cap on asking for one (205_mfa_recovery): only its SECURITY DEFINER functions touch them.
 // The allocation holder keys' salt and each run's frozen keys (219_allocation_holder_keys, #523 N/P): only its definer functions and trigger.
-// dam_observation_load_mark (249): what the dams tick last loaded per pass file, read and written only through
+// dam_observation_load_mark (257): what the dams tick last loaded per pass file, read and written only through
 // app_dam_load_marks and app_dam_load_mark_write from the worker's session with no user.
 const OWNER_ONLY = new Set(['erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder', 'dam_observation_load_mark']);
 /**
@@ -245,7 +245,7 @@ const READ_ONLY = new Set([
 	// (the operator's import, as the schema owner) and app_gauge_record_load_web (the worker, with no user).
 	'gauge_record',
 	'gauge_record_span',
-	// DE Africa's Waterbodies polygons (249_dam_observation), loaded by the operator (`pnpm import:waterbodies`), and what
+	// DE Africa's Waterbodies polygons (257_dam_observation), loaded by the operator (`pnpm import:waterbodies`), and what
 	// satellites saw of each traced dam: its waterbody match and its observations, written only by app_dam_match_write and
 	// app_dam_observation_load (the worker, with no user) and dropped by map_feature_outline_changed when a dam is redrawn.
 	'waterbody_reference',

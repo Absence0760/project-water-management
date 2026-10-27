@@ -1287,10 +1287,10 @@ reads it.
 
 ### Waterbodies
 
-`waterbody_reference` (249) holds Digital Earth Africa's Waterbodies
+`waterbody_reference` (257) holds Digital Earth Africa's Waterbodies
 polygons, which the dam observations match each traced dam against
 (issue #604 R5; [architecture.md § Dam observations](./architecture.md#dam-observations),
-[data-model.md § Dam observations](./data-model.md#dam-observations-249_dam_observationsql)).
+[data-model.md § Dam observations](./data-model.md#dam-observations-257_dam_observationsql)).
 Global reference data like the register of dams: the **operator** loads it
 as the schema owner, and only the worker reads it (no route, no map layer).
 

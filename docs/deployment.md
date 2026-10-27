@@ -2227,7 +2227,7 @@ decides whether the kind is allowed at all; until then `dws_source` stays
 
 What satellites saw of each traced dam, into `dam_observation` (issue #604
 R5; the flow: [architecture.md § Dam observations](./architecture.md#dam-observations);
-the tables: [data-model.md § Dam observations](./data-model.md#dam-observations-249_dam_observationsql);
+the tables: [data-model.md § Dam observations](./data-model.md#dam-observations-257_dam_observationsql);
 the source: [data-sources.md](./data-sources.md#deafrica-waterbodies-series)).
 One Terraform variable, off by default:
 
@@ -2272,7 +2272,7 @@ heartbeats stay green.
    reads under `dams/` are `WorkerReadsMirror`'s, and the fetcher is outside
    the VPC.
 2. Load the Waterbodies polygons (below).
-3. Deploy a backend release with migration 249 and the `dams-weekly` mode,
+3. Deploy a backend release with migration 257 and the `dams-weekly` mode,
    then apply `dam_observations_enabled = true` (a `terraform plan` first,
    and the operator's go-ahead for the apply), once at least one dam is
    traced on a project's map: with none, the WOfS pass has nothing to hold

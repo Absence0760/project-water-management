@@ -395,7 +395,7 @@ open:
       [deployment.md § Dam observations](./deployment.md#dam-observations),
       *Turning it on*: the Waterbodies polygons loaded for the region
       (`load-reference.yml` kind `waterbodies`), a backend release with
-      migration 249 and the `dams-weekly` mode, at least one traced dam,
+      migration 257 and the `dams-weekly` mode, at least one traced dam,
       then `dam_observations_enabled = true` (plan, then the operator's
       go-ahead for the apply). Durable fix: those steps, then watch the
       first day's `dams_pass` and `dams_tick` log lines and both heartbeat

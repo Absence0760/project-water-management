@@ -1,5 +1,5 @@
 // The worker's side of the dam observations (issue #604 R5; handover.ts for
-// the files, 249_dam_observation.sql). Not a job: runTick (jobs/runner.ts)
+// the files, 257_dam_observation.sql). Not a job: runTick (jobs/runner.ts)
 // calls runDamsTick once per tick, with no user, beside the DWS tick.
 //
 // Only with DAM_OBSERVATIONS=on (off by default; in production the worker's

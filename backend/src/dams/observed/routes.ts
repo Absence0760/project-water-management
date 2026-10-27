@@ -4,7 +4,7 @@
 //   GET /projects/:id/dams/observations[?run=<runId>][&node=<nodeId>]   viewer
 //
 // Each unit's dam polygons, their observed wet area from Digital Earth Africa
-// (dam_observation, 249) and the run's modelled dam area on the same days,
+// (dam_observation, 257) and the run's modelled dam area on the same days,
 // flagged (./compare.ts). The run is `run` when given, else the project's
 // newest, the one the Dams tab shows. Read only, under the caller's RLS.
 import { Hono } from 'hono';

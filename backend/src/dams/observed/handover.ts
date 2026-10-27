@@ -1,5 +1,5 @@
 // The handover between the worker and the fetcher Lambda for dam observations
-// (issue #604 Round 5; 249_dam_observation.sql, docs/architecture.md § Dam
+// (issue #604 Round 5; 257_dam_observation.sql, docs/architecture.md § Dam
 // observations). The same pattern as the weekly DWS pass (ingest/dws.ts): the
 // fetcher has internet but no database, the worker has the database but no
 // internet, and both reach the mirror bucket (MIRROR_URL), so it carries:
@@ -93,7 +93,7 @@ export const MAX_OUTLINES = 5000;
 export const MAX_ROWS = 20_000;
 /** Landsat's record starts here; neither source has earlier dates. */
 export const WOFS_FIRST_DATE = '1984-01-01';
-/** A Waterbodies uid (a geohash; 249's waterbody_reference.uid). */
+/** A Waterbodies uid (a geohash; 257's waterbody_reference.uid). */
 export const WATERBODY_UID = /^[0-9a-z]{6,12}$/;
 const FEATURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** A real calendar date (2023-02-31 is not one), ISO. */

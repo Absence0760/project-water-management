@@ -2005,8 +2005,8 @@ feed_fetch (DWS_SOURCE=store) ── gauge_record_current (best source per day) 
 ### Dam observations
 
 What satellites saw of each traced dam (issue #604 Round 5): the wet area on
-a date, per source, in our own store, `dam_observation` (249,
-[data-model.md § Dam observations](./data-model.md#dam-observations-249_dam_observationsql)),
+a date, per source, in our own store, `dam_observation` (257,
+[data-model.md § Dam observations](./data-model.md#dam-observations-257_dam_observationsql)),
 for the modelled-vs-observed dam area (R5-B). Two sources, both Digital
 Earth Africa, CC BY 4.0 ([data-sources.md](./data-sources.md#deafrica-waterbodies-series)):
 **Waterbodies**' per-waterbody series for a dam matched to one waterbody

@@ -3732,7 +3732,7 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
 ## Dams seen from space
 
 Each unit's dam outlines against what Digital Earth Africa's satellites saw
-of them (issue #604 R5-B; the observations are 249's `dam_observation`,
+of them (issue #604 R5-B; the observations are 257's `dam_observation`,
 loaded weekly by the worker, R5-A; the method and thresholds in
 [model.md § 2.10l](./model.md#210l-modelled-vs-observed-dam-area-app-issue-604-r5-b);
 the screen in [ui.md § Dams](./ui.md#dams)). Read only, under the caller's

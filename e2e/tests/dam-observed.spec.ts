@@ -1,6 +1,6 @@
 // Dams seen from space (issue #604 R5-B; docs/ui.md § Dams and § Farmer view).
 // A unit's dam outline on the map with satellite views loaded the way the
-// worker loads them (249's functions, e2e/support/damObserved.ts): the Dams
+// worker loads them (257's functions, e2e/support/damObserved.ts): the Dams
 // tab's "Seen from space" fold under the picked dam's storage chart says how
 // many clear views were compared and how many disagree; opened, it says the
 // Waterbodies polygon is merged with a neighbour, draws the run's surface

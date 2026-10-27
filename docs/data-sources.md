@@ -247,7 +247,7 @@ in `infra/feeds.tf`):
 ## Dam observations
 
 What satellites saw of each traced dam, into `dam_observation` (migration
-249; [architecture.md § Dam observations](./architecture.md#dam-observations)).
+257; [architecture.md § Dam observations](./architecture.md#dam-observations)).
 The same out-of-VPC handover as the weekly DWS pass: the worker writes the
 wanted list to the mirror bucket, the fetcher's hourly `dams-weekly` run
 reads the upstream and writes files back, and the worker loads them. Hourly

@@ -1,4 +1,4 @@
-// Which DE Africa waterbody a traced dam is (issue #604 R5; 249's
+// Which DE Africa waterbody a traced dam is (issue #604 R5; 257's
 // dam_waterbody_match, docs/architecture.md § Dam observations).
 //
 // No PostGIS: the database narrows the waterbodies to those whose bounding
@@ -47,7 +47,7 @@ import type { DamOutlineGeometry } from './handover.js';
 export const MIN_DAM_SHARE = 0.3;
 export const MATCH_WATERBODY_SHARE = 0.7;
 export const MAX_OTHER_DAM_SHARE = 0.1;
-/** The largest box app_waterbody_candidates takes, degrees a side (249). */
+/** The largest box app_waterbody_candidates takes, degrees a side (257). */
 export const MAX_CANDIDATE_BOX_DEG = 1;
 
 export type MatchStatus = 'matched' | 'merged' | 'none';

@@ -10323,7 +10323,7 @@ together.
   `A = A_full (S/C)^b` (§2.7a). A satellite pass (Landsat, about 10:30 local)
   is compared with that day's value; the day's own change is small beside
   the observation's error.
-- **Observed.** `dam_observation` (249, R5-A): per dam polygon, source
+- **Observed.** `dam_observation` (257, R5-A): per dam polygon, source
   (`waterbodies`: DE Africa Waterbodies' area series for the polygon it
   matched; `wofs`: WOfS water pixels inside the app's own outline, R5-C),
   date, wet area (m²) and the share of the outline seen clearly.

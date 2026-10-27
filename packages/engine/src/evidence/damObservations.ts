@@ -4,7 +4,7 @@
 // Digital Earth Africa's WOfS saw it wet, how many dry, and how many were
 // inconclusive. Satellite evidence beside the model, never an input to it.
 //
-// The backend reads the dams' WOfS rows (249 dam_observation, source 'wofs',
+// The backend reads the dams' WOfS rows (257 dam_observation, source 'wofs',
 // under the reader's RLS) for the period; this freezes every one into the
 // report, so the manifest's hash covers them and reproduce:pack classifies
 // them again from the manifest (checkDamObservations). The rule (provisional,

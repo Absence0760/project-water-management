@@ -365,7 +365,7 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		premise: 'not writable'
 	},
 	'dam_observation_load_mark.feature_id': {
-		reason: 'no project_id of its own: the worker’s record of the WOfS pass file it last loaded for that dam feature (key = feature_id), owner-only, water_app has no grant; written only by app_dam_load_mark_write from the worker’s session with no user (249)',
+		reason: 'no project_id of its own: the worker’s record of the WOfS pass file it last loaded for that dam feature (key = feature_id), owner-only, water_app has no grant; written only by app_dam_load_mark_write from the worker’s session with no user (257)',
 		premise: 'no project_id'
 	}
 };

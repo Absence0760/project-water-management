@@ -4001,7 +4001,7 @@ the restored one.
 `reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
 keyed by `(kind, dataset)`: the reference-bucket object a production load
 of a map dataset read (`land-cover`, `evaporation`, `rivers`, since
-225 `gazetteer`, since 238 `map-grid`, and since 249 `waterbodies`, the
+225 `gazetteer`, since 238 `map-grid`, and since 257 `waterbodies`, the
 DE Africa Waterbodies polygons) and the
 SHA-256 it was checked against. Written in the same transaction as the
 dataset by the replace functions (`replaceCroplandDataset`,
@@ -4601,7 +4601,7 @@ A gap row is a row like any other: DWS listing a day with no value (170
   the live path writes, waiting for days the store doesn't hold, the
   tick's handover); `ingest/dws.test.ts`; `scripts/import-dws.test.ts`.
 
-### Dam observations (249_dam_observation.sql)
+### Dam observations (257_dam_observation.sql)
 
 What satellites saw of each traced dam (issue #604 R5,
 [architecture.md § Dam observations](./architecture.md#dam-observations)):
@@ -4673,7 +4673,7 @@ passes leave in the mirror bucket; no route writes them.
     most 20 000 rows; each date 1984 to tomorrow (UTC), listed once; wet
     area 0 to 10¹² m², never NaN; share 0–100; each upstream key 1–200
     printable characters; `fetched_at` not in the future.
-- **reference_load** takes kind `waterbodies` (249), so a production load
+- **reference_load** takes kind `waterbodies` (257), so a production load
   records its file like the other reference datasets.
 - **Tests**: `dams/observed/observations.security.db.test.ts` (RLS with
   positive controls: a viewer, a farmer's own dam, nothing across projects;

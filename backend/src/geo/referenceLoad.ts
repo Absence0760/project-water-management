@@ -127,7 +127,7 @@ export const REFERENCE_KINDS = {
 			Object.entries(TILE_ARCHIVES).map(([archive, a]) => [archive, { status: 'allowed', sourcesRow: a.sourcesRow, source: a.what, version: 'the provenance file’s', attribution: a.licence }])
 		) as Record<keyof typeof TILE_ARCHIVES, ReferenceDataset>
 	},
-	// DE Africa Waterbodies polygons, for matching traced dams to their time series (249, issue #604 R5).
+	// DE Africa Waterbodies polygons, for matching traced dams to their time series (257, issue #604 R5).
 	waterbodies: {
 		status: 'allowed',
 		sourcesRows: ['Digital Earth Africa Waterbodies'],
