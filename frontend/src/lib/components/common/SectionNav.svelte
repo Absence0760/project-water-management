@@ -346,13 +346,31 @@
 		if (findOpen) findInput?.focus();
 	});
 
-	// On a phone the menu is one sideways strip: keep the marked link in it in view.
+	// On a phone the menu is one sideways strip: keep the marked link in it in view. But not while the
+	// person has scrolled the strip themselves: the page's own scroll (or a re-layout) can move the marked
+	// section meanwhile, and snapping the strip back would put another link under their finger (the
+	// settings side-index e2e caught a tap landing on EWR that way). Their scroll holds the strip until
+	// they pick a link in it. The strip has no smooth scrolling, so a scroll that doesn't end where this
+	// code last put it is theirs.
+	let stripSetTo = -1;
+	let stripHeld = false;
+	function setStrip(left: number) {
+		if (!flowEl) return;
+		flowEl.scrollLeft = left;
+		stripSetTo = flowEl.scrollLeft;
+	}
+	function stripScrolled() {
+		if (flowEl && Math.abs(flowEl.scrollLeft - stripSetTo) > 1) stripHeld = true;
+	}
+	function stripPicked(e: MouseEvent) {
+		if (e.target instanceof Element && e.target.closest('.groups a')) stripHeld = false;
+	}
 	$effect(() => {
 		const link = activeSection ? flowEl?.querySelector<HTMLElement>(`.groups a[href="#${activeSection}"]`) : null;
-		if (!flowEl || !link || flowEl.scrollWidth <= flowEl.clientWidth) return;
+		if (!flowEl || !link || flowEl.scrollWidth <= flowEl.clientWidth || stripHeld) return;
 		const left = link.offsetLeft - flowEl.offsetLeft;
 		if (left < flowEl.scrollLeft || left + link.offsetWidth > flowEl.scrollLeft + flowEl.clientWidth) {
-			flowEl.scrollLeft = left - 16;
+			setStrip(left - 16);
 		}
 	});
 	// A link Tab reaches on the strip shows whole, not cut at its edge (the browser leaves a half-shown one).
@@ -361,7 +379,7 @@
 		if (!flowEl || !link || flowEl.scrollWidth <= flowEl.clientWidth) return;
 		const at = link.getBoundingClientRect().left - flowEl.getBoundingClientRect().left + flowEl.scrollLeft;
 		const to = stripScrollTo(at, link.offsetWidth, flowEl.scrollLeft, flowEl.clientWidth);
-		if (to !== null) flowEl.scrollLeft = to;
+		if (to !== null) setStrip(to);
 	}
 	// The bar sits over the content's top, so jumps and focus keep clear of it; the rail sits beside it.
 	// Not in a box of its own, which the bar doesn't cover.
@@ -519,7 +537,7 @@
 		</nav>
 	{:else}
 		<nav class="sections" class:embedded aria-label={label} bind:clientHeight={height} style:--bar-h="{height}px">
-			<div class="flow" bind:this={flowEl} onfocusin={revealFocused}>
+			<div class="flow" bind:this={flowEl} onfocusin={revealFocused} onscroll={stripScrolled} onclick={stripPicked} role="presentation">
 				{#if find}
 					<div class="item find-wrap" bind:this={findWrap} onkeydown={findPopKeydown} onfocusout={findFocusOut} role="presentation">
 						<button

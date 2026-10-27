@@ -5469,8 +5469,12 @@ History is left to its own redesign.
   `#anchor` does, so Tab carries on from there; following the fragment
   already in the URL does too (issue #586).
 - **Phones** (up to 640 px): one strip that scrolls sideways inside itself
-  with every link (no More), the marked link kept in view, never the page.
-  A link Tab (or Shift+Tab) reaches is scrolled in whole, 16 px clear of the
+  with every link (no More), the marked link kept in view, never the page,
+  unless the person has scrolled the strip themselves: then it stays where
+  they put it until they pick a link in it, so a page scroll (or a
+  re-layout) that marks another section never moves the link under their
+  finger (`SectionNav` `stripHeld`; the settings side-index e2e caught a tap
+  landing on the wrong link). A link Tab (or Shift+Tab) reaches is scrolled in whole, 16 px clear of the
   edge (`sectionNav.ts` `stripScrollTo`): the browser scrolls a focused
   element only when none of it shows, so one half off the edge stayed cut
   (issue #586, at 320 px). With `groupNames` (Data, Hydrological units) the
