@@ -326,7 +326,17 @@ test.describe('desktop', () => {
 			await page.goto(`/projects/${p.id}?tab=${tab}`);
 			const h = header(page);
 			await expect(h.getByRole('button', { name: 'Add data' })).toBeVisible();
-			// Allocations adds Download CSV once its volumes load, which moves the row: measure the settled header.
+			// Measure the settled header, never a partial one: Add data is the page's own, but the rain pill
+			// waits on the series' freshness, and each tab is a lazy component that fills the header's context
+			// and controls only once it mounts (fillHeader). Measured before the Network's Map, Tables and
+			// + Add buttons arrived, the row "fit" and then wrapped under the title once they did (CI, #602).
+			await expect(h.locator('summary', { hasText: 'Rain up to' })).toBeVisible();
+			if (tab === 'settings') await expect(h.getByTestId('settings-context')).toBeVisible();
+			if (tab === 'network') {
+				await expect(h.getByTestId('network-summary')).toBeVisible();
+				await expect(h.getByRole('button', { name: '+ Add hydrological unit' })).toBeVisible();
+			}
+			// Allocations adds Download CSV once its volumes load, which moves the row.
 			if (tab === 'allocations') await expect(h.getByRole('link', { name: 'Download CSV' })).toBeVisible();
 			// The title and its context on one line, the gap, then every control on one line: does it fit the row?
 			const fits = await h.evaluate((el) => {
