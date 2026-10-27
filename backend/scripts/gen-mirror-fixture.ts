@@ -8,7 +8,8 @@
 // Fixed in time, unlike the file fixture (which re-dates itself to today): the
 // copy is as the files stood on MIRROR_FIXTURE.today, so finals through
 // 2025-12-31 (2023–2025, one leap year) and preliminary sat days through
-// 2026-02-06. Only the chunks holding the fixture's 8 × 6 grid and the band
+// 2026-02-06, and the CHIRPS-GEFS issues of 2026-02-08 and 2026-02-09
+// (`gefs/<issue>` and `gefs/index.json`). Only the chunks holding the fixture's 8 × 6 grid and the band
 // of the same size just south of it are written, each with the cells the
 // files cover; every other chunk is unwritten (NaN), which costs nothing. The
 // band holds one land copy of every cell of the grid's repeating pattern
@@ -26,7 +27,8 @@ import { readFileSync } from 'node:fs';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { cellCentre, chcCell } from '../src/feeds/cellCache.js';
 import { FIXTURE_DIR, fixtureHttp, fixtureTag } from '../src/feeds/fixtures.js';
-import { CHC_BASE, chirpsFinalFileUrl, chirpsPrelimUrl, gridValues } from '../src/feeds/sources/chirps.js';
+import { CHC_BASE, chirpsFinalFileUrl, chirpsPrelimUrl, GEFS_DAYS, gefsUrl, gridValues } from '../src/feeds/sources/chirps.js';
+import { gefsProduct, writeGefsIndex } from '../src/ingest/gefs.js';
 import { type Block, DAILY_CHUNK, ensureDaily, ensureFinals, FINALS_CHUNK, writeDailyDays, writeFinalsYear } from '../src/mirror/arrays.js';
 import { chcCellOf, dateOfDoy, gridOf, MIRROR_REGION, mirrorCell, regionSize } from '../src/mirror/grid.js';
 import { type Manifest, manifestHash, writeManifest } from '../src/mirror/manifest.js';
@@ -40,7 +42,9 @@ export const MIRROR_FIXTURE = {
 	years: { first: 2023, last: 2025 },
 	finalThrough: '2025-12-31',
 	prelimFirst: '2026-01-01',
-	prelimThrough: '2026-02-06'
+	prelimThrough: '2026-02-06',
+	/** CHIRPS-GEFS issues held, newest first: two, so their 32 days hold every place of the 17-day pattern (fromMirrorGefs.ts). */
+	gefsIssues: ['2026-02-09', '2026-02-08']
 } as const;
 
 interface SampleFixture {
@@ -171,6 +175,38 @@ export async function buildMirrorFixture(dir: string): Promise<void> {
 		prelimThrough: MIRROR_FIXTURE.prelimThrough,
 		files
 	});
+
+	// CHIRPS-GEFS issues (the daily layout, as ingest/gefs.ts writes them), from the GEFS files on the same grid and cover.
+	const gefsSample = JSON.parse(readFileSync(`${FIXTURE_DIR}gefs-sample.json`, 'utf8')) as SampleFixture;
+	if (JSON.stringify([gefsSample.grid.originLat, gefsSample.grid.originLon, gefsSample.grid.width, gefsSample.grid.height, gefsSample.cover]) !==
+		JSON.stringify([sample.grid.originLat, sample.grid.originLon, sample.grid.width, sample.grid.height, sample.cover])) {
+		throw new Error('gefs-sample.json and chirps-sample.json must share their grid and cover (fromMirror.ts fixtureSourceCell reads both)');
+	}
+	for (const issue of MIRROR_FIXTURE.gefsIssues) {
+		const product = gefsProduct(issue);
+		const arr = await ensureDaily(store, product, issue, GEFS_DAYS);
+		const gefsFiles: Manifest['files'] = [];
+		for (const [d, day] of days(issue, fromEpochDay(toEpochDay(issue) + GEFS_DAYS - 1)).entries()) {
+			const parts: { block: Block; values: Float32Array }[] = [];
+			for (const block of dailyBlocks) {
+				const v = await read(gefsUrl(issue, day), blockPoints(block));
+				const values = Float32Array.from(v, (x) => x ?? Number.NaN);
+				await writeDailyDays(arr, d, block, values);
+				parts.push({ block, values });
+			}
+			const sha = manifestHash([regionDay(parts)]);
+			gefsFiles.push({ url: gefsUrl(issue, day), etag: etagOf(sha), lastModified: null, size: null, valuesSha256: sha, revision: 1, fetchedAt });
+		}
+		await writeManifest(store, {
+			...base,
+			product,
+			years: { first: Number(issue.slice(0, 4)), last: Number(fromEpochDay(toEpochDay(issue) + GEFS_DAYS - 1).slice(0, 4)) },
+			finalThrough: null,
+			prelimThrough: null,
+			files: gefsFiles
+		});
+	}
+	await writeGefsIndex(store, MIRROR_FIXTURE.gefsIssues);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
