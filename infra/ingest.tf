@@ -45,7 +45,8 @@
 # Freshness (issue #604 rule 4): each run publishes, per product,
 #   namespace  <project>/Mirror   (water-management/Mirror)
 #   metric     MirrorLagDays      (Unit: None; days, a number)
-#   dimension  Product = rnl | sat
+#   dimension  Product = rnl | sat   (prelim: the fetcher's daily ingest, feeds.tf,
+#                                     as an embedded metric; its alarm below)
 #   value      today (UTC) minus the product's manifest finalThrough, in days
 # with cloudwatch:PutMetricData (its role may publish to that namespace only).
 # A lag past ingest_lag_alarm_days alarms, and so does NO datapoint for two
@@ -490,6 +491,34 @@ resource "aws_cloudwatch_metric_alarm" "mirror_lag" {
 
   dimensions = {
     Product = each.key
+  }
+}
+
+# The preliminary copy's freshness (issue #604 R2-B): the fetcher's daily
+# ingest (feeds.tf, backend/src/ingest/daily.ts) publishes MirrorLagDays with
+# Product = prelim, today minus the newest sat day the copy holds (final or
+# preliminary), as an embedded metric in its own log. Gated on
+# daily_ingest_enabled, not ingest_image_tag: it is the Node fetcher's job,
+# and breaching on missing data, it would fire from the first apply before a
+# release with the daily mode is out.
+resource "aws_cloudwatch_metric_alarm" "mirror_lag_prelim" {
+  count = var.daily_ingest_enabled && local.alarms_essential ? 1 : 0
+
+  alarm_name          = "${local.project}-mirror-lag-prelim"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  metric_name         = local.mirror_lag_metric
+  namespace           = local.mirror_metric_namespace
+  period              = 86400
+  statistic           = "Maximum"
+  threshold           = var.daily_ingest_lag_alarm_days
+  alarm_description   = "The data mirror's newest CHIRPS sat day (preliminary, else final) is more than ${var.daily_ingest_lag_alarm_days} days old, or the fetcher's daily ingest published no lag for two days (it stopped running, or fails before it measures). Logs Insights on the fetcher log group: filter message.event = \"mirror_daily_ingest\" | fields message.stopped, message.reason, message.detail, message.prelimThrough. reason refused = CHC answered HTTP 403 (the run stopped on purpose; docs/deployment.md § The data mirror). The app keeps serving the cached days meanwhile."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    Product = "prelim"
   }
 }
 

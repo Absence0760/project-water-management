@@ -5,7 +5,11 @@
 # the mirror bucket and nothing else; the worker may read the mirror, and so
 # may the S3 interface endpoint's policy (without that statement every read
 # from the VPC is AccessDenied); the freshness alarms treat missing data as
-# breaching, so a job that stops running alarms too.
+# breaching, so a job that stops running alarms too. Round 2 (R2-B): the
+# fetcher's daily ingest (feeds.tf) and the preliminary freshness alarm stay
+# off until daily_ingest_enabled is set, and the backfill state machine
+# (ingest_backfill.tf) walks the months one at a time, paced, invoking only
+# the ingest function.
 #
 # The mocks, overrides and variables below are copied from
 # guardrails.tftest.hcl (a test file can't share them); keep them in step.
@@ -720,6 +724,23 @@ override_resource {
   }
 }
 
+override_resource {
+  target          = aws_cloudwatch_event_rule.daily_ingest
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-daily-ingest"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.ingest_backfill
+  override_during = plan
+  values = {
+    id  = "water-management-mirror-backfill"
+    arn = "arn:aws:iam::000000000000:role/water-management-mirror-backfill"
+  }
+}
+
 # --- The mirror bucket ---------------------------------------------------------------
 
 run "mirror_bucket_is_private_and_versioned" {
@@ -1058,4 +1079,204 @@ run "rejects_more_than_two_ingest_runs" {
   }
 
   expect_failures = [var.ingest_reserved_concurrency]
+}
+
+# --- The fetcher's daily ingest (feeds.tf, issue #604 R2-B) --------------------------
+
+run "daily_ingest_off_by_default" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_rule.daily_ingest.state == "DISABLED" &&
+      length(aws_cloudwatch_event_target.daily_ingest) == 0 &&
+      length(aws_lambda_permission.fetcher_daily_ingest) == 0 &&
+      length(aws_iam_role_policy.fetcher_mirror) == 0
+    )
+    error_message = "Until daily_ingest_enabled is set the daily rule is disabled, targets nothing, may invoke nothing, and the fetcher can't touch the mirror bucket."
+  }
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.mirror_lag_prelim) == 0
+    error_message = "No preliminary freshness alarm before the daily ingest is on: breaching on missing data, it would fire from the first apply."
+  }
+  assert {
+    condition = (
+      aws_lambda_function_event_invoke_config.fetcher.maximum_retry_attempts == 0 &&
+      aws_lambda_function_event_invoke_config.fetcher.function_name == aws_lambda_function.fetcher.function_name
+    )
+    error_message = "An asynchronous fetcher run (the daily ingest) is never retried: a 403 must stop it."
+  }
+  assert {
+    condition     = aws_lambda_function.fetcher.environment[0].variables["MIRROR_URL"] == "s3://water-management-mirror-000000000000"
+    error_message = "The fetcher knows the copy it writes (MIRROR_URL = s3://<mirror bucket>)."
+  }
+}
+
+run "daily_ingest_on" {
+  command = plan
+
+  variables {
+    daily_ingest_enabled = true
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_rule.daily_ingest.state == "ENABLED" &&
+      aws_cloudwatch_event_target.daily_ingest[0].arn == aws_lambda_function.fetcher.arn &&
+      jsondecode(aws_cloudwatch_event_target.daily_ingest[0].input) == { mode = "daily-ingest" } &&
+      one(aws_cloudwatch_event_target.daily_ingest[0].retry_policy).maximum_retry_attempts == 0 &&
+      aws_cloudwatch_event_rule.daily_ingest.schedule_expression != aws_cloudwatch_event_rule.ingest["rnl"].schedule_expression &&
+      aws_cloudwatch_event_rule.daily_ingest.schedule_expression != aws_cloudwatch_event_rule.ingest["sat"].schedule_expression
+    )
+    error_message = "With daily_ingest_enabled the daily rule sends {\"mode\":\"daily-ingest\"} to the fetcher, never retried, at another time than the Python job's runs."
+  }
+  assert {
+    condition = (
+      aws_lambda_permission.fetcher_daily_ingest[0].principal == "events.amazonaws.com" &&
+      aws_lambda_permission.fetcher_daily_ingest[0].source_arn == aws_cloudwatch_event_rule.daily_ingest.arn &&
+      aws_lambda_permission.fetcher_daily_ingest[0].function_name == aws_lambda_function.fetcher.function_name
+    )
+    error_message = "Only the daily rule may invoke the fetcher on a schedule."
+  }
+  assert {
+    condition = (
+      aws_iam_role_policy.fetcher_mirror[0].role == aws_iam_role.fetcher_lambda.id &&
+      toset(flatten([for s in data.aws_iam_policy_document.fetcher_mirror.statement : s.actions])) == toset(["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]) &&
+      toset(flatten([for s in data.aws_iam_policy_document.fetcher_mirror.statement : s.resources])) == toset([aws_s3_bucket.mirror.arn, "${aws_s3_bucket.mirror.arn}/*"]) &&
+      alltrue([for s in data.aws_iam_policy_document.fetcher_mirror.statement : s.effect != "Deny"])
+    )
+    error_message = "The fetcher reads, writes, lists and deletes in the mirror bucket only (its lag metric is an embedded metric: no PutMetricData)."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.mirror_lag_prelim[0].treat_missing_data == "breaching" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_prelim[0].namespace == "water-management/Mirror" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_prelim[0].metric_name == "MirrorLagDays" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_prelim[0].dimensions["Product"] == "prelim" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_prelim[0].threshold == 12 &&
+      aws_cloudwatch_metric_alarm.mirror_lag_prelim[0].period == 86400 &&
+      aws_cloudwatch_metric_alarm.mirror_lag_prelim[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
+    )
+    error_message = "The preliminary copy's freshness alarm reads MirrorLagDays{Product=prelim}, pages through the alerts topic, and treats missing data as breaching."
+  }
+  assert {
+    condition     = length(aws_lambda_function.ingest) == 0 && length(aws_cloudwatch_metric_alarm.mirror_lag) == 0
+    error_message = "The daily ingest is the Node fetcher's: turning it on doesn't need (or create) the Python ingest function or its alarms."
+  }
+}
+
+run "essential_tier_keeps_the_prelim_freshness_alarm" {
+  command = plan
+
+  variables {
+    daily_ingest_enabled = true
+    alarm_tier           = "essential"
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.mirror_lag_prelim) == 1
+    error_message = "alarm_tier = \"essential\" keeps the preliminary copy's freshness alarm."
+  }
+}
+
+run "no_alarm_tier_drops_the_prelim_freshness_alarm" {
+  command = plan
+
+  variables {
+    daily_ingest_enabled = true
+    alarm_tier           = "none"
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.mirror_lag_prelim) == 0
+    error_message = "alarm_tier = \"none\" creates no alarm, the preliminary freshness one included."
+  }
+}
+
+run "rejects_a_prelim_lag_alarm_that_fires_on_a_healthy_copy" {
+  command = plan
+
+  variables {
+    daily_ingest_lag_alarm_days = 7
+  }
+
+  expect_failures = [var.daily_ingest_lag_alarm_days]
+}
+
+# --- The backfill (ingest_backfill.tf, issue #604 R2-B) -------------------------------
+
+run "backfill_off_without_the_ingest_function" {
+  command = plan
+
+  assert {
+    condition = (
+      length(aws_sfn_state_machine.ingest_backfill) == 0 &&
+      length(aws_iam_role.ingest_backfill) == 0 &&
+      length(aws_iam_role_policy.ingest_backfill) == 0
+    )
+    error_message = "No backfill state machine (or its role) before the ingest function exists."
+  }
+}
+
+run "backfill_one_month_at_a_time_paced_and_never_retrying_a_refusal" {
+  command = plan
+
+  variables {
+    ingest_image_tag = "0.7.0-0123456789ab"
+  }
+
+  assert {
+    condition = (
+      aws_sfn_state_machine.ingest_backfill[0].name == "water-management-mirror-backfill" &&
+      aws_sfn_state_machine.ingest_backfill[0].type == "STANDARD" &&
+      aws_sfn_state_machine.ingest_backfill[0].role_arn == aws_iam_role.ingest_backfill[0].arn
+    )
+    error_message = "The backfill is a Standard state machine running as its own role."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.Type == "Map" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemsPath == "$.items" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.MaxConcurrency == 1
+    )
+    error_message = "The months run one at a time (MaxConcurrency = 1): a finals chunk holds a whole year, so two months of one year at once would lose one."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Resource == "arn:aws:states:::lambda:invoke" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Parameters.FunctionName == "arn:aws:lambda:af-south-1:000000000000:function:water-management-mirror-ingest" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Next == "Pace" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Pace.Type == "Wait" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Pace.Seconds >= 60
+    )
+    error_message = "Each month invokes the ingest function, then waits at least 60 s (D4: one CHC file a minute)."
+  }
+  assert {
+    condition = alltrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
+      alltrue([for e in r.ErrorEquals : startswith(e, "Lambda.") && e != "Lambda.Unknown"])
+    ])
+    error_message = "Only Lambda's own service errors are retried: never States.ALL or States.TaskFailed, so a month that met HTTP 403 fails the execution at once."
+  }
+  assert {
+    condition = (
+      aws_iam_role_policy.ingest_backfill[0].role == aws_iam_role.ingest_backfill[0].id &&
+      length(data.aws_iam_policy_document.ingest_backfill.statement) == 1 &&
+      one(data.aws_iam_policy_document.ingest_backfill.statement).actions == toset(["lambda:InvokeFunction"]) &&
+      one(data.aws_iam_policy_document.ingest_backfill.statement).resources == toset([
+        "arn:aws:lambda:af-south-1:000000000000:function:water-management-mirror-ingest",
+        "arn:aws:lambda:af-south-1:000000000000:function:water-management-mirror-ingest:*",
+      ])
+    )
+    error_message = "The backfill role may invoke the ingest function and nothing else."
+  }
+}
+
+run "rejects_a_backfill_faster_than_a_file_a_minute" {
+  command = plan
+
+  variables {
+    ingest_backfill_wait_seconds = 30
+  }
+
+  expect_failures = [var.ingest_backfill_wait_seconds]
 }
