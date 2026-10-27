@@ -232,11 +232,14 @@ function terraformEnv(): Record<Role, Map<string, string | null>> {
 			expect(role, `infra/${file}: aws_lambda_function.${m[1]} is a Lambda this test doesn't know; add it to TF_RESOURCE and give it a role`).toBeDefined();
 			const body = tf.slice(m.index!, tf.indexOf('\n}\n', m.index!));
 			const lines = body.split('\n');
-			const start = lines.findIndex((l) => /^\s*variables = \{$/.test(l));
+			// `variables = { … }`, or `variables = merge({ … }, <cond> ? { … } : {})` for settings Terraform sets only
+			// under a switch (the worker's FEED_FETCHER while per-feed fetching is on, infra/feeds.tf): every key either way.
+			const start = lines.findIndex((l) => /^\s*variables = (\{|merge\()$/.test(l));
 			expect(start, `aws_lambda_function.${m[1]} has no environment variables block`).toBeGreaterThan(0);
+			const merged = lines[start]!.trim().endsWith('merge(');
 			const vars = new Map<string, string | null>();
 			for (const line of lines.slice(start + 1)) {
-				if (/^\s*\}$/.test(line)) break;
+				if (merged ? /^\s*\)$/.test(line) : /^\s*\}$/.test(line)) break;
 				const kv = /^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.+?)\s*$/.exec(line);
 				if (!kv) continue; // a comment or a blank line
 				const literal = /^"([^"$]*)"$/.exec(kv[2]!);
@@ -494,6 +497,28 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		for (const v of [undefined, 'file:///tmp/mirror/', 's3://'])
 			expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'on', CHIRPS_SOURCE: 'chc', MIRROR_URL: v })), `MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
 		expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'off', CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
+	});
+
+	// Issue #604 R3-C: per-feed fetching retires once CHIRPS reads the copy and DWS the store.
+	it('the worker hands fetches to the fetcher (FEED_FETCHER=sqs, with its queue) while any feed fetches per feed, and needs neither once none does', () => {
+		const cutover = { CHIRPS_SOURCE: 'mirror', DWS_SOURCE: 'store' };
+		// Per-feed fetching on (either flag on the old value): FEED_FETCHER=sqs is required, and so is its queue.
+		for (const flags of [{ CHIRPS_SOURCE: 'chc', DWS_SOURCE: 'live' }, { CHIRPS_SOURCE: 'mirror', DWS_SOURCE: 'live' }, { CHIRPS_SOURCE: 'chc', DWS_SOURCE: 'store' }]) {
+			const label = JSON.stringify(flags);
+			for (const v of [undefined, '', 'inline']) expect(problemNames('worker', prod('worker', { ...flags, FEED_FETCHER: v })), `${label} FEED_FETCHER=${String(v)}`).toContain('FEED_FETCHER');
+			expect(problemNames('worker', prod('worker', { ...flags, FETCH_REQUESTS_QUEUE_URL: undefined })), `${label} without a queue`).toContain('FETCH_REQUESTS_QUEUE_URL');
+			expect(problemNames('worker', prod('worker', flags)), label).toEqual([]); // positive control
+		}
+		// sqs with no fetch-requests queue is refused even after the cutover: every send would fail.
+		expect(problemNames('worker', prod('worker', { ...cutover, FEED_FETCHER: 'sqs', FETCH_REQUESTS_QUEUE_URL: undefined }))).toContain('FETCH_REQUESTS_QUEUE_URL');
+		// Both on the new values: no FEED_FETCHER and no queue, as Terraform then renders the worker (positive control).
+		expect(problemNames('worker', prod('worker', { ...cutover, FEED_FETCHER: undefined, FETCH_REQUESTS_QUEUE_URL: undefined }))).toEqual([]);
+		// ...but never inline, and a queue URL set is still checked.
+		expect(problemNames('worker', prod('worker', { ...cutover, FEED_FETCHER: 'inline', FETCH_REQUESTS_QUEUE_URL: undefined }))).toContain('FEED_FETCHER');
+		expect(problemNames('worker', prod('worker', { ...cutover, FEED_FETCHER: undefined, FETCH_REQUESTS_QUEUE_URL: 'http://localhost:9324/q' }))).toContain('FETCH_REQUESTS_QUEUE_URL');
+		// The fetcher answers on ingest-results only while the queues exist: unset is fine, a local URL is not.
+		expect(problemNames('fetcher', prod('fetcher', { INGEST_RESULTS_QUEUE_URL: undefined }))).toEqual([]);
+		expect(problemNames('fetcher', prod('fetcher', { INGEST_RESULTS_QUEUE_URL: 'http://localhost:9324/q' }))).toContain('INGEST_RESULTS_QUEUE_URL');
 	});
 
 	it('lets the delineation DEM be off or an S3 object (positive control for the DEM_URL refusals)', () => {
