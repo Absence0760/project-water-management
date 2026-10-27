@@ -1,0 +1,13 @@
+# R4-C (ECMWF ENS forecast, ingest/ecmwf.py): direct dependencies to merge
+# into requirements.txt (the coordinator regenerates the hash-pinned file).
+#
+# eccodes: ECMWF's GRIB2 decoder, the Python bindings (pure Python, cffi).
+# It finds the C library in eccodeslib's wheel through findlibs; checked
+# 2026-10-27 that cp314 manylinux_2_28 wheels exist for both x86_64 (CI)
+# and aarch64 (the Lambda image; AL2023's glibc 2.34 >= 2.28), with every
+# shared library bundled (libeccodes, libaec, libopenjp2, libpng and
+# eckitlib's): no system package and no build. It pulls cffi, pycparser,
+# attrs, findlibs and eckitlib transitively.
+eccodes==2.50.0
+# eccodeslib: libeccodes itself as a binary wheel (pinned with eccodes).
+eccodeslib==2.50.0.33

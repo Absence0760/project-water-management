@@ -17,5 +17,7 @@ RUN pip install --no-cache-dir --require-hashes -r ${LAMBDA_TASK_ROOT}/requireme
 
 # The job's modules only: no tests, no fixtures (production runs FEED_SOURCE=live).
 COPY chcnetcdf.py chirps_final.py cloudwatch.py grid.py lambda_handler.py lease.py manifest.py polite.py zarrstore.py ${LAMBDA_TASK_ROOT}/
+# ECMWF ENS forecast (issue #604 R4-C): GRIB2 through eccodes (requirements.c.in).
+COPY ecmwf.py ${LAMBDA_TASK_ROOT}/
 
 CMD ["lambda_handler.handler"]

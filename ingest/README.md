@@ -28,6 +28,11 @@ Fixtures mode runs the same code against a synthetic directory.
 | `tiffread.py` | A stdlib GeoTIFF strip reader: one pixel of a CHC daily file through range requests, for `verify_copy.py`. Not in the image. |
 | `requirements-verify.txt` | `verify_copy.py`'s hash-pinned packages (the image's plus icechunk), for `ingest/.venv-verify` only. |
 | `fixtures/make_chc_fixture.py` | Writes `fixtures/chc/chirps-v3.0.2024.02.days_p05.nc`, the reader's synthetic fixture. |
+| `ecmwf.py` | The ECMWF ENS forecast job (below): index-based range reads of `tp`, decoding with eccodes, the region on the 0.1° grid, daily totals, the ensemble statistics, `ecmwf/<issue>` and its index, resumed across runs. |
+| `ecmwf_qm_fit.py` | The operator's offline quantile-mapping fit of the ECMWF forecast to our rain; writes `ecmwf/qm.json`. Not in the image. |
+| `ecmwf_fixturehttp.py` | Fixtures mode's stand-in for ECMWF's open data bucket over `fixtures/ecmwf/`, re-dated to any issue. Not in the image. |
+| `fixtures/ecmwf/make_ecmwf_fixtures.py` | Writes the synthetic ECMWF step files (`fixtures/ecmwf/`: 15 GRIB2 files and their `.index`), and builds the tests' structured ones. |
+| `requirements.c.in` | R4-C's direct dependencies (eccodes, eccodeslib), to merge into `requirements.txt`. |
 | `fixtures/chirps/make_chirps_fixtures.py` | Writes the synthetic `byMonth` directory (`fixtures/chirps/`): two months, their listing, and a rewritten and a changed variant. |
 | `tests/roundtrip.ts` | The Node half of the cross-language round trip (`test_roundtrip.py`). |
 | `Dockerfile` | The Lambda image (build context `ingest/`). |
@@ -38,6 +43,7 @@ Fixtures mode runs the same code against a synthetic directory.
 ```json
 { "product": "rnl" | "sat", "mode": "monthly" }
 { "product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM" }
+{ "product": "ecmwf", "mode": "daily" }
 ```
 
 A backfill names its month (from 1981-01 for `rnl`, 2000-06 for `sat`); a
@@ -109,6 +115,51 @@ that copied, a run the budget cut short, a monthly run held off by the lease,
 and every failure, before the error is re-raised. The lag alarms treat a
 missing datapoint as breaching, and `test_chirps_final.MetricOnEveryExit`
 walks every exit to keep it that way.
+
+## The ECMWF forecast job
+
+`ecmwf.py` (issue #604 D17, R4-C; its docstring is the spec) copies each
+00 UTC run of ECMWF's ensemble from its open data bucket
+(`https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/<YYYYMMDD>/00z/ifs/0p1/enfo/<YYYYMMDD>000000-<step>h-enfo-ef-sfc.{index,grib2}`,
+the 0.1° files ECMWF publishes from 2026-10-20, about 09:40 UTC):
+
+1. **Today's issue, else yesterday's.** One held already ends the run. With
+   no work saved for it, the last step's index is asked for first: a 404
+   means the issue isn't out.
+2. **Each step** (24 … 360 h): the `.index` (JSON lines, one per field,
+   with `_offset`/`_length`), then one range request per member for its
+   `tp` field only, one request a second. Each field is decoded with
+   eccodes and checked (`tp` in m, this run, accumulated from 0 h to the
+   step, this member, a regular lat/lon grid); our 0.1° cells (centred on
+   .05) take the mean of the four field points at their corners. The step's
+   members are saved to `ingest-state/ecmwf/work/<issue>/step-<h>.npy`, so
+   a run stopped by its time budget is resumed by the next.
+3. **The issue.** Day d is `1000 × (tp[24(d+1) h] − tp[24d h])` mm, the UTC
+   day issue + d (day 0 is the issue date, as for CHIRPS-GEFS); a round-off
+   below zero is 0, a real drop, a gap or over 2000 mm fails. Per cell and
+   day the ensemble mean, p10, p50 and p90 go into Zarr `ecmwf/<issue>`
+   (dims stat, day, lat, lon; chunk (1, 1, 55, 62)), then its manifest, then
+   `ecmwf/index.json`.
+4. **Keeping:** the newest 7 issues whole; older ones keep only their mean
+   (listed as `archived`) for the quantile-mapping fit.
+
+A 403 stops the run (never retried) and writes `ecmwf/refused.json`; later
+runs that UTC day ask nothing. The lease is `ingest-state/ecmwf/lease.json`.
+`MirrorLagDays{Product=ecmwf}` (today minus the newest issue held) goes out on
+every exit once an issue is held. `pnpm dev:ingest:run ecmwf` runs it in
+fixtures mode (`ecmwf_fixturehttp.py`).
+
+**The fit** (`ecmwf_qm_fit.py`, the operator, offline): empirical quantile
+mapping of the archived ensemble means against the copy's `sat` rain (else
+`prelim`) for the same 0.1° cell and day, per region and season, written to
+`ecmwf/qm.json`; the feed applies it (`backend/src/feeds/fromMirrorEcmwf.ts`)
+and labels the forecast "not yet calibrated" without it. Runbook:
+docs/deployment.md § ECMWF.
+
+**eccodes** comes as binary wheels (`eccodes` plus `eccodeslib`, which
+bundles libeccodes, libaec, OpenJPEG, libpng and eckit): cp314
+manylinux_2_28 wheels exist for x86_64 (CI) and aarch64 (the image), so
+nothing is built and no system package is needed.
 
 ## The copy
 
@@ -248,7 +299,7 @@ hash-pinned `requirements.txt` the first time it runs, and again whenever that
 file changes.
 
 ```sh
-pnpm dev:ingest:run          # rnl into ingest/.mirror (gitignored); `pnpm dev:ingest:run sat` for sat
+pnpm dev:ingest:run          # rnl into ingest/.mirror (gitignored); `pnpm dev:ingest:run sat` for sat, `ecmwf` for the ECMWF forecast
 pnpm test:ingest             # the unittest suite
 ```
 
@@ -272,6 +323,8 @@ They cover:
 - **The handler:** a fixtures-mode run from start to finish, a re-run that is one 304, the variants through the environment, a retry after a crash between the chunk upload and the manifest, a gap in the months that holds `finalThrough` back, a file whose days aren't its month's, and an image whose COPY line lacks a module.
 - **The finals job** (`test_chirps_final.py`): the listing parser, a new month, a rewrite with the same values (no bump), a rewrite with changed values (a bump and its `changes`), the 304, a 403 that stops with no retry, the time budget, the pacing (within and across runs, on a fake clock), a backfill of a named month, the lease (local and S3), and the metric on every exit.
 - **The round trip** (`test_roundtrip.py`): Python writes the copy from the synthetic NetCDF, and Node's `backend/src/mirror/` reads it through `tests/roundtrip.ts`, bit for bit, with the same hash and manifest. It needs the pnpm install (`backend/node_modules/.bin/tsx`) and skips without it, except in CI, where `INGEST_REQUIRE_NODE=1` makes it fail.
+- **The ECMWF job** (`test_ecmwf.py`): the index filter (only the members' `tp`, sorted, the ranges being the messages), refusals (another run or step, a member twice, the wrong field), the corner mean at 0.1° on a structured field (and one wet point shared by its four cells), longitudes that wrap, de-accumulation to daily mm (round-off, a drop, over 2000 mm, a gap), the statistics, a fixtures run end to end (the array, its metadata, the manifest, the index, the request count), the time budget and the resumed run, keeping 7 and archiving the rest as their mean, a 403 that stops with no retry, writes the marker and silences the day, the lease, the metric on every exit, a partial issue never listed, the sweep, the S3 path, the handler's routing, the image's COPY lines and the committed fixture against its generator.
+- **The fit** (`test_ecmwf_qm_fit.py`, synthetic data only): a doubled forecast mapped back, identity, the rule beyond the pairs (the same vectors as the Node side's `applyQm`), seasons, and a fit from a small synthetic copy with its provenance.
 - **The reader:** a value outside 0–2000 mm fails the read and writes nothing.
 - **The fixture:** it still matches its generator.
 - **The copy's verification** (`test_verify_copy.py`): `tiffread.py` against synthetic GeoTIFFs written by the test (LZW in TIFF's early-change variant, deflate and none; one and several rows per strip; both byte orders; every pixel, no data included), with the formats it refuses. Sampling is seeded and stratified across products and years. The CHC check runs against a fake CHC serving TIFFs of a `zarrstore`-written copy: a pass at one request a second, a one-ulp mismatch failing with both values, a 404 and a 403 that stops after one request. The dynamical.org comparison runs on synthetic arrays: the units, the row flip, the mask, the tolerance and dry cells, with `main` reading the region from the copy against a fake store. The coverage check covers a gap, the first month, `finalThrough` and the lag, plus the committed fixture copy offline. Nothing touches CHC or dynamical.org.
@@ -307,6 +360,14 @@ the result:
 ```sh
 ingest/.venv/bin/python ingest/fixtures/make_chc_fixture.py
 ```
+
+`fixtures/ecmwf/` holds one invented ECMWF issue, 15 step files with their
+`.index`, on ECMWF's real 0.1° global grid, 4 members each with a 2 m
+temperature field between their `tp` fields. Each field is constant (GRIB
+packs a constant in no bits, so a file is about 1.5 KB); the tests write
+their own structured fields. Regenerate with
+`ingest/.venv/bin/python ingest/fixtures/ecmwf/make_ecmwf_fixtures.py`; a
+test fails if they drift.
 
 ## The image
 

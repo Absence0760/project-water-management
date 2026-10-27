@@ -2,6 +2,7 @@
 
 Event: {"product": "rnl" | "sat", "mode": "monthly"}
        {"product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM"}
+       {"product": "ecmwf", "mode": "daily"}   (ecmwf.py, its own run)
 Env:   MIRROR_URL      file:///abs/path or s3://bucket[/prefix] (required)
        FEED_SOURCE     fixtures (default: the synthetic byMonth directory in
                        fixtures/chirps/, served by fixturehttp.py, no
@@ -102,6 +103,10 @@ def _publish_lag(mirror, product: str, metrics, today: dt.date) -> int:
 def handler(event, context=None, s3_client=None, opener=None, metrics=None, clock=None, sleep=None, today=None):
     """Run one event. `s3_client`, `opener` (polite's), `metrics` (a cloudwatch
     sink), `clock`/`sleep` (pacing) and `today` (the lag's date) are for tests."""
+    # --- ECMWF ENS forecast (issue #604 R4-C): {"product": "ecmwf", "mode": "daily"}, ecmwf.py ---
+    if isinstance(event, dict) and event.get("product") == "ecmwf":
+        return _handle_ecmwf(event, context, s3_client, opener, metrics, clock, sleep, today)
+    # --- end ECMWF ---
     ev = validate_event(event)
     source = os.environ.get("FEED_SOURCE", "fixtures")
     if source not in ("fixtures", "live"):
@@ -159,6 +164,39 @@ def handler(event, context=None, s3_client=None, opener=None, metrics=None, cloc
     return _result(ev, source, mirror, out, lag)
 
 
+# --- ECMWF ENS forecast (issue #604 R4-C) ---
+def _handle_ecmwf(event, context, s3_client, opener, metrics, clock, sleep, today) -> dict:
+    import ecmwf
+
+    ecmwf.validate_event(event)
+    source = os.environ.get("FEED_SOURCE", "fixtures")
+    if source not in ("fixtures", "live"):
+        raise RuntimeError(f"FEED_SOURCE must be fixtures or live, got {source!r}")
+    mirror_url = os.environ.get("MIRROR_URL")
+    if not mirror_url:
+        raise RuntimeError("MIRROR_URL is not set (file:///abs/path or s3://bucket)")
+    live = source == "live"
+    if metrics is None:
+        metrics = cloudwatch.CloudWatchSink() if live else cloudwatch.LocalSink()
+    if opener is None and not live:
+        import ecmwf_fixturehttp
+
+        opener = ecmwf_fixturehttp.EcmwfFixtureOpener()
+    return ecmwf.handle(
+        event,
+        context,
+        mirror=zarrstore.Mirror.from_url(mirror_url, s3_client=s3_client),
+        live=live,
+        opener=opener,
+        metrics=metrics,
+        today=(today or (lambda: dt.datetime.now(dt.UTC).date()))(),
+        contact=os.environ.get("INGEST_CONTACT"),
+        clock=clock,
+        sleep=sleep,
+    )
+# --- end ECMWF ---
+
+
 def _result(ev, source, mirror, out, lag) -> dict:
     m = manifest.read(mirror, ev["product"])
     return {
@@ -177,4 +215,4 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     product = sys.argv[1] if len(sys.argv) > 1 else "rnl"
-    print(json.dumps(handler({"product": product, "mode": "monthly"}), indent=2))
+    print(json.dumps(handler({"product": product, "mode": "daily" if product == "ecmwf" else "monthly"}), indent=2))

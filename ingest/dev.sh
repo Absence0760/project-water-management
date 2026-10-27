@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The bulk ingest job on this machine (ingest/README.md):
 #
-#   pnpm dev:ingest:run [rnl|sat]   run the Lambda handler once in fixtures mode
+#   pnpm dev:ingest:run [rnl|sat|ecmwf]  run the Lambda handler once in fixtures mode
 #                                   (the committed synthetic NetCDF, no network) into
 #                                   MIRROR_URL, default file://<repo>/ingest/.mirror (gitignored)
 #   pnpm test:ingest                the package's unittest suite
@@ -59,7 +59,7 @@ verify)
 	exec "$here/.venv-verify/bin/python" "$here/verify_copy.py" "$@"
 	;;
 *)
-	echo "usage: ingest/dev.sh run [rnl|sat] | test | verify [verify_copy.py args]" >&2
+	echo "usage: ingest/dev.sh run [rnl|sat|ecmwf] | test | verify [verify_copy.py args]" >&2
 	exit 2
 	;;
 esac
