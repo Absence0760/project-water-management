@@ -4218,6 +4218,85 @@ signed-in session, no write grant to `water_app` (`catalogue.db.test.ts`
   claim's order and bounds, the apply's rules and refusals, and the loop end
   to end on the rewrite fixture.
 
+### Mirror revisions (245_mirror_revision.sql)
+
+Issue #604 moves CHIRPS onto a copy we control: a Zarr store per product
+with a `manifest.json` beside it, whose `revision` goes up only when CHC
+rewrote a file *and* the values changed, each time appending a `changes`
+entry `{revision, days: [from, to], cellsChanged, maxAbsDiff}` (design D8).
+This is how such a revision reaches the cell cache without a feed (D9):
+it marks the cached finals stale, and the re-check above does the rest.
+
+| Table | Holds |
+| --- | --- |
+| `mirror_manifest` | One row per `origin` and `product` (primary key): `revision` (≥ 1), the revision of the copy the cache was last brought up to; `applied_at`; `manifest` (`jsonb`, the manifest as applied, `changes` and all: the record of the revision). No foreign keys |
+
+- **RLS**: reference data like `chirps_cell_year`: SELECT for any
+  signed-in session, no write grant to `water_app` (`catalogue.db.test.ts`
+  `READ_ONLY`), written only by the function below.
+- **`app_mirror_apply_revision(origin, product, revision, changes,
+  manifest)`** (`SECURITY DEFINER`, `search_path` pinned, `water_app`
+  only, and only from a session with **no user and no API key**, the
+  worker's tick under `withoutUser`, else `42501`): returns `(revision,
+  applied, marked)`. A `revision` at or below the stored one changes
+  nothing and returns the stored one with `applied = false` (a tick that
+  raced another, or a manifest read before the last apply). Otherwise each
+  entry of `changes` (a list of the manifest's entries; those at or below
+  the stored revision are skipped, so the caller may pass the whole list)
+  with `cellsChanged > 0` marks stale (`chirps_cell_stale`) **every cached
+  final** of its days inside the manifest's `region`, or inside the entry's
+  own optional `region` `{w,s,e,n}` (which must sit inside the manifest's);
+  then the row takes the new revision and manifest, and `marked` counts the
+  cell-days newly marked.
+  - **Which cells, and why all of the region's.** The manifest's `changes`
+    name no cells (`cellsChanged` is a count), and a list for a region-wide
+    rewrite would be 341,000 cells. So the function marks every cell the
+    cache holds a final for on those days, inside the region: only cells
+    some feed asked for, so the marking is small. Over-marking costs one
+    re-read from the copy of a value that turns out unchanged (the re-read
+    clears the stale row and logs nothing); under-marking would leave a
+    wrong value cached for good. Preliminary values are never marked (their
+    final replaces them anyway), nor cells outside the region (the copy
+    can't serve them), nor the other origin's rows.
+  - **No `chirps_revision` row here.** That table means "these cached
+    finals changed", and every CHIRPS feed recomputes its series from the
+    cache for each logged day (`refreshRevisedDays`). Logged before any
+    value moved, it would make every feed recompute up to a revision's days
+    from the old values for nothing, and the day would be logged again when
+    the re-read lands. The re-read (`chirps_recheck_claim` `reread`, then
+    `chirps_recheck_apply`, 210) logs each day whose values really changed,
+    and the feeds refresh from that as for a file CHC rewrote.
+  - **Bounds** (else `23514`, nothing marked or recorded): origin `chc` or
+    `fixtures`, product `sat` or `rnl`; revision ≥ 1; the manifest an object
+    of at most 4 MB naming the same product and revision, with `grid.step`
+    0.05 and a `region` on the CHC grid's 0.05° lattice (exact: `jsonb`
+    numbers are `numeric`; `mirror_region_cells` turns it into row and
+    column ranges); at most 1000 entries, each with an integer `revision`
+    no later than the manifest's, ISO `days` running forwards over at most
+    366 days from the product's first day to today (UTC), a non-negative
+    integer `cellsChanged` and a non-negative `maxAbsDiff`; at most 4000
+    distinct days marked in one call (a larger revision is applied in parts).
+  - **Locks**: an advisory lock on the origin and product (two ticks never
+    apply at once, even before the first row exists), then each day's
+    `chirps_file` row in day order, under which its stale rows are written:
+    210's rule, so it never waits on a re-check's stale rows while holding
+    them. Cell rows are only read.
+- **`app_mirror_revision(origin, product)`** (`SECURITY DEFINER`, the same
+  no-user caller only): the stored revision, `NULL` when none, so the tick
+  calls the apply only when the manifest's is newer.
+- `mirror_worker_context()` (no user, no API key; as 051's
+  `alert_worker_context`) and `mirror_region_cells(region)` are the shared
+  checks (invoker rights).
+- The typed wrapper is `backend/src/feeds/mirrorRevision.ts`
+  (`applyMirrorRevision`, `mirrorRevision`); the worker tick that calls it
+  is issue #604 R2-D. A known race for R2-D to close: a feed fetch that read
+  the copy *before* a revision and applies its re-read *after* the marking
+  clears the stale rows with the old values. `chirps_cell_stale.marked_at`
+  against the revision the fetch read is the handle.
+- `feeds/mirrorRevision.db.test.ts` checks the access (positive controls),
+  what is marked and what isn't, that the re-check then claims the marked
+  days, the revision rules and every bound.
+
 ### Feed days (031_feed_days.sql)
 
 Which days of a series its feed wrote, so a feed replaces only those and

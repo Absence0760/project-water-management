@@ -1304,6 +1304,17 @@ row names a source, where to read it and the series it merges into:
   before 210 receives) is refused as invalid, and the feed retries 15
   minutes later, as with 208. Requests and cost:
   [deployment.md § Data feeds](./deployment.md#data-feeds).
+
+  **A revision of our copy** (issue #604, `245_mirror_revision.sql`) enters
+  the same loop without a feed: once CHIRPS is read from the copy, the
+  worker's tick (R2-D, with no user) reads each product's manifest and,
+  when its revision is newer than `mirror_manifest`'s, calls
+  `app_mirror_apply_revision` (`feeds/mirrorRevision.ts`). It marks every
+  cached final of the changed days inside the copy's region stale, as a
+  changed HEAD tag does in step 3, and records the revision; steps 1, 3 and
+  4 then re-read those days from the copy, log what really changed in
+  `chirps_revision` and refresh each feed's series. Details and bounds:
+  [data-model.md § Mirror revisions](./data-model.md#mirror-revisions-245_mirror_revisionsql).
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed replaces only the days
