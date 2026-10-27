@@ -1760,7 +1760,7 @@ EventBridge, daily
   | `rnl`, `sat` | finals | 0.05° (CHC's) | 550 × 620 | (1, 110, 124) | through `finalThrough` (sat's preliminary days in `prelim`) |
   | `prelim`, `gefs/<issue>` | daily | 0.05° | 550 × 620 | (1, 110, 124) | through `prelimThrough` / the issue's 16 days |
   | `era5l` (ERA5-Land, from 1950) | finals | 0.1° | 275 × 310 | (finals: 1, 366, 20, 20) | through `finalThrough` |
-  | `imerg_late` (IMERG Late, from June 2000) | daily | 0.1° | 275 × 310 | (1, 55, 62) | through `prelimThrough`, a file a day with its `version` (V07, V08) |
+  | `imerg_late` (IMERG Late, from June 2000) | daily | 0.1° | 275 × 310 | (1, 55, 62) | the days with a file (each on its own: a missing day is not held and blocks none after it), through `prelimThrough`, the newest; a file a day with its `version` (V07, V08) |
 
   The 0.1° grid's `[0, 0]` is centred at 35.45° S, 10.05° E. The cell cache
   (`chirps_cell_year`, 252) keys a row by its product's global grid (row 0

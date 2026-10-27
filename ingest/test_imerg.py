@@ -292,17 +292,33 @@ class Recent(Base):
         self.assertEqual(len(self.opener.requests), 2)
         self.assertEqual(self.manifest()["prelimThrough"], TODAY.isoformat())
 
-    def test_a_day_not_published_yet_leaves_a_gap_and_prelimThrough_stops_before_it(self):
+    def test_a_day_not_published_yet_leaves_a_gap_and_prelimThrough_is_the_newest_day(self):
         gap = TODAY - dt.timedelta(days=4)
         self.run_job(opener=imerg_fixture.FakeEarthdata(latest=TODAY - dt.timedelta(days=1), missing={gap}))
         m = self.manifest()
         self.assertEqual(len(m["files"]), 9)
-        self.assertEqual(m["prelimThrough"], (gap - dt.timedelta(days=1)).isoformat())
-        self.assertEqual(self.metrics.published[-1], ("imerg_late", 5))
-        # The gap appears: the next run copies just it, and prelimThrough runs on.
+        self.assertNotIn(gap.isoformat(), manifest.imerg_held_days(m["files"]))
+        # Each held day stands on its own: the gap doesn't hold prelimThrough (or the lag) back.
+        self.assertEqual(m["prelimThrough"], (TODAY - dt.timedelta(days=1)).isoformat())
+        self.assertEqual(self.metrics.published[-1], ("imerg_late", 1))
+        # The gap appears: the next run copies just it.
         out = self.run_job()
         self.assertEqual([c["day"] for c in out["copied"]], [gap.isoformat()])
         self.assertEqual(self.manifest()["prelimThrough"], (TODAY - dt.timedelta(days=1)).isoformat())
+
+    def test_a_gap_older_than_the_look_back_blocks_no_later_day(self):
+        gap = TODAY - dt.timedelta(days=4)
+        self.run_job(opener=imerg_fixture.FakeEarthdata(latest=TODAY - dt.timedelta(days=1), missing={gap}))
+        # Eleven days on, the gap is past the 10-day search and never comes back; the copy runs on past it.
+        later = TODAY + dt.timedelta(days=11)
+        self.run_job(today=later)
+        m = self.manifest()
+        held = manifest.imerg_held_days(m["files"])
+        self.assertNotIn(gap.isoformat(), held)
+        self.assertIn((gap + dt.timedelta(days=1)).isoformat(), held)
+        self.assertEqual(m["prelimThrough"], (later - dt.timedelta(days=1)).isoformat())
+        manifest.validate(m)
+        self.assertEqual(self.metrics.published[-1], ("imerg_late", 1))
 
     def test_a_shorter_window_from_the_event(self):
         out = self.run_job(event={**EVENT, "days": 3})

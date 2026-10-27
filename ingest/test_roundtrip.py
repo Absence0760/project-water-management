@@ -179,6 +179,24 @@ class RoundTrip(unittest.TestCase):
         self.check_cells(node, stored, cells, "-" + "f" * days + "-")
         self.assertEqual(node["versions"], [None] + ["V08" if first + dt.timedelta(days=i) >= v08 else "V07" for i in range(days)] + [None])
 
+    def test_imerg_late_a_missing_day_is_not_held_and_blocks_no_later_day_in_python_or_node(self):
+        url = f"file://{self.dir / 'mirror'}"
+        today = dt.date(2024, 10, 12)
+        gap = today - dt.timedelta(days=5)
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": url, "FEED_SOURCE": "fixtures"}):
+            lambda_handler.handler({"product": "imerg_late", "mode": "recent"}, opener=imerg_fixture.FakeEarthdata(latest=today - dt.timedelta(days=1), missing={gap}), metrics=cloudwatch.LocalSink(), today=lambda: today)
+        py = manifest.read(zarrstore.Mirror.from_url(url), "imerg_late")
+        first, last = today - dt.timedelta(days=imerg.RECENT_DAYS), today - dt.timedelta(days=1)
+        self.assertEqual(py["prelimThrough"], last.isoformat())
+        window = [first + dt.timedelta(days=i) for i in range((last - first).days + 1)]
+        held = [d for d in window if d != gap]
+        root = Path(url[len("file://") :])
+        stored = np.stack([zarrstore.read_daily_day(root, "imerg_late", d) for d in held])
+        cells = [(15, 84), (137, 155)]
+        node = self.node_cells(url, "imerg_late", (first, last), cells)
+        self.assertEqual(node["manifest"]["prelimThrough"], last.isoformat())
+        self.check_cells(node, stored, cells, "".join("-" if d == gap else "f" for d in window))
+
     def test_the_s3_staging_path_writes_the_same_objects(self):
         """zarrstore.S3Mirror stages through a temporary directory: its objects, laid out as files, read the same."""
         from fakes3 import FakeS3

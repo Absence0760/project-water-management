@@ -35,13 +35,16 @@ growing northwards; float32, NaN fill, bytes + gzip 6.
 `firstDay` is set when the array is made (30 days before that run's day).
 
 **The manifest** (`imerg_late/manifest.json`): `finalThrough` is always null
-(Late is never final), `prelimThrough` the end of the contiguous run of held
-days from the oldest, and each `files` entry is one day's granule (its
+(Late is never final), `prelimThrough` the newest held day, and each `files` entry is one day's granule (its
 OPeNDAP URL) with **`version`**: the collection's version, `V07` or `V08`
 (the per-day version the bias correction is fitted by, D16). The minor
 letter stays in the URL. ingest/manifest.py and backend/src/mirror/manifest.ts
-both accept that field and check the rest (the grid, the per-day URLs, the
-contiguous days); this job also insists every file carries its version and
+both accept that field and check the rest (the grid, the per-day URLs,
+`prelimThrough` not past the newest file). The held days are exactly the
+days with a file, each on its own: a day CMR has not listed (or listed late)
+is a gap the readers treat as not held, and the days after it are read as
+usual, so one missing day older than the look-back blocks nothing. This job
+also insists every file carries its version and
 that it agrees with the granule's tag.
 
 **A run** (`{"product": "imerg_late", "mode": "recent"}`, a few times a day):
@@ -374,19 +377,15 @@ def held_days(m: dict) -> dict[dt.date, dict]:
 
 
 def _refresh(m: dict) -> None:
-    """files sorted by day; years; prelimThrough = the end of the contiguous run from the oldest held day."""
+    """files sorted by day; years; prelimThrough = the newest held day (a gap before it is just not held)."""
     held = held_days(m)
     m["files"] = [held[d] for d in sorted(held)]
     if not held:
         m["years"] = {"first": None, "last": None}
         m["prelimThrough"] = None
         return
-    first = min(held)
-    through = first
-    while through + dt.timedelta(days=1) in held:
-        through += dt.timedelta(days=1)
-    m["years"] = {"first": first.year, "last": max(held).year}
-    m["prelimThrough"] = through.isoformat()
+    m["years"] = {"first": min(held).year, "last": max(held).year}
+    m["prelimThrough"] = max(held).isoformat()
 
 
 def lag_days(m: dict | None, today: dt.date) -> int:

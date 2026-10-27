@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -12,7 +12,7 @@ import { fixtureHttp } from '../feeds/fixtures.js';
 import { fetchChirpsCells } from '../feeds/sources/chirps.js';
 import { ensureFinals, openFinals, readFinalsBlock, writeFinalsYear } from './arrays.js';
 import { chcCellOf, MIRROR_REGION, mirrorCell, MirrorOutsideRegionError } from './grid.js';
-import { type Manifest, MirrorManifestError, readManifest, writeManifest } from './manifest.js';
+import { imergFileDay, type Manifest, MirrorManifestError, readManifest, writeManifest } from './manifest.js';
 import { MirrorNotReadyError, readCells } from './readCells.js';
 import { openStore } from './store.js';
 
@@ -199,6 +199,25 @@ describe('readCells of the 0.1° products (issue #604 R4-B)', () => {
 		expect(got.versions).toEqual([null, ...Array<string>(13).fill('V07'), 'V08', 'V08', null]);
 		// A skipped day is unread, as for CHIRPS.
 		expect((await readCells(fixture, 'imerg_late', [NW], { start: '2026-02-07', end: '2026-02-08' }, { plan: '10' })).cells.read).toBe('-f');
+	});
+
+	it('reads an imerg_late day with no file as not held, and the days after it as usual (each day stands on its own)', async () => {
+		// The fixture copy, with one day more than 10 days before prelimThrough (out of the search's look-back) gone from
+		// the manifest: CMR never listed it, so no later run fills it.
+		const dir = mkdtempSync(join(tmpdir(), 'mirror-read-'));
+		tmp.push(dir);
+		cpSync(MIRROR_FIXTURE_DIR, dir, { recursive: true });
+		const store = openStore(pathToFileURL(dir).href);
+		const m = (await readManifest(store, 'imerg_late'))!;
+		const gap = '2026-01-26';
+		expect(toEpochDay(m.prelimThrough!) - toEpochDay(gap)).toBeGreaterThan(10);
+		await writeManifest(store, { ...m, files: m.files.filter((f) => imergFileDay(f.url) !== gap) });
+		const got = await readCells(store, 'imerg_late', [NW], { start: '2026-01-25', end: '2026-02-08' });
+		expect(got.cells.read).toBe(`f-${'f'.repeat(13)}`);
+		expect(got.cells.values[0]![1]).toBeNull();
+		expect(got.cells.values[0]![2]).toBe(expected(NW, '2026-01-27', 2));
+		expect(got.cells.values[0]![14]).toBe(expected(NW, '2026-02-08', 2));
+		expect(got.versions![1]).toBeNull();
 	});
 
 	it('refuses a 0.1° cell outside the region, and is not ready while the copy has no such product', async () => {

@@ -10,6 +10,7 @@ import {
 	era5lWrittenDays,
 	finalsCoverage,
 	imergCoverage,
+	imergHeldDays,
 	imergFileDay,
 	imergVersions,
 	type Manifest,
@@ -207,10 +208,12 @@ describe('manifests per product (issue #604 R4-B; ingest/manifest.py holds the s
 		}
 	});
 
-	it('imerg_late: a file a day naming its day, its version optional, its days through prelimThrough within the contiguous days', () => {
+	it('imerg_late: a file a day naming its day, its version optional, prelimThrough no later than the newest file (a gap is fine)', () => {
 		expect(problem(imerg(['2024-06-01', '2024-06-02', '2024-06-04'], '2024-06-02'))).toBeNull();
-		expect(problem(imerg(['2024-06-01', '2024-06-02', '2024-06-04'], '2024-06-04'))).toMatch(/prelimThrough runs past the days the files hold contiguously \(through 2024-06-02\)/);
-		expect(problem(imerg([], '2024-06-01'))).toMatch(/through none/);
+		// Each day stands on its own: prelimThrough past the gap, to the newest file, is what the ingest writes.
+		expect(problem(imerg(['2024-06-01', '2024-06-02', '2024-06-04'], '2024-06-04'))).toBeNull();
+		expect(problem(imerg(['2024-06-01', '2024-06-02', '2024-06-04'], '2024-06-05'))).toMatch(/prelimThrough runs past the newest day the files hold \(2024-06-04\)/);
+		expect(problem(imerg([], '2024-06-01'))).toMatch(/\(none\)/);
 		// The version is optional, but must be one when present: the collection's, with no minor letter.
 		const noVersion = imerg(['2024-06-01'], '2024-06-01');
 		delete noVersion.files[0]!.version;
@@ -237,6 +240,10 @@ describe('manifests per product (issue #604 R4-B; ingest/manifest.py holds the s
 		expect(imergFileDay(imergUrl('2024-02-29'))).toBe('2024-02-29');
 		expect(imergFileDay(imergUrl('2023-02-29'))).toBeNull();
 		expect(imergCoverage(m.files)).toEqual({ from: '2024-06-01', through: '2024-06-02' });
+		// Each day stands on its own: a gap is not held, the days after it still are, and coverage runs to the newest.
+		const gapped = imerg(['2024-06-01', '2024-06-04'], '2024-06-04');
+		expect([...imergHeldDays(gapped.files)].sort()).toEqual(['2024-06-01', '2024-06-04']);
+		expect(imergCoverage(gapped.files)).toEqual({ from: '2024-06-01', through: '2024-06-04' });
 		expect(Object.fromEntries(imergVersions(m))).toEqual({ '2024-06-01': 'V08', '2024-06-02': 'V07' });
 	});
 

@@ -18,8 +18,9 @@
 // (feeds/cellCache.ts productCell): `era5l` from its finals array, a day `f`
 // within `years` from the first day its month requests hold (era5lCoverage)
 // through `finalThrough`; and
-// `imerg_late` from its daily array, a day `f` from the first day its files
-// hold (imergCoverage) through its manifest's `prelimThrough` (IMERG Late is
+// `imerg_late` from its daily array, a day `f` when a file names it
+// (imergHeldDays: each day on its own, so a missing day is `-`, not held,
+// and blocks none after it) up to its manifest's `prelimThrough` (IMERG Late is
 // never final, but no final product follows it: the cache keeps each day as
 // final, and a new version of a day reaches it as a revision), with each
 // day's IMERG version (`versions`). The cache holds no preliminary day of either.
@@ -30,7 +31,7 @@ import { FeedFormatError, FeedUnavailableError } from '../feeds/errors.js';
 import { DAY_FINAL_ONLY, DAY_SKIP } from '../feeds/sources/chirps.js';
 import { type Block, type DailyArray, dailyChunk, FINALS_CHUNK, type FinalsProduct, openDaily, openFinals, readDailyBlock, readFinalsBlock } from './arrays.js';
 import { cellsByChunk, dayIndex, doyIndex, MIRROR_REGION, mirrorCell, productStep } from './grid.js';
-import { era5lCoverage, finalsCoverage, imergCoverage, imergVersions, type Manifest, readManifest } from './manifest.js';
+import { era5lCoverage, finalsCoverage, imergHeldDays, imergVersions, type Manifest, readManifest } from './manifest.js';
 import type { MirrorStore } from './store.js';
 
 /** The copy doesn't hold the product yet (no manifest or no array): the feed tries again later. */
@@ -92,13 +93,14 @@ export async function readCells(
 	// The cache takes imerg_late's days as final (nothing later replaces them but a revision), though its manifest holds
 	// them through prelimThrough: IMERG Late is never final, but there is no final product of it to wait for.
 	const heldThrough = product === 'imerg_late' ? manifest.prelimThrough : manifest.finalThrough;
-	const held = product === 'imerg_late' ? imergCoverage(manifest.files) : product === 'era5l' ? era5lCoverage(manifest.files) : finalsCoverage(manifest.files);
+	const held = product === 'era5l' ? era5lCoverage(manifest.files) : product === 'imerg_late' ? null : finalsCoverage(manifest.files);
+	// imerg_late: the days its files name, each on its own (a gap is not held and blocks nothing after it).
+	const heldDays = product === 'imerg_late' ? imergHeldDays(manifest.files) : null;
 	const { first, last } = manifest.years;
 	const isFinal = (day: string) =>
 		(daily === null || day >= daily.firstDay) &&
+		(heldDays === null ? held !== null && day >= held.from : heldDays.has(day)) &&
 		heldThrough !== null &&
-		held !== null &&
-		day >= held.from &&
 		day <= heldThrough &&
 		first !== null &&
 		Number(day.slice(0, 4)) >= first &&

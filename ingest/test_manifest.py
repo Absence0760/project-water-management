@@ -172,16 +172,20 @@ class PerProduct(unittest.TestCase):
         m = self.imerg(["2024-06-01", "2024-06-02", "2024-06-04"], "2024-06-02")
         manifest.validate(m)
         self.assertEqual(manifest.imerg_file_day(imerg_url("2024-06-04")), "2024-06-04")
-        self.assertEqual(manifest.imerg_coverage(m["files"]), ("2024-06-01", "2024-06-02"))
+        # Each day stands on its own: the gap (06-03) is not held, and 06-04 still is.
+        self.assertEqual(manifest.imerg_held_days(m["files"]), {"2024-06-01", "2024-06-02", "2024-06-04"})
+        self.assertEqual(manifest.imerg_coverage(m["files"]), ("2024-06-01", "2024-06-04"))
         # The version round-trips, after the spec's keys.
         doc = json.loads(manifest.dumps(m))
         self.assertEqual(list(doc["files"][0])[-1], "version")
         self.assertEqual(manifest.loads(manifest.dumps(m)), m)
-        # prelimThrough past the gap.
+        # prelimThrough past the gap is fine (the newest held day); past the newest file is not.
         m["prelimThrough"] = "2024-06-04"
-        with self.assertRaisesRegex(ValueError, "runs past the days"):
+        manifest.validate(m)
+        m["prelimThrough"] = "2024-06-05"
+        with self.assertRaisesRegex(ValueError, "runs past the newest day"):
             manifest.validate(m)
-        m["prelimThrough"] = "2024-06-02"
+        m["prelimThrough"] = "2024-06-04"
         # Optional: a file without one is valid (positive control for the pattern below).
         m["files"][0].pop("version")
         manifest.validate(m)

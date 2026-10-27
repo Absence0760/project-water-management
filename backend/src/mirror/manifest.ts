@@ -31,9 +31,12 @@
 // granule names do (`3IMERG.YYYYMMDD-S000000-E235959.`), each optionally
 // with the IMERG collection `version` it came from (`V07`, later `V08`; the
 // minor letter stays in the URL), the per-day version the bias correction is
-// fitted by (D16). `prelimThrough` may not run past the contiguous run of
-// days from the first file (imergCoverage), as finalThrough may not for the
-// CHIRPS finals. No other product's file carries a version. `era5l`'s files
+// fitted by (D16). Its held days are exactly the days a file names
+// (imergHeldDays), each on its own: a day with no file is not held (never
+// final no-data), and a gap doesn't stop the days after it from being read,
+// since this rolling window of recent days is useful for its newest days.
+// `prelimThrough` is the newest held day and may not run past the newest
+// file (imergCoverage). No other product's file carries a version. `era5l`'s files
 // are its CDS month requests (ingest/era5land.py), each URL exactly
 // `cds://reanalysis-era5-land/total_precipitation/YYYY-MM` with no ETag or
 // Last-Modified (the CDS gives none). Month M's request holds the 00 UTC
@@ -150,22 +153,23 @@ export function imergFileDay(url: string): string | null {
 	return isIsoDate(day) ? day : null;
 }
 
-/**
- * The days an IMERG product's files hold: the earliest day a file names
- * through the end of the contiguous run of days from it (null when no file
- * names one). A later day after a gap doesn't extend it.
- */
-export function imergCoverage(files: readonly { url: string }[]): { from: string; through: string } | null {
-	const days = new Set<number>();
+/** imerg_late: the ISO days its files name, exactly its held days, each on its own (no contiguity; ingest/manifest.py imerg_held_days). */
+export function imergHeldDays(files: readonly { url: string }[]): Set<string> {
+	const days = new Set<string>();
 	for (const f of files) {
 		const d = imergFileDay(f.url);
-		if (d) days.add(toEpochDay(d));
+		if (d) days.add(d);
 	}
-	if (days.size === 0) return null;
-	const first = Math.min(...days);
-	let last = first;
-	while (days.has(last + 1)) last++;
-	return { from: fromEpochDay(first), through: fromEpochDay(last) };
+	return days;
+}
+
+/**
+ * The oldest and newest day an IMERG product's files name (null when none).
+ * Days between with no file are not held (imergHeldDays).
+ */
+export function imergCoverage(files: readonly { url: string }[]): { from: string; through: string } | null {
+	const days = [...imergHeldDays(files)].sort();
+	return days.length ? { from: days[0]!, through: days.at(-1)! } : null;
 }
 
 /** imerg_late: each held day's IMERG version, by ISO day, from its file. */
@@ -236,7 +240,7 @@ export const Manifest = z
 		if (imerg) {
 			if (m.files.some((f) => imergFileDay(f.url) === null)) bad('an imerg_late file whose url names no day (…3IMERG.YYYYMMDD-S000000-E235959.…)');
 			const held = imergCoverage(m.files);
-			if (m.prelimThrough !== null && (held === null || m.prelimThrough > held.through)) bad(`prelimThrough runs past the days the files hold contiguously (through ${held?.through ?? 'none'})`);
+			if (m.prelimThrough !== null && (held === null || m.prelimThrough > held.through)) bad(`prelimThrough runs past the newest day the files hold (${held?.through ?? 'none'})`);
 		} else if (m.files.some((f) => f.version !== undefined)) bad(`${m.product}'s files carry no version`);
 		if (m.product === 'era5l') {
 			if (m.files.some((f) => era5lFileMonth(f.url) === null)) bad('an era5l file whose url is not a month request (cds://reanalysis-era5-land/total_precipitation/YYYY-MM)');

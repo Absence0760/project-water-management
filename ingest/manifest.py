@@ -27,8 +27,13 @@ Per product (the same rules as the Node validator; backend/src/mirror/grid.ts
 PRODUCT_GRIDS): `grid.step` is the product's (`PRODUCT_STEPS`: 0.05 for the
 CHIRPS products, 0.1 for `era5l` and `imerg_late`), and `rnl` and `era5l`
 hold no preliminary days. `imerg_late` holds no final days (IMERG Late is
-never final): its days run through `prelimThrough`, which may not run past
-the contiguous run of days its files hold from the first (`imerg_coverage`).
+never final): its held days are exactly the days a file names
+(`imerg_held_days`), each standing on its own, and `prelimThrough` is the
+newest of them (`imerg_coverage`), which it may not run past. A day with no
+file is not held, never final no-data, and a gap does not stop the days after
+it from being read: the product is a rolling window of recent days, whose
+useful days are the newest (one day CMR never listed must not block the
+next 30).
 Its files are one a day, each URL naming its day as GPM's daily granule names
 do (`3IMERG.YYYYMMDD-S000000-E235959.`), each optionally with the IMERG
 collection `version` it came from (`V07`, later `V08`; the minor letter stays
@@ -97,16 +102,15 @@ def imerg_file_day(url: str) -> str | None:
         return None
 
 
+def imerg_held_days(files: list[dict]) -> set[str]:
+    """The ISO days imerg_late's files name: exactly its held days, each on its own (no contiguity)."""
+    return {d for f in files if (d := imerg_file_day(f["url"])) is not None}
+
+
 def imerg_coverage(files: list[dict]) -> tuple[str, str] | None:
-    """(first day, last day) of the contiguous run of days the files name, from the earliest; None when none."""
-    days = {dt.date.fromisoformat(d) for f in files if (d := imerg_file_day(f["url"])) is not None}
-    if not days:
-        return None
-    first = min(days)
-    last = first
-    while last + dt.timedelta(days=1) in days:
-        last += dt.timedelta(days=1)
-    return first.isoformat(), last.isoformat()
+    """(oldest, newest) day the files name; None when none. Days between with no file are not held (imerg_held_days)."""
+    days = imerg_held_days(files)
+    return (min(days), max(days)) if days else None
 
 
 def file_month(url: str) -> tuple[int, int] | None:
@@ -272,7 +276,7 @@ def validate(m: dict) -> dict:
             _fail("imerg_late holds no final days")
         days = imerg_coverage(m["files"])
         if m["prelimThrough"] is not None and (days is None or m["prelimThrough"] > days[1]):
-            _fail(f"prelimThrough {m['prelimThrough']} runs past the days the files hold contiguously (through {days[1] if days else 'none'})")
+            _fail(f"prelimThrough {m['prelimThrough']} runs past the newest day the files hold ({days[1] if days else 'none'})")
     else:
         for i, f in enumerate(m["files"]):
             if "version" in f:
