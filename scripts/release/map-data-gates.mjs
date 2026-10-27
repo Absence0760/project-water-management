@@ -47,14 +47,15 @@ export const REQUIRED_TEXT = {
 };
 
 /** The kinds a production load may name (backend/src/geo/referenceLoad.ts REFERENCE_KINDS, the allowed ones; referenceLoad.test.ts keeps the two in step). */
-export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid'];
+export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles'];
 
 /**
  * The kinds allowed dataset by dataset, and the labels each may load as
  * (REFERENCE_KINDS' `datasets`, the allowed ones; referenceLoad.test.ts keeps
- * the two in step). MAP grids: each surface's terms are its owner's.
+ * the two in step). MAP grids: each surface's terms are its owner's. Tiles:
+ * the archives the tiles bucket serves, whose provenance a load records (248).
  */
-export const DATASETS = { 'map-grid': ['WAAS-SWCape-2007'] };
+export const DATASETS = { tiles: ['basemap', 'fonts', 'terrain', 'water'], 'map-grid': ['WAAS-SWCape-2007'] };
 
 const ARCHIVE = /^\/tiles\/[a-z0-9-]+\.pmtiles$/;
 const GLYPHS = '/tiles/fonts/{fontstack}/{range}.pbf';
