@@ -1,13 +1,13 @@
 # Spike: issue #604 Round 0 (our own copy of CHIRPS)
 
-Run 2026-10-26/27 from the dev workstation, before anything in Rounds 1–3 is
+Run 2026-10-26/27 from the dev workstation (check 4 from af-south-1), before anything in Rounds 1–3 is
 built. Round 0 checks five assumptions in the
 [#604 plan](https://github.com/Absence0760/project-water-management/issues/604).
 The scripts are in [`604-round0/`](./604-round0/). They are kept to reproduce
 the results, are not part of the app and are not run by CI.
 
-**Requests made to CHC in total:** 3 directory listings, 1 whole NetCDF
-download and 28 range reads of 4 daily TIFFs, paced at 1 a second with the
+**Requests made to CHC in total:** 3 directory listings, 2 whole NetCDF
+downloads (one from the workstation, one from af-south-1) and 28 range reads of 4 daily TIFFs, paced at 1 a second with the
 feeds' User-Agent. No 403s. dynamical.org was read anonymously from its AWS
 Open Data bucket, which puts no load on CHC.
 
@@ -18,7 +18,7 @@ Open Data bucket, which puts no load on CHC.
 | 1 | What does a CHC `byMonth` `rnl` NetCDF store, and are its values bit-equal to the daily TIFFs'? | **float32, no `scale_factor`/`add_offset`, bit-equal 20/20.** | D2 and D4 hold as written. The ≈1,800 cached cell-days need no revision. |
 | 2 | Does `final/sat/netcdf/byMonth/` exist with the same layout? | **Yes**: 316 files, `chirps-v3.0.YYYY.MM.days_p05.nc`, from 2000-06 to 2026-09 (`rnl`: 549 files, 1981-01 to 2026-09). | `sat` uses the same code path as `rnl`, with a 2000-06 start. |
 | 3 | How far are dynamical.org's values from CHC's? | Over the whole D1 box for June 2024: **median 0.067%, p99 0.17%, max 0.195%** on wet cell-days, and the same land/sea mask. | D5's "≤0.2%" is confirmed and becomes R3-E's tolerance. Its units are kg m⁻² s⁻¹, so multiply by 86,400. |
-| 4 | How long does a ≈330 MiB download from CHC take from af-south-1? | **Not yet run** (it needs the operator's console). From the workstation: 346 MiB in 25.6 s (14.2 MB/s). | See [Check 4](#4-download-time-from-af-south-1). |
+| 4 | How long does a ≈330 MiB download from CHC take from af-south-1? | **HTTP 200, 346 MiB in 37 s (9.8 MB/s)** from a Lambda in af-south-1. The workstation took 25.6 s. | D11's 15-minute budget has about 20× headroom. No ban on one whole-file request from AWS, so D12's fixed address isn't triggered. |
 | 5 | Does zarrita.js (exact pin) in Node 24 read a zarr-python v3 float32 gzip array with the D2 chunking? | **Reading: yes**, bit-equal, both layouts. **Writing: zarrita 0.7.5 cannot encode gzip**, but a small `node:zlib` codec registered with `zarr.registry` works, and zarr-python reads what it writes bit for bit. | R1-C needs that codec for `gen:mirror-fixture` (see below). The raw-float32 fallback is not needed. |
 
 ### 1. The NetCDF's format
@@ -65,14 +65,15 @@ June 2024 (30 × 550 × 620, 6.7 s from the workstation) from
 
 ### 4. Download time from af-south-1
 
-Not run in this session: it needs the operator's AWS console, and running it
-through a Lambda would mean deploying one. AWS CloudShell is offered in
-Africa (Cape Town), so the operator runs one command there. The command is
-in the PR description. It downloads the same file to `/dev/null` (one
-request) and prints the status code, size and time.
+Run 2026-10-27 as a throwaway Lambda in the production account (Python 3.13,
+arm64, 1 GB, outside any VPC: the same egress the ingest job will have).
+It was created with the CLI, invoked once, and then deleted with its role and
+log group. It streamed the same file with the feeds' User-Agent and threw
+the bytes away:
 
-- A **200** in under about 5 minutes confirms D11's 15-minute Lambda budget with room to spare. The workstation took 26 s.
-- A **403** is also an answer: CHC bans AWS af-south-1 addresses even for one request, so D12's trigger (a fixed address CHC allowlists) applies before R2-A ships. CloudShell's address isn't a Lambda's, but both are AWS af-south-1 egress.
+- **HTTP 200**, 362,853,441 bytes (all of it), first byte after 3.1 s, **37.0 s in total (9.8 MB/s)**.
+- One `byMonth` file is about 4% of a 15-minute Lambda, so the backfill's one-file-per-invocation plan (D11) has plenty of room, and 2 GB of `/tmp` holds a whole file.
+- CHC served one whole-file request from an AWS af-south-1 address without a 403. The 2026-10-25 bans came from volume (thousands of range reads), not from the address range, which is what D12 assumed.
 
 ### 5. zarrita.js
 
