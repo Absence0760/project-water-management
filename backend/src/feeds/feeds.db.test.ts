@@ -124,6 +124,8 @@ describe('data_feed RLS and the routes', () => {
 		expect(list.body.feeds.map((f: { id: string }) => f.id)).toEqual([id]);
 		expect(list.body).toMatchObject({ mode: 'fixtures', canEdit: false, canRun: false, schedules: ['daily'] });
 		expect(list.body.sources.map((s: { source: string }) => s.source)).toEqual(['chirps', 'chirps_gefs', 'dws']);
+		// Our CHIRPS copy (issue #604): off a live process, the committed sample copy, on time as of the day it was made.
+		expect(list.body.rainCopy).toMatchObject({ readable: true, sample: true, asOf: '2026-02-09', final: { sat: { through: '2025-12-31', behind: false } }, preliminary: { through: '2026-02-06', behind: false } });
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body).toMatchObject({ canEdit: true, canRun: true });
 		expect((await editor.call('GET', `/projects/${pid}/feeds`)).body).toMatchObject({ canEdit: false, canRun: true });
 

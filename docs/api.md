@@ -4415,7 +4415,7 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/feeds` | – | `{ feeds: FeedMeta[], sources, chirpsProducts, schedules, mode, canEdit, canRun }`. `sources`: `{ source, label, kinds, unit }[]` (what the form offers); `chirpsProducts`: `["sat", "rnl"]`; `mode`: `fixtures` or `live` (whether this server reads synthetic files); `canEdit` (owner), `canRun` (editor) | viewer |
+| GET | `/projects/:id/feeds` | – | `{ feeds: FeedMeta[], sources, chirpsProducts, schedules, mode, rainCopy, canEdit, canRun }`. `sources`: `{ source, label, kinds, unit }[]` (what the form offers); `chirpsProducts`: `["sat", "rnl"]`; `mode`: `fixtures` or `live` (whether this server reads synthetic files); `rainCopy`: our own copy of CHIRPS (below), or `null` while this server reads CHC's files directly (`CHIRPS_SOURCE=chc`); `canEdit` (owner), `canRun` (editor) | viewer |
 | POST | `/projects/:id/feeds` | `FeedInput` | `201 { feed: FeedMeta }`. `409` if another feed already writes that series, or the target is a new series that sorts ahead of a series of its kind holding a record, which runs would then read instead (`series_takes_over`, `details: { runSeries, targetName }`, issue #561: a run reads the first by name; also on a PATCH that re-targets), or the project has 60 feeds (`MAX_FEEDS`: 20 before the shared CHIRPS cell cache, 208, made a feed per hydrological unit cheap), or the series holds another CHIRPS product or version (below) | owner |
 | PATCH | `/projects/:id/feeds/:feedId` | any of `FeedInput`'s fields | `200 { feed }`. The fields sent replace the saved ones, and the whole is validated again (a new `source` needs its `config`). Saving makes you the feed's acting user; a new source, place or series clears its health. The version check below runs when the save changes the source, the product or the target; `replaceSeries: true` alone confirms replacing the current target | owner |
 | DELETE | `/projects/:id/feeds/:feedId` | – | `204`. The series keeps its days | owner |
@@ -4503,7 +4503,7 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   `chirpsRevision`, architecture.md § Data feeds). A CHIRPS `prelimDays` counts the preliminary days in the
   window, the ones the feed already held and didn't read again included.
 - `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
-  `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
+  `stale`, `failing`, `pending`, `disabled`, `copy-behind`. `reason` says why, as a `code`
   and its facts; the client writes the sentence and formats the days (all
   `YYYY-MM-DD`), so no date is baked into server text. `newest`, `from` and
   `through` are the source's own days; `checked` and `since` are the days
@@ -4518,9 +4518,25 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `{ code: "waiting" }` (waiting for its first fetch),
   - `{ code: "ok", newest, checked }` (`checked` is the last successful fetch's day),
   - `{ code: "rebuilding", from, through }` (state `pending`: a confirmed replacement is backfilling; the live series is unchanged until it completes),
-  - `{ code: "rebuild-stalled", from, through, since }` (state `stale`: the same, but it hasn't grown since `since`).
+  - `{ code: "rebuild-stalled", from, through, since }` (state `stale`: the same, but it hasn't grown since `since`),
+  - `{ code: "copy-behind", product, final, preliminary, newest }` (state `copy-behind`, issue #604: a CHIRPS feed, fetched at least once and neither off, failing nor rebuilding, whose part of our copy is late: `rainCopy.final[product]`, or for `sat` also `rainCopy.preliminary`. `final` and `preliminary` are the days the copy holds to, null when none (`preliminary` always null for `rnl`); `newest` the feed's own. The feed itself is fine: it counts no failure and fills the days once the copy holds them).
 
   A client should fall back to the `state` for a code it doesn't know.
+- `rainCopy` (`feeds/health.ts` `RainCopy`, read by `feeds/rainCopy.ts` from the
+  copy's three manifests, kept for 5 minutes): `{ readable: true, sample,
+  asOf, final: { sat: CopyPart, rnl: CopyPart }, preliminary: CopyPart }`,
+  `CopyPart = { through, behind }`. `through` is the manifest's
+  `finalThrough` (`sat`, `rnl`) or `prelimThrough` (the `prelim` product),
+  null when the copy holds none. `behind`: `through` is null, or more than 75
+  days before `asOf` for a final part (`COPY_FINAL_LAG_DAYS`, the lag
+  alarm's threshold) or 7 for the preliminary days (`COPY_PRELIM_LAG_DAYS`,
+  judged by the later of `prelimThrough` and `sat`'s `finalThrough`, since a
+  month's preliminary days are dropped once its finals land). `asOf` is
+  today (UTC); `sample: true` is the committed sample copy
+  (`backend/fixtures/mirror/`), whose lags count to the day it was made,
+  `2026-02-09`. `{ readable: false }` when the manifests couldn't be read
+  (logged as `rain_copy_unreadable` with the error's class only); feeds then
+  show their own health.
   `lastError` is written by the server, never an upstream body or database
   text, e.g. `the source is unreachable: HTTP 503` or `the source’s data could
   not be read: the grid has no data at …`.

@@ -17,15 +17,20 @@
 //   pending   not fetched yet, or not since a new place or series was saved
 //             (018_feeds.sql clears the data, success and failures then), or
 //             a confirmed replacement still backfilling (feed_stage, 032)
+//   copy-behind  a CHIRPS feed read from our own copy (CHIRPS_SOURCE=mirror,
+//             issue #604) whose copy is late: the feed is fine, our copy
+//             hasn't caught up with CHC (rainCopyStatus, below). Not the
+//             feed's own error, so it never counts a failure or backs off;
+//             the feed fills the days once the copy holds them
 //   ok        otherwise
 //
 // `stale` is also reported on its own, so a failing feed that is out of date
 // says both.
 import { toEpochDay } from '@water-management/engine/calendar';
 import { localDate } from '../projects/timeZone.js';
-import { type FeedConfig, type FeedSource, feedStaleAfterDays } from './config.js';
+import { chirpsProduct, type FeedConfig, type FeedSource, feedStaleAfterDays } from './config.js';
 
-export const FEED_STATES = ['ok', 'stale', 'failing', 'pending', 'disabled'] as const;
+export const FEED_STATES = ['ok', 'stale', 'failing', 'pending', 'disabled', 'copy-behind'] as const;
 export type FeedState = (typeof FEED_STATES)[number];
 
 /**
@@ -47,6 +52,10 @@ export type FeedState = (typeof FEED_STATES)[number];
  *                 until it is caught up
  *   rebuild-stalled  the same, but it hasn't grown since `since` (over a
  *                 day): the stage waits, the live series is unchanged
+ *   copy-behind   our copy of the feed's CHIRPS `product` is late: it holds
+ *                 final days to `final` and (sat only, else null)
+ *                 preliminary days to `preliminary`, either null when it
+ *                 holds none; `newest` is the feed's own newest day
  */
 export type HealthReason =
 	| { code: 'off'; newest: string | null }
@@ -58,7 +67,8 @@ export type HealthReason =
 	| { code: 'waiting' }
 	| { code: 'ok'; newest: string | null; checked: string }
 	| { code: 'rebuilding'; from: string; through: string }
-	| { code: 'rebuild-stalled'; from: string; through: string; since: string };
+	| { code: 'rebuild-stalled'; from: string; through: string; since: string }
+	| { code: 'copy-behind'; product: 'sat' | 'rnl'; final: string | null; preliminary: string | null; newest: string | null };
 
 export interface FeedHealth {
 	state: FeedState;
@@ -90,11 +100,96 @@ export const REBUILD_STALL_DAYS = 1;
 const FIRST_DATA_GRACE_DAYS = 2;
 
 /**
+ * How far behind CHC our copy's finals (`rnl`, `sat`) may run before they
+ * count as late: CHC publishes month M's finals during month M+1, usually by
+ * the 25th, so a healthy copy's finals end up to ~56 days back just before a
+ * release. 75 is the lag alarm's threshold (infra ingest_lag_alarm_days), so
+ * the panel and the alarm agree.
+ */
+export const COPY_FINAL_LAG_DAYS = 75;
+
+/**
+ * How far behind the copy's preliminary `sat` days may run: CHC publishes a
+ * preliminary day two or three days after it (the fixtures' prelimLagDays is
+ * 3), so a week means the daily ingest has missed several runs.
+ */
+export const COPY_PRELIM_LAG_DAYS = 7;
+
+/** One part of the copy: the last day it holds (null: none yet), and whether that is later than the part's usual lag allows. */
+export interface CopyPart {
+	through: string | null;
+	behind: boolean;
+}
+
+/**
+ * Our CHIRPS copy (issue #604) as the data feeds panel shows it, from the
+ * three products' manifests: `final.sat`/`final.rnl` from each finals
+ * manifest's finalThrough, `preliminary` from the prelim manifest's
+ * prelimThrough. `asOf` is the day the lags count to: today (UTC, the day
+ * the lag alarm counts to) for a real copy, or the committed sample copy's
+ * own day when `sample` (it is fixed in time, as a copy current on that day).
+ * `readable: false` when the manifests couldn't be read (the reason is
+ * logged, never sent).
+ */
+export type RainCopy =
+	| { readable: true; sample: boolean; asOf: string; final: { sat: CopyPart; rnl: CopyPart }; preliminary: CopyPart }
+	| { readable: false };
+
+/** A copy whose manifests were read. */
+export type ReadCopy = Extract<RainCopy, { readable: true }>;
+
+/** The manifests' days rainCopyStatus reads (null: that product's manifest isn't in the copy yet). */
+export interface CopyDays {
+	sat: { finalThrough: string | null } | null;
+	rnl: { finalThrough: string | null } | null;
+	prelim: { prelimThrough: string | null } | null;
+}
+
+const laterOf = (a: string | null, b: string | null) => (a === null ? b : b === null ? a : a > b ? a : b);
+
+/**
+ * The copy's parts on `asOf`. A part is behind when it holds nothing, or its
+ * last day is more than its usual lag before `asOf` (exactly the lag is still
+ * on time). The preliminary part is judged by the later of its own last day
+ * and sat's finals: once a month's finals land its preliminary days are
+ * dropped, so the finals may be the newest days the copy holds.
+ */
+export function rainCopyStatus(days: CopyDays, asOf: string, sample = false): ReadCopy {
+	const t = toEpochDay(asOf);
+	const part = (through: string | null, lag: number): CopyPart => ({ through, behind: through === null || t - toEpochDay(through) > lag });
+	const satFinal = days.sat?.finalThrough ?? null;
+	const prelim = days.prelim?.prelimThrough ?? null;
+	const preliminary = part(laterOf(prelim, satFinal), COPY_PRELIM_LAG_DAYS);
+	return {
+		readable: true,
+		sample,
+		asOf,
+		final: { sat: part(satFinal, COPY_FINAL_LAG_DAYS), rnl: part(days.rnl?.finalThrough ?? null, COPY_FINAL_LAG_DAYS) },
+		preliminary: { through: prelim, behind: preliminary.behind }
+	};
+}
+
+/**
+ * Whether the copy a CHIRPS feed reads is behind, as the feed's reason (null:
+ * not CHIRPS, no copy in use, the copy unreadable, or on time). An rnl feed
+ * reads rnl's finals; a sat feed sat's finals and the preliminary days.
+ */
+export function copyBehind(f: Pick<HealthInput, 'source' | 'config' | 'lastDataDate'>, copy: RainCopy | null | undefined): Extract<HealthReason, { code: 'copy-behind' }> | null {
+	if (f.source !== 'chirps' || !copy?.readable) return null;
+	const product = chirpsProduct(f.config);
+	const final = copy.final[product];
+	const behind = product === 'rnl' ? final.behind : final.behind || copy.preliminary.behind;
+	if (!behind) return null;
+	return { code: 'copy-behind', product, final: final.through, preliminary: product === 'sat' ? copy.preliminary.through : null, newest: f.lastDataDate };
+}
+
+/**
  * `f`'s health on `today`, the calendar day in `timeZone` (the caller's
  * localDate(now, project.time_zone)); the instants it reports are dated in
- * that zone too.
+ * that zone too. `copy`: our CHIRPS copy's state when the server reads it
+ * (CHIRPS_SOURCE=mirror, feeds/rainCopy.ts), else null or absent.
  */
-export function feedHealth(f: HealthInput, today: string, timeZone: string): FeedHealth {
+export function feedHealth(f: HealthInput, today: string, timeZone: string, copy?: RainCopy | null): FeedHealth {
 	const iso = (d: Date | string) => localDate(typeof d === 'string' ? new Date(d) : d, timeZone);
 	const staleAfterDays = feedStaleAfterDays(f.source, f.config);
 	const t = toEpochDay(today);
@@ -115,6 +210,9 @@ export function feedHealth(f: HealthInput, today: string, timeZone: string): Fee
 		if (t - toEpochDay(since) > REBUILD_STALL_DAYS) return { state: 'stale', stale: true, staleAfterDays, reason: { code: 'rebuild-stalled', from: r.startDate, through: r.through, since } };
 		return { state: 'pending', stale: false, staleAfterDays, reason: { code: 'rebuilding', from: r.startDate, through: r.through } };
 	}
+	// Fetched, but our copy is late: say so rather than "no new data", which reads as the feed's fault.
+	const late = unfetched ? null : copyBehind(f, copy);
+	if (late) return out('copy-behind', late);
 	if (stale) {
 		if (newest) return out('stale', staleAfterDays < 0 ? { code: 'old-forecast', newest } : { code: 'old-data', newest });
 		if (!unfetched) return out('stale', { code: 'no-data' });

@@ -26,6 +26,7 @@ import {
 	SOURCES
 } from './config.js';
 import { feedSourceMode } from './http.js';
+import { rainCopy } from './rainCopy.js';
 import { createFeed, deleteFeed, getFeed, listFeeds, replaceKey, type RunSeriesPick, runSeries, seriesAccepts, targetSeries, updateFeed } from './store.js';
 
 /**
@@ -184,22 +185,25 @@ function refuseBoundaryMark(config: unknown) {
 }
 
 export const feedRoutes = new Hono<AuthEnv>()
-	.get('/:id/feeds', async (c) =>
-		withUser(c.get('userId'), async (db) => {
+	.get('/:id/feeds', async (c) => {
+		// Our CHIRPS copy's state (cached; read before the transaction, never inside it). Null while CHC is read directly.
+		const copy = await rainCopy();
+		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, c.req.param('id'), 'viewer');
 			return c.json({
-				feeds: await listFeeds(db, c.req.param('id')),
+				feeds: await listFeeds(db, c.req.param('id'), new Date(), copy),
 				// What the form offers, and whether this server fetches for real.
 				sources: FEED_SOURCES.map((s) => ({ source: s, label: SOURCES[s].label, kinds: SOURCES[s].kinds, unit: SOURCES[s].unit })),
 				// CHIRPS v3's daily products; the default (sat) first.
 				chirpsProducts: CHIRPS_DAILY_PRODUCTS,
 				schedules: FEED_SCHEDULES,
 				mode: feedSourceMode(),
+				rainCopy: copy,
 				canEdit: role === 'owner',
 				canRun: role !== 'viewer'
 			});
-		})
-	)
+		});
+	})
 	.post('/:id/feeds', async (c) => {
 		const body = await readJson(c);
 		refuseBoundaryMark((body as { config?: unknown } | null)?.config);

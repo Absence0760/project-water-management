@@ -247,6 +247,55 @@ The checklist for these is issue #62; the history scrub is #63.
       `budget_monthly_usd` (110) is already sized for it; set `dmarc_report_email`.
       — *Done: af-south-1; production has been live since 2026-10-05.*
 
+## The rain data copy (issue #604)
+
+Round 2 built CHIRPS on our own copy behind `CHIRPS_SOURCE`
+([architecture.md § Our copy of the rain data](./architecture.md#our-copy-of-the-rain-data)).
+Production still reads CHC. What Round 3 has to do, besides its own pieces
+(GEFS and DWS on the copy, retiring per-feed fetching, reference-data
+provenance, `ingest/verify_copy.py`):
+
+- [ ] **Run the cutover** ([deployment.md § The data
+      mirror](./deployment.md#the-data-mirror), *The cutover*): the job's
+      daily runs with `MirrorLagDays` reporting, the backfill (`rnl` from
+      1981, `sat` from 1998), verification, then `chirps_source = "mirror"`
+      and the paused CHIRPS feeds back on (#571). Each `terraform apply` with
+      the operator's go-ahead.
+- [ ] **The API's view of the copy.** The data feeds panel's "Rain data
+      copied to …" line and the **Copy behind** state are worked out in the
+      API (`feeds/rainCopy.ts` reads the three manifests, cached 5 minutes),
+      but only the worker gets `CHIRPS_SOURCE`/`MIRROR_URL` and read access
+      to the mirror bucket. Until the API Lambda has them it reads
+      `CHIRPS_SOURCE` as `chc` and shows no copy line (safe, but silent).
+      Two ways to finish it: give the API Lambda the two variables, a
+      `GetObject` on `<mirror>/*/manifest.json` and a statement in the S3
+      interface endpoint's policy; or, the durable fix this file
+      recommends, have the worker's mirror tick record each product's
+      `finalThrough`/`prelimThrough` in the database (beside
+      `mirror_manifest`, which only moves on a revision) and the API read
+      them there, so the API never reaches S3. Trigger: before the cutover's
+      step 4.
+- [ ] **The portfolio counts a copy-behind feed as stale.** `portfolio.ts`
+      judges feed health without the copy (`feedHealth(f, today, tz)`), so
+      a feed the panel shows as **Copy behind** counts there as failing or
+      stale once its data is old. Pass the copy (`rainCopy()`) into
+      `loadPortfolio`/`loadMyOutcomes` and decide what the tile counts it as
+      (neither ok nor failing, with its own count, is the honest one). Same
+      trigger: before the cutover, since nothing is ever copy-behind until
+      then.
+- [ ] **The sample copy's dates.** The committed copy
+      (`backend/fixtures/mirror/`) is fixed at 2026-02-09, and the panel
+      counts its lags to that day (`rainCopy.ts` `SAMPLE_COPY_MADE`), so dev
+      and e2e show it on time with its own dates. If the worker comes to
+      shift the sample copy's days to today in fixtures mode (as the file
+      fixtures re-date themselves), `rainCopy.ts` should report the shifted
+      days too, so the line matches what feeds read.
+- [ ] **Two thresholds in two places.** The app's
+      `COPY_FINAL_LAG_DAYS` (75, `feeds/health.ts`) matches
+      `ingest_lag_alarm_days`'s default by hand; a prod tfvars that changes
+      the alarm doesn't move the app. Pass it to the API as a variable at
+      the cutover if the operator ever tunes it.
+
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
 - [x] **Guard pending notices as db-setup.ts guards pending jobs.** The

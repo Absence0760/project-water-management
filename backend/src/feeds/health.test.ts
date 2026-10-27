@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { feedHealth, type HealthInput } from './health.js';
+import { COPY_FINAL_LAG_DAYS, COPY_PRELIM_LAG_DAYS, type CopyDays, copyBehind, feedHealth, type HealthInput, rainCopyStatus } from './health.js';
 
 const base: HealthInput = {
 	source: 'chirps',
@@ -155,5 +155,85 @@ describe('feedHealth', () => {
 	it('disabled, whatever else', () => {
 		expect(feedHealth({ ...base, enabled: false, consecutiveFailures: 2 }, today, 'UTC')).toMatchObject({ state: 'disabled', reason: { code: 'off', newest: '2026-09-20' } });
 		expect(feedHealth({ ...base, enabled: false, lastDataDate: null }, today, 'UTC').reason).toEqual({ code: 'off', newest: null });
+	});
+});
+
+// Issue #604 Round 2: with CHIRPS read from our own copy, a late copy is not the feed's fault.
+describe('rainCopyStatus', () => {
+	const days = (sat: string | null, rnl: string | null, prelim: string | null): CopyDays => ({
+		sat: { finalThrough: sat },
+		rnl: { finalThrough: rnl },
+		prelim: { prelimThrough: prelim }
+	});
+
+	it('finals are on time up to COPY_FINAL_LAG_DAYS (75) days back, and behind one day past it', () => {
+		expect(COPY_FINAL_LAG_DAYS).toBe(75);
+		// 2026-07-31 + 75 days = 2026-10-14.
+		const at = (asOf: string) => rainCopyStatus(days('2026-07-31', '2026-07-31', '2026-10-10'), asOf);
+		expect(at('2026-10-14')).toMatchObject({ readable: true, asOf: '2026-10-14', final: { sat: { through: '2026-07-31', behind: false }, rnl: { through: '2026-07-31', behind: false } } });
+		expect(at('2026-10-15')).toMatchObject({ final: { sat: { behind: true }, rnl: { behind: true } } });
+	});
+
+	it('preliminary days are on time up to COPY_PRELIM_LAG_DAYS (7) back, and behind one day past it', () => {
+		expect(COPY_PRELIM_LAG_DAYS).toBe(7);
+		const at = (asOf: string) => rainCopyStatus(days('2026-08-31', '2026-08-31', '2026-10-07'), asOf).preliminary;
+		expect(rainCopyStatus(days('2026-08-31', '2026-08-31', '2026-10-07'), '2026-10-14')).toMatchObject({ preliminary: { through: '2026-10-07', behind: false } });
+		expect(at('2026-10-15')).toEqual({ through: '2026-10-07', behind: true });
+	});
+
+	it('a product the copy doesn’t hold yet is behind; a missing prelim is judged by sat’s finals', () => {
+		const none = rainCopyStatus({ sat: null, rnl: null, prelim: null }, '2026-10-27');
+		expect(none).toEqual({
+			readable: true,
+			sample: false,
+			asOf: '2026-10-27',
+			final: { sat: { through: null, behind: true }, rnl: { through: null, behind: true } },
+			preliminary: { through: null, behind: true }
+		});
+		// Finals newer than the preliminary days (a month's finals just landed, its preliminary days dropped): the copy is current.
+		expect(rainCopyStatus(days('2026-10-24', '2026-10-24', null), '2026-10-27').preliminary).toEqual({ through: null, behind: false });
+		// Positive control: the same with old finals is behind.
+		expect(rainCopyStatus(days('2026-08-31', '2026-08-31', null), '2026-10-27').preliminary.behind).toBe(true);
+	});
+});
+
+describe('feedHealth with our copy', () => {
+	const fresh = rainCopyStatus({ sat: { finalThrough: '2026-08-31' }, rnl: { finalThrough: '2026-08-31' }, prelim: { prelimThrough: '2026-09-22' } }, today);
+	const latePrelim = rainCopyStatus({ sat: { finalThrough: '2026-08-31' }, rnl: { finalThrough: '2026-08-31' }, prelim: { prelimThrough: '2026-09-15' } }, today);
+	const lateFinals = rainCopyStatus({ sat: { finalThrough: '2026-07-01' }, rnl: { finalThrough: '2026-07-01' }, prelim: { prelimThrough: '2026-09-22' } }, today);
+	const rnl = { ...base, config: { ...base.config, product: 'rnl' as const }, lastDataDate: '2026-07-01' };
+
+	it('a sat feed shows copy-behind when the preliminary days or sat’s finals are late, with the copy’s days and its own newest', () => {
+		expect(feedHealth(base, today, 'UTC', fresh).state).toBe('ok');
+		expect(feedHealth(base, today, 'UTC', latePrelim)).toEqual({
+			state: 'copy-behind',
+			stale: false,
+			staleAfterDays: 12,
+			reason: { code: 'copy-behind', product: 'sat', final: '2026-08-31', preliminary: '2026-09-15', newest: '2026-09-20' }
+		});
+		expect(feedHealth(base, today, 'UTC', lateFinals).reason).toMatchObject({ code: 'copy-behind', final: '2026-07-01', preliminary: '2026-09-22' });
+		// Instead of "no new data": the copy, not the feed, is late.
+		expect(feedHealth({ ...base, lastDataDate: '2026-09-01' }, today, 'UTC', latePrelim)).toMatchObject({ state: 'copy-behind', stale: true });
+	});
+
+	it('an rnl feed reads rnl’s finals only: late preliminary days don’t touch it', () => {
+		expect(feedHealth({ ...rnl, lastDataDate: '2026-08-31' }, today, 'UTC', latePrelim).state).toBe('ok');
+		expect(feedHealth(rnl, today, 'UTC', lateFinals).reason).toEqual({ code: 'copy-behind', product: 'rnl', final: '2026-07-01', preliminary: null, newest: '2026-07-01' });
+	});
+
+	it('the feed’s own state wins: off, failing, rebuilding and never fetched stay as they are', () => {
+		expect(feedHealth({ ...base, enabled: false }, today, 'UTC', latePrelim).state).toBe('disabled');
+		expect(feedHealth({ ...base, consecutiveFailures: 1, lastError: 'x' }, today, 'UTC', latePrelim).state).toBe('failing');
+		expect(feedHealth({ ...base, rebuilding: { startDate: '2001-01-01', through: '2001-04-30', updatedAt: '2026-09-25T00:10:00Z' } }, today, 'UTC', latePrelim).state).toBe('pending');
+		const waiting = { ...base, createdAt: '2026-09-24T10:00:00Z', lastAttemptAt: null, lastSuccessAt: null, lastDataDate: null };
+		expect(feedHealth(waiting, today, 'UTC', latePrelim).reason).toEqual({ code: 'waiting' });
+	});
+
+	it('only CHIRPS reads the copy, and no copy (CHC read directly) or an unreadable one changes nothing', () => {
+		const gefs = { ...base, source: 'chirps_gefs' as const, lastDataDate: '2026-10-09' };
+		expect(feedHealth(gefs, today, 'UTC', latePrelim).state).toBe('ok');
+		expect(feedHealth(base, today, 'UTC', null).state).toBe('ok');
+		expect(feedHealth(base, today, 'UTC', { readable: false }).state).toBe('ok');
+		expect(copyBehind({ ...base, source: 'dws', config: { station: 'X0H000' } }, lateFinals)).toBeNull();
 	});
 });

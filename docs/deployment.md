@@ -1423,9 +1423,12 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 Issue #604's rule: the app never fetches from someone else's server because a
 feed or a user asked. One scheduled job of ours copies what our projects need
 into our own store, and the app reads only that copy (issue #604 R1-A's
-source register, `docs/data-sources.md`, lists the upstreams). Round 1 builds
-the store and the job's infrastructure (`infra/ingest.tf`); nothing reads the
-copy yet, so production behaves as before.
+source register, `docs/data-sources.md`, lists the upstreams). Round 1 built
+the store and the job's infrastructure (`infra/ingest.tf`); Round 2 builds
+the jobs that fill it and the worker's path that reads it, behind
+`CHIRPS_SOURCE` (the flow end to end: [architecture.md § Our copy of the
+rain data](./architecture.md#our-copy-of-the-rain-data)). Until the cutover
+below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
 
 - **The mirror bucket** `water-management-mirror-<account>` (output
   `mirror_bucket`): private (every public access block on, ACLs off), SSE-S3,
@@ -1494,7 +1497,55 @@ copy yet, so production behaves as before.
      schedules' targets and its freshness alarms appear. Later releases
      move the function to their own image; the ECR lifecycle policy never
      expires the image the tag pins.
-  4. The one-off 1981 backfill (`mode: "backfill"`) is Round 2's runbook.
+  4. The one-off 1981 backfill and the switch to the copy: the cutover,
+     below.
+- **The cutover** (Round 3 carries it out; an outline, each step checked
+  before the next, every apply with the operator's go-ahead):
+  1. **The job runs.** `ingest_image_tag` is set (above) and a few daily
+     runs have passed: `MirrorLagDays` has a datapoint per product per day
+     in `water-management/Mirror`, and the `mirror-lag-*` alarms are OK, not
+     INSUFFICIENT_DATA or ALARM. A product still empty reports no lag, so
+     its alarm breaches until the backfill fills it: expect that, and don't
+     cut over past it.
+  2. **Backfill.** Start the backfill state machine (`infra/ingest_backfill.tf`;
+     its month list from `ingest/backfill_plan.py`, 2 months at a time, about
+     1 request a minute against CHC) for `rnl` from 1981 and `sat` from 1998.
+     It is resumable: a month already in the manifest with the same values
+     isn't fetched again. Watch the runs' logs; a 403 stops a run on purpose
+     (the alarm runbook above). About $3 in all.
+  3. **Verify.** Each manifest's `finalThrough` is the last month CHC has
+     published and its `files` cover every month from the first; the
+     preliminary days run to within a few days of today. Round 3's
+     `ingest/verify_copy.py` compares random cell-days with CHC's own daily
+     files (bit for bit) and the whole region with dynamical.org's copy.
+     Only a clean report goes on.
+  4. **Switch.** Set `chirps_source = "mirror"` (the worker's
+     `CHIRPS_SOURCE`, with `MIRROR_URL=s3://<mirror bucket>`) in the prod
+     tfvars, apply, and cut a backend release. CHIRPS feeds now read the
+     copy in the worker; the fetcher no longer reads CHC for them. For Data
+     → Data feeds to show "Rain data copied to … (final) / … (preliminary)"
+     and **Copy behind**, the **API** Lambda needs the same two variables and
+     read access to the manifests (its role, and a statement in the S3
+     interface endpoint's policy beside `WorkerReadsMirror`): not wired yet
+     ([followups.md § The rain data copy](./followups.md#the-rain-data-copy-issue-604)).
+     Without them the API reads `CHIRPS_SOURCE` as `chc` and the panel
+     simply shows no copy line, which is safe.
+  5. **Re-enable** the CHIRPS feeds paused since the 403s (#571), and watch
+     the first day: feeds catch up from the copy in minutes, and none shows
+     **Copy behind** or Failing.
+
+  Rolling back is the flag: `chirps_source = "chc"` and a release. The
+  cache rows the copy filled stay valid (origin `chc`, the same values).
+- **Copy behind, in the app.** Data → Data feeds reads the copy's
+  manifests (kept 5 minutes per API process) and marks a CHIRPS feed
+  **Copy behind** when its part of the copy is late: a final product more
+  than 75 days old (the same threshold as `ingest_lag_alarm_days`'s
+  default; the app's is `COPY_FINAL_LAG_DAYS` in `feeds/health.ts`, so
+  change both together) or the preliminary days more than 7. The feed
+  itself counts no failure and needs nothing; the operator's signal is the
+  alarm. A copy the API can't read (permissions, an invalid manifest) logs
+  `rain_copy_unreadable` with the error's class, and the panel says it
+  couldn't check the copy; feeds keep their own health.
 - **Cost:** under $1/month in steady state. ~6 GB of Zarr in S3 Standard
   (~$0.20) plus a month of old versions, a few seconds of Lambda a day and a
   couple of minutes once a month, a few images in ECR (cents), two custom

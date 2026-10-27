@@ -314,7 +314,7 @@
 		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0.05rem 0.45rem;
-		border-radius: 999px;
+		border-radius: 0.7rem;
 		border: 1px solid var(--border);
 		background: var(--surface-2);
 		color: var(--text-2);

@@ -6,7 +6,7 @@ import type { Db } from '../db/tx.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { feedProvenance, type FeedConfig, type FeedInput, type FeedSchedule, type FeedSource } from './config.js';
 import type { FetchWindow } from './fetch.js';
-import { type FeedHealth, feedHealth } from './health.js';
+import { type FeedHealth, feedHealth, type RainCopy } from './health.js';
 
 /** A feed as the API returns it. */
 export interface FeedMeta {
@@ -123,19 +123,23 @@ type FeedSelect = Omit<FeedMeta, 'health' | 'writes' | 'series' | 'versionConfli
 export const seriesAccepts = (writes: SeriesProvenance | null, series: { filled: boolean; provenance: SeriesProvenance | null } | null): boolean =>
 	!writes || !series || !series.filled || sameProvenance(series.provenance, writes);
 
-function toMeta(r: FeedSelect, now: Date): FeedMeta {
+function toMeta(r: FeedSelect, now: Date, copy: RainCopy | null = null): FeedMeta {
 	const { seriesExists, seriesProduct, seriesProductVersion, seriesFilled, timeZone: tz, ...row } = r;
 	const timeZone = tz ?? DEFAULT_TIME_ZONE;
 	const writes = feedProvenance(row.source, row.config);
 	const provenance = seriesProduct !== null && seriesProductVersion !== null ? { product: seriesProduct, version: seriesProductVersion } : null;
 	const series = seriesExists ? { filled: seriesFilled, provenance } : null;
-	return { ...row, health: feedHealth(row, localDate(now, timeZone), timeZone), writes, series, versionConflict: !seriesAccepts(writes, series) };
+	return { ...row, health: feedHealth(row, localDate(now, timeZone), timeZone, copy), writes, series, versionConflict: !seriesAccepts(writes, series) };
 }
 
-/** The project's feeds, their health as of `now` in the project's time zone. */
-export async function listFeeds(db: Db, projectId: string, now = new Date()): Promise<FeedMeta[]> {
+/**
+ * The project's feeds, their health as of `now` in the project's time zone;
+ * `copy`, our CHIRPS copy's state (feeds/rainCopy.ts), marks a CHIRPS feed
+ * whose copy is late (health.ts copy-behind).
+ */
+export async function listFeeds(db: Db, projectId: string, now = new Date(), copy: RainCopy | null = null): Promise<FeedMeta[]> {
 	const { rows } = await db.query<FeedSelect>(`SELECT ${COLS} FROM ${FROM} WHERE f.project_id = $1 ORDER BY f.created_at, f.id`, [projectId]);
-	return rows.map((r) => toMeta(r, now));
+	return rows.map((r) => toMeta(r, now, copy));
 }
 
 export async function getFeed(db: Db, projectId: string, feedId: string, now = new Date()): Promise<FeedMeta | null> {

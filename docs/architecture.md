@@ -1353,8 +1353,9 @@ row names a source, where to read it and the series it merges into:
   2026-02-06, as the synthetic files stood on 2026-02-09), which
   `pnpm gen:mirror-fixture` writes from the same synthetic GeoTIFFs
   `FEED_SOURCE=fixtures` serves, so a read from the copy is the files' value
-  bit for bit (`mirror/readCells.test.ts`). Nothing in production imports
-  `mirror/` yet: the worker reads it once R2-C wires `CHIRPS_SOURCE=mirror`.
+  bit for bit (`mirror/readCells.test.ts`). The worker reads it when
+  `CHIRPS_SOURCE=mirror`; production stays on `chc` until the cutover
+  ([§ Our copy of the rain data](#our-copy-of-the-rain-data)).
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed replaces only the days
@@ -1497,7 +1498,9 @@ row names a source, where to read it and the series it merges into:
   no preliminary files), under 12 days ahead for the forecast, 240 days for
   DWS; a feed's `staleAfterDays` overrides; `feedStaleAfterDays`), `pending`
   (not fetched yet, or not since a new place or series was saved),
-  `disabled`. A feed not fetched two days after it was attached or changed is
+  `disabled`, and `copy-behind` (a CHIRPS feed read from our copy whose copy
+  is late, [§ Our copy of the rain data](#our-copy-of-the-rain-data)). A feed
+  not fetched two days after it was attached or changed is
   stale ("the background worker may not be running"). A project with the
   `data_stale` or `feed_failing` alert on emails its owners and editors
   ([§ Alert emails](#alert-emails)); `data_stale` also watches each series
@@ -1584,6 +1587,78 @@ rainfall feed", with a count when the feed wrote only some of its days):
 The audit event per merge (`series.merged`) and the debounced re-run after new
 data (WP-2.11) are built (see Merging above), and so is CHIRPS over a bounding box
 (`config.bbox`, above).
+
+### Our copy of the rain data
+
+Issue #604's rule: the app never fetches from someone else's server because a
+feed or a user asked. CHC refused our per-feed reads with HTTP 403 from
+2026-10-25 (each feed range-read daily GeoTIFFs from rotating Lambda
+addresses), so CHIRPS moves to one scheduled job of ours that copies the
+region our projects use (D1: 10–41° E, 35.5–8° S) into our own bucket, and
+every CHIRPS feed reads that copy. Round 2 builds the whole path **behind
+`CHIRPS_SOURCE`**; production keeps reading CHC (`chc`, the default when
+`FEED_SOURCE=live`) until the cutover (Round 3, [deployment.md § The data
+mirror](./deployment.md#the-data-mirror)).
+
+```
+EventBridge, daily
+  ├─► mirror-ingest (Python 3.14 container Lambda, outside the VPC)
+  │     rnl, sat finals: CHC's byMonth NetCDF, one conditional GET a day, the new
+  │     or rewritten month downloaded whole, subset to the region, hashed (D8)
+  └─► daily ingest (the fetcher Lambda's new mode, Node, outside the VPC)
+        preliminary sat: only new daily TIFFs, the region's rows; drops days whose finals landed
+  (once) backfill: Step Functions over the byMonth list from 1981, 2 at a time
+                │  polite client: one User-Agent, conditional GETs, ~1 request/s, 403 = stop
+                ▼
+  s3://<project>-mirror-<account> (private, versioned)
+        rnl/, sat/  (year, doy, lat, lon) Zarr v3 · prelim/ (day, lat, lon) · manifest.json each
+                │
+  worker (in the VPC, S3 interface endpoint)
+        feed_fetch for a CHIRPS feed reads its cells' days from the copy in-process
+        (no fetcher call), at most one year per job, into the chirps_cell_year cache
+        mirror tick: a manifest revision newer than mirror_manifest's marks the
+        changed days stale, and feeds replay them (the re-check loop above)
+                ▼
+  chirps_cell_year ──► each feed's series ──► runs (unchanged)
+```
+
+- **The copy and its manifests.** Each product has a Zarr array and a
+  `manifest.json` (`backend/src/mirror/`, the format above): the upstream
+  files it came from with a hash of their values, `finalThrough` (the end of
+  the contiguous months held) and, for `prelim`, `prelimThrough`, and a
+  `revision` that moves only when values really change. The Python job
+  (`ingest/`) writes the finals; the Node daily ingest the preliminary days;
+  both validate the manifest the same way.
+- **Feeds read it** when `CHIRPS_SOURCE=mirror` (`mirror/source.ts`
+  `chirpsSource`, `MIRROR_URL`): `feed_fetch` reads the cells from the copy
+  inside its job (`feeds/fromMirror.ts`) instead of sending a request to the
+  fetcher, so a 1981 backfill takes minutes, not days. A day the copy
+  doesn't hold yet is "not published yet", as a 404 was: no failure, no
+  backoff. A product the copy doesn't hold at all (no manifest) is
+  unavailable. The cache, the feed windows, the merge and runs don't change.
+- **Revisions** reach the cache without a feed: the worker's mirror tick
+  reads each manifest and applies a newer revision through
+  `app_mirror_apply_revision` (above, *A revision of our copy*); the
+  per-file HEAD re-check retires while the copy is the source.
+- **Health.** A late copy is not the feed's fault, so it is not a failure:
+  `feeds/rainCopy.ts` reads the three manifests (kept 5 minutes, so listing
+  feeds doesn't read S3 each time) and `feeds/health.ts` `rainCopyStatus`
+  calls a final product behind when its `finalThrough` is more than 75 days
+  old (the lag alarm's threshold: CHC publishes a month's finals during the
+  next month, so a healthy copy runs up to ~56 days behind), and the
+  preliminary days behind past 7 days. A fetched CHIRPS feed whose part of
+  the copy is behind shows **Copy behind** instead of OK or Stale, and the
+  panel says how far the copy reaches ("Rain data copied to 31 Jul 2026
+  (final) / 5 Oct 2026 (preliminary)"; [ui.md § Data feeds](./ui.md#data-feeds),
+  [api.md § Data feeds](./api.md#data-feeds)). The operator learns it first
+  from the `MirrorLagDays` alarms ([deployment.md § The data
+  mirror](./deployment.md#the-data-mirror)). With `chc` nothing of this shows.
+- **Locally** (`FEED_SOURCE=fixtures`, so `CHIRPS_SOURCE` defaults to
+  `mirror`) feeds read the committed synthetic copy,
+  `backend/fixtures/mirror/`, with no Python, S3 or network; it is fixed as
+  the synthetic files stood on 2026-02-09, so its lags count to that day and
+  the panel calls it the sample copy. `pnpm dev:ingest:run` runs the Python
+  job against synthetic NetCDF fixtures when you need it.
 
 ## Server-side reports
 

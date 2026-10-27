@@ -12,7 +12,7 @@ import { kindLabel } from '#lib/series/kinds.js';
 export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws';
 /** CHIRPS v3's two daily products (backend/src/feeds/config.ts CHIRPS_DAILY_PRODUCTS). */
 export type ChirpsProduct = 'sat' | 'rnl';
-export type FeedState = 'ok' | 'stale' | 'failing' | 'pending' | 'disabled';
+export type FeedState = 'ok' | 'stale' | 'failing' | 'pending' | 'disabled' | 'copy-behind';
 
 export interface GridCell {
 	lat: number;
@@ -97,7 +97,8 @@ export type HealthReason =
 	| { code: 'waiting' }
 	| { code: 'ok'; newest: string | null; checked: string }
 	| { code: 'rebuilding'; from: string; through: string }
-	| { code: 'rebuild-stalled'; from: string; through: string; since: string };
+	| { code: 'rebuild-stalled'; from: string; through: string; since: string }
+	| { code: 'copy-behind'; product: ChirpsProduct; final: string | null; preliminary: string | null; newest: string | null };
 
 export interface FeedHealth {
 	state: FeedState;
@@ -113,12 +114,30 @@ export interface SourceOption {
 	unit: string;
 }
 
+/** One part of our CHIRPS copy: its last day (null: none yet) and whether that is later than usual. */
+export interface CopyPart {
+	through: string | null;
+	behind: boolean;
+}
+
+/**
+ * Our own copy of the CHIRPS rain data (issue #604; backend/src/feeds/health.ts
+ * RainCopy): how far each part reaches, as of `asOf` (today, or the day the
+ * sample copy was made when `sample`). `readable: false`: the server couldn't
+ * read it.
+ */
+export type RainCopy =
+	| { readable: true; sample: boolean; asOf: string; final: { sat: CopyPart; rnl: CopyPart }; preliminary: CopyPart }
+	| { readable: false };
+
 export interface FeedList {
 	feeds: FeedMeta[];
 	sources: SourceOption[];
 	schedules: string[];
 	/** fixtures: this server reads synthetic files, not the real sources. */
 	mode: 'fixtures' | 'live';
+	/** Our CHIRPS copy, when CHIRPS feeds read it; null (or absent, an older server) when they read CHC's files directly. */
+	rainCopy?: RainCopy | null;
 	canEdit: boolean;
 	canRun: boolean;
 }
@@ -462,7 +481,8 @@ export const STATE_LABELS: Record<FeedState, string> = {
 	stale: 'Stale',
 	failing: 'Failing',
 	pending: 'Waiting',
-	disabled: 'Off'
+	disabled: 'Off',
+	'copy-behind': 'Copy behind'
 };
 
 /** "Last data 21 Sep 2026 · checked today 06:00" (fmtWhen: "yesterday 06:00", "24 Sep 2026 06:00"), or what is missing. */
@@ -523,6 +543,12 @@ export function healthMessage(h: FeedHealth): string {
 			return `Replacing the series: the new record runs ${fmtDay(r.from)} to ${fmtDay(r.through)} so far. The series stays as it is until the backfill completes.`;
 		case 'rebuild-stalled':
 			return `The replacement stopped growing on ${fmtDay(r.since)} (the new record runs ${fmtDay(r.from)} to ${fmtDay(r.through)}); the series stays as it is. Run it now, or withdraw the replacement.`;
+		case 'copy-behind': {
+			const final = r.final ? `final days to ${fmtDay(r.final)}` : 'no final days yet';
+			const n = newest(r.newest);
+			const held = r.product === 'sat' ? `${final} and ${r.preliminary ? `preliminary days to ${fmtDay(r.preliminary)}` : 'no preliminary days'}` : final;
+			return `Our copy of the rain data is behind: it holds ${held}. The feed itself is fine and fills in the newer days once the copy catches up; there is nothing to do here. ${n.charAt(0).toUpperCase()}${n.slice(1)}.`;
+		}
 		default:
 			return `${STATE_LABELS[h.state] ?? 'Unknown state'}.`;
 	}
@@ -583,7 +609,33 @@ export function separateName(
 	return name;
 }
 
-/** How many feeds need attention (stale or failing), for the section's warning. */
+/**
+ * The line under the panel's head about our CHIRPS copy, for a project with
+ * a CHIRPS feed: how far the copy reaches, final and (for a sat feed)
+ * preliminary, and whether it is behind. Null when no feed reads it (no
+ * CHIRPS feed, or the server reads CHC's files directly). Only the products
+ * the project's feeds read are named; two final days are told apart only
+ * when they differ.
+ */
+export function rainCopyNote(copy: RainCopy | null | undefined, feeds: readonly Pick<FeedMeta, 'source' | 'config'>[]): { text: string; behind: boolean } | null {
+	const products = new Set(feeds.filter((f) => f.source === 'chirps').map((f) => f.config.product ?? 'sat'));
+	if (!copy || products.size === 0) return null;
+	if (!copy.readable) return { text: 'Couldn’t check our copy of the rain data: the feeds’ newest days may be late. Refresh the status to try again.', behind: true };
+	const day = (p: CopyPart) => (p.through ? fmtDay(p.through) : 'nothing yet');
+	const used = (['sat', 'rnl'] as const).filter((p) => products.has(p));
+	const finals = used.map((p) => copy.final[p]);
+	const finalText =
+		used.length === 2 && copy.final.sat.through !== copy.final.rnl.through
+			? `${day(copy.final.sat)} (final, sat) and ${day(copy.final.rnl)} (final, rnl)`
+			: `${day(finals[0]!)} (final)`;
+	const withPrelim = products.has('sat') ? ` / ${day(copy.preliminary)} (preliminary)` : '';
+	const behind = finals.some((p) => p.behind) || (products.has('sat') && copy.preliminary.behind);
+	const sample = copy.sample ? ` This is the sample copy, as it stood on ${fmtDay(copy.asOf)}.` : '';
+	const late = behind ? ' The copy is behind the published data: feeds fill in the newer days once it catches up, with nothing to do here.' : '';
+	return { text: `Rain data copied to ${finalText}${withPrelim}.${late}${sample}`, behind };
+}
+
+/** How many feeds need attention (stale or failing), for the section's warning. A feed whose copy is behind isn't counted: nothing here can fix it. */
 export const needsAttention = (feeds: readonly Pick<FeedMeta, 'health'>[]) =>
 	feeds.filter((f) => f.health.state === 'failing' || f.health.state === 'stale').length;
 
