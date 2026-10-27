@@ -1,0 +1,136 @@
+# ----------------------------------------------------------------------------
+# The data mirror's backfill (issue #604 R2-B, D4; docs/deployment.md § The
+# data mirror → Backfill)
+#
+# A Step Functions state machine the operator starts by hand (no schedule)
+# with the month list ingest/backfill_plan.py prints:
+#
+#   { "items": [ { "product": "rnl", "mode": "backfill", "month": "1981-01" }, … ] }
+#
+# It invokes the Python ingest Lambda (ingest.tf) once per month, in order,
+# one at a time, and waits ingest_backfill_wait_seconds (≥ 60) after each:
+# D4's one bulk file a minute against CHC.
+#
+#   - One at a time (MaxConcurrency = 1), not D11's 2: a finals chunk holds a
+#     whole year (chunk (1, 366, 20, 20)), so two months of one year written
+#     at once would each read the chunk, add their month and write it back,
+#     and the second write would lose the first month.
+#   - A failed month stops the execution. The function's own errors are never
+#     retried: a 403 (polite.py StopRun) is CHC refusing us, and asking again
+#     is what gets an address banned. Only Lambda's service errors (throttled
+#     by the ingest's reserved concurrency, a transient API error) are retried,
+#     after a minute. Re-running the plan skips the months the manifest holds.
+#   - A plain (inline) Map over the list: ~900 months at ~10 history events
+#     each stays well under a Standard execution's 25,000-event history, and
+#     needs no S3 item reader or child executions.
+#
+# Created only once the ingest function exists (ingest_image_tag). Its role
+# may invoke that one function and nothing else.
+# ----------------------------------------------------------------------------
+
+locals {
+  ingest_backfill_name = "${local.project}-mirror-backfill"
+}
+
+data "aws_iam_policy_document" "ingest_backfill_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["states.amazonaws.com"]
+    }
+    # Only this account's state machine of this name may assume it (confused deputy).
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:states:${var.aws_region}:${data.aws_caller_identity.current.account_id}:stateMachine:${local.ingest_backfill_name}"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ingest_backfill" {
+  count = local.ingest_enabled ? 1 : 0
+
+  name               = "${local.project}-mirror-backfill"
+  assume_role_policy = data.aws_iam_policy_document.ingest_backfill_assume_role.json
+}
+
+data "aws_iam_policy_document" "ingest_backfill" {
+  statement {
+    sid     = "InvokeIngestOnly"
+    actions = ["lambda:InvokeFunction"]
+    # The function and its qualified forms (a version or alias), nothing else.
+    resources = [local.ingest_function_arn, "${local.ingest_function_arn}:*"]
+  }
+}
+
+resource "aws_iam_role_policy" "ingest_backfill" {
+  count = local.ingest_enabled ? 1 : 0
+
+  name   = "invoke-mirror-ingest"
+  role   = aws_iam_role.ingest_backfill[0].id
+  policy = data.aws_iam_policy_document.ingest_backfill.json
+}
+
+resource "aws_sfn_state_machine" "ingest_backfill" {
+  count = local.ingest_enabled ? 1 : 0
+
+  name     = local.ingest_backfill_name
+  role_arn = aws_iam_role.ingest_backfill[0].arn
+  type     = "STANDARD"
+
+  definition = jsonencode({
+    Comment = "Mirror backfill (issue #604 D4): one CHC byMonth file a month, in order, one at a time, a wait after each. Input: {\"items\": [{\"product\", \"mode\": \"backfill\", \"month\"}, …]} from ingest/backfill_plan.py."
+    StartAt = "Months"
+    States = {
+      Months = {
+        Type      = "Map"
+        ItemsPath = "$.items"
+        # One at a time: a finals chunk holds a whole year (see the header).
+        MaxConcurrency = 1
+        # The months' answers aren't kept: the execution's history has them.
+        ResultPath = null
+        ItemProcessor = {
+          ProcessorConfig = { Mode = "INLINE" }
+          StartAt         = "Ingest"
+          States = {
+            Ingest = {
+              Type     = "Task"
+              Resource = "arn:aws:states:::lambda:invoke"
+              Parameters = {
+                FunctionName = local.ingest_function_arn
+                "Payload.$"  = "$"
+              }
+              # A little over the function's own 900 s.
+              TimeoutSeconds = local.ingest_timeout_s + 60
+              ResultPath     = null
+              # Lambda's service errors only (throttled by the ingest's reserved
+              # concurrency, a transient API failure). The function's own errors,
+              # a 403 above all, are not retried: they fail the execution.
+              Retry = [{
+                ErrorEquals     = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+                IntervalSeconds = 60
+                MaxAttempts     = 3
+                BackoffRate     = 2
+              }]
+              Next = "Pace"
+            }
+            Pace = {
+              Type    = "Wait"
+              Seconds = var.ingest_backfill_wait_seconds
+              End     = true
+            }
+          }
+        }
+        End = true
+      }
+    }
+  })
+
+  depends_on = [aws_iam_role_policy.ingest_backfill]
+}
