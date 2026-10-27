@@ -6,7 +6,12 @@ import { describe, expect, it } from 'vitest';
 import {
 	CSV_DISCLAIMER_COMMENT,
 	DISCLAIMER,
+	ECMWF_CREDIT,
 	FORECAST_RAIN_NOTE,
+	copernicusEra5lNotice,
+	forecastRainSourceOf,
+	rainCredits,
+	runRainCredits,
 	REPORT_FOOTER,
 	REPORT_NOT_EVIDENCE,
 	REPORT_NOT_SIGNED,
@@ -69,6 +74,48 @@ describe('FORECAST_RAIN_NOTE', () => {
 		expect(FORECAST_RAIN_NOTE('2026-09-29', 'other')).toBe(plain);
 		expect(FORECAST_RAIN_NOTE('2026-09-29', null)).toBe(plain);
 		expect(FORECAST_RAIN_NOTE('2026-09-29')).toBe(plain);
+	});
+
+	it('credits ECMWF open data, CC BY 4.0, for a forecast an ECMWF ENS feed wrote (issue #604 R4-E)', () => {
+		expect(FORECAST_RAIN_NOTE('2026-10-27', 'ecmwf_ens')).toBe(
+			'From 2026-10-27, this run uses forecast rain (the ECMWF ENS forecast; ECMWF open data, CC BY 4.0), not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.'
+		);
+		expect(forecastRainSourceOf('ecmwf_ens')).toBe('ecmwf_ens');
+		expect(forecastRainSourceOf('chirps_gefs')).toBe('chirps_gefs');
+		expect(forecastRainSourceOf('gefs')).toBeUndefined();
+		expect(forecastRainSourceOf(null)).toBeUndefined();
+	});
+});
+
+describe('the rain data credits (issue #604 R4-E)', () => {
+	const sources = readFileSync(new URL('../../../../docs/data-sources.md', import.meta.url), 'utf8').replace(/\s+/g, ' ').replace(/ ?> /g, ' ');
+
+	it('quote docs/data-sources.md word for word', () => {
+		expect(sources).toContain(copernicusEra5lNotice('[year]'));
+		expect(sources).toContain(`Credit "${ECMWF_CREDIT}"`);
+		const [, imerg] = rainCredits({ era5l: true, imergVersions: ['V07'] }, '[date]');
+		expect(sources).toContain(`"${imerg!.lines[0]}"`);
+		expect(sources).toContain(rainCredits({ era5l: true }, '2026-10-27')[0]!.lines[1]);
+	});
+
+	it('name each source once, in a fixed order, with the year the data were read in Copernicus’s line', () => {
+		const c = rainCredits({ ecmwf: true, imergVersions: ['V07', 'V08', 'V07'], era5l: true }, '2026-10-27');
+		expect(c.map((x) => x.product)).toEqual(['era5l', 'imerg_late', 'ecmwf_ens']);
+		expect(c[0]!.lines[0]).toMatch(/^Contains modified Copernicus Climate Change Service information 2026\. /);
+		expect(c[1]!.lines).toHaveLength(2);
+		expect(c[1]!.lines[1]).toContain('0.1 degree V08, edited by');
+		expect(c[1]!.lines[0]).toContain('accessed 2026-10-27, doi:10.5067/GPM/IMERGDL/DAY/07.');
+		expect(rainCredits({}, '2026-10-27')).toEqual([]);
+	});
+
+	it('take a run’s products present in its input and its ECMWF forecast, and nothing on CHIRPS alone', () => {
+		const products = [
+			{ product: 'era5l', version: null, present: false },
+			{ product: 'imerg_late', version: 'V07', present: true }
+		];
+		expect(runRainCredits({ summary: { gapRain: { products } }, forecastRainSource: 'other' }, '2026-10-27').map((c) => c.product)).toEqual(['imerg_late']);
+		expect(runRainCredits({ summary: {}, forecastRainSource: 'ecmwf_ens' }, '2026-10-27').map((c) => c.product)).toEqual(['ecmwf_ens']);
+		expect(runRainCredits({ summary: { gapRain: null } }, '2026-10-27')).toEqual([]);
 	});
 });
 
