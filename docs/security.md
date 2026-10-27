@@ -2889,9 +2889,14 @@ In short:
     with its map feature id, from all projects (`app_dam_outlines`, worker
     only). An outline is a project's drawing, so it leaves the VPC only to
     our own bucket, for our own fetcher; what DE Africa receives is a
-    waterbody uid in a public file path (Waterbodies) or a bounding-box STAC
-    search (WOfS), never a project, a name or a user. DE Africa is not a
-    sub-processor. The fetcher's role reaches `dams/` only (get and put, no
+    waterbody uid in a public file path (Waterbodies), or for WOfS a STAC
+    search over the dam's box **snapped outward to a 0.05° grid** (about
+    5.5 km; `stac.ts` `snapSearchBox`), never the outline or its exact box,
+    and then HTTP range reads of the scenes' COGs, which reveal only which
+    512 × 512-pixel tiles (about 15 km at 30 m) of a scene are read. The
+    sum over the exact outline runs in our fetcher. Never a project, a name
+    or a user. On that basis DE Africa is not treated as a sub-processor
+    (to be confirmed by the CISO / Security Analyst). The fetcher's role reaches `dams/` only (get and put, no
     delete); the files coming back are schema-checked (`handover.ts`) and
     bounded again by `app_dam_observation_load`, and land only on dams the
     file's uid is matched to, or the dam its feature id names. The live

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FeedFormatError, FeedRefusedError } from '../../../feeds/errors.js';
 import type { FeedHttp } from '../../../feeds/http.js';
-import { assetUrl, MAX_PAGES, parsePage, WOFS_S3_BASE, searchScenes, searchUrl, WOFS_STAC_SEARCH } from './stac.js';
+import { assetUrl, MAX_PAGES, parsePage, WOFS_S3_BASE, searchScenes, searchUrl, snapSearchBox, WOFS_STAC_SEARCH } from './stac.js';
 
 /** A synthetic item in the explorer's shape (invented ids and paths). */
 const item = (id: string, datetime: string, href = `s3://deafrica-services/wofs_ls/1-0-0/900/001/${datetime.slice(0, 4)}/x/${id}_water.tif`) => ({
@@ -37,6 +37,33 @@ describe('searchUrl', () => {
 		const u = new URL(searchUrl(BBOX, '2025-01-01', '2025-12-31'));
 		expect(u.origin + u.pathname).toBe(WOFS_STAC_SEARCH);
 		expect(Object.fromEntries(u.searchParams)).toEqual({ collections: 'wofs_ls', bbox: '19,-34,19.1,-33.9', datetime: '2025-01-01T00:00:00Z/2025-12-31T23:59:59Z', limit: '100' });
+	});
+
+	it('never sends the outline’s exact box: it is snapped outward to the 0.05° grid', () => {
+		// An invented dam a few hundred metres across.
+		const exact = [19.123456, -33.987654, 19.127891, -33.983219] as const;
+		const u = new URL(searchUrl(exact, '2025-01-01', '2025-12-31'));
+		expect(u.searchParams.get('bbox')).toBe('19.1,-34,19.15,-33.95');
+		for (const v of exact) expect(u.href).not.toContain(String(v).slice(0, 6));
+	});
+});
+
+describe('snapSearchBox', () => {
+	it('snaps outward and keeps the outline inside', () => {
+		const exact: [number, number, number, number] = [-0.012, 51.49, 0.013, 51.51];
+		const [w, s, e, n] = snapSearchBox(exact);
+		expect([w, s, e, n]).toEqual([-0.05, 51.45, 0.05, 51.55]);
+		expect(w <= exact[0] && s <= exact[1] && e >= exact[2] && n >= exact[3]).toBe(true);
+	});
+
+	it('leaves a box already on the grid as it is (no floating-point creep outward)', () => {
+		expect(snapSearchBox([19, -34, 19.1, -33.9])).toEqual([19, -34, 19.1, -33.9]);
+		expect(snapSearchBox([20.35, -33.65, 20.4, -33.6])).toEqual([20.35, -33.65, 20.4, -33.6]);
+	});
+
+	it('gives every box a grid cell of its own at least, and stays on the globe', () => {
+		expect(snapSearchBox([19.12, -33.98, 19.12, -33.98])).toEqual([19.1, -34, 19.15, -33.95]);
+		expect(snapSearchBox([179.99, -89.99, 180, -89.98])).toEqual([179.95, -90, 180, -89.95]);
 	});
 });
 

@@ -3,7 +3,8 @@
 //
 // One search per window: collection `wofs_ls` (Landsat 5, 7, 8 and 9 WOfS
 // feature layers, one item per Landsat path/row scene), the outline's
-// lon/lat box, the window's dates, 100 items a page. The explorer pages with
+// lon/lat box snapped outward to a 0.05° grid (snapSearchBox: DE Africa never
+// sees a dam's exact box), the window's dates, 100 items a page. The explorer pages with
 // a `next` link (an `_o` offset, checked 2026-10-27); the link is followed
 // only to the same search endpoint, up to MAX_PAGES. `/stac/collections/
 // wofs_ls` itself answered HTTP 500 that day; `/stac/search` is the one we
@@ -65,11 +66,33 @@ export function assetUrl(href: string): string | null {
 	return `${WOFS_S3_BASE}/${key}`;
 }
 
-/** The search URL for one window's first page. */
+/** The grid the search's box is snapped out to, degrees (~5.5 km): SEARCH_GRID_DEG = 1 / SEARCH_GRID_PER_DEG. */
+export const SEARCH_GRID_PER_DEG = 20;
+export const SEARCH_GRID_DEG = 1 / SEARCH_GRID_PER_DEG;
+
+/**
+ * The box sent to DE Africa: the outline's box snapped outward to the 0.05° grid, so the search never carries a
+ * dam's exact position (docs/security.md, the dam observations' handover). It changes no row: the sum (sum.ts) runs
+ * over the exact outline, here, so a scene over the snapped box that misses the outline (rare, a Landsat scene is
+ * ~185 km across) has no pixel inside it and costs only its header read (pass.ts). Rounded to 1e-6 of a cell
+ * first, so a box already on the grid stays put.
+ */
+export function snapSearchBox([w, s, e, n]: readonly [number, number, number, number]): [number, number, number, number] {
+	const cells = (v: number) => Math.round(v * SEARCH_GRID_PER_DEG * 1e6) / 1e6;
+	const out = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Number(v.toFixed(2))));
+	return [
+		out(Math.floor(cells(w)) / SEARCH_GRID_PER_DEG, -180, 180),
+		out(Math.floor(cells(s)) / SEARCH_GRID_PER_DEG, -90, 90),
+		out(Math.ceil(cells(e)) / SEARCH_GRID_PER_DEG, -180, 180),
+		out(Math.ceil(cells(n)) / SEARCH_GRID_PER_DEG, -90, 90)
+	];
+}
+
+/** The search URL for one window's first page, over the outline's box snapped out (snapSearchBox). */
 export function searchUrl(bbox: readonly [number, number, number, number], from: string, to: string, limit = PAGE_LIMIT): string {
 	const u = new URL(WOFS_STAC_SEARCH);
 	u.searchParams.set('collections', WOFS_COLLECTION);
-	u.searchParams.set('bbox', bbox.map((v) => Number(v.toFixed(6))).join(','));
+	u.searchParams.set('bbox', snapSearchBox(bbox).join(','));
 	u.searchParams.set('datetime', `${from}T00:00:00Z/${to}T23:59:59Z`);
 	u.searchParams.set('limit', String(limit));
 	return u.href;

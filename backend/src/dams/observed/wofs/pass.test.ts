@@ -14,7 +14,7 @@ import { openStore, type MirrorStore } from '../../../mirror/store.js';
 import { readObservationFile, readStatus, writeWanted, type WantedOutline } from '../handover.js';
 import { loadWofsFixture, wofsFixture, type WofsFixtureSpec } from './fixtures.js';
 import { better, outlineBbox, outlineHash, readState, runWofsPass, STAC_INTERVAL_MS, SCENE_INTERVAL_MS, WOFS_BACKFILL_FROM } from './pass.js';
-import { WOFS_S3_BASE, WOFS_STAC_SEARCH, type WofsScene } from './stac.js';
+import { snapSearchBox, WOFS_S3_BASE, WOFS_STAC_SEARCH, type WofsScene } from './stac.js';
 
 const tmp: string[] = [];
 afterAll(() => tmp.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -378,7 +378,7 @@ describe('runWofsPass', () => {
 	it('ends a dam’s turn on a bad search or a timeout, and goes on with the next', async () => {
 		const store = freshStore();
 		await listed(store, [DAM_A, DAM_B]);
-		const bboxA = outlineBbox(DAM_A).map((v) => Number(v.toFixed(6))).join(',');
+		const bboxA = snapSearchBox(outlineBbox(DAM_A)).join(',');
 		const { http } = wofsHttp({
 			fail: (url) => (url.startsWith(WOFS_STAC_SEARCH) && new URL(url).searchParams.get('bbox') === bboxA ? new FeedUnavailableError('it did not answer in time') : null)
 		});
