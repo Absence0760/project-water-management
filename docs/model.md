@@ -2322,7 +2322,10 @@ days*): a MAP factor, or f[month] × k_unit, alone; the §2.4b factors, or
 f[month] without k_unit, × the MAP ratio too; raw, unusable or no CHIRPS of
 its own, the MAP ratio alone. An uploaded forecast (`'other'`, or the field
 absent) keeps the unit's MAP ratio (unit MAP ÷ gauge MAP, × 1 without them),
-because it may already be at gauge level. The
+because it may already be at gauge level. An ECMWF ENS forecast
+(`'ecmwf_ens'`, issue #604 R4-E: an `ecmwf_ens` feed wrote every forecast
+day) is read as `'other'` is: the value only names the source, so the report
+credits ECMWF, and changes no figure (no engine version). The
 catchment's own forecast days stay uncorrected either way.
 Each GEFS issue replaces the one before from its issue date on, so the series
 may keep an older issue's first day before today's; after the last observed
