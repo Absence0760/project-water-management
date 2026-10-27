@@ -46,6 +46,14 @@ export interface MirrorManifest {
 
 /** The most days one call of the apply marks (246): a larger revision is applied in parts, a transaction each. */
 export const MIRROR_PART_DAYS = 4000;
+/**
+ * The most estimated cell-days one call of the apply marks (246): days times
+ * the cell-year rows the cache holds that year in the region. An entry that
+ * doesn't fit is split by days; a part takes at least one day.
+ */
+export const MIRROR_PART_CELL_DAYS = 1_000_000;
+/** The most `changes` entries one call of the apply takes (246): the tick passes only the unapplied ones, in batches. */
+export const MIRROR_MAX_CHANGES = 1000;
 
 export interface MirrorApplyResult {
 	/** The revision the cache is now brought up to (null: none yet, a first revision still in parts). */
@@ -54,7 +62,7 @@ export interface MirrorApplyResult {
 	applied: boolean;
 	/** Cell-days marked stale by this call (a mark already there counts, its time refreshed). */
 	marked: number;
-	/** Entries of the revision still to mark: call again, in a new transaction. 0 when it is recorded, or was not newer. */
+	/** Entries of the revision not wholly marked yet: call again, in a new transaction. 0 when it is recorded, or was not newer. */
 	remaining: number;
 }
 
@@ -66,10 +74,14 @@ export async function mirrorRevision(db: Db, origin: CacheOrigin, product: Chirp
 
 /**
  * One part of bringing `origin` / `product`'s cache up to `manifest`'s
- * revision (app_mirror_apply_revision): the next manifest changes newer than
- * the stored revision, up to MIRROR_PART_DAYS days, have the cached finals of
- * their days marked stale; the revision is recorded with the last part
- * (`remaining` 0, `applied`). Each part commits on its own, so the caller
+ * revision (app_mirror_apply_revision): the next days of the manifest's
+ * changes newer than the stored revision, up to MIRROR_PART_DAYS days and
+ * MIRROR_PART_CELL_DAYS estimated cell-days, have the cached finals of their
+ * days marked stale (with no revision stored yet, the baseline: every cached
+ * final in the region, year by year); the revision is recorded with the last
+ * part (`remaining` 0, `applied`). `manifest.changes` is passed as it is, at
+ * most MIRROR_MAX_CHANGES entries: the tick passes only the unapplied ones
+ * (mirror-tick.ts nextBatch). Each part commits on its own, so the caller
  * calls again in a new transaction while `remaining` > 0, and a part lost to
  * a crash is picked up by the next call. Re-applying the same (or an older)
  * revision changes nothing. Throws what the function raises (23514 for a

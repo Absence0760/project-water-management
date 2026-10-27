@@ -14,6 +14,13 @@
 // series from what changed (210's re-check, feeds/ingest.ts
 // refreshRevisedDays), with a History event.
 //
+// What it passes the apply (nextBatch): with no revision stored yet (the first
+// manifest this cache sees, at the cutover) no entries at all, as the
+// function's baseline marks every cached final in the region instead; after
+// that only the entries newer than the stored revision, since `changes` only
+// grows and the function takes at most 1000. A backlog of more goes in
+// batches at revision boundaries, each recorded as its own revision.
+//
 // Cheap when nothing moved: one manifest request per product per tick at
 // most, and none of the work when the manifest's ETag (S3) or size and
 // modification time (a file:// copy) is the one already handled by this
@@ -27,7 +34,14 @@ import { fileURLToPath } from 'node:url';
 import type { AbsolutePath } from '@zarrita/storage';
 import { withoutUser } from '../../db/tx.js';
 import { cacheOrigin, type CacheOrigin } from '../../feeds/cellCacheStore.js';
-import { applyMirrorRevision, type MirrorManifest, mirrorRevision, recordMirrorCopy } from '../../feeds/mirrorRevision.js';
+import {
+	applyMirrorRevision,
+	MIRROR_MAX_CHANGES,
+	type MirrorChange,
+	type MirrorManifest,
+	mirrorRevision,
+	recordMirrorCopy
+} from '../../feeds/mirrorRevision.js';
 import { logEvent } from '../../logging/logEvent.js';
 import { safeError } from '../../logging/safeError.js';
 import { parseManifest } from '../../mirror/manifest.js';
@@ -133,6 +147,49 @@ export async function fetchManifest(
 
 const BUSY = new Set(['55P03', '40P01']);
 
+/**
+ * The next call of the apply for `manifest` when the cache is at `stored`: the
+ * revision to bring it to and the manifest to pass (its `changes` cut to that
+ * call's entries, at most MIRROR_MAX_CHANGES; what mirror_manifest keeps).
+ * - No revision stored: no entries (the function's baseline marks every
+ *   cached final in the region, whatever the entries say).
+ * - Else the entries newer than `stored` (the manifest keeps them in revision
+ *   order, parseManifest), all of them when they fit, to the manifest's
+ *   revision. When they don't, the first ones up to the last revision they
+ *   hold whole, recorded as that revision; the next call goes on from it.
+ * - A single revision of more entries than fit (never seen; CHC's largest
+ *   rewrite is about 45 entries) is passed as one entry per year it touches,
+ *   from its first to its last changed day that year, over the whole region:
+ *   more marked than changed, but never stuck.
+ */
+export function nextBatch(manifest: MirrorManifest, stored: number | null): MirrorManifest {
+	if (stored === null) return { ...manifest, changes: [] };
+	const newer = manifest.changes.filter((c) => c.revision > stored);
+	if (newer.length <= MIRROR_MAX_CHANGES) return { ...manifest, changes: newer };
+	const r = newer[MIRROR_MAX_CHANGES - 1]!.revision;
+	if (newer[MIRROR_MAX_CHANGES]!.revision !== r) return { ...manifest, revision: r, changes: newer.slice(0, MIRROR_MAX_CHANGES) };
+	const firstOfR = newer.findIndex((c) => c.revision === r);
+	if (firstOfR > 0) return { ...manifest, revision: newer[firstOfR - 1]!.revision, changes: newer.slice(0, firstOfR) };
+	// One revision of more entries than a call takes: cover it year by year.
+	const years = new Map<string, MirrorChange>();
+	for (const c of newer) {
+		if (c.revision !== r || c.cellsChanged === 0) continue;
+		const [from, to] = c.days;
+		for (const y of new Set([from.slice(0, 4), to.slice(0, 4)])) {
+			const lo = from.slice(0, 4) === y ? from : `${y}-01-01`;
+			const hi = to.slice(0, 4) === y ? to : `${y}-12-31`;
+			const had = years.get(y);
+			years.set(y, {
+				revision: r,
+				days: [had && had.days[0] < lo ? had.days[0] : lo, had && had.days[1] > hi ? had.days[1] : hi],
+				cellsChanged: Math.max(had?.cellsChanged ?? 0, c.cellsChanged),
+				maxAbsDiff: Math.max(had?.maxAbsDiff ?? 0, c.maxAbsDiff)
+			});
+		}
+	}
+	return { ...manifest, revision: r, changes: [...years.keys()].sort().map((y) => years.get(y)!) };
+}
+
 async function tickProduct(origin: CacheOrigin, product: MirrorTickProduct, started: number, o: MirrorTickOptions): Promise<MirrorProductResult> {
 	const key = `${origin}/${product}`;
 	const got = await fetchManifest(product, handled.get(key), { s3: o.s3, env: o.env });
@@ -146,14 +203,16 @@ async function tickProduct(origin: CacheOrigin, product: MirrorTickProduct, star
 	}
 	// Checked here as the readers check it (a bad manifest is refused with a message naming the field), then by the function.
 	const parsed = parseManifest(raw, product);
-	// Recorded first, whatever happens to the revision: a new month moves finalThrough without one.
-	await withoutUser((db) => recordMirrorCopy(db, origin, product, parsed));
+	// Recorded first, whatever happens to the revision: a new month moves finalThrough without one. Without
+	// `changes`, which only grows and isn't read there.
+	const { changes: _changes, ...summary } = parsed;
+	await withoutUser((db) => recordMirrorCopy(db, origin, product, summary));
 	if (product === 'prelim') {
 		handled.set(key, got.tag);
 		return { status: 'current', revision: parsed.revision };
 	}
 	const manifest = parsed as MirrorManifest;
-	const stored = await withoutUser((db) => mirrorRevision(db, origin, product));
+	let stored = await withoutUser((db) => mirrorRevision(db, origin, product));
 	if (stored !== null && manifest.revision <= stored) {
 		handled.set(key, got.tag);
 		return { status: 'current', revision: manifest.revision };
@@ -162,14 +221,21 @@ async function tickProduct(origin: CacheOrigin, product: MirrorTickProduct, star
 	const maxParts = o.maxParts ?? 10;
 	let marked = 0;
 	let parts = 0;
+	let applied = false;
 	for (;;) {
-		const r = await withoutUser((db) => applyMirrorRevision(db, origin, product, manifest));
+		const batch = nextBatch(manifest, stored);
+		const r = await withoutUser((db) => applyMirrorRevision(db, origin, product, batch));
 		parts++;
 		marked += r.marked;
+		applied ||= r.applied;
 		if (r.remaining === 0) {
-			handled.set(key, got.tag);
-			if (r.applied) logEvent('info', { event: 'mirror_revision_applied', origin, product, revision: manifest.revision, marked, parts });
-			return { status: r.applied ? 'applied' : 'current', revision: manifest.revision, marked, parts };
+			if (r.revision !== null && r.revision >= manifest.revision) {
+				handled.set(key, got.tag);
+				if (applied) logEvent('info', { event: 'mirror_revision_applied', origin, product, revision: manifest.revision, marked, parts });
+				return { status: applied ? 'applied' : 'current', revision: manifest.revision, marked, parts };
+			}
+			// A batch of a backlog recorded (its own revision): the next batch goes on from it.
+			stored = r.revision;
 		}
 		if (parts >= maxParts || Date.now() - started >= budgetMs) {
 			logEvent('info', { event: 'mirror_revision_partial', origin, product, revision: manifest.revision, marked, parts, remaining: r.remaining });

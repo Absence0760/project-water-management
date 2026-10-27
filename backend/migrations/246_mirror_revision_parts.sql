@@ -6,15 +6,24 @@
 --    and the revision it records must be the manifest's, so a revision CHC
 --    makes of years of data (it has rewritten the 2024 dailies and the annual
 --    NetCDFs) was refused for good. Now one call marks the next run of the
---    revision's entries, up to 4000 days, logs each entry it marked in
+--    revision's days, up to 4000 days and 1,000,000 estimated cell-days (an
+--    entry split by days if it must), logs each run it marked in
 --    mirror_change (one transaction per call), and records the revision only
 --    when the last entry is marked: `remaining` says how many are left. A
---    worker that dies between calls leaves the entries it marked logged, and
+--    worker that dies between calls leaves the runs it marked logged, and
 --    the next call (the next tick) carries on after them. One call per part
 --    rather than all of a revision in one transaction: a 45-year rewrite is
 --    16,000 days, and one transaction holding every day's file row that long
 --    would stall every CHIRPS fetch behind it, and start again from nothing
 --    after a timeout.
+--
+--    The baseline. The first manifest of an origin and product the cache
+--    sees (no revision stored: the cutover to CHIRPS_SOURCE=mirror) marks
+--    every cached final inside the region, in the same parts, rather than its
+--    `changes`: the cache holds finals read from CHC's own files, CHC may
+--    have rewritten some before the copy existed, and the copy's `changes`
+--    start with its own history, so nothing else would ever read them again
+--    (with the copy as source no fetch HEADs CHC's files).
 --
 -- 2. The stale-mark race. A fetch that read a value before a revision
 --    reached the copy, and lands it after the revision was applied, wrote the
@@ -38,9 +47,11 @@
 -- unchanged); app_mirror_apply_revision gains a `remaining` column, so it is
 -- dropped and made again (worker only, as 245).
 
--- One row per entry of a revision's `changes` a call marked: which revision
--- it was applied for (target_revision) and its place among that revision's
--- entries to mark (idx), its own revision, days and grid cells. What a
+-- One row per run of days of an entry of a revision's `changes` a call
+-- marked (an entry larger than a part is split by days, a row each): which
+-- revision it was applied for (target_revision) and the entry's place among
+-- that revision's entries to mark (idx), its own revision, the days of the
+-- run and the grid cells. What a
 -- resumed apply skips, and what a fetch queued before applied_at checks its
 -- finals against. Pruned 30 days after its revision is recorded.
 CREATE TABLE mirror_change (
@@ -56,12 +67,12 @@ CREATE TABLE mirror_change (
 	c0              integer NOT NULL CHECK (c0 BETWEEN 0 AND 7199),
 	c1              integer NOT NULL CHECK (c1 BETWEEN c0 AND 7199),
 	applied_at      timestamptz NOT NULL DEFAULT now(),
-	PRIMARY KEY (origin, product, target_revision, idx),
+	PRIMARY KEY (origin, product, target_revision, idx, day_from),
 	CHECK (day_from <= day_to AND day_to - day_from < 366)
 );
 CREATE INDEX mirror_change_applied ON mirror_change (origin, product, applied_at);
 COMMENT ON TABLE mirror_change IS
-	'Each entry of a revision of our CHIRPS copy an apply marked (246): what a resumed apply skips, and what a fetch queued before it checks its finals against. Written only by app_mirror_apply_revision.';
+	'Each run of days of an entry of a revision of our CHIRPS copy an apply marked (246): what a resumed apply skips, and what a fetch queued before it checks its finals against. Written only by app_mirror_apply_revision.';
 
 ALTER TABLE mirror_change ENABLE ROW LEVEL SECURITY;
 CREATE POLICY mirror_change_select ON mirror_change FOR SELECT USING (app_current_user_id() IS NOT NULL);
@@ -205,20 +216,43 @@ CREATE FUNCTION mirror_mark_raced(p_origin text, p_product text, p_since timesta
 REVOKE ALL ON FUNCTION mirror_mark_raced(text, text, timestamptz, date[], integer[], integer[]) FROM PUBLIC;
 
 -- app_mirror_apply_revision, from 245's definition (its only one), now in
--- parts. p_changes is still the manifest's `changes` list, checked whole on
--- every call (bounds as 245's, else 23514). The entries to mark are those
--- above the stored revision with cellsChanged > 0, in list order; a call
--- skips those already logged in mirror_change for this p_revision (a resumed
--- apply: they must match the entries at their places, else the log of this
--- revision is dropped and it starts again, re-marking), marks the next ones
--- up to 4000 days (at least one entry; each is at most 366), logs them, and
--- returns:
+-- parts. p_changes is the manifest's `changes` list, or the part of it the
+-- caller hasn't applied (the tick passes only the entries above the stored
+-- revision, at most 1000, mirror-tick.ts nextBatch), checked whole on every
+-- call (bounds as 245's, else 23514). The entries to mark are those above the
+-- stored revision with cellsChanged > 0, in list order.
+--
+-- The baseline: with no stored revision (the first manifest of this origin
+-- and product the cache sees, at the cutover to CHIRPS_SOURCE=mirror) the
+-- entries are not what is marked. The cache holds finals read from CHC's own
+-- files, and CHC may have rewritten some before the copy existed (the copy
+-- holds them revised, and its `changes` start with its own history), so
+-- every cached final inside the region is marked instead: one entry per year
+-- the cache holds a cell of, the whole region, in year order.
+--
+-- A part is bounded twice: at most 4000 days (each day's chirps_file row is
+-- locked), and at most 1,000,000 estimated cell-days. The estimate is a day
+-- times the cell-year rows the cache holds that year inside the manifest's
+-- region (counted once per call): an upper bound on the stale rows the part
+-- inserts. One part's stale rows are one statement in one transaction, so it
+-- must finish well inside the worker's time (300 s, the tick's own 60 s):
+-- a million rows on the minimal tier's database take seconds, where the
+-- days bound alone, with a few thousand cached cells, came to tens of
+-- millions, and a part that times out rolls back, logs nothing, and is tried
+-- again the same way for ever. A part takes at least one day (progress), and
+-- an entry that doesn't fit is split by days: mirror_change logs each run of
+-- days marked, an entry in one or more rows.
+--
+-- A call skips what mirror_change already logged for this p_revision (a
+-- resumed apply: the log must be a prefix of this call's entries, run after
+-- run, else it is dropped and the revision starts again, re-marking), marks
+-- the next part, logs it, and returns:
 --   revision  the stored revision after the call (NULL: none yet);
 --   applied   true when this call recorded p_revision (the last part);
 --   marked    cell-days marked (or re-marked) by this call;
---   remaining entries still to mark: 0 when the revision is recorded, or
---             when p_revision is not newer than the stored one (applied
---             false: nothing changes).
+--   remaining entries not wholly marked yet: 0 when the revision is
+--             recorded, or when p_revision is not newer than the stored one
+--             (applied false: nothing changes).
 -- A mark already there takes this call's time (marked_at), so a fetch queued
 -- before it doesn't clear it (chirps_recheck_apply).
 --
@@ -236,6 +270,8 @@ CREATE FUNCTION app_mirror_apply_revision(p_origin text, p_product text, p_revis
 	AS $$
 	#variable_conflict use_column
 	DECLARE
+		part_days constant integer := 4000;
+		part_cell_days constant bigint := 1000000;
 		stored integer;
 		first_day date := CASE p_product WHEN 'sat' THEN date '1998-01-01' ELSE date '1981-01-01' END;
 		today date := (now() AT TIME ZONE 'UTC')::date;
@@ -248,10 +284,19 @@ CREATE FUNCTION app_mirror_apply_revision(p_origin text, p_product text, p_revis
 		n_marked integer := 0;
 		todo jsonb := '[]';
 		part jsonb := '[]';
+		cells jsonb;
 		n_todo integer;
-		n_done integer;
 		n_days integer := 0;
-		len integer;
+		est bigint := 0;
+		cnt bigint;
+		ent jsonb;
+		e_to date;
+		run_from date;
+		day_at date;
+		cur date;
+		last_idx integer;
+		last_to date;
+		full_part boolean := false;
 		i integer;
 	BEGIN
 		IF NOT mirror_worker_context() THEN
@@ -318,32 +363,85 @@ CREATE FUNCTION app_mirror_apply_revision(p_origin text, p_product text, p_revis
 			ELSE
 				er := region;
 			END IF;
-			-- Already applied, or nothing changed: nothing to mark.
-			CONTINUE WHEN ch_rev <= coalesce(stored, 0) OR (ch ->> 'cellsChanged')::integer = 0;
+			-- The baseline marks everything instead; an entry already applied, or of no cells, marks nothing.
+			CONTINUE WHEN stored IS NULL OR ch_rev <= stored OR (ch ->> 'cellsChanged')::integer = 0;
 			todo := todo || jsonb_build_array(jsonb_build_object('rev', ch_rev, 'from', d_from, 'to', d_to, 'r0', er.r0, 'r1', er.r1, 'c0', er.c0, 'c1', er.c1));
 		END LOOP;
+
+		-- The cell-year rows the cache holds inside the region, by year: the estimate of a part's cell-days.
+		SELECT coalesce(jsonb_object_agg(y.year::text, y.n), '{}') INTO cells
+			FROM (SELECT cy.year, count(*) AS n FROM chirps_cell_year cy
+				WHERE cy.origin = p_origin AND cy.product = p_product
+					AND cy.row_idx BETWEEN region.r0 AND region.r1 AND cy.col_idx BETWEEN region.c0 AND region.c1
+				GROUP BY cy.year) y;
+		IF stored IS NULL THEN
+			-- The baseline: each year the cache holds a cell of inside the region, whole, the whole region.
+			SELECT coalesce(jsonb_agg(jsonb_build_object('rev', p_revision, 'from', b.bf, 'to', b.bt,
+					'r0', region.r0, 'r1', region.r1, 'c0', region.c0, 'c1', region.c1) ORDER BY b.bf), '[]') INTO todo
+				FROM (SELECT greatest(make_date(k::integer, 1, 1), first_day) AS bf, least(make_date(k::integer, 12, 31), today) AS bt
+					FROM jsonb_object_keys(cells) AS k) b
+				WHERE b.bf <= b.bt;
+		END IF;
 		n_todo := jsonb_array_length(todo);
 
-		-- A resumed apply: the entries a call before this one marked for this revision, if they are still the first ones.
-		SELECT count(*) INTO n_done FROM mirror_change mc WHERE mc.origin = p_origin AND mc.product = p_product AND mc.target_revision = p_revision;
-		IF n_done > 0 AND (n_done > n_todo OR EXISTS (
-			SELECT 1 FROM mirror_change mc
-			WHERE mc.origin = p_origin AND mc.product = p_product AND mc.target_revision = p_revision
-				AND (mc.idx > n_done OR todo -> (mc.idx - 1) IS DISTINCT FROM
-					jsonb_build_object('rev', mc.revision, 'from', mc.day_from, 'to', mc.day_to, 'r0', mc.r0, 'r1', mc.r1, 'c0', mc.c0, 'c1', mc.c1))
-		)) THEN
+		-- A resumed apply: what calls before this one logged for this revision, if it is a prefix of these entries, run after
+		-- run (each entry's runs back to back from its first day, each entry whole before the next); else dropped.
+		IF EXISTS (
+			SELECT 1
+			FROM (
+				SELECT mc.idx, mc.revision AS rev, mc.day_from, mc.day_to, mc.r0, mc.r1, mc.c0, mc.c1,
+					lag(mc.idx) OVER w AS p_idx, lag(mc.day_to) OVER w AS p_to
+				FROM mirror_change mc
+				WHERE mc.origin = p_origin AND mc.product = p_product AND mc.target_revision = p_revision
+				WINDOW w AS (ORDER BY mc.idx, mc.day_from)
+			) l
+			CROSS JOIN LATERAL (SELECT todo -> (l.idx - 1) AS t, todo -> (l.p_idx - 1) AS pt) x
+			WHERE l.idx > n_todo
+				OR (x.t ->> 'rev')::integer <> l.rev OR (x.t ->> 'r0')::integer <> l.r0 OR (x.t ->> 'r1')::integer <> l.r1
+				OR (x.t ->> 'c0')::integer <> l.c0 OR (x.t ->> 'c1')::integer <> l.c1 OR l.day_to > (x.t ->> 'to')::date
+				OR CASE
+					WHEN l.p_idx IS NULL THEN l.idx <> 1 OR l.day_from <> (x.t ->> 'from')::date
+					WHEN l.p_idx = l.idx THEN l.day_from <> l.p_to + 1
+					ELSE l.idx <> l.p_idx + 1 OR l.p_to <> (x.pt ->> 'to')::date OR l.day_from <> (x.t ->> 'from')::date
+				END
+		) THEN
 			DELETE FROM mirror_change mc WHERE mc.origin = p_origin AND mc.product = p_product AND mc.target_revision = p_revision;
-			n_done := 0;
+		END IF;
+		SELECT mc.idx, mc.day_to INTO last_idx, last_to FROM mirror_change mc
+			WHERE mc.origin = p_origin AND mc.product = p_product AND mc.target_revision = p_revision
+			ORDER BY mc.idx DESC, mc.day_to DESC LIMIT 1;
+		IF last_idx IS NULL THEN
+			i := 0;
+		ELSIF last_to >= (todo -> (last_idx - 1) ->> 'to')::date THEN
+			i := last_idx;
+		ELSE
+			i := last_idx - 1;
+			cur := last_to + 1;
 		END IF;
 
-		-- This call's part: the next entries, up to 4000 days (at least one).
-		i := n_done;
-		WHILE i < n_todo LOOP
-			len := ((todo -> i ->> 'to')::date - (todo -> i ->> 'from')::date) + 1;
-			EXIT WHEN n_days > 0 AND n_days + len > 4000;
-			part := part || jsonb_build_array(todo -> i);
-			n_days := n_days + len;
-			i := i + 1;
+		-- This call's part: the next days, entry by entry, up to 4000 days and the cell-day budget (at least one day).
+		WHILE i < n_todo AND NOT full_part LOOP
+			ent := todo -> i;
+			e_to := (ent ->> 'to')::date;
+			run_from := coalesce(cur, (ent ->> 'from')::date);
+			cur := NULL;
+			day_at := run_from;
+			WHILE day_at <= e_to LOOP
+				cnt := coalesce((cells ->> extract(year FROM day_at)::integer::text)::bigint, 0);
+				IF n_days > 0 AND (n_days >= part_days OR est + cnt > part_cell_days) THEN
+					full_part := true;
+					EXIT;
+				END IF;
+				n_days := n_days + 1;
+				est := est + cnt;
+				day_at := day_at + 1;
+			END LOOP;
+			IF day_at > run_from THEN
+				part := part || jsonb_build_array(ent || jsonb_build_object('idx', i + 1, 'from', run_from, 'to', day_at - 1));
+			END IF;
+			IF NOT full_part THEN
+				i := i + 1;
+			END IF;
 		END LOOP;
 
 		IF n_days > 0 THEN
@@ -367,9 +465,9 @@ CREATE FUNCTION app_mirror_apply_revision(p_origin text, p_product text, p_revis
 				ON CONFLICT (origin, product, row_idx, col_idx, day) DO UPDATE SET marked_at = now();
 			GET DIAGNOSTICS n_marked = ROW_COUNT;
 			INSERT INTO mirror_change (origin, product, target_revision, idx, revision, day_from, day_to, r0, r1, c0, c1)
-				SELECT p_origin, p_product, p_revision, n_done + x.o::integer, (x.e ->> 'rev')::integer, (x.e ->> 'from')::date, (x.e ->> 'to')::date,
+				SELECT p_origin, p_product, p_revision, (x.e ->> 'idx')::integer, (x.e ->> 'rev')::integer, (x.e ->> 'from')::date, (x.e ->> 'to')::date,
 					(x.e ->> 'r0')::integer, (x.e ->> 'r1')::integer, (x.e ->> 'c0')::integer, (x.e ->> 'c1')::integer
-				FROM jsonb_array_elements(part) WITH ORDINALITY AS x(e, o);
+				FROM jsonb_array_elements(part) AS x(e);
 		END IF;
 
 		IF i < n_todo THEN
@@ -386,7 +484,7 @@ CREATE FUNCTION app_mirror_apply_revision(p_origin text, p_product text, p_revis
 	END
 	$$;
 COMMENT ON FUNCTION app_mirror_apply_revision(text, text, integer, jsonb, jsonb) IS
-	'Brings the CHIRPS cell cache up to a revision of our copy (245, in parts since 246): each call marks stale every cached final of the next changed days (up to 4000) in the region, logs the entries in mirror_change, and records the revision in mirror_manifest when the last is marked. An older or equal revision changes nothing. From the worker (no user) only.';
+	'Brings the CHIRPS cell cache up to a revision of our copy (245, in parts since 246): each call marks stale every cached final of the next changed days in the region (every cached final in the region, year by year, when no revision is stored yet: the baseline), up to 4000 days and 1,000,000 estimated cell-days, logs them in mirror_change, and records the revision in mirror_manifest when the last is marked. An older or equal revision changes nothing. From the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_mirror_apply_revision(text, text, integer, jsonb, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_mirror_apply_revision(text, text, integer, jsonb, jsonb) TO water_app;
 

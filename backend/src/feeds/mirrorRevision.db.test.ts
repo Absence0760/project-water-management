@@ -4,7 +4,13 @@
 // cached finals of the changed days inside the region; never an uncached
 // cell, a preliminary value, a day outside the change or a cell outside the
 // region), that the re-check (210) then claims them, that an older or equal
-// revision changes nothing, and its bounds.
+// revision changes nothing, and its bounds. Since 246: the baseline (the
+// first revision marks every cached final in the region, once), parts bounded
+// by days and by estimated cell-days (an entry split by days, resumed after a
+// crash), and the stale-mark race.
+//
+// Most tests start from `baseline()`: revision 1 applied over an empty cache,
+// so the revisions after it mark their changes, not everything.
 //
 // DB test files run one at a time; this one removes every cached cell, stale
 // row, revision and manifest it made after each test.
@@ -13,7 +19,15 @@ import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { cellCentre } from './cellCache.js';
 import { claimRecheck } from './cellCacheStore.js';
-import { applyMirrorRevision, type MirrorChange, type MirrorManifest, mirrorCopy, mirrorRevision, recordMirrorCopy } from './mirrorRevision.js';
+import {
+	applyMirrorRevision,
+	MIRROR_PART_CELL_DAYS,
+	type MirrorChange,
+	type MirrorManifest,
+	mirrorCopy,
+	mirrorRevision,
+	recordMirrorCopy
+} from './mirrorRevision.js';
 
 afterEach(async () => {
 	vi.unstubAllEnvs();
@@ -48,6 +62,8 @@ const manifest = (revision: number, changes: MirrorChange[], extra: Record<strin
 	...extra
 });
 const apply = (m: MirrorManifest) => withoutUser((db) => applyMirrorRevision(db, 'chc', 'sat', m));
+/** Revision 1 over an empty cache: the baseline marks nothing, and later revisions mark their changes. */
+const baseline = async () => expect(await apply(manifest(1, []))).toEqual({ revision: 1, applied: true, marked: 0, remaining: 0 });
 const applyRaw = (args: unknown[]) => withoutUser((db) => db.query('SELECT * FROM app_mirror_apply_revision($1, $2, $3, $4, $5)', args));
 
 const doy = (iso: string) => Math.round((Date.parse(iso) - Date.parse(`${iso.slice(0, 4)}-01-01`)) / 86_400_000);
@@ -102,22 +118,24 @@ describe('mirror_manifest and the apply: who may', () => {
 
 describe('app_mirror_apply_revision: what it marks', () => {
 	it('marks only cached finals of the changed days inside the region, and logs no revision until a re-read changes a value', async () => {
+		await baseline();
 		const days = span('2024-02-27', 10); // 27 Feb – 7 Mar (2024 is a leap year)
 		await cacheRow(IN, days);
 		await cacheRow(IN2, days, { prelim: true }); // preliminary: the final will replace it anyway
 		await cacheRow(OUT, days); // cached final, but outside the region
 		await cacheRow(IN, ['2023-03-01'], { year: 2023 }); // the same cell, another year
-		const r = await apply(manifest(1, [change(1, ['2024-03-01', '2024-03-03'])]));
+		const r = await apply(manifest(2, [change(2, ['2024-03-01', '2024-03-03'])]));
 		// Positive control: the cached in-region cell is marked on exactly the changed days.
-		expect(r).toEqual({ revision: 1, applied: true, marked: 3, remaining: 0 });
+		expect(r).toEqual({ revision: 2, applied: true, marked: 3, remaining: 0 });
 		expect(await stale()).toEqual(['2024-03-01', '2024-03-02', '2024-03-03'].map((day) => ({ row_idx: IN.row, col_idx: IN.col, day })));
 		// Nothing before or after the days, nothing preliminary, nothing outside the region, no uncached cell, no other year.
 		expect(await asOwner('SELECT count(*)::int AS n FROM chirps_revision')).toEqual([{ n: 0 }]);
 		const stored = await asOwner(`SELECT revision, manifest -> 'changes' AS changes FROM mirror_manifest WHERE origin = 'chc' AND product = 'sat'`);
-		expect(stored).toEqual([{ revision: 1, changes: [change(1, ['2024-03-01', '2024-03-03'])] }]);
+		expect(stored).toEqual([{ revision: 2, changes: [change(2, ['2024-03-01', '2024-03-03'])] }]);
 	});
 
 	it('a change’s own region narrows the cells; a change of no cells marks nothing; the fixtures’ cache is apart', async () => {
+		await baseline();
 		await cacheRow(IN, ['2024-03-01']);
 		await cacheRow({ row: 1700, col: 4100 }, ['2024-03-01']);
 		await asOwner(
@@ -125,16 +143,17 @@ describe('app_mirror_apply_revision: what it marks', () => {
 			 SELECT 'fixtures', product, row_idx, col_idx, year, vals, final, final_through FROM chirps_cell_year WHERE row_idx = 1600`
 		);
 		// Rows 1600–1619 only (lat −20 to −21).
-		const narrow = change(1, ['2024-03-01', '2024-03-01'], { region: { w: 10, s: -21, e: 41, n: -20 } });
-		const nothing = change(1, ['2024-03-01', '2024-03-01'], { cellsChanged: 0, maxAbsDiff: 0 });
-		expect(await apply(manifest(1, [nothing, narrow]))).toEqual({ revision: 1, applied: true, marked: 1, remaining: 0 });
+		const narrow = change(2, ['2024-03-01', '2024-03-01'], { region: { w: 10, s: -21, e: 41, n: -20 } });
+		const nothing = change(2, ['2024-03-01', '2024-03-01'], { cellsChanged: 0, maxAbsDiff: 0 });
+		expect(await apply(manifest(2, [nothing, narrow]))).toEqual({ revision: 2, applied: true, marked: 1, remaining: 0 });
 		expect(await stale()).toEqual([{ row_idx: 1600, col_idx: 4100, day: '2024-03-01' }]);
 		expect(await asOwner(`SELECT origin FROM chirps_cell_stale`)).toEqual([{ origin: 'chc' }]);
 	});
 
 	it('hands the marked days to the feeds’ re-check: a fetch over the cell claims them to read again (210)', async () => {
+		await baseline();
 		await cacheRow(IN, span('2024-03-01', 3));
-		await apply(manifest(1, [change(1, ['2024-03-01', '2024-03-02'])]));
+		await apply(manifest(2, [change(2, ['2024-03-01', '2024-03-02'])]));
 		const owner = await signUp('MirrorFeed');
 		const pid = (await owner.call('POST', '/projects', { name: 'Mirror' })).body.project.id as string;
 		const f = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [{ ...cellCentre(IN), weight: 1 }], startDate: '2024-01-01' } });
@@ -161,22 +180,23 @@ describe('app_mirror_apply_revision: what it marks', () => {
 
 describe('app_mirror_apply_revision: revisions', () => {
 	it('an equal or older revision changes nothing and returns the stored one; a newer one applies only its newer changes', async () => {
+		await baseline();
 		await cacheRow(IN, span('2024-03-01', 10));
-		const c1 = change(1, ['2024-03-01', '2024-03-02']);
-		const c2 = change(2, ['2024-03-05', '2024-03-05']);
-		expect(await apply(manifest(1, [c1]))).toEqual({ revision: 1, applied: true, marked: 2, remaining: 0 });
-		// The re-check reads them and clears the rows; re-applying revision 1 must not mark them again.
+		const c2 = change(2, ['2024-03-01', '2024-03-02']);
+		const c3 = change(3, ['2024-03-05', '2024-03-05']);
+		expect(await apply(manifest(2, [c2]))).toEqual({ revision: 2, applied: true, marked: 2, remaining: 0 });
+		// The re-check reads them and clears the rows; re-applying revision 2 must not mark them again.
 		await asOwner('DELETE FROM chirps_cell_stale');
-		expect(await apply(manifest(1, [c1]))).toEqual({ revision: 1, applied: false, marked: 0, remaining: 0 });
+		expect(await apply(manifest(2, [c2]))).toEqual({ revision: 2, applied: false, marked: 0, remaining: 0 });
 		expect(await stale()).toEqual([]);
-		// Revision 2 with the manifest's whole list: only revision 2's days.
-		expect(await apply(manifest(2, [c1, c2]))).toEqual({ revision: 2, applied: true, marked: 1, remaining: 0 });
+		// Revision 3 with the manifest's whole list: only revision 3's days.
+		expect(await apply(manifest(3, [c2, c3]))).toEqual({ revision: 3, applied: true, marked: 1, remaining: 0 });
 		expect((await stale()).map((s) => s.day)).toEqual(['2024-03-05']);
 		// An older manifest (read before the last apply) changes nothing, and leaves the stored manifest as it was.
 		await asOwner('DELETE FROM chirps_cell_stale');
-		expect(await apply(manifest(1, [c1]))).toEqual({ revision: 2, applied: false, marked: 0, remaining: 0 });
+		expect(await apply(manifest(2, [c2]))).toEqual({ revision: 3, applied: false, marked: 0, remaining: 0 });
 		expect(await stale()).toEqual([]);
-		expect(await asOwner(`SELECT revision, (manifest ->> 'revision')::int AS m FROM mirror_manifest`)).toEqual([{ revision: 2, m: 2 }]);
+		expect(await asOwner(`SELECT revision, (manifest ->> 'revision')::int AS m FROM mirror_manifest`)).toEqual([{ revision: 3, m: 3 }]);
 	});
 });
 
@@ -214,8 +234,8 @@ describe('app_mirror_apply_revision: bounds', () => {
 		}
 		expect(await stale()).toEqual([]);
 		expect(await storedRevision()).toBeNull();
-		// Positive control: the same call in bounds lands.
-		expect(await apply(manifest(1, [ok]))).toEqual({ revision: 1, applied: true, marked: 1, remaining: 0 });
+		// Positive control: the same call in bounds lands (the first revision: the baseline marks the cell's three cached days).
+		expect(await apply(manifest(1, [ok]))).toEqual({ revision: 1, applied: true, marked: 3, remaining: 0 });
 	});
 });
 
@@ -267,29 +287,41 @@ const markedAt = async (cell: { row: number; col: number }, day: string) =>
 	(await asOwner(`SELECT marked_at FROM chirps_cell_stale WHERE row_idx = $1 AND col_idx = $2 AND day = $3`, [cell.row, cell.col, day]))[0]?.marked_at as Date | undefined;
 
 describe('app_mirror_apply_revision: a revision of more than 4000 days, in parts (246)', () => {
-	// Twelve whole years: 2010–2019 are 3652 days, and 2020 (366) would pass 4000, so the first part is ten entries.
+	// Twelve whole years: 2010–2019 are 3652 days, so the first part ends 348 days into 2020 (13 December), after its cached day.
 	const years = Array.from({ length: 12 }, (_, i) => 2010 + i);
-	const big = () => manifest(1, years.map((y) => change(1, [`${y}-01-01`, `${y}-12-31`])));
+	const big = (revision = 2) => manifest(revision, years.map((y) => change(revision, [`${y}-01-01`, `${y}-12-31`])));
 	const cacheYears = async () => {
 		for (const y of years) await cacheRow(IN, [`${y}-06-01`], { year: y });
 	};
 	const staleYears = async () => (await stale()).map((r) => Number(r.day.slice(0, 4)));
+	const runs = async () =>
+		(await asOwner(
+			`SELECT idx, to_char(day_from, 'YYYY-MM-DD') AS "from", to_char(day_to, 'YYYY-MM-DD') AS "to" FROM mirror_change ORDER BY target_revision, idx, day_from`
+		)) as { idx: number; from: string; to: string }[];
 
 	it('marks the first part, records nothing, says how much is left; the next call marks the rest and records the revision', async () => {
+		await baseline();
 		await cacheYears();
-		expect(await apply(big())).toEqual({ revision: null, applied: false, marked: 10, remaining: 2 });
-		expect(await staleYears()).toEqual(years.slice(0, 10));
-		expect(await storedRevision()).toBeNull();
-		expect(await withoutUser((db) => mirrorRevision(db, 'chc', 'sat'))).toBeNull();
-		expect(await apply(big())).toEqual({ revision: 1, applied: true, marked: 2, remaining: 0 });
+		expect(await apply(big())).toEqual({ revision: 1, applied: false, marked: 11, remaining: 2 });
+		expect(await staleYears()).toEqual(years.slice(0, 11));
+		// 2020 split by days: its first run logged, the rest still to do.
+		expect((await runs()).slice(-1)).toEqual([{ idx: 11, from: '2020-01-01', to: '2020-12-13' }]);
+		expect(await storedRevision()).toBe(1);
+		expect(await apply(big())).toEqual({ revision: 2, applied: true, marked: 1, remaining: 0 });
 		expect(await staleYears()).toEqual(years);
+		expect((await runs()).slice(10)).toEqual([
+			{ idx: 11, from: '2020-01-01', to: '2020-12-13' },
+			{ idx: 11, from: '2020-12-14', to: '2020-12-31' },
+			{ idx: 12, from: '2021-01-01', to: '2021-12-31' }
+		]);
 		// Recorded: the same revision again changes nothing.
 		await asOwner('DELETE FROM chirps_cell_stale');
-		expect(await apply(big())).toEqual({ revision: 1, applied: false, marked: 0, remaining: 0 });
+		expect(await apply(big())).toEqual({ revision: 2, applied: false, marked: 0, remaining: 0 });
 		expect(await stale()).toEqual([]);
 	});
 
 	it('resumes after a crash: a part that committed isn’t marked again, one that rolled back is done again; a different list starts over', async () => {
+		await baseline();
 		await cacheYears();
 		await apply(big());
 		// The re-check read the first part's days in the meantime and cleared them.
@@ -302,36 +334,119 @@ describe('app_mirror_apply_revision: a revision of more than 4000 days, in parts
 			})
 		).rejects.toThrow('the worker stopped');
 		expect(await stale()).toEqual([]);
-		expect((await asOwner(`SELECT count(*)::int AS n FROM mirror_change`))[0].n).toBe(10);
-		// The next tick carries on after the ten entries the first part logged.
-		expect(await apply(big())).toEqual({ revision: 1, applied: true, marked: 2, remaining: 0 });
-		expect(await staleYears()).toEqual([2020, 2021]);
+		expect(await runs()).toHaveLength(11);
+		// The next tick carries on after the runs the first part logged, inside 2020 as well.
+		expect(await apply(big())).toEqual({ revision: 2, applied: true, marked: 1, remaining: 0 });
+		expect(await staleYears()).toEqual([2021]);
 
 		// Positive control for the skip: a revision whose entries don't match what was logged for it starts over.
 		await asOwner('DELETE FROM chirps_cell_stale');
-		const m2 = manifest(2, years.map((y) => change(2, [`${y}-01-01`, `${y}-12-31`])));
-		expect(await apply(m2)).toMatchObject({ applied: false, marked: 10, remaining: 2 });
-		await asOwner(`UPDATE mirror_change SET day_to = day_to - 1 WHERE target_revision = 2 AND idx = 3`);
+		const m3 = big(3);
+		expect(await apply(m3)).toMatchObject({ applied: false, marked: 11, remaining: 2 });
+		await asOwner(`UPDATE mirror_change SET day_to = day_to - 1 WHERE target_revision = 3 AND idx = 3`);
 		await asOwner('DELETE FROM chirps_cell_stale');
-		expect(await apply(m2)).toMatchObject({ applied: false, marked: 10, remaining: 2 });
-		expect(await staleYears()).toEqual(years.slice(0, 10));
+		expect(await apply(m3)).toMatchObject({ applied: false, marked: 11, remaining: 2 });
+		expect(await staleYears()).toEqual(years.slice(0, 11));
+		// And a log whose last run doesn't start where the one before ended (a gap inside an entry).
+		await asOwner(`UPDATE mirror_change SET day_from = day_from + 1 WHERE target_revision = 3 AND idx = 11`);
+		await asOwner('DELETE FROM chirps_cell_stale');
+		expect(await apply(m3)).toMatchObject({ applied: false, marked: 11, remaining: 2 });
+	});
+});
+
+describe('app_mirror_apply_revision: a part is bounded by estimated cell-days too (246)', () => {
+	// 3000 cached cells in 2024 (rows 1600–1659, columns 4100–4149), each final on 1 March and 30 November only.
+	const CELLS = 3000;
+	const perPart = Math.floor(MIRROR_PART_CELL_DAYS / CELLS); // 333 days of 2024 a part
+	const cacheMany = () =>
+		asOwner(
+			`INSERT INTO chirps_cell_year (origin, product, row_idx, col_idx, year, vals, final, final_through)
+			 SELECT 'chc', 'sat', r, c, 2024,
+				array_fill(NULL::real, ARRAY[366]), array_fill(false, ARRAY[366]), '2024-12-31'
+			 FROM generate_series(1600, 1659) r, generate_series(4100, 4149) c;
+			 UPDATE chirps_cell_year SET vals[61] = 3, final[61] = true, vals[335] = 4, final[335] = true WHERE year = 2024 AND origin = 'chc';
+			 INSERT INTO chirps_file (origin, product, day) SELECT 'chc', 'sat', d::date FROM generate_series(date '2024-01-01', date '2024-12-31', interval '1 day') d ON CONFLICT DO NOTHING`
+		);
+	const dayOf = (n: number) => span('2024-01-01', n + 1)[n]!;
+
+	it('splits one year’s entry by days so a part stays under the budget, always moving on, and resumes inside the entry', async () => {
+		await baseline();
+		await cacheMany();
+		const year = manifest(2, [change(2, ['2024-01-01', '2024-12-31'])]);
+		// Part 1: the first 333 days (1 March inside, 30 November not): one cell-day per cell.
+		expect(await apply(year)).toEqual({ revision: 1, applied: false, marked: CELLS, remaining: 1 });
+		const runs = () => asOwner(`SELECT idx, to_char(day_from, 'YYYY-MM-DD') AS "from", to_char(day_to, 'YYYY-MM-DD') AS "to" FROM mirror_change ORDER BY day_from`);
+		expect(await runs()).toEqual([{ idx: 1, from: '2024-01-01', to: dayOf(perPart - 1) }]);
+		// A crash inside part 2 rolls it back; the next call does it again, from the day after part 1.
+		await expect(
+			withoutUser(async (db) => {
+				await applyMirrorRevision(db, 'chc', 'sat', year);
+				throw new Error('the worker stopped');
+			})
+		).rejects.toThrow('the worker stopped');
+		expect(await runs()).toHaveLength(1);
+		expect(await apply(year)).toEqual({ revision: 2, applied: true, marked: CELLS, remaining: 0 });
+		expect(await runs()).toEqual([
+			{ idx: 1, from: '2024-01-01', to: dayOf(perPart - 1) },
+			{ idx: 1, from: dayOf(perPart), to: '2024-12-31' }
+		]);
+		expect(await asOwner(`SELECT to_char(day, 'YYYY-MM-DD') AS day, count(*)::int AS n FROM chirps_cell_stale GROUP BY day ORDER BY day`)).toEqual([
+			{ day: '2024-03-01', n: CELLS },
+			{ day: '2024-11-30', n: CELLS }
+		]);
+	});
+
+	it('the first revision (the baseline) is bounded the same way', async () => {
+		await cacheMany();
+		expect(await apply(manifest(1, []))).toEqual({ revision: null, applied: false, marked: CELLS, remaining: 1 });
+		expect(await apply(manifest(1, []))).toEqual({ revision: 1, applied: true, marked: CELLS, remaining: 0 });
+		expect((await asOwner(`SELECT count(*)::int AS n FROM chirps_cell_stale`))[0].n).toBe(2 * CELLS);
+	});
+});
+
+describe('app_mirror_apply_revision: the baseline (246), the first revision the cache sees', () => {
+	it('marks every cached final in the region, whatever the changes say, once; the next revision marks only its changes', async () => {
+		await cacheRow(IN, ['2024-03-01', '2024-03-02']);
+		await cacheRow(IN, ['2003-07-01'], { year: 2003 });
+		await cacheRow(IN2, ['2024-03-01'], { prelim: true }); // preliminary: never marked
+		await cacheRow(OUT, ['2024-03-01']); // outside the region: the copy can't serve it
+		await asOwner(
+			`INSERT INTO chirps_cell_year (origin, product, row_idx, col_idx, year, vals, final, final_through)
+			 SELECT 'fixtures', product, row_idx, col_idx, year, vals, final, final_through FROM chirps_cell_year WHERE row_idx = $1 AND col_idx = $2`,
+			[IN.row, IN.col]
+		);
+		// The changes name one day; the baseline marks the three cached finals in the region (CHC may have rewritten any before the copy).
+		expect(await apply(manifest(4, [change(4, ['2024-03-02', '2024-03-02'])]))).toEqual({ revision: 4, applied: true, marked: 3, remaining: 0 });
+		expect(await stale()).toEqual([
+			{ row_idx: IN.row, col_idx: IN.col, day: '2003-07-01' },
+			{ row_idx: IN.row, col_idx: IN.col, day: '2024-03-01' },
+			{ row_idx: IN.row, col_idx: IN.col, day: '2024-03-02' }
+		]);
+		expect(await asOwner(`SELECT DISTINCT origin FROM chirps_cell_stale`)).toEqual([{ origin: 'chc' }]);
+		// Once: the same revision again marks nothing.
+		await asOwner('DELETE FROM chirps_cell_stale');
+		expect(await apply(manifest(4, [change(4, ['2024-03-02', '2024-03-02'])]))).toEqual({ revision: 4, applied: false, marked: 0, remaining: 0 });
+		// Positive control: a later revision marks its own change only.
+		expect(await apply(manifest(5, [change(5, ['2024-03-02', '2024-03-02'])]))).toEqual({ revision: 5, applied: true, marked: 1, remaining: 0 });
+		expect(await stale()).toEqual([{ row_idx: IN.row, col_idx: IN.col, day: '2024-03-02' }]);
 	});
 });
 
 describe('the stale-mark race (246): a fetch that read before a revision doesn’t undo it', () => {
 	it('a re-read clears a mark made before its fetch was queued (positive control), keeps one made after, and a revision refreshes a mark already there', async () => {
 		const { owner, feed, job } = await feedJob('RaceReread');
+		await baseline();
 		await cacheRow(IN, ['2024-03-01', '2024-03-02', '2024-03-03']);
-		// Before the fetch: revision 1 marks 1 March, and the fetch, queued after it, reads it again and clears it.
-		await apply(manifest(1, [change(1, ['2024-03-01', '2024-03-01'])]));
+		// Before the fetch: revision 2 marks 1 March, and the fetch, queued after it, reads it again and clears it.
+		await apply(manifest(2, [change(2, ['2024-03-01', '2024-03-01'])]));
 		const first = await job();
 		await reread(owner, feed, first, '2024-03-01', [IN], 3);
 		expect(await stale()).toEqual([]);
 
-		// A fetch is queued; revision 2 lands while it is out; its answer (read from the copy before) comes back after.
+		// A fetch is queued; revision 3 lands while it is out; its answer (read from the copy before) comes back after.
 		const second = await job();
 		await asOwner(`UPDATE job SET created_at = now() - interval '1 minute' WHERE id = $1`, [second]);
-		await apply(manifest(2, [change(2, ['2024-03-02', '2024-03-02'])]));
+		await apply(manifest(3, [change(3, ['2024-03-02', '2024-03-02'])]));
 		await reread(owner, feed, second, '2024-03-02', [IN], 3);
 		expect(await stale()).toEqual([{ row_idx: IN.row, col_idx: IN.col, day: '2024-03-02' }]);
 		// The next fetch, queued after, reads it again and clears it.
@@ -342,7 +457,7 @@ describe('the stale-mark race (246): a fetch that read before a revision doesn�
 		await asOwner(`INSERT INTO chirps_cell_stale (origin, product, row_idx, col_idx, day, marked_at) VALUES ('chc', 'sat', $1, $2, '2024-03-03', now() - interval '1 day')`, [IN.row, IN.col]);
 		const third = await job();
 		await asOwner(`UPDATE job SET created_at = now() - interval '1 minute' WHERE id = $1`, [third]);
-		await apply(manifest(3, [change(3, ['2024-03-03', '2024-03-03'])]));
+		await apply(manifest(4, [change(4, ['2024-03-03', '2024-03-03'])]));
 		expect((await markedAt(IN, '2024-03-03'))!.getTime()).toBeGreaterThan(Date.now() - 60_000);
 		await reread(owner, feed, third, '2024-03-03', [IN], 3);
 		expect(await stale()).toEqual([{ row_idx: IN.row, col_idx: IN.col, day: '2024-03-03' }]);
@@ -350,14 +465,15 @@ describe('the stale-mark race (246): a fetch that read before a revision doesn�
 
 	it('a merge of finals read before a change applied since marks them (the revision couldn’t: nobody had cached them); one queued after doesn’t', async () => {
 		const { owner, feed, job } = await feedJob('RaceMerge');
+		await baseline();
 		await cacheRow(IN, ['2024-03-01']);
 		// The merge acts for the feed's running job: the one job() just started.
 		const merge = (cell: { row: number; col: number }) =>
 			withUser(owner.id, (db) => db.query('SELECT chirps_cache_merge($1, $2, $3, $4, $5, $6, $7, $8)', [feed, 'chc', 'sat', '2024-03-01', 'fff', [cell.row], [cell.col], [3, 3, 3]]));
 		const early = await job();
 		await asOwner(`UPDATE job SET created_at = now() - interval '1 minute' WHERE id = $1`, [early]);
-		// Revision 1 changes 1–2 March. IN2 isn't cached, so nothing of it is marked.
-		expect(await apply(manifest(1, [change(1, ['2024-03-01', '2024-03-02'])]))).toMatchObject({ marked: 1 });
+		// Revision 2 changes 1–2 March. IN2 isn't cached, so nothing of it is marked.
+		expect(await apply(manifest(2, [change(2, ['2024-03-01', '2024-03-02'])]))).toMatchObject({ marked: 1 });
 		await asOwner('DELETE FROM chirps_cell_stale');
 		// The fetch queued before lands IN2's values for 1–3 March: the changed days are marked, the 3rd isn't.
 		expect(early).toBeTruthy();
