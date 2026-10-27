@@ -26,7 +26,7 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 import { MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { runTick } from '../jobs/runner.js';
-import { ensureFinals, openFinals, readFinalsBlock, writeFinalsYear } from '../mirror/arrays.js';
+import { ensureDaily, ensureFinals, openFinals, readFinalsBlock, writeDailyDays, writeFinalsYear } from '../mirror/arrays.js';
 import { mirrorCell } from '../mirror/grid.js';
 import { readManifest, writeManifest } from '../mirror/manifest.js';
 import { readCells } from '../mirror/readCells.js';
@@ -272,6 +272,42 @@ describe('a CHIRPS feed reads our copy (CHIRPS_SOURCE=mirror)', () => {
 		expect(after.values.slice(48)).toEqual(before.values.slice(48));
 		expect(await feedRow(f.feedId)).toMatchObject({ consecutive_failures: 0, last_meta: { finalThrough: '2026-01-31', prelimDays: 6 } });
 		expect(await cachedDays('chc', 'sat', 2026)).toEqual({ held: 37, final: 31 });
+	});
+
+	// Issue #604 R3-C: a month's finals land ~55 days out, past the 50-day re-read; the copy path shares fetchWindow and the marker.
+	it('a final marker 55 days behind the newest day: the window goes back to it, and the month’s first days take their finals', async () => {
+		const store = liveCopy();
+		// The copy's preliminary days run on to 2026-02-24 (4 mm a day from 02-07): 55 days after its finals end on 2025-12-31.
+		const at = mirrorCell(home());
+		const block = { y0: at.y, x0: at.x, h: 1, w: 1 };
+		const prelim = await ensureDaily(store, 'prelim', '2026-01-01', 55);
+		await writeDailyDays(prelim, 37, block, new Float32Array(18).fill(4));
+		await writeManifest(store, { ...(await readManifest(store, 'prelim'))!, prelimThrough: '2026-02-24' });
+
+		const owner = await signUp('MirrorFinalGap');
+		const f = await feed(owner, { cells: [{ ...FIXTURE_CELL(), weight: 1 }], product: 'sat', startDate: '2025-12-15' });
+		expect((await tick()).done).toBe(1);
+		const before = (await series(owner, f.pid))!;
+		expect(before.values).toHaveLength(72);
+		expect(await feedRow(f.feedId)).toMatchObject({ last_data_date: '2026-02-24', last_meta: { prelimDays: 55, finalThrough: '2025-12-31' } });
+
+		// January's finals land: 2.5 mm a day.
+		const values = new Float32Array(366).fill(Number.NaN);
+		values.fill(2.5, 0, 31);
+		await writeFinalsYear(await ensureFinals(store, 'sat', 2026), 2026, block, values);
+		const m = (await readManifest(store, 'sat'))!;
+		const january = { ...m.files.at(-1)!, url: m.files.at(-1)!.url.replace('2025.12', '2026.01') };
+		await writeManifest(store, { ...m, years: { ...m.years, last: 2026 }, finalThrough: '2026-01-31', files: [...m.files, january] });
+
+		await runNext(f.feedId);
+		const after = (await series(owner, f.pid))!;
+		// Positive control: 01-01 … 01-04, which the 50-day re-read (from 01-05) never read again, are final too.
+		expect(after.values.slice(17, 21)).toEqual([2.5, 2.5, 2.5, 2.5]);
+		expect(after.values.slice(17, 48)).toEqual(new Array(31).fill(2.5));
+		expect(after.values.slice(0, 17)).toEqual(before.values.slice(0, 17));
+		expect(after.values.slice(48)).toEqual(before.values.slice(48));
+		expect(after.values.slice(54)).toEqual(new Array(18).fill(4));
+		expect(await feedRow(f.feedId)).toMatchObject({ consecutive_failures: 0, last_meta: { finalThrough: '2026-01-31', prelimDays: 24 } });
 	});
 
 	it('fixtures mode: the committed copy, re-dated to today, gives the feed the days reading the fixture files gives it', async () => {

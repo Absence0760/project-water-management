@@ -183,8 +183,29 @@ describe('fetchWindow with the final marker (CHIRPS)', () => {
 	it('starts the re-read after the last final day, and ignores a marker the window already starts after', () => {
 		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
 		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-08-15')).toEqual({ start: '2026-08-16', end: '2026-09-24' });
-		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-07-01')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
 		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-08-01')).toEqual({ start: '2026-08-02', end: '2026-09-24' });
+	});
+
+	// Issue #604 R3-C: CHC's finals come ~55 days out, past the 50-day re-read.
+	it('a marker more than 50 days behind the newest day starts the window after it, so its preliminary days are read again', () => {
+		// 55 days behind: the 50-day re-read alone would start on 08-01 and skip 07-27 … 07-31.
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-07-26')).toEqual({ start: '2026-07-27', end: '2026-09-24' });
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-07-01')).toEqual({ start: '2026-07-02', end: '2026-09-24' });
+		// Exactly CHIRPS_FINAL_REACH_DAYS back still reaches; one day more is given up (the 50-day re-read, as before).
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-06-11')).toEqual({ start: '2026-06-12', end: '2026-09-24' });
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-06-10')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
+		// The startDate floor holds: no day before it is the feed's.
+		expect(fetchWindow('chirps', { ...grid, startDate: '2026-07-20' }, '2026-09-20', today, '2026-09-24', '2026-07-01')).toEqual({ start: '2026-07-20', end: '2026-09-24' });
+		// Nothing after the marker (it reaches the newest day): nothing preliminary, the window as before.
+		expect(fetchWindow('chirps', grid, '2026-07-01', today, '2026-09-24', '2026-07-01')).toEqual({ start: '2026-07-02', end: '2026-09-24' });
+	});
+
+	it('a backfill through empty days (#29) still moves on: the marker can’t pull its window back behind readThrough', () => {
+		const config = { ...grid, startDate: '2020-01-01' };
+		// Newest 2020-04-29, marker 60 days before, and the last window read to 2020-09-30 with nothing in it.
+		expect(fetchWindow('chirps', config, '2020-04-29', today, '2020-09-30', '2020-02-29')).toEqual({ start: '2020-08-12', end: '2020-12-09' });
+		// A window from the marker would reach past readThrough: it starts there.
+		expect(fetchWindow('chirps', config, '2020-04-29', today, '2020-05-10', '2020-02-29')).toEqual({ start: '2020-03-01', end: '2020-06-28' });
 	});
 
 	it('never starts past the window’s end: final through yesterday (or later) leaves one day', () => {

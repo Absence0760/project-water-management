@@ -39,6 +39,17 @@ const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
 export const CHIRPS_REVISION_DAYS = 50;
 /** The most CHIRPS days one fetch reads (a long backfill continues next time). */
 export const CHIRPS_MAX_DAYS = 120;
+/**
+ * How far behind its newest day a CHIRPS feed's final marker may fall and the
+ * window still go back for the preliminary days after it (chirpsPendingFrom).
+ * CHC publishes a month's finals around the 20th–25th of the next, so a
+ * month's first day waits about 55 days, past CHIRPS_REVISION_DAYS; 100 also
+ * covers a month's delay at CHC. Below CHIRPS_MAX_DAYS, so a window that
+ * starts there still reaches 20 days past the newest day. A day still not
+ * final after it (one with no value, which blocks the marker) is given up:
+ * the window and the marker go on as before the fix (issue #604 R3-C).
+ */
+export const CHIRPS_FINAL_REACH_DAYS = 100;
 /** First fetch, with no start date configured. */
 export const CHIRPS_FIRST_DAYS = 60;
 /** DWS re-reads a year: verified data is revised in arrears. */
@@ -78,6 +89,24 @@ export interface FetchRequest {
 	heldThrough?: string;
 }
 
+/**
+ * The first day a CHIRPS feed's series may still hold as preliminary: the day
+ * after its final marker (floored at the config's startDate, before which the
+ * feed owns no day), when the series holds days after the marker and that day
+ * is within CHIRPS_FINAL_REACH_DAYS of its newest day. Null when nothing can
+ * be preliminary, or the day is past reach. fetchWindow starts no later than
+ * it, and finalThroughAfter (ingest.ts) never moves the marker past it
+ * unread, so a final landing more than CHIRPS_REVISION_DAYS out still
+ * replaces the preliminary day (issue #604 R3-C).
+ */
+export function chirpsPendingFrom(finalThrough: string | null, lastDataDate: string | null, startDate: string | null | undefined): string | null {
+	if (!finalThrough || !lastDataDate || finalThrough >= lastDataDate) return null;
+	let from = addDays(finalThrough, 1);
+	if (startDate && from < startDate) from = startDate;
+	if (from > lastDataDate) return null;
+	return from >= addDays(lastDataDate, -CHIRPS_FINAL_REACH_DAYS) ? from : null;
+}
+
 /** The inclusive days one fetch asks for (FetchRequest's start and end). */
 export interface FetchWindow {
 	start: string;
@@ -109,6 +138,14 @@ export interface FetchWindow {
  * 120-day cap counts from there. The startDate floor still holds, since the
  * marker only ever moves the start later.
  *
+ * The other way round, a marker more than CHIRPS_REVISION_DAYS behind the
+ * newest day moves the start earlier, to the day after it
+ * (chirpsPendingFrom): the days between may still be preliminary, and CHC's
+ * finals come about 55 days out, so a re-read of only 50 days would leave a
+ * month's first days preliminary for good. Not past CHIRPS_FINAL_REACH_DAYS,
+ * and not when a window from there couldn't pass readThrough (a backfill
+ * through empty days, #29, which must move on).
+ *
  * DWS asks for at most DWS_WINDOW_DAYS (two years) a request, so a first
  * fetch's ten years, or an older startDate, is walked a window at a time.
  * Its year of re-read is for recent days, which DWS revises in arrears: a
@@ -135,6 +172,8 @@ export function fetchWindow(
 		case 'chirps': {
 			const end = addDays(today, -1);
 			let start = from(CHIRPS_REVISION_DAYS, CHIRPS_FIRST_DAYS, CHIRPS_MAX_DAYS, end);
+			const pending = chirpsPendingFrom(finalThrough, lastDataDate, config.startDate);
+			if (pending && pending < start && (!readThrough || addDays(pending, CHIRPS_MAX_DAYS - 1) > readThrough)) start = pending;
 			if (finalThrough && finalThrough >= start && start <= end) start = finalThrough < end ? addDays(finalThrough, 1) : end;
 			const capped = toEpochDay(end) - toEpochDay(start) + 1 > CHIRPS_MAX_DAYS ? addDays(start, CHIRPS_MAX_DAYS - 1) : end;
 			return { start, end: capped };
