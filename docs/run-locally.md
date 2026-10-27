@@ -389,10 +389,28 @@ pnpm dev:feeds:run          # one tick that queues EVERY enabled feed, due or no
 pnpm dev:jobs:tick          # one tick: only the feeds that are due (and any other due job)
 ```
 
+CHIRPS feeds read our own copy of CHIRPS here (`CHIRPS_SOURCE=mirror`, the
+default with the fixtures; [architecture.md § Data feeds](./architecture.md#data-feeds)):
+the committed synthetic copy `backend/fixtures/mirror/`, read inside the
+`feed_fetch` job. The copy is fixed at 2026-02-09 (finals 2023–2025,
+preliminary days to 2026-02-06), so fixtures mode re-dates it as the files
+are re-dated: a day is final, preliminary or not out yet by the files' own
+lags from today (final to 40 days back, preliminary to 3), and its values
+come from a day of the copy of the same kind a whole number of the pattern's
+14 days away, which holds the same values. A cell of the cover outside the
+8 × 6 grid reads the repeat of its grid cell from the band the copy holds
+just south of the grid. So the feeds show the values they showed reading the
+files. `FEED_FIXTURE_REWRITE` doesn't reach the copy (a revision of the copy
+comes from its manifest), and a live copy (`FEED_SOURCE=live`) is never
+re-dated. To read CHC's files instead, as production does until the cutover,
+put `CHIRPS_SOURCE=chc` in `backend/.env.development.local`; the backend's
+unit and DB tests run that way unless a test sets `mirror`.
+
 The fixtures tag each file by its bytes, as an ETag would. To watch the
 re-check of cached finals CHC rewrites in place
-([architecture.md § Data feeds](./architecture.md#data-feeds)), backfill a
-CHIRPS feed past 120 days back, then set `FEED_FIXTURE_REWRITE=1` in a
+([architecture.md § Data feeds](./architecture.md#data-feeds)), set
+`CHIRPS_SOURCE=chc` (above), backfill a CHIRPS feed past 120 days back,
+then set `FEED_FIXTURE_REWRITE=1` in a
 gitignored `backend/.env.development.local` and restart: the finals
 `backend/fixtures/feeds/chirps-rewrite.json` names (91–120 days back) are
 served ×1.25 at the same URL. Files are HEADed 90 days after their last

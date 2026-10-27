@@ -23,6 +23,11 @@ process.env.APP_ENCRYPTION_KEY = 'test-only-app-encryption-key-00000000000';
 process.env.MFA_REQUIRED = 'false';
 // Their fixtures sign packs with invented registrations nobody checked (167_signers); evidence/packs.db.test.ts turns it back on for its issue test.
 process.env.REGISTRATION_CHECK_REQUIRED = 'false';
+// CHIRPS feeds read CHC's files (through the fixtures), production's path until
+// the cutover (issue #604 R3-C), though FEED_SOURCE=fixtures alone would pick
+// our copy (mirror/source.ts). The tests of the copy's path set mirror
+// themselves (feeds/fromMirror.db.test.ts).
+process.env.CHIRPS_SOURCE = 'chc';
 // DB-backed tests (*.db.test.ts) use a dedicated test database, water_test in
 // the main checkout and water_test_w<tag> in a git worktree (test-db.ts); see
 // db-global-setup.ts. DEV-ONLY docker credentials.
