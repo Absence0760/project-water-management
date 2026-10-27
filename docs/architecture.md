@@ -1719,6 +1719,16 @@ EventBridge, daily
   nothing and records only that it looked, and the forecast series keeps
   the issue it has. Locally the committed copy holds two synthetic issues,
   re-dated to today the way the synthetic files are.
+- **The recent days (IMERG Late, issue #604 R4-D).** The Python ingest
+  Lambda copies NASA's IMERG Late daily rain for the last 10 days (about
+  14 h behind) into `imerg_late/`, the daily layout on the 0.1° grid
+  (275 × 310, chunk (1, 55, 62)), keeping 30 days; each day's manifest
+  entry carries its version (`V07`, later `V08`), since bias correction is
+  fitted per version. One CMR search a run names the granules and GES
+  DISC's OPeNDAP returns region D1 only, with an Earthdata token read from
+  Secrets Manager (`ingest/imerg.py`, `infra/imerg.tf`, off until
+  `imerg_enabled`). Nothing reads it yet: the engine will take a day from
+  it only where CHIRPS has no preliminary value (R4-B).
 - **Revisions** reach the cache without a feed: the worker's mirror tick
   reads each manifest and applies a newer revision through
   `app_mirror_apply_revision` (above, *A revision of our copy*); the

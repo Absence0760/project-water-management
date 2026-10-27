@@ -1439,7 +1439,7 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
   TLS only, **versioned**, with noncurrent versions expiring after 30 days
   (a monthly refresh rewrites ~130 MB, so a month of old versions is cents)
   and incomplete multipart uploads aborted after a day. It holds one Zarr v3
-  array per product (`rnl/`, `sat/`, `prelim/` and `gefs/<issue>/`), each
+  array per product (`rnl/`, `sat/`, `prelim/`, `gefs/<issue>/` and `imerg_late/`), each
   with its `manifest.json`, and `gefs/index.json` listing the forecast
   issues held.
 - **The ingest job** `water-management-mirror-ingest`: a Python 3.14
@@ -1451,7 +1451,9 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
   address in its User-Agent; use a role address, every upstream sees it).
   Its role may get, put, list and delete in the mirror bucket only, send to
   its DLQ, write its own log group, pull its own image, and publish metrics
-  in the `water-management/Mirror` namespace only. No database, no secret.
+  in the `water-management/Mirror` namespace only. No database; its one
+  secret is IMERG's Earthdata token (§ IMERG Late), read at run time by the
+  ARN in `EARTHDATA_TOKEN_SECRET_ARN`.
   Its 2 reserved executions come out of the account's Lambda concurrency
   quota (infra/README.md § Operator steps).
 - **Schedules:** one EventBridge rule per product, daily (`rnl` at 02:00
@@ -1711,6 +1713,67 @@ the operator starts it.
    difference beyond tolerance is a bug in the copy to find before
    anything reads it (re-copy the month with a `backfill` event once
    fixed, then verify again).
+
+### IMERG Late
+
+The near-real-time rain for the days CHIRPS has no preliminary value for
+yet (issue #604 R4-D, D16): NASA's IMERG Late daily, `GPM_3IMERGDL` V07,
+about 14 h behind, into `imerg_late/` (0.1°, the last 30 days, each day's
+version in the manifest; `ingest/imerg.py`, ingest/README.md § IMERG Late,
+the source register's [imerg](./data-sources.md#imerg)). It runs in the same
+ingest Lambda, from `infra/imerg.tf`: a rule 4 times a day (04:40, 10:40,
+16:40, 22:40 UTC) sending `{"product":"imerg_late","mode":"recent"}`. A run
+asks CMR which granules exist (no sign-in), then GES DISC's OPeNDAP service
+for region D1 of each day it doesn't hold, with an Earthdata Login token.
+Off until `imerg_enabled`, which needs the token first.
+
+**The token.** Terraform creates the secret `water-management/ingest/earthdata-token`
+with no value and gives the ingest role `GetSecretValue` on it alone; the
+token itself never passes through Terraform, the repo or a chat. Once,
+by the operator:
+
+1. **An Earthdata Login account** at https://urs.earthdata.nasa.gov, on the
+   estate's owner identity (`~/github/project-mgmt/docs/vendor-accounts.md`
+   and its Runbook H; add the registry row).
+2. **Approve GES DISC's application**: Profile → Applications → Authorized
+   Apps → Approve More Applications → "NASA GESDISC DATA ARCHIVE", and agree
+   to its terms. Without it every request answers 401.
+3. **Create a user token**: Profile → Generate Token. It is valid for 60
+   days. Save it to a file only you can read, for example
+   `~/earthdata-token` with mode 0600, and never print it.
+4. **Put it in the secret**, from that file, with the prod profile
+   (`aws sso login` first):
+   `aws secretsmanager put-secret-value --secret-id water-management/ingest/earthdata-token --secret-string file://$HOME/earthdata-token && shred -u $HOME/earthdata-token`.
+   Check without reading it back: `aws secretsmanager describe-secret --secret-id water-management/ingest/earthdata-token --query VersionIdsToStages`
+   shows one `AWSCURRENT` version.
+5. **Turn it on**: `imerg_enabled = true` in the prod tfvars (with an
+   `ingest_image_tag` whose release has `ingest/imerg.py`), `terraform plan`,
+   then apply with the operator's go-ahead. That creates the rule, its
+   target and permission, and the `mirror-lag-imerg-late` alarm.
+6. **First run** without waiting for the schedule:
+   `aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload '{"product":"imerg_late","mode":"recent"}' /tmp/imerg.json && cat /tmp/imerg.json`
+   should list 10 days `copied`, each with `"version": "V07"`. A 401 means
+   step 2 or the token is wrong (below).
+
+**Rotating the token** every 60 days (put a reminder in the calendar when
+creating it): repeat steps 3 and 4; the next run reads the new value. A run
+that met a 401 or 403 wrote `ingest-state/imerg_late/refused.json` and asks
+nothing more that UTC day; after fixing the token the same day, remove it:
+`aws s3 rm s3://<mirror bucket>/ingest-state/imerg_late/refused.json`.
+
+**Watching it.** Each run publishes `MirrorLagDays{Product=imerg_late}`,
+today minus the newest contiguous day held: 1 on a healthy copy (2 before
+the day's file lands). The `mirror-lag-imerg-late` alarm (essential tier)
+fires above `imerg_lag_alarm_days` (default 3; the day's lowest reading) on
+two days running, or when no datapoint arrives for two days. Runbook: the
+`mirror-ingest` log group and its DLQ. `refused_today` in a run's result,
+or an `HTTP 401` error, is almost always the token's 60 days running out;
+a 403 means GES DISC refused us (stop and write to them, as for CHC). An
+`ImergFormatError` means a file or CMR's answer changed shape (a new
+version's layout, say): the run stopped before writing anything wrong.
+When V08 arrives, CMR lists it beside V07 and the job takes the newer
+version for each day, re-copying a held day once (its revision moves only
+if its values changed).
 
 ## DWS gauge records
 

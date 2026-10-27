@@ -2,6 +2,7 @@
 
 Event: {"product": "rnl" | "sat", "mode": "monthly"}
        {"product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM"}
+       {"product": "imerg_late", "mode": "recent", "days": 1-30?}   (imerg.py)
 Env:   MIRROR_URL      file:///abs/path or s3://bucket[/prefix] (required)
        FEED_SOURCE     fixtures (default: the synthetic byMonth directory in
                        fixtures/chirps/, served by fixturehttp.py, no
@@ -45,6 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import chirps_final  # noqa: E402
 import cloudwatch  # noqa: E402
+import imerg  # noqa: E402  (R4-D: IMERG Late, its own event)
 import lease  # noqa: E402
 import manifest  # noqa: E402
 import polite  # noqa: E402
@@ -102,6 +104,10 @@ def _publish_lag(mirror, product: str, metrics, today: dt.date) -> int:
 def handler(event, context=None, s3_client=None, opener=None, metrics=None, clock=None, sleep=None, today=None):
     """Run one event. `s3_client`, `opener` (polite's), `metrics` (a cloudwatch
     sink), `clock`/`sleep` (pacing) and `today` (the lag's date) are for tests."""
+    # --- IMERG Late (issue #604 R4-D): {"product": "imerg_late", "mode": "recent"}, imerg.py ---
+    if isinstance(event, dict) and event.get("product") == imerg.PRODUCT:
+        return imerg.handle(event, context, s3_client=s3_client, opener=opener, metrics=metrics, today=today, clock=clock, sleep=sleep)
+    # --- end IMERG Late ---
     ev = validate_event(event)
     source = os.environ.get("FEED_SOURCE", "fixtures")
     if source not in ("fixtures", "live"):
