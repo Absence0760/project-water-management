@@ -17,6 +17,7 @@ import { FeedRefusedError, FeedThrottledError, FeedUnavailableError } from './er
 import { CHC_BASE } from './sources/chirps.js';
 import { DWS_BASE } from './sources/dws.js';
 import { DEAFRICA_SERVICES_BASE } from '../dams/observed/upstream.js';
+import { WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
 
 export interface FeedHttp {
 	/** Bytes [start, end] (inclusive) of `url`; null for HTTP 404 (not published yet). */
@@ -93,7 +94,14 @@ const USER_AGENT = 'water-management-feeds/1 (+https://github.com/Absence0760/pr
  * open internet egress, so this is what keeps a redirect, or a future code
  * path, from steering it at another host (docs/security.md § Data feeds).
  */
-export const FEED_HOSTS: readonly string[] = [new URL(CHC_BASE).host, new URL(DWS_BASE).host, new URL(DEAFRICA_SERVICES_BASE).host];
+export const FEED_HOSTS: readonly string[] = [
+	new URL(CHC_BASE).host,
+	new URL(DWS_BASE).host,
+	// Digital Earth Africa's public bucket: the Waterbodies series and the WOfS scenes (dams/observed, issue #604 R5).
+	new URL(DEAFRICA_SERVICES_BASE).host,
+	// Digital Earth Africa's STAC search: the WOfS scenes over a dam (dams/observed/wofs, issue #604 R5-C).
+	new URL(WOFS_STAC_SEARCH).host
+];
 /** Redirects followed per request, each checked against FEED_HOSTS. */
 const MAX_REDIRECTS = 3;
 

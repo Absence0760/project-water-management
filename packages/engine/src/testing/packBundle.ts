@@ -25,6 +25,7 @@ import { applyScenario } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import { localityMapSvg } from '../geo/localityMap';
 import type { EvidenceReport } from '../evidence/types';
+import { damObservationsSection, type EvidenceDamObservations } from '../evidence/damObservations';
 import { canonicalJson, seriesDigest } from '../manifest';
 import type { ModelInput, ModelOutput, NetworkNode } from '../project';
 import { Rng } from '../random';
@@ -138,7 +139,10 @@ function fixtureLocality(hash: SyncHash, applicant: boolean, svgSha256?: string)
  * `locality`, the report carries § 1's locality map (evidence-12) and its
  * SVG's SHA-256, or `locality.svgSha256` in its place (a wrong one).
  */
-export function packBundleFixture(hash: SyncHash, opts: { application?: boolean; locality?: boolean | { svgSha256: string }; seriesChoice?: boolean } = {}): PackBundleInput {
+export function packBundleFixture(
+	hash: SyncHash,
+	opts: { application?: boolean; locality?: boolean | { svgSha256: string }; seriesChoice?: boolean; observations?: boolean | EvidenceDamObservations } = {}
+): PackBundleInput {
 	const base = packFixtureInput();
 	// Two CHIRPS series, the one read the shorter (engine ≥ 1.90.0, issue #561): its runs warn, and the warning reads input.seriesChoice.
 	if (opts.seriesChoice) {
@@ -179,11 +183,32 @@ export function packBundleFixture(hash: SyncHash, opts: { application?: boolean;
 			series: [...listed(baseline, 'baseline'), ...(application ? listed(application, 'application') : [])]
 		},
 		summaries: { baseline: baseline.summary, application: application?.summary ?? null },
-		...(opts.locality ? { builtBy: ENGINE_VERSION, localityMap: fixtureLocality(hash, !!application, typeof opts.locality === 'object' ? opts.locality.svgSha256 : undefined) } : {})
+		...(opts.locality ? { builtBy: ENGINE_VERSION, localityMap: fixtureLocality(hash, !!application, typeof opts.locality === 'object' ? opts.locality.svgSha256 : undefined) } : {}),
+		...(opts.observations ? { builtBy: ENGINE_VERSION, damObservations: opts.observations === true ? fixtureObservations() : opts.observations } : {})
 	} as unknown as EvidenceReport;
 	const manifest = buildPackManifest({ pack: { id: PACK_FIXTURE_ID, version: 1, supersedes: null }, project, report, engine: { version: ENGINE_VERSION, build: null } });
 	// As the backend reads it back from jsonb.
 	return { manifest: JSON.parse(JSON.stringify(manifest)), baseline, application };
+}
+
+/** Observed wet days (evidence-21) of one invented dam on Farm one, as the report freezes them: 3 clear dates, 2 wet. */
+export function fixtureObservations(): EvidenceDamObservations {
+	return damObservationsSection(
+		[
+			{
+				featureId: '00000000-0000-4000-8000-0000000000d1',
+				name: 'Farm one dam',
+				nodeId: 'F1',
+				rows: [
+					{ date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 },
+					{ date: '2020-01-13', wetAreaM2: 900, pctObserved: 40 },
+					{ date: '2020-01-21', wetAreaM2: 0, pctObserved: 95 },
+					{ date: '2020-01-29', wetAreaM2: 2700, pctObserved: 90 }
+				]
+			}
+		],
+		{ applicant: true, ownNodeIds: ['F1'], startDate: START, endDate: '2030-01-01', models: [] }
+	)!;
 }
 
 /** The headline fixture's registered volumes (synthetic): two takes on Farm one, one storage-only row (s21b, not a take). */

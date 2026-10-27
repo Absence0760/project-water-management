@@ -27,7 +27,8 @@
 // production. Each file covers the fixture's `cover` (21.0–25.4° E, 20.0–34.0° S),
 // the invented 8 × 6 grid repeated around it, so a feed over a seeded
 // example's synthetic catchment (backend/scripts/examples/map.ts) reads rain
-// offline. Any other URL is a 404. Invented grid and station: no real
+// offline. DE Africa's STAC search and its WOfS scenes are answered by
+// dams/observed/wofs/fixtures.ts (wofs-sample.json). Any other URL is a 404. Invented grid and station: no real
 // place, catchment or measurement.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -38,6 +39,8 @@ import type { FeedHttp } from './http.js';
 import { CHC_BASE, GEFS_DAYS } from './sources/chirps.js';
 import { DWS_BASE, parseDwsDaily } from './sources/dws.js';
 import { writeGrid } from './sources/tiff-write.js';
+import { wofsFixture } from '../dams/observed/wofs/fixtures.js';
+import { WOFS_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
 
 export const FIXTURE_DIR = fileURLToPath(new URL('../../fixtures/feeds/', import.meta.url));
 
@@ -162,7 +165,12 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 		return t;
 	};
 
+	// DE Africa's STAC search and WOfS scenes (dams/observed/wofs/fixtures.ts), made when first asked.
+	let wofs: ReturnType<typeof wofsFixture> | null = null;
+	const wofsOf = () => (wofs ??= wofsFixture(today));
+
 	const file = (url: string): Uint8Array | null => {
+		if (url.startsWith(`${WOFS_S3_BASE}/`)) return wofsOf().scene(url);
 		const t = toEpochDay(today());
 		let m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/final\/rnl\/\d{4}\/chirps-v3\.0\.rnl\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
 		if (m && url.startsWith(CHC_BASE)) {
@@ -210,6 +218,7 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 			return bytes ? { tag: tagOf(bytes) } : null;
 		},
 		async text(url) {
+			if (url.startsWith(`${WOFS_STAC_SEARCH}?`)) return wofsOf().search(url);
 			if (!url.startsWith(`${DWS_BASE}?`)) return null;
 			const q = new URL(url).searchParams;
 			const station = (q.get('Station') ?? '').replace(/100\.00$/, '');

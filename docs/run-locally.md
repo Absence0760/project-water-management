@@ -480,7 +480,7 @@ network.
 ```bash
 pnpm import:waterbodies   # the synthetic polygons (pnpm setup already ran it)
 pnpm seed:examples        # Sandspruit's traced dams, if not seeded yet
-pnpm dev:dams:run         # tick (match, wanted list) → Waterbodies pass (fixtures) → tick (load)
+pnpm dev:dams:run         # tick (match, wanted list) → Waterbodies pass → WOfS pass (both fixtures) → tick (load)
 ```
 
 It prints what each step did; Sandspruit's dams match all but Grootdraai
@@ -490,6 +490,13 @@ handover goes through `MIRROR_URL` when it names a directory of its own,
 else a scratch directory under the system's temp directory, never the
 committed `backend/fixtures/mirror/`. Run it again and the pass asks with
 each file's ETag and gets 304s.
+
+The WOfS pass reads invented scenes (`backend/fixtures/feeds/wofs-sample.json`,
+`backend/src/dams/observed/wofs/fixtures.ts`) for every traced dam: about
+the last 400 days, a scene every 8 days or so, some dates under cloud, so
+each dam gets a row per date with its wet area and the share seen. Run it
+again the same day and every dam is fresh (scanned within 6 days): nothing
+is asked.
 
 The worker's tick does the same each time it runs only with
 `DAM_OBSERVATIONS=on` and a `MIRROR_URL` of its own, in a gitignored

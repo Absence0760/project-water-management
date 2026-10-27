@@ -1,0 +1,52 @@
+{
+	"_comment": "Synthetic WOfS for FEED_SOURCE=fixtures (backend/src/dams/observed/wofs/fixtures.ts): the STAC item every fixture scene is shaped like, and how the invented scenes are laid out and dated. No real scene, place or measurement.",
+	"item": {
+		"type": "Feature",
+		"stac_version": "1.1.0",
+		"stac_extensions": ["https://stac-extensions.github.io/projection/v2.0.0/schema.json"],
+		"id": "00000000-0000-5000-8000-000000000000",
+		"collection": "wofs_ls",
+		"bbox": [0, 0, 0, 0],
+		"properties": {
+			"title": "wofs_ls_fixture",
+			"gsd": 30.0,
+			"datetime": "2000-01-01T08:30:00.000000Z",
+			"proj:epsg": 32634,
+			"platform": "landsat-8",
+			"odc:product_family": "wofs",
+			"odc:file_format": "GeoTIFF"
+		},
+		"links": [],
+		"assets": {
+			"water": {
+				"href": "s3://deafrica-services/wofs_ls/1-0-0/fixture/water.tif",
+				"type": "image/tiff; application=geotiff; profile=cloud-optimized",
+				"title": "water",
+				"raster:bands": [{ "nodata": 1, "data_type": "uint8", "unit": "1" }],
+				"roles": ["data"]
+			}
+		}
+	},
+	"scenes": {
+		"sizePx": 768,
+		"stepPx": 704,
+		"tilePx": 256,
+		"pixelM": 30
+	},
+	"schedule": {
+		"historyDays": 400,
+		"lagDays": 6,
+		"revisitDays": 16,
+		"pathOffsetsDays": [0, 7],
+		"pathMinutes": [510, 516]
+	},
+	"water": {
+		"wavelengthM": [1400, 1800],
+		"seasonal": { "mean": 0.62, "amplitude": 0.18, "peakDayOfYear": 60 }
+	},
+	"cloud": {
+		"everyNth": 5,
+		"bandM": 9000,
+		"overcastEveryNth": 11
+	}
+}

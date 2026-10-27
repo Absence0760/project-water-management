@@ -34,6 +34,7 @@ const {
 	withDeadline
 } =
 	await import('./lambda-fetcher.js');
+type DamsWeeklyAnswer = import('./lambda-fetcher.js').DamsWeeklyAnswer;
 
 afterEach(() => {
 	sent.length = 0;
@@ -475,7 +476,7 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 	const dirs: string[] = [];
 	afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
 	/** A bucket of its own holding the worker's wanted list: the committed synthetic uids. */
-	const bucket = async (uids?: string[]) => {
+	const bucket = async (uids?: string[], outlines: import('./dams/observed/handover.js').WantedOutline[] = []) => {
 		const d = mkdtempSync(join(tmpdir(), 'wm-fetcher-dams-'));
 		dirs.push(d);
 		const { openStore } = await import('./mirror/store.js');
@@ -483,7 +484,7 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		const { readdirSync } = await import('node:fs');
 		const { WATERBODIES_FIXTURE_DIR } = await import('./dams/observed/waterbodies.js');
 		const all = readdirSync(WATERBODIES_FIXTURE_DIR).map((f) => f.slice(0, -4)).sort();
-		await writeWanted(openStore(pathToFileURL(`${d}/`).href), { generatedAt: new Date().toISOString(), waterbodies: uids ?? all.slice(0, 2), outlines: [] });
+		await writeWanted(openStore(pathToFileURL(`${d}/`).href), { generatedAt: new Date().toISOString(), waterbodies: uids ?? all.slice(0, 2), outlines });
 		vi.stubEnv('MIRROR_URL', pathToFileURL(`${d}/`).href);
 		return all;
 	};
@@ -504,7 +505,11 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		const res = await handler({ mode: 'dams-weekly' } as never);
 		const metric = out.mock.calls.map(([l]) => String(l)).find((l) => l.includes('DamPassCompleted'));
 		out.mockRestore();
-		expect(res).toEqual({ waterbodies: { fetched: 2, unchanged: 0, failed: 0, fresh: 0, recencyDays: expect.any(Number), stopped: 'done' } });
+		expect(res).toEqual({
+			waterbodies: { fetched: 2, unchanged: 0, failed: 0, fresh: 0, recencyDays: expect.any(Number), stopped: 'done' },
+			// No outline listed: the WOfS pass has nothing to do.
+			wofs: { fetched: 0, unchanged: 0, failed: 0, fresh: 0, recencyDays: null, stopped: 'done' }
+		});
 		expect(JSON.parse(metric!)).toMatchObject({ Source: 'waterbodies', DamPassCompleted: 1, DamObservationAgeDays: expect.any(Number) });
 		const lines = info.mock.calls.map(([l]) => l as string);
 		expect(lines.map((l) => JSON.parse(l)).find((l) => l.event === 'dams_pass')).toMatchObject({ source: 'waterbodies', fetched: 2, stopped: 'done', requests: 2 });
@@ -525,6 +530,54 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		expect(out.mock.calls.some(([l]) => String(l).includes('DamPassCompleted'))).toBe(true);
 		const logged = error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'dams_pass');
 		expect(logged).toMatchObject({ source: 'waterbodies', fetched: 0, stopped: 'refused', reason: 'refused', detail: 'HTTP 403', requests: 1 });
+	});
+
+	// An invented dam outline the synthetic WOfS covers (dams/observed/wofs/fixtures.ts), wanted from 60 days back.
+	const dam = () => ({
+		featureId: '00000000-0000-4000-8000-0000000000d1',
+		geometry: {
+			type: 'Polygon' as const,
+			coordinates: [
+				[
+					[22.306, -32.123],
+					[22.313, -32.124],
+					[22.314, -32.118],
+					[22.309, -32.116],
+					[22.306, -32.123]
+				] as [number, number][]
+			]
+		},
+		since: new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10)
+	});
+
+	it('runs the WOfS pass after Waterbodies (fixtures here), with its own heartbeat and a log of counts, never a dam', async () => {
+		await bucket(undefined, [dam()]);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = (await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer;
+		const metrics = out.mock.calls.map(([l]) => String(l)).filter((l) => l.includes('DamPassCompleted'));
+		out.mockRestore();
+		expect(res.wofs).toEqual({ fetched: 1, unchanged: 0, failed: 0, fresh: 0, recencyDays: expect.any(Number), stopped: 'done' });
+		expect(metrics.map((l) => JSON.parse(l).Source)).toEqual(['waterbodies', 'wofs']);
+		expect(JSON.parse(metrics[1]!)).toMatchObject({ DamPassCompleted: 1, DamObservationAgeDays: expect.any(Number) });
+		const lines = info.mock.calls.map(([l]) => l as string);
+		expect(lines.map((l) => JSON.parse(l)).find((l) => l.event === 'dams_pass' && l.source === 'wofs')).toMatchObject({ fetched: 1, stopped: 'done', sceneFailed: 0 });
+		expect(lines.join('\n')).not.toContain(dam().featureId);
+	});
+
+	it('fails the invocation when STAC refuses the WOfS pass, after its heartbeat', async () => {
+		await bucket([], [dam()]);
+		vi.stubEnv('FEED_SOURCE', 'live');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, text: refuse, textConditional: refuse };
+		await expect(handler({ mode: 'dams-weekly' } as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		expect(out.mock.calls.some(([l]) => String(l).includes('"Source":"wofs"'))).toBe(true);
+		const logged = error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'dams_pass' && l.source === 'wofs');
+		expect(logged).toMatchObject({ fetched: 0, stopped: 'refused', reason: 'refused', detail: 'HTTP 403', stacRequests: 1 });
 	});
 
 	it('refuses to write the committed synthetic copy, or no bucket at all', async () => {
