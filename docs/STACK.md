@@ -36,7 +36,7 @@ sides share.
   production, where a container-image renderer Lambda does the printing).
   Dam observations (`src/dams/observed/`, issue #604 R5): the tick matches
   traced dams to DE Africa Waterbodies polygons and loads what the fetcher's
-  daily `dams-weekly` pass wrote to the mirror bucket (synthetic series under
+  hourly `dams-weekly` passes wrote to the mirror bucket (synthetic series under
   `fixtures/waterbodies/` with `FEED_SOURCE=fixtures`; off unless
   `DAM_OBSERVATIONS=on`; architecture.md § Dam observations).
   Alert emails (`src/alerts/`) are evaluated by an `alert_eval` job and sent

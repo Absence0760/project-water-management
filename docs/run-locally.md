@@ -488,15 +488,18 @@ It prints what each step did; Sandspruit's dams match all but Grootdraai
 matched ones get a series ending 2023-09-17, as the public series do. The
 handover goes through `MIRROR_URL` when it names a directory of its own,
 else a scratch directory under the system's temp directory, never the
-committed `backend/fixtures/mirror/`. Run it again and the pass asks with
-each file's ETag and gets 304s.
+committed `backend/fixtures/mirror/`. Run it again within the week and
+every uid is fresh (asked within 7 days; a failed one waits a day): nothing
+is asked. A week on, the pass asks with each file's ETag and gets 304s.
 
 The WOfS pass reads invented scenes (`backend/fixtures/feeds/wofs-sample.json`,
 `backend/src/dams/observed/wofs/fixtures.ts`) for every traced dam: about
 the last 400 days, a scene every 8 days or so, some dates under cloud, so
 each dam gets a row per date with its wet area and the share seen. Run it
-again the same day and every dam is fresh (scanned within 6 days): nothing
-is asked.
+again the same UTC day and every dam is fresh (its newest scenes checked
+today, as production's hourly runs do once a day): nothing is asked. With
+no time limit here, the first run already read each dam's history back to
+2013 (the fixture holds none that old, so those searches come back empty).
 
 The worker's tick does the same each time it runs only with
 `DAM_OBSERVATIONS=on` and a `MIRROR_URL` of its own, in a gitignored

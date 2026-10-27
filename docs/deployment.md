@@ -1830,9 +1830,13 @@ the source: [data-sources.md](./data-sources.md#deafrica-waterbodies-series)).
 One Terraform variable, off by default:
 
 - **`dam_observations_enabled`** (default `false`, `infra/dam_observations.tf`)
-  turns on the `water-management-dams-weekly` EventBridge rule (daily at
-  05:00 UTC, `{"mode":"dams-weekly"}` to the fetcher, never retried; each
-  key re-read once a week), the fetcher's get and put on `dams/` in the
+  turns on the `water-management-dams-weekly` EventBridge rule (hourly at
+  :20, `{"mode":"dams-weekly"}` to the fetcher, never retried; each
+  Waterbodies uid re-read once a week, a failed one once a day, each dam's
+  newest WOfS scenes once a UTC day, and the rest of every run on the WOfS
+  history, so a dam reaches 2013 in about seven hours of runs rather than a
+  week of daily ones; a run with nothing due still publishes the heartbeats
+  and recency), the fetcher's get and put on `dams/` in the
   mirror bucket (`dams-handover`), the worker's put of `dams/wanted.json`
   (`dams-wanted-list`), and the alarms (essential tier):
   - `water-management-dam-pass-waterbodies` and `…-dam-pass-wofs`:
@@ -1847,11 +1851,23 @@ One Terraform variable, off by default:
     the first day.
 - **`dam_wofs_recency_alarm_days`** (default 60, at least 21).
 
+The flag can't go on without the worker's side: with
+`dam_observations_enabled = true`, `terraform plan` fails (a precondition
+on `terraform_data.dam_observations_gate`) unless the worker Lambda's
+environment has `DAM_OBSERVATIONS = "on"`, since without it the worker
+never writes the wanted list nor loads what the passes fetch, while the
+heartbeats stay green.
+
 ### Turning it on
 
-1. **One change in the data mirror's files (#605's), made before the apply:**
+1. **One change in the data mirror's files (#605's), made before the apply
+   (the plan refuses the flag without it):**
    the worker's environment (`infra/jobs.tf`, beside `DWS_WEEKLY`):
-   `DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"`. The S3
+   `DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"`. Then
+   drop the `expect_failures` on the gate from
+   `infra/tests/dam_observations.tftest.hcl`'s runs with the flag on (they
+   fail once the gate passes) and make its refusal run assert the gate
+   passes instead. The S3
    interface endpoint's policy already lets the worker put
    `dams/wanted.json` (`infra/packs.tf`, `WorkerWritesDamWantedList`); its
    reads under `dams/` are `WorkerReadsMirror`'s, and the fetcher is outside
@@ -1862,17 +1878,21 @@ One Terraform variable, off by default:
    and the operator's go-ahead for the apply), once at least one dam is
    traced on a project's map: with none, the WOfS pass has nothing to hold
    and its recency alarm fires. The first worker tick matches the traced
-   dams and writes `dams/wanted.json`; the next 05:00 run fetches the
-   matched dams' series (a few, at 1 a second) and the WOfS scenes, and the
-   tick after loads them. Check: Logs Insights on the fetcher log group,
+   dams and writes `dams/wanted.json`; the next hourly run (at :20) fetches
+   the matched dams' series (a few, at 1 a second) and each dam's newest
+   WOfS scenes, the runs after it the WOfS history, and each tick after
+   loads what came in. Check: Logs Insights on the fetcher log group,
    `filter message.event = "dams_pass"`, then `filter message.event =
    "dams_tick"` on the worker's.
 
 A pass that met HTTP 403 or throttling stopped on purpose
 (`message.stopped` is `refused` or `throttled`, and its status file says
-`"stopped": true`): it is not retried that day, the other source's pass
-still ran, the invocation fails (the fetcher's Errors alarm), and the next
-day's run asks again. The app keeps the observations it holds.
+`"stopped": true`): it is not retried within the hour, the other source's
+pass still ran, the invocation fails (the fetcher's Errors alarm), and the
+next hour's run asks again (the uid or dam that met it waits a day, like
+any that failed). If it persists, set `dam_observations_enabled = false`
+and ask DE Africa before turning it back on. The app keeps the
+observations it holds.
 
 ### Loading the Waterbodies polygons
 

@@ -4585,11 +4585,14 @@ passes leave in the mirror bucket; no route writes them.
     printable characters; `fetched_at` not in the future.
 - **reference_load** takes kind `waterbodies` (249), so a production load
   records its file like the other reference datasets.
-- **Tests**: `dams/observed/observations.db.test.ts` (RLS with positive
-  controls: a viewer, a farmer's own dam, nothing across projects; refused
-  writes; the worker-only functions; every bound; the loader's targets;
-  unmatching, redrawing and deleting a dam); `dams/observed/tick.db.test.ts`
-  (the tick, the pass and the load end to end on the synthetic set);
+- **Tests**: `dams/observed/observations.security.db.test.ts` (RLS with
+  positive controls: a viewer, a farmer's own dam, nothing across projects;
+  refused writes; the worker-only functions refusing a signed-in user);
+  `dams/observed/observations.db.test.ts` (the worker's functions, every
+  bound, the loader's targets; unmatching, redrawing (match and observations
+  gone) against renaming (both kept) and deleting a dam);
+  `dams/observed/tick.db.test.ts` (the tick, the pass and the load end to end
+  on the synthetic set, and `runTick`'s `dams` result, under a skewed TZ);
   `catalogue.db.test.ts`.
 
 ### Feed days (031_feed_days.sql)

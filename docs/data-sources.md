@@ -250,8 +250,9 @@ in `infra/feeds.tf`):
 What satellites saw of each traced dam, into `dam_observation` (migration
 249; [architecture.md § Dam observations](./architecture.md#dam-observations)).
 The same out-of-VPC handover as the weekly DWS pass: the worker writes the
-wanted list to the mirror bucket, the fetcher's daily `dams-weekly` run
-reads the upstream and writes files back, and the worker loads them.
+wanted list to the mirror bucket, the fetcher's hourly `dams-weekly` run
+reads the upstream and writes files back, and the worker loads them. Hourly
+for the WOfS backfill's pace only: each key keeps its own cadence below.
 
 ### deafrica-waterbodies-series
 
@@ -272,10 +273,11 @@ reads the upstream and writes files back, and the worker loads them.
   value shows (R5-B's chart and farmer view), and on `/data-sources`.
 - **Contact:** Digital Earth Africa's help desk and community forum
   (digitalearthafrica.org; docs.digitalearthafrica.org).
-- **Access pattern:** the fetcher's `dams-weekly` mode (run daily at
-  05:00 UTC, `infra/dam_observations.tf`) reads `dams/wanted.json` and asks
-  for each matched dam's uid whose last good fetch is 6 days old or more,
-  oldest first, with `If-None-Match` on the ETag the last fetch kept: an
+- **Access pattern:** the fetcher's `dams-weekly` mode (run hourly at
+  :20, `infra/dam_observations.tf`) reads `dams/wanted.json` and asks
+  for each matched dam's uid whose last good fetch is 7 days old or more
+  (and that wasn't asked within the last day, so a failing uid is asked
+  once a day, not hourly), oldest first, with `If-None-Match` on the ETag the last fetch kept: an
   unchanged file costs a 304 and no body. It writes `dams/waterbodies/<uid>.json`
   and `dams/waterbodies-status.json`; the worker loads them into
   `dam_observation` for every dam matched to that uid
@@ -284,10 +286,11 @@ reads the upstream and writes files back, and the worker loads them.
 - **Limits we keep to:** one request a second; at most 30 % of the run's
   time (the rest is WOfS's); feeds/http.ts's User-Agent, host allowlist,
   20 s timeout and 4 MB cap; a 429/503 pauses the host for its
-  `Retry-After` and stops the run, as does a 403, never retried that day:
-  the status says `stopped` and why, the invocation fails (the fetcher's
+  `Retry-After` and stops the run, as does a 403, never retried within
+  the hour (that uid not within the day): the status says `stopped` and why, the invocation fails (the fetcher's
   Errors alarm), and the heartbeat still goes out. A 404 (a uid with no
-  series) or a changed layout is recorded for that uid and the run goes on.
+  series) or a changed layout is recorded for that uid, which waits a day,
+  and the run goes on.
 - **Rows kept:** `wet_area_m2` = `area_wet_m2`, `pct_observed` =
   100 − `pc_invalid`; a date with nothing seen clearly (`pc_invalid` 100 or
   an empty `pc_wet`) is dropped, since 0 m² wet on a date nobody saw reads
@@ -300,7 +303,7 @@ reads the upstream and writes files back, and the worker loads them.
   (`DamObservationAgeDays{Source=waterbodies}`) is still published, so a
   restart upstream shows. Ask DE Africa whether the public series will be
   updated again (operator step).
-- **Fallback:** [deafrica-wofs](#deafrica-wofs) (R5-C): WOfS summed inside
+- **Fallback:** [deafrica-wofs-scenes](#deafrica-wofs-scenes) (R5-C): WOfS summed inside
   the dam's own outline, current (the newest Western Cape scene 2026-10-20
   when checked), and the only source for a dam Waterbodies merges or misses.
 - **Owner:** the operator; code `backend/src/dams/observed/` (`match.ts`,
@@ -331,10 +334,12 @@ reads the upstream and writes files back, and the worker loads them.
   R5-B's chart and farmer view, and `/data-sources`.
 - **Contact:** Digital Earth Africa's help desk and community forum
   (digitalearthafrica.org; docs.digitalearthafrica.org).
-- **Access pattern:** the fetcher's daily `dams-weekly` run, after the
+- **Access pattern:** the fetcher's hourly `dams-weekly` run, after the
   Waterbodies pass, with the rest of the run's time
   ([architecture.md § Dam observations](./architecture.md#dam-observations)).
-  For each dam in turn whose scan is 6 days old or more: one STAC search per
+  Each dam's newest scenes are checked at most once a UTC day (`REFRESH_DAYS`;
+  a turn that failed waits for the next day too); every other run's time
+  goes to the history. For each dam in turn: one STAC search per
   year window over the outline's box (100 items a page), then per scene its
   header (16 KB) and the tiles under the outline, as one range where they
   sit together: about 2–3 requests a scene, a few KB to tens of KB each,
@@ -344,13 +349,14 @@ reads the upstream and writes files back, and the worker loads them.
   outline's hash); the worker loads the rows into `dam_observation`
   (source `wofs`). Every dam's newest scenes come first; the history goes
   back to 2013 (the Landsat 8 era, `WOFS_BACKFILL_FROM`) with the time
-  left, newest first, and resumes across runs; after it, a dam re-reads
-  only its last 45 days, for scenes published late.
+  left, newest first, and resumes across runs (about seven hours of hourly
+  runs per dam); after it, a dam re-reads only its last 45 days, once a
+  day, for scenes published late.
 - **Limits we keep to:** STAC at most one request a second, the bucket at
   most five a second, one request in flight; feeds/http.ts's User-Agent,
   host allowlist, 20 s timeout and 4 MB cap; a 403 or 429/503 from either
-  host stops the pass, never retried that day (the status says `stopped`
-  and why, the invocation fails, the heartbeat still goes out). A scene
+  host stops the pass, never retried within the hour (the status says
+  `stopped` and why, the invocation fails, the heartbeat still goes out). A scene
   that can't be read is skipped and counted; a failed search or a timeout
   ends that dam's turn.
 - **Freshness:** the pass's heartbeat (`DamPassCompleted{Source=wofs}`)

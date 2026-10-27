@@ -1828,7 +1828,8 @@ Earth Africa, CC BY 4.0 ([data-sources.md](./data-sources.md#deafrica-waterbodie
 **Waterbodies**' per-waterbody series for a dam matched to one waterbody
 (R5-A), and **WOfS** summed inside the dam's own outline for every traced
 dam (R5-C). Off until `dam_observations_enabled` (Terraform) and
-`DAM_OBSERVATIONS=on` (the worker).
+`DAM_OBSERVATIONS=on` (the worker); the Terraform plan refuses the first
+without the second (`infra/dam_observations.tf`'s gate).
 
 ```
 operator ── pnpm import:waterbodies / load-reference.yml ──► waterbody_reference (polygons)
@@ -1838,10 +1839,10 @@ worker tick (DAM_OBSERVATIONS=on, no user):
       app_dam_outlines() ─► app_waterbody_candidates(box) ─► overlap in TS ─► app_dam_match_write
    put   dams/wanted.json   { waterbodies: uids of matched dams, outlines: EVERY dam + since }
 
-EventBridge, daily 05:00 UTC ──► fetcher, {"mode":"dams-weekly"} (outside the VPC)
-   Waterbodies pass (waterbodies.ts): each wanted uid due (6 days), conditional GET, 1 a second
+EventBridge, hourly at :20 ──► fetcher, {"mode":"dams-weekly"} (outside the VPC)
+   Waterbodies pass (waterbodies.ts, ≤ 30% of the run): each wanted uid due (7 days; a failed one 1 day), conditional GET, 1 a second
       writes dams/waterbodies/<uid>.json, dams/waterbodies-status.json
-   WOfS pass (R5-C): STAC search + COG reads inside each outline since its date
+   WOfS pass (R5-C): each dam's newest scenes once a UTC day, the rest of the run its history backward
       writes dams/wofs/<featureId>.json, dams/wofs-status.json
    each pass: DamPassCompleted{Source} + DamObservationAgeDays{Source} (EMF)
 
@@ -1849,6 +1850,15 @@ worker tick: each status, then each file whose last good fetch is new to it
    ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs)
 ```
 
+- **Why hourly.** The fetcher's 120 s limit, less Waterbodies' share (up to
+  30%), reads a year or two of one dam's WOfS scenes a run, so a daily run
+  would take about a week per dam to reach 2013 (about a year for 50 dams);
+  hourly it is about seven hours per dam (about two weeks for 50). The
+  schedule is the backfill's pace, not the upstreams' load: each Waterbodies
+  uid is still asked once a week (a uid that failed, once a day), each dam's
+  newest WOfS scenes once a UTC day, and the pacing doesn't change. A run
+  with nothing due asks DE Africa nothing and still publishes each source's
+  heartbeat and recency, so the alarms keep their daily periods.
 - **Why the fetcher, in Node, for both sources (the compute decision).**
   The rule wants one scheduled job of ours per source, and the handover the
   DWS pass already uses fits both: the worker never reaches the public
@@ -1889,8 +1899,9 @@ worker tick: each status, then each file whose last good fetch is new to it
 - **Politeness**: the feeds' User-Agent and host allowlist
   (`FEED_HOSTS`, feeds/http.ts), one request a second, a conditional GET on
   the ETag kept, `Retry-After` honoured, and a 403 or throttling stops the
-  pass for the day (the other source's pass still runs; the invocation fails
-  at the end).
+  pass until the next hour's run (the other source's pass still runs; the
+  invocation fails at the end, never retried); the uid that met it, like any
+  that failed, waits a day.
 - **Locally** (`FEED_SOURCE=fixtures`) the pass reads the committed
   synthetic series (`backend/fixtures/waterbodies/series/`), so dev, CI and
   e2e need no network. `pnpm dev:dams:run` runs tick → pass → tick once
@@ -1941,14 +1952,17 @@ worker tick: each status, then each file whose last good fetch is new to it
     own, never read by the worker) keeps per dam the SHA-256 of its
     outline and the span read so far, `[backfilledFrom, scannedThrough]`.
     A run first takes every due dam forward to today (a new dam starts 45
-    days back), then, with the time left, reads older history backward a
+    days back; a dam is due once a UTC day, `REFRESH_DAYS`, so most hourly
+    runs have none), then, with the time left, reads older history backward a
     year a search, newest date first, down to 2013 (the Landsat 8 era,
     `WOFS_BACKFILL_FROM`). So every dam is current before any time goes on
     the past, and the recency alarm doesn't fire through a first backfill
     (about 90 scenes a year over a dam, 2–3 requests each: several runs).
     Either way the cursor follows each date, so a run stopped at the
-    Lambda's deadline loses nothing. A dam scanned to within 6 days waits;
-    a caught-up dam re-scans its last 45 days each time, for scenes DE
+    Lambda's deadline loses nothing. A dam whose newest scenes were checked
+    today (`checkedOn` in the state: a forward turn that ended, well or on a
+    failure) waits for the next UTC day; one the deadline cut short goes on
+    in the next run. A caught-up dam re-scans its last 45 days each day, for scenes DE
     Africa publishes late (a row is written again only if it changed). A
     redrawn outline (its hash changed) starts again, its file rewritten
     empty at once so the old outline's rows can't be loaded again (249's

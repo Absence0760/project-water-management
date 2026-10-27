@@ -336,6 +336,71 @@ provenance, `ingest/verify_copy.py`):
       the alarm doesn't move the app. Pass it to the API as a variable at
       the cutover if the operator ever tunes it.
 
+## Observing dams (issue #604 Round 5)
+
+Round 5 built the dam observations, off in production
+([architecture.md § Dam observations](./architecture.md#dam-observations),
+[deployment.md § Dam observations](./deployment.md#dam-observations)). What's
+open:
+
+- [ ] **The worker's `DAM_OBSERVATIONS` line in `infra/jobs.tf`.** Broken:
+      `jobs.tf` is #605's file, so this round couldn't set the worker's
+      `DAM_OBSERVATIONS`, and with `dam_observations_enabled = true` the
+      worker would never write the wanted list nor load anything. The plan
+      now refuses the flag until it's there
+      (`terraform_data.dam_observations_gate`). Durable fix: add
+      `DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"`
+      beside `DWS_WEEKLY` in the worker's environment, then drop the
+      `expect_failures` on the gate from `infra/tests/dam_observations.tftest.hcl`
+      (its runs with the flag on fail once the gate passes) and make the
+      refusal run assert the gate passes with the flag on. Trigger: #605
+      merges (or before step 1 of the production steps below, whichever is
+      first).
+- [ ] **The operator's production steps.** Broken: nothing observes a dam in
+      production until the operator runs
+      [deployment.md § Dam observations](./deployment.md#dam-observations),
+      *Turning it on*: the
+      jobs.tf line above, the Waterbodies polygons loaded for the region
+      (`load-reference.yml` kind `waterbodies`), a backend release with
+      migration 249 and the `dams-weekly` mode, at least one traced dam,
+      then `dam_observations_enabled = true` (plan, then the operator's
+      go-ahead for the apply). Durable fix: those steps, then watch the
+      first day's `dams_pass` and `dams_tick` log lines and both heartbeat
+      alarms. Trigger: a client project with traced dams that wants the
+      modelled-vs-observed dam area.
+- [ ] **The frozen Waterbodies series.** Broken: DE Africa's public
+      per-waterbody CSVs (`waterbodies/v0.0.2/surface_area_change/`) were
+      last written 2024-02-26 and end 2023-09-17 (checked 2026-10-27), though
+      the product says weekly, so Waterbodies adds history only and has no
+      recency alarm. Durable fix: ask DE Africa (help desk or forum) whether
+      the public series will be updated again, or where the current ones
+      live; if they will, add a `dam-recency-waterbodies` alarm like WOfS's;
+      if they won't, keep the pass for the history (it costs a 304 a uid a
+      week) and say so in data-sources.md, or retire it if its uid matching
+      adds nothing WOfS doesn't. Trigger: DE Africa's reply (operator step),
+      or the series' `newest` moving past 2023-09-17 in the pass's status.
+- [ ] **v0.0.3 polygons against v0.0.2 series: the uids.** Broken (maybe):
+      the match reads uids from the v0.0.3 historical extent, and the pass
+      asks the v0.0.2 series by that uid. Both are DE Africa's latest of
+      each, but nothing has checked on real data that a v0.0.3 uid names
+      the same waterbody in v0.0.2 (a geohash of a changed polygon may
+      differ, or have no series: a 404, recorded as failed). Durable fix: on
+      the operator's real clip, take a sample of matched uids and check
+      each series exists and its `px_total` × 900 m² is near the v0.0.3
+      polygon's area; if they disagree, load the v0.0.2 polygons for
+      matching instead (or map v0.0.3 uids to v0.0.2 by overlap at load).
+      Trigger: the first production load of the polygons, before turning
+      the flag on.
+- [ ] **Stale planned rows in data-sources.md.** Broken: the source
+      register's inventory still lists `deafrica-waterbodies` and
+      `deafrica-wofs` as `planned R5-A` / `planned R5-C`, and § Planned
+      sources keeps their rows, beside the built `deafrica-waterbodies-series`
+      and `deafrica-wofs-scenes`. They are #605's existing rows, which this
+      round adds beside but doesn't edit. Durable fix: delete both planned
+      rows and their § Planned sources entries, pointing any link at them
+      (`#deafrica-waterbodies`, `#deafrica-wofs`) to the built sections.
+      Trigger: #605 merges.
+
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
 - [x] **Guard pending notices as db-setup.ts guards pending jobs.** The

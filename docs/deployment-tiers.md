@@ -99,7 +99,7 @@ Cost:
 | RDS gp3 storage, 20 GiB | 3.02 | 2.30 |
 | 4 interface endpoints × 1 AZ (Secrets Manager, SES, SQS, S3; S3's also $0.01/GB processed for the DEM, water and reference reads) | 38.23 | 29.20 |
 | WAF (ACL + 5 rules; billed globally) | 10.00 | 10.00 |
-| CloudWatch: 44 alarms (41 until the renderer exists), logs, RDS log export | ~4.80 | ~4.30 |
+| CloudWatch: 44 alarms (41 until the renderer exists; 3 more, ≈ $0.30, with `dam_observations_enabled`: the two dam pass heartbeats and the WOfS recency), logs, RDS log export | ~4.80 | ~4.30 |
 | 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 | 4.10 |
 | SQS polling by the six event sources (~2.9 M receives past the free tier), ECR images, S3 (incl. the tiles and reference buckets, ~$0.10, and the data mirror's ~6 GB, ~$0.20–0.30), SES, Lambda (the migrate Lambda's 3008 MB is billed only while it migrates or loads), CloudFront | ~1.90 | ~1.60 |
 | **Total** | **≈ $77** | **≈ $63** |
