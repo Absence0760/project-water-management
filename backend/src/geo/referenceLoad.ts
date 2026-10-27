@@ -105,6 +105,14 @@ export const REFERENCE_KINDS = {
 		sourcesRows: ['Hydrological station catalogue'],
 		why: "the DWS station catalogue's licence is unconfirmed (followups.md, Decision: the DWS station catalogue's licence)"
 	},
+	// SANLC's orchard and vine grid (255, issue #604 R5-D): built and loaded locally (`pnpm import:crop-types`), refused
+	// here until its terms are recorded. To unblock: the Sources row, then status 'allowed' with a file and a loader
+	// branch below reading cropTypesFromJson into replaceCropTypeDataset (geo/cropTypeGrid.ts), from the file `--out` writes.
+	'crop-types': {
+		status: 'blocked',
+		sourcesRows: ['South African National Land Cover (SANLC)'],
+		why: "SANLC's terms are not yet recorded (followups.md, Decision: SANLC's licence)"
+	},
 	// The tile archives' provenance (248): not data, a record of where the archive
 	// the tiles bucket serves came from, which tiles-upload.ts --production writes
 	// beside the originals it keeps. One label per archive, each decided by its

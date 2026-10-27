@@ -93,7 +93,7 @@ Every job that fetches from an upstream:
 | [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | planned R4-D | NASA GES DISC (Earthdata) | – | R4 `ingest/imerg.py` |
 | [deafrica-waterbodies](#deafrica-waterbodies) | DE Africa Waterbodies area series | planned R5-A | `s3://deafrica-services` (af-south-1) | – | R5 |
 | [deafrica-wofs](#deafrica-wofs) | DE Africa WOfS inside our own outlines | planned R5-C | `s3://deafrica-services`, `explorer.digitalearth.africa` | – | R5 |
-| [sanlc](#sanlc) | SANLC orchard and vine classes | planned R5-D (gated on its terms; blocked today) | `egis.environment.gov.za` | – | R5 |
+| [sanlc](#sanlc) | SANLC orchard and vine classes | built R5-D; blocked in production until its terms are recorded (synthetic grid in dev, CI and e2e) | `egis.environment.gov.za` | `crop_type_dataset` | `pnpm import:crop-types` |
 | [agera5](#agera5) | AgERA5 daily reference ET (NASA POWER fallback) | planned R5-E | `cds.climate.copernicus.eu`; `power.larc.nasa.gov` | – | R5 |
 
 ## Live feeds
@@ -452,7 +452,7 @@ starts.
 | <a id="imerg"></a>imerg | CC BY 4.0 | NASA GPM IMERG, with its version | NASA GES DISC / Earthdata forum; needs an Earthdata login and token (operator step) | `GPM_3IMERGDL` daily, region subset, product `imerg_late`, only days with no CHIRPS preliminary value | Earthdata allows about 20–60 requests a minute; we keep to 1 a second | GSMaP Gauge-NRT (commercial use allowed with credit; FTP after registration) | operator; R4-D |
 | <a id="deafrica-waterbodies"></a>deafrica-waterbodies | CC BY 4.0 | Digital Earth Africa | Digital Earth Africa | weekly read of the Waterbodies area series for our traced dams into `dam_observation`; same region as the app, unsigned | weekly; only the waterbodies our dams overlap | [deafrica-wofs](#deafrica-wofs) | operator; R5-A |
 | <a id="deafrica-wofs"></a>deafrica-wofs | CC BY 4.0 | Digital Earth Africa | Digital Earth Africa | WOfS scenes from the STAC catalogue, summed inside our own dam outlines | only scenes over our dams | none (Sentinel-1/2 masks are a Round 6 candidate) | operator; R5-C |
-| <a id="sanlc"></a>sanlc | **gated:** fails D-B on the terms we could read (2013/14: no derivatives, no competing products); the 2018–2022 terms on EGIS still to be read (operator step) | "© GEOTERRAIMAGE" with the year, if allowed | DFFE (EGIS) | the operator's download, once allowed | – | WorldCover | operator; R5-D |
+| <a id="sanlc"></a>sanlc | **gated:** fails D-B on the terms we could read (2013/14: no derivatives, no competing products); the 2018–2022 terms on EGIS still to be read (operator step) | "© GEOTERRAIMAGE" with the year, if allowed | DFFE (EGIS) | the operator's download, warped to EPSG:4326 and pre-summarised by `pnpm import:crop-types` into orchard, vine and new-planting shares per cell (maps.md § Orchards and vines from SANLC); local evaluation only, the production load (kind `crop-types`) refused until allowed | – | WorldCover | operator; R5-D |
 | <a id="agera5"></a>agera5 | CC BY (Copernicus); NASA POWER: no restrictions, CC BY 4.0 on AWS | Copernicus; NASA POWER | ECMWF support; NASA POWER | CDS API, daily FAO-56 reference ET for the region | as era5-land | NASA POWER (REST, usage monitored, or S3) | operator; R5-E |
 
 ## Candidates for Round 6 and later

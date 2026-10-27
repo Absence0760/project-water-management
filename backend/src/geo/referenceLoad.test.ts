@@ -137,7 +137,7 @@ describe('which kinds load', () => {
 		expect([...LOADABLE].sort()).toEqual(allowed.sort());
 	});
 
-	it.each(['quaternaries', 'dam-register', 'gauge-stations'])('%s is refused in production, naming the decision that would unblock it', (kind) => {
+	it.each(['quaternaries', 'dam-register', 'gauge-stations', 'crop-types'])('%s is refused in production, naming the decision that would unblock it', (kind) => {
 		const e = thrown(() => parseLoadRequest({ ...ok, kind, key: `reference/${kind}/x.json` }));
 		expect(e.code).toBe('refused');
 		expect(e.publicReason).toMatch(/blocked in production/);

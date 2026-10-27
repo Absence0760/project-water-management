@@ -5047,6 +5047,22 @@ saves the catchment's model, and override mode there edits the scenario's
   in the parcels, no crop yet, and a "Synthetic test data" warning for the
   committed grid. On a narrow sheet the Use buttons are 44 px targets; the
   tables scroll in their own box. e2e: `cropland-proposals.spec.ts`.
+  **Orchards and vines** (issue #604 R5-D, a sub-heading in the same box,
+  `croptypes`; [maps.md § Orchards and vines from
+  SANLC](./maps.md#orchards-and-vines-from-sanlc)), only when a crop-type
+  grid is loaded (never in production until SANLC's terms are recorded):
+  its own "Synthetic test data" warning, a caution (`croptypes-caution`:
+  "This is orchard and vine land mapped from satellite, not the irrigated
+  area, and it doesn’t say which fruit or cultivar: check it before you use
+  it."), a table of the parcels in the land cover's order with
+  **Orchards**, **Vines** and, with an earlier edition, **New since
+  <edition>** (the header wraps), an **All parcels** footer, a note that the
+  new plantings are shown and never offered, and its own **Source and
+  method**. **Area to use** then splits into two groups, "Cultivated (land
+  cover)" and "Orchards and vines" ("Orchards, all 2 parcels: 25.71 ha",
+  "Vines, Top block: 1.29 ha"); a crop-type choice's confirmation says
+  "from crop types" with the crop-type caution, and so does the notice.
+  e2e: `crop-types-proposals.spec.ts`.
 - **Saving:** it edits the shared `ModelEditor`, so an edit shows on the Crops
   tab at once and the other way round. The sheet is modal, which makes the
   page's save bar unreachable, so it repeats the save row: status (unsaved,

@@ -84,7 +84,7 @@ describe('load: a reference load’s inputs', () => {
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {
-		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'sanlc']) {
+		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'crop-types', 'sanlc']) {
 			const problems = loadProblems({ ...landCover, LOAD_KIND: kind }, has);
 			assert.equal(problems.length, 1);
 			assert.match(problems[0], /blocked by their licences/);

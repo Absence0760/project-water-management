@@ -160,6 +160,7 @@ describe('accepting a cultivated area as a crop’s planted area', () => {
 			dataset: 'synthetic',
 			version: 'synthetic 1',
 			basis: 'unit',
+			layer: null,
 			featureName: null,
 			current: true
 		});
