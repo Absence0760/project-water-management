@@ -1,0 +1,359 @@
+{
+  "product": "prelim",
+  "revision": 1,
+  "region": {
+    "w": 10,
+    "s": -35.5,
+    "e": 41,
+    "n": -8
+  },
+  "grid": {
+    "origin": {
+      "lat": -35.475,
+      "lon": 10.025
+    },
+    "step": 0.05
+  },
+  "years": {
+    "first": 2026,
+    "last": 2026
+  },
+  "finalThrough": null,
+  "prelimThrough": "2026-02-06",
+  "files": [
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.01.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.02.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.03.tif",
+      "etag": "\"fx-6c741ad1fb1782ac\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f6bdb8fd4665cdedff638578a007267073cec2186c7fe4f26605509727f41479",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.04.tif",
+      "etag": "\"fx-e385f49fbe7fb872\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "0383642f31b2e1e1790c8a0b84a090131e4c721b2e501b5b829aa7df613a8387",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.05.tif",
+      "etag": "\"fx-897ad6b9c52d33f9\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d5103fa9484ded25cb80903465788b6fe3e54c6476e7ff3e53d884afe28e20e3",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.06.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.07.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.08.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.09.tif",
+      "etag": "\"fx-9cf6afcd5b8a2ec1\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "7584e69a23f9da963acf166b841666eeaa452bd6aceca8878f9b32abe7b4bc96",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.10.tif",
+      "etag": "\"fx-dc9f5c67f259b43f\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "4ac490a400bb5dc6271efa0af4f1d1f6f0083bdbeeff07280547e15c2686ac75",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.11.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.12.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.13.tif",
+      "etag": "\"fx-faac2f9694d2f4d5\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "b509c48e22157636c521e66d51e8ca74f847475b842034273f78f29ee70200f0",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.14.tif",
+      "etag": "\"fx-bec4437b339ad2d5\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "0619bd2d01e02b8e88c47f084eac028ee62949f386345bf54f96960bbf436c4b",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.15.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.16.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.17.tif",
+      "etag": "\"fx-6c741ad1fb1782ac\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f6bdb8fd4665cdedff638578a007267073cec2186c7fe4f26605509727f41479",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.18.tif",
+      "etag": "\"fx-e385f49fbe7fb872\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "0383642f31b2e1e1790c8a0b84a090131e4c721b2e501b5b829aa7df613a8387",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.19.tif",
+      "etag": "\"fx-897ad6b9c52d33f9\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d5103fa9484ded25cb80903465788b6fe3e54c6476e7ff3e53d884afe28e20e3",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.20.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.21.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.22.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.23.tif",
+      "etag": "\"fx-9cf6afcd5b8a2ec1\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "7584e69a23f9da963acf166b841666eeaa452bd6aceca8878f9b32abe7b4bc96",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.24.tif",
+      "etag": "\"fx-dc9f5c67f259b43f\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "4ac490a400bb5dc6271efa0af4f1d1f6f0083bdbeeff07280547e15c2686ac75",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.25.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.26.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.27.tif",
+      "etag": "\"fx-faac2f9694d2f4d5\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "b509c48e22157636c521e66d51e8ca74f847475b842034273f78f29ee70200f0",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.28.tif",
+      "etag": "\"fx-bec4437b339ad2d5\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "0619bd2d01e02b8e88c47f084eac028ee62949f386345bf54f96960bbf436c4b",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.29.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.30.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.01.31.tif",
+      "etag": "\"fx-6c741ad1fb1782ac\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f6bdb8fd4665cdedff638578a007267073cec2186c7fe4f26605509727f41479",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.02.01.tif",
+      "etag": "\"fx-e385f49fbe7fb872\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "0383642f31b2e1e1790c8a0b84a090131e4c721b2e501b5b829aa7df613a8387",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.02.02.tif",
+      "etag": "\"fx-897ad6b9c52d33f9\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d5103fa9484ded25cb80903465788b6fe3e54c6476e7ff3e53d884afe28e20e3",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.02.03.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.02.04.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.02.05.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.02.06.tif",
+      "etag": "\"fx-9cf6afcd5b8a2ec1\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "7584e69a23f9da963acf166b841666eeaa452bd6aceca8878f9b32abe7b4bc96",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    }
+  ],
+  "changes": []
+}

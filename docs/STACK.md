@@ -51,6 +51,12 @@ sides share.
   is off; the committed synthetic raster (`backend/fixtures/water/`) or JRC
   Global Surface Water after `pnpm dev:tiles:water` ([maps.md § Assisted
   drawing](./maps.md#assisted-drawing)).
+  The rain data copy (`src/mirror/`, issue #604, in progress) reads and
+  writes Zarr v3 arrays with `zarrita` 0.7.5 and `@zarrita/storage` 0.2.0
+  (exact pins; a `node:zlib` gzip codec for writing) from `MIRROR_URL`
+  (`file://` or `s3://`, the latter through `@aws-sdk/client-s3`); the
+  committed synthetic copy is `backend/fixtures/mirror/` (`pnpm
+  gen:mirror-fixture`; [architecture.md § Data feeds](./architecture.md#data-feeds)).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has four projects: `unit` (no DB),
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
@@ -219,6 +225,7 @@ pnpm test:guards            # node:test suites for scripts/guards, scripts/relea
 pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~6 min)
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
 pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
+pnpm gen:mirror-fixture     # rewrite the synthetic rain data copy (backend/fixtures/mirror/: Zarr arrays + manifests from the synthetic CHIRPS files; no DB; architecture.md § Data feeds)
 pnpm gen:example            # rewrite the example catchment the empty project list starts from (Kleinberg; no DB; issue #286)
 pnpm gen:help-art           # re-render the help pictures, by day and at dusk for dark mode (optional: Blender 5 + ImageMagick 7; HELP_ART_ONLY, HELP_ART_LIGHT, HELP_ART_DEVICE; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)
