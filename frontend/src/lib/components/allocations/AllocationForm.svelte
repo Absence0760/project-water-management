@@ -40,6 +40,8 @@
 		waterUse: a?.waterUse ?? ('21a' as NonNullable<AllocationInput['waterUse']>),
 		volume: a ? String(a.volumeM3PerYear) : '',
 		storage: a?.storageM3 == null ? '' : String(a.storageM3),
+		// The registered irrigated area (ha): a take's only, never the model's input.
+		area: a?.irrigatedAreaHa == null ? '' : String(a.irrigatedAreaHa),
 		validFrom: a?.validFrom ?? '',
 		validTo: a?.validTo ?? '',
 		reference: a?.reference ?? '',
@@ -77,6 +79,12 @@
 			formError = 'Storage is a number of m³, or empty.';
 			return;
 		}
+		// A dam's storage row (21b) registers no area; the field is hidden there and nothing is sent.
+		const area = storageOnly || draft.area.trim() === '' ? null : parseNum(draft.area);
+		if (!storageOnly && draft.area.trim() !== '' && (area === null || area < 0)) {
+			formError = 'The irrigated area is a number of hectares, or empty.';
+			return;
+		}
 		const maxRate = draft.maxRate.trim() === '' ? null : parseNum(draft.maxRate);
 		if (draft.maxRate.trim() !== '' && (maxRate === null || maxRate < 0)) {
 			formError = 'The maximum rate is a number of m³/s, or empty.';
@@ -97,6 +105,7 @@
 			waterUse: draft.waterUse,
 			volumeM3PerYear: volume,
 			storageM3: storage,
+			irrigatedAreaHa: area,
 			validFrom: draft.validFrom || null,
 			validTo: draft.validTo || null,
 			reference: draft.reference,
@@ -174,6 +183,12 @@
 				<label for="af-storage">Storage (m³){#if !storageOnly} <span class="muted">(optional)</span>{/if}</label>
 				<input id="af-storage" type="text" inputmode="decimal" required={storageOnly} bind:value={draft.storage} />
 			</div>
+			{#if !storageOnly}
+				<div class="field">
+					<span class="label"><label for="af-area">Irrigated area (ha) <span class="muted">(optional)</span></label> <HelpTip key="registered-irrigated-area" /></span>
+					<input id="af-area" type="text" inputmode="decimal" bind:value={draft.area} />
+				</div>
+			{/if}
 			<div class="field">
 				<label for="af-from">Valid from</label>
 				<DayInput id="af-from" bind:value={draft.validFrom} />

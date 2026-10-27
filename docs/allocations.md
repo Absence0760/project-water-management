@@ -26,7 +26,8 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 | Water source | `surface` or `groundwater` |
 | Water use | the NWA s21 water use (142, issue #72): `21a` taking water (the default) or `21b` storing water. A `21b` row is a dam's registered storage only: volume 0, a storage, surface water; it is never compared, capped or scaled as a take (engine 1.59.0) |
 | Volume | m³ per year, ≥ 0 (0 on a `21b` row) |
-| Storage | registered storage (s21b), m³; optional on a take, required on a `21b` row |
+| Storage | registered storage (s21b), m³; optional on a take, required on a `21b` row. A WARMS "Dam capacity" column reads as it |
+| Irrigated area | the area the authorisation registers for irrigation, ha (244); optional, and on a take (`21a`) only. A record of what the authorisation says: the model never reads it (a unit's irrigated area in a run is its planted crop areas), so changing it leaves the latest run current |
 | Valid from / to | inclusive ISO dates; either may be open |
 | Registration number, property | used to match the row to a node, and shown in the list |
 | Registered user | the holder's name; see [Who sees what](#who-sees-what) |
@@ -82,7 +83,7 @@ so on, or the app's own template headings (`registration_no`, `farm`,
 `storage_m3`, `valid_from`, `valid_to`, `reference`, `property_ref`, the
 licence conditions `months` (numbers or names, ranges over the new year:
 `Oct-Mar`), `max_rate_m3s` and `conditions`, separated by `|`, and
-`water_use`, `21a` or `21b`, blank = a take). The
+`water_use`, `21a` or `21b`, blank = a take, and `irrigated_area_ha`). The
 template is downloadable from the Allocations page's Import sheet. The aliases are **pending a real
 extract** from the client (followups.md): a column the importer doesn't know
 is listed as "not read", never guessed.
@@ -116,6 +117,14 @@ is listed as "not read", never guessed.
   water-use column is refused whole: its storage rows can't be told from
   its takes. The template has its own volume and storage columns, so there
   a blank or missing `water_use` is a take.
+- **Irrigated area** (244): a column headed "Irrigated area (ha)",
+  "Irrigation area", "Area under irrigation (ha)", "Registered irrigated
+  area" or the template's `irrigated_area_ha`, in hectares. Only a heading
+  that says irrigated is read: a bare "Area (ha)" isn't, since in a WARMS
+  extract it may be the property's extent, and it is listed as not read, as
+  is a heading in another unit ("Area (m2)"). Numbers read as the volume's do. On a 21(b) storage row an area is a
+  row problem, not dropped: WARMS states it on the take, and on the dam's row
+  it would be counted twice.
 - **Refused files.** A heading that looks like an **ID number, passport,
   phone, cell, fax or email** column refuses the whole file, before anything
   is stored (POPIA minimisation, [security.md](./security.md)). A cell in the
@@ -153,7 +162,9 @@ is listed as "not read", never guessed.
   starts with `= + - @` (or a tab or CR) with `'`, as every export does
   (`backend/src/export/csv.ts textCell`).
 
-Hand entry (**+ Add volume** in the page header), edits (including
+Hand entry (**+ Add volume** in the page header: volume, storage, irrigated
+area, water use, dates, registration, property, holder and licence
+conditions), edits (including
 matching a row to a farm, **Change** on a row) and deletes are on the
 Allocations page for editors; the page's layout is in
 [ui.md § Allocations](./ui.md#allocations-taballocations).
