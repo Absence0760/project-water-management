@@ -288,8 +288,8 @@ override_resource {
   target          = aws_sqs_queue.fetch_requests
   override_during = plan
   values = {
-    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests"
-    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests"
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests.fifo"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests.fifo"
   }
 }
 
@@ -297,8 +297,8 @@ override_resource {
   target          = aws_sqs_queue.fetch_requests_dlq
   override_during = plan
   values = {
-    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests-dlq"
-    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests-dlq"
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests-dlq.fifo"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests-dlq.fifo"
   }
 }
 
@@ -670,6 +670,8 @@ variables {
   # which the variable refuses: the site's own domain, and a plan-only test
   # never subscribes it.
   budget_alert_email = "ops@icwbt.jaredhoward.com"
+  # The fetcher's user-agent contact (feeds.tf); required, no default.
+  feeds_contact = "ops@icwbt.jaredhoward.com"
 }
 
 run "production_guardrails" {
@@ -2267,10 +2269,34 @@ run "data_feeds" {
   }
   assert {
     condition = (
-      aws_sqs_queue.fetch_requests.visibility_timeout_seconds >= 6 * aws_lambda_function.fetcher.timeout &&
+      aws_sqs_queue.fetch_requests.visibility_timeout_seconds >= 2 * aws_lambda_function.fetcher.timeout &&
+      aws_sqs_queue.fetch_requests.visibility_timeout_seconds <= 3 * aws_lambda_function.fetcher.timeout &&
       aws_sqs_queue.ingest_results.visibility_timeout_seconds >= 6 * aws_lambda_function.worker.timeout
     )
-    error_message = "Visibility must be at least 6x the consuming Lambda's timeout."
+    error_message = "Visibility must be at least 6x the consuming Lambda's timeout; fetch-requests (FIFO, no throttled receives) 2-3x, since an in-flight message holds its whole group."
+  }
+
+  # --- Politeness to CHC (issue #604): one fetch per source host at a time ----------
+  assert {
+    condition = (
+      aws_sqs_queue.fetch_requests.fifo_queue == true &&
+      aws_sqs_queue.fetch_requests_dlq.fifo_queue == true &&
+      endswith(aws_sqs_queue.fetch_requests.name, ".fifo") &&
+      endswith(aws_sqs_queue.fetch_requests_dlq.name, ".fifo") &&
+      aws_sqs_queue.fetch_requests.content_based_deduplication == false
+    )
+    error_message = "fetch-requests (and its DLQ) must be FIFO: its message groups (one per source host) are what keep CHC to one fetch at a time across fetcher instances."
+  }
+  assert {
+    condition = (
+      aws_lambda_event_source_mapping.fetcher_requests.scaling_config[0].maximum_concurrency == 2 &&
+      aws_lambda_function.fetcher.reserved_concurrent_executions >= aws_lambda_event_source_mapping.fetcher_requests.scaling_config[0].maximum_concurrency
+    )
+    error_message = "The fetcher's trigger: maximum_concurrency 2 (AWS's least; the message groups cap it per host), never above its reserved concurrency, or throttled receives burn the DLQ's 5."
+  }
+  assert {
+    condition     = aws_lambda_function.fetcher.environment[0].variables["FEEDS_CONTACT"] == var.feeds_contact
+    error_message = "The fetcher's user agent names the operator's contact (FEEDS_CONTACT = var.feeds_contact), which CHC asked for."
   }
 
   # --- The fetcher: outside the VPC, small, capped, live sources only --------------
@@ -2279,10 +2305,10 @@ run "data_feeds" {
       aws_lambda_function.fetcher.runtime == "nodejs24.x" &&
       aws_lambda_function.fetcher.handler == "lambda-fetcher.handler" &&
       aws_lambda_function.fetcher.memory_size == 512 &&
-      aws_lambda_function.fetcher.timeout == 120 &&
+      aws_lambda_function.fetcher.timeout == 900 &&
       aws_lambda_function.fetcher.reserved_concurrent_executions == 2
     )
-    error_message = "Fetcher Lambda: nodejs24.x, lambda-fetcher.handler, 512 MB, 120 s, reserved concurrency 2."
+    error_message = "Fetcher Lambda: nodejs24.x, lambda-fetcher.handler, 512 MB, 900 s, reserved concurrency 2."
   }
   assert {
     condition     = length(aws_lambda_function.fetcher.vpc_config) == 0
@@ -2292,9 +2318,9 @@ run "data_feeds" {
     condition = (
       aws_lambda_function.fetcher.environment[0].variables["FEED_SOURCE"] == "live" &&
       aws_lambda_function.fetcher.environment[0].variables["INGEST_RESULTS_QUEUE_URL"] == aws_sqs_queue.ingest_results.url &&
-      length(aws_lambda_function.fetcher.environment[0].variables) == 2
+      length(aws_lambda_function.fetcher.environment[0].variables) == 3
     )
-    error_message = "The fetcher gets the live sources and the ingest-results queue, and nothing else (no DATABASE_URL, no secrets)."
+    error_message = "The fetcher gets the live sources, the ingest-results queue and the user agent's contact, and nothing else (no DATABASE_URL, no secrets)."
   }
   assert {
     condition = (
@@ -3547,6 +3573,48 @@ run "rejects_unreserved_fetcher_concurrency" {
   }
 
   expect_failures = [var.fetcher_reserved_concurrency]
+}
+
+# feeds_contact is required (no default) and must be an address someone reads:
+# the fetcher refuses to start without one (backend/src/config/production.ts).
+run "rejects_empty_feeds_contact" {
+  command = plan
+  variables {
+    feeds_contact = ""
+  }
+  expect_failures = [var.feeds_contact]
+}
+
+run "rejects_malformed_feeds_contact" {
+  command = plan
+  variables {
+    feeds_contact = "ops at icwbt.jaredhoward.com"
+  }
+  expect_failures = [var.feeds_contact]
+}
+
+run "rejects_reserved_feeds_contact" {
+  command = plan
+  variables {
+    feeds_contact = "ops@feeds.example.org"
+  }
+  expect_failures = [var.feeds_contact]
+}
+
+run "rejects_template_feeds_contact" {
+  command = plan
+  variables {
+    feeds_contact = "you@icwbt.jaredhoward.com"
+  }
+  expect_failures = [var.feeds_contact]
+}
+
+run "rejects_header_breaking_feeds_contact" {
+  command = plan
+  variables {
+    feeds_contact = "ops@icwbt.jaredhoward.com) evil"
+  }
+  expect_failures = [var.feeds_contact]
 }
 
 run "rejects_unreserved_renderer_concurrency" {

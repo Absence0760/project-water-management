@@ -404,7 +404,11 @@ event naming the revision.
 To try the real sources from your machine, put `FEED_SOURCE=live` in a
 gitignored `backend/.env.development.local` and use real coordinates. CHIRPS
 and the forecast are public; the DWS site may refuse requests from outside
-South Africa (HTTP 403), which the feed shows as failing.
+South Africa (HTTP 403), which the feed shows as failing. Add
+`FEEDS_CONTACT=<your email>` there too: CHC asked for a contact in the user
+agent (optional locally, required on the production fetcher). The live
+client keeps to about a request a second per host, as CHC asked, so a local
+live fetch of a long window takes minutes, not seconds.
 
 ## Ingest
 

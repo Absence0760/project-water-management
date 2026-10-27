@@ -277,8 +277,8 @@ override_resource {
   target          = aws_sqs_queue.fetch_requests
   override_during = plan
   values = {
-    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests"
-    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests"
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests.fifo"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests.fifo"
   }
 }
 
@@ -286,8 +286,8 @@ override_resource {
   target          = aws_sqs_queue.fetch_requests_dlq
   override_during = plan
   values = {
-    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests-dlq"
-    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests-dlq"
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests-dlq.fifo"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests-dlq.fifo"
   }
 }
 
@@ -659,6 +659,8 @@ variables {
   # which the variable refuses: the site's own domain, and a plan-only test
   # never subscribes it.
   budget_alert_email = "ops@icwbt.jaredhoward.com"
+  # The fetcher's user-agent contact (feeds.tf); required, no default.
+  feeds_contact = "ops@icwbt.jaredhoward.com"
 }
 
 run "dlq_alarms_fire_on_new_arrivals" {

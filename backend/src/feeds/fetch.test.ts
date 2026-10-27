@@ -226,10 +226,12 @@ describe('fetchWindow with the final marker (CHIRPS)', () => {
 	// final, and only the final file of a day it holds preliminary, as the
 	// held days did before it; rnl probes its finals as sat does, so the day
 	// after the marker, not out yet, is the one file it asks for (reading to
-	// yesterday asked for all 39).
+	// yesterday asked for all 39). One file at a time since CHC's reply (#604:
+	// CHC_CONCURRENCY), the probe stops at the first final not out yet rather
+	// than finishing a batch of six, so the files alone take 4 fewer (sat; 3 for rnl).
 	it.each([
-		['sat', 160, 3],
-		['rnl', 157, 1]
+		['sat', 156, 3],
+		['rnl', 154, 1]
 	] as const)('a caught-up %s feed’s daily fetch: %i range requests without them, %i with them', async (product, before, after) => {
 		const day = '2026-03-10';
 		const fixtures = fixtureHttp(() => day);

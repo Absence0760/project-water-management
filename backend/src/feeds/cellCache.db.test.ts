@@ -342,6 +342,29 @@ describe('feeds through the cell cache (FEED_FETCHER=sqs, the fetcher answering 
 		expect(await nextIn(fb.feedId)).toBeLessThanOrEqual(5);
 	});
 
+	it('a fetch the fetcher’s time budget cut short is a shorter window: its days land, `through` stops at its last day, and the backfill goes on after it (issue #604)', async () => {
+		const config = { cells: [cell()], product: 'rnl', startDate: '2000-01-01' };
+		const a = await signUp('CutShort');
+		const fa = await feed(a, config);
+		const m = (await fetchJob())!;
+		expect(m.request).toMatchObject({ start: '2000-01-01', end: '2000-04-29' });
+		// No time at all: the fetcher finishes its first day and answers that (sources/chirps.ts fetchChirpsCells).
+		const req = parseFetchRequest(JSON.stringify(m))!;
+		const cut = await runFetch(req.request, fixtureHttp(), { stopAt: 0 });
+		expect(cut.ok && 'cells' in cut ? cut.cells.read : null).toBe('f');
+		await answer(m, cut);
+		expect((await values(a, fa.pid))!).toMatchObject({ startDate: '2000-01-01', values: [expect.any(Number)] });
+		expect(await feedMeta(fa.feedId)).toMatchObject({ consecutive_failures: 0, last_error: null, last_meta: { days: 1, through: '2000-01-01', finalThrough: '2000-01-01' } });
+		// Not caught up, so the next window is queued, and it starts after the day read rather than asking for the same window again.
+		expect(await nextIn(fa.feedId)).toBeGreaterThan(50);
+		await asOwner(`UPDATE job SET run_after = now() WHERE kind = 'feed_fetch' AND status = 'queued' AND payload->>'feedId' = $1`, [fa.feedId]);
+		const next = (await fetchJob())!;
+		expect(next.request).toMatchObject({ start: '2000-01-02', end: '2000-04-30' });
+		// Positive control: the whole window answered, the series has every day of it.
+		await answer(next);
+		expect((await values(a, fa.pid))!.values).toHaveLength(121);
+	});
+
 	it('a partial hit reads only the cell the cache lacks, and the mean is the one reading both from the files gives', async () => {
 		const config = { cells: [cell()], product: 'rnl', startDate: '2000-01-01' };
 		const a = await signUp('PartialFirst');

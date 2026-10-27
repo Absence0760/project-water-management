@@ -1,6 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FeedRefusedError, FeedThrottledError, FeedUnavailableError, feedErrorMessage } from './errors.js';
-import { feedHttp, feedSourceMode, fileTag, liveHttp, REFUSED_PAUSE_SECONDS, retryAfterSeconds, THROTTLE_DEFAULT_SECONDS, THROTTLE_MAX_SECONDS, type ThrottleState } from './http.js';
+import {
+	feedHttp,
+	feedSourceMode,
+	fileTag,
+	hostPacer,
+	liveHttp as pacedLiveHttp,
+	PACE_JITTER_MS,
+	PACE_MIN_SPACING_MS,
+	type Pacer,
+	REFUSED_PAUSE_SECONDS,
+	retryAfterSeconds,
+	THROTTLE_DEFAULT_SECONDS,
+	THROTTLE_MAX_SECONDS,
+	type ThrottleState,
+	userAgent
+} from './http.js';
+
+/** No pacing: the client's other behaviour, without a second's wait per request (the pacing has its own tests below). */
+const noPace: Pacer = { acquire: async () => () => {} };
+const liveHttp = (f: Parameters<typeof pacedLiveHttp>[0], throttle?: ThrottleState, pacer: Pacer = noPace, contact?: string) => pacedLiveHttp(f, throttle, pacer, contact);
 
 describe('feedSourceMode', () => {
 	it('defaults to fixtures (local-first: no network in dev or CI)', () => {
@@ -245,5 +264,207 @@ describe('liveHttp: where it may go', () => {
 		const timeout = Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
 		await expect(liveHttp(failing(timeout)).text(CHC)).rejects.toThrow(new FeedUnavailableError('the request timed out'));
 		await expect(liveHttp(failing(new TypeError('terminated: other side closed'))).text(CHC)).rejects.toThrow(new FeedUnavailableError('the request failed'));
+	});
+});
+
+describe('userAgent (CHC asked for a contact in it, issue #604)', () => {
+	it('names the product and the repo, and the contact when one is given', () => {
+		expect(userAgent(undefined)).toBe('water-management-feeds/1 (+https://github.com/Absence0760/project-water-management)');
+		expect(userAgent(' ops@example.com ')).toBe('water-management-feeds/1 (+https://github.com/Absence0760/project-water-management; ops@example.com)');
+	});
+
+	it('leaves out a contact that is not an address, so nothing unchecked reaches the header', () => {
+		for (const bad of ['', 'nobody', 'ops@example.com)\r\nX-Evil: 1', 'ops@example.com; other', '<ops@example.com>']) {
+			expect(userAgent(bad), bad).toBe('water-management-feeds/1 (+https://github.com/Absence0760/project-water-management)');
+		}
+	});
+
+	it('is the agent every request sends', async () => {
+		const f = vi.fn(async () => new Response('ab', { status: 206 }));
+		await liveHttp(f, new Map(), noPace, 'ops@example.com').range('https://data.chc.ucsb.edu/a.tif', 0, 1);
+		const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+		expect((init.headers as Record<string, string>)['user-agent']).toBe(userAgent('ops@example.com'));
+	});
+});
+
+describe('hostPacer (about one request a second per host, one at a time, issue #604)', () => {
+	/** A clock that only moves when the pacer sleeps, or when a test moves it. */
+	const clock = () => {
+		let t = 1_000_000;
+		const sleeps: number[] = [];
+		return {
+			now: () => t,
+			advance: (ms: number) => (t += ms),
+			sleep: async (ms: number) => {
+				sleeps.push(ms);
+				t += ms;
+			},
+			sleeps
+		};
+	};
+
+	it('spaces request starts to one host by 1 s plus 0–0.5 s of jitter', async () => {
+		expect([PACE_MIN_SPACING_MS, PACE_JITTER_MS]).toEqual([1000, 500]);
+		for (const r of [0, 0.5, 0.999]) {
+			const c = clock();
+			const pacer = hostPacer({ now: c.now, sleep: c.sleep, random: () => r });
+			const starts: number[] = [];
+			for (let i = 0; i < 3; i++) {
+				const release = await pacer.acquire('data.chc.ucsb.edu');
+				starts.push(c.now());
+				c.advance(200); // the request takes 200 ms
+				release();
+			}
+			const gaps = starts.slice(1).map((t, i) => t - starts[i]!);
+			for (const gap of gaps) {
+				expect(gap).toBeGreaterThanOrEqual(1000);
+				expect(gap).toBeLessThan(1500);
+				expect(gap).toBeCloseTo(1000 + r * 500, 6);
+			}
+		}
+	});
+
+	it('never waits for the spacing a slow request already used up', async () => {
+		const c = clock();
+		const pacer = hostPacer({ now: c.now, sleep: c.sleep, random: () => 0.5 });
+		(await pacer.acquire('data.chc.ucsb.edu'))();
+		c.advance(3000);
+		const release = await pacer.acquire('data.chc.ucsb.edu');
+		release();
+		expect(c.sleeps).toEqual([]);
+	});
+
+	it('the first request to a host waits for nothing', async () => {
+		const c = clock();
+		(await hostPacer({ now: c.now, sleep: c.sleep }).acquire('data.chc.ucsb.edu'))();
+		expect(c.sleeps).toEqual([]);
+	});
+
+	it('holds one request in flight per host: the next starts only once the one before is released', async () => {
+		const c = clock();
+		const pacer = hostPacer({ now: c.now, sleep: c.sleep, random: () => 0 });
+		const order: string[] = [];
+		const first = await pacer.acquire('data.chc.ucsb.edu');
+		const second = pacer.acquire('data.chc.ucsb.edu').then((release) => {
+			order.push('second started');
+			return release;
+		});
+		const third = pacer.acquire('data.chc.ucsb.edu').then((release) => {
+			order.push('third started');
+			return release;
+		});
+		await new Promise((r) => setTimeout(r, 5));
+		expect(order).toEqual([]);
+		c.advance(5000); // however long the first takes, the second waits for it
+		order.push('first done');
+		first();
+		(await second)();
+		(await third)();
+		expect(order).toEqual(['first done', 'second started', 'third started']);
+	});
+
+	it('does not delay a request to another host (positive control: the same host is delayed)', async () => {
+		const c = clock();
+		const pacer = hostPacer({ now: c.now, sleep: c.sleep, random: () => 0 });
+		const chc = await pacer.acquire('data.chc.ucsb.edu');
+		// CHC's slot is still held: DWS gets its own at once.
+		const dws = await Promise.race([pacer.acquire('www.dws.gov.za'), new Promise<null>((r) => setTimeout(() => r(null), 20))]);
+		expect(dws).not.toBeNull();
+		dws!();
+		chc();
+		expect(c.sleeps).toEqual([]);
+		(await pacer.acquire('data.chc.ucsb.edu'))();
+		expect(c.sleeps).toEqual([1000]);
+	});
+
+	it('a release twice frees the slot once', async () => {
+		const c = clock();
+		const pacer = hostPacer({ now: c.now, sleep: c.sleep, random: () => 0 });
+		const a = await pacer.acquire('h');
+		const b = pacer.acquire('h');
+		a();
+		a();
+		const release = await b;
+		const third = Promise.race([pacer.acquire('h'), new Promise<null>((r) => setTimeout(() => r(null), 20))]);
+		expect(await third).toBeNull(); // b still holds it
+		release();
+	});
+});
+
+describe('liveHttp paced (issue #604)', () => {
+	const clockPacer = () => {
+		let t = 0;
+		const sleeps: number[] = [];
+		const pacer = hostPacer({
+			now: () => t,
+			sleep: async (ms) => {
+				sleeps.push(ms);
+				t += ms;
+			},
+			random: () => 0
+		});
+		return { pacer, sleeps };
+	};
+
+	it('a run of range reads to CHC goes one at a time, each start a spacing after the last', async () => {
+		const { pacer, sleeps } = clockPacer();
+		let inFlight = 0;
+		let most = 0;
+		const f = vi.fn(async () => {
+			most = Math.max(most, ++inFlight);
+			await new Promise((r) => setTimeout(r, 2));
+			inFlight--;
+			return new Response('ab', { status: 206 });
+		});
+		const http = liveHttp(f, new Map(), pacer);
+		// Six asked at once, as the old fetcher did: they still go one at a time.
+		await Promise.all(Array.from({ length: 6 }, (_, i) => http.range(`https://data.chc.ucsb.edu/${i}.tif`, 0, 1)));
+		expect(f).toHaveBeenCalledTimes(6);
+		expect(most).toBe(1);
+		expect(sleeps).toEqual(new Array(5).fill(1000));
+	});
+
+	it('paces each redirect hop too: every request CHC sees counts', async () => {
+		const { pacer, sleeps } = clockPacer();
+		const f = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://data.chc.ucsb.edu/products/b.tif' } }))
+			.mockResolvedValueOnce(new Response('ab', { status: 206 }));
+		await liveHttp(f as never, new Map(), pacer).range('https://data.chc.ucsb.edu/products/a.tif', 0, 1);
+		expect(f).toHaveBeenCalledTimes(2);
+		expect(sleeps).toEqual([1000]);
+	});
+
+	it('frees the slot when a request fails, so the next one still goes', async () => {
+		const { pacer } = clockPacer();
+		const f = vi
+			.fn()
+			.mockRejectedValueOnce(new TypeError('fetch failed'))
+			.mockResolvedValueOnce(new Response('ab', { status: 206 }));
+		const http = liveHttp(f as never, new Map(), pacer);
+		await expect(http.range('https://data.chc.ucsb.edu/a.tif', 0, 1)).rejects.toThrow(FeedUnavailableError);
+		expect(await http.range('https://data.chc.ucsb.edu/a.tif', 0, 1)).not.toBeNull();
+	});
+
+	it('a 403 still stops the fetch: a request queued behind it is refused without asking (positive control: DWS is asked)', async () => {
+		const { pacer } = clockPacer();
+		const throttle: ThrottleState = new Map();
+		const f = vi.fn(async (url: string) => new Response(url.includes('dws') ? 'ab' : 'Forbidden', { status: url.includes('dws') ? 200 : 403 }));
+		const http = liveHttp(f as never, throttle, pacer);
+		const [a, b] = await Promise.allSettled([http.range('https://data.chc.ucsb.edu/a.tif', 0, 1), http.range('https://data.chc.ucsb.edu/b.tif', 0, 1)]);
+		expect(a).toMatchObject({ status: 'rejected', reason: expect.any(FeedRefusedError) });
+		expect(b).toMatchObject({ status: 'rejected', reason: expect.any(FeedRefusedError) });
+		expect(f).toHaveBeenCalledTimes(1);
+		expect(await http.text('https://www.dws.gov.za/p')).toBe('ab');
+	});
+
+	it('a 429 pauses the host for the requests queued behind it too', async () => {
+		const { pacer } = clockPacer();
+		const throttle: ThrottleState = new Map();
+		const f = vi.fn(async () => new Response('slow down', { status: 429, headers: { 'retry-after': '60' } }));
+		const http = liveHttp(f as never, throttle, pacer);
+		const got = await Promise.allSettled([1, 2, 3].map((i) => http.range(`https://data.chc.ucsb.edu/${i}.tif`, 0, 1)));
+		expect(got.every((g) => g.status === 'rejected' && g.reason instanceof FeedThrottledError)).toBe(true);
+		expect(f).toHaveBeenCalledTimes(1);
 	});
 });

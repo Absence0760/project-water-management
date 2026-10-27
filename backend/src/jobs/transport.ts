@@ -218,15 +218,33 @@ export function feedFetcher(value: string | undefined = process.env.FEED_FETCHER
 	return v as FeedFetcher;
 }
 
-/** Send a message to a queue by URL. Throws: the caller decides whether that fails its job. */
-export async function sendToQueue(url: string | undefined, name: string, message: object): Promise<void> {
+/**
+ * A FIFO queue's ordering for one message (SQS needs both on a .fifo queue):
+ * its message group, the unit SQS delivers one at a time, and a
+ * deduplication id (a resend within five minutes is dropped).
+ */
+export interface FifoSend {
+	group: string;
+	dedupe: string;
+}
+
+/** Whether a queue URL is a FIFO queue's: SQS requires the .fifo suffix on one. */
+export const isFifoQueue = (url: string) => url.endsWith('.fifo');
+
+/**
+ * Send a message to a queue by URL. Throws: the caller decides whether that
+ * fails its job. `fifo` is sent only to a FIFO queue (isFifoQueue), so a
+ * caller can pass it whichever the queue is (fetch-requests became FIFO
+ * while releases already in flight sent to the standard one).
+ */
+export async function sendToQueue(url: string | undefined, name: string, message: object, fifo?: FifoSend): Promise<void> {
 	if (!url) throw new Error(`${name} is not set`);
 	const body = JSON.stringify(message);
 	if (Buffer.byteLength(body) > MAX_MESSAGE_BYTES) throw new Error(`the message is larger than SQS allows (${MAX_MESSAGE_BYTES} bytes)`);
-	await (await sqs(url))(body);
+	await (await sqs(url))(body, fifo && isFifoQueue(url) ? fifo : undefined);
 }
 
-export type Send = (body: string) => Promise<void>;
+export type Send = (body: string, fifo?: FifoSend) => Promise<void>;
 const sqsSends = new Map<string, Send>();
 let sqsClient: Promise<{ client: import('@aws-sdk/client-sqs').SQSClient; Command: typeof import('@aws-sdk/client-sqs').SendMessageCommand }> | undefined;
 
@@ -240,8 +258,8 @@ export async function sqs(url: string): Promise<Send> {
 		Command: SendMessageCommand
 	}));
 	const { client, Command } = await sqsClient;
-	const send: Send = async (body) => {
-		await client.send(new Command({ QueueUrl: url, MessageBody: body }));
+	const send: Send = async (body, fifo) => {
+		await client.send(new Command({ QueueUrl: url, MessageBody: body, ...(fifo ? { MessageGroupId: fifo.group, MessageDeduplicationId: fifo.dedupe } : {}) }));
 	};
 	sqsSends.set(url, send);
 	return send;

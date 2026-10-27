@@ -1291,7 +1291,10 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 
 - **The worker** (`FEED_FETCHER=sqs`) never fetches: a `feed_fetch` job sends
   a versioned request to the `fetch-requests` queue
-  (`FETCH_REQUESTS_QUEUE_URL`) and is done.
+  (`FETCH_REQUESTS_QUEUE_URL`) and is done. The queue is FIFO
+  (`…-fetch-requests.fifo`, since issue #604), each request in its source
+  host's message group (`chc`, `dws`), so the fetcher runs one fetch per
+  host at a time ([architecture.md § Data feeds → Throttling](./architecture.md#data-feeds)).
 - **The API and the worker** both set `FEED_SOURCE=live`, though neither
   fetches: it is also which CHIRPS cell cache a process reads
   (`cacheOrigin`, `backend/src/feeds/cellCacheStore.ts`). The fetcher's
@@ -1304,8 +1307,12 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
   Terraform that sets it before releasing a backend that checks it.
 - **Fetcher Lambda** (`backend/src/lambda-fetcher.ts`, handler
   `lambda-fetcher.handler`): **no VPC** (it is the only Lambda with internet
-  access, which is what keeps the feeds from needing a NAT), 512 MB, 120 s,
-  reserved concurrency `fetcher_reserved_concurrency` (2). `FEED_SOURCE=live`.
+  access, which is what keeps the feeds from needing a NAT), 512 MB, 900 s,
+  reserved concurrency `fetcher_reserved_concurrency` (2). `FEED_SOURCE=live`,
+  and `FEEDS_CONTACT` from `feeds_contact` (required; the contact in its user
+  agent, which CHC asked for). It reads CHC one file at a time, about one
+  request a second, and answers a long backfill window with the days it
+  finished in time.
   It has no database access and no credentials to one: its role may receive
   from `fetch-requests` and send to `ingest-results`, nothing else. One
   request per invocation; a failed send is a batch-item failure, retried.
@@ -1355,18 +1362,21 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
     per-IP ban for volume (each fetcher environment has its own address: a
     new one gets a fetch or two through, then 403s); the fetcher stops
     asking that host for an hour and the feed backs off 2 hours, doubling, up
-    to a day (architecture.md § Data feeds → Throttling). If it persists,
-    lower `fetcher_reserved_concurrency` to 1 and write to CHC
-    (chc-help@geog.ucsb.edu) with the user agent
-    (`water-management-feeds/1`) and what the fetcher asks (about 5 range
-    reads per daily file, 120 files a fetch), to ask what volume they allow.
+    to a day (architecture.md § Data feeds → Throttling). Since issue #604
+    the fetcher keeps to what CHC asked (one fetch at a time, about a request
+    a second, the contact in the user agent), so a 403 from CHC now means
+    something changed: switch the CHIRPS feeds off and write to CHC
+    (chc-help@geog.ucsb.edu) with the user agent and the times of the
+    refusals. Lowering `fetcher_reserved_concurrency` changes nothing for CHC
+    (the message groups already allow one fetch per host).
     A `refused` from DWS outside South Africa is expected (Sources' terms
     below). Older lines, from before `refused` existed, log a 403 as
     `unavailable` with `detail` `HTTP 403`. `throttled`
     (`HTTP 429` or `HTTP 503`): the source is limiting us; the fetcher pauses
     that host for its `Retry-After` and the feeds back off on their own
     (architecture.md § Data feeds → Throttling); if it persists through a
-    backfill, lower `fetcher_reserved_concurrency` to 1. `format`: the source
+    backfill, raise `PACE_MIN_SPACING_MS` (`feeds/http.ts`) rather than
+    lowering concurrency, which is already one fetch per host. `format`: the source
     changed what it serves, a code fix; for DWS, `detail` names the check
     that failed (`sources/dws.ts` `DWS_FORMAT_FAILURES`). `invalid_request` or `internal`: a
     bug; the feed's status panel has the stored message.
@@ -1403,11 +1413,62 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
   1981 however many feeds there are; a single daily feed covers ~1 200 a
   month, a full cycle in under a year. The reads happen only after a
   rewrite: a rewritten year re-reads ~365 days per cell set once, 10 a fetch
-  a minute apart. Lambda time: a HEAD takes about 200 ms, six at a time, a few
-  seconds a fetch. Cents a month; the answers stay under ~75% of SQS's
+  a minute apart. Lambda time: one request at a time, about a second
+  apart (issue #604), so 40 HEADs take under a minute; a fetch short of time
+  leaves the rest for its claims to come due again. Cents a month; the answers stay under ~75% of SQS's
   256 KB (`fetch.test.ts`). The tables add ~100 bytes per cached final
   file (~3 MB for both products' whole archives) plus the stale rows of a
   rewrite until they are read.
+
+### Re-enabling the CHIRPS feeds (issue #604)
+
+The CHIRPS feeds were switched off on 2026-10-25 (#571) after CHC's bot
+protection blocked the fetcher's addresses. CHC wrote back on 2026-10-27:
+their limits are per public address (a block for hours above about 2
+requests a second, HTTP 429 past 20 open connections), and they asked for
+one file at a time, about one request a second in total across our Lambdas,
+and a contact email in the user agent. The fetcher now does all three
+([architecture.md § Data feeds → Throttling](./architecture.md#data-feeds)).
+Before the feeds go back on:
+
+1. **Set `feeds_contact`** in the production tfvars: an address you read,
+   which CHC will write to before blocking us. Never commit it; the repo is
+   public. Re-run `export-tf-vars.sh` if CI's Terraform reads the tfvars from
+   GitHub.
+2. **Check `fetch-requests` is empty**, since the apply replaces it with a
+   FIFO queue (`…-fetch-requests.fifo`, and its DLQ) and a message left in
+   the old one is lost (its feed fetches again on its next schedule):
+   `aws sqs get-queue-attributes --queue-url <url> --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible --profile water-management`.
+3. **`terraform plan`, then apply** with the go-ahead: the queue and DLQ
+   replaced, the fetcher's event source re-created on the new queue, its
+   timeout 120 → 900 s and `FEEDS_CONTACT` set, the worker's
+   `FETCH_REQUESTS_QUEUE_URL` and the IAM and alarm references moved.
+4. **Release the backend at once** (`backend@X.Y.Z`): the worker on the old
+   build sends without a message group, which a FIFO queue refuses, so
+   until the release a feed's fetch job fails and retries (nothing is lost,
+   and a CHIRPS feed is off anyway). The new fetcher refuses to start
+   without `FEEDS_CONTACT`, which is why the apply goes first.
+5. **Switch the CHIRPS feeds back on** one at a time (Settings → Data feeds),
+   the reference cell's first.
+6. **Watch the first day.** On the fetcher's log group:
+   `filter message.event = "feed_fetch_failed" | stats count() by message.source, message.reason, message.detail`
+   should show no `refused` or `throttled` from CHIRPS, and
+   `filter message.event = "feed_fetched" and message.source = "chirps" | stats count(), avg(message.ms) by bin(1h)`
+   about one fetch at a time (each up to ~15 minutes while a backfill runs).
+   `fetch-requests-age` may fire while several feeds backfill, since their
+   fetches now queue behind each other: that is the queue doing its job, not
+   a stall, as long as `feed_fetched` lines keep coming.
+
+**Backfill is slow now.** At about a request a second a CHIRPS day costs
+3–10 requests for one cell (a final file; a preliminary one too when the
+final isn't out), plus one per extra grid row for a box. A 120-day window of
+one cell's finals takes about 10 minutes, and the next window follows a
+minute later: a record from 1981 (`rnl`) takes about a day per cell set, from
+1998 (`sat`) about 16 hours. A box over many grid rows doesn't fit a window in
+the fetcher's 885 s, so its fetches are cut short and it takes several times
+that. Feeds over different cells queue behind each other.
+Cells another feed already read come from the cell cache at no cost. The
+copy of our own (#604, draft PR #605) replaces this for history.
 
 ## Alert emails
 

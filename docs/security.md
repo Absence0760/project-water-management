@@ -2768,6 +2768,14 @@ In short:
     can't send the fetcher (open egress) to another host or plain HTTP.
     `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
+  - The user agent names the operator's contact address (`FEEDS_CONTACT`,
+    which CHC asked for, issue #604): the only setting that reaches a
+    request header. It goes in only if it matches a plain address
+    (`FEEDS_CONTACT_RE`, `config/production.ts`: no spaces, brackets,
+    semicolons or line breaks), else is left out, so it can't inject a
+    header or break the agent; production refuses to start the fetcher
+    without a real one. It is the operator's own address, never a user's,
+    and lives only in the tfvars (the repo is public).
   - Every response is bounded: 20 s timeout (all hops and the body), 4 MB cap whether declared or
     streamed, range reads for the grids (`feeds/http.test.ts`). A GeoTIFF is parsed by our own
     bounds-checked reader (dimensions up to 100 000 pixels, strips up to 8 MB
