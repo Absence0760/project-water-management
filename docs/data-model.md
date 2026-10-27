@@ -4253,7 +4253,7 @@ it marks the cached finals stale, and the re-check above does the rest.
 | --- | --- |
 | `mirror_manifest` | One row per `origin` and `product` (primary key): `revision` (≥ 1), the revision of the copy the cache was last brought up to; `applied_at`; `manifest` (`jsonb`, the manifest as applied, its `changes` cut to the entries that apply marked, as the tick passes them: the record of the revision). No foreign keys |
 | `mirror_change` (246) | One row per run of days of an entry of a revision's `changes` an apply marked (an entry larger than a part is split by days, a row per run): `origin`, `product`, `target_revision` (the revision it was applied for), `idx` (the entry's place among that revision's entries to mark) and `day_from` as primary key; the entry's own `revision`, the run's `day_from`/`day_to`, the grid cells `r0`–`r1`, `c0`–`c1`; `applied_at` (indexed with origin and product). What a resumed apply skips, and what a fetch queued before `applied_at` checks its finals against. Pruned 30 days after its revision is recorded. No foreign keys |
-| `mirror_copy` (246) | One row per `origin` and `product` (`sat`, `rnl` or `prelim`; primary key): the copy's manifest as the worker's tick last read it: `revision`, `final_through` (null for `prelim`), `prelim_through` (null for `rnl`), `seen_at`. What the API shows of the copy (only the worker can reach it). No foreign keys |
+| `mirror_copy` (246) | One row per `origin` and `product` (`sat`, `rnl` or `prelim`; since 252 also `era5l` and `imerg_late`; primary key): the copy's manifest as the worker's tick last read it: `revision`, `final_through` (null for `prelim` and `imerg_late`), `prelim_through` (null for `rnl` and `era5l`), `seen_at`. What the API shows of the copy (only the worker can reach it). No foreign keys |
 
 - **RLS**: reference data like `chirps_cell_year`: SELECT for any
   signed-in session, no write grant to `water_app` (`catalogue.db.test.ts`
@@ -4291,9 +4291,10 @@ it marks the cached finals stale, and the re-check above does the rest.
     `chirps_recheck_apply`, 210) logs each day whose values really changed,
     and the feeds refresh from that as for a file CHC rewrote.
   - **Bounds** (else `23514`, nothing marked or recorded): origin `chc` or
-    `fixtures`, product `sat` or `rnl`; revision ≥ 1; the manifest an object
+    `fixtures`, product `sat` or `rnl` (since 252 also `era5l` and
+    `imerg_late`); revision ≥ 1; the manifest an object
     of at most 4 MB naming the same product and revision, with `grid.step`
-    0.05 and a `region` on the CHC grid's 0.05° lattice (exact: `jsonb`
+    the product's (0.05, or 0.1 since 252) and a `region` on that lattice (exact: `jsonb`
     numbers are `numeric`; `mirror_region_cells` turns it into row and
     column ranges); at most 1000 entries, each with an integer `revision`
     no later than the manifest's, ISO `days` running forwards over at most
@@ -4446,6 +4447,53 @@ it marks the cached finals stale, and the re-check above does the rest.
   1500-entry list with five new entries; a backlog of 1400 in two
   batches; `mirror_copy` recorded, a new month too);
   `jobs/handlers/mirror-tick.test.ts` `nextBatch`.
+
+### The cell cache's products and grids (252_cache_products.sql)
+
+Round 4 of issue #604 adds two rain products to our copy, both on a 0.1°
+grid over the same region: `era5l` (ERA5-Land daily precipitation, D15,
+from 1950) and `imerg_late` (IMERG Late daily, D16, from 2000-06-01). They
+go through the cell cache and the revision machinery above unchanged in
+shape (`backend/src/mirror/grid.ts` `PRODUCT_GRIDS`;
+[architecture.md § Our copy of the rain data](./architecture.md#our-copy-of-the-rain-data)).
+
+- **Products.** Every `product` CHECK of `chirps_cell_year`,
+  `chirps_cell_stale`, `chirps_file`, `chirps_revision`, `mirror_manifest`
+  and `mirror_change` takes `sat`, `rnl`, `era5l` and `imerg_late`, and
+  `mirror_copy`'s those and `prelim`. `mirror_copy` holds no
+  `prelim_through` for `rnl` or `era5l` (`mirror_copy_no_prelim`) and no
+  `final_through` for `prelim` or `imerg_late` (`mirror_copy_no_final`):
+  IMERG Late's manifest runs through `prelimThrough`, since Late is never
+  final. In the cache both new products' days are final (no later product
+  replaces them; a new version of an IMERG day is a revision of the copy),
+  so `chirps_cache_merge` refuses a `p` day for any product but `sat`.
+- **Grids.** A row's `row_idx`/`col_idx` is a cell of its product's global
+  grid, row 0 at 60° N and column 0 at 180° W: CHC's 0.05° grid (2400 ×
+  7200) for `sat`/`rnl`, a 0.1° grid (1200 × 3600) for `era5l`/
+  `imerg_late`. The 0.05° column CHECKs stay, and a per-product CHECK
+  (`chirps_cell_year_grid`, `chirps_cell_stale_grid`,
+  `mirror_change_grid`) keeps a 0.1° product's rows ≤ 1199 and columns
+  ≤ 3599, so a 0.05° index written as a 0.1° one is refused rather than
+  cached as another place's rain. A feed's 0.05° cell (r, c) lies in the
+  0.1° cell (⌊r/2⌋, ⌊c/2⌋) (`feeds/cellCache.ts` `productCell`).
+- **First days.** `chirps_cell_year_year` and `chirps_file_day` start
+  `era5l` in 1950 and `imerg_late` on 2000-06-01 (`sat` 1998, `rnl` 1981).
+- **Functions.** `mirror_cache_product`, `mirror_product_first_day`,
+  `mirror_product_step` and `mirror_product_cell_ok` hold that table for
+  the functions (the CHECKs spell it out). Replaced from their latest
+  definitions with only the product checks changed: `chirps_feed_job` and
+  `chirps_recheck_claim` (210), `chirps_cache_merge`,
+  `chirps_recheck_apply`, `app_mirror_apply_revision` (its manifest's
+  `grid.step` must be the product's, its regions on that step's lattice:
+  `mirror_region_cells(region, step)`, which replaces 245's one-argument
+  form) and `app_mirror_record_copy` (246). `chirps_feed_job` names, for
+  `era5l` and `imerg_late`, a running job of **any** CHIRPS feed (no feed's
+  config names them yet: `feeds/fromMirror.ts` `fillProductCache` fills
+  them for a feed's cells from its fetch); for `sat` and `rnl` the feed's
+  own product, as before.
+- Tests: `src/db/migration-252.db.test.ts` (each CHECK and function, with
+  positive controls), `src/feeds/productCache.db.test.ts` (a fill, a
+  revision that marks and replays).
 
 ### DWS gauge records (247_gauge_record.sql)
 
