@@ -129,6 +129,8 @@ Original/
 AI/
 data/
 .venv-brand/
+# ingest/dev.sh verify (verify_copy.py, issue #604)
+.venv-verify/
 .claude/worktrees/
 
 # The bulk ingest job's local Zarr copy (pnpm dev:ingest:run, ingest/README.md).

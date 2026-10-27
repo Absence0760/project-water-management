@@ -24,11 +24,14 @@ Fixtures mode runs the same code against a synthetic directory.
 | `chcnetcdf.py` | Reads one CHC NetCDF file and cuts out the region (D1), refusing any other layout. |
 | `grid.py` | The region, the grid and the index maths every module shares. |
 | `backfill_plan.py` | Prints the backfill state machine's month list (`infra/ingest_backfill.tf`), skipping months the manifest holds. Standard library only. Runbook: docs/deployment.md § Backfill. |
+| `verify_copy.py` | The operator's check of a backfilled copy before the cutover: coverage, CHC's daily files bit for bit, dynamical.org's copy within 0.2% (§ Verify the copy). Not in the image. |
+| `tiffread.py` | A stdlib GeoTIFF strip reader: one pixel of a CHC daily file through range requests, for `verify_copy.py`. Not in the image. |
+| `requirements-verify.txt` | `verify_copy.py`'s hash-pinned packages (the image's plus icechunk), for `ingest/.venv-verify` only. |
 | `fixtures/make_chc_fixture.py` | Writes `fixtures/chc/chirps-v3.0.2024.02.days_p05.nc`, the reader's synthetic fixture. |
 | `fixtures/chirps/make_chirps_fixtures.py` | Writes the synthetic `byMonth` directory (`fixtures/chirps/`): two months, their listing, and a rewritten and a changed variant. |
 | `tests/roundtrip.ts` | The Node half of the cross-language round trip (`test_roundtrip.py`). |
 | `Dockerfile` | The Lambda image (build context `ingest/`). |
-| `dev.sh` | `pnpm dev:ingest:run` and `pnpm test:ingest`. |
+| `dev.sh` | `pnpm dev:ingest:run`, `pnpm test:ingest` and `ingest/dev.sh verify`. |
 
 ## The event and the environment
 
@@ -174,8 +177,68 @@ written as `0x7FC00000`. When a file is copied again:
 - **User-Agent:** `water-management-ingest/1 (+https://github.com/Absence0760/project-water-management; <INGEST_CONTACT>)`.
 - **Conditional GETs:** it sends `If-None-Match` and `If-Modified-Since`, and a 304 means the file is skipped.
 - **Pacing:** at most one request a second (`min_interval`), retries included, and one request at a time.
+- **Range requests:** `byte_range=(first, last)` sends `Range` for a few pixels of a TIFF (`verify_copy.py`), paced like any request.
 - **429 and 503:** it waits as long as `Retry-After` asks, given in seconds or as an HTTP date. It retries at most `max_retries` times and gives up (`RetryLater`) rather than wait longer than `max_wait`.
 - **403:** it raises `StopRun` at once, with no retry. The run stops and the alarm fires, because CHC bans by volume.
+
+## Verify the copy
+
+`verify_copy.py` is run by the operator once the backfill is done, before
+the worker reads the copy (docs/deployment.md § Backfill, steps 4–5). It
+never runs in Lambda or CI. It reads the copy at `MIRROR_URL` (`file://` or
+`s3://`, through boto3 with the operator's credentials) and writes a
+Markdown report, to stdout or `--out`. The exit status is 0 when every
+check it ran passed and 1 otherwise, so the runbook can gate the switch on it.
+
+```sh
+MIRROR_URL=s3://<mirror bucket> ingest/dev.sh verify --out /tmp/verify-copy.md
+ingest/dev.sh verify --no-network --mirror file://$PWD/backend/fixtures/mirror --first-month 2023-01   # coverage only, offline
+```
+
+`ingest/dev.sh verify` makes `ingest/.venv-verify` (gitignored) from
+`requirements-verify.txt` on first use. That file is the image's pins plus
+`icechunk`, hash-pinned the same way, and Dependabot's `/ingest` pip entry
+bumps it (never auto-merged). `--checks` picks the checks (default all
+three), and `--no-network` runs only coverage:
+
+- **coverage**: each finals manifest's `files` hold every month from the
+  product's first (`rnl` 1981-01, `sat` 2000-06; `--first-month` for a
+  partial copy) with no gap. `finalThrough` must be the last day of that
+  contiguous run (`manifest.finals_coverage`) and at most `--max-lag-days`
+  (75, the lag alarm's default) old. It reads the JSON itself rather than
+  through `manifest.validate`, so it reports every problem at once.
+- **chc**: `--samples` cell-days (200), seeded (`--seed`, 604). They are
+  split evenly between `rnl` and `sat`, and within each product evenly
+  across its years (every decade is drawn from), with a uniform day and
+  cell. Each is read from the copy's chunk and from CHC's daily GeoTIFF
+  (`final/<product>/YYYY/chirps-v3.0.<product>.YYYY.MM.DD.tif`, the files
+  the cache read before the copy) with `tiffread.py`. That takes three range
+  requests: the header, the image directory, and the pixel's strip. Every
+  request goes through `polite.PoliteClient` (`byte_range`): one at a time,
+  at most one a second, with the job's User-Agent. An HTTP 403 (or a
+  `Retry-After` too long to wait) stops the run, and the report says
+  **Stopped**. Values must be **bit-equal**, where no data on both sides
+  counts as equal. A different cell-day fails and is listed with both
+  values; a missing or unreadable file fails too.
+- **dynamical**: the whole region of `rnl` for one whole month per decade
+  (seeded, or `--month YYYY-MM`, repeatable), clipped to the days
+  dynamical.org holds. It compares against dynamical.org's Icechunk store
+  (`s3://dynamical-ucsb-chc-chirps/ucsb-chc-chirps-analysis-final/v0.1.0.icechunk`,
+  us-west-2, anonymous; variable `precipitation_surface`). Its kg m⁻² s⁻¹
+  is multiplied by 86,400 in float32, its north-up rows are flipped, and
+  its cell centres are checked against D1's. The land/sea mask must match
+  exactly, and the relative difference on wet cell-days (copy ≥ 1 mm) must
+  stay within `--tolerance` (0.002). Round 0 measured a median of 0.067% and
+  a maximum of 0.195% for June 2024. The report gives the median, p99,
+  maximum and largest absolute difference per month. dynamical.org rounds
+  to 8 mantissa bits, so its values never bit-match; that is why only CHC's
+  own files are the bit-for-bit check.
+
+`tiffread.py` reads what the backend's `tiff.ts` reads (classic TIFF in
+either byte order, one float32 band, strips, LZW, deflate or none, no
+predictor, WGS 84 degrees) and refuses anything else. CHC's files are LZW
+with one row per strip and the IFD at the end, so the image directory and
+the strip table come in one 64 KiB read.
 
 ## Run it locally
 
@@ -211,6 +274,7 @@ They cover:
 - **The round trip** (`test_roundtrip.py`): Python writes the copy from the synthetic NetCDF, and Node's `backend/src/mirror/` reads it through `tests/roundtrip.ts`, bit for bit, with the same hash and manifest. It needs the pnpm install (`backend/node_modules/.bin/tsx`) and skips without it, except in CI, where `INGEST_REQUIRE_NODE=1` makes it fail.
 - **The reader:** a value outside 0–2000 mm fails the read and writes nothing.
 - **The fixture:** it still matches its generator.
+- **The copy's verification** (`test_verify_copy.py`): `tiffread.py` against synthetic GeoTIFFs written by the test (LZW in TIFF's early-change variant, deflate and none; one and several rows per strip; both byte orders; every pixel, no data included), with the formats it refuses. Sampling is seeded and stratified across products and years. The CHC check runs against a fake CHC serving TIFFs of a `zarrstore`-written copy: a pass at one request a second, a one-ulp mismatch failing with both values, a 404 and a 403 that stops after one request. The dynamical.org comparison runs on synthetic arrays: the units, the row flip, the mask, the tolerance and dry cells, with `main` reading the region from the copy against a fake store. The coverage check covers a gap, the first month, `finalThrough` and the lag, plus the committed fixture copy offline. Nothing touches CHC or dynamical.org.
 
 CI runs them in the `ingest` job, "Bulk ingest (Python)", in
 `.github/workflows/ci.yml`, with Node and the pnpm install for the round

@@ -105,7 +105,9 @@ updates:
         update-types: ["minor", "patch"]
 
   # The bulk ingest Lambda's Python packages (ingest/requirements.txt, issue
-  # #604) get an entry of their own, not a folder in the list above: a
+  # #604) get an entry of their own (it also bumps
+  # ingest/requirements-verify.txt, the operator's verify_copy.py, which
+  # Dependabot finds in the same directory), not a folder in the list above: a
   # multi-folder group's PR need not name its folder, and these go into a
   # production image, so dependabot-auto-merge.yml leaves `/ingest` to a human
   # by folder and by branch name (dependabot/pip/ingest/…).
