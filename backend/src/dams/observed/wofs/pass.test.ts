@@ -94,10 +94,11 @@ describe('runWofsPass', () => {
 		const { http, log } = wofsHttp();
 		const r = await runWofsPass({ store, http, today: TODAY, ...fast });
 		expect(r).toMatchObject({ stopped: 'done', written: [DAM_A.featureId], failures: [], sceneFailures: [], error: null });
-		// Searched from the backfill's start, a year at a time, to today.
+		// The newest weeks first, then a year at a time back to the backfill's start.
 		const searches = log.filter((u) => u.startsWith(WOFS_STAC_SEARCH)).map((u) => new URL(u).searchParams.get('datetime'));
-		expect(searches[0]).toBe(`${WOFS_BACKFILL_FROM}T00:00:00Z/2014-01-01T23:59:59Z`);
-		expect(searches.at(-1)).toMatch(new RegExp(`/${TODAY}T23:59:59Z$`));
+		expect(searches[0]).toBe(`${day(-45)}T00:00:00Z/${TODAY}T23:59:59Z`);
+		expect(searches[1]).toBe(`${day(-411)}T00:00:00Z/${day(-46)}T23:59:59Z`);
+		expect(searches.at(-1)).toMatch(new RegExp(`^${WOFS_BACKFILL_FROM}T00:00:00Z/`));
 		expect(log.every((u) => u.startsWith(WOFS_STAC_SEARCH) || u.startsWith(WOFS_S3_BASE))).toBe(true);
 
 		const f = (await readObservationFile(store, 'wofs', DAM_A.featureId))!;
@@ -122,10 +123,11 @@ describe('runWofsPass', () => {
 
 		const status = (await readStatus(store, 'wofs'))!;
 		expect(status).toMatchObject({ source: 'wofs', stopped: false });
-		expect(status.perKey[DAM_A.featureId]).toEqual({ lastGood: new Date(status.ranAt).toISOString().replace(/\.\d+Z$/, (m) => m), newest: dates.at(-1) });
+		expect(status.perKey[DAM_A.featureId]).toEqual({ lastGood: expect.any(String), newest: dates.at(-1) });
+		expect(status.perKey[DAM_A.featureId]!.lastGood! <= status.ranAt).toBe(true);
 		expect(r.recencyDays).toBe(toEpochDay(TODAY) - toEpochDay(dates.at(-1)!));
 		const state = (await readState(store))!;
-		expect(state.dams[DAM_A.featureId]).toMatchObject({ outline: outlineHash(DAM_A), scannedThrough: TODAY });
+		expect(state.dams[DAM_A.featureId]).toMatchObject({ outline: outlineHash(DAM_A), scannedThrough: TODAY, backfilledFrom: WOFS_BACKFILL_FROM });
 	});
 
 	it('writes one row for a date two overlapping scenes both saw', async () => {
@@ -180,43 +182,58 @@ describe('runWofsPass', () => {
 		expect(r2.written).toEqual([]);
 	});
 
-	it('resumes across runs under the deadline, ending with what one long run writes', async () => {
+	it('resumes across runs under the deadline, newest first, ending with what one long run writes', async () => {
+		// Two years of scenes and a backfill to 600 days back: the newest year forward, then the year before it backward.
+		const spec: WofsFixtureSpec = { ...SPEC, schedule: { ...SPEC.schedule, historyDays: 700 } };
+		const backfillFrom = day(-600);
 		const whole = freshStore();
 		await listed(whole, [DAM_A]);
-		await runWofsPass({ store: whole, http: wofsHttp().http, today: TODAY, ...fast });
+		await runWofsPass({ store: whole, http: wofsHttp({ spec }).http, today: TODAY, backfillFrom, ...fast });
 		const want = (await readObservationFile(whole, 'wofs', DAM_A.featureId))!.rows;
+		expect(want[0]!.date < day(-365)).toBe(true);
 
 		const store = freshStore();
 		await listed(store, [DAM_A]);
 		let runs = 0;
 		let stopped = 'deadline';
-		const scanned: string[] = [];
+		const spans: [string, string][] = [];
 		while (stopped === 'deadline') {
 			runs++;
-			expect(runs).toBeLessThan(40);
+			expect(runs).toBeLessThan(60);
 			const c = clock(T0 + runs * 86_400_000);
 			// Every request takes a second; a run gets twenty.
-			const { http } = wofsHttp({ onRequest: () => c.advance(1000) });
-			const r = await runWofsPass({ store, http, today: TODAY, deadline: c.now() + 20_000, now: c.now, sleep: c.sleep, ...fast });
+			const { http } = wofsHttp({ spec, onRequest: () => c.advance(1000) });
+			const r = await runWofsPass({ store, http, today: TODAY, backfillFrom, deadline: c.now() + 20_000, now: c.now, sleep: c.sleep, ...fast });
 			stopped = r.stopped;
-			scanned.push((await readState(store))!.dams[DAM_A.featureId]!.scannedThrough ?? '');
+			const st = (await readState(store))!.dams[DAM_A.featureId]!;
+			spans.push([st.backfilledFrom ?? '', st.scannedThrough ?? '']);
+			if (runs === 1) {
+				// The first run reads the newest scenes first: the dam is current before any history comes in.
+				const f = (await readObservationFile(store, 'wofs', DAM_A.featureId))!;
+				expect(f.rows.at(-1)!.date).toBe(want.at(-1)!.date);
+				expect(r.recencyDays).toBe(toEpochDay(TODAY) - toEpochDay(want.at(-1)!.date));
+			}
 		}
 		expect(runs).toBeGreaterThan(2);
 		expect(stopped).toBe('done');
-		// Each run went on from the one before.
-		expect(scanned).toEqual([...scanned].sort());
+		// Each run went on from the one before: forward up to today, then back toward the backfill's start.
+		expect(spans.map(([, to]) => to)).toEqual([...spans.map(([, to]) => to)].sort());
+		expect(spans.map(([from]) => from)).toEqual([...spans.map(([from]) => from)].sort().reverse());
+		expect(spans.at(-1)![0]).toBe(backfillFrom);
 		expect((await readObservationFile(store, 'wofs', DAM_A.featureId))!.rows).toEqual(want);
 	});
 
-	it('keeps from the worker’s since on, and starts no earlier than it', async () => {
+	it('starts a dam from the worker’s since when that is later, and backfills the rest; the file keeps every row', async () => {
 		const store = freshStore();
-		await listed(store, [{ ...DAM_A, since: day(-60) }]);
+		await listed(store, [{ ...DAM_A, since: day(-20) }]);
 		const { http, log } = wofsHttp();
 		await runWofsPass({ store, http, today: TODAY, ...fast });
-		const first = new URL(log.find((u) => u.startsWith(WOFS_STAC_SEARCH))!).searchParams.get('datetime');
-		expect(first).toBe(`${day(-60)}T00:00:00Z/${TODAY}T23:59:59Z`);
+		const searches = log.filter((u) => u.startsWith(WOFS_STAC_SEARCH)).map((u) => new URL(u).searchParams.get('datetime')!);
+		expect(searches[0]).toBe(`${day(-20)}T00:00:00Z/${TODAY}T23:59:59Z`);
+		expect(searches[1]).toBe(`${day(-386)}T00:00:00Z/${day(-21)}T23:59:59Z`);
+		// The newest rows reach the worker first, so its since says nothing of the history: none is dropped.
 		const f = (await readObservationFile(store, 'wofs', DAM_A.featureId))!;
-		expect(f.rows.every((x) => x.date >= day(-60))).toBe(true);
+		expect(f.rows[0]!.date < day(-60)).toBe(true);
 	});
 
 	it('starts a changed outline again, its old rows gone', async () => {
@@ -245,14 +262,14 @@ describe('runWofsPass', () => {
 		const r = await runWofsPass({ store, http, today: TODAY, ...fast });
 		expect(r.stopped).toBe('refused');
 		expect(r.error).toBeInstanceOf(FeedRefusedError);
-		// Nothing asked after the 403, and the second dam never started.
+		// Nothing asked after the 403.
 		expect(log.filter((u) => u.startsWith(WOFS_S3_BASE)).length).toBe(11);
 		const status = (await readStatus(store, 'wofs'))!;
 		expect(status).toMatchObject({ stopped: true, reason: 'refused' });
-		const first = r.written[0]!;
-		expect(status.perKey[first]!.error).toBe('refused');
-		expect((await readObservationFile(store, 'wofs', first))!.rows.length).toBeGreaterThan(0);
-		expect(r.written).toHaveLength(1);
+		// The dam whose turn met it says so; what was read before it is written.
+		expect(Object.values(status.perKey).filter((k) => k.error === 'refused')).toHaveLength(1);
+		expect(r.written.length).toBeGreaterThan(0);
+		for (const id of r.written) expect((await readObservationFile(store, 'wofs', id))!.rows.length).toBeGreaterThan(0);
 	});
 
 	it('stops on throttling too', async () => {

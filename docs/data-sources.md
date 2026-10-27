@@ -342,9 +342,10 @@ reads the upstream and writes files back, and the worker loads them.
   STAC item id, each item's URL and ETag), `dams/wofs-status.json`, and its
   own `dams/wofs-state.json` (how far each dam is scanned, and its
   outline's hash); the worker loads the rows into `dam_observation`
-  (source `wofs`). The first backfill goes back to 2013 (the Landsat 8
-  era, `WOFS_BACKFILL_FROM`) and resumes across runs; after it, a dam
-  re-reads only its last 45 days, for scenes published late.
+  (source `wofs`). Every dam's newest scenes come first; the history goes
+  back to 2013 (the Landsat 8 era, `WOFS_BACKFILL_FROM`) with the time
+  left, newest first, and resumes across runs; after it, a dam re-reads
+  only its last 45 days, for scenes published late.
 - **Limits we keep to:** STAC at most one request a second, the bucket at
   most five a second, one request in flight; feeds/http.ts's User-Agent,
   host allowlist, 20 s timeout and 4 MB cap; a 403 or 429/503 from either

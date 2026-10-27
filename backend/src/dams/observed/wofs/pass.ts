@@ -14,31 +14,45 @@
 //           ─put─► dams/wofs-state.json         ours: per dam the outline's hash and how far it's scanned
 //   worker tick ──get──► the status, then each newer dams/wofs/<featureId>.json → app_dam_observation_load
 //
-// What a run does. The dams go in turn (never tried first, then by their
-// last turn, oldest first, so one that keeps failing goes behind the rest),
-// skipping a dam scanned up to within refreshDays of today. For each dam it
-// searches STAC year by year from where it left off (`scannedThrough` + 1,
-// or the worker's `since`, never before WOFS_BACKFILL_FROM), and takes the
-// scenes a date at a time, in date order: each scene's header, then the
-// tiles under the outline (cog.ts), summed inside it (sum.ts). Two scenes on
-// one date (neighbouring Landsat rows overlap) give ONE row: the scene that
-// saw the most of the dam clearly, then the one covering most of it, then the
-// lower item id. They aren't combined pixel by pixel: the rows' grids needn't
-// line up, and the better view is what a reader would pick. After each date
-// `scannedThrough` moves to it; at the deadline the dam stops there and the
-// next run goes on from it. So the first backfill (2013 on: about 90 scenes
-// a year over a dam, 2–3 requests each) runs over several runs.
+// What a run does. First every due dam's NEWEST scenes, then, with the time
+// left, older history, so every dam is current before any time goes on the
+// past (and the recency alarm doesn't fire through a first backfill). The
+// dams go in turn (never tried first, then by their last turn, oldest first,
+// so one that keeps failing goes behind the rest); a dam scanned to within
+// refreshDays of today waits. Per dam, `dams/wofs-state.json` keeps the span
+// read so far, [backfilledFrom, scannedThrough]:
+//
+//   forward   from scannedThrough + 1 (or the worker's `since`) to today; a
+//             dam's first turn starts LOOKBACK_DAYS back (the newest weeks),
+//             and sets backfilledFrom there
+//   backward  from backfilledFrom − 1 down to WOFS_BACKFILL_FROM (2013, the
+//             Landsat 8 era), a year a search, newest date first
+//
+// Each STAC search is a year (WINDOW_DAYS) over the outline's box; its scenes
+// are taken a date at a time: each scene's header, then the tiles under the
+// outline (cog.ts), summed inside it (sum.ts). Two scenes on one date
+// (neighbouring Landsat rows overlap) give ONE row: the scene that saw the
+// most of the dam clearly, then the one covering most of it, then the lower
+// item id. They aren't combined pixel by pixel: the rows' grids needn't line
+// up, and the better view is what a reader would pick. After each date the
+// cursor moves to it, so at the deadline a dam stops there and the next run
+// goes on from it: a first backfill (about 90 scenes a year over a dam, 2–3
+// requests each) runs over several runs.
 //
 // A dam scanned to within LOOKBACK_DAYS of today re-scans that tail each
 // time: DE Africa publishes a scene days to weeks after it is taken, and the
 // two paths over a dam are processed apart, so a scene can appear behind a
-// date we've passed. Its row is written again (the loader upserts).
+// date we've passed. Its row is written again only if it changed (the
+// loader upserts).
 //
 // An outline that changed (its hash differs from the one in the state file)
 // starts again: its file is rewritten from scratch (empty until the new scan
-// writes rows), as 249's trigger deletes the old outline's rows. The file
-// keeps the rows from the worker's `since` on (the ones it doesn't hold yet)
-// plus the re-scanned tail; older ones are dropped.
+// writes rows), as 249's trigger deletes the old outline's rows. Otherwise
+// the file keeps every row read, never cut back: the newest rows reach the
+// worker first, so its `since` says nothing of the history still to load,
+// and a row dropped before the worker loaded it would be lost. It is about
+// 90 rows a year from 2013 (MAX_ROWS allows 20 000), and the worker
+// reloads it only when a run changed it.
 //
 // Politeness (#604 "The rule"): one User-Agent (feeds/http.ts), STAC asked
 // at most once a second (STAC_INTERVAL_MS) and the bucket at most five times
@@ -106,8 +120,10 @@ export const WofsState = z
 				.object({
 					/** SHA-256 of the outline the rows were summed in (outlineHash). */
 					outline: z.string().regex(/^[0-9a-f]{64}$/),
-					/** Every scene up to and including this date has been read. */
+					/** Every scene from backfilledFrom up to and including this date has been read. */
 					scannedThrough: IsoDay.optional(),
+					/** The oldest date read back to: the history before it is still to come (until WOFS_BACKFILL_FROM). */
+					backfilledFrom: IsoDay.optional(),
 					/** The dam's last turn, good or not. */
 					triedAt: IsoTime.optional()
 				})
@@ -251,6 +267,9 @@ export function better(a: SceneView, b: SceneView): SceneView {
 	return a.scene.itemId <= b.scene.itemId ? a : b;
 }
 
+/** A dam's turn: the newest scenes (forward, to today) or older history (backward, toward backfillFrom). */
+type Direction = 'forward' | 'backward';
+
 /** One pass (see the header). Throws only for the mirror itself or a bug; the upstreams' failures are reported. */
 export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult> {
 	const now = opts.now ?? Date.now;
@@ -285,154 +304,208 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 	// Only the listed dams are kept: a dam deleted drops out of the status and the state too.
 	const perKey: PassStatus['perKey'] = {};
 	const state: WofsState = { v: 1, dams: {} };
+	const changed = new Set<string>();
 	for (const o of wanted.outlines) {
 		const hash = outlineHash(o);
 		const prev = prevState?.dams[o.featureId];
+		if (prev && prev.outline !== hash) changed.add(o.featureId);
 		state.dams[o.featureId] = prev && prev.outline === hash ? prev : { outline: hash, ...(prev?.triedAt ? { triedAt: prev.triedAt } : {}) };
 		const pk = previous?.perKey[o.featureId];
 		if (pk) perKey[o.featureId] = pk;
 	}
-	const changed = new Set(wanted.outlines.filter((o) => prevState?.dams[o.featureId] && prevState.dams[o.featureId]!.outline !== state.dams[o.featureId]!.outline).map((o) => o.featureId));
 
+	const turn = (id: string) => state.dams[id]!.triedAt ?? '';
+	const byTurn = (a: WantedOutline, b: WantedOutline) => (turn(a.featureId) < turn(b.featureId) ? -1 : turn(a.featureId) > turn(b.featureId) ? 1 : a.featureId < b.featureId ? -1 : 1);
 	const freshFrom = addDays(today, -refreshDays);
 	const isFresh = (id: string) => (state.dams[id]!.scannedThrough ?? '') >= freshFrom && !changed.has(id);
-	const turn = (id: string) => state.dams[id]!.triedAt ?? '';
-	const due = wanted.outlines.filter((o) => !isFresh(o.featureId)).sort((a, b) => (turn(a.featureId) < turn(b.featureId) ? -1 : turn(a.featureId) > turn(b.featureId) ? 1 : a.featureId < b.featureId ? -1 : 1));
+	const due = wanted.outlines.filter((o) => !isFresh(o.featureId)).sort(byTurn);
 	result.fresh = wanted.outlines.length - due.length;
+	const touched = new Set<string>();
+	const sceneFailed = new Set<string>();
+	let stop: 'refused' | 'throttled' | null = null;
 
-	let threw = false;
-	try {
-		for (const outline of due) {
-			if (pastDeadline()) {
-				result.stopped = 'deadline';
-				break;
-			}
-			const id = outline.featureId;
-			const st = state.dams[id]!;
-			st.triedAt = isoNow();
-			result.turns++;
-			const since = maxDay(backfillFrom, outline.since);
-			const cursor = st.scannedThrough ? maxDay(since, addDays(st.scannedThrough, 1)) : since;
-			// Caught up: re-scan the tail for scenes published late.
-			const tail = addDays(today, -lookbackDays);
-			const scanFrom = cursor > tail ? maxDay(backfillFrom, tail) : cursor;
-			const keepFrom = scanFrom < since ? scanFrom : since;
+	/** One dam's turn in one direction; false when the run must stop (the deadline, a 403, throttling). */
+	const takeTurn = async (outline: WantedOutline, direction: Direction): Promise<boolean> => {
+		const id = outline.featureId;
+		const st = state.dams[id]!;
+		touched.add(id);
+		if (direction === 'forward') st.triedAt = isoNow();
+		const since = maxDay(backfillFrom, outline.since);
 
-			// The rows the worker may not hold yet, by date; a changed outline's are dropped.
-			let existing: ObservationFile | null = null;
-			if (!changed.has(id)) {
-				try {
-					existing = await readObservationFile(store, 'wofs', id);
-				} catch (err) {
-					// Our own file unreadable: rebuilt from the scan.
-					if (!(err instanceof FeedFormatError)) throw err;
-				}
-			}
-			const rows = new Map<string, ObservationFile['rows'][number]>();
-			const upstream = new Map<string, ObservationFile['upstream'][number]>();
-			for (const r of existing?.rows ?? []) if (r.date >= keepFrom) rows.set(r.date, r);
-			for (const u of existing?.upstream ?? []) if (u.itemId) upstream.set(u.itemId, u);
-			// Written when a row is new or dropped, or the outline changed (its old file must not be loaded again).
-			let dirty = changed.has(id) || rows.size !== (existing?.rows.length ?? 0);
-
-			const masks = new Map<string, OutlineMask>();
-			const bbox = outlineBbox(outline);
-			let stop: 'refused' | 'throttled' | null = null;
-			let failure: { code: string; error: unknown } | null = null;
+		// The rows the worker may not hold yet, by date; a changed outline's are dropped.
+		let existing: ObservationFile | null = null;
+		if (!changed.has(id)) {
 			try {
+				existing = await readObservationFile(store, 'wofs', id);
+			} catch (err) {
+				// Our own file unreadable: rebuilt from the scan.
+				if (!(err instanceof FeedFormatError)) throw err;
+			}
+		}
+		const rows = new Map<string, ObservationFile['rows'][number]>();
+		const upstream = new Map<string, ObservationFile['upstream'][number]>();
+		for (const r of existing?.rows ?? []) rows.set(r.date, r);
+		for (const u of existing?.upstream ?? []) if (u.itemId) upstream.set(u.itemId, u);
+		// Written when a row is new, changed or dropped, or the outline changed (its old file must not be loaded again).
+		const reset = changed.has(id);
+		let dirty = reset;
+		changed.delete(id);
+
+		const masks = new Map<string, OutlineMask>();
+		const bbox = outlineBbox(outline);
+		let failure: { code: string; error: unknown } | null = null;
+		let deadline = false;
+
+		/** Reads one date's scenes and keeps the best view as its row. */
+		const readDate = async (date: string, scenes: WofsScene[]) => {
+			let best: SceneView | null = null;
+			for (const scene of scenes) {
+				let view: SceneView | null;
+				try {
+					view = await viewScene(s3.http, scene, outline, masks);
+					result.scenesRead++;
+				} catch (err) {
+					if (err instanceof FeedFormatError) {
+						result.sceneFailures.push({ featureId: id, itemId: scene.itemId, error: err });
+						sceneFailed.add(id);
+						continue;
+					}
+					throw err;
+				}
+				if (view) best = best ? better(best, view) : view;
+			}
+			if (!best) return;
+			const was = rows.get(date);
+			const row = { date, wetAreaM2: best.wetAreaM2, pctObserved: best.pctObserved, upstreamKey: best.scene.itemId };
+			// A re-scanned tail's unchanged row doesn't make the worker load the file again.
+			if (!was || was.wetAreaM2 !== row.wetAreaM2 || was.pctObserved !== row.pctObserved || was.upstreamKey !== row.upstreamKey) dirty = true;
+			rows.set(date, row);
+			upstream.set(best.scene.itemId, { url: best.scene.url, itemId: best.scene.itemId, ...(best.etag ? { etag: best.etag } : {}) });
+		};
+		/** The scenes of [from, to], by date. */
+		const search = async (from: string, to: string) => {
+			const scenes = await searchScenes(stac.http, bbox, from, to);
+			const byDate = new Map<string, WofsScene[]>();
+			for (const s of scenes) byDate.set(s.date, [...(byDate.get(s.date) ?? []), s]);
+			return byDate;
+		};
+
+		try {
+			if (direction === 'forward') {
+				// First time: the newest weeks (the re-scanned tail's span), so the dam is current at once; the rest is backfilled backward.
+				if (!st.scannedThrough) st.backfilledFrom = maxDay(since, addDays(today, -lookbackDays));
+				const cursor = st.scannedThrough ? maxDay(since, addDays(st.scannedThrough, 1)) : st.backfilledFrom!;
+				// Caught up: re-scan the tail for scenes published late.
+				const tail = addDays(today, -lookbackDays);
+				const scanFrom = cursor > tail ? maxDay(backfillFrom, tail, st.backfilledFrom) : cursor;
 				for (let from = scanFrom; from <= today; from = addDays(from, WINDOW_DAYS)) {
 					if (pastDeadline()) throw new Deadline();
 					const end = addDays(from, WINDOW_DAYS - 1);
 					const to = end > today ? today : end;
-					let scenes: WofsScene[];
-					try {
-						scenes = await searchScenes(stac.http, bbox, from, to);
-					} catch (err) {
-						if (err instanceof FeedFormatError) {
-							failure = { code: 'stac_format', error: err };
-							break;
-						}
-						throw err;
-					}
-					const dates = [...new Set(scenes.map((s) => s.date))];
-					for (const date of dates) {
+					const byDate = await search(from, to);
+					for (const date of [...byDate.keys()].sort()) {
 						if (pastDeadline()) throw new Deadline();
-						let best: SceneView | null = null;
-						for (const scene of scenes.filter((s) => s.date === date)) {
-							let view: SceneView | null;
-							try {
-								view = await viewScene(s3.http, scene, outline, masks);
-								result.scenesRead++;
-							} catch (err) {
-								if (err instanceof FeedFormatError) {
-									result.sceneFailures.push({ featureId: id, itemId: scene.itemId, error: err });
-									perKey[id] = { ...perKey[id], error: 'scene_format' };
-									continue;
-								}
-								throw err;
-							}
-							if (view) best = best ? better(best, view) : view;
-						}
-						if (best) {
-							const was = rows.get(date);
-							const row = { date, wetAreaM2: best.wetAreaM2, pctObserved: best.pctObserved, upstreamKey: best.scene.itemId };
-							// A re-scanned tail's unchanged row doesn't make the worker load the file again.
-							if (!was || was.wetAreaM2 !== row.wetAreaM2 || was.pctObserved !== row.pctObserved || was.upstreamKey !== row.upstreamKey) dirty = true;
-							rows.set(date, row);
-							upstream.set(best.scene.itemId, { url: best.scene.url, itemId: best.scene.itemId, ...(best.etag ? { etag: best.etag } : {}) });
-						}
-						st.scannedThrough = date;
+						await readDate(date, byDate.get(date)!);
+						if (date > (st.scannedThrough ?? '')) st.scannedThrough = date;
 					}
 					if (to > (st.scannedThrough ?? '')) st.scannedThrough = to;
 				}
-			} catch (err) {
-				if (err instanceof Deadline) {
-					result.stopped = 'deadline';
-				} else if (stopReason(err)) {
-					stop = stopReason(err);
-					result.error = err;
-				} else if (err instanceof FeedUnavailableError) {
-					failure = { code: 'unavailable', error: err };
-				} else {
-					throw err;
+			} else {
+				while (st.backfilledFrom && st.backfilledFrom > backfillFrom) {
+					if (pastDeadline()) throw new Deadline();
+					const to = addDays(st.backfilledFrom, -1);
+					const from = maxDay(backfillFrom, addDays(st.backfilledFrom, -WINDOW_DAYS));
+					const byDate = await search(from, to);
+					// Newest first, so the cursor can follow each date down.
+					for (const date of [...byDate.keys()].sort().reverse()) {
+						if (pastDeadline()) throw new Deadline();
+						await readDate(date, byDate.get(date)!);
+						st.backfilledFrom = date;
+					}
+					st.backfilledFrom = from;
 				}
 			}
+		} catch (err) {
+			if (err instanceof Deadline) {
+				deadline = true;
+			} else if (stopReason(err)) {
+				stop = stopReason(err);
+				result.error = err;
+			} else if (err instanceof FeedFormatError || err instanceof FeedUnavailableError) {
+				// A search that couldn't be read, or a timeout: this dam's turn ends, the next goes on.
+				failure = { code: err instanceof FeedFormatError ? 'stac_format' : 'unavailable', error: err };
+			} else {
+				throw err;
+			}
+		}
 
-			// What was read before a failure is kept: written, and the worker loads it.
-			if (dirty) {
-				const sorted = [...rows.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
-				const used = new Set(sorted.map((r) => r.upstreamKey));
-				await writeObservationFile(store, {
-					source: 'wofs',
-					key: id,
-					fetchedAt: isoNow(),
-					upstream: [...upstream.values()].filter((u) => used.has(u.itemId!)),
-					rows: sorted
-				});
-				result.written.push(id);
-				const newest = sorted.at(-1)?.date;
-				perKey[id] = { ...perKey[id], lastGood: isoNow(), ...(newest ? { newest } : {}) };
-				if (changed.has(id) && !newest) delete perKey[id]!.newest;
-			}
-			if (failure) {
-				result.failures.push({ featureId: id, ...failure });
-				perKey[id] = { ...perKey[id], error: failure.code };
-			} else if (!stop && result.stopped !== 'deadline' && perKey[id]?.error && !result.sceneFailures.some((f) => f.featureId === id)) {
-				// A clean turn clears the last one's error.
-				const { error: _, ...rest } = perKey[id]!;
-				perKey[id] = rest;
-			}
-			if (stop) {
-				result.stopped = stop;
-				perKey[id] = { ...perKey[id], error: stop };
+		// What was read before a failure is kept: written, and the worker loads it.
+		if (dirty) {
+			const sorted = [...rows.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+			const used = new Set(sorted.map((r) => r.upstreamKey));
+			await writeObservationFile(store, {
+				source: 'wofs',
+				key: id,
+				fetchedAt: isoNow(),
+				upstream: [...upstream.values()].filter((u) => used.has(u.itemId!)),
+				rows: sorted
+			});
+			if (!result.written.includes(id)) result.written.push(id);
+			// The newest date held: the file's (or the one before, which a file never holds less than); none after a reset.
+			const { newest: before, ...rest } = perKey[id] ?? {};
+			const newest = [reset ? undefined : before, sorted.at(-1)?.date].filter((d): d is string => !!d).sort().at(-1);
+			perKey[id] = { ...rest, lastGood: isoNow(), ...(newest ? { newest } : {}) };
+		}
+		if (failure) {
+			result.failures.push({ featureId: id, ...failure });
+			perKey[id] = { ...perKey[id], error: failure.code };
+		} else if (stop) {
+			perKey[id] = { ...perKey[id], error: stop };
+		} else if (sceneFailed.has(id)) {
+			perKey[id] = { ...perKey[id], error: 'scene_format' };
+		} else if (!deadline && perKey[id]?.error) {
+			// A clean turn clears the last one's error.
+			const { error: _, ...rest } = perKey[id]!;
+			perKey[id] = rest;
+		}
+		if (deadline) result.stopped = 'deadline';
+		if (stop) result.stopped = stop;
+		return !deadline && !stop;
+	};
+
+	let threw = false;
+	try {
+		// First every due dam's newest scenes, so each is current; then, with the time left, older history.
+		let going = true;
+		for (const outline of due) {
+			if (pastDeadline()) {
+				result.stopped = 'deadline';
+				going = false;
 				break;
 			}
-			if (result.stopped === 'deadline') break;
+			if (!(await takeTurn(outline, 'forward'))) {
+				going = false;
+				break;
+			}
+		}
+		if (going) {
+			const behind = wanted.outlines.filter((o) => {
+				const st = state.dams[o.featureId]!;
+				return st.scannedThrough !== undefined && st.backfilledFrom !== undefined && st.backfilledFrom > backfillFrom;
+			});
+			for (const outline of behind.sort(byTurn)) {
+				if (pastDeadline()) {
+					result.stopped = 'deadline';
+					break;
+				}
+				if (!(await takeTurn(outline, 'backward'))) break;
+			}
 		}
 	} catch (err) {
 		threw = true;
 		throw err;
 	} finally {
+		result.turns = touched.size;
 		result.stacRequests = stac.counter.requests;
 		result.sceneRequests = s3.counter.requests;
 		const stopped = result.stopped === 'refused' || result.stopped === 'throttled';

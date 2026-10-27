@@ -1937,20 +1937,26 @@ worker tick: each status, then each file whose last good fetch is new to it
     covering most of it, then the lower item id. Not combined pixel by
     pixel: the rows' grids needn't line up, and the better view is what a
     reader would pick.
-  - **Resuming.** `dams/wofs-state.json` (the pass's own, never read by the
-    worker) keeps per dam the SHA-256 of its outline and the date every
-    scene up to which has been read (`scannedThrough`). A run stops at the
-    Lambda's deadline between dates and the next run goes on from there;
-    the first backfill (from 2013, the Landsat 8 era, `WOFS_BACKFILL_FROM`;
-    about 90 scenes a year over a dam, 2–3 requests each) takes several
-    runs. A dam scanned to within 6 days waits; a caught-up dam re-scans
-    its last 45 days each time, for scenes DE Africa publishes late (its
-    rows are written again only if they change). A redrawn outline (its
-    hash changed) starts again, its file rewritten empty at once so the
-    old outline's rows can't be loaded again (249's trigger deletes them
-    from the store). The file keeps the rows from the worker's `since` on
-    and the re-scanned tail; each row names its STAC item, and `upstream`
-    each item's URL and ETag.
+  - **Newest first, then history.** `dams/wofs-state.json` (the pass's
+    own, never read by the worker) keeps per dam the SHA-256 of its
+    outline and the span read so far, `[backfilledFrom, scannedThrough]`.
+    A run first takes every due dam forward to today (a new dam starts 45
+    days back), then, with the time left, reads older history backward a
+    year a search, newest date first, down to 2013 (the Landsat 8 era,
+    `WOFS_BACKFILL_FROM`). So every dam is current before any time goes on
+    the past, and the recency alarm doesn't fire through a first backfill
+    (about 90 scenes a year over a dam, 2–3 requests each: several runs).
+    Either way the cursor follows each date, so a run stopped at the
+    Lambda's deadline loses nothing. A dam scanned to within 6 days waits;
+    a caught-up dam re-scans its last 45 days each time, for scenes DE
+    Africa publishes late (a row is written again only if it changed). A
+    redrawn outline (its hash changed) starts again, its file rewritten
+    empty at once so the old outline's rows can't be loaded again (249's
+    trigger deletes them from the store, and the loader refuses a file
+    fetched before the redraw). The file keeps every row read, never cut
+    back (the newest reach the worker first, so its `since` says nothing of
+    the history still to load); each row names its STAC item, and
+    `upstream` each item's URL and ETag.
   - **Politeness**: STAC at most one request a second, the bucket at most
     five (two or three small ranges a scene), one in flight; a 403 or
     throttling from either stops the pass (the status says stopped and
