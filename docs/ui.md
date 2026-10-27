@@ -4753,6 +4753,17 @@ logic in `crops/loadFactors.ts`, its presentation helpers in
 `crops/loadFactorsView.ts`, data in `crops/library.ts`). Which crop set a
 catchment uses is the hydrologist's call (issue #54 Q9/Q10).
 
+Its lead line is the first thing read: the model uses the crop factors
+already in the project (Crops & demand › Tables › Crop factors, or as
+imported), and the dialog only overwrites them from another source, the
+reference library or a workbook, with nothing changing until the user
+applies and then saves the model with a reason. It ends with a help tip
+(**About Load crop factors**) for the glossary entry `load-crop-factors`
+(`lib/help/tips.ts`, its long text in `lib/help/articles.ts`: what the
+dialog overwrites, the four steps, Kp, Apply then save, and that the set is
+the hydrologist's call); the `crop-factor` entry links to it rather than
+repeating it. `e2e/tests/crop-library.spec.ts` checks the line and the tip.
+
 The dialog is a full dialog laid out as the task's four numbered steps.
 Wide (its body from 64rem, 896 px), steps 1–3 scroll in the left column and
 step 4, the effect on demand, sits in its own column beside them, so the
