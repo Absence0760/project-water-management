@@ -6,10 +6,10 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { afterAll, describe, expect, it } from 'vitest';
-import { FeedRefusedError, FeedThrottledError } from '../feeds/errors.js';
+import { FeedFormatError, FeedRefusedError, FeedThrottledError } from '../feeds/errors.js';
 import { fixtureHttp, renderDwsPage } from '../feeds/fixtures.js';
 import type { FeedHttp } from '../feeds/http.js';
-import { DWS_WINDOW_DAYS } from '../feeds/sources/dws.js';
+import { DWS_FORMAT_FAILURES, DWS_WINDOW_DAYS, dwsFailureLabel } from '../feeds/sources/dws.js';
 import { openStore, type MirrorStore } from '../mirror/store.js';
 import { MIRROR_LAG_METRIC, MIRROR_METRIC_NAMESPACE } from './daily.js';
 import {
@@ -179,6 +179,72 @@ describe('the weekly DWS pass', () => {
 		const r = await runDwsWeekly({ store, http, today: TODAY, intervalMs: 0 });
 		expect(r).toMatchObject({ fetched: ['X0H001'], failed: ['X0H000'], stopped: 'done', error: null });
 		expect(await readStatus(store)).toMatchObject({ stale: false, stations: { X0H000: { okAt: null }, X0H001: { okAt: expect.any(String) } } });
+	});
+
+	// A row past the store's bounds (247_gauge_record.sql) used to throw a ZodError out of the pass before the status
+	// was written, losing every station fetched before it, and the bad station sorted first again the next day.
+	for (const [what, row, check] of [
+		['a flow of 1e9 m³/s', { date: day(-90), value: 1e9, quality: '1' }, 'flow'],
+		['a quality code 1.5', { date: day(-90), value: 1, quality: '1.5' }, 'quality'],
+		['a quality code 1-2', { date: day(-90), value: 1, quality: '1-2' }, 'quality'],
+		['a quality code longer than 8', { date: day(-90), value: 1, quality: 'A12345678' }, 'quality']
+	] as const) {
+		it(`skips a station whose page lists ${what} (a format failure of that station), and loads the others`, async () => {
+			const store = freshStore();
+			await writeStations(store, list(['X0H000', 'X0H001', 'X0H002']));
+			const good = [{ date: day(-90), value: 1.5, quality: '1' }];
+			const { http } = stationsHttp((s) => page(s, s === 'X0H001' ? [row] : good));
+			const r = await runDwsWeekly({ store, http, today: TODAY, intervalMs: 0 });
+			expect(r).toMatchObject({ fetched: ['X0H000', 'X0H002'], failed: ['X0H001'], stopped: 'done', error: null });
+			// Why, for the log: a format failure whose label names the check (never the page's text).
+			expect(r.failures).toHaveLength(1);
+			expect(r.failures[0]!.station).toBe('X0H001');
+			expect(r.failures[0]!.error).toBeInstanceOf(FeedFormatError);
+			expect(dwsFailureLabel((r.failures[0]!.error as Error).message)).toBe(DWS_FORMAT_FAILURES[check][1]);
+			// Positive control: the others' files and the status are written, and the bad station's file is not.
+			expect((await readStationFile(store, 'X0H000'))!.rows).toEqual([[day(-90), 1.5, '1']]);
+			expect((await readStationFile(store, 'X0H002'))!.rows).toEqual([[day(-90), 1.5, '1']]);
+			expect(await readStationFile(store, 'X0H001')).toBeNull();
+			expect(await readStatus(store)).toMatchObject({
+				stale: false,
+				stations: { X0H000: { okAt: expect.any(String) }, X0H001: { okAt: null, triedAt: expect.any(String) }, X0H002: { okAt: expect.any(String) } }
+			});
+		});
+	}
+
+	it('writes the status even when the run stops on its own failure, so the stations fetched before it reach the worker', async () => {
+		const dir = freshStore();
+		await writeStations(dir, list(['X0H000', 'X0H001', 'X0H002']));
+		const broken = new Error('the bucket refused the write');
+		// The mirror refuses X0H001's file: ours, not DWS's, so the run throws.
+		const store: MirrorStore = { ...dir, get: (k) => dir.get(k), set: async (k, v) => (k === stationKey('X0H001') ? Promise.reject(broken) : dir.set(k, v)) } as MirrorStore;
+		const { http } = stationsHttp((s) => page(s, [{ date: day(-90), value: 1, quality: '1' }]));
+		await expect(runDwsWeekly({ store, http, today: TODAY, intervalMs: 0 })).rejects.toBe(broken);
+		const status = (await readStatus(dir))!;
+		expect(status.stations.X0H000?.okAt).toEqual(expect.any(String));
+		expect(status.stations.X0H001?.okAt ?? null).toBeNull();
+		expect(await readStationFile(dir, 'X0H000')).not.toBeNull();
+	});
+
+	it('gives every station its turn when more keep failing than one run reaches (failures go behind the rest)', async () => {
+		const store = freshStore();
+		const failing = ['X0H000', 'X0H001', 'X0H002', 'X0H003'];
+		const healthy = ['X0H010', 'X0H011'];
+		await writeStations(store, list([...failing, ...healthy]));
+		const { http, log } = stationsHttp((s) => (failing.includes(s) ? '<html><body><p>Maintenance</p></body></html>' : page(s, [])));
+		const c = clock();
+		// One run reaches three stations (a second a request, the deadline after the third starts).
+		const run = async () => {
+			const r = await runDwsWeekly({ store, http, today: TODAY, now: c.now, sleep: c.sleep, intervalMs: 1000, deadline: c.now() + 1500 });
+			c.advance(86_400_000);
+			return r;
+		};
+		const fetched: string[] = [];
+		for (let i = 0; i < 3; i++) fetched.push(...(await run()).fetched);
+		expect(fetched.sort()).toEqual(healthy);
+		// The failing ones were each tried too, none twice before every other had its turn.
+		const asked = log.map((u) => u.searchParams.get('Station')!.replace(/100\.00$/, ''));
+		expect(new Set(asked.slice(0, 6)).size).toBe(6);
 	});
 
 	it('stops starting stations at the deadline; the rest go first next run', async () => {

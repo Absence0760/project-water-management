@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { FeedFormatError, FeedServerError, FeedUnavailableError, feedErrorMessage } from '../errors.js';
 import { FIXTURE_DIR } from '../fixtures.js';
-import { DWS_FORMAT_FAILURES, DWS_SERVER_ERROR_LABEL, dwsFailureLabel, dwsRowValues, dwsSiteType, dwsUrl, parseDwsDaily, parseDwsRows } from './dws.js';
+import { DWS_FORMAT_FAILURES, DWS_MAX_FLOW, DWS_SERVER_ERROR_LABEL, dwsFailureLabel, dwsRowValues, dwsSiteType, dwsUrl, parseDwsDaily, parseDwsRows } from './dws.js';
 
 const sample = readFileSync(`${FIXTURE_DIR}dws-sample.html`, 'utf8');
 const page = (table: string) => `<html><body><pre>\nStation : X0H000100.00\n\n${table}\n</pre></body></html>`;
@@ -257,5 +257,35 @@ describe('parseDwsRows: the listed rows, each with its quality code', () => {
 		expect(r.outside).toBeGreaterThan(0);
 		expect(parseDwsRows(page('No data for this period'))).toEqual({ rows: [], quality: {}, rejected: 0, outside: 0 });
 		expect(dwsRowValues([])).toEqual({ startDate: null, values: [] });
+	});
+
+	// The gauge record store's bounds (247_gauge_record.sql) and the weekly pass's station file hold the same.
+	it('refuses a flow above 100 000 m³/s or a quality code that is not 1 to 8 letters or digits, as a format failure naming the check', () => {
+		const fails = (rows: string, check: keyof typeof DWS_FORMAT_FAILURES) => {
+			let err: unknown;
+			try {
+				parseDwsRows(page(`DATE D_AVG_FR QUAL\n${rows}`));
+			} catch (e) {
+				err = e;
+			}
+			expect(err, rows).toBeInstanceOf(FeedFormatError);
+			expect(dwsFailureLabel((err as Error).message), rows).toBe(DWS_FORMAT_FAILURES[check][1]);
+		};
+		fails('20210101 1e9 1', 'flow');
+		fails('20210101 100000.001 1', 'flow');
+		fails('20210101 1.5 1.5', 'quality');
+		fails('20210101 1.5 1-2', 'quality');
+		fails('20210101 1.5 A12345678', 'quality');
+		// The live per-feed path reads the same parser: refused there too.
+		expect(() => parseDwsDaily(page('DATE D_AVG_FR QUAL\n20210101 1e9 1'))).toThrow(FeedFormatError);
+		// Outside the window it is dropped before the check, as any row there is.
+		expect(parseDwsRows(page('DATE D_AVG_FR QUAL\n20200101 1e9 1\n20210101 1.5 1'), { start: '2021-01-01', end: '2021-01-31' }).rows).toHaveLength(1);
+		// Positive control: the edges load (exactly the cap, an 8-character code, a gap row with its code).
+		const r = parseDwsRows(page(`DATE D_AVG_FR QUAL\n20210101 ${DWS_MAX_FLOW} 1\n20210102 0 AB12cd34\n20210103 -999 170`));
+		expect(r.rows).toEqual([
+			{ day: '2021-01-01', value: DWS_MAX_FLOW, quality: '1' },
+			{ day: '2021-01-02', value: 0, quality: 'AB12cd34' },
+			{ day: '2021-01-03', value: null, quality: '170' }
+		]);
 	});
 });

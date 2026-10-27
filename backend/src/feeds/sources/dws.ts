@@ -37,7 +37,9 @@
 // the fetcher can log which check failed (dwsFailureLabel). The ScriptServer
 // error page is the site's backend failing, not a changed layout: it fails
 // the fetch as a FeedServerError (unavailable), which the scheduler retries. A row whose value
-// isn't a non-negative number is a gap (null), counted in the result. A gap
+// isn't a non-negative number is a gap (null), counted in the result. A flow
+// above DWS_MAX_FLOW or a quality code that isn't 1 to 8 letters or digits
+// fails the fetch as a format failure: the gauge record store refuses both. A gap
 // row can leave the flow column blank and still carry a quality code
 // ("20210102             170"): the code is read by its column, never as a flow.
 import { toEpochDay } from '@water-management/engine/calendar';
@@ -124,7 +126,10 @@ export const DWS_FORMAT_FAILURES = {
 	badDate: ['the DWS table has an impossible date', 'impossible date'],
 	twice: ['the DWS table lists a day twice', 'a day listed twice'],
 	tooManyRows: ['the DWS table has more rows than one request can hold', 'too many rows'],
-	tooLong: ['the DWS table spans more days than one request can hold', 'too many days']
+	tooLong: ['the DWS table spans more days than one request can hold', 'too many days'],
+	flow: ['the DWS table has a flow above 100000 m³/s', 'flow out of range'],
+	quality: ['the DWS table has a quality code that is not 1 to 8 letters or digits', 'bad quality code'],
+	stationFile: ['the DWS rows do not fit the station file', 'station file invalid']
 } as const satisfies Record<string, readonly [string, string]>;
 
 /** The log label of a DWS failure's message (a format failure's, after its stored prefix), or null for any other message. */
@@ -133,6 +138,16 @@ export function dwsFailureLabel(message: string): string | null {
 	return null;
 }
 const F = DWS_FORMAT_FAILURES;
+/**
+ * The most a listed flow may be: 100 000 m³/s, an order of magnitude above
+ * any South African river's recorded peak. The gauge record store refuses
+ * more (247_gauge_record.sql: the column's CHECK and gauge_record_write), and
+ * so does the weekly pass's station file (ingest/dws.ts StationFile), so the
+ * page is refused here first, as a format failure of that one page.
+ */
+export const DWS_MAX_FLOW = 100_000;
+/** A quality code the store keeps: 1 to 8 letters or digits (247_gauge_record.sql, ingest/dws.ts StationFile). */
+export const DWS_QUALITY_CODE = /^[A-Za-z0-9]{1,8}$/;
 const MAX_ROWS = 20 * 366 + 10;
 /**
  * The daily table's header, spaces collapsed. The site prints "D AVG F/R"
@@ -208,6 +223,9 @@ export function parseDwsRows(raw: string, window?: DwsWindow): DwsRows {
 			continue;
 		}
 		if (byDay.has(day)) throw new FeedFormatError(`${F.twice[0]}: ${iso}`);
+		// Bounds the store holds too (DWS_MAX_FLOW, DWS_QUALITY_CODE): a page past them is refused whole, never half loaded.
+		if (row.value !== null && row.value > DWS_MAX_FLOW) throw new FeedFormatError(`${F.flow[0]}: ${iso}`);
+		if (row.quality !== undefined && !DWS_QUALITY_CODE.test(row.quality)) throw new FeedFormatError(`${F.quality[0]}: ${iso}`);
 		if (byDay.size >= MAX_ROWS) throw new FeedFormatError(F.tooManyRows[0]);
 		// A missing-data code, a blank, text or a negative (-999) value is a gap (parseDwsRow).
 		byDay.set(day, { day: iso, value: row.value, quality: row.quality ?? null });

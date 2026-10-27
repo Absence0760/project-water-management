@@ -20,8 +20,11 @@
 //
 // What a run does: reads the station list and the last status, and fetches
 // each station whose last good fetch is REFRESH_DAYS old or more (never
-// fetched first, then the oldest), until the list is done or the deadline
-// (the Lambda's time left) comes; the rest go first next run. A station is
+// tried first, then by its last turn, good or failed, oldest first, so a
+// station that keeps failing goes behind the rest rather than ahead of them
+// every run), until the list is done or the deadline (the Lambda's time
+// left) comes; the rest go first next run. The status is written however the
+// run ends, so what it fetched before a failure always reaches the worker. A station is
 // asked for the newest two years (DWS_WINDOW_DAYS, today included), the
 // window a feed asks for, parsed by the feed's own reader (sources/dws.ts
 // parseDwsRows, on the engine's row reader) with the same checks. Requests
@@ -33,8 +36,9 @@
 // never retried: status.json says the source is stale and why, the lag
 // metric keeps growing (MirrorLagDays{Product=dws}, alarmed in
 // infra/feeds.tf), and the invocation fails. A station whose own page fails
-// another way (a changed layout, not found, a timeout) is skipped, counted, and tried
-// again next run; the others go on.
+// another way (a changed layout, a flow or quality code out of the store's
+// bounds, not found, a timeout) is skipped, counted, logged by station and
+// check (lambda-fetcher.ts dwsWeekly), and tried again next run; the others go on.
 //
 // Locally (FEED_SOURCE=fixtures) the client is the synthetic one and pacing
 // is off; MIRROR_URL must name a directory of its own (dailyMirrorUrl).
@@ -44,7 +48,7 @@ import { z } from 'zod';
 import { DWS_RIVER_GAUGE } from '../feeds/config.js';
 import { FeedFormatError, FeedRefusedError, FeedServerError, FeedThrottledError, FeedUnavailableError } from '../feeds/errors.js';
 import type { FeedHttp } from '../feeds/http.js';
-import { DWS_FORMAT_FAILURES, DWS_WINDOW_DAYS, dwsUrl, parseDwsRows } from '../feeds/sources/dws.js';
+import { DWS_FORMAT_FAILURES, DWS_MAX_FLOW, DWS_QUALITY_CODE, DWS_WINDOW_DAYS, dwsUrl, parseDwsRows } from '../feeds/sources/dws.js';
 import type { MirrorStore } from '../mirror/store.js';
 import { MIRROR_LAG_METRIC, MIRROR_METRIC_NAMESPACE, pacedHttp, REQUEST_INTERVAL_MS } from './daily.js';
 
@@ -70,8 +74,8 @@ export const StationsFile = z
 	.refine((f) => new Set(f.stations).size === f.stations.length, 'a station is listed twice');
 export type StationsFile = z.output<typeof StationsFile>;
 
-/** One listed day: [day, flow in m³/s or null for a gap, quality code or null]. */
-const Row = z.tuple([IsoDay, z.number().finite().min(0).max(100_000).nullable(), z.string().regex(/^[A-Za-z0-9]{1,8}$/).nullable()]);
+/** One listed day: [day, flow in m³/s or null for a gap, quality code or null]. The page parser and the store hold the same bounds. */
+const Row = z.tuple([IsoDay, z.number().finite().min(0).max(DWS_MAX_FLOW).nullable(), z.string().regex(DWS_QUALITY_CODE).nullable()]);
 
 /** dws/<station>.json: one station's newest window as the page listed it. */
 export const StationFile = z
@@ -134,6 +138,8 @@ export interface DwsWeeklyResult {
 	fetched: string[];
 	/** Stations whose page failed another way (skipped, tried next run). */
 	failed: string[];
+	/** Each of those, with why: the error (a FeedFormatError or FeedUnavailableError), for the log. */
+	failures: { station: string; error: unknown }[];
 	/** Listed stations fetched recently enough to wait. */
 	fresh: number;
 	/** No list yet; every due station done; the deadline; or stopped by DWS (refused, throttled, server_error). */
@@ -174,57 +180,81 @@ export async function runDwsWeekly(opts: DwsWeeklyOptions): Promise<DwsWeeklyRes
 		const t = toEpochDay(today);
 		return Math.max(...list.stations.map((s) => t - toEpochDay(dayOf(stations[s]?.okAt ?? list.at))));
 	};
-	if (!list) return { fetched: [], failed: [], fresh: 0, stopped: 'no_stations', requests: 0, lagDays: null, error: null };
+	if (!list) return { fetched: [], failed: [], failures: [], fresh: 0, stopped: 'no_stations', requests: 0, lagDays: null, error: null };
 
 	const okAt = (s: string) => (stations[s]?.okAt ? Date.parse(stations[s]!.okAt!) : -Infinity);
-	const due = list.stations.filter((s) => okAt(s) <= now() - refreshMs).sort((a, b) => okAt(a) - okAt(b) || (a < b ? -1 : 1));
+	// Its last turn, good or not: a station that keeps failing goes behind the others each run, rather than first
+	// every run (its okAt stays old), so one run's budget always reaches the rest in turn. Never tried goes first.
+	const turn = (s: string) => Math.max(okAt(s), stations[s]?.triedAt ? Date.parse(stations[s]!.triedAt) : -Infinity);
+	const due = list.stations.filter((s) => okAt(s) <= now() - refreshMs).sort((a, b) => turn(a) - turn(b) || (a < b ? -1 : 1));
 	const from = fromEpochDay(toEpochDay(today) - (DWS_WINDOW_DAYS - 1));
 
 	const fetched: string[] = [];
 	const failed: string[] = [];
+	const failures: DwsWeeklyResult['failures'] = [];
 	let stopped: DwsWeeklyResult['stopped'] = 'done';
 	let error: unknown = null;
-	for (const station of due) {
-		if (opts.deadline !== undefined && now() >= opts.deadline) {
-			stopped = 'deadline';
-			break;
-		}
-		const triedAt = new Date(now()).toISOString();
-		try {
-			const page = await http.text(dwsUrl(station, from, today));
-			if (page === null) throw new FeedFormatError(DWS_FORMAT_FAILURES.notFound[0]);
-			const parsed = parseDwsRows(page, { start: from, end: today });
-			const file: StationFile = {
-				v: 1,
-				station,
-				from,
-				to: today,
-				fetchedAt: triedAt,
-				rows: parsed.rows.map((r): [string, number | null, string | null] => [r.day, r.value, r.quality])
-			};
-			await writeJson(store, stationKey(station), StationFile.parse(file));
-			stations[station] = { okAt: triedAt, triedAt };
-			fetched.push(station);
-		} catch (err) {
-			const reason = stopReason(err);
-			if (reason) {
-				stopped = reason;
-				error = err;
-				stations[station] = { okAt: stations[station]?.okAt ?? null, triedAt };
+	let threw = false;
+	try {
+		for (const station of due) {
+			if (opts.deadline !== undefined && now() >= opts.deadline) {
+				stopped = 'deadline';
 				break;
 			}
-			// A page that failed (changed layout, not found, timed out) is that station's; anything else (the mirror
-			// write failing) is ours: stop, and let the invocation fail.
-			if (!(err instanceof FeedFormatError || err instanceof FeedUnavailableError)) throw err;
-			failed.push(station);
-			stations[station] = { okAt: stations[station]?.okAt ?? null, triedAt };
+			const triedAt = new Date(now()).toISOString();
+			let file: StationFile;
+			try {
+				const page = await http.text(dwsUrl(station, from, today));
+				if (page === null) throw new FeedFormatError(DWS_FORMAT_FAILURES.notFound[0]);
+				const parsed = parseDwsRows(page, { start: from, end: today });
+				// The parser holds the file's bounds (a flow, a quality code); a page that still doesn't fit is that page's failure.
+				const checked = StationFile.safeParse({
+					v: 1,
+					station,
+					from,
+					to: today,
+					fetchedAt: triedAt,
+					rows: parsed.rows.map((r): [string, number | null, string | null] => [r.day, r.value, r.quality])
+				});
+				if (!checked.success) throw new FeedFormatError(DWS_FORMAT_FAILURES.stationFile[0]);
+				file = checked.data;
+			} catch (err) {
+				const reason = stopReason(err);
+				if (reason) {
+					stopped = reason;
+					error = err;
+					stations[station] = { okAt: stations[station]?.okAt ?? null, triedAt };
+					break;
+				}
+				// A page that failed (changed layout, a value out of bounds, not found, timed out) is that station's:
+				// skip it, tried again next run behind the others. Anything else is a bug: stop, and fail the invocation.
+				if (!(err instanceof FeedFormatError || err instanceof FeedUnavailableError)) throw err;
+				failed.push(station);
+				failures.push({ station, error: err });
+				stations[station] = { okAt: stations[station]?.okAt ?? null, triedAt };
+				continue;
+			}
+			// The mirror write failing is ours, not the station's: it throws, and the status below still records the rest.
+			await writeJson(store, stationKey(station), file);
+			stations[station] = { okAt: triedAt, triedAt };
+			fetched.push(station);
+		}
+	} catch (err) {
+		threw = true;
+		throw err;
+	} finally {
+		// Written on every exit, so the stations fetched before a failure reach the worker (it loads a station's file
+		// only once the status says it is newer, feeds/gaugeRecordLoad.ts).
+		const stale = stopped === 'refused' || stopped === 'throttled' || stopped === 'server_error';
+		const status: StatusFile = { v: 1, runAt: new Date(now()).toISOString(), stale, reason: stale ? (stopped as StatusFile['reason']) : null, stations };
+		try {
+			await writeJson(store, STATUS_KEY, status);
+		} catch (err) {
+			// The first failure is the one to report.
+			if (!threw) throw err;
 		}
 	}
-
-	const stale = stopped === 'refused' || stopped === 'throttled' || stopped === 'server_error';
-	const status: StatusFile = { v: 1, runAt: new Date(now()).toISOString(), stale, reason: stale ? (stopped as StatusFile['reason']) : null, stations };
-	await writeJson(store, STATUS_KEY, status);
-	return { fetched, failed, fresh: list.stations.length - due.length, stopped, requests: counter.requests, lagDays: lag(), error };
+	return { fetched, failed, failures, fresh: list.stations.length - due.length, stopped, requests: counter.requests, lagDays: lag(), error };
 }
 
 /** The pass's freshness as a CloudWatch Embedded Metric Format line: MirrorLagDays, Product=dws (daily.ts lagMetricLine's shape). */
