@@ -16,7 +16,8 @@
 import type { AbsolutePath } from '@zarrita/storage';
 import { z } from 'zod';
 import { FeedFormatError } from '../../feeds/errors.js';
-import type { MirrorStore } from '../../mirror/store.js';
+import { fixtureMirrorUrl, mirrorStore } from '../../mirror/source.js';
+import { openStore, type MirrorStore } from '../../mirror/store.js';
 
 export type Position = [number, number];
 export type DamOutlineGeometry = { type: 'Polygon'; coordinates: Position[][] } | { type: 'MultiPolygon'; coordinates: Position[][][] };
@@ -62,6 +63,17 @@ export interface PassStatus {
 	reason?: string;
 	/** Per key: the last good fetch (ISO time), the newest observation date held, the last error (a fixed code). */
 	perKey: Record<string, { lastGood?: string; newest?: string; error?: string }>;
+}
+
+type Env = Record<string, string | undefined>;
+
+/** The bucket the handover goes through: MIRROR_URL, never the committed synthetic copy (a live process must name one). */
+export function damsStore(env: Env = process.env): MirrorStore {
+	const v = env.MIRROR_URL?.trim();
+	if (!v || v.replace(/\/?$/, '/') === fixtureMirrorUrl()) {
+		throw new Error('MIRROR_URL must name the bucket (or a scratch directory) the dam passes read; the committed synthetic copy is never written');
+	}
+	return env === process.env ? mirrorStore(env) : openStore(v);
 }
 
 // --- Keys -----------------------------------------------------------------------------
