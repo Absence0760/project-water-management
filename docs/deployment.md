@@ -1494,12 +1494,70 @@ copy yet, so production behaves as before.
      schedules' targets and its freshness alarms appear. Later releases
      move the function to their own image; the ECR lifecycle policy never
      expires the image the tag pins.
-  4. The one-off 1981 backfill (`mode: "backfill"`) is Round 2's runbook.
+  4. The one-off 1981 backfill: [§ Backfill](#backfill) below.
 - **Cost:** under $1/month in steady state. ~6 GB of Zarr in S3 Standard
   (~$0.20) plus a month of old versions, a few seconds of Lambda a day and a
   couple of minutes once a month, a few images in ECR (cents), two custom
   metrics and the two essential alarms (about $0.30 each past the free
   tier, in af-south-1). The one-off backfill is about $3.
+
+### The daily ingest (preliminary days)
+
+The fetcher Lambda (`infra/feeds.tf`) has a second mode beside the per-feed
+fetches: an EventBridge rule (`water-management-daily-ingest`, 03:00 UTC,
+after the Python job's runs) invokes it with `{"mode":"daily-ingest"}`, and it
+copies the new CHIRPS preliminary `sat` days into the copy's `prelim/` array
+(`backend/src/ingest/daily.ts`). Per day it reads the file's header and strip
+table and one range over the region's rows (about 3 requests, at most one a
+second); a day with nothing new costs one request. It drops the preliminary
+days the `sat` finals now hold, and `prelimThrough` never runs past a missing
+day. A 403 stops the run, which is not retried (the fetcher's async invoke
+config: 0 retries); the next day's run tries again.
+
+Each run logs `mirror_daily_ingest` (copied, dropped, `prelimThrough`,
+`stopped`, and for a failure a `reason`/`detail` such as `refused`/`HTTP 403`)
+and publishes `MirrorLagDays{Product=prelim}`, today minus the newest `sat`
+day the copy holds, as an embedded metric (no `PutMetricData` grant). The
+alarm `mirror-lag-prelim` (essential tier) fires past
+`daily_ingest_lag_alarm_days` (12) on two days running, or when no datapoint
+arrives for two days.
+
+**Turning it on:** after a backend release with the daily mode is deployed,
+set `daily_ingest_enabled = true` and apply. That enables the rule, gives the
+fetcher's role get/put/list/delete on the mirror bucket, and creates the
+alarm; off (the default), none of them exist, so production doesn't alarm for
+a job that isn't running. The fetcher reads `MIRROR_URL` (set by Terraform
+either way). Run the [backfill](#backfill) of `sat` first: without `sat`
+finals the daily ingest starts 30 days back.
+
+### Backfill
+
+The one-off copy of CHC's `byMonth` finals since 1981 (D4) runs through the
+`water-management-mirror-backfill` Step Functions state machine
+(`infra/ingest_backfill.tf`, created once `ingest_image_tag` is set). It
+invokes the ingest Lambda with `{"product","mode":"backfill","month"}` once
+per month, **one month at a time** (a finals chunk holds a whole year, so two
+months of one year written at once would lose one) and **waits 60 s after
+each** (`ingest_backfill_wait_seconds`, D4's one file a minute). A month that
+fails, an HTTP 403 above all, fails the execution; only Lambda's own service
+errors (throttling, a transient API error) are retried. Nothing schedules it:
+the operator starts it.
+
+1. Write the month list for a product with `ingest/backfill_plan.py`; with
+   the product's manifest it leaves out the months already copied:
+   `aws s3 cp s3://<mirror bucket>/rnl/manifest.json /tmp/rnl-manifest.json` (skip on a first run),
+   then `python3 ingest/backfill_plan.py rnl --to <last complete month> --manifest /tmp/rnl-manifest.json > /tmp/rnl-plan.json`.
+   `rnl` starts in 1981-01, `sat` in 1998-01. Stop at the month before the
+   current one: the daily `monthly` runs write the newest month, and a
+   backfill of the same year at the same moment would race them on that
+   year's chunks.
+2. Start it: `aws stepfunctions start-execution --state-machine-arn <arn> --input file:///tmp/rnl-plan.json`.
+   About 550 `rnl` months take ~1.5 days (a ~40 s download and the wait per
+   month); `sat` about 1 day. One product at a time.
+3. If an execution fails, read the failed month's error in the execution's
+   history and the `mirror-ingest` log group. After a 403, wait (and write to
+   CHC, the source register's contact) before resuming. To resume, repeat
+   steps 1–2: the plan skips the months the manifest now holds.
 
 ## Alert emails
 

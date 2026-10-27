@@ -19,6 +19,7 @@ refuses for now.
 | `manifest.py` | `<product>/manifest.json`: read, write, validate, and `valuesSha256`. |
 | `chcnetcdf.py` | Reads one CHC NetCDF file and cuts out the region (D1), refusing any other layout. |
 | `grid.py` | The region, the grid and the index maths every module shares. |
+| `backfill_plan.py` | Prints the backfill state machine's month list (`infra/ingest_backfill.tf`), skipping months the manifest holds. Standard library only. Runbook: docs/deployment.md § Backfill. |
 | `fixtures/make_chc_fixture.py` | Writes `fixtures/chc/chirps-v3.0.2024.02.days_p05.nc`, the synthetic fixture. |
 | `Dockerfile` | The Lambda image (build context `ingest/`). |
 | `dev.sh` | `pnpm dev:ingest:run` and `pnpm test:ingest`. |
