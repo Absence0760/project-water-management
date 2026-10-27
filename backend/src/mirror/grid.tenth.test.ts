@@ -13,6 +13,8 @@ describe('the product registry', () => {
 		expect(productGrid('prelim')).toMatchObject({ step: 0.05, kind: 'daily' });
 		expect(productGrid('era5l')).toMatchObject({ step: 0.1, kind: 'finals', firstDay: '1950-01-01', firstYear: 1950 });
 		expect(productGrid('imerg_late')).toMatchObject({ step: 0.1, kind: 'daily', firstDay: '2000-06-01' });
+		expect(productGrid('agera5_et0')).toMatchObject({ step: 0.1, kind: 'finals', firstDay: '1979-01-01', firstYear: 1979 });
+		expect(productGrid('power_et0')).toMatchObject({ step: 0.1, kind: 'daily', firstDay: '1981-01-01' });
 		expect(productGrid('gefs/2026-02-09')).toMatchObject({ step: 0.05, kind: 'daily' });
 		expect(productGrid('ecmwf/2026-02-09')).toMatchObject({ step: 0.1, kind: 'daily' });
 		expect(productGrid('gefs/latest')).toBeNull();

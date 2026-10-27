@@ -6,7 +6,9 @@ import { pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
 import {
+	agera5Coverage,
 	era5lCoverage,
+	powerHeldDays,
 	era5lWrittenDays,
 	finalsCoverage,
 	imergCoverage,
@@ -206,6 +208,53 @@ describe('manifests per product (issue #604 R4-B; ingest/manifest.py holds the s
 			bad.files[0]![k] = '"x"';
 			expect(problem(bad), k).toMatch(/the CDS gives neither/);
 		}
+	});
+
+	it('agera5_et0 (issue #604 R5-E): finals only, each file a CDS month request holding its month, finalThrough within the contiguous months', () => {
+		const url = (m: string) => `cds://sis-agrometeorological-indicators/reference_evapotranspiration/${m}`;
+		const agera5 = (months: string[], finalThrough: string | null): Manifest => ({
+			...sample(),
+			product: 'agera5_et0',
+			grid: tenth,
+			years: { first: 2024, last: 2024 },
+			finalThrough,
+			files: months.map((m) => ({ ...file, url: url(m), etag: null, lastModified: null })),
+			changes: []
+		});
+		expect(problem(agera5(['2024-01', '2024-02'], '2024-02-29'))).toBeNull();
+		expect(agera5Coverage(agera5(['2024-01', '2024-02', '2024-04'], null).files)).toEqual({ from: '2024-01-01', through: '2024-02-29' });
+		expect(problem(agera5(['2024-01', '2024-02', '2024-04'], '2024-04-30'))).toMatch(/finalThrough runs past the days the files hold contiguously \(through 2024-02-29\)/);
+		expect(problem({ ...agera5(['2024-01'], '2024-01-31'), prelimThrough: '2024-02-01' })).toMatch(/agera5_et0 has no preliminary days/);
+		expect(problem({ ...agera5(['2024-01'], '2024-01-31'), grid: { origin: { lat: -35.475, lon: 10.025 }, step: 0.05 } })).toMatch(/must be 0.1° for agera5_et0/);
+		for (const u of ['cds://reanalysis-era5-land/total_precipitation/2024-01', `${url('2024-01')}.zip`, url('2024-13')]) {
+			const bad = agera5(['2024-01'], null);
+			bad.files[0]!.url = u;
+			expect(problem(bad), u).toMatch(/not a month request/);
+		}
+		const tagged = agera5(['2024-01'], null);
+		tagged.files[0]!.etag = '"x"';
+		expect(problem(tagged)).toMatch(/the CDS gives neither/);
+	});
+
+	it('power_et0 (issue #604 R5-E): a file a day naming its day, no final days, prelimThrough no later than the newest file', () => {
+		const url = (d: string) => `power://temporal/daily/regional/fao56-et0/${d}`;
+		const power = (days: string[], prelimThrough: string | null): Manifest => ({
+			...sample(),
+			product: 'power_et0',
+			grid: tenth,
+			years: { first: 2024, last: 2024 },
+			finalThrough: null,
+			prelimThrough,
+			files: days.map((d) => ({ ...file, url: url(d), etag: null, lastModified: null })),
+			changes: []
+		});
+		expect(problem(power(['2024-06-01', '2024-06-03'], '2024-06-03'))).toBeNull();
+		expect([...powerHeldDays(power(['2024-06-01', '2024-06-03'], null).files)]).toEqual(['2024-06-01', '2024-06-03']);
+		expect(problem(power(['2024-06-01'], '2024-06-02'))).toMatch(/prelimThrough runs past the newest day the files hold \(2024-06-01\)/);
+		expect(problem({ ...power(['2024-06-01'], '2024-06-01'), finalThrough: '2024-06-01' })).toMatch(/power_et0 holds no final days/);
+		const bad = power(['2024-06-01'], null);
+		bad.files[0]!.url = 'power://temporal/daily/regional/fao56-et0/2024-02-30';
+		expect(problem(bad)).toMatch(/names no day/);
 	});
 
 	it('imerg_late: a file a day naming its day, its version optional, prelimThrough no later than the newest file (a gap is fine)', () => {

@@ -13,6 +13,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import {
 	autoFitRecordOf,
 	ENGINE_VERSION,
+	et0FitWindow,
+	fitScoredThrough,
 	finishAutoCalibration,
 	calibrationSeriesKey,
 	fitRecordFromReport,
@@ -30,6 +32,8 @@ import {
 	type CalibrationFlowKind,
 	type CalibrationRules,
 	type ModelInput,
+	type DailySeries,
+	type Et0DailyFingerprint,
 	type ProjectSettings
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
@@ -39,6 +43,12 @@ import { enqueueJob, type JobMeta, type JobStatus } from '../jobs/queue.js';
 import { LeaseLostError } from '../jobs/errors.js';
 import { mergeSettings, patchSettings } from '../projects/settings.js';
 import { loadModelInput, seriesHash } from '../runs/execute.js';
+
+/** The daily reference ET series' fit fingerprint (issue #604 R5-E): its days through `through` hashed as a run's snapshot is; null without any. */
+function et0Fingerprint(series: DailySeries | undefined, through: string): Et0DailyFingerprint | null {
+	const w = series ? et0FitWindow(series, through) : null;
+	return w ? { startDate: w.startDate, length: w.values.length, valuesSha256: seriesHash(w.values), through } : null;
+}
 import { AUTO_CALIBRATIONS_KEPT, AUTO_CASE_SECONDS_MAX } from './schema.js';
 
 export type AutoCalibrationStatus = 'running' | 'complete' | 'failed';
@@ -325,6 +335,7 @@ export async function applyCalibration(db: Db, projectId: string, id: string): P
 	// The fitted record: the outlet's, or the calibration site's gauge record (engine ≥ 1.41.0).
 	const fitted = input.series[calibrationSeriesKey(flowKind, kept.report.siteNodeId ?? null)];
 	const apan = input.series.evap_apan_mm;
+	const et0 = input.series.evap_et0_mm;
 	const record = fitRecordFromReport(kept.report, {
 		settings: fitSettings,
 		validate: true,
@@ -333,6 +344,8 @@ export async function applyCalibration(db: Db, projectId: string, id: string): P
 		fittedAt: (a.completedAt ?? new Date()).toISOString(),
 		chirpsSource: input.series.rain_chirps_mm ? (input.series.rain_chirps_mm.provenance ?? null) : null,
 		apanDaily: apan ? { startDate: apan.startDate, length: apan.values.length, valuesSha256: seriesHash(apan.values) } : null,
+		// Through the fit's last scored day only (et0FitWindow): a feed's later days never reached the fit.
+		et0Daily: et0Fingerprint(et0, fitScoredThrough(kept.report)),
 		...(fitted?.origin !== undefined ? { observedOrigin: fitted.origin ?? null } : {}),
 		auto: autoFitRecordOf({ ...report, chosen: a.chosen })
 	});

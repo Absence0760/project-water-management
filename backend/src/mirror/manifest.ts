@@ -44,6 +44,12 @@
 // second-last day of M (era5lWrittenDays; the 1950-01 request starts at the
 // record, 1950-01-01), and `finalThrough` may not run past the contiguous run
 // of those days from the earliest month (era5lCoverage).
+// The reference evapotranspiration products (R5-E) follow the same two
+// patterns: `agera5_et0` (finals, finalThrough only) has one file per CDS month
+// request, `cds://sis-agrometeorological-indicators/reference_evapotranspiration/YYYY-MM`,
+// holding exactly that month's days (agera5Coverage); `power_et0` (daily,
+// prelimThrough only) one file per day, `power://temporal/daily/regional/fao56-et0/YYYY-MM-DD`,
+// each held day on its own like imerg_late's (powerHeldDays).
 import { createHash } from 'node:crypto';
 import { endianness } from 'node:os';
 import type { AbsolutePath } from '@zarrita/storage';
@@ -145,6 +151,53 @@ export function era5lCoverage(files: readonly { url: string }[]): { from: string
 	return { from: era5lWrittenDays(first).from, through: era5lWrittenDays(last).through };
 }
 
+/** An agera5_et0 file's URL: the CDS month request it came from (ingest/agera5.py). */
+const AGERA5_URL = /^cds:\/\/sis-agrometeorological-indicators\/reference_evapotranspiration\/(\d{4})-(0[1-9]|1[0-2])$/;
+
+/** The month (`year * 12 + month - 1`) an agera5_et0 file's URL names, or null. */
+export const agera5FileMonth = (url: string): number | null => {
+	const m = AGERA5_URL.exec(url);
+	return m ? Number(m[1]) * 12 + Number(m[2]) - 1 : null;
+};
+
+/**
+ * The days agera5_et0's files hold: month M's request holds exactly M's
+ * calendar days, so from the earliest month's first day through the last day
+ * of the contiguous run of months from it (null when no file names a month).
+ */
+export function agera5Coverage(files: readonly { url: string }[]): { from: string; through: string } | null {
+	const months = new Set<number>();
+	for (const f of files) {
+		const m = agera5FileMonth(f.url);
+		if (m !== null) months.add(m);
+	}
+	if (months.size === 0) return null;
+	const first = Math.min(...months);
+	let last = first;
+	while (months.has(last + 1)) last++;
+	const [ly, lm] = [Math.floor(last / 12), (last % 12) + 1];
+	return { from: `${Math.floor(first / 12)}-${pad2((first % 12) + 1)}-01`, through: `${ly}-${pad2(lm)}-${pad2(new Date(Date.UTC(ly, lm, 0)).getUTCDate())}` };
+}
+
+/** A power_et0 file's URL names its day (ingest/nasapower.py). */
+const POWER_URL = /^power:\/\/temporal\/daily\/regional\/fao56-et0\/(\d{4}-\d{2}-\d{2})$/;
+
+/** The day a power_et0 file's URL names (ISO), or null. */
+export function powerFileDay(url: string): string | null {
+	const m = POWER_URL.exec(url);
+	return m && isIsoDate(m[1]!) ? m[1]! : null;
+}
+
+/** power_et0: the ISO days its files name, exactly its held days, each on its own (a rolling window, as imerg_late's). */
+export function powerHeldDays(files: readonly { url: string }[]): Set<string> {
+	const days = new Set<string>();
+	for (const f of files) {
+		const d = powerFileDay(f.url);
+		if (d) days.add(d);
+	}
+	return days;
+}
+
 /** The day an IMERG daily file's URL names (ISO), or null. */
 export function imergFileDay(url: string): string | null {
 	const m = FILE_DAY.exec(url);
@@ -231,8 +284,8 @@ export const Manifest = z
 		if (new Set(m.files.map((f) => f.url)).size !== m.files.length) bad('a file is listed twice');
 		const chcFinals = m.product === 'rnl' || m.product === 'sat';
 		const imerg = m.product === 'imerg_late';
-		const finals = chcFinals || m.product === 'era5l';
-		if ((m.product === 'rnl' || m.product === 'era5l') && m.prelimThrough !== null) bad(`${m.product} has no preliminary days`);
+		const finals = chcFinals || m.product === 'era5l' || m.product === 'agera5_et0';
+		if ((m.product === 'rnl' || m.product === 'era5l' || m.product === 'agera5_et0') && m.prelimThrough !== null) bad(`${m.product} has no preliminary days`);
 		for (const [k, d] of [['finalThrough', m.finalThrough], ['prelimThrough', m.prelimThrough]] as const) {
 			if (d !== null && (m.years.first === null || Number(d.slice(0, 4)) < m.years.first || Number(d.slice(0, 4)) > m.years.last!)) bad(`${k} is outside years`);
 		}
@@ -247,6 +300,17 @@ export const Manifest = z
 			if (m.files.some((f) => f.etag !== null || f.lastModified !== null)) bad('an era5l file with an etag or lastModified: the CDS gives neither');
 			const held = era5lCoverage(m.files);
 			if (m.finalThrough !== null && (held === null || m.finalThrough > held.through)) bad(`finalThrough runs past the days the files hold contiguously (through ${held?.through ?? 'none'})`);
+		}
+		if (m.product === 'agera5_et0') {
+			if (m.files.some((f) => agera5FileMonth(f.url) === null)) bad('an agera5_et0 file whose url is not a month request (cds://sis-agrometeorological-indicators/reference_evapotranspiration/YYYY-MM)');
+			if (m.files.some((f) => f.etag !== null || f.lastModified !== null)) bad('an agera5_et0 file with an etag or lastModified: the CDS gives neither');
+			const held = agera5Coverage(m.files);
+			if (m.finalThrough !== null && (held === null || m.finalThrough > held.through)) bad(`finalThrough runs past the days the files hold contiguously (through ${held?.through ?? 'none'})`);
+		}
+		if (m.product === 'power_et0') {
+			if (m.files.some((f) => powerFileDay(f.url) === null)) bad('a power_et0 file whose url names no day (power://temporal/daily/regional/fao56-et0/YYYY-MM-DD)');
+			const days = [...powerHeldDays(m.files)].sort();
+			if (m.prelimThrough !== null && (!days.length || m.prelimThrough > days.at(-1)!)) bad(`prelimThrough runs past the newest day the files hold (${days.at(-1) ?? 'none'})`);
 		}
 		if (chcFinals) {
 			if (m.files.some((f) => !FILE_MONTH.test(f.url))) bad('a finals file whose url names no month (….YYYY.MM.days_p05.nc)');

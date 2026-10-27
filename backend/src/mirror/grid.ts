@@ -42,13 +42,19 @@ export interface ProductGrid {
  *   era5l        ERA5-Land daily total precipitation (D15), finals layout, 0.1°, from 1950.
  *   imerg_late   IMERG Late V07 daily (D16), daily layout, 0.1°, from June 2000; a version per day in the manifest's files.
  *   gefs/<issue> the CHIRPS-GEFS forecast, 0.05°; ecmwf/<issue> the ECMWF ensemble forecast, 0.1° (R4-C).
+ *   agera5_et0   AgERA5 v2.0 daily FAO-56 reference evapotranspiration (R5-E), finals layout, 0.1°, from 1979, mm/day.
+ *   power_et0    FAO-56 reference evapotranspiration we compute from NASA POWER's daily meteorology (R5-E, the
+ *                fallback), daily layout, 0.1° (each cell its nearest POWER point), a rolling window of recent days.
+ * Neither ET₀ product enters the cell cache: an evaporation feed reads them in its own job (feeds/fromMirrorEt0.ts).
  */
 export const PRODUCT_GRIDS = {
 	rnl: { step: 0.05, kind: 'finals', firstDay: '1981-01-01', firstYear: 1981 },
 	sat: { step: 0.05, kind: 'finals', firstDay: '1998-01-01', firstYear: 1981 },
 	prelim: { step: 0.05, kind: 'daily', firstDay: '1998-01-01' },
 	era5l: { step: 0.1, kind: 'finals', firstDay: '1950-01-01', firstYear: 1950 },
-	imerg_late: { step: 0.1, kind: 'daily', firstDay: '2000-06-01' }
+	imerg_late: { step: 0.1, kind: 'daily', firstDay: '2000-06-01' },
+	agera5_et0: { step: 0.1, kind: 'finals', firstDay: '1979-01-01', firstYear: 1979 },
+	power_et0: { step: 0.1, kind: 'daily', firstDay: '1981-01-01' }
 } as const satisfies Record<string, ProductGrid>;
 export type GridProduct = keyof typeof PRODUCT_GRIDS;
 

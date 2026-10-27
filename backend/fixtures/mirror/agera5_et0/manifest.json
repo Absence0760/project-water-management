@@ -1,0 +1,134 @@
+{
+  "product": "agera5_et0",
+  "revision": 1,
+  "region": {
+    "w": 10,
+    "s": -35.5,
+    "e": 41,
+    "n": -8
+  },
+  "grid": {
+    "origin": {
+      "lat": -35.45,
+      "lon": 10.05
+    },
+    "step": 0.1
+  },
+  "years": {
+    "first": 2025,
+    "last": 2025
+  },
+  "finalThrough": "2025-12-31",
+  "prelimThrough": null,
+  "files": [
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-01",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "97ae1e3c0f885f665413e3aec0755ce194b1f315d0c1e0b42941d430232bbbfd",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-02",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "adf24c39b2d86745324e452bd53e1feaf01dcae7cd1202ee05e294542adb2c70",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-03",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "fd2096e343a4a4f962c94be3014f6b6aea75f3741dae4c0666d2049c757801cd",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-04",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f2edbf10be9e0f7d84a58c09b87d1735d997bf2f472896dd9aab5f320a50de52",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-05",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "c3b1a4ffae8eb64d7cd65f7886705900ec79ee4d54cb028af1cd378f5dc5a9f5",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-06",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "056d92ad94ae2da84a940bd2668420c36cbfa62c18e24814049598c035945c2c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-07",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "4adc0f322eb576ebbcc51d4341cb79b34c8e71f52c4515969a30bb8816157804",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-08",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1f10661f223fe1bcd9b779a2a8a0bc117e71c514571c3182eb59222045237045",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-09",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "488060236c0e07780c2a92c0ff02fd2c7761f8230fcb08b197e29a012b4c830b",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-10",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "b7b5f1d70c22857eeb64aee567fb74e37578f396399cbab331887115200f84d2",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-11",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "450f74cf8578e29cefe363ed6ce94cb0d243e5bdc609484ca27ea300bb929455",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "cds://sis-agrometeorological-indicators/reference_evapotranspiration/2025-12",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "4bf1d432bbf001d348e31f1b7703d21159ec18f7e74faf810e2d30fc6980a510",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    }
+  ],
+  "changes": []
+}

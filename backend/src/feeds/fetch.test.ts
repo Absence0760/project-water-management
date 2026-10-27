@@ -102,6 +102,16 @@ describe('fetchWindow', () => {
 		expect(fetchWindow('ecmwf_ens', grid, null, '2026-12-20')).toEqual({ start: '2026-12-20', end: '2027-01-03' });
 	});
 
+	it('reference ET (issue #604 R5-E): a year back at first, a year a window, then 75 days re-read before the newest', () => {
+		// First fetch: the year to yesterday.
+		expect(fetchWindow('agera5_et0', grid, null, '2026-10-27')).toEqual({ start: '2025-10-27', end: '2026-10-26' });
+		// Caught up: the 75 days before the newest (POWER's days become AgERA5's), through yesterday.
+		expect(fetchWindow('agera5_et0', grid, '2026-10-24', '2026-10-27')).toEqual({ start: '2026-08-10', end: '2026-10-26' });
+		// A startDate years back walks a year (366 days) a window, and stays a floor.
+		expect(fetchWindow('agera5_et0', { ...grid, startDate: '1991-01-01' }, null, '2026-10-27')).toEqual({ start: '1991-01-01', end: '1992-01-01' });
+		expect(fetchWindow('agera5_et0', { ...grid, startDate: '2026-09-01' }, '2026-10-24', '2026-10-27')).toEqual({ start: '2026-09-01', end: '2026-10-26' });
+	});
+
 	it('DWS: ten years back at first, asked for two years at a time; then a year of revisions before the newest', () => {
 		// Production, 2026-10-26: the first fetch asked for all ten years in one request and got the ScriptServer error page.
 		expect(DWS_WINDOW_DAYS).toBe(730);
@@ -453,6 +463,11 @@ describe('runFetch failures: a result with our message, never a throw or an upst
 	it('an ECMWF request is refused: those forecasts are read only from the copy, never fetched', async () => {
 		const r = await runFetch({ source: 'ecmwf_ens', config: grid, start: '2026-03-10', end: '2026-03-24', today: '2026-03-10' }, broken({}));
 		expect(r).toEqual({ ok: false, error: 'the source’s data could not be read: ECMWF forecasts are read only from the rain data copy, never by the fetcher' });
+	});
+
+	it('a reference ET request is refused: it is read only from the copy, never fetched', async () => {
+		const r = await runFetch({ source: 'agera5_et0', config: grid, start: '2026-03-10', end: '2026-03-24', today: '2026-03-10' }, broken({}));
+		expect(r).toEqual({ ok: false, error: 'the source’s data could not be read: reference evapotranspiration is read only from our data copy, never by the fetcher' });
 	});
 
 	it('no GEFS issue today or yesterday', async () => {
