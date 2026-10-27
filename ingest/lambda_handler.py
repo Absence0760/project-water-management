@@ -5,6 +5,8 @@ Event: {"product": "rnl" | "sat", "mode": "monthly"}
        {"product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM"}
        {"product": "imerg_late", "mode": "recent", "days": 1-30?}   (imerg.py)
        {"product": "ecmwf", "mode": "daily"}   (ecmwf.py, its own run)
+       {"product": "agera5_et0", "mode": "monthly" | "backfill", "month"?}  (agera5.py)
+       {"product": "power_et0", "mode": "recent", "days": 1-60?}  (nasapower.py)
 Env:   MIRROR_URL      file:///abs/path or s3://bucket[/prefix] (required)
        FEED_SOURCE     fixtures (default: the synthetic byMonth directory in
                        fixtures/chirps/, served by fixturehttp.py, no
@@ -58,6 +60,12 @@ import zarrstore  # noqa: E402
 import era5land  # noqa: E402
 
 # --- end era5l ---------------------------------------------------------------
+
+# --- reference evaporation (issue #604 R5-E): agera5.py, nasapower.py ----------
+import agera5  # noqa: E402
+import nasapower  # noqa: E402
+
+# --- end reference evaporation -------------------------------------------------
 
 # Round 1's names for the single-file path, which now lives in chirps_final.
 ingest_file = chirps_final.ingest_file
@@ -120,6 +128,12 @@ def handler(event, context=None, s3_client=None, opener=None, metrics=None, cloc
     if isinstance(event, dict) and event.get("product") == era5land.PRODUCT:
         return era5land.handler(event, context, s3_client=s3_client, metrics=metrics, **({"clock": clock} if clock else {}), **({"today": today} if today else {}))
     # --- end era5l ---
+    # --- reference evaporation (issue #604 R5-E): AgERA5 (cdsjob, like era5l) and its NASA POWER fallback ---
+    if isinstance(event, dict) and event.get("product") == agera5.PRODUCT:
+        return agera5.handler(event, context, s3_client=s3_client, metrics=metrics, **({"clock": clock} if clock else {}), **({"today": today} if today else {}))
+    if isinstance(event, dict) and event.get("product") == nasapower.PRODUCT:
+        return nasapower.handle(event, context, s3_client=s3_client, opener=opener, metrics=metrics, today=today, clock=clock, sleep=sleep)
+    # --- end reference evaporation ---
     # --- ECMWF ENS forecast (issue #604 R4-C): {"product": "ecmwf", "mode": "daily"}, ecmwf.py ---
     if isinstance(event, dict) and event.get("product") == "ecmwf":
         return _handle_ecmwf(event, context, s3_client, opener, metrics, clock, sleep, today)
@@ -232,4 +246,5 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     product = sys.argv[1] if len(sys.argv) > 1 else "rnl"
-    print(json.dumps(handler({"product": product, "mode": "daily" if product == "ecmwf" else "monthly"}), indent=2))
+    mode = {"ecmwf": "daily", "imerg_late": "recent", "power_et0": "recent"}.get(product, "monthly")
+    print(json.dumps(handler({"product": product, "mode": mode}), indent=2))
