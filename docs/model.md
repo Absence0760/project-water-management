@@ -6735,7 +6735,7 @@ signed document matching its hashed manifest (ui-playbook § Dates, issue
 #521 round 3), the run report prints ISO (#586 D9), and the limitations are
 docs/engine-audit.md's own words, hashed into every sign-off and pack.
 
-**Flow generation renamed (engine ≥ 1.101.0, issue #614).** The panel that
+**Flow generation renamed (engine ≥ 1.102.0, issue #614).** The panel that
 chooses Fragmentation or Per unit is now **Model selection for flow
 generation**, first on Model settings, so the warnings that name it say
 "Model settings → Model selection for flow generation": the "Parameters not
@@ -6743,10 +6743,10 @@ fitted for this method" fit caveat (`calibrate/provenance.ts`) and the
 over-allocated flow shares' error (`network/shares.ts`). `places.ts` keeps
 each panel's former headings (`FORMER_PANELS`, `share: ['Flow
 generation']`), so `placesIn` still finds an older run's "Model settings →
-Flow generation" (1.98.0 to 1.100.0) and "Settings → Flow generation"
+Flow generation" (1.98.0 to 1.101.0) and "Settings → Flow generation"
 (before 1.98.0) and links them to the panel, and `warningInCurrentWords`
 reads both as the new name. Only words changed: no figure moves, but a
-1.100.0 run made again at 1.101.0 has another results digest.
+1.101.0 run made again at 1.102.0 has another results digest.
 
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`
