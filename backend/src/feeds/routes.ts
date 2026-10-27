@@ -215,7 +215,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 			await refuseTakeOver(db, id, input);
 			const { input: checked, replaceFrom } = await versionCheck(db, id, input, true);
 			const fid = await createFeed(db, id, checked, replaceFrom ?? null).catch(conflict);
-			const feed = await getFeed(db, id, fid);
+			const feed = await getFeed(db, id, fid, new Date(), await rainCopy(db));
 			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'created', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
 			return feed;
 		});
@@ -259,7 +259,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 			// Logged even when the settings come back unchanged: every save makes the saver the
 			// feed's acting user (the identity its scheduled fetches run as), which is itself a change.
 			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'changed', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
-			return getFeed(db, id, fid);
+			return getFeed(db, id, fid, new Date(), await rainCopy(db));
 		});
 		return c.json({ feed });
 	})

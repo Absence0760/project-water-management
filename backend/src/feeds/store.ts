@@ -142,9 +142,10 @@ export async function listFeeds(db: Db, projectId: string, now = new Date(), cop
 	return rows.map((r) => toMeta(r, now, copy));
 }
 
-export async function getFeed(db: Db, projectId: string, feedId: string, now = new Date()): Promise<FeedMeta | null> {
+/** One feed; `copy` as listFeeds', so a feed a route answers with shows the same health as in the list. */
+export async function getFeed(db: Db, projectId: string, feedId: string, now = new Date(), copy: RainCopy | null = null): Promise<FeedMeta | null> {
 	const { rows } = await db.query<FeedSelect>(`SELECT ${COLS} FROM ${FROM} WHERE f.project_id = $1 AND f.id = $2`, [projectId, feedId]);
-	return rows[0] ? toMeta(rows[0], now) : null;
+	return rows[0] ? toMeta(rows[0], now, copy) : null;
 }
 
 /**

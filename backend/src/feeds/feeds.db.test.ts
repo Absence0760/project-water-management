@@ -142,6 +142,18 @@ describe('data_feed RLS and the routes', () => {
 			final: { sat: { through: '2025-12-31', behind: false } },
 			preliminary: { through: '2026-02-06', behind: false }
 		});
+		// A CHIRPS feed whose copy is late shows it in the list and in what an edit answers (getFeed), alike.
+		const rain = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id as string;
+		await asOwner(`UPDATE data_feed SET last_attempt_at = now(), last_success_at = now() WHERE id = $1`, [rain]);
+		const sat = JSON.parse(readFileSync(new URL('../../fixtures/mirror/sat/manifest.json', import.meta.url), 'utf8')) as { product: string; revision: number; finalThrough: string };
+		const late = { ...sat, finalThrough: '2025-06-30' };
+		await withoutUser((db) => recordMirrorCopy(db, 'fixtures', 'sat', late));
+		const listed = ((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds as { id: string; health: { state: string } }[]).find((f) => f.id === rain)!;
+		expect(listed.health.state).toBe('copy-behind');
+		const edited = await owner.call('PATCH', `/projects/${pid}/feeds/${rain}`, { schedule: 'daily' });
+		expect(edited.status).toBe(200);
+		expect(edited.body.feed.health).toEqual(listed.health);
+		await owner.call('DELETE', `/projects/${pid}/feeds/${rain}`);
 		// While CHC is read directly, no copy (the setup's default, production's until the cutover).
 		vi.stubEnv('CHIRPS_SOURCE', 'chc');
 		expect((await viewer.call('GET', `/projects/${pid}/feeds`)).body.rainCopy).toBeNull();
