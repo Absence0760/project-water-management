@@ -202,6 +202,16 @@ test('Load crop factors opens from the Crops header and from a crop’s sheet', 
 	await page.getByRole('button', { name: 'Load crop factors…' }).click();
 	await expect(dialog(page)).toBeVisible();
 	await expect(dialog(page).getByLabel('Load factors from, for Orchard')).toBeVisible();
+	// The lead says what the dialog overwrites, and its help tip explains the rest.
+	await expect(dialog(page).locator('.lead')).toContainText(
+		'The model uses the crop factors already in this project (Crops & demand › Tables › Crop factors, or as imported). This dialog only overwrites them from another source, the reference library or a workbook, and nothing changes until you apply and then save the model with a reason.'
+	);
+	const tip = dialog(page).getByRole('button', { name: 'About Load crop factors' });
+	await tip.click();
+	await expect(dialog(page).getByText('Overwrites the project’s crop factors from the reference library or a workbook.')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(tip).toHaveAttribute('aria-expanded', 'false');
+	await expect(dialog(page)).toBeVisible();
 	await dialog(page).getByRole('button', { name: 'Cancel' }).click();
 	await expect(dialog(page)).toHaveCount(0);
 

@@ -2371,6 +2371,8 @@ export interface Allocation {
 	waterSource: AllocationWaterSourceKind;
 	volumeM3PerYear: number;
 	storageM3: number | null;
+	/** The registered irrigated area, ha (244); null = none stated. A take (21a) only; the model never reads it. */
+	irrigatedAreaHa: number | null;
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
@@ -2464,6 +2466,8 @@ export interface AllocationInput {
 	waterSource: AllocationWaterSourceKind;
 	volumeM3PerYear: number;
 	storageM3?: number | null;
+	/** Registered irrigated area, ha; a take (21a) only. */
+	irrigatedAreaHa?: number | null;
 	validFrom?: string | null;
 	validTo?: string | null;
 	reference?: string;
@@ -2493,6 +2497,7 @@ export interface AllocationPreviewRow {
 	maxRateM3s: number | null;
 	conditions: string[];
 	waterUse: AllocationWaterUse;
+	irrigatedAreaHa: number | null;
 	errors: string[];
 	nodeId: string | null;
 	matchedBy: 'registration' | 'property' | 'name' | 'manual' | null;

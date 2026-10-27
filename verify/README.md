@@ -71,7 +71,7 @@ The core daily chain, with every setting of it the generator varies:
 - **GR4J** (§2.4a): the production and routing stores, both unit
   hydrographs, the exchange (X2 ≠ 0), the warm-up cycling the historical days
   only, PE from the pan coefficient × A-pan or a monthly PE row, and under a
-  monthly row a daily reference ET series (`evap_et0_mm`, engine ≥ 1.102.0,
+  monthly row a daily reference ET series (`evap_et0_mm`, engine ≥ 1.103.0,
   issue #604 R5-E) as it stands on the days it has a value ≥ 0 (probes
   `daily-et0-monthly-pe`, `daily-et0-pan-pe`, `daily-et0-zero-row`).
 - **Crop demand** (§2.3): gross demand from A-pan × crop factor (28.25-day

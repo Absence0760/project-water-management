@@ -188,6 +188,12 @@ class Run(unittest.TestCase):
         self.metrics = metrics or cloudwatch.LocalSink()
         return ecmwf.handle({"product": "ecmwf", "mode": "daily"}, context, mirror=self.mirror, live=False, opener=self.opener, metrics=self.metrics, today=today)
 
+    def test_only_the_step_files_it_writes_count_as_held(self):
+        prefix = ecmwf.work_prefix(TODAY)
+        for name in ("step-24.npy", "step-48.npy", "step-24.npy.tmp", "step-x.npy", "step-.npy", "step-25.npy", "notes.json"):
+            ecmwf._put(self.mirror, prefix + name, b"")
+        self.assertEqual(ecmwf._steps_held(self.mirror, TODAY), {24, 48})  # 25 isn't one of STEPS
+
     def test_copies_the_issue_whole_with_its_stats_manifest_and_index(self):
         r = self.go()
         self.assertEqual((r["stopped"], r["copied"], r["lagDays"]), ("copied", TODAY.isoformat(), 0))

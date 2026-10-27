@@ -89,6 +89,7 @@ import datetime as dt
 import io
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -385,15 +386,15 @@ def _load_step(mirror, issue: dt.date, step: int) -> np.ndarray | None:
     return None if raw is None else np.load(io.BytesIO(raw), allow_pickle=False)
 
 
+_STEP_FILE = re.compile(r"step-(\d+)\.npy")
+
+
 def _steps_held(mirror, issue: dt.date) -> set[int]:
     held = set()
     for k in _list(mirror, work_prefix(issue)):
-        name = k.rsplit("/", 1)[-1]
-        if name.startswith("step-") and name.endswith(".npy"):
-            try:
-                held.add(int(name[5:-4]))
-            except ValueError:
-                pass
+        m = _STEP_FILE.fullmatch(k.rsplit("/", 1)[-1])
+        if m:  # anything else under the prefix isn't a step this job wrote
+            held.add(int(m[1]))
     return held & set(STEPS)
 
 

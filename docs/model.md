@@ -713,7 +713,7 @@ setting, so run comparison reads it as legacy.
     PE row: converting between them is the pan coefficient's job (ET₀ = Kp ×
     Epan), which stays the modeller's. The engine is unchanged by this; it
     only ever sees the accepted values.
-  - **Daily reference ET** (engine ≥ 1.102.0, issue #604 R5-E,
+  - **Daily reference ET** (engine ≥ 1.103.0, issue #604 R5-E,
     `packages/engine/src/evaporation/et0Daily.ts`). A monthly PE row is a
     climatology (dPET's 1991–2020 means, say), so a dry, hot current season
     runs on an average year's evaporation. A project may also hold a daily
@@ -740,7 +740,7 @@ setting, so run comparison reads it as legacy.
       the run has a usable value.
     - **No series, no change.** Without an `evap_et0_mm` series nothing
       runs: no summary, no warning, and every result is bit-identical to
-      engine 1.101.0 (`et0Daily.test.ts`, with its positive control; the
+      engine 1.102.0 (`et0Daily.test.ts`, with its positive control; the
       client catchment regression suite and the invariant suites run
       unchanged). Under `pe.kind: 'pan'` a series changes nothing but the
       summary and the warning (tested).

@@ -4753,6 +4753,17 @@ logic in `crops/loadFactors.ts`, its presentation helpers in
 `crops/loadFactorsView.ts`, data in `crops/library.ts`). Which crop set a
 catchment uses is the hydrologist's call (issue #54 Q9/Q10).
 
+Its lead line is the first thing read: the model uses the crop factors
+already in the project (Crops & demand › Tables › Crop factors, or as
+imported), and the dialog only overwrites them from another source, the
+reference library or a workbook, with nothing changing until the user
+applies and then saves the model with a reason. It ends with a help tip
+(**About Load crop factors**) for the glossary entry `load-crop-factors`
+(`lib/help/tips.ts`, its long text in `lib/help/articles.ts`: what the
+dialog overwrites, the four steps, Kp, Apply then save, and that the set is
+the hydrologist's call); the `crop-factor` entry links to it rather than
+repeating it. `e2e/tests/crop-library.spec.ts` checks the line and the tip.
+
 The dialog is a full dialog laid out as the task's four numbered steps.
 Wide (its body from 64rem, 896 px), steps 1–3 scroll in the left column and
 step 4, the effect on demand, sits in its own column beside them, so the
@@ -5458,8 +5469,12 @@ History is left to its own redesign.
   `#anchor` does, so Tab carries on from there; following the fragment
   already in the URL does too (issue #586).
 - **Phones** (up to 640 px): one strip that scrolls sideways inside itself
-  with every link (no More), the marked link kept in view, never the page.
-  A link Tab (or Shift+Tab) reaches is scrolled in whole, 16 px clear of the
+  with every link (no More), the marked link kept in view, never the page,
+  unless the person has scrolled the strip themselves: then it stays where
+  they put it until they pick a link in it, so a page scroll (or a
+  re-layout) that marks another section never moves the link under their
+  finger (`SectionNav` `stripHeld`; the settings side-index e2e caught a tap
+  landing on the wrong link). A link Tab (or Shift+Tab) reaches is scrolled in whole, 16 px clear of the
   edge (`sectionNav.ts` `stripScrollTo`): the browser scrolls a focused
   element only when none of it shows, so one half off the edge stayed cut
   (issue #586, at 320 px). With `groupNames` (Data, Hydrological units) the
@@ -6721,8 +6736,8 @@ other sections.
   fieldset's legend where it has one), so heading navigation reaches them:
   under Flow generation its cards (Per unit: Each unit's rainfall station,
   then the Flow share card; Units without a station an `h4` in its legend,
-  issue #553); under Rain gaps its two cards, CHIRPS gap filling and Flagged
-  rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
+  issue #553); under Rain gaps its three cards, Gap-filling product (issue
+  #604), CHIRPS gap filling and Flagged rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
   and rain source periods as `h4`s (issue #521). The four panels that moved
   to Calibration (Flow calibration, Calibration record, Fit the parameters,
   WR2012 check) are an `h3` each there, under its *Set up the fit* part
@@ -10691,7 +10706,10 @@ volume** (`volume=new`), each a side sheet that closes in place, so Back goes
 to where it was opened from. A viewer opening a sheet link gets the page.
 The volume sheet's **Water use** picks a take (s21a) or a dam's storage
 (s21b, issue #72); a storage row has no volume field, its water source is
-surface and its storage is required.
+surface and its storage is required. A take has an optional **Irrigated
+area (ha)** (244), the area it is registered to irrigate, kept to two
+decimals; a storage row has no area field, and switching back to a take
+brings the typed area back.
 
 **Under the header**, a sentence naming the run and saying modelled use is
 *modelled, not metered* and a difference is something to look into, not a
@@ -10795,7 +10813,9 @@ offered to a viewer who sees totals only. Tests: `allocations/useMap.test.ts`,
 fits at 1280 without sideways scroll: unit (or **Not matched**, highlighted)
 with the registration number under it, the registered user for editors only,
 authorisation with purpose, volume with source (**Storage only (s21b)** for a
-dam's registered storage, which is never a take, issue #72), storage, validity with where
+dam's registered storage, which is never a take, issue #72), storage with the
+registered irrigated area under it (`areaHa`, "42.5 ha", or – when none is
+stated; the picked unit's volumes say "· 42.5 ha irrigated"), validity with where
 it came from (the file name and the first 12 hex digits of its SHA-256, or
 "Entered by hand") and, when it states any, its licence conditions in one
 line ("Oct–Mar only · at most 0.05 m³/s · 2 conditions", `conditionsSummary`,

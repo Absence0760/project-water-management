@@ -511,7 +511,7 @@ requested volume in a full-allocation background, is one op.
 `rain_catchment_alt_mm` and the reanalysis `rain_reanalysis_mm` (engine ≥
 1.69.0, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), and the daily A-pan evaporation
 `evap_apan_mm` (engine ≥ 0.38.0, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)), and the daily reference ET
-`evap_et0_mm` (engine ≥ 1.102.0, model.md §2.4a *Daily reference ET*). From engine 1.78.0
+`evap_et0_mm` (engine ≥ 1.103.0, model.md §2.4a *Daily reference ET*). From engine 1.78.0
 a land unit's own rain records too, `rain_catchment_mm@<unit id>` and
 `rain_chirps_mm@<unit id>` ([model.md §2.4h](./model.md)), which the rain
 sensitivity (§2.10g) scales with the rest.

@@ -270,7 +270,7 @@ export interface FitRecord {
 		 */
 		apanDaily?: ApanDailyFingerprint | null;
 		/**
-		 * The daily reference ET series the fit ran on (engine ≥ 1.102.0, issue
+		 * The daily reference ET series the fit ran on (engine ≥ 1.103.0, issue
 		 * #604 R5-E, docs/model.md §2.4a): the same fingerprint as `apanDaily`;
 		 * null = the project had none. Absent on a record made before it was
 		 * tracked, which is never flagged.
@@ -393,7 +393,7 @@ export interface ApanDailyFingerprint {
 
 /**
  * Which part of the daily reference ET series (`evap_et0_mm`, engine ≥
- * 1.102.0) a fit ran on: the A-pan's fingerprint over its days through
+ * 1.103.0) a fit ran on: the A-pan's fingerprint over its days through
  * `through`, the last day the fit scored (et0FitWindow). A caller saying what
  * it is now fingerprints the series through the record's own `through`, so
  * days a feed appended after the fit never count as a change.
@@ -630,7 +630,7 @@ export interface FitRecordStatus {
 	 */
 	apanDailyChanged: boolean;
 	/**
-	 * The daily reference ET series (engine ≥ 1.102.0, issue #604 R5-E) was
+	 * The daily reference ET series (engine ≥ 1.103.0, issue #604 R5-E) was
 	 * added, removed or changed since a GR4J fit that ran on a monthly PE row,
 	 * and GR4J still does: the PE on the days it covers changed. False when
 	 * the record or the caller doesn't know the series, and under pan

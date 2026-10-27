@@ -1341,7 +1341,7 @@ def run(doc: dict) -> dict:
     g = settings["gr4j"]
     apan = [float(x) for x in settings["apanMm"]]
     pe = settings["pe"]
-    # §2.4a (engine ≥ 1.102.0, issue #604 R5-E): under a monthly PE row a daily
+    # §2.4a (engine ≥ 1.103.0, issue #604 R5-E): under a monthly PE row a daily
     # reference ET record (evap_et0_mm) is the day's PE as it stands wherever it
     # has a value ≥ 0; never read under pan coefficient × A-pan.
     et0 = Series(series.get("evap_et0_mm")) if pe.get("kind") == "monthly" else Series(None)

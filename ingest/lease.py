@@ -101,7 +101,7 @@ def _acquire_local(m: zarrstore.LocalMirror, product: str, owner: str, now: floa
     path.parent.mkdir(parents=True, exist_ok=True)
     for _ in range(2):
         try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)  # owner only: nothing else on the machine reads it
         except FileExistsError:
             held = json.loads(path.read_text() or "{}")
             if held.get("expires", 0) > now:

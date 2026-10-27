@@ -186,7 +186,7 @@ export interface PreparedRun {
 	rainSource: { info: RainSourceInfo; column: Float64Array } | null;
 	/** How the daily A-pan series is used (engine ≥ 0.38.0, issue #45; null without one). */
 	apanDaily: ApanDailyInfo | null;
-	/** The daily reference ET series' use (engine ≥ 1.102.0, ./evaporation/et0Daily.ts); null without one. */
+	/** The daily reference ET series' use (engine ≥ 1.103.0, ./evaporation/et0Daily.ts); null without one. */
 	et0Daily: Et0DailyInfo | null;
 	/**
 	 * settings.gapRain as applied (engine ≥ 1.101.0, ./gapRain.ts): which

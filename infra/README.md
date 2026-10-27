@@ -150,8 +150,10 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
   ([docs/deployment.md § Background jobs](../docs/deployment.md#background-jobs)).
   `water-management-fetcher` (`backend/src/lambda-fetcher.ts`, `feeds.tf`)
   downloads the data feeds' sources: no VPC, no database URL or secret, 512
-  MB, 120 s, reserved concurrency `fetcher_reserved_concurrency` (2), its role
-  limited to receiving `fetch-requests` and sending `ingest-results`
+  MB, 900 s, reserved concurrency `fetcher_reserved_concurrency` (2), its role
+  limited to receiving `fetch-requests` (a FIFO queue, one message group per
+  source host, so CHC sees one fetch at a time) and sending `ingest-results`,
+  its user agent naming `feeds_contact`
   ([docs/deployment.md § Data feeds](../docs/deployment.md#data-feeds)).
   `water-management-renderer` (`backend/src/lambda-renderer.ts`,
   `reports.tf`) prints report PDFs: a **container image**
@@ -219,7 +221,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | File | What |
 | --- | --- |
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
-| `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `redirect_domains` (former hostnames → their zones, `{}` for none), `github_repo`, `budget_alert_email`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
+| `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `redirect_domains` (former hostnames → their zones, `{}` for none), `github_repo`, `budget_alert_email`, `feeds_contact`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
 | `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
 | `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint (`secretsmanager_endpoint_az_count`) and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
@@ -787,6 +789,10 @@ Claude does not run any of these, and none of them print a secret. Replace
    the first frontend release (step 10).
    `budget_alert_email` is required and must be a real mailbox; plan
    refuses an empty, malformed or reserved (`example.com` etc.) address.
+   `feeds_contact` is required too: the address the data feeds' fetcher
+   names in its user agent, which CHC asked for (issue #604); the same
+   refusals, and a template's (`you@…`). The repo is public, so it lives only
+   in the tfvars.
    Then check that the budgets accepted the topic (no "Invalid SNS topic"
    in the console, or `aws budgets describe-notifications-for-budget --account-id <acct> --budget-name water-management-daily --profile water-management`
    answering without an error).
@@ -924,9 +930,9 @@ Claude does not run any of these, and none of them print a secret. Replace
     publishes `MirrorLagDays`, Round 2: its freshness alarms treat missing
     data as breaching and would fire daily before then). A backend release
     pushes the ingest image as `<version>-<sha12>` and leaves a notice naming
-    the tag. **Set `ingest_image_tag` after the first image push**, and
-    `ingest_contact` (a role address for the User-Agent), in `prod.tfvars`,
-    then plan and apply (step 8): the function, its two daily schedules'
+    the tag. **Set `ingest_image_tag` after the first image push**
+    in `prod.tfvars` (its User-Agent names `feeds_contact`, the one contact
+    the fetcher uses too), then plan and apply (step 8): the function, its two daily schedules'
     targets and the `mirror-lag-*` alarms appear, and the rules switch to
     ENABLED. The ECR lifecycle policy never expires the tagged image, as for
     the renderer (10a). Runbook: [docs/deployment.md § The data
@@ -1165,7 +1171,11 @@ address fails the plan (example.com/.org/.net and their subdomains, and the
 in any case); `dmarc_report_email` may be empty but is held to the same rule
 when set. A positive control (`accepts_real_alert_mailboxes`) accepts a
 domain that only contains "example". The suite's own address is at the
-site's domain, since the rule refuses every reserved one. Six more refuse an unreserved (`-1`) concurrency on each
+site's domain, since the rule refuses every reserved one. Five refuse a
+`feeds_contact` CHC couldn't write to: empty, malformed, reserved, a
+template's (`you@…`), or with characters that would break out of the user
+agent (`data_feeds` checks it reaches the fetcher as `FEEDS_CONTACT`, and
+that `fetch-requests` and its DLQ are FIFO). Six more refuse an unreserved (`-1`) concurrency on each
 Lambda and a worker cap below the sum of its SQS triggers'
 `maximum_concurrency`; two refuse an API or worker cap whose cap × pool sum
 passes 70 database connections (§ Connections), with 26 accepted as the

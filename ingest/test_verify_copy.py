@@ -7,7 +7,6 @@ import datetime as dt
 import email.message
 import io
 import json
-import math
 import struct
 import sys
 import tempfile
@@ -78,7 +77,7 @@ def lzw_encode(data: bytes) -> bytes:
     return bytes(out)
 
 
-def make_tiff(values, origin_lon, origin_lat, scale=0.05, compression=5, rows_per_strip=1, big_endian=False, geokeys=None, extra=None):
+def make_tiff(values, origin_lon, origin_lat, scale=0.05, compression=5, rows_per_strip=1, big_endian=False, geokeys=None, extra=None, nodata=b"-9999\0"):
     """A GeoTIFF of `values` (rows north-up), strips first and the IFD at the
     end, like CHC's files. `extra` adds (tag, type, values) entries."""
     bo = ">" if big_endian else "<"
@@ -109,7 +108,7 @@ def make_tiff(values, origin_lon, origin_lat, scale=0.05, compression=5, rows_pe
         (33550, 12, [scale, scale, 0.0]),
         (33922, 12, [0.0, 0.0, 0.0, origin_lon, origin_lat, 0.0]),
         (34735, 3, keys),
-        (42113, 2, b"-9999\0"),
+        (42113, 2, nodata),
     ] + list(extra or [])
     entries.sort(key=lambda e: e[0])
     fmt = {2: "s", 3: "H", 4: "I", 12: "d"}
@@ -203,6 +202,13 @@ class TiffReader(unittest.TestCase):
                     tiffread.open_grid(Reader(data))
         with self.assertRaises(tiffread.TiffFormatError):
             tiffread.open_grid(Reader(b"GIF89a" + b"\0" * 20))
+
+    def test_gdal_nodata_is_read_only_when_it_names_a_finite_number(self):
+        """tiff.ts's rule (Number(text), kept only when finite), so the twins accept the same files."""
+        cases = {b"-9999\0": -9999.0, b"1e3\0": 1000.0, b" -3.5 \0": -3.5, b"none\0": None, b"nan\0": None, b"inf\0": None, b"1e999\0": None, b"\0": None}
+        for text, want in cases.items():
+            with self.subTest(text):
+                self.assertEqual(tiffread.open_grid(Reader(make_tiff(self.values, 20.0, -30.0, nodata=text))).nodata, want)
 
     def test_a_point_outside_the_grid_is_refused(self):
         g = tiffread.open_grid(Reader(make_tiff(self.values, 20.0, -30.0)))

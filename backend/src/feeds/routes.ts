@@ -2,6 +2,7 @@
 // (viewer), attach / change / remove (owner), and "Run now" (editor), which
 // queues a fetch at once instead of waiting for the schedule.
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -185,15 +186,20 @@ function refuseBoundaryMark(config: unknown) {
 	}
 }
 
+// GET …/feeds/gap-rain's query; viewWindowQuery and the feed-id check give the 400s their words.
+const GapRainQuery = z.object({ feed: z.string().optional(), from: z.string().optional(), to: z.string().optional() });
+
 export const feedRoutes = new Hono<AuthEnv>()
 	// The gap-filling products over one CHIRPS feed's cells (issue #604 R4-E, docs/api.md § Data feeds): what the
 	// Data tab draws beside CHIRPS. Read from the shared cell cache only (a feed's fetch fills it), never the copy.
 	.get('/:id/feeds/gap-rain', async (c) => {
 		const id = c.req.param('id');
-		const feed = c.req.query('feed') ?? null;
+		// The whole query parsed at once, as the other routes do: a named single read is what the credential sweep looks for.
+		const q = GapRainQuery.parse(c.req.query());
+		const feed = q.feed ?? null;
 		if (feed !== null && !UUID.test(feed)) throw new ApiError(400, 'feed must be a feed id');
 		// At most ten years of days a request (GAP_VIEW_MAX_DAYS), by default the record's last ten; the double mass covers the whole record.
-		const ask = viewWindowQuery(c.req.query('from') ?? null, c.req.query('to') ?? null);
+		const ask = viewWindowQuery(q.from ?? null, q.to ?? null);
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			return c.json(await gapRainProducts(db, id, feed, undefined, ask));

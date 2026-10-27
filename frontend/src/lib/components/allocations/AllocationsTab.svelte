@@ -68,6 +68,7 @@
 		shortHash,
 		SOURCE_LABEL,
 		storageSentence,
+		areaHa,
 		unitRows,
 		unitStatusText,
 		volumeCell,
@@ -518,7 +519,7 @@
 											{#each pickedVolumes as a (a.id)}
 												<li>
 													<span class="vol-main"
-														><strong>{volumeCell(a)}</strong>{#if a.waterUse === '21b' && a.storageM3 !== null}: {fmtNum(a.storageM3)} m³{/if} · {SOURCE_LABEL[a.waterSource]} · {AUTHORISATION_LABEL[a.authorisation]}</span
+														><strong>{volumeCell(a)}</strong>{#if a.waterUse === '21b' && a.storageM3 !== null}: {fmtNum(a.storageM3)} m³{/if} · {SOURCE_LABEL[a.waterSource]} · {AUTHORISATION_LABEL[a.authorisation]}{#if a.irrigatedAreaHa !== null} · {areaHa(a.irrigatedAreaHa)} irrigated{/if}</span
 													>
 													<span class="small muted">
 														{a.registrationNo || 'No registration number'}{data?.canSeeHolders && a.holder ? ` · ${a.holder}` : ''} · valid {validity(a)}
@@ -573,7 +574,7 @@
 									{#if data.canSeeHolders}<th scope="col">Registered user</th>{/if}
 									<th scope="col">Authorisation<span class="sub">purpose</span></th>
 									<th scope="col" class="num">Volume (m³/a)<span class="sub">source</span></th>
-									<th scope="col" class="num">Storage (m³)</th>
+									<th scope="col" class="num">Storage (m³)<span class="sub">irrigated area (ha)</span></th>
 									<th scope="col">Valid<span class="sub">from</span></th>
 									{#if canEdit}<th scope="col"><span class="visually-hidden">Actions</span></th>{/if}
 								</tr>
@@ -586,7 +587,9 @@
 										{#if data.canSeeHolders}<td data-label="Registered user">{a.holder ?? '–'}</td>{/if}
 										<td data-label="Authorisation">{AUTHORISATION_LABEL[a.authorisation]}<span class="sub">{PURPOSE_LABEL[a.purpose]}</span></td>
 										<td class="num" data-label="Volume (m³/a)">{a.waterUse === '21b' ? volumeCell(a) : fmtNum(a.volumeM3PerYear)}<span class="sub">{SOURCE_LABEL[a.waterSource]}</span></td>
-										<td class="num" data-label="Storage (m³)">{fmtNum(a.storageM3)}</td>
+										<td class="num" data-label="Storage (m³)" data-testid="allocation-storage-area"
+											>{fmtNum(a.storageM3)}<span class="sub">{a.irrigatedAreaHa === null ? '–' : areaHa(a.irrigatedAreaHa)}</span></td
+										>
 										<td data-label="Valid">
 											{validity(a)}
 											{#if conditionsSummary(a)}<span class="sub" data-testid="allocation-conditions" title={a.conditions.join('\n') || undefined}>{conditionsSummary(a)}</span>{/if}

@@ -13,6 +13,14 @@
 // host alone for its Retry-After (THROTTLE_*); an HTTP 403 is a
 // FeedRefusedError, and the host is left alone for REFUSED_PAUSE_SECONDS.
 // Both pauses hold across clients in one process.
+//
+// The live client is also polite by itself (PACE_*, hostPacer): per host, one
+// request in flight per process and about one request start a second, as CHC
+// asked (2026-10-27, issue #604). The fetcher Lambda's SQS trigger keeps it to
+// one invocation per source host at a time (infra/feeds.tf), so that is also
+// the total across our Lambdas. And the user agent names a contact
+// (FEEDS_CONTACT) when one is set: required on the production fetcher.
+import { FEEDS_CONTACT_RE } from '../config/production.js';
 import { FeedRefusedError, FeedThrottledError, FeedUnavailableError } from './errors.js';
 import { CHC_BASE } from './sources/chirps.js';
 import { DWS_BASE } from './sources/dws.js';
@@ -74,7 +82,22 @@ export async function feedHttp(mode: FeedSourceMode = feedSourceMode()): Promise
 const TIMEOUT_MS = 20_000;
 /** A range read is a few tens of KB; a DWS page for 20 years is ~150 KB. */
 const MAX_BYTES = 4 * 1024 * 1024;
-const USER_AGENT = 'water-management-feeds/1 (+https://github.com/Absence0760/project-water-management)';
+const USER_AGENT_PRODUCT = 'water-management-feeds/1';
+const USER_AGENT_URL = '+https://github.com/Absence0760/project-water-management';
+
+/**
+ * Our user agent: the product, the repo, and a contact address when one is
+ * given (FEEDS_CONTACT). CHC asked for a contact in it (2026-10-27): the
+ * distinctive agent is how they matched our blocks across the fetcher's
+ * rotating addresses, and the address is who they write to before blocking.
+ * A value that isn't an address (FEEDS_CONTACT_RE) is left out rather than
+ * sent: it never reaches a header unchecked. Production refuses to start the
+ * fetcher without a good one (config/production.ts).
+ */
+export function userAgent(contact: string | undefined = process.env.FEEDS_CONTACT): string {
+	const c = contact?.trim();
+	return c && FEEDS_CONTACT_RE.test(c) ? `${USER_AGENT_PRODUCT} (${USER_AGENT_URL}; ${c})` : `${USER_AGENT_PRODUCT} (${USER_AGENT_URL})`;
+}
 
 /**
  * The only hosts a live fetch may ask, over HTTPS on the default port: the
@@ -165,8 +188,87 @@ export function assertLiveFeedRequestsAllowed(env: Record<string, string | undef
 	if (env.AWS_LAMBDA_FUNCTION_NAME && !liveRequestsAllowed) throw new LiveFeedRequestRefusedError();
 }
 
-export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a), throttle: ThrottleState = THROTTLED): FeedHttp {
+/**
+ * The least time between the starts of two requests to one host, and the most
+ * random time added to it: 1 s plus 0–0.5 s, so about one request a second.
+ * CHC's reply (2026-10-27, issue #604): their bot protection blocks an
+ * address for hours above about 2 requests a second sustained (each repeat
+ * block longer), they answer HTTP 429 past 20 open connections, and they ask
+ * for about 1 request a second in total, one file at a time; their download
+ * guide asks for 0.5 s plus up to 0.5 s of jitter between requests
+ * (https://github.com/chc-ucsb/chc-data-download#downloading-politely). We
+ * keep their total rather than their guide's per-client floor, since the
+ * guide is for one client and we are one per source host. The old fetcher
+ * read 6 at a time, about 3.6 requests a second, and was blocked.
+ */
+export const PACE_MIN_SPACING_MS = 1000;
+export const PACE_JITTER_MS = 500;
+
+/** Takes a host's one request slot, waiting for the one before to finish and the spacing to pass; resolves to its release. */
+export interface Pacer {
+	acquire(host: string): Promise<() => void>;
+}
+
+/**
+ * Per host: at most one request in flight, and each start at least
+ * `spacingMs` plus up to `jitterMs` (random) after the one before it. A
+ * request to another host waits for nothing here. Waiters are served in
+ * order. The clock, the sleep and the randomness are injectable for tests.
+ */
+export function hostPacer(
+	opts: { now?: () => number; sleep?: (ms: number) => Promise<void>; random?: () => number; spacingMs?: number; jitterMs?: number } = {}
+): Pacer {
+	const now = opts.now ?? Date.now;
+	const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+	const random = opts.random ?? Math.random;
+	const spacing = opts.spacingMs ?? PACE_MIN_SPACING_MS;
+	const jitter = opts.jitterMs ?? PACE_JITTER_MS;
+	/** Per host, the promise the next request waits on: the last one's release. */
+	const tails = new Map<string, Promise<void>>();
+	/** Per host, when its last request started. */
+	const lastStart = new Map<string, number>();
+	return {
+		async acquire(host) {
+			const before = tails.get(host) ?? Promise.resolve();
+			let release!: () => void;
+			const mine = new Promise<void>((resolve) => (release = resolve));
+			const tail = before.then(() => mine);
+			tails.set(host, tail);
+			await before;
+			try {
+				const last = lastStart.get(host);
+				if (last !== undefined) {
+					const wait = last + spacing + random() * jitter - now();
+					if (wait > 0) await sleep(wait);
+				}
+			} catch (err) {
+				release();
+				throw err;
+			}
+			lastStart.set(host, now());
+			let done = false;
+			return () => {
+				if (done) return;
+				done = true;
+				release();
+				// The last in line leaves nothing behind (the start time stays: the spacing holds across idle gaps).
+				if (tails.get(host) === tail) tails.delete(host);
+			};
+		}
+	};
+}
+
+/** Shared by every live client in one process, like THROTTLED: a warm fetcher Lambda keeps its pace across invocations. */
+const PACER: Pacer = hostPacer();
+
+export function liveHttp(
+	fetchFn: Fetch = (...a) => fetch(...a),
+	throttle: ThrottleState = THROTTLED,
+	pacer: Pacer = PACER,
+	contact: string | undefined = process.env.FEEDS_CONTACT
+): FeedHttp {
 	assertLiveFeedRequestsAllowed();
+	const agent = userAgent(contact);
 	const paused = (host: string) => {
 		const p = throttle.get(host);
 		if (!p) return;
@@ -177,14 +279,35 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a), throttle: Throt
 	const get = async (url: string, headers: Record<string, string>, method: 'GET' | 'HEAD' = 'GET'): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null } | null> => {
 		let target = new URL(url);
 		if (!allowed(target)) throw new FeedUnavailableError('the request was refused (not a known source host)');
-		// One deadline for the whole exchange: every hop and the body.
+		// Each hop takes its host's slot (pacer) and holds it until its response is done with, the body included.
+		let release = await pacer.acquire(target.host);
+		try {
+			return await exchange(target, headers, method, (next) => {
+				release();
+				return pacer.acquire(next.host).then((r) => {
+					release = r;
+				});
+			});
+		} finally {
+			release();
+		}
+	};
+	const exchange = async (
+		first: URL,
+		headers: Record<string, string>,
+		method: 'GET' | 'HEAD',
+		hopTo: (next: URL) => Promise<void>
+	): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null } | null> => {
+		let target = first;
+		// One deadline for the whole exchange: every hop and the body (from when it holds its first slot, not while it queues).
 		const signal = AbortSignal.timeout(TIMEOUT_MS);
 		let res: Response;
 		for (let hop = 0; ; hop++) {
+			// After the slot: a 429 or 403 the request before met pauses this one too.
 			paused(target.host);
 			try {
 				// Redirects are followed here, not by fetch, so each target is checked.
-				res = await fetchFn(target.href, { method, headers: { 'user-agent': USER_AGENT, ...headers }, signal, redirect: 'manual' });
+				res = await fetchFn(target.href, { method, headers: { 'user-agent': agent, ...headers }, signal, redirect: 'manual' });
 			} catch (err) {
 				throw transportError(err);
 			}
@@ -194,6 +317,7 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a), throttle: Throt
 			const location = res.headers.get('location');
 			const next = location ? URL.parse(location, target.href) : null;
 			if (!next || !allowed(next)) throw new FeedUnavailableError('the source redirected somewhere it may not');
+			await hopTo(next);
 			target = next;
 		}
 		if (res.status === 404 || res.status === 416) {

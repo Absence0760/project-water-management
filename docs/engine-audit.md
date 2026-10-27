@@ -713,7 +713,7 @@ and are **provisional, to be confirmed by the client's hydrologist**.
 
 ## Provisional decisions 2026-10-27: daily reference ET (issue #604 R5-E)
 
-Engine 1.102.0 lets GR4J run on a **daily FAO-56 reference ET** record
+Engine 1.103.0 lets GR4J run on a **daily FAO-56 reference ET** record
 (`evap_et0_mm`, model.md §2.4a *Daily reference ET*, `et0Daily.ts`):
 AgERA5 v2.0 from our copy through an `agera5_et0` data feed, with ET₀ we
 compute from NASA POWER's daily weather on the newest days, or a station's

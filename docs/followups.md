@@ -518,7 +518,7 @@ runs and accumulations are real) can't be decided without the client.
       (engine-audit.md GR1–GR6). Its control is Settings → Rain gaps →
       Gap-filling product (R4-E, ui.md § Model settings), and Data draws
       the products beside CHIRPS (ui.md § Data).
-- [ ] **Daily reference ET (engine 1.102.0, issue #604 R5-E, model.md
+- [ ] **Daily reference ET (engine 1.103.0, issue #604 R5-E, model.md
       §2.4a *Daily reference ET*).** Built opt-in (a project without an
       `evap_et0_mm` series runs as before, to the bit). Calls made in the
       build, to confirm: read only under a monthly PE row and as it
@@ -3528,6 +3528,25 @@ role and not before it.
         those listed under a reservoir's HyDataSets page) with
         `SiteType=DC`; if RIV fails for one, derive DC from the catalogue
         rather than the code letter, which can't tell them apart.
+  - [ ] **CHC blocked the fetcher (HTTP 403, 2026-10-25; #571, #604).** CHC's
+        bot protection blocked the fetcher's addresses for reading about 3.6
+        requests a second (6 files at a time, two Lambdas); the CHIRPS feeds
+        were switched off, and #585 made a 403 pause the host and back the
+        feed off. CHC replied 2026-10-27: their limits are per address (a
+        block for hours above ~2 requests a second, 429 past 20
+        connections), and they asked for one file at a time, about one
+        request a second in total, and a contact in the user agent. Done
+        (`fix/chc-polite-fetch`): the live client paces each host (one in
+        flight, 1 s + 0–0.5 s between starts), `fetch-requests` is a FIFO
+        queue with one message group per host (one fetch at a time across
+        instances), every CHC read is one at a time, a fetch short of time
+        answers the days it finished, and the user agent names
+        `FEEDS_CONTACT` (Terraform `feeds_contact`, required on the
+        fetcher). Left: the operator steps in [deployment.md § Re-enabling
+        the CHIRPS feeds](./deployment.md#re-enabling-the-chirps-feeds-issue-604)
+        (set `feeds_contact`, apply, release, switch the feeds on, watch the
+        first day). Trigger: that release. Then tick this. (#605's ingest job reads
+        the same `feeds_contact`, as `INGEST_CONTACT`.)
   - [ ] **Terms of use (operator decision, roadmap D7):** DWS's terms for
         automated retrieval, and CHIRPS-GEFS's licence (CHIRPS itself is
         public domain). Decide before a DWS or GEFS feed is used for a client.

@@ -24,7 +24,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "fixtures" / "era5land"))
 sys.path.insert(0, str(Path(__file__).resolve().parent / "fixtures" / "agera5"))
 
-import era5land  # noqa: E402
+import agera5request  # noqa: E402
+import cdsjob  # noqa: E402
+import era5request  # noqa: E402
 import make_agera5_fixture as afx  # noqa: E402
 import make_era5land_fixture as fx  # noqa: E402
 import polite  # noqa: E402
@@ -33,8 +35,9 @@ _ID = re.compile(r"^fake-(\d{4})-(\d{2})-(\d+)$")
 
 
 class FakeCds:
-    #: The product module whose requests this fake answers (DATASET, month_request, request_month, month_str).
-    job = era5land
+    #: The request module whose requests this fake answers (DATASET, PRODUCT, month_request, request_month): never the
+    #: job itself, which imports this fake (era5request.py, agera5request.py).
+    job = era5request
 
     def __init__(self, variant: str | None = None, today: dt.date | None = None, ready_after: int = 0, fail=(), refuse: int | None = None, preliminary=None, values=None):
         self.variant = variant  # "revised": the consolidated values differ at one point
@@ -51,16 +54,16 @@ class FakeCds:
     def _gate(self, what, *args):
         self.calls.append((what, *args))
         if self.refuse:
-            raise polite.StopRun(f"{era5land.CDS_URL} ({what})", self.refuse)
+            raise polite.StopRun(f"{era5request.CDS_URL} ({what})", self.refuse)
 
     def submit(self, dataset, request) -> str:
         self._gate("submit", dataset)
         if dataset != self.job.DATASET:
-            raise era5land.CdsError(f"no dataset {dataset}")
+            raise cdsjob.CdsError(f"no dataset {dataset}")
         ym = self.job.request_month(request)
         if ym is None or request != self.job.month_request(ym):
-            raise era5land.CdsError(f"not a {self.job.PRODUCT} month request: {request}")
-        key = era5land.month_str(ym)
+            raise cdsjob.CdsError(f"not a {self.job.PRODUCT} month request: {request}")
+        key = cdsjob.month_str(ym)
         n = sum(1 for s in self.submits if s == key) + 1
         rid = f"fake-{key}-{n}"
         self.submits.append(key)
@@ -82,7 +85,7 @@ class FakeCds:
 
     def find(self, dataset, ym):
         self._gate("find", dataset)
-        key = era5land.month_str(ym)
+        key = era5request.month_str(ym)
         for rid, job in self.jobs.items():
             if job["month"] == tuple(ym) and key not in self.fail:
                 return rid
@@ -92,7 +95,7 @@ class FakeCds:
         if self.preliminary is not None:
             p = self.preliminary(*ym)
             return None if p is None else bool(p)
-        return (self.today - era5land.month_end(ym)).days < era5land.RECHECK_AFTER_DAYS
+        return (self.today - era5request.month_end(ym)).days < era5request.RECHECK_AFTER_DAYS
 
     def download(self, rid, dest) -> int:
         self._gate("download", rid)
@@ -112,9 +115,7 @@ class FakeAgera5Cds(FakeCds):
 
     def __init__(self, *a, single: bool = False, lattice: str = "centres", **kw):
         super().__init__(*a, **kw)
-        import agera5
-
-        self.job = agera5
+        self.job = agera5request
         self.single = single
         self.lattice = lattice
 

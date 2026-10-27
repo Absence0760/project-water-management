@@ -180,6 +180,22 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 	await expect(page.getByRole('heading', { name: /^Data quality/ })).toBeInViewport();
 	await expect(menu.getByRole('link', { name: 'Data quality' })).toBeInViewport();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+	// A strip the person scrolled stays where they put it while the page scrolls under it (the marked
+	// section changes), so a tap lands on the link they see; picking a link hands it back.
+	const strip = menu.locator('.flow');
+	await strip.evaluate((el) => (el.scrollLeft = 0));
+	const held = await strip.evaluate((el) => el.scrollLeft);
+	const marked = menu.locator('a[aria-current="location"]');
+	await expect(marked).toHaveText('Data quality');
+	await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+	// The page's end marks the last section, off the strip's left end where the person left it.
+	await expect(marked).toHaveText('Automatic runs');
+	await expect(marked).not.toBeInViewport();
+	expect(await strip.evaluate((el) => el.scrollLeft)).toBe(held);
+	await menu.getByRole('link', { name: 'Simulation period' }).click();
+	await expect(page).toHaveURL(/#set-period$/);
+	await expect(menu.getByRole('link', { name: 'Simulation period' })).toBeInViewport();
 });
 
 test('the data-quality ratios read as a short percentage, not the stored two thirds to nine places', async ({ page, owner }) => {

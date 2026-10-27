@@ -82,10 +82,15 @@ import zarrstore
 
 log = logging.getLogger("ingest")
 
-PRODUCT = "agera5_et0"
-DATASET = "sis-agrometeorological-indicators"
-VARIABLE = "reference_evapotranspiration"
-VERSION = "2_0"
+from agera5request import (  # noqa: E402,F401  (re-exported: agera5.DATASET, agera5.month_request, … stay its names)
+    DATASET,
+    PRODUCT,
+    VARIABLE,
+    VERSION,
+    month_days,
+    month_request,
+    request_month,
+)
 RUNBOOK = "docs/deployment.md § AgERA5"
 
 #: The product's 0.1 deg grid on region D1, from 1979 (grid.py; backend/src/mirror/grid.ts PRODUCT_GRIDS).
@@ -145,10 +150,6 @@ parse_month = cdsjob.parse_month
 month_end = cdsjob.month_end
 
 
-def month_days(ym) -> list[dt.date]:
-    return [dt.date(*ym, d) for d in range(1, month_end(ym).day + 1)]
-
-
 def newest_complete_month(today: dt.date) -> tuple[int, int]:
     """The newest month whose last day the CDS should hold by `today`."""
     ym = cdsjob.prev_month((today.year, today.month))
@@ -165,31 +166,6 @@ def file_url(ym) -> str:
 def url_month(url: str) -> tuple[int, int] | None:
     return manifest.agera5_file_month(url)
 
-
-def month_request(ym) -> dict:
-    """The CDS request for month `ym`: every day, region D1, version 2.0."""
-    return {
-        "variable": VARIABLE,
-        "year": [f"{ym[0]:04d}"],
-        "month": [f"{ym[1]:02d}"],
-        "day": [f"{d.day:02d}" for d in month_days(ym)],
-        "version": VERSION,
-        "area": [grid.REGION["n"], grid.REGION["w"], grid.REGION["s"], grid.REGION["e"]],
-    }
-
-
-def request_month(req: dict) -> tuple[int, int] | None:
-    """The month a CDS request (ours, as the CDS echoes it back) asks for, or None if it isn't one of ours."""
-
-    def one(v):
-        return v[0] if isinstance(v, list) and len(v) == 1 else v
-
-    try:
-        if str(one(req.get("variable"))) != VARIABLE or str(one(req.get("version"))) != VERSION:
-            return None
-        return int(one(req["year"])), int(one(req["month"]))
-    except (KeyError, TypeError, ValueError):
-        return None
 
 
 # --- reading one month's download -------------------------------------------------------

@@ -24,7 +24,8 @@ evaporation).
 | `chirps_final.py` | The CHIRPS finals job (below): the listing and its diff, paced whole-file downloads within the time budget, and `ingest_file`, the single-file path. |
 | `era5land.py` | The ERA5-Land job (§ The ERA5-Land job): submit a month's CDS request, collect it on a later run, the 0.1° remap, the revision rule, and its own handler (`lambda_handler.py` hands `era5l` events to it). |
 | `cdsjob.py` | The CDS submit-then-collect machinery `era5land.py` and `agera5.py` share: the request state, the intent before a submit, adopting a queued request, backoff and the give-up rule, the refusal marker, the lease, `LiveCds` and the handler that publishes the lag on every exit. Each product brings a `CdsProduct` spec. |
-| `fakecds.py` | Fixtures mode's stand-in for the CDS: submit, status, find and download, serving `fixtures/era5land/`'s synthetic NetCDF (`FakeCds`) and `fixtures/agera5/`'s synthetic zip (`FakeAgera5Cds`). Not in the image. |
+| `era5request.py`, `agera5request.py` | Each CDS product's request (dataset, a month's request, the month a request names), shared by its job and `fakecds.py` so the fake never imports the job that imports it; `CdsError` and `CDS_URL` are `cdsjob.py`'s. |
+| `fakecds.py` | Fixtures mode's stand-in for the CDS: submit, status, find and download, serving `fixtures/era5land/`'s synthetic NetCDF (`FakeCds`) and `fixtures/agera5/`'s synthetic zip (`FakeAgera5Cds`), checking each request against the request modules. Not in the image. |
 | `agera5.py` | AgERA5's daily FAO-56 reference ET into `agera5_et0` (§ Reference evaporation): the month request, the reader (a zip of daily NetCDFs or one NetCDF, cells placed by coordinate), the 0–30 mm check, the revision rule; its runs are `cdsjob.py`'s. |
 | `fixtures/agera5/make_agera5_fixture.py` | Writes a synthetic AgERA5 month (a zip of daily NetCDF-4 files, or one file; x.x5 cells, or x.x0 points); `fakecds.py` calls it for each download. |
 | `nasapower.py` | The fallback, `power_et0` (§ Reference evaporation): NASA POWER's daily regional API, one parameter a request over 12 tiles, FAO-56 ET₀ per POWER point, the nearest point for each 0.1° cell, the last N days re-read each run, 120 days kept. |
@@ -618,6 +619,10 @@ docker buildx build --platform linux/arm64 -f ingest/Dockerfile ingest
 
 - **Base:** AWS's Lambda Python 3.14 image, using the arm64 tag pinned by
   digest.
+- **User:** `USER 65534` (nobody), so the image never runs as root (Trivy
+  DS-0002; `test_lambda_handler.py` checks it). Lambda runs it as its own
+  unprivileged user anyway; this covers a local `docker run`. The code and
+  packages are world-readable and the job writes only to `/tmp`.
 - **Pin checks:** `pnpm check:pins` refuses a `FROM` that isn't
   `public.ecr.aws/lambda/python:<version>-arm64@sha256:…`, and a
   `pip install` without `--require-hashes`.

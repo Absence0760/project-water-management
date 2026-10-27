@@ -1003,7 +1003,7 @@ export const FitRecord = z
 					.strict()
 					.nullable()
 					.optional(),
-				// Engine ≥ 1.102.0 (issue #604 R5-E): the daily reference ET series the fit ran on, the same fingerprint over its
+				// Engine ≥ 1.103.0 (issue #604 R5-E): the daily reference ET series the fit ran on, the same fingerprint over its
 				// days through the fit's last scored day (`through`). Optional, as above.
 				et0Daily: z
 					.object({ startDate: isoDate, length: z.number().int().min(0).max(60_000), valuesSha256: z.string().regex(/^[0-9a-f]{64}$/), through: isoDate })

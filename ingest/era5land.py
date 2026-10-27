@@ -110,15 +110,24 @@ import numpy as np
 import cdsjob
 import chirps_final
 import grid
+from era5request import (  # noqa: F401  (re-exported: era5land.DATASET, era5land.month_request, … stay its names)
+    CDS_URL,
+    DATASET,
+    RECHECK_AFTER_DAYS,
+    VARIABLE,
+    CdsError,
+    month_end,
+    month_request,
+    month_str,
+    next_month,
+    request_month,
+)
 import manifest
 import zarrstore
 
 log = logging.getLogger("ingest")
 
 PRODUCT = "era5l"
-DATASET = "reanalysis-era5-land"
-VARIABLE = "total_precipitation"
-CDS_URL = cdsjob.CDS_URL
 RUNBOOK = "docs/deployment.md § ERA5-Land"
 
 #: The product's 0.1 deg grid on region D1, from 1950 (grid.py; backend/src/mirror/grid.ts PRODUCT_GRIDS).
@@ -133,9 +142,7 @@ FIRST_DAY = manifest.ERA5L_FIRST_DAY
 
 #: A month's last 00 UTC step is on the CDS this many days after it (ERA5-Land-T is ~5 days behind).
 AVAILABLE_AFTER_DAYS = 6
-#: Re-request a preliminary (or unknown) month this long after its end (the consolidated data are ~2 months behind)...
-RECHECK_AFTER_DAYS = 75
-#: ...and again this often while it stays preliminary (or unknown).
+#: Re-request a preliminary (or unknown) month RECHECK_AFTER_DAYS (era5request.py) after its end, and again this often while it stays so.
 RECHECK_EVERY_DAYS = 30
 #: A month whose files never say their phase (no `expver`) stops being rechecked this long after its end:
 #: ERA5-Land replaces ERA5-Land-T about two months on, so 180 days covers a late consolidation with room to spare.
@@ -209,37 +216,6 @@ def file_url(ym) -> str:
 def url_month(url: str) -> tuple[int, int] | None:
     """The month a manifest file's URL (file_url) names: manifest.era5l_file_month."""
     return manifest.era5l_file_month(url)
-
-
-def month_request(ym) -> dict:
-    """The CDS request for month `ym`: every day's 00 UTC step, region D1, one unarchived NetCDF."""
-    days = month_end(ym).day
-    return {
-        "variable": [VARIABLE],
-        "year": f"{ym[0]:04d}",
-        "month": f"{ym[1]:02d}",
-        "day": [f"{d:02d}" for d in range(1, days + 1)],
-        "time": ["00:00"],
-        "data_format": "netcdf",
-        "download_format": "unarchived",
-        "area": [grid.REGION["n"], grid.REGION["w"], grid.REGION["s"], grid.REGION["e"]],
-    }
-
-
-def request_month(req: dict) -> tuple[int, int] | None:
-    """The month a CDS request (ours, as the CDS echoes it back) asks for, or None if it isn't one of ours."""
-
-    def one(v):
-        return v[0] if isinstance(v, list) and len(v) == 1 else v
-
-    try:
-        if [str(v) for v in (req.get("variable") if isinstance(req.get("variable"), list) else [req.get("variable")])] != [VARIABLE]:
-            return None
-        if [str(t) for t in (req.get("time") if isinstance(req.get("time"), list) else [req.get("time")])] not in (["00:00"], ["00"]):
-            return None
-        return int(one(req["year"])), int(one(req["month"]))
-    except (KeyError, TypeError, ValueError):
-        return None
 
 
 # --- reading one month's NetCDF --------------------------------------------------

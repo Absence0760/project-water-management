@@ -305,8 +305,9 @@
 		<div class="lcf">
 			<div class="steps">
 				<p class="lead">
-					Fill this project’s crop factors from published values or a workbook. Nothing changes until you apply, and then you save the model
-					with a reason, as for any edit.
+					The model uses the crop factors already in this project (Crops &amp; demand › Tables › Crop factors, or as imported). This dialog only
+					overwrites them from another source, the reference library or a workbook, and nothing changes until you apply and then save the model
+					with a reason. <HelpTip key="load-crop-factors" label="About Load crop factors" />
 				</p>
 
 				<section class="step" aria-labelledby="lcf-h-src">

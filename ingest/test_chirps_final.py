@@ -141,10 +141,13 @@ class Listing(unittest.TestCase):
             self.assertEqual(names, [fx.name(2024, 1), fx.name(2024, 2)], variant)
             for n in names:
                 self.assertTrue(o._path(n).is_file(), (variant, n))
-            with tempfile.TemporaryDirectory() as tmp:
-                fresh = [p for p in fx.write(Path(tmp)) if p.suffix == ".html"]
-                for p in fresh:
-                    self.assertEqual(p.read_text(), (fx.HERE / p.name).read_text(), p.name)
+            # The page the generator writes for the committed files themselves (not regenerated ones: HDF5
+            # builds differ by a few bytes, which moves the rounded size).
+            feb_time = {None: fx.MTIME[(2024, 2)], "rewritten": fx.MTIME_REWRITTEN, "changed": fx.MTIME_CHANGED}[variant]
+            readme = ("README.txt", dt.datetime(2024, 1, 2, 3, 4, tzinfo=dt.UTC), 1234)
+            jan = (fx.name(2024, 1), fx.MTIME[(2024, 1)], o._path(fx.name(2024, 1)).stat().st_size)
+            feb = (fx.name(2024, 2), feb_time, o._path(fx.name(2024, 2)).stat().st_size)
+            self.assertEqual(listing, fx.listing_html([readme, jan, feb]), variant)
 
     def test_committed_files_match_their_generator(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -389,6 +392,12 @@ class Lease(Base):
         self.assertFalse(p.exists())
         with lease.hold(mirror, "rnl", self.clock):
             pass
+
+    def test_a_local_lease_file_is_the_owners_alone(self):
+        mirror = zarrstore.Mirror.from_url(f"file://{self.root}")
+        with lease.hold(mirror, "rnl", self.clock):
+            mode = (self.root / lease.lease_key("rnl")).stat().st_mode & 0o777
+        self.assertEqual(mode & 0o077, 0, oct(mode))  # nothing for group or others, whatever the umask
 
     def test_s3_lease_uses_conditional_writes(self):
         s3 = FakeS3()

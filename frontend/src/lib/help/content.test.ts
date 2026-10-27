@@ -402,6 +402,8 @@ describe('searchHelp', () => {
 		expect(searchHelp('nse')[0]!.id).toBe('nse');
 		expect(searchHelp('Reserve')[0]!.id).toBe('ewr'); // alias
 		expect(searchHelp('kc')[0]!.id).toBe('crop-factor');
+		expect(searchHelp('load crop factors')[0]!.id).toBe('load-crop-factors');
+		expect(searchHelp('crop library')[0]!.id).toBe('load-crop-factors'); // alias
 		expect(searchHelp('dam spill').map((e) => e.id)).toContain('spill');
 		expect(searchHelp('zzzz')).toEqual([]);
 	});

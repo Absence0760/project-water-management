@@ -631,6 +631,7 @@ override_resource {
 
 variables {
   aws_region      = "af-south-1"
+  feeds_contact   = "ops@icwbt.jaredhoward.com"
   route53_zone_id = "Z0000000000000000000"
   # The hostname before issue #551, kept as a redirect, in its own zone.
   redirect_domains = { "water-management.jaredhoward.com" = "Z1111111111111111111" }

@@ -367,9 +367,10 @@ resource "aws_lambda_function" "ingest" {
 
   environment {
     variables = {
-      MIRROR_URL     = "s3://${aws_s3_bucket.mirror.bucket}"
-      FEED_SOURCE    = "live"
-      INGEST_CONTACT = var.ingest_contact
+      MIRROR_URL  = "s3://${aws_s3_bucket.mirror.bucket}"
+      FEED_SOURCE = "live"
+      # The one contact the operator sets for every upstream (variables.tf feeds_contact).
+      INGEST_CONTACT = var.feeds_contact
       # IMERG Late's Earthdata token, read at run time in live mode (imerg.tf).
       EARTHDATA_TOKEN_SECRET_ARN = aws_secretsmanager_secret.earthdata_token.arn
       # The CDS key's secret, read by ERA5-Land runs (era5land.tf); an ARN, not the key.

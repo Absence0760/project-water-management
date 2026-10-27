@@ -3219,8 +3219,10 @@ what](./allocations.md#who-sees-what)).
 
 - `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
   propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
-  storageM3, validFrom, validTo, reference, months, maxRateM3s, conditions,
-  waterUse, createdAt, updatedAt }`. `waterUse` (142, issue #72) is the NWA
+  storageM3, irrigatedAreaHa, validFrom, validTo, reference, months,
+  maxRateM3s, conditions, waterUse, createdAt, updatedAt }`.
+  `irrigatedAreaHa` (244) is the irrigated area registered, ha, or `null`
+  when none is stated; the model never reads it. `waterUse` (142, issue #72) is the NWA
   s21 water use: `'21a'` a take of `volumeM3PerYear` a year, `'21b'` a dam's
   storage only (`volumeM3PerYear` 0, `storageM3` stated, surface water),
   never counted as a take. `months` (calendar months 1–12, ascending, or
@@ -3236,13 +3238,16 @@ what](./allocations.md#who-sees-what)).
   (claimed = not verified; only `existing_lawful_use` is verified under s35;
   issue #281), purpose?: 'irrigation' | 'domestic' | 'livestock'
   | 'industry' | 'mining' | 'municipal' | 'other', waterSource: 'surface' |
-  'groundwater', volumeM3PerYear, storageM3?, validFrom?, validTo?,
+  'groundwater', volumeM3PerYear, storageM3?, irrigatedAreaHa?: 0 ≤ ha < 10⁷
+  | null, validFrom?, validTo?,
   reference?, months?: 1–12 each, 1–12 of them, no repeats (stored ascending)
   | null, maxRateM3s?: 0 ≤ r < 10⁶ | null, conditions?: up to 20 strings of
   1–500 characters, waterUse?: '21a' (default) | '21b' }` (dates
   `YYYY-MM-DD`). A `'21b'` row, created or as a PATCH leaves it, must have
-  `volumeM3PerYear` 0, a `storageM3` and `waterSource` `'surface'`, else
-  `400` (137's `allocation_storage_only_check` refuses it in the table too).
+  `volumeM3PerYear` 0, a `storageM3`, `waterSource` `'surface'` and no
+  `irrigatedAreaHa`, else `400` (137's `allocation_storage_only_check` and
+  244's `allocation_irrigated_area_take_check` refuse it in the table too).
+  Changing only `irrigatedAreaHa` leaves the latest run current.
 - Import: the template and a WARMS extract may carry `months` (numbers or
   names, ranges over the new year: `Oct-Mar`), `max_rate_m3s` and
   `conditions` (separated by `|`); a cell that doesn't read is a row problem.

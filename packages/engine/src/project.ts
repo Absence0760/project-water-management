@@ -1506,7 +1506,7 @@ export const userPriorityWord = (p: UserPriority | null | undefined): string => 
  * demand and dam evaporation; every other day falls back to the monthly
  * mean (./evaporation/apanDaily.ts, docs/model.md §2.3a).
  *
- * `evap_et0_mm` (engine ≥ 1.102.0, issue #604 R5-E) is a daily FAO-56
+ * `evap_et0_mm` (engine ≥ 1.103.0, issue #604 R5-E) is a daily FAO-56
  * reference evapotranspiration record (mm/day): an AgERA5 data feed (with
  * NASA POWER's computed ET₀ on the days AgERA5 doesn't have yet) or a
  * station's own. Only GR4J reads it, only under `pe.kind: 'monthly'`, as it
@@ -4380,7 +4380,7 @@ export interface RunSummary {
 	 */
 	apanDaily?: ApanDailyInfo;
 	/**
-	 * How the daily reference ET series was used (engine ≥ 1.102.0, issue
+	 * How the daily reference ET series was used (engine ≥ 1.103.0, issue
 	 * #604 R5-E, ./evaporation/et0Daily.ts): whether GR4J read it (only under
 	 * a monthly PE row), the run days it covered and the days that fell back
 	 * to the row. Absent when the project has no such series, and on older runs.

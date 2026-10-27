@@ -19,6 +19,7 @@ of the file, so a short answer for the IFD block is fine.
 from __future__ import annotations
 
 import math
+import re
 import struct
 import zlib
 from dataclasses import dataclass
@@ -89,6 +90,23 @@ def _need(got: bytes | None, n: int, what: str) -> bytes:
     if got is None or len(got) < n:
         raise TiffFormatError(f"the file ends before {what}")
     return got
+
+
+#: A decimal number as GDAL writes GDAL_NODATA ("-9999", "-3.4e+38"); "nan" and "inf" are no number here.
+_NODATA_NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
+
+
+def _gdal_nodata(text: str) -> float | None:
+    """The file's GDAL_NODATA as the float32 the writer stored, or None when it
+    names no finite number. That is the backend's reader's rule (tiff.ts takes
+    Number(text) only when it is finite), and the twins accept the same files;
+    NaN and values at or below NODATA_FLOOR are no data either way."""
+    if not _NODATA_NUMBER.fullmatch(text):
+        return None
+    v = float(text)
+    if not math.isfinite(v):  # a decimal past float range ("1e999")
+        return None
+    return struct.unpack("f", struct.pack("f", v))[0]
 
 
 def open_grid(read: RangeRead) -> Grid | None:
@@ -209,13 +227,7 @@ def open_grid(read: RangeRead) -> Grid | None:
 
     nodata = None
     if TAG_GDAL_NODATA in entries and entries[TAG_GDAL_NODATA][0] == 2 and entries[TAG_GDAL_NODATA][1] <= 256:
-        text = raw(TAG_GDAL_NODATA)[1].rstrip(b"\0").decode("ascii", "replace").strip()
-        try:
-            v = float(text)
-            if math.isfinite(v):
-                nodata = struct.unpack("f", struct.pack("f", v))[0]  # the float32 the writer stored
-        except ValueError:
-            pass
+        nodata = _gdal_nodata(raw(TAG_GDAL_NODATA)[1].rstrip(b"\0").decode("ascii", "replace").strip())
 
     return Grid(
         width=width,
