@@ -41,7 +41,7 @@ import { fileURLToPath } from 'node:url';
 import { FeedFormatError, FeedRefusedError, FeedThrottledError, FeedUnavailableError } from '../../feeds/errors.js';
 import type { ConditionalText, FeedHttp } from '../../feeds/http.js';
 import type { MirrorStore } from '../../mirror/store.js';
-import { type ObservationFile, type PassStatus, readObservationFile, readStatus, readWanted, recencyDays, WATERBODY_UID, writeObservationFile, writeStatus } from './handover.js';
+import { isCalendarDate, type ObservationFile, type PassStatus, readObservationFile, readStatus, readWanted, recencyDays, WATERBODY_UID, writeObservationFile, writeStatus } from './handover.js';
 import { DEAFRICA_SERVICES_BASE } from './upstream.js';
 
 /** Where the per-waterbody series live (v0.0.2: the newest version with public time series, 2026-10-27). */
@@ -70,7 +70,7 @@ export function parseWaterbodiesCsv(text: string, uid: string): ObservationFile[
 		const bad = (what: string) => new FeedFormatError(`the Waterbodies series has a row (${i + 2}) with ${what}`);
 		if (cells.length !== WATERBODIES_HEADER.length) throw bad('the wrong number of columns');
 		const date = cells[at('date')]!.slice(0, 10);
-		if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) throw bad('no date');
+		if (!isCalendarDate(date) || date < '1984-01-01') throw bad('no date');
 		const invalid = Number(cells[at('pc_invalid')]);
 		if (cells[at('pc_invalid')] === '' || !Number.isFinite(invalid) || invalid < 0 || invalid > 100.0001) throw bad('no share invalid');
 		const pctObserved = Math.max(0, Math.min(100, 100 - invalid));
@@ -156,51 +156,59 @@ export async function runWaterbodiesPass(opts: WaterbodiesPassOptions): Promise<
 	const failed: string[] = [];
 	let stopped: WaterbodiesPassResult['stopped'] = 'done';
 	let error: unknown = null;
-	for (const uid of due) {
-		if (opts.deadline !== undefined && now() >= opts.deadline) {
-			stopped = 'deadline';
-			break;
-		}
-		const triedAt = new Date(now()).toISOString();
-		// The file held, for its ETag; one that no longer reads is fetched whole.
-		const held = await readObservationFile(store, 'waterbodies', uid).catch(() => null);
-		const url = waterbodiesUrl(uid);
-		try {
-			const got = await paced(url, held?.upstream[0]?.etag ?? null);
-			if (got === null) throw new FeedUnavailableError('HTTP 404');
-			if (got.status === 'not-modified') {
-				perKey[uid] = { ...perKey[uid], lastGood: triedAt, ...(held?.rows.length ? { newest: held.rows.at(-1)!.date } : {}) };
-				delete perKey[uid]!.error;
-				unchanged.push(uid);
-				continue;
-			}
-			const rows = parseWaterbodiesCsv(got.text, uid);
-			const file: ObservationFile = {
-				source: 'waterbodies',
-				key: uid,
-				fetchedAt: triedAt,
-				upstream: [{ url, ...(got.etag ? { etag: got.etag } : {}), ...(got.lastModified ? { lastModified: got.lastModified } : {}) }],
-				rows
-			};
-			await writeObservationFile(store, file);
-			perKey[uid] = { lastGood: triedAt, ...(rows.length ? { newest: rows.at(-1)!.date } : {}) };
-			fetched.push(uid);
-		} catch (err) {
-			if (err instanceof FeedRefusedError || err instanceof FeedThrottledError) {
-				stopped = err instanceof FeedRefusedError ? 'refused' : 'throttled';
-				error = err;
-				perKey[uid] = { ...perKey[uid], error: stopped };
+	const saveStatus = async () => {
+		const stale = stopped === 'refused' || stopped === 'throttled';
+		await writeStatus(store, { source: 'waterbodies', ranAt: new Date(now()).toISOString(), stopped: stale, ...(stale ? { reason: stopped } : {}), perKey });
+	};
+	try {
+		for (const uid of due) {
+			if (opts.deadline !== undefined && now() >= opts.deadline) {
+				stopped = 'deadline';
 				break;
 			}
-			// The upstream's answer for this uid; anything else (the mirror write failing) is ours: stop and fail.
-			if (!(err instanceof FeedFormatError || err instanceof FeedUnavailableError)) throw err;
-			perKey[uid] = { ...perKey[uid], error: errorCode(err) };
-			failed.push(uid);
+			const triedAt = new Date(now()).toISOString();
+			// The file held, for its ETag; one that no longer reads is fetched whole.
+			const held = await readObservationFile(store, 'waterbodies', uid).catch(() => null);
+			const url = waterbodiesUrl(uid);
+			try {
+				const got = await paced(url, held?.upstream[0]?.etag ?? null);
+				if (got === null) throw new FeedUnavailableError('HTTP 404');
+				if (got.status === 'not-modified') {
+					perKey[uid] = { ...perKey[uid], lastGood: triedAt, ...(held?.rows.length ? { newest: held.rows.at(-1)!.date } : {}) };
+					delete perKey[uid]!.error;
+					unchanged.push(uid);
+					continue;
+				}
+				const rows = parseWaterbodiesCsv(got.text, uid);
+				const file: ObservationFile = {
+					source: 'waterbodies',
+					key: uid,
+					fetchedAt: triedAt,
+					upstream: [{ url, ...(got.etag ? { etag: got.etag } : {}), ...(got.lastModified ? { lastModified: got.lastModified } : {}) }],
+					rows
+				};
+				await writeObservationFile(store, file);
+				perKey[uid] = { lastGood: triedAt, ...(rows.length ? { newest: rows.at(-1)!.date } : {}) };
+				fetched.push(uid);
+			} catch (err) {
+				if (err instanceof FeedRefusedError || err instanceof FeedThrottledError) {
+					stopped = err instanceof FeedRefusedError ? 'refused' : 'throttled';
+					error = err;
+					perKey[uid] = { ...perKey[uid], error: stopped };
+					break;
+				}
+				// The upstream's answer for this uid; anything else (the mirror write failing) is ours: stop and fail.
+				if (!(err instanceof FeedFormatError || err instanceof FeedUnavailableError)) throw err;
+				perKey[uid] = { ...perKey[uid], error: errorCode(err) };
+				failed.push(uid);
+			}
 		}
+	} catch (err) {
+		// The mirror itself failed: keep what this run fetched before it (best effort), then fail.
+		await saveStatus().catch(() => {});
+		throw err;
 	}
-
-	const stale = stopped === 'refused' || stopped === 'throttled';
-	await writeStatus(store, { source: 'waterbodies', ranAt: new Date(now()).toISOString(), stopped: stale, ...(stale ? { reason: stopped } : {}), perKey });
+	await saveStatus();
 	return done({ fetched, unchanged, failed, fresh: wanted.waterbodies.length - due.length, stopped, error });
 }
 

@@ -88,6 +88,8 @@ describe('the dams handover files', () => {
 			)
 		).toThrow();
 		expect(() => writeObservationFile(s, file({ rows: [{ date: '2020-01-05', wetAreaM2: 1, pctObserved: 101, upstreamKey: 'k' }] }))).toThrow();
+		expect(() => writeObservationFile(s, file({ rows: [{ date: '2023-02-31', wetAreaM2: 1, pctObserved: 1, upstreamKey: 'k' }] }))).toThrow();
+		expect(() => writeObservationFile(s, file({ rows: [{ date: '9999-12-31', wetAreaM2: 1, pctObserved: 1, upstreamKey: 'k' }] }))).toThrow();
 		expect(() => writeWanted(s, { generatedAt: '2026-10-27T04:00:00.000Z', waterbodies: ['zzzzza0001', 'zzzzza0001'], outlines: [] })).toThrow();
 		// A file under one key that names another is refused on read.
 		await s.set(observationKey('waterbodies', 'zzzzza0002'), new TextEncoder().encode(JSON.stringify(file())));

@@ -2,8 +2,9 @@
 // the files, 249_dam_observation.sql). Not a job: runTick (jobs/runner.ts)
 // calls runDamsTick once per tick, with no user, beside the DWS tick.
 //
-// Only with DAM_OBSERVATIONS=on (Terraform sets it on the worker from
-// dam_observations_enabled; off by default), and only against a bucket the
+// Only with DAM_OBSERVATIONS=on (off by default; in production the worker's
+// environment in infra/jobs.tf must set it from dam_observations_enabled, a
+// change still to make there, docs/deployment.md § Dam observations), and only against a bucket the
 // passes read: MIRROR_URL in a live process, else a MIRROR_URL of its own
 // (never the committed synthetic copy; `pnpm dev:dams:run` uses a scratch
 // directory). Each tick:
@@ -16,8 +17,10 @@
 //      key whose last good fetch this process hasn't loaded, its file, into
 //      dam_observation (app_dam_observation_load). A Waterbodies file is
 //      loaded again when the dams matched to its uid change, so a dam matched
-//      after the file was fetched gets its series. The function skips rows it
-//      already holds unchanged, so a restarted worker reloading every file
+//      after the file was fetched gets its series. A 304 week moves a key's
+//      last good fetch, so each unchanged file is read and loaded again once a
+//      week (one GET and one call each); the function skips rows it already
+//      holds unchanged, so that, and a restarted worker reloading every file,
 //      rewrites nothing.
 // A failure is logged and left to the next tick; the rest of the tick goes on.
 // The log names counts only, never a dam, uid or project.
@@ -166,7 +169,7 @@ export async function runDamsTick(o: { store?: MirrorStore; env?: Env; now?: () 
 			for (const [key, s] of Object.entries(status?.perKey ?? {})) {
 				if (!s.lastGood) continue;
 				// A Waterbodies file reaches the dams matched to its uid: when they change, load it again.
-				const mark = source === 'waterbodies' ? `${s.lastGood}|${(matchedTo.get(key) ?? []).sort().join(',')}` : s.lastGood;
+				const mark = source === 'waterbodies' ? `${s.lastGood}|${[...(matchedTo.get(key) ?? [])].sort().join(',')}` : s.lastGood;
 				const id = `${source}:${key}`;
 				if (loaded.get(id) === mark) continue;
 				if (source === 'waterbodies' && !matchedTo.has(key)) continue;

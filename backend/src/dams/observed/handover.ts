@@ -91,7 +91,11 @@ export const WOFS_FIRST_DATE = '1984-01-01';
 /** A Waterbodies uid (a geohash; 249's waterbody_reference.uid). */
 export const WATERBODY_UID = /^[0-9a-z]{6,12}$/;
 const FEATURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const IsoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/** A real calendar date (2023-02-31 is not one), ISO. */
+export const isCalendarDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+const IsoDay = z.string().refine(isCalendarDate, 'not a calendar date');
+/** An observation's date: a calendar date from Landsat's start to tomorrow (UTC), as app_dam_observation_load bounds it. */
+const ObsDay = IsoDay.refine((d) => d >= '1984-01-01' && d <= new Date(Date.now() + 86_400_000).toISOString().slice(0, 10), 'outside 1984 to tomorrow');
 const IsoTime = z.string().datetime({ offset: true });
 const Printable = (max: number) => z.string().min(1).max(max).regex(/^[!-~]+$/);
 const Lon = z.number().finite().min(-180).max(180);
@@ -121,7 +125,7 @@ export const WantedListSchema = z
 
 const Row = z
 	.object({
-		date: IsoDay,
+		date: ObsDay,
 		wetAreaM2: z.number().finite().min(0).max(1e12),
 		pctObserved: z.number().finite().min(0).max(100),
 		upstreamKey: Printable(200)

@@ -837,7 +837,7 @@ variable "cloudfront_price_class" {
 }
 
 variable "dam_observations_enabled" {
-  description = "Turn on the dam observations (dam_observations.tf, issue #604 R5): the daily EventBridge rule that invokes the fetcher with {\"mode\":\"dams-weekly\"} (DE Africa Waterbodies and WOfS, each key re-read once a week), the fetcher's reads and writes under dams/ in the mirror bucket, the worker's write of dams/wanted.json, and the passes' heartbeat and WOfS recency alarms. The worker's DAM_OBSERVATIONS=on and the S3 endpoint's statement for dams/wanted.json are set beside DWS_WEEKLY (jobs.tf, packs.tf). Off (the default) until a backend release with the mode is deployed and a dam is traced, or the alarms fire for passes that don't exist yet. Runbook: docs/deployment.md § Dam observations."
+  description = "Turn on the dam observations (dam_observations.tf, issue #604 R5): the daily EventBridge rule that invokes the fetcher with {\"mode\":\"dams-weekly\"} (DE Africa Waterbodies and WOfS, each key re-read once a week), the fetcher's reads and writes under dams/ in the mirror bucket, the worker's write of dams/wanted.json, and the passes' heartbeat and WOfS recency alarms. The worker's DAM_OBSERVATIONS=on (jobs.tf) and the S3 endpoint's statement for dams/wanted.json (packs.tf) are not set by this variable yet: add them beside DWS_WEEKLY's before turning it on, or the worker never writes the wanted list. Off (the default) until a backend release with the mode is deployed and a dam is traced, or the alarms fire for passes that don't exist yet. Runbook: docs/deployment.md § Dam observations."
   type        = bool
   default     = false
 }

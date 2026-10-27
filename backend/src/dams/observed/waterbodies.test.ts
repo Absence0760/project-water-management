@@ -64,6 +64,8 @@ describe('parseWaterbodiesCsv', () => {
 		expect(() => parseWaterbodiesCsv('', 'zzzzza0001')).toThrow(FeedFormatError);
 		expect(() => parseWaterbodiesCsv('date,area_wet_m2\n2023-01-01,1', 'zzzzza0001')).toThrow(/columns changed/);
 		expect(() => parseWaterbodiesCsv(`${HEAD}\nyesterday,1,1,1,1,1,0,0,1,1,0`, 'zzzzza0001')).toThrow(/no date/);
+		expect(() => parseWaterbodiesCsv(`${HEAD}\n2023-02-31,1,1,1,1,1,0,0,1,1,0`, 'zzzzza0001')).toThrow(/no date/);
+		expect(() => parseWaterbodiesCsv(`${HEAD}\n1975-01-01,1,1,1,1,1,0,0,1,1,0`, 'zzzzza0001')).toThrow(/no date/);
 		expect(() => parseWaterbodiesCsv(`${HEAD}\n2023-01-01,1,1,1,1,1,0,0,1,1`, 'zzzzza0001')).toThrow(/columns/);
 		expect(() => parseWaterbodiesCsv(`${HEAD}\n2023-01-01,1,1,-5,1,1,0,0,1,1,0`, 'zzzzza0001')).toThrow(/wet area/);
 		expect(() => parseWaterbodiesCsv(`${HEAD}\n2023-01-01,1,1,5,1,1,0,0,1,1,150`, 'zzzzza0001')).toThrow(/share invalid/);
@@ -183,7 +185,21 @@ describe('runWaterbodiesPass', () => {
 		}
 	});
 
-	it('waits a second between requests, and starts no uid past the deadline', async () => {
+	it('keeps the status of what it fetched before the mirror failed, then fails', async () => {
+		const s = store();
+		await want(s, UIDS.slice(0, 2));
+		let writes = 0;
+		const failing = Object.assign(Object.create(Object.getPrototypeOf(s)), s, {
+			set: async (k: Parameters<typeof s.set>[0], v: Uint8Array) => {
+				if (String(k).startsWith('/dams/waterbodies/') && ++writes === 2) throw new Error('bucket down');
+				return s.set(k, v);
+			}
+		});
+		await expect(run(failing, fixtureWaterbodiesHttp())).rejects.toThrow('bucket down');
+		expect(Object.keys((await readStatus(s, 'waterbodies'))!.perKey)).toEqual([UIDS[0]]);
+	});
+
+		it('waits a second between requests, and starts no uid past the deadline', async () => {
 		const s = store();
 		await want(s, UIDS.slice(0, 3));
 		const slept: number[] = [];
