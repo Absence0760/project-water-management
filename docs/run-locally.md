@@ -409,6 +409,18 @@ panel's "Rain data copied to …" line reads what the worker's tick recorded
 about the copy (`mirror_copy`), so until a tick has run (`pnpm dev:full`, or
 one `pnpm dev:jobs:tick`) it says the copy hasn't been checked yet.
 
+DWS feeds read our own store of DWS gauge flow here (`DWS_SOURCE=store`,
+the default with the fixtures; [architecture.md § DWS gauge records](./architecture.md#dws-gauge-records)):
+each fetch first writes its window's days from the synthetic DWS page into
+`gauge_record` (origin `fixtures`), then reads them, so a feed shows the
+values the page gave and nothing needs seeding. To load a DWS daily table
+as the operator loads DWS's reply, try the invented one:
+`pnpm import:dws backend/fixtures/dws/X0H001-reply.synthetic.txt --reference SYNTHETIC`
+(station `X0H001`, January–March 2010; a feed on `X0H001` with a start date
+in 2010 reads it). To read the page through the fetch as production does,
+put `DWS_SOURCE=live` in `backend/.env.development.local`; the backend's
+unit and DB tests run that way unless a test sets `store`.
+
 The fixtures tag each file by its bytes, as an ETag would. To watch the
 re-check of cached finals CHC rewrites in place
 ([architecture.md § Data feeds](./architecture.md#data-feeds)), set

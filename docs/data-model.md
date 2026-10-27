@@ -4425,6 +4425,79 @@ it marks the cached finals stale, and the re-check above does the rest.
   batches; `mirror_copy` recorded, a new month too);
   `jobs/handlers/mirror-tick.test.ts` `nextBatch`.
 
+### DWS gauge records (247_gauge_record.sql)
+
+Issue #604's rule moves DWS feeds off DWS's site too (design D14): a DWS
+feed with `DWS_SOURCE=store` reads its station's days from our own store
+(`backend/src/feeds/fromGaugeRecord.ts`) instead of asking
+`HyData.aspx` per feed. Three writers fill it, each its own **source**:
+
+- `dws-request`: DWS's reply to a written data request, loaded by the
+  operator (`pnpm import:dws <file> --reference "…"`,
+  `backend/scripts/import-dws.ts`). The primary route for a station's
+  history, and the one that settles storing the data in a commercial tool.
+- `dws-web`: the weekly pass (`backend/src/ingest/dws.ts`), the newest two
+  years of each station an enabled DWS feed names, handed over through the
+  mirror bucket and loaded by the worker's tick
+  (`backend/src/feeds/gaugeRecordLoad.ts`).
+- `upload`: any other DWS daily table the operator loads
+  (`pnpm import:dws … --source upload`, e.g. a page saved by hand).
+
+| Table | Holds |
+| --- | --- |
+| `gauge_record` | One row per `origin`, `station`, `day` and `source` (primary key): the daily mean flow `value` in m³/s (null for a listed gap, e.g. quality 170; 0–100 000, never NaN), DWS's `quality` code as listed (1–8 letters or digits, or null), `fetched_at`, and `reference` (a `dws-request` row's reply). `station` is a river gauge code (`^[A-Z][0-9]H[0-9]{3}$`, the feed config's `DWS_RIVER_GAUGE`); `origin` is `dws` (from DWS) or `fixtures` (the synthetic page dev, CI and e2e read). No foreign keys |
+| `gauge_record_span` | One row per `origin`, `station`, `source` and `day_from` (primary key): the days `day_from`–`day_to` that source was asked for, listed or not; `fetched_at` (the newest load merged into it) and `reference`. Overlapping or adjacent spans of one source merge as they are written. What tells a day DWS has no data for (inside a span, no row) from a day not loaded yet (no span). No foreign keys |
+| `gauge_record_current` (view, `security_invoker`) | Per `origin`, `station` and `day`, the row of the best source (below): what a feed reads |
+
+**Precedence.** Each source keeps its own rows, so a load never destroys
+another's and a disagreement stays visible; the view picks per day
+`dws-request`, then `dws-web`, then `upload` (`gauge_source_rank`):
+
+- **A DWS reply first.** It is DWS's own extract of Hydstra, sent to us in
+  writing for this use: the authoritative copy, and the only one we have
+  permission to keep.
+- **The web pass next.** The same verified data read from the public page,
+  and fresher (weekly), so it fills every day a reply doesn't hold (the
+  months since the reply was extracted above all). It doesn't override the
+  reply on a day both hold: it is a scrape of a page whose layer DWS has
+  seen fail (the ScriptServer page), with no terms.
+- **An upload last.** A table of unknown provenance, used only where neither
+  DWS source has the day.
+
+A gap row is a row like any other: DWS listing a day with no value (170
+"permanent gap") is an answer, and it wins over a lower source's value.
+
+- **RLS**: reference data like `chirps_cell_year`: SELECT for any
+  signed-in session, no write grant to `water_app` (`catalogue.db.test.ts`
+  `READ_ONLY`).
+- **`gauge_record_write(origin, station, source, from, to, days[],
+  values[], quality[], fetched_at, reference)`** (invoker's rights,
+  `search_path` pinned, closed to `water_app` and PUBLIC, as
+  `authority_confirm_by_operator`): the operator's import, as the schema
+  owner. Replaces the source's rows over `from`–`to` (a day it no longer
+  lists goes; other sources stay) and merges the span. Bounds (else
+  23514): origin, source and station known; the span 1–7330 days (DWS's 20
+  years a request) ending by today in South Africa; the arrays of one
+  length, at most 7330 rows, each day inside the span and listed once; each
+  value null or 0–100 000; each quality code 1–8 letters or digits;
+  `fetched_at` not in the future; a `dws-request` load names its reply.
+  A load no newer than the source's newest one already covering the whole
+  span changes nothing (`applied = false`). One writer per station at a
+  time (an advisory lock).
+- **`app_gauge_record_load_web(origin, station, from, to, days[], values[],
+  quality[], fetched_at)`** (`SECURITY DEFINER`, `water_app` EXECUTE, worker
+  only: no user and no API key, 245's `mirror_worker_context`, else 42501):
+  `gauge_record_write` with source `dws-web` and a span of at most 731 days.
+- **`app_dws_feed_stations()`** (`SECURITY DEFINER`, worker only): the river
+  gauges enabled DWS feeds name, in any project, each once, at most 500:
+  the weekly pass's station list. Only public station codes leave with it.
+- **Tests**: `feeds/gaugeRecord.db.test.ts` (a signed-in reader with a
+  positive control, `water_app`'s refused writes, the worker-only
+  functions, every bound, the precedence, the replace and the skip, the
+  import of the synthetic reply, a store-backed fetch writing exactly what
+  the live path writes, waiting for days the store doesn't hold, the
+  tick's handover); `ingest/dws.test.ts`; `scripts/import-dws.test.ts`.
+
 ### Feed days (031_feed_days.sql)
 
 Which days of a series its feed wrote, so a feed replaces only those and

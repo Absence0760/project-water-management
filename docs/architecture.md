@@ -1686,6 +1686,66 @@ EventBridge, daily
   the first worker tick records: `pnpm dev:full`, or one `pnpm dev:jobs:tick`). `pnpm dev:ingest:run` runs the Python
   job against synthetic NetCDF fixtures when you need it.
 
+### DWS gauge records
+
+The same rule for DWS (issue #604 R3-B, design D14): a DWS feed reads its
+station's days from our own store, `gauge_record` (247,
+[data-model.md § DWS gauge records](./data-model.md#dws-gauge-records-247_gauge_recordsql)),
+**behind `DWS_SOURCE`**: `store` reads it, `live` keeps the per-feed request
+to DWS's page through the fetcher. Unset follows `FEED_SOURCE` (`live` in
+production, `store` in dev, CI and e2e); production says `live` until the
+operator has DWS's written answer and has loaded its reply
+([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
+
+```
+operator ── pnpm import:dws <DWS's reply> ──► gauge_record (source dws-request)
+
+EventBridge, daily 04:00 UTC ──► fetcher, {"mode":"dws-weekly"} (outside the VPC)
+   reads   dws/stations.json            ◄── worker tick: app_dws_feed_stations()
+   GET     HyData.aspx, each station due (re-read every 6 days), newest 2 years, 1 a second
+   writes  dws/<station>.json, dws/status.json            (mirror bucket)
+                                         ──► worker tick: app_gauge_record_load_web
+                                              ──► gauge_record (source dws-web)
+
+feed_fetch (DWS_SOURCE=store) ── gauge_record_current (best source per day) ──► the feed's series
+```
+
+- **Why the bucket carries the handover.** The fetcher has internet but no
+  database; the worker has the database but no internet (§ System). Both
+  already reach the mirror bucket, so the worker writes the station list
+  there (its one write to the bucket, `dws/stations.json`, only with
+  `DWS_WEEKLY=on`) and reads back what the fetcher wrote. No queue, and
+  nothing to retire with the per-feed fetch requests (R3-C).
+- **The weekly pass** (`backend/src/ingest/dws.ts`, the fetcher's
+  `dws-weekly` mode) asks each station for the window a feed asks for (two
+  years, `DWS_WINDOW_DAYS`) with the feed's own reader
+  (`sources/dws.ts` `parseDwsRows`), keeping each listed row's quality
+  code. It runs daily so the lag metric (`MirrorLagDays{Product=dws}`) is
+  published every day, but a station is re-read only once its last good
+  fetch is 6 days old, oldest first, so a long list spreads over days
+  inside the fetcher's 120 s. An HTTP 403, throttling or the ScriptServer
+  page stops the run at once and is never retried: `dws/status.json` says
+  the source is stale and why, the lag grows, and the alarm fires.
+- **Reading the store** (`backend/src/feeds/fromGaugeRecord.ts`, from the
+  `feed_fetch` job, whatever `FEED_FETCHER` says): the window as before
+  (`fetchWindow`), the rows of `gauge_record_current`, and the live path's
+  answer exactly (the listed days laid out from the first, the meta's
+  days, gaps, rejected and quality counts), ingested in the job. Days no
+  span covers yet wait, as with the CHIRPS copy: with nothing held from the
+  window's first day on, the fetch records only that it looked (no
+  failure, no backoff, the same window next time). Days a span covers with
+  no row are DWS's "no data", as the page says it. A backfill window that
+  ends before today stops at the store's newest day; the window reaching
+  today reads to today, and the year of re-read picks up the next week's
+  days.
+- **Locally** (`FEED_SOURCE=fixtures`) a DWS feed's fetch first writes the
+  window's days from the synthetic DWS page (`feeds/fixtures.ts`) into the
+  store under origin `fixtures`, as the weekly pass would, then reads them:
+  dev, CI and e2e DWS feeds show the values they always did, with nothing
+  to seed. The worker's handover is off (`DWS_WEEKLY` unset). `pnpm
+  import:dws backend/fixtures/dws/X0H001-reply.synthetic.txt --reference
+  SYNTHETIC` loads the invented reply.
+
 ## Server-side reports
 
 The printable report ([ui.md § Report](./ui.md#report)) rendered to a PDF on
