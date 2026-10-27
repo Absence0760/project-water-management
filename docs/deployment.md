@@ -1671,6 +1671,19 @@ limits we keep to are in [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-
   ones as their mean. One run at a time (the `ecmwf` lease): a run that
   meets the lease ends at once. A run that finds the day's issue held asks
   ECMWF nothing.
+- **Is the issue out?** A run first asks for the issue's last step's
+  `.index` (ECMWF writes a run's steps in order). Checked 2026-10-27: a key
+  not yet published on the `ecmwf-forecasts` bucket answers **404**
+  (`NoSuchKey`), not 403, so the job reads a 404 there as "not published
+  yet" (`stopped: "not_published"`) and a 404 on a later step as
+  `partial`. S3 also answered **503** now and then to such probes:
+  `polite.py` retries a 503 (or 429) up to **3 times**, honouring
+  `Retry-After` and otherwise waiting 30, 60 and 120 s (one wait over 300 s
+  gives up at once). A probe that still answers 503 after the third retry
+  fails the run with `RetryLater`, having written nothing and no refusal
+  marker; the target doesn't retry it (the failed event goes to the
+  mirror-ingest DLQ), and the next scheduled run, 20 minutes on, asks again
+  (`ingest/test_ecmwf.py` covers both).
 - **A 403** stops the run at once, never retried, writes
   `ecmwf/refused.json` (the time), and the Lambda errors (the event goes to
   the mirror-ingest DLQ, which alarms). The day's later runs see the marker
@@ -1805,11 +1818,23 @@ by the operator:
    `aws secretsmanager put-secret-value --secret-id water-management/ingest/earthdata-token --secret-string file://$HOME/earthdata-token && shred -u $HOME/earthdata-token`.
    Check without reading it back: `aws secretsmanager describe-secret --secret-id water-management/ingest/earthdata-token --query VersionIdsToStages`
    shows one `AWSCURRENT` version.
-5. **Turn it on**: `imerg_enabled = true` in the prod tfvars (with an
+5. **Check one real CMR granule record first.** The job (`imerg.py`
+   `parse_search`) requires each granule's `RelatedUrls` to hold **exactly
+   one** URL starting `https://opendap.earthdata.nasa.gov/`, and refuses
+   the run (`ImergFormatError`) on none or several. CMR's search needs no
+   sign-in, so look at yesterday's granule:
+   `curl -s "https://cmr.earthdata.nasa.gov/search/granules.umm_json?short_name=GPM_3IMERGDL&version=07&temporal=$(date -u -d yesterday +%Y-%m-%d)T00:00:00Z,$(date -u -d yesterday +%Y-%m-%d)T23:59:59Z" | jq '.items[0].umm | {GranuleUR, urls: [.RelatedUrls[].URL]}'`
+   The `GranuleUR` should name the day (`3IMERG.YYYYMMDD-S000000-E235959.`)
+   and a `V07` tag, and among the URLs exactly one should start
+   `https://opendap.earthdata.nasa.gov/` (the others are the data archive's
+   HTTPS link, the `.xml` and browse links, which the job ignores). Two
+   OPeNDAP links (say a second one for a cloud copy), or one on another
+   host, means `parse_search` needs changing before turning it on.
+6. **Turn it on**: `imerg_enabled = true` in the prod tfvars (with an
    `ingest_image_tag` whose release has `ingest/imerg.py`), `terraform plan`,
    then apply with the operator's go-ahead. That creates the rule, its
    target and permission, and the `mirror-lag-imerg-late` alarm.
-6. **First run** without waiting for the schedule:
+7. **First run** without waiting for the schedule:
    `aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload '{"product":"imerg_late","mode":"recent"}' /tmp/imerg.json && cat /tmp/imerg.json`
    should list 10 days `copied`, each with `"version": "V07"`. A 401 means
    step 2 or the token is wrong (below).
@@ -1821,7 +1846,7 @@ nothing more that UTC day; after fixing the token the same day, remove it:
 `aws s3 rm s3://<mirror bucket>/ingest-state/imerg_late/refused.json`.
 
 **Watching it.** Each run publishes `MirrorLagDays{Product=imerg_late}`,
-today minus the newest contiguous day held: 1 on a healthy copy (2 before
+today minus the newest day held (`prelimThrough`): 1 on a healthy copy (2 before
 the day's file lands). The `mirror-lag-imerg-late` alarm (essential tier)
 fires above `imerg_lag_alarm_days` (default 3; the day's lowest reading) on
 two days running, or when no datapoint arrives for two days. Runbook: the
@@ -1832,7 +1857,9 @@ a 403 means GES DISC refused us (stop and write to them, as for CHC). An
 version's layout, say): the run stopped before writing anything wrong.
 When V08 arrives, CMR lists it beside V07 and the job takes the newer
 version for each day, re-copying a held day once (its revision moves only
-if its values changed).
+if its values changed). A day CMR never lists (or lists only after it has
+left the 10-day search) stays a gap: the readers treat it as not held, and
+the days after it are read as usual, so one missing day blocks nothing.
 
 ### ERA5-Land
 
@@ -1873,6 +1900,18 @@ The operator, once:
 5. **Turn it on:** `era5l_enabled = true` in the prod tfvars, then `plan`
    and, with the operator's go-ahead, `apply`. The next 02:40 UTC run
    submits the newest complete month; the one after collects it.
+6. **Confirm on the first live collection that the CDS file carries
+   `expver`.** The collected month's result (the run's log line and the
+   `collected` entry) has `"preliminary": true` or `false` when it does,
+   and `null` when it doesn't; `ingest-state/era5l/requests.json` shows the
+   same as the month's `preliminary`. The synthetic fixture writes `expver`,
+   but the job has only been checked against it. With `null` the copy
+   can't tell ERA5-Land-T from ERA5-Land, so it re-requests the month every
+   30 days until 180 days after its end (`RECHECK_UNKNOWN_CAP_DAYS`,
+   ingest/README.md § The ERA5-Land job) instead of stopping once a read
+   says consolidated: harmless but more requests, so record what you saw
+   in issue #604, and if it is `null`, find where the CDS now puts the
+   phase.
 
 **Backfill** (`nsf-ncar-era5` on AWS holds ERA5, not ERA5-Land, so it goes
 through the CDS too). Each invocation marks one month wanted and submits it

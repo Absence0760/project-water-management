@@ -335,6 +335,18 @@ provenance, `ingest/verify_copy.py`):
       `ingest_lag_alarm_days`'s default by hand; a prod tfvars that changes
       the alarm doesn't move the app. Pass it to the API as a variable at
       the cutover if the operator ever tunes it.
+- [ ] **ECMWF quantile mapping is fitted on cells, applied to area means**
+      (R4-C, [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-ens)).
+      `ingest/ecmwf_qm_fit.py` pairs the ensemble mean with observed rain
+      per 0.1° cell, but `fromMirrorEcmwf.ts` applies the fit to a
+      catchment's area-weighted mean, whose distribution has more
+      small-rain days and fewer extremes, so the mapping can over-correct
+      the tails and under-correct drizzle. **Durable fix:** fit on area
+      means for the feed's region (the forecast mean and the observed rain
+      averaged over the same cells, per feed or per catchment-sized block,
+      one fit per group), and check it against the per-cell fit on held-out
+      days. **Trigger:** when the first QM fit is run, once the archive
+      (`ecmwf/`'s archived issue means) holds a season.
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 

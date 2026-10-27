@@ -268,6 +268,41 @@ class Run(unittest.TestCase):
         self.assertTrue((self.root / "ecmwf" / TODAY.isoformat() / "c" / "3").exists())  # control: a held issue keeps all four
         self.assertTrue(np.allclose(ecmwf.read_issue(self.root, (TODAY - dt.timedelta(days=8)).isoformat())[:, 0, 0], expected_issue_stats()[0], atol=1e-3))
 
+    def probe_503(self, times: int):
+        """An opener whose publication probe (the last step's index) answers 503 `times` times, as S3 did on 2026-10-27."""
+        import urllib.error
+
+        probe = ecmwf.file_url(TODAY, ecmwf.STEPS[-1], "index")
+        inner = ecmwf_fixturehttp.EcmwfFixtureOpener()
+        left = [times]
+
+        def opener(req, timeout=None):
+            if req.full_url == probe and left[0] > 0:
+                left[0] -= 1
+                inner.requests.append((req.full_url, {}))
+                raise urllib.error.HTTPError(req.full_url, 503, "Slow Down", ecmwf_fixturehttp._headers({}), None)
+            return inner(req, timeout)
+
+        return opener, inner
+
+    def test_a_503_on_the_publication_probe_is_retried_with_backoff(self):
+        opener, inner = self.probe_503(2)
+        slept: list[float] = []
+        r = ecmwf.handle({"product": "ecmwf", "mode": "daily"}, None, mirror=self.mirror, live=False, opener=opener, metrics=cloudwatch.LocalSink(), today=TODAY, sleep=slept.append)
+        self.assertEqual(r["stopped"], "copied")
+        self.assertEqual(slept, [30.0, 60.0])  # polite.PoliteClient's default backoff, doubling
+        self.assertEqual(r["requests"], 2 + 1 + 15 * (1 + fx.FIXTURE_MEMBERS))
+
+    def test_a_503_that_persists_on_the_probe_fails_the_run_after_three_retries_and_writes_nothing(self):
+        opener, inner = self.probe_503(10)
+        slept: list[float] = []
+        with self.assertRaises(polite.RetryLater):
+            ecmwf.handle({"product": "ecmwf", "mode": "daily"}, None, mirror=self.mirror, live=False, opener=opener, metrics=cloudwatch.LocalSink(), today=TODAY, sleep=slept.append)
+        self.assertEqual(len(inner.requests), 4)  # the probe and 3 retries
+        self.assertEqual(slept, [30.0, 60.0, 120.0])
+        self.assertIsNone(self.mirror.read_json("ecmwf/index.json"))
+        self.assertIsNone(self.mirror.read_json("ecmwf/refused.json"))  # not a refusal: the next scheduled run asks again
+
     def test_a_403_stops_writes_the_marker_and_the_day_asks_nothing_more(self):
         self.go(today=TODAY - dt.timedelta(days=1))  # something held, so the lag has a value
         refuse = ecmwf_fixturehttp.EcmwfFixtureOpener(refuse=True)

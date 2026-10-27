@@ -331,6 +331,15 @@ in `infra/feeds.tf`):
   and a same-day marker (`ecmwf/refused.json`) stops the day's later runs.
 - **Fallback:** CHIRPS-GEFS; then a day-old issue (a feed reads today's,
   else yesterday's).
+- **Limitation of the calibration:** the quantile-mapping fit
+  (`ingest/ecmwf_qm_fit.py`) pairs the ensemble mean with observed rain per
+  0.1° cell, but the feed applies it to a catchment's area-weighted mean
+  (`backend/src/feeds/fromMirrorEcmwf.ts`), whose distribution differs:
+  averaging over cells gives more small-rain days and fewer extremes, so a
+  per-cell mapping can push an area mean's tails too far and leave its
+  drizzle under-corrected. The durable fix is to fit on area means for the
+  feed's region, tracked in [followups.md § The rain data copy](./followups.md#the-rain-data-copy-issue-604),
+  to be done when the first fit is run, once the archive holds a season.
 - **Owner:** the operator; code `ingest/ecmwf.py`, `ingest/ecmwf_qm_fit.py`,
   `backend/src/ingest/ecmwf.ts`, `backend/src/feeds/fromMirrorEcmwf.ts`.
 
