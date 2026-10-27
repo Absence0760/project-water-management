@@ -16,12 +16,44 @@
 # the feed's acting user under RLS (backend/src/feeds/ingest.ts).
 #
 # Each queue dead-letters after 5 receives into its own DLQ, which alarms.
+#
+# Politeness to CHC (issue #604; docs/architecture.md § Data feeds →
+# Throttling). CHC's limits are per public address: their bot protection
+# blocks one for hours above about 2 requests a second, and they answer 429
+# past 20 open connections. They asked (2026-10-27) for one file at a time and
+# about 1 request a second in total across all our Lambdas. Within one
+# fetcher instance the live client keeps to that (backend/src/feeds/http.ts
+# PACE_*). Across instances, fetch-requests is a FIFO queue whose message
+# group is the source's host (`chc`, `dws`; jobs/handlers/feed-fetch.ts
+# fetchGroup): SQS hands Lambda one message of a group at a time, so at most
+# one fetch per host runs at once, whatever the concurrency.
+#
+# Why not reserved concurrency 1: an SQS trigger's maximum_concurrency is at
+# least 2, and a reservation below it throttles the trigger, and each
+# throttled receive counts towards the DLQ's 5 (AWS: "Don't set maximum
+# concurrency higher than the function's reserved concurrency"). The message
+# groups cap it without throttling: concurrency is the lower of the groups
+# and maximum_concurrency.
 # ----------------------------------------------------------------------------
 
 locals {
-  # A fetch reads up to 120 CHIRPS days (~4 range requests each, 6 at a time).
-  fetcher_timeout_seconds              = 120
-  fetch_requests_visibility_seconds    = 6 * local.fetcher_timeout_seconds
+  # At about a request a second a CHIRPS day is 3–10 requests for one cell,
+  # plus one per extra grid row of a box: a 120-day window of one cell's
+  # finals is ~10 minutes, and a box's doesn't fit. A fetch short of time
+  # answers with the days it finished and the backfill goes on
+  # (backend/src/feeds/sources/chirps.ts fetchChirpsCells). A forecast is used whole: 16 files of 2 requests plus
+  # one per grid row of its cells, so a box of 25 rows is ~430 requests, ~9
+  # minutes. 900 s, Lambda's longest, fits it; the rare fetch that reads two
+  # issues of such a box (a partly published one, then yesterday's) answers
+  # "did not answer in time" and retries in 15 minutes. A long fetch holds
+  # its host's message group, but the throughput is the request rate either way.
+  fetcher_timeout_seconds = 900
+  # FIFO: an in-flight message holds its whole group until it is deleted or
+  # comes back, so this is how long a crashed fetch holds up the next. The
+  # 6x the timeout the other queues keep is for throttled receives, which the
+  # message groups rule out (concurrency 2 <= reserved 2): twice the timeout,
+  # which Lambda requires to be at least the function's.
+  fetch_requests_visibility_seconds    = 2 * local.fetcher_timeout_seconds
   ingest_results_visibility_seconds    = 6 * local.worker_timeout_seconds
   feed_queue_message_retention_seconds = 345600 # 4 days: a fetch older than that is stale anyway
 }
@@ -29,16 +61,22 @@ locals {
 # --- Queues ------------------------------------------------------------------
 
 resource "aws_sqs_queue" "fetch_requests_dlq" {
-  name                      = "${local.project}-fetch-requests-dlq"
+  # A FIFO queue's DLQ must be FIFO too.
+  name                      = "${local.project}-fetch-requests-dlq.fifo"
+  fifo_queue                = true
   message_retention_seconds = 1209600
   sqs_managed_sse_enabled   = true
 }
 
 resource "aws_sqs_queue" "fetch_requests" {
-  name                       = "${local.project}-fetch-requests"
-  visibility_timeout_seconds = local.fetch_requests_visibility_seconds
-  message_retention_seconds  = local.feed_queue_message_retention_seconds
-  sqs_managed_sse_enabled    = true
+  # FIFO, one message group per source host: see the header (politeness to CHC).
+  name       = "${local.project}-fetch-requests.fifo"
+  fifo_queue = true
+  # The worker sends a deduplication id (the fetch job's id), so the content needn't be hashed.
+  content_based_deduplication = false
+  visibility_timeout_seconds  = local.fetch_requests_visibility_seconds
+  message_retention_seconds   = local.feed_queue_message_retention_seconds
+  sqs_managed_sse_enabled     = true
 
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.fetch_requests_dlq.arn
@@ -160,6 +198,8 @@ resource "aws_lambda_function" "fetcher" {
     variables = {
       FEED_SOURCE              = "live"
       INGEST_RESULTS_QUEUE_URL = aws_sqs_queue.ingest_results.url
+      # The contact in the user agent CHC asked for (backend/src/feeds/http.ts userAgent).
+      FEEDS_CONTACT = var.feeds_contact
     }
   }
 
@@ -184,6 +224,8 @@ resource "aws_lambda_event_source_mapping" "fetcher_requests" {
   batch_size              = 1
   function_response_types = ["ReportBatchItemFailures"]
 
+  # The least AWS allows. A FIFO queue caps concurrency at its active message
+  # groups too (two: chc, dws), so CHC sees one fetch at a time (header).
   scaling_config {
     maximum_concurrency = 2
   }

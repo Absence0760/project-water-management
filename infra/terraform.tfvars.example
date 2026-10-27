@@ -65,6 +65,12 @@ alarm_tier = "essential"
 # .localhost), so an unedited copy of this file fails before it can page nobody.
 budget_alert_email = "you+aws-alerts@example.com"
 
+# Required. The contact the data feeds' fetcher puts in its user agent, which
+# CHC (CHIRPS) asked for, so they can write before blocking us (issue #604).
+# Replace the placeholder: plan refuses an empty, malformed, reserved or
+# template address, as for budget_alert_email.
+feeds_contact = "you@example.com"
+
 # Lambda concurrency caps. A new account's concurrency quota is 10 and AWS
 # keeps 10 unreserved, so ANY reservation fails until the quota is raised:
 # raise it BEFORE the first apply to at least the sum of these + 10 (48 at the

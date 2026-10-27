@@ -3,7 +3,21 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError, FeedUnavailableError } from '../errors.js';
 import { fixtureHttp, fixtureValue } from '../fixtures.js';
 import type { FeedHttp } from '../http.js';
-import { chirpsFinalUrl, chirpsPrelimUrl, chirpsRnlUrl, fetchChirps, fetchChirpsCells, fetchGefs, gefsUrl, gridMean, gridValuesTagged, mapLimit, recheckChirpsFinals } from './chirps.js';
+import {
+	CHC_CONCURRENCY,
+	chirpsFinalUrl,
+	chirpsPrelimUrl,
+	chirpsRnlUrl,
+	CUT_RESERVE_MIN_MS,
+	fetchChirps,
+	fetchChirpsCells,
+	fetchGefs,
+	gefsUrl,
+	gridMean,
+	gridValuesTagged,
+	mapLimit,
+	recheckChirpsFinals
+} from './chirps.js';
 import { writeGrid } from './tiff-write.js';
 
 /** An http that serves given grids by URL, 404 otherwise. */
@@ -98,7 +112,8 @@ describe('fetchChirps', () => {
 			[chirpsPrelimUrl('2026-02-01')]: g(3),
 			[chirpsFinalUrl('2026-02-02')]: g(4) // final again after a preliminary day: not part of the run
 		});
-		expect(await fetchChirps(sat, [cell(0, 0)], '2026-01-30', '2026-02-03')).toEqual({ startDate: '2026-01-30', values: [1, 2, 3, 4], prelimDays: 1, finalThrough: '2026-01-31' });
+		// Six at a time (the old default), so 02-02's final is in the batch that finds 02-01 has none.
+		expect(await fetchChirps(sat, [cell(0, 0)], '2026-01-30', '2026-02-03', 'sat', { concurrency: 6 })).toEqual({ startDate: '2026-01-30', values: [1, 2, 3, 4], prelimDays: 1, finalThrough: '2026-01-31' });
 		// The first day preliminary: no marker at all.
 		const prelimFirst = await fetchChirps(sat, [cell(0, 0)], '2026-02-01', '2026-02-03');
 		// Finals are probed in date order: 02-01 has none, so 02-02's (out of order) isn't asked for.
@@ -106,7 +121,7 @@ describe('fetchChirps', () => {
 		expect(prelimFirst).not.toHaveProperty('finalThrough');
 		// A day missing between published ones ends the run, for rnl too; its days are all final.
 		const rnl = served({ [chirpsRnlUrl('2026-01-01')]: g(1), [chirpsRnlUrl('2026-01-02')]: g(2), [chirpsRnlUrl('2026-01-04')]: g(4) });
-		expect(await fetchChirps(rnl, [cell(0, 0)], '2026-01-01', '2026-01-06', 'rnl')).toEqual({ startDate: '2026-01-01', values: [1, 2, null, 4], prelimDays: 0, finalThrough: '2026-01-02' });
+		expect(await fetchChirps(rnl, [cell(0, 0)], '2026-01-01', '2026-01-06', 'rnl', { concurrency: 6 })).toEqual({ startDate: '2026-01-01', values: [1, 2, null, 4], prelimDays: 0, finalThrough: '2026-01-02' });
 		expect(await fetchChirps(rnl, [cell(0, 0)], '2026-01-03', '2026-01-04', 'rnl')).not.toHaveProperty('finalThrough');
 		// Nothing published: no days, no marker.
 		expect(await fetchChirps(served({}), [cell(0, 0)], '2026-01-01', '2026-01-03')).toEqual({ startDate: '2026-01-01', values: [], prelimDays: 0 });
@@ -528,5 +543,137 @@ describe('mapLimit', () => {
 		started.length = 0;
 		expect(await run(null)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
 		expect(started).toHaveLength(8);
+	});
+});
+
+describe('one CHC file at a time (CHC’s reply, issue #604)', () => {
+	const g = (v: number) => grid(new Array(8).fill(v));
+	const pts = [cell(0, 0)];
+	/** served, counting the most requests in flight at once. */
+	const counted = (files: Record<string, Uint8Array>) => {
+		const base = served(files);
+		let inFlight = 0;
+		const seen = { most: 0 };
+		const http: FeedHttp = {
+			text: base.text,
+			range: async (url, start, end) => {
+				seen.most = Math.max(seen.most, ++inFlight);
+				await new Promise((r) => setTimeout(r, 1));
+				inFlight--;
+				return base.range(url, start, end);
+			},
+			head: async () => {
+				seen.most = Math.max(seen.most, ++inFlight);
+				await new Promise((r) => setTimeout(r, 1));
+				inFlight--;
+				return { tag: null };
+			}
+		};
+		return { http, seen };
+	};
+	const files = () => {
+		const f: Record<string, Uint8Array> = {};
+		for (let d = 1; d <= 9; d++) f[chirpsFinalUrl(`2026-01-0${d}`)] = g(d);
+		for (let d = 10; d <= 20; d++) f[chirpsPrelimUrl(`2026-01-${d}`)] = g(d);
+		for (let d = 10; d <= 25; d++) f[gefsUrl('2026-03-10', fromEpochDay(toEpochDay('2026-03-10') + d - 10))] = g(1);
+		return f;
+	};
+
+	it('reads with a concurrency of 1 by default, everywhere it reads CHC', async () => {
+		expect(CHC_CONCURRENCY).toBe(1);
+		const runs: [string, (http: FeedHttp) => Promise<unknown>][] = [
+			['fetchChirps', (http) => fetchChirps(http, pts, '2026-01-01', '2026-01-20', 'sat', { today: '2026-01-21' })],
+			['fetchChirpsCells', (http) => fetchChirpsCells(http, pts, '2026-01-01', '0'.repeat(20), 'sat', { today: '2026-01-21' })],
+			['fetchGefs', (http) => fetchGefs(http, pts, '2026-03-10')],
+			['recheckChirpsFinals', (http) => recheckChirpsFinals(http, pts, 'sat', ['2026-01-01', '2026-01-02', '2026-01-03'], ['2026-01-04', '2026-01-05'])]
+		];
+		for (const [name, run] of runs) {
+			const { http, seen } = counted(files());
+			await run(http);
+			expect(seen.most, name).toBe(1);
+		}
+		// Positive control: the counter sees more when asked for more.
+		const { http, seen } = counted(files());
+		await fetchChirpsCells(http, pts, '2026-01-01', '0'.repeat(20), 'sat', { today: '2026-01-21', concurrency: 4 });
+		expect(seen.most).toBeGreaterThan(1);
+	});
+});
+
+describe('fetchChirpsCells within a time budget (issue #604: about a request a second)', () => {
+	const g = (v: number) => grid(new Array(8).fill(v));
+	const pts = [cell(0, 0)];
+	/** served, where every request takes `ms` of a fake clock. */
+	const slow = (files: Record<string, Uint8Array>, ms: number) => {
+		const base = served(files);
+		const clock = { t: 0 };
+		const http: FeedHttp & { urls: string[] } = {
+			urls: base.urls,
+			text: base.text,
+			range: async (url, start, end) => {
+				clock.t += ms;
+				return base.range(url, start, end);
+			}
+		};
+		return { http, clock, now: () => clock.t };
+	};
+	const files: Record<string, Uint8Array> = {};
+	for (let d = 1; d <= 9; d++) files[chirpsFinalUrl(`2026-01-0${d}`)] = g(d);
+	for (let d = 10; d <= 20; d++) files[chirpsPrelimUrl(`2026-01-${d}`)] = g(d);
+
+	it('stops starting days when the next might not fit, and answers the days it finished', async () => {
+		const { http, now } = slow(files, 1000);
+		const full = await fetchChirpsCells(served(files), pts, '2026-01-01', '0'.repeat(20), 'sat', { today: '2026-01-21' });
+		expect(full.read).toBe(`${'f'.repeat(9)}${'p'.repeat(11)}`);
+		// A day's file is 3 requests here (header, directory, a strip): 3 s. 30 s of budget leaves room for only a few.
+		const r = await fetchChirpsCells(http, pts, '2026-01-01', '0'.repeat(20), 'sat', { today: '2026-01-21', stopAt: 30_000, now });
+		expect(r.read.length).toBeGreaterThan(0);
+		expect(r.read.length).toBeLessThan(20);
+		// What it answers is a prefix of the whole answer: every day it covers is done as planned.
+		expect(r.read).toBe(full.read.slice(0, r.read.length));
+		expect(r.values[0]).toEqual(full.values[0]!.slice(0, r.read.length));
+		expect(r.tags).toEqual(full.tags.slice(0, r.read.length));
+		// It kept the reserve: no new day started with less than CUT_RESERVE_MIN_MS left.
+		expect(now()).toBeLessThanOrEqual(30_000 - CUT_RESERVE_MIN_MS + 3000 * 2);
+		// No file of a day it didn't answer was asked for.
+		const answered = new Set(Array.from({ length: r.read.length }, (_, i) => `2026.01.${String(i + 1).padStart(2, '0')}`));
+		expect(http.urls.every((u) => [...answered].some((d) => u.includes(d)))).toBe(true);
+	});
+
+	it('a preliminary day is read in the same batch as its missing final, so a cut never leaves a day half read', async () => {
+		const { http, now } = slow(files, 1000);
+		// Through the 9th, finals; the 10th's final is missing (January still due), so its preliminary follows at once.
+		const r = await fetchChirpsCells(http, pts, '2026-01-01', '0'.repeat(20), 'sat', { today: '2026-01-21', stopAt: 51_000, now });
+		expect(r.read.length).toBeLessThan(20);
+		expect(r.read).toMatch(/^f{9}p*$/);
+		expect(r.read.length).toBeGreaterThanOrEqual(10);
+	});
+
+	it('always finishes the first batch, so every fetch moves on at least a day', async () => {
+		const { http, now } = slow(files, 1000);
+		const r = await fetchChirpsCells(http, pts, '2026-01-01', '0'.repeat(20), 'sat', { today: '2026-01-21', stopAt: 0, now });
+		expect(r.read).toBe('f');
+		expect(r.values).toEqual([[1]]);
+	});
+
+	it('skipped days before the cut are kept; the cut falls before the first unfinished planned day', async () => {
+		const { http, now } = slow(files, 1000);
+		// Days 2–5 skipped (the cache holds them final), so after the first day the next planned is the 6th.
+		const r = await fetchChirpsCells(http, pts, '2026-01-01', `0${'1'.repeat(4)}${'0'.repeat(15)}`, 'sat', { today: '2026-01-21', stopAt: 0, now });
+		expect(r.read).toBe('f----');
+	});
+
+	it('without a budget, reads the whole plan (positive control)', async () => {
+		const { http, now } = slow(files, 1000);
+		expect((await fetchChirpsCells(http, pts, '2026-01-01', '0'.repeat(20), 'sat', { today: '2026-01-21', now })).read).toHaveLength(20);
+	});
+
+	it('recheckChirpsFinals leaves out what the budget left no time for, without counting it as failed', async () => {
+		const { http, now } = slow({ [chirpsFinalUrl('2026-01-01')]: g(1) }, 1000);
+		const none = await recheckChirpsFinals(http, pts, 'sat', [], ['2026-01-01', '2026-01-02'], 1, { stopAt: 0, now });
+		expect(none).toEqual({ head: [], read: [], failed: 0 });
+		expect(http.urls).toEqual([]);
+		const all = await recheckChirpsFinals(http, pts, 'sat', [], ['2026-01-01', '2026-01-02'], 1, { stopAt: 1e9, now });
+		expect(all.read.map((d) => d.day)).toEqual(['2026-01-01', '2026-01-02']);
+		expect(all.failed).toBe(0);
 	});
 });

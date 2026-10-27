@@ -1489,38 +1489,96 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
   answer (inline too) is checked against the window it asked for, which comes
   from our side, never from the answer: a day outside it (the forecast aside,
   keyed by its issue) refuses the answer whole as a failed fetch.
-- **Throttling.** A fetch reads up to six files at a time (`mapLimit`), and
-  the fetcher runs at most two fetches at once (`fetcher_reserved_concurrency`
-  and its trigger's `maximum_concurrency`, `infra/feeds.tf`), so CHC sees at
-  most twelve requests in flight however many feeds backfill. Each feed's
-  backfill goes a window (120 days) a minute (`BACKFILL_NEXT_SECONDS`), so a
-  dozen feeds starting from 1981 together keep both fetches busy for hours.
+- **Throttling.** CHC asked us (2026-10-27, issue #604) to read **one file
+  at a time, about one request a second in total across all our Lambdas,
+  with a contact email in the user agent**. Their limits are per public
+  address: their bot protection (CrowdSec) blocks one for hours above about
+  2 requests a second sustained, each repeat block longer, and they answer
+  429 past 20 open connections; a block can also look like 403 or timeouts.
+  The old fetcher read six files at a time with two fetcher Lambdas
+  (about 3.6 requests a second) and was blocked. Their download guide asks
+  for 0.5 s plus up to 0.5 s of jitter between requests
+  (<https://github.com/chc-ucsb/chc-data-download#downloading-politely>). Four
+  pieces keep to it:
+  - **Pacing, per process.** The live client (`feeds/http.ts` `hostPacer`)
+    holds, per host, at most one request in flight and starts each request
+    at least 1 s plus 0–0.5 s of random jitter after the one before
+    (`PACE_MIN_SPACING_MS`, `PACE_JITTER_MS`), every redirect hop included.
+    It is shared by every client in the process, so a warm fetcher keeps its
+    pace across invocations, and another host (DWS) waits for nothing.
+  - **One fetch per host, across instances.** `fetch-requests` is a FIFO
+    queue, and the fetch job sends each request in its source host's
+    message group (`chc` for CHIRPS and CHIRPS-GEFS, `dws`; `fetchGroup`
+    in `jobs/handlers/feed-fetch.ts`, deduplicated by the fetch job's id).
+    SQS hands Lambda one message of a group at a time, so however many
+    instances run, CHC sees one fetch, paced as above: about one request a
+    second in total. A DWS fetch doesn't wait behind a CHIRPS backfill.
+    Reserved concurrency 1 was not the lever: an SQS trigger's
+    `maximum_concurrency` is at least 2, and a reservation below it
+    throttles the trigger, each throttled receive counting towards the
+    DLQ's 5. The trigger stays at 2 with 2 reserved (`infra/feeds.tf`), and
+    the two groups cap it without throttling. Since an in-flight FIFO
+    message holds its group, the queue's visibility is twice the fetcher's
+    900 s timeout rather than the other queues' six times (no throttled
+    receives to absorb).
+  - **One file at a time.** `CHC_CONCURRENCY` (1) is the default for every
+    CHC read (`fetchChirps`, `fetchChirpsCells`, `fetchGefs`,
+    `recheckChirpsFinals`); DWS is one page per fetch.
+  - **A time budget instead of a timeout.** At about a request a second a
+    CHIRPS day is 3–10 requests for one cell (a final file, and a
+    preliminary one when the final isn't out) plus one per extra grid row of
+    a box, so a 120-day window over a box no longer fits in an invocation. The fetcher tells the fetch its deadline (`runFetch`'s
+    budget), and a cell-cache fetch reads day batch by day batch until the
+    next might not fit (less than twice its slowest batch, and at least
+    `CUT_RESERVE_MIN_MS`, 15 s, left), then answers the days it finished:
+    `read` shorter than the plan. The ingest takes that as a shorter window
+    (`cutWindow` in `feeds/ingest.ts`), records its last day as `through`,
+    and the backfill goes on after it a minute later, rather than the fetch
+    failing at the deadline and asking for the same window again. The first
+    batch always runs, so every fetch moves on at least a day. A cut fetch
+    skips the re-check of cached finals, and the re-check stops starting
+    HEADs and reads when time runs short (left out, not counted as failed;
+    their claims come due again). A forecast is used whole: 16 files, each
+    2 requests plus one per grid row of the feed's cells, so a box of 25
+    rows takes about 9 minutes, inside the fetcher's 900 s; reading two
+    issues of such a box (a partly published one, then yesterday's) doesn't
+    fit, answers "did not answer in time", and retries in 15 minutes, by
+    when the issue is whole. A backfill from 1981 is now slow: a 120-day
+    window of one cell's finals takes about 10 minutes, so a record from
+    1981 about a day per cell set; a box over several grid rows (a request
+    per row per file) is cut short and takes several times that
+    ([deployment.md § Re-enabling the CHIRPS feeds](./deployment.md#re-enabling-the-chirps-feeds-issue-604)).
+  - **The contact.** The user agent is `water-management-feeds/1
+    (+https://github.com/Absence0760/project-water-management; <FEEDS_CONTACT>)`
+    when `FEEDS_CONTACT` is set (`userAgent`): required on the production
+    fetcher (`config/production.ts`: an address, not a reserved domain or a
+    template's), set from Terraform's `feeds_contact`, optional elsewhere.
+
   An HTTP 429 or 503 is a `FeedThrottledError` (a `FeedUnavailableError`,
   `throttled` in the fetcher's log): the fetch fails at once and starts no
   further reads (`mapLimit` stops on the first failure), and the live client
   asks that host nothing more for its `Retry-After` (60 s without one, at most
   15 minutes, `THROTTLE_*` in `feeds/http.ts`), remembered across a warm
-  Lambda's invocations, so the fetches queued behind it fail without asking.
+  Lambda's invocations, so the fetches queued behind it (in the pacer, too:
+  the pause is checked once a request holds its slot) fail without asking.
   The feed records the failure and the scheduler's backoff takes it from
   there (15 minutes, doubling up to a day); a success restarts the backfill
   chain. An HTTP 403 is a `FeedRefusedError` (also a `FeedUnavailableError`,
-  `refused` in the fetcher's log), kept apart from throttling: CHC's nginx
-  answers 403 to an address it has banned for volume (2026-10-25: each new
+  `refused` in the fetcher's log), kept apart from throttling: CHC answers
+  403 to an address it has blocked for volume (2026-10-25: each new
   fetcher environment, with its own outbound address, got through a fetch
   or two and was refused from then on), and the DWS site to addresses
-  outside South Africa. A 403 carries no `Retry-After`, and a ban doesn't
+  outside South Africa. A 403 carries no `Retry-After`, and a block doesn't
   lift in a minute, so the live client leaves the host alone for an hour
-  (`REFUSED_PAUSE_SECONDS`): the refused environment stops asking, and a new
-  one isn't held back. Since that pause is per process, the feed's stored
-  message says so ("the source refused this server’s requests (HTTP 403):
-  it may have blocked this server’s address, so the feed waits hours before
-  asking again"), and the scheduler reads it (`app_feed_is_due`,
-  242_feed_refused_backoff.sql) to back the feed off 2 hours after one
-  refusal, doubling, capped at the day like any failure, so a refused feed
-  still tries once a day. Other failures keep 15 minutes. A 404 or 416 is
-  still "not published", no failure and no pause. Concurrency stays where it is until the logs show `HTTP 429`: then
-  lower the fetcher's concurrency to one, or the per-fetch six, before
-  lengthening the backfill's pause.
+  (`REFUSED_PAUSE_SECONDS`) and the fetch stops: the refused environment
+  stops asking, and a new one isn't held back. Since that pause is per
+  process, the feed's stored message says so ("the source refused this
+  server’s requests (HTTP 403): it may have blocked this server’s address,
+  so the feed waits hours before asking again"), and the scheduler reads it
+  (`app_feed_is_due`, 242_feed_refused_backoff.sql) to back the feed off 2
+  hours after one refusal, doubling, capped at the day like any failure, so
+  a refused feed still tries once a day. Other failures keep 15 minutes. A
+  404 or 416 is still "not published", no failure and no pause.
 
 The Data tab marks a series a feed wrote ("Written by the CHIRPS daily
 rainfall feed", with a count when the feed wrote only some of its days):

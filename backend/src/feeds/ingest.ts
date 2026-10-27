@@ -428,6 +428,27 @@ async function fromCells(db: Db, feed: FeedRow, raw: unknown, window: FetchWindo
 }
 
 /**
+ * The window a cell-cache answer covers: the one asked for, or, when the
+ * fetcher's time budget cut the fetch short (sources/chirps.ts
+ * fetchChirpsCells: at about a request a second a long backfill window
+ * doesn't fit in one invocation), the days from its start through the last
+ * day it finished. Every day of that shorter window was read as planned, so
+ * it is recorded as `through` and the backfill goes on from after it
+ * (continueBackfill: the window no longer reaches yesterday), instead of the
+ * fetch failing at the deadline and asking for the same window forever. An
+ * answer that isn't a cell-cache answer of at least one day is left to
+ * fromCells to refuse.
+ */
+export function cutWindow(raw: unknown, window: FetchWindow): FetchWindow {
+	const parsed = CellsResult.safeParse(raw);
+	if (!parsed.success) return window;
+	const { startDate, read } = parsed.data.cells;
+	if (startDate !== window.start || read.length === 0) return window;
+	const last = fromEpochDay(toEpochDay(startDate) + read.length - 1);
+	return last < window.end ? { start: window.start, end: last } : window;
+}
+
+/**
  * `window` is what the fetch asked for. A forecast is checked by its issue
  * instead (it reads the newest issue, whatever the window), and records no
  * `through`. `origin` is where a cell-cache answer's values came from: the
@@ -445,7 +466,11 @@ export async function ingestResult(
 ): Promise<IngestOutcome> {
 	const nextSeconds = opts.cacheOnly ? CACHED_NEXT_SECONDS : BACKFILL_NEXT_SECONDS;
 	const origin = opts.origin ?? cacheOrigin();
-	if (feed.source === 'chirps' && typeof raw === 'object' && raw !== null && 'cells' in raw) raw = await fromCells(db, feed, raw, window, origin, opts.fetchJobId ?? null);
+	if (feed.source === 'chirps' && typeof raw === 'object' && raw !== null && 'cells' in raw) {
+		// A fetch the fetcher's time budget cut short answered fewer days than the window: they are the window now.
+		window = cutWindow(raw, window);
+		raw = await fromCells(db, feed, raw, window, origin, opts.fetchJobId ?? null);
+	}
 	const parsed = FetchResult.safeParse(raw);
 	if (!parsed.success || (feed.source === 'chirps_gefs' && parsed.data.ok && !isKeyedIssue(parsed.data))) {
 		return failed(db, feed, INVALID);

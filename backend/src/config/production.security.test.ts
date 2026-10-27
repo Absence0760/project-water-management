@@ -90,7 +90,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		DB_POOL_MAX: '2',
 		NODE_EXTRA_CA_CERTS: CA,
 		FEED_FETCHER: 'sqs',
-		FETCH_REQUESTS_QUEUE_URL: SQS('fetch-requests'),
+		FETCH_REQUESTS_QUEUE_URL: SQS('fetch-requests.fifo'),
 		FEED_SOURCE: 'live',
 		REPORT_RENDERER: 'sqs',
 		RENDER_REQUESTS_QUEUE_URL: SQS('render-requests'),
@@ -107,7 +107,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		DEM_URL: 's3://water-management-tiles-000000000000/tiles/terrain.pmtiles',
 		OPERATOR_EMAIL: 'operator@water.example.org'
 	},
-	fetcher: { FEED_SOURCE: 'live', INGEST_RESULTS_QUEUE_URL: SQS('ingest-results') },
+	// FEEDS_CONTACT: an address on a real domain (reserved ones are refused); the operator's own goes in their tfvars, never the repo.
+	fetcher: { FEED_SOURCE: 'live', INGEST_RESULTS_QUEUE_URL: SQS('ingest-results'), FEEDS_CONTACT: 'ops@icwbt.jaredhoward.com' },
 	renderer: {
 		RENDER_SITE_URL: SITE,
 		RENDER_API_URL: `${SITE}/api`,
@@ -406,6 +407,17 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['worker', 'STORAGE', 'local'],
 			['renderer', 'STORAGE', undefined],
 			['fetcher', 'FEED_SOURCE', 'fixtures'],
+			['fetcher', 'FEEDS_CONTACT', undefined],
+			['fetcher', 'FEEDS_CONTACT', ''],
+			['fetcher', 'FEEDS_CONTACT', 'not-an-address'],
+			['fetcher', 'FEEDS_CONTACT', 'ops@localhost'],
+			['fetcher', 'FEEDS_CONTACT', 'ops@example.com'],
+			['fetcher', 'FEEDS_CONTACT', 'ops@feeds.example.org'],
+			['fetcher', 'FEEDS_CONTACT', 'ops@water.test'],
+			['fetcher', 'FEEDS_CONTACT', 'you@icwbt.jaredhoward.com'],
+			['fetcher', 'FEEDS_CONTACT', 'your-email@icwbt.jaredhoward.com'],
+			['fetcher', 'FEEDS_CONTACT', 'changeme@icwbt.jaredhoward.com'],
+			['fetcher', 'FEEDS_CONTACT', 'ops@icwbt.jaredhoward.com)\r\nX-Evil: 1'],
 			['fetcher', 'FEED_SOURCE', undefined],
 			['api', 'FEED_SOURCE', undefined],
 			['api', 'FEED_SOURCE', 'fixtures'],
@@ -460,6 +472,11 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		for (const role of ['api', 'worker'] as const)
 			for (const v of [undefined, '', 's3://water-tiles/tiles/terrain.pmtiles']) expect(problemNames(role, prod(role, { DEM_URL: v })), `${role} ${String(v)}`).not.toContain('DEM_URL');
 		for (const v of [undefined, '', 's3://water-tiles/tiles/water.pmtiles']) expect(problemNames('api', prod('api', { WATER_URL: v })), String(v)).not.toContain('WATER_URL');
+	});
+
+	it('takes a contact address on a real domain for the fetcher, and needs none elsewhere (positive control for the FEEDS_CONTACT refusals)', () => {
+		for (const v of ['ops@icwbt.jaredhoward.com', ' feeds+chc@icwbt.jaredhoward.com ', 'a.b-c@feeds.icwbt.jaredhoward.com']) expect(problemNames('fetcher', prod('fetcher', { FEEDS_CONTACT: v })), v).not.toContain('FEEDS_CONTACT');
+		for (const role of ['api', 'worker'] as const) expect(problemNames(role, prod(role, { FEEDS_CONTACT: undefined }))).not.toContain('FEEDS_CONTACT');
 	});
 
 	it('refuses a committed placeholder in any setting, classified or not', () => {

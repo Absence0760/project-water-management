@@ -1,6 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// The SQS client, stubbed: what each SendMessage would carry (the FIFO test below).
+const { sqsSent } = vi.hoisted(() => ({ sqsSent: [] as Record<string, unknown>[] }));
+vi.mock('@aws-sdk/client-sqs', () => ({
+	SQSClient: class {
+		async send(cmd: { input: Record<string, unknown> }) {
+			sqsSent.push(cmd.input);
+			return {};
+		}
+	},
+	SendMessageCommand: class {
+		constructor(public input: Record<string, unknown>) {}
+	}
+}));
+
 import {
 	feedFetcher,
+	isFifoQueue,
 	MAX_MESSAGE_BYTES,
 	parseFetchRequest,
 	parseRenderRequest,
@@ -72,6 +88,26 @@ describe('the data-feed messages (fetch-requests / ingest-results)', () => {
 	it('sendToQueue refuses without a queue URL, and a message over the SQS limit, before any AWS call', async () => {
 		await expect(sendToQueue(undefined, 'FETCH_REQUESTS_QUEUE_URL', {})).rejects.toThrow('FETCH_REQUESTS_QUEUE_URL is not set');
 		await expect(sendToQueue('https://sqs.example/q', 'Q', { x: 'y'.repeat(MAX_MESSAGE_BYTES) })).rejects.toThrow(/larger than SQS allows/);
+	});
+});
+
+describe('sendToQueue to a FIFO queue (fetch-requests, issue #604)', () => {
+	afterEach(() => void (sqsSent.length = 0));
+
+	it('sends the message group and deduplication id to a .fifo queue', async () => {
+		expect(isFifoQueue('https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests.fifo')).toBe(true);
+		await sendToQueue('https://sqs.example/water-management-fetch-requests.fifo', 'Q', { a: 1 }, { group: 'chc', dedupe: 'job-1' });
+		expect(sqsSent).toEqual([{ QueueUrl: 'https://sqs.example/water-management-fetch-requests.fifo', MessageBody: '{"a":1}', MessageGroupId: 'chc', MessageDeduplicationId: 'job-1' }]);
+	});
+
+	it('leaves them off a standard queue, which refuses them (positive control: the FIFO one gets them)', async () => {
+		expect(isFifoQueue('https://sqs.example/water-management-fetch-requests')).toBe(false);
+		await sendToQueue('https://sqs.example/water-management-fetch-requests', 'Q', { a: 1 }, { group: 'chc', dedupe: 'job-1' });
+		await sendToQueue('https://sqs.example/water-management-jobs', 'Q', { a: 2 });
+		expect(sqsSent).toEqual([
+			{ QueueUrl: 'https://sqs.example/water-management-fetch-requests', MessageBody: '{"a":1}' },
+			{ QueueUrl: 'https://sqs.example/water-management-jobs', MessageBody: '{"a":2}' }
+		]);
 	});
 });
 

@@ -540,12 +540,27 @@ variable "s3_endpoint_az_count" {
 }
 
 variable "fetcher_reserved_concurrency" {
-  description = "Max concurrent fetcher Lambda executions (data feeds, feeds.tf): bounds spend and how hard the public sources are hit at once. At least 2, its SQS trigger's maximum_concurrency. Never -1: raise the account quota instead (lambda_reserved_concurrency)."
+  description = "Max concurrent fetcher Lambda executions (data feeds, feeds.tf): bounds spend. At least 2, its SQS trigger's maximum_concurrency. How hard a source is hit is set elsewhere: fetch-requests is FIFO with one message group per source host, so each host sees one fetch at a time whatever this is (issue #604). Never -1: raise the account quota instead (lambda_reserved_concurrency)."
   type        = number
   default     = 2
   validation {
     condition     = var.fetcher_reserved_concurrency >= 2
     error_message = "Must be at least 2, its SQS trigger's maximum_concurrency; -1 (unreserved) is refused too. Raise the account's Lambda concurrency quota instead (infra/README.md § Operator steps)."
+  }
+}
+
+variable "feeds_contact" {
+  description = "The contact email the data feeds' fetcher puts in its user agent (feeds.tf, backend/src/feeds/http.ts): CHC asked for one (2026-10-27, issue #604), to write to before blocking our addresses. Required, no default: the repo is public, so the address lives only in the operator's tfvars. The fetcher refuses to start without a good one (backend/src/config/production.ts)."
+  type        = string
+
+  validation {
+    condition = (
+      can(regex("^[A-Za-z0-9._%+-]{1,64}@([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$", var.feeds_contact)) &&
+      !can(regex("(?i)(@([^@]+\\.)?example\\.(com|org|net)|\\.(example|test|invalid|localhost|local))$", var.feeds_contact)) &&
+      # A template's address left unedited (the same list backend/src/config/production.ts refuses).
+      !can(regex("(?i)^(you|your|yourname|your[._-]?(e-?mail|name|address)|e-?mail|name|user|someone|somebody|changeme|change[._-]me|replace[._-]?me|todo|xxx+|foo|test)@", var.feeds_contact))
+    )
+    error_message = "feeds_contact must be an email address (name@domain.tld) someone reads: not empty, not at a reserved domain (example.com/.org/.net, .example, .test, .invalid, .localhost, .local), and not a template's (you@, your-email@, changeme@)."
   }
 }
 
