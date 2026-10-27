@@ -16,5 +16,6 @@ day[:]=box
 # probe cells to check from Node: (lat idx, lon idx) incl. a sea cell and a chunk edge
 probes=[(int(np.searchsorted(lat,a-1e-4))-i0, int(np.searchsorted(lon,o-1e-4))-j0) for a,o in [(-33.925,18.875),(-34.025,19.125),(-33.975,22.475)]]+[(0,0),(19,19),(20,20),(ny-1,nx-1)]
 exp=[{'y':int(y),'x':int(x),'bits':box[:,y,x].view(np.uint32).tolist()} for y,x in probes]
-json.dump({'d0':d0,'ny':ny,'nx':nx,'probes':exp}, open(out+'.expect.json','w'))
+with open(out+'.expect.json','w') as fh:
+    json.dump({'d0':d0,'ny':ny,'nx':nx,'probes':exp}, fh)
 print('wrote', out, 'ny', ny, 'nx', nx, 'probes', probes)

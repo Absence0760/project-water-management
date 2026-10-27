@@ -28,7 +28,7 @@
 // many as fit the tick's time; the rest next tick (the function resumes
 // after the parts already marked). A failure is logged and left to the next
 // tick: the rest of the tick goes on.
-import { stat, readFile } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AbsolutePath } from '@zarrita/storage';
@@ -106,7 +106,7 @@ const defaultS3 = () => (s3Client ??= import('@aws-sdk/client-s3').then((sdk) =>
 /**
  * `product`'s manifest bytes and a tag for them, or 'unchanged' when the tag
  * is `known`, or null when the copy has no manifest. One request at most: a
- * stat then a read (file://), or a GET with If-None-Match (s3://).
+ * stat and a read of one open file (file://), or a GET with If-None-Match (s3://).
  */
 export async function fetchManifest(
 	product: MirrorTickProduct,
@@ -116,16 +116,22 @@ export async function fetchManifest(
 	const url = mirrorUrl(env);
 	if (url.startsWith('file://')) {
 		const path = join(fileURLToPath(url), product, 'manifest.json');
-		let st;
+		// One open file: its stat and its bytes are the same file, even if the manifest is replaced meanwhile.
+		let fh;
 		try {
-			st = await stat(path);
+			fh = await open(path, 'r');
 		} catch (err) {
 			if ((err as { code?: string }).code === 'ENOENT') return null;
 			throw err;
 		}
-		const tag = `${st.size}:${st.mtimeMs}`;
-		if (tag === known) return 'unchanged';
-		return { tag, bytes: new Uint8Array(await readFile(path)) };
+		try {
+			const st = await fh.stat();
+			const tag = `${st.size}:${st.mtimeMs}`;
+			if (tag === known) return 'unchanged';
+			return { tag, bytes: new Uint8Array(await fh.readFile()) };
+		} finally {
+			await fh.close();
+		}
 	}
 	const store = mirrorStore(env);
 	if (!(store instanceof S3Store)) throw new Error('the copy is neither file:// nor s3://');

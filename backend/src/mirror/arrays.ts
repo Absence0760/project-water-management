@@ -82,7 +82,6 @@ async function ensureGroups(store: MirrorStore, product: string): Promise<void> 
 }
 
 const same = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((v, i) => v === b[i]);
-const sameRegion = (a: Region, b: Region) => a.w === b.w && a.s === b.s && a.e === b.e && a.n === b.n;
 
 /** Check an opened array against D2: dtype, chunks, dims, codecs, region and grid. */
 function checkLayout(arr: MirrorArray, product: string, kind: 'finals' | 'daily', meta: Record<string, unknown>): { region: Region; grid: MirrorGrid } {

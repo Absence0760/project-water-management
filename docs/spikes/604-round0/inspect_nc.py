@@ -1,4 +1,4 @@
-import sys, h5py, numpy as np
+import sys, h5py
 f = h5py.File(sys.argv[1], 'r')
 print('root attrs:', {k: (v.decode() if isinstance(v, bytes) else v) for k, v in f.attrs.items()})
 for name, d in f.items():
