@@ -1537,29 +1537,31 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
      `CHIRPS_SOURCE`, with `MIRROR_URL=s3://<mirror bucket>`) in the prod
      tfvars, apply, and cut a backend release. CHIRPS feeds now read the
      copy in the worker; the fetcher no longer reads CHC for them. For Data
-     → Data feeds to show "Rain data copied to … (final) / … (preliminary)"
-     and **Copy behind**, the **API** Lambda needs the same two variables and
-     read access to the manifests (its role, and a statement in the S3
-     interface endpoint's policy beside `WorkerReadsMirror`): not wired yet
-     ([followups.md § The rain data copy](./followups.md#the-rain-data-copy-issue-604)).
-     Without them the API reads `CHIRPS_SOURCE` as `chc` and the panel
-     simply shows no copy line, which is safe.
+     → Data feeds, the same variable sets the **API** Lambda's
+     `CHIRPS_SOURCE` (`infra/lambda.tf`), so the panel shows "Rain data
+     copied to … (final) / … (preliminary)" and **Copy behind** from the
+     next worker tick: the API reads the copy's days from the `mirror_copy`
+     rows the worker records, and needs no `MIRROR_URL` and no access to the
+     bucket. Until that tick the panel says the copy hasn't been checked
+     yet.
   5. **Re-enable** the CHIRPS feeds paused since the 403s (#571), and watch
      the first day: feeds catch up from the copy in minutes, and none shows
      **Copy behind** or Failing.
 
   Rolling back is the flag: `chirps_source = "chc"` and a release. The
   cache rows the copy filled stay valid (origin `chc`, the same values).
-- **Copy behind, in the app.** Data → Data feeds reads the copy's
-  manifests (kept 5 minutes per API process) and marks a CHIRPS feed
+- **Copy behind, in the app.** Data → Data feeds reads how far the copy
+  runs from `mirror_copy` (the worker's tick records each manifest there
+  when it changes) and marks a CHIRPS feed
   **Copy behind** when its part of the copy is late: a final product more
   than 75 days old (the same threshold as `ingest_lag_alarm_days`'s
   default; the app's is `COPY_FINAL_LAG_DAYS` in `feeds/health.ts`, so
   change both together) or the preliminary days more than 7. The feed
   itself counts no failure and needs nothing; the operator's signal is the
-  alarm. A copy the API can't read (permissions, an invalid manifest) logs
-  `rain_copy_unreadable` with the error's class, and the panel says it
-  couldn't check the copy; feeds keep their own health.
+  alarm. A manifest the tick can't read or record logs
+  `mirror_revision_failed` with the error's class and leaves the last
+  recorded days in place; before any tick has recorded the copy the panel
+  says it hasn't been checked yet, and feeds keep their own health.
 - **Cost:** under $1/month in steady state. ~6 GB of Zarr in S3 Standard
   (~$0.20) plus a month of old versions, a few seconds of Lambda a day and a
   couple of minutes once a month, a few images in ECR (cents), two custom
@@ -1612,7 +1614,7 @@ the operator starts it.
    the product's manifest it leaves out the months already copied:
    `aws s3 cp s3://<mirror bucket>/rnl/manifest.json /tmp/rnl-manifest.json` (skip on a first run),
    then `python3 ingest/backfill_plan.py rnl --to <last complete month> --manifest /tmp/rnl-manifest.json > /tmp/rnl-plan.json`.
-   `rnl` starts in 1981-01, `sat` in 1998-01. Stop at the month before the
+   `rnl` starts in 1981-01, `sat` in 2000-06 (its first byMonth file; its daily files start in 1998). Stop at the month before the
    current one: the daily `monthly` runs write the newest month, and a
    backfill of the same year at the same moment would race them on that
    year's chunks.

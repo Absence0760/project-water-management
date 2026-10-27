@@ -123,13 +123,14 @@ export interface CopyPart {
 
 /**
  * Our CHIRPS copy (issue #604) as the data feeds panel shows it, from the
- * three products' manifests: `final.sat`/`final.rnl` from each finals
+ * three products' manifests as the worker's tick recorded them (mirror_copy,
+ * feeds/rainCopy.ts): `final.sat`/`final.rnl` from each finals
  * manifest's finalThrough, `preliminary` from the prelim manifest's
  * prelimThrough. `asOf` is the day the lags count to: today (UTC, the day
  * the lag alarm counts to) for a real copy, or the committed sample copy's
  * own day when `sample` (it is fixed in time, as a copy current on that day).
- * `readable: false` when the manifests couldn't be read (the reason is
- * logged, never sent).
+ * `readable: false` when the copy hasn't been checked yet (no product
+ * recorded): no feed is then marked behind.
  */
 export type RainCopy =
 	| { readable: true; sample: boolean; asOf: string; final: { sat: CopyPart; rnl: CopyPart }; preliminary: CopyPart }
@@ -171,7 +172,7 @@ export function rainCopyStatus(days: CopyDays, asOf: string, sample = false): Re
 
 /**
  * Whether the copy a CHIRPS feed reads is behind, as the feed's reason (null:
- * not CHIRPS, no copy in use, the copy unreadable, or on time). An rnl feed
+ * not CHIRPS, no copy in use, the copy not checked yet, or on time). An rnl feed
  * reads rnl's finals; a sat feed sat's finals and the preliminary days.
  */
 export function copyBehind(f: Pick<HealthInput, 'source' | 'config' | 'lastDataDate'>, copy: RainCopy | null | undefined): Extract<HealthReason, { code: 'copy-behind' }> | null {

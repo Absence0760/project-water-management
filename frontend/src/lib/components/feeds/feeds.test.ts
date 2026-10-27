@@ -337,14 +337,14 @@ describe('descriptions', () => {
 			expect(rainCopyNote(copy({ final: { sat: part('2026-08-31'), rnl: part(null, true) } }), [rnl])).toEqual({ text: `Rain data copied to nothing yet (final).${late}`, behind: true });
 		});
 
-		it('is absent with no CHIRPS feed or no copy, and says so when the copy couldn’t be read', () => {
+		it('is absent with no CHIRPS feed or no copy, and says so, without a warning, when the copy hasn’t been checked yet', () => {
 			expect(rainCopyNote(copy(), [gefs])).toBeNull();
 			expect(rainCopyNote(copy(), [])).toBeNull();
 			expect(rainCopyNote(null, [sat])).toBeNull();
 			expect(rainCopyNote(undefined, [sat])).toBeNull();
 			expect(rainCopyNote({ readable: false }, [sat])).toEqual({
-				text: 'Couldn’t check our copy of the rain data: the feeds’ newest days may be late. Refresh the status to try again.',
-				behind: true
+				text: 'Our copy of the rain data hasn’t been checked yet: the server looks at it every few minutes. Refresh the status later to see how far it reaches.',
+				behind: false
 			});
 		});
 	});

@@ -1659,9 +1659,11 @@ EventBridge, daily
   `app_mirror_apply_revision` (above, *A revision of our copy*); the
   per-file HEAD re-check retires while the copy is the source.
 - **Health.** A late copy is not the feed's fault, so it is not a failure:
-  `feeds/rainCopy.ts` reads the three manifests (kept 5 minutes, so listing
-  feeds doesn't read S3 each time) and `feeds/health.ts` `rainCopyStatus`
-  calls a final product behind when its `finalThrough` is more than 75 days
+  the worker's mirror tick records each product's `revision`,
+  `finalThrough` and `prelimThrough` in `mirror_copy` (246) whenever its
+  manifest changes, and the API reads them there (`feeds/rainCopy.ts`, in
+  the list's own transaction), so the API never reaches the copy. Then
+  `feeds/health.ts` `rainCopyStatus` calls a final product behind when its `finalThrough` is more than 75 days
   old (the lag alarm's threshold: CHC publishes a month's finals during the
   next month, so a healthy copy runs up to ~56 days behind), and the
   preliminary days behind past 7 days. A fetched CHIRPS feed whose part of
@@ -1670,12 +1672,18 @@ EventBridge, daily
   (final) / 5 Oct 2026 (preliminary)"; [ui.md § Data feeds](./ui.md#data-feeds),
   [api.md § Data feeds](./api.md#data-feeds)). The operator learns it first
   from the `MirrorLagDays` alarms ([deployment.md § The data
-  mirror](./deployment.md#the-data-mirror)). With `chc` nothing of this shows.
+  mirror](./deployment.md#the-data-mirror)). A product the tick hasn't
+  recorded is behind; with no product recorded at all (a fresh database, or
+  no worker running yet) the copy is *not checked yet*, which marks no feed
+  and the panel says so. The API reads `CHIRPS_SOURCE` (the worker's value,
+  from the same Terraform variable) only to know whether to report the
+  copy: with `chc` nothing of this shows.
 - **Locally** (`FEED_SOURCE=fixtures`, so `CHIRPS_SOURCE` defaults to
   `mirror`) feeds read the committed synthetic copy,
   `backend/fixtures/mirror/`, with no Python, S3 or network; it is fixed as
   the synthetic files stood on 2026-02-09, so its lags count to that day and
-  the panel calls it the sample copy. `pnpm dev:ingest:run` runs the Python
+  the panel calls it the sample copy (`mirror_copy`'s `fixtures` rows, which
+  the first worker tick records: `pnpm dev:full`, or one `pnpm dev:jobs:tick`). `pnpm dev:ingest:run` runs the Python
   job against synthetic NetCDF fixtures when you need it.
 
 ## Server-side reports

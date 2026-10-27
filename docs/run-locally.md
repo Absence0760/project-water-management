@@ -404,7 +404,10 @@ files. `FEED_FIXTURE_REWRITE` doesn't reach the copy (a revision of the copy
 comes from its manifest), and a live copy (`FEED_SOURCE=live`) is never
 re-dated. To read CHC's files instead, as production does until the cutover,
 put `CHIRPS_SOURCE=chc` in `backend/.env.development.local`; the backend's
-unit and DB tests run that way unless a test sets `mirror`.
+unit and DB tests run that way unless a test sets `mirror`. The Data feeds
+panel's "Rain data copied to …" line reads what the worker's tick recorded
+about the copy (`mirror_copy`), so until a tick has run (`pnpm dev:full`, or
+one `pnpm dev:jobs:tick`) it says the copy hasn't been checked yet.
 
 The fixtures tag each file by its bytes, as an ETag would. To watch the
 re-check of cached finals CHC rewrites in place

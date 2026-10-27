@@ -261,24 +261,10 @@ provenance, `ingest/verify_copy.py`):
       1981, `sat` from 1998), verification, then `chirps_source = "mirror"`
       and the paused CHIRPS feeds back on (#571). Each `terraform apply` with
       the operator's go-ahead.
-- [ ] **The API's view of the copy.** The data feeds panel's "Rain data
-      copied to …" line and the **Copy behind** state are worked out in the
-      API (`feeds/rainCopy.ts` reads the three manifests, cached 5 minutes),
-      but only the worker gets `CHIRPS_SOURCE`/`MIRROR_URL` and read access
-      to the mirror bucket. Until the API Lambda has them it reads
-      `CHIRPS_SOURCE` as `chc` and shows no copy line (safe, but silent).
-      Two ways to finish it: give the API Lambda the two variables, a
-      `GetObject` on `<mirror>/*/manifest.json` and a statement in the S3
-      interface endpoint's policy; or, the durable fix this file
-      recommends, have the worker's mirror tick record each product's
-      `finalThrough`/`prelimThrough` in the database (beside
-      `mirror_manifest`, which only moves on a revision) and the API read
-      them there, so the API never reaches S3. Trigger: before the cutover's
-      step 4.
 - [ ] **The portfolio counts a copy-behind feed as stale.** `portfolio.ts`
       judges feed health without the copy (`feedHealth(f, today, tz)`), so
       a feed the panel shows as **Copy behind** counts there as failing or
-      stale once its data is old. Pass the copy (`rainCopy()`) into
+      stale once its data is old. Pass the copy (`rainCopy(db)`) into
       `loadPortfolio`/`loadMyOutcomes` and decide what the tile counts it as
       (neither ok nor failing, with its own count, is the honest one). Same
       trigger: before the cutover, since nothing is ever copy-behind until

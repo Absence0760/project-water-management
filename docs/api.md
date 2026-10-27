@@ -4522,8 +4522,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `{ code: "copy-behind", product, final, preliminary, newest }` (state `copy-behind`, issue #604: a CHIRPS feed, fetched at least once and neither off, failing nor rebuilding, whose part of our copy is late: `rainCopy.final[product]`, or for `sat` also `rainCopy.preliminary`. `final` and `preliminary` are the days the copy holds to, null when none (`preliminary` always null for `rnl`); `newest` the feed's own. The feed itself is fine: it counts no failure and fills the days once the copy holds them).
 
   A client should fall back to the `state` for a code it doesn't know.
-- `rainCopy` (`feeds/health.ts` `RainCopy`, read by `feeds/rainCopy.ts` from the
-  copy's three manifests, kept for 5 minutes): `{ readable: true, sample,
+- `rainCopy` (`feeds/health.ts` `RainCopy`, read by `feeds/rainCopy.ts` from
+  `mirror_copy`, the copy's three manifests as the worker's tick last
+  recorded them): `{ readable: true, sample,
   asOf, final: { sat: CopyPart, rnl: CopyPart }, preliminary: CopyPart }`,
   `CopyPart = { through, behind }`. `through` is the manifest's
   `finalThrough` (`sat`, `rnl`) or `prelimThrough` (the `prelim` product),
@@ -4534,9 +4535,10 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   month's preliminary days are dropped once its finals land). `asOf` is
   today (UTC); `sample: true` is the committed sample copy
   (`backend/fixtures/mirror/`), whose lags count to the day it was made,
-  `2026-02-09`. `{ readable: false }` when the manifests couldn't be read
-  (logged as `rain_copy_unreadable` with the error's class only); feeds then
-  show their own health.
+  `2026-02-09`. A product the tick hasn't recorded is `through: null`,
+  behind. `{ readable: false }` when no product is recorded yet (the worker
+  hasn't checked the copy since the database was made): not checked yet, and
+  feeds show their own health.
   `lastError` is written by the server, never an upstream body or database
   text, e.g. `the source is unreachable: HTTP 503` or `the source’s data could
   not be read: the grid has no data at …`.

@@ -194,6 +194,11 @@ resource "aws_lambda_function" "backend" {
       # them sample data. Unset is the local fixtures, which the backend's
       # production check refuses (config/production.ts).
       FEED_SOURCE = "live"
+      # Whether CHIRPS feeds read our copy (issue #604): the same as the
+      # worker's (jobs.tf), so the Data feeds panel reports the copy exactly
+      # when the feeds read it. The API reads the copy's days from the
+      # mirror_copy rows the worker records; it never reaches the copy itself.
+      CHIRPS_SOURCE = var.chirps_source
 
       # Server-side reports (reports.tf): the API signs PDF downloads as
       # CloudFront signed URLs on the site's /reports/* path. The private key

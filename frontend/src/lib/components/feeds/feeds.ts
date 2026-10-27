@@ -123,8 +123,8 @@ export interface CopyPart {
 /**
  * Our own copy of the CHIRPS rain data (issue #604; backend/src/feeds/health.ts
  * RainCopy): how far each part reaches, as of `asOf` (today, or the day the
- * sample copy was made when `sample`). `readable: false`: the server couldn't
- * read it.
+ * sample copy was made when `sample`). `readable: false`: not checked yet
+ * (the worker hasn't recorded the copy since the database was made).
  */
 export type RainCopy =
 	| { readable: true; sample: boolean; asOf: string; final: { sat: CopyPart; rnl: CopyPart }; preliminary: CopyPart }
@@ -620,7 +620,7 @@ export function separateName(
 export function rainCopyNote(copy: RainCopy | null | undefined, feeds: readonly Pick<FeedMeta, 'source' | 'config'>[]): { text: string; behind: boolean } | null {
 	const products = new Set(feeds.filter((f) => f.source === 'chirps').map((f) => f.config.product ?? 'sat'));
 	if (!copy || products.size === 0) return null;
-	if (!copy.readable) return { text: 'Couldn’t check our copy of the rain data: the feeds’ newest days may be late. Refresh the status to try again.', behind: true };
+	if (!copy.readable) return { text: 'Our copy of the rain data hasn’t been checked yet: the server looks at it every few minutes. Refresh the status later to see how far it reaches.', behind: false };
 	const day = (p: CopyPart) => (p.through ? fmtDay(p.through) : 'nothing yet');
 	const used = (['sat', 'rnl'] as const).filter((p) => products.has(p));
 	const finals = used.map((p) => copy.final[p]);

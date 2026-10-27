@@ -8,8 +8,8 @@
 // data runs the model through the same worker tick, so they share the file's
 // one-at-a-time order. With a CHIRPS feed the panel says how far our copy of
 // the rain data reaches (issue #604; the committed sample copy here, on time
-// as of the day it was made), and a feed whose copy is late says so instead
-// of looking stale.
+// as of the day it was made, once a worker tick has recorded it), and a feed
+// whose copy is late says so instead of looking stale.
 import { readFileSync } from 'node:fs';
 import type { APIRequestContext } from '@playwright/test';
 import { addMember, createProject, createRun, putSeries, seedRunnableProject } from '../support/api.ts';
@@ -79,7 +79,7 @@ const triesAgain = (at: number, minutes: number) => {
 	return `It tries again after ${when}.`;
 };
 
-/** A product's manifest in the committed sample copy of the rain data (backend/fixtures/mirror/), which the e2e server reads. */
+/** A product's manifest in the committed sample copy of the rain data (backend/fixtures/mirror/), which the e2e worker tick reads and records. */
 const sampleManifest = (product: 'sat' | 'rnl' | 'prelim') =>
 	JSON.parse(readFileSync(new URL(`../../backend/fixtures/mirror/${product}/manifest.json`, import.meta.url), 'utf8')) as {
 		finalThrough: string | null;
@@ -194,6 +194,9 @@ test('an owner attaches a CHIRPS feed by bounding box, and it fetches the areaâ€
 test('with a CHIRPS feed the panel says how far our copy of the rain data reaches, and a late copy is told apart from a stale feed', async ({ page, owner, fetchRoute }) => {
 	void owner;
 	const project = await createProject(page.request, 'Rain copy');
+	// The API reads the copy's days from what the worker's tick last recorded (mirror_copy); the e2e backend has no
+	// worker, so tick once (it reads the committed sample copy's manifests), before the feed exists so nothing is fetched.
+	await runJobsTick({ projects: [project.id] });
 	await attachFeed(page.request, project.id);
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });

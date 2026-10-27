@@ -1,5 +1,6 @@
 # Plan-only tests (mocked providers, no AWS credentials) for which CHIRPS the
-# worker's feed fetches read (issue #604 R2-C; jobs.tf, var.chirps_source):
+# worker's feed fetches read (issue #604 R2-C; jobs.tf, var.chirps_source),
+# and the API's matching value (lambda.tf, for the Data feeds panel):
 # CHC through the fetcher until the cutover, by default; our copy, read in
 # the worker's own fetch job from the mirror bucket, when set to mirror; any
 # other value refused at plan.
@@ -730,6 +731,13 @@ run "worker_reads_chc_by_default" {
     error_message = "Until the cutover the worker sends CHIRPS fetches to the fetcher (CHIRPS_SOURCE=chc)."
   }
   assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["CHIRPS_SOURCE"] == "chc" &&
+      !contains(keys(aws_lambda_function.backend.environment[0].variables), "MIRROR_URL")
+    )
+    error_message = "The API says the same CHIRPS_SOURCE as the worker, and is never told where the copy lives (it reads mirror_copy)."
+  }
+  assert {
     condition     = aws_lambda_function.worker.environment[0].variables["MIRROR_URL"] == "s3://water-management-mirror-000000000000"
     error_message = "The worker is told where the copy lives (s3://<mirror bucket>), so switching chirps_source needs nothing else."
   }
@@ -749,6 +757,10 @@ run "worker_reads_the_copy_when_switched" {
       aws_s3_bucket.mirror.bucket == "water-management-mirror-000000000000"
     )
     error_message = "chirps_source = mirror has the worker read the mirror bucket."
+  }
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["CHIRPS_SOURCE"] == "mirror"
+    error_message = "chirps_source = mirror has the API's Data feeds panel report the copy too."
   }
 }
 

@@ -281,8 +281,8 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	INGEST_RESULTS_QUEUE_URL: { why: 'Where the fetcher answers.', checks: { fetcher: publicHttps } },
 	CHIRPS_SOURCE: {
-		why: 'Which CHIRPS a feed fetch reads (mirror/source.ts, issue #604): chc, CHC’s files through the fetcher, or mirror, our copy read in the worker’s own fetch job (feeds/fromMirror.ts). Unset follows FEED_SOURCE (chc when live), but production says which: Terraform sets it on the worker from var.chirps_source (infra/jobs.tf).',
-		checks: { worker: oneOf('chc', 'mirror') }
+		why: 'Which CHIRPS a feed fetch reads (mirror/source.ts, issue #604): chc, CHC’s files through the fetcher, or mirror, our copy read in the worker’s own fetch job (feeds/fromMirror.ts). The API reads it too, only to know whether the Data feeds panel reports the copy (feeds/rainCopy.ts, from the mirror_copy rows the worker records; the API never reaches the copy). Unset follows FEED_SOURCE (chc when live), but production says which, the same on both: Terraform sets it from var.chirps_source (infra/jobs.tf, infra/lambda.tf).',
+		checks: { api: oneOf('chc', 'mirror'), worker: oneOf('chc', 'mirror') }
 	},
 	MIRROR_URL: {
 		why: 'Where our copy of CHIRPS lives (mirror/source.ts mirrorUrl): s3://<the mirror bucket> (infra/ingest.tf). Unset off Lambda is the committed synthetic copy, which a live process refuses. The worker needs it when CHIRPS_SOURCE=mirror; the ingest Lambdas (the fetcher’s daily ingest, issue #604 R2-B) write it, and Terraform sets it on the fetcher always (infra/feeds.tf), so the fetcher must name the bucket.',

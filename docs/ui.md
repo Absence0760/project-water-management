@@ -6208,7 +6208,10 @@ editors run one now and read the map's proposals, viewers read.
   they differ). When a part is late it becomes a warning box adding "The
   copy is behind the published data: feeds fill in the newer days once it
   catches up, with nothing to do here.", never `role="alert"` (nothing on
-  the page can fix it); a copy the server couldn't read says so. The
+  the page can fix it). Before the worker has recorded the copy at all (a
+  fresh database, no worker running yet) a plain line says "Our copy of the
+  rain data hasn’t been checked yet: the server looks at it every few
+  minutes. Refresh the status later to see how far it reaches." The
   committed sample copy adds "This is the sample copy, as it stood on 9 Feb
   2026." (`rainCopyNote` in `feeds.ts`, `data-testid="rain-copy"`,
   `data-behind`). No line while the server reads CHC directly.

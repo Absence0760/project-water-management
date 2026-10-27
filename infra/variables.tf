@@ -620,7 +620,7 @@ variable "renderer_reserved_concurrency" {
 # --- The data mirror (ingest.tf, issue #604) ------------------------------------
 
 variable "chirps_source" {
-  description = "Which CHIRPS the worker's feed fetches read (CHIRPS_SOURCE, issue #604): chc sends each fetch to the fetcher Lambda, which reads CHC's files; mirror reads our copy in the mirror bucket (ingest.tf) inside the worker's own fetch job, with no request to CHC. chc until the cutover (Round 3, R3-C): switch only once the copy holds the region's finals and preliminary days (docs/deployment.md § The data mirror)."
+  description = "Which CHIRPS the worker's feed fetches read (CHIRPS_SOURCE, issue #604): chc sends each fetch to the fetcher Lambda, which reads CHC's files; mirror reads our copy in the mirror bucket (ingest.tf) inside the worker's own fetch job, with no request to CHC. The API gets the same value, so the Data feeds panel reports the copy exactly when the feeds read it (it reads the copy's days from the database, never the bucket). chc until the cutover (Round 3, R3-C): switch only once the copy holds the region's finals and preliminary days (docs/deployment.md § The data mirror)."
   type        = string
   default     = "chc"
   validation {

@@ -36,6 +36,7 @@ import { MAX_FEEDS, RUN_NOW_RATE, runNowWait } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
 import { ingestResult } from './ingest.js';
 import { claimFeed, feedForJob, listDueFeeds, takeFeedFetch } from './store.js';
+import { recordMirrorCopy } from './mirrorRevision.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -50,6 +51,7 @@ afterEach(async () => {
 	await asOwner('DELETE FROM chirps_cell_year');
 	await asOwner('DELETE FROM chirps_file');
 	await asOwner('DELETE FROM chirps_cell_stale');
+	await asOwner('DELETE FROM mirror_copy');
 });
 
 const cell = () => ({ ...FIXTURE_CELL(), weight: 1 });
@@ -118,14 +120,31 @@ describe('data_feed RLS and the routes', () => {
 		});
 		const id = created.body.feed.id;
 
-		// Positive control: the viewer reads it, and what the form offers.
+		// Positive control: the viewer reads it, and what the form offers. (Another file's tick may have recorded the copy.)
+		await asOwner('DELETE FROM mirror_copy');
+		vi.stubEnv('CHIRPS_SOURCE', 'mirror');
 		const list = await viewer.call('GET', `/projects/${pid}/feeds`);
 		expect(list.status).toBe(200);
 		expect(list.body.feeds.map((f: { id: string }) => f.id)).toEqual([id]);
 		expect(list.body).toMatchObject({ mode: 'fixtures', canEdit: false, canRun: false, schedules: ['daily'] });
 		expect(list.body.sources.map((s: { source: string }) => s.source)).toEqual(['chirps', 'chirps_gefs', 'dws']);
-		// Our CHIRPS copy (issue #604): off a live process, the committed sample copy, on time as of the day it was made.
-		expect(list.body.rainCopy).toMatchObject({ readable: true, sample: true, asOf: '2026-02-09', final: { sat: { through: '2025-12-31', behind: false } }, preliminary: { through: '2026-02-06', behind: false } });
+		// Our CHIRPS copy (issue #604), as the worker's tick records it (mirror_copy): not checked before a tick, then,
+		// off a live process, the committed sample copy, on time as of the day it was made.
+		expect(list.body.rainCopy).toEqual({ readable: false });
+		for (const product of ['sat', 'rnl', 'prelim'] as const) {
+			const m = JSON.parse(readFileSync(new URL(`../../fixtures/mirror/${product}/manifest.json`, import.meta.url), 'utf8')) as { product: string; revision: number };
+			await withoutUser((db) => recordMirrorCopy(db, 'fixtures', product, m));
+		}
+		expect((await viewer.call('GET', `/projects/${pid}/feeds`)).body.rainCopy).toMatchObject({
+			readable: true,
+			sample: true,
+			asOf: '2026-02-09',
+			final: { sat: { through: '2025-12-31', behind: false } },
+			preliminary: { through: '2026-02-06', behind: false }
+		});
+		// While CHC is read directly, no copy (the setup's default, production's until the cutover).
+		vi.stubEnv('CHIRPS_SOURCE', 'chc');
+		expect((await viewer.call('GET', `/projects/${pid}/feeds`)).body.rainCopy).toBeNull();
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body).toMatchObject({ canEdit: true, canRun: true });
 		expect((await editor.call('GET', `/projects/${pid}/feeds`)).body).toMatchObject({ canEdit: false, canRun: true });
 

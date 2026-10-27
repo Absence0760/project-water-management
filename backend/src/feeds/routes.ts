@@ -186,10 +186,10 @@ function refuseBoundaryMark(config: unknown) {
 
 export const feedRoutes = new Hono<AuthEnv>()
 	.get('/:id/feeds', async (c) => {
-		// Our CHIRPS copy's state (cached; read before the transaction, never inside it). Null while CHC is read directly.
-		const copy = await rainCopy();
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, c.req.param('id'), 'viewer');
+			// Our CHIRPS copy's state, as the worker's tick last recorded it (mirror_copy). Null while CHC is read directly.
+			const copy = await rainCopy(db);
 			return c.json({
 				feeds: await listFeeds(db, c.req.param('id'), new Date(), copy),
 				// What the form offers, and whether this server fetches for real.

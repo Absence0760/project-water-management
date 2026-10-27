@@ -80,6 +80,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		JOB_TRANSPORT: 'sqs',
 		JOBS_QUEUE_URL: SQS('jobs'),
 		FEED_SOURCE: 'live',
+		CHIRPS_SOURCE: 'chc',
 		STORAGE: 's3',
 		REPORTS_BUCKET: 'water-management-reports-000000000000',
 		PACKS_BUCKET: 'water-management-packs-000000000000',
@@ -463,8 +464,12 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		for (const [role, name, value] of cases) expect(problemNames(role, prod(role, { [name]: value })), `${role} ${name}=${value}`).toContain(name);
 	});
 
-	it('the worker says which CHIRPS it reads, and reads our copy only from its S3 bucket', () => {
-		for (const v of [undefined, '', 'dyn', 'live']) expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: v })), `CHIRPS_SOURCE=${String(v)}`).toContain('CHIRPS_SOURCE');
+	it('the worker and the API say which CHIRPS is read, and the worker reads our copy only from its S3 bucket', () => {
+		for (const role of ['worker', 'api'] as const) {
+			for (const v of [undefined, '', 'dyn', 'live']) expect(problemNames(role, prod(role, { CHIRPS_SOURCE: v })), `${role} CHIRPS_SOURCE=${String(v)}`).toContain('CHIRPS_SOURCE');
+		}
+		// Positive control: the API needs no MIRROR_URL either way (it reads the copy's days from mirror_copy).
+		expect(problemNames('api', prod('api', { CHIRPS_SOURCE: 'mirror' }))).toEqual([]);
 		const mirror = (url: string | undefined) => problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'mirror', MIRROR_URL: url }));
 		for (const v of [undefined, '', 'file:///var/task/fixtures/mirror/', 'fixtures/mirror', 'http://localhost:9002/mirror', 's3://'])
 			expect(mirror(v), `mirror with MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
