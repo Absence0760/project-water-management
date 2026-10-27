@@ -27,7 +27,8 @@ import {
 	type RunoffModelId,
 	type SeriesOrigin,
 	type SeriesProvenance,
-	type ApanDailyFingerprint
+	type ApanDailyFingerprint,
+	type Et0DailyFingerprint
 } from '@water-management/engine';
 import { FLOW_KIND_LABEL } from '#lib/components/calibration/metrics.js';
 import { fmtDay, fmtNum } from '#lib/format/number.js';
@@ -349,6 +350,7 @@ export function fitRecordFor(
 		now?: Date;
 		chirpsSource?: SeriesProvenance | null;
 		apanDaily?: ApanDailyFingerprint | null;
+		et0Daily?: Et0DailyFingerprint | null;
 		observedOrigin?: SeriesOrigin | null;
 	}
 ): FitRecord {
@@ -362,6 +364,8 @@ export function fitRecordFor(
 		...(opts.chirpsSource !== undefined ? { chirpsSource: opts.chirpsSource } : {}),
 		// The daily A-pan series it ran on (issue #45), when known.
 		...(opts.apanDaily !== undefined ? { apanDaily: opts.apanDaily } : {}),
+		// And the daily reference ET series (issue #604 R5-E), when known.
+		...(opts.et0Daily !== undefined ? { et0Daily: opts.et0Daily } : {}),
 		// The fitted record's source and given unit (107_series_source.sql), when known.
 		...(opts.observedOrigin !== undefined ? { observedOrigin: opts.observedOrigin } : {})
 	});

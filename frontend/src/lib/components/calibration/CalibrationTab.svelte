@@ -37,7 +37,7 @@
 	import CalibrationResults from './CalibrationResults.svelte';
 	import type { RunSummary } from '@water-management/engine';
 	import { calibrationNavGroups, isCalPart, isCalSubsection, type CalShown } from './page';
-	import { apanFingerprint } from './apanFingerprint';
+	import { apanFingerprint, et0Fingerprint } from './apanFingerprint';
 	import { gr4jChanges, statusLine, type CalState } from './status';
 	import { hasRole } from '#lib/api/index.js';
 
@@ -57,6 +57,7 @@
 		chirpsSource,
 		observedOrigins,
 		apanSeries,
+		et0Series,
 		flowRecordId = null,
 		readonly,
 		onProjectChange
@@ -87,6 +88,8 @@
 		observedOrigins?: Partial<Record<string, SeriesOrigin | null>>;
 		/** The daily A-pan series a run would read (issue #45): null for none, undefined while the list loads. */
 		apanSeries?: Pick<SeriesMeta, 'id' | 'updatedAt'> | null;
+		/** The daily reference ET series a run would read (issue #604 R5-E): null for none, undefined while the list loads. */
+		et0Series?: Pick<SeriesMeta, 'id' | 'updatedAt'> | null;
 		/** A flow record the calibration can score against, for the link to where its site is set (the Data tab). */
 		flowRecordId?: string | null;
 		readonly: boolean;
@@ -134,8 +137,31 @@
 			live = false;
 		};
 	});
+	// The daily reference ET series now (issue #604 R5-E), the same way and through the same per-version cache.
+	let et0Now = $state<ApanDailyFingerprint | null | undefined>(undefined);
+	// Through the fit's last scored day (the record's `through`): a feed's later days never reached the fit.
+	// A fit recorded with no series: any series now is one added since, so the whole of it stands for it.
+	const et0Then = $derived(s.fitRecord?.forcing?.et0Daily);
+	$effect(() => {
+		const meta = et0Series;
+		const then = et0Then;
+		et0Now = meta === null ? null : undefined;
+		if (!meta || then === undefined) return;
+		let live = true;
+		(then ? et0Fingerprint(project.id, meta, then.through) : apanFingerprint(project.id, meta)).then(
+			(f) => {
+				if (live) et0Now = f;
+			},
+			() => {
+				if (live) et0Now = undefined;
+			}
+		);
+		return () => {
+			live = false;
+		};
+	});
 	// The header (issue #17): where the parameters came from, and the way to the fit (Settings' until round 3).
-	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily: apanNow }) : null);
+	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily: apanNow, ...(et0Now !== undefined ? { et0Daily: et0Now } : {}) }) : null);
 	const summary = $derived(fitSummary(s.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 
@@ -191,6 +217,7 @@
 						{chirpsSource}
 						{observedOrigins}
 						apanDaily={apanNow}
+						et0Daily={et0Now}
 						{flowRecordId}
 						{readonly}
 						{onProjectChange}
