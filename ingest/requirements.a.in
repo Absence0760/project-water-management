@@ -1,0 +1,7 @@
+# Piece R4-A (ERA5-Land, era5land.py): direct dependencies to add to the
+# hash-pinned requirements.txt at the merge (r4-shared.md).
+#
+# The Copernicus CDS's own Python client (ECMWF, Apache-2.0), which cdsapi
+# now wraps: submit a request, ask its status, find its results. Imported only
+# in live mode (era5land.LiveCds); checked 2026-10-27.
+ecmwf-datastores-client==0.5.3

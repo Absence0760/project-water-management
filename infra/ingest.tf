@@ -372,6 +372,8 @@ resource "aws_lambda_function" "ingest" {
       INGEST_CONTACT = var.ingest_contact
       # IMERG Late's Earthdata token, read at run time in live mode (imerg.tf).
       EARTHDATA_TOKEN_SECRET_ARN = aws_secretsmanager_secret.earthdata_token.arn
+      # The CDS key's secret, read by ERA5-Land runs (era5land.tf); an ARN, not the key.
+      CDS_KEY_SECRET_ARN = aws_secretsmanager_secret.cds_key.arn
     }
   }
 

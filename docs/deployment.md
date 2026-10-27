@@ -1775,6 +1775,80 @@ When V08 arrives, CMR lists it beside V07 and the job takes the newer
 version for each day, re-copying a held day once (its revision moves only
 if its values changed).
 
+### ERA5-Land
+
+A second rain source (issue #604 R4-A, D15): ERA5-Land daily total
+precipitation from the Copernicus Climate Data Store, copied as product
+`era5l` on the 0.1° grid by the same `mirror-ingest` function
+(`ingest/era5land.py`; how it works: ingest/README.md § The ERA5-Land job).
+The CDS needs an account and an API key. Terraform creates the secret
+`water-management/ingest/cds-key` with **no value** (`infra/era5land.tf`),
+gives the ingest role `GetSecretValue` on that secret only, and passes its
+ARN (never the key) as `CDS_KEY_SECRET_ARN`. The daily rule (02:40 UTC,
+`{"product":"era5l","mode":"monthly"}`) and the `mirror-lag-era5l` alarm
+exist only with `era5l_enabled = true` (default false), which needs
+`ingest_image_tag` set to a release that has `era5land.py`.
+
+The operator, once:
+
+1. **The CDS account.** Register at cds.climate.copernicus.eu (an ECMWF
+   account) with the project's role mailbox, not a personal address, and
+   record it in the vendor registry (`project-mgmt` docs/vendor-accounts.md).
+2. **Accept the dataset's licence.** Signed in, open the dataset
+   "ERA5-Land hourly data from 1950 to present" (`reanalysis-era5-land`),
+   go to its Download tab, and accept the licence under "Terms of use"
+   (CC-BY). Until it is accepted every request answers 403, which stops the
+   run on purpose.
+3. **Save the key to a file only you can read.** Copy the API key from your
+   CDS profile page into a new file with a text editor (not `echo`, which
+   would put it in the shell history), e.g. `~/cds-key.txt`, holding the key
+   alone, then `chmod 600 ~/cds-key.txt`.
+4. **Put it in the secret**, from that file (the job strips a trailing
+   newline):
+   `aws secretsmanager put-secret-value --secret-id water-management/ingest/cds-key --secret-string file://$HOME/cds-key.txt --region af-south-1 --profile water-management`
+   Check it landed without reading it back:
+   `aws secretsmanager describe-secret --secret-id water-management/ingest/cds-key --query '{changed:LastChangedDate,versions:VersionIdsToStages}' --region af-south-1 --profile water-management`
+   shows a version staged `AWSCURRENT`. Then delete the file:
+   `shred -u ~/cds-key.txt`. To rotate, repeat steps 3–4 with the new key;
+   the next run reads it.
+5. **Turn it on:** `era5l_enabled = true` in the prod tfvars, then `plan`
+   and, with the operator's go-ahead, `apply`. The next 02:40 UTC run
+   submits the newest complete month; the one after collects it.
+
+**Backfill** (`nsf-ncar-era5` on AWS holds ERA5, not ERA5-Land, so it goes
+through the CDS too). Each invocation marks one month wanted and submits it
+while fewer than four requests are queued; every later run, the daily one
+included, keeps submitting wanted months, newest first, as slots free. So
+mark the months once, one synchronous invocation at a time (never async: a
+run that finds another holding the lease fails), e.g. 1981 to 2025 to match
+CHIRPS:
+`for y in $(seq 1981 2025); do for m in 01 02 03 04 05 06 07 08 09 10 11 12; do aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload "{\"product\":\"era5l\",\"mode\":\"backfill\",\"month\":\"$y-$m\"}" --cli-read-timeout 900 --region af-south-1 --profile water-management /dev/null >/dev/null || echo "$y-$m failed"; done; done`
+The daily run alone then drains about four months a day (~550 months in
+four to five months); invoking any backfill month again during the day
+collects and refills sooner. The array grows from 1950 whatever range you
+pick (unwritten chunks cost nothing).
+
+**When it alarms** (`mirror-lag-era5l`, past `era5l_lag_alarm_days`, default
+50; a healthy copy runs 32–45 days behind, since a month's last day comes
+with the next month's request): read the `mirror-ingest` log group's
+`era5l:` lines and `ingest-state/era5l/requests.json` in the mirror bucket
+(`aws s3 cp s3://<mirror bucket>/ingest-state/era5l/requests.json -`).
+- **Refused** (`StopRun`, HTTP 401 or 403): 401 is a wrong or expired key
+  (step 4 again); 403 is the licence not accepted (step 2) or the account
+  blocked (write to ECMWF support). The run writes
+  `ingest-state/era5l/refused.json`, and no run calls the CDS again that UTC
+  day; the next day's run tries again, or delete that object once fixed.
+- **`RequestsFailed`**: a month's request failed five times (backing off 1,
+  2, 4 and 8 days). Its entry's `lastError` says how it ended; once the cause
+  is fixed, delete that month's entry from `requests.json` (download, edit,
+  upload) and the next run submits it again.
+
+**Attribution:** ERA5-Land is CC BY 4.0, and Copernicus's attribution must
+show wherever its values do (docs/data-sources.md § era5-land has the text).
+
+**Cost:** cents a month: the secret (~$0.40), a few seconds of Lambda a day,
+a month's download of a few MB, and the array's chunks (about 1–2 GB in S3 from 1981, under $0.05).
+
 ## DWS gauge records
 
 DWS feeds move onto a store of ours too (issue #604 R3-B, design D14; the
