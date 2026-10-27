@@ -71,7 +71,8 @@
 //              leaves out github_actions and docker (the renderer image:
 //              .github/dependabot.yml's docker entry); and the same `if:`
 //              excludes the renderer image's npm directory
-//              (/backend/renderer-deps) by fetch-metadata's `directory` and by
+//              (/backend/renderer-deps) and the ingest image's pip directory
+//              (/ingest) by fetch-metadata's `directory` and by
 //              the PR's branch name, each on its own line joined with `&&`.
 //              Those PRs stay manual. And `gh pr merge --auto` comes after
 //              a read of the repo's `allow_auto_merge`: with the setting off
@@ -315,9 +316,10 @@ export const MANUAL_ECOSYSTEMS = ['github_actions', 'docker'];
 
 /**
  * Dependabot directories whose PRs a human always merges, whatever their
- * ecosystem (the auto-merge rule): the renderer image's npm packages.
+ * ecosystem (the auto-merge rule): the renderer image's npm packages and the
+ * bulk ingest image's Python packages (issue #604).
  */
-export const MANUAL_DIRECTORIES = ['/backend/renderer-deps'];
+export const MANUAL_DIRECTORIES = ['/backend/renderer-deps', '/ingest'];
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 
@@ -364,7 +366,7 @@ export function autoMergeProblem(text) {
 		if (!block.some((l) => byBranch.test(l))) missing.push(`!contains(github.event.pull_request.head.ref, '${dir}/') &&`);
 	}
 	if (missing.length) {
-		return { line: ifAt + 1, message: `the auto-merge condition does not exclude the renderer image's npm directory; add, each on its own line: ${missing.join(' / ')}` };
+		return { line: ifAt + 1, message: `the auto-merge condition does not exclude every production image's dependency directory (${MANUAL_DIRECTORIES.join(', ')}); add, each on its own line: ${missing.join(' / ')}` };
 	}
 	const code = (l) => !/^\s*#/.test(l);
 	const mergeAt = lines.findIndex((l) => code(l) && /\bgh pr merge\b.*--auto/.test(l));
