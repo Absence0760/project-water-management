@@ -258,7 +258,8 @@ provenance, `ingest/verify_copy.py`):
 - [ ] **Run the cutover** ([deployment.md § The data
       mirror](./deployment.md#the-data-mirror), *The cutover*): the job's
       daily runs with `MirrorLagDays` reporting, the backfill (`rnl` from
-      1981, `sat` from 1998), verification, then `chirps_source = "mirror"`
+      1981-01, `sat` from 2000-06, its first byMonth file), verification
+      (`ingest/dev.sh verify`), then `chirps_source = "mirror"`
       and the paused CHIRPS feeds back on (#571). Each `terraform apply` with
       the operator's go-ahead.
 - [ ] **The portfolio counts a copy-behind feed as stale.** `portfolio.ts`
@@ -276,6 +277,20 @@ provenance, `ingest/verify_copy.py`):
       shift the sample copy's days to today in fixtures mode (as the file
       fixtures re-date themselves), `rainCopy.ts` should report the shifted
       days too, so the line matches what feeds read.
+- [ ] **Loading DWS's reply in production** (R3-B). `pnpm import:dws`
+      writes `gauge_record` locally, but production's database is reachable
+      only through the migrate Lambda, whose reference load
+      (`backend/src/geo/referenceLoad.ts`, `load-reference.yml`) has no `dws`
+      kind. Add one (the reply uploaded to the reference bucket, loaded with
+      `source = 'dws-request'` through the same parser) once DWS's written
+      answer allows storing the data. Until then `dws_source` stays `live`.
+      Trigger: DWS's reply to the operator's request (#604 operator steps).
+- [ ] **Table datasets' originals and upstream versions** (R3-D). Migration
+      248 records provenance for every `reference_load` kind, but only tile
+      archives fill it: `load-reference.yml` takes no inputs for a table
+      load's originals (`originals/<kind>/`) or upstream version. Add
+      optional workflow inputs and pass them to the load. Trigger: the next
+      refresh of any table dataset (deployment.md § Refreshing a dataset).
 - [ ] **Two thresholds in two places.** The app's
       `COPY_FINAL_LAG_DAYS` (75, `feeds/health.ts`) matches
       `ingest_lag_alarm_days`'s default by hand; a prod tfvars that changes
