@@ -69,6 +69,10 @@ Terraform defaults.
 - Worker, fetcher and report-renderer Lambdas (the renderer once
   `renderer_image_tag` is set), the six SQS queues and their DLQs, the
   5-minute EventBridge tick.
+- The data mirror (issue #604, `infra/ingest.tf`): its private, versioned
+  bucket and the mirror ingest Lambda (once `ingest_image_tag` is set) with
+  its two daily schedules and DLQ; under $1/month
+  ([deployment.md § The data mirror](./deployment.md#the-data-mirror)).
 - SES for account, alert and report email.
 - One ENI each for the Secrets Manager, SES, SQS and S3 interface endpoints
   (`*_endpoint_az_count = 1`).
@@ -83,7 +87,8 @@ Terraform defaults.
 aws_region         = "af-south-1"
 budget_monthly_usd = 110  # the default; 85 in us-east-1
 # Everything else on defaults. Set renderer_image_tag after the first
-# backend deploy (deployment.md § Reports).
+# backend deploy (deployment.md § Reports), and ingest_image_tag once the
+# mirror ingest job publishes its lag (deployment.md § The data mirror).
 ```
 
 Cost:
@@ -96,7 +101,7 @@ Cost:
 | WAF (ACL + 5 rules; billed globally) | 10.00 | 10.00 |
 | CloudWatch: 44 alarms (41 until the renderer exists), logs, RDS log export | ~4.80 | ~4.30 |
 | 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 | 4.10 |
-| SQS polling by the six event sources (~2.9 M receives past the free tier), ECR image, S3 (incl. the tiles and reference buckets, ~$0.10), SES, Lambda (the migrate Lambda's 3008 MB is billed only while it migrates or loads), CloudFront | ~1.90 | ~1.60 |
+| SQS polling by the six event sources (~2.9 M receives past the free tier), ECR images, S3 (incl. the tiles and reference buckets, ~$0.10, and the data mirror's ~6 GB, ~$0.20–0.30), SES, Lambda (the migrate Lambda's 3008 MB is billed only while it migrates or loads), CloudFront | ~1.90 | ~1.60 |
 | **Total** | **≈ $77** | **≈ $63** |
 
 The line-by-line us-east-1 breakdown is
@@ -198,7 +203,7 @@ current prices (us-east-1; free tiers apply first):
 The first thing to outgrow is the database instance class, not Lambda or
 bandwidth: watch the RDS CPU, memory and burst-credit alarms. The Lambda
 reserved-concurrency caps (`lambda_reserved_concurrency` 25, worker 8,
-migrate 1, fetcher 2, renderer 2; never `-1`, which the variables refuse) bound the worst case of an attack or a runaway job
+migrate 1, fetcher 2, renderer 2, mirror ingest 2; never `-1`, which the variables refuse) bound the worst case of an attack or a runaway job
 (the API's 25 × 1 GB busy all month is about 65 M GB-s, ≈ $1 150 at af-south-1's
 arm price, ≈ $1 320 with request charges; it was ≈ $530 at the old cap of 10,
 issue #541; `lambda-throttles` pages on saturation and the daily budget a day later;

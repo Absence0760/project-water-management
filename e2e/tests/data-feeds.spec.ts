@@ -6,7 +6,12 @@
 // and the panel passes axe (WCAG 2.2 AA) in that state with its form open.
 // Automatic runs (WP-2.11, docs/ui.md § Automatic runs) live here too: new
 // data runs the model through the same worker tick, so they share the file's
-// one-at-a-time order.
+// one-at-a-time order. With a CHIRPS feed the panel says how far our copy of
+// the rain data reaches (issue #604; the committed sample copy here, on time
+// as of the day it was made, once a worker tick has recorded it), and a feed
+// whose copy is late says so instead of looking stale. An ECMWF forecast
+// feed (issue #604 R4-C) reads the copy's ECMWF issue and credits ECMWF.
+import { readFileSync } from 'node:fs';
 import type { APIRequestContext } from '@playwright/test';
 import { addMember, createProject, createRun, putSeries, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
@@ -75,6 +80,15 @@ const triesAgain = (at: number, minutes: number) => {
 	return `It tries again after ${when}.`;
 };
 
+/** A product's manifest in the committed sample copy of the rain data (backend/fixtures/mirror/), which the e2e worker tick reads and records. */
+const sampleManifest = (product: 'sat' | 'rnl' | 'prelim') =>
+	JSON.parse(readFileSync(new URL(`../../backend/fixtures/mirror/${product}/manifest.json`, import.meta.url), 'utf8')) as {
+		finalThrough: string | null;
+		prelimThrough: string | null;
+	};
+/** A YYYY-MM-DD day as the panel writes it ("6 Feb 2026"). */
+const isoDay = (d: string) => day(0, Date.parse(`${d}T00:00:00Z`));
+
 /** Attach a CHIRPS feed straight through the API (as whoever `request` is signed in as). */
 async function attachFeed(request: APIRequestContext, projectId: string): Promise<string> {
 	const res = await request.post(`${API_URL}/projects/${projectId}/feeds`, {
@@ -93,6 +107,8 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 	await expect(panel.getByText('No feeds yet.')).toBeVisible();
 	await expect(panel.getByText('Sample data')).toBeVisible();
+	// No CHIRPS feed, so nothing about our copy of the rain data.
+	await expect(panel.getByTestId('rain-copy')).toHaveCount(0);
 
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
 	await panel.getByLabel('Source').selectOption({ label: 'CHIRPS-GEFS rainfall forecast' });
@@ -141,6 +157,34 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 	await expect(page.getByTestId('section-context')).toHaveText('1 daily input series');
 });
 
+test('an ECMWF forecast feed reads our copy, credits ECMWF and says it is not yet calibrated (issue #604 R4-C)', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Feeds');
+	await page.clock.install();
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	await panel.getByLabel('Source').selectOption({ label: 'ECMWF ENS rainfall forecast' });
+	await expect(panel.getByLabel('Into series')).toHaveValue('rain_forecast_mm');
+	await panel.getByLabel('Grid cells').fill('-20.12, 25.17');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toHaveCount(1);
+	await expect(feed).toContainText('ECMWF ENS rainfall forecast → Rainfall — forecast');
+	// Before its first fetch: the credit alone.
+	await expect(feed).toContainText('ECMWF open data, CC BY 4.0');
+	await expect(feed).not.toContainText('calibrated');
+
+	await feed.getByRole('button', { name: 'Run now: Rainfall — forecast' }).click();
+	const fetched = await fetchOnce(project.id);
+	await nextPoll(page);
+	await expect(feed).toHaveAttribute('data-state', 'ok');
+	// 15 days from the issue (today, in the committed sample copy re-dated), and no fit in the copy yet.
+	await expect(feed).toContainText(datedIn(fetched, (at) => `Last data ${day(14, at)} · checked `));
+	await expect(feed).toContainText('ECMWF open data, CC BY 4.0 · not yet calibrated');
+});
+
 test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area’s rainfall', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Box feed');
@@ -174,6 +218,63 @@ test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area�
 	await expect(feed).toHaveAttribute('data-state', 'ok');
 	// Preliminary days reach three days back on the fixtures (chirps-sample.json prelimLagDays).
 	await expect(feed).toContainText(datedIn(fetched, (at) => `OK; newest data ${day(-3, at)}, checked ${projectToday(at)}.`));
+});
+
+test('with a CHIRPS feed the panel says how far our copy of the rain data reaches, and a late copy is told apart from a stale feed', async ({ page, owner, fetchRoute }) => {
+	void owner;
+	const project = await createProject(page.request, 'Rain copy');
+	// The API reads the copy's days from what the worker's tick last recorded (mirror_copy); the e2e backend has no
+	// worker, so tick once (it reads the committed sample copy's manifests), before the feed exists so nothing is fetched.
+	await runJobsTick({ projects: [project.id] });
+	await attachFeed(page.request, project.id);
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toHaveCount(1);
+
+	// The sample copy's own days (read from its manifests), on time: its lags count to the day it was made.
+	const final = isoDay(sampleManifest('sat').finalThrough!);
+	const prelim = isoDay(sampleManifest('prelim').prelimThrough!);
+	const note = panel.getByTestId('rain-copy');
+	await expect(note).toHaveText(`Rain data copied to ${final} (final) / ${prelim} (preliminary). This is the sample copy, as it stood on 9 Feb 2026.`);
+	await expect(note).toHaveAttribute('data-behind', 'false');
+	await expect(note).not.toHaveRole('alert');
+
+	// A late copy: no copy on this server can be late on demand (the sample's days are fixed), so the live list
+	// with the copy moved back and the feed's health as the server words a late copy (backend feeds/health.ts copy-behind).
+	const listUrl = `${API_URL}/projects/${project.id}/feeds`;
+	const late = await fetchRoute(page, listUrl, async (route) => {
+		const res = await route.fetch();
+		const body = await res.json();
+		body.rainCopy = {
+			readable: true,
+			sample: false,
+			asOf: '2026-10-27',
+			final: { sat: { through: '2026-07-31', behind: true }, rnl: { through: '2026-07-31', behind: true } },
+			preliminary: { through: '2026-10-05', behind: true }
+		};
+		body.feeds[0].health = {
+			state: 'copy-behind',
+			stale: true,
+			staleAfterDays: 12,
+			reason: { code: 'copy-behind', product: 'sat', final: '2026-07-31', preliminary: '2026-10-05', newest: '2026-10-05' }
+		};
+		await route.fulfill({ response: res, json: body });
+	});
+	await page.reload();
+	await expect(note).toHaveText(
+		'Rain data copied to 31 Jul 2026 (final) / 5 Oct 2026 (preliminary). The copy is behind the published data: feeds fill in the newer days once it catches up, with nothing to do here.'
+	);
+	await expect(note).toHaveAttribute('data-behind', 'true');
+	await expect(feed).toHaveAttribute('data-state', 'copy-behind');
+	await expect(feed.getByText('Copy behind', { exact: true })).toBeVisible();
+	await expect(feed.locator('.health')).toHaveText(
+		'Our copy of the rain data is behind: it holds final days to 31 Jul 2026 and preliminary days to 5 Oct 2026. The feed itself is fine and fills in the newer days once the copy catches up; there is nothing to do here. Newest data 5 Oct 2026.'
+	);
+	// Not the feed's fault, and nothing here fixes it: no "needs attention" warning.
+	await expect(panel.getByTestId('feeds-attention')).toHaveCount(0);
+	await expectNoViolations(page, { include: '#data-feeds' });
+	await late.unroute();
 });
 
 test('a coastal box leaves out its sea cells when asked, and fetches the land’s rainfall', async ({ page, owner }) => {

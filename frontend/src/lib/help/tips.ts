@@ -1618,6 +1618,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.chirpsQuantileMap', 'run.rain_chirps_mapped']
 	},
 	{
+		id: 'gap-rain',
+		term: 'Gap-filling product',
+		short: 'Which product fills blank catchment-rain days (CHIRPS, ERA5-Land, or both), and IMERG Late for the last few days, each on its own fit.',
+		category: 'data',
+		fields: ['settings.gapRain', 'run.rain_era5l', 'run.rain_imerg_late']
+	},
+	{
 		id: 'double-mass',
 		term: 'Double mass: catchment rain vs CHIRPS',
 		short: 'Cumulative catchment rain against cumulative CHIRPS: a kink means one record changed, e.g. a station opened, closed or moved.',

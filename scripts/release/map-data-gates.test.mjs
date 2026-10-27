@@ -56,7 +56,7 @@ describe('load: a reference load’s inputs', () => {
 		// The Southwestern Cape MAP surface: its credit is stored with the dataset and shown with the layer (docs/maps.md § MAP grid).
 		const mapGrid = { ...landCover, LOAD_KIND: 'map-grid', LOAD_KEY: 'reference/map-grid/waas-swcape.json.gz', LOAD_DATASET: 'WAAS-SWCape-2007' };
 		assert.deepEqual(loadProblems(mapGrid, lacks), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid']);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles']);
 	});
 
 	it('a MAP grid loads only a dataset whose licence is recorded, with no source of its own', () => {
@@ -71,6 +71,16 @@ describe('load: a reference load’s inputs', () => {
 		assert.match(loadProblems({ ...mapGrid, LOAD_SOURCE: 'Lynch 2004' }, has).join('\n'), /takes no source/);
 		// Positive control: a kind not listed by dataset takes any well-formed label.
 		assert.deepEqual(loadProblems({ ...landCover, LOAD_DATASET: 'Some-other-surface' }, has), []);
+	});
+
+	it('records a tile archive’s provenance only for the four archives, with no source and no legal-text gate', () => {
+		const tiles = { ...landCover, LOAD_KIND: 'tiles', LOAD_KEY: 'reference/tiles/terrain-2026-10-27.json', LOAD_DATASET: 'terrain' };
+		// Recording where an archive came from publishes nothing: the relief's Art. 6(c) gate is the upload's and the frontend's, not this.
+		assert.deepEqual(loadProblems(tiles, lacks), []);
+		assert.deepEqual(DATASETS.tiles, ['basemap', 'fonts', 'terrain', 'water']);
+		assert.match(loadProblems({ ...tiles, LOAD_DATASET: 'rivers' }, has).join('\n'), /only the datasets whose licence is recorded: basemap, fonts, terrain, water/);
+		assert.match(loadProblems({ ...tiles, LOAD_SOURCE: 'x' }, has).join('\n'), /takes no source/);
+		assert.match(loadProblems({ ...tiles, LOAD_KEY: 'originals/terrain/terrain.pmtiles' }, has).join('\n'), /reference\/tiles\/<file>/);
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {

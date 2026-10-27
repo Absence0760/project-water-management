@@ -18,6 +18,7 @@ import {
 	exclusionRanges,
 	fromEpochDay,
 	prepareRun,
+	RAIN_SOURCE_CODE,
 	SERIES_KINDS,
 	resolveDataQuality,
 	seriesRowFlags,
@@ -52,12 +53,15 @@ export interface PreviewSeriesCell {
 	m3Day: number | null;
 }
 
-export type RainSource = 'catchment' | 'chirps' | 'forecast' | 'none';
+/** Where a day's rain used came from; `era5l` and `imergLate` (engine ≥ 1.101.0, settings.gapRain) where a gap-filling product filled it. */
+export type RainSource = 'catchment' | 'chirps' | 'era5l' | 'imergLate' | 'forecast' | 'none';
 
 export interface PreviewDerivedCell {
 	rainUsedMm: number | null;
 	/** null = outside the model's run window (no rain series at all, or before/after the simulation period). */
 	rainSource: RainSource | null;
+	/** The IMERG version that filled the day (rainSource 'imergLate'), from the run's own segments; null otherwise. */
+	rainSourceVersion?: string | null;
 	/** This calendar month's CHIRPS bias factor, when a CHIRPS series exists and one could be fitted. */
 	chirpsFactor: number | null;
 	/** CHIRPS as the model reads it: bias-corrected on the days it fills in for blank catchment rain, as stored otherwise. */
@@ -171,9 +175,10 @@ type DerivedByDate = Map<string, Omit<PreviewDerivedCell, 'excluded' | 'exclusio
  * the table still shows the raw series columns then, just none of the
  * rain-derived ones.
  */
-function buildDerivedByDate(list: readonly SeriesMeta[], valuesById: Readonly<Record<string, Daily>>, settings: ProjectSettings): DerivedByDate {
+function buildDerivedByDate(list: readonly SeriesMeta[], valuesById: Readonly<Record<string, Daily>>, settings: ProjectSettings, extra: Readonly<Record<string, DailySeries>> = {}): DerivedByDate {
 	const out: DerivedByDate = new Map();
-	const series = firstByKind(list, valuesById);
+	// The gap-filling products' input series (issue #604 R4-E, series/gapRain.ts gapRainInputSeries): beside the stored ones, as a run reads them.
+	const series = { ...firstByKind(list, valuesById), ...extra } as ModelInput['series'];
 	// A rain-source period's series counts as rain too (engine ≥ 1.69.0, hasRainInput).
 	if (!hasRainInput(series, settings.rainSource)) return out;
 
@@ -188,14 +193,21 @@ function buildDerivedByDate(list: readonly SeriesMeta[], valuesById: Readonly<Re
 	const chirps = prepared.aligned('rain_chirps_mm');
 	const forecast = prepared.aligned('rain_forecast_mm');
 	const d0 = toEpochDay(prepared.startDate);
+	// Which product filled a gap (engine ≥ 1.101.0): RAIN_SOURCE_CODE.era5l / .imergLate per run day, and IMERG's version by its segments.
+	const gap = prepared.gapRain;
+	const segments = gap?.info.segments ?? [];
 	for (let t = 0; t < prepared.days; t++) {
 		const c = catchment[t] ?? null;
 		const ch = chirps[t] ?? null;
 		const f = forecast[t] ?? null;
-		const rainSource: RainSource = c !== null ? 'catchment' : ch !== null ? 'chirps' : f !== null ? 'forecast' : 'none';
-		out.set(fromEpochDay(d0 + t), {
+		const code = gap?.code[t] ?? -1;
+		const filled: RainSource = code === RAIN_SOURCE_CODE.era5l ? 'era5l' : code === RAIN_SOURCE_CODE.imergLate ? 'imergLate' : 'chirps';
+		const rainSource: RainSource = c !== null ? 'catchment' : ch !== null ? filled : f !== null ? 'forecast' : 'none';
+		const date = fromEpochDay(d0 + t);
+		out.set(date, {
 			rainUsedMm: c ?? ch ?? f,
 			rainSource,
+			rainSourceVersion: rainSource === 'imergLate' ? (segments.find((s) => s.product === 'imerg_late' && s.from <= date && date <= s.to)?.version ?? null) : null,
 			// The day's own fit segment's factor with a CHIRPS fit period (engine ≥ 0.29.0), else its calendar month's.
 			chirpsFactor: chirpsFactorOn(prepared.chirpsCorrection, d0 + t),
 			chirpsCorrectedMm: ch
@@ -210,7 +222,7 @@ function buildDerivedByDate(list: readonly SeriesMeta[], valuesById: Readonly<Re
  * flags (engine `seriesRowFlags` — the same rules `checkSeries` reports, not
  * reimplemented) and the derived "how the model used it" columns.
  */
-export function buildPreviewRows(list: readonly SeriesMeta[], valuesById: Readonly<Record<string, Daily>>, settings: ProjectSettings): PreviewRow[] {
+export function buildPreviewRows(list: readonly SeriesMeta[], valuesById: Readonly<Record<string, Daily>>, settings: ProjectSettings, extra: Readonly<Record<string, DailySeries>> = {}): PreviewRow[] {
 	const withData = list.filter((s) => valuesById[s.id]);
 	if (withData.length === 0) return [];
 
@@ -231,7 +243,7 @@ export function buildPreviewRows(list: readonly SeriesMeta[], valuesById: Readon
 		flagsById.set(s.id, (SERIES_KINDS as readonly string[]).includes(s.kind) ? seriesRowFlags(s.kind as SeriesKind, d, dq) : null);
 	}
 
-	const derivedByDate = buildDerivedByDate(list, valuesById, settings);
+	const derivedByDate = buildDerivedByDate(list, valuesById, settings, extra);
 	const exclusions = exclusionRanges(settings.calibrationExclusions ?? []);
 
 	const rows: PreviewRow[] = [];
@@ -263,6 +275,7 @@ export function buildPreviewRows(list: readonly SeriesMeta[], valuesById: Readon
 			derived: {
 				rainUsedMm: drv?.rainUsedMm ?? null,
 				rainSource: drv?.rainSource ?? null,
+				rainSourceVersion: drv?.rainSourceVersion ?? null,
 				chirpsFactor: drv?.chirpsFactor ?? null,
 				chirpsCorrectedMm: drv?.chirpsCorrectedMm ?? null,
 				excluded: excl !== undefined,

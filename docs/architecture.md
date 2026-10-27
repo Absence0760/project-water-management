@@ -29,6 +29,9 @@ flowchart LR
     RQ[[SQS render-requests<br/>render-results]]
     RL[Renderer Lambda<br/>container, Chromium<br/>no VPC, no DB]
     RB[(S3 reports<br/>private, 7 days)]
+    IT[EventBridge<br/>daily per product]
+    IL[Mirror ingest Lambda<br/>container, Python<br/>no VPC, no DB]
+    MB[(S3 mirror<br/>Zarr v3, versioned)]
     L --- EL
   end
   SRC[(CHIRPS · GEFS · DWS<br/>public sources)]
@@ -47,6 +50,10 @@ flowchart LR
   RL -- "PDF" --> RB
   L -- "302: CloudFront signed URL" --> UI
   CF -- "/reports/* (signed URLs, OAC)" --> RB
+  IT --> IL
+  IL -- "HTTPS (whole files, polite)" --> SRC
+  IL -- "Zarr chunks + manifest" --> MB
+  W -. "reads the copy (Round 2, issue #604)" .-> MB
 ```
 
 Locally the same pieces run as `vite dev` on `:7777`, a Node server
@@ -1035,13 +1042,17 @@ on their account and alert pages, until they turn mail back on. Locally,
 
 Rainfall and gauge flow that arrive by themselves (roadmap WP-2.10;
 `backend/src/feeds/`, `018_feeds.sql`, the `feed_fetch` / `feed_ingest`
-jobs). A `data_feed` row names a source, where to read it and the series it
-merges into:
+jobs). Every upstream a feed reads, with its licence, contact, access
+pattern, the limits we keep to and its fallback, is in the source register,
+[data-sources.md](./data-sources.md) (issue #604; a guard fails a host in
+`FEED_HOSTS` or a `data_feed.source` value with no row there). A `data_feed`
+row names a source, where to read it and the series it merges into:
 
 | Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
 | --- | --- | --- | --- |
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Data → Data feeds → Attach a feed → Area: the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default for a catchment feed, from 1998) or `rnl` (from 1981; the feeds a project sets up for its hydrological units read `rnl`, so each unit's record covers the whole 1991–2020 MAP period its rain level is computed over, issue #500 item 3, [maps.md § Rain for each unit](./maps.md#rain-for-each-unit), [model.md §2.4h](./model.md#24h-runoff-from-each-units-own-rain-engine--1780-issue-482)) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, no preliminary product, published a month at a time with the `sat` finals (11–26 days after the month ends in 2026), so its newest day is 2–8 weeks old (on 2026-10-09 `daily/final/rnl/` ended at 2026-08-31 and `daily/prelim/sat/` at 2026-10-05). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
+| `ecmwf_ens` | The ECMWF ENS ensemble mean, 15 days from each 00 UTC run, from **our copy only** (`ecmwf/<issue>`, 0.1°): each feed cell's centre falls in a 0.1° cell, weighted as listed (same cells or box as CHIRPS) | `rain_forecast_mm`, mm, quantile-mapped to our rain once the operator's fit is in the copy, else labelled not yet calibrated | Zarr written by the Python ingest job from ECMWF's open data GRIB2 (`ingest/ecmwf.py`, below); no feed ever asks ECMWF |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); the site allows 20 years per request, the feed asks for two (`DWS_WINDOW_DAYS`, the window below). Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
 - **Rain for each unit** (issue #482, `feeds/fromUnits.ts`,
@@ -1153,6 +1164,20 @@ merges into:
   before the window), and the next window starts the day after it (one day
   at least, the cap counted from there). Changing the feed's place,
   product or series clears `last_meta`, so the marker starts again.
+  The marker can also fall **more than 50 days** behind the newest day:
+  CHC publishes a month's finals around the 20th–25th of the next, so a
+  month's first days wait about 55 days. Then the window starts the day
+  after the marker instead (`fetch.ts` `chirpsPendingFrom`), so those days,
+  still preliminary in the series, are read again and take their finals,
+  and the ingest never moves the marker past a day the window didn't read
+  while it may still be preliminary (`finalThroughAfter`). Before issue #604
+  R3-C the window started 50 days back regardless and the marker jumped to
+  the answer's claim, so a month's first days could stay preliminary for
+  good. Both the CHC path and the copy path take the window from here. The
+  reach is `CHIRPS_FINAL_REACH_DAYS` (100): a day still not final after
+  that (one with no value blocks the marker) is given up and the window
+  goes back to the 50-day re-read, and a backfill through empty days
+  (#29, readThrough) keeps moving rather than being pulled back.
   A fetch also reads only what can have changed (`fetchChirpsCells`,
   the cell cache's fetch below; `fetchChirps` for a request without cells): CHC
   publishes a month's finals together (`rnl`'s with `sat`'s), about three
@@ -1301,6 +1326,69 @@ merges into:
   before 210 receives) is refused as invalid, and the feed retries 15
   minutes later, as with 208. Requests and cost:
   [deployment.md § Data feeds](./deployment.md#data-feeds).
+
+  **A revision of our copy** (issue #604, `245_mirror_revision.sql`) enters
+  the same loop without a feed: once CHIRPS is read from the copy, the
+  worker's tick (R2-D, with no user) reads each product's manifest and,
+  when its revision is newer than `mirror_manifest`'s, calls
+  `app_mirror_apply_revision` (`feeds/mirrorRevision.ts`). It marks every
+  cached final of the changed days inside the copy's region stale, as a
+  changed HEAD tag does in step 3, and records the revision; steps 1, 3 and
+  4 then re-read those days from the copy, log what really changed in
+  `chirps_revision` and refresh each feed's series. Details and bounds:
+  [data-model.md § Mirror revisions](./data-model.md#mirror-revisions-245_mirror_revisionsql-246_mirror_revision_partssql).
+
+- **The rain data copy (in progress, issue #604).** `backend/src/mirror/`
+  reads and writes our own copy of CHIRPS for the D1 region (10–41° E,
+  35.5–8° S, 620 × 550 cells): Zarr v3 arrays through zarrita (exact pin)
+  from `MIRROR_URL` (`file:///abs/path` locally, `s3://bucket[/prefix]` in
+  production, through `@aws-sdk/client-s3`), float32, gzip, NaN for the sea
+  and for any chunk never written. The finals (`rnl`, `sat`) are laid out
+  (year, day of year[366], lat, lon) in (1, 366, 20, 20) chunks, so index 365
+  stays NaN in a year with no 29 February; the preliminary days (`prelim`,
+  later `gefs/<issue>`) (day, lat, lon) in (1, 110, 124) chunks. Each product
+  has a `manifest.json` beside it (revision, `finalThrough`, `prelimThrough`,
+  the upstream files with a hash of their values, each revision's changes),
+  validated on read and write (`manifest.ts`). zarrita's gzip only decodes,
+  so `store.ts` registers a `node:zlib` codec before any array opens.
+  `readCells(store, product, cells, window)` answers in the fetcher's
+  `CellsResult` shape: a day is `f` when the product's manifest says its
+  finals reach it, a `sat` day after that `p` when the `prelim` manifest's
+  does, else `-`, and on a day read a NaN is no data (-1). A finals
+  manifest's `finalThrough` is the end of the **contiguous** run of months
+  its files (CHC's byMonth files, each URL naming its month) hold from the
+  first one copied, never the newest day seen: after a partial backfill plus
+  the newest month, the months between read as `-`, not as final no-data the
+  cell cache would keep for good. The ingest writes it that way, a manifest
+  claiming more is refused, and a day before the first month held is `-`
+  (`finalsCoverage`). A cell outside the
+  region is refused (`MirrorOutsideRegionError`, a format error). Dev, CI and
+  e2e read the committed synthetic copy, `backend/fixtures/mirror/` (~110 KB;
+  the chunks of the fixture grid and the band of its size south of it,
+  finals 2023–2025 and preliminary days to 2026-02-06, as the synthetic files
+  stood on 2026-02-09), which `pnpm gen:mirror-fixture` writes from the same
+  synthetic GeoTIFFs `FEED_SOURCE=fixtures` serves, so a read from the copy
+  is the files' value bit for bit (`mirror/readCells.test.ts`). Production
+  stays on `chc` until the cutover ([§ Our copy of the rain data](#our-copy-of-the-rain-data)).
+- **The worker reads the copy** (issue #604 R2-C, D3) when `CHIRPS_SOURCE`
+  is `mirror` (`mirror/source.ts`: the default in dev, CI and e2e; production
+  is `chc`, Terraform's `chirps_source`, until the cutover). A CHIRPS
+  `feed_fetch` plans as before (`planFetch`), then reads the cells and days
+  the cache lacks from the copy **inside the job** and merges them through
+  `chirps_cache_merge` in the same transaction (`feeds/fromMirror.ts`): no
+  `FetchRequest` and no SQS round trip, even with `FEED_FETCHER=sqs`. One job
+  reads one fetch window (at most 120 days), and a backfill's next window
+  follows in `CACHED_NEXT_SECONDS`. A day the copy doesn't hold yet reads as
+  `-`, as a day CHC hasn't published, and a later fetch reads it. No copy at
+  all (no manifest, `MirrorNotReadyError`) writes nothing and records only
+  the attempt (`last_attempt_at`): no failure, no backoff, the same window
+  next time. A cell outside the region fails the feed with a message naming
+  the region. The re-check keeps only its re-reads: a stale day (a revision
+  of the copy, 245) is read again from the copy and applied through
+  `chirps_recheck_apply`; nothing is HEADed. Finals from the copy are tagged
+  `mirror` in `chirps_file`. The cache origin follows `FEED_SOURCE`: `chc`
+  for a live copy, `fixtures` for the committed one, which fixtures mode
+  re-dates to today ([run-locally.md § Data feeds](./run-locally.md#data-feeds)).
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed replaces only the days
@@ -1443,14 +1531,41 @@ merges into:
   no preliminary files), under 12 days ahead for the forecast, 240 days for
   DWS; a feed's `staleAfterDays` overrides; `feedStaleAfterDays`), `pending`
   (not fetched yet, or not since a new place or series was saved),
-  `disabled`. A feed not fetched two days after it was attached or changed is
+  `disabled`, and `copy-behind` (a CHIRPS feed read from our copy whose copy
+  is late, [§ Our copy of the rain data](#our-copy-of-the-rain-data)). A feed
+  not fetched two days after it was attached or changed is
   stale ("the background worker may not be running"). A project with the
   `data_stale` or `feed_failing` alert on emails its owners and editors
   ([§ Alert emails](#alert-emails)); `data_stale` also watches each series
   an API key sends (a logger pushing to `/ingest`, which has no feed):
   days with no new value, from its last non-blank day (141, issue #120).
 
-Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
+Where the fetch runs depends first on two flags (issue #604; Terraform's
+`chirps_source` and `dws_source`, [deployment.md § The
+cutover](./deployment.md#the-cutover)):
+
+| `CHIRPS_SOURCE` | `DWS_SOURCE` | CHIRPS, CHIRPS-GEFS | DWS | Per-feed path (`FEED_FETCHER`, queues) |
+| --- | --- | --- | --- | --- |
+| `chc` | `live` | fetcher (CHC) | fetcher (DWS) | on: `sqs`, both queues (production until the cutover) |
+| `mirror` | `live` | our copy, in the worker's job | fetcher (DWS) | on, for DWS only |
+| `chc` | `store` | fetcher (CHC) | our store, in the worker's job | on, for CHIRPS only |
+| `mirror` | `store` | our copy, in the worker's job | our store, in the worker's job | **off**: no `FEED_FETCHER`, no queues, no SQS triggers (`infra/feeds.tf` `local.per_feed_fetching`) |
+
+A source the copy or store serves never reaches the SQS or inline path,
+whatever `FEED_FETCHER` says (`jobs/handlers/feed-fetch.ts`, tested in
+`feed-fetch.cutover.db.test.ts`). The fetcher Lambda stays in every row for
+its scheduled modes (the daily ingest, the GEFS pass, the weekly DWS pass).
+And on Lambda only the fetcher may make a live request at all: the API and
+worker carry `FEED_SOURCE=live` (it names the cell cache they read) and the
+worker's bundle holds the inline path local dev uses, so neither setting
+nor bundle can keep them off CHC and DWS; `feeds/http.ts`
+`assertLiveFeedRequestsAllowed` refuses `liveHttp` on Lambda unless the
+process is the fetcher (`allowLiveFeedRequests`, called once at the
+fetcher's init), and a fetch job that meets the refusal dies at once naming
+the cause, never retried. That is a runtime check rather than a module
+reachability test because the worker legitimately bundles the inline path.
+
+For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
 
 - `inline` (the default: local, CI, e2e): the `feed_fetch` job fetches and
   merges in one transaction. `FEED_SOURCE=fixtures` (the default) answers the
@@ -1588,6 +1703,283 @@ rainfall feed", with a count when the feed wrote only some of its days):
 The audit event per merge (`series.merged`) and the debounced re-run after new
 data (WP-2.11) are built (see Merging above), and so is CHIRPS over a bounding box
 (`config.bbox`, above).
+
+### Our copy of the rain data
+
+Issue #604's rule: the app never fetches from someone else's server because a
+feed or a user asked. CHC refused our per-feed reads with HTTP 403 from
+2026-10-25 (each feed range-read daily GeoTIFFs from rotating Lambda
+addresses), so CHIRPS moves to one scheduled job of ours that copies the
+region our projects use (D1: 10–41° E, 35.5–8° S) into our own bucket, and
+every CHIRPS feed reads that copy. Round 2 builds the whole path **behind
+`CHIRPS_SOURCE`**; production keeps reading CHC (`chc`, the default when
+`FEED_SOURCE=live`) until the cutover (Round 3, [deployment.md § The data
+mirror](./deployment.md#the-data-mirror)).
+
+```
+EventBridge, daily
+  ├─► mirror-ingest (Python 3.14 container Lambda, outside the VPC)
+  │     rnl, sat finals: CHC's byMonth NetCDF, one conditional GET a day, the new
+  │     or rewritten month downloaded whole, subset to the region, hashed (D8)
+  ├─► daily ingest (the fetcher Lambda's new mode, Node, outside the VPC)
+  │     preliminary sat: only new daily TIFFs, the region's rows; drops days whose finals landed
+  └─► GEFS pass (the same mode, "pass":"gefs", 08:38 UTC and hourly to 11:38)
+        the newest complete CHIRPS-GEFS issue, its 16 TIFFs' region rows; keeps 7 issues
+  (once) backfill: Step Functions over the byMonth list from 1981, 2 at a time
+                │  polite client: one User-Agent, conditional GETs, ~1 request/s, 403 = stop
+                ▼
+  s3://<project>-mirror-<account> (private, versioned)
+        rnl/, sat/  (year, doy, lat, lon) Zarr v3 · prelim/, gefs/<issue>/ (day, lat, lon) · manifest.json each
+        gefs/index.json (the issues held, newest first)
+                │
+  worker (in the VPC, S3 interface endpoint)
+        feed_fetch for a CHIRPS feed reads its cells' days from the copy in-process
+        (no fetcher call), at most one year per job, into the chirps_cell_year cache;
+        for a CHIRPS-GEFS feed, the newest issue's 16 days at its cells
+        mirror tick: a manifest revision newer than mirror_manifest's marks the
+        changed days stale, and feeds replay them (the re-check loop above)
+                ▼
+  chirps_cell_year ──► each feed's series ──► runs (unchanged)
+```
+
+- **The copy and its manifests.** Each product has a Zarr array and a
+  `manifest.json` (`backend/src/mirror/`, the format above): the upstream
+  files it came from with a hash of their values, `finalThrough` (the end of
+  the contiguous months held) and, for `prelim`, `prelimThrough`, and a
+  `revision` that moves only when values really change. The Python job
+  (`ingest/`) writes the finals; the Node daily ingest the preliminary days;
+  both validate the manifest the same way.
+- **Feeds read it** when `CHIRPS_SOURCE=mirror` (`mirror/source.ts`
+  `chirpsSource`, `MIRROR_URL`): `feed_fetch` reads the cells from the copy
+  inside its job (`feeds/fromMirror.ts`) instead of sending a request to the
+  fetcher, so a 1981 backfill takes minutes, not days. A day the copy
+  doesn't hold yet is "not published yet", as a 404 was: no failure, no
+  backoff. A product the copy doesn't hold at all (no manifest) is
+  unavailable. The cache, the feed windows, the merge and runs don't change.
+- **The forecast.** The fetcher's GEFS pass (`ingest/gefs.ts`, its own
+  invocation `{"mode":"daily-ingest","pass":"gefs"}`) copies the newest
+  complete CHIRPS-GEFS issue, today's else yesterday's, the rule the
+  per-feed fetch kept: the 16th day's file first (CHC writes the days in
+  order, so without it the issue isn't complete), then the other 15, each
+  file's region rows in about 3 requests at one a second. The issue becomes
+  `gefs/<issue>` (the daily layout, `firstDay` the issue date) with its
+  manifest, and only once all 16 are written is it listed in
+  `gefs/index.json`, newest first; the newest 7 are kept and older arrays
+  deleted. It runs at 08:38 UTC, just after CHC issues (08:26–08:30) and
+  before the forecast feeds fall due at 08:45, then hourly to 11:38 for a
+  late issue; a run that finds the day's issue held asks CHC nothing, and
+  after a 403 (`gefs/refused.json`, the time CHC refused) neither does any
+  later run that UTC day. With
+  `CHIRPS_SOURCE=mirror` a `chirps_gefs` feed_fetch reads that issue at its
+  cells in the job (`feeds/fromMirrorGefs.ts`, no fetcher call) and writes
+  the forecast the per-feed fetch wrote: the same issue rule, the same mean
+  (`meanOf`), the same result and ingest. A copy holding neither today's
+  nor yesterday's issue is behind, not the feed broken: the fetch writes
+  nothing and records only that it looked, and the forecast series keeps
+  the issue it has. Locally the committed copy holds two synthetic issues,
+  re-dated to today the way the synthetic files are.
+- **ERA5-Land (issue #604 R4-A).** The Python ingest Lambda copies
+  Copernicus's ERA5-Land daily total precipitation, about 5 days behind,
+  into `era5l/`, the finals layout on the 0.1° grid (275 × 310, from 1950).
+  ERA5-Land's points sit on x.x0°, so each cell is the mean of its four
+  corner points (an area-conservative remap). The CDS queues requests, so a
+  run submits one month's request and a later run collects it, never
+  waiting inside the Lambda; the CDS key comes from Secrets Manager
+  (`ingest/era5land.py`, `infra/era5land.tf`, off until `era5l_enabled`). A
+  day is the UTC day: its total is the next day's 00 UTC step, so month M's
+  request holds the last day of M−1 through the second-last day of M, and
+  each manifest file is that request
+  (`cds://reanalysis-era5-land/total_precipitation/YYYY-MM`, no ETag). Both
+  manifest validators refuse a `finalThrough` past the contiguous run of
+  days those requests hold, as they do for CHIRPS's months. The newest
+  months are ERA5-Land-T, preliminary: the job asks for them again about two
+  months later, and a change of values is a revision. The array carries
+  Copernicus's attribution, which has to show wherever its values do
+  ([data-sources.md § era5-land](./data-sources.md#era5-land)).
+- **The recent days (IMERG Late, issue #604 R4-D).** The Python ingest
+  Lambda copies NASA's IMERG Late daily rain for the last 10 days (about
+  14 h behind) into `imerg_late/`, the daily layout on the 0.1° grid
+  (275 × 310, chunk (1, 55, 62)), keeping 30 days; each day's manifest
+  entry carries its version (`V07`, later `V08`), since bias correction is
+  fitted per version. One CMR search a run names the granules and GES
+  DISC's OPeNDAP returns region D1 only, with an Earthdata token read from
+  Secrets Manager (`ingest/imerg.py`, `infra/imerg.tf`, off until
+  `imerg_enabled`). Nothing reads it yet: the engine will take a day from
+  it only where CHIRPS has no preliminary value (R4-B).
+- **Products and grids** (issue #604 R4-B; `mirror/grid.ts`
+  `PRODUCT_GRIDS`, mirrored by `ingest/grid.py` `for_product`, so the
+  writers and the reader share one definition). Every product holds the
+  same region on its own grid, and each array's `grid` attribute and
+  manifest carry the step, which the readers and writers check against the
+  product's:
+
+  | Product | Layout | Grid | Rows × columns | Daily chunk | Days held |
+  |---|---|---|---|---|---|
+  | `rnl`, `sat` | finals | 0.05° (CHC's) | 550 × 620 | (1, 110, 124) | through `finalThrough` (sat's preliminary days in `prelim`) |
+  | `prelim`, `gefs/<issue>` | daily | 0.05° | 550 × 620 | (1, 110, 124) | through `prelimThrough` / the issue's 16 days |
+  | `era5l` (ERA5-Land, from 1950) | finals | 0.1° | 275 × 310 | (finals: 1, 366, 20, 20) | through `finalThrough` |
+  | `imerg_late` (IMERG Late, from June 2000) | daily | 0.1° | 275 × 310 | (1, 55, 62) | the days with a file (each on its own: a missing day is not held and blocks none after it), through `prelimThrough`, the newest; a file a day with its `version` (V07, V08) |
+
+  The 0.1° grid's `[0, 0]` is centred at 35.45° S, 10.05° E. The cell cache
+  (`chirps_cell_year`, 252) keys a row by its product's global grid (row 0
+  at 60° N, column 0 at 180° W): 2400 × 7200 cells at 0.05°, 1200 × 3600
+  at 0.1°. A feed's cells are 0.05° CHIRPS cells; for a 0.1° product each
+  maps to the 0.1° cell that contains it (`feeds/cellCache.ts`
+  `productCell`: 0.05° cell (r, c) lies in 0.1° cell (⌊r/2⌋, ⌊c/2⌋)), and
+  the series keeps the feed's weights cell by cell (`seriesFromCache`), so a
+  0.1° cell weighs the sum of the weights of the feed's cells inside it.
+  `feeds/fromMirror.ts` `fillProductCache` fills `era5l` or `imerg_late`
+  for a cell list and window from the copy, from a running fetch of any
+  CHIRPS feed (the cache's writers allow that for these two), with the same
+  rules as a CHIRPS feed: a day the copy doesn't hold yet waits, no manifest
+  writes nothing, and stale days (a revision) are read again;
+  `readProductSeries` is the weighted series from the cache, and
+  `productVersions` each IMERG day's version (its `chirps_file` tag). The
+  cache keeps both products' days as final: ERA5-Land's are, and IMERG Late
+  has no final product to wait for (a new version of a day comes as a
+  revision of the copy). A project uses them through `settings.gapRain`
+  (engine ≥ 1.101.0, model.md §2.4b *Gap-filling product*): the fetch of
+  the CHIRPS feed whose cells its runs read then fills them for those cells
+  in the same job (`feeds/gapRainFill.ts`: ERA5-Land over the record's span
+  in year windows, newest first, at most 12 read from the copy a fetch;
+  IMERG Late's last 30 days), each in its own savepoint so an expected
+  failure (the copy's format, the copy not answering, the cache refusing
+  the values) never takes the feed's CHIRPS days with it: it is rolled back,
+  logged by class and recorded on the feed (`last_meta.gapEra5l` /
+  `gapImergLate`, 254_feed_gap_fill_outcome), which Data → Rain products
+  side by side shows; any other error fails the job. The fill also stops in
+  time: at most 60 s a fetch (`GAP_FILL_BUDGET_MS`) and 20 s before the
+  job's deadline (the worker Lambda's 300 s timeout less 10 s), leaving
+  older windows for the next fetch, so it can't time out the job and lose
+  the CHIRPS days; and a run reads them from the cache
+  over the same cells into its input (`runs/gapRainInput.ts`: `rain_era5l_mm`,
+  one `rain_imerg_late_mm~<version>` per IMERG version), which its snapshot
+  keeps, as the reference cell's CHIRPS. Their committed synthetic copy holds
+  invented values over the 0.1° cells of the fixture grid, at its own dates
+  (2024-01-01 to 2025-12-30 for `era5l`, one file per month request,
+  2026-01-25 to 2026-02-08 for `imerg_late`), not
+  re-dated to today as the CHIRPS products are.
+
+- **The second forecast** (issue #604 D17, R4-C). The mirror-ingest
+  Lambda's ECMWF runs (`ingest/ecmwf.py`, `{"product":"ecmwf","mode":"daily"}`,
+  every 20 minutes 10:00–13:40 UTC, `infra/ecmwf.tf`) copy each 00 UTC ENS
+  run's total precipitation from ECMWF's open data bucket
+  (`ecmwf-forecasts`, eu-central-1): per step (24 … 360 h) the `.index`,
+  then a range request per member for its `tp` field, one a second, resumed
+  across runs from saved steps. Decoded with eccodes onto our 0.1° grid
+  (each cell the mean of the four 0.1° points at its corners),
+  de-accumulated into 15 UTC days (day 0 is the issue date, as for
+  CHIRPS-GEFS), and stored as the ensemble mean and p10/p50/p90 in
+  `ecmwf/<issue>` (dims stat, day, lat, lon), listed in `ecmwf/index.json`
+  once whole; 7 issues kept, older ones archived as their mean for the
+  quantile-mapping fit. An `ecmwf_ens` feed_fetch reads the mean at its
+  cells in the job (`feeds/fromMirrorEcmwf.ts`), whatever `CHIRPS_SOURCE`
+  says: there is no per-feed path to ECMWF, and the fetcher refuses one. It
+  maps each day through `ecmwf/qm.json` (the operator's offline fit,
+  `ingest/ecmwf_qm_fit.py`) when that covers the place and season, else
+  writes the model's own value with `last_meta.calibration` = `not yet
+  calibrated`. Today's issue, else yesterday's; a copy with neither waits
+  without a failure. The feeds fall due at 14:00 UTC
+  (253_feed_source_ecmwf.sql). Locally the committed copy holds one
+  invented issue over a 4 × 4 block, read as today's anywhere in the region.
+- **Revisions** reach the cache without a feed: the worker's mirror tick
+  reads each manifest (`era5l` and `imerg_late` too) and applies a newer revision through
+  `app_mirror_apply_revision` (above, *A revision of our copy*); the
+  per-file HEAD re-check retires while the copy is the source.
+- **Health.** A late copy is not the feed's fault, so it is not a failure:
+  the worker's mirror tick records each product's `revision`,
+  `finalThrough` and `prelimThrough` in `mirror_copy` (246) whenever its
+  manifest changes, and the API reads them there (`feeds/rainCopy.ts`, in
+  the list's own transaction), so the API never reaches the copy. Then
+  `feeds/health.ts` `rainCopyStatus` calls a final product behind when its `finalThrough` is more than 75 days
+  old (the lag alarm's threshold: CHC publishes a month's finals during the
+  next month, so a healthy copy runs up to ~56 days behind), and the
+  preliminary days behind past 7 days. A fetched CHIRPS feed whose part of
+  the copy is behind shows **Copy behind** instead of OK or Stale, and the
+  panel says how far the copy reaches ("Rain data copied to 31 Jul 2026
+  (final) / 5 Oct 2026 (preliminary)"; [ui.md § Data feeds](./ui.md#data-feeds),
+  [api.md § Data feeds](./api.md#data-feeds)). The operator learns it first
+  from the `MirrorLagDays` alarms ([deployment.md § The data
+  mirror](./deployment.md#the-data-mirror)). A product the tick hasn't
+  recorded is behind; with no product recorded at all (a fresh database, or
+  no worker running yet) the copy is *not checked yet*, which marks no feed
+  and the panel says so. The API reads `CHIRPS_SOURCE` (the worker's value,
+  from the same Terraform variable) only to know whether to report the
+  copy: with `chc` nothing of this shows.
+- **Locally** (`FEED_SOURCE=fixtures`, so `CHIRPS_SOURCE` defaults to
+  `mirror`) feeds read the committed synthetic copy,
+  `backend/fixtures/mirror/`, with no Python, S3 or network; it is fixed as
+  the synthetic files stood on 2026-02-09, so its lags count to that day and
+  the panel calls it the sample copy (`mirror_copy`'s `fixtures` rows, which
+  the first worker tick records: `pnpm dev:full`, or one `pnpm dev:jobs:tick`). `pnpm dev:ingest:run` runs the Python
+  job against synthetic NetCDF fixtures when you need it.
+
+### DWS gauge records
+
+The same rule for DWS (issue #604 R3-B, design D14): a DWS feed reads its
+station's days from our own store, `gauge_record` (247,
+[data-model.md § DWS gauge records](./data-model.md#dws-gauge-records-247_gauge_recordsql)),
+**behind `DWS_SOURCE`**: `store` reads it, `live` keeps the per-feed request
+to DWS's page through the fetcher. Unset follows `FEED_SOURCE` (`live` in
+production, `store` in dev, CI and e2e); production says `live` until the
+operator has DWS's written answer and has loaded its reply
+([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
+
+```
+operator ── pnpm import:dws <DWS's reply> ──► gauge_record (source dws-request)
+
+EventBridge, daily 04:00 UTC ──► fetcher, {"mode":"dws-weekly"} (outside the VPC)
+   reads   dws/stations.json            ◄── worker tick: app_dws_feed_stations()
+   GET     HyData.aspx, each station due (re-read every 6 days), newest 2 years, 1 a second
+   writes  dws/<station>.json, dws/status.json            (mirror bucket)
+                                         ──► worker tick: app_gauge_record_load_web
+                                              ──► gauge_record (source dws-web)
+
+feed_fetch (DWS_SOURCE=store) ── gauge_record_current (best source per day) ──► the feed's series
+```
+
+- **Why the bucket carries the handover.** The fetcher has internet but no
+  database; the worker has the database but no internet (§ System). Both
+  already reach the mirror bucket, so the worker writes the station list
+  there (its one write to the bucket, `dws/stations.json`, only with
+  `DWS_WEEKLY=on`) and reads back what the fetcher wrote. No queue, and
+  nothing to retire with the per-feed fetch requests (R3-C).
+- **The weekly pass** (`backend/src/ingest/dws.ts`, the fetcher's
+  `dws-weekly` mode) asks each station for the window a feed asks for (two
+  years, `DWS_WINDOW_DAYS`) with the feed's own reader
+  (`sources/dws.ts` `parseDwsRows`), keeping each listed row's quality
+  code. It runs daily so the lag metric (`MirrorLagDays{Product=dws}`) is
+  published every day, but a station is re-read only once its last good
+  fetch is 6 days old, ordered by its last turn (good or failed, never
+  tried first), so a long list spreads over days inside the fetcher's 120 s
+  and a station that keeps failing goes behind the rest. A page past the
+  store's bounds (a flow above 100 000 m³/s, a quality code not 1–8
+  letters or digits) fails that station only, as any format failure does,
+  and the status is written however the run ends. An HTTP 403, throttling or the ScriptServer
+  page stops the run at once and is never retried: `dws/status.json` says
+  the source is stale and why, the lag grows, and the alarm fires.
+- **Reading the store** (`backend/src/feeds/fromGaugeRecord.ts`, from the
+  `feed_fetch` job, whatever `FEED_FETCHER` says): the window as before
+  (`fetchWindow`), the rows of `gauge_record_current`, and the live path's
+  answer exactly (the listed days laid out from the first, the meta's
+  days, gaps, rejected and quality counts), ingested in the job. Days no
+  span covers yet wait, as with the CHIRPS copy: with nothing held from the
+  window's first day on, or a day of the window before the earliest span
+  or between two (nobody has asked DWS for it yet: a station only the
+  weekly pass reads holds two years, so an older history waits on DWS's
+  reply), the fetch records only that it looked (no failure, no backoff,
+  the same window next time). Days a span covers with
+  no row are DWS's "no data", as the page says it. A backfill window that
+  ends before today stops at the store's newest day; the window reaching
+  today reads to today, and the year of re-read picks up the next week's
+  days.
+- **Locally** (`FEED_SOURCE=fixtures`) a DWS feed's fetch first writes the
+  window's days from the synthetic DWS page (`feeds/fixtures.ts`) into the
+  store under origin `fixtures`, as the weekly pass would, then reads them:
+  dev, CI and e2e DWS feeds show the values they always did, with nothing
+  to seed. The worker's handover is off (`DWS_WEEKLY` unset). `pnpm
+  import:dws backend/fixtures/dws/X0H001-reply.synthetic.txt --reference
+  SYNTHETIC` loads the invented reply.
 
 ## Server-side reports
 

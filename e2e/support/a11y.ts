@@ -51,7 +51,20 @@ export async function expectNoViolations(page: Page, scope: ScanScope = {}) {
 /** The scan behind expectNoViolations: each violation, with up to five of its nodes. */
 export async function violations(page: Page, { tags = WCAG_TAGS, rules, include }: ScanScope = {}) {
 	expect(page.frames(), 'the page has a frame: scan it with the default (runPartial) mode instead').toHaveLength(1);
-	await page.evaluate(() => window.scrollTo(0, 0));
+	// To the top, and still there two frames later: a smooth scroll still running (a pick that brings a chart into
+	// view, data-page.spec.ts) takes one more step after an instant scrollTo, which left the page a few pixels down
+	// (40 on a loaded CI runner) and the header's guide link under the sticky app header.
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					new Promise<number>((done) => {
+						window.scrollTo({ top: 0, behavior: 'instant' });
+						requestAnimationFrame(() => requestAnimationFrame(() => done(window.scrollY)));
+					})
+			)
+		)
+		.toBe(0);
 	// options() replaces the whole option object, so it goes before withTags()/withRules().
 	const builder = new AxeBuilder({ page }).options({ resultTypes: ['violations'] }).setLegacyMode();
 	if (rules) builder.withRules(rules);

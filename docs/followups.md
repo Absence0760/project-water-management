@@ -247,6 +247,119 @@ The checklist for these is issue #62; the history scrub is #63.
       `budget_monthly_usd` (110) is already sized for it; set `dmarc_report_email`.
       — *Done: af-south-1; production has been live since 2026-10-05.*
 
+## The rain data copy (issue #604)
+
+Round 2 built CHIRPS on our own copy behind `CHIRPS_SOURCE`
+([architecture.md § Our copy of the rain data](./architecture.md#our-copy-of-the-rain-data)).
+Production still reads CHC. What Round 3 has to do, besides its own pieces
+(GEFS and DWS on the copy, retiring per-feed fetching, reference-data
+provenance, `ingest/verify_copy.py`):
+
+- [ ] **Run the cutover** ([deployment.md § The data
+      mirror](./deployment.md#the-data-mirror), *The cutover*): the job's
+      daily runs with `MirrorLagDays` reporting, the backfill (`rnl` from
+      1981-01, `sat` from 2000-06, its first byMonth file), verification
+      (`ingest/dev.sh verify`), then `chirps_source = "mirror"`
+      and the paused CHIRPS feeds back on (#571), and once DWS answers
+      `dws_source = "store"`, whose apply removes the per-feed queues
+      ([deployment.md § The cutover](./deployment.md#the-cutover)). Each
+      `terraform apply` with the operator's go-ahead.
+- [ ] **The portfolio counts a copy-behind feed as stale.** `portfolio.ts`
+      judges feed health without the copy (`feedHealth(f, today, tz)`), so
+      a feed the panel shows as **Copy behind** counts there as failing or
+      stale once its data is old. Pass the copy (`rainCopy(db)`) into
+      `loadPortfolio`/`loadMyOutcomes` and decide what the tile counts it as
+      (neither ok nor failing, with its own count, is the honest one). Same
+      trigger: before the cutover, since nothing is ever copy-behind until
+      then.
+- [ ] **The sample copy's dates.** The committed copy
+      (`backend/fixtures/mirror/`) is fixed at 2026-02-09, and the panel
+      counts its lags to that day (`rainCopy.ts` `SAMPLE_COPY_MADE`), so dev
+      and e2e show it on time with its own dates. If the worker comes to
+      shift the sample copy's days to today in fixtures mode (as the file
+      fixtures re-date themselves), `rainCopy.ts` should report the shifted
+      days too, so the line matches what feeds read.
+- [ ] **Loading DWS's reply in production** (R3-B). `pnpm import:dws`
+      writes `gauge_record` locally, but production's database is reachable
+      only through the migrate Lambda, whose reference load
+      (`backend/src/geo/referenceLoad.ts`, `load-reference.yml`) has no `dws`
+      kind. Add one (the reply uploaded to the reference bucket, loaded with
+      `source = 'dws-request'` through the same parser) once DWS's written
+      answer allows storing the data. Until then `dws_source` stays `live`.
+      Trigger: DWS's reply to the operator's request (#604 operator steps).
+- [ ] **Table datasets' originals and upstream versions** (R3-D). Migration
+      248 records provenance for every `reference_load` kind, but only tile
+      archives fill it: `load-reference.yml` takes no inputs for a table
+      load's originals (`originals/<kind>/`) or upstream version. Add
+      optional workflow inputs and pass them to the load. Trigger: the next
+      refresh of any table dataset (deployment.md § Refreshing a dataset).
+- [ ] **Retire per-feed fetching, stage 2** (R3-C built stage 1: with
+      both flags on the new values Terraform removes the queues, and the
+      worker and API refuse live requests; [deployment.md § The
+      cutover](./deployment.md#the-cutover)). **Trigger:** both
+      `chirps_source = "mirror"` and `dws_source = "store"` in production
+      for 30 days with no rollback. Then delete, in one PR with its tests
+      and docs:
+      - [ ] the per-feed `FetchRequest` mode of `backend/src/lambda-fetcher.ts`
+            (the SQS batch handler, `parseFetchRequest`, the
+            `feed_fetch_failed` log line and its reason codes), keeping its
+            daily-ingest, GEFS and DWS-weekly modes;
+      - [ ] `FEED_FETCHER` (`jobs/transport.ts` `feedFetcher`, its
+            `config/production.ts` entry, the SQS and inline branches of
+            `jobs/handlers/feed-fetch.ts`), `FETCH_REQUESTS_QUEUE_URL`,
+            `INGEST_RESULTS_QUEUE_URL`, the `feed_ingest` job and
+            `feeds/schedule.ts` `acceptIngestResult`, the worker's
+            `ingest-results` routing in `lambda-worker.ts`, and the
+            `FetchRequestMessage` / `IngestResultMessage` types;
+      - [ ] the CHC HEAD re-check of cached finals for origin `chc`
+            (210_chirps_final_recheck, `cellCache.ts` `RECHECK_*`,
+            `claimRecheck`'s HEAD half, `recheckChirpsFinals`): the copy's
+            manifests and revisions replace it (245/246); keep the stale
+            re-reads the revisions mark;
+      - [ ] the refused / throttled backoff branches that only a fetcher's
+            answer reaches (242_feed_refused_backoff, 243_feed_next_attempt)
+            in `feeds/schedule.ts` and the ingest, by a forward migration
+            that keeps the columns the scheduler still reads, or drops them
+            expand/contract;
+      - [ ] the per-feed sources' live readers that only the fetcher's
+            per-feed mode calls (`fetchChirpsCells`, `fetchChirps`,
+            `fetchGefs`, the DWS page fetch) where the scheduled passes
+            don't share them, and their fixtures-mode paths in dev (dev
+            already reads the copy and store by default);
+      - [ ] Terraform's `local.per_feed_fetching` switch and the `moved`
+            blocks (`infra/feeds.tf`), once no state still holds the
+            queues, and the tftests that cover per-feed fetching
+            (`cutover.tftest.hcl` and the queues' assertions elsewhere).
+- [ ] **Two thresholds in two places.** The app's
+      `COPY_FINAL_LAG_DAYS` (75, `feeds/health.ts`) matches
+      `ingest_lag_alarm_days`'s default by hand; a prod tfvars that changes
+      the alarm doesn't move the app. Pass it to the API as a variable at
+      the cutover if the operator ever tunes it.
+- [ ] **ECMWF quantile mapping is fitted on cells, applied to area means**
+      (R4-C, [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-ens)).
+      `ingest/ecmwf_qm_fit.py` pairs the ensemble mean with observed rain
+      per 0.1° cell, but `fromMirrorEcmwf.ts` applies the fit to a
+      catchment's area-weighted mean, whose distribution has more
+      small-rain days and fewer extremes, so the mapping can over-correct
+      the tails and under-correct drizzle. **Durable fix:** fit on area
+      means for the feed's region (the forecast mean and the observed rain
+      averaged over the same cells, per feed or per catchment-sized block,
+      one fit per group), and check it against the per-cell fit on held-out
+      days. **Trigger:** when the first QM fit is run, once the archive
+      (`ecmwf/`'s archived issue means) holds a season.
+- [ ] **The uncertainty bands don't vary ERA5-Land or IMERG Late**
+      (R4-B, [model.md § 2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)).
+      The ensemble's rain-source members run CHIRPS alone with
+      `gapRain: null` (`packages/engine/src/uncertainty/ensemble.ts`), so a
+      project that fills its gaps from ERA5-Land or IMERG Late gets bands
+      that leave out the uncertainty in those products and their
+      corrections. **Durable fix:** a rain-source member per product the
+      run reads (that product alone, every day corrected by its own fit, as
+      the CHIRPS-only member is), split evenly with the others, and the
+      members' rain source named in `run_uncertainty`. **Trigger:** the
+      first client project that sets `settings.gapRain` to a product, or an
+      evidence pack on one.
+
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
 - [x] **Guard pending notices as db-setup.ts guards pending jobs.** The
@@ -371,6 +484,17 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **The gap-filling product (engine 1.101.0, issue #604 R4-B,
+      model.md §2.4b *Gap-filling product*).** Built off by default
+      (`settings.gapRain` absent runs as before, to the bit). Calls made
+      in the build, to confirm: each product and IMERG version on its own
+      §2.4b fit over the whole record, always monthly; ERA5-Land always
+      thresholded at 1 mm and quantile-mapped, IMERG by its factor alone;
+      IMERG only past the last reading of the chosen products; the choice
+      not read under a catchment station or for a unit's own CHIRPS
+      (engine-audit.md GR1–GR6). Its control is Settings → Rain gaps →
+      Gap-filling product (R4-E, ui.md § Model settings), and Data draws
+      the products beside CHIRPS (ui.md § Data).
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
@@ -3391,8 +3515,8 @@ role and not before it.
         fetcher). Left: the operator steps in [deployment.md § Re-enabling
         the CHIRPS feeds](./deployment.md#re-enabling-the-chirps-feeds-issue-604)
         (set `feeds_contact`, apply, release, switch the feeds on, watch the
-        first day). Trigger: that release. Then tick this, and point #605's
-        `ingest_contact` at `feeds_contact` when it merges.
+        first day). Trigger: that release. Then tick this. (#605's ingest job reads
+        the same `feeds_contact`, as `INGEST_CONTACT`.)
   - [ ] **Terms of use (operator decision, roadmap D7):** DWS's terms for
         automated retrieval, and CHIRPS-GEFS's licence (CHIRPS itself is
         public domain). Decide before a DWS or GEFS feed is used for a client.

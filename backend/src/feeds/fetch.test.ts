@@ -97,6 +97,11 @@ describe('fetchWindow', () => {
 		expect(fetchWindow('chirps_gefs', grid, '2026-10-05', '2026-09-25')).toEqual({ start: '2026-09-25', end: '2026-10-10' });
 	});
 
+	it('ECMWF ENS: the 15 days from today (issue #604 R4-C)', () => {
+		expect(fetchWindow('ecmwf_ens', grid, '2026-10-05', '2026-09-25')).toEqual({ start: '2026-09-25', end: '2026-10-09' });
+		expect(fetchWindow('ecmwf_ens', grid, null, '2026-12-20')).toEqual({ start: '2026-12-20', end: '2027-01-03' });
+	});
+
 	it('DWS: ten years back at first, asked for two years at a time; then a year of revisions before the newest', () => {
 		// Production, 2026-10-26: the first fetch asked for all ten years in one request and got the ScriptServer error page.
 		expect(DWS_WINDOW_DAYS).toBe(730);
@@ -183,8 +188,29 @@ describe('fetchWindow with the final marker (CHIRPS)', () => {
 	it('starts the re-read after the last final day, and ignores a marker the window already starts after', () => {
 		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
 		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-08-15')).toEqual({ start: '2026-08-16', end: '2026-09-24' });
-		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-07-01')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
 		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-08-01')).toEqual({ start: '2026-08-02', end: '2026-09-24' });
+	});
+
+	// Issue #604 R3-C: CHC's finals come ~55 days out, past the 50-day re-read.
+	it('a marker more than 50 days behind the newest day starts the window after it, so its preliminary days are read again', () => {
+		// 55 days behind: the 50-day re-read alone would start on 08-01 and skip 07-27 … 07-31.
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-07-26')).toEqual({ start: '2026-07-27', end: '2026-09-24' });
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-07-01')).toEqual({ start: '2026-07-02', end: '2026-09-24' });
+		// Exactly CHIRPS_FINAL_REACH_DAYS back still reaches; one day more is given up (the 50-day re-read, as before).
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-06-11')).toEqual({ start: '2026-06-12', end: '2026-09-24' });
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-06-10')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
+		// The startDate floor holds: no day before it is the feed's.
+		expect(fetchWindow('chirps', { ...grid, startDate: '2026-07-20' }, '2026-09-20', today, '2026-09-24', '2026-07-01')).toEqual({ start: '2026-07-20', end: '2026-09-24' });
+		// Nothing after the marker (it reaches the newest day): nothing preliminary, the window as before.
+		expect(fetchWindow('chirps', grid, '2026-07-01', today, '2026-09-24', '2026-07-01')).toEqual({ start: '2026-07-02', end: '2026-09-24' });
+	});
+
+	it('a backfill through empty days (#29) still moves on: the marker can’t pull its window back behind readThrough', () => {
+		const config = { ...grid, startDate: '2020-01-01' };
+		// Newest 2020-04-29, marker 60 days before, and the last window read to 2020-09-30 with nothing in it.
+		expect(fetchWindow('chirps', config, '2020-04-29', today, '2020-09-30', '2020-02-29')).toEqual({ start: '2020-08-12', end: '2020-12-09' });
+		// A window from the marker would reach past readThrough: it starts there.
+		expect(fetchWindow('chirps', config, '2020-04-29', today, '2020-05-10', '2020-02-29')).toEqual({ start: '2020-03-01', end: '2020-06-28' });
 	});
 
 	it('never starts past the window’s end: final through yesterday (or later) leaves one day', () => {
@@ -424,6 +450,11 @@ describe('runFetch failures: a result with our message, never a throw or an upst
 			ok: false,
 			error: 'the source’s data could not be read: the grid has no data at -20.275, 25.375 (the sea, or outside the product’s coverage), inside the bounding box: shrink the box to the land, list the cells instead, or let the feed leave out sea cells (skipNoData)'
 		});
+	});
+
+	it('an ECMWF request is refused: those forecasts are read only from the copy, never fetched', async () => {
+		const r = await runFetch({ source: 'ecmwf_ens', config: grid, start: '2026-03-10', end: '2026-03-24', today: '2026-03-10' }, broken({}));
+		expect(r).toEqual({ ok: false, error: 'the source’s data could not be read: ECMWF forecasts are read only from the rain data copy, never by the fetcher' });
 	});
 
 	it('no GEFS issue today or yesterday', async () => {

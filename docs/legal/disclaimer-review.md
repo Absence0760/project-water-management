@@ -78,10 +78,15 @@ all-farms and summary):
 > # model estimates that can be wrong; not an authorisation to use water; as far as the law allows the operator of this software accepts no responsibility to anyone who relies on this file; see the report disclaimer (version 2026-09-28.2)
 
 **Forecast runs.** A forecast run's report also prints, on its cover, one of
-two lines (`FORECAST_RAIN_NOTE(from, source)`). When a CHIRPS-GEFS data feed
+three lines (`FORECAST_RAIN_NOTE(from, source)`). When a CHIRPS-GEFS data feed
 wrote every forecast day:
 
 > From {date}, this run uses forecast rain (CHIRPS-GEFS, Climate Hazards Center, doi:10.15780/G2PH2M), not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.
+
+When an ECMWF ENS data feed wrote every forecast day (issue #604 R4-E; ECMWF's
+CC BY 4.0 credit):
+
+> From {date}, this run uses forecast rain (the ECMWF ENS forecast; ECMWF open data, CC BY 4.0), not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.
 
 Otherwise (an uploaded or edited forecast):
 

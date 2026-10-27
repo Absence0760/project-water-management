@@ -268,9 +268,15 @@ test('a workflow with a production job may not restore a dependency cache', () =
 	assert.deepEqual(rules(good + '      - run: aws s3 sync --cache-control "max-age=60" x y\n'), []);
 });
 
-test('a docker build must produce one linux/amd64 manifest without attestations', () => {
+test('a docker build must produce one single-platform manifest without attestations', () => {
 	const ok = '      - run: docker buildx build --provenance=false --sbom=false --platform linux/amd64 --load -t x .\n';
 	assert.deepEqual(rules(good + ok), []);
+	// arm64 (the data mirror's ingest Lambda) is one platform too.
+	assert.deepEqual(rules(good + ok.replace('linux/amd64', 'linux/arm64')), []);
+	// No platform, or two (an image index), is refused.
+	assert.deepEqual(rules(good + ok.replace(' --platform linux/amd64', '')), ['image']);
+	assert.deepEqual(rules(good + ok.replace('linux/amd64', 'linux/amd64,linux/arm64')), ['image']);
+	assert.deepEqual(rules(good + ok.replace('linux/amd64', 'linux/arm')), ['image']);
 	assert.deepEqual(rules(good + '      - run: docker build -t x .\n'), ['image']);
 	assert.deepEqual(rules(good + ok.replace(' --sbom=false', '')), ['image']);
 	assert.deepEqual(rules(good + '      # docker build -t x .\n'), []);
@@ -303,7 +309,9 @@ test('image-sha: the repo deploy workflows pass', () => {
 
 const EXCLUDE_RENDERER_DEPS =
 	"          !startsWith(steps.meta.outputs.directory, '/backend/renderer-deps') &&\n" +
-	"          !contains(github.event.pull_request.head.ref, '/backend/renderer-deps/') &&\n";
+	"          !contains(github.event.pull_request.head.ref, '/backend/renderer-deps/') &&\n" +
+	"          !startsWith(steps.meta.outputs.directory, '/ingest') &&\n" +
+	"          !contains(github.event.pull_request.head.ref, '/ingest/') &&\n";
 
 test('auto-merge: the allowlist exists and leaves github_actions and docker to a human', () => {
 	const file = '.github/workflows/dependabot-auto-merge.yml';
@@ -318,30 +326,36 @@ test('auto-merge: the allowlist exists and leaves github_actions and docker to a
 	assert.match(checkWorkflow(file, step(['docker']))[0].message, /includes docker/);
 });
 
-test('auto-merge: the renderer image\'s npm directory stays manual, by directory and by branch', () => {
+test('auto-merge: the production images\' dependency directories (renderer npm, ingest pip) stay manual, by directory and by branch', () => {
 	const file = '.github/workflows/dependabot-auto-merge.yml';
 	const allow = `contains(fromJSON('["npm_and_yarn", "pip"]'), steps.meta.outputs.package-ecosystem) &&`;
 	const patch = "steps.meta.outputs.update-type == 'version-update:semver-patch'";
 	const step = (...conds) => good + `      - name: Approve + auto-merge\n        if: >-\n${conds.map((c) => `          ${c}\n`).join('')}        env:\n          X: y\n`;
 	const byDir = "!startsWith(steps.meta.outputs.directory, '/backend/renderer-deps') &&";
 	const byBranch = "!contains(github.event.pull_request.head.ref, '/backend/renderer-deps/') &&";
+	// The ingest image's pip directory is excluded the same way; present in every case below unless named.
+	const ingDir = "!startsWith(steps.meta.outputs.directory, '/ingest') &&";
+	const ingBranch = "!contains(github.event.pull_request.head.ref, '/ingest/') &&";
 
-	assert.deepEqual(rules(step(allow, byDir, byBranch, patch), file), [], 'positive control: both exclusions present');
-	assert.deepEqual(rules(step(byBranch, allow, byDir, patch), file), [], 'order within the condition does not matter');
-	assert.deepEqual(rules(step(allow, patch), file), ['auto-merge'], 'neither exclusion');
-	assert.deepEqual(rules(step(allow, byDir, patch), file), ['auto-merge'], 'directory only: the branch backstop is missing');
-	assert.deepEqual(rules(step(allow, byBranch, patch), file), ['auto-merge'], 'branch only: the directory check is missing');
-	assert.match(checkWorkflow(file, step(allow, byDir, patch))[0].message, /head\.ref, '\/backend\/renderer-deps\/'/);
+	assert.deepEqual(rules(step(allow, byDir, byBranch, ingDir, ingBranch, patch), file), [], 'positive control: every exclusion present');
+	assert.deepEqual(rules(step(byBranch, allow, byDir, ingDir, ingBranch, patch), file), [], 'order within the condition does not matter');
+	assert.deepEqual(rules(step(allow, ingDir, ingBranch, patch), file), ['auto-merge'], 'neither exclusion');
+	assert.deepEqual(rules(step(allow, byDir, byBranch, patch), file), ['auto-merge'], 'the renderer excluded but not /ingest');
+	assert.deepEqual(rules(step(allow, byDir, byBranch, ingDir, patch), file), ['auto-merge'], '/ingest by directory only');
+	assert.match(checkWorkflow(file, step(allow, byDir, byBranch, patch))[0].message, /head\.ref, '\/ingest\/'/);
+	assert.deepEqual(rules(step(allow, byDir, ingDir, ingBranch, patch), file), ['auto-merge'], 'directory only: the branch backstop is missing');
+	assert.deepEqual(rules(step(allow, byBranch, ingDir, ingBranch, patch), file), ['auto-merge'], 'branch only: the directory check is missing');
+	assert.match(checkWorkflow(file, step(allow, byDir, ingDir, ingBranch, patch))[0].message, /head\.ref, '\/backend\/renderer-deps\/'/);
 	// Near misses that would not exclude it.
-	assert.deepEqual(rules(step(allow, byDir.slice(1), byBranch, patch), file), ['auto-merge'], 'not negated');
-	assert.deepEqual(rules(step(allow, byDir.replace(' &&', ' ||'), byBranch, patch), file), ['auto-merge'], 'joined with ||');
-	assert.deepEqual(rules(step(allow, byDir.replace('renderer-deps', 'renderer'), byBranch, patch), file), ['auto-merge'], 'another directory');
+	assert.deepEqual(rules(step(allow, byDir.slice(1), byBranch, ingDir, ingBranch, patch), file), ['auto-merge'], 'not negated');
+	assert.deepEqual(rules(step(allow, byDir.replace(' &&', ' ||'), byBranch, ingDir, ingBranch, patch), file), ['auto-merge'], 'joined with ||');
+	assert.deepEqual(rules(step(allow, byDir.replace('renderer-deps', 'renderer'), byBranch, ingDir, ingBranch, patch), file), ['auto-merge'], 'another directory');
 	// Outside the allowlist's own `if:` it does not count.
 	const elsewhere = good +
 		`      - name: Other\n        if: >-\n          ${byDir}\n          ${byBranch}\n          true\n` +
 		`      - name: Approve + auto-merge\n        if: >-\n          ${allow}\n          ${patch}\n`;
 	assert.deepEqual(rules(elsewhere, file), ['auto-merge'], 'the exclusions sit in another step');
-	const inRun = step(allow, patch) + `        run: |\n          ${byDir}\n          ${byBranch}\n`;
+	const inRun = step(allow, ingDir, ingBranch, patch) + `        run: |\n          ${byDir}\n          ${byBranch}\n`;
 	assert.deepEqual(rules(inRun, file), ['auto-merge'], 'the same text past the end of the `if:` does not count');
 });
 

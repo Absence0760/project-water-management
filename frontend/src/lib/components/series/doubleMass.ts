@@ -16,7 +16,8 @@ export interface DoubleMassChart {
 const noDates = { startDate: '', values: [] as (number | null)[] };
 const f2 = (x: number) => x.toFixed(2);
 
-export function doubleMassChart(dm: DoubleMass): DoubleMassChart {
+/** `against`: the product in CHIRPS' place (issue #604 R4-E: ERA5-Land), as the lines and caption name it. */
+export function doubleMassChart(dm: DoubleMass, against = 'CHIRPS'): DoubleMassChart {
 	const x = [0, ...dm.years.map((y) => y.cumChirpsMm)];
 	const observed = [null, ...dm.years.map((y) => y.cumCatchmentMm)];
 	const whole = x.map((v) => dm.wholeSlope * v);
@@ -34,7 +35,7 @@ export function doubleMassChart(dm: DoubleMass): DoubleMassChart {
 		}
 		fitted.push(y0 + dm.segments[seg]!.slope * (y.cumChirpsMm - x0));
 	});
-	const segments = dm.segments.map((s) => `${waterYearLabel(s.fromWaterYear)} to ${waterYearLabel(s.toWaterYear)}: ${f2(s.slope)} × CHIRPS`);
+	const segments = dm.segments.map((s) => `${waterYearLabel(s.fromWaterYear)} to ${waterYearLabel(s.toWaterYear)}: ${f2(s.slope)} × ${against}`);
 	return {
 		curve: {
 			series: [

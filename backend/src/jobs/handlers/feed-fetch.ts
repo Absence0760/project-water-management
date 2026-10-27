@@ -24,6 +24,26 @@
 // caught up, a few final files to HEAD, claimed for this job. With such work
 // the request goes out even when the window needs nothing (its plan all
 // skips).
+//
+// With CHIRPS_SOURCE=mirror (mirror/source.ts; the default in dev, CI and e2e)
+// a CHIRPS fetch reads our own copy of CHIRPS instead, in this job, whatever
+// FEED_FETCHER says: no FetchRequest, no SQS round trip (feeds/fromMirror.ts,
+// issue #604 D3). So does a CHIRPS-GEFS fetch: it reads the newest issue the
+// daily GEFS pass copied (feeds/fromMirrorGefs.ts, R3-A).
+//
+// A CHIRPS fetch from the copy then fills the gap-filling products its
+// project's runs read over the feed's cells, ERA5-Land and IMERG Late, when
+// settings.gapRain asks for them (feeds/gapRainFill.ts, issue #604 R4-B).
+//
+// With DWS_SOURCE=store (feeds/fromGaugeRecord.ts dwsSource; the default in
+// dev, CI and e2e) a DWS fetch reads its station's days from our gauge record
+// store (247_gauge_record) the same way, in this job (issue #604 R3-B).
+//
+// After the cutover (both of those, issue #604 R3-C) no fetch reaches the
+// SQS or inline paths below, so production sets no FEED_FETCHER and has no
+// fetch-requests queue (infra/feeds.tf local.per_feed_fetching). The inline
+// path stays for local dev; on Lambda its live client refuses (feeds/http.ts),
+// and the job dies saying why.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import { planFetch, RECHECK_HEAD_DAYS, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from '../../feeds/cellCache.js';
@@ -32,8 +52,15 @@ import { chirpsProduct, type FeedSource, type GridConfig, gridCells } from '../.
 import { type CellsResult, type FetchRequest, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
 import { DAY_SKIP } from '../../feeds/sources/chirps.js';
 import { withUser } from '../../db/tx.js';
-import { feedHttp } from '../../feeds/http.js';
+import { feedHttp, LiveFeedRequestRefusedError } from '../../feeds/http.js';
+import { JobError } from '../errors.js';
+import { fetchFromMirror } from '../../feeds/fromMirror.js';
+import { fillGapProducts } from '../../feeds/gapRainFill.js';
+import { fetchGefsFromMirror } from '../../feeds/fromMirrorGefs.js';
+import { fetchEcmwfFromMirror } from '../../feeds/fromMirrorEcmwf.js';
 import { ingestResult } from '../../feeds/ingest.js';
+import { chirpsSource } from '../../mirror/source.js';
+import { dwsSource, fetchFromGaugeRecord } from '../../feeds/fromGaugeRecord.js';
 import { beginFeedFetch, feedForJob, takeFeedFetch } from '../../feeds/store.js';
 import { defineHandler } from '../registry.js';
 import { feedFetcher, type FetchRequestMessage, sendToQueue } from '../transport.js';
@@ -57,13 +84,35 @@ export const fetchGroup = (source: FeedSource): 'chc' | 'dws' => (source === 'dw
 export const feedFetchHandler = defineHandler({
 	role: 'editor',
 	payload: FeedFetchPayload,
-	async run({ db, job, payload }) {
+	async run({ db, job, payload, deadline }) {
 		const feed = await feedForJob(db, job.projectId, payload.feedId);
 		// Removed or switched off since it was queued: nothing to do.
 		if (!feed || !feed.enabled) return;
 		const today = utcToday();
 		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough);
 		const request: FetchRequest = { source: feed.source, config: feed.config, ...window, today };
+		if (feed.source === 'chirps' && chirpsSource() === 'mirror') {
+			await fetchFromMirror(db, feed, window, { jobId: job.id, today });
+			// The gap-filling products its project's runs read over this feed's cells (issue #604 R4-B, feeds/gapRainFill.ts):
+			// each product's outcome is recorded on the feed (last_meta, 254), and the fill stops in time for this job's deadline.
+			await fillGapProducts(db, feed, { jobId: job.id, today, deadline: deadline ?? null });
+			return;
+		}
+		// CHIRPS-GEFS from the copy too (issue #604 R3-A): the newest issue the daily GEFS pass copied, read in this job.
+		if (feed.source === 'chirps_gefs' && chirpsSource() === 'mirror') {
+			await fetchGefsFromMirror(db, feed, window, { jobId: job.id, today });
+			return;
+		}
+		// ECMWF ENS (issue #604 R4-C): only ever from the copy, whatever CHIRPS_SOURCE says (there is no per-feed path).
+		if (feed.source === 'ecmwf_ens') {
+			await fetchEcmwfFromMirror(db, feed, window, { jobId: job.id, today });
+			return;
+		}
+		// DWS from our gauge record store (issue #604 R3-B).
+		if (feed.source === 'dws' && dwsSource() === 'store') {
+			await fetchFromGaugeRecord(db, feed, window, { jobId: job.id, today });
+			return;
+		}
 		if (feed.source === 'chirps') {
 			const product = chirpsProduct(feed.config);
 			const cells = uniqueCells(gridCells(feed.config as GridConfig));
@@ -118,6 +167,21 @@ export const feedFetchHandler = defineHandler({
 		}
 		// Inline: the fetch holds this transaction open for its duration, which
 		// is fine locally (fixtures answer at once); production never does this.
-		await ingestResult(db, feed, await runFetch(request, await feedHttp()), window, { fetchJobId: job.id });
+		// On Lambda a live client refuses (feeds/http.ts): a worker configured to
+		// fetch a source itself is a bug no retry fixes, so the job is dead at once,
+		// saying why (issue #604 R3-C).
+		let http;
+		try {
+			http = await feedHttp();
+		} catch (err) {
+			if (err instanceof LiveFeedRequestRefusedError) {
+				throw new JobError(
+					`this worker may not fetch ${feed.source} from the source itself: production reads it from our copy or store (CHIRPS_SOURCE=mirror, DWS_SOURCE=store) or hands it to the fetcher (FEED_FETCHER=sqs)`,
+					{ retry: false }
+				);
+			}
+			throw err;
+		}
+		await ingestResult(db, feed, await runFetch(request, http), window, { fetchJobId: job.id });
 	}
 });

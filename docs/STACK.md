@@ -51,6 +51,12 @@ sides share.
   is off; the committed synthetic raster (`backend/fixtures/water/`) or JRC
   Global Surface Water after `pnpm dev:tiles:water` ([maps.md § Assisted
   drawing](./maps.md#assisted-drawing)).
+  The rain data copy (`src/mirror/`, issue #604, in progress) reads and
+  writes Zarr v3 arrays with `zarrita` 0.7.5 and `@zarrita/storage` 0.2.0
+  (exact pins; a `node:zlib` gzip codec for writing) from `MIRROR_URL`
+  (`file://` or `s3://`, the latter through `@aws-sdk/client-s3`); the
+  committed synthetic copy is `backend/fixtures/mirror/` (`pnpm
+  gen:mirror-fixture`; [architecture.md § Data feeds](./architecture.md#data-feeds)).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has four projects: `unit` (no DB),
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
@@ -102,6 +108,19 @@ sides share.
   the synthetic workbook fixture for the importer parity test and the
   string-decoding fixture that pins the reader to openpyxl
   (`scripts/wbt-import/fixtures/`, invented data).
+- **ingest/**: the bulk ingest job (issue #604), Python 3.14 as an arm64
+  container-image Lambda (`ingest/Dockerfile`, AWS's Lambda Python base pinned
+  by digest; handler `lambda_handler.handler`). It copies CHC's CHIRPS NetCDF
+  (read with xarray + h5netcdf/h5py; no netCDF4, no GDAL) into our own Zarr v3
+  copy (zarr 3; `MIRROR_URL`: `file://…` locally, `s3://…` in production,
+  written through boto3) with a `manifest.json` per product, through one
+  polite HTTP client (stdlib `urllib`: a descriptive User-Agent with
+  `INGEST_CONTACT`, conditional GETs, 1 request a second, `Retry-After`, and a
+  403 that stops the run). Dependencies hash-pinned in
+  `ingest/requirements.txt`. `FEED_SOURCE=fixtures` reads a committed
+  synthetic NetCDF (`ingest/fixtures/`) and needs no network. Optional
+  locally (`pnpm dev:ingest:run`); pnpm dev, the other CI jobs and e2e never
+  need Python ([ingest/README.md](../ingest/README.md)).
 - **infra/**: Terraform: S3 + CloudFront (+ `/api/*` → Lambda) + WAF + Lambda
   (API, plus a migrate Lambda, `backend/src/lambda-migrate.ts`, and the job
   worker, `backend/src/lambda-worker.ts`, with its SQS queue + DLQ and
@@ -131,6 +150,7 @@ pnpm dev:run:worker         # the job worker alone: polls every 15 s and on LIST
 pnpm dev:jobs:tick          # run every due job once and exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default, no network) and exit
 pnpm dev:ingest:push        # push the synthetic logger CSV to /ingest with the API key in WM_INGEST_KEY (run-locally.md § Ingest)
+pnpm dev:ingest:run [rnl|sat|era5l|imerg_late]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
 
 pnpm dev:db:up              # Postgres 17 in docker on :5434
 pnpm dev:db:down
@@ -181,6 +201,9 @@ pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid
 pnpm import:gazetteer       # load the synthetic place names the Map's search finds after its own layers (pnpm setup runs it);
                              # <ZA.txt[.gz]> [<BW.txt[.gz]> …] --dataset <label> [--source "<attribution>"] loads GeoNames' dumps of South Africa and its
                              # neighbours (BW, LS, MZ, NA, SZ, ZW; theirs inside the basemap only), several files as one dataset (CC BY 4.0; maps.md § Gazetteer)
+pnpm import:dws <file> --reference "<reply>"   # load a DWS daily flow table (DWS's reply to a data request; --source upload for any other) into the
+                             # gauge record store DWS feeds read with DWS_SOURCE=store, as the schema owner; [--station A2H012] [--from … --to …]
+                             # (backend/fixtures/dws/ holds an invented reply; deployment.md § DWS gauge records)
 pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + the Showcase (every feature: runs, scenarios, map, allocations, evidence pack draft, notes, alerts; run-locally.md § The showcase; SEED_SHOWCASE=0 skips it) + the Licence comparison map (every band of the Allocations map, issue #510; skipped with the Showcase) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
@@ -210,15 +233,17 @@ pnpm gen:bundle-budget <slug> <kb> "<why>"  # raise the total ceiling: one new e
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
 pnpm check:migrations       # every migration this branch adds sorts after origin/main's highest (git fetch first; data-model.md § Migrations)
-pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned, bin/tiles-dev.sh's GDAL image and docker-compose.yml's images (Postgres, Mailpit, MinIO) by digest, and every URL tarball in pnpm-lock.yaml (SheetJS) by its integrity hash; bump them together as backend/renderer.Dockerfile's header says
+pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned, the ingest image's arm64 Lambda base by digest and its pip install by hash, bin/tiles-dev.sh's GDAL image and docker-compose.yml's images (Postgres, Mailpit, MinIO) by digest, and every URL tarball in pnpm-lock.yaml (SheetJS) by its integrity hash; bump them together as backend/renderer.Dockerfile's header says
 pnpm check:renderer-image   # build the report renderer's container image and smoke-test it as Lambda runs it (docker; ~3.5 GB)
 pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNAPSHOT) is; a weekly workflow opens an issue past 90 days
                              # check:pins also refuses any workflow `services:` image (serviceImageProblems): one is pulled from its registry on every run, which Docker Hub and ECR Public refused (issues #492, #521); CI starts docker-compose.yml's services through scripts/ci/service-image.sh, so a Dependabot compose bump moves CI with it
 pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the pinned apt versions from it (docker); on every Dependabot docker PR
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
 pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~6 min)
+pnpm test:ingest            # the bulk ingest job's unittest suite (ingest/, Python 3.14; seconds)
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
 pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
+pnpm gen:mirror-fixture     # rewrite the synthetic rain data copy (backend/fixtures/mirror/: Zarr arrays + manifests from the synthetic CHIRPS files; no DB; architecture.md § Data feeds)
 pnpm gen:example            # rewrite the example catchment the empty project list starts from (Kleinberg; no DB; issue #286)
 pnpm gen:help-art           # re-render the help pictures, by day and at dusk for dark mode (optional: Blender 5 + ImageMagick 7; HELP_ART_ONLY, HELP_ART_LIGHT, HELP_ART_DEVICE; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)
@@ -303,6 +328,7 @@ Deploying (only when the client is ready for it) is covered in
 
 - `docs/model.md`: the water-balance model, formulas, workbook quirks, glossary
 - `docs/engine-audit.md`: where and why the engine departs from the workbook (finding IDs); `docs/engine-review.md`: the earlier faithfulness review
+- `docs/spikes/`: one-off spikes that settle a plan's assumptions before it is built (`604-round0.md`: CHC's NetCDF vs its TIFFs, dynamical.org, zarrita, issue #604)
 - `docs/upstream/`: bug reports drafted for upstream projects (the V8 Maglev OSR miscompile behind engine-audit.md V1, issue #232)
 - `docs/legal/disclaimer-review.md`: the report disclaimer, sign-off statement and farmer liability lines, quoted for the client's legal review (issue #47)
 - `docs/legal/operator-agreement.md` (POPIA s20–21 template for each client) and `docs/legal/incident-procedure.md` (personal-information breach: who decides, timelines, the Regulator's report); `docs/legal/known-defect-procedure.md` (a confirmed engine bug: the errata row, the runs' May be affected flag, the owners' email); `docs/legal/information-officer.md` (registering with the Information Regulator); `docs/legal/map-data-licences.md` (the Terms against the map data's licences, and the map credits; for counsel); `docs/legal-status.md` tracks what is open
@@ -312,6 +338,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
 - `docs/maps.md`: the Map tab: the self-hosted basemap and its fetch recipe, GeoJSON upload checks, server-side areas, the quaternary lookup and loading its dataset, the cultivated area from land cover, the evaporation from the map, the sources table, CSP
+- `docs/data-sources.md`: the source register: every upstream we use or plan (feeds, reference datasets, #604's planned sources) with host, licence and attribution, contact, access pattern, limits, fallback and owner, and the polite-client rules (`scripts/guards/data_sources.mjs` keeps it in step with `FEED_HOSTS` and `data_feed.source`)
 - `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
 - `docs/evidence-pack.md`: licensing evidence packs: the manifest and its hash, the short code, the lifecycle (draft, sign, issue, supersede, withdraw) and the public verify lookup
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
@@ -397,7 +424,7 @@ Prefer reading these over guessing. Update them when behaviour changes.
 
 ## What not to do
 
-- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python's stdlib `unittest` for the importer (`scripts/wbt-import/`) and the cross-check (`verify/`) aside, and the
+- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python's stdlib `unittest` for the importer (`scripts/wbt-import/`), the bulk ingest job (`ingest/`) and the cross-check (`verify/`) aside, and the
   dependency-free CI/release guards under `scripts/` (and `e2e/support/*.test.ts`) use Node's built-in `node:test`
   (the estate pattern), since the root package has no dependencies.
 - Don't replace pnpm, and don't `npm install -g` anything.

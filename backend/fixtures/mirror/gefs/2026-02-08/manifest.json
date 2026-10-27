@@ -1,0 +1,170 @@
+{
+  "product": "gefs/2026-02-08",
+  "revision": 1,
+  "region": {
+    "w": 10,
+    "s": -35.5,
+    "e": 41,
+    "n": -8
+  },
+  "grid": {
+    "origin": {
+      "lat": -35.475,
+      "lon": 10.025
+    },
+    "step": 0.05
+  },
+  "years": {
+    "first": 2026,
+    "last": 2026
+  },
+  "finalThrough": null,
+  "prelimThrough": null,
+  "files": [
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.08.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.09.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.10.tif",
+      "etag": "\"fx-0227800087d8e1f9\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f4c55c08973dabf2d191a33e9583ee1dbb6385fa28f96c28a0f89e0eaf8f52a2",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.11.tif",
+      "etag": "\"fx-d6f9a4ece17b95b9\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9a802f945ff5b231e7f9e9a34f731b5c2645277a3fdf19b6ac32e9019827bbbb",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.12.tif",
+      "etag": "\"fx-50f3400c93d28b1f\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d889b53a6f5eca3c49668100f4ffe08477a202e4cec64ab29a3e87ec58460fea",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.13.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.14.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.15.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.16.tif",
+      "etag": "\"fx-2b3ca4175d919fbc\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "5acf3cf99444c9d46e02413a09fb35d3bf6220ef7c8d45dccbd1ea345f5bee1a",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.17.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.18.tif",
+      "etag": "\"fx-727e4e138bde34d6\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f6feefc2b65b3a36c079116ab059af8ede5ac0989f195465bb42cf6ee223a8da",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.19.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.20.tif",
+      "etag": "\"fx-d01e0aeb994ba049\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1b89c500ff9d95ec310d45d54a090f99980c567c33b8482adfcf91fef28dcf9c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.21.tif",
+      "etag": "\"fx-7f8c58d45e05cf20\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "dfed62b513f9c06fd899c1f174b8e80d5bd1b2bde28a688044dcacadfb744905",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.22.tif",
+      "etag": "\"fx-9592faa80218f0cd\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d145af6a40d2e68d75c3e3cbb560c534badd698de2c1e264754e5cf343a4c5b0",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/02/08/c3g_2026.02.23.tif",
+      "etag": "\"fx-c0a25b961d468921\"",
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "921d97fddc018cb589e2cdb1341924b8feb6d99becce8e9bdd025ee8d547be91",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    }
+  ],
+  "changes": []
+}

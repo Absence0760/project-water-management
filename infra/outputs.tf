@@ -132,3 +132,18 @@ output "waf_captcha_api_key" {
   value       = aws_wafv2_api_key.captcha.api_key
   sensitive   = true
 }
+
+output "ingest_function_name" {
+  description = "Mirror ingest Lambda function name (the data mirror, ingest.tf). deploy-backend.yml moves it to each release's image once it exists (it is created only when ingest_image_tag is set). GitHub variable INGEST_FUNCTION_NAME."
+  value       = local.ingest_function_name
+}
+
+output "ingest_ecr_repository" {
+  description = "Name of the mirror ingest image's ECR repository. deploy-backend.yml pushes each release's image to it. GitHub variable INGEST_ECR_REPOSITORY."
+  value       = aws_ecr_repository.ingest.name
+}
+
+output "mirror_bucket" {
+  description = "The data mirror's private, versioned bucket (Zarr v3 arrays + manifest.json per product). MIRROR_URL is s3://<this>."
+  value       = aws_s3_bucket.mirror.bucket
+}

@@ -56,7 +56,7 @@
 	import NetworkSchematic from '#lib/components/network/NetworkSchematic.svelte';
 	import { ranAgo } from '#lib/components/network/supplyColour.js';
 	import { supplyColouring } from '#lib/components/network/farmColour.js';
-	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, PAIRING_NUMS, settingsRows, STATION_HEAD, STATION_NUMS, stationPairingRows, stationRows, transferRows } from '#lib/components/report/inputs.js';
+	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, PAIRING_NUMS, reportRainCredits, settingsRows, STATION_HEAD, STATION_NUMS, stationPairingRows, stationRows, transferRows } from '#lib/components/report/inputs.js';
 	import { reportPageRule } from '#lib/components/report/printPage.js';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
 	import AssurancePanel from '#lib/components/reliability/AssurancePanel.svelte';
@@ -466,6 +466,14 @@
 							[3, 4],
 							coverageRows(series, run)
 						)}
+						<!-- The credits the run's rain owes (issue #604 R4-E): ERA5-Land, IMERG Late, the ECMWF forecast, word for word. -->
+						{@const credits = reportRainCredits(run)}
+						{#if credits.length}
+							<h3>Rain data credits</h3>
+							<ul class="credits" data-testid="report-rain-credits">
+								{#each credits as c (c.product)}{#each c.lines as l (l)}<li><strong>{c.name}:</strong> {l}</li>{/each}{/each}
+							</ul>
+						{/if}
 					{:else if s.id === 'calibration'}
 						<CalibrationPanel
 							calibration={summary.calibration}
@@ -696,6 +704,13 @@
 	}
 	h3 {
 		margin: 1.25rem 0 0.5rem;
+	}
+	/* The rain sources' credits (issue #604 R4-E): small, whole, on paper too. */
+	.credits {
+		margin: 0;
+		padding-left: 1.1rem;
+		font-size: var(--font-sm);
+		max-width: 100ch;
 	}
 	/* A report reads top to bottom: whole tables, not boxes that scroll. */
 	.report :global(.table-wrap) {

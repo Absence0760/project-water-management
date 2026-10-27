@@ -37,10 +37,12 @@
 // the fetcher can log which check failed (dwsFailureLabel). The ScriptServer
 // error page is the site's backend failing, not a changed layout: it fails
 // the fetch as a FeedServerError (unavailable), which the scheduler retries. A row whose value
-// isn't a non-negative number is a gap (null), counted in the result. A gap
+// isn't a non-negative number is a gap (null), counted in the result. A flow
+// above DWS_MAX_FLOW or a quality code that isn't 1 to 8 letters or digits
+// fails the fetch as a format failure: the gauge record store refuses both. A gap
 // row can leave the flow column blank and still carry a quality code
 // ("20210102             170"): the code is read by its column, never as a flow.
-import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
+import { toEpochDay } from '@water-management/engine/calendar';
 import { DWS_GAP_CODES, DWS_HEADER, DWS_ROW, dwsColumns, dwsTableText, parseDwsRow, stripHtmlComments } from '@water-management/engine/dws';
 import { DWS_RIVER_GAUGE, DWS_RIVER_GAUGE_MESSAGE } from '../config.js';
 import { FeedFormatError, FeedServerError } from '../errors.js';
@@ -124,7 +126,10 @@ export const DWS_FORMAT_FAILURES = {
 	badDate: ['the DWS table has an impossible date', 'impossible date'],
 	twice: ['the DWS table lists a day twice', 'a day listed twice'],
 	tooManyRows: ['the DWS table has more rows than one request can hold', 'too many rows'],
-	tooLong: ['the DWS table spans more days than one request can hold', 'too many days']
+	tooLong: ['the DWS table spans more days than one request can hold', 'too many days'],
+	flow: ['the DWS table has a flow above 100000 m³/s', 'flow out of range'],
+	quality: ['the DWS table has a quality code that is not 1 to 8 letters or digits', 'bad quality code'],
+	stationFile: ['the DWS rows do not fit the station file', 'station file invalid']
 } as const satisfies Record<string, readonly [string, string]>;
 
 /** The log label of a DWS failure's message (a format failure's, after its stored prefix), or null for any other message. */
@@ -133,6 +138,16 @@ export function dwsFailureLabel(message: string): string | null {
 	return null;
 }
 const F = DWS_FORMAT_FAILURES;
+/**
+ * The most a listed flow may be: 100 000 m³/s, an order of magnitude above
+ * any South African river's recorded peak. The gauge record store refuses
+ * more (247_gauge_record.sql: the column's CHECK and gauge_record_write), and
+ * so does the weekly pass's station file (ingest/dws.ts StationFile), so the
+ * page is refused here first, as a format failure of that one page.
+ */
+export const DWS_MAX_FLOW = 100_000;
+/** A quality code the store keeps: 1 to 8 letters or digits (247_gauge_record.sql, ingest/dws.ts StationFile). */
+export const DWS_QUALITY_CODE = /^[A-Za-z0-9]{1,8}$/;
 const MAX_ROWS = 20 * 366 + 10;
 /**
  * The daily table's header, spaces collapsed. The site prints "D AVG F/R"
@@ -142,22 +157,37 @@ const MAX_ROWS = 20 * 366 + 10;
 const M3S = /cubic met(re|er)s?\s*(\/|per)\s*s(ec(ond)?)?\b|\bm(3|³)\s*\/\s*s\b|\bcumecs\b/i;
 const DAILY_HEADER = /^DATE (D AVG F\/R|D_AVG_FR) QUAL( |$)/;
 
+/** One listed day of a DWS daily table: its flow (null for a gap) and its quality code as listed (null when none). */
+export interface DwsRowDay {
+	day: string;
+	value: number | null;
+	quality: string | null;
+}
+
+/** A DWS daily table's rows, oldest first, with the counts DwsDays carries. */
+export interface DwsRows {
+	rows: DwsRowDay[];
+	quality: Record<string, number>;
+	rejected: number;
+	outside: number;
+}
+
 /**
- * Parse a HyData.aspx daily page. Rows are placed by date; a missing date is a
- * gap. With a window, rows dated outside it are dropped (and counted): a page
- * that ignores the dates asked for, or carries a mistyped future date, must
- * not write days nobody asked for or move the feed's newest day past today.
+ * Parse a HyData.aspx daily page into its listed rows, each with its own
+ * quality code: what the gauge record store keeps (247_gauge_record,
+ * ingest/dws.ts). The checks are parseDwsDaily's (below), which is built on
+ * it. With a window, rows dated outside it are dropped (and counted).
  */
-export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
+export function parseDwsRows(raw: string, window?: DwsWindow): DwsRows {
 	// A comment is not content: one that mentions <pre> must not be taken for the table.
 	const page = stripHtmlComments(raw);
 	if (SERVER_ERROR.test(page)) throw new FeedServerError(DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL);
 	const body = dwsTableText(page);
 	if (body === null) {
-		if (/no data for this period/i.test(page)) return { startDate: null, values: [], quality: {}, rejected: 0, outside: 0 };
+		if (/no data for this period/i.test(page)) return { rows: [], quality: {}, rejected: 0, outside: 0 };
 		throw new FeedFormatError(F.noTable[0]);
 	}
-	if (/no data for this period/i.test(body)) return { startDate: null, values: [], quality: {}, rejected: 0, outside: 0 };
+	if (/no data for this period/i.test(body)) return { rows: [], quality: {}, rejected: 0, outside: 0 };
 	// Lines keep their leading spaces: a row's columns are read against the header's.
 	const lines = body.split(/\r?\n/).map((l) => l.trimEnd());
 	const h = lines.findIndex((l) => DWS_HEADER.test(l));
@@ -178,7 +208,7 @@ export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 	const from = window ? toEpochDay(window.start) : -Infinity;
 	const to = window ? toEpochDay(window.end) : Infinity;
 
-	const byDay = new Map<number, number | null>();
+	const byDay = new Map<number, DwsRowDay>();
 	const quality: Record<string, number> = {};
 	let rejected = 0;
 	let outside = 0;
@@ -193,18 +223,40 @@ export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 			continue;
 		}
 		if (byDay.has(day)) throw new FeedFormatError(`${F.twice[0]}: ${iso}`);
+		// Bounds the store holds too (DWS_MAX_FLOW, DWS_QUALITY_CODE): a page past them is refused whole, never half loaded.
+		if (row.value !== null && row.value > DWS_MAX_FLOW) throw new FeedFormatError(`${F.flow[0]}: ${iso}`);
+		if (row.quality !== undefined && !DWS_QUALITY_CODE.test(row.quality)) throw new FeedFormatError(`${F.quality[0]}: ${iso}`);
 		if (byDay.size >= MAX_ROWS) throw new FeedFormatError(F.tooManyRows[0]);
 		// A missing-data code, a blank, text or a negative (-999) value is a gap (parseDwsRow).
-		byDay.set(day, row.value);
+		byDay.set(day, { day: iso, value: row.value, quality: row.quality ?? null });
 		if (row.gap !== null) rejected++;
 		if (row.quality) quality[row.quality] = (quality[row.quality] ?? 0) + 1;
 	}
-	if (byDay.size === 0) return { startDate: null, values: [], quality, rejected, outside };
+	if (byDay.size === 0) return { rows: [], quality, rejected, outside };
 	const days = [...byDay.keys()];
 	const first = Math.min(...days);
 	const last = Math.max(...days);
 	// Rows are few, but their dates come from the page: bound the span before allocating it.
 	if (last - first + 1 > MAX_ROWS) throw new FeedFormatError(F.tooLong[0]);
-	const values = Array.from({ length: last - first + 1 }, (_, i) => byDay.get(first + i) ?? null);
-	return { startDate: fromEpochDay(first), values, quality, rejected, outside };
+	return { rows: days.sort((a, b) => a - b).map((d) => byDay.get(d)!), quality, rejected, outside };
+}
+
+/** Rows (oldest first) laid out by date from the first: a day not listed is a gap. */
+export function dwsRowValues(rows: readonly DwsRowDay[]): { startDate: string | null; values: (number | null)[] } {
+	if (!rows.length) return { startDate: null, values: [] };
+	const first = toEpochDay(rows[0]!.day);
+	const values = new Array<number | null>(toEpochDay(rows.at(-1)!.day) - first + 1).fill(null);
+	for (const r of rows) values[toEpochDay(r.day) - first] = r.value;
+	return { startDate: rows[0]!.day, values };
+}
+
+/**
+ * Parse a HyData.aspx daily page. Rows are placed by date; a missing date is a
+ * gap. With a window, rows dated outside it are dropped (and counted): a page
+ * that ignores the dates asked for, or carries a mistyped future date, must
+ * not write days nobody asked for or move the feed's newest day past today.
+ */
+export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
+	const r = parseDwsRows(raw, window);
+	return { ...dwsRowValues(r.rows), quality: r.quality, rejected: r.rejected, outside: r.outside };
 }

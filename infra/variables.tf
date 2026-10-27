@@ -632,6 +632,100 @@ variable "renderer_reserved_concurrency" {
   }
 }
 
+# --- The data mirror (ingest.tf, issue #604) ------------------------------------
+
+variable "chirps_source" {
+  description = "Which CHIRPS the worker's feed fetches read (CHIRPS_SOURCE, issue #604): chc sends each fetch to the fetcher Lambda, which reads CHC's files; mirror reads our copy in the mirror bucket (ingest.tf) inside the worker's own fetch job, with no request to CHC. The API gets the same value, so the Data feeds panel reports the copy exactly when the feeds read it (it reads the copy's days from the database, never the bucket). chc until the cutover: switch only once the copy holds the region's finals and preliminary days (docs/deployment.md § The cutover). With dws_source = \"store\" as well, per-feed fetching is off and Terraform removes the fetch-requests and ingest-results queues, their DLQs and alarms, both SQS triggers and the worker's FEED_FETCHER (feeds.tf local.per_feed_fetching); setting either back brings them back."
+  type        = string
+  default     = "chc"
+  validation {
+    condition     = contains(["chc", "mirror"], var.chirps_source)
+    error_message = "chirps_source must be chc or mirror."
+  }
+}
+
+variable "ingest_image_tag" {
+  description = "Tag of the mirror ingest image (ingest/Dockerfile) in its ECR repository that the mirror-ingest Lambda is created from: <release version>-<first 12 hex of its commit>, e.g. 0.7.0-0123456789ab, as deploy-backend.yml pushes it and prints it. Empty (the default) creates the mirror bucket, the repository, the DLQ and the (disabled) schedules but not the function or its freshness alarms: push an image with a backend release first (docs/deployment.md § The data mirror). Setting it enables the daily schedules and the alarms; the ECR lifecycle policy never expires this image (ingest.tf)."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.ingest_image_tag == "" || can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9a-f]{12}$", var.ingest_image_tag))
+    error_message = "ingest_image_tag must be empty or the tag deploy-backend.yml pushed, <version>-<12 hex of the commit>, like 0.7.0-0123456789ab."
+  }
+}
+
+variable "ingest_reserved_concurrency" {
+  description = "Max concurrent mirror ingest runs (ingest.tf): one per product, and never more than two requests at once against an upstream (issue #604's polite client). Counted in the account's Lambda concurrency quota (infra/README.md § Operator steps, step 3)."
+  type        = number
+  default     = 2
+  validation {
+    condition     = var.ingest_reserved_concurrency >= 1 && var.ingest_reserved_concurrency <= 2 && floor(var.ingest_reserved_concurrency) == var.ingest_reserved_concurrency
+    error_message = "1 or 2: more would hit CHC with more than two runs at once (and -1, unreserved, is refused too)."
+  }
+}
+
+variable "ingest_lag_alarm_days" {
+  description = "Alarm when a mirrored product's finals end more than this many days ago (MirrorLagDays). CHC publishes month M's finals during month M+1, usually by the 25th, so a healthy copy runs up to ~56 days behind just before a release; the default 75 fires once a monthly release is about three weeks late."
+  type        = number
+  default     = 75
+  validation {
+    condition     = var.ingest_lag_alarm_days >= 60 && floor(var.ingest_lag_alarm_days) == var.ingest_lag_alarm_days
+    error_message = "A whole number of days, at least 60, or the alarm fires on a healthy copy just before CHC's monthly release."
+  }
+}
+
+variable "daily_ingest_enabled" {
+  description = "Turn on the fetcher's daily ingest (feeds.tf, issue #604 R2-B): the daily EventBridge rule that copies CHIRPS preliminary days into the data mirror and the GEFS rule that copies the day's forecast issue (R3-A, 08:38–11:38 UTC), the fetcher role's write to the mirror bucket, and the preliminary and GEFS copies' freshness alarms (ingest.tf, breaching on missing data). Off (the default) until a backend release with the daily mode is deployed, or the alarm would fire for a job that doesn't exist yet. Runbook: docs/deployment.md § The data mirror."
+  type        = bool
+  default     = false
+}
+
+variable "daily_ingest_lag_alarm_days" {
+  description = "Alarm when the mirror's newest CHIRPS sat day (preliminary, else final) is more than this many days old (MirrorLagDays{Product=prelim}). CHC publishes a pentad's preliminary days two days after it ends, so a healthy copy runs up to ~8 days behind; the default 12 fires once a pentad is about a week late."
+  type        = number
+  default     = 12
+  validation {
+    condition     = var.daily_ingest_lag_alarm_days >= 9 && floor(var.daily_ingest_lag_alarm_days) == var.daily_ingest_lag_alarm_days
+    error_message = "A whole number of days, at least 9, or the alarm fires on a healthy copy just before a pentad is published."
+  }
+}
+
+variable "dws_source" {
+  description = "Where the worker's DWS feed fetches read (DWS_SOURCE, issue #604 R3-B): live sends each fetch to the fetcher Lambda, which reads DWS's HyData.aspx page; store reads our gauge_record table (migration 247) inside the worker's own fetch job, with no request to DWS. live until the operator has DWS's written answer and has loaded its reply (pnpm import:dws, docs/deployment.md § DWS gauge records). With chirps_source = \"mirror\" as well, per-feed fetching is off and Terraform removes the fetch queues (feeds.tf local.per_feed_fetching; docs/deployment.md § The cutover)."
+  type        = string
+  default     = "live"
+  validation {
+    condition     = contains(["live", "store"], var.dws_source)
+    error_message = "dws_source must be live or store."
+  }
+}
+
+variable "dws_weekly_enabled" {
+  description = "Turn on the weekly DWS pass (feeds.tf, issue #604 R3-B): the daily EventBridge rule that invokes the fetcher with {\"mode\":\"dws-weekly\"} (each station re-read once a week), the fetcher's write to dws/ in the mirror bucket, the worker's station list (DWS_WEEKLY=on, its write to dws/stations.json) and the pass's freshness alarm. Off (the default) until a backend release with the mode is deployed, or the alarm would fire for a job that doesn't exist yet. Runbook: docs/deployment.md § DWS gauge records."
+  type        = bool
+  default     = false
+}
+
+variable "dws_weekly_lag_alarm_days" {
+  description = "Alarm when a station the DWS feeds read was last fetched more than this many days ago (MirrorLagDays{Product=dws}): each is re-read every 6 days, so a healthy pass runs up to ~7 days behind; the default 10 fires when a station misses its week by three days (a 403 or the ScriptServer page stops the whole pass)."
+  type        = number
+  default     = 10
+  validation {
+    condition     = var.dws_weekly_lag_alarm_days >= 8 && floor(var.dws_weekly_lag_alarm_days) == var.dws_weekly_lag_alarm_days
+    error_message = "A whole number of days, at least 8, or the alarm fires on a healthy pass just before a station's weekly re-read."
+  }
+}
+
+variable "ingest_backfill_wait_seconds" {
+  description = "Seconds the backfill state machine (ingest_backfill.tf) waits after each month before invoking the next: D4's 1 file a minute against CHC."
+  type        = number
+  default     = 60
+  validation {
+    condition     = var.ingest_backfill_wait_seconds >= 60 && floor(var.ingest_backfill_wait_seconds) == var.ingest_backfill_wait_seconds
+    error_message = "At least 60 whole seconds: CHC is asked for at most one bulk file a minute (issue #604 D4)."
+  }
+}
+
 variable "jobs_backlog_alarm_seconds" {
   description = "Alarm when the oldest due job has waited this long. The schedule ticks every 5 minutes, so anything under ~10 minutes would fire on a normal wait."
   type        = number
@@ -645,7 +739,7 @@ variable "jobs_backlog_alarm_seconds" {
 # --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
 
 variable "alarm_tier" {
-  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends. \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
+  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; two fewer after the cutover (chirps_source = \"mirror\" and dws_source = \"store\" remove the fetch-requests and ingest-results queues and their DLQ alarms, feeds.tf), 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), two more with daily_ingest_enabled (the preliminary and GEFS copies'), one more with era5l_enabled (ERA5-Land's lag, era5land.tf) and one more with imerg_enabled (IMERG Late's lag, imerg.tf). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
   type        = string
   default     = "full"
 

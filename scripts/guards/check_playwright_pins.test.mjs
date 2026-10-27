@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { composeImageProblems, imageProblems, lockfileTarballProblems, pinProblems, readPins, scriptImageProblems } from './check_playwright_pins.mjs';
+import { composeImageProblems, imageProblems, ingestImageProblems, lockfileTarballProblems, pinProblems, readPins, scriptImageProblems } from './check_playwright_pins.mjs';
 
 const DIGEST = '@sha256:' + 'a'.repeat(64);
 
@@ -174,4 +174,45 @@ test("the repo's pnpm-lock.yaml keeps every URL tarball's integrity (real positi
 	const lock = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'pnpm-lock.yaml'), 'utf8');
 	assert.match(lock, /tarball: https:/, 'the lockfile has a URL tarball for this guard to check');
 	assert.deepEqual(lockfileTarballProblems(lock, 'pnpm-lock.yaml'), []);
+});
+
+const INGEST_IMAGE = [
+	'# FROM public.ecr.aws/lambda/python:3.14 in a comment is not a pin',
+	`FROM public.ecr.aws/lambda/python:3.14-arm64${DIGEST}`,
+	'COPY requirements.txt ${LAMBDA_TASK_ROOT}/',
+	'RUN pip install --no-cache-dir --require-hashes \\',
+	'    -r ${LAMBDA_TASK_ROOT}/requirements.txt',
+	'CMD ["lambda_handler.handler"]'
+].join('\n');
+
+test('the ingest image: an arm64 Lambda Python base by digest and a hash-checked pip install pass (positive control)', () => {
+	assert.deepEqual(ingestImageProblems(INGEST_IMAGE), []);
+});
+
+test('the ingest image: a FROM by tag alone is refused', () => {
+	const problems = ingestImageProblems(INGEST_IMAGE.replace(DIGEST, ''));
+	assert.ok(problems.some((p) => p === 'ingest/Dockerfile:2: FROM without an @sha256 digest (keep the tag beside it: image:tag@sha256:…)'), problems.join('\n'));
+});
+
+test('the ingest image: another image or the amd64 tag is refused', () => {
+	for (const from of [`public.ecr.aws/lambda/python:3.14${DIGEST}`, `python:3.14-slim${DIGEST}`, `public.ecr.aws/lambda/nodejs:24-arm64${DIGEST}`]) {
+		const problems = ingestImageProblems(INGEST_IMAGE.replace(`public.ecr.aws/lambda/python:3.14-arm64${DIGEST}`, from));
+		assert.match(problems.join('\n'), /ingest\/Dockerfile:2: FROM must be public\.ecr\.aws\/lambda\/python:<version>-arm64/, from);
+	}
+});
+
+test('the ingest image: pip install without --require-hashes is refused, however pip is called', () => {
+	for (const run of ['RUN pip install -r requirements.txt', 'RUN python -m pip install numpy', 'RUN true && pip3 install zarr']) {
+		const problems = ingestImageProblems(INGEST_IMAGE.replace(/RUN pip install[^\n]*\n[^\n]*/, run));
+		assert.match(problems.join('\n'), /pip install without --require-hashes/, run);
+	}
+});
+
+test('the ingest image: a file with no FROM is a problem, not a pass', () => {
+	assert.deepEqual(ingestImageProblems('CMD ["x"]'), ['ingest/Dockerfile: no FROM line found']);
+});
+
+test("the repo's ingest/Dockerfile passes", () => {
+	const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+	assert.deepEqual(ingestImageProblems(readFileSync(join(root, 'ingest/Dockerfile'), 'utf8')), []);
 });

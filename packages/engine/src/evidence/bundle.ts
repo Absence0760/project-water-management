@@ -43,6 +43,7 @@ import type { DailySeries, ModelInput } from '../project';
 import { runModelChecked } from '../run';
 import { ENGINE_VERSION } from '../version';
 import { ZipArchive, zip, type ZipEntry } from '../zip';
+import { forecastRainSourceOf, runRainCredits, type RainCredit } from '../liability/disclaimer';
 import { LOCALITY_MAP_VERSION, localityMapSvg } from '../geo/localityMap';
 import { packManifestText, packShortCode, type PackManifest } from './pack';
 import { AUTHORISED_PAIR_VERSION, authorisedPairBoard, authorisedPairInputs, freshResultsDigest, mixFromRecord, runAuthorisedPair, type AuthorisedPairRecord } from './authorisedPair';
@@ -157,7 +158,7 @@ export function runResultsText(r: { startDate: string; summary: unknown; series:
  * backend's loadRunInput rebuilds it: `seriesChoice` (the CHIRPS series the
  * run read and the others, which a run warning reads; engine ≥ 1.90.0, issue
  * #561), a forecast run's `forecastRainSource` (its units' forecast days,
- * engine ≥ 1.85.0), the latter only as one of its two values, and `stations`
+ * engine ≥ 1.85.0), the latter only as one of its values (`ecmwf_ens` from issue #604 R4-E), and `stations`
  * (the rainfall stations' names and MAPs, engine ≥ 1.91.0, issue #553).
  */
 export function bundleRunInput(snapshot: Pick<RunInputsSnapshot, 'settings' | 'model' | 'seriesChoice' | 'forecastRainSource' | 'stations'>, series: Record<string, DailySeries>): ModelInput {
@@ -168,7 +169,7 @@ export function bundleRunInput(snapshot: Pick<RunInputsSnapshot, 'settings' | 'm
 		model: snapshot.model,
 		series,
 		...(snapshot.seriesChoice ? { seriesChoice: snapshot.seriesChoice } : {}),
-		...(source === 'chirps_gefs' || source === 'other' ? { forecastRainSource: source } : {}),
+		...(forecastRainSourceOf(source) ? { forecastRainSource: forecastRainSourceOf(source)! } : {}),
 		// The rainfall stations' details (engine ≥ 1.91.0, issue #553): the station forcing reads their MAPs.
 		...(stations && typeof stations === 'object' && !Array.isArray(stations) ? { stations } : {})
 	} as ModelInput;
@@ -228,7 +229,28 @@ const RUNS: BundleRunName[] = ['baseline', 'application'];
 /** The CSV of an input series is named by its hash, so runs that share a series share its file. */
 export const bundleSeriesPath = (valuesSha256: string) => `series/${valuesSha256}.csv`;
 
-function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName: string): string {
+/**
+ * The credits the bundle owes for the rain it carries (issue #604 R4-E,
+ * docs/data-sources.md): a run's ERA5-Land and IMERG Late inputs are in
+ * series/, and an ECMWF forecast in its forecast series, so the README names
+ * their sources word for word. Accessed: the baseline run's creation day.
+ * Empty for a run on CHIRPS alone, whose README is as before.
+ */
+export function bundleRainCredits(input: Pick<PackBundleInput, 'manifest' | 'baseline' | 'application'>): RainCredit[] {
+	const accessed = (input.manifest.report.identity?.baseline?.createdAt ?? '').slice(0, 10);
+	const all = [input.baseline, input.application].flatMap((r) =>
+		r ? runRainCredits({ summary: r.summary as Parameters<typeof runRainCredits>[0]['summary'], forecastRainSource: r.inputs.forecastRainSource, forecastRainEcmwf: r.inputs.forecastRainEcmwf }, accessed) : []
+	);
+	const out: RainCredit[] = [];
+	for (const c of all) {
+		const had = out.find((x) => x.product === c.product);
+		if (!had) out.push({ ...c, lines: [...c.lines] });
+		else for (const l of c.lines) if (!had.lines.includes(l)) had.lines.push(l);
+	}
+	return out;
+}
+
+function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName: string, credits: readonly RainCredit[] = []): string {
 	const runs = RUNS.filter((r) => index.runs[r]).map((r) => `- ${r}: run \`${index.runs[r]!.runId}\`, engine ${index.runs[r]!.engineVersion}, results digest \`${index.runs[r]!.resultsSha256}\``);
 	const engines = [...new Set(RUNS.flatMap((r) => (index.runs[r] ? [index.runs[r]!.engineVersion] : [])))];
 	return [
@@ -281,6 +303,7 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 		'- `runs/<run>/input.json`: the run\'s stored inputs: settings, model, and each series\' first day, days and SHA-256.',
 		'- `runs/<run>/results.json`: the run\'s stored summary and the SHA-256 of each daily output. The results digest is the SHA-256 of its canonical text (engine `runResultsText`).',
 		'- `series/<sha256>.csv`: each input series\' values, `date,value`, a missing day empty; named by the SHA-256 of the values\' JSON array.',
+		...(credits.length ? ['', '## Data credits', '', 'Some input series hold rain from these sources, credited as each asks:', '', ...credits.flatMap((c) => c.lines.map((l) => `- ${c.name}: ${l}`))] : []),
 		''
 	].join('\n');
 }
@@ -338,7 +361,7 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 		runs,
 		headline: input.application && pair ? { baselineResultsSha256: pair.baselineResultsSha256, applicationResultsSha256: pair.applicationResultsSha256 } : null
 	} as const;
-	put('README.md', readme(m, head, `pack-${head.pack.shortCode}.zip`));
+	put('README.md', readme(m, head, `pack-${head.pack.shortCode}.zip`, bundleRainCredits(input)));
 	const names = [...files.keys()].sort();
 	const index: PackBundleIndex = { ...head, files: {} };
 	for (const n of names) index.files[n] = await hash(files.get(n)!);

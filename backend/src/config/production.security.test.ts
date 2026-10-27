@@ -39,6 +39,10 @@ const ENTRY: Record<Role, string> = {
 };
 /** Terraform's aws_lambda_function resource for each role. */
 const TF_RESOURCE: Record<string, Role> = { backend: 'api', worker: 'worker', fetcher: 'fetcher', renderer: 'renderer', migrate: 'migrate' };
+/** Lambdas that run none of the backend's code, so none of SETTINGS applies (with why). */
+const NOT_BACKEND: Record<string, string> = {
+	ingest: 'the Python mirror ingest job (ingest/, issue #604): its own settings, checked by ingest/lambda_handler.py'
+};
 /** Read by the runtime or the test runner, not by our code: classified, but no module mentions them. */
 const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'NODE_OPTIONS', 'VITEST']);
 
@@ -76,6 +80,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		JOB_TRANSPORT: 'sqs',
 		JOBS_QUEUE_URL: SQS('jobs'),
 		FEED_SOURCE: 'live',
+		CHIRPS_SOURCE: 'chc',
 		STORAGE: 's3',
 		REPORTS_BUCKET: 'water-management-reports-000000000000',
 		PACKS_BUCKET: 'water-management-packs-000000000000',
@@ -92,6 +97,10 @@ const PROD: Record<Role, Record<string, string>> = {
 		FEED_FETCHER: 'sqs',
 		FETCH_REQUESTS_QUEUE_URL: SQS('fetch-requests.fifo'),
 		FEED_SOURCE: 'live',
+		CHIRPS_SOURCE: 'chc',
+		DWS_SOURCE: 'live',
+		DWS_WEEKLY: 'off',
+		MIRROR_URL: 's3://water-management-mirror-000000000000',
 		REPORT_RENDERER: 'sqs',
 		RENDER_REQUESTS_QUEUE_URL: SQS('render-requests'),
 		STORAGE: 's3',
@@ -108,7 +117,12 @@ const PROD: Record<Role, Record<string, string>> = {
 		OPERATOR_EMAIL: 'operator@water.example.org'
 	},
 	// FEEDS_CONTACT: an address on a real domain (reserved ones are refused); the operator's own goes in their tfvars, never the repo.
-	fetcher: { FEED_SOURCE: 'live', INGEST_RESULTS_QUEUE_URL: SQS('ingest-results'), FEEDS_CONTACT: 'ops@icwbt.jaredhoward.com' },
+	fetcher: {
+		FEED_SOURCE: 'live',
+		INGEST_RESULTS_QUEUE_URL: SQS('ingest-results'),
+		MIRROR_URL: 's3://water-management-mirror-000000000000',
+		FEEDS_CONTACT: 'ops@icwbt.jaredhoward.com'
+	},
 	renderer: {
 		RENDER_SITE_URL: SITE,
 		RENDER_API_URL: `${SITE}/api`,
@@ -219,15 +233,19 @@ function terraformEnv(): Record<Role, Map<string, string | null>> {
 	for (const file of readdirSync(INFRA).filter((f) => f.endsWith('.tf'))) {
 		const tf = readFileSync(`${INFRA}${file}`, 'utf8');
 		for (const m of tf.matchAll(/^resource "aws_lambda_function" "([a-z_]+)" \{$/gm)) {
+			if (m[1]! in NOT_BACKEND) continue;
 			const role = TF_RESOURCE[m[1]!];
 			expect(role, `infra/${file}: aws_lambda_function.${m[1]} is a Lambda this test doesn't know; add it to TF_RESOURCE and give it a role`).toBeDefined();
 			const body = tf.slice(m.index!, tf.indexOf('\n}\n', m.index!));
 			const lines = body.split('\n');
-			const start = lines.findIndex((l) => /^\s*variables = \{$/.test(l));
+			// `variables = { … }`, or `variables = merge({ … }, <cond> ? { … } : {})` for settings Terraform sets only
+			// under a switch (the worker's FEED_FETCHER while per-feed fetching is on, infra/feeds.tf): every key either way.
+			const start = lines.findIndex((l) => /^\s*variables = (\{|merge\()$/.test(l));
 			expect(start, `aws_lambda_function.${m[1]} has no environment variables block`).toBeGreaterThan(0);
+			const merged = lines[start]!.trim().endsWith('merge(');
 			const vars = new Map<string, string | null>();
 			for (const line of lines.slice(start + 1)) {
-				if (/^\s*\}$/.test(line)) break;
+				if (merged ? /^\s*\)$/.test(line) : /^\s*\}$/.test(line)) break;
 				const kv = /^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.+?)\s*$/.exec(line);
 				if (!kv) continue; // a comment or a blank line
 				const literal = /^"([^"$]*)"$/.exec(kv[2]!);
@@ -466,6 +484,80 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['api', 'WATER_URL', 'http://localhost:9002/tiles/water.pmtiles']
 		];
 		for (const [role, name, value] of cases) expect(problemNames(role, prod(role, { [name]: value })), `${role} ${name}=${value}`).toContain(name);
+	});
+
+	it('the worker and the API say which CHIRPS is read, and the worker reads our copy only from its S3 bucket', () => {
+		for (const role of ['worker', 'api'] as const) {
+			for (const v of ['dyn', 'live', 'CHC']) expect(problemNames(role, prod(role, { CHIRPS_SOURCE: v })), `${role} CHIRPS_SOURCE=${String(v)}`).toContain('CHIRPS_SOURCE');
+		}
+		// Positive control: the API needs no MIRROR_URL either way (it reads the copy's days from mirror_copy).
+		expect(problemNames('api', prod('api', { CHIRPS_SOURCE: 'mirror' }))).toEqual([]);
+		const mirror = (url: string | undefined) => problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'mirror', MIRROR_URL: url }));
+		for (const v of [undefined, '', 'file:///var/task/fixtures/mirror/', 'fixtures/mirror', 'http://localhost:9002/mirror', 's3://'])
+			expect(mirror(v), `mirror with MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
+		// Positive controls: the copy in its bucket; and on chc the URL may be unset, but a set one is still checked.
+		expect(mirror('s3://water-management-mirror-000000000000')).toEqual([]);
+		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'mirror' }))).toEqual([]);
+		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
+		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'chc', MIRROR_URL: 'file:///tmp/mirror/' }))).toContain('MIRROR_URL');	// The fetcher writes the copy (its daily ingest): Terraform always sets the bucket, and nothing else will do.
+		for (const v of [undefined, 'file:///var/task/fixtures/mirror/', 's3://']) expect(problemNames('fetcher', prod('fetcher', { MIRROR_URL: v })), `fetcher MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
+		expect(problemNames('fetcher', prod('fetcher', {}))).toEqual([]);
+	});
+
+	it('the worker says where DWS feeds read (store or live) and whether it runs the weekly pass, which needs the mirror bucket', () => {
+		for (const v of ['dws', 'fixtures']) expect(problemNames('worker', prod('worker', { DWS_SOURCE: v })), `DWS_SOURCE=${String(v)}`).toContain('DWS_SOURCE');
+		for (const v of ['yes', 'true']) expect(problemNames('worker', prod('worker', { DWS_WEEKLY: v })), `DWS_WEEKLY=${String(v)}`).toContain('DWS_WEEKLY');
+		// Positive controls: either source, the pass on or off.
+		for (const v of ['store', 'live']) expect(problemNames('worker', prod('worker', { DWS_SOURCE: v }))).toEqual([]);
+		expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'on' }))).toEqual([]);
+		// The pass on needs the bucket, even with CHIRPS from CHC; off, the URL may be unset.
+		for (const v of [undefined, 'file:///tmp/mirror/', 's3://'])
+			expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'on', CHIRPS_SOURCE: 'chc', MIRROR_URL: v })), `MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
+		expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'off', CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
+	});
+
+	// Release before apply: a worker or API released with code that reads the flags starts on the env Terraform last
+	// applied, which has none of them. Unset is today's production behaviour (CHIRPS from CHC, DWS live, no weekly
+	// pass), so it must start; a wrong value is still refused.
+	it('starts on today’s production env without CHIRPS_SOURCE, DWS_SOURCE or DWS_WEEKLY (released before the apply that sets them)', () => {
+		const before = { CHIRPS_SOURCE: undefined, DWS_SOURCE: undefined, DWS_WEEKLY: undefined };
+		expect(problemNames('worker', prod('worker', before))).toEqual([]);
+		expect(problemNames('api', prod('api', { CHIRPS_SOURCE: undefined }))).toEqual([]);
+		for (const v of ['', '  ']) expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: v, DWS_SOURCE: v, DWS_WEEKLY: v })), JSON.stringify(v)).toEqual([]);
+		// Unset means the old values, so the per-feed fetcher is still required: no FEED_FETCHER is refused, as with chc + live.
+		expect(problemNames('worker', prod('worker', { ...before, FEED_FETCHER: undefined }))).toContain('FEED_FETCHER');
+		expect(problemNames('worker', prod('worker', { ...before, FETCH_REQUESTS_QUEUE_URL: undefined }))).toContain('FETCH_REQUESTS_QUEUE_URL');
+		// One flag new and the other unset (its old value) still fetches per feed.
+		expect(problemNames('worker', prod('worker', { ...before, CHIRPS_SOURCE: 'mirror', FEED_FETCHER: undefined }))).toContain('FEED_FETCHER');
+		expect(problemNames('worker', prod('worker', { ...before, DWS_SOURCE: 'store', FEED_FETCHER: undefined }))).toContain('FEED_FETCHER');
+		// The weekly pass off when unset: the mirror bucket may be unset too (CHIRPS from CHC).
+		expect(problemNames('worker', prod('worker', { ...before, MIRROR_URL: undefined }))).toEqual([]);
+		// A wrong value is refused (the reverse of the controls above).
+		expect(problemNames('worker', prod('worker', { ...before, DWS_SOURCE: 'dws' }))).toContain('DWS_SOURCE');
+		expect(problemNames('worker', prod('worker', { ...before, DWS_WEEKLY: 'true' }))).toContain('DWS_WEEKLY');
+		for (const role of ['worker', 'api'] as const) expect(problemNames(role, prod(role, { ...before, CHIRPS_SOURCE: 'live' })), role).toContain('CHIRPS_SOURCE');
+	});
+
+	// Issue #604 R3-C: per-feed fetching retires once CHIRPS reads the copy and DWS the store.
+	it('the worker hands fetches to the fetcher (FEED_FETCHER=sqs, with its queue) while any feed fetches per feed, and needs neither once none does', () => {
+		const cutover = { CHIRPS_SOURCE: 'mirror', DWS_SOURCE: 'store' };
+		// Per-feed fetching on (either flag on the old value): FEED_FETCHER=sqs is required, and so is its queue.
+		for (const flags of [{ CHIRPS_SOURCE: 'chc', DWS_SOURCE: 'live' }, { CHIRPS_SOURCE: 'mirror', DWS_SOURCE: 'live' }, { CHIRPS_SOURCE: 'chc', DWS_SOURCE: 'store' }]) {
+			const label = JSON.stringify(flags);
+			for (const v of [undefined, '', 'inline']) expect(problemNames('worker', prod('worker', { ...flags, FEED_FETCHER: v })), `${label} FEED_FETCHER=${String(v)}`).toContain('FEED_FETCHER');
+			expect(problemNames('worker', prod('worker', { ...flags, FETCH_REQUESTS_QUEUE_URL: undefined })), `${label} without a queue`).toContain('FETCH_REQUESTS_QUEUE_URL');
+			expect(problemNames('worker', prod('worker', flags)), label).toEqual([]); // positive control
+		}
+		// sqs with no fetch-requests queue is refused even after the cutover: every send would fail.
+		expect(problemNames('worker', prod('worker', { ...cutover, FEED_FETCHER: 'sqs', FETCH_REQUESTS_QUEUE_URL: undefined }))).toContain('FETCH_REQUESTS_QUEUE_URL');
+		// Both on the new values: no FEED_FETCHER and no queue, as Terraform then renders the worker (positive control).
+		expect(problemNames('worker', prod('worker', { ...cutover, FEED_FETCHER: undefined, FETCH_REQUESTS_QUEUE_URL: undefined }))).toEqual([]);
+		// ...but never inline, and a queue URL set is still checked.
+		expect(problemNames('worker', prod('worker', { ...cutover, FEED_FETCHER: 'inline', FETCH_REQUESTS_QUEUE_URL: undefined }))).toContain('FEED_FETCHER');
+		expect(problemNames('worker', prod('worker', { ...cutover, FEED_FETCHER: undefined, FETCH_REQUESTS_QUEUE_URL: 'http://localhost:9324/q' }))).toContain('FETCH_REQUESTS_QUEUE_URL');
+		// The fetcher answers on ingest-results only while the queues exist: unset is fine, a local URL is not.
+		expect(problemNames('fetcher', prod('fetcher', { INGEST_RESULTS_QUEUE_URL: undefined }))).toEqual([]);
+		expect(problemNames('fetcher', prod('fetcher', { INGEST_RESULTS_QUEUE_URL: 'http://localhost:9324/q' }))).toContain('INGEST_RESULTS_QUEUE_URL');
 	});
 
 	it('lets the delineation DEM be off or an S3 object (positive control for the DEM_URL refusals)', () => {

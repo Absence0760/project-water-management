@@ -608,9 +608,11 @@ environment's job is the required reviewer (§ 1), not storage.
 | `FETCHER_FUNCTION_NAME` | `fetcher_function_name` (data feeds; the release preflight requires it) |
 | `RENDERER_FUNCTION_NAME` | `renderer_function_name` (report renderer; always an output, even before the function exists, so the preflight requires it) |
 | `RENDERER_ECR_REPOSITORY` | `renderer_ecr_repository` (the renderer image's ECR repository; the release preflight requires it) |
+| `INGEST_FUNCTION_NAME` | `ingest_function_name` (the data mirror's ingest job; always an output, even before the function exists, so the preflight requires it) |
+| `INGEST_ECR_REPOSITORY` | `ingest_ecr_repository` (the ingest image's ECR repository; the release preflight requires it) |
 | `PUBLIC_SITE_URL` | `public_site_url` |
 | `CLOUDFRONT_DOMAIN_NAME` | `cloudfront_domain_name` (not read by the workflows) |
-| `REPORTS_BUCKET`, `PACKS_BUCKET`, `TILES_BUCKET`, `REFERENCE_BUCKET`, `DB_INSTANCE_IDENTIFIER`, `DB_SUBNET_GROUP_NAME`, `DB_SECURITY_GROUP_ID`, `DB_PARAMETER_GROUP_NAME` | the outputs of the same names (not read by the workflows; the bucket names are for the operator's uploads, the `db_*` ones for `restore-db.sh`, which reads them from Terraform) |
+| `REPORTS_BUCKET`, `PACKS_BUCKET`, `TILES_BUCKET`, `REFERENCE_BUCKET`, `MIRROR_BUCKET`, `DB_INSTANCE_IDENTIFIER`, `DB_SUBNET_GROUP_NAME`, `DB_SECURITY_GROUP_ID`, `DB_PARAMETER_GROUP_NAME` | the outputs of the same names (not read by the workflows; the bucket names are for the operator's uploads, the `db_*` ones for `restore-db.sh`, which reads them from Terraform) |
 | secret `AWS_DEPLOY_ROLE_ARN` | `aws_deploy_role_arn` |
 | secret `LAMBDA_FUNCTION_URL` | `lambda_function_url` (debugging only) |
 | `WAF_CAPTCHA_SCRIPT_URL` | `waf_captcha_script_url` (the sign-in CAPTCHA's jsapi.js; empty until `waf_captcha_integration_url` is set) |
@@ -665,6 +667,10 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   § Reports; the renderer only once `renderer_image_tag` is set), the
   renderer's ECR repository, and the reports, packs, tiles and reference
   buckets (§ Evidence packs, § The Map tab).
+- The data mirror (`ingest.tf`, § The data mirror): its private, versioned
+  bucket, the ingest job's ECR repository, its DLQ and its daily schedules
+  (disabled), and the ingest Lambda outside the VPC once `ingest_image_tag`
+  is set.
 - No CORS block on the Function URL (the browser never calls it).
 - SES (above), CloudFront security headers and CSP, PriceClass_All.
 - Background jobs (`jobs.tf`, § Background jobs below): the SQS `jobs`
@@ -713,7 +719,8 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   arrivals, the worker heartbeat, RDS free storage, CloudFront 5xx, API
   Lambda errors and throttles (`lambda-throttles`: the API at its reserved
   concurrency, issue #541), `unhandled_error` and `mail_send_failed`, 13
-  alarm metrics.
+  alarm metrics; 15 once `ingest_image_tag` is set, with the data mirror's
+  two freshness alarms (§ The data mirror).
   Everything else listed above is declared but not created; its metrics and
   log lines are still there, just unpaged. Set `alarm_tier = "full"` in the
   prod tfvars to page on all of it (~$5/month in af-south-1). The RDS event
@@ -847,7 +854,9 @@ the real plan stays an operator step
   `build` job, no AWS credentials) is pushed to ECR and the renderer Lambda
   moved to it; until the operator has created the function (§ Reports) the
   step pushes the image and says what to do, and any other `get-function`
-  error fails the deploy. Then the job calls `/api/health` through
+  error fails the deploy. The data mirror's ingest image goes the same way
+  (built in the `build-ingest` job on GitHub's arm64 runner, no AWS
+  credentials; § The data mirror). Then the job calls `/api/health` through
   CloudFront and fails unless it answers `{"ok":true}`.
 - **Release builds install cold**: no dependency cache is restored in either
   deploy workflow (the workflow guard's `no-cache` rule), since a cache is
@@ -1023,7 +1032,7 @@ Each deployable has its own release line, named `<component>@<semver>`
 
 | Tag | Workflow | Deploys |
 | --- | --- | --- |
-| `backend@X.Y.Z` | `deploy-backend.yml` | migrate Lambda (runs the migrations), then the API, worker and fetcher Lambdas, then the renderer's image (pushed to ECR; the renderer moved to it once it exists), then the health check |
+| `backend@X.Y.Z` | `deploy-backend.yml` | migrate Lambda (runs the migrations), then the API, worker and fetcher Lambdas, then the renderer's and the mirror ingest job's images (pushed to ECR; each function moved to its image once it exists), then the health check |
 | `web@X.Y.Z` | `deploy-frontend.yml` | the engine suite and a 1 600-case soak (a failure stops the release; the result is the build record the report's validation statement prints, model.md §2.10f), then the static build to S3, then a CloudFront invalidation |
 
 **Publishing a GitHub Release is the trigger.** Pushing a tag on its own does
@@ -1294,7 +1303,11 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
   (`FETCH_REQUESTS_QUEUE_URL`) and is done. The queue is FIFO
   (`…-fetch-requests.fifo`, since issue #604), each request in its source
   host's message group (`chc`, `dws`), so the fetcher runs one fetch per
-  host at a time ([architecture.md § Data feeds → Throttling](./architecture.md#data-feeds)).
+  host at a time ([architecture.md § Data feeds → Throttling](./architecture.md#data-feeds)). This per-feed path, the two
+  queues and everything below that serves them, lasts until the cutover
+  ([§ The cutover](#the-cutover)): with `chirps_source = "mirror"` and
+  `dws_source = "store"` every fetch is read in the worker's own job and
+  Terraform removes them.
 - **The API and the worker** both set `FEED_SOURCE=live`, though neither
   fetches: it is also which CHIRPS cell cache a process reads
   (`cacheOrigin`, `backend/src/feeds/cellCacheStore.ts`). The fetcher's
@@ -1468,7 +1481,707 @@ minute later: a record from 1981 (`rnl`) takes about a day per cell set, from
 the fetcher's 885 s, so its fetches are cut short and it takes several times
 that. Feeds over different cells queue behind each other.
 Cells another feed already read come from the cell cache at no cost. The
-copy of our own (#604, draft PR #605) replaces this for history.
+copy of our own ([§ The data mirror](#the-data-mirror)) replaces this for history.
+
+## The data mirror
+
+Issue #604's rule: the app never fetches from someone else's server because a
+feed or a user asked. One scheduled job of ours copies what our projects need
+into our own store, and the app reads only that copy (issue #604 R1-A's
+source register, `docs/data-sources.md`, lists the upstreams). Round 1 built
+the store and the job's infrastructure (`infra/ingest.tf`); Round 2 builds
+the jobs that fill it and the worker's path that reads it, behind
+`CHIRPS_SOURCE` (the flow end to end: [architecture.md § Our copy of the
+rain data](./architecture.md#our-copy-of-the-rain-data)). Until the cutover
+below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
+
+- **The mirror bucket** `water-management-mirror-<account>` (output
+  `mirror_bucket`): private (every public access block on, ACLs off), SSE-S3,
+  TLS only, **versioned**, with noncurrent versions expiring after 30 days
+  (a monthly refresh rewrites ~130 MB, so a month of old versions is cents)
+  and incomplete multipart uploads aborted after a day. It holds one Zarr v3
+  array per product (`rnl/`, `sat/`, `prelim/`, `gefs/<issue>/`,
+  `ecmwf/<issue>/`, `era5l/` and `imerg_late/`), each with its
+  `manifest.json`, and `gefs/index.json` and `ecmwf/index.json` listing the
+  forecast issues held.
+- **The ingest job** `water-management-mirror-ingest`: a Python 3.14
+  container-image Lambda (`ingest/Dockerfile`, handler
+  `lambda_handler.handler`), arm64, 3 GB memory, 2 GB of `/tmp`, 900 s,
+  reserved concurrency 2, **outside the VPC** (it reaches CHC over the
+  internet; no NAT). Environment: `MIRROR_URL=s3://<mirror bucket>`,
+  `FEED_SOURCE=live`, and `INGEST_CONTACT` from `feeds_contact` (the
+  same one contact the fetcher's user agent names, [§ Re-enabling the CHIRPS
+  feeds](#re-enabling-the-chirps-feeds-issue-604); use a role address, every
+  upstream sees it).
+  Its role may get, put, list and delete in the mirror bucket only, send to
+  its DLQ, write its own log group, pull its own image, and publish metrics
+  in the `water-management/Mirror` namespace only. No database; its one
+  secret is IMERG's Earthdata token (§ IMERG Late), read at run time by the
+  ARN in `EARTHDATA_TOKEN_SECRET_ARN`.
+  Its 2 reserved executions come out of the account's Lambda concurrency
+  quota (infra/README.md § Operator steps).
+- **Schedules:** one EventBridge rule per product, daily (`rnl` at 02:00
+  UTC, `sat` at 02:20), invoking the job with `{"product":"rnl","mode":"monthly"}`
+  and the same for `sat`. The monthly mode is idempotent: CHC publishes a
+  month's finals during the next month, usually by the 25th, and a daily run
+  picks the file up the day it appears with one conditional request (a 304)
+  on the other days. A daily run also gives the freshness alarms a datapoint
+  every day, which a run only on the 25th could not (a CloudWatch alarm
+  can't look back a month). The rules exist from the first apply, disabled
+  until `ingest_image_tag` is set. A failed run is not retried (a run that
+  met an HTTP 403 must stop, not retry); its event goes to the
+  `mirror-ingest-dlq` and the next day's run tries again.
+- **What a daily run does** (`ingest/chirps_final.py`, ingest/README.md §
+  The CHIRPS finals job): it takes the product's lease
+  (`ingest-state/<product>/lease.json`, so a backfill and the daily run never
+  write one year's chunks at once), makes one conditional GET of CHC's
+  `byMonth` listing, and diffs it against the manifest by size and time.
+  Each new or rewritten month is downloaded whole, oldest first, at most one
+  file a minute, and only while 6 minutes of the run's 15 remain; the rest
+  wait for the next day. A month's values are hashed, and the revision goes
+  up only when they changed (a re-copy with the same values doesn't count).
+  An HTTP 403 stops the run at once, with no retry. Every run, 304 and
+  failure included, publishes `MirrorLagDays`. A `backfill` event
+  (`{"product":…,"mode":"backfill","month":"YYYY-MM"}`) copies one named
+  month the same way; one that finds the lease held fails with `MirrorBusy`.
+- **The worker reads the copy** (from Round 2): its role may `GetObject` and
+  `ListBucket` on the mirror bucket (`ListBucket` so a missing, all-NaN
+  chunk answers 404, not 403), and the **S3 interface endpoint's policy**
+  (`infra/packs.tf`, `WorkerReadsMirror`) allows the same. Without that
+  endpoint statement every read from the VPC fails with AccessDenied, whatever
+  the role says.
+- **Alarms:**
+  - `mirror-lag-rnl`, `mirror-lag-sat` (essential tier): the job publishes,
+    per product and per run, **namespace `water-management/Mirror`, metric
+    `MirrorLagDays`, dimension `Product` = `rnl` | `sat`**, the days between
+    today (UTC) and the product's manifest `finalThrough`, with
+    `cloudwatch:PutMetricData`. The alarm fires when the lag passes
+    `ingest_lag_alarm_days` (75: a healthy copy runs up to ~56 days behind
+    just before CHC's monthly release) on two days running, **and when no
+    datapoint arrives for two days** (`treat_missing_data = "breaching"`): a
+    job that stopped running, or fails before it measures, alarms too.
+  - `mirror-ingest-errors` and `mirror-ingest-dlq-arrivals` (full tier): a
+    run raised or timed out.
+  - *Runbook.* Read the run in the `/aws/lambda/water-management-mirror-ingest`
+    log group. A run that met HTTP 403 stopped on purpose: don't redrive;
+    write to the upstream's contact (the source register) and wait. A DLQ
+    message needs no redrive either: the next day's run does the same work.
+    Meanwhile feeds keep serving the days already cached.
+- **Turning it on** (after Round 2 makes the job publish `MirrorLagDays`;
+  until then a breaching freshness alarm would fire every day):
+  1. Apply once with `ingest_image_tag` empty: the bucket, repository, DLQ
+     and disabled schedules appear. Run `export-tf-vars.sh infra/` so
+     `INGEST_FUNCTION_NAME` and `INGEST_ECR_REPOSITORY` reach GitHub: the
+     backend release preflight requires both, so no backend release passes
+     its preflight between merging this and that apply.
+  2. Cut a backend release: `deploy-backend.yml` pushes the ingest image as
+     `<version>-<sha12>` and prints a notice with the tag.
+  3. **Set `ingest_image_tag` after the first image push**, in the
+     prod tfvars (`feeds_contact` is already set), and apply: the function, its
+     schedules' targets and its freshness alarms appear. Later releases
+     move the function to their own image; the ECR lifecycle policy never
+     expires the image the tag pins.
+  4. The one-off 1981 backfill ([§ Backfill](#backfill) below), then the
+     switch to the copy: the cutover, below.
+- **The cutover** (Round 3 carries it out; an outline, each step checked
+  before the next, every apply with the operator's go-ahead):
+  1. **The job runs.** `ingest_image_tag` is set (above) and a few daily
+     runs have passed: `MirrorLagDays` has a datapoint per product per day
+     in `water-management/Mirror`, and the `mirror-lag-*` alarms are OK, not
+     INSUFFICIENT_DATA or ALARM. A product still empty reports no lag, so
+     its alarm breaches until the backfill fills it: expect that, and don't
+     cut over past it.
+  2. **Backfill.** Start the backfill state machine (`infra/ingest_backfill.tf`;
+     its month list from `ingest/backfill_plan.py`, one month at a time with
+     at least a minute between them, [§ Backfill](#backfill)) for `rnl` from
+     1981-01 and `sat` from 2000-06.
+     It is resumable: a month already in the manifest with the same values
+     isn't fetched again. Watch the runs' logs; a 403 stops a run on purpose
+     (the alarm runbook above). About $3 in all.
+  3. **Verify.** `ingest/verify_copy.py` ([§ Backfill](#backfill), steps
+     4–5) checks each manifest's coverage and lag, compares random cell-days
+     with CHC's own daily files (bit for bit) and the whole region with
+     dynamical.org's copy. Only a report that ends **PASS** (exit 0) goes
+     on. Check by hand that the preliminary days run to within a few days of
+     today (`prelimThrough` in `prelim/manifest.json`).
+  4. **Switch.** Set `chirps_source = "mirror"` (the worker's
+     `CHIRPS_SOURCE`, with `MIRROR_URL=s3://<mirror bucket>`) in the prod
+     tfvars, apply, and cut a backend release. CHIRPS feeds now read the
+     copy in the worker; the fetcher no longer reads CHC for them. For Data
+     → Data feeds, the same variable sets the **API** Lambda's
+     `CHIRPS_SOURCE` (`infra/lambda.tf`), so the panel shows "Rain data
+     copied to … (final) / … (preliminary)" and **Copy behind** from the
+     next worker tick: the API reads the copy's days from the `mirror_copy`
+     rows the worker records, and needs no `MIRROR_URL` and no access to the
+     bucket. Until that tick the panel says the copy hasn't been checked
+     yet. That first tick also runs the **baseline**, by itself: with no
+     revision of the copy recorded yet, it marks every cached final in the
+     region stale (CHC may have rewritten some before the copy existed,
+     and the copy's `changes` don't go back that far), in parts over a few
+     ticks, and the feeds read them again from the copy over the next
+     fetches. Nothing to do but expect `mirror_revision_partial` then
+     `mirror_revision_applied` in the worker's logs ([data-model.md §
+     Mirror revisions](./data-model.md#mirror-revisions-245_mirror_revisionsql-246_mirror_revision_partssql)).
+  5. **Re-enable** the CHIRPS feeds paused since the 403s (#571), and watch
+     the first day: feeds catch up from the copy in minutes, and none shows
+     **Copy behind** or Failing.
+
+  Rolling back is the flag: `chirps_source = "chc"` and a release. The
+  cache rows the copy filled stay valid (origin `chc`, the same values).
+- **Copy behind, in the app.** Data → Data feeds reads how far the copy
+  runs from `mirror_copy` (the worker's tick records each manifest there
+  when it changes) and marks a CHIRPS feed
+  **Copy behind** when its part of the copy is late: a final product more
+  than 75 days old (the same threshold as `ingest_lag_alarm_days`'s
+  default; the app's is `COPY_FINAL_LAG_DAYS` in `feeds/health.ts`, so
+  change both together) or the preliminary days more than 7. The feed
+  itself counts no failure and needs nothing; the operator's signal is the
+  alarm. A manifest the tick can't read or record logs
+  `mirror_revision_failed` with the error's class and leaves the last
+  recorded days in place; before any tick has recorded the copy the panel
+  says it hasn't been checked yet, and feeds keep their own health.
+- **Cost:** under $1/month in steady state. ~6 GB of Zarr in S3 Standard
+  (~$0.20) plus a month of old versions, a few seconds of Lambda a day and a
+  couple of minutes once a month, a few images in ECR (cents), two custom
+  metrics and the two essential alarms (about $0.30 each past the free
+  tier, in af-south-1). The one-off backfill is about $3.
+
+### The daily ingest (preliminary days)
+
+The fetcher Lambda (`infra/feeds.tf`) has a second mode beside the per-feed
+fetches: an EventBridge rule (`water-management-daily-ingest`, 03:00 UTC,
+after the Python job's runs) invokes it with `{"mode":"daily-ingest"}`, and it
+copies the new CHIRPS preliminary `sat` days into the copy's `prelim/` array
+(`backend/src/ingest/daily.ts`). Per day it reads the file's header and strip
+table and one range over the region's rows (about 3 requests, at most one a
+second); a day with nothing new costs one request. It drops the preliminary
+days the `sat` finals now hold, and `prelimThrough` never runs past a missing
+day. A 403 stops the run, which is not retried (the fetcher's async invoke
+config: 0 retries); the next day's run tries again.
+
+Each run logs `mirror_daily_ingest` (copied, dropped, `prelimThrough`,
+`stopped`, and for a failure a `reason`/`detail` such as `refused`/`HTTP 403`)
+and publishes `MirrorLagDays{Product=prelim}`, today minus the newest `sat`
+day the copy holds, as an embedded metric (no `PutMetricData` grant). The
+alarm `mirror-lag-prelim` (essential tier) fires past
+`daily_ingest_lag_alarm_days` (12) on two days running, or when no datapoint
+arrives for two days.
+
+**Turning it on:** after a backend release with the daily mode is deployed,
+set `daily_ingest_enabled = true` and apply. That enables both rules (this
+one and the GEFS pass's, below), gives the fetcher's role get/put/list/delete
+on the mirror bucket, and creates both freshness alarms; off (the default), none of them exist, so production doesn't alarm for
+a job that isn't running. The fetcher reads `MIRROR_URL` (set by Terraform
+either way). Run the [backfill](#backfill) of `sat` first: without `sat`
+finals the daily ingest starts 30 days back.
+
+### The GEFS pass (the forecast)
+
+A second rule (`water-management-gefs-ingest`, 08:38 UTC and hourly to
+11:38) invokes the fetcher with `{"mode":"daily-ingest","pass":"gefs"}`, and
+it copies the newest complete CHIRPS-GEFS issue into `gefs/<issue>/`
+(`backend/src/ingest/gefs.ts`): today's, else yesterday's, the 16th day's
+file read first so a partly published issue costs one request and is never
+copied. Per file, the header and strip table and one range over the region's
+rows (about 3 requests, at most one a second: about 48 an issue, under a
+minute). The issue's manifest, then `gefs/index.json` (the issues held,
+newest first), are written only once all 16 days are in; the newest 7 issues
+are kept and older arrays deleted, with any array a cut-short run left. A
+run that finds the day's issue held asks CHC nothing. It runs apart from the
+03:00 preliminary pass because CHC issues at about 08:30 UTC, and the two
+passes together could need more than the fetcher's 120 s. The first run is
+at 08:38 so the forecast feeds, due at 08:45, read the day's issue. A 403
+stops the run, not retried, and leaves `gefs/refused.json` in the mirror
+(the time CHC refused): each hourly run is a fresh invocation, so without it
+the next would ask CHC again within the hour. A later run that finds the
+marker dated today asks nothing and logs `stopped: "refused_today"` (with
+`refusedAt`, at warn); the next UTC day's 08:38 run tries again. A marker
+that couldn't be written is logged as `markerFailed` beside the 403. The
+03:00 preliminary pass needs no marker: its rule runs once a day and is
+never retried.
+
+Each run logs `mirror_daily_ingest` with `product: "gefs"` (`copied`,
+`partial` for an issue found half published, `newest`, `stopped`, and for a
+failure `reason`/`detail`, or `refused_today`) and publishes `MirrorLagDays{Product=gefs}`,
+today minus the newest issue held, as an embedded metric. The alarm
+`mirror-lag-gefs` (essential tier) fires at **2 days** (neither today's nor
+yesterday's issue held, so the forecast feeds reading the copy wait, keeping
+the forecast they have) on two days running, or when no datapoint arrives
+for two days. Runbook: the run's log line; a `refused` stopped on purpose
+(as above); `partial` on several runs means CHC is publishing late. It is
+turned on with the daily ingest (`daily_ingest_enabled`): the rule, its
+target and permission, and the alarm exist only then.
+
+### ECMWF (the second forecast)
+
+Issue #604 D17 (R4-C): the ECMWF ENS forecast, copied by the same
+mirror-ingest Lambda (`ingest/ecmwf.py`) and read by `ecmwf_ens` feeds
+(`backend/src/feeds/fromMirrorEcmwf.ts`). The source, its licence and the
+limits we keep to are in [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-ens).
+
+- **What a run does.** The rule `water-management-mirror-ingest-ecmwf`
+  (`infra/ecmwf.tf`) invokes the job with `{"product":"ecmwf","mode":"daily"}`
+  every 20 minutes from 10:00 to 13:40 UTC. ECMWF publishes the 00 UTC run's
+  0.1° files about 09:40 UTC (two hours after the 0.25° ones). A run tries
+  today's issue, else yesterday's: it reads each step's `.index` and then
+  one range request per member for that member's `tp` field (765 requests
+  an issue, one a second, ~1.1 GB), never a whole 4 GB step file. It saves
+  each finished step under `ingest-state/ecmwf/work/<issue>/`, stops
+  starting steps with under 2 minutes of the Lambda's time left, and the
+  next run picks up from there; with all 15 steps in (and 5 minutes left)
+  it writes `ecmwf/<issue>/` (the ensemble mean and p10/p50/p90, 0.1°), its
+  manifest and `ecmwf/index.json`, keeps 7 issues whole and archives older
+  ones as their mean. One run at a time (the `ecmwf` lease): a run that
+  meets the lease ends at once. A run that finds the day's issue held asks
+  ECMWF nothing.
+- **Is the issue out?** A run first asks for the issue's last step's
+  `.index` (ECMWF writes a run's steps in order). Checked 2026-10-27: a key
+  not yet published on the `ecmwf-forecasts` bucket answers **404**
+  (`NoSuchKey`), not 403, so the job reads a 404 there as "not published
+  yet" (`stopped: "not_published"`) and a 404 on a later step as
+  `partial`. S3 also answered **503** now and then to such probes:
+  `polite.py` retries a 503 (or 429) up to **3 times**, honouring
+  `Retry-After` and otherwise waiting 30, 60 and 120 s (one wait over 300 s
+  gives up at once). A probe that still answers 503 after the third retry
+  fails the run with `RetryLater`, having written nothing and no refusal
+  marker; the target doesn't retry it (the failed event goes to the
+  mirror-ingest DLQ), and the next scheduled run, 20 minutes on, asks again
+  (`ingest/test_ecmwf.py` covers both).
+- **A 403** stops the run at once, never retried, writes
+  `ecmwf/refused.json` (the time), and the Lambda errors (the event goes to
+  the mirror-ingest DLQ, which alarms). The day's later runs see the marker
+  and ask nothing (`stopped: "refused_today"`); the next UTC day tries again.
+- **Logs and the alarm.** Each run logs one JSON line, `event:
+  "mirror_ingest"`, `product: "ecmwf"`, with `stopped` (`copied`,
+  `up_to_date`, `deadline`: resumed next run, `partial`: ECMWF hasn't
+  published every step yet, `not_published`, `busy`, `refused`,
+  `refused_today`), `working`, `stepsDone`, `newest` and `lagDays`, and
+  publishes `MirrorLagDays{Product=ecmwf}` (today minus the newest issue
+  held; nothing while the copy holds none). The alarm `mirror-lag-ecmwf`
+  (essential tier) fires at **2 days** on two days running, or when no
+  datapoint arrives for two days. Feeds keep the forecast they have
+  meanwhile.
+- **Turning it on.** Build an ingest image whose `requirements.txt` includes
+  eccodes (`ingest/requirements.c.in`: eccodes and eccodeslib, binary
+  wheels for arm64, no system package), deploy it (`ingest_image_tag`),
+  then set `ecmwf_enabled = true` and apply. Without both, the rule stays
+  disabled with no target and there is no alarm. ECMWF's open data needs no
+  key. The feeds fall due at 14:00 UTC (253_feed_source_ecmwf.sql).
+- **Quantile mapping** (D17, "quantile-mapped to our corrected rain"). Once
+  the copy has archived a few months of issues, the operator fits the
+  mapping offline and writes `ecmwf/qm.json` into the mirror; feeds apply it
+  from their next fetch, and until then they write the model's own values,
+  labelled "not yet calibrated":
+
+  ```bash
+  aws s3 sync s3://<mirror bucket>/ecmwf ./copy/ecmwf --exclude "*/c/1/*" --exclude "*/c/2/*" --exclude "*/c/3/*" && aws s3 sync s3://<mirror bucket>/sat ./copy/sat && aws s3 sync s3://<mirror bucket>/prelim ./copy/prelim && ingest/.venv/bin/python ingest/ecmwf_qm_fit.py --copy ./copy --mirror s3://<mirror bucket> --dry-run
+  ```
+
+  `--dry-run` prints the file; run it again without to write
+  `ecmwf/qm.json`. `--scale` applies a CHIRPS bias correction to the
+  observed rain first, `--regions` fits per region (default the whole
+  region D1), and each group (region × season) needs `--min-samples` pairs
+  (default 2,000). Removing `ecmwf/qm.json` returns feeds to uncalibrated.
+
+### Backfill
+
+The one-off copy of CHC's `byMonth` finals since 1981 (D4) runs through the
+`water-management-mirror-backfill` Step Functions state machine
+(`infra/ingest_backfill.tf`, created once `ingest_image_tag` is set). It
+invokes the ingest Lambda with `{"product","mode":"backfill","month"}` once
+per month, **one month at a time** (a finals chunk holds a whole year, so two
+months of one year written at once would lose one) and **waits 60 s after
+each** (`ingest_backfill_wait_seconds`, D4's one file a minute). A month that
+fails, an HTTP 403 above all, fails the execution; only Lambda's own service
+errors (throttling, a transient API error) are retried. Nothing schedules it:
+the operator starts it.
+
+1. Write the month list for a product with `ingest/backfill_plan.py`; with
+   the product's manifest it leaves out the months already copied:
+   `aws s3 cp s3://<mirror bucket>/rnl/manifest.json /tmp/rnl-manifest.json` (skip on a first run),
+   then `python3 ingest/backfill_plan.py rnl --to <last complete month> --manifest /tmp/rnl-manifest.json > /tmp/rnl-plan.json`.
+   `rnl` starts in 1981-01, `sat` in 2000-06 (its first byMonth file; its daily files start in 1998). Stop at the month before the
+   current one: the daily `monthly` runs write the newest month, and a
+   backfill of the same year at the same moment would race them on that
+   year's chunks.
+2. Start it: `aws stepfunctions start-execution --state-machine-arn <arn> --input file:///tmp/rnl-plan.json`.
+   About 550 `rnl` months take ~1.5 days (a ~40 s download and the wait per
+   month); `sat` about 1 day. One product at a time.
+3. If an execution fails, read the failed month's error in the execution's
+   history and the `mirror-ingest` log group. After a 403, wait (and write to
+   CHC, the source register's contact) before resuming. To resume, repeat
+   steps 1–2: the plan skips the months the manifest now holds.
+4. **Verify the copy** once both products are done, from the workstation
+   with read access to the mirror bucket (`aws sso login` for the prod
+   profile first):
+   `MIRROR_URL=s3://<mirror bucket> INGEST_CONTACT=<role address> ingest/dev.sh verify --out /tmp/verify-copy.md`.
+   It makes `ingest/.venv-verify` from `ingest/requirements-verify.txt` on
+   first use and runs three checks (ingest/README.md § Verify the copy):
+   - **coverage**: each finals manifest holds every month from its first
+     (`rnl` 1981-01, `sat` 2000-06) with no gap, `finalThrough` ends that
+     run, and it is at most 75 days old (`--max-lag-days`);
+   - **CHC**: 200 random cell-days (`--samples`, seeded with `--seed`,
+     spread over both products and every year) read from CHC's own daily
+     GeoTIFFs a pixel at a time, about 600 range requests at one a second
+     (~10 minutes), with the job's User-Agent. Each must be **bit-equal**
+     to the copy; a different one is listed with both values. An HTTP 403
+     stops the run at once (not retried): wait and write to CHC, as for the
+     backfill;
+   - **dynamical.org**: the whole region of `rnl` for one month per decade
+     (`--month YYYY-MM` to choose) against dynamical.org's public copy on
+     AWS Open Data (anonymous, no load on CHC): the land/sea mask must match
+     exactly and wet cell-days (≥ 1 mm) differ by at most 0.2%
+     (`--tolerance`; Round 0 measured a median of 0.067% and a maximum of
+     0.195%). The report gives the median, p99 and maximum per month.
+
+   `--checks coverage,chc` (or any subset) runs fewer. The report is
+   Markdown; the exit status is 0 only when every check run passed. Keep
+   the report with the cutover's record (issue #604).
+5. **Switch** only on a clean report: set `chirps_source = "mirror"` in the
+   prod tfvars, apply with the operator's go-ahead, and cut a backend
+   release (the cutover above, step 4). Then **re-enable the CHIRPS feeds
+   paused since the 403s** (#571), and watch the first day: they catch up
+   from the copy, and none shows Copy behind or Failing. **Roll back** by
+   the flag: `chirps_source = "chc"`, apply and a release; the cache rows
+   the copy filled stay valid. A failed report means no switch: a coverage
+   gap is resumed with steps 1–2; a CHC mismatch or a dynamical.org
+   difference beyond tolerance is a bug in the copy to find before
+   anything reads it (re-copy the month with a `backfill` event once
+   fixed, then verify again).
+
+### IMERG Late
+
+The near-real-time rain for the days CHIRPS has no preliminary value for
+yet (issue #604 R4-D, D16): NASA's IMERG Late daily, `GPM_3IMERGDL` V07,
+about 14 h behind, into `imerg_late/` (0.1°, the last 30 days, each day's
+version in the manifest; `ingest/imerg.py`, ingest/README.md § IMERG Late,
+the source register's [imerg](./data-sources.md#imerg)). It runs in the same
+ingest Lambda, from `infra/imerg.tf`: a rule 4 times a day (04:40, 10:40,
+16:40, 22:40 UTC) sending `{"product":"imerg_late","mode":"recent"}`. A run
+asks CMR which granules exist (no sign-in), then GES DISC's OPeNDAP service
+for region D1 of each day it doesn't hold, with an Earthdata Login token.
+Off until `imerg_enabled`, which needs the token first.
+
+**The token.** Terraform creates the secret `water-management/ingest/earthdata-token`
+with no value and gives the ingest role `GetSecretValue` on it alone; the
+token itself never passes through Terraform, the repo or a chat. Once,
+by the operator:
+
+1. **An Earthdata Login account** at https://urs.earthdata.nasa.gov, on the
+   estate's owner identity (`~/github/project-mgmt/docs/vendor-accounts.md`
+   and its Runbook H; add the registry row).
+2. **Approve GES DISC's application**: Profile → Applications → Authorized
+   Apps → Approve More Applications → "NASA GESDISC DATA ARCHIVE", and agree
+   to its terms. Without it every request answers 401.
+3. **Create a user token**: Profile → Generate Token. It is valid for 60
+   days. Save it to a file only you can read, for example
+   `~/earthdata-token` with mode 0600, and never print it.
+4. **Put it in the secret**, from that file, with the prod profile
+   (`aws sso login` first):
+   `aws secretsmanager put-secret-value --secret-id water-management/ingest/earthdata-token --secret-string file://$HOME/earthdata-token && shred -u $HOME/earthdata-token`.
+   Check without reading it back: `aws secretsmanager describe-secret --secret-id water-management/ingest/earthdata-token --query VersionIdsToStages`
+   shows one `AWSCURRENT` version.
+5. **Check one real CMR granule record first.** The job (`imerg.py`
+   `parse_search`) requires each granule's `RelatedUrls` to hold **exactly
+   one** URL starting `https://opendap.earthdata.nasa.gov/`, and refuses
+   the run (`ImergFormatError`) on none or several. CMR's search needs no
+   sign-in, so look at yesterday's granule:
+   `curl -s "https://cmr.earthdata.nasa.gov/search/granules.umm_json?short_name=GPM_3IMERGDL&version=07&temporal=$(date -u -d yesterday +%Y-%m-%d)T00:00:00Z,$(date -u -d yesterday +%Y-%m-%d)T23:59:59Z" | jq '.items[0].umm | {GranuleUR, urls: [.RelatedUrls[].URL]}'`
+   The `GranuleUR` should name the day (`3IMERG.YYYYMMDD-S000000-E235959.`)
+   and a `V07` tag, and among the URLs exactly one should start
+   `https://opendap.earthdata.nasa.gov/` (the others are the data archive's
+   HTTPS link, the `.xml` and browse links, which the job ignores). Two
+   OPeNDAP links (say a second one for a cloud copy), or one on another
+   host, means `parse_search` needs changing before turning it on.
+6. **Turn it on**: `imerg_enabled = true` in the prod tfvars (with an
+   `ingest_image_tag` whose release has `ingest/imerg.py`), `terraform plan`,
+   then apply with the operator's go-ahead. That creates the rule, its
+   target and permission, and the `mirror-lag-imerg-late` alarm.
+7. **First run** without waiting for the schedule:
+   `aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload '{"product":"imerg_late","mode":"recent"}' /tmp/imerg.json && cat /tmp/imerg.json`
+   should list 10 days `copied`, each with `"version": "V07"`. A 401 means
+   step 2 or the token is wrong (below).
+
+**Rotating the token** every 60 days (put a reminder in the calendar when
+creating it): repeat steps 3 and 4; the next run reads the new value. A run
+that met a 401 or 403 wrote `ingest-state/imerg_late/refused.json` and asks
+nothing more that UTC day; after fixing the token the same day, remove it:
+`aws s3 rm s3://<mirror bucket>/ingest-state/imerg_late/refused.json`.
+
+**Watching it.** Each run publishes `MirrorLagDays{Product=imerg_late}`,
+today minus the newest day held (`prelimThrough`): 1 on a healthy copy (2 before
+the day's file lands). The `mirror-lag-imerg-late` alarm (essential tier)
+fires above `imerg_lag_alarm_days` (default 3; the day's lowest reading) on
+two days running, or when no datapoint arrives for two days. Runbook: the
+`mirror-ingest` log group and its DLQ. `refused_today` in a run's result,
+or an `HTTP 401` error, is almost always the token's 60 days running out;
+a 403 means GES DISC refused us (stop and write to them, as for CHC). An
+`ImergFormatError` means a file or CMR's answer changed shape (a new
+version's layout, say): the run stopped before writing anything wrong.
+When V08 arrives, CMR lists it beside V07 and the job takes the newer
+version for each day, re-copying a held day once (its revision moves only
+if its values changed). A day CMR never lists (or lists only after it has
+left the 10-day search) stays a gap: the readers treat it as not held, and
+the days after it are read as usual, so one missing day blocks nothing.
+
+### ERA5-Land
+
+A second rain source (issue #604 R4-A, D15): ERA5-Land daily total
+precipitation from the Copernicus Climate Data Store, copied as product
+`era5l` on the 0.1° grid by the same `mirror-ingest` function
+(`ingest/era5land.py`; how it works: ingest/README.md § The ERA5-Land job).
+The CDS needs an account and an API key. Terraform creates the secret
+`water-management/ingest/cds-key` with **no value** (`infra/era5land.tf`),
+gives the ingest role `GetSecretValue` on that secret only, and passes its
+ARN (never the key) as `CDS_KEY_SECRET_ARN`. The daily rule (02:40 UTC,
+`{"product":"era5l","mode":"monthly"}`) and the `mirror-lag-era5l` alarm
+exist only with `era5l_enabled = true` (default false), which needs
+`ingest_image_tag` set to a release that has `era5land.py`.
+
+The operator, once:
+
+1. **The CDS account.** Register at cds.climate.copernicus.eu (an ECMWF
+   account) with the project's role mailbox, not a personal address, and
+   record it in the vendor registry (`project-mgmt` docs/vendor-accounts.md).
+2. **Accept the dataset's licence.** Signed in, open the dataset
+   "ERA5-Land hourly data from 1950 to present" (`reanalysis-era5-land`),
+   go to its Download tab, and accept the licence under "Terms of use"
+   (CC-BY). Until it is accepted every request answers 403, which stops the
+   run on purpose.
+3. **Save the key to a file only you can read.** Copy the API key from your
+   CDS profile page into a new file with a text editor (not `echo`, which
+   would put it in the shell history), e.g. `~/cds-key.txt`, holding the key
+   alone, then `chmod 600 ~/cds-key.txt`.
+4. **Put it in the secret**, from that file (the job strips a trailing
+   newline):
+   `aws secretsmanager put-secret-value --secret-id water-management/ingest/cds-key --secret-string file://$HOME/cds-key.txt --region af-south-1 --profile water-management`
+   Check it landed without reading it back:
+   `aws secretsmanager describe-secret --secret-id water-management/ingest/cds-key --query '{changed:LastChangedDate,versions:VersionIdsToStages}' --region af-south-1 --profile water-management`
+   shows a version staged `AWSCURRENT`. Then delete the file:
+   `shred -u ~/cds-key.txt`. To rotate, repeat steps 3–4 with the new key;
+   the next run reads it.
+5. **Turn it on:** `era5l_enabled = true` in the prod tfvars, then `plan`
+   and, with the operator's go-ahead, `apply`. The next 02:40 UTC run
+   submits the newest complete month; the one after collects it.
+6. **Confirm on the first live collection that the CDS file carries
+   `expver`.** The collected month's result (the run's log line and the
+   `collected` entry) has `"preliminary": true` or `false` when it does,
+   and `null` when it doesn't; `ingest-state/era5l/requests.json` shows the
+   same as the month's `preliminary`. The synthetic fixture writes `expver`,
+   but the job has only been checked against it. With `null` the copy
+   can't tell ERA5-Land-T from ERA5-Land, so it re-requests the month every
+   30 days until 180 days after its end (`RECHECK_UNKNOWN_CAP_DAYS`,
+   ingest/README.md § The ERA5-Land job) instead of stopping once a read
+   says consolidated: harmless but more requests, so record what you saw
+   in issue #604, and if it is `null`, find where the CDS now puts the
+   phase.
+
+**Backfill** (`nsf-ncar-era5` on AWS holds ERA5, not ERA5-Land, so it goes
+through the CDS too). Each invocation marks one month wanted and submits it
+while fewer than four requests are queued; every later run, the daily one
+included, keeps submitting wanted months, newest first, as slots free. So
+mark the months once, one synchronous invocation at a time (never async: a
+run that finds another holding the lease fails), e.g. 1981 to 2025 to match
+CHIRPS:
+`for y in $(seq 1981 2025); do for m in 01 02 03 04 05 06 07 08 09 10 11 12; do aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload "{\"product\":\"era5l\",\"mode\":\"backfill\",\"month\":\"$y-$m\"}" --cli-read-timeout 900 --region af-south-1 --profile water-management /dev/null >/dev/null || echo "$y-$m failed"; done; done`
+The daily run alone then drains about four months a day (~550 months in
+four to five months); invoking any backfill month again during the day
+collects and refills sooner. The array grows from 1950 whatever range you
+pick (unwritten chunks cost nothing).
+
+**When it alarms** (`mirror-lag-era5l`, past `era5l_lag_alarm_days`, default
+50; a healthy copy runs 32–45 days behind, since a month's last day comes
+with the next month's request): read the `mirror-ingest` log group's
+`era5l:` lines and `ingest-state/era5l/requests.json` in the mirror bucket
+(`aws s3 cp s3://<mirror bucket>/ingest-state/era5l/requests.json -`).
+- **Refused** (`StopRun`, HTTP 401 or 403): 401 is a wrong or expired key
+  (step 4 again); 403 is the licence not accepted (step 2) or the account
+  blocked (write to ECMWF support). The run writes
+  `ingest-state/era5l/refused.json`, and no run calls the CDS again that UTC
+  day; the next day's run tries again, or delete that object once fixed.
+- **`RequestsFailed`**: a month's request failed five times (backing off 1,
+  2, 4 and 8 days). Its entry's `lastError` says how it ended; once the cause
+  is fixed, delete that month's entry from `requests.json` (download, edit,
+  upload) and the next run submits it again.
+
+**Attribution:** ERA5-Land is CC BY 4.0, and Copernicus's attribution must
+show wherever its values do (docs/data-sources.md § era5-land has the text).
+
+**Cost:** cents a month: the secret (~$0.40), a few seconds of Lambda a day,
+a month's download of a few MB, and the array's chunks (about 1–2 GB in S3 from 1981, under $0.05).
+
+## DWS gauge records
+
+DWS feeds move onto a store of ours too (issue #604 R3-B, design D14; the
+flow end to end: [architecture.md § DWS gauge records](./architecture.md#dws-gauge-records);
+the table: [data-model.md § DWS gauge records](./data-model.md#dws-gauge-records-247_gauge_recordsql)).
+Two Terraform variables, both off by default, so production behaves as
+before until the operator turns them on:
+
+- **`dws_source`** (`live` | `store`, default `live`) sets the worker's
+  `DWS_SOURCE`: `live` sends each DWS feed fetch to the fetcher, which reads
+  DWS's page; `store` reads `gauge_record` inside the worker's fetch job and
+  never asks DWS.
+- **`dws_weekly_enabled`** (default `false`) turns on the weekly pass: the
+  `water-management-dws-weekly` EventBridge rule (daily at 04:00 UTC,
+  `{"mode":"dws-weekly"}` to the fetcher, never retried; each station is
+  re-read once a week), the fetcher's get and put on `dws/` in the mirror
+  bucket, the worker's `DWS_WEEKLY=on` and its put of `dws/stations.json`
+  (the S3 endpoint's policy carries the same statement), and the
+  `water-management-mirror-lag-dws` alarm (`MirrorLagDays{Product=dws}`
+  above `dws_weekly_lag_alarm_days`, default 10, or no datapoint for two
+  days; essential tier).
+
+Release and apply can come in either order. Unset, `CHIRPS_SOURCE`,
+`DWS_SOURCE` and `DWS_WEEKLY` mean what production does today (`chc`,
+`live`, off), so a backend release that reads them starts on the
+environment the last apply left (`backend/src/config/production.ts`); a
+value set is checked, and a wrong one still refuses to start. Unset also
+counts as the old values for the cutover's checks (`FEED_FETCHER=sqs` and
+its queue stay required).
+
+### Turning it on
+
+1. Send DWS the written data request (#604 operator steps): verified daily
+   flow for the project's stations, and **written permission to store the
+   data and show derived results in a commercial tool**.
+2. Deploy a backend release with migration 247 and the `dws-weekly` mode,
+   then apply `dws_weekly_enabled = true` (a `terraform plan` first, and the
+   operator's go-ahead for the apply). The first worker tick writes
+   `dws/stations.json`; the next 04:00 run fetches every listed station
+   (about 2 s each at 1 a second, so ~50 a run inside the fetcher's 120 s;
+   the rest the next day, by last turn, so a station that keeps failing goes
+   behind the others) and the tick after loads them. A station whose page
+   fails (a changed layout, a flow above 100 000 m³/s or a quality code the
+   store refuses, a timeout) is skipped and logged on its own line,
+   `filter message.event = "dws_station_failed"` (`station`, and `detail`
+   naming the check); the others load, and the status is written however
+   the run ends.
+   Check: Logs Insights on the fetcher log group,
+   `filter message.event = "dws_weekly"`, then
+   `filter message.event = "dws_tick"` on the worker's.
+3. Load DWS's reply (below) once it arrives.
+4. Apply `dws_source = "store"`. DWS feeds now read the store; their
+   series don't change (the store's answer is the page's, test
+   `gaugeRecord.db.test.ts`).
+
+**Which stations need the reply first.** A feed reads the store only over
+days some source was asked for (a span): the weekly pass asks for each
+station's newest two years, so a day before that, or in a hole between
+spans, is one nobody has asked DWS for yet. A feed whose window holds such a
+day waits on it (`last_attempt_at` moves, no failure, nothing written, the
+same window next time) rather than reading it as no data and stepping over
+it for good, and fills it once a reply covers it. So before `dws_source =
+"store"`, a station needs DWS's reply covering its feeds' history when any
+of them:
+
+- is still backfilling (its newest day, `last_data_date`, is empty or more
+  than about two years old), or has a `startDate` more than two years back
+  that it hasn't reached: a new feed with no `startDate` starts ten years
+  back, so it too waits on a reply;
+- reads a station that has stopped reporting (its newest day is older than
+  the weekly pass's first window).
+
+A feed that is caught up (its newest day inside the last two years) reads
+the weekly pass's days and needs no reply. To list the stations to ask for:
+`SELECT DISTINCT config->>'station', config->>'startDate', last_data_date
+FROM data_feed WHERE source = 'dws' AND enabled` (as the schema owner),
+those whose `last_data_date` is null or before the first weekly run's
+window.
+
+A run that met HTTP 403, throttling or the ScriptServer page stopped on
+purpose (`message.stopped` is `refused`, `throttled` or `server_error`,
+and `dws/status.json` says `"stale": true`): it is never retried within the
+run, and the next day's run asks again. Feeds reading the store keep the
+days it holds meanwhile; if the 403s persist, the reply is the route
+(D12's trigger to revisit a fixed address is written down there).
+
+### Loading DWS's reply
+
+`pnpm import:dws <file> --reference "<the reply's reference>"` (as the
+schema owner) loads a DWS daily table with source `dws-request`, which a
+feed prefers to the weekly pass for every day both hold. The file is read
+by the feed's own DWS reader: the fixed-width `DATE … QUAL` table, as a
+saved `HyData.aspx` page or plain text, gzipped or not. `--station` when
+the file doesn't name one; `--from`/`--to` when the request asked for more
+days than the reply lists (they then read as no data rather than not yet
+loaded); `--source upload` for a table that isn't DWS's reply. A reply is
+the client's: never commit one. Locally it loads into the dev database
+under origin `fixtures` (what the local feeds read); try it on the invented
+`backend/fixtures/dws/X0H001-reply.synthetic.txt`.
+
+**Production** has no path for it yet: the database is in the private VPC,
+and the migrate Lambda's reference load (`load-reference.yml`,
+§ Reference datasets) knows no `dws` kind. Adding one (the same parser, a
+`dws` kind in `backend/src/geo/referenceLoad.ts` calling
+`gauge_record_write` with origin `dws`) waits on DWS's written answer, which
+decides whether the kind is allowed at all; until then `dws_source` stays
+`live`, or the store holds only the weekly pass's two years.
+
+
+## The cutover
+
+Issue #604 moves every feed off its upstream: CHIRPS and CHIRPS-GEFS onto
+our copy ([§ The data mirror](#the-data-mirror)), DWS onto our store
+([§ DWS gauge records](#dws-gauge-records)). Each has its own flag, flipped
+on its own evidence, in either order:
+
+1. **CHIRPS:** after the backfill and a **PASS** from `verify_copy.py`
+   ([§ Backfill](#backfill), step 5), apply `chirps_source = "mirror"` and
+   cut a backend release. CHIRPS and CHIRPS-GEFS feeds read the copy in the
+   worker's job; DWS still goes to the fetcher.
+2. **DWS:** once DWS's written answer allows it and its reply is loaded
+   ([§ Turning it on](#turning-it-on), step 4), apply `dws_source = "store"`.
+
+While either flag is on its old value (`chc`, `live`), per-feed fetching
+stays exactly as [§ Data feeds](#data-feeds) describes, and the worker
+still refuses to send a source the copy or store serves (a CHIRPS or GEFS
+fetch never reaches SQS with `chirps_source = "mirror"`, nor a DWS fetch
+with `dws_source = "store"`; `backend/src/jobs/handlers/feed-fetch.ts`).
+
+**What the second flag removes.** With both on the new values,
+`local.per_feed_fetching` (`infra/feeds.tf`) is false, and the same apply
+plans to destroy:
+
+- the `fetch-requests` and `ingest-results` queues, their DLQs and redrive
+  policies;
+- the fetcher's SQS trigger and the worker's `ingest-results` trigger, and
+  both roles' `feed-queues` policies;
+- the SQS endpoint's `WorkerSendsFetchRequests` statement (`infra/jobs.tf`);
+- the alarms on them: the two DLQ-arrival alarms (essential tier, so it
+  drops from 13 alarm metrics to 11), `fetch-requests-age` and
+  `feed-fetch-failed` with its log filter (only the per-feed mode logs it);
+- the worker's `FEED_FETCHER` and `FETCH_REQUESTS_QUEUE_URL`, and the
+  fetcher's `INGEST_RESULTS_QUEUE_URL`.
+
+The fetcher Lambda stays, for its scheduled modes (the daily ingest, the
+GEFS pass and the weekly DWS pass), with its errors and throttles alarms.
+Read the plan before the apply: it should destroy only the list above and
+change the two functions' environments. Check that both queues are empty
+first (`ApproximateNumberOfMessages` 0 on `fetch-requests` and
+`ingest-results`; an answer still in flight is lost with its queue, and the
+feed simply fetches again from the copy or store). **The running backend
+release must include issue #604 R3-C** before this apply: its production
+check accepts a worker with no `FEED_FETCHER` once both flags are on the
+new values, and a fetcher with no `INGEST_RESULTS_QUEUE_URL`
+(`backend/src/config/production.ts`); an older release refuses to start
+both Lambdas. With it deployed, apply with the operator's go-ahead; no
+further release is needed. On Lambda a live request from the API
+or worker is refused whatever the configuration
+(`backend/src/feeds/http.ts`), so a mistake fails a fetch job loudly
+("this worker may not fetch … from the source itself") rather than asking
+CHC or DWS from an address they don't know.
+
+**Rollback.** Flip either flag back (`chirps_source = "chc"` or
+`dws_source = "live"`) and apply: the queues, triggers, grants, alarms and
+the worker's `FEED_FETCHER=sqs` come back in that apply, and feeds of that
+source fetch through the fetcher again from their next fetch. New queues
+have new URLs, which the same apply hands both functions. The cell cache and
+the store stay valid either way.
+
+**Afterwards** (stage 2, not built): once both flags have run in production
+for 30 days with no rollback, the per-feed code is deleted
+([followups.md § The rain data copy](./followups.md#the-rain-data-copy)).
 
 ## Alert emails
 
@@ -1784,22 +2497,45 @@ behaviour with its own OAC, `infra/s3_cloudfront.tf`):
 
 The local commands leave the files in `~/.cache/water-management-tiles/`.
 Upload them with your own SSO session (no workflow or Lambda can write the
-bucket). **An upload is itself the release** of that file: the `/tiles/*`
-behaviour serves whatever is in the bucket to anyone, by byte range,
-whether or not the frontend variable is set. So upload `terrain.pmtiles`
-only once the Art. 6(c) sentence is live in the app's legal text; the
-frontend gate and `delineation_dem` come after that, not instead of it.
-Then invalidate the cache, since CloudFront keeps byte ranges of
-the old file and the PMTiles reader notices a replaced archive by its
-`ETag`:
+bucket), through `backend/scripts/tiles-upload.ts --production`: it puts
+the archive in the tiles bucket, keeps the original download in the
+reference bucket under `originals/<archive>/`, and writes the archive's
+provenance file (its SHA-256, the upstream's version, ETag and
+Last-Modified, the originals' hashes) to `reference/tiles/`, then prints
+the `load-reference.yml` run that records it ([§ Reference
+datasets](#reference-datasets), Which file is loaded). `--dry-run` first
+shows what it would put and record, and uploads nothing. **An upload is
+itself the release** of that file: the `/tiles/*` behaviour serves whatever
+is in the bucket to anyone, by byte range, whether or not the frontend
+variable is set. So upload `terrain.pmtiles` only once the Art. 6(c)
+sentence is live in the app's legal text; the frontend gate and
+`delineation_dem` come after that, not instead of it. Then invalidate the
+cache, since CloudFront keeps byte ranges of the old file and the PMTiles
+reader notices a replaced archive by its `ETag`. From `backend/`, with the
+buckets from `terraform output`:
 
 ```bash
-aws s3 cp ~/.cache/water-management-tiles/south-africa.pmtiles s3://<tiles_bucket>/tiles/south-africa.pmtiles --cache-control "public, max-age=86400" --profile water-management
-aws s3 sync ~/.cache/water-management-tiles/fonts/ s3://<tiles_bucket>/tiles/fonts/ --cache-control "public, max-age=604800" --profile water-management
-aws s3 cp ~/.cache/water-management-tiles/terrain.pmtiles s3://<tiles_bucket>/tiles/terrain.pmtiles --cache-control "public, max-age=86400" --profile water-management
-aws s3 cp ~/.cache/water-management-tiles/water.pmtiles s3://<tiles_bucket>/tiles/water.pmtiles --cache-control "public, max-age=86400" --profile water-management
+export AWS_PROFILE=water-management AWS_REGION=af-south-1
+T="--production --tiles-bucket <tiles_bucket> --reference-bucket <reference_bucket>"
+C=~/.cache/water-management-tiles
+pnpm exec tsx scripts/tiles-upload.ts $T $C/south-africa.pmtiles --version <build YYYYMMDD> --original $C/south-africa.pmtiles --dry-run
+pnpm exec tsx scripts/tiles-upload.ts $T $C/south-africa.pmtiles --version <build YYYYMMDD> --original $C/south-africa.pmtiles
+pnpm exec tsx scripts/tiles-upload.ts $T --fonts $C/fonts --version <FONTS_REF> --original $C/basemaps-assets-<FONTS_REF>.tar.gz
+pnpm exec tsx scripts/tiles-upload.ts $T --terrain $C/terrain.pmtiles --version <Mapterhorn version> --original $C/terrain.pmtiles
+pnpm exec tsx scripts/tiles-upload.ts $T --water $C/water.pmtiles --version 1.5 --upstream <one GSW tile's URL> $(for f in $C/gsw/occurrence_*.tif; do printf -- '--original %s ' "$f"; done)
+# each prints its own record run, e.g.:
+gh workflow run load-reference.yml -f kind=tiles -f key=reference/tiles/terrain-<date>.json -f sha256=<hex> -f dataset=terrain
 aws cloudfront create-invalidation --distribution-id <cloudfront_distribution_id> --paths '/tiles/*' --profile water-management
 ```
+
+The basemap's and the relief's original download *is* the extract (`pmtiles
+extract` reads the region's byte ranges of an archive of hundreds of GB, which
+can't be kept), so the extract goes in as its own original: the upstream
+deletes old daily builds, and the tiles bucket keeps a replaced archive only
+14 days. One PutObject takes at most 5 GiB; past that (no archive is near it
+today) the script refuses and says to use `aws s3 cp`. Each upload also
+leaves `<file>.provenance.json` beside the file, so a later upload of the
+same bytes records the same provenance without the flags.
 
 Then set the repository variables in the table (`gh variable set
 PUBLIC_TILES_URL --body /tiles/south-africa.pmtiles`, and so on) and
@@ -1895,13 +2631,26 @@ already accepted were copied into the project and don't change either way.
 
 **Which file is loaded.** Each load records the object's key and SHA-256
 with the dataset, in the same transaction (`reference_load`, migration 192;
-`geo/referenceOrigin.ts`), so the record outlives the Actions log. The
+`geo/referenceOrigin.ts`), so the record outlives the Actions log. The tile
+archives are recorded there too (migration 248, kind `tiles`, one row per
+archive): our SHA-256 of the archive, the upstream's URL, version, ETag and
+Last-Modified, the licence it is used under, and the originals kept in the
+bucket with their hashes. `tiles-upload.ts --production` writes the
+provenance file, and the workflow's `tiles` kind records it (`-f
+kind=tiles -f dataset=<basemap|fonts|terrain|water>`, no source; the
+record names the archive and adds no data). Locally `tiles-upload.ts`
+records it straight into the dev database. The Map shows the recorded
+version and dates on the elevation model's and the water occurrence's
+dataset lines (`app_reference_provenance()`, the app's only read). The
 workflow's log prints the file it loaded and the one it replaced (key,
 SHA-256 and when it was loaded): that replaced file is the one to restore
 to undo the load. A local `pnpm import:*` of the same label names no
 bucket file, so it deletes the record rather than leave it describing data
-that is gone. The table is owner-only (the app never reads it); to read it
-outside a load, `SELECT * FROM reference_load` as the schema owner.
+that is gone. The table is owner-only (the app reads only versions and
+dates, through `app_reference_provenance()`); to read it outside a load,
+run the `reference-provenance` check ([§ Read-only production
+checks](#read-only-production-checks)), or locally `SELECT * FROM
+reference_load` as the schema owner (`pnpm dev:db:psql`).
 
 Only what [maps.md § Sources](./maps.md#sources) marks allowed loads. The
 workflow offers those kinds alone, its gate refuses the rest, and the
@@ -2034,6 +2783,35 @@ migrating: the migrate Lambda's reserved concurrency of 1 turns the second
 invocation away (the workflow fails with a throttle, nothing is loaded), and
 a load writes only its own dataset's rows, so retrying afterwards is safe.
 
+#### Refreshing a dataset
+
+Reference data changes yearly at most, and most of it never. Check
+politely before refreshing (one request, a conditional one where the
+upstream supports it, with your own contact in the User-Agent; a 403 means
+stop and find out why, never retry: [data-sources.md § The
+rule](./data-sources.md#the-rule)). Each refresh keeps the original
+download in the reference bucket under `originals/<dataset>/`, named by
+version, so the dataset can be rebuilt without the upstream. A tile
+archive's originals go up with `tiles-upload.ts`; a table dataset's with
+`aws s3 cp <file> s3://<reference_bucket>/originals/<kind>/<version>-<file>
+--profile water-management` before its load (their hashes are not yet
+recorded in `reference_load`, only the loaded file's). The last recorded
+ETag and Last-Modified: the `reference-provenance` check ([§ Read-only
+production checks](#read-only-production-checks)), or the archive's
+`<file>.provenance.json` beside your cached copy.
+
+| Dataset | Where it comes from | Is there a new version? | Rebuild and upload | Verify |
+| --- | --- | --- | --- | --- |
+| `basemap` (tiles) | Protomaps daily builds of OpenStreetMap, `build.protomaps.com/<YYYYMMDD>.pmtiles` | any day: pick a recent build, `curl -sI -A "<you>" https://build.protomaps.com/<YYYYMMDD>.pmtiles` (one HEAD); refresh when the map is visibly out of date | `TILES_BUILD=<YYYYMMDD> pnpm dev:tiles:fetch`, then the `tiles-upload.ts --production` line above | the Map's basemap draws; the record's version is the build |
+| `fonts` (tiles) | `protomaps/basemaps-assets` at a pinned commit (`FONTS_REF` in `bin/tiles-dev.sh`) | `gh api repos/protomaps/basemaps-assets/commits/main --jq .sha` (one request); refresh only for missing glyphs | `TILES_FONTS_REF=<sha> pnpm dev:tiles:fonts` (records the archive's SHA-256 in `bin/source-checksums.sha256`: commit it), then the fonts line | labels draw; `tiles/fonts/OFL.txt` is served |
+| `terrain` (tiles) | Mapterhorn's planet build, `download.mapterhorn.com/planet.pmtiles` (Copernicus GLO-30) | `curl -sI -H 'If-None-Match: <recorded ETag>' https://download.mapterhorn.com/planet.pmtiles`: 304 is unchanged; the version is in `download_urls.json` | `pnpm dev:tiles:terrain`, then the terrain line; then the invalidation | Relief draws; a delineation's dataset line shows the new version |
+| `water` (tiles) | JRC Global Surface Water occurrence tiles (`WATER_SOURCE`, versioned folder and file names) | the GSW download page names the latest version (v1.5, 1984–2024 today); a new one is a new folder | `WATER_SOURCE=<new folder> pnpm dev:tiles:water` (new tiles are recorded in `bin/source-checksums.sha256`: commit them), then the water line with the new `--version` | Trace a dam's sheet shows the new version |
+| `rivers` | HydroRIVERS v1.0, `data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_af_shp.zip` (static) | `curl -sI -H 'If-None-Match: <recorded ETag>' <zip URL>`: 304 is unchanged; a v2 would be a new file name | `pnpm dev:tiles:rivers`, `gzip -k rivers.geojson`, keep the zip under `originals/rivers/`, load as in the table above | the load's counts; the River network layer |
+| `land-cover` | ESA WorldCover 10 m 2021 v200 (final; no later version announced) | the WorldCover site's data-access page | the operator's tiles → `pnpm import:land-cover … --out`, keep the tiles under `originals/land-cover/`, load | the load's counts; a unit's cultivated-area proposal |
+| `evaporation` | dPET on data.bris (DOI-versioned; new years appended) | the dataset page lists its years; refresh when the years you average over change | `pnpm import:evaporation:fetch <first> <last>` (the yearly files are 2.4 GB each and deleted once reduced: keep the reduced totals, not the NetCDF, under `originals/evaporation/`), then `--out` and load | Settings → Evaporation from the map shows the new dataset |
+| `gazetteer` | GeoNames country dumps, `download.geonames.org/export/dump/<CC>.zip` | `curl -sI -z <last load's date> https://download.geonames.org/export/dump/ZA.zip`: 304 is unchanged; refresh a few times a year at most | the gazetteer steps above; keep the seven zips under `originals/gazetteer/` | the Map's search finds the places listed above |
+| `map-grid` | a file from the client (WAAS, 2007): no upstream | never, unless the client sends a new surface | the MAP grid steps above; keep the surface as received under `originals/map-grid/` | the MAP grid layer and its credit line |
+
 A large load squeezes the database's memory. The first production loads
 (2026-10-05: HydroRIVERS, 89 454 reaches, then WorldCover, 5.4 million cells,
 back to back) took the 1 GiB `db.t4g.micro` from about 140 MB freeable to
@@ -2148,6 +2926,22 @@ water-management`; the answer is written to the named file, then printed:
   ```
 
   `count: 0`: nobody was grandfathered. Any rows: step 18.
+
+- **`reference-provenance`** (issue #604 R3-D, [§ Reference
+  datasets](#reference-datasets), Refreshing a dataset): what each
+  reference dataset and tile archive was last loaded from. Each row is
+  `kind`, `dataset`, `source_sha256` (our hash of the file loaded or the
+  archive served), `upstream_version`, `upstream_etag`,
+  `upstream_last_modified`, `originals` (how many original downloads are
+  kept for it) and `loaded_at`; never a bucket key.
+
+  ```bash
+  aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"reference-provenance"}' --cli-read-timeout 300 --region af-south-1 --profile water-management reference-provenance.json && jq . reference-provenance.json
+  ```
+
+  Use the ETag and Last-Modified in a refresh's conditional request; a
+  `tiles` row with no version or no originals was uploaded without them,
+  so the next refresh of it should pass `--version` and `--original`.
 
 Adding a check is a code change: an entry in the registry (a `SELECT`
 with no parameters, its columns from the allowlist its unit test holds), a

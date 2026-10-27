@@ -171,49 +171,71 @@ resource "aws_lambda_function" "worker" {
   }
 
   environment {
-    variables = {
-      # DATABASE_URL, AUTH_JWT_SECRET (run stamps) and ALERTS_TOKEN_SECRET
-      # are in the runtime secret, never here: this block is readable by any
-      # GetFunctionConfiguration caller (secrets.tf).
-      RUNTIME_SECRET_ARN     = aws_secretsmanager_secret.runtime["worker"].arn
-      RUNTIME_SECRET_VERSION = aws_secretsmanager_secret_version.runtime["worker"].version_id
-      DB_POOL_MAX            = local.worker_db_pool_max
-      NODE_EXTRA_CA_CERTS    = local.rds_ca_path
-      # No JOB_TRANSPORT / JOBS_QUEUE_URL: only the API wakes the worker; the
-      # worker never sends to the jobs queue (no sqs:SendMessage on it, above).
-      # Data feeds (feeds.tf): no internet here, so fetches go to the fetcher.
-      FEED_FETCHER             = "sqs"
-      FETCH_REQUESTS_QUEUE_URL = aws_sqs_queue.fetch_requests.url
-      # Never a fetch here (FEED_FETCHER=sqs); it is the cell cache the
-      # worker's runs read, the same `chc` the API's read (lambda.tf).
-      FEED_SOURCE = "live"
-      # Server-side reports (reports.tf): no Chromium here, so renders go to
-      # the renderer; the worker records them and emails the link (SES).
-      REPORT_RENDERER           = "sqs"
-      RENDER_REQUESTS_QUEUE_URL = aws_sqs_queue.render_requests.url
-      STORAGE                   = "s3"
-      REPORTS_BUCKET            = aws_s3_bucket.reports.bucket
-      PACKS_BUCKET              = aws_s3_bucket.packs.bucket
-      MAIL_TRANSPORT            = "ses"
-      MAIL_FROM                 = "${var.mail_from_display_name} <${local.mail_from_address}>"
-      SITE_URL                  = local.site_origin
-      SES_CONFIGURATION_SET     = aws_sesv2_configuration_set.main.configuration_set_name
-      # The operator's copy of the licence-record notices (161_licence_record,
-      # backend/src/licence/record.ts): the mailbox that gets the alarms.
-      OPERATOR_EMAIL = var.budget_alert_email
-      # Alert emails (WP-2.13, docs/deployment.md § Alerts). Only the worker
-      # signs unsubscribe links (ALERTS_TOKEN_SECRET, in its runtime secret);
-      # the API checks a link by its hash alone. ALERTS_ENABLED is the kill
-      # switch (runbook: alert storm).
-      ALERTS_ENABLED   = var.alerts_enabled ? "true" : "false"
-      ALERTS_DAILY_CAP = "5"
-      # SES bounces and complaints (ses.tf): a record is read as one only
-      # when it came from this queue (lambda-worker.ts fromMailEventsQueue).
-      MAIL_EVENTS_QUEUE_ARN = aws_sqs_queue.mail_events.arn
-      # Catchment delineation's `delineate` job (map_data.tf worker_dem): the
-      # same DEM as the API's, empty while delineation_dem is off.
-      DEM_URL = var.delineation_dem ? "s3://${aws_s3_bucket.tiles.bucket}/${local.dem_key}" : ""
-    }
+    variables = merge(
+      {
+        # DATABASE_URL, AUTH_JWT_SECRET (run stamps) and ALERTS_TOKEN_SECRET
+        # are in the runtime secret, never here: this block is readable by any
+        # GetFunctionConfiguration caller (secrets.tf).
+        RUNTIME_SECRET_ARN     = aws_secretsmanager_secret.runtime["worker"].arn
+        RUNTIME_SECRET_VERSION = aws_secretsmanager_secret_version.runtime["worker"].version_id
+        DB_POOL_MAX            = local.worker_db_pool_max
+        NODE_EXTRA_CA_CERTS    = local.rds_ca_path
+        # No JOB_TRANSPORT / JOBS_QUEUE_URL: only the API wakes the worker; the
+        # worker never sends to the jobs queue (no sqs:SendMessage on it, above).
+        # Data feeds (feeds.tf): no internet here, so a per-feed fetch goes to
+        # the fetcher (FEED_FETCHER / FETCH_REQUESTS_QUEUE_URL, set below only
+        # while per-feed fetching is on). Never a fetch here; FEED_SOURCE is
+        # the cell cache the worker's runs read, the same `chc` the API's read
+        # (lambda.tf), and a live request on this Lambda is refused
+        # (backend/src/feeds/http.ts).
+        FEED_SOURCE = "live"
+        # Which CHIRPS a feed fetch reads (issue #604): chc sends it to the
+        # fetcher above; mirror reads our copy in the fetch job itself, from
+        # the mirror bucket (ingest.tf; the role's GetObject and the S3
+        # endpoint's statement are there). chc until the cutover (R3-C,
+        # docs/deployment.md § The cutover).
+        CHIRPS_SOURCE = var.chirps_source
+        MIRROR_URL    = "s3://${aws_s3_bucket.mirror.bucket}"
+        # Where a DWS feed fetch reads (issue #604 R3-B): live sends it to the
+        # fetcher; store reads gauge_record in the fetch job. With the weekly
+        # pass on, the worker writes its station list to the mirror bucket and
+        # loads what the pass fetched (feeds.tf, DWS_WEEKLY).
+        DWS_SOURCE = var.dws_source
+        DWS_WEEKLY = var.dws_weekly_enabled ? "on" : "off"
+        # Server-side reports (reports.tf): no Chromium here, so renders go to
+        # the renderer; the worker records them and emails the link (SES).
+        REPORT_RENDERER           = "sqs"
+        RENDER_REQUESTS_QUEUE_URL = aws_sqs_queue.render_requests.url
+        STORAGE                   = "s3"
+        REPORTS_BUCKET            = aws_s3_bucket.reports.bucket
+        PACKS_BUCKET              = aws_s3_bucket.packs.bucket
+        MAIL_TRANSPORT            = "ses"
+        MAIL_FROM                 = "${var.mail_from_display_name} <${local.mail_from_address}>"
+        SITE_URL                  = local.site_origin
+        SES_CONFIGURATION_SET     = aws_sesv2_configuration_set.main.configuration_set_name
+        # The operator's copy of the licence-record notices (161_licence_record,
+        # backend/src/licence/record.ts): the mailbox that gets the alarms.
+        OPERATOR_EMAIL = var.budget_alert_email
+        # Alert emails (WP-2.13, docs/deployment.md § Alerts). Only the worker
+        # signs unsubscribe links (ALERTS_TOKEN_SECRET, in its runtime secret);
+        # the API checks a link by its hash alone. ALERTS_ENABLED is the kill
+        # switch (runbook: alert storm).
+        ALERTS_ENABLED   = var.alerts_enabled ? "true" : "false"
+        ALERTS_DAILY_CAP = "5"
+        # SES bounces and complaints (ses.tf): a record is read as one only
+        # when it came from this queue (lambda-worker.ts fromMailEventsQueue).
+        MAIL_EVENTS_QUEUE_ARN = aws_sqs_queue.mail_events.arn
+        # Catchment delineation's `delineate` job (map_data.tf worker_dem): the
+        # same DEM as the API's, empty while delineation_dem is off.
+        DEM_URL = var.delineation_dem ? "s3://${aws_s3_bucket.tiles.bucket}/${local.dem_key}" : ""
+      },
+      # Per-feed fetching (feeds.tf local.per_feed_fetching): until CHIRPS reads
+      # the copy and DWS the store, a CHC or DWS fetch goes to the fetcher.
+      local.per_feed_fetching ? {
+        FEED_FETCHER             = "sqs"
+        FETCH_REQUESTS_QUEUE_URL = one(aws_sqs_queue.fetch_requests[*].url)
+      } : {}
+    )
   }
 
   depends_on = [
@@ -411,14 +433,18 @@ data "aws_iam_policy_document" "sqs_endpoint" {
       identifiers = [aws_iam_role.worker_lambda.arn]
     }
   }
-  # Data feeds (feeds.tf): the worker asks the fetcher.
-  statement {
-    sid       = "WorkerSendsFetchRequests"
-    actions   = ["sqs:SendMessage"]
-    resources = [aws_sqs_queue.fetch_requests.arn]
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.worker_lambda.arn]
+  # Data feeds (feeds.tf): the worker asks the fetcher, while per-feed
+  # fetching is on (local.per_feed_fetching).
+  dynamic "statement" {
+    for_each = aws_sqs_queue.fetch_requests
+    content {
+      sid       = "WorkerSendsFetchRequests"
+      actions   = ["sqs:SendMessage"]
+      resources = [statement.value.arn]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.worker_lambda.arn]
+      }
     }
   }
 }

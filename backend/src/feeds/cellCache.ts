@@ -12,8 +12,18 @@
 // just those cells' values (sources/chirps.ts fetchChirpsCells), the worker
 // merges them into the cache, and the feed's days are its weighted mean
 // computed from the cache (seriesFromCache), with gridMean's own arithmetic.
+//
+// Other products of our copy share the cache (252_cache_products.sql): ERA5-
+// Land (`era5l`) and IMERG Late (`imerg_late`), each on its own 0.1° grid.
+// A row's cell is a cell of its product's global grid (productCell): a
+// feed's cells are 0.05° CHIRPS cells, and each maps to the 0.1° cell that
+// contains it. The weighting is the feed's, cell by cell: a 0.1° cell holding
+// several of the feed's 0.05° cells counts once for each, with each one's
+// weight (seriesFromCache), so it weighs the sum of their weights, which is
+// the area of the feed's footprint inside it.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
-import { CHIRPS_CELL_DEG, type WeightedCell } from './config.js';
+import { productStep } from '../mirror/grid.js';
+import { CHIRPS_CELL_DEG, type ChirpsDailyProduct, type WeightedCell } from './config.js';
 import { DAY_FINAL_ONLY, DAY_READ, DAY_SKIP, type GridDays, meanOf, type NoDataPolicy } from './sources/chirps.js';
 import { pixelOf } from './sources/tiff.js';
 
@@ -22,11 +32,15 @@ export const CHC_ROWS = 2400;
 export const CHC_COLS = 7200;
 const CHC_GRID = { width: CHC_COLS, height: CHC_ROWS, originLon: -180, originLat: 60, scaleLon: CHIRPS_CELL_DEG, scaleLat: CHIRPS_CELL_DEG };
 
-/** One cell of the CHC grid. */
+/** One cell of a global grid (CHC's 0.05° one unless a product says otherwise). */
 export interface GridCell {
 	row: number;
 	col: number;
 }
+
+/** The products the cell cache keeps (252): CHIRPS's two finals, and the 0.1° rain products of our copy. */
+export const CACHE_PRODUCTS = ['sat', 'rnl', 'era5l', 'imerg_late'] as const;
+export type CacheProduct = ChirpsDailyProduct | 'era5l' | 'imerg_late';
 
 /**
  * The CHC cell holding a point, by the same rule the reader uses on the real
@@ -40,17 +54,32 @@ export function chcCell(lat: number, lon: number): GridCell {
 	return px;
 }
 
+/**
+ * The cell of `product`'s global grid holding a point: chcCell for a CHIRPS
+ * product; for a coarser grid, the cell holding the point's CHC cell (both
+ * grids share their north-west corner and the step is a whole number of CHC
+ * cells, so the 0.05° cell (r, c) lies in the 0.1° cell (⌊r/2⌋, ⌊c/2⌋)), so a
+ * point on a 0.1° edge goes the way its 0.05° cell does.
+ */
+export function productCell(product: CacheProduct, lat: number, lon: number): GridCell {
+	const c = chcCell(lat, lon);
+	const k = Math.round(productStep(product) / CHIRPS_CELL_DEG);
+	return k === 1 ? c : { row: Math.floor(c.row / k), col: Math.floor(c.col / k) };
+}
+
 const round9 = (x: number) => Number(x.toFixed(9));
 /** A cell's centre: what the fetcher reads it at, so any grid on the 0.05° lattice (the fixtures' too) gives that cell. */
-export const cellCentre = (c: GridCell) => ({ lat: round9(60 - (c.row + 0.5) * CHIRPS_CELL_DEG), lon: round9(-180 + (c.col + 0.5) * CHIRPS_CELL_DEG) });
+export const cellCentre = (c: GridCell) => gridCellCentre(c, CHIRPS_CELL_DEG);
+/** The centre of a cell of the global grid of `step` (a product's: grid.ts productStep). */
+export const gridCellCentre = (c: GridCell, step: number) => ({ lat: round9(60 - (c.row + 0.5) * step), lon: round9(-180 + (c.col + 0.5) * step) });
 
 const byRowCol = (a: GridCell, b: GridCell) => a.row - b.row || a.col - b.col;
 
-/** A feed's cells as grid cells, each once, by row then column: the order the cache's merge locks them in. */
-export function uniqueCells(cells: readonly { lat: number; lon: number }[]): GridCell[] {
+/** A feed's cells as cells of `product`'s grid (CHC's by default), each once, by row then column: the order the cache's merge locks them in. */
+export function uniqueCells(cells: readonly { lat: number; lon: number }[], product: CacheProduct = 'sat'): GridCell[] {
 	const seen = new Map<string, GridCell>();
 	for (const c of cells) {
-		const g = chcCell(c.lat, c.lon);
+		const g = productCell(product, c.lat, c.lon);
 		seen.set(`${g.row},${g.col}`, g);
 	}
 	return [...seen.values()].sort(byRowCol);
@@ -120,7 +149,8 @@ export function planFetch(cells: readonly GridCell[], view: CacheView, window: {
 }
 
 /**
- * A feed's days over `window`, from the cache: each day the weighted mean of
+ * A feed's days over `window`, from the cache of `product` (its CHIRPS
+ * product, or `era5l` / `imerg_late`, each cell read at its productCell): each day the weighted mean of
  * the feed's own cells (in its config's order, with its weights) by gridMean's
  * arithmetic (sources/chirps.ts meanOf), so the refusals (a listed sea cell),
  * the sea mask (skipNoData) and the rounding are the ones a fetch from the
@@ -128,26 +158,57 @@ export function planFetch(cells: readonly GridCell[], view: CacheView, window: {
  * preliminary is preliminary, and the rest is fetchChirps' shape: trailing
  * empty days dropped, `finalThrough` the leading run of final days.
  */
-export function seriesFromCache(cells: readonly WeightedCell[], view: CacheView, window: { start: string; end: string }, noData?: NoDataPolicy): GridDays {
-	const keys = cells.map((c) => chcCell(c.lat, c.lon));
-	const days = windowDays(window);
-	const got = days.map((day) => {
-		const cds = keys.map((k) => cellDay(view, k, day));
-		if (cds.some((cd) => cd.v === null)) return { v: null, prelim: false };
-		const v = meanOf(
-			cds.map((cd) => (Number.isNaN(cd.v) ? null : cd.v)),
-			cells,
-			noData
-		);
-		return { v, prelim: cds.some((cd) => !cd.final) };
-	});
+export function seriesFromCache(
+	cells: readonly WeightedCell[],
+	view: CacheView,
+	window: { start: string; end: string },
+	noData?: NoDataPolicy,
+	product: CacheProduct = 'sat'
+): GridDays {
+	// Each of the feed's cells, with its own weight, reads its product cell: on a coarser grid several read the same one.
+	const keys = cells.map((c) => productCell(product, c.lat, c.lon));
+	// cellDay's reading, a year at a time: each cell's row looked up once a year, not once a day, so a whole
+	// record (27,000 days over 100 cells, the Data tab's double mass) costs array reads, not string keys.
+	const s = toEpochDay(window.start);
+	const n = Math.max(0, toEpochDay(window.end) - s + 1);
+	const got: { v: number | null; prelim: boolean }[] = new Array(n);
+	const vals: (number | null)[] = new Array(keys.length);
+	// The window's own first year, even when it holds no days (an end before its start: a startDate in the
+	// future): a made-up year 0 is no ISO date, and toEpochDay refuses it.
+	let year = Number(window.start.slice(0, 4));
+	let y0 = toEpochDay(`${year}-01-01`);
+	let y1 = toEpochDay(`${year + 1}-01-01`);
+	let rows = keys.map((k) => view.get(viewKey(k, year)));
+	for (let t = 0; t < n; t++) {
+		const e = s + t;
+		if (e >= y1) {
+			year++;
+			y0 = y1;
+			y1 = toEpochDay(`${year + 1}-01-01`);
+			rows = keys.map((k) => view.get(viewKey(k, year)));
+		}
+		const i = e - y0;
+		let missing = false;
+		let prelim = false;
+		for (let c = 0; c < rows.length; c++) {
+			const row = rows[c];
+			const v = row ? (row.vals[i] ?? null) : null;
+			if (v === null) {
+				missing = true;
+				break;
+			}
+			if (row!.final[i] !== true) prelim = true;
+			vals[c] = Number.isNaN(v) ? null : v;
+		}
+		got[t] = missing ? { v: null, prelim: false } : { v: meanOf(vals, cells, noData), prelim };
+	}
 	let last = got.length - 1;
 	while (last >= 0 && got[last]!.v === null) last--;
 	const kept = got.slice(0, last + 1);
 	let final = 0;
 	while (final < kept.length && kept[final]!.v !== null && !kept[final]!.prelim) final++;
 	const out: GridDays = { startDate: window.start, values: kept.map((g) => g.v), prelimDays: kept.filter((g) => g.v !== null && g.prelim).length };
-	if (final > 0) out.finalThrough = days[final - 1]!;
+	if (final > 0) out.finalThrough = fromEpochDay(s + final - 1);
 	return out;
 }
 

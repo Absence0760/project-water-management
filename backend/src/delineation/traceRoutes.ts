@@ -19,6 +19,7 @@ import { safeError } from '../logging/safeError.js';
 import { logEvent } from '../logging/logEvent.js';
 import { requireRole } from '../projects/access.js';
 import { configuredWater, traceDam, TraceRefused } from './damTrace.js';
+import { tileProvenance, withProvenance } from '../geo/referenceOrigin.js';
 import { countMapCompute } from './throttle.js';
 
 export const TraceBody = z
@@ -32,13 +33,17 @@ export const TraceBody = z
 export const traceRoutes = new Hono<AuthEnv>()
 	.get('/:id/map/dam-trace', async (c) => {
 		const id = c.req.param('id');
-		await withUser(c.get('userId'), (db) => requireRole(db, id, 'viewer'));
+		// The source line shows the archive's recorded version and date (248, geo/referenceOrigin.ts).
+		const provenance = await withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			return tileProvenance(db, 'water');
+		});
 		const water = configuredWater();
 		let dataset = null;
 		if (water) {
 			try {
 				const i = await water.info();
-				dataset = { label: i.label, attribution: i.attribution, fingerprint: i.fingerprint, maxZoom: i.maxZoom, bounds: i.bounds };
+				dataset = { label: withProvenance(i.label, provenance), attribution: i.attribution, fingerprint: i.fingerprint, maxZoom: i.maxZoom, bounds: i.bounds };
 			} catch (err) {
 				logEvent('warn', { event: 'water_unreadable', ...safeError(err) });
 			}

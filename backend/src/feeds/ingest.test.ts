@@ -10,6 +10,9 @@ describe('latestDay (the newest day an answer may hold; feeds.db.test.ts covers 
 		expect(latestDay('chirps_gefs', '2026-09-25')).toBe('2026-10-10');
 		expect(latestDay('chirps_gefs', '2026-12-20')).toBe('2027-01-04');
 		expect(latestDay('chirps_gefs', '2028-02-20')).toBe('2028-03-06');
+		// The ECMWF ENS mean: its 15th day (issue #604 R4-C).
+		expect(latestDay('ecmwf_ens', '2026-09-25')).toBe('2026-10-09');
+		expect(latestDay('ecmwf_ens', '2026-12-20')).toBe('2027-01-03');
 	});
 });
 
@@ -43,6 +46,22 @@ describe('finalThroughAfter (the CHIRPS final marker the ingest keeps)', () => {
 		// Short of the window: the days between are unknown, so only the claim counts.
 		expect(finalThroughAfter(feed('2026-01-08'), answer(undefined), window)).toBeNull();
 		expect(finalThroughAfter(feed('2026-01-08'), answer('2026-01-11'), window)).toBe('2026-01-11');
+	});
+
+	// Issue #604 R3-C: the marker never passes a day the window didn't read again while it may still be preliminary.
+	it('a marker short of the window stays while the days between may still be preliminary in the series', () => {
+		const held = (finalThrough: string, lastDataDate: string, startDate?: string) =>
+			({ source: 'chirps', finalThrough, lastDataDate, config: { cells: [], ...(startDate ? { startDate } : {}) } }) as unknown as FeedRow;
+		// The series holds days after 01-08 (newest 01-20): 01-09 wasn't read, so the marker stays, whatever the claim.
+		expect(finalThroughAfter(held('2026-01-08', '2026-01-20'), answer('2026-01-12'), window)).toBe('2026-01-08');
+		expect(finalThroughAfter(held('2026-01-08', '2026-01-20'), answer(undefined), window)).toBe('2026-01-08');
+		// The days between are before the startDate, so not the feed's: the claim counts (positive control).
+		expect(finalThroughAfter(held('2026-01-08', '2026-01-20', '2026-01-10'), answer('2026-01-12'), window)).toBe('2026-01-12');
+		// Past CHIRPS_FINAL_REACH_DAYS (100) behind the newest day the days are given up, as fetchWindow gives them up.
+		expect(finalThroughAfter(held('2026-01-08', '2026-04-20'), answer('2026-01-12'), window)).toBe('2026-01-12');
+		expect(finalThroughAfter(held('2026-01-08', '2026-04-19'), answer('2026-01-12'), window)).toBe('2026-01-08');
+		// The series is final through its newest day: nothing between can be preliminary.
+		expect(finalThroughAfter(held('2026-01-08', '2026-01-08'), answer('2026-01-12'), window)).toBe('2026-01-12');
 	});
 
 	it('is CHIRPS only', () => {

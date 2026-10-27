@@ -480,10 +480,28 @@ override_resource {
 }
 
 override_resource {
+  target          = aws_s3_bucket.mirror
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-mirror-000000000000"
+    bucket = "water-management-mirror-000000000000"
+  }
+}
+
+override_resource {
   target          = aws_cloudfront_origin_request_policy.report_downloads
   override_during = plan
   values = {
     id = "report-downloads-origin-request-policy-id"
+  }
+}
+
+override_resource {
+  target          = aws_ecr_repository.ingest
+  override_during = plan
+  values = {
+    arn            = "arn:aws:ecr:af-south-1:000000000000:repository/water-management-mirror-ingest"
+    repository_url = "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-mirror-ingest"
   }
 }
 
@@ -2049,7 +2067,7 @@ run "background_jobs" {
   }
   assert {
     condition = alltrue([for s in data.aws_iam_policy_document.sqs_endpoint.statement :
-      length(s.resources) == 1 && contains([aws_sqs_queue.jobs.arn, aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn, aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn, aws_sqs_queue.mail_events.arn], one(s.resources)) &&
+      length(s.resources) == 1 && contains([aws_sqs_queue.jobs.arn, aws_sqs_queue.fetch_requests[0].arn, aws_sqs_queue.ingest_results[0].arn, aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn, aws_sqs_queue.mail_events.arn], one(s.resources)) &&
       alltrue([for a in s.actions : !strcontains(a, "*")])
     ])
     error_message = "The SQS endpoint policy must name only the jobs, data-feed, render and mail-events queues, one per statement, with no wildcard actions."
@@ -2255,23 +2273,23 @@ run "data_feeds" {
 
   # --- Queues: SSE, a DLQ after 5 receives, visibility past the consumer's timeout ---
   assert {
-    condition     = alltrue([for q in [aws_sqs_queue.fetch_requests, aws_sqs_queue.fetch_requests_dlq, aws_sqs_queue.ingest_results, aws_sqs_queue.ingest_results_dlq] : q.sqs_managed_sse_enabled])
+    condition     = alltrue([for q in [aws_sqs_queue.fetch_requests[0], aws_sqs_queue.fetch_requests_dlq[0], aws_sqs_queue.ingest_results[0], aws_sqs_queue.ingest_results_dlq[0]] : q.sqs_managed_sse_enabled])
     error_message = "Every data-feed queue must be encrypted (SSE-SQS)."
   }
   assert {
     condition = (
-      jsondecode(aws_sqs_queue.fetch_requests.redrive_policy).maxReceiveCount == 5 &&
-      jsondecode(aws_sqs_queue.fetch_requests.redrive_policy).deadLetterTargetArn == aws_sqs_queue.fetch_requests_dlq.arn &&
-      jsondecode(aws_sqs_queue.ingest_results.redrive_policy).maxReceiveCount == 5 &&
-      jsondecode(aws_sqs_queue.ingest_results.redrive_policy).deadLetterTargetArn == aws_sqs_queue.ingest_results_dlq.arn
+      jsondecode(aws_sqs_queue.fetch_requests[0].redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(aws_sqs_queue.fetch_requests[0].redrive_policy).deadLetterTargetArn == aws_sqs_queue.fetch_requests_dlq[0].arn &&
+      jsondecode(aws_sqs_queue.ingest_results[0].redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(aws_sqs_queue.ingest_results[0].redrive_policy).deadLetterTargetArn == aws_sqs_queue.ingest_results_dlq[0].arn
     )
     error_message = "Both data-feed queues must dead-letter to their own DLQ after 5 receives."
   }
   assert {
     condition = (
-      aws_sqs_queue.fetch_requests.visibility_timeout_seconds >= 2 * aws_lambda_function.fetcher.timeout &&
-      aws_sqs_queue.fetch_requests.visibility_timeout_seconds <= 3 * aws_lambda_function.fetcher.timeout &&
-      aws_sqs_queue.ingest_results.visibility_timeout_seconds >= 6 * aws_lambda_function.worker.timeout
+      aws_sqs_queue.fetch_requests[0].visibility_timeout_seconds >= 2 * aws_lambda_function.fetcher.timeout &&
+      aws_sqs_queue.fetch_requests[0].visibility_timeout_seconds <= 3 * aws_lambda_function.fetcher.timeout &&
+      aws_sqs_queue.ingest_results[0].visibility_timeout_seconds >= 6 * aws_lambda_function.worker.timeout
     )
     error_message = "Visibility must be at least 6x the consuming Lambda's timeout; fetch-requests (FIFO, no throttled receives) 2-3x, since an in-flight message holds its whole group."
   }
@@ -2279,18 +2297,18 @@ run "data_feeds" {
   # --- Politeness to CHC (issue #604): one fetch per source host at a time ----------
   assert {
     condition = (
-      aws_sqs_queue.fetch_requests.fifo_queue == true &&
-      aws_sqs_queue.fetch_requests_dlq.fifo_queue == true &&
-      endswith(aws_sqs_queue.fetch_requests.name, ".fifo") &&
-      endswith(aws_sqs_queue.fetch_requests_dlq.name, ".fifo") &&
-      aws_sqs_queue.fetch_requests.content_based_deduplication == false
+      aws_sqs_queue.fetch_requests[0].fifo_queue == true &&
+      aws_sqs_queue.fetch_requests_dlq[0].fifo_queue == true &&
+      endswith(aws_sqs_queue.fetch_requests[0].name, ".fifo") &&
+      endswith(aws_sqs_queue.fetch_requests_dlq[0].name, ".fifo") &&
+      aws_sqs_queue.fetch_requests[0].content_based_deduplication == false
     )
     error_message = "fetch-requests (and its DLQ) must be FIFO: its message groups (one per source host) are what keep CHC to one fetch at a time across fetcher instances."
   }
   assert {
     condition = (
-      aws_lambda_event_source_mapping.fetcher_requests.scaling_config[0].maximum_concurrency == 2 &&
-      aws_lambda_function.fetcher.reserved_concurrent_executions >= aws_lambda_event_source_mapping.fetcher_requests.scaling_config[0].maximum_concurrency
+      aws_lambda_event_source_mapping.fetcher_requests[0].scaling_config[0].maximum_concurrency == 2 &&
+      aws_lambda_function.fetcher.reserved_concurrent_executions >= aws_lambda_event_source_mapping.fetcher_requests[0].scaling_config[0].maximum_concurrency
     )
     error_message = "The fetcher's trigger: maximum_concurrency 2 (AWS's least; the message groups cap it per host), never above its reserved concurrency, or throttled receives burn the DLQ's 5."
   }
@@ -2317,16 +2335,17 @@ run "data_feeds" {
   assert {
     condition = (
       aws_lambda_function.fetcher.environment[0].variables["FEED_SOURCE"] == "live" &&
-      aws_lambda_function.fetcher.environment[0].variables["INGEST_RESULTS_QUEUE_URL"] == aws_sqs_queue.ingest_results.url &&
-      length(aws_lambda_function.fetcher.environment[0].variables) == 3
+      aws_lambda_function.fetcher.environment[0].variables["INGEST_RESULTS_QUEUE_URL"] == aws_sqs_queue.ingest_results[0].url &&
+      aws_lambda_function.fetcher.environment[0].variables["MIRROR_URL"] == "s3://${aws_s3_bucket.mirror.bucket}" &&
+      length(aws_lambda_function.fetcher.environment[0].variables) == 4
     )
-    error_message = "The fetcher gets the live sources, the ingest-results queue and the user agent's contact, and nothing else (no DATABASE_URL, no secrets)."
+    error_message = "The fetcher gets the live sources, the ingest-results queue, the mirror its daily ingest writes (issue #604 R2-B) and the user agent's contact, and nothing else (no DATABASE_URL, no secrets)."
   }
   assert {
     condition = (
-      toset(flatten([for s in data.aws_iam_policy_document.fetcher_lambda.statement : s.resources])) == toset([aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn]) &&
-      alltrue([for s in data.aws_iam_policy_document.fetcher_lambda.statement : s.sid != "SendIngestResults" || toset(s.actions) == toset(["sqs:SendMessage"])]) &&
-      alltrue([for s in data.aws_iam_policy_document.fetcher_lambda.statement : alltrue([for a in s.actions : startswith(a, "sqs:") && !strcontains(a, "*")])])
+      toset(flatten([for s in data.aws_iam_policy_document.fetcher_lambda[0].statement : s.resources])) == toset([aws_sqs_queue.fetch_requests[0].arn, aws_sqs_queue.ingest_results[0].arn]) &&
+      alltrue([for s in data.aws_iam_policy_document.fetcher_lambda[0].statement : s.sid != "SendIngestResults" || toset(s.actions) == toset(["sqs:SendMessage"])]) &&
+      alltrue([for s in data.aws_iam_policy_document.fetcher_lambda[0].statement : alltrue([for a in s.actions : startswith(a, "sqs:") && !strcontains(a, "*")])])
     )
     error_message = "The fetcher's role reaches the two feed queues only: receive fetch-requests, send ingest-results."
   }
@@ -2336,10 +2355,10 @@ run "data_feeds" {
   }
   assert {
     condition = (
-      aws_lambda_event_source_mapping.fetcher_requests.event_source_arn == aws_sqs_queue.fetch_requests.arn &&
-      aws_lambda_event_source_mapping.fetcher_requests.function_name == aws_lambda_function.fetcher.arn &&
-      aws_lambda_event_source_mapping.fetcher_requests.batch_size == 1 &&
-      contains(aws_lambda_event_source_mapping.fetcher_requests.function_response_types, "ReportBatchItemFailures")
+      aws_lambda_event_source_mapping.fetcher_requests[0].event_source_arn == aws_sqs_queue.fetch_requests[0].arn &&
+      aws_lambda_event_source_mapping.fetcher_requests[0].function_name == aws_lambda_function.fetcher.arn &&
+      aws_lambda_event_source_mapping.fetcher_requests[0].batch_size == 1 &&
+      contains(aws_lambda_event_source_mapping.fetcher_requests[0].function_response_types, "ReportBatchItemFailures")
     )
     error_message = "fetch-requests triggers the fetcher, one request at a time, retrying only failed sends."
   }
@@ -2348,7 +2367,7 @@ run "data_feeds" {
   assert {
     condition = (
       aws_lambda_function.worker.environment[0].variables["FEED_FETCHER"] == "sqs" &&
-      aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.fetch_requests.url
+      aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.fetch_requests[0].url
     )
     error_message = "The worker hands fetches to the fetcher (it has no internet) and never fetches itself."
   }
@@ -2364,13 +2383,13 @@ run "data_feeds" {
   }
   assert {
     condition = (
-      aws_lambda_event_source_mapping.worker_ingest_results.event_source_arn == aws_sqs_queue.ingest_results.arn &&
-      aws_lambda_event_source_mapping.worker_ingest_results.function_name == aws_lambda_function.worker.arn
+      aws_lambda_event_source_mapping.worker_ingest_results[0].event_source_arn == aws_sqs_queue.ingest_results[0].arn &&
+      aws_lambda_event_source_mapping.worker_ingest_results[0].function_name == aws_lambda_function.worker.arn
     )
     error_message = "ingest-results triggers the worker."
   }
   assert {
-    condition     = toset(flatten([for s in data.aws_iam_policy_document.worker_feeds.statement : s.resources])) == toset([aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn])
+    condition     = toset(flatten([for s in data.aws_iam_policy_document.worker_feeds[0].statement : s.resources])) == toset([aws_sqs_queue.fetch_requests[0].arn, aws_sqs_queue.ingest_results[0].arn])
     error_message = "The worker's feed policy reaches the two feed queues only."
   }
   assert {
@@ -2385,8 +2404,8 @@ run "data_feeds" {
   # --- Alarms -----------------------------------------------------------------------
   assert {
     condition = (
-      one([for m in aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.fetch_requests_dlq.name &&
-      one([for m in aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.ingest_results_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.fetch_requests_dlq[0].name &&
+      one([for m in aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.ingest_results_dlq[0].name &&
       aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0].threshold == 0 &&
       aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0].threshold == 0
     )
@@ -2905,7 +2924,7 @@ run "packs" {
       length(aws_vpc_endpoint.s3.subnet_ids) == 1 &&
       length(aws_vpc_endpoint.s3.security_group_ids) == 1 &&
       can(regex("security_group_ids\\s*=\\s*\\[aws_security_group\\.vpce_s3\\.id\\]", regex("(?s)resource \"aws_vpc_endpoint\" \"s3\" \\{.*?\\n\\}", file("packs.tf")))) &&
-      length(data.aws_iam_policy_document.s3_endpoint.statement) == 5 &&
+      length(data.aws_iam_policy_document.s3_endpoint.statement) == 7 &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*"]) &&
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[0].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn]) &&
@@ -2920,9 +2939,15 @@ run "packs" {
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[3].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[4].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[4].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
-      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[4].principals).identifiers) == toset([aws_iam_role.migrate_lambda.arn])
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[4].principals).identifiers) == toset([aws_iam_role.migrate_lambda.arn]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[5].actions) == toset(["s3:GetObject", "s3:ListBucket"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[5].resources) == toset([aws_s3_bucket.mirror.arn, "${aws_s3_bucket.mirror.arn}/*"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[5].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[6].actions) == toset(["s3:PutObject"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[6].resources) == toset(["${aws_s3_bucket.mirror.arn}/dws/stations.json"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[6].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn])
     )
-    error_message = "The worker, the API and migrate reach S3 through one interface endpoint whose policy allows only the worker's read of packs/, the API's put of a bundle (packs/*.zip), the API's and the worker's reads of the delineation DEM (tiles/terrain.pmtiles), the API's of the dam-trace water (tiles/water.pmtiles), and migrate's read of a reference file (reference/*)."
+    error_message = "The worker, the API and migrate reach S3 through one interface endpoint whose policy allows only the worker's read of packs/, the API's put of a bundle (packs/*.zip), the API's and the worker's reads of the delineation DEM (tiles/terrain.pmtiles), the API's of the dam-trace water (tiles/water.pmtiles), migrate's read of a reference file (reference/*), the worker's read of the data mirror (ingest.tf), and the worker's put of the weekly DWS pass's station list (dws/stations.json, feeds.tf)."
   }
   assert {
     condition = (
@@ -3019,12 +3044,12 @@ run "map_data" {
       data.aws_iam_policy_document.github_deploy,
       data.aws_iam_policy_document.migrate_lambda,
       data.aws_iam_policy_document.worker_lambda,
-      data.aws_iam_policy_document.fetcher_lambda,
+      data.aws_iam_policy_document.fetcher_lambda[0],
       data.aws_iam_policy_document.renderer_lambda,
       data.aws_iam_policy_document.worker_packs,
       data.aws_iam_policy_document.renderer_packs,
       data.aws_iam_policy_document.worker_reports,
-      data.aws_iam_policy_document.worker_feeds,
+      data.aws_iam_policy_document.worker_feeds[0],
       data.aws_iam_policy_document.lambda_jobs_send,
       data.aws_iam_policy_document.lambda_ses,
       data.aws_iam_policy_document.lambda_ses_release,
@@ -3065,10 +3090,11 @@ run "map_data" {
       length(data.aws_iam_policy_document.migrate_reference.statement) == 1 &&
       toset(data.aws_iam_policy_document.migrate_reference.statement[0].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.migrate_reference.statement[0].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
+      length([for r in data.aws_iam_policy_document.migrate_reference.statement[0].resources : r if strcontains(r, "originals/") || endswith(r, "/*") && !endswith(r, "/reference/*")]) == 0 &&
       aws_iam_role_policy.migrate_reference.role == aws_iam_role.migrate_lambda.id &&
       aws_lambda_function.migrate.environment[0].variables["REFERENCE_BUCKET"] == aws_s3_bucket.reference.bucket
     )
-    error_message = "The migrate role may only read reference files (reference/*): no list, put or delete, and it knows the bucket (REFERENCE_BUCKET)."
+    error_message = "The migrate role may only read reference files (reference/*, the tile provenance files under reference/tiles/ included): never originals/, no list, put or delete, and it knows the bucket (REFERENCE_BUCKET)."
   }
   assert {
     condition     = aws_lambda_function.migrate.timeout == 900 && aws_lambda_function.migrate.memory_size == var.migrate_memory_mb && var.migrate_memory_mb == 3008 && aws_lambda_function.migrate.reserved_concurrent_executions == 1 && aws_lambda_function.migrate.environment[0].variables["NODE_OPTIONS"] == "--max-old-space-size=2556"
@@ -3649,7 +3675,7 @@ run "worker_sqs_triggers" {
     condition = aws_lambda_function.worker.reserved_concurrent_executions >= sum([
       for m in [
         aws_lambda_event_source_mapping.worker_jobs,
-        aws_lambda_event_source_mapping.worker_ingest_results,
+        aws_lambda_event_source_mapping.worker_ingest_results[0],
         aws_lambda_event_source_mapping.worker_render_results,
         aws_lambda_event_source_mapping.worker_mail_events,
       ] : m.scaling_config[0].maximum_concurrency
@@ -3658,7 +3684,7 @@ run "worker_sqs_triggers" {
   }
   assert {
     condition = (
-      aws_lambda_function.fetcher.reserved_concurrent_executions >= aws_lambda_event_source_mapping.fetcher_requests.scaling_config[0].maximum_concurrency &&
+      aws_lambda_function.fetcher.reserved_concurrent_executions >= aws_lambda_event_source_mapping.fetcher_requests[0].scaling_config[0].maximum_concurrency &&
       aws_lambda_function.renderer[0].reserved_concurrent_executions >= aws_lambda_event_source_mapping.renderer_requests[0].scaling_config[0].maximum_concurrency
     )
     error_message = "The fetcher's and renderer's reserved concurrency must cover their SQS trigger's maximum_concurrency."
@@ -3667,7 +3693,7 @@ run "worker_sqs_triggers" {
     condition = alltrue([
       for m in [
         aws_lambda_event_source_mapping.worker_jobs,
-        aws_lambda_event_source_mapping.worker_ingest_results,
+        aws_lambda_event_source_mapping.worker_ingest_results[0],
         aws_lambda_event_source_mapping.worker_render_results,
         aws_lambda_event_source_mapping.worker_mail_events,
       ] : m.function_name == aws_lambda_function.worker.arn && try(contains(m.function_response_types, "ReportBatchItemFailures"), false)

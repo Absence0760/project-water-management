@@ -118,6 +118,18 @@ export const CHECKS = {
 			WHERE e.kind = 'authority.grandfathered'`,
 		columns: ['project_id', 'user_id', 'created_at'],
 		orderBy: 'project_id, created_at, user_id'
+	},
+	// Issue #604 R3-D: what each reference dataset and tile archive was last
+	// loaded from (248_reference_load_provenance), for a refresh's conditional
+	// request (the recorded ETag and Last-Modified) and to check an upload
+	// (our SHA-256). Reference data's provenance, no project or person in it.
+	// docs/deployment.md § Reference datasets, Refreshing a dataset.
+	'reference-provenance': {
+		about: 'each reference dataset’s and tile archive’s recorded file and upstream (issue #604 R3-D)',
+		sql: `SELECT kind, dataset, source_sha256, upstream_version, upstream_etag, upstream_last_modified, jsonb_array_length(coalesce(originals, '[]')) AS originals, loaded_at
+			FROM reference_load`,
+		columns: ['kind', 'dataset', 'source_sha256', 'upstream_version', 'upstream_etag', 'upstream_last_modified', 'originals', 'loaded_at'],
+		orderBy: 'kind, dataset'
 	}
 } as const satisfies Record<string, ReadOnlyCheck>;
 

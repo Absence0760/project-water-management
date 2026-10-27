@@ -267,6 +267,46 @@ describe('liveHttp: where it may go', () => {
 	});
 });
 
+// Issue #604 R3-C: on Lambda only the fetcher asks CHC or DWS. The worker's
+// bundle holds the inline fetch path (local dev's), so module reachability
+// can't prove it; this runtime refusal does, whatever the flags say.
+describe('live requests outside the fetcher Lambda', () => {
+	it('on Lambda, liveHttp (and feedHttp live) refuse until the process is the fetcher; fixtures and off-Lambda stay allowed', async () => {
+		vi.resetModules();
+		const fresh = await import('./http.js');
+		const spy = vi.spyOn(globalThis, 'fetch');
+		try {
+			// Off Lambda: allowed (dev, CI, a hand-run script; positive control).
+			expect(() => fresh.liveHttp(vi.fn())).not.toThrow();
+			vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'water-management-worker');
+			expect(() => fresh.liveHttp()).toThrow(/refusing a live feed request outside the fetcher Lambda/);
+			await expect(fresh.feedHttp('live')).rejects.toThrow(/outside the fetcher Lambda/);
+			expect(await (await fresh.feedHttp('fixtures')).text('https://www.dws.gov.za/elsewhere')).toBeNull();
+			expect(spy).not.toHaveBeenCalled();
+			// The fetcher's entry point opts in (positive control).
+			fresh.allowLiveFeedRequests();
+			expect(() => fresh.liveHttp(vi.fn())).not.toThrow();
+		} finally {
+			spy.mockRestore();
+			vi.unstubAllEnvs();
+			vi.resetModules();
+		}
+	});
+
+	it('only the fetcher Lambda’s entry point opts in', async () => {
+		const { readdirSync, readFileSync } = await import('node:fs');
+		const { fileURLToPath } = await import('node:url');
+		const src = fileURLToPath(new URL('../', import.meta.url));
+		const callers = (readdirSync(src, { recursive: true }) as string[])
+			.filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+			.filter((f) => /\ballowLiveFeedRequests\(\)/.test(readFileSync(`${src}${f}`, 'utf8')))
+			.sort();
+		expect(callers).toEqual(['feeds/http.ts', 'lambda-fetcher.ts']);
+		// And it does so at init, before any handler runs.
+		expect(readFileSync(`${src}lambda-fetcher.ts`, 'utf8')).toMatch(/^allowLiveFeedRequests\(\);$/m);
+	});
+});
+
 describe('userAgent (CHC asked for a contact in it, issue #604)', () => {
 	it('names the product and the repo, and the contact when one is given', () => {
 		expect(userAgent(undefined)).toBe('water-management-feeds/1 (+https://github.com/Absence0760/project-water-management)');

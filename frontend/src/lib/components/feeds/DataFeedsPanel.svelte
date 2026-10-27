@@ -1,7 +1,7 @@
 <!--
 	Data → Data feeds (roadmap WP-2.10; docs/ui.md § Data feeds; on Settings
 	until issue #586 moved it beside the series it fills): the
-	project's scheduled feeds (CHIRPS rainfall, the CHIRPS-GEFS forecast, DWS
+	project's scheduled feeds (CHIRPS rainfall, the CHIRPS-GEFS and ECMWF ENS forecasts, DWS
 	gauge flow) with their health, "Run now", and a card to attach one. Owners
 	attach, switch off and remove feeds; editors can run one now; viewers read.
 	The add action sits in the panel's head (issue #521) and opens the card
@@ -23,6 +23,8 @@
 	import BoundaryRain from './BoundaryRain.svelte';
 	import UnitRain from './UnitRain.svelte';
 	import {
+		calibrationNote,
+		gapFillNote,
 		cellsUsedNote,
 		conflictMessage,
 		describePlace,
@@ -41,6 +43,7 @@
 		keptNote,
 		needsAttention,
 		nextTryNote,
+		rainCopyNote,
 		targetHint,
 		separateName,
 		STATE_LABELS,
@@ -88,6 +91,8 @@
 	// What the chosen series means for the model when it isn't the obvious one (CHIRPS as the catchment rain, issue #51).
 	const kindHint = $derived(targetHint(draft.source, draft.targetKind));
 	const attention = $derived(data ? needsAttention(data.feeds) : 0);
+	/** How far our copy of the CHIRPS rain data reaches, for a project with a CHIRPS feed (issue #604); null otherwise. */
+	const copyNote = $derived(data ? rainCopyNote(data.rainCopy, data.feeds) : null);
 	/** The map's proposals: CHIRPS only, and for editors as well as owners (editors read them; an owner applies). */
 	const mapAreas = $derived(!!data?.canRun && draft.source === 'chirps');
 	/** An editor (not an owner) opens the card only to read the map's proposals. */
@@ -378,7 +383,7 @@
 	<div class="panel-head">
 		<div class="title">
 			<h2 id="{uid}-h" tabindex="-1" bind:this={heading}>Data feeds <HelpTip key="data-feeds" /></h2>
-			{#if data?.mode === 'fixtures'}<span class="badge badge-warn" title="FEED_SOURCE=fixtures: feeds read synthetic sample files, not the real sources">Sample data</span>{/if}
+			{#if data?.mode === 'fixtures'}<span class="badge badge-warn" title="This server reads synthetic sample files, not the real sources">Sample data</span>{/if}
 		</div>
 		{#if data}
 			<div class="head-actions">
@@ -602,6 +607,11 @@
 			</form>
 		{/if}
 
+		{#if copyNote}
+			<!-- Our copy of the rain data (issue #604): a plain line, a warning box when it is late; never role="alert", as nothing here can fix it. -->
+			<p class={copyNote.behind ? 'alert alert-warning copy' : 'muted small copy'} data-testid="rain-copy" data-behind={copyNote.behind}>{copyNote.text}</p>
+		{/if}
+
 		{#if attention}
 			<div class="alert alert-warning" role="alert" data-testid="feeds-attention">
 				{attention === 1 ? '1 feed needs' : `${attention} feeds need`} attention: its data is out of date or its last fetch failed.
@@ -623,7 +633,7 @@
 						{#if conflictMessage(f)}
 							<p class="alert alert-warning version" data-testid="feed-version-conflict">{conflictMessage(f)}</p>
 						{/if}
-						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}{#if keptNote(f.lastMeta)}{' '}· {keptNote(f.lastMeta)}{/if}{#if cellsUsedNote(f)}{' '}· {cellsUsedNote(f)} with data{/if}</p>
+						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}{#if keptNote(f.lastMeta)}{' '}· {keptNote(f.lastMeta)}{/if}{#if cellsUsedNote(f)}{' '}· {cellsUsedNote(f)} with data{/if}{#if calibrationNote(f)}{' '}· {calibrationNote(f)}{/if}{#if gapFillNote(f.lastMeta)}{' '}· {gapFillNote(f.lastMeta)}{/if}</p>
 						{#if data.canRun || data.canEdit}
 							<div class="act">
 								{#if data.canRun && f.enabled}
@@ -690,11 +700,12 @@
 		gap: 0.4rem;
 		align-items: baseline;
 	}
+	/* A badge's corners (app.css .badge): a pill on one line, a rounded box if "Copy behind" wraps on a phone. */
 	.state {
 		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0.05rem 0.45rem;
-		border-radius: 999px;
+		border-radius: 0.7rem;
 		border: 1px solid var(--border);
 		background: var(--surface-2);
 		color: var(--text-2);
@@ -734,6 +745,10 @@
 	}
 	.msg {
 		margin: 0 0 0.5rem;
+	}
+	.copy {
+		margin: 0 0 0.6rem;
+		max-width: 75ch;
 	}
 	/* The add card: bordered, above the list, its action row at its foot. */
 	.add {

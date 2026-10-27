@@ -1,4 +1,7 @@
-import { fileURLToPath } from 'node:url';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FeedRefusedError, FeedThrottledError } from './feeds/errors.js';
 import type { FeedHttp } from './feeds/http.js';
@@ -16,7 +19,8 @@ vi.mock('./feeds/http.js', async (orig) => {
 	return { ...real, feedHttp: async () => httpOverride.next ?? real.feedHttp() };
 });
 
-const { FETCH_SEND_MARGIN_MS, failureDetail, fetchFailureReason, handler, withDeadline } = await import('./lambda-fetcher.js');
+const { DAILY_INGEST_EVENT, DWS_WEEKLY_EVENT, FETCH_SEND_MARGIN_MS, GEFS_INGEST_EVENT, failureDetail, fetchFailureReason, handler, isDailyIngestEvent, isDwsWeeklyEvent, withDeadline } =
+	await import('./lambda-fetcher.js');
 
 afterEach(() => {
 	sent.length = 0;
@@ -276,6 +280,197 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'dws', config: { station: 'X0H000' }, start: '2020-01-01', end: '2020-01-10', today } };
 		const res = await handler({ Records: [record('m1', req), record('m2', req)] } as never);
 		expect(res).toEqual({ batchItemFailures: [{ itemIdentifier: 'm1' }] });
+	});
+});
+
+describe('the fetcher’s daily-ingest mode (issue #604 R2-B)', () => {
+	const dirs: string[] = [];
+	afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
+	const mirrorDir = () => {
+		const d = mkdtempSync(join(tmpdir(), 'wm-fetcher-daily-'));
+		dirs.push(d);
+		return d;
+	};
+
+	it('routes the scheduled event to the daily ingest, and an SQS batch to the per-feed fetch', () => {
+		expect(isDailyIngestEvent(DAILY_INGEST_EVENT)).toBe(true);
+		expect(isDailyIngestEvent({ mode: 'daily-ingest', 'detail-type': 'Scheduled Event' })).toBe(true);
+		expect(isDailyIngestEvent({ Records: [], mode: 'daily-ingest' })).toBe(false);
+		expect(isDailyIngestEvent({ Records: [] })).toBe(false);
+		expect(isDailyIngestEvent({ mode: 'monthly' })).toBe(false);
+		expect(isDailyIngestEvent(null)).toBe(false);
+		expect(isDailyIngestEvent([DAILY_INGEST_EVENT])).toBe(false);
+	});
+
+	it('runs the daily ingest into the copy MIRROR_URL names (fixtures here), publishes the lag metric and logs the outcome, sending nothing to a queue', async () => {
+		const dir = mirrorDir();
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${dir}/`).href);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = await handler({ mode: 'daily-ingest' } as never);
+		const metric = out.mock.calls.map(([l]) => String(l)).find((l) => l.includes('MirrorLagDays'));
+		out.mockRestore();
+		// A fresh copy, no finals: it starts PRELIM_LOOKBACK_DAYS back and copies at most DAILY_MAX_FILES days a run.
+		expect(res).toMatchObject({ copied: 20, dropped: 0, stopped: 'max_files' });
+		expect(JSON.parse(metric!)).toMatchObject({ Product: 'prelim', MirrorLagDays: (res as unknown as { lagDays: number }).lagDays });
+		const logged = info.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ event: 'mirror_daily_ingest', product: 'prelim', copied: 20, stopped: 'max_files', ms: expect.any(Number) });
+		expect(sent).toHaveLength(0);
+	});
+
+	it('fails the invocation on an HTTP 403, after logging it as refused (no retry: the schedule tries again tomorrow)', async () => {
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${mirrorDir()}/`).href);
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, rangeTagged: refuse, text: refuse };
+		await expect(handler({ mode: 'daily-ingest' } as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		const logged = error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ copied: 0, stopped: 'error', reason: 'refused', detail: 'HTTP 403', requests: 1 });
+	});
+
+	it('refuses to run without MIRROR_URL (it never writes the committed synthetic copy)', async () => {
+		vi.stubEnv('MIRROR_URL', '');
+		await expect(handler({ mode: 'daily-ingest' } as never)).rejects.toThrow(/MIRROR_URL is not set/);
+	});
+
+	it('runs the GEFS pass on {"mode":"daily-ingest","pass":"gefs"} (issue #604 R3-A): today’s issue into the copy, its own lag metric and log line', async () => {
+		const dir = mirrorDir();
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${dir}/`).href);
+		expect(isDailyIngestEvent(GEFS_INGEST_EVENT)).toBe(true);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = await handler(GEFS_INGEST_EVENT as never);
+		const metric = out.mock.calls.map(([l]) => String(l)).find((l) => l.includes('MirrorLagDays'));
+		out.mockRestore();
+		expect(res).toEqual({ copied: today, newest: today, lagDays: 0, stopped: 'copied' });
+		expect(JSON.parse(metric!)).toMatchObject({ Product: 'gefs', MirrorLagDays: 0 });
+		const logged = info.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ product: 'gefs', copied: today, held: 1, stopped: 'copied', requests: 48 });
+		// The preliminary pass didn't run: no prelim array.
+		expect(existsSync(join(dir, 'prelim'))).toBe(false);
+		expect(existsSync(join(dir, 'gefs', today, 'manifest.json'))).toBe(true);
+		expect(sent).toHaveLength(0);
+	});
+
+	it('fails the GEFS pass on an HTTP 403 after logging it as refused, with no request after it', async () => {
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${mirrorDir()}/`).href);
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, rangeTagged: refuse, text: refuse };
+		await expect(handler(GEFS_INGEST_EVENT as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		const logged = error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ product: 'gefs', copied: null, stopped: 'error', reason: 'refused', detail: 'HTTP 403', requests: 1 });
+	});
+
+	it('after a 403, the next GEFS run the same UTC day asks CHC nothing and logs that it skipped (refused_today)', async () => {
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${mirrorDir()}/`).href);
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, rangeTagged: refuse, text: refuse };
+		await expect(handler(GEFS_INGEST_EVENT as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		// An hour later: a fresh invocation (a cold container), with a client that would answer.
+		let asked = 0;
+		const count = async () => {
+			asked++;
+			return null;
+		};
+		httpOverride.next = { range: count, rangeTagged: count, text: count };
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const res = await handler(GEFS_INGEST_EVENT as never);
+		expect(res).toMatchObject({ copied: null, stopped: 'refused_today' });
+		expect(asked).toBe(0);
+		const logged = warn.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ product: 'gefs', stopped: 'refused_today', requests: 0, refusedAt: expect.any(String) });
+	});
+
+	it('fails an event of neither mode, naming no payload', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		await expect(handler({ mode: 'something-else' } as never)).rejects.toThrow(/does not know/);
+		expect(error).toHaveBeenCalledWith(JSON.stringify({ event: 'fetcher_event_unknown' }));
+	});
+});
+
+describe('the fetcher’s dws-weekly mode (issue #604 R3-B)', () => {
+	const dirs: string[] = [];
+	afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
+	/** A bucket of its own holding the worker's station list. */
+	const bucket = async (stations: string[]) => {
+		const d = mkdtempSync(join(tmpdir(), 'wm-fetcher-dws-'));
+		dirs.push(d);
+		const { openStore } = await import('./mirror/store.js');
+		const { writeStations } = await import('./ingest/dws.js');
+		await writeStations(openStore(pathToFileURL(`${d}/`).href), { v: 1, at: new Date().toISOString(), stations });
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${d}/`).href);
+		return d;
+	};
+
+	it('routes the scheduled event to the weekly pass, and nothing else', () => {
+		expect(isDwsWeeklyEvent(DWS_WEEKLY_EVENT)).toBe(true);
+		expect(isDwsWeeklyEvent({ mode: 'dws-weekly', 'detail-type': 'Scheduled Event' })).toBe(true);
+		expect(isDwsWeeklyEvent({ Records: [], mode: 'dws-weekly' })).toBe(false);
+		expect(isDwsWeeklyEvent(DAILY_INGEST_EVENT)).toBe(false);
+		expect(isDailyIngestEvent(DWS_WEEKLY_EVENT)).toBe(false);
+		expect(isDwsWeeklyEvent(null)).toBe(false);
+	});
+
+	it('runs the pass into the bucket MIRROR_URL names (fixtures here), publishes the dws lag and logs counts, never a station', async () => {
+		await bucket(['X0H000']);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = await handler({ mode: 'dws-weekly' } as never);
+		const metric = out.mock.calls.map(([l]) => String(l)).find((l) => l.includes('MirrorLagDays'));
+		out.mockRestore();
+		expect(res).toEqual({ fetched: 1, failed: 0, fresh: 0, lagDays: 0, stopped: 'done' });
+		expect(JSON.parse(metric!)).toMatchObject({ Product: 'dws', MirrorLagDays: 0 });
+		const lines = info.mock.calls.map(([l]) => l as string);
+		const logged = lines.map((l) => JSON.parse(l)).find((l) => l.event === 'dws_weekly');
+		expect(logged).toMatchObject({ fetched: 1, failed: 0, stopped: 'done', requests: 1, ms: expect.any(Number) });
+		expect(lines.join('\n')).not.toContain('X0H000');
+		expect(sent).toHaveLength(0);
+	});
+
+	it('fails the invocation on an HTTP 403, after logging it as refused (no retry: next week’s run tries again)', async () => {
+		await bucket(['X0H000', 'X0H001']);
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, text: refuse };
+		await expect(handler({ mode: 'dws-weekly' } as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		const logged = error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'dws_weekly');
+		expect(logged).toMatchObject({ fetched: 0, stopped: 'refused', reason: 'refused', detail: 'HTTP 403', requests: 1 });
+	});
+
+	it('logs each station it skipped with the check that failed (never the page), and loads the rest', async () => {
+		await bucket(['X0H000', 'X0H001']);
+		const { renderDwsPage } = await import('./feeds/fixtures.js');
+		const day = today;
+		const pageOf = async (url: string) => {
+			const station = new URL(url).searchParams.get('Station')!.replace(/100\.00$/, '');
+			return renderDwsPage(station, [{ date: day, value: station === 'X0H000' ? 1e9 : 1.5, quality: '1' }]);
+		};
+		httpOverride.next = { range: async () => null, text: pageOf };
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = await handler({ mode: 'dws-weekly' } as never);
+		expect(res).toMatchObject({ fetched: 1, failed: 1, stopped: 'done' });
+		const lines = warn.mock.calls.map(([l]) => JSON.parse(l as string));
+		expect(lines.find((l) => l.event === 'dws_station_failed')).toEqual({ event: 'dws_station_failed', station: 'X0H000', reason: 'format', detail: 'flow out of range' });
+		expect(lines.find((l) => l.event === 'dws_weekly')).toMatchObject({ fetched: 1, failed: 1 });
+		expect(warn.mock.calls.join('\n')).not.toContain('1000000000');
+	});
+
+	it('refuses to run without MIRROR_URL', async () => {
+		vi.stubEnv('MIRROR_URL', '');
+		await expect(handler({ mode: 'dws-weekly' } as never)).rejects.toThrow(/MIRROR_URL is not set/);
 	});
 });
 

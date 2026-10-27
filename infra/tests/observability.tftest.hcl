@@ -670,8 +670,8 @@ run "dlq_alarms_fire_on_new_arrivals" {
   assert {
     condition = alltrue([for pair in [
       [aws_cloudwatch_metric_alarm.jobs_dlq_depth[0], aws_sqs_queue.jobs_dlq.name],
-      [aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0], aws_sqs_queue.fetch_requests_dlq.name],
-      [aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0], aws_sqs_queue.ingest_results_dlq.name],
+      [aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0], aws_sqs_queue.fetch_requests_dlq[0].name],
+      [aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0], aws_sqs_queue.ingest_results_dlq[0].name],
       [aws_cloudwatch_metric_alarm.render_requests_dlq_depth[0], aws_sqs_queue.render_requests_dlq.name],
       [aws_cloudwatch_metric_alarm.render_results_dlq_depth[0], aws_sqs_queue.render_results_dlq.name],
       [aws_cloudwatch_metric_alarm.mail_events_dlq_depth[0], aws_sqs_queue.mail_events_dlq.name],
@@ -730,10 +730,10 @@ run "fetcher_and_renderer_failures_alarm" {
   assert {
     condition = (
       aws_cloudwatch_metric_alarm.fetch_requests_age[0].metric_name == "ApproximateAgeOfOldestMessage" &&
-      aws_cloudwatch_metric_alarm.fetch_requests_age[0].dimensions["QueueName"] == aws_sqs_queue.fetch_requests.name &&
+      aws_cloudwatch_metric_alarm.fetch_requests_age[0].dimensions["QueueName"] == aws_sqs_queue.fetch_requests[0].name &&
       aws_cloudwatch_metric_alarm.fetch_requests_age[0].statistic == "Maximum" &&
       aws_cloudwatch_metric_alarm.fetch_requests_age[0].threshold == 3600 &&
-      aws_cloudwatch_metric_alarm.fetch_requests_age[0].threshold < aws_sqs_queue.fetch_requests.message_retention_seconds
+      aws_cloudwatch_metric_alarm.fetch_requests_age[0].threshold < aws_sqs_queue.fetch_requests[0].message_retention_seconds
     )
     error_message = "A fetch request waiting over an hour must alarm, well before it expires."
   }

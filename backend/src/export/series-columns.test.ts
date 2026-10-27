@@ -65,6 +65,27 @@ describe('seriesExportColumns', () => {
 		]);
 	});
 
+	it('names ERA5-Land and IMERG Late with the day’s version from the run’s segments (engine ≥ 1.101.0, issue #604 R4-E)', () => {
+		const r = run(
+			'rain_catchment_mm',
+			{
+				rain_final: { label: 'x', unit: 'mm', values: [0, 12, 0, 4, 1.5] },
+				rain_source: { label: 'x', unit: null, values: [0, RAIN_SOURCE_CODE.catchment, RAIN_SOURCE_CODE.era5l, RAIN_SOURCE_CODE.imergLate, RAIN_SOURCE_CODE.imergLate] }
+			},
+			{
+				gapRainSegments: [
+					{ from: '2024-01-02', to: '2024-01-02', product: 'era5l', version: null },
+					{ from: '2024-01-03', to: '2024-01-03', product: 'imerg_late', version: 'V07' },
+					{ from: '2024-01-04', to: '2024-01-04', product: 'imerg_late', version: 'V08' }
+				]
+			}
+		);
+		expect(csv(rain, settings(), r).map((l) => l.split(',')[4])).toEqual(['Rain source [run Baseline]', 'catchment', 'ERA5-Land', 'IMERG Late V07', 'IMERG Late V08']);
+		// Without segments (no version recorded), the product alone.
+		const bare = run('rain_catchment_mm', { rain_source: { label: 'x', unit: null, values: [0, 6, 6, 6, 6] } });
+		expect(csv(rain, settings(), bare)[1]).toContain(',IMERG Late');
+	});
+
 	it('a day no source filled is blank in every run column; days past the run are blank', () => {
 		const r = run('rain_catchment_mm', {
 			rain_final: { label: 'x', unit: 'mm', values: [0, 12, NaN] },

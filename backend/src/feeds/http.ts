@@ -157,6 +157,38 @@ export type ThrottleState = Map<string, { until: number; status: 429 | 503 | 403
 const THROTTLED: ThrottleState = new Map();
 
 /**
+ * Whether this process may ask CHC or DWS: only the fetcher Lambda in
+ * production (lambda-fetcher.ts calls allowLiveFeedRequests at init). The API
+ * and the worker carry FEED_SOURCE=live too (it names the cell cache they read,
+ * cellCacheStore.ts), and the worker's bundle holds the inline fetch path local
+ * dev uses (jobs/handlers/feed-fetch.ts), so neither the setting nor the
+ * bundle's modules can keep them from a live request: this does, on Lambda,
+ * whatever FEED_FETCHER, CHIRPS_SOURCE and DWS_SOURCE say. A fetch that would
+ * reach it fails loudly instead of quietly asking an upstream from an address
+ * we never told it about (issue #604 R3-C; docs/security.md § Data feeds).
+ * Off Lambda (dev, CI, a hand-run script) live requests stay allowed.
+ */
+let liveRequestsAllowed = false;
+
+/** The fetcher Lambda's entry point, once at init: this process is the one that asks the upstreams. */
+export function allowLiveFeedRequests(): void {
+	liveRequestsAllowed = true;
+}
+
+/** A live feed request outside the fetcher Lambda (assertLiveFeedRequestsAllowed): a configuration bug, never the source's doing. */
+export class LiveFeedRequestRefusedError extends Error {
+	constructor() {
+		super('refusing a live feed request outside the fetcher Lambda: the API and the worker never ask CHC or DWS (feeds/http.ts)');
+		this.name = 'LiveFeedRequestRefusedError';
+	}
+}
+
+/** Throw unless this process may make a live feed request (above). */
+export function assertLiveFeedRequestsAllowed(env: Record<string, string | undefined> = process.env): void {
+	if (env.AWS_LAMBDA_FUNCTION_NAME && !liveRequestsAllowed) throw new LiveFeedRequestRefusedError();
+}
+
+/**
  * The least time between the starts of two requests to one host, and the most
  * random time added to it: 1 s plus 0–0.5 s, so about one request a second.
  * CHC's reply (2026-10-27, issue #604): their bot protection blocks an
@@ -235,6 +267,7 @@ export function liveHttp(
 	pacer: Pacer = PACER,
 	contact: string | undefined = process.env.FEEDS_CONTACT
 ): FeedHttp {
+	assertLiveFeedRequestsAllowed();
 	const agent = userAgent(contact);
 	const paused = (host: string) => {
 		const p = throttle.get(host);

@@ -38,6 +38,7 @@ import { MAX_FEEDS, RUN_NOW_RATE, runNowWait } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
 import { ingestResult } from './ingest.js';
 import { claimFeed, feedForJob, listDueFeeds, takeFeedFetch } from './store.js';
+import { recordMirrorCopy } from './mirrorRevision.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -52,6 +53,7 @@ afterEach(async () => {
 	await asOwner('DELETE FROM chirps_cell_year');
 	await asOwner('DELETE FROM chirps_file');
 	await asOwner('DELETE FROM chirps_cell_stale');
+	await asOwner('DELETE FROM mirror_copy');
 });
 
 const cell = () => ({ ...FIXTURE_CELL(), weight: 1 });
@@ -120,12 +122,43 @@ describe('data_feed RLS and the routes', () => {
 		});
 		const id = created.body.feed.id;
 
-		// Positive control: the viewer reads it, and what the form offers.
+		// Positive control: the viewer reads it, and what the form offers. (Another file's tick may have recorded the copy.)
+		await asOwner('DELETE FROM mirror_copy');
+		vi.stubEnv('CHIRPS_SOURCE', 'mirror');
 		const list = await viewer.call('GET', `/projects/${pid}/feeds`);
 		expect(list.status).toBe(200);
 		expect(list.body.feeds.map((f: { id: string }) => f.id)).toEqual([id]);
 		expect(list.body).toMatchObject({ mode: 'fixtures', canEdit: false, canRun: false, schedules: ['daily'] });
-		expect(list.body.sources.map((s: { source: string }) => s.source)).toEqual(['chirps', 'chirps_gefs', 'dws']);
+		expect(list.body.sources.map((s: { source: string }) => s.source)).toEqual(['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens']);
+		// Our CHIRPS copy (issue #604), as the worker's tick records it (mirror_copy): not checked before a tick, then,
+		// off a live process, the committed sample copy, on time as of the day it was made.
+		expect(list.body.rainCopy).toEqual({ readable: false });
+		for (const product of ['sat', 'rnl', 'prelim'] as const) {
+			const m = JSON.parse(readFileSync(new URL(`../../fixtures/mirror/${product}/manifest.json`, import.meta.url), 'utf8')) as { product: string; revision: number };
+			await withoutUser((db) => recordMirrorCopy(db, 'fixtures', product, m));
+		}
+		expect((await viewer.call('GET', `/projects/${pid}/feeds`)).body.rainCopy).toMatchObject({
+			readable: true,
+			sample: true,
+			asOf: '2026-02-09',
+			final: { sat: { through: '2025-12-31', behind: false } },
+			preliminary: { through: '2026-02-06', behind: false }
+		});
+		// A CHIRPS feed whose copy is late shows it in the list and in what an edit answers (getFeed), alike.
+		const rain = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id as string;
+		await asOwner(`UPDATE data_feed SET last_attempt_at = now(), last_success_at = now() WHERE id = $1`, [rain]);
+		const sat = JSON.parse(readFileSync(new URL('../../fixtures/mirror/sat/manifest.json', import.meta.url), 'utf8')) as { product: string; revision: number; finalThrough: string };
+		const late = { ...sat, finalThrough: '2025-06-30' };
+		await withoutUser((db) => recordMirrorCopy(db, 'fixtures', 'sat', late));
+		const listed = ((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds as { id: string; health: { state: string } }[]).find((f) => f.id === rain)!;
+		expect(listed.health.state).toBe('copy-behind');
+		const edited = await owner.call('PATCH', `/projects/${pid}/feeds/${rain}`, { schedule: 'daily' });
+		expect(edited.status).toBe(200);
+		expect(edited.body.feed.health).toEqual(listed.health);
+		await owner.call('DELETE', `/projects/${pid}/feeds/${rain}`);
+		// While CHC is read directly, no copy (the setup's default, production's until the cutover).
+		vi.stubEnv('CHIRPS_SOURCE', 'chc');
+		expect((await viewer.call('GET', `/projects/${pid}/feeds`)).body.rainCopy).toBeNull();
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body).toMatchObject({ canEdit: true, canRun: true });
 		expect((await editor.call('GET', `/projects/${pid}/feeds`)).body).toMatchObject({ canEdit: false, canRun: true });
 
@@ -490,6 +523,14 @@ describe('the scheduler', () => {
 			expect(await next('dws', 5, '2026-03-01T09:00:00Z', refused)).toBe('2026-03-02T08:59:00.000Z');
 			// A failing GEFS feed whose slot comes before its backoff ends: the slot.
 			expect(await next('chirps_gefs', 1, '2026-03-01T08:40:00Z', outage)).toBe('2026-03-01T08:45:00.000Z');
+			// ECMWF ENS (253): the first 14:00 UTC after it was scheduled, strictly after.
+			expect(await next('ecmwf_ens', 0, '2026-03-01T10:00:00Z')).toBe('2026-03-01T14:00:00.000Z');
+			expect(await next('ecmwf_ens', 0, '2026-03-01T14:00:00Z')).toBe('2026-03-02T14:00:00.000Z');
+			expect(await next('ecmwf_ens', 0, '2026-03-01T14:00:01Z')).toBe('2026-03-02T14:00:00.000Z');
+			// Failing: the backoff when it ends first (an outage, a refusal), else the slot.
+			expect(await next('ecmwf_ens', 1, '2026-03-01T10:00:00Z', outage)).toBe('2026-03-01T10:14:00.000Z');
+			expect(await next('ecmwf_ens', 1, '2026-03-01T10:00:00Z', refused)).toBe('2026-03-01T11:59:00.000Z');
+			expect(await next('ecmwf_ens', 3, '2026-03-01T10:00:00Z', refused)).toBe('2026-03-01T14:00:00.000Z');
 
 			// 242's app_feed_is_due, frozen: the rewrite must agree with it everywhere, not only with itself.
 			await client.query(`CREATE FUNCTION pg_temp.feed_is_due_242(p_source text, p_schedule text, p_failures integer, p_last timestamptz, p_now timestamptz, p_last_error text)
@@ -1878,6 +1919,24 @@ describe('daily only, and the "Run now" limit (111_feed_daily_only)', () => {
 		// Removing the feed removes its bucket.
 		expect((await owner.call('DELETE', `/projects/${pid}/feeds/${id}`)).status).toBe(204);
 		expect(await asOwner('SELECT tokens FROM data_feed_run_now WHERE feed_id = $1', [id])).toEqual([]);
+	});
+
+	it('data_feed.source takes the ECMWF ENS forecast beside the other three, and nothing else (253)', async () => {
+		const owner = await signUp('EcmwfSource');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		// Positive controls: every source the API takes is one the table takes.
+		for (const source of ['chirps_gefs', 'dws', 'ecmwf_ens', 'chirps']) {
+			await asOwner(`UPDATE data_feed SET source = $2 WHERE id = $1`, [id, source]);
+			expect((await asOwner('SELECT source FROM data_feed WHERE id = $1', [id]))[0].source).toBe(source);
+		}
+		await expect(asOwner(`UPDATE data_feed SET source = 'ecmwf' WHERE id = $1`, [id])).rejects.toMatchObject({ code: '23514', constraint: 'data_feed_source_check' });
+		// Through the API, as an owner: an ECMWF feed of grid cells, writing the forecast series.
+		const r = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'ecmwf_ens', config: { cells: [{ lat: -20.12, lon: 25.17 }] } });
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		expect(r.body.feed).toMatchObject({ source: 'ecmwf_ens', targetKind: 'rain_forecast_mm' });
+		const sources = (await owner.call('GET', `/projects/${pid}/feeds`)).body.sources as { source: string; label: string }[];
+		expect(sources.find((s) => s.source === 'ecmwf_ens')?.label).toBe('ECMWF ENS rainfall forecast');
 	});
 
 	it('the table holds only daily feeds, and the migration turned hourly ones daily without touching their health or acting user', async () => {

@@ -66,6 +66,11 @@
 # six 10° occurrence tiles are about 100 MB together; the archive is a few
 # tens of MB. WATER_SOURCE (the download folder's URL) and TILES_BBOX override it.
 #
+# Each upload records where the archive came from (tiles-upload.ts: its SHA-256,
+# the upstream's version, ETag and Last-Modified, the originals kept in the
+# local `water-reference` bucket) in this checkout's database when it is up
+# (docs/deployment.md § Reference datasets, Refreshing a dataset).
+#
 # `rivers` and `water` check each whole file they download (or reuse from the
 # cache) against bin/source-checksums.sha256, since neither publisher offers a
 # checksum: a mismatch stops with both hashes, an unlisted file is recorded on
@@ -141,7 +146,7 @@ fetch_fonts() {
 	for f in "${FONT_STACKS[@]}"; do members+=("$top/fonts/$f"); done
 	tar -xzf "$tgz" -C "$FONTS" --strip-components=2 "${members[@]}"
 	du -sh "$FONTS"
-	(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --fonts "$FONTS")
+	(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --fonts "$FONTS" --version "$FONTS_REF" --original "$tgz")
 }
 
 serves_tiles() { curl -fsS -o /dev/null -r 0-15 "$URL" 2>/dev/null; }
@@ -189,7 +194,8 @@ case "${1:-}" in
 		echo "Extracting $BBOX at maxzoom $MAXZOOM from the Protomaps build $build …"
 		pmtiles extract "https://build.protomaps.com/$build.pmtiles" "$FILE" --bbox="$BBOX" --maxzoom="$MAXZOOM"
 		du -h "$FILE"
-		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts "$FILE")
+		# The build date is the basemap's version; tiles-upload.ts asks the build for its ETag and records both.
+		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts "$FILE" --version "$build")
 		fetch_fonts
 		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev."
 		;;
@@ -199,7 +205,7 @@ case "${1:-}" in
 		echo "Extracting $BBOX at maxzoom $TERRAIN_MAXZOOM from $TERRAIN_SRC …"
 		pmtiles extract "$TERRAIN_SRC" "$TERRAIN_FILE" --bbox="$BBOX" --maxzoom="$TERRAIN_MAXZOOM"
 		du -h "$TERRAIN_FILE"
-		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --terrain "$TERRAIN_FILE")
+		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --terrain "$TERRAIN_FILE" --upstream "$TERRAIN_SRC")
 		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev and turn on Map → Layers → Relief."
 		;;
 	rivers)
@@ -274,7 +280,10 @@ case "${1:-}" in
 		pmtiles edit -q "$WATER_FILE" --metadata="$CACHE/gsw/water-metadata.json"
 		rm -f "$CACHE/gsw/water-3857.tif" "$CACHE/gsw/water.mbtiles" "$CACHE/gsw/water.vrt"
 		du -h "$WATER_FILE"
-		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --water "$WATER_FILE")
+		# The GSW tiles are the originals: kept beside the archive, so it can be rebuilt without the upstream.
+		originals=()
+		for t in "${tiles[@]}"; do originals+=(--original "$CACHE/gsw/$t"); done
+		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --water "$WATER_FILE" --version 1.5 --upstream "$WATER_SRC/${tiles[0]}" "${originals[@]}")
 		echo "Now: put WATER_URL=$WATER_URL in backend/.env.development.local and restart pnpm dev; the Map offers Trace a dam."
 		;;
 	fonts)

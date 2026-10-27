@@ -2768,6 +2768,12 @@ In short:
     can't send the fetcher (open egress) to another host or plain HTTP.
     `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
+    On Lambda only the fetcher may build a live client at all
+    (`assertLiveFeedRequestsAllowed`, `allowLiveFeedRequests` at the
+    fetcher's init): the API and the worker, which carry
+    `FEED_SOURCE=live` for the cell cache, are refused whatever
+    `FEED_FETCHER` and the cutover's flags say (issue #604 R3-C,
+    `feeds/http.test.ts`, `jobs/handlers/feed-fetch.cutover.db.test.ts`).
   - The user agent names the operator's contact address (`FEEDS_CONTACT`,
     which CHC asked for, issue #604): the only setting that reaches a
     request header. It goes in only if it matches a plain address
@@ -2840,7 +2846,39 @@ In short:
     fetch claimed. So a forged answer can't rewrite
     finals the feed never asked about, and at worst marks the claimed days
     stale (they are read again). A revision is logged (`chirps_revision`)
-    and reaches each project's series with a History event.
+    and reaches each project's series with a History event. Our own copy's revisions (issue #604, 245) reach the cache only through
+    `app_mirror_apply_revision`, which only the worker (no user, no API
+    key) may call: it validates the manifest and day bounds, only ever
+    *marks* cached finals stale (never writes a value), and records the
+    revision in `mirror_manifest`, which `water_app` can read but not write.
+    Since 246 it does so in parts (at most 4000 days a call, logged in
+    `mirror_change`, also read-only to `water_app`), and the worker records
+    how far each product of the copy runs in `mirror_copy` through
+    `app_mirror_record_copy` (the same no-user caller only, bounds-checked
+    dates), so the API reads the copy's dates from the database and never
+    needs the bucket. A fetch that read before a revision can't undo it:
+    `chirps_recheck_apply` clears only a stale mark made before its fetch
+    was queued, and a merge marks the finals it read inside a change
+    applied since (`mirror_mark_raced`, owner-only).
+  - **DWS gauge records** (247, issue #604 R3-B). `gauge_record` and
+    `gauge_record_span` are reference data, readable by any signed-in
+    session and written by no app path: `app_gauge_record_load_web` (the
+    weekly pass, only the worker with no user and no API key) and
+    `gauge_record_write` (the operator's `pnpm import:dws`, invoker's
+    rights, closed to `water_app`). Both bound every input (a river gauge
+    code, a span of at most 20 years ending by today, each day inside it
+    once, flows 0–100 000 m³/s and never NaN, quality codes 1–8 letters
+    or digits, at most 7330 rows a call, the web load at most 731 days).
+    The weekly pass's files cross from the fetcher (outside the VPC,
+    internet) to the worker through the private mirror bucket, so the
+    worker treats them as untrusted input: each is schema-checked
+    (`StationFile`, the same bounds) before the function checks them again.
+    The worker's only write to the bucket is the station list
+    (`dws/stations.json`, its role's one PutObject there, and the S3
+    endpoint's matching statement): public station codes of enabled DWS
+    feeds, `app_dws_feed_stations` (worker only), never a project or a
+    user. The fetcher's role reaches `dws/` only (get and put, no delete),
+    and its log lines carry counts and a reason, never a station.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no
@@ -3403,9 +3441,13 @@ placed points. The server never trusts the browser with geometry:
   (2–100 characters after trimming, at least one letter or digit;
   `SearchQuery`), reads only our own reference tables (no third-party
   geocoder, so what is typed leaves nowhere) and writes nothing. The shared CHIRPS cell cache (`chirps_cell_year`, 208,
-  and 210's `chirps_file`, `chirps_cell_stale`, `chirps_revision`) is read
+  and 210's `chirps_file`, `chirps_cell_stale`, `chirps_revision`, 245's
+  `mirror_manifest`, and 246's `mirror_change` and `mirror_copy`) and the
+  DWS gauge records (247's `gauge_record`, `gauge_record_span`) are read
   the same way but written by the data feeds, through checked functions
-  (`chirps_cache_merge`, `chirps_recheck_claim`, `chirps_recheck_apply`;
+  (`chirps_cache_merge`, `chirps_recheck_claim`, `chirps_recheck_apply`,
+  `app_mirror_apply_revision`, `app_mirror_record_copy`,
+  `app_gauge_record_load_web`, and the operator's `gauge_record_write`;
   Input handling, above).
 - No third-party origin: MapLibre is bundled, its worker is same-origin
   (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file
@@ -4176,7 +4218,7 @@ beside the resource; a new ignore needs a line here too.
 | Finding | Resources | Why it stays |
 | --- | --- | --- |
 | AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, Cost Anomaly Detection, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
-| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.packs` (packs.tf), `.frontend` (s3_cloudfront.tf), `.tiles` and `.reference` (map_data.tf) | All are SSE-S3 encrypted. `frontend` is the public static site, and `tiles` the map's public tiles (served to every viewer through CloudFront). `reports` and `packs` are private (public access blocked, written only by the renderer role, read only by CloudFront's origin access control for short signed URLs): a CMK would need a key policy for CloudFront and a grant for the renderer without changing who can read a PDF. `reference` is private, read only by the migrate role and written only by the operator's SSO session; its files are the operator's downloads of openly licensed data. |
+| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.packs` (packs.tf), `.frontend` (s3_cloudfront.tf), `.tiles` and `.reference` (map_data.tf), `.mirror` (ingest.tf) | All are SSE-S3 encrypted. `frontend` is the public static site, and `tiles` the map's public tiles (served to every viewer through CloudFront). `reports` and `packs` are private (public access blocked, written only by the renderer role, read only by CloudFront's origin access control for short signed URLs): a CMK would need a key policy for CloudFront and a grant for the renderer without changing who can read a PDF. `reference` is private, read only by the migrate role and written only by the operator's SSO session; its files are the operator's downloads of openly licensed data. `mirror` (issue #604) is private, written only by the mirror ingest role and read only by the worker's; it holds a copy of openly licensed rainfall grids. |
 
 Revisit AWS-0132 for `reports` and `packs` if a client contract asks for
 customer-held keys or key-level audit of report or pack reads.

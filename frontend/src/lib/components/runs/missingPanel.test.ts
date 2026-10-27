@@ -11,9 +11,10 @@ const full = {
 	wr2012: {} as RunSummary['wr2012'],
 	plausibility: { gauges: [{ nodeId: 'g' }] } as RunSummary['plausibility'],
 	forecast: { from: '2026-10-01' } as RunSummary['forecast'],
-	stations: { units: [{}], pairings: [] } as unknown as RunSummary['stations']
+	stations: { units: [{}], pairings: [] } as unknown as RunSummary['stations'],
+	gapRain: { product: 'era5l', imergLate: false, products: [], segments: [] } as unknown as RunSummary['gapRain']
 };
-const OPTIONAL = ['res-forecast', 'res-gauges', 'res-runoff', 'res-unit-rain', 'res-wr2012', 'res-plausibility'];
+const OPTIONAL = ['res-forecast', 'res-gauges', 'res-runoff', 'res-unit-rain', 'res-gap-rain', 'res-wr2012', 'res-plausibility'];
 
 describe('missingPanel', () => {
 	it('says what each optional panel needs on a run without it, linking where it is set', () => {

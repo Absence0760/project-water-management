@@ -63,7 +63,7 @@ erDiagram
 | `language` | The languages a person or an invite can have (`code`), synced from the engine's language table; see [Languages](#languages-080_languagesql) | none |
 | `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); `privacy_contact_name` / `_email` / `_postal` (168: whom to ask about the team's projects' personal information); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
 | `team_member` | (team, user, team role) | none |
-| `project` | One catchment/place: name, description, optional `team_id`, `wua_name` (095_wua_name, issue #74: the WUA the farm pages' contact lines name, "Questions? Contact Vaalbank WUA."; NULL = "your WUA", 1–200 characters by a CHECK; not the team's name, which may be a consultancy's; every member reads it, farmers included, and an editor changes it), `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`, and the zone server-rendered PDFs print in (`app_project_time_zone`, 217: the render-session exchange reads it for any member, issue #521); the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `calibrationSiteNodeId` (engine 1.41.0: where calibration scores, null = the outlet or a gauge above it with a flow record, [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410); no SQL migration, null from `mergeSettings`), `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `chirpsQuantileMap` (engine 1.53.0, CR-23: the CHIRPS gap fill's opt-in quantile map, `{ wetDayMm }` or null, [model.md §2.4b](./model.md#quantile-map-engine--1530-cr-23); no SQL migration, null from `mergeSettings`), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `lakeEvapFactorSource` (engine 1.49.0: free-text provenance of the dam evaporation factors, e.g. a lake-factor preset's note, [model.md §2.7a](./model.md) item 4; never read by the model; no SQL migration, '' from `mergeSettings`), `arealRain` (engine 1.13.0: the areal rainfall correction on GR4J's rain, `{ factors, method, source }` or null, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130); no SQL migration, null from `mergeSettings`), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `allocationMode` and `allocationTolerance` (engine 1.18.0, issue #72: what the registered volumes do to a run, `'none'` by default, `'cap'` or `'fullAllocation'`, and the comparison's band, a fraction in [0, 1), default 0.1, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72); no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrChargeSource` and `lowFlowMeasure` (engine 1.3.0, issue #64: what the EWR charge follows, `'pragmatic'` by default or `'ruleTable'`, and what low flows are judged on, `'total'` by default or `'baseflow'`, [model.md §2.9c–§2.9d](./model.md); pending the hydrologist; no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrDailySource` (engine 1.77.0, issue #455: where the outlet's daily EWR comes from, the pragmatic EWR, the DRM TAB file or the DRM percentile tables, with the scaling and the tables, or null = the pragmatic EWR; an optional `[EWR options]` sheet imports it; [model.md §2.9f](./model.md); no SQL migration, null from `mergeSettings`), `ewrSplit` (engine 1.94.0, issue #553: how the EWR is split between the units, `'flowShare'` by default or `'naturalMar'`, each unit's natural MAR ÷ the units', [model.md §2.5b](./model.md); no SQL migration, `mergeSettings` gives a project without it the default, what every earlier run did), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Five keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `responsibleAuthority` (163, `projects/authoritySettings.ts`: who decides the project's licence applications), `ewrHeadline` (issue #444, `projects/ewrHeadlineSettings.ts`: `{ source: 'auto' } \| { source: 'pragmatic' } \| { source: 'ruleTable', siteNodeId }`, which EWR test the results are judged by, `auto` by default and for an absent key; a copy remaps its site; no SQL migration), `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, R6, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null, review: { month, day } \| null }`, null = the engine's defaults, 1 October – 30 April, 0.8 and the review on 1 January, confirmed by the client (O3, O6, issue #90); how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
+| `project` | One catchment/place: name, description, optional `team_id`, `wua_name` (095_wua_name, issue #74: the WUA the farm pages' contact lines name, "Questions? Contact Vaalbank WUA."; NULL = "your WUA", 1–200 characters by a CHECK; not the team's name, which may be a consultancy's; every member reads it, farmers included, and an editor changes it), `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`, and the zone server-rendered PDFs print in (`app_project_time_zone`, 217: the render-session exchange reads it for any member, issue #521); the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `calibrationSiteNodeId` (engine 1.41.0: where calibration scores, null = the outlet or a gauge above it with a flow record, [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410); no SQL migration, null from `mergeSettings`), `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `chirpsQuantileMap` (engine 1.53.0, CR-23: the CHIRPS gap fill's opt-in quantile map, `{ wetDayMm }` or null, [model.md §2.4b](./model.md#quantile-map-engine--1530-cr-23); no SQL migration, null from `mergeSettings`), `gapRain` (engine 1.101.0, issue #604 R4-B: the product that fills the catchment rain's blank days, `{ product: 'chirps' \| 'era5l' \| 'chirpsThenEra5l', imergLate }` or null = CHIRPS alone, [model.md §2.4b](./model.md#gap-filling-product-engine--11010-issue-604-r4-b); no SQL migration, null from `mergeSettings`), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `lakeEvapFactorSource` (engine 1.49.0: free-text provenance of the dam evaporation factors, e.g. a lake-factor preset's note, [model.md §2.7a](./model.md) item 4; never read by the model; no SQL migration, '' from `mergeSettings`), `arealRain` (engine 1.13.0: the areal rainfall correction on GR4J's rain, `{ factors, method, source }` or null, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130); no SQL migration, null from `mergeSettings`), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `allocationMode` and `allocationTolerance` (engine 1.18.0, issue #72: what the registered volumes do to a run, `'none'` by default, `'cap'` or `'fullAllocation'`, and the comparison's band, a fraction in [0, 1), default 0.1, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72); no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrChargeSource` and `lowFlowMeasure` (engine 1.3.0, issue #64: what the EWR charge follows, `'pragmatic'` by default or `'ruleTable'`, and what low flows are judged on, `'total'` by default or `'baseflow'`, [model.md §2.9c–§2.9d](./model.md); pending the hydrologist; no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrDailySource` (engine 1.77.0, issue #455: where the outlet's daily EWR comes from, the pragmatic EWR, the DRM TAB file or the DRM percentile tables, with the scaling and the tables, or null = the pragmatic EWR; an optional `[EWR options]` sheet imports it; [model.md §2.9f](./model.md); no SQL migration, null from `mergeSettings`), `ewrSplit` (engine 1.94.0, issue #553: how the EWR is split between the units, `'flowShare'` by default or `'naturalMar'`, each unit's natural MAR ÷ the units', [model.md §2.5b](./model.md); no SQL migration, `mergeSettings` gives a project without it the default, what every earlier run did), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Five keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `responsibleAuthority` (163, `projects/authoritySettings.ts`: who decides the project's licence applications), `ewrHeadline` (issue #444, `projects/ewrHeadlineSettings.ts`: `{ source: 'auto' } \| { source: 'pragmatic' } \| { source: 'ruleTable', siteNodeId }`, which EWR test the results are judged by, `auto` by default and for an absent key; a copy remaps its site; no SQL migration), `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, R6, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null, review: { month, day } \| null }`, null = the engine's defaults, 1 October – 30 April, 0.8 and the review on 1 January, confirmed by the client (O3, O6, issue #90); how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm`, `gauge` or (engine ≥ 0.22.0, migration 011) `user`, an other water user, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and return flow | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `irrigation_system` | A project's irrigation systems (migration 198, engine ≥ 1.72.0, [model.md §2.3](./model.md#23-irrigation-demand)): `name`, `efficiency` (0 < e ≤ 1), `preset` (the SABI 2021 system it started as, NULL for the project's own) and `sort_order`. A trigger seeds every new project with the six SABI rows (through `irrigation_system_seed`, SECURITY INVOKER since migration 200, which `water_app` can't execute: only the project-insert trigger calls it); the backfill added a row "Imported, NN %" for each efficiency in use that none matched. Read from viewer up (201; a farmer or an applicant reads none of it), written by editors | none (the workbook import adds "Workbook, NN %" rows) |
@@ -73,7 +73,7 @@ erDiagram
 | `borehole` | An individual borehole on a farm or other user (migration 043, engine ≥ 0.36.0, WP-3.9, [model.md §2.7d](./model.md)): `node_id`, `name` (1–200 chars), `capacity_m3_day` ≥ 0, `annual_cap_m3` ≥ 0 or null (no cap; per water year), `mode` (`none`, `supplemental`, `primary`, `emergency`), `emergency_below_pct` 0–1, `target` (`direct`, `dam`), `depletion_factor` 0–1 (CHECKs). They add to the node's combined `borehole_capacity_m3_day` (012), whose `stream_depletion_lag_days` they share. Part of the model document (`ProjectModel.boreholes`, present only when there are any), rewritten whole on save like `land_cover`; cascades with its node. RLS viewer/editor policies plus `borehole_select_farmer` (own linked farms only), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no boreholes) |
 | `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `priority_rank` smallint or null (migration 169, engine ≥ 1.64.0, issue #343: its rank within `first` or `last`, 1 supplied before 2, equal ranks pro rata, CHECKed to 1–99; null = 1, so every object saved before it runs unchanged; ignored on a `shared` object; the API's `rank`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `source` text or null (migration 139, engine ≥ 1.56.0, issue #54 Q11: where its number comes from, `meter`, `aadd`, `perCapita` or `other`, CHECKed to that list; the API refuses a source whose sizing the object doesn't have; null = not recorded), `water_source` text or null (migration 170, engine ≥ 1.65.0, issue #344: where its water comes from, `dam` or `river`, CHECKed to that list; null = the dam), `river_pump_m3_day` and `river_pool_m3` float8 ≥ 0 (finite) or null (its river abstraction's pump capacity, null = no limit, and pool, null or 0 = none; read only under `river`), `monthly_unit` text or null (migration 199, engine ≥ 1.72.0: the unit a monthly object's demand is entered and shown in, `ls` or `m3s`, CHECKed; null = m³/day; display only, `monthly_m3_day` holds the demand), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`); out of the catchment (migration 224, engine ≥ 1.86.0, [model.md §2.6](./model.md#26-transfers-transfers)): `to_node_id` NULL, a dam rule only (CHECK `transfer_external_from_dam`; every existing row names a unit; a farmer sees such a rule from a linked farm through `transfer_select_farmer`'s `from_node_id` arm) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
-| `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. So may catchment or CHIRPS rain: the land unit whose own rain it is (209, [Unit rain series](#unit-rain-series-209_unit_rain_seriessql)); none = the catchment's. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name, in the name's byte order whatever the database's collation ([Which series a run reads](#which-series-a-run-reads)) | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
+| `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. So may catchment or CHIRPS rain: the land unit whose own rain it is (209, [Unit rain series](#unit-rain-series-209_unit_rain_seriessql)); none = the catchment's. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. It also stores, with no `series_id`, what it read from the shared cell cache rather than a stored series: the reference cell's CHIRPS, and (engine 1.101.0, `settings.gapRain`) ERA5-Land as `rain_era5l_mm` and IMERG Late as one `rain_imerg_late_mm~<version>` per version, so `loadRunInput` reproduces them. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name, in the name's byte order whatever the database's collation ([Which series a run reads](#which-series-a-run-reads)) | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model, and once that scenario is deleted), `from_scenario` (188), true for a run a scenario made whether or not the scenario still exists, and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`, and the answers to the evidence report's Appendix C prompts `purpose_need`, `mitigation`, `monitoring` (129); see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
@@ -646,7 +646,13 @@ can't be. `GET /compare/runs` returns the whole snapshot, and
 `forecastRainSource`): `chirps_gefs` only when the forecast series'
 `feed_id` is a CHIRPS-GEFS feed and its `feed_days` cover every day from
 the first forecast day to the series' end (031_feed_days), read when the
-run is made; the report's forecast line credits CHIRPS-GEFS only then.
+run is made; the report's forecast line credits CHIRPS-GEFS only then
+(`ecmwf_ens` likewise for an ECMWF ENS feed, issue #604 R4-E). Beside it,
+`forecastRainEcmwf: true` (`runs/execute.ts` `forecastRainEcmwf`) when any
+forecast day is still an ECMWF ENS feed's (its `feed_days` overlap the
+forecast days), even with a day edited by hand: not a model input, only
+the flag ECMWF's CC BY credit reads (engine `runRainCredits`: the report,
+the CSVs, the workbook and an evidence pack's bundle).
 The engine reads it too (§2.4h's forecast days), so a reproduction, a
 scenario on the run and an evidence pack's re-run carry it. A
 run of a project with two or more CHIRPS series at the outlet or at a land
@@ -3970,7 +3976,7 @@ runbook ([deployment.md § Restoring the database](./deployment.md#restoring-the
 step 6a), which reads it on the old instance and deletes each row again on
 the restored one.
 
-### Reference loads (192_feature_names_reference_load.sql)
+### Reference loads (192_feature_names_reference_load.sql, 248_reference_load_provenance.sql)
 
 `reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
 keyed by `(kind, dataset)`: the reference-bucket object a production load
@@ -3985,8 +3991,30 @@ dataset (a local `pnpm import:*`), so it never outlives the data it
 describes. No foreign key: rivers have no dataset table. Owner-only like
 `erasure_log` (RLS on, no policy, no grant; `catalogue.db.test.ts`
 `OWNER_ONLY`): the migrate Lambda and the import scripts write it as the
-schema owner and the app never reads it
-([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+schema owner, and the app reads it only through `app_reference_provenance()`
+(248, below; [deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+
+**Provenance and the tile archives (248, issue #604 R3-D).** Seven nullable
+columns, for any kind: `upstream_url` (https only), `upstream_version`,
+`upstream_etag` and `upstream_last_modified` (what the operator's download
+saw upstream), `licence` (from the code's table, `TILE_ARCHIVES`, never a
+file), and `originals`, a JSON list of `{key, sha256, bytes}`, the original
+downloads kept in the reference bucket under `originals/<dataset>/…`. Null
+is unknown, never empty. A table load records none of them yet (its dataset
+row carries its source and version). The kind `tiles` records the archives
+the tiles bucket serves, one row each, its dataset the archive's name
+(`basemap`, `fonts`, `terrain`, `water`) and `source_key` its served key
+(`tiles/terrain.pmtiles`, `tiles/fonts/` for the glyph ranges; a CHECK,
+`reference_load_tiles_archive`, holds each name to its key); `source_sha256`
+is our SHA-256 of the archive (of the glyph files' listing for the fonts).
+`backend/scripts/tiles-upload.ts` writes it (`recordTileProvenance`, an
+upsert that returns the record it replaced): locally into the dev database,
+in production through `load-reference.yml`'s `tiles` kind. The table stays
+owner-only; the app's one read is `app_reference_provenance()` (SECURITY
+DEFINER, EXECUTE for `water_app` only), which returns the kind, dataset,
+version, upstream date, licence and when it was recorded, never a key,
+hash or ETag. The Map's dataset lines use it (`withProvenance`: the DEM
+grid's, the delineation sheet's and the trace sheet's labels).
 
 ### The job purge clears links (148_job_purge_clears_links.sql)
 
@@ -4015,14 +4043,14 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 
 | Column | Holds |
 | --- | --- |
-| `project_id`, `source` | The project, and `chirps`, `chirps_gefs` or `dws` |
+| `project_id`, `source` | The project, and `chirps`, `chirps_gefs`, `dws` or `ecmwf_ens` (253) |
 | `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ bbox: { south, west, north, east }, skipNoData? }` (at most 100 cells in 25 rows) or `{ station }`, plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981). Listed cells may carry the mark of where they came from, written only by its route: `boundary` (the catchment boundary, `fromBoundary.ts`) or `unit` (`{ nodeId, featureId, updatedAt, areaKm2 }`: a land unit's parcel, `fromUnits.ts`, issue #482; such a feed writes the unit's own rain, [§ Unit rain series](#unit-rain-series-209_unit_rain_seriessql)) |
 | `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-031_feed_dayssql)). A CHIRPS feed writes nothing into a series holding another product or version (032, [§ Series provenance](#series-provenance-032_series_provenancesql)) |
 | `enabled`, `schedule` | `schedule` is always `daily` (CHECK, 111: no source publishes more often; the migration turned `hourly` feeds daily) |
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
-| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30); `last_meta.finalThrough` (CHIRPS) the last day through which the series holds final values, checked by the ingest and not re-read by the next window (#69); `last_meta.filesChecked` / `recheckDaysRead` / `revisionXmin` (CHIRPS) the re-check of cached finals, § Re-checking cached finals (210) |
+| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30); `last_meta.finalThrough` (CHIRPS) the last day through which the series holds final values, checked by the ingest and not re-read by the next window (#69); `last_meta.filesChecked` / `recheckDaysRead` / `revisionXmin` (CHIRPS) the re-check of cached finals, § Re-checking cached finals (210); `last_meta.gapEra5l` / `gapImergLate` (the CHIRPS feed whose cells the runs read, while `settings.gapRain` asks for the product) what that fetch's fill made of it, `ok`, `not_ready` or `failed:<format\|unavailable\|refused>`, merged in after the ingest by `app_record_gap_fill` (254_feed_gap_fill_outcome; only the running feed_fetch job of that feed, queued as the caller; never an error's text) |
 | `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
@@ -4047,7 +4075,8 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   - Due (`app_feed_is_due`, 027, a plain function only the two above call):
     never scheduled; or not scheduled within a day, with a minute's slack;
     or, for a **`chirps_gefs`** feed, scheduled before the latest 08:45 UTC
-    (after CHC publishes the day's issue, #33); or, while failing, after
+    (after CHC publishes the day's issue, #33), and for an **`ecmwf_ens`**
+    feed before the latest 14:00 UTC (after the copy's ECMWF runs, 253); or, while failing, after
     15 min × 2^(failures − 1), capped at the day. UTC whatever the session
     time zone. 111 dropped the hourly interval; the `schedule` argument
     stays so the callers are unchanged. 242 adds the feed's `last_error`:
@@ -4222,6 +4251,334 @@ signed-in session, no write grant to `water_app` (`catalogue.db.test.ts`
 - `feeds/recheck.db.test.ts` checks the access (positive controls), the
   claim's order and bounds, the apply's rules and refusals, and the loop end
   to end on the rewrite fixture.
+
+### Mirror revisions (245_mirror_revision.sql, 246_mirror_revision_parts.sql)
+
+Issue #604 moves CHIRPS onto a copy we control: a Zarr store per product
+with a `manifest.json` beside it, whose `revision` goes up only when CHC
+rewrote a file *and* the values changed, each time appending a `changes`
+entry `{revision, days: [from, to], cellsChanged, maxAbsDiff}` (design D8).
+This is how such a revision reaches the cell cache without a feed (D9):
+it marks the cached finals stale, and the re-check above does the rest.
+
+| Table | Holds |
+| --- | --- |
+| `mirror_manifest` | One row per `origin` and `product` (primary key): `revision` (≥ 1), the revision of the copy the cache was last brought up to; `applied_at`; `manifest` (`jsonb`, the manifest as applied, its `changes` cut to the entries that apply marked, as the tick passes them: the record of the revision). No foreign keys |
+| `mirror_change` (246) | One row per run of days of an entry of a revision's `changes` an apply marked (an entry larger than a part is split by days, a row per run): `origin`, `product`, `target_revision` (the revision it was applied for), `idx` (the entry's place among that revision's entries to mark) and `day_from` as primary key; the entry's own `revision`, the run's `day_from`/`day_to`, the grid cells `r0`–`r1`, `c0`–`c1`; `applied_at` (indexed with origin and product). What a resumed apply skips, and what a fetch queued before `applied_at` checks its finals against. Pruned 30 days after its revision is recorded. No foreign keys |
+| `mirror_copy` (246) | One row per `origin` and `product` (`sat`, `rnl` or `prelim`; since 252 also `era5l` and `imerg_late`; primary key): the copy's manifest as the worker's tick last read it: `revision`, `final_through` (null for `prelim` and `imerg_late`), `prelim_through` (null for `rnl` and `era5l`), `seen_at`. What the API shows of the copy (only the worker can reach it). No foreign keys |
+
+- **RLS**: reference data like `chirps_cell_year`: SELECT for any
+  signed-in session, no write grant to `water_app` (`catalogue.db.test.ts`
+  `READ_ONLY`), each table written only by its function below.
+- **`app_mirror_apply_revision(origin, product, revision, changes,
+  manifest)`** (`SECURITY DEFINER`, `search_path` pinned, `water_app`
+  only, and only from a session with **no user and no API key**, the
+  worker's tick under `withoutUser`, else `42501`): returns `(revision,
+  applied, marked)`. A `revision` at or below the stored one changes
+  nothing and returns the stored one with `applied = false` (a tick that
+  raced another, or a manifest read before the last apply). Otherwise each
+  entry of `changes` (a list of the manifest's entries; those at or below
+  the stored revision are skipped, though the tick passes only the newer
+  ones, below) with `cellsChanged > 0` marks stale (`chirps_cell_stale`) **every cached
+  final** of its days inside the manifest's `region`, or inside the entry's
+  own optional `region` `{w,s,e,n}` (which must sit inside the manifest's);
+  then the row takes the new revision and manifest, and `marked` counts the
+  cell-days newly marked.
+  - **Which cells, and why all of the region's.** The manifest's `changes`
+    name no cells (`cellsChanged` is a count), and a list for a region-wide
+    rewrite would be 341,000 cells. So the function marks every cell the
+    cache holds a final for on those days, inside the region: only cells
+    some feed asked for, so the marking is small. Over-marking costs one
+    re-read from the copy of a value that turns out unchanged (the re-read
+    clears the stale row and logs nothing); under-marking would leave a
+    wrong value cached for good. Preliminary values are never marked (their
+    final replaces them anyway), nor cells outside the region (the copy
+    can't serve them), nor the other origin's rows.
+  - **No `chirps_revision` row here.** That table means "these cached
+    finals changed", and every CHIRPS feed recomputes its series from the
+    cache for each logged day (`refreshRevisedDays`). Logged before any
+    value moved, it would make every feed recompute up to a revision's days
+    from the old values for nothing, and the day would be logged again when
+    the re-read lands. The re-read (`chirps_recheck_claim` `reread`, then
+    `chirps_recheck_apply`, 210) logs each day whose values really changed,
+    and the feeds refresh from that as for a file CHC rewrote.
+  - **Bounds** (else `23514`, nothing marked or recorded): origin `chc` or
+    `fixtures`, product `sat` or `rnl` (since 252 also `era5l` and
+    `imerg_late`); revision ≥ 1; the manifest an object
+    of at most 4 MB naming the same product and revision, with `grid.step`
+    the product's (0.05, or 0.1 since 252) and a `region` on that lattice (exact: `jsonb`
+    numbers are `numeric`; `mirror_region_cells` turns it into row and
+    column ranges); at most 1000 entries, each with an integer `revision`
+    no later than the manifest's, ISO `days` running forwards over at most
+    366 days from the product's first day to today (UTC), a non-negative
+    integer `cellsChanged` and a non-negative `maxAbsDiff`. (245 also
+    refused a call of more than 4000 days; 246 applies it in parts.) The
+    1000-entry bound is on what one call is given, not on the manifest:
+    `changes` only grows (neither `ingest/manifest.py` nor the daily run
+    trims it), so the tick passes only the entries above the stored
+    revision, and a backlog of more than 1000 in batches (below).
+  - **In parts (246).** The function now returns `(revision, applied,
+    marked, remaining)`. The entries to mark (above the stored revision,
+    `cellsChanged > 0`, in list order) are taken day by day, up to **4000
+    days** and **1,000,000 estimated cell-days** a call
+    (`MIRROR_PART_DAYS`, `MIRROR_PART_CELL_DAYS` in
+    `feeds/mirrorRevision.ts`), and always at least one day; an entry that
+    doesn't fit is split by days, and each run of days marked is a
+    `mirror_change` row. Each call marks its part, logs its runs, and
+    commits. `remaining` (entries not wholly marked) > 0 means call again
+    (`revision` is still the old one, `applied` false); the last part
+    records the revision (`applied`, `remaining` 0). A call skips what is
+    already logged for the same revision when it is a prefix of this
+    call's entries, run after run (each entry's runs back to back from
+    its first day, each entry whole before the next, the same revision and
+    cells; else that log is dropped and it starts over, re-marking:
+    harmless), and goes on from the day after the last run, so a worker
+    that dies between parts resumes on the next tick, inside an entry too,
+    and one that dies inside a part rolls it back whole.
+  - **Why a cell-day budget (246).** The days bound alone didn't bound the
+    work: a part's stale rows are its days times every cached final cell
+    of the region, so 4000 days over a few thousand cached cells is tens of
+    millions of rows in one statement. Past the worker's time (300 s, the
+    tick's own 60 s) the part rolls back, logs nothing, and the next tick
+    tries the same part again, for ever. So each call counts the
+    `chirps_cell_year` rows the cache holds inside the region, by year
+    (one grouped index scan), and estimates a day as that year's count: an
+    upper bound on its stale rows (it counts preliminary and empty days
+    too). A million rows is seconds on the minimal tier's database, and
+    with 3000 cached cells still 333 days a part.
+  - **The baseline (246).** With no revision stored (the first manifest of
+    an origin and product the cache sees: the cutover to
+    `CHIRPS_SOURCE=mirror`), the entries are checked but not what is
+    marked: the call marks **every cached final in the region** instead,
+    one entry per year the cache holds a cell of, the whole region, in the
+    same parts, then records the revision, so it happens once. Why: the
+    cache holds finals read from CHC's own files; CHC may have rewritten
+    some before the copy existed, which the copy holds revised, but its
+    `changes` start with the copy's own history, and with the copy as
+    source no fetch HEADs CHC's files any more (`claimRecheck`). Without
+    the baseline such a final would never be read again. It costs one
+    re-read from the copy of each cached final, which clears the mark and
+    logs nothing where the value is the same. A cell first cached during
+    the baseline was read from the copy (or is caught by the race rule
+    below), and a year first cached in the middle changes the entries, so
+    the log starts over (bounded: one restart per year).
+    **Why parts, not one transaction:** CHC has rewritten years at once (the
+    2024 dailies, the annual NetCDFs); a whole `rnl` rewrite is 16,000 days.
+    One transaction would hold every one of those days' file rows, stalling
+    every CHIRPS fetch behind it, and a timeout would throw all of it away.
+    Parts of 4000 days take seconds each, and progress survives.
+  - **Locks (246).** The product's advisory lock is taken exclusive,
+    waiting at most 30 s (`lock_timeout`); the file rows at most 500 ms. An
+    inline fetch holds the file rows of its claimed days and then, in its
+    merge, waits for the same advisory lock shared: without the short
+    timeout the two would deadlock. A timeout (`55P03`) refuses the call
+    whole, and the tick tries again next time.
+  - **Locks**: an advisory lock on the origin and product (two ticks never
+    apply at once, even before the first row exists), then each day's
+    `chirps_file` row in day order, under which its stale rows are written:
+    210's rule, so it never waits on a re-check's stale rows while holding
+    them. Cell rows are only read.
+- **`app_mirror_revision(origin, product)`** (`SECURITY DEFINER`, the same
+  no-user caller only): the stored revision, `NULL` when none, so the tick
+  calls the apply only when the manifest's is newer.
+- `mirror_worker_context()` (no user, no API key; as 051's
+  `alert_worker_context`) and `mirror_region_cells(region)` are the shared
+  checks (invoker rights).
+- **The stale-mark race (246).** A fetch that read a value from the copy
+  before a revision, and lands it after the revision was marked, used to
+  write the old value back as current, for good. Two ways, both closed:
+  - `chirps_recheck_apply` cleared the revision's marks for the days it
+    re-read. It now clears only a mark whose `marked_at` is no later than
+    `chirps_read_since(fetch job)`: the fetch job's `created_at` (every
+    read of that job, every attempt, comes after it; `started_at` would
+    not do, as an answer to an earlier attempt of the same job can land
+    after a retry). A mark made later stays, and a later fetch reads the
+    day again. The apply, a HEAD that finds a rewritten file, and the
+    merge below refresh the `marked_at` of a mark already there
+    (`ON CONFLICT … DO UPDATE`), so an old mark counts as new.
+  - `chirps_cache_merge` (and the re-check's re-read) could cache an old
+    final for a cell the revision didn't mark because nobody had cached it
+    yet. Each now ends with `mirror_mark_raced(origin, product, since,
+    days, rows, cols)` (owner-only): every final it read on a day and cell
+    inside a `mirror_change` row applied after `since` is marked stale.
+    Both take the product's advisory lock **shared** before writing, and
+    the apply takes it exclusive: so the apply either sees the fetch's
+    committed cells and marks them, or committed its `mirror_change` rows
+    before the fetch looks. For a `feed_ingest` (production's CHC path)
+    `since` is the `created_at` of the `feed_fetch` its answer is to.
+  - Signatures unchanged (piece C calls them as they are). Over-marking
+    costs one more read of an unchanged value; under-marking kept a wrong
+    value cached.
+- **`mirror_copy` and `app_mirror_record_copy(origin, product, manifest)`
+  (246)** (`SECURITY DEFINER`, the same no-user caller only): the worker's
+  tick records each product's manifest (`sat`, `rnl`, `prelim`) whenever
+  it changed, a new month as well as a revision: `revision`,
+  `finalThrough`, `prelimThrough` (bounds, else `23514`: the manifest an
+  object of at most 4 MB naming the product, an integer revision ≥ 1, each
+  day null or an ISO date from 1981-01-01 to today, no `finalThrough` for
+  `prelim`, no `prelimThrough` for `rnl`). The API, which can't reach the
+  copy, reads it as any signed-in session: `SELECT product, revision,
+  final_through, prelim_through, seen_at FROM mirror_copy WHERE origin =
+  $1` (`mirrorCopy(db, origin)` in `feeds/mirrorRevision.ts`, with
+  `cacheOrigin()`).
+- The typed wrappers are `backend/src/feeds/mirrorRevision.ts`
+  (`applyMirrorRevision`, one part; `mirrorRevision`; `recordMirrorCopy`;
+  `mirrorCopy`). The worker tick is `backend/src/jobs/handlers/mirror-tick.ts`,
+  called by `runTick` before it queues the due feeds, only with
+  `CHIRPS_SOURCE=mirror`: per product one manifest request at most (a
+  conditional GET on S3, a stat on a `file://` copy), nothing more when its
+  ETag (or size and mtime) is the one this process already handled; it
+  records the manifest (without its `changes`), and for `rnl`/`sat`
+  applies a newer revision in parts within the tick's time (60 s, 10
+  parts per product), the rest next tick. What each call is given is
+  `nextBatch(manifest, stored)`: with no stored revision no entries (the
+  baseline); else only the entries above the stored revision, all of them
+  to the manifest's revision when they are at most 1000, or else the first
+  ones up to the last revision they hold whole, recorded as that revision
+  (the stored manifest says so), the next batch going on from it. One
+  revision of more than 1000 entries on its own (never seen: CHC's largest
+  rewrite is about 45 entries) is passed as one entry per year it touches,
+  from its first to its last changed day that year over the whole region:
+  more marked than changed, but never stuck. A failure is logged (`mirror_revision_failed`, or
+  `mirror_revision_busy` on a lock timeout) and retried next tick; the rest
+  of the tick goes on. With `CHIRPS_SOURCE=mirror` a fetch HEADs none of
+  CHC's files for the `chc` origin (`claimRecheck`): the copy's revisions
+  replace that re-check, and its stale days are still read again.
+- `feeds/mirrorRevision.db.test.ts` checks the access (positive controls),
+  what is marked and what isn't, that the re-check then claims the marked
+  days, the revision rules and every bound, a revision of more than 4000
+  days in parts and resumed after a crash (inside an entry too), an entry
+  split by the cell-day budget over 3000 cached cells, the baseline (every
+  cached final in the region once; the next revision only its changes),
+  the race both ways (with positive controls), the HEAD guard and
+  `mirror_copy`; `jobs/handlers/mirror-tick.db.test.ts` the tick end to
+  end (nothing with `chc`; the baseline on first sight marks the finals
+  read from CHC, the feed re-reads them, the second tick does nothing; a
+  revision marks, the feed re-reads, its series changes with a History
+  event; a baseline over several parts moves on tick after tick; a
+  1500-entry list with five new entries; a backlog of 1400 in two
+  batches; `mirror_copy` recorded, a new month too);
+  `jobs/handlers/mirror-tick.test.ts` `nextBatch`.
+
+### The cell cache's products and grids (252_cache_products.sql)
+
+Round 4 of issue #604 adds two rain products to our copy, both on a 0.1°
+grid over the same region: `era5l` (ERA5-Land daily precipitation, D15,
+from 1950) and `imerg_late` (IMERG Late daily, D16, from 2000-06-01). They
+go through the cell cache and the revision machinery above unchanged in
+shape (`backend/src/mirror/grid.ts` `PRODUCT_GRIDS`;
+[architecture.md § Our copy of the rain data](./architecture.md#our-copy-of-the-rain-data)).
+
+- **Products.** Every `product` CHECK of `chirps_cell_year`,
+  `chirps_cell_stale`, `chirps_file`, `chirps_revision`, `mirror_manifest`
+  and `mirror_change` takes `sat`, `rnl`, `era5l` and `imerg_late`, and
+  `mirror_copy`'s those and `prelim`. `mirror_copy` holds no
+  `prelim_through` for `rnl` or `era5l` (`mirror_copy_no_prelim`) and no
+  `final_through` for `prelim` or `imerg_late` (`mirror_copy_no_final`):
+  IMERG Late's manifest runs through `prelimThrough`, since Late is never
+  final. In the cache both new products' days are final (no later product
+  replaces them; a new version of an IMERG day is a revision of the copy),
+  so `chirps_cache_merge` refuses a `p` day for any product but `sat`.
+- **Grids.** A row's `row_idx`/`col_idx` is a cell of its product's global
+  grid, row 0 at 60° N and column 0 at 180° W: CHC's 0.05° grid (2400 ×
+  7200) for `sat`/`rnl`, a 0.1° grid (1200 × 3600) for `era5l`/
+  `imerg_late`. The 0.05° column CHECKs stay, and a per-product CHECK
+  (`chirps_cell_year_grid`, `chirps_cell_stale_grid`,
+  `mirror_change_grid`) keeps a 0.1° product's rows ≤ 1199 and columns
+  ≤ 3599, so a 0.05° index written as a 0.1° one is refused rather than
+  cached as another place's rain. A feed's 0.05° cell (r, c) lies in the
+  0.1° cell (⌊r/2⌋, ⌊c/2⌋) (`feeds/cellCache.ts` `productCell`).
+- **First days.** `chirps_cell_year_year` and `chirps_file_day` start
+  `era5l` in 1950 and `imerg_late` on 2000-06-01 (`sat` 1998, `rnl` 1981).
+- **Functions.** `mirror_cache_product`, `mirror_product_first_day`,
+  `mirror_product_step` and `mirror_product_cell_ok` hold that table for
+  the functions (the CHECKs spell it out). Replaced from their latest
+  definitions with only the product checks changed: `chirps_feed_job` and
+  `chirps_recheck_claim` (210), `chirps_cache_merge`,
+  `chirps_recheck_apply`, `app_mirror_apply_revision` (its manifest's
+  `grid.step` must be the product's, its regions on that step's lattice:
+  `mirror_region_cells(region, step)`, which replaces 245's one-argument
+  form) and `app_mirror_record_copy` (246). `chirps_feed_job` names, for
+  `era5l` and `imerg_late`, a running job of **any** CHIRPS feed (no feed's
+  config names them yet: `feeds/fromMirror.ts` `fillProductCache` fills
+  them for a feed's cells from its fetch); for `sat` and `rnl` the feed's
+  own product, as before.
+- Tests: `src/db/migration-252.db.test.ts` (each CHECK and function, with
+  positive controls), `src/feeds/productCache.db.test.ts` (a fill, a
+  revision that marks and replays).
+
+### DWS gauge records (247_gauge_record.sql)
+
+Issue #604's rule moves DWS feeds off DWS's site too (design D14): a DWS
+feed with `DWS_SOURCE=store` reads its station's days from our own store
+(`backend/src/feeds/fromGaugeRecord.ts`) instead of asking
+`HyData.aspx` per feed. Three writers fill it, each its own **source**:
+
+- `dws-request`: DWS's reply to a written data request, loaded by the
+  operator (`pnpm import:dws <file> --reference "…"`,
+  `backend/scripts/import-dws.ts`). The primary route for a station's
+  history, and the one that settles storing the data in a commercial tool.
+- `dws-web`: the weekly pass (`backend/src/ingest/dws.ts`), the newest two
+  years of each station an enabled DWS feed names, handed over through the
+  mirror bucket and loaded by the worker's tick
+  (`backend/src/feeds/gaugeRecordLoad.ts`).
+- `upload`: any other DWS daily table the operator loads
+  (`pnpm import:dws … --source upload`, e.g. a page saved by hand).
+
+| Table | Holds |
+| --- | --- |
+| `gauge_record` | One row per `origin`, `station`, `day` and `source` (primary key): the daily mean flow `value` in m³/s (null for a listed gap, e.g. quality 170; 0–100 000, never NaN), DWS's `quality` code as listed (1–8 letters or digits, or null), `fetched_at`, and `reference` (a `dws-request` row's reply). `station` is a river gauge code (`^[A-Z][0-9]H[0-9]{3}$`, the feed config's `DWS_RIVER_GAUGE`); `origin` is `dws` (from DWS) or `fixtures` (the synthetic page dev, CI and e2e read). No foreign keys |
+| `gauge_record_span` | One row per `origin`, `station`, `source` and `day_from` (primary key): the days `day_from`–`day_to` that source was asked for, listed or not; `fetched_at` (the newest load merged into it) and `reference`. Overlapping or adjacent spans of one source merge as they are written. What tells a day DWS has no data for (inside a span, no row) from a day not loaded yet (no span). No foreign keys |
+| `gauge_record_current` (view, `security_invoker`) | Per `origin`, `station` and `day`, the row of the best source (below): what a feed reads |
+
+**Precedence.** Each source keeps its own rows, so a load never destroys
+another's and a disagreement stays visible; the view picks per day
+`dws-request`, then `dws-web`, then `upload` (`gauge_source_rank`):
+
+- **A DWS reply first.** It is DWS's own extract of Hydstra, sent to us in
+  writing for this use: the authoritative copy, and the only one we have
+  permission to keep.
+- **The web pass next.** The same verified data read from the public page,
+  and fresher (weekly), so it fills every day a reply doesn't hold (the
+  months since the reply was extracted above all). It doesn't override the
+  reply on a day both hold: it is a scrape of a page whose layer DWS has
+  seen fail (the ScriptServer page), with no terms.
+- **An upload last.** A table of unknown provenance, used only where neither
+  DWS source has the day.
+
+A gap row is a row like any other: DWS listing a day with no value (170
+"permanent gap") is an answer, and it wins over a lower source's value.
+
+- **RLS**: reference data like `chirps_cell_year`: SELECT for any
+  signed-in session, no write grant to `water_app` (`catalogue.db.test.ts`
+  `READ_ONLY`).
+- **`gauge_record_write(origin, station, source, from, to, days[],
+  values[], quality[], fetched_at, reference)`** (invoker's rights,
+  `search_path` pinned, closed to `water_app` and PUBLIC, as
+  `authority_confirm_by_operator`): the operator's import, as the schema
+  owner. Replaces the source's rows over `from`–`to` (a day it no longer
+  lists goes; other sources stay) and merges the span. Bounds (else
+  23514): origin, source and station known; the span 1–7330 days (DWS's 20
+  years a request) ending by today in South Africa; the arrays of one
+  length, at most 7330 rows, each day inside the span and listed once; each
+  value null or 0–100 000; each quality code 1–8 letters or digits;
+  `fetched_at` not in the future; a `dws-request` load names its reply.
+  A load no newer than the source's newest one already covering the whole
+  span changes nothing (`applied = false`). One writer per station at a
+  time (an advisory lock).
+- **`app_gauge_record_load_web(origin, station, from, to, days[], values[],
+  quality[], fetched_at)`** (`SECURITY DEFINER`, `water_app` EXECUTE, worker
+  only: no user and no API key, 245's `mirror_worker_context`, else 42501):
+  `gauge_record_write` with source `dws-web` and a span of at most 731 days.
+- **`app_dws_feed_stations()`** (`SECURITY DEFINER`, worker only): the river
+  gauges enabled DWS feeds name, in any project, each once, at most 500:
+  the weekly pass's station list. Only public station codes leave with it.
+- **Tests**: `feeds/gaugeRecord.db.test.ts` (a signed-in reader with a
+  positive control, `water_app`'s refused writes, the worker-only
+  functions, every bound, the precedence, the replace and the skip, the
+  import of the synthetic reply, a store-backed fetch writing exactly what
+  the live path writes, waiting for days the store doesn't hold, the
+  tick's handover); `ingest/dws.test.ts`; `scripts/import-dws.test.ts`.
 
 ### Feed days (031_feed_days.sql)
 

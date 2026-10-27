@@ -6,6 +6,8 @@
 // test checks each against docs/maps.md, where the licence was read).
 // Plain text, never HTML: the page renders it as text.
 
+// From the credits' own subpath, not the engine's barrel: this module is on the public Data sources page and the map's attribution, which need nothing else of the engine.
+import { copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION, imergCitation } from '@water-management/engine/credits';
 import { APP_NAME } from '#lib/brand.js';
 
 /** A `YYYY-MM-DD` day in words, "1 October 2026" (UTC, so the day never shifts). */
@@ -168,6 +170,40 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		licenceUrl: 'https://www.chc.ucsb.edu/data/chirps3',
 		read: '2026-10-01',
 		statements: ['Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025).']
+	},
+	// The rain data copy's other products (issue #604 R4-E, docs/data-sources.md): ERA5-Land and IMERG Late fill catchment-rain gaps where a
+	// project chooses them, and the ECMWF ENS forecast feeds the rain forecast. Each notice is the engine's (liability/rainCredits.ts), the
+	// one every other place their values show prints; read now, so Copernicus's year and IMERG's day accessed are today's.
+	{
+		id: 'era-land',
+		name: 'ERA5-Land daily precipitation',
+		usedFor: 'Filling gaps in the catchment rain where a project’s Rain gaps setting chooses it, and the Data tab’s rain products side by side.',
+		publisher: 'ECMWF, for the Copernicus Climate Change Service (C3S)',
+		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
+		licenceUrl: 'https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land',
+		read: '2026-10-27',
+		statements: [copernicusEra5lNotice(new Date().getUTCFullYear())],
+		citation: ERA5L_CITATION
+	},
+	{
+		id: 'imerg',
+		name: 'GPM IMERG Late Run, daily (V07)',
+		usedFor: 'Filling the last few days of the catchment rain, before CHIRPS’ first values, where a project’s Rain gaps setting chooses it.',
+		publisher: 'NASA Goddard Earth Sciences Data and Information Services Center (GES DISC)',
+		licence: 'NASA open data (CC0 by NASA’s data use guidance; CC BY 4.0 on the AWS Open Data registry), credited as CC BY asks',
+		licenceUrl: 'https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance',
+		read: '2026-10-27',
+		statements: [imergCitation(new Date().toISOString().slice(0, 10))]
+	},
+	{
+		id: 'ecmwf-ens',
+		name: 'ECMWF open data: the ENS 15-day rain forecast',
+		usedFor: 'The rain forecast, where an ECMWF ENS feed writes it.',
+		publisher: 'European Centre for Medium-Range Weather Forecasts (ECMWF)',
+		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0) and the ECMWF Terms of Use',
+		licenceUrl: 'https://www.ecmwf.int/en/forecasts/datasets/open-data',
+		read: '2026-10-27',
+		statements: [ECMWF_CREDIT]
 	},
 	{
 		id: 'waas-map',

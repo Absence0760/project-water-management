@@ -218,7 +218,10 @@ describe('chirps_recheck_apply', () => {
 
 	it('a read of a stale day replaces the final (the one path that does), clears it, and logs the revision; only the cells read', async () => {
 		const { owner, feed, job } = await setup('ApplyRead');
-		await asOwner(`INSERT INTO chirps_cell_stale (origin, product, row_idx, col_idx, day) VALUES ('chc', 'sat', 1600, 4100, '2024-03-01'), ('chc', 'sat', 1600, 4101, '2024-03-01')`);
+		// Marked before the fetch was queued (marked_at): a mark made after it is kept by its read (246), tested below.
+		await asOwner(
+			`INSERT INTO chirps_cell_stale (origin, product, row_idx, col_idx, day, marked_at) VALUES ('chc', 'sat', 1600, 4100, '2024-03-01', now() - interval '1 hour'), ('chc', 'sat', 1600, 4101, '2024-03-01', now() - interval '1 hour')`
+		);
 		await asOwner(`UPDATE chirps_file SET tag = '"new"'`);
 		expect((await apply(owner, feed, job, ['chc', 'sat', [], [], ['2024-03-01'], ['"new"'], [1600], [4100], [1.25]])).rows[0]!.n).toBe(1);
 		const v = await asOwner(`SELECT col_idx, vals[$1] AS v, final[$1] AS f FROM chirps_cell_year ORDER BY col_idx`, [doy('2024-03-01') + 1]);
@@ -233,8 +236,9 @@ describe('chirps_recheck_apply', () => {
 			{ day: '2024-03-01', cells_changed: 1, tag_before: '"new"', tag_after: '"new"' }
 		]);
 		// The same read again: the value is already there, nothing changes, nothing is logged.
-		await asOwner(`INSERT INTO chirps_cell_stale (origin, product, row_idx, col_idx, day) VALUES ('chc', 'sat', 1600, 4100, '2024-03-01')`);
+		await asOwner(`INSERT INTO chirps_cell_stale (origin, product, row_idx, col_idx, day, marked_at) VALUES ('chc', 'sat', 1600, 4100, '2024-03-01', now() - interval '1 hour')`);
 		expect((await apply(owner, feed, job, ['chc', 'sat', [], [], ['2024-03-01'], ['"new"'], [1600], [4100], [1.25]])).rows[0]!.n).toBe(0);
+		expect(await stale()).toEqual([{ col_idx: 4101, day: '2024-03-01' }]);
 	});
 
 	it('an untagged file read again whose values differ is a rewrite: the other cells’ finals of the day become stale too', async () => {
@@ -290,7 +294,7 @@ describe('chirps_recheck_apply', () => {
 		expect(await fileRow('2024-03-01')).toMatchObject({ tag: '"v1"', claim_job: null, revisions: 0 });
 		expect(await stale()).toEqual([]);
 		// Gone: the cell's cached value stays, and it isn't read again.
-		await asOwner(`INSERT INTO chirps_cell_stale (origin, product, row_idx, col_idx, day) VALUES ('chc', 'sat', 1600, 4100, '2024-03-01')`);
+		await asOwner(`INSERT INTO chirps_cell_stale (origin, product, row_idx, col_idx, day, marked_at) VALUES ('chc', 'sat', 1600, 4100, '2024-03-01', now() - interval '1 hour')`);
 		expect((await apply(owner, feed, job, ['chc', 'sat', [], [], ['2024-03-01'], [null], [1600], [4100], [null]])).rows[0]!.n).toBe(0);
 		expect(await stale()).toEqual([]);
 		expect((await asOwner(`SELECT vals[$1] AS v FROM chirps_cell_year WHERE col_idx = 4100`, [doy('2024-03-01') + 1]))[0].v).toBe(1);
@@ -550,6 +554,8 @@ describe('the re-check end to end, on the fixtures with a rewrite (FEED_FETCHER=
 			await asOwner(`UPDATE job SET run_after = now() WHERE kind = 'feed_fetch' AND status = 'queued'`);
 			vi.stubEnv('FEED_FETCHER', 'sqs');
 			vi.stubEnv('FETCH_REQUESTS_QUEUE_URL', 'https://sqs.test/fetch-requests');
+			// Production today: FEED_SOURCE=live, so CHIRPS_SOURCE defaults to chc (with mirror, CHC's files aren't HEADed: below).
+			vi.stubEnv('CHIRPS_SOURCE', 'chc');
 			sent.length = 0;
 			const done = (await tick()).done;
 			vi.unstubAllEnvs();

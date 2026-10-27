@@ -4,10 +4,10 @@
 // the pure side is feeds/cellCache.ts.
 import type { Db } from '../db/tx.js';
 import { feedFetcher } from '../jobs/transport.js';
-import { type CacheView, decodeCellValue, type GridCell, viewKey, windowYears } from './cellCache.js';
-import type { ChirpsDailyProduct } from './config.js';
+import { type CacheProduct, type CacheView, decodeCellValue, type GridCell, viewKey, windowYears } from './cellCache.js';
 import type { CellsResult } from './fetch.js';
 import { feedSourceMode } from './http.js';
+import { chirpsSource } from '../mirror/source.js';
 
 /**
  * Where the cached values came from: `chc` (the real files) or `fixtures`
@@ -26,7 +26,7 @@ export type CacheOrigin = 'chc' | 'fixtures';
 export const cacheOrigin = (): CacheOrigin => (feedFetcher() === 'sqs' || feedSourceMode() === 'live' ? 'chc' : 'fixtures');
 
 /** The cache rows of `cells` for the years `window` spans, as the job's acting user (any signed-in session reads it). */
-export async function readCellCache(db: Db, origin: CacheOrigin, product: ChirpsDailyProduct, cells: readonly GridCell[], window: { start: string; end: string }): Promise<CacheView> {
+export async function readCellCache(db: Db, origin: CacheOrigin, product: CacheProduct, cells: readonly GridCell[], window: { start: string; end: string }): Promise<CacheView> {
 	const view: CacheView = new Map();
 	if (!cells.length || window.start > window.end) return view;
 	const [y0, y1] = windowYears(window);
@@ -42,6 +42,9 @@ export async function readCellCache(db: Db, origin: CacheOrigin, product: Chirps
 	return view;
 }
 
+/** A fetch's cell values for the cache: the fetcher's answer (a CHIRPS product), or a read of our copy of any cache product (feeds/fromMirror.ts). */
+export type CacheCells = Omit<CellsResult['cells'], 'product'> & { product: CacheProduct };
+
 /**
  * Merge a fetch's cell values for feed `feedId` into the cache
  * (chirps_cache_merge, which takes them only from a running job of that
@@ -50,7 +53,7 @@ export async function readCellCache(db: Db, origin: CacheOrigin, product: Chirps
  * The cells go in (row, column) order, the function's lock order. Throws
  * what the function raises; the ingest turns that into an invalid answer.
  */
-export async function mergeCellCache(db: Db, feedId: string, origin: CacheOrigin, answer: CellsResult['cells']): Promise<number> {
+export async function mergeCellCache(db: Db, feedId: string, origin: CacheOrigin, answer: CacheCells): Promise<number> {
 	if (!answer.cells.length || !answer.read.length) return 0;
 	const order = answer.cells.map((_, i) => i).sort((a, b) => answer.cells[a]![0] - answer.cells[b]![0] || answer.cells[a]![1] - answer.cells[b]![1]);
 	const { rows } = await db.query<{ n: number }>('SELECT chirps_cache_merge($1, $2, $3, $4, $5, $6, $7, $8, $9) AS n', [
@@ -78,15 +81,22 @@ export interface RecheckClaim {
  * chirps_recheck_claim), as the running feed_fetch job's acting user: up to
  * `reads` days to read again for `cells` (their stale days, then files whose
  * tag isn't known) and up to `heads` files to HEAD. Null when there is none.
+ *
+ * With CHIRPS_SOURCE=mirror no file of CHC's is HEADed (`heads` is taken as
+ * 0, for the `chc` origin): the copy's own revisions (246, the worker tick's
+ * jobs/handlers/mirror-tick.ts) mark what CHC rewrote, and a HEAD's ETag
+ * would describe CHC's file, not the copy the feed reads. The stale days are
+ * still read again: that is how a revision reaches the feeds.
  */
 export async function claimRecheck(
 	db: Db,
 	feedId: string,
 	origin: CacheOrigin,
-	product: ChirpsDailyProduct,
+	product: CacheProduct,
 	cells: readonly GridCell[],
-	{ heads, reads, intervalDays }: { heads: number; reads: number; intervalDays: number }
+	{ heads: asked, reads, intervalDays }: { heads: number; reads: number; intervalDays: number }
 ): Promise<RecheckClaim | null> {
+	const heads = origin === 'chc' && chirpsSource() === 'mirror' ? 0 : asked;
 	if (!cells.length || (heads <= 0 && reads <= 0)) return null;
 	const { rows } = await db.query<{ kind: 'reread' | 'verify' | 'head'; day: string }>(
 		`SELECT kind, to_char(day, 'YYYY-MM-DD') AS day FROM chirps_recheck_claim($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -110,7 +120,7 @@ export async function applyRecheck(
 	feedId: string,
 	fetchJobId: string,
 	origin: CacheOrigin,
-	product: ChirpsDailyProduct,
+	product: CacheProduct,
 	cells: readonly GridCell[],
 	answer: NonNullable<CellsResult['recheck']>
 ): Promise<number> {
@@ -133,7 +143,7 @@ export async function applyRecheck(
 }
 
 /** Whether any of `cells` still holds a stale final (chirps_cell_stale): the feed's next fetch should come soon to read it. */
-export async function staleLeft(db: Db, origin: CacheOrigin, product: ChirpsDailyProduct, cells: readonly GridCell[]): Promise<boolean> {
+export async function staleLeft(db: Db, origin: CacheOrigin, product: CacheProduct, cells: readonly GridCell[]): Promise<boolean> {
 	if (!cells.length) return false;
 	const { rows } = await db.query(
 		`SELECT 1 FROM chirps_cell_stale s JOIN unnest($3::int[], $4::int[]) AS k(r, c) ON s.row_idx = k.r AND s.col_idx = k.c
@@ -156,7 +166,7 @@ export async function staleLeft(db: Db, origin: CacheOrigin, product: ChirpsDail
 export async function revisedDays(
 	db: Db,
 	origin: CacheOrigin,
-	product: ChirpsDailyProduct,
+	product: CacheProduct,
 	sinceMarker: string | null,
 	maxDays: number
 ): Promise<{ days: string[]; next: string; more: boolean }> {

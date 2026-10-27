@@ -488,6 +488,15 @@ override_resource {
 }
 
 override_resource {
+  target          = aws_ecr_repository.ingest
+  override_during = plan
+  values = {
+    arn            = "arn:aws:ecr:af-south-1:000000000000:repository/water-management-mirror-ingest"
+    repository_url = "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-mirror-ingest"
+  }
+}
+
+override_resource {
   target          = aws_ecr_repository.renderer
   override_during = plan
   values = {
@@ -502,6 +511,15 @@ override_resource {
   values = {
     id  = "water-management-renderer-lambda"
     arn = "arn:aws:iam::000000000000:role/water-management-renderer-lambda"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.ingest_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-mirror-ingest-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-mirror-ingest-lambda"
   }
 }
 
@@ -682,8 +700,8 @@ run "lambda_logs_scoped" {
   command = plan
 
   assert {
-    condition     = toset(keys(aws_iam_role_policy.lambda_logs)) == toset(["api", "migrate", "worker", "fetcher", "renderer"])
-    error_message = "Every Lambda role (API, migrate, worker, fetcher, renderer) gets its own logs policy."
+    condition     = toset(keys(aws_iam_role_policy.lambda_logs)) == toset(["api", "migrate", "worker", "fetcher", "renderer", "ingest"])
+    error_message = "Every Lambda role (API, migrate, worker, fetcher, renderer, mirror ingest) gets its own logs policy."
   }
   assert {
     condition = (
@@ -691,7 +709,8 @@ run "lambda_logs_scoped" {
       aws_iam_role_policy.lambda_logs["migrate"].role == aws_iam_role.migrate_lambda.id &&
       aws_iam_role_policy.lambda_logs["worker"].role == aws_iam_role.worker_lambda.id &&
       aws_iam_role_policy.lambda_logs["fetcher"].role == aws_iam_role.fetcher_lambda.id &&
-      aws_iam_role_policy.lambda_logs["renderer"].role == aws_iam_role.renderer_lambda.id
+      aws_iam_role_policy.lambda_logs["renderer"].role == aws_iam_role.renderer_lambda.id &&
+      aws_iam_role_policy.lambda_logs["ingest"].role == aws_iam_role.ingest_lambda.id
     )
     error_message = "Each logs policy is attached to its own Lambda's role."
   }
@@ -704,12 +723,14 @@ run "lambda_logs_scoped" {
       worker   = one(data.aws_iam_policy_document.lambda_logs["worker"].statement).resources
       fetcher  = one(data.aws_iam_policy_document.lambda_logs["fetcher"].statement).resources
       renderer = one(data.aws_iam_policy_document.lambda_logs["renderer"].statement).resources
+      ingest   = one(data.aws_iam_policy_document.lambda_logs["ingest"].statement).resources
       } == {
       api      = toset(["arn:aws:logs:af-south-1:000000000000:log-group:/aws/lambda/water-management-backend:*"])
       migrate  = toset(["arn:aws:logs:af-south-1:000000000000:log-group:/aws/lambda/water-management-migrate:*"])
       worker   = toset(["arn:aws:logs:af-south-1:000000000000:log-group:/aws/lambda/water-management-worker:*"])
       fetcher  = toset(["arn:aws:logs:af-south-1:000000000000:log-group:/aws/lambda/water-management-fetcher:*"])
       renderer = toset(["arn:aws:logs:af-south-1:000000000000:log-group:/aws/lambda/water-management-renderer:*"])
+      ingest   = toset(["arn:aws:logs:af-south-1:000000000000:log-group:/aws/lambda/water-management-mirror-ingest:*"])
     }
     error_message = "Each role may write only to /aws/lambda/<its own function> (its streams, :*)."
   }
@@ -719,7 +740,8 @@ run "lambda_logs_scoped" {
       one(data.aws_iam_policy_document.lambda_logs["migrate"].statement).resources == toset(["arn:aws:logs:af-south-1:000000000000:log-group:${aws_cloudwatch_log_group.migrate.name}:*"]) &&
       one(data.aws_iam_policy_document.lambda_logs["worker"].statement).resources == toset(["arn:aws:logs:af-south-1:000000000000:log-group:${aws_cloudwatch_log_group.worker.name}:*"]) &&
       one(data.aws_iam_policy_document.lambda_logs["fetcher"].statement).resources == toset(["arn:aws:logs:af-south-1:000000000000:log-group:${aws_cloudwatch_log_group.fetcher.name}:*"]) &&
-      one(data.aws_iam_policy_document.lambda_logs["renderer"].statement).resources == toset(["arn:aws:logs:af-south-1:000000000000:log-group:${aws_cloudwatch_log_group.renderer.name}:*"])
+      one(data.aws_iam_policy_document.lambda_logs["renderer"].statement).resources == toset(["arn:aws:logs:af-south-1:000000000000:log-group:${aws_cloudwatch_log_group.renderer.name}:*"]) &&
+      one(data.aws_iam_policy_document.lambda_logs["ingest"].statement).resources == toset(["arn:aws:logs:af-south-1:000000000000:log-group:${aws_cloudwatch_log_group.ingest.name}:*"])
     )
     error_message = "The ARNs follow the Terraform-managed log groups (a renamed group must move its grant)."
   }
@@ -730,6 +752,7 @@ run "lambda_logs_scoped" {
       data.aws_iam_policy_document.lambda_logs["worker"].statement,
       data.aws_iam_policy_document.lambda_logs["fetcher"].statement,
       data.aws_iam_policy_document.lambda_logs["renderer"].statement,
+      data.aws_iam_policy_document.lambda_logs["ingest"].statement,
       ] : length(st) == 1 && one(st).actions == toset(["logs:CreateLogStream", "logs:PutLogEvents"]) && one(st).effect != "Deny"
     ])
     error_message = "A logs policy creates streams and puts events, nothing else: no logs:CreateLogGroup (Terraform owns every group)."
@@ -747,8 +770,8 @@ run "lambda_logs_scoped" {
         data.aws_iam_policy_document.migrate_lambda.statement,
         data.aws_iam_policy_document.worker_lambda.statement,
         data.aws_iam_policy_document.lambda_jobs_send.statement,
-        data.aws_iam_policy_document.fetcher_lambda.statement,
-        data.aws_iam_policy_document.worker_feeds.statement,
+        data.aws_iam_policy_document.fetcher_lambda[0].statement,
+        data.aws_iam_policy_document.worker_feeds[0].statement,
         data.aws_iam_policy_document.renderer_lambda.statement,
         data.aws_iam_policy_document.renderer_packs.statement,
         data.aws_iam_policy_document.renderer_ecr_pull.statement,
@@ -757,6 +780,11 @@ run "lambda_logs_scoped" {
         data.aws_iam_policy_document.lambda_ses.statement,
         data.aws_iam_policy_document.lambda_ses_release.statement,
         data.aws_iam_policy_document.worker_mail_events.statement,
+        data.aws_iam_policy_document.ingest_lambda.statement,
+        data.aws_iam_policy_document.ingest_ecr_pull.statement,
+        data.aws_iam_policy_document.worker_mirror.statement,
+        data.aws_iam_policy_document.fetcher_dws.statement,
+        data.aws_iam_policy_document.worker_dws.statement,
         ] : [
         for s in st : [for a in s.actions : !startswith(a, "logs:")]
       ]
@@ -846,7 +874,7 @@ run "sqs_endpoint_send_only" {
       } == {
       ApiSendsWakeUps           = { principal = aws_iam_role.lambda.arn, queue = aws_sqs_queue.jobs.arn, actions = toset(["sqs:SendMessage"]) }
       WorkerSendsRenderRequests = { principal = aws_iam_role.worker_lambda.arn, queue = aws_sqs_queue.render_requests.arn, actions = toset(["sqs:SendMessage"]) }
-      WorkerSendsFetchRequests  = { principal = aws_iam_role.worker_lambda.arn, queue = aws_sqs_queue.fetch_requests.arn, actions = toset(["sqs:SendMessage"]) }
+      WorkerSendsFetchRequests  = { principal = aws_iam_role.worker_lambda.arn, queue = aws_sqs_queue.fetch_requests[0].arn, actions = toset(["sqs:SendMessage"]) }
     }
     error_message = "The SQS endpoint allows SendMessage only: the API to jobs, the worker to render-requests and fetch-requests. Nothing receives or deletes through it."
   }
@@ -855,7 +883,7 @@ run "sqs_endpoint_send_only" {
   assert {
     condition = (
       aws_lambda_event_source_mapping.worker_jobs.event_source_arn == aws_sqs_queue.jobs.arn &&
-      aws_lambda_event_source_mapping.worker_ingest_results.event_source_arn == aws_sqs_queue.ingest_results.arn &&
+      aws_lambda_event_source_mapping.worker_ingest_results[0].event_source_arn == aws_sqs_queue.ingest_results[0].arn &&
       aws_lambda_event_source_mapping.worker_render_results.event_source_arn == aws_sqs_queue.render_results.arn &&
       aws_lambda_event_source_mapping.worker_mail_events.event_source_arn == aws_sqs_queue.mail_events.arn
     )

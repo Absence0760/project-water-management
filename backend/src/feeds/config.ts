@@ -9,8 +9,17 @@ import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, type SeriesProvenance } from '@water-mana
 import { z } from 'zod';
 import { SeriesStartDate } from '../series/limits.js';
 
-export const FEED_SOURCES = ['chirps', 'chirps_gefs', 'dws'] as const;
+export const FEED_SOURCES = ['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens'] as const;
 export type FeedSource = (typeof FEED_SOURCES)[number];
+
+/**
+ * The forecast sources and how many days an issue holds: CHIRPS-GEFS 16, the
+ * ECMWF ENS mean 15 (issue #604 R4-C, ingest/ecmwf.py). A forecast result is
+ * one whole issue keyed by its issue date (feeds/ingest.ts).
+ */
+export const FORECAST_DAYS = { chirps_gefs: 16, ecmwf_ens: 15 } as const satisfies Partial<Record<FeedSource, number>>;
+export type ForecastSource = keyof typeof FORECAST_DAYS;
+export const isForecastSource = (s: FeedSource): s is ForecastSource => s in FORECAST_DAYS;
 
 /**
  * Daily only (111_feed_daily_only): no source publishes more often (CHIRPS
@@ -48,6 +57,9 @@ export const SOURCES: Record<FeedSource, SourceSpec> = {
 	// A new 16-day forecast is issued daily; at least 12 days ahead means one
 	// was issued in the last few days.
 	chirps_gefs: { label: 'CHIRPS-GEFS rainfall forecast', kinds: ['rain_forecast_mm'], unit: 'mm', staleAfterDays: -12, staleAlertDays: 2 },
+	// The ECMWF ENS mean from our copy (issue #604 R4-C): 15 days from each
+	// day's 00 UTC run; at least 11 days ahead means an issue of the last few days.
+	ecmwf_ens: { label: 'ECMWF ENS rainfall forecast', kinds: ['rain_forecast_mm'], unit: 'mm', staleAfterDays: -11, staleAlertDays: 2 },
 	// Verified DWS flow lags by months (docs/architecture.md § Data feeds).
 	dws: { label: 'DWS gauge flow', kinds: ['flow_observed_m3s', 'flow_reference_m3s', 'flow_logger_m3s'], unit: 'm³/s', staleAfterDays: 240, staleAlertDays: 30 }
 };

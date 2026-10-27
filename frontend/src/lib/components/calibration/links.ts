@@ -17,6 +17,7 @@ export const MODEL_QUALITY_ANCHORS = [
 	'res-calibration',
 	'res-runoff',
 	'res-unit-rain',
+	'res-gap-rain',
 	'res-wr2012',
 	'res-ewr-agreement',
 	'res-plausibility'

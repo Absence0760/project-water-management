@@ -32,7 +32,7 @@ import { replaceRivers, riverRecords } from './loadRivers.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { placeRecords, placesSummary, replacePlaces } from './loadGazetteer.js';
 import { rainMapFromJson, replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
-import { referenceLoadOf, type ReferenceLoadRecord } from './referenceOrigin.js';
+import { parseTileProvenance, recordTileProvenance, referenceLoadOf, TILE_ARCHIVES, type ReferenceLoadRecord } from './referenceOrigin.js';
 
 /** One dataset of a kind allowed dataset by dataset: its own Sources row, and what a load stores with it. */
 export type ReferenceDataset = {
@@ -103,6 +103,20 @@ export const REFERENCE_KINDS = {
 		status: 'blocked',
 		sourcesRows: ['Hydrological station catalogue'],
 		why: "the DWS station catalogue's licence is unconfirmed (followups.md, Decision: the DWS station catalogue's licence)"
+	},
+	// The tile archives' provenance (248): not data, a record of where the archive
+	// the tiles bucket serves came from, which tiles-upload.ts --production writes
+	// beside the originals it keeps. One label per archive, each decided by its
+	// own Sources row; the licence recorded is TILE_ARCHIVES', never the file's.
+	tiles: {
+		status: 'allowed',
+		sourcesRows: Object.values(TILE_ARCHIVES).map((a) => a.sourcesRow),
+		file: /\.json$/,
+		what: 'the provenance file `tiles-upload.ts --production` writes',
+		limits: { object: 64 * 1024, text: 64 * 1024 },
+		datasets: Object.fromEntries(
+			Object.entries(TILE_ARCHIVES).map(([archive, a]) => [archive, { status: 'allowed', sourcesRow: a.sourcesRow, source: a.what, version: 'the provenance file’s', attribution: a.licence }])
+		) as Record<keyof typeof TILE_ARCHIVES, ReferenceDataset>
 	},
 	'map-grid': {
 		status: 'allowed',
@@ -277,6 +291,24 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 	// Read before the replace: load-reference.yml's concurrency group runs one load at a time.
 	const replaced = await referenceLoadOf(client, req.kind, req.dataset);
 	let doc: unknown;
+	if (req.kind === 'tiles') {
+		try {
+			doc = JSON.parse(text);
+		} catch {
+			throw new LoadError(`${req.key} is not JSON`, 'unreadable', 'the file is not JSON');
+		}
+		// parseTileProvenance's problems are fixed text, never the file's.
+		const got = parseTileProvenance(doc);
+		if (typeof got === 'string') throw new LoadError(`${req.key}: ${got}`, 'unreadable', `the file is not a tile provenance file: ${got}`);
+		if (got.archive !== req.dataset) throw refused('the provenance file is for another archive than the dataset named');
+		try {
+			await recordTileProvenance(client, got);
+		} catch (e) {
+			throw new LoadError(`recording ${req.dataset}: ${(e as Error).message}`, 'load_failed');
+		}
+		log(`tiles: ${got.archive} recorded: SHA-256 ${got.sha256}, ${got.bytes} bytes, version ${got.upstream.version ?? 'unknown'}, ${got.originals.length} original(s)`);
+		return { kind: req.kind, dataset: req.dataset, written: 1, skipped: 0, belowOrder: 0, replaced };
+	}
 	if (req.kind === 'land-cover') {
 		try {
 			doc = JSON.parse(text);

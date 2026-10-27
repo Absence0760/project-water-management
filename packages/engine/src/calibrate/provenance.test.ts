@@ -250,7 +250,7 @@ describe('fit record', () => {
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(6);
 		expect(caveats[0]).toMatch(/^Parameters edited since the fit: X1\./);
-		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, rain-source periods, zero-rain run handling or the rain each unit runs on \(runoff from each unit’s own rain, its records, MAPs and factors\) has changed since the fit/);
+		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, gap-filling product, rain-source periods, zero-rain run handling or the rain each unit runs on \(runoff from each unit’s own rain, its records, MAPs and factors\) has changed since the fit/);
 	});
 
 	it('keeps how automated calibration chose the fit, and says when its rules are drafts or have changed since (issue #153)', () => {
@@ -441,6 +441,21 @@ describe('fit record', () => {
 		// Under raw CHIRPS the map never applies, so it isn't recorded.
 		const raw = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: { wetDayMm: 1 } } });
 		expect('chirpsQuantileMap' in raw.forcing!).toBe(false);
+	});
+
+	it('records the gap-filling product only when it isn’t CHIRPS alone, and flags a change of it (engine ≥ 1.101.0)', () => {
+		const base = { panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const, chirpsFitPeriod: 'all' as const };
+		const chirps = fitRecordFromReport(report(), ctx);
+		expect('gapRain' in chirps.forcing!).toBe(false);
+		// Positive control: CHIRPS alone, absent, null or written out, is no change.
+		expect(fitRecordStatus({ ...base, gapRain: null }, chirps).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, gapRain: { product: 'chirps', imergLate: false } }, chirps).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, gapRain: { product: 'era5l', imergLate: false } }, chirps).forcingChanged).toBe(true);
+		const era5 = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, gapRain: { product: 'era5l', imergLate: false } } });
+		expect(era5.forcing!.gapRain).toEqual({ product: 'era5l', imergLate: false });
+		expect(fitRecordStatus({ ...base, gapRain: { product: 'era5l', imergLate: false } }, era5).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, gapRain: { product: 'era5l', imergLate: true } }, era5).forcingChanged).toBe(true);
+		expect(fitRecordCaveats(fitRecordStatus({ ...base, gapRain: null }, era5)).at(-1)).toMatch(/gap-filling product/);
 	});
 
 	it('records the rain-source periods and flags "forcing changed since fit" when they change (engine ≥ 0.30.0)', () => {

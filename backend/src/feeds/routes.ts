@@ -2,6 +2,7 @@
 // (viewer), attach / change / remove (owner), and "Run now" (editor), which
 // queues a fetch at once instead of waiting for the schedule.
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -26,6 +27,8 @@ import {
 	SOURCES
 } from './config.js';
 import { feedSourceMode } from './http.js';
+import { rainCopy } from './rainCopy.js';
+import { gapRainProducts, viewWindowQuery } from './gapRainView.js';
 import { createFeed, deleteFeed, getFeed, listFeeds, replaceKey, type RunSeriesPick, runSeries, seriesAccepts, targetSeries, updateFeed } from './store.js';
 
 /**
@@ -183,23 +186,44 @@ function refuseBoundaryMark(config: unknown) {
 	}
 }
 
+// GET …/feeds/gap-rain's query; viewWindowQuery and the feed-id check give the 400s their words.
+const GapRainQuery = z.object({ feed: z.string().optional(), from: z.string().optional(), to: z.string().optional() });
+
 export const feedRoutes = new Hono<AuthEnv>()
-	.get('/:id/feeds', async (c) =>
-		withUser(c.get('userId'), async (db) => {
+	// The gap-filling products over one CHIRPS feed's cells (issue #604 R4-E, docs/api.md § Data feeds): what the
+	// Data tab draws beside CHIRPS. Read from the shared cell cache only (a feed's fetch fills it), never the copy.
+	.get('/:id/feeds/gap-rain', async (c) => {
+		const id = c.req.param('id');
+		// The whole query parsed at once, as the other routes do: a named single read is what the credential sweep looks for.
+		const q = GapRainQuery.parse(c.req.query());
+		const feed = q.feed ?? null;
+		if (feed !== null && !UUID.test(feed)) throw new ApiError(400, 'feed must be a feed id');
+		// At most ten years of days a request (GAP_VIEW_MAX_DAYS), by default the record's last ten; the double mass covers the whole record.
+		const ask = viewWindowQuery(q.from ?? null, q.to ?? null);
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			return c.json(await gapRainProducts(db, id, feed, undefined, ask));
+		});
+	})
+	.get('/:id/feeds', async (c) => {
+		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, c.req.param('id'), 'viewer');
+			// Our CHIRPS copy's state, as the worker's tick last recorded it (mirror_copy). Null while CHC is read directly.
+			const copy = await rainCopy(db);
 			return c.json({
-				feeds: await listFeeds(db, c.req.param('id')),
+				feeds: await listFeeds(db, c.req.param('id'), new Date(), copy),
 				// What the form offers, and whether this server fetches for real.
 				sources: FEED_SOURCES.map((s) => ({ source: s, label: SOURCES[s].label, kinds: SOURCES[s].kinds, unit: SOURCES[s].unit })),
 				// CHIRPS v3's daily products; the default (sat) first.
 				chirpsProducts: CHIRPS_DAILY_PRODUCTS,
 				schedules: FEED_SCHEDULES,
 				mode: feedSourceMode(),
+				rainCopy: copy,
 				canEdit: role === 'owner',
 				canRun: role !== 'viewer'
 			});
-		})
-	)
+		});
+	})
 	.post('/:id/feeds', async (c) => {
 		const body = await readJson(c);
 		refuseBoundaryMark((body as { config?: unknown } | null)?.config);
@@ -211,7 +235,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 			await refuseTakeOver(db, id, input);
 			const { input: checked, replaceFrom } = await versionCheck(db, id, input, true);
 			const fid = await createFeed(db, id, checked, replaceFrom ?? null).catch(conflict);
-			const feed = await getFeed(db, id, fid);
+			const feed = await getFeed(db, id, fid, new Date(), await rainCopy(db));
 			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'created', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
 			return feed;
 		});
@@ -255,7 +279,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 			// Logged even when the settings come back unchanged: every save makes the saver the
 			// feed's acting user (the identity its scheduled fetches run as), which is itself a change.
 			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'changed', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
-			return getFeed(db, id, fid);
+			return getFeed(db, id, fid, new Date(), await rainCopy(db));
 		});
 		return c.json({ feed });
 	})
