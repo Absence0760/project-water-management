@@ -39,12 +39,18 @@
 // A refusal (HTTP 403) or throttling ends the run at once, with no retry, as
 // in the preliminary pass; the run reports the error rather than throwing, so
 // the caller still publishes the lag metric (days since the newest issue
-// held) and logs the outcome. An issue is published once by CHC, so its
+// held) and logs the outcome. A refusal also leaves a marker in the copy
+// (`gefs/refused.json`, the time CHC refused): the rule runs hourly to 11:38
+// UTC, each run a fresh invocation, so without it the next run would ask CHC
+// again within the hour. A run that finds the marker dated today asks CHC
+// nothing (`refused_today`, logged) and the next UTC day's first run tries
+// again. The preliminary pass needs none: its rule runs once a day. An issue is published once by CHC, so its
 // manifest's revision is always 1.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { isIsoDate } from '@water-management/engine/calendar';
 import type { AbsolutePath } from '@zarrita/storage';
 import { z } from 'zod';
+import { FeedRefusedError } from '../feeds/errors.js';
 import type { FeedHttp } from '../feeds/http.js';
 import { GEFS_DAYS, gefsUrl } from '../feeds/sources/chirps.js';
 import { DAILY_CHUNK, type DailyProduct, ensureDaily, writeDailyDays } from '../mirror/arrays.js';
@@ -64,6 +70,8 @@ const DELETE_CONCURRENCY = 8;
 export const gefsProduct = (issue: string): DailyProduct => `gefs/${issue}`;
 
 const INDEX_KEY = '/gefs/index.json' as AbsolutePath;
+/** When CHC last refused the pass (HTTP 403): later runs that UTC day ask nothing. */
+export const GEFS_REFUSED_KEY = '/gefs/refused.json' as AbsolutePath;
 const IsoDay = z.string().refine(isIsoDate, 'an ISO date (YYYY-MM-DD)');
 
 /** `gefs/index.json`: the complete issues the copy holds, newest first. */
@@ -119,11 +127,15 @@ export interface GefsIngestResult {
 	deleted: string[];
 	/** Today minus the newest issue held, or null when none is. */
 	lagDays: number | null;
-	/** `copied`; `up_to_date` (the newest issue there is was held already); `not_published` (neither today's nor yesterday's is complete); `deadline`; `error`. */
-	stopped: 'copied' | 'up_to_date' | 'not_published' | 'deadline' | 'error';
+	/** `copied`; `up_to_date` (the newest issue there is was held already); `not_published` (neither today's nor yesterday's is complete); `deadline`; `refused_today` (CHC refused an earlier run today: nothing asked); `error`. */
+	stopped: 'copied' | 'up_to_date' | 'not_published' | 'deadline' | 'refused_today' | 'error';
+	/** With `refused_today`, or after a refusal this run: when CHC refused (ISO), else null. */
+	refusedAt: string | null;
 	requests: number;
 	/** The failure that stopped the run (a 403 included), or null. */
 	error: unknown;
+	/** Writing the refusal marker failed (after a 403), or null. */
+	markerError: unknown;
 }
 
 type Deletable = { delete?: (key: AbsolutePath) => Promise<unknown> };
@@ -158,6 +170,22 @@ export async function deleteGefsIssue(store: MirrorStore, issue: string, region:
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
 
+const RefusedMarker = z.object({ v: z.literal(1), at: z.string().datetime({ offset: true }) }).strict();
+
+/** When CHC last refused the pass, or null (none, or a marker that isn't one: it never blocks a run by being broken). */
+export async function readGefsRefused(store: MirrorStore): Promise<string | null> {
+	const bytes = await store.get(GEFS_REFUSED_KEY);
+	if (bytes === undefined) return null;
+	try {
+		const r = RefusedMarker.safeParse(JSON.parse(new TextDecoder().decode(bytes)));
+		return r.success ? r.data.at : null;
+	} catch {
+		return null;
+	}
+}
+
+const writeGefsRefused = (store: MirrorStore, at: string) => store.set(GEFS_REFUSED_KEY, new TextEncoder().encode(`${JSON.stringify({ v: 1, at })}\n`));
+
 /** Copy the newest complete issue into the copy (see the header). Never throws for a source failure: it reports it. */
 export async function runGefsIngest(opts: GefsIngestOptions): Promise<GefsIngestResult> {
 	const region = opts.region ?? MIRROR_REGION;
@@ -170,11 +198,19 @@ export async function runGefsIngest(opts: GefsIngestOptions): Promise<GefsIngest
 	const block = { y0: 0, x0: 0, h: rows, w: cols };
 
 	let held = (await readGefsIndex(store)) ?? [];
+	const lagDays = () => (held.length ? toEpochDay(today) - toEpochDay(held[0]!) : null);
+	// CHC refused a run earlier this UTC day: ask it nothing until tomorrow (see the header).
+	let refusedAt = await readGefsRefused(store);
+	if (refusedAt !== null && new Date(refusedAt).toISOString().slice(0, 10) === today) {
+		return { copied: null, partial: null, held, deleted: [], lagDays: lagDays(), stopped: 'refused_today', refusedAt, requests: 0, error: null, markerError: null };
+	}
+	refusedAt = null;
 	const deleted: string[] = [];
 	let copied: string | null = null;
 	let partial: string | null = null;
 	let stopped: GefsIngestResult['stopped'] = 'not_published';
 	let error: unknown = null;
+	let markerError: unknown = null;
 
 	/** One issue whole: 'copied', or why not. */
 	const copyIssue = async (issue: string): Promise<'copied' | 'not_published' | 'deadline'> => {
@@ -252,6 +288,16 @@ export async function runGefsIngest(opts: GefsIngestOptions): Promise<GefsIngest
 	} catch (err) {
 		stopped = 'error';
 		error = err;
+		if (err instanceof FeedRefusedError) {
+			refusedAt = new Date(now()).toISOString();
+			// The refusal stays the failure reported (and the lag still goes out); a marker that couldn't be written is
+			// reported beside it (the caller logs it), and costs the next run one request.
+			try {
+				await writeGefsRefused(store, refusedAt);
+			} catch (markerErr) {
+				markerError = markerErr;
+			}
+		}
 	}
 
 	return {
@@ -259,10 +305,12 @@ export async function runGefsIngest(opts: GefsIngestOptions): Promise<GefsIngest
 		partial,
 		held,
 		deleted,
-		lagDays: held.length ? toEpochDay(today) - toEpochDay(held[0]!) : null,
+		lagDays: lagDays(),
 		stopped,
+		refusedAt,
 		requests: counter.requests,
-		error
+		error,
+		markerError
 	};
 }
 

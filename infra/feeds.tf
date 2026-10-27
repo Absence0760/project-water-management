@@ -316,7 +316,10 @@ resource "aws_lambda_permission" "fetcher_daily_ingest" {
 # always copy yesterday's, and the two passes' requests at one a second (up to
 # ~80 + ~64) don't fit the fetcher's 120 s. 08:38, before the CHIRPS-GEFS
 # feeds fall due at 08:45 (111_feed_daily_only), then hourly to 11:38 for a
-# late issue; a run that finds the day's issue held asks CHC nothing.
+# late issue; a run that finds the day's issue held asks CHC nothing, and
+# after a 403 the run leaves gefs/refused.json, so the later runs that UTC day
+# ask nothing either (each run is a fresh invocation; a pause in a warm
+# container wouldn't hold).
 resource "aws_cloudwatch_event_rule" "gefs_ingest" {
   name                = "${local.project}-gefs-ingest"
   description         = "The fetcher's GEFS pass: the newest complete CHIRPS-GEFS issue into the data mirror ({\"mode\":\"daily-ingest\",\"pass\":\"gefs\"}). Disabled until daily_ingest_enabled is set."

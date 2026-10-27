@@ -199,9 +199,12 @@ async function gefsIngest(context?: Pick<Context, 'getRemainingTimeInMillis'>): 
 	});
 	if (r.lagDays !== null) emitMetricLine(gefsLagMetricLine(r.lagDays));
 	const message = r.error !== null ? feedErrorMessage(r.error) : null;
-	logEvent(message !== null ? 'error' : 'info', {
+	// refused_today: CHC refused an earlier run today, so this one asked nothing (ingest/gefs.ts GEFS_REFUSED_KEY).
+	logEvent(message !== null ? 'error' : r.stopped === 'refused_today' ? 'warn' : 'info', {
 		event: 'mirror_daily_ingest',
 		product: 'gefs',
+		...(r.refusedAt !== null ? { refusedAt: r.refusedAt } : {}),
+		...(r.markerError !== null ? { markerFailed: safeError(r.markerError).error } : {}),
 		copied: r.copied,
 		partial: r.partial,
 		held: r.held.length,
@@ -315,9 +318,15 @@ async function dwsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): P
 		intervalMs: feedSourceMode() === 'live' ? REQUEST_INTERVAL_MS : 0
 	});
 	if (r.lagDays !== null) emitMetricLine(dwsLagMetricLine(r.lagDays));
+	// Each station skipped this run, and why: its code (a public DWS gauge code, so the operator can look at it) and
+	// the fixed reason and check label, never the page's text (failureDetail).
+	for (const f of r.failures) {
+		const m = feedErrorMessage(f.error);
+		logEvent('warn', { event: 'dws_station_failed', station: f.station, reason: fetchFailureReason(m), detail: failureDetail(m) });
+	}
 	const failed = r.error !== null;
 	const message = failed ? feedErrorMessage(r.error) : null;
-	// Counts and a reason code, never a station or an upstream body.
+	// Counts and a reason code, never an upstream body (the stations skipped are logged above, one line each).
 	logEvent(failed ? 'error' : r.failed.length ? 'warn' : 'info', {
 		event: 'dws_weekly',
 		fetched: r.fetched.length,

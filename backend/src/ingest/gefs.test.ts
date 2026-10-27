@@ -15,7 +15,7 @@ import { mirrorCell } from '../mirror/grid.js';
 import { readManifest } from '../mirror/manifest.js';
 import { openStore, type MirrorStore } from '../mirror/store.js';
 import { MIRROR_LAG_METRIC, MIRROR_METRIC_NAMESPACE } from './daily.js';
-import { GEFS_KEEP_ISSUES, gefsLagMetricLine, gefsProduct, readGefsIndex, runGefsIngest, writeGefsIndex } from './gefs.js';
+import { GEFS_KEEP_ISSUES, GEFS_REFUSED_KEY, gefsLagMetricLine, gefsProduct, readGefsIndex, readGefsRefused, runGefsIngest, writeGefsIndex } from './gefs.js';
 
 const tmp: string[] = [];
 afterAll(() => tmp.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -171,6 +171,48 @@ describe('the daily GEFS pass', () => {
 		expect(log.some((u) => u.includes(`/${add(TODAY, -1).replaceAll('-', '/')}/`))).toBe(false);
 		expect(await readGefsIndex(store)).toBeNull();
 		expect(await readManifest(store, gefsProduct(TODAY))).toBeNull();
+	});
+
+	// The rule runs hourly 08:38–11:38 UTC, each run a fresh invocation: a 403 must not be asked again within the hour.
+	it('after an HTTP 403, writes the refusal marker; later runs that UTC day ask CHC nothing, and the next day tries again', async () => {
+		const { store } = freshStore();
+		const refusedAt = Date.parse(`${TODAY}T08:38:05Z`);
+		const refused = new Map<string, Served>([[`${TODAY}/${GEFS_DAYS - 1}`, 'refused']]);
+		const first = await run(store, filesHttp(refused).http, TODAY, { now: () => refusedAt });
+		expect(first).toMatchObject({ stopped: 'error', requests: 1, refusedAt: new Date(refusedAt).toISOString(), markerError: null });
+		expect(await readGefsRefused(store)).toBe(new Date(refusedAt).toISOString());
+
+		// 09:38 and 11:38 the same day: nothing asked, reported as refused_today (the lag still measured).
+		for (const hour of ['09:38', '11:38']) {
+			const { http, log } = filesHttp(issues(TODAY));
+			const r = await run(store, http, TODAY, { now: () => Date.parse(`${TODAY}T${hour}:00Z`) });
+			expect(r, hour).toMatchObject({ stopped: 'refused_today', requests: 0, error: null, copied: null, refusedAt: new Date(refusedAt).toISOString(), lagDays: null });
+			expect(log, hour).toEqual([]);
+		}
+
+		// The next UTC day's first run asks again (positive control), and copies.
+		const tomorrow = add(TODAY, 1);
+		const { http, log } = filesHttp(issues(tomorrow));
+		const next = await run(store, http, tomorrow, { now: () => Date.parse(`${tomorrow}T08:38:00Z`) });
+		expect(next).toMatchObject({ stopped: 'copied', copied: tomorrow, refusedAt: null, error: null });
+		expect(log.length).toBeGreaterThan(0);
+	});
+
+	it('a refusal marker that isn’t one never blocks a run', async () => {
+		const { store } = freshStore();
+		await store.set(GEFS_REFUSED_KEY, new TextEncoder().encode('{"v":2}'));
+		expect(await readGefsRefused(store)).toBeNull();
+		const r = await run(store, filesHttp(issues(TODAY)).http, TODAY, { now: () => Date.parse(`${TODAY}T09:38:00Z`) });
+		expect(r.stopped).toBe('copied');
+	});
+
+	it('reports a refusal marker it could not write beside the 403, which stays the failure reported', async () => {
+		const { store: inner } = freshStore();
+		const broken = new Error('the bucket refused the write');
+		const store = { get: (k: never) => inner.get(k), set: async (k: string, v: Uint8Array) => (k === GEFS_REFUSED_KEY ? Promise.reject(broken) : inner.set(k as never, v)) } as unknown as MirrorStore;
+		const r = await run(store, filesHttp(new Map<string, Served>([[`${TODAY}/${GEFS_DAYS - 1}`, 'refused']])).http, TODAY);
+		expect(r.error).toBeInstanceOf(FeedRefusedError);
+		expect(r.markerError).toBe(broken);
 	});
 
 	it('keeps the newest 7 issues and deletes the older ones’ arrays, and sweeps an unlisted array a cut-short run left', async () => {
