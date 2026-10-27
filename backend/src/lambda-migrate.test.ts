@@ -193,7 +193,7 @@ describe('a read-only check (docs/deployment.md § Read-only production checks)'
 		expect(err.name).toBe('CheckFailed');
 		expect(JSON.parse(err.message)).toEqual({
 			code: 'refused',
-			reason: 'check must be one of unit-rain-reference-runs, pre-213-cap-runs, series-pick-moves, authority-grandfathered',
+			reason: 'check must be one of unit-rain-reference-runs, pre-213-cap-runs, series-pick-moves, authority-grandfathered, reference-provenance',
 			logGroup: context.logGroupName,
 			logStream: context.logStreamName,
 			requestId: context.awsRequestId
