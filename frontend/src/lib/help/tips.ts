@@ -950,6 +950,12 @@ export const TIPS: HelpTipText[] = [
 		fields: ['crop.cropFactor', 'crop.name']
 	},
 	{
+		id: 'load-crop-factors',
+		term: 'Load crop factors',
+		short: 'Overwrites the project’s crop factors from the reference library or a workbook. Nothing changes until you apply and save the model.',
+		category: 'crops'
+	},
+	{
 		id: 'crop-area',
 		term: 'Crop area',
 		short: 'Area of each crop on each hydrological unit, entered in hectares. Leave a crop blank on hydrological units that don’t grow it.',
