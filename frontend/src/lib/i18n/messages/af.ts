@@ -807,6 +807,10 @@ export const af: Catalogue = {
 	'48093517': 'Nog geen helder beeld van jou dam uit die ruimte nie. Wolke steek dit dikwels weg; die volgende helder beeld sal hier verskyn.',
 	// On {date} a satellite saw water over {area} of your dam.
 	'068f0c4b': 'Op {date} het ’n satelliet water oor {area} van jou dam gesien.',
+	// On {date} a satellite saw water over {area}, more than the {full} your dam covers when full.
+	'53ecbd91': 'Op {date} het ’n satelliet water oor {area} gesien, meer as die {full} wat jou dam beslaan wanneer hy vol is.',
+	// On {date} a satellite saw water over {area} of the {full} your dam covers when full.
+	'821b05a8': 'Op {date} het ’n satelliet water gesien oor {area} van die {full} wat jou dam beslaan wanneer hy vol is.',
 	// Your dam, seen from space
 	'5e5e1f57': 'Jou dam, uit die ruimte gesien',
 	// A satellite sees the water’s surface, not how deep it is: a check on the model, not a measurement of the water in your dam.

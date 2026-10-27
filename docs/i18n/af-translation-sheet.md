@@ -18,15 +18,4 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-2 strings: 2 on the site, 0 in emails, 0 in the glossary.
-
-## The site (farm pages, sign-in pages, account)
-
-### farm.damPage
-
-Farm view: the dam details page.
-
-| Id | English | Context | Afrikaans |
-| --- | --- | --- | --- |
-| `53ecbd91` | On {date} a satellite saw water over {area}, more than the {full} your dam covers when full. | {date} is a day like “10 Dec 2021”, {area} and {full} areas like “4.4 ha” and “4.0 ha”: the water spread past the dam’s full area (it is likely spilling). Keep: {area}, {date}, {full} |  |
-| `821b05a8` | On {date} a satellite saw water over {area} of the {full} your dam covers when full. | {date} is a day like “10 Dec 2021”, {area} and {full} areas like “2.0 ha” and “5.0 ha”. The satellite measures the water’s surface (its area), not how much water there is; no percentage on purpose, since the page already gives how full the dam is by volume. Keep: {area}, {date}, {full} |  |
+0 strings: 0 on the site, 0 in emails, 0 in the glossary.
