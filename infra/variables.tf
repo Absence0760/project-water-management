@@ -685,6 +685,32 @@ variable "daily_ingest_lag_alarm_days" {
   }
 }
 
+variable "dws_source" {
+  description = "Where the worker's DWS feed fetches read (DWS_SOURCE, issue #604 R3-B): live sends each fetch to the fetcher Lambda, which reads DWS's HyData.aspx page; store reads our gauge_record table (migration 247) inside the worker's own fetch job, with no request to DWS. live until the operator has DWS's written answer and has loaded its reply (pnpm import:dws, docs/deployment.md § DWS gauge records)."
+  type        = string
+  default     = "live"
+  validation {
+    condition     = contains(["live", "store"], var.dws_source)
+    error_message = "dws_source must be live or store."
+  }
+}
+
+variable "dws_weekly_enabled" {
+  description = "Turn on the weekly DWS pass (feeds.tf, issue #604 R3-B): the daily EventBridge rule that invokes the fetcher with {\"mode\":\"dws-weekly\"} (each station re-read once a week), the fetcher's write to dws/ in the mirror bucket, the worker's station list (DWS_WEEKLY=on, its write to dws/stations.json) and the pass's freshness alarm. Off (the default) until a backend release with the mode is deployed, or the alarm would fire for a job that doesn't exist yet. Runbook: docs/deployment.md § DWS gauge records."
+  type        = bool
+  default     = false
+}
+
+variable "dws_weekly_lag_alarm_days" {
+  description = "Alarm when a station the DWS feeds read was last fetched more than this many days ago (MirrorLagDays{Product=dws}): each is re-read every 6 days, so a healthy pass runs up to ~7 days behind; the default 10 fires when a station misses its week by three days (a 403 or the ScriptServer page stops the whole pass)."
+  type        = number
+  default     = 10
+  validation {
+    condition     = var.dws_weekly_lag_alarm_days >= 8 && floor(var.dws_weekly_lag_alarm_days) == var.dws_weekly_lag_alarm_days
+    error_message = "A whole number of days, at least 8, or the alarm fires on a healthy pass just before a station's weekly re-read."
+  }
+}
+
 variable "ingest_backfill_wait_seconds" {
   description = "Seconds the backfill state machine (ingest_backfill.tf) waits after each month before invoking the next: D4's 1 file a minute against CHC."
   type        = number

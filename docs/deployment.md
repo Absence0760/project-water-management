@@ -1701,6 +1701,76 @@ the operator starts it.
    anything reads it (re-copy the month with a `backfill` event once
    fixed, then verify again).
 
+## DWS gauge records
+
+DWS feeds move onto a store of ours too (issue #604 R3-B, design D14; the
+flow end to end: [architecture.md § DWS gauge records](./architecture.md#dws-gauge-records);
+the table: [data-model.md § DWS gauge records](./data-model.md#dws-gauge-records-247_gauge_recordsql)).
+Two Terraform variables, both off by default, so production behaves as
+before until the operator turns them on:
+
+- **`dws_source`** (`live` | `store`, default `live`) sets the worker's
+  `DWS_SOURCE`: `live` sends each DWS feed fetch to the fetcher, which reads
+  DWS's page; `store` reads `gauge_record` inside the worker's fetch job and
+  never asks DWS.
+- **`dws_weekly_enabled`** (default `false`) turns on the weekly pass: the
+  `water-management-dws-weekly` EventBridge rule (daily at 04:00 UTC,
+  `{"mode":"dws-weekly"}` to the fetcher, never retried; each station is
+  re-read once a week), the fetcher's get and put on `dws/` in the mirror
+  bucket, the worker's `DWS_WEEKLY=on` and its put of `dws/stations.json`
+  (the S3 endpoint's policy carries the same statement), and the
+  `water-management-mirror-lag-dws` alarm (`MirrorLagDays{Product=dws}`
+  above `dws_weekly_lag_alarm_days`, default 10, or no datapoint for two
+  days; essential tier).
+
+### Turning it on
+
+1. Send DWS the written data request (#604 operator steps): verified daily
+   flow for the project's stations, and **written permission to store the
+   data and show derived results in a commercial tool**.
+2. Deploy a backend release with migration 247 and the `dws-weekly` mode,
+   then apply `dws_weekly_enabled = true` (a `terraform plan` first, and the
+   operator's go-ahead for the apply). The first worker tick writes
+   `dws/stations.json`; the next 04:00 run fetches every listed station
+   (about 2 s each at 1 a second, so ~50 a run inside the fetcher's 120 s;
+   the rest the next day, oldest first) and the tick after loads them.
+   Check: Logs Insights on the fetcher log group,
+   `filter message.event = "dws_weekly"`, then
+   `filter message.event = "dws_tick"` on the worker's.
+3. Load DWS's reply (below) once it arrives.
+4. Apply `dws_source = "store"`. DWS feeds now read the store; their
+   series don't change (the store's answer is the page's, test
+   `gaugeRecord.db.test.ts`).
+
+A run that met HTTP 403, throttling or the ScriptServer page stopped on
+purpose (`message.stopped` is `refused`, `throttled` or `server_error`,
+and `dws/status.json` says `"stale": true`): it is never retried within the
+run, and the next day's run asks again. Feeds reading the store keep the
+days it holds meanwhile; if the 403s persist, the reply is the route
+(D12's trigger to revisit a fixed address is written down there).
+
+### Loading DWS's reply
+
+`pnpm import:dws <file> --reference "<the reply's reference>"` (as the
+schema owner) loads a DWS daily table with source `dws-request`, which a
+feed prefers to the weekly pass for every day both hold. The file is read
+by the feed's own DWS reader: the fixed-width `DATE … QUAL` table, as a
+saved `HyData.aspx` page or plain text, gzipped or not. `--station` when
+the file doesn't name one; `--from`/`--to` when the request asked for more
+days than the reply lists (they then read as no data rather than not yet
+loaded); `--source upload` for a table that isn't DWS's reply. A reply is
+the client's: never commit one. Locally it loads into the dev database
+under origin `fixtures` (what the local feeds read); try it on the invented
+`backend/fixtures/dws/X0H001-reply.synthetic.txt`.
+
+**Production** has no path for it yet: the database is in the private VPC,
+and the migrate Lambda's reference load (`load-reference.yml`,
+§ Reference datasets) knows no `dws` kind. Adding one (the same parser, a
+`dws` kind in `backend/src/geo/referenceLoad.ts` calling
+`gauge_record_write` with origin `dws`) waits on DWS's written answer, which
+decides whether the kind is allowed at all; until then `dws_source` stays
+`live`, or the store holds only the weekly pass's two years.
+
 ## Alert emails
 
 The worker sends the alert emails ([architecture.md § Alert emails](./architecture.md#alert-emails),

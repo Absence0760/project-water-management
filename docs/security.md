@@ -2846,6 +2846,25 @@ In short:
     `chirps_recheck_apply` clears only a stale mark made before its fetch
     was queued, and a merge marks the finals it read inside a change
     applied since (`mirror_mark_raced`, owner-only).
+  - **DWS gauge records** (247, issue #604 R3-B). `gauge_record` and
+    `gauge_record_span` are reference data, readable by any signed-in
+    session and written by no app path: `app_gauge_record_load_web` (the
+    weekly pass, only the worker with no user and no API key) and
+    `gauge_record_write` (the operator's `pnpm import:dws`, invoker's
+    rights, closed to `water_app`). Both bound every input (a river gauge
+    code, a span of at most 20 years ending by today, each day inside it
+    once, flows 0–100 000 m³/s and never NaN, quality codes 1–8 letters
+    or digits, at most 7330 rows a call, the web load at most 731 days).
+    The weekly pass's files cross from the fetcher (outside the VPC,
+    internet) to the worker through the private mirror bucket, so the
+    worker treats them as untrusted input: each is schema-checked
+    (`StationFile`, the same bounds) before the function checks them again.
+    The worker's only write to the bucket is the station list
+    (`dws/stations.json`, its role's one PutObject there, and the S3
+    endpoint's matching statement): public station codes of enabled DWS
+    feeds, `app_dws_feed_stations` (worker only), never a project or a
+    user. The fetcher's role reaches `dws/` only (get and put, no delete),
+    and its log lines carry counts and a reason, never a station.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no
@@ -3409,10 +3428,12 @@ placed points. The server never trusts the browser with geometry:
   `SearchQuery`), reads only our own reference tables (no third-party
   geocoder, so what is typed leaves nowhere) and writes nothing. The shared CHIRPS cell cache (`chirps_cell_year`, 208,
   and 210's `chirps_file`, `chirps_cell_stale`, `chirps_revision`, 245's
-  `mirror_manifest`, and 246's `mirror_change` and `mirror_copy`) is read
+  `mirror_manifest`, and 246's `mirror_change` and `mirror_copy`) and the
+  DWS gauge records (247's `gauge_record`, `gauge_record_span`) are read
   the same way but written by the data feeds, through checked functions
   (`chirps_cache_merge`, `chirps_recheck_claim`, `chirps_recheck_apply`,
-  `app_mirror_apply_revision`, `app_mirror_record_copy`;
+  `app_mirror_apply_revision`, `app_mirror_record_copy`,
+  `app_gauge_record_load_web`, and the operator's `gauge_record_write`;
   Input handling, above).
 - No third-party origin: MapLibre is bundled, its worker is same-origin
   (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file

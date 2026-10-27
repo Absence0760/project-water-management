@@ -9,7 +9,9 @@
 # fetcher's daily ingest (feeds.tf) and the preliminary freshness alarm stay
 # off until daily_ingest_enabled is set, and the backfill state machine
 # (ingest_backfill.tf) walks the months one at a time, paced, invoking only
-# the ingest function.
+# the ingest function. Round 3 (R3-B): the weekly DWS pass (feeds.tf) stays
+# off until dws_weekly_enabled is set, and then reaches only dws/ in the
+# mirror bucket (the worker only its station list).
 #
 # The mocks, overrides and variables below are copied from
 # guardrails.tftest.hcl (a test file can't share them); keep them in step.
@@ -1328,4 +1330,112 @@ run "rejects_a_backfill_faster_than_a_file_a_minute" {
   }
 
   expect_failures = [var.ingest_backfill_wait_seconds]
+}
+
+# --- The weekly DWS pass (feeds.tf, issue #604 R3-B) ---------------------------------
+
+run "dws_weekly_off_by_default" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_rule.dws_weekly.state == "DISABLED" &&
+      length(aws_cloudwatch_event_target.dws_weekly) == 0 &&
+      length(aws_lambda_permission.fetcher_dws_weekly) == 0 &&
+      length(aws_iam_role_policy.fetcher_dws) == 0 &&
+      length(aws_iam_role_policy.worker_dws) == 0 &&
+      length(aws_cloudwatch_metric_alarm.mirror_lag_dws) == 0
+    )
+    error_message = "Until dws_weekly_enabled is set the DWS rule is disabled, targets nothing, may invoke nothing, neither Lambda may write dws/, and no freshness alarm fires for a pass that doesn't exist."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.worker.environment[0].variables["DWS_SOURCE"] == "live" &&
+      aws_lambda_function.worker.environment[0].variables["DWS_WEEKLY"] == "off"
+    )
+    error_message = "By default DWS feeds read DWS's page (DWS_SOURCE=live) and the worker hands nothing to a weekly pass (DWS_WEEKLY=off)."
+  }
+}
+
+run "dws_weekly_on" {
+  command = plan
+
+  variables {
+    dws_weekly_enabled = true
+    dws_source         = "store"
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_rule.dws_weekly.state == "ENABLED" &&
+      aws_cloudwatch_event_target.dws_weekly[0].arn == aws_lambda_function.fetcher.arn &&
+      jsondecode(aws_cloudwatch_event_target.dws_weekly[0].input) == { mode = "dws-weekly" } &&
+      one(aws_cloudwatch_event_target.dws_weekly[0].retry_policy).maximum_retry_attempts == 0 &&
+      aws_cloudwatch_event_rule.dws_weekly.schedule_expression != aws_cloudwatch_event_rule.daily_ingest.schedule_expression
+    )
+    error_message = "With dws_weekly_enabled the DWS rule sends {\"mode\":\"dws-weekly\"} to the fetcher, never retried, at another time than the daily ingest."
+  }
+  assert {
+    condition = (
+      aws_lambda_permission.fetcher_dws_weekly[0].principal == "events.amazonaws.com" &&
+      aws_lambda_permission.fetcher_dws_weekly[0].statement_id == "AllowEventBridgeDwsWeekly" &&
+      can(regex("source_arn\\s*=\\s*aws_cloudwatch_event_rule\\.dws_weekly\\.arn", regex("(?s)resource \"aws_lambda_permission\" \"fetcher_dws_weekly\" \\{.*?\\n\\}", file("feeds.tf"))))
+    )
+    error_message = "Only the DWS rule may invoke the fetcher for the weekly pass."
+  }
+  assert {
+    condition = (
+      aws_iam_role_policy.fetcher_dws[0].role == aws_iam_role.fetcher_lambda.id &&
+      toset(flatten([for s in data.aws_iam_policy_document.fetcher_dws.statement : s.actions])) == toset(["s3:GetObject", "s3:PutObject", "s3:ListBucket"]) &&
+      toset(flatten([for s in data.aws_iam_policy_document.fetcher_dws.statement : s.resources])) == toset([aws_s3_bucket.mirror.arn, "${aws_s3_bucket.mirror.arn}/dws/*"])
+    )
+    error_message = "The fetcher's weekly pass reads and writes dws/ in the mirror bucket only (no delete, nothing of the CHIRPS copy)."
+  }
+  assert {
+    condition = (
+      aws_iam_role_policy.worker_dws[0].role == aws_iam_role.worker_lambda.id &&
+      toset(flatten([for s in data.aws_iam_policy_document.worker_dws.statement : s.actions])) == toset(["s3:PutObject"]) &&
+      toset(flatten([for s in data.aws_iam_policy_document.worker_dws.statement : s.resources])) == toset(["${aws_s3_bucket.mirror.arn}/dws/stations.json"])
+    )
+    error_message = "The worker's one write to the mirror bucket is the station list."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.worker.environment[0].variables["DWS_SOURCE"] == "store" &&
+      aws_lambda_function.worker.environment[0].variables["DWS_WEEKLY"] == "on"
+    )
+    error_message = "The worker reads DWS from the store when dws_source says so, and runs the handover (DWS_WEEKLY=on)."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.mirror_lag_dws[0].treat_missing_data == "breaching" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_dws[0].namespace == "water-management/Mirror" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_dws[0].metric_name == "MirrorLagDays" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_dws[0].dimensions["Product"] == "dws" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_dws[0].threshold == 10 &&
+      aws_cloudwatch_metric_alarm.mirror_lag_dws[0].period == 86400 &&
+      aws_cloudwatch_metric_alarm.mirror_lag_dws[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
+    )
+    error_message = "The DWS pass's freshness alarm reads MirrorLagDays{Product=dws}, pages through the alerts topic, and treats missing data as breaching."
+  }
+}
+
+run "rejects_a_dws_lag_alarm_that_fires_on_a_healthy_pass" {
+  command = plan
+
+  variables {
+    dws_weekly_lag_alarm_days = 7
+  }
+
+  expect_failures = [var.dws_weekly_lag_alarm_days]
+}
+
+run "rejects_an_unknown_dws_source" {
+  command = plan
+
+  variables {
+    dws_source = "web"
+  }
+
+  expect_failures = [var.dws_source]
 }

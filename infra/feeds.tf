@@ -25,6 +25,16 @@
 # PutMetricData grant needed). Only then may its role read, write, list and
 # delete in the mirror bucket. A run is never retried (a 403 must stop it;
 # the next day's run tries again).
+#
+# The weekly DWS pass (issue #604 R3-B, backend/src/ingest/dws.ts): once
+# dws_weekly_enabled is set, a daily rule invokes the fetcher with
+# {"mode":"dws-weekly"}, and it re-reads each station some DWS feed names
+# once a week (the newest two years, 1 request a second) into dws/ in the
+# mirror bucket, publishing MirrorLagDays{Product=dws}. The worker hands it
+# the station list (dws/stations.json, its one write to the bucket) and loads
+# what it fetched into gauge_record (feeds/gaugeRecordLoad.ts): the fetcher
+# has no database and the worker no internet, so the bucket carries the
+# handover. A 403 or DWS's ScriptServer page stops the run, never retried.
 # ----------------------------------------------------------------------------
 
 locals {
@@ -297,6 +307,110 @@ resource "aws_lambda_permission" "fetcher_gefs_ingest" {
   function_name = aws_lambda_function.fetcher.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.gefs_ingest.arn
+}
+
+# --- The weekly DWS pass (issue #604 R3-B) ----------------------------------------------
+
+# dws/ only: the station list (read), each station's file and the status
+# (written). ListBucket, so a missing file (no list yet) answers 404, not 403.
+data "aws_iam_policy_document" "fetcher_dws" {
+  statement {
+    sid       = "ReadWriteDwsHandover"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["${aws_s3_bucket.mirror.arn}/dws/*"]
+  }
+  statement {
+    sid       = "ListMirror"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.mirror.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "fetcher_dws" {
+  count = var.dws_weekly_enabled ? 1 : 0
+
+  name   = "dws-handover"
+  role   = aws_iam_role.fetcher_lambda.id
+  policy = data.aws_iam_policy_document.fetcher_dws.json
+}
+
+# The worker's one write to the bucket: the station list. Its reads (the
+# status and the stations' files) are worker_mirror's (ingest.tf); the S3
+# endpoint's policy carries the same write (packs.tf).
+data "aws_iam_policy_document" "worker_dws" {
+  statement {
+    sid       = "WriteDwsStationList"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.mirror.arn}/dws/stations.json"]
+  }
+}
+
+resource "aws_iam_role_policy" "worker_dws" {
+  count = var.dws_weekly_enabled ? 1 : 0
+
+  name   = "dws-station-list"
+  role   = aws_iam_role.worker_lambda.id
+  policy = data.aws_iam_policy_document.worker_dws.json
+}
+
+# Daily at 04:00 UTC (06:00 in South Africa, after the daily ingest's 03:00),
+# though each station is re-read only once a week (REFRESH_DAYS): a daily run
+# spreads the stations over the fetcher's 120 s, and publishes the lag every
+# day so the freshness alarm below can treat a missing day as breaching. A
+# day with no station due sends DWS nothing.
+resource "aws_cloudwatch_event_rule" "dws_weekly" {
+  name                = "${local.project}-dws-weekly"
+  description         = "The fetcher's weekly DWS pass: each DWS feed's station re-read once a week into the mirror bucket ({\"mode\":\"dws-weekly\"}). Disabled until dws_weekly_enabled is set."
+  schedule_expression = "cron(0 4 * * ? *)"
+  state               = var.dws_weekly_enabled ? "ENABLED" : "DISABLED"
+}
+
+resource "aws_cloudwatch_event_target" "dws_weekly" {
+  count = var.dws_weekly_enabled ? 1 : 0
+
+  rule  = aws_cloudwatch_event_rule.dws_weekly.name
+  arn   = aws_lambda_function.fetcher.arn
+  input = jsonencode({ mode = "dws-weekly" })
+
+  retry_policy {
+    maximum_retry_attempts       = 0
+    maximum_event_age_in_seconds = 3600
+  }
+}
+
+resource "aws_lambda_permission" "fetcher_dws_weekly" {
+  count = var.dws_weekly_enabled ? 1 : 0
+
+  statement_id  = "AllowEventBridgeDwsWeekly"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.fetcher.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.dws_weekly.arn
+}
+
+# The pass's freshness: the oldest last good fetch of a listed station
+# (MirrorLagDays{Product=dws}, an embedded metric in the fetcher's log).
+# Breaching on missing data: a pass that stopped running alarms too. Gated
+# on dws_weekly_enabled, or it would fire from the first apply.
+resource "aws_cloudwatch_metric_alarm" "mirror_lag_dws" {
+  count = var.dws_weekly_enabled && local.alarms_essential ? 1 : 0
+
+  alarm_name          = "${local.project}-mirror-lag-dws"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  metric_name         = local.mirror_lag_metric
+  namespace           = local.mirror_metric_namespace
+  period              = 86400
+  statistic           = "Maximum"
+  threshold           = var.dws_weekly_lag_alarm_days
+  alarm_description   = "A station the DWS feeds read was last fetched from DWS more than ${var.dws_weekly_lag_alarm_days} days ago, or the fetcher's weekly DWS pass published no lag for two days. Logs Insights on the fetcher log group: filter message.event = \"dws_weekly\" | fields message.stopped, message.reason, message.detail, message.fetched, message.failed. stopped refused / throttled / server_error = DWS answered HTTP 403, 429/503 or its ScriptServer page (the run stopped on purpose, docs/deployment.md § DWS gauge records). Feeds reading the store keep the days it holds meanwhile."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    Product = "dws"
+  }
 }
 
 # The schedule invokes asynchronously, and Lambda would retry a failed run

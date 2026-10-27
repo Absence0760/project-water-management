@@ -27,6 +27,12 @@
 // mode with `"pass":"gefs"` copies the newest CHIRPS-GEFS issue instead
 // (ingest/gefs.ts, issue #604 R3-A), on its own rule.
 //
+// A third (issue #604 R3-B): a weekly schedule invokes it with
+// `{"mode":"dws-weekly"}` (DWS_WEEKLY_EVENT, infra/feeds.tf), and it reads the
+// newest two years of each station our DWS feeds name into the mirror bucket
+// (ingest/dws.ts), for the worker to load into the gauge record store,
+// publishing MirrorLagDays for Product=dws.
+//
 // Like lambda.ts, this must never import a module that loads dotenv
 // (lambda-fetcher.test.ts bundles it to check).
 import type { Context, SQSBatchResponse, SQSEvent } from 'aws-lambda';
@@ -266,14 +272,78 @@ async function dailyIngest(context?: Pick<Context, 'getRemainingTimeInMillis'>):
 	return { copied: r.copied.length, dropped: r.dropped.length, prelimThrough: r.prelimThrough, lagDays: r.lagDays, stopped: r.stopped };
 }
 
+// --- The weekly DWS pass (issue #604 R3-B) ---------------------------------------------
+
+/** The scheduled event that runs the weekly DWS pass (infra/feeds.tf, the dws-weekly rule's input). */
+export const DWS_WEEKLY_EVENT = { mode: 'dws-weekly' } as const;
+export type DwsWeeklyEvent = typeof DWS_WEEKLY_EVENT;
+
+/** Whether `event` is the weekly DWS pass's scheduled event. */
+export function isDwsWeeklyEvent(event: unknown): event is DwsWeeklyEvent {
+	return typeof event === 'object' && event !== null && !Array.isArray(event) && !('Records' in event) && (event as { mode?: unknown }).mode === DWS_WEEKLY_EVENT.mode;
+}
+
+/** What a dws-weekly invocation answers (counts only, never a station). */
+export interface DwsWeeklyAnswer {
+	fetched: number;
+	failed: number;
+	fresh: number;
+	lagDays: number | null;
+	stopped: string;
+}
+
+/**
+ * One weekly DWS pass (ingest/dws.ts): the bucket MIRROR_URL names, the
+ * client FEED_SOURCE names. The lag metric goes out whatever happened, then a
+ * stop by DWS (HTTP 403, 429/503, the ScriptServer page) fails the invocation,
+ * which is not retried (feeds.tf: next week's run tries again).
+ */
+async function dwsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DwsWeeklyAnswer> {
+	// Loaded only for this mode.
+	const { dwsLagMetricLine, runDwsWeekly } = await import('./ingest/dws.js');
+	const { dailyMirrorUrl, REQUEST_INTERVAL_MS } = await import('./ingest/daily.js');
+	const { openStore } = await import('./mirror/store.js');
+	const started = Date.now();
+	const budget = context ? context.getRemainingTimeInMillis() - DAILY_SAVE_MARGIN_MS : DEFAULT_BUDGET_MS;
+	const r = await runDwsWeekly({
+		store: openStore(dailyMirrorUrl()),
+		http: await feedHttp(),
+		today: utcToday(),
+		deadline: started + budget,
+		intervalMs: feedSourceMode() === 'live' ? REQUEST_INTERVAL_MS : 0
+	});
+	if (r.lagDays !== null) emitMetricLine(dwsLagMetricLine(r.lagDays));
+	const failed = r.error !== null;
+	const message = failed ? feedErrorMessage(r.error) : null;
+	// Counts and a reason code, never a station or an upstream body.
+	logEvent(failed ? 'error' : r.failed.length ? 'warn' : 'info', {
+		event: 'dws_weekly',
+		fetched: r.fetched.length,
+		failed: r.failed.length,
+		fresh: r.fresh,
+		lagDays: r.lagDays,
+		stopped: r.stopped,
+		requests: r.requests,
+		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
+		ms: Date.now() - started
+	});
+	if (failed) throw r.error;
+	return { fetched: r.fetched.length, failed: r.failed.length, fresh: r.fresh, lagDays: r.lagDays, stopped: r.stopped };
+}
+
 export async function handler(event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse>;
 export async function handler(event: DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DailyIngestAnswer | GefsIngestAnswer>;
-export async function handler(event: SQSEvent | DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer> {
+export async function handler(event: DwsWeeklyEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DwsWeeklyAnswer>;
+export async function handler(
+	event: SQSEvent | DailyIngestEvent | DwsWeeklyEvent,
+	context?: Pick<Context, 'getRemainingTimeInMillis'>
+): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer | DwsWeeklyAnswer> {
 	if (isDailyIngestEvent(event)) return isGefsPass(event) ? gefsIngest(context) : dailyIngest(context);
+	if (isDwsWeeklyEvent(event)) return dwsWeekly(context);
 	if (!Array.isArray((event as SQSEvent | undefined)?.Records)) {
-		// Neither mode: nothing to answer, and a retry can't help. Fail loudly (the Errors alarm), naming no payload.
+		// No mode: nothing to answer, and a retry can't help. Fail loudly (the Errors alarm), naming no payload.
 		logEvent('error', { event: 'fetcher_event_unknown' });
-		throw new Error('the fetcher was invoked with an event it does not know (expected an SQS batch or {"mode":"daily-ingest"})');
+		throw new Error('the fetcher was invoked with an event it does not know (expected an SQS batch, {"mode":"daily-ingest"} or {"mode":"dws-weekly"})');
 	}
 	return fetchBatch(event as SQSEvent, context);
 }

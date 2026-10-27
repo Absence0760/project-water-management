@@ -73,7 +73,7 @@ Every job that fetches from an upstream:
 | --- | --- | --- | --- | --- | --- |
 | [chirps](#chirps) | CHIRPS v3 daily rainfall (`rnl`, `sat` final and preliminary) | live (feeds paused since 2026-10-25, CHC's 403s); the copy in R1–R3 | `data.chc.ucsb.edu` | `chirps` | `backend/src/feeds/sources/chirps.ts`; R2 `ingest/chirps_final.py`, `backend/src/ingest/daily.ts` |
 | [chirps-gefs](#chirps-gefs) | CHIRPS-GEFS v3 16-day forecast | live; the copy built (R3-A), read with `CHIRPS_SOURCE=mirror` | `data.chc.ucsb.edu` | `chirps_gefs` | `backend/src/ingest/gefs.ts` (the copy), `backend/src/feeds/fromMirrorGefs.ts` (feeds read it); `backend/src/feeds/sources/chirps.ts` until the cutover |
-| [dws-flow](#dws-flow) | DWS verified daily flow | live; the weekly job and the written request in R3-B | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`; R3 `backend/src/ingest/dws.ts` |
+| [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until DWS's written answer | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
 | [dpet](#dpet) | dPET daily potential evapotranspiration | reference load | `data.bris.ac.uk` | – | `bin/evaporation-fetch.sh`, `pnpm import:evaporation` |
 | [worldcover](#worldcover) | ESA WorldCover 10 m 2021 v200 (cropland) | reference load | `esa-worldcover.org` (the operator's download) | – | `pnpm import:land-cover` |
@@ -204,20 +204,28 @@ in `infra/feeds.tf`):
   owner, if allowed.
 - **Contact:** DWS National Hydrological Services, GeoRequests@dws.gov.za
   (Hydstra data). Letter not yet sent (#604 operator steps).
-- **Access pattern today:** each DWS feed asks for a 2-year window
+- **Access pattern with `DWS_SOURCE=live` (production today):** each DWS feed asks for a 2-year window
   (`DWS_WINDOW_DAYS`, 365-day re-read) per station; the site allows 20 years
   a request.
-- **Access pattern planned (R3-B, D14):** the written data request is the
-  primary route, loaded by an operator import (`pnpm import:dws`) into a
-  `gauge_record` table; a **weekly** top-up job asks only for stations some
-  feed uses, the newest 2-year window each.
-- **Limits we keep to:** 1 request a second; a 403 or the ScriptServer page
-  marks the source stale and alerts, never retries.
+- **Access pattern built (R3-B, D14):** the written data request is the
+  primary route, loaded by the operator (`pnpm import:dws`) into
+  `gauge_record` (247) as source `dws-request`; a **weekly** pass (the
+  fetcher's `dws-weekly` mode, run daily, each station re-read once its last
+  good fetch is 6 days old) asks only for the stations enabled DWS feeds
+  name, the newest 2-year window each, and the worker loads it as `dws-web`.
+  With `DWS_SOURCE=store` a feed reads the store and never asks DWS
+  ([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
+  Production stays on `live` (and the pass off) until DWS answers.
+- **Limits we keep to:** 1 request a second, one User-Agent; a 403,
+  throttling (429/503) or the ScriptServer page stops the pass, marks the
+  source stale (`dws/status.json`) and alerts (`MirrorLagDays{Product=dws}`),
+  never retried.
 - **Fallback:** the manual DWS import, already built
   (`frontend/src/lib/series/dws.ts`, sharing the engine's parser,
   `@water-management/engine/dws`).
-- **Owner:** the operator; code `backend/src/feeds/sources/dws.ts`, then
-  R3-B `backend/src/ingest/dws.ts`.
+- **Owner:** the operator; code `backend/src/feeds/sources/dws.ts`,
+  `backend/src/ingest/dws.ts`, `backend/src/feeds/fromGaugeRecord.ts`,
+  `backend/scripts/import-dws.ts`.
 
 ## Planned: the copy's cross-check
 

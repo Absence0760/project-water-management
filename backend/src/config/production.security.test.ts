@@ -98,6 +98,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		FETCH_REQUESTS_QUEUE_URL: SQS('fetch-requests'),
 		FEED_SOURCE: 'live',
 		CHIRPS_SOURCE: 'chc',
+		DWS_SOURCE: 'live',
+		DWS_WEEKLY: 'off',
 		MIRROR_URL: 's3://water-management-mirror-000000000000',
 		REPORT_RENDERER: 'sqs',
 		RENDER_REQUESTS_QUEUE_URL: SQS('render-requests'),
@@ -480,6 +482,18 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'chc', MIRROR_URL: 'file:///tmp/mirror/' }))).toContain('MIRROR_URL');	// The fetcher writes the copy (its daily ingest): Terraform always sets the bucket, and nothing else will do.
 		for (const v of [undefined, 'file:///var/task/fixtures/mirror/', 's3://']) expect(problemNames('fetcher', prod('fetcher', { MIRROR_URL: v })), `fetcher MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
 		expect(problemNames('fetcher', prod('fetcher', {}))).toEqual([]);
+	});
+
+	it('the worker says where DWS feeds read (store or live) and whether it runs the weekly pass, which needs the mirror bucket', () => {
+		for (const v of [undefined, '', 'dws', 'fixtures']) expect(problemNames('worker', prod('worker', { DWS_SOURCE: v })), `DWS_SOURCE=${String(v)}`).toContain('DWS_SOURCE');
+		for (const v of [undefined, '', 'yes', 'true']) expect(problemNames('worker', prod('worker', { DWS_WEEKLY: v })), `DWS_WEEKLY=${String(v)}`).toContain('DWS_WEEKLY');
+		// Positive controls: either source, the pass on or off.
+		for (const v of ['store', 'live']) expect(problemNames('worker', prod('worker', { DWS_SOURCE: v }))).toEqual([]);
+		expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'on' }))).toEqual([]);
+		// The pass on needs the bucket, even with CHIRPS from CHC; off, the URL may be unset.
+		for (const v of [undefined, 'file:///tmp/mirror/', 's3://'])
+			expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'on', CHIRPS_SOURCE: 'chc', MIRROR_URL: v })), `MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
+		expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'off', CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
 	});
 
 	it('lets the delineation DEM be off or an S3 object (positive control for the DEM_URL refusals)', () => {

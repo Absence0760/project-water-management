@@ -235,7 +235,11 @@ const READ_ONLY = new Set([
 	// The entries of a revision of the copy an apply marked, and how far each product of the copy runs (246_mirror_revision_parts):
 	// written only by app_mirror_apply_revision and app_mirror_record_copy, from the worker's session with no user.
 	'mirror_change',
-	'mirror_copy'
+	'mirror_copy',
+	// Our store of DWS gauge flow and the days each source covered (247_gauge_record): written only by gauge_record_write
+	// (the operator's import, as the schema owner) and app_gauge_record_load_web (the worker, with no user).
+	'gauge_record',
+	'gauge_record_span'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
@@ -813,6 +817,7 @@ describe('schema catalogue', () => {
 			{ proname: 'app_begin_feed_fetch', pinned: true, secdef: true },
 			{ proname: 'app_claim_feed', pinned: true, secdef: true },
 			{ proname: 'app_due_feeds', pinned: true, secdef: true },
+			{ proname: 'app_dws_feed_stations', pinned: true, secdef: true },
 			{ proname: 'app_feed_fetch_job', pinned: true, secdef: true },
 			{ proname: 'app_feed_fetch_now', pinned: true, secdef: true },
 			{ proname: 'app_feed_is_due', pinned: true, secdef: false },

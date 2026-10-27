@@ -193,6 +193,12 @@ resource "aws_lambda_function" "worker" {
       # endpoint's statement are there). chc until the cutover (R3-C).
       CHIRPS_SOURCE = var.chirps_source
       MIRROR_URL    = "s3://${aws_s3_bucket.mirror.bucket}"
+      # Where a DWS feed fetch reads (issue #604 R3-B): live sends it to the
+      # fetcher; store reads gauge_record in the fetch job. With the weekly
+      # pass on, the worker writes its station list to the mirror bucket and
+      # loads what the pass fetched (feeds.tf, DWS_WEEKLY).
+      DWS_SOURCE = var.dws_source
+      DWS_WEEKLY = var.dws_weekly_enabled ? "on" : "off"
       # Server-side reports (reports.tf): no Chromium here, so renders go to
       # the renderer; the worker records them and emails the link (SES).
       REPORT_RENDERER           = "sqs"

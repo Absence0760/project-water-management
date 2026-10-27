@@ -29,7 +29,11 @@
 // a CHIRPS fetch reads our own copy of CHIRPS instead, in this job, whatever
 // FEED_FETCHER says: no FetchRequest, no SQS round trip (feeds/fromMirror.ts,
 // issue #604 D3). So does a CHIRPS-GEFS fetch: it reads the newest issue the
-// daily GEFS pass copied (feeds/fromMirrorGefs.ts, R3-A). DWS feeds are unchanged.
+// daily GEFS pass copied (feeds/fromMirrorGefs.ts, R3-A).
+//
+// With DWS_SOURCE=store (feeds/fromGaugeRecord.ts dwsSource; the default in
+// dev, CI and e2e) a DWS fetch reads its station's days from our gauge record
+// store (247_gauge_record) the same way, in this job (issue #604 R3-B).
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import { planFetch, RECHECK_HEAD_DAYS, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from '../../feeds/cellCache.js';
@@ -43,6 +47,7 @@ import { fetchFromMirror } from '../../feeds/fromMirror.js';
 import { fetchGefsFromMirror } from '../../feeds/fromMirrorGefs.js';
 import { ingestResult } from '../../feeds/ingest.js';
 import { chirpsSource } from '../../mirror/source.js';
+import { dwsSource, fetchFromGaugeRecord } from '../../feeds/fromGaugeRecord.js';
 import { beginFeedFetch, feedForJob, takeFeedFetch } from '../../feeds/store.js';
 import { defineHandler } from '../registry.js';
 import { feedFetcher, type FetchRequestMessage, sendToQueue } from '../transport.js';
@@ -69,6 +74,11 @@ export const feedFetchHandler = defineHandler({
 		// CHIRPS-GEFS from the copy too (issue #604 R3-A): the newest issue the daily GEFS pass copied, read in this job.
 		if (feed.source === 'chirps_gefs' && chirpsSource() === 'mirror') {
 			await fetchGefsFromMirror(db, feed, window, { jobId: job.id, today });
+			return;
+		}
+		// DWS from our gauge record store (issue #604 R3-B).
+		if (feed.source === 'dws' && dwsSource() === 'store') {
+			await fetchFromGaugeRecord(db, feed, window, { jobId: job.id, today });
 			return;
 		}
 		if (feed.source === 'chirps') {
