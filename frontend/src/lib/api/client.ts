@@ -172,6 +172,8 @@ import type {
 	GaugeStationLookup,
 	MapSearchAnswer,
 	DamProposals,
+	DamObservations,
+	FarmDamObserved,
 	DelineationProposal,
 	DelineationRequest,
 	DelineationState,
@@ -637,6 +639,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			exportUrl: (id: string, nodeId: string) => `${base}${p(id)}/farm/${enc(nodeId)}/export.csv`,
 			/** The farm's map (issue #326 A3): its own parcels and dams, with the boundary, rivers and gauges; empty without a parcel or dam. */
 			map: (id: string, nodeId: string) => request<FarmMap>('GET', `${p(id)}/farm/${enc(nodeId)}/map`),
+			/** The farm's dam seen from space (issue #604 R5-B): the newest clear satellite view and its credit. */
+			damObserved: (id: string, nodeId: string) => request<FarmDamObserved>('GET', `${p(id)}/farm/${enc(nodeId)}/dam-observed`),
 			/** "Who decides about your farm's information": the project's team and its privacy contact (168), any member. */
 			privacyContact: (id: string) => request<ProjectPrivacyContact>('GET', `${p(id)}/privacy-contact`),
 			/** "Who can see my farm": the people who can read it, by name and role (never emails). */
@@ -1271,6 +1275,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 * docs/api.md § Catchment map). The register's capacities are a reference only (#523 C1): only the polygon's area is
 		 * accepted, one value, saved to the model as a revision naming the source.
 		 */
+		/**
+		 * Each unit's dam seen from space against a run's modelled dam area (issue #604 R5-B, docs/api.md § Dams seen from
+		 * space): the run named, else the project's newest.
+		 */
+		damObservations: (id: string, runId?: string | null) => request<DamObservations>('GET', `${p(id)}/dams/observations${runId ? `?${new URLSearchParams({ run: runId })}` : ''}`),
 		damProposals: {
 			get: (id: string, nodeId: string) => request<DamProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/dam-proposals`),
 			areaFromMap: (id: string, nodeId: string, featureId: string) =>

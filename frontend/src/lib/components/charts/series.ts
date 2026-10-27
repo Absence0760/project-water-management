@@ -14,6 +14,8 @@ export interface ChartSeries extends DailyInput {
 	/** CSS custom property holding the colour, e.g. '--series-2'. */
 	color?: string;
 	width?: number;
+	/** A points series' dot size in CSS px (3 by default; sparse observations, such as a dam seen from space, read better larger). */
+	pointSize?: number;
 	/** Starts switched off; clicking its legend entry shows it. */
 	hidden?: boolean;
 }

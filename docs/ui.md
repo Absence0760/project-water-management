@@ -1869,6 +1869,38 @@ for every workspace tab. Its own chunk.
   Summary's **30 days / 1 year / All** switch (`FLOW_WINDOWS`, opens on a
   year). A line above it: % full and the volume on the last day, the lowest
   in the last year and the days at the minimum level.
+- **Seen from space** under the storage chart (issue #604 R5-B,
+  `dams/DamObservedBox.svelte`, wording and series in `dams/observed.ts`;
+  the method and thresholds in [model.md § 2.10l](./model.md#210l-modelled-vs-observed-dam-area-app-issue-604-r5-b)):
+  the picked dam's surface area in the run (its `dam_area` column, the survey
+  curve's or the power law's) beside what Digital Earth Africa's satellites
+  saw of the unit's dam outlines on the Map (`GET …/dams/observations?run=`,
+  [api.md § Dams seen from space](./api.md#dams-seen-from-space); one request
+  for the run, every dam). An `h3`, then a fold (`common/Fold.svelte`) of one
+  line: "Upper farm: 12 clear views compared · 2 disagree · 75% within ±10%",
+  or why there is nothing ("no outline of this dam on the map", "no satellite
+  views yet", "none compared · latest clear view …"). **Show** opens, in order:
+  a line per outline DE Africa Waterbodies merged with a neighbouring water
+  body, has no polygon for, or hasn't been matched to yet (its Waterbodies
+  views aren't compared, only WOfS inside the outline); the full area and
+  where it comes from (survey curve's top, as entered, or estimated from the
+  capacity) with a summary in words (the span, the mean difference as a share
+  of the full area, the share within ±10 %, how often seen full or empty); the
+  chart (`LineChart`, ha: the run's area as a line, the compared views as
+  dots, the views not compared as fainter dots off until the legend shows
+  them, the full area dashed, 30 days / 1 year / All opening on All) with the
+  flags as lanes along its foot (**Disagree** `--danger`, **Seen full**
+  `--accent`, **Seen empty** `--warning`, each named in the lanes key); **Show
+  the N views**, a table newest first (date, source, seen, % seen clearly,
+  modelled, and the difference and flags or why it wasn't compared; a row that
+  disagrees in `--danger` with the words "Disagree: …"), which stacks each
+  view as a block in a narrow column (36rem) rather than scrolling sideways;
+  and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0 (Waterbodies
+  and WOfS, from Landsat)". The run's area loads through the Runs cache only
+  once the fold opens. A dam with no outline says so, with **Open the Map**.
+  Beside the cards the plot gives up the fold's closed height, as for the
+  proposals, and an opened fold grows the sticky panel (it sticks by its
+  foot). e2e: `dam-observed.spec.ts`.
 - **Assurance of supply: <unit>** under the chart (issue #444,
   `reliability/NodeAssurance.svelte`): a dam has no assurance of its own, so
   it is labelled as the unit's ("The hydrological unit's supply, which this
@@ -12491,6 +12523,20 @@ published.
   `axisPlacement`; `farm-view.spec.ts` measures the letters' gaps at 320 px).
   A farm with no dam: its dam page says "… has no dam in the model." and
   links back, with no estimate line (there is no figure for it to precede).
+  **Your dam, seen from space** (issue #604 R5-B, `farm/DamObservedCard.svelte`,
+  wording in `farm/damObserved.ts`, section `farm.damPage`) follows the dam
+  page's chart, only when the farm's dam is drawn as an outline on the Map
+  (`GET …/farm/:nodeId/dam-observed`, api.md § Farm): "On 10 Dec 2021 a
+  satellite saw water over 2.0 ha of your dam, about 40 % of the area it
+  covers when full." (the newest view at least 90 % clear, by the comparison's
+  own rule; the full area from the farm's own node: survey curve, entered or
+  estimated; without one, the sentence stops at the area), or "No clear view of
+  your dam from space yet. …"; then "A satellite sees the water’s surface, not
+  how deep it is: a check on the model, not a measurement of the water in your
+  dam." and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0." A
+  failed load is one line asking to check the connection and reload, as the
+  map card's. Nothing of a neighbour's dam reaches it (the route names the
+  farm, and 249's farmer policies are the second layer).
 - **The estimate line** (`farm/EstimateNote.svelte`, `role="note"`): "These
   figures are worked out by a computer model of the catchment. They are
   estimates, not measurements or instructions, and they can be wrong. Only a

@@ -3353,6 +3353,71 @@ export interface RegisterDamProposal {
 	loadedAt: string;
 }
 
+/** Where a dam observation comes from (backend dams/observed/compare.ts). */
+export type ObservedSource = 'waterbodies' | 'wofs';
+/** Why an observation wasn't compared with the model (backend dams/observed/compare.ts SkipReason). */
+export type ObservedSkip = 'partly-seen' | 'not-this-dam' | 'partial-unit' | 'other-source' | 'outside-run' | 'no-run';
+/** Which side says full or empty while the other clearly doesn't. */
+export type ObservedMismatch = 'model-full' | 'model-empty' | 'seen-full' | 'seen-empty';
+
+/** One satellite view of a unit's dam, with the run's area that day. */
+export interface ObservedPoint {
+	date: string;
+	source: ObservedSource;
+	wetAreaM2: number;
+	pctObserved: number;
+	modelledAreaM2: number | null;
+	compared: boolean;
+	skip: ObservedSkip | null;
+	seenFull: boolean;
+	seenEmpty: boolean;
+	modelFull: boolean;
+	modelEmpty: boolean;
+	mismatch: ObservedMismatch | null;
+}
+
+/** One unit's dam (or a dam polygon linked to no unit) seen from space. */
+export interface ObservedDam {
+	nodeId: string | null;
+	features: {
+		id: string;
+		name: string;
+		nodeId: string | null;
+		/** How the polygon matched a DE Africa Waterbodies polygon; null before the matcher has looked. */
+		match: { status: 'matched' | 'merged' | 'none'; damShare: number | null; waterbodyShare: number | null } | null;
+	}[];
+	fullArea: { areaM2: number; from: 'survey' | 'entered' | 'estimated' } | null;
+	inRun: boolean;
+	points: ObservedPoint[];
+	summary: {
+		compared: number;
+		skipped: number;
+		biasPctOfFull: number | null;
+		withinShare: number | null;
+		seenFull: number;
+		seenEmpty: number;
+		mismatches: number;
+		latestClear: { date: string; source: ObservedSource; wetAreaM2: number; pctObserved: number } | null;
+	};
+}
+
+/** GET …/dams/observations (issue #604 R5-B): each unit's dam seen from space against the run's modelled area. */
+export interface DamObservations {
+	attribution: string;
+	thresholds: { minPctObserved: number; fullShare: number; emptyShare: number; pixelM2: number; clearlyNotFull: number; clearlyWet: number; withinShare: number };
+	run: { id: string; label: string; createdAt: string; engineVersion: string; forecastFrom: string | null } | null;
+	dams: ObservedDam[];
+}
+
+/** GET …/farm/:nodeId/dam-observed (issue #604 R5-B): the farm's dam seen from space. */
+export interface FarmDamObserved {
+	/** The farm's dams drawn on the map as an outline; 0 and the page says nothing. */
+	outlines: number;
+	latest: { date: string; wetAreaM2: number; source: ObservedSource } | null;
+	fullAreaM2: number | null;
+	attribution: string;
+}
+
 /** GET …/nodes/:nodeId/dam-proposals: what the register and the map propose for a unit's dam. */
 export interface DamProposals {
 	nodeId: string;
