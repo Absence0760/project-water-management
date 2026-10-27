@@ -1,8 +1,10 @@
 // Modelled vs observed dam area (./compare.ts, issue #604 R5-B): pairing by
 // date, the clear-view threshold, the composite dam's sum, the source rules,
 // the spill / empty / mismatch flags at their thresholds, and the summary.
+// Dates, so under a skewed TZ (CLAUDE.md rule 7): UTC+14 would move a
+// local-midnight date a day, UTC−11 the other way.
 import { estimatedDamAreaM2 } from '@water-management/engine';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { compareDam, flags, fullAreaOf, OBSERVED, type CompareInput, type ObservationIn } from './compare.js';
 
 const F = 10_000;
@@ -10,6 +12,15 @@ const full = { areaM2: F, from: 'entered' as const };
 const obs = (date: string, wetAreaM2: number, more: Partial<ObservationIn> = {}): ObservationIn => ({ featureId: 'a', source: 'wofs', date, wetAreaM2, pctObserved: 100, ...more });
 /** A run from 1 Jan 2024 whose dam_area is `values` (one a day). */
 const run = (values: (number | null)[]) => ({ startDate: '2024-01-01', values });
+let tz: string | undefined;
+beforeAll(() => {
+	tz = process.env.TZ;
+	process.env.TZ = 'Pacific/Kiritimati';
+});
+afterAll(() => {
+	process.env.TZ = tz;
+});
+
 const base = (over: Partial<CompareInput>): CompareInput => ({ features: [{ id: 'a', match: 'matched' }], observations: [], modelled: run(new Array(31).fill(5_000)), full, ...over });
 
 describe('fullAreaOf', () => {
@@ -143,6 +154,27 @@ describe('compareDam', () => {
 		]);
 		expect(r.summary).toMatchObject({ compared: 3, skipped: 1, seenFull: 1, seenEmpty: 0, mismatches: 2 });
 		expect(r.summary.withinShare).toBeCloseTo(1 / 3, 9);
+	});
+
+	it('pairs the run’s first and last day with their own values, and the days either side are outside it, in any zone', () => {
+		// 31 days from 1 Jan 2024: index 0 on 1 Jan, index 30 on 31 Jan.
+		const values = new Array(31).fill(5_000);
+		values[0] = 1_000;
+		values[30] = 9_000;
+		for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'UTC']) {
+			process.env.TZ = zone;
+			const r = compareDam(base({ modelled: run(values), observations: [obs('2023-12-31', 1_000), obs('2024-01-01', 1_000), obs('2024-01-31', 9_000), obs('2024-02-01', 9_000)] }));
+			expect(
+				r.points.map((p) => [p.date, p.modelledAreaM2, p.skip]),
+				zone
+			).toEqual([
+				['2023-12-31', null, 'outside-run'],
+				['2024-01-01', 1_000, null],
+				['2024-01-31', 9_000, null],
+				['2024-02-01', null, 'outside-run']
+			]);
+		}
+		process.env.TZ = 'Pacific/Kiritimati';
 	});
 
 	it('is empty with no observations', () => {
