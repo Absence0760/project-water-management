@@ -659,6 +659,32 @@ variable "ingest_lag_alarm_days" {
   }
 }
 
+variable "daily_ingest_enabled" {
+  description = "Turn on the fetcher's daily ingest (feeds.tf, issue #604 R2-B): the daily EventBridge rule that copies CHIRPS preliminary days into the data mirror, the fetcher role's write to the mirror bucket, and the preliminary copy's freshness alarm (ingest.tf, breaching on missing data). Off (the default) until a backend release with the daily mode is deployed, or the alarm would fire for a job that doesn't exist yet. Runbook: docs/deployment.md § The data mirror."
+  type        = bool
+  default     = false
+}
+
+variable "daily_ingest_lag_alarm_days" {
+  description = "Alarm when the mirror's newest CHIRPS sat day (preliminary, else final) is more than this many days old (MirrorLagDays{Product=prelim}). CHC publishes a pentad's preliminary days two days after it ends, so a healthy copy runs up to ~8 days behind; the default 12 fires once a pentad is about a week late."
+  type        = number
+  default     = 12
+  validation {
+    condition     = var.daily_ingest_lag_alarm_days >= 9 && floor(var.daily_ingest_lag_alarm_days) == var.daily_ingest_lag_alarm_days
+    error_message = "A whole number of days, at least 9, or the alarm fires on a healthy copy just before a pentad is published."
+  }
+}
+
+variable "ingest_backfill_wait_seconds" {
+  description = "Seconds the backfill state machine (ingest_backfill.tf) waits after each month before invoking the next: D4's 1 file a minute against CHC."
+  type        = number
+  default     = 60
+  validation {
+    condition     = var.ingest_backfill_wait_seconds >= 60 && floor(var.ingest_backfill_wait_seconds) == var.ingest_backfill_wait_seconds
+    error_message = "At least 60 whole seconds: CHC is asked for at most one bulk file a minute (issue #604 D4)."
+  }
+}
+
 variable "jobs_backlog_alarm_seconds" {
   description = "Alarm when the oldest due job has waited this long. The schedule ticks every 5 minutes, so anything under ~10 minutes would fire on a normal wait."
   type        = number
@@ -672,7 +698,7 @@ variable "jobs_backlog_alarm_seconds" {
 # --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
 
 variable "alarm_tier" {
-  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
+  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), and one more with daily_ingest_enabled (the preliminary copy's). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
   type        = string
   default     = "full"
 

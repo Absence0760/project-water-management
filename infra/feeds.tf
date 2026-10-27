@@ -16,6 +16,15 @@
 # the feed's acting user under RLS (backend/src/feeds/ingest.ts).
 #
 # Each queue dead-letters after 5 receives into its own DLQ, which alarms.
+#
+# The daily ingest (issue #604 R2-B, backend/src/ingest/daily.ts): once
+# daily_ingest_enabled is set, an EventBridge rule invokes the same fetcher
+# once a day with {"mode":"daily-ingest"}, and it copies the new CHIRPS
+# preliminary days into the mirror bucket (ingest.tf), publishing
+# MirrorLagDays{Product=prelim} as an embedded metric in its own log (no
+# PutMetricData grant needed). Only then may its role read, write, list and
+# delete in the mirror bucket. A run is never retried (a 403 must stop it;
+# the next day's run tries again).
 # ----------------------------------------------------------------------------
 
 locals {
@@ -160,6 +169,8 @@ resource "aws_lambda_function" "fetcher" {
     variables = {
       FEED_SOURCE              = "live"
       INGEST_RESULTS_QUEUE_URL = aws_sqs_queue.ingest_results.url
+      # The copy the daily ingest writes (its role may only once daily_ingest_enabled is set).
+      MIRROR_URL = "s3://${aws_s3_bucket.mirror.bucket}"
     }
   }
 
@@ -187,6 +198,76 @@ resource "aws_lambda_event_source_mapping" "fetcher_requests" {
   scaling_config {
     maximum_concurrency = 2
   }
+}
+
+# --- The daily ingest (issue #604 R2-B) ----------------------------------------------
+
+# The mirror bucket, only once the daily ingest is on: the per-feed mode never
+# touches it. Delete, because a preliminary day the finals now hold has its
+# chunks deleted; ListBucket, so an unwritten (all-NaN) chunk answers 404, not
+# 403.
+data "aws_iam_policy_document" "fetcher_mirror" {
+  statement {
+    sid       = "ReadWriteMirrorObjects"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.mirror.arn}/*"]
+  }
+  statement {
+    sid       = "ListMirror"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.mirror.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "fetcher_mirror" {
+  count = var.daily_ingest_enabled ? 1 : 0
+
+  name   = "write-mirror"
+  role   = aws_iam_role.fetcher_lambda.id
+  policy = data.aws_iam_policy_document.fetcher_mirror.json
+}
+
+# 03:00 UTC: after the Python job's rnl (02:00) and sat (02:20) runs, so a
+# day whose final landed overnight is dropped, not copied, the same morning.
+# CHC publishes a pentad's preliminary days two days after it ends; a daily
+# run copies them the day they appear.
+resource "aws_cloudwatch_event_rule" "daily_ingest" {
+  name                = "${local.project}-daily-ingest"
+  description         = "The fetcher's daily ingest: CHIRPS preliminary sat days into the data mirror ({\"mode\":\"daily-ingest\"}). Disabled until daily_ingest_enabled is set."
+  schedule_expression = "cron(0 3 * * ? *)"
+  state               = var.daily_ingest_enabled ? "ENABLED" : "DISABLED"
+}
+
+resource "aws_cloudwatch_event_target" "daily_ingest" {
+  count = var.daily_ingest_enabled ? 1 : 0
+
+  rule  = aws_cloudwatch_event_rule.daily_ingest.name
+  arn   = aws_lambda_function.fetcher.arn
+  input = jsonencode({ mode = "daily-ingest" })
+
+  retry_policy {
+    maximum_retry_attempts       = 0
+    maximum_event_age_in_seconds = 3600
+  }
+}
+
+resource "aws_lambda_permission" "fetcher_daily_ingest" {
+  count = var.daily_ingest_enabled ? 1 : 0
+
+  statement_id  = "AllowEventBridgeDailyIngest"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.fetcher.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.daily_ingest.arn
+}
+
+# The schedule invokes asynchronously, and Lambda would retry a failed run
+# twice by default: a run that met HTTP 403 must stop, not ask again within
+# minutes. The SQS mode is a synchronous poll, so this doesn't touch it.
+resource "aws_lambda_function_event_invoke_config" "fetcher" {
+  function_name                = aws_lambda_function.fetcher.function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
 }
 
 # --- The worker's side: send requests, consume results -------------------------------

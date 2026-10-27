@@ -316,26 +316,104 @@ export async function readPoints(read: RangeRead, grid: GridInfo, points: readon
 		return px;
 	});
 	const decoded = new Map<number, DataView>();
-	const rowBytes = grid.width * 4;
 	for (const s of new Set(where.map((w) => Math.floor(w.row / grid.rowsPerStrip)))) {
 		const { offset, bytes } = await grid.strip(s);
 		if (!(bytes > 0 && bytes <= MAX_STRIP_BYTES)) throw new FeedFormatError('a strip of the grid has an implausible size');
 		const raw = await read(offset, offset + bytes - 1);
 		if (!raw || raw.length < bytes) throw new FeedFormatError('the grid file ends inside a strip');
-		const rows = Math.min(grid.rowsPerStrip, grid.height - s * grid.rowsPerStrip);
-		const expected = rows * rowBytes;
-		// Bound what the header makes us allocate, not only what we read.
-		if (expected > MAX_DECODED_STRIP_BYTES) throw new FeedFormatError('a strip of the grid would decode to an implausible size');
-		const data = grid.compression === 5 ? lzwDecode(raw, expected) : raw.subarray(0, expected);
-		if (data.length < expected) throw new FeedFormatError('a strip of the grid is truncated');
-		decoded.set(s, new DataView(data.buffer, data.byteOffset, data.byteLength));
+		decoded.set(s, decodeStrip(grid, s, raw));
 	}
 	return where.map(({ row, col }) => {
 		const s = Math.floor(row / grid.rowsPerStrip);
 		const v = decoded.get(s)!.getFloat32(((row - s * grid.rowsPerStrip) * grid.width + col) * 4, grid.littleEndian);
-		if (Number.isNaN(v) || v <= NODATA_FLOOR || (grid.nodata !== null && v === grid.nodata)) return null;
-		return v;
+		return isNoData(grid, v) ? null : v;
 	});
+}
+
+/** Whether a sample is "no data": NaN, at or below NODATA_FLOOR, or the file's own GDAL_NODATA. */
+const isNoData = (grid: Pick<GridInfo, 'nodata'>, v: number) => Number.isNaN(v) || v <= NODATA_FLOOR || (grid.nodata !== null && v === grid.nodata);
+
+/** Strip `s`'s samples from its stored bytes: checked against the header's bounds, LZW-decoded when compressed. */
+function decodeStrip(grid: GridInfo, s: number, raw: Uint8Array): DataView {
+	const rows = Math.min(grid.rowsPerStrip, grid.height - s * grid.rowsPerStrip);
+	const expected = rows * grid.width * 4;
+	// Bound what the header makes us allocate, not only what we read.
+	if (expected > MAX_DECODED_STRIP_BYTES) throw new FeedFormatError('a strip of the grid would decode to an implausible size');
+	const data = grid.compression === 5 ? lzwDecode(raw, expected) : raw.subarray(0, expected);
+	if (data.length < expected) throw new FeedFormatError('a strip of the grid is truncated');
+	return new DataView(data.buffer, data.byteOffset, data.byteLength);
+}
+
+/** The longest single range readRows asks for: the live client refuses a response over 4 MiB (feeds/http.ts). */
+export const ROWS_READ_MAX_BYTES = 2 * 1024 * 1024;
+/** Strips this close together in the file are read in one range, the bytes between them thrown away. */
+const ROWS_READ_GAP_BYTES = 64 * 1024;
+/** The most stored bytes one readRows call may read: a band of the CHC grid is a few MB. */
+const ROWS_READ_TOTAL_MAX_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Rows `row0`..`row1` (inclusive, file order: row 0 is the grid's north edge)
+ * across the whole width, as float32 in row-major order with every no-data
+ * sample NaN. The daily ingest's read (ingest/daily.ts): it copies a band of
+ * the grid, not a few points, so instead of a read per strip it reads the
+ * strips' bytes as few ranges as the file's layout allows. CHC writes its
+ * strips in row order, back to back, so a band is one span of the file,
+ * read in pieces of at most ROWS_READ_MAX_BYTES (about 2 for the D1 region's
+ * 550 rows); strips stored apart are read as separate spans. Repeated strip
+ * offsets (TIFF allows them) are read once.
+ */
+export async function readRows(read: RangeRead, grid: GridInfo, row0: number, row1: number, maxRead = ROWS_READ_MAX_BYTES): Promise<Float32Array> {
+	if (!(Number.isInteger(row0) && Number.isInteger(row1) && row0 >= 0 && row1 >= row0 && row1 < grid.height)) {
+		throw new RangeError(`rows ${row0}–${row1} are outside the grid's ${grid.height}`);
+	}
+	const s0 = Math.floor(row0 / grid.rowsPerStrip);
+	const s1 = Math.floor(row1 / grid.rowsPerStrip);
+	const strips: { s: number; offset: number; bytes: number }[] = [];
+	let total = 0;
+	for (let s = s0; s <= s1; s++) {
+		const { offset, bytes } = await grid.strip(s);
+		if (!(bytes > 0 && bytes <= MAX_STRIP_BYTES)) throw new FeedFormatError('a strip of the grid has an implausible size');
+		strips.push({ s, offset, bytes });
+	}
+	// Spans of the file holding the strips: sorted by offset, merged when they overlap or nearly touch.
+	const spans: { start: number; end: number }[] = [];
+	for (const st of [...strips].sort((a, b) => a.offset - b.offset)) {
+		const last = spans.at(-1);
+		const end = st.offset + st.bytes; // exclusive
+		if (last && st.offset <= last.end + ROWS_READ_GAP_BYTES) last.end = Math.max(last.end, end);
+		else spans.push({ start: st.offset, end });
+	}
+	for (const sp of spans) total += sp.end - sp.start;
+	if (total > ROWS_READ_TOTAL_MAX_BYTES) throw new FeedFormatError('the rows of the grid would need an implausible amount of reading');
+	// One request at a time: the source is asked politely (the daily ingest paces them).
+	const got: { start: number; end: number; buf: Uint8Array }[] = [];
+	for (const sp of spans) {
+		const buf = new Uint8Array(sp.end - sp.start);
+		for (let at = sp.start; at < sp.end; at += maxRead) {
+			const to = Math.min(sp.end, at + maxRead) - 1;
+			const part = await read(at, to);
+			if (!part || part.length < to - at + 1) throw new FeedFormatError('the grid file ends inside a strip');
+			buf.set(part.subarray(0, to - at + 1), at - sp.start);
+		}
+		got.push({ ...sp, buf });
+	}
+	const out = new Float32Array((row1 - row0 + 1) * grid.width);
+	for (const st of strips) {
+		const sp = got.find((g) => st.offset >= g.start && st.offset + st.bytes <= g.end)!;
+		const view = decodeStrip(grid, st.s, sp.buf.subarray(st.offset - sp.start, st.offset - sp.start + st.bytes));
+		const first = st.s * grid.rowsPerStrip;
+		const lo = Math.max(first, row0);
+		const hi = Math.min(first + grid.rowsPerStrip - 1, row1);
+		for (let r = lo; r <= hi; r++) {
+			const base = (r - first) * grid.width * 4;
+			const o = (r - row0) * grid.width;
+			for (let c = 0; c < grid.width; c++) {
+				const v = view.getFloat32(base + c * 4, grid.littleEndian);
+				out[o + c] = isNoData(grid, v) ? Number.NaN : v;
+			}
+		}
+	}
+	return out;
 }
 
 const CLEAR = 256;

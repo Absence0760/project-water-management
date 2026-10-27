@@ -2310,9 +2310,10 @@ run "data_feeds" {
     condition = (
       aws_lambda_function.fetcher.environment[0].variables["FEED_SOURCE"] == "live" &&
       aws_lambda_function.fetcher.environment[0].variables["INGEST_RESULTS_QUEUE_URL"] == aws_sqs_queue.ingest_results.url &&
-      length(aws_lambda_function.fetcher.environment[0].variables) == 2
+      aws_lambda_function.fetcher.environment[0].variables["MIRROR_URL"] == "s3://${aws_s3_bucket.mirror.bucket}" &&
+      length(aws_lambda_function.fetcher.environment[0].variables) == 3
     )
-    error_message = "The fetcher gets the live sources and the ingest-results queue, and nothing else (no DATABASE_URL, no secrets)."
+    error_message = "The fetcher gets the live sources, the ingest-results queue and the mirror its daily ingest writes (issue #604 R2-B), and nothing else (no DATABASE_URL, no secrets)."
   }
   assert {
     condition = (

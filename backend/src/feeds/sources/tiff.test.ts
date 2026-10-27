@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FeedFormatError } from '../errors.js';
-import { gdalItems, lzwDecode, openGrid, pixelOf, readPoints, type RangeRead } from './tiff.js';
+import { gdalItems, lzwDecode, openGrid, pixelOf, readPoints, readRows, type RangeRead } from './tiff.js';
 import { lzwEncode, writeGrid, type GridSpec } from './tiff-write.js';
 
 /** A RangeRead over bytes in memory, counting reads. */
@@ -311,6 +311,75 @@ describe('openGrid + readPoints', () => {
 			corrupt.fill(0xff, offset, offset + bytes);
 			await expect(readPoints(reader(corrupt).read, g, [{ lat: -20.12, lon: 25.17 }])).rejects.toThrow(FeedFormatError);
 		});
+	});
+});
+
+describe('readRows (the daily ingest’s band of rows)', () => {
+	// The spec's values: row r, column c is r * 10 + c + 0.5.
+	const row = (r: number, width = 8) => Array.from({ length: width }, (_, c) => r * 10 + c + 0.5);
+
+	it('reads a band of whole rows in file order, in one range after the header and IFD, matching readPoints', async () => {
+		const r = reader(writeGrid(spec()));
+		const grid = (await openGrid(r.read))!;
+		const before = r.reads;
+		const band = await readRows(r.read, grid, 1, 4);
+		expect(r.reads - before).toBe(1); // the strips are back to back: one span
+		expect([...band]).toEqual([...row(1), ...row(2), ...row(3), ...row(4)]);
+		// The same samples readPoints gives for those cells.
+		expect(await readPoints(r.read, grid, [{ lat: -20.12, lon: 25.17 }])).toEqual([band[(2 - 1) * 8 + 3]]);
+	});
+
+	it('splits a span into reads of at most maxRead bytes', async () => {
+		const bytes = writeGrid(spec({ compression: 1 }));
+		const r = reader(bytes);
+		const grid = (await openGrid(r.read))!;
+		const before = r.reads;
+		const sizes: number[] = [];
+		const counted: RangeRead = async (start, end) => (sizes.push(end - start + 1), r.read(start, end));
+		const band = await readRows(counted, grid, 0, 5, 50);
+		expect([...band]).toEqual(Array.from({ length: 6 }, (_, i) => row(i)).flat());
+		// 6 rows × 32 bytes = 192 bytes, in pieces of 50.
+		expect(sizes).toEqual([50, 50, 50, 42]);
+		expect(r.reads - before).toBe(4);
+	});
+
+	it('reads several rows per strip, keeping only the rows asked for', async () => {
+		const r = reader(writeGrid(spec({ rowsPerStrip: 4 })));
+		const grid = (await openGrid(r.read))!;
+		expect([...(await readRows(r.read, grid, 3, 4))]).toEqual([...row(3), ...row(4)]);
+	});
+
+	it('reads repeated strip offsets once (the fixture server shares identical strips)', async () => {
+		const values = Array.from({ length: 48 }, (_, i) => (i % 8) + 0.5); // every row the same
+		const r = reader(writeGrid(spec({ values, shareStrips: true })));
+		const grid = (await openGrid(r.read))!;
+		const before = r.reads;
+		const band = await readRows(r.read, grid, 0, 5);
+		expect(r.reads - before).toBe(1);
+		expect([...band]).toEqual(Array.from({ length: 6 }, () => row(0)).flat());
+	});
+
+	it('makes no-data samples NaN: -9999, NaN and the GDAL_NODATA value', async () => {
+		const values = row(0).concat(row(1));
+		values[0] = -9999;
+		values[1] = Number.NaN;
+		values[2] = 7;
+		const r = reader(writeGrid({ ...spec(), height: 2, values, nodata: '7' }));
+		const grid = (await openGrid(r.read))!;
+		const band = await readRows(r.read, grid, 0, 1);
+		expect([band[0], band[1], band[2]].every(Number.isNaN)).toBe(true);
+		expect(band[3]).toBe(3.5);
+	});
+
+	it('refuses rows outside the grid, and a file that ends inside the band', async () => {
+		const bytes = writeGrid(spec());
+		const r = reader(bytes);
+		const grid = (await openGrid(r.read))!;
+		await expect(readRows(r.read, grid, 4, 6)).rejects.toThrow(RangeError);
+		await expect(readRows(r.read, grid, 3, 2)).rejects.toThrow(RangeError);
+		const s = await grid.strip(5);
+		const cut: RangeRead = async (start, end) => bytes.subarray(start, Math.min(end + 1, s.offset + 1));
+		await expect(readRows(cut, grid, 0, 5)).rejects.toThrow(/ends inside a strip/);
 	});
 });
 
