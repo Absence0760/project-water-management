@@ -150,7 +150,7 @@ pnpm dev:run:worker         # the job worker alone: polls every 15 s and on LIST
 pnpm dev:jobs:tick          # run every due job once and exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default, no network) and exit
 pnpm dev:ingest:push        # push the synthetic logger CSV to /ingest with the API key in WM_INGEST_KEY (run-locally.md § Ingest)
-pnpm dev:ingest:run [rnl|sat]  # the bulk ingest Lambda once in fixtures mode: synthetic NetCDF → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
+pnpm dev:ingest:run [rnl|sat|era5l|imerg_late]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
 
 pnpm dev:db:up              # Postgres 17 in docker on :5434
 pnpm dev:db:down

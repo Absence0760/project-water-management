@@ -1719,6 +1719,24 @@ EventBridge, daily
   nothing and records only that it looked, and the forecast series keeps
   the issue it has. Locally the committed copy holds two synthetic issues,
   re-dated to today the way the synthetic files are.
+- **ERA5-Land (issue #604 R4-A).** The Python ingest Lambda copies
+  Copernicus's ERA5-Land daily total precipitation, about 5 days behind,
+  into `era5l/`, the finals layout on the 0.1° grid (275 × 310, from 1950).
+  ERA5-Land's points sit on x.x0°, so each cell is the mean of its four
+  corner points (an area-conservative remap). The CDS queues requests, so a
+  run submits one month's request and a later run collects it, never
+  waiting inside the Lambda; the CDS key comes from Secrets Manager
+  (`ingest/era5land.py`, `infra/era5land.tf`, off until `era5l_enabled`). A
+  day is the UTC day: its total is the next day's 00 UTC step, so month M's
+  request holds the last day of M−1 through the second-last day of M, and
+  each manifest file is that request
+  (`cds://reanalysis-era5-land/total_precipitation/YYYY-MM`, no ETag). Both
+  manifest validators refuse a `finalThrough` past the contiguous run of
+  days those requests hold, as they do for CHIRPS's months. The newest
+  months are ERA5-Land-T, preliminary: the job asks for them again about two
+  months later, and a change of values is a revision. The array carries
+  Copernicus's attribution, which has to show wherever its values do
+  ([data-sources.md § era5-land](./data-sources.md#era5-land)).
 - **The recent days (IMERG Late, issue #604 R4-D).** The Python ingest
   Lambda copies NASA's IMERG Late daily rain for the last 10 days (about
   14 h behind) into `imerg_late/`, the daily layout on the 0.1° grid
@@ -1763,7 +1781,8 @@ EventBridge, daily
   revision of the copy). No feed uses them yet: how a project uses ERA5-Land
   and IMERG is the engine's next piece. Their committed synthetic copy holds
   invented values over the 0.1° cells of the fixture grid, at its own dates
-  (2024–2025 for `era5l`, 2026-01-25 to 2026-02-08 for `imerg_late`), not
+  (2024-01-01 to 2025-12-30 for `era5l`, one file per month request,
+  2026-01-25 to 2026-02-08 for `imerg_late`), not
   re-dated to today as the CHIRPS products are.
 - **Revisions** reach the cache without a feed: the worker's mirror tick
   reads each manifest (`era5l` and `imerg_late` too) and applies a newer revision through

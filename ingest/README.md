@@ -217,8 +217,11 @@ The module's docstring is the full design; in short:
   month's request asks for the 00 UTC steps of its own days, so it writes
   the last day of the previous month through its own second-last day; the
   month's last day comes with the next month's request. `finalThrough` is
-  the end of the contiguous run of months held (ERA5-Land-T days included:
-  a revision later marks them, as below).
+  the end of the contiguous run of days the months held write (ERA5-Land-T
+  days included: a revision later marks them, as below); both manifest
+  validators (`manifest.py`, `backend/src/mirror/manifest.ts`) refuse a
+  manifest that claims more, or a file URL, ETag or Last-Modified other
+  than a month request's.
 - **The remap.** ERA5-Land's points are on x.x0°; the copy's cells are
   centred on x.x5°, so each cell is the mean of its four corner points (a
   quarter of each box: the area-weighted remap). Sea points have no value;
@@ -402,6 +405,7 @@ file changes.
 ```sh
 pnpm dev:ingest:run          # rnl into ingest/.mirror (gitignored); `pnpm dev:ingest:run sat` for sat
 pnpm dev:ingest:run era5l    # ERA5-Land from the fake CDS: the first run submits, the second collects
+pnpm dev:ingest:run imerg_late  # IMERG Late's last ten days from the fake Earthdata (a recent run)
 pnpm test:ingest             # the unittest suite
 ```
 
