@@ -18,20 +18,4 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-7 strings: 7 on the site, 0 in emails, 0 in the glossary.
-
-## The site (farm pages, sign-in pages, account)
-
-### farm.damPage
-
-Farm view: the dam details page.
-
-| Id | English | Context | Afrikaans |
-| --- | --- | --- | --- |
-| `2dadf580` | The view of your dam from space could not be loaded. Check your connection, then reload the page. |  |  |
-| `48093517` | No clear view of your dam from space yet. Clouds often hide it; the next clear view will show here. |  |  |
-| `5b23de54` | On {date} a satellite saw water over {area} of your dam, about {pct} of the area it covers when full. | {date} is a day like “10 Dec 2021”, {area} an area like “2.0 ha”, {pct} a share like “40 %”. The satellite measures the water’s surface (its area), not how much water there is. Keep: {area}, {date}, {pct} |  |
-| `068f0c4b` | On {date} a satellite saw water over {area} of your dam. | Keep: {area}, {date} |  |
-| `5e5e1f57` | Your dam, seen from space |  |  |
-| `ef2498f7` | A satellite sees the water’s surface, not how deep it is: a check on the model, not a measurement of the water in your dam. |  |  |
-| `d4509ba5` | Satellite views: {credit}. | {credit} is “Digital Earth Africa, CC BY 4.0”, the data’s owner and licence: it stays as it is, untranslated. Keep: {credit} |  |
+0 strings: 0 on the site, 0 in emails, 0 in the glossary.
