@@ -146,7 +146,7 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 ## Commands (run from repo root)
 
 ```bash
-pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, evaporation, MAP grid, gazetteer, Waterbodies polygons), start Mailpit and MinIO (one-time)
+pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, orchards and vines, evaporation, MAP grid, gazetteer, Waterbodies polygons), start Mailpit and MinIO (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (starts Postgres first via dev:db:up; the backend applies pending migrations)
 pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only; also starts Postgres)
 pnpm dev:all                # everything: Mailpit, MinIO + the map's basemap if cached (never fetched), then dev:full
@@ -198,6 +198,9 @@ pnpm import:rivers          # load the synthetic river network the Map's River n
                              # pnpm dev:tiles:rivers fetches HydroRIVERS (GDAL's ogr2ogr) and loads it (maps.md § River network)
 pnpm import:land-cover      # load the synthetic cropland grid a unit's planted-areas drawer proposes from (pnpm setup runs it);
                              # <tile.tif> … --dataset <label> [--cell 0.0025] [--bbox w,s,e,n] loads your own ESA WorldCover tiles (maps.md § Cultivated area from land cover)
+pnpm import:crop-types      # load the synthetic orchard and vine grid the planted-areas drawer shows beside the land cover (pnpm setup runs it);
+                             # <current.tif> --dataset <label> [--baseline <earlier.tif> --baseline-version <name>] loads your own SANLC, warped to EPSG:4326
+                             # (its terms are pending: local evaluation only, production refuses it; maps.md § Orchards and vines from SANLC)
 pnpm import:evaporation     # load the synthetic evaporation grid Calibration → Evaporation from the map proposes from (pnpm setup runs it);
                              # <file> … --dataset <label> [--bbox w,s,e,n] loads dPET years (.nc, or the totals --reduce <dir> wrote) as monthly means;
                              # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)

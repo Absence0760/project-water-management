@@ -186,7 +186,8 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * `pnpm import:quaternaries`); the app only proposes from it. So is the
  * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`),
  * the register of dams (157_dam_register.sql, `pnpm import:dam-register`),
- * the land-cover cropland grid (173_cropland_reference.sql, `pnpm import:land-cover`)
+ * the land-cover cropland grid (173_cropland_reference.sql, `pnpm import:land-cover`),
+ * the orchard and vine grid (255_crop_type_reference.sql, `pnpm import:crop-types`),
  * the evaporation grid (180_evaporation_reference.sql, `pnpm import:evaporation`)
  * and the gazetteer the Map's search reads (225_gazetteer.sql, `pnpm import:gazetteer`).
  * An applicant's "Ask the assessors why" question is filed and answered only
@@ -209,6 +210,8 @@ const READ_ONLY = new Set([
 	'river_reference',
 	'cropland_dataset',
 	'cropland_cell_reference',
+	'crop_type_dataset',
+	'crop_type_cell_reference',
 	'evaporation_dataset',
 	'evaporation_cell_reference',
 	'rain_map_dataset',

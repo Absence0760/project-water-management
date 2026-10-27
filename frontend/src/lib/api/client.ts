@@ -191,6 +191,7 @@ import type {
 	DivideProposal,
 	DivideTicks,
 	CroplandProposals,
+	CropTypeLayer,
 	EvaporationProposals,
 	EvaporationTarget
 } from './types';
@@ -1296,8 +1297,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		cropland: {
 			get: (id: string, nodeId: string, dataset?: string) =>
 				request<CroplandProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/cropland-proposals${dataset ? `?${new URLSearchParams({ dataset })}` : ''}`),
-			cropAreaFromLandCover: (id: string, nodeId: string, body: { cropId: string; dataset: string; featureId?: string }) =>
-				request<{ nodeId: string; cropId: string; areaM2: number; dataset: string; revisionId: string | null }>(
+			/** With `layer`, the orchards or vines of the crop-type grid (`dataset` then names a crop-type dataset; issue #604 R5-D). */
+			cropAreaFromLandCover: (id: string, nodeId: string, body: { cropId: string; dataset: string; featureId?: string; layer?: CropTypeLayer }) =>
+				request<{ nodeId: string; cropId: string; areaM2: number; dataset: string; layer?: CropTypeLayer; revisionId: string | null }>(
 					'POST',
 					`${p(id)}/nodes/${enc(nodeId)}/crop-area-from-land-cover`,
 					body

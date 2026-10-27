@@ -22,7 +22,7 @@ pnpm setup
 This runs `pnpm install`, then `pnpm dev:db:up` (Postgres 17 on
 **127.0.0.1:5434**, waiting until it is healthy), then `pnpm dev:db:migrate`,
 then the synthetic reference data (`pnpm import:quaternaries`,
-`import:gauge-stations`, `import:dam-register`, `import:land-cover`, `import:evaporation`,
+`import:gauge-stations`, `import:dam-register`, `import:land-cover`, `import:crop-types`, `import:evaporation`,
 `import:map-grid`, `import:rivers`, `import:gazetteer`; see
 [Map](#map)), then `pnpm dev:mail:up` (Mailpit, see [Email](#email)), then `pnpm dev:s3:up`
 (MinIO, for report PDFs and evidence packs' reproduction bundles, see
@@ -561,6 +561,7 @@ pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it
 pnpm import:rivers          # the synthetic river network (pnpm setup runs it): what Map → Layers → River network draws and proposes as rivers
 pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB download; needs ogr2ogr, sudo dnf install gdal, or docker), cut to South Africa and loaded as HydroRIVERS-v10
 pnpm import:land-cover      # the synthetic cropland grid (pnpm setup runs it): what a unit's planted-areas drawer (From land cover) sums its parcels from
+pnpm import:crop-types      # the synthetic orchard and vine grid (pnpm setup runs it): the drawer's Orchards and vines; <current.tif> --dataset <label> [--baseline <earlier.tif> --baseline-version <name>] loads your own SANLC for local evaluation (production refuses it until its terms are recorded; maps.md § Orchards and vines from SANLC)
 pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Calibration → Evaporation from the map averages over the boundary
 pnpm import:map-grid        # the synthetic MAP grid (pnpm setup runs it): what Map → Layers → MAP grid draws
                             # or a real one: <grid.asc> --dataset <label> --source "…" [--bbox w,s,e,n]; add --out <file.json.gz> to write

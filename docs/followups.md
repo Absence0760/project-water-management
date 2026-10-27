@@ -4611,19 +4611,26 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
       Show the WorldCover attribution with any figure served.
 - [ ] **Decision: SANLC's licence** (operator; maps.md § Sources, issue
-      #326 B-landcover, decision D-B). South African National Land Cover
-      would give crop classes WorldCover lacks (centre pivots, orchards,
-      vineyards, sugar cane), but the earlier release's GEOTERRAIMAGE licence
-      is CC BY-ND with no commercial resale and no competing products, and
-      DFFE's e-GIS pages (the 2018/2020 terms) refuse connections from
-      outside South Africa. Ask DFFE in writing whether SANLC 2020 may be
-      reused, with derivatives, in a commercial service; on a yes, record it
-      in the sources table and load it as another dataset (`--classes` with
-      its cultivated class codes; the loader takes EPSG:4326 only, so a
-      projected release is reprojected first). Until then the
-      proposals read WorldCover or the synthetic grid. Trigger: a
-      hydrologist asking which crop the land cover sees, or WorldCover's
-      cropland class proving too coarse in a client catchment.
+      #326 B-landcover, decision D-B; issue #618 step 8b). South African
+      National Land Cover gives crop classes WorldCover lacks, but the
+      earlier release's GEOTERRAIMAGE licence is CC BY-ND with no commercial
+      resale and no competing products, and DFFE's e-GIS pages (the
+      2018–2022 terms) refuse connections from outside South Africa. Its
+      orchard and vine classes are **built** (issue #604 R5-D, maps.md
+      § Orchards and vines from SANLC: migration 255, `pnpm
+      import:crop-types`, a synthetic grid in dev, CI and e2e) and refused
+      in production (`REFERENCE_KINDS['crop-types']` blocked, the release
+      gate too), so the live site shows none. Read the EGIS terms (or ask
+      DFFE in writing) whether SANLC 2018 and 2022 may be reused, with
+      derivatives, in a commercial service. On a yes: record them in the
+      Sources table and `docs/legal/map-data-licences.md`, set the kind
+      `allowed` with its file pattern and a loader branch in
+      `geo/referenceLoad.ts` (`cropTypesFromJson` into
+      `replaceCropTypeDataset`), add it to `LOADABLE` in
+      `scripts/release/map-data-gates.mjs`, and load the `--out` summary
+      through deployment.md § Reference datasets. On a no: drop the kind and
+      leave the synthetic grid as the tests' only data. Trigger: the EGIS
+      terms read (#618 8b), or a licence applicant asking for new plantings.
 - [x] **Loading the evaporation grid in production** (issue #326 B-evap,
       2026-10-02, PR feat/evaporation-production-load): `pnpm
       import:evaporation <years> --dataset <label> --out <file>.json.gz`

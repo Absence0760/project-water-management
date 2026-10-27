@@ -110,8 +110,12 @@ const decision: Check = (v) => (v === 'true' || v === 'false' ? null : 'must be 
 /** An S3 URL (s3://bucket/…): our copy of CHIRPS in its bucket, never the committed fixtures (a file path) or a local store. */
 const s3Url: Check = (v) => (!set(v) ? 'is not set' : /^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](\/.*)?$/.test(v.trim()) ? null : 'is not an s3:// URL');
 
-/** MIRROR_URL on the worker: required when it reads the copy (CHIRPS_SOURCE=mirror) or hands the weekly DWS pass its stations (DWS_WEEKLY=on), else checked only when set. */
-const mirrorUrlFor: Check = (v, env) => (env?.CHIRPS_SOURCE?.trim() === 'mirror' || env?.DWS_WEEKLY?.trim() === 'on' ? s3Url(v) : optional(s3Url)(v));
+/**
+ * MIRROR_URL on the worker: required when it reads the copy (CHIRPS_SOURCE=mirror), hands the weekly DWS pass its stations
+ * (DWS_WEEKLY=on) or runs the dams tick (DAM_OBSERVATIONS=on, which reads the passes' files from the bucket), else checked only when set.
+ */
+const mirrorUrlFor: Check = (v, env) =>
+	env?.CHIRPS_SOURCE?.trim() === 'mirror' || env?.DWS_WEEKLY?.trim() === 'on' || env?.DAM_OBSERVATIONS?.trim() === 'on' ? s3Url(v) : optional(s3Url)(v);
 
 /**
  * Whether the worker's feeds all read our copy and store (CHIRPS_SOURCE=mirror
@@ -338,6 +342,10 @@ export const SETTINGS: Record<string, Setting> = {
 	FEEDS_CONTACT: {
 		why: 'The contact address in the live feed client\'s user agent (feeds/http.ts userAgent), which CHC asked for (2026-10-27, issue #604): who they write to before blocking us. Only the fetcher asks a source in production (feeds/http.ts assertLiveFeedRequestsAllowed), for per-feed fetches and its scheduled modes alike, so only it must have one (Terraform var.feeds_contact); elsewhere it is optional and the agent goes without.',
 		checks: { fetcher: contactEmail }
+	},
+	DAM_OBSERVATIONS: {
+		why: 'on: the worker runs the dams tick (dams/observed/tick.ts, issue #604 R5): matches traced dams, writes the passes’ wanted list and loads what they fetched, through the mirror bucket, so MIRROR_URL must name it. Terraform is to set it from var.dam_observations_enabled (infra/jobs.tf; dam_observations.tf refuses the flag until it does). Unset is off (damObservationsOn), today’s production behaviour, so a release can go out before that apply; a value set is checked. The API reaches it through jobs/runner.ts but runs no tick.',
+		checks: { worker: optional(oneOf('on', 'off')) }
 	},
 	FEED_FIXTURE_REWRITE: {
 		why: 'Fixtures only (FEED_SOURCE=fixtures): 1 serves some synthetic CHIRPS finals rewritten in place, to watch the re-check locally. The live client never reads it, and the fetcher refuses the fixtures in production.'

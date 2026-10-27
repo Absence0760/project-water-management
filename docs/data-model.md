@@ -2151,12 +2151,32 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   cells with cropland are stored. Global, loaded by the operator as the
   schema owner (`pnpm import:land-cover`), readable by anyone signed in,
   written by no app role.
+- **`crop_type_dataset`** and **`crop_type_cell_reference`**
+  (`255_crop_type_reference.sql`, issue #604 R5-D,
+  [maps.md § Orchards and vines from SANLC](./maps.md#orchards-and-vines-from-sanlc)):
+  the orchard and vine grid the planted-area proposals show beside the land
+  cover. A dataset row: `dataset` (primary key, 1–50; `synthetic` for the
+  committed fixture), `source`, `version`, `baseline_version` (the earlier
+  edition new plantings are counted against; null without one), `method`,
+  `attribution`, `cell_deg`, `orchard_classes` and `vine_classes` (SANLC: 32
+  and 33), `loaded_at`. A cell row: `dataset` (cascades with it), `row_idx`,
+  `col_idx` (primary key `(dataset, row_idx, col_idx)`, as the land cover's,
+  also covering the foreign key), and the shares `orchard`, `vine`,
+  `new_orchard` and `new_vine` (each 0–1, a new share at most its layer's,
+  orchard + vine above 0 and at most 1). Only cells with an orchard or a
+  vine are stored. Global, loaded by the operator as the schema owner
+  (`pnpm import:crop-types`), readable by anyone signed in, written by no app
+  role. Empty in production until SANLC's terms are recorded (the load is
+  refused, `geo/referenceLoad.ts`). An area used from it is recorded in
+  `crop_area_land_cover` below, its `method` naming the class.
 - **`crop_area_land_cover`** (`174_crop_area_land_cover.sql`): where a
   planted area accepted from land cover came from. Primary key
   `(node_id, crop_id)`; `project_id`, `area_m2` (the value accepted),
   `dataset`, `source`, `version`, `method` (copied from the dataset then, so
   a reload doesn't rewrite what was cited), `basis` (`unit` or `parcel`),
-  `feature_name` (the parcel, for `parcel`), `accepted_at`. Not keyed to
+  `feature_name` (the parcel, for `parcel`), `layer` (255: `orchard` or
+  `vine` for an area from the crop-type grid, null for the land cover's),
+  `accepted_at`. Not keyed to
   `crop_area`, which a model save rewrites whole: it is current while
   `crop_area.area_m2` equals `area_m2`, and goes with its project, unit or
   crop. Viewers read, editors write, same-project trigger on `node_id` and

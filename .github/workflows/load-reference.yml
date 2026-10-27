@@ -19,8 +19,9 @@ name: Load a reference dataset
 # kept, recorded in reference_load; dataset basemap, fonts, terrain or water),
 # and waterbodies (DE Africa Waterbodies polygons, CC BY 4.0, for matching
 # traced dams to their time series; docs/deployment.md § Dam observations).
-# Quaternaries, the register of dams and the gauging
-# stations stay blocked by their licences; the input offers only the allowed
+# Quaternaries, the register of dams, the gauging
+# stations and SANLC's orchards and vines (crop-types) stay blocked by their
+# licences; the input offers only the allowed
 # kinds, the check job refuses the rest, and so does the Lambda.
 #
 # Three jobs, as in the deploy workflows:

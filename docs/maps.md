@@ -2282,11 +2282,105 @@ reads them.
   form and the load, `geo/loadCropland.ts` the GeoTIFF reader;
   `lambda-migrate.test.ts` checks the bundle). The attribution must be shown
   with any figure a client-facing deployment serves from it (§ Sources).
-- **SANLC** (South African National Land Cover, DFFE) would give finer crop
-  classes (pivots, orchards, vineyards), but stays **blocked** (§ Sources):
-  the GEOTERRAIMAGE licence the earlier release came under forbids derivative
-  work and products that compete with GEOTERRAIMAGE's own, and the 2018/2020
-  terms couldn't be read from outside South Africa.
+- **SANLC** (South African National Land Cover, DFFE) gives finer crop
+  classes than WorldCover's one cropland class: its orchards and vines are
+  read as a grid of their own beside this one ([§ Orchards and vines from
+  SANLC](#orchards-and-vines-from-sanlc)), never as another land-cover
+  dataset here.
+
+### Orchards and vines from SANLC
+
+**Orchards and vines**, in the same **From land cover** box (issue #604
+R5-D; `crops/CroplandProposalsBox.svelte`, `geo/cropTypes.ts`), shows for
+each of the unit's parcels the area SANLC maps as **permanent orchards**
+(class 32) and **permanent vines** (class 33), their sums, and with an
+earlier edition loaded, **New since** that edition: the orchard or vine
+land that was neither then. **Area to use** offers the orchards and the
+vines (the unit's sum, then each parcel) in a group of their own after the
+land cover's, and **Use** sets one crop's planted area to one of them, as
+it does for the cultivated area.
+
+- **Terms pending: off in production.** SANLC's terms are not yet recorded
+  (§ Sources, followups.md *Decision: SANLC's licence*, issue #618 step 8b).
+  The feature is built the way the MAP grid was before its licence was
+  recorded (issue #560): a committed synthetic grid for dev, CI and e2e, a
+  loader for the real rasters, and the production load refused
+  (`REFERENCE_KINDS['crop-types']` in `geo/referenceLoad.ts` is `blocked`,
+  and the release gate `map-data-gates.mjs` refuses the kind too). With no
+  crop-type dataset in its database, the live site's box shows no
+  **Orchards and vines** section and offers no such area
+  (`cropTypes: null` in the API). To turn it on once DFFE's terms allow
+  derivatives in a commercial service: record them in § Sources and
+  `docs/legal/map-data-licences.md`, set the kind `allowed` with the file
+  `--out` writes and a loader branch (`cropTypesFromJson` into
+  `replaceCropTypeDataset`, `geo/cropTypeGrid.ts`), and load it through
+  [deployment.md § Reference datasets](./deployment.md#reference-datasets).
+- **What it is and isn't.** A warning (`croptypes-caution`,
+  `CROP_TYPE_CAUTION` in `crops/croplandProposals.ts`) says: "This is
+  orchard and vine land mapped from satellite, not the irrigated area, and
+  it doesn't say which fruit or cultivar: check it before you use it." The
+  confirmation repeats it. SANLC doesn't say whether an orchard is
+  irrigated ([GEE catalogue](https://gee-community-catalog.org/projects/sa_nlc/)),
+  nor which fruit, so the crop stays the modeller's choice.
+- **New plantings, for licence applicants.** A pixel is *new* when it is an
+  orchard or vine in the current edition and neither in the earlier one;
+  a pixel the earlier edition has no data for is never new. The figure is
+  shown per parcel and summed (`croptypes-new-total`), with a note that it
+  is never offered as an area to use: it is the record of planting since
+  the earlier edition (2018 → 2022) an applicant states, not a demand.
+- **The same arithmetic as the cultivated area.** Per layer, the sum over
+  the cells a parcel covers of the cell's area × the share of it inside the
+  parcel × the cell's share of that layer (`geo/gridShares.ts`), each layer
+  spread evenly within its cell; parcels rounded to the m² before the unit's
+  sum, which is the value **Use** saves. One summary reads at most
+  `MAX_SUMMARY_CELLS`.
+- **Cited, value by value.** **Use** posts `layer: 'orchard' | 'vine'` with
+  the crop-type dataset's label
+  ([api.md § Catchment map](./api.md#catchment-map)); the server re-derives
+  the area, writes the crop area, records a revision ("Planted area of
+  Apples on Upper farm from crop types: 25.71 ha of permanent orchards in
+  its 2 parcels; South African National Land Cover 2022 (…) (2022; dataset
+  “SANLC-2022”). Permanent orchards (class 32). Pre-summarised at import:
+  …") and a `crop_area_land_cover` row (174) citing it, with its `layer`
+  (255), so the crop's line says "from crop types (orchards; …)".
+- **Beside the land cover only.** The section sits under the land cover's
+  table, catchment line and source, and shows only while a land-cover
+  dataset is loaded: with none, the box says so and proposes nothing, as
+  before (the API still returns `cropTypes`). Production loads WorldCover
+  first in any case.
+
+#### The crop-type grid
+
+`crop_type_dataset` and `crop_type_cell_reference` (255) are global
+reference data, loaded by the operator as the schema owner and only read by
+the app, like the land-cover grid.
+
+- **Committed: synthetic only.** `backend/fixtures/geo/crop-types.synthetic.json`
+  is an invented 0.005° grid over the land-cover fixture's area: every cell
+  20 % orchard, 10 % vine and 5 % new orchard inside 21.30–21.35° E,
+  33.65–33.70° S (the DB and e2e tests' parcels), a fixed pattern elsewhere
+  (its `_comment` gives the rule), with editions "synthetic 2022" and
+  "synthetic 2018". `pnpm import:crop-types` with no argument loads it
+  (`pnpm setup` does), as dataset `synthetic`, and the box marks it
+  "Synthetic test data".
+- **Real data: the operator's own SANLC download, for local evaluation
+  only** until the terms are recorded. SANLC 2018 and 2022 come from
+  DFFE's e-GIS (`egis.environment.gov.za`, reachable from South Africa) as
+  national 20 m rasters in an Albers projection. The loader reads EPSG:4326
+  only, through the land cover's own GeoTIFF reader (8-bit, one band,
+  classic TIFF), so warp both editions onto the same pixels, cut to the
+  client's area, first:
+  `gdalwarp -t_srs EPSG:4326 -tr 0.000125 0.000125 -tap -te <w> <s> <e> <n> -r near -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=NO sanlc_2022.tif sanlc-2022.tif`
+  (and the same for 2018; `-te` on multiples of 0.0025, so 20 pixels make a
+  0.0025° cell). Then
+  `pnpm import:crop-types sanlc-2022.tif --dataset SANLC-2022 --baseline sanlc-2018.tif --baseline-version 2018`.
+  `--orchard-classes` and `--vine-classes` override 32 and 33 (check a new
+  edition's legend), `--cell`, `--bbox`, `--source`, `--version` and
+  `--attribution` the defaults; two rasters on different pixels are refused
+  with the reason. `--out <file>.json.gz` writes the summary instead of
+  loading it, the file a production load will read once allowed. The
+  command prints that the terms are pending. Never commit a raster, a
+  summary or a database filled from SANLC.
 
 ## Evaporation from the map
 
@@ -2667,7 +2761,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Synthetic Waterbodies fixture (`backend/fixtures/waterbodies/`) | this repo (invented outlines round the Sandspruit example's dams, `pnpm gen:waterbodies-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, `pnpm setup`, `pnpm dev:dams:run`) |
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
 | ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method, and on the Data sources and credits page (`/data-sources#worldcover`) | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
-| South African National Land Cover (SANLC) 2018 / 2020 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020 (2022 announced) | Every two years, irregular | **Blocked.** Not loaded. To unblock: DFFE's written terms for 2018/2020 allowing derivatives in a commercial service, recorded here with the date |
+| South African National Land Cover (SANLC) 2018 / 2020 / 2022 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020, 2022 (released May 2024) | Every two years, irregular | **Blocked.** Built for its orchard and vine classes (issue #604 R5-D, § Orchards and vines from SANLC: kind `crop-types`, synthetic fixture only) and refused in production. To unblock: DFFE's written terms for 2018/2022 allowing derivatives in a commercial service (the EGIS terms, issue #618 step 8b), recorded here with the date |
 | Lynch (2004) mean annual precipitation, 1 arc minute (~1.7 km), South Africa, Lesotho and Eswatini: the MAP grid layer ([§ MAP grid](#map-grid)) | S.D. Lynch, *Development of a raster database of annual, monthly and daily rainfall for southern Africa*, WRC Report 1156/1/04 (2004); distributed as `GISData/grids/gmap` (an ESRI grid on the Cape datum, Clarke 1880) in R.E. Schulze (ed.), *South African Atlas of Climatology and Agrohydrology*, WRC Report 1489/1/06 (2007), from the Water Research Observatory ([dataset page](https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip), download behind a free account) | **Unconfirmed.** Read 2026-10-09: the dataset page lists "Open (Creative commons)" linking CC BY-SA 4.0 and, in its header, "No License Provided". CC BY-SA's share-alike on adapted material may reach a published map of it, which D-B rejects | "Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2", if allowed | the 2008 Atlas zip | none (a 2004 surface) | **Blocked: licence unconfirmed.** Loaded locally only (`pnpm import:map-grid`), never committed; production loads refused. To unblock: the WRC's or the Atlas editor's written terms for showing the grid in a commercial service, recorded here with the date |
 | Mean annual rainfall surface for the Southwestern Cape (WAAS, about 100 m): the MAP grid layer ([§ MAP grid](#map-grid)) and MAP from the grid ([§ MAP for each unit](#map-for-each-unit)) | Beuster Clarke & Associates, for the Western Cape Water Availability Assessment Study (WAAS) of the Department of Water Affairs and Forestry (now DWS), March 2007; a copy received from the client | **Terms not stated** (read 2026-10-23): the copy's ESRI `metadata.xml` still has the ArcGIS template text in its access and use constraints. **The operator's decision (2026-10-23): use it in production**, recorded in [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23) | "Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.", stored as the grid's source and attribution, shown whole with the layer and on `/data-sources#waas-map`; the map's credits show the short "MAP grid: WAAS (2007), Beuster Clarke & Associates" linking to it ([§ Credits on the map](#credits-on-the-map)) | Version 1.1 (March 2007) | none (a 2007 surface) | allowed (the operator's decision, 2026-10-23): production loads it as dataset `WAAS-SWCape-2007` only, clipped with `--bbox` to the client's area, stored with the credit line above whatever the file says (`geo/referenceLoad.ts`); never committed |
 | Other provincial MAP surfaces (about 100 m, another water availability study's) | the study's client or consultant, per surface | **Unconfirmed**: each is a project deliverable whose reuse terms are its owner's | as its owner asks | per surface | none | **Blocked: licence unconfirmed.** Loaded locally only, by the operator who holds the file; never committed; a production load refuses any label but the allowed ones |
