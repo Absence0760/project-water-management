@@ -1527,12 +1527,12 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
      It is resumable: a month already in the manifest with the same values
      isn't fetched again. Watch the runs' logs; a 403 stops a run on purpose
      (the alarm runbook above). About $3 in all.
-  3. **Verify.** Each manifest's `finalThrough` is the last month CHC has
-     published and its `files` cover every month from the first; the
-     preliminary days run to within a few days of today. Round 3's
-     `ingest/verify_copy.py` compares random cell-days with CHC's own daily
-     files (bit for bit) and the whole region with dynamical.org's copy.
-     Only a clean report goes on.
+  3. **Verify.** `ingest/verify_copy.py` ([§ Backfill](#backfill), steps
+     4–5) checks each manifest's coverage and lag, compares random cell-days
+     with CHC's own daily files (bit for bit) and the whole region with
+     dynamical.org's copy. Only a report that ends **PASS** (exit 0) goes
+     on. Check by hand that the preliminary days run to within a few days of
+     today (`prelimThrough` in `prelim/manifest.json`).
   4. **Switch.** Set `chirps_source = "mirror"` (the worker's
      `CHIRPS_SOURCE`, with `MIRROR_URL=s3://<mirror bucket>`) in the prod
      tfvars, apply, and cut a backend release. CHIRPS feeds now read the
@@ -1632,6 +1632,43 @@ the operator starts it.
    history and the `mirror-ingest` log group. After a 403, wait (and write to
    CHC, the source register's contact) before resuming. To resume, repeat
    steps 1–2: the plan skips the months the manifest now holds.
+4. **Verify the copy** once both products are done, from the workstation
+   with read access to the mirror bucket (`aws sso login` for the prod
+   profile first):
+   `MIRROR_URL=s3://<mirror bucket> INGEST_CONTACT=<role address> ingest/dev.sh verify --out /tmp/verify-copy.md`.
+   It makes `ingest/.venv-verify` from `ingest/requirements-verify.txt` on
+   first use and runs three checks (ingest/README.md § Verify the copy):
+   - **coverage**: each finals manifest holds every month from its first
+     (`rnl` 1981-01, `sat` 2000-06) with no gap, `finalThrough` ends that
+     run, and it is at most 75 days old (`--max-lag-days`);
+   - **CHC**: 200 random cell-days (`--samples`, seeded with `--seed`,
+     spread over both products and every year) read from CHC's own daily
+     GeoTIFFs a pixel at a time, about 600 range requests at one a second
+     (~10 minutes), with the job's User-Agent. Each must be **bit-equal**
+     to the copy; a different one is listed with both values. An HTTP 403
+     stops the run at once (not retried): wait and write to CHC, as for the
+     backfill;
+   - **dynamical.org**: the whole region of `rnl` for one month per decade
+     (`--month YYYY-MM` to choose) against dynamical.org's public copy on
+     AWS Open Data (anonymous, no load on CHC): the land/sea mask must match
+     exactly and wet cell-days (≥ 1 mm) differ by at most 0.2%
+     (`--tolerance`; Round 0 measured a median of 0.067% and a maximum of
+     0.195%). The report gives the median, p99 and maximum per month.
+
+   `--checks coverage,chc` (or any subset) runs fewer. The report is
+   Markdown; the exit status is 0 only when every check run passed. Keep
+   the report with the cutover's record (issue #604).
+5. **Switch** only on a clean report: set `chirps_source = "mirror"` in the
+   prod tfvars, apply with the operator's go-ahead, and cut a backend
+   release (the cutover above, step 4). Then **re-enable the CHIRPS feeds
+   paused since the 403s** (#571), and watch the first day: they catch up
+   from the copy, and none shows Copy behind or Failing. **Roll back** by
+   the flag: `chirps_source = "chc"`, apply and a release; the cache rows
+   the copy filled stay valid. A failed report means no switch: a coverage
+   gap is resumed with steps 1–2; a CHC mismatch or a dynamical.org
+   difference beyond tolerance is a bug in the copy to find before
+   anything reads it (re-copy the month with a `backfill` event once
+   fixed, then verify again).
 
 ## Alert emails
 
