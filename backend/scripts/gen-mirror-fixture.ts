@@ -11,7 +11,10 @@
 // 2026-02-06, and the CHIRPS-GEFS issues of 2026-02-08 and 2026-02-09
 // (`gefs/<issue>` and `gefs/index.json`). Two 0.1° products too (issue #604
 // R4-B), with invented values of their own (no file fixture stands behind
-// them): `era5l` (finals layout, 2024–2025, monthly files) and `imerg_late`
+// them): `era5l` (finals layout, 2024-01-01 to 2025-12-30, one file per CDS
+// month request as ingest/era5land.py writes them: month M holds the last day
+// of M−1 through the second-last day of M, so the first file lacks
+// 2023-12-31 and finalThrough is the second-last day of 2025-12) and `imerg_late`
 // (daily layout, 2026-01-25 to 2026-02-08 through prelimThrough, a file a
 // day, each V07 but the last two V08), each over the 0.1° cells holding the fixture grid and its
 // band, every other chunk unwritten. Only the chunks holding the fixture's 8 × 6 grid and the band
@@ -50,8 +53,8 @@ export const MIRROR_FIXTURE = {
 	prelimThrough: '2026-02-06',
 	/** CHIRPS-GEFS issues held, newest first: two, so their 32 days hold every place of the 17-day pattern (fromMirrorGefs.ts). */
 	gefsIssues: ['2026-02-09', '2026-02-08'],
-	/** ERA5-Land: finals through the end of 2025, from 2024 (a leap year). */
-	era5l: { years: { first: 2024, last: 2025 }, finalThrough: '2025-12-31' },
+	/** ERA5-Land: finals from 2024 (a leap year) through 2025-12-30, the last day month 2025-12's request holds. */
+	era5l: { years: { first: 2024, last: 2025 }, finalThrough: '2025-12-30' },
 	/** IMERG Late: about 14 hours behind, so through the day before yesterday on MIRROR_FIXTURE.today; V08 from v08From. */
 	imerg: { first: '2026-01-25', through: '2026-02-08', v08From: '2026-02-07' }
 } as const;
@@ -250,7 +253,7 @@ async function buildTenthProducts(store: MirrorStore, sample: SampleFixture): Pr
 		return out;
 	};
 
-	// era5l: a year chunk per year, one file per month.
+	// era5l: a year chunk per year, one file per CDS month request: a day's total is the next day's 00 UTC step, so it is in the request of the month of the day after it.
 	const e = MIRROR_FIXTURE.era5l;
 	const era5l = await ensureFinals(store, 'era5l', e.years.last, { firstYear: PRODUCT_GRIDS.era5l.firstYear });
 	const monthDays = new Map<string, Float32Array[]>();
@@ -261,14 +264,15 @@ async function buildTenthProducts(store: MirrorStore, sample: SampleFixture): Pr
 			if (day > e.finalThrough) continue;
 			const v = dayValues(day, 1);
 			values.set(v, doy * n);
-			const list = monthDays.get(day.slice(0, 7)) ?? monthDays.set(day.slice(0, 7), []).get(day.slice(0, 7))!;
+			const month = fromEpochDay(toEpochDay(day) + 1).slice(0, 7);
+			const list = monthDays.get(month) ?? monthDays.set(month, []).get(month)!;
 			list.push(regionDay([{ block, values: v }], step));
 		}
 		await writeFinalsYear(era5l, year, block, values);
 	}
 	const era5lFiles = [...monthDays.keys()].sort().map((month) => {
 		const sha = manifestHash(monthDays.get(month)!);
-		return { url: `fixture:era5l/reanalysis-era5-land.${month}.nc`, etag: etagOf(sha), lastModified: null, size: null, valuesSha256: sha, revision: 1, fetchedAt };
+		return { url: `cds://reanalysis-era5-land/total_precipitation/${month}`, etag: null, lastModified: null, size: null, valuesSha256: sha, revision: 1, fetchedAt };
 	});
 	await writeManifest(store, { ...base, product: 'era5l', years: { ...e.years }, finalThrough: e.finalThrough, prelimThrough: null, files: era5lFiles });
 

@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
 import {
+	era5lCoverage,
+	era5lWrittenDays,
 	finalsCoverage,
 	imergCoverage,
 	imergFileDay,
@@ -139,7 +141,15 @@ describe('manifests per product (issue #604 R4-B; ingest/manifest.py holds the s
 	const imergUrl = (day: string, v = 'V07B') =>
 		`https://gpm1.gesdisc.eosdis.nasa.gov/data/GPM_L3/GPM_3IMERGDL.07/${day.slice(0, 4)}/${day.slice(5, 7)}/3B-DAY-L.MS.MRG.3IMERG.${day.replaceAll('-', '')}-S000000-E235959.${v}.nc4`;
 	const file = sample().files[0]!;
-	const era5l = (): Manifest => ({ ...sample(), product: 'era5l', grid: tenth, files: [{ ...file, url: 'cds:reanalysis-era5-land/2024-06' }], changes: [] });
+	const era5lUrl = (month: string) => `cds://reanalysis-era5-land/total_precipitation/${month}`;
+	const era5l = (months = ['2024-06'], finalThrough: string | null = '2024-06-29'): Manifest => ({
+		...sample(),
+		product: 'era5l',
+		grid: tenth,
+		finalThrough,
+		files: months.map((m) => ({ ...file, url: era5lUrl(m), etag: null, lastModified: null })),
+		changes: []
+	});
 	const imerg = (days: string[], prelimThrough: string | null): Manifest => ({
 		...sample(),
 		product: 'imerg_late',
@@ -171,6 +181,30 @@ describe('manifests per product (issue #604 R4-B; ingest/manifest.py holds the s
 	it('era5l holds finals only: no preliminary days, no month in its file names, no version', () => {
 		expect(problem({ ...era5l(), prelimThrough: '2024-07-01' })).toMatch(/era5l has no preliminary days/);
 		expect(problem({ ...era5l(), files: [{ ...era5l().files[0]!, version: 'V07' }] })).toMatch(/era5l's files carry no version/);
+	});
+
+	it('era5l: each file a CDS month request with no ETag or Last-Modified, finalThrough within the contiguous days the requests hold', () => {
+		// Month M's request holds the last day of M−1 through the second-last day of M; the record starts on 1950-01-01.
+		const month = (y: number, m: number) => y * 12 + m - 1;
+		expect(era5lWrittenDays(month(2024, 3))).toEqual({ from: '2024-02-29', through: '2024-03-30' });
+		expect(era5lWrittenDays(month(2025, 1))).toEqual({ from: '2024-12-31', through: '2025-01-30' });
+		expect(era5lWrittenDays(month(1950, 1))).toEqual({ from: '1950-01-01', through: '1950-01-30' });
+		const gap = era5l(['2024-01', '2024-02', '2024-04'], '2024-02-28');
+		expect(era5lCoverage(gap.files)).toEqual({ from: '2023-12-31', through: '2024-02-28' });
+		expect(problem(gap)).toBeNull();
+		// The day month 03 would hold, and the end of the month past the gap.
+		for (const past of ['2024-02-29', '2024-04-29']) expect(problem({ ...gap, finalThrough: past }), past).toMatch(/finalThrough runs past the days the files hold contiguously \(through 2024-02-28\)/);
+		expect(problem(era5l([], '2024-06-01'))).toMatch(/through none/);
+		for (const url of ['cds:reanalysis-era5-land/2024-06', 'cds://reanalysis-era5-land/2m_temperature/2024-06', `${era5lUrl('2024-13')}`, `${era5lUrl('2024-06')}.nc`, 'https://example.org/2024-06']) {
+			const bad = era5l();
+			bad.files[0]!.url = url;
+			expect(problem(bad), url).toMatch(/not a month request/);
+		}
+		for (const k of ['etag', 'lastModified'] as const) {
+			const bad = era5l();
+			bad.files[0]![k] = '"x"';
+			expect(problem(bad), k).toMatch(/the CDS gives neither/);
+		}
 	});
 
 	it('imerg_late: a file a day naming its day, its version optional, its days through prelimThrough within the contiguous days', () => {
@@ -209,7 +243,8 @@ describe('manifests per product (issue #604 R4-B; ingest/manifest.py holds the s
 	it('the committed fixture copy’s 0.1° manifests are valid', async () => {
 		const fixture = openStore(pathToFileURL(MIRROR_FIXTURE_DIR).href);
 		const e = await readManifest(fixture, 'era5l');
-		expect(e).toMatchObject({ grid: tenth, finalThrough: '2025-12-31', prelimThrough: null });
+		expect(e).toMatchObject({ grid: tenth, finalThrough: '2025-12-30', prelimThrough: null });
+		expect(era5lCoverage(e!.files)).toEqual({ from: '2023-12-31', through: '2025-12-30' });
 		const i = await readManifest(fixture, 'imerg_late');
 		expect(i).toMatchObject({ grid: tenth, finalThrough: null, prelimThrough: '2026-02-08' });
 		expect(imergVersions(i!).get('2026-02-08')).toBe('V08');

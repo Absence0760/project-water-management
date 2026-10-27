@@ -14,7 +14,8 @@
 //
 // Both carry attrs.region {w,s,e,n} and attrs.grid {origin {lat, lon}, step},
 // the step the product's (grid.ts PRODUCT_GRIDS): an array on another grid is
-// refused.
+// refused. era5l's year axis starts in 1950, and its array may carry
+// attrs.attribution, Copernicus's credit (a string); no other array may.
 import type { AbsolutePath } from '@zarrita/storage';
 import * as zarr from 'zarrita';
 import { FeedFormatError } from '../feeds/errors.js';
@@ -104,7 +105,9 @@ function checkLayout(arr: MirrorArray, product: string, kind: 'finals' | 'daily'
 	if (JSON.stringify(meta.codecs) !== JSON.stringify(CODECS)) throw bad('codecs');
 	const fill = arr.fillValue;
 	if (typeof fill !== 'number' || !Number.isNaN(fill)) throw bad('fill value');
-	const a = arr.attrs as { region?: Region; grid?: MirrorGrid };
+	const a = arr.attrs as { region?: Region; grid?: MirrorGrid; attribution?: unknown };
+	// era5l's ingest keeps Copernicus's credit beside the values (ingest/era5land.py ATTRIBUTION); no other product carries one.
+	if ('attribution' in a && (product !== 'era5l' || typeof a.attribution !== 'string' || !a.attribution)) throw bad('attribution');
 	const r = a.region;
 	if (!r || ![r.w, r.s, r.e, r.n].every(Number.isFinite) || r.w >= r.e || r.s >= r.n) throw bad('region');
 	const g = gridOf(r, step);
@@ -125,6 +128,8 @@ export async function openFinals(store: MirrorStore, product: FinalsProduct): Pr
 	const { region, grid } = checkLayout(arr, product, 'finals', meta);
 	const firstYear = (arr.attrs as { firstYear?: unknown }).firstYear;
 	if (!Number.isInteger(firstYear)) throw new MirrorFormatError(`the rain data copy's ${product} array has no firstYear`);
+	// era5l's year axis starts with its record (1950); a CHIRPS finals array's start is its own attribute.
+	if (product === 'era5l' && firstYear !== PRODUCT_GRIDS.era5l.firstYear) throw new MirrorFormatError(`the rain data copy's era5l array starts in ${String(firstYear)}, not ${PRODUCT_GRIDS.era5l.firstYear}`);
 	return { kind: 'finals', arr, firstYear: firstYear as number, region, grid };
 }
 

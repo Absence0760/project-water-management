@@ -16,7 +16,8 @@
 // The other rain products read the same way, each on its own grid (grid.ts
 // PRODUCT_GRIDS), its cells cells of that product's global grid
 // (feeds/cellCache.ts productCell): `era5l` from its finals array, a day `f`
-// within `years` from the product's first day through `finalThrough`; and
+// within `years` from the first day its month requests hold (era5lCoverage)
+// through `finalThrough`; and
 // `imerg_late` from its daily array, a day `f` from the first day its files
 // hold (imergCoverage) through its manifest's `prelimThrough` (IMERG Late is
 // never final, but no final product follows it: the cache keeps each day as
@@ -28,8 +29,8 @@ import type { CacheCells } from '../feeds/cellCacheStore.js';
 import { FeedFormatError, FeedUnavailableError } from '../feeds/errors.js';
 import { DAY_FINAL_ONLY, DAY_SKIP } from '../feeds/sources/chirps.js';
 import { type Block, type DailyArray, dailyChunk, FINALS_CHUNK, type FinalsProduct, openDaily, openFinals, readDailyBlock, readFinalsBlock } from './arrays.js';
-import { cellsByChunk, dayIndex, doyIndex, MIRROR_REGION, mirrorCell, PRODUCT_GRIDS, productStep } from './grid.js';
-import { finalsCoverage, imergCoverage, imergVersions, type Manifest, readManifest } from './manifest.js';
+import { cellsByChunk, dayIndex, doyIndex, MIRROR_REGION, mirrorCell, productStep } from './grid.js';
+import { era5lCoverage, finalsCoverage, imergCoverage, imergVersions, type Manifest, readManifest } from './manifest.js';
 import type { MirrorStore } from './store.js';
 
 /** The copy doesn't hold the product yet (no manifest or no array): the feed tries again later. */
@@ -87,11 +88,11 @@ export async function readCells(
 	}
 
 	const days = Array.from({ length: n }, (_, i) => fromEpochDay(s + i));
-	// The days the files hold: CHC's months, IMERG's days, or (era5l) every day from the product's first.
+	// The days the files hold: CHC's months, IMERG's days, or era5l's month requests (each the last day of the month before through its second-last day).
 	// The cache takes imerg_late's days as final (nothing later replaces them but a revision), though its manifest holds
 	// them through prelimThrough: IMERG Late is never final, but there is no final product of it to wait for.
 	const heldThrough = product === 'imerg_late' ? manifest.prelimThrough : manifest.finalThrough;
-	const held = product === 'imerg_late' ? imergCoverage(manifest.files) : product === 'era5l' ? { from: PRODUCT_GRIDS.era5l.firstDay } : finalsCoverage(manifest.files);
+	const held = product === 'imerg_late' ? imergCoverage(manifest.files) : product === 'era5l' ? era5lCoverage(manifest.files) : finalsCoverage(manifest.files);
 	const { first, last } = manifest.years;
 	const isFinal = (day: string) =>
 		(daily === null || day >= daily.firstDay) &&

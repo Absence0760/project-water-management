@@ -165,7 +165,8 @@ describe('readCells of the 0.1° products (issue #604 R4-B)', () => {
 	it('reads era5l finals across a leap year’s end on the 0.1° grid, nothing past finalThrough', async () => {
 		const got = await readCells(fixture, 'era5l', [NW, SE, FAR], { start: '2024-12-30', end: '2026-01-01' }, {});
 		expect(got.cells.product).toBe('era5l');
-		expect(got.cells.read).toBe(`${'f'.repeat(367)}-`);
+		// finalThrough is 2025-12-30, the last day month 2025-12's request holds (2025-12-31 comes with 2026-01's).
+		expect(got.cells.read).toBe(`${'f'.repeat(366)}--`);
 		for (const [i, day] of ['2024-12-30', '2024-12-31', '2025-01-01'].entries()) {
 			expect(got.cells.values[0]![i]).toBe(expected(NW, day, 1));
 			expect(got.cells.values[1]![i]).toBe(expected(SE, day, 1));
@@ -177,6 +178,17 @@ describe('readCells of the 0.1° products (issue #604 R4-B)', () => {
 		expect(got.revision).toEqual({ final: 1, prelim: null });
 		// 29 February 2024 is a day; the year axis starts in 1950, so 1950 reads (unwritten: no data).
 		expect((await readCells(fixture, 'era5l', [NW], { start: '2024-02-29', end: '2024-02-29' })).cells.values[0]).toEqual([expected(NW, '2024-02-29', 1)]);
+	});
+
+	it('reads no era5l day before the first month request the manifest holds, though its year is within years', async () => {
+		// The copy without its first two months: it holds from 2024-02-29 (month 2024-03's first day).
+		const m = (await readManifest(fixture, 'era5l'))!;
+		const later = { ...m, files: m.files.filter((f) => !/\/2024-0[12]$/.test(f.url)) };
+		const bytes = new TextEncoder().encode(JSON.stringify(later));
+		const store = { get: (k: string) => (k === '/era5l/manifest.json' ? Promise.resolve(bytes) : fixture.get(k as never)), set: fixture.set.bind(fixture) } as typeof fixture;
+		const got = await readCells(store, 'era5l', [NW], { start: '2024-02-27', end: '2024-03-01' });
+		expect(got.cells.read).toBe('--ff');
+		expect(got.cells.values[0]).toEqual([null, null, expected(NW, '2024-02-29', 1), expected(NW, '2024-03-01', 1)]);
 	});
 
 	it('reads imerg_late’s daily days with their versions, nothing before its first day or past finalThrough', async () => {

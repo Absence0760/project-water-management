@@ -34,8 +34,13 @@
 // fitted by (D16). `prelimThrough` may not run past the contiguous run of
 // days from the first file (imergCoverage), as finalThrough may not for the
 // CHIRPS finals. No other product's file carries a version. `era5l`'s files
-// (CDS results) name no month the reader could check: the ingest writes
-// `finalThrough` as the end of the contiguous run it holds (R4-A).
+// are its CDS month requests (ingest/era5land.py), each URL exactly
+// `cds://reanalysis-era5-land/total_precipitation/YYYY-MM` with no ETag or
+// Last-Modified (the CDS gives none). Month M's request holds the 00 UTC
+// steps of M's days, the totals of the last day of M−1 through the
+// second-last day of M (era5lWrittenDays; the 1950-01 request starts at the
+// record, 1950-01-01), and `finalThrough` may not run past the contiguous run
+// of those days from the earliest month (era5lCoverage).
 import { createHash } from 'node:crypto';
 import { endianness } from 'node:os';
 import type { AbsolutePath } from '@zarrita/storage';
@@ -95,6 +100,47 @@ const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /** An IMERG daily file's URL names its day: `…3IMERG.YYYYMMDD-S000000-E235959.…`. */
 const FILE_DAY = /3IMERG\.(\d{4})(\d{2})(\d{2})-S000000-E235959\./;
+
+/** An era5l file's URL: the CDS month request it came from. */
+const ERA5L_URL = /^cds:\/\/reanalysis-era5-land\/total_precipitation\/(\d{4})-(0[1-9]|1[0-2])$/;
+/** ERA5-Land's record starts here: the 1950-01 request's first step is the record's start. */
+const ERA5L_FIRST_DAY = '1950-01-01';
+
+/** The month (`year * 12 + month - 1`) an era5l file's URL names, or null. */
+const era5lFileMonth = (url: string): number | null => {
+	const m = ERA5L_URL.exec(url);
+	return m ? Number(m[1]) * 12 + Number(m[2]) - 1 : null;
+};
+
+/**
+ * The days era5l's request for a month (`year * 12 + month - 1`) holds: the
+ * last day of the month before through the second-last day of the month
+ * (each 00 UTC step totals the day before it), never before 1950-01-01.
+ */
+export function era5lWrittenDays(month: number): { from: string; through: string } {
+	const first = toEpochDay(`${Math.floor(month / 12)}-${pad2((month % 12) + 1)}-01`);
+	const next = toEpochDay(`${Math.floor((month + 1) / 12)}-${pad2(((month + 1) % 12) + 1)}-01`);
+	const from = fromEpochDay(first - 1);
+	return { from: from < ERA5L_FIRST_DAY ? ERA5L_FIRST_DAY : from, through: fromEpochDay(next - 2) };
+}
+
+/**
+ * The days era5l's files hold: from the earliest month's first day through
+ * the end of the contiguous run of months from it (null when no file names
+ * one). A later month after a gap doesn't extend it.
+ */
+export function era5lCoverage(files: readonly { url: string }[]): { from: string; through: string } | null {
+	const months = new Set<number>();
+	for (const f of files) {
+		const m = era5lFileMonth(f.url);
+		if (m !== null) months.add(m);
+	}
+	if (months.size === 0) return null;
+	const first = Math.min(...months);
+	let last = first;
+	while (months.has(last + 1)) last++;
+	return { from: era5lWrittenDays(first).from, through: era5lWrittenDays(last).through };
+}
 
 /** The day an IMERG daily file's URL names (ISO), or null. */
 export function imergFileDay(url: string): string | null {
@@ -192,6 +238,12 @@ export const Manifest = z
 			const held = imergCoverage(m.files);
 			if (m.prelimThrough !== null && (held === null || m.prelimThrough > held.through)) bad(`prelimThrough runs past the days the files hold contiguously (through ${held?.through ?? 'none'})`);
 		} else if (m.files.some((f) => f.version !== undefined)) bad(`${m.product}'s files carry no version`);
+		if (m.product === 'era5l') {
+			if (m.files.some((f) => era5lFileMonth(f.url) === null)) bad('an era5l file whose url is not a month request (cds://reanalysis-era5-land/total_precipitation/YYYY-MM)');
+			if (m.files.some((f) => f.etag !== null || f.lastModified !== null)) bad('an era5l file with an etag or lastModified: the CDS gives neither');
+			const held = era5lCoverage(m.files);
+			if (m.finalThrough !== null && (held === null || m.finalThrough > held.through)) bad(`finalThrough runs past the days the files hold contiguously (through ${held?.through ?? 'none'})`);
+		}
 		if (chcFinals) {
 			if (m.files.some((f) => !FILE_MONTH.test(f.url))) bad('a finals file whose url names no month (….YYYY.MM.days_p05.nc)');
 			const held = finalsCoverage(m.files);

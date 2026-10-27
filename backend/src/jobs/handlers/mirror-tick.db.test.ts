@@ -98,7 +98,7 @@ describe('runMirrorTick', () => {
 			sat: { revision: 1, finalThrough: '2025-12-31' },
 			rnl: { revision: 1 },
 			prelim: { revision: 1, prelimThrough: '2026-02-06', finalThrough: null },
-			era5l: { revision: 1, finalThrough: '2025-12-31', prelimThrough: null },
+			era5l: { revision: 1, finalThrough: '2025-12-30', prelimThrough: null },
 			imerg_late: { revision: 1, finalThrough: null, prelimThrough: '2026-02-08' }
 		});
 		// Nothing changed: no manifest is read again.

@@ -184,6 +184,28 @@ describe('the 0.1° products’ layouts (issue #604 R4-B)', () => {
 		await expect(writeDailyDays(d, 0, { y0: 275, x0: 0, h: 1, w: 1 }, Float32Array.of(1))).rejects.toThrow(RangeError);
 	});
 
+	it('takes era5l’s Copernicus attribution and its 1950 year axis, and nothing else of the kind', async () => {
+		const { dir, store } = fresh();
+		await ensureFinals(store, 'era5l', 2025);
+		await ensureFinals(store, 'rnl', 2025);
+		const meta = (p: string) => JSON.parse(readFileSync(join(dir, `${p}/zarr.json`), 'utf8'));
+		const put = (p: string, m: unknown) => store.set(`/${p}/zarr.json`, new TextEncoder().encode(JSON.stringify(m)));
+		const era5l = meta('era5l');
+		// As ingest/era5land.py writes it: the credit beside firstYear, region and grid.
+		await put('era5l', { ...era5l, attributes: { ...era5l.attributes, attribution: 'Contains modified Copernicus Climate Change Service information [year].' } });
+		expect((await openFinals(store, 'era5l'))!.firstYear).toBe(1950);
+		for (const attribution of ['', 7, ['Copernicus']]) {
+			await put('era5l', { ...era5l, attributes: { ...era5l.attributes, attribution } });
+			await expect(openFinals(store, 'era5l'), JSON.stringify(attribution)).rejects.toThrow(/attribution/);
+		}
+		await put('era5l', { ...era5l, attributes: { ...era5l.attributes, firstYear: 1981 } });
+		await expect(openFinals(store, 'era5l')).rejects.toThrow(/starts in 1981, not 1950/);
+		// No other product carries an attribution.
+		const rnl = meta('rnl');
+		await put('rnl', { ...rnl, attributes: { ...rnl.attributes, attribution: 'x' } });
+		await expect(openFinals(store, 'rnl')).rejects.toThrow(/attribution/);
+	});
+
 	it('refuses an array of one product laid out on another’s grid', async () => {
 		const { dir, store } = fresh();
 		// A 0.05° daily array where imerg_late's should be: its grid, chunks and shape are CHC's.
