@@ -2015,22 +2015,45 @@ behaviour with its own OAC, `infra/s3_cloudfront.tf`):
 
 The local commands leave the files in `~/.cache/water-management-tiles/`.
 Upload them with your own SSO session (no workflow or Lambda can write the
-bucket). **An upload is itself the release** of that file: the `/tiles/*`
-behaviour serves whatever is in the bucket to anyone, by byte range,
-whether or not the frontend variable is set. So upload `terrain.pmtiles`
-only once the Art. 6(c) sentence is live in the app's legal text; the
-frontend gate and `delineation_dem` come after that, not instead of it.
-Then invalidate the cache, since CloudFront keeps byte ranges of
-the old file and the PMTiles reader notices a replaced archive by its
-`ETag`:
+bucket), through `backend/scripts/tiles-upload.ts --production`: it puts
+the archive in the tiles bucket, keeps the original download in the
+reference bucket under `originals/<archive>/`, and writes the archive's
+provenance file (its SHA-256, the upstream's version, ETag and
+Last-Modified, the originals' hashes) to `reference/tiles/`, then prints
+the `load-reference.yml` run that records it ([§ Reference
+datasets](#reference-datasets), Which file is loaded). `--dry-run` first
+shows what it would put and record, and uploads nothing. **An upload is
+itself the release** of that file: the `/tiles/*` behaviour serves whatever
+is in the bucket to anyone, by byte range, whether or not the frontend
+variable is set. So upload `terrain.pmtiles` only once the Art. 6(c)
+sentence is live in the app's legal text; the frontend gate and
+`delineation_dem` come after that, not instead of it. Then invalidate the
+cache, since CloudFront keeps byte ranges of the old file and the PMTiles
+reader notices a replaced archive by its `ETag`. From `backend/`, with the
+buckets from `terraform output`:
 
 ```bash
-aws s3 cp ~/.cache/water-management-tiles/south-africa.pmtiles s3://<tiles_bucket>/tiles/south-africa.pmtiles --cache-control "public, max-age=86400" --profile water-management
-aws s3 sync ~/.cache/water-management-tiles/fonts/ s3://<tiles_bucket>/tiles/fonts/ --cache-control "public, max-age=604800" --profile water-management
-aws s3 cp ~/.cache/water-management-tiles/terrain.pmtiles s3://<tiles_bucket>/tiles/terrain.pmtiles --cache-control "public, max-age=86400" --profile water-management
-aws s3 cp ~/.cache/water-management-tiles/water.pmtiles s3://<tiles_bucket>/tiles/water.pmtiles --cache-control "public, max-age=86400" --profile water-management
+export AWS_PROFILE=water-management AWS_REGION=af-south-1
+T="--production --tiles-bucket <tiles_bucket> --reference-bucket <reference_bucket>"
+C=~/.cache/water-management-tiles
+pnpm exec tsx scripts/tiles-upload.ts $T $C/south-africa.pmtiles --version <build YYYYMMDD> --original $C/south-africa.pmtiles --dry-run
+pnpm exec tsx scripts/tiles-upload.ts $T $C/south-africa.pmtiles --version <build YYYYMMDD> --original $C/south-africa.pmtiles
+pnpm exec tsx scripts/tiles-upload.ts $T --fonts $C/fonts --version <FONTS_REF> --original $C/basemaps-assets-<FONTS_REF>.tar.gz
+pnpm exec tsx scripts/tiles-upload.ts $T --terrain $C/terrain.pmtiles --version <Mapterhorn version> --original $C/terrain.pmtiles
+pnpm exec tsx scripts/tiles-upload.ts $T --water $C/water.pmtiles --version 1.5 --upstream <one GSW tile's URL> $(for f in $C/gsw/occurrence_*.tif; do printf -- '--original %s ' "$f"; done)
+# each prints its own record run, e.g.:
+gh workflow run load-reference.yml -f kind=tiles -f key=reference/tiles/terrain-<date>.json -f sha256=<hex> -f dataset=terrain
 aws cloudfront create-invalidation --distribution-id <cloudfront_distribution_id> --paths '/tiles/*' --profile water-management
 ```
+
+The basemap's and the relief's original download *is* the extract (`pmtiles
+extract` reads the region's byte ranges of an archive of hundreds of GB, which
+can't be kept), so the extract goes in as its own original: the upstream
+deletes old daily builds, and the tiles bucket keeps a replaced archive only
+14 days. One PutObject takes at most 5 GiB; past that (no archive is near it
+today) the script refuses and says to use `aws s3 cp`. Each upload also
+leaves `<file>.provenance.json` beside the file, so a later upload of the
+same bytes records the same provenance without the flags.
 
 Then set the repository variables in the table (`gh variable set
 PUBLIC_TILES_URL --body /tiles/south-africa.pmtiles`, and so on) and
@@ -2126,13 +2149,26 @@ already accepted were copied into the project and don't change either way.
 
 **Which file is loaded.** Each load records the object's key and SHA-256
 with the dataset, in the same transaction (`reference_load`, migration 192;
-`geo/referenceOrigin.ts`), so the record outlives the Actions log. The
+`geo/referenceOrigin.ts`), so the record outlives the Actions log. The tile
+archives are recorded there too (migration 248, kind `tiles`, one row per
+archive): our SHA-256 of the archive, the upstream's URL, version, ETag and
+Last-Modified, the licence it is used under, and the originals kept in the
+bucket with their hashes. `tiles-upload.ts --production` writes the
+provenance file, and the workflow's `tiles` kind records it (`-f
+kind=tiles -f dataset=<basemap|fonts|terrain|water>`, no source; the
+record names the archive and adds no data). Locally `tiles-upload.ts`
+records it straight into the dev database. The Map shows the recorded
+version and dates on the elevation model's and the water occurrence's
+dataset lines (`app_reference_provenance()`, the app's only read). The
 workflow's log prints the file it loaded and the one it replaced (key,
 SHA-256 and when it was loaded): that replaced file is the one to restore
 to undo the load. A local `pnpm import:*` of the same label names no
 bucket file, so it deletes the record rather than leave it describing data
-that is gone. The table is owner-only (the app never reads it); to read it
-outside a load, `SELECT * FROM reference_load` as the schema owner.
+that is gone. The table is owner-only (the app reads only versions and
+dates, through `app_reference_provenance()`); to read it outside a load,
+run the `reference-provenance` check ([§ Read-only production
+checks](#read-only-production-checks)), or locally `SELECT * FROM
+reference_load` as the schema owner (`pnpm dev:db:psql`).
 
 Only what [maps.md § Sources](./maps.md#sources) marks allowed loads. The
 workflow offers those kinds alone, its gate refuses the rest, and the
@@ -2265,6 +2301,35 @@ migrating: the migrate Lambda's reserved concurrency of 1 turns the second
 invocation away (the workflow fails with a throttle, nothing is loaded), and
 a load writes only its own dataset's rows, so retrying afterwards is safe.
 
+#### Refreshing a dataset
+
+Reference data changes yearly at most, and most of it never. Check
+politely before refreshing (one request, a conditional one where the
+upstream supports it, with your own contact in the User-Agent; a 403 means
+stop and find out why, never retry: [data-sources.md § The
+rule](./data-sources.md#the-rule)). Each refresh keeps the original
+download in the reference bucket under `originals/<dataset>/`, named by
+version, so the dataset can be rebuilt without the upstream. A tile
+archive's originals go up with `tiles-upload.ts`; a table dataset's with
+`aws s3 cp <file> s3://<reference_bucket>/originals/<kind>/<version>-<file>
+--profile water-management` before its load (their hashes are not yet
+recorded in `reference_load`, only the loaded file's). The last recorded
+ETag and Last-Modified: the `reference-provenance` check ([§ Read-only
+production checks](#read-only-production-checks)), or the archive's
+`<file>.provenance.json` beside your cached copy.
+
+| Dataset | Where it comes from | Is there a new version? | Rebuild and upload | Verify |
+| --- | --- | --- | --- | --- |
+| `basemap` (tiles) | Protomaps daily builds of OpenStreetMap, `build.protomaps.com/<YYYYMMDD>.pmtiles` | any day: pick a recent build, `curl -sI -A "<you>" https://build.protomaps.com/<YYYYMMDD>.pmtiles` (one HEAD); refresh when the map is visibly out of date | `TILES_BUILD=<YYYYMMDD> pnpm dev:tiles:fetch`, then the `tiles-upload.ts --production` line above | the Map's basemap draws; the record's version is the build |
+| `fonts` (tiles) | `protomaps/basemaps-assets` at a pinned commit (`FONTS_REF` in `bin/tiles-dev.sh`) | `gh api repos/protomaps/basemaps-assets/commits/main --jq .sha` (one request); refresh only for missing glyphs | `TILES_FONTS_REF=<sha> pnpm dev:tiles:fonts` (records the archive's SHA-256 in `bin/source-checksums.sha256`: commit it), then the fonts line | labels draw; `tiles/fonts/OFL.txt` is served |
+| `terrain` (tiles) | Mapterhorn's planet build, `download.mapterhorn.com/planet.pmtiles` (Copernicus GLO-30) | `curl -sI -H 'If-None-Match: <recorded ETag>' https://download.mapterhorn.com/planet.pmtiles`: 304 is unchanged; the version is in `download_urls.json` | `pnpm dev:tiles:terrain`, then the terrain line; then the invalidation | Relief draws; a delineation's dataset line shows the new version |
+| `water` (tiles) | JRC Global Surface Water occurrence tiles (`WATER_SOURCE`, versioned folder and file names) | the GSW download page names the latest version (v1.5, 1984–2024 today); a new one is a new folder | `WATER_SOURCE=<new folder> pnpm dev:tiles:water` (new tiles are recorded in `bin/source-checksums.sha256`: commit them), then the water line with the new `--version` | Trace a dam's sheet shows the new version |
+| `rivers` | HydroRIVERS v1.0, `data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_af_shp.zip` (static) | `curl -sI -H 'If-None-Match: <recorded ETag>' <zip URL>`: 304 is unchanged; a v2 would be a new file name | `pnpm dev:tiles:rivers`, `gzip -k rivers.geojson`, keep the zip under `originals/rivers/`, load as in the table above | the load's counts; the River network layer |
+| `land-cover` | ESA WorldCover 10 m 2021 v200 (final; no later version announced) | the WorldCover site's data-access page | the operator's tiles → `pnpm import:land-cover … --out`, keep the tiles under `originals/land-cover/`, load | the load's counts; a unit's cultivated-area proposal |
+| `evaporation` | dPET on data.bris (DOI-versioned; new years appended) | the dataset page lists its years; refresh when the years you average over change | `pnpm import:evaporation:fetch <first> <last>` (the yearly files are 2.4 GB each and deleted once reduced: keep the reduced totals, not the NetCDF, under `originals/evaporation/`), then `--out` and load | Settings → Evaporation from the map shows the new dataset |
+| `gazetteer` | GeoNames country dumps, `download.geonames.org/export/dump/<CC>.zip` | `curl -sI -z <last load's date> https://download.geonames.org/export/dump/ZA.zip`: 304 is unchanged; refresh a few times a year at most | the gazetteer steps above; keep the seven zips under `originals/gazetteer/` | the Map's search finds the places listed above |
+| `map-grid` | a file from the client (WAAS, 2007): no upstream | never, unless the client sends a new surface | the MAP grid steps above; keep the surface as received under `originals/map-grid/` | the MAP grid layer and its credit line |
+
 A large load squeezes the database's memory. The first production loads
 (2026-10-05: HydroRIVERS, 89 454 reaches, then WorldCover, 5.4 million cells,
 back to back) took the 1 GiB `db.t4g.micro` from about 140 MB freeable to
@@ -2379,6 +2444,22 @@ water-management`; the answer is written to the named file, then printed:
   ```
 
   `count: 0`: nobody was grandfathered. Any rows: step 18.
+
+- **`reference-provenance`** (issue #604 R3-D, [§ Reference
+  datasets](#reference-datasets), Refreshing a dataset): what each
+  reference dataset and tile archive was last loaded from. Each row is
+  `kind`, `dataset`, `source_sha256` (our hash of the file loaded or the
+  archive served), `upstream_version`, `upstream_etag`,
+  `upstream_last_modified`, `originals` (how many original downloads are
+  kept for it) and `loaded_at`; never a bucket key.
+
+  ```bash
+  aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{"check":"reference-provenance"}' --cli-read-timeout 300 --region af-south-1 --profile water-management reference-provenance.json && jq . reference-provenance.json
+  ```
+
+  Use the ETag and Last-Modified in a refresh's conditional request; a
+  `tiles` row with no version or no originals was uploaded without them,
+  so the next refresh of it should pass `--version` and `--original`.
 
 Adding a check is a code change: an entry in the registry (a `SELECT`
 with no parameters, its columns from the allowlist its unit test holds), a

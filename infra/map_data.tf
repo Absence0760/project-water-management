@@ -24,6 +24,11 @@
 #     as the schema owner, through .github/workflows/load-reference.yml,
 #     which only runs in the `production` environment. Only the kinds
 #     docs/maps.md § Sources marks allowed load; the code refuses the rest.
+#     reference/tiles/ holds the tile archives' provenance files, which a
+#     `tiles` load records (248, backend/scripts/tiles-upload.ts). Beside
+#     them, originals/<dataset>/… keeps the operator's original downloads, so
+#     a dataset can be re-derived without the upstream: the operator's
+#     alone, outside migrate_reference's reference/* (guardrails.tftest.hcl).
 #
 # The operator uploads the objects with their own SSO session (deployment.md);
 # no role here can write either bucket, and the deploy role touches neither.
@@ -35,8 +40,9 @@
 # days, old reference files a year), and expiry keeps re-uploads from being
 # billed for ever.
 #
-# Cost: storage of ~3.5 GB of tiles and a few hundred MB of reference files
-# (well under $1/month, plus ~$0.10 while a replaced archive's old version
+# Cost: storage of ~3.5 GB of tiles, a few hundred MB of reference files and
+# up to ~4 GB of originals (the basemap and DEM extracts, the GSW tiles; well
+# under $1/month, plus ~$0.10 while a replaced archive's old version
 # is kept); multipart uploads that never finish are aborted after 7 days so a
 # broken 2 GB upload doesn't sit there billed. Viewer traffic is CloudFront
 # egress, bounded per request by tiles_range (2 MiB), per IP by the WAF's

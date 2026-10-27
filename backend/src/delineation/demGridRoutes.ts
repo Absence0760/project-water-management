@@ -17,6 +17,7 @@ import { logEvent } from '../logging/logEvent.js';
 import { safeError } from '../logging/safeError.js';
 import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
+import { tileProvenance, withProvenance } from '../geo/referenceOrigin.js';
 import { DEM_GRID_STRIDE, demGridPoints } from './demGrid.js';
 
 /** The most points one answer carries: about a 70 × 70 block, as many labels as a screen holds apart. */
@@ -29,7 +30,11 @@ export const demGridRoutes = new Hono<AuthEnv>().get('/:id/map/dem-grid', async 
 	if (bbox.e - bbox.w > DEM_GRID_BBOX_MAX_DEG || bbox.n - bbox.s > DEM_GRID_BBOX_MAX_DEG)
 		throw new ApiError(400, `Ask for at most ${DEM_GRID_BBOX_MAX_DEG}° each way.`);
 	const id = c.req.param('id');
-	await withUser(c.get('userId'), (db) => requireRole(db, id, 'viewer'));
+	// The source line shows the archive's recorded version and date (248, geo/referenceOrigin.ts).
+	const provenance = await withUser(c.get('userId'), async (db) => {
+		await requireRole(db, id, 'viewer');
+		return tileProvenance(db, 'terrain');
+	});
 	const dem = configuredDem();
 	if (!dem) throw new ApiError(409, 'The DEM grid is off: the server has no elevation model (DEM_URL is empty).');
 	try {
@@ -37,7 +42,7 @@ export const demGridRoutes = new Hono<AuthEnv>().get('/:id/map/dem-grid', async 
 		const got = await demGridPoints(dem, bbox, DEM_GRID_LAYER_MAX);
 		return c.json({
 			bbox: [bbox.w, bbox.s, bbox.e, bbox.n],
-			dataset: { label: info.label, attribution: info.attribution, zoom: info.maxZoom },
+			dataset: { label: withProvenance(info.label, provenance), attribution: info.attribution, zoom: info.maxZoom },
 			stride: DEM_GRID_STRIDE,
 			cellM: got?.cellM ?? null,
 			points: got?.points ?? [],

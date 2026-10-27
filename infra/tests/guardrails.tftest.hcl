@@ -3061,10 +3061,11 @@ run "map_data" {
       length(data.aws_iam_policy_document.migrate_reference.statement) == 1 &&
       toset(data.aws_iam_policy_document.migrate_reference.statement[0].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.migrate_reference.statement[0].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
+      length([for r in data.aws_iam_policy_document.migrate_reference.statement[0].resources : r if strcontains(r, "originals/") || endswith(r, "/*") && !endswith(r, "/reference/*")]) == 0 &&
       aws_iam_role_policy.migrate_reference.role == aws_iam_role.migrate_lambda.id &&
       aws_lambda_function.migrate.environment[0].variables["REFERENCE_BUCKET"] == aws_s3_bucket.reference.bucket
     )
-    error_message = "The migrate role may only read reference files (reference/*): no list, put or delete, and it knows the bucket (REFERENCE_BUCKET)."
+    error_message = "The migrate role may only read reference files (reference/*, the tile provenance files under reference/tiles/ included): never originals/, no list, put or delete, and it knows the bucket (REFERENCE_BUCKET)."
   }
   assert {
     condition     = aws_lambda_function.migrate.timeout == 900 && aws_lambda_function.migrate.memory_size == var.migrate_memory_mb && var.migrate_memory_mb == 3008 && aws_lambda_function.migrate.reserved_concurrent_executions == 1 && aws_lambda_function.migrate.environment[0].variables["NODE_OPTIONS"] == "--max-old-space-size=2556"

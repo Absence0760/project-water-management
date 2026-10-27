@@ -190,6 +190,34 @@ describe('authority-grandfathered (issue #523 G5)', () => {
 	});
 });
 
+describe('reference-provenance (issue #604 R3-D)', () => {
+	const DS = 'test-ro-check-provenance';
+	beforeAll(() =>
+		asOwner(
+			`INSERT INTO reference_load (kind, dataset, source_key, source_sha256, upstream_version, upstream_etag, upstream_last_modified, originals)
+			 VALUES ('rivers', $1, 'reference/rivers/r.geojson.gz', $2, 'v1.0', '"e-1"', '2026-10-01T00:00:00Z', '[{"key": "originals/rivers/v1.0-r.zip", "sha256": "${'b'.repeat(64)}", "bytes": 3}]')`,
+			[DS, 'a'.repeat(64)]
+		)
+	);
+	afterAll(() => asOwner('DELETE FROM reference_load WHERE dataset = $1', [DS]));
+
+	it('lists the recorded file, upstream and how many originals were kept, never a bucket key', async () => {
+		const r = await runCheck(client, 'reference-provenance');
+		const row = r.rows.find((x) => x.dataset === DS);
+		expect(row).toEqual({
+			kind: 'rivers',
+			dataset: DS,
+			source_sha256: 'a'.repeat(64),
+			upstream_version: 'v1.0',
+			upstream_etag: '"e-1"',
+			upstream_last_modified: '2026-10-01T00:00:00.000Z',
+			originals: '1',
+			loaded_at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/)
+		});
+		expect(JSON.stringify(r.rows)).not.toMatch(/reference\/rivers|originals\//);
+	});
+});
+
 describe('runCheck runs read only', () => {
 	// A table and a function that writes to it, in a schema of their own (dropped after), to try a write through runCheck.
 	beforeAll(() =>

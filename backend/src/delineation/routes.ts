@@ -33,6 +33,7 @@ import { logEvent } from '../logging/logEvent.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
+import { tileProvenance, withProvenance } from '../geo/referenceOrigin.js';
 import { delineate, DelineationRefused, type WindowAim } from './delineate.js';
 import { loadProposal, SELECT, storeProposal, toProposal, type ProposalRow } from './proposals.js';
 import { delineationLimits, jobWindowsFrom, loadRequest, nextJobWindow, queueDelineation, waitingRequest } from './requests.js';
@@ -71,17 +72,19 @@ const km2 = (m2: number) => `${(m2 / 1e6).toFixed(2)} km²`;
 export const delineationRoutes = new Hono<AuthEnv>()
 	.get('/:id/map/delineation', async (c) => {
 		const id = c.req.param('id');
-		const { proposals, request } = await withUser(c.get('userId'), async (db) => {
+		const { proposals, request, provenance } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			const { rows } = await db.query<ProposalRow>(`${SELECT} ORDER BY p.created_at DESC, p.id LIMIT ${LISTED}`, [id]);
 			// A delineation the worker still has: the Map shows it waiting, and picks up its outcome.
-			return { proposals: rows.map(toProposal), request: await waitingRequest(db, id) };
+			// The dataset line shows the DEM's recorded version and date (248, geo/referenceOrigin.ts).
+			return { proposals: rows.map(toProposal), request: await waitingRequest(db, id), provenance: await tileProvenance(db, 'terrain') };
 		});
 		const dem = configuredDem();
 		let dataset = null;
 		if (dem) {
 			try {
-				dataset = await dem.info();
+				const info = await dem.info();
+				dataset = { ...info, label: withProvenance(info.label, provenance) };
 			} catch (err) {
 				logEvent('warn', { event: 'dem_unreadable', ...safeError(err) });
 			}

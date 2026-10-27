@@ -68,7 +68,12 @@ server and no tile CDN: the file is served from the app's own storage.
   Protomaps daily build at maxzoom 15 into
   `~/.cache/water-management-tiles/south-africa.pmtiles` (reading only that
   bbox's byte ranges), and uploads it to the MinIO bucket `tiles`, readable by
-  anyone (MinIO is loopback-only), with `backend/scripts/tiles-upload.ts`.
+  anyone (MinIO is loopback-only), with `backend/scripts/tiles-upload.ts`,
+  which also records the archive's provenance in this checkout's database
+  when it is up (the build date, the build's ETag, our SHA-256; [§
+  Sources](#sources), Which version is in use). Each `dev:tiles:*` fetch
+  does the same for its archive, and keeps the fonts archive and the GSW
+  tiles as originals in the private MinIO bucket `water-reference`.
   `pnpm dev:tiles:env` prints the URL
   (`http://localhost:9002/tiles/south-africa.pmtiles`) that `up` sets.
   `pnpm dev:tiles:status` says what is cached and served.
@@ -2623,6 +2628,23 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Surveyor-General's farm names (registered farm names and numbers), considered for the search | Chief Surveyor-General, Department of Agriculture, Land Reform and Rural Development | **Unconfirmed**: no reuse terms for a commercial service found in writing | – | – | – | **Blocked: licence unconfirmed.** Not loaded; a later dataset once its reuse licence is confirmed in writing, recorded here with the date |
 | Synthetic gazetteer (`backend/fixtures/geo/gazetteer.synthetic.txt`) | this repo (invented places, GeoNames' format) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm setup`) |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+
+**Which version is in use.** The table's Version column is the version the
+licence was read for. What a deployment actually serves is recorded with
+each load or upload (`reference_load`, [deployment.md § Reference
+datasets](./deployment.md#reference-datasets), Which file is loaded): a
+table dataset's file and SHA-256, and since migration 248 each tile archive
+(basemap, fonts, relief DEM, water occurrence) with its upstream version,
+ETag and Last-Modified, our SHA-256, the licence, and the original download
+kept in the reference bucket (`originals/<dataset>/`), written by
+`backend/scripts/tiles-upload.ts`. Where the Map names a dataset's source
+on screen, the version and dates come from that record when there is one:
+the DEM grid's "Source:" line, the delineation sheet's "From …" and the
+trace sheet's "From …" (`geo/referenceOrigin.ts` `withProvenance`, read
+through `app_reference_provenance()`), e.g. "… (version 0.0.13, upstream
+file of 2026-09-30, recorded 2026-10-27)". The Data sources page
+(`/data-sources`) is prerendered static text and shows the licence's
+reading, not the deployment's version.
 
 ### Credits on the map
 
