@@ -66,8 +66,10 @@
 </div>
 
 <style>
+	/* One column that can shrink below its select's longest option, so the card fits a 320 px phone. */
 	.gap-rain {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0.5rem;
 	}
 	.title {
@@ -78,6 +80,7 @@
 		max-width: 75ch;
 	}
 	.field select {
+		width: 100%;
 		max-width: 360px;
 	}
 	.lbl {
