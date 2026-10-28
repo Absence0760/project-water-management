@@ -21,7 +21,9 @@ import { ApiError } from '../http/errors.js';
 import { logEvent } from '../logging/logEvent.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
 import { assistantConfig, weightedTokens, type AssistantConfig } from './config.js';
-import { capConversation, runTurn } from './orchestrator.js';
+import { safeError } from '../logging/safeError.js';
+import { capConversation, runTurn, turnFloor, type TurnOutcome } from './orchestrator.js';
+import { systemPrompt } from './prompt.js';
 import { createProvider } from './providers/index.js';
 import { sseBody } from './sse.js';
 import { ASSISTANT_TOOLS } from './tools/index.js';
@@ -141,37 +143,55 @@ export const assistantRoutes = new Hono<AuthEnv>()
 		const cfg = assistantConfig();
 		const conversation: ChatMessage[] | null = capConversation(body.messages, cfg.maxInputChars);
 
-		const { provider, usedBefore } = await withUser(userId, async (db) => {
+		const turnTools = tools;
+		const system = systemPrompt();
+		const { provider, begun } = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'viewer');
 			const provider = cfg.provider === 'off' ? null : providerFor(cfg);
 			if (!provider) throw off();
-			if (!conversation) {
+			// The turn's first call needs this much at most (input estimate + a whole call's output): a conversation
+			// it doesn't fit in one turn's budget is refused before anything is counted.
+			const floor = conversation ? turnFloor(cfg, system, turnTools, conversation) : Infinity;
+			if (!conversation || floor > cfg.maxTurnTokens) {
 				throw ApiError.coded(413, 'assistant_input_too_large', `The message is longer than the assistant takes (${cfg.maxInputChars} characters).`);
 			}
 			if (body.runId) {
 				const { rows } = await db.query('SELECT 1 FROM model_run WHERE id = $1 AND project_id = $2', [body.runId, id]);
 				if (!rows.length) throw new ApiError(404, 'run not found');
 			}
-			// Counted before the stream: the message, or a 429 (nothing counted).
-			return { provider, usedBefore: await beginTurn(c, db, id, cfg) };
+			// Before the stream: the message counted and the turn's budget reserved, or a 429 (nothing counted).
+			// Last in the transaction, so nothing after it can roll the reservation back without the turn.
+			return { provider, begun: await beginTurn(c, db, id, cfg, floor) };
 		});
+		const usedBefore = begun.used;
 
 		const ctx = { userId, projectId: id, runId: body.runId ?? null };
 		const stream = sseBody({ keepaliveSeconds: cfg.keepaliveSeconds, requestSignal: c.req.raw.signal }, async (out) => {
-			const result = await runTurn(
-				{
-					provider,
-					tools,
-					cfg,
-					emit: out.send,
-					signal: out.signal,
-					// Each call its own read-only transaction as the caller: RLS and the routes' withholding decide what it reads.
-					runTool: (tool, args, signal) => runToolBounded(userId, (db) => tool.run({ db, ...ctx }, args), signal)
-				},
-				conversation!
-			);
-			// Charged whatever the outcome, the client gone included: the tokens were spent.
-			const after = await chargeTurn(userId, id, result.inputTokens, result.outputTokens);
+			let result: TurnOutcome;
+			try {
+				result = await runTurn(
+					{
+						provider,
+						tools: turnTools,
+						cfg,
+						system,
+						// What app_assistant_begin reserved: no more than any monthly cap has left.
+						budget: begun.budget,
+						emit: out.send,
+						signal: out.signal,
+						// Each call its own read-only transaction as the caller: RLS and the routes' withholding decide what it reads.
+						runTool: (tool, args, signal) => runToolBounded(userId, (db) => tool.run({ db, ...ctx }, args), signal)
+					},
+					conversation!
+				);
+			} catch (err) {
+				// runTurn never throws. Should it ever, what it spent is unknown, so its reservation is left to expire
+				// and be charged in full (264_assistant_reservation): never counted short. The charge-failed alarm reads it.
+				logEvent('error', { event: 'assistant_charge_failed', reason: 'turn_threw', ...safeError(err) });
+				return;
+			}
+			// Charged whatever the outcome, the client gone included: the tokens were spent. This settles the reservation.
+			const after = await chargeTurn(userId, id, begun.reservationId, result.inputTokens, result.outputTokens);
 			const weighted = weightedTokens(result.inputTokens, result.outputTokens);
 			// One line a turn, counts only (no text): the assistant's spend alarm sums weightedTokens (infra/alarms.tf).
 			logEvent('info', { event: 'assistant_turn', inputTokens: result.inputTokens, outputTokens: result.outputTokens, weightedTokens: weighted, end: result.end });

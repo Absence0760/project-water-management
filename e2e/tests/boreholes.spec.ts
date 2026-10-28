@@ -42,8 +42,11 @@ test('edit a farm’s boreholes, run, and see the groundwater and stream depleti
 	await page.getByLabel(/^Run label/).fill('Pumping');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Pumping' })).toBeVisible();
-	// The run warns about the calibration record measured while they pumped.
-	await expect(page.getByText(/boreholes that deplete the river/).first()).toBeAttached();
+	// The run warns about the calibration record measured while they pumped. The summary shows the first 3 things to
+	// check (issue #521), and this one comes after the dam areas, the natural MAR split (issue #616) and GN 538: open them all.
+	const checks = page.getByTestId('warnings-check');
+	await checks.getByRole('button', { name: /^Show all \d+ things to check$/ }).click();
+	await expect(checks.getByRole('listitem').filter({ hasText: /boreholes that deplete the river/ })).toBeVisible();
 	// The table is in Other uses on Hydrological units (issue #137), linked from the Summary.
 	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Hydrological units' }).click();
 	const uses = page.getByRole('region', { name: 'Other uses of water' });

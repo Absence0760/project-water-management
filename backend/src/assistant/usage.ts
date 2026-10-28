@@ -3,9 +3,13 @@
 // tokens (input + 5 × output, config.ts weightedTokens), per project
 // (cfg.tokensPerMonth), per person across projects (cfg.tokensPerUserMonth)
 // and for the whole deployment (cfg.tokensTotalPerMonth), and a message cap
-// per person per hour across projects (cfg.messagesPerHour). A turn is begun (checked and counted as a message)
+// per person per hour across projects (cfg.messagesPerHour). A turn is begun
 // before its stream starts, in the transaction that checked the caller's
-// role, and charged its tokens after it ends, whatever the outcome.
+// role: counted as a message, and its budget reserved
+// (264_assistant_reservation: what no cap is passed by, however many turns
+// run at once). It is charged its tokens after it ends, whatever the
+// outcome, which settles the reservation; one never settled (the Lambda
+// died) is charged in full once it expires.
 import type { Context } from 'hono';
 import { withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -62,21 +66,53 @@ const SPENT: Record<BudgetScope, { code: 'assistant_budget_spent' | 'assistant_u
 };
 
 /**
- * Begin one turn as the transaction's user: counts the message, or throws
- * 429 with Retry-After (`assistant_rate_limited` past the hourly cap; once a
- * month is spent `assistant_total_budget_spent` for the deployment's,
+ * Seconds past the turn's deadline (cfg.turnSeconds) a reservation lasts
+ * before it is charged in full as unsettled: past the assistant Lambda's
+ * timeout (the deadline + 15 s, infra/assistant.tf), so a turn that ends
+ * normally always settles first, and only a Lambda that died leaves one.
+ */
+export const RESERVATION_MARGIN_SECONDS = 120;
+
+/** A begun turn: this month's tokens before it, and the budget reserved for it. */
+export interface BegunTurn {
+	used: MonthUsed;
+	/** The reservation app_assistant_charge settles (chargeTurn). */
+	reservationId: string;
+	/** Weighted tokens the turn may spend (runTurn's budget). */
+	budget: number;
+}
+
+/**
+ * Begin one turn as the transaction's user: counts the message and reserves
+ * the turn's budget (the least of cfg.maxTurnTokens and what each monthly cap
+ * has left), or throws 429 with Retry-After (`assistant_rate_limited` past
+ * the hourly cap; once a month has less than `minTokens` left
+ * `assistant_total_budget_spent` for the deployment's,
  * `assistant_user_budget_spent` for the person's, `assistant_budget_spent`
- * for the project's; nothing counted). Returns this month's tokens so far.
+ * for the project's; nothing counted). `minTokens` is the turn's floor
+ * (orchestrator.ts turnFloor), no more than cfg.maxTurnTokens.
  */
 export async function beginTurn(
 	c: Context,
 	db: Db,
 	projectId: string,
-	cfg: Pick<AssistantConfig, 'tokensPerMonth' | 'tokensPerUserMonth' | 'tokensTotalPerMonth' | 'messagesPerHour'>
-): Promise<MonthUsed> {
-	const { rows } = await db.query<UsedRow & { outcome: 'ok' | 'rate' | 'budget' | 'user_budget' | 'total_budget'; wait_seconds: number }>(
-		'SELECT outcome, wait_seconds, project_used, user_used, total_used FROM app_assistant_begin($1, $2, $3, $4, $5)',
-		[projectId, cfg.tokensPerMonth, cfg.messagesPerHour, cfg.tokensPerUserMonth, cfg.tokensTotalPerMonth]
+	cfg: Pick<AssistantConfig, 'tokensPerMonth' | 'tokensPerUserMonth' | 'tokensTotalPerMonth' | 'messagesPerHour' | 'maxTurnTokens' | 'turnSeconds'>,
+	minTokens: number
+): Promise<BegunTurn> {
+	const { rows } = await db.query<
+		UsedRow & { outcome: 'ok' | 'rate' | 'budget' | 'user_budget' | 'total_budget'; wait_seconds: number; reservation_id: string | null; budget: string | null }
+	>(
+		'SELECT outcome, wait_seconds, project_used, user_used, total_used, reservation_id, budget FROM app_assistant_begin($1, $2, $3, $4, $5, $6, $7, $8)',
+		[
+			projectId,
+			cfg.tokensPerMonth,
+			cfg.messagesPerHour,
+			cfg.tokensPerUserMonth,
+			cfg.tokensTotalPerMonth,
+			cfg.maxTurnTokens,
+			Math.ceil(minTokens),
+			cfg.turnSeconds + RESERVATION_MARGIN_SECONDS
+		]
 	);
 	const r = rows[0]!;
 	if (r.outcome === 'rate') {
@@ -90,20 +126,29 @@ export async function beginTurn(
 		c.header('Retry-After', String(r.wait_seconds));
 		throw ApiError.coded(429, SPENT[scope].code, `${SPENT[scope].what}; it starts again on ${monthResetsAt().slice(0, 10)}.`, { seconds: r.wait_seconds, scope });
 	}
-	return monthUsed(r);
+	return { used: monthUsed(r), reservationId: r.reservation_id!, budget: Number(r.budget) };
 }
 
 /**
- * Charge a finished turn's tokens to the caller's row this month. Returns
- * this month's tokens after it, or null if the charge failed (logged as
+ * Charge a finished turn's tokens to the caller's row and settle its
+ * reservation (null: a charge with no reservation, this month). Returns this
+ * month's tokens after it, or null if the charge failed (logged as
  * `assistant_charge_failed`, not thrown: the answer is already sent; the
- * assistant's charge-failed alarm reads that line, infra/alarms.tf).
+ * assistant's charge-failed alarm reads that line, infra/alarms.tf). A
+ * reservation left by a failed charge is charged in full once it expires.
  */
-export async function chargeTurn(userId: string, projectId: string, inputTokens: number, outputTokens: number): Promise<MonthUsed | null> {
+export async function chargeTurn(
+	userId: string,
+	projectId: string,
+	reservationId: string | null,
+	inputTokens: number,
+	outputTokens: number
+): Promise<MonthUsed | null> {
 	try {
 		return await withUser(userId, async (db) => {
-			const { rows } = await db.query<UsedRow>('SELECT project_used, user_used, total_used FROM app_assistant_charge($1, $2, $3)', [
+			const { rows } = await db.query<UsedRow>('SELECT project_used, user_used, total_used FROM app_assistant_charge($1, $2, $3, $4)', [
 				projectId,
+				reservationId,
 				Math.max(0, Math.round(inputTokens)),
 				Math.max(0, Math.round(outputTokens))
 			]);

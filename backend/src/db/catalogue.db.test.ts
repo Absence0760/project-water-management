@@ -23,7 +23,8 @@ const NO_RLS = new Set(['schema_migrations']);
 // The allocation holder keys' salt and each run's frozen keys (219_allocation_holder_keys, #523 N/P): only its definer functions and trigger.
 // dam_observation_load_mark (261): what the dams tick last loaded per pass file, read and written only through
 // app_dam_load_marks and app_dam_load_mark_write from the worker's session with no user.
-const OWNER_ONLY = new Set(['erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder', 'dam_observation_load_mark']);
+// assistant_reservation (264): a turn's reserved budget, read and written only by the assistant's definer functions.
+const OWNER_ONLY = new Set(['assistant_reservation', 'erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder', 'dam_observation_load_mark']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
@@ -309,6 +310,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	// The assistant's spend stays counted against the project's month, without the name; the hourly count goes (262_assistant_usage).
 	'assistant_usage.user_id': 'set null',
 	'assistant_rate.user_id': 'cascade',
+	// A turn's reservation still counts against the project's and the deployment's month until it settles or expires (264).
+	'assistant_reservation.user_id': 'set null',
 	'api_key.revoked_by': 'set null',
 	'audit_event.actor_user_id': 'set null',
 	// Who acts for the authority (229): the delegation goes with the account; who proposed or confirmed it is cleared.

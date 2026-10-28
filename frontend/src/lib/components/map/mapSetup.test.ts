@@ -31,3 +31,20 @@ describe('mapSetupSteps', () => {
 		expect(mapSetupSteps({ boundaryName: 'B', rain: 'error' })).toBeNull();
 	});
 });
+
+describe('mapSetupSteps for a model started from the map (issue #646 F2)', () => {
+	const item = (id: string, status: 'done' | 'partial' | 'todo' | 'unknown', optional = false) => ({ id, title: id, status, detail: `${id} detail`, href: `?tab=${id}`, where: id, optional }) as never;
+	it('lists the data step’s items, with their status and link, in place of the boundary and rain steps', () => {
+		const steps = mapSetupSteps({ boundaryName: 'B', rain: 'current', data: [item('rain', 'done'), item('unit-rain', 'partial'), item('run', 'todo')] })!;
+		expect(steps.map((s) => [s.id, s.done, s.status, s.href])).toEqual([
+			['rain', true, 'done', '?tab=rain'],
+			['unit-rain', false, 'partial', '?tab=unit-rain'],
+			['run', false, 'todo', '?tab=run']
+		]);
+		expect(setupCount(steps)).toBe('1 of 3');
+	});
+	it('goes once every item a run needs is done, an optional one left or not', () => {
+		expect(mapSetupSteps({ boundaryName: null, rain: null, data: [item('rain', 'todo', true), item('run', 'done')] })).toBeNull();
+		expect(mapSetupSteps({ boundaryName: 'B', rain: 'current', data: [item('run', 'unknown')] })).not.toBeNull();
+	});
+});

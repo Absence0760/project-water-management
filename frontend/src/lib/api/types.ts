@@ -3646,7 +3646,17 @@ export interface StartPlan {
 	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
 	units: StartUnit[];
 	/** Beside units' boundaries (start-16): the catchment less them, with no outline; `members` the dams and pumps in no unit's boundary. */
-	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number; members?: StartMember[] };
+	rest: {
+		name: string;
+		areaM2: number | null;
+		geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null;
+		nonContributingM2?: number;
+		members?: StartMember[];
+		/** Beside units' boundaries with a DEM (start-17): the unit it drains into (its key), or null for the outflow gauge. */
+		drainsInto?: string | null;
+		/** Whether drainsInto is proposed, to tick; absent or false, it drains into the outflow gauge. */
+		drainsIntoProposed?: boolean;
+	};
 	/** What of the catchment drains into pans (start-11; absent without an elevation model or before). */
 	pans?: PanReport;
 	/** `placement`: how a dropped point was put on the channel (start-7): one beside a larger channel can be moved there. */
@@ -3662,7 +3672,8 @@ export interface StartTicks {
 	outletName: string;
 	/** `areaBasis`: with `area`, the gross area (the default) or the effective one (195). */
 	units: { key: string; name: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean }[];
-	rest: { include: boolean; name: string; area: boolean; areaBasis?: MapAreaBasis };
+	/** `drainsInto`: take the rest's proposed drains-into (start-17); absent or false, the outflow gauge. */
+	rest: { include: boolean; name: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto?: boolean };
 }
 
 export interface StartProposal {
@@ -3727,7 +3738,8 @@ export interface DividePlan {
 	outlet: { featureId: string | null; nodeId: string; name: string; point: MapPosition; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary'; placement?: PointPlacement };
 	catchment: { areaM2: number; boundaryAreaM2: number | null };
 	units: DivideUnit[];
-	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number };
+	/** `drainsInto`: beside units' boundaries (start-17), the point (its key) the rest drains into, or null for the outflow; proposed when `drainsIntoProposed`. */
+	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number; drainsInto?: string | null; drainsIntoProposed?: boolean };
 	/** What of the catchment drains into pans (start-11; absent before). */
 	pans?: PanReport;
 	untouched: { nodeId: string; name: string; areaKm2: number }[];
@@ -3742,7 +3754,7 @@ export interface DividePlan {
 export interface DivideTicks {
 	/** `areaBasis`: with `area`, the gross area (the default) or the effective one (195). */
 	units: { key: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean; add: boolean; name?: string }[];
-	rest: { to: 'none' } | { to: 'node'; nodeId: string; areaBasis?: MapAreaBasis } | { to: 'new'; name: string; areaBasis?: MapAreaBasis };
+	rest: { to: 'none' } | { to: 'node'; nodeId: string; areaBasis?: MapAreaBasis } | { to: 'new'; name: string; areaBasis?: MapAreaBasis; drainsInto?: boolean };
 }
 
 export interface DivideProposal extends Omit<StartProposal, 'mode' | 'plan'> {
@@ -3757,6 +3769,26 @@ export interface StartState {
 	modelEmpty: boolean;
 	startedFromMap: boolean;
 	proposals: (StartProposal | DivideProposal)[];
+	/** A Start or Divide the background worker is still routing (queued or running), else null (272; absent from an older server). */
+	request?: PlanRequest | null;
+}
+
+/**
+ * A Start or Divide plan handed to the background worker: its routing reached the edge of the request's window (272,
+ * docs/api.md § Start from the map). A Start's `fallbackId` is its proposal without the order, which the routed one replaces
+ * while open. `failed`: the job died, and `error` says why.
+ */
+export interface PlanRequest {
+	id: string;
+	kind: 'start' | 'divide';
+	status: DelineationRequest['status'];
+	progress: number | null;
+	error: string | null;
+	proposal: StartProposal | DivideProposal | null;
+	fallbackId: string | null;
+	refusal: { reason: string; message: string } | null;
+	createdAt: string;
+	finishedAt: string | null;
 }
 
 /** One click's piece (POST …/map/subcatchments): its incremental catchment, the land draining to it before any other click. */

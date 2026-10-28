@@ -51,3 +51,7 @@ export function calibrationSiteIndex(nodes: ProjectModel['nodes'], outflow: numb
 	if (err) throw new Error(err);
 	return nodes.findIndex((n) => n.id === siteNodeId);
 }
+
+// Calibration zones (issue #555): exported through this module, which the engine's index re-exports.
+export * from './zones';
+export * from './stepwise';

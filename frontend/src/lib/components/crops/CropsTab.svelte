@@ -176,11 +176,28 @@
 	$effect(() => {
 		sheetOpen = !!sheetCrop;
 	});
+	// The sheet shuts at once, but the URL only drops `crop` once SvelteKit's navigation lands. An Edit
+	// pressed in between built its URL from the one still naming the closed crop, and SvelteKit keeps only
+	// the newest navigation, so the drop was abandoned: the same crop's Edit changed nothing (the sheet
+	// stayed shut under a URL naming it) and another crop's left Back reopening the closed one. So an
+	// open waits for the drop under way.
+	let dropping: Promise<void> | null = null;
 	$effect(() => {
 		// Closed (Done, Esc, the ✕, the crop removed): drop `crop` in place, so Back goes to where it was opened from.
-		if (!sheetOpen && untrack(() => cropParam)) void goto(withoutParam(page.url, 'crop'), { replace: true, reset: false });
+		if (!sheetOpen && untrack(() => cropParam)) {
+			const drop = goto(withoutParam(page.url, 'crop'), { replace: true, reset: false });
+			dropping = drop;
+			void drop.finally(() => {
+				if (dropping === drop) dropping = null;
+			});
+		}
 	});
-	const openCrop = (id: string) => goto(withParam(page.url, 'crop', id), { reset: false });
+	const settled = () => {};
+	async function openCrop(id: string) {
+		// Waits for the drop to land or fail; a failure is reported where the drop is, not swallowed here.
+		await dropping?.then(settled, settled);
+		await goto(withParam(page.url, 'crop', id), { reset: false });
+	}
 	function add() {
 		const c = editor.addCrop();
 		void openCrop(c.id);

@@ -151,6 +151,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Built, pending the hydrologist"
 	},
 	{
+		"id": "CZ1",
+		"source": "finding",
+		"severity": "Low (projects that tick a gauge in Calibrate at several gauges, under Per unit)",
+		"title": "Several outputs still show or vary only the calibration site's zone",
+		"status": "Warned"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,

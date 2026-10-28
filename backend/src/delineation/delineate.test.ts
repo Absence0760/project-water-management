@@ -127,8 +127,8 @@ describe('delineate (synthetic DEM)', () => {
 		expect(tooLargeText('click', 100, 9_000)).toMatch(/^The catchment above that point .* Click further upstream/);
 		expect(tooLargeText('click', 100, 10_001)).toMatch(/^The river here drains about 10\s001 km²/);
 		expect(tooLargeText('click', null, 1e6)).toMatch(/^The catchment above that point reaches beyond the area the app delineates around a click/);
-		expect(tooLargeText('outlet', 100, null)).toMatch(/^The catchment above the outlet .* Pick an outlet gauge further upstream, or type the units in\.$/);
-		expect(tooLargeText('outlet', 100, 340_724)).toMatch(/^The river at the outlet drains about 340\s724 km² .* Type the units in, or outline pieces of the river with Sub-catchments, one per click/);
+		expect(tooLargeText('outlet', 100, null)).toMatch(/^The catchment above the outlet .* can’t order or check the units here\. Each unit’s area is its own boundary’s: set the order on the Network, or pick an outlet gauge further upstream\.$/);
+		expect(tooLargeText('outlet', 100, 340_724)).toMatch(/^The river at the outlet drains about 340\s724 km² .* set the order on the Network, or outline pieces of the river with Sub-catchments, one per click/);
 	});
 
 	it('says which window it stopped at when the next would break the budget, and reports each window it starts', async () => {

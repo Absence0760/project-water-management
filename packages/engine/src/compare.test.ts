@@ -1262,6 +1262,15 @@ describe('diffInputs', () => {
 		const beforeNote = structuredClone(a);
 		delete (beforeNote.settings as Record<string, unknown>).lakeEvapFactorSource;
 		expect(diffInputs(beforeNote, { ...a, settings: { ...a.settings, lakeEvapFactorSource: '' } })).toEqual([]);
+		// Calibration zones (engine 1.106.0, issue #555): by the ticked rows' parameters a run reads, so [] (migration 267),
+		// an unticked row or a zone's window is no change, and a ticked zone's parameters are.
+		const zones = (z: unknown) => ({ ...a, settings: { ...a.settings, calibrationZones: z } as never });
+		const row = { nodeId: 'H', enabled: true, calibrationStart: null, gr4j: { x1: 900, x2: 0, x3: 220, x4: 3.1 } };
+		expect(diffInputs(a, zones([]))).toEqual([]);
+		expect(diffInputs(a, zones([{ ...row, enabled: false }]))).toEqual([]);
+		expect(diffInputs(zones([row]), zones([{ ...row, calibrationStart: '2000-10-01' }]))).toEqual([]);
+		expect(texts(a, zones([row]))).toEqual(['Calibration zones: none (one parameter set) → gauge node H (X1 900, X2 0, X3 220, X4 3.1)']);
+		expect(texts(zones([row]), zones([{ ...row, gr4j: null }]))).toEqual(['Calibration zones: gauge node H (X1 900, X2 0, X3 220, X4 3.1) → gauge node H (the catchment’s parameters)']);
 	});
 
 	it('describes a change of the CHIRPS bias correction', () => {

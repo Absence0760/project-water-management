@@ -3468,7 +3468,7 @@ farm whose area differed from its high + low MAP areas by more than 1 % was
 warned about once (audit W3, review F7, `areaMismatches`, §2.10a). Engine
 1.105.0 retired the methods, `settings.hiLoSplit` and the node fields
 `areaHiKm2`, `areaLoKm2` and `flowShareManual` (`RETIRED_SETTINGS_KEYS`,
-`RETIRED_NODE_FIELDS`; ignored when read). Migration 264 strips the method
+`RETIRED_NODE_FIELDS`; ignored when read). Migration 266 strips the method
 and split from stored projects and writes one History event
 (`settings.flow_share_reset`) per project that had a Hi/Lo or Specific
 method or any high-, low-MAP or specific value, listing what it held; the
@@ -3690,7 +3690,7 @@ where `MAR_f` is the unit's natural runoff summed over the **MAR period**.
   (`'flowShare'`, the default, or `'naturalMar'`, which applied only under
   Per unit). From 1.105.0 a stored or patched value is ignored (engine and
   API `mergeSettings`, `RETIRED_SETTINGS_KEYS`), the API drops it from a
-  patch, migration 263 strips it from stored projects, a scenario's
+  patch, migration 265 strips it from stored projects, a scenario's
   `settings.set ewrSplit` is refused with a reason to delete it
   ([scenarios.md](./scenarios.md)), and the run comparison lists it as
   removed ([run-comparison.md](./run-comparison.md)). An older run's summary
@@ -10580,7 +10580,9 @@ that never sets it fits exactly as before.
   The fitted parameters are still the catchment's GR4J parameters: one runoff
   model runs for the whole catchment and the unit shares (§2.5) route it to
   each node, so a fit at a gauge assumes the sub-catchment above it responds
-  as the whole catchment does.
+  as the whole catchment does. Under Per unit flow generation, calibration
+  zones (§2.10n, engine 1.106.0) give the units above a gauge parameters of
+  their own instead, fitted there, and the outlet the rest.
 - **No gauged range and no gap filling.** `settings.qualityFlags.ratings` and
   `settings.flowGapFill` are the outlet records' settings, so a gauge's record
   has neither: no day of it is flagged extrapolated or censored, and none is
@@ -10679,6 +10681,117 @@ outside the calibration exclusions, whatever the calibration site. A rule
 table's monthly requirement is not used here, as at the outlet. A project
 without such a site has no key. The summary CSV writes each site's table
 after the outlet's.
+
+### 2.10n Calibration zones: calibrating at several gauges (engine 1.106.0, issue #555)
+
+Not in the workbook. §2.10k fits the catchment's one GR4J parameter set at
+one site. Under Per unit flow generation (§2.4h) each land unit runs its own
+GR4J, so a gauge inside the network with a long enough record can calibrate
+**the units upstream of it on its own record**, and the outlet the rest.
+
+**The setting.** `settings.calibrationZones` (`CalibrationZone` in
+`packages/engine/src/calibrate/zones.ts`): one row per gauge, `{ nodeId,
+enabled, calibrationStart, calibrationEnd, calibrationFlowKind,
+calibrationExclusions, qualityFlags, gr4j, fitRecord }`. `enabled` is the
+row's *Calibrate here* tick; `qualityFlags` is `{ suspect, zeroFlowMonths? }`
+or null for the catchment's (a gauge's record has no gauged range or gap fill,
+§2.10k, so those flags don't apply); `gr4j` is the zone's X1–X4 (each inside
+the bounds calibration searches) or null, not fitted yet. The **calibration
+site's own zone** (the outlet's, or *Scored at*'s gauge, §2.10k) keeps the
+settings it always had: `calibrationSiteNodeId`, the calibration window,
+`calibrationFlowKind`, `calibrationExclusions`, `qualityFlags`, `gr4j` and
+`fitRecord`. Absent, `[]` (what migration 270 stored in every project) or no
+ticked row is exactly every engine before: one parameter set, to the bit (an
+invariant test runs and fits every example catchment both ways under both
+methods, `backend/src/model/examples.zones.test.ts`).
+
+**The zones.** A ticked row is usable when its node is a gauge inside the
+network (not the outlet), is not the calibration site and is not below it
+(on the site's path to the outlet); an unusable ticked row warns
+(`Calibration zone: …`) and is left out. Each land unit (a farm with an area,
+§2.4h) belongs to the **first usable ticked gauge on its path downstream**
+(the unit itself excluded); a unit that reaches none is in the site's zone.
+So a ticked gauge's zone is the land units draining to it that aren't in a
+ticked zone further upstream, unticking a gauge merges its units into the
+next ticked gauge downstream, and the site's zone is the rest. Each unit runs
+GR4J with its zone's X1–X4 (the row's `gr4j`, else, with a warning that the
+zone has no parameters of its own yet, the catchment's `gr4j`); the warm-up
+(`gr4j.warmupDays`), PE and forcing are the catchment's, as under §2.4h. The
+groundwater exchange series is written when the catchment's X2, or that of
+any zone with land units, is not 0. `summary.runoff.params` stays the
+calibration site's zone's parameters (the catchment's stores are the units'
+area-weighted means, so the run's runoff self-check caps the production store
+at the units' area-weighted X1); each zone's are in `summary.unitRain.zones`.
+While the report, the evidence pack, the uncertainty ensemble and automated
+calibration don't yet read the zones, every run that applies one warns that
+they show or vary only the site's parameters (`Calibration zones: N land
+units ran on …`).
+
+**Only under Per unit.** Under Fragmentation one GR4J runs for the whole
+catchment (§2.5), so zones can't have their own parameters: ticked rows warn
+(`Calibration zones: … need Per unit flow generation`) and the run is the
+one-parameter-set run. Fragmentation's share runs (§2.5b) keep the
+catchment's parameters.
+
+**The run summary.** `summary.unitRain.zones` (only when zones applied):
+each usable zone upstream first, then the site's own zone (`nodeId` null),
+each `{ nodeId, name, units, params, fitted }`. The run comparison lists a
+change of the ticked rows' parameters (*Calibration zones*; a window, a fit
+record or an unticked row is no change).
+
+**The stepwise fit** (`calibrate/stepwise.ts` `calibrateStepwise`). Zones are
+fitted in network order, **upstream first**: a zone with more ticked gauges
+below it comes first (so one whose gauge drains through another ticked gauge
+is always before it), then by name, then id, and the site's own zone is
+last. Each step is a whole
+`calibrate()` (§2.10b) with the same objective, bounds, budget, starts, seed
+and validation:
+
+1. A zone step (`CalibrateOptions.zone`) fits **only that zone's units'**
+   parameters: every other unit keeps its zone's. It scores the zone's gauge
+   (its record against the gauge's simulated outflow, as §2.10k scores a
+   gauge site), on the row's window, exclusions, record and quality flags
+   (`zoneCalibrationSettings`). Only the units above the gauge and the dams,
+   abstractions, transfers and losses above it reach the score; units below
+   or beside it can't move it. The WR2012 MAR penalty is off for a zone step
+   (it targets the whole catchment's natural MAR).
+2. Its fitted parameters are then fixed for every step below it, so its
+   simulated outflow is routed down with them.
+3. The site's own zone is fitted last, on the site's settings, with every
+   zone above it at its fitted parameters.
+
+Each step has its own scores, split-sample and dry → wet tests, notes and fit
+record (`FitRecord.zone`: `{ nodeId, units }`, `nodeId` null for the site's
+zone). The steps are applied as one result (`applyStepwise`): the site's
+zone's parameters and fit record into `gr4j` and `fitRecord`, each zone's into
+its row. A cancelled step stops the fit and nothing is applied. With no
+ticked zone the stepwise fit is one step, `calibrate()` itself.
+
+While a zone above the site is being fitted, the units below it run on their
+current parameters (not yet refitted), and the units' natural MAR shares
+(§2.5b) follow every unit's runoff, so a zone's step score can differ from
+a run made after every step is applied wherever something above the gauge
+reads the units' shares or the whole catchment's natural flow (an EWR charge,
+curtailment, a hands-off flow, the senior users' claims, land cover's
+low-flow threshold).
+
+**Refusals and warnings.** The fit refuses when a ticked zone has no land
+unit above its gauge, when every land unit is in a zone above the site, or
+when the site is a gauge inside the network and none of its own zone's units
+drains through it (they all join the river beside it, so its step's score
+couldn't move with the parameters it fits) (`zoneFitError`). Each step under zones notes when its record has fewer than
+2 complete water years (95 % of a water year's days observed, outside the
+exclusions) or no dry → wet test (no dry year to fit on), the representativeness
+and dry → wet notes beside it (`zoneCoverageNotes`). The API refuses a new
+row whose gauge isn't a gauge inside the network with a flow record, a
+gauge listed twice, and a ticked row that is the site or below it (api.md §
+Projects).
+
+**Not yet** (issue #555's next round, docs/followups.md): the zones on the
+Network tab and the Map, calibration statistics per ticked site in a run, the
+report's and evidence pack's per-zone lines, a per-zone run comparison, and
+automated calibration and the uncertainty ensemble per zone (both still fit
+or perturb the site's zone's parameters alone).
 
 ### 2.10l Modelled vs observed dam area (app, issue #604 R5-B)
 

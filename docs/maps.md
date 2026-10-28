@@ -771,7 +771,9 @@ when there are none. The checks are pure and in the browser
 thresholds named constants there:
 
 - **Units with no parcel**: a hydrological unit (farm node) that no farm
-  parcel is linked to.
+  parcel is linked to, and whose area came from no polygon on the map (an
+  *other* area a unit's area was taken from is its outline, as for the
+  per-unit proposals, issue #646 F1).
 - **Outside the boundary** (only with a boundary): a parcel, dam, point or
   line with any vertex outside the catchment boundary (a hole in it counts as
   outside). A vertex within `OUTSIDE_TOLERANCE_M` (10 m) of the boundary's
@@ -1011,11 +1013,17 @@ unit, averaged over the unit's own polygon, so that under
 ([model.md §2.4h](./model.md)).
 
 - **Which units.** Land units only: farm nodes with an area above 0 (gauges
-  and water users have no land and are never listed). A unit's polygon is its
-  farm parcel on the map: the parcel its area was accepted from
-  (`node.area_feature_id`, which Start from the map and Sub-catchments set
-  for every unit they save), else its only parcel. A unit with no parcel is
-  listed as without a polygon; one with several and none accepted is
+  and water users have no land and are never listed). **A unit's polygon**
+  (one rule for every per-unit proposal and the reference cell,
+  `geo/unitPolygon.ts`, issue #646 F1): the area feature its area was
+  accepted from (`node.area_feature_id`, which Start from the map, Divide and
+  Use this area set), of either area kind, a farm parcel or an *other* area
+  (as Sub-catchments from clicks saves its pieces and Start links them as
+  units' boundaries), linked to the unit or not, while it is a polygon; else
+  its only linked farm parcel. An *other* area alone (linked, but its area
+  not taken) is no unit's outline. Until #646 only farm parcels counted, so
+  units started from other areas had no polygon here. A unit with no polygon
+  is listed as without one; one with several parcels and none accepted is
   refused until one parcel's area is used for it.
 - **The proposal** (`GET /projects/:id/feeds/chirps/from-units`, editor): per
   unit, its parcel, area and cells (latitude, longitude, share inside,
@@ -1413,7 +1421,9 @@ to a point on a river. The design, the method and its accuracy are in
   running, or waiting in another catchment, is refused (429). Locally the
   worker runs only with `pnpm dev:full` (or `pnpm dev:jobs:tick` once);
   under plain `pnpm dev` the sheet waits. Still at the edge at 6 144 cells
-  is refused, never cut off.
+  is refused, never cut off. Start from the map and Divide hand a plan too
+  large for the request to the same job and share the one-per-editor slot
+  ([§ Start from the map](#start-from-the-map), #646 item 3).
 - **The proposal** is drawn dashed in teal over the features, with its
   outlet, until it is decided; the sheet lists its area, the snap distance,
   the cells, what drains into pans and the effective area (below), the
@@ -1762,10 +1772,41 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   gauge in the network*; any of them *not in the model*; the outlet is a
   gauge or the boundary's own), the proposal (each value ticked on its own:
   the unit's area, what it drains into, the rest of the catchment as a
-  unit), and data and the first run (the existing proposals, linked in
-  order: rain from the boundary, the nearest gauging station, evaporation,
-  each unit's composite dam to enter, land cover, then Runs). Typing the
-  model in on the Network stays the other way; upload works at every step.
+  unit), and data and the first run (below). The points step makes units'
+  boundaries too: **Draw a unit's boundary** (an *other* area) and
+  **Sub-catchments, one per click** (with a DEM) sit beside Place a point,
+  and the sheet comes back once the area or the pieces are saved (#646
+  F13). Typing the model in on the Network stays the other way; upload
+  works at every step.
+- **Data and the first run: a to-do list** (issue #646 item 2, the
+  hydrologist's review F2–F4; `startData.ts`). Every data proposal a run
+  needs, in the order a run reads them: the units' areas and order, how
+  natural flow is made, rain from the boundary, the catchment's MAP, rain
+  for each unit, MAP for each unit, evaporation (the A-pan, and Evaporation
+  from the map), the WR2012 check, observed flow (its link opens Data
+  feeds on a DWS gauge with the nearest gauging stations proposed,
+  `?feed=dws`), each unit's composite dam, the cultivated area, then **Run
+  the model**. Each line has a status worked out from what the project
+  holds now, never a stored tick: Done, Started (done for some units),
+  To do, or Checking while it is read (a unit's rain is a CHIRPS feed with
+  that unit's mark; its MAP `mapMm`; observed flow an outlet record, or a
+  DWS feed waiting for its first fetch; a composite dam a volume above 0 on
+  each unit a dam on the map is part of; a run any run). The next one a run
+  needs is marked; the catchment's MAP, the WR2012 check, the cultivated
+  area and the units' areas are optional (a stand-in or a check). The list
+  outlives the sheet: once it is closed, the Map's **Getting started** pill
+  shows the same items, each with its link, and links back to the data
+  step, until every item a run needs is done. An editor's lines say the
+  feeds are an owner's to set up.
+- **Each unit's rain and MAP, together** (`StartUnitsData.svelte`,
+  `unitsData.ts`): under the list, one table with a row per land unit, its
+  MAP from the MAP grid and its own CHIRPS feed over its boundary, each with
+  its source and its own tick, unticked until the editor ticks it or
+  presses **Tick all**. **Apply the ticked values** asks first, then sends
+  the ticked units to MAP for each unit's and Rain for each unit's own
+  POSTs (`nodeIds`), each recorded as it is when used on its own page: the
+  server re-derives every value, refuses a mix of grids, and only an owner
+  can create feeds (an editor sees them without a tick).
 - **Units follow your boundaries** (`start-16`, #523 C1; the
   hydrologist's answer on #90, "Abstraction points from Start from the map /
   Divide"). Each hydrological unit is a boundary you put on the map (drawn,
@@ -1805,7 +1846,19 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   catchment. Beside the units' boundaries the rest of the catchment is the
   catchment (the boundary's area, else the elevation model's) less theirs,
   never below 0, with no outline of its own: its area goes in typed, with
-  no parcel. A gauge on a unit's outflow cell is put one cell further down,
+  no parcel. **Where the rest drains** (`start-17`, #646 item 3, the
+  hydrologist's review F10): it is the catchment's cells that no unit's
+  boundary holds (an undrawn headwater, typically), and it drains into the
+  first unit, water user or gauge its flow path meets, from where most of
+  its area drains, proposed as a tick on its card ("Drains into Middle");
+  the outflow gauge only when nothing lies below it. Before `start-17` it
+  always drained straight into the outflow, which bypassed the units below
+  an undrawn headwater: their upstream inflow missed its runoff (in the
+  review's illustration, 80 km² of headwater above a 40 km² unit and an
+  80 km² unit at the outlet left the lower unit's river pump a third of
+  its inflow), while the catchment's total at the outflow, unchanged, hid
+  it. When under 90 % of a rest larger than 1 % of the catchment drains
+  that way, a warning says the rest of it reaches other units first. A gauge on a unit's outflow cell is put one cell further down,
   so the unit drains into it. With no unit boundary at all the rest is the
   outlet's own piece, as before; the rest of this bullet is how every area
   was made before `start-16`, and how that rest's still is. **Every area comes from the cells** (`start-6`): each cell's own
@@ -1902,7 +1955,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   the method counts them ("1 point at a dam polygon’s outflow (1 marked
   off-channel)", with the rule) only when one is marked; an unmarked dam is
   placed exactly as before, so marking dams didn't bump the method
-  version (it was `start-14` then; `start-16` today). A
+  version (it was `start-14` then; `start-17` today). A
   delineated outlet (a boundary from Delineate) stays on its own cell, where
   Delineate put it. Each card says where its point went ("On the nearest
   terrain channel, 42 m from the point."), and the method names only the
@@ -1914,7 +1967,34 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Without a DEM** (`DEM_URL` empty): each unit has its boundary's area
   and drains into the outflow gauge (the order is set on the Network); the
   rest of the catchment is the boundary less the units' boundaries (the
-  whole boundary, saved as its parcel, with none).
+  whole boundary, saved as its parcel, with none), and drains into the
+  outflow gauge too, a warning saying so ("… until you set the order on the
+  Network: without routing, nothing says where it lies.").
+- **Too large to route within the request** (#646 item 3, the
+  hydrologist's review F11; `272_plan_request`, `delineation/planRequests.ts`,
+  `jobs/handlers/delineate-plan.ts`): routing that still reaches the edge
+  of the request's 3 072-cell window (about 100 km at zoom 11), or would
+  pass its 20 s, no longer refuses the Start. Since `start-16` each unit's
+  area is its own boundary's and the elevation model only orders and checks
+  them, so the server answers at once with the plan a server without a DEM
+  makes from the same map (each unit its boundary's area, no order, the rest
+  the boundary less the units), its first warning saying what wasn't
+  checked ("The catchment is too large to route on the elevation model
+  within a request, so the order wasn’t proposed and no unit’s area was
+  checked against it. …"). It also hands the plan to the background
+  worker, the same `delineate` job as a large click
+  ([§ Delineation](#delineation)), which routes it with windows up to
+  6 144 cells (about 200 km) and proposes the routed plan, with the order
+  and the checks, in place of the quick one while it is still open; the
+  sheet says so while it waits. Applied or discarded first, the quick one
+  stands and the routed one is never stored. **Locally with `pnpm dev`**
+  (no worker running; `JOB_TRANSPORT` defaults to `inprocess`, whose worker
+  starts only with `pnpm dev:full`) the quick plan is what you get; with
+  `pnpm dev:full`, and in production, the routed one follows a minute or
+  two later. A catchment past the worker's 6 144 cells too is refused
+  there, the quick plan standing. **Divide** has no plan without a DEM, so
+  a division too large for the request goes to the worker the same way
+  (`202`), and its sheet waits for it; locally without a worker it waits.
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes; each ticked unit's
   area its own boundary, linked to it as **Use this area** links one
@@ -1955,13 +2035,16 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   against the elevation model) and what it drains into, **beside the node's
   value now**, each taken only when ticked, and the rest of the catchment
   (beside the boundaries, the catchment less them, typed) to a unit, a new
-  unit or nobody. A ticked value that changed since the proposal, or a
+  unit (draining, when ticked, into the point its flow path meets first,
+  `start-17`) or nobody. A ticked value that changed since the proposal, or a
   boundary redrawn since, is refused (409), never overwritten unseen;
   dividing again redraws in place the rest's parcel an earlier division made
   ([design/start-from-map.md § Dividing a model that has
   nodes](./design/start-from-map.md#dividing-a-model-that-has-nodes)).
-- **Limits.** The same as Delineation's: about 100 km across, 30 proposals a
-  project an hour (starts and divisions together), the 20 s budget.
+- **Limits.** The same as Delineation's: about 100 km across in the
+  request, about 200 km on the worker (above), 30 proposals a project an
+  hour (starts and divisions together), the 20 s budget, one waiting or
+  running background delineation or plan per account.
 
 ## Sub-catchments from clicks
 
@@ -2182,7 +2265,14 @@ the unit's name on Crops & demand, the Network, the Summary, Supply or Dams;
 [ui.md § Farm drawer](./ui.md#farm-drawer)) summarises, for one hydrological unit, the
 area a land-cover map shows as cropland inside each **farm parcel** on the map
 linked to that unit, the parcels' sum, and the catchment boundary's for
-reference. The modeller picks an area (all the unit's parcels, or one
+reference. A unit with no linked parcel is summed over its area feature
+instead, the polygon its area came from (an *other* area as Sub-catchments
+from clicks and Start leave a unit's boundary; issue #646 F1,
+`geo/unitPolygon.ts`): its whole sub-catchment's cropland. A unit with
+parcels of its own keeps theirs, since its boundary holds them and summing
+both would count them twice. One polygon picked on its own may be any of them, the area
+feature included, so the boundary's cropland can still be used beside the
+parcels. The modeller picks an area (all the unit's parcels, or one
 parcel) and a crop, and **Use** sets that crop's planted area on the unit to
 it.
 
@@ -2675,10 +2765,11 @@ grid](#map-grid)), proposed beside what its form holds, and written to the
 units' `mapMm` / `mapSource` only when an editor uses it.
 
 - **Which units and polygons.** Land units only (farm nodes with an area
-  above 0), each over its farm parcel as for its rain ([§ Rain for each
-  unit](#rain-for-each-unit)): the parcel its area came from, else its only
-  one. A unit with no parcel is listed as without one; one with several and
-  none its area is refused until one is chosen.
+  above 0), each over its polygon as for its rain ([§ Rain for each
+  unit](#rain-for-each-unit)): the area feature its area came from (a parcel
+  or an *other* area, issue #646 F1), else its only parcel. A unit with no
+  polygon is listed as without one; one with several parcels and none its
+  area is refused until one is chosen.
 - **The mean.** Over the grid cells the parcel touches, each weighted by the
   share of the cell inside it (exact clipped overlap, `gridShares.ts`) × the
   cell's area on the ellipsoid (which carries the cos latitude), as the

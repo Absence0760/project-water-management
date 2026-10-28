@@ -18,6 +18,8 @@ import {
 	proposeBody,
 	startStep,
 	tickAll,
+	restDrainsIntoName,
+	restOffersDrainsInto,
 	unitOffers
 } from './startFlow';
 
@@ -171,7 +173,7 @@ describe('the ticks', () => {
 	it('open with every value unticked and the proposed names', () => {
 		const t = initialTicks(p);
 		expect(t.units.every((u) => !u.area && !u.drainsInto && !u.runoffToDam)).toBe(true);
-		expect(t.rest).toEqual({ include: false, name: 'Rest of the catchment', area: false });
+		expect(t.rest).toEqual({ include: false, name: 'Rest of the catchment', area: false, drainsInto: false });
 		expect(t.outletName).toBe('Outflow gauge');
 	});
 
@@ -195,6 +197,29 @@ describe('the ticks', () => {
 		expect(tickAll(beside, initialTicks(beside)).rest).toMatchObject({ include: true, area: true });
 		const none = plan([unit('a')], { rest: { name: 'Rest of the catchment', areaM2: null, geometry: null } });
 		expect(tickAll(none, initialTicks(none)).rest).toMatchObject({ include: true, area: false });
+	});
+
+	it('offers the rest’s drains-into only when the routing proposed a unit (start-17, F10), and sends it only with the rest', () => {
+		const into = plan([unit('mid'), unit('low')], { rest: { name: 'Rest of the catchment', areaM2: 2e6, geometry: null, drainsInto: 'mid', drainsIntoProposed: true } });
+		expect(restOffersDrainsInto(into)).toBe(true);
+		const t = tickAll(into, initialTicks(into));
+		expect(t.rest).toMatchObject({ include: true, area: true, drainsInto: true });
+		t.units[0]!.name = 'Middle';
+		expect(restDrainsIntoName(into, t)).toBe('Middle');
+		expect(applyTicks(t).rest).toMatchObject({ include: true, drainsInto: true });
+		expect(applySummary(t)).toMatch(/and 3 drains-into from the proposal/);
+		// Left out of the model, its order isn't sent.
+		expect(applyTicks({ ...t, rest: { ...t.rest, include: false } }).rest).not.toHaveProperty('drainsInto');
+		// To the outflow (nothing below it), without a DEM, or before start-17: nothing to tick.
+		for (const rest of [
+			{ name: 'R', areaM2: 1, geometry: null, drainsInto: null, drainsIntoProposed: false },
+			{ name: 'R', areaM2: 1, geometry: null },
+			{ name: 'R', areaM2: 1, geometry: null, drainsInto: 'mid' }
+		]) {
+			const q = plan([unit('mid')], { rest });
+			expect(restOffersDrainsInto(q)).toBe(false);
+			expect(tickAll(q, initialTicks(q)).rest.drainsInto).toBe(false);
+		}
 	});
 
 	it('names what each unit drains into by the names as typed', () => {

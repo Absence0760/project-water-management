@@ -318,13 +318,15 @@ describe('the figures, and where they come from', () => {
 			(await admin.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: RAIN_START, values: [...current.values, ...new Array(10).fill(1)] })).status
 		).toBe(200);
 		const today = utcToday();
+		// Scheduled just now, as a feed with an attempt was: with no last_scheduled_at a feed is due at once, and a later
+		// file's tick (jobs.db.test.ts's) queued its fetch, which that file then left pending in the shared queue.
 		for (const [failures, dataDate] of [
 			[0, today],
 			[3, null]
 		] as const) {
 			await asOwner(
-				`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, acting_user_id, created_by, last_attempt_at, last_success_at, last_data_date, consecutive_failures)
-				 VALUES ($1, 'dws', '{"station":"X0H000"}', 'flow_observed_m3s', $5, $2, $2, now(), CASE WHEN $3::int = 0 THEN now() END, $4::date, $3)`,
+				`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, acting_user_id, created_by, last_scheduled_at, last_attempt_at, last_success_at, last_data_date, consecutive_failures)
+				 VALUES ($1, 'dws', '{"station":"X0H000"}', 'flow_observed_m3s', $5, $2, $2, now(), now(), CASE WHEN $3::int = 0 THEN now() END, $4::date, $3)`,
 				[pid, admin.id, failures, dataDate, `gauge ${failures}`]
 			);
 		}

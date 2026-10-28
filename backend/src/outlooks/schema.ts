@@ -28,7 +28,7 @@ export const OUTLOOK_JOBS_PER_USER = 2;
 export const OUTLOOKS_KEPT = 20;
 
 /**
- * How the analogue years are used (265_outlook_method CHECK): `esp` every
+ * How the analogue years are used (267_outlook_method CHECK): `esp` every
  * year alike; `climateState` also the years nearest this season's ENSO and
  * SAM state (issue #620). A forecast-conditioned method (C3S, issue #620
  * steps 5–7) would be a third value.

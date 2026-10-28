@@ -133,9 +133,21 @@ describe('outlookRequest', () => {
 
 describe('ClimateAnalogues markup', () => {
 	const html = (r: OutlookResult) => render(ClimateAnalogues, { props: { view: buildClimateView(r)! } }).body;
-	// Tags and comments out, every run of white space (the numbers' no-break spaces too) one space.
+	// Tags and comments out, every run of white space (the numbers' no-break spaces too) one space. The comments (Svelte's
+	// hydration markers) go by splitting at each opener and keeping what follows its closer: a reader of our own markup,
+	// not a sanitizer, so nothing is left half-removed for a replace to miss.
 	const sp = (s: string) => s.replace(/\s+/g, ' ');
-	const text = (h: string) => sp(h.replace(/<!--[^]*?-->/g, '').replace(/<[^>]+>/g, ' '));
+	const uncomment = (h: string) =>
+		h
+			.split('<!--')
+			.map((part, i) => {
+				if (i === 0) return part;
+				const end = part.indexOf('-->');
+				if (end < 0) throw new Error('an unclosed comment in the rendered markup');
+				return part.slice(end + 3);
+			})
+			.join('');
+	const text = (h: string) => sp(uncomment(h).replace(/<[^>]+>/g, ' '));
 
 	it('shows the state, the table beside every year, the years chosen with their ONI and AAO, and the source', () => {
 		const r = result();

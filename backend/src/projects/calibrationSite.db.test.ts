@@ -101,3 +101,73 @@ describe('settings.calibrationSiteNodeId', () => {
 		expect((await u.call('GET', `/projects/${cid}`)).body.project.settings.calibrationSiteNodeId).toBe(weir.id);
 	});
 });
+
+const zoneRow = (nodeId: string, over: Record<string, unknown> = {}) => ({
+	nodeId,
+	enabled: true,
+	calibrationStart: null,
+	calibrationEnd: null,
+	calibrationFlowKind: null,
+	calibrationExclusions: [],
+	qualityFlags: null,
+	gr4j: { x1: 900, x2: 0, x3: 220, x4: 3.1 },
+	fitRecord: null,
+	...over
+});
+const zones = (calibrationZones: unknown[], extra: Record<string, unknown> = {}) => ({ settings: { calibrationZones, ...extra } });
+
+describe('settings.calibrationZones (engine 1.106.0, issue #555)', () => {
+	it('an editor ticks a gauge with a record; a viewer reads it but cannot change it; it reaches the model input', async () => {
+		const owner = await signUp('CalZoneOwner');
+		const viewer = await signUp('CalZoneViewer');
+		const p = await gauged(owner, 'Calibration zones');
+		expect((await owner.call('POST', `/projects/${p.id}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+		const set = await owner.call('PATCH', `/projects/${p.id}`, zones([zoneRow(p.upper.id)]));
+		expect(set.status, JSON.stringify(set.body)).toBe(200);
+		expect(set.body.project.settings.calibrationZones).toEqual([zoneRow(p.upper.id)]);
+		// Positive control: the viewer reads it.
+		expect((await viewer.call('GET', `/projects/${p.id}`)).body.project.settings.calibrationZones).toEqual([zoneRow(p.upper.id)]);
+		expect((await viewer.call('PATCH', `/projects/${p.id}`, zones([]))).status).toBe(403);
+		const input = await withUser(owner.id, (db) => loadModelInput(db, p.id));
+		expect((input.settings.calibrationZones as { nodeId: string }[])[0]!.nodeId).toBe(p.upper.id);
+		// Unticked, the row and its settings stay; [] clears it.
+		const off = await owner.call('PATCH', `/projects/${p.id}`, zones([zoneRow(p.upper.id, { enabled: false })]));
+		expect(off.body.project.settings.calibrationZones[0].enabled).toBe(false);
+		expect((await owner.call('PATCH', `/projects/${p.id}`, zones([]))).body.project.settings.calibrationZones).toEqual([]);
+	});
+
+	it('refuses a farm, the outlet, a gauge with no record, another project’s node, the site itself and a repeat, storing nothing', async () => {
+		const u = await signUp('CalZoneBad');
+		const p = await gauged(u, 'Bad zones');
+		const other = await gauged(u, 'Other zones');
+		for (const [body, why] of [
+			[zones([zoneRow(p.farm.id)]), 'calibrationZones: the site is the outlet (null) or a gauge above it'],
+			[zones([zoneRow(p.outlet.id)]), 'calibrationZones: the site is the outlet (null) or a gauge above it'],
+			[zones([zoneRow(p.bare.id)]), 'calibrationZones: that gauge has no observed flow record attached'],
+			[zones([zoneRow(other.upper.id)]), 'calibrationZones: no such hydrological unit in this project'],
+			[zones([zoneRow(p.upper.id)], { calibrationSiteNodeId: p.upper.id }), 'calibrationZones: calibration zone: "Upper weir" is the calibration site (Scored at), whose zone is the rest of the catchment']
+		] as const) {
+			const res = await u.call('PATCH', `/projects/${p.id}`, body);
+			expect(res.status, why).toBe(400);
+			expect(res.body.error).toBe(why);
+		}
+		expect((await u.call('PATCH', `/projects/${p.id}`, zones([zoneRow(p.upper.id), zoneRow(p.upper.id, { enabled: false })]))).status).toBe(400);
+		const s = (await u.call('GET', `/projects/${p.id}`)).body.project.settings;
+		expect(s.calibrationZones ?? []).toEqual([]);
+		expect(s.calibrationSiteNodeId).toBeNull();
+		// A stored zone then blocks moving the site onto its gauge.
+		expect((await u.call('PATCH', `/projects/${p.id}`, zones([zoneRow(p.upper.id)]))).status).toBe(200);
+		expect((await u.call('PATCH', `/projects/${p.id}`, site(p.upper.id))).status).toBe(400);
+	});
+
+	it('a copy moves each row to the copied gauge', async () => {
+		const u = await signUp('CalZoneCopy');
+		const p = await gauged(u, 'Zones to copy');
+		expect((await u.call('PATCH', `/projects/${p.id}`, zones([zoneRow(p.upper.id)]))).status).toBe(200);
+		const copy = await u.call('POST', `/projects/${p.id}/copy`, { name: 'Copied zones' });
+		expect(copy.status, JSON.stringify(copy.body)).toBe(201);
+		const cid = copy.body.project.id as string;
+		const weir = ((await u.call('GET', `/projects/${cid}/model`)).body.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper weir')!;
+		expect((await u.call('GET', `/projects/${cid}`)).body.project.settings.calibrationZones[0].nodeId).toBe(weir.id);
+	});
+});

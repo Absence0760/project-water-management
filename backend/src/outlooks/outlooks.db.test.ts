@@ -5,7 +5,7 @@
 // result, a level whose ops don't apply, RLS (with a positive control),
 // write-once members and outcomes, the per-user limit, the project's cap,
 // and the job failing closed when its user lost the editor role. The
-// climate-state method (265_outlook_method, issue #620): the ESP part the
+// climate-state method (267_outlook_method, issue #620): the ESP part the
 // same to the bit, the years chosen from the committed synthetic copy of the
 // ONI and AAO, why none are chosen on a short record, and RLS on it.
 //

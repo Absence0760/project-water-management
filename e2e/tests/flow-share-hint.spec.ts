@@ -2,8 +2,9 @@
 // Model settings, § Data; docs/model.md §2.4h, §2.5). On the sample
 // model and its catchment rain series (synthetic):
 // - Settings → Model selection for flow generation's flow-share line follows the method:
-//   Fragmentation, GR4J's one run's flow; Per unit, only the land cover's
-//   low-flow threshold (issue #553 round 3; the EWR by natural MAR, issue #615).
+//   Fragmentation, the units' shares split GR4J's one run's flow; Per unit,
+//   they don't split the flow (issue #553 round 3; one natural MAR share per
+//   unit, issues #615, #616).
 // - Units without a station reads the gauge's MAP from the catchment rain station:
 //   an older project's settings gaugeMapMm until the station has one, then
 //   the station's. Its link opens the series in Series details, where an
@@ -22,12 +23,12 @@ test('Model selection for flow generation’s flow share says what it splits, by
 	const share = page.locator('#set-share');
 	const hint = share.getByTestId('share-hint');
 	await expect(hint).toHaveAttribute('data-unit-rain', 'off');
-	await expect(hint).toHaveText('GR4J runs once on the catchment rain; the flow share splits its flow between units. To give each unit its own runoff, choose Per unit above.');
+	await expect(hint).toHaveText('GR4J runs once on the catchment rain, and the units’ shares split its flow between them. To give each unit its own runoff, choose Per unit above.');
 
 	// Per unit (unsaved is enough: the line reads the form), it says the flow is no longer split.
 	await share.getByRole('radio', { name: 'Per unit' }).check();
 	await expect(hint).toHaveAttribute('data-unit-rain', 'on');
-	await expect(hint).toHaveText('Each unit makes its own runoff; the flow share now splits only the land cover’s low-flow threshold between units, not the flow or the EWR.');
+	await expect(hint).toHaveText('Each unit makes its own runoff, so the shares don’t split the flow.');
 	await saveSettings(page);
 	await page.reload();
 	await expect(hint).toHaveAttribute('data-unit-rain', 'on');
