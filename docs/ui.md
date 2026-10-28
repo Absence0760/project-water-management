@@ -6208,9 +6208,30 @@ flow** (every flow record with its m³/day, and Excluded from calibration),
 each offered only when it would show something. The raw station and raw
 CHIRPS lines (help `preview.areaStationRaw`, `preview.areaChirpsRaw`) are in
 an area's own view only: in All they are stored series columns already
-(issue #619's recommendation). A unit with no station a run reads has no
-derived lines yet (issue #613 slice 2), so its view says so and shows the
-series stored at it. The view is in the URL while the dialog is open
+(issue #619's recommendation). A unit with no station, under per-unit rain
+(issue #613 slice 2), shows its own §2.4h chain instead (the engine's
+`unitAreaRain`, the run's `rain_unit` to the bit; `derivedRain.ts`
+`unitChainLines`): *<unit> own gauge (checked)* (its gauge after the
+catchment's checks and its unreliable periods), *Catchment gauge adjusted to
+<unit> (× k)* (the catchment rain × unit MAP ÷ gauge MAP, three decimals),
+*<unit> CHIRPS raw*, *<unit> CHIRPS levelled (…)* (the header says how: × its
+MAP factor, the §2.4b factors, the reference gauge's f(m) × k_unit, or raw),
+*<unit> rain used* and *<unit> rain used from* (own gauge, catchment gauge ×
+MAP ratio, own CHIRPS (levelled), catchment rain, forecast or no source),
+each only where its rule reads that link, then the series stored at it (its
+gauge as recorded). Above the table it says the rule in words, the MAP ratio
+with both MAPs, and how its CHIRPS is levelled (with the reference gauge's
+twelve factors when it reads them; `data-testid="preview-chain-rule"`). In
+All the same unit adds its derived links (all but the CHIRPS raw), as the
+Full CSV does (*own gauge, checked*, *catchment gauge × MAP ratio*, *CHIRPS
+levelled*, rain used and the day's link as the engine's code: unitGauge,
+gaugeMap, unitChirps, catchment, forecast or none; Compact its rain used),
+with a `#` line naming its rule and ratio (help `preview.areaOwnGauge`,
+`preview.areaGaugeScaled`, `preview.areaChirpsLevelled`). A unit whose lines
+couldn't be computed says why above the table in place of its derived
+columns (`data-testid="preview-area-error"`), and with per-unit rain off a
+unit without a station has no derived lines, so its view says so and shows
+the series stored at it. The view is in the URL while the dialog is open
 (`preview=<all|unit:<id>|stations|catchment|flow>`, written with `replace`), so
 a reload or a link opens the dialog on it; closing drops the parameter, and
 reopening in the same visit keeps the view. A row's own **Preview** switches

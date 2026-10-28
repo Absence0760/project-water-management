@@ -137,6 +137,9 @@ const PREVIEW_KEYS = [
 	...buildAreaColumns([{ nodeId: null, name: '', lines: { startDate: '2020-01-01', rainUsed: [], source: [], stationScaled: [], chirpsCorrected: [] } as never }]).map((c) => c.helpKey),
 	// A unit's own view (issue #613): every line, and the View select.
 	...areaViewColumns({ nodeId: 'u', name: 'U', lines: { startDate: '2020-01-01', rainUsed: [], source: [], stationRaw: [], stationScaled: [], chirpsRaw: [], chirpsCorrected: [], correctAgainst: 's', forcing: { stationId: 's', stationName: 'S', ratio: 1 } } as never }).map((c) => c.helpKey),
+	// A unit without a station (issue #613 slice 2): its §2.4h chain, every link present.
+	...buildAreaColumns([{ nodeId: 'u', name: 'U', lines: null, chain: { startDate: '2020-01-01', rule: 'unitGauge', rainUsed: [], source: [], ownGauge: [], gaugeScaled: [], chirpsRaw: [], chirpsLevelled: [], recipe: { gaugeMapFactor: 1, chirps: { source: 'raw' } } } as never }]).map((c) => c.helpKey),
+	'preview.areaChirpsRaw',
 	'preview.view'
 ];
 

@@ -2,12 +2,13 @@ import { defaultProjectSettings, SERIES_KINDS, type NetworkNode, type ProjectSet
 import { describe, expect, it } from 'vitest';
 import type { Daily } from './coverage';
 import { helpFor } from '#lib/help/content.js';
-import type { AreaRainLines } from './derivedRain';
+import type { AreaRainLines, UnitChainLines } from './derivedRain';
 import {
 	areaCell,
 	areaColumnId,
 	areaViewColumns,
 	buildAreaColumns,
+	chirpsLevelText,
 	buildPreviewColumns,
 	buildPreviewRows,
 	columnsForView,
@@ -540,5 +541,79 @@ describe('the View select’s views and their columns (issue #613)', () => {
 		expect(filterPreviewRows(rows, { query: '> 20', missingOnly: false, flaggedOnly: false, visibleSeriesIds }).map((r) => r.date)).toEqual(['2020-01-02']);
 		const flowIds = shownSeriesIds(columnsForView('flow', all, ctx));
 		expect(filterPreviewRows(rows, { query: '', missingOnly: true, flaggedOnly: false, visibleSeriesIds: flowIds }).map((r) => r.date)).toEqual(['2020-01-01']);
+	});
+});
+
+describe('a unit without a station: its §2.4h chain (issue #613 slice 2)', () => {
+	const chain = (over: Partial<UnitChainLines> = {}, recipe: Partial<UnitChainLines['recipe']> = {}): UnitChainLines =>
+		({
+			startDate: '2020-01-01',
+			nodeId: 'u2',
+			rule: 'unitGauge',
+			recipe: { nodeId: 'u2', rule: 'unitGauge', hasGauge: true, gaugeMapFactor: 1.4, gaugeMapOwnFactor: 1.4, gaugeMapClamped: false, gaugeMapOutsideBand: false, chirps: { source: 'map', factor: 1.2345 }, ...recipe },
+			mapMm: 700,
+			gaugeMapMm: 500,
+			rainUsed: [5, 2.4, 1.2, 0],
+			source: ['unitGauge', 'unitChirps', 'gaugeMap', 'none'],
+			ownGauge: [5, null, null, null],
+			gaugeScaled: [7, 1.4, 1.2, null],
+			chirpsRaw: [1, 2, null, null],
+			chirpsLevelled: [1.2, 2.4, null, null],
+			warnings: [],
+			...over
+		}) as UnitChainLines;
+	const list = [meta({ id: 'chu2', kind: 'rain_chirps_mm', name: 'CHIRPS Lower', siteNodeId: 'u2' }), meta({ id: 'gau2', kind: 'rain_catchment_mm', name: 'Lower gauge', siteNodeId: 'u2' })];
+	const areas = [{ nodeId: 'u2', name: 'Lower unit', lines: null, chain: chain() }];
+	const all = [...buildPreviewColumns(list), ...buildAreaColumns(areas)];
+
+	it('its view: own gauge (checked), the catchment gauge × its ratio, CHIRPS raw and levelled, rain used and its source, then the gauge stored at it', () => {
+		const cols = columnsForView('unit:u2', all, { list, areas });
+		expect(cols.map((c) => c.label)).toEqual([
+			'Lower unit own gauge (checked)',
+			'Catchment gauge adjusted to Lower unit (× 1.400)',
+			'Lower unit CHIRPS raw',
+			'Lower unit CHIRPS levelled (× 1.235 to its MAP)',
+			'Lower unit rain used',
+			'Lower unit rain used from',
+			// The stored gauge as recorded (its CHIRPS is the raw line already).
+			'Rainfall — catchment · Lower gauge'
+		]);
+		expect(cols.slice(0, 6).map((c) => c.id)).toEqual(['ownGauge', 'gaugeScaled', 'chirpsRaw', 'chirpsLevelled', 'rainUsed', 'source'].map((l) => `area:u2:${l}`));
+		expect(cols[2]!.seriesId).toBe('chu2');
+		for (const c of cols) expect(helpFor(c.helpKey), c.helpKey).toBeTruthy();
+	});
+
+	it('All has its derived links (the Full CSV’s), not the raw CHIRPS', () => {
+		expect(buildAreaColumns(areas).map((c) => c.label)).toEqual([
+			'Lower unit: own gauge (checked)',
+			'Lower unit: catchment gauge × MAP ratio',
+			'Lower unit: CHIRPS levelled',
+			'Lower unit: rain used',
+			'Lower unit: rain used from'
+		]);
+	});
+
+	it('only the links its rule reads: rule 3 has no gauge lines, rule 4 only the rain used and its source', () => {
+		const r3 = { nodeId: 'u2', name: 'Lower unit', lines: null, chain: chain({ rule: 'unitChirps', ownGauge: null, gaugeScaled: null }, { gaugeMapFactor: null }) };
+		expect(areaViewColumns(r3).map((c) => c.area!.line)).toEqual(['chirpsRaw', 'chirpsLevelled', 'rainUsed', 'source']);
+		const r4 = { nodeId: 'u2', name: 'Lower unit', lines: null, chain: chain({ rule: 'catchment', ownGauge: null, gaugeScaled: null, chirpsRaw: null, chirpsLevelled: null }, { gaugeMapFactor: null, chirps: null }) };
+		expect(areaViewColumns(r4).map((c) => c.label)).toEqual(['Lower unit rain used', 'Lower unit rain used from']);
+	});
+
+	it('reads each link by date, the source as the link in words', () => {
+		const l = chain();
+		expect(areaCell(l, 'ownGauge', '2020-01-01')).toBe(5);
+		expect(areaCell(l, 'gaugeScaled', '2020-01-03')).toBe(1.2);
+		expect(areaCell(l, 'chirpsLevelled', '2020-01-02')).toBe(2.4);
+		expect(areaCell(l, 'chirpsRaw', '2020-01-03')).toBeNull();
+		expect(['2020-01-01', '2020-01-02', '2020-01-03', '2020-01-04'].map((d) => areaCell(l, 'source', d))).toEqual(['own gauge', 'own CHIRPS (levelled)', 'catchment gauge × MAP ratio', 'no source (dry)']);
+		expect(areaCell(l, 'rainUsed', '2020-01-05')).toBeNull();
+	});
+
+	it('says how its CHIRPS is levelled', () => {
+		expect(chirpsLevelText(chain({}, { chirps: { source: 'bias' } }))).toBe('× the catchment’s monthly bias factors × 1.400');
+		expect(chirpsLevelText(chain({}, { gaugeMapFactor: null, chirps: { source: 'bias' } }))).toBe('× the catchment’s monthly bias factors');
+		expect(chirpsLevelText(chain({}, { chirps: { source: 'reference', factors: [], kUnit: { factor: 0.9 } } as never }))).toBe('× the reference gauge’s f(m) × k_unit 0.900');
+		expect(chirpsLevelText(chain({}, { chirps: { source: 'raw' } }))).toBe('raw: nothing to level it with');
 	});
 });

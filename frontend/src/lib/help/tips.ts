@@ -1830,6 +1830,30 @@ export const TIPS: HelpTipText[] = [
 		fields: ['preview.areaRainFrom']
 	},
 	{
+		id: 'preview-area-own-gauge',
+		term: 'Own gauge, checked (daily preview)',
+		short: 'A unit’s own rain gauge after the catchment’s checks and its unreliable periods, as a unit without a station reads it: derived when viewed.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaOwnGauge']
+	},
+	{
+		id: 'preview-area-gauge-scaled',
+		term: 'Catchment gauge × MAP ratio (daily preview)',
+		short: 'The catchment rain × the unit’s MAP ÷ the gauge’s MAP, as a unit without a station reads it: derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaGaugeScaled']
+	},
+	{
+		id: 'preview-area-chirps-levelled',
+		term: 'Unit CHIRPS levelled (daily preview)',
+		short: 'A unit’s own CHIRPS levelled as a run levels it (to its MAP, or by the bias or reference factors), for a unit without a station.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaChirpsLevelled']
+	},
+	{
 		id: 'wr90',
 		term: 'WR90 / WR2012',
 		short: 'The Water Resources of South Africa studies (1990, 2012): S-pan evaporation, MAP and naturalised flow per quaternary catchment.',

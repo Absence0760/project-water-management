@@ -30,7 +30,9 @@
 	// The View select (issue #613) picks the column set: All (every column, as
 	// before), one land unit (its station raw and adjusted, its CHIRPS raw and
 	// bias-corrected with the factors, its rain used and source, then the series
-	// stored at it), or a group (stations, the average catchment rainfall, flow).
+	// stored at it; a unit without a station under per-unit rain, its §2.4h
+	// chain instead: own gauge, catchment gauge × MAP ratio, CHIRPS raw and
+	// levelled, rain used and the link each day came from), or a group (stations, the average catchment rainfall, flow).
 	// The column checkboxes hide columns within the view. SeriesTab keeps the
 	// view in the URL (`preview=`) while the dialog is open.
 	import { rainCredits, type DailySeries, type NetworkNode, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
@@ -42,7 +44,12 @@
 	import type { Daily } from './coverage';
 	import {
 		areaCell,
+		areaData,
 		areaTitle,
+		chainOf,
+		CHAIN_RULE_TEXT,
+		chirpsLevelText,
+		stationLinesOf,
 		buildAreaColumns,
 		buildPreviewColumns,
 		buildPreviewRows,
@@ -136,7 +143,7 @@
 			if (ask === areasAsk) areasLoading = false;
 		}
 	}
-	const areaLines = $derived(new Map((areas ?? []).map((a) => [a.nodeId, a.lines])));
+	const areaLines = $derived(new Map((areas ?? []).map((a) => [a.nodeId, areaData(a)])));
 	const areasFailed = $derived((areas ?? []).filter((a) => a.error));
 
 	const columns = $derived([...buildPreviewColumns(list), ...buildAreaColumns(areas ?? [])]);
@@ -385,9 +392,32 @@
 		</div>
 
 		{#if viewArea && !areasLoading && !areasError}
-			{@const lines = viewArea.found?.lines ?? null}
+			{@const lines = stationLinesOf(viewArea.found?.lines)}
+			{@const chain = chainOf(viewArea.found?.chain)}
 			<div class="factors" data-testid="preview-factors">
-				{#if lines}
+				{#if viewArea.found?.error}
+					<p data-testid="preview-area-error">Couldn’t compute {viewArea.name}’s rain: {viewArea.found.error}. Its derived columns are left out; the series stored for it are shown.</p>
+				{:else if chain}
+					{@const r = chain.recipe}
+					<p data-testid="preview-chain-rule">{viewArea.name} has no rainfall station: under per-unit rain a run reads {CHAIN_RULE_TEXT[chain.rule]} (§2.4h).</p>
+					{#if r.gaugeMapFactor !== null}
+						<p>
+							MAP ratio × {fmtNum(r.gaugeMapFactor, 3)}{#if chain.mapMm !== null && chain.gaugeMapMm !== null}: its MAP {fmtNum(chain.mapMm, 1)} mm ÷ the catchment gauge’s MAP {fmtNum(chain.gaugeMapMm, 1)} mm{/if}{r.gaugeMapClamped
+								? ` (clamped from ${fmtNum(r.gaugeMapOwnFactor ?? 0, 3)})`
+								: ''}.
+						</p>
+					{/if}
+					{#if r.chirps?.source === 'unusable'}
+						<p>Its CHIRPS totals 0 mm in every complete year, so a run doesn’t read it.</p>
+					{:else if r.chirps}
+						<p>Its CHIRPS is levelled {chirpsLevelText(chain)}{r.chirps.source === 'reference' ? ', the reference gauge’s factors January to December:' : '.'}</p>
+						{#if r.chirps.source === 'reference'}
+							<ul aria-label="Reference gauge factors by month">
+								{#each r.chirps.factors as k, m (m)}<li><span class="muted">{MONTHS[m]}</span> {fmtNum(k, 2)}</li>{/each}
+							</ul>
+						{/if}
+					{/if}
+				{:else if lines}
 					{#if lines.refused}
 						<p>The pairing that corrects {viewArea.name}’s CHIRPS against {stationNameOf(lines.correctAgainst)} is refused: {lines.refused}. Its CHIRPS isn’t corrected, so its gaps fall to the next fallback.</p>
 					{:else if lines.factors}
@@ -398,8 +428,8 @@
 					{:else}
 						<p>No CHIRPS bias factors were fitted against {stationNameOf(lines.correctAgainst)}.</p>
 					{/if}
-				{:else if !viewArea.found?.error}
-					<p class="muted">A run reads no rainfall station for {viewArea.name} with the settings as saved, so it has no derived rain lines; the series stored for it are shown.</p>
+				{:else}
+					<p class="muted">A run reads no rain of {viewArea.name}’s own with the settings as saved (no rainfall station, and per-unit rain is off), so it has no derived rain lines; the series stored for it are shown.</p>
 				{/if}
 			</div>
 		{/if}
