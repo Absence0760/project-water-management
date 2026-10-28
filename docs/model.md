@@ -3045,6 +3045,14 @@ for each unit](./maps.md#map-for-each-unit).
   the gauge, with the cell on those days. Whether to leave them out is the
   hydrologist's call ([followups.md § Hydrologist](./followups.md#hydrologist)).
 
+The Data tab's Preview all data shows a unit's chain day by day (issue #613
+slice 2, ui.md § Data): `unitAreaRain(input, nodeId)`
+(`runoff/unitAreaRain.ts`) reads each link as `unitRainForcing` makes it (the
+checked own gauge, the catchment rain × k2, the unit's CHIRPS × its level)
+beside the rain used and each day's link, which are `unitRainForcing`'s own,
+so they match the run's `rain_unit` to the bit. It is read-only and changes
+no run output, so it needs no `ENGINE_VERSION` bump.
+
 ### 2.4i Rainfall stations (engine ≥ 1.91.0, issue #553)
 
 `settings.rainStations` (`RainStationSettings` in

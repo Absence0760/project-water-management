@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { NetworkNode, SeriesMeta } from '@water-management/engine';
 import { BOM, commentLine, datedCsv, groupedCsv, textCell, type ExportArea } from './groupedCsv';
-import type { AreaRainLines } from './derivedRain';
+import type { AreaRainLines, UnitChainLines } from './derivedRain';
 import { groupSeries } from './groups';
 
 // Rule 7: dates, so under a skewed TZ (UTC+14 would move a local-midnight date a day).
@@ -86,6 +86,37 @@ describe('groupedCsv', () => {
 		const r = rows(groupedCsv('compact', groups, VALUES, [{ ...AREAS[0]!, lines: refused }, { nodeId: null, name: 'the catchment', sentence: null, lines: null, error: 'no model input' }], META));
 		expect(r[2]).toBe('# Unit A: CHIRPS gaps not corrected; the pairing is refused (fewer than 5 complete years)');
 		expect(r[3]).toBe('# Average catchment rainfall: not computed (no model input)');
+	});
+});
+
+describe('groupedCsv: a unit without a station (issue #613 slice 2)', () => {
+	const groups = groupSeries(LIST, NODES, { unitRain: { mode: 'perUnit' } } as never);
+	const chain = {
+		startDate: '2021-01-01',
+		nodeId: 'A',
+		rule: 'gaugeMap',
+		recipe: { gaugeMapFactor: 1.6 } as never,
+		mapMm: 800,
+		gaugeMapMm: 500,
+		rainUsed: [1.6, 0.8, 0],
+		source: ['gaugeMap', 'unitChirps', 'none'],
+		ownGauge: null,
+		gaugeScaled: [1.6, null, null],
+		chirpsRaw: [0.4, 1, null],
+		chirpsLevelled: [0.32, 0.8, null],
+		warnings: []
+	} satisfies UnitChainLines;
+	const areas: ExportArea[] = [{ nodeId: 'A', name: 'Unit A', sentence: null, lines: null, chain }];
+
+	it('compact: its rain used; full: the links its rule reads, the rain used and the link of each day', () => {
+		const c = rows(groupedCsv('compact', groups, VALUES, areas, META));
+		expect(c[1]).toBe('# Unit A: no rainfall station; its rain follows rule gaugeMap of the per-unit chain (§2.4h)%2C MAP ratio 1.6');
+		expect(c[2]).toBe('date,Bergwater (mm),Unit A: rain used (mm),flow (m³/s)');
+		const f = rows(groupedCsv('full', groups, VALUES, areas, META));
+		expect(f[2]).toBe(
+			'date,Bergwater (mm),chirps (mm),chirpsA (mm),Unit A: catchment gauge × MAP ratio (mm),Unit A: CHIRPS levelled (mm),Unit A: rain used (mm),Unit A: rain used from,flow (m³/s),evap (mm)'
+		);
+		expect(f[4]).toBe('2021-01-02,,,,,0.8,0.8,unitChirps,,');
 	});
 });
 

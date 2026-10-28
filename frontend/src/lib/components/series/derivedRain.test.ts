@@ -4,7 +4,7 @@
 // invented values only (public repo).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runModel, stationSeriesKey, toEpochDay, type ModelInput, type RainStationSettings } from '@water-management/engine';
-import { areaRainLines, prepareFor } from './derivedRain';
+import { areaRainLines, isChain, prepareFor, unitChainLines } from './derivedRain';
 import { sourceCounts, sourceLanes, sourceSummary } from './rainSources';
 
 // Rule 7: dates, so under a skewed TZ (UTC+14 would move a local-midnight date a day).
@@ -180,5 +180,27 @@ describe('the source strip and summary', () => {
 		expect(sourceSummary(['station', 'fallback', 'fallback'])).toBe('1 day from the station, 2 from the next fallback.');
 		const none = sourceLanes('2021-01-01', ['none', 'none']);
 		expect(none.map((l) => [l.label, l.text])).toEqual([['No rain', '2 days from no rain from any source (read as dry)']]);
+	});
+});
+
+describe('unitChainLines for a unit without a station (issue #613 slice 2)', () => {
+	// B has no station: under per-unit rain it runs its §2.4h chain (its own CHIRPS levelled to its MAP).
+	const x = input({ units: { A: { stationId: 'S' } }, sites: SITES });
+	const out = runModel(x);
+
+	it('the rain used is the run’s rain_unit to the bit, each day the link its source names', () => {
+		const b = unitChainLines(x, 'B', prepareFor(x))!;
+		expect(b.rule).toBe('unitChirps');
+		expect(b.rainUsed).toEqual(col(out, 'rain_unit', 'B'));
+		expect(b.chirpsRaw).not.toBeNull();
+		for (let t = 0; t < b.rainUsed.length; t++) if (b.source[t] === 'unitChirps') expect(b.rainUsed[t]).toBe(b.chirpsLevelled![t]);
+		expect(isChain(b)).toBe(true);
+		expect(isChain(areaRainLines(x, 'A')!)).toBe(false);
+	});
+
+	it('none for a unit on its station, or with per-unit rain off; areaRainLines has none for the chain unit', () => {
+		expect(unitChainLines(x, 'A')).toBeNull();
+		expect(areaRainLines(x, 'B')).toBeNull();
+		expect(unitChainLines(input({}, false), 'B')).toBeNull();
 	});
 });

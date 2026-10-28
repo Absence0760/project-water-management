@@ -77,7 +77,7 @@
 	import { asksStation } from './station';
 	import StationFields from './StationFields.svelte';
 	import AreaRainPanel from './AreaRainPanel.svelte';
-	import type { AreaRainLines } from './derivedRain';
+	import type { AreaRainLines, UnitChainLines } from './derivedRain';
 	import { ModelInputCache } from './areaInput';
 	import { groupedCsv, type ExportArea, type ExportSize } from './groupedCsv';
 	import {
@@ -737,8 +737,11 @@
 		return memo.areas;
 	}
 	async function computeAreas(): Promise<ExportArea[]> {
-		const items = groups.flatMap((g) => g.items).filter((it): it is AreaItem => it.type !== 'series' && areaOf(it) !== null);
+		// The catchment and each unit on its station, and (issue #613 slice 2) each unit without one under per-unit rain: its §2.4h chain.
+		const perUnit = settings?.unitRain?.mode === 'perUnit';
+		const items = groups.flatMap((g) => g.items).filter((it): it is AreaItem => it.type !== 'series' && (areaOf(it) !== null || (perUnit && it.type === 'unit')));
 		let read: ((nodeId: string | null) => AreaRainLines | null) | null = null;
+		let readChain: ((nodeId: string) => UnitChainLines | null) | null = null;
 		let inputError: string | null = null;
 		if (items.length) {
 			try {
@@ -746,6 +749,7 @@
 				// One run preparation for every area's pairing (each area's rain used still prepares its own, in the engine).
 				const prep = derived.prepareFor(x);
 				read = (nodeId) => derived.areaRainLines(x, nodeId, prep);
+				readChain = (nodeId) => derived.unitChainLines(x, nodeId, prep);
 			} catch (e) {
 				inputError = msg(e);
 			}
@@ -754,17 +758,19 @@
 		for (const it of items) {
 			const nodeId = nodeIdOf(it.id);
 			let lines: AreaRainLines | null = null;
+			let chain: UnitChainLines | null = null;
 			let error = inputError;
 			if (read) {
 				await yieldToPaint();
 				try {
 					lines = read(nodeId);
-					if (!lines) error = 'a run reads no station for it with the settings as saved';
+					if (!lines && nodeId !== null && readChain) chain = readChain(nodeId);
+					if (!lines && !chain) error = 'a run reads no rain of its own for it with the settings as saved';
 				} catch (e) {
 					error = msg(e);
 				}
 			}
-			areas.push({ nodeId, name: areaOf(it)!.name, sentence: areaInfo(it).sentence, lines, error });
+			areas.push({ nodeId, name: areaOf(it)?.name ?? (it.type === 'unit' ? it.unit.name : 'Average catchment rainfall'), sentence: areaInfo(it).sentence, lines, chain, error });
 		}
 		return areas;
 	}

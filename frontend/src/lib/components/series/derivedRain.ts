@@ -18,12 +18,14 @@ import {
 	stationAreaRain,
 	stationSeriesKey,
 	toEpochDay,
+	unitAreaRain,
 	unitRainSeriesKey,
 	type DailySeries,
 	type ModelInput,
 	type PreparedRun,
 	type StationAreaForcing,
-	type StationRainDaySource
+	type StationRainDaySource,
+	type UnitAreaRain
 } from '@water-management/engine';
 
 export interface AreaRainLines {
@@ -108,3 +110,21 @@ export function areaRainLines(input: ModelInput, nodeId: string | null, prep: Pr
 		warnings: r.warnings
 	};
 }
+
+/**
+ * A land unit without a rainfall station under per-unit rain (issue #613 slice 2, docs/model.md §2.4h): the links
+ * of its chain (its own gauge after the checks, the catchment gauge × its MAP ratio, its CHIRPS as stored and
+ * levelled to its MAP), the rain used and the link each day came from: the engine's unitAreaRain, the run's
+ * rain_unit to the bit. Null when per-unit rain is off or the unit is on its station (areaRainLines' then).
+ */
+export type UnitChainLines = Omit<UnitAreaRain, 'rainMm'> & { /** The rain the run reads (its rain_unit), mm; 0 on a dry day. */ rainUsed: number[] };
+
+export function unitChainLines(input: ModelInput, nodeId: string, prep: PreparedRun = prepareFor(input)): UnitChainLines | null {
+	const r = unitAreaRain(input, nodeId, prep);
+	if (!r) return null;
+	const { rainMm, ...rest } = r;
+	return { ...rest, rainUsed: rainMm };
+}
+
+/** Whether an area's lines are a §2.4h chain's (a unit without a station) rather than a station's. */
+export const isChain = (l: AreaRainLines | UnitChainLines): l is UnitChainLines => 'rule' in l;

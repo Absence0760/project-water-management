@@ -32,13 +32,14 @@ import {
 	type ProjectSettings,
 	type SeriesKind,
 	type SeriesMeta,
-	type StationRainDaySource
+	type StationRainDaySource,
+	type UnitRainDaySource
 } from '@water-management/engine';
 import { dayPrefix, fmtNum } from '#lib/format/number.js';
 import { seriesKindLabel } from '#lib/series/kinds.js';
 import { firstOutletSeries } from '#lib/series/pick.js';
 import type { Daily } from './coverage';
-import type { AreaRainLines } from './derivedRain';
+import type { AreaRainLines, UnitChainLines } from './derivedRain';
 import { asksStation } from './station';
 
 export type PreviewFlag = 'missing' | 'negative' | 'outlier' | 'flatline';
@@ -359,15 +360,29 @@ export function filterPreviewRows(rows: readonly PreviewRow[], { query, missingO
 // and where each day's rain used came from. The lines are computed by SeriesTab (derivedRain.ts, the engine's
 // stationAreaRain over the model input a run reads) and handed in; nothing here runs the engine.
 
-export type AreaLine = 'stationRaw' | 'stationScaled' | 'chirpsRaw' | 'chirpsCorrected' | 'rainUsed' | 'source';
+export type AreaLine = 'stationRaw' | 'stationScaled' | 'chirpsRaw' | 'chirpsCorrected' | 'rainUsed' | 'source' | ChainLine;
+/** A §2.4h unit's own links (issue #613 slice 2): its own gauge after the checks, the catchment gauge × its MAP ratio, its CHIRPS levelled. */
+export type ChainLine = 'ownGauge' | 'gaugeScaled' | 'chirpsLevelled';
 
-/** One area as the dialog gets it: the catchment (nodeId null) or a land unit, its lines, or why they couldn't be computed. */
+/**
+ * One area as the dialog gets it: the catchment (nodeId null) or a land unit, its lines under its station, or, for
+ * a unit without one under per-unit rain, its §2.4h chain (`chain`), or why they couldn't be computed.
+ */
 export interface PreviewArea {
 	nodeId: string | null;
 	name: string;
 	lines: AreaRainLines | null;
+	chain?: UnitChainLines | null;
 	error?: string | null;
 }
+
+/** An area's derived lines, whichever kind it has: its station's, its §2.4h chain's, or none. */
+export const areaData = (a: Pick<PreviewArea, 'lines' | 'chain'>): AreaRainLines | UnitChainLines | null => a.lines ?? a.chain ?? null;
+const isChainData = (l: AreaRainLines | UnitChainLines): l is UnitChainLines => 'rule' in l;
+/** The lines when they are a §2.4h chain's, else null (the dialog's panel reads one or the other). */
+export const chainOf = (l: AreaRainLines | UnitChainLines | null | undefined): UnitChainLines | null => (l && isChainData(l) ? l : null);
+/** The lines when they are a station's, else null. */
+export const stationLinesOf = (l: AreaRainLines | UnitChainLines | null | undefined): AreaRainLines | null => (l && !isChainData(l) ? l : null);
 
 export const areaColumnId = (nodeId: string | null, line: AreaLine): string => `area:${nodeId ?? 'catchment'}:${line}`;
 export const areaTitle = (a: Pick<PreviewArea, 'nodeId' | 'name'>): string => (a.nodeId === null ? 'Average catchment rainfall' : a.name);
@@ -386,21 +401,64 @@ const AREA_LINES: readonly { line: AreaLine; what: string; unit: string; helpKey
 	{ line: 'source', what: 'rain used from', unit: '', helpKey: 'preview.areaRainFrom', inAll: true }
 ];
 
-/** Whether an area has a line: the CHIRPS lines only with CHIRPS of its own (the corrected one also needs a pairing that isn't refused). */
-const hasLine = (lines: AreaRainLines, line: AreaLine) => (line === 'chirpsRaw' ? !!lines.chirpsRaw : line === 'chirpsCorrected' ? !!lines.chirpsCorrected : true);
+/**
+ * A §2.4h unit's lines (issue #613 slice 2), in its view's order: each link of its chain as a run reads it, then
+ * the rain used and its source. All of them are in "All" (the Full CSV's): none is a stored series as it stands.
+ */
+const CHAIN_LINES: readonly { line: AreaLine; what: string; unit: string; helpKey: string; inAll: boolean }[] = [
+	{ line: 'ownGauge', what: 'own gauge (checked)', unit: 'mm', helpKey: 'preview.areaOwnGauge', inAll: true },
+	{ line: 'gaugeScaled', what: 'catchment gauge × MAP ratio', unit: 'mm', helpKey: 'preview.areaGaugeScaled', inAll: true },
+	{ line: 'chirpsRaw', what: 'CHIRPS raw', unit: 'mm', helpKey: 'preview.areaChirpsRaw', inAll: false },
+	{ line: 'chirpsLevelled', what: 'CHIRPS levelled', unit: 'mm', helpKey: 'preview.areaChirpsLevelled', inAll: true },
+	{ line: 'rainUsed', what: 'rain used', unit: 'mm', helpKey: 'preview.areaRainUsed', inAll: true },
+	{ line: 'source', what: 'rain used from', unit: '', helpKey: 'preview.areaRainFrom', inAll: true }
+];
+
+/** Whether an area has a line: the CHIRPS lines only with CHIRPS of its own (the corrected one also needs a pairing that isn't refused); a chain's links only where its rule reads them. */
+function hasLine(lines: AreaRainLines | UnitChainLines, line: AreaLine): boolean {
+	if (isChainData(lines)) {
+		if (line === 'ownGauge') return !!lines.ownGauge;
+		if (line === 'gaugeScaled') return !!lines.gaugeScaled;
+		if (line === 'chirpsRaw') return !!lines.chirpsRaw;
+		if (line === 'chirpsLevelled') return !!lines.chirpsLevelled;
+		return line === 'rainUsed' || line === 'source';
+	}
+	return line === 'chirpsRaw' ? !!lines.chirpsRaw : line === 'chirpsCorrected' ? !!lines.chirpsCorrected : AREA_LINES.some((l) => l.line === line);
+}
 
 /** Each area's columns for the "All" view, in the Full CSV's order and words; an area without lines adds none, and one without CHIRPS no corrected column. */
 export function buildAreaColumns(areas: readonly PreviewArea[]): PreviewColumn[] {
 	const out: PreviewColumn[] = [];
 	for (const a of areas) {
-		if (!a.lines) continue;
-		for (const l of AREA_LINES) {
-			if (!l.inAll || !hasLine(a.lines, l.line)) continue;
+		const data = areaData(a);
+		if (!data) continue;
+		for (const l of isChainData(data) ? CHAIN_LINES : AREA_LINES) {
+			if (!l.inAll || !hasLine(data, l.line)) continue;
 			out.push({ id: areaColumnId(a.nodeId, l.line), label: `${areaTitle(a)}: ${l.what}`, unit: l.unit, group: 'area', area: { nodeId: a.nodeId, line: l.line }, helpKey: l.helpKey });
 		}
 	}
 	return out;
 }
+
+/** How a §2.4h unit's CHIRPS is levelled, for its column's header: "× 1.234", the §2.4b factors, the reference factors × k_unit, or raw. */
+export function chirpsLevelText(chain: Pick<UnitChainLines, 'recipe'>): string {
+	const c = chain.recipe.chirps;
+	if (!c) return 'not levelled';
+	if (c.source === 'map') return `× ${fmtNum(c.factor, 3)} to its MAP`;
+	if (c.source === 'bias') return `× the catchment’s monthly bias factors${chain.recipe.gaugeMapFactor !== null ? ` × ${fmtNum(chain.recipe.gaugeMapFactor, 3)}` : ''}`;
+	if (c.source === 'reference')
+		return c.kUnit ? `× the reference gauge’s f(m) × k_unit ${fmtNum(c.kUnit.factor, 3)}` : `× the reference gauge’s f(m)${chain.recipe.gaugeMapFactor !== null ? ` × ${fmtNum(chain.recipe.gaugeMapFactor, 3)}` : ''}`;
+	if (c.source === 'raw') return 'raw: nothing to level it with';
+	return 'unusable';
+}
+
+/** What a §2.4h rule reads, in words, for the panel above a unit's view (docs/model.md §2.4h). */
+export const CHAIN_RULE_TEXT: Record<UnitChainLines['rule'], string> = {
+	unitGauge: 'its own rain gauge (after the checks), its gaps from its own CHIRPS, then the catchment gauge × its MAP ratio, then the catchment rain',
+	gaugeMap: 'the catchment gauge × its MAP ratio, its gaps from its own CHIRPS, then the catchment rain',
+	unitChirps: 'its own CHIRPS levelled to its MAP, its gaps from the catchment rain',
+	catchment: 'the catchment rain, as without per-unit rain: it has no rain gauge or usable CHIRPS of its own, and no MAP to scale the catchment gauge by'
+};
 
 /**
  * One area's own view of its lines (issue #613): every line, the station raw and adjusted, the CHIRPS raw and
@@ -408,6 +466,7 @@ export function buildAreaColumns(areas: readonly PreviewArea[]): PreviewColumn[]
  * view's, so a column hidden there is hidden here too.
  */
 export function areaViewColumns(a: PreviewArea, stationName: (id: string) => string | null = () => null, chirpsSeriesId?: string): PreviewColumn[] {
+	if (!a.lines && a.chain && a.nodeId !== null) return chainViewColumns(a.name, a.nodeId, a.chain, chirpsSeriesId);
 	const lines = a.lines;
 	if (!lines) return [];
 	const f = lines.forcing;
@@ -415,7 +474,7 @@ export function areaViewColumns(a: PreviewArea, stationName: (id: string) => str
 	const against = lines.correctAgainst === f.stationId ? station : (stationName(lines.correctAgainst) ?? 'a station no longer in the project');
 	const name = a.nodeId === null ? 'Catchment' : a.name;
 	const to = a.nodeId === null ? 'the catchment' : a.name;
-	const label: Record<AreaLine, string> = {
+	const label: Partial<Record<AreaLine, string>> = {
 		stationRaw: `${station} raw`,
 		stationScaled: `${station} adjusted to ${to} (× ${fmtNum(f.ratio, 3)})`,
 		chirpsRaw: `${name} CHIRPS raw`,
@@ -425,12 +484,38 @@ export function areaViewColumns(a: PreviewArea, stationName: (id: string) => str
 	};
 	return AREA_LINES.filter((l) => hasLine(lines, l.line)).map((l) => ({
 		id: areaColumnId(a.nodeId, l.line),
-		label: label[l.line],
+		label: label[l.line]!,
 		unit: l.unit,
 		group: 'area' as const,
 		area: { nodeId: a.nodeId, line: l.line },
 		helpKey: l.helpKey,
 		...(l.line === 'stationRaw' ? { seriesId: f.stationId } : l.line === 'chirpsRaw' && chirpsSeriesId ? { seriesId: chirpsSeriesId } : {})
+	}));
+}
+
+/**
+ * A §2.4h unit's own view (issue #613 slice 2): its own gauge after the checks, the catchment gauge adjusted to it
+ * (× its MAP ratio, three decimals), its CHIRPS raw and levelled, the rain used and its source, each where its rule
+ * reads it. The ids are the "All" view's, so a column hidden there is hidden here too.
+ */
+function chainViewColumns(name: string, nodeId: string, chain: UnitChainLines, chirpsSeriesId?: string): PreviewColumn[] {
+	const k = chain.recipe.gaugeMapFactor;
+	const label: Partial<Record<AreaLine, string>> = {
+		ownGauge: `${name} own gauge (checked)`,
+		gaugeScaled: `Catchment gauge adjusted to ${name} (× ${k === null ? '' : fmtNum(k, 3)})`,
+		chirpsRaw: `${name} CHIRPS raw`,
+		chirpsLevelled: `${name} CHIRPS levelled (${chirpsLevelText(chain)})`,
+		rainUsed: `${name} rain used`,
+		source: `${name} rain used from`
+	};
+	return CHAIN_LINES.filter((l) => hasLine(chain, l.line)).map((l) => ({
+		id: areaColumnId(nodeId, l.line),
+		label: label[l.line]!,
+		unit: l.unit,
+		group: 'area' as const,
+		area: { nodeId, line: l.line },
+		helpKey: l.helpKey,
+		...(l.line === 'chirpsRaw' && chirpsSeriesId ? { seriesId: chirpsSeriesId } : {})
 	}));
 }
 
@@ -500,7 +585,8 @@ export function columnsForView(view: PreviewViewId, columns: readonly PreviewCol
 	const areaView = (nodeId: string | null, stored: readonly SeriesMeta[]) => {
 		const area = ctx.areas.find((a) => a.nodeId === nodeId);
 		// The CHIRPS series a run reads for the area is the CHIRPS raw line already.
-		const shown = area?.lines?.chirpsRaw ? firstByName(stored.filter((s) => s.kind === 'rain_chirps_mm')) : undefined;
+		const data = area ? areaData(area) : null;
+		const shown = data?.chirpsRaw ? firstByName(stored.filter((s) => s.kind === 'rain_chirps_mm')) : undefined;
 		const lines = area ? areaViewColumns(area, stationName, shown?.id) : [];
 		return [...lines, ...bySeries(stored.filter((s) => s !== shown).map((s) => s.id))];
 	};
@@ -522,10 +608,26 @@ export const RAIN_FROM_LABEL: Record<StationRainDaySource, string> = {
 	none: 'no source (dry)'
 };
 
+/** The link of a §2.4h unit's chain a day's rain used came from, in words (the CSV writes the engine's codes). */
+export const CHAIN_FROM_LABEL: Record<UnitRainDaySource, string> = {
+	unitGauge: 'own gauge',
+	gaugeMap: 'catchment gauge × MAP ratio',
+	unitChirps: 'own CHIRPS (levelled)',
+	catchment: 'catchment rain',
+	forecast: 'forecast',
+	none: 'no source (dry)'
+};
+
 /** The value of one area line on `date`: a number (mm), the source in words, or null outside the run window or with no value. */
-export function areaCell(lines: AreaRainLines, line: AreaLine, date: string): number | string | null {
+export function areaCell(lines: AreaRainLines | UnitChainLines, line: AreaLine, date: string): number | string | null {
 	const i = toEpochDay(date) - toEpochDay(lines.startDate);
 	if (i < 0 || i >= lines.rainUsed.length) return null;
+	if (isChainData(lines)) {
+		if (line === 'source') return CHAIN_FROM_LABEL[lines.source[i]!];
+		const c = line === 'rainUsed' ? lines.rainUsed : line === 'ownGauge' ? lines.ownGauge : line === 'gaugeScaled' ? lines.gaugeScaled : line === 'chirpsRaw' ? lines.chirpsRaw : line === 'chirpsLevelled' ? lines.chirpsLevelled : null;
+		const v = c?.[i];
+		return v == null || !Number.isFinite(v) ? null : v;
+	}
 	if (line === 'source') return RAIN_FROM_LABEL[lines.source[i]!];
 	const v =
 		line === 'rainUsed'
