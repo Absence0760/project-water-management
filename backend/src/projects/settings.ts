@@ -250,9 +250,8 @@ function remapFitRecordNodes(r: Json, ids: ReadonlyMap<string, string>): Json {
  * are one set, entered together. And the rainfall stations' assignments
  * (issue #553): a unit left out of a save is unassigned, not kept. And each
  * flow record's missing periods (issue #611): a record left out has none.
- * And the calibration zones (issue #555): a row left out of a save is gone.
  */
-export const REPLACED_WHOLE: ReadonlySet<string> = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing', 'calibrationZones']);
+export const REPLACED_WHOLE: ReadonlySet<string> = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -1345,7 +1344,7 @@ export const SettingsPatch = z
 		calibrationFlowKind: z.enum(CALIBRATION_FLOW_KINDS).nullable(),
 		// Where calibration scores (engine ≥ 1.41.0): null = the outlet, else an inner gauge with a record (checked by the route).
 		calibrationSiteNodeId: z.string().uuid().nullable(),
-		// Calibration zones (engine 1.106.0, issue #555): the whole list, replaced on a save; the route checks the gauges.
+		// Calibration zones (engine 1.106.0, issue #555): the whole list (an array, so a patch replaces it); the route checks the gauges.
 		calibrationZones: CalibrationZones,
 		calibrationExclusions: ExclusionList,
 		// One flow record's missing periods (engine ≥ 1.102.0, issue #611): replaced whole, null = none. The route checks the records.
