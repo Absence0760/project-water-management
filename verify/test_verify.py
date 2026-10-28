@@ -439,7 +439,10 @@ MUTANTS = [
     ("a unit in a calibration zone runs on the site's parameters, not its zone's", 'zp = zone_p.get(u["id"], g)', "zp = g"),
     ("an unticked zone row still gives its units their own parameters", 'if z.get("enabled") is not True or not n or', "if not n or"),
     ("a zone's parameters outside the bounds are used as they are", 'if ok else settings["gr4j"]', 'if ok else ({k: p[k] for k in GR4J_BOUNDS} if isinstance(p, dict) else settings["gr4j"])'),
-    ("a unit takes the ticked gauge nearest the outlet, not the first on its way down", 'for i in down(u["id"])[1:]:\n            if i in usable:', 'for i in reversed(down(u["id"])[1:]):\n            if i in usable:'),
+    ("a unit's zone is the ticked gauge nearest the outlet, not the first on its way down", 'for i in down(u["id"])[1:]:\n            if i in usable:', 'for i in reversed(down(u["id"])[1:]):\n            if i in usable:'),
+    # diff.py notes a series only the engine writes rather than failing, so the exchange series' zone rule is
+    # proven the other way: python writing it under Per unit whatever the zones' X2 is caught.
+    ("the exchange series is written under Per unit whatever the zones' X2", 'if g["x2"] != 0 or (per_unit and any(p["x2"] != 0 for p in zone_params(', 'if g["x2"] != 0 or (per_unit or any(p["x2"] != 0 for p in zone_params('),
 ]
 
 
