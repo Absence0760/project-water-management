@@ -4,6 +4,9 @@ import {
 	ALLOCATION_MODES,
 	CALIBRATION_BOUNDS,
 	CALIBRATION_FLOW_KINDS,
+	calibrationPriorError,
+	FIT_BOUNDS,
+	PRIOR_MAX_WEIGHT,
 	CHIRPS_BIAS_MODES,
 	CHIRPS_FIT_PERIOD_MODES,
 	defaultProjectSettings,
@@ -982,13 +985,35 @@ const flowKind = z.enum(CALIBRATION_FLOW_KINDS);
  * is recomputed by the server on every save (routes.ts), whatever is sent,
  * and the seed and engine version let anyone reproduce the fit.
  */
+/**
+ * The regional GR4J prior a fit used (engine calibrate/prior.ts PriorFitResult,
+ * issue #622): its weight, whether it bounded the search, the ranges and the
+ * provenance the prior route gave. Checked by the engine's own rule.
+ */
+const PriorFitResult = z
+	.object({
+		weight: z.number().min(0).max(PRIOR_MAX_WEIGHT),
+		bounded: z.boolean(),
+		ranges: z.unknown(),
+		provenance: z.unknown(),
+		penaltyAtFit: z.number().min(0).nullable(),
+		penaltyAtStart: z.number().min(0).nullable()
+	})
+	.strict()
+	.superRefine((v, ctx) => {
+		const err = calibrationPriorError({ weight: v.weight, ranges: v.ranges, provenance: v.provenance });
+		if (err) ctx.addIssue({ code: 'custom', message: `regional prior: ${err}` });
+		else if (JSON.stringify(v.provenance).length > 8_000) ctx.addIssue({ code: 'custom', message: 'regional prior: the provenance is too large' });
+	});
+
 export const FitRecord = z
 	.object({
 		fittedAt: z.iso.datetime({ offset: true }),
 		engineVersion: z.string().max(40),
 		model: z.enum(RUNOFF_MODELS),
 		objective: z.enum(OBJECTIVES),
-		bounds: z.enum(CALIBRATION_BOUNDS),
+		// 'prior': the regional prior's p10–p90 box (issue #622), with `prior` below.
+		bounds: z.enum(FIT_BOUNDS),
 		seed: z.number().int().min(0).max(2 ** 31 - 1),
 		// Records made before multi-start fits (CR-2) have neither: one start.
 		starts: z.number().int().min(1).max(MAX_STARTS).optional(),
@@ -1052,6 +1077,8 @@ export const FitRecord = z
 			.strict()
 			.nullable()
 			.default(null),
+		// Engine 1.106.0 (issue #622): the regional prior the fit used; absent when it used none.
+		prior: PriorFitResult.optional(),
 		notes: z.array(z.string().max(2000)).max(50),
 		editedParams: z.array(z.string().max(40)).max(30).default([]),
 		// The forcing the fit ran under (issue #4 pan-coefficient provenance):
