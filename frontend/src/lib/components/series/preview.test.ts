@@ -548,6 +548,85 @@ describe('the View select’s views and their columns (issue #613)', () => {
 	});
 });
 
+describe('a unit’s patch stations (issue #613 slice 3)', () => {
+	const list = [
+		meta({ id: 'berg', kind: 'rain_catchment_mm', name: 'Bergwater' }),
+		meta({ id: 'ridge', kind: 'rain_catchment_mm', name: 'Ridge' }),
+		meta({ id: 'vlei', kind: 'rain_catchment_mm', name: 'Vlei' }),
+		meta({ id: 'chu1', kind: 'rain_chirps_mm', name: 'CHIRPS Upper', siteNodeId: 'u1' })
+	];
+	const lines = (over: Partial<AreaRainLines> = {}): AreaRainLines =>
+		({
+			startDate: '2020-01-01',
+			rainUsed: [4, 5, 2.4],
+			source: ['station', 'patch', 'patch'],
+			patchFrom: [null, 'patch 1: Ridge', 'patch 3: Vlei'],
+			// Place 2 is CHIRPS, which isn't a station line: the numbers stay the priority's.
+			patches: [
+				{ place: 1, stationId: 'ridge', stationName: 'Ridge', ratio: 1.25, raw: [3, 4, null], scaled: [3.75, 5, null] },
+				{ place: 3, stationId: 'vlei', stationName: 'Vlei', ratio: 0.8, raw: [null, null, 3], scaled: [null, null, 2.4] }
+			],
+			stationRaw: [3.2, null, null],
+			stationScaled: [4, null, null],
+			chirpsRaw: [1, 0, 0],
+			chirpsCorrected: [1.25, 0, 0],
+			factors: Array.from({ length: 12 }, () => 1.25),
+			refused: null,
+			correctAgainst: 'berg',
+			forcing: { stationId: 'berg', stationName: 'Bergwater', ratio: 1.25 } as AreaRainLines['forcing'],
+			warnings: [],
+			...over
+		}) as AreaRainLines;
+	const areas = [{ nodeId: 'u1', name: 'Upper unit', lines: lines() }];
+	const all = [...buildPreviewColumns(list), ...buildAreaColumns(areas)];
+
+	it('the unit view: the main station, each patch station raw and adjusted in priority order, then the CHIRPS', () => {
+		const cols = columnsForView('unit:u1', all, { list, areas });
+		expect(cols.map((c) => c.label)).toEqual([
+			'Bergwater raw',
+			'Bergwater adjusted to Upper unit (× 1.250)',
+			'Patch 1: Ridge raw',
+			'Patch 1: Ridge adjusted to Upper unit (× 1.250)',
+			'Patch 3: Vlei raw',
+			'Patch 3: Vlei adjusted to Upper unit (× 0.800)',
+			'Upper unit CHIRPS raw',
+			'Upper unit CHIRPS bias-corrected (f(m) against Bergwater)',
+			'Upper unit rain used',
+			'Upper unit rain used from'
+		]);
+		expect(cols.slice(2, 6).map((c) => c.id)).toEqual(['area:u1:patchRaw:1', 'area:u1:patchScaled:1', 'area:u1:patchRaw:3', 'area:u1:patchScaled:3']);
+		for (const c of cols) expect(helpFor(c.helpKey), c.helpKey).toBeTruthy();
+		// A patch station's raw line reads its stored series, so Missing only and the search read it in this view.
+		expect(shownSeriesIds(cols)).toEqual(['berg', 'ridge', 'vlei', 'chu1']);
+		// No CHIRPS of its own: the patch stations still follow the main station's lines.
+		const bare = areaViewColumns({ nodeId: 'u1', name: 'Upper unit', lines: lines({ chirpsRaw: null, chirpsCorrected: null }) });
+		expect(bare.map((c) => c.area!.line)).toEqual(['stationRaw', 'stationScaled', 'patchRaw:1', 'patchScaled:1', 'patchRaw:3', 'patchScaled:3', 'rainUsed', 'source']);
+	});
+
+	it('All gains each patch station × its ratio after the station’s (the Full CSV’s), not its raw record', () => {
+		expect(buildAreaColumns(areas).map((c) => c.label)).toEqual([
+			'Upper unit: station × ratio',
+			'Upper unit: patch 1: Ridge × ratio',
+			'Upper unit: patch 3: Vlei × ratio',
+			'Upper unit: CHIRPS corrected',
+			'Upper unit: rain used',
+			'Upper unit: rain used from'
+		]);
+	});
+
+	it('reads a patch line by date; the rain used from names the patch station and its place', () => {
+		const l = lines();
+		expect(areaCell(l, 'patchRaw:1', '2020-01-02')).toBe(4);
+		expect(areaCell(l, 'patchScaled:1', '2020-01-02')).toBe(5);
+		expect(areaCell(l, 'patchScaled:3', '2020-01-02')).toBeNull();
+		expect(areaCell(l, 'patchScaled:3', '2020-01-03')).toBe(2.4);
+		expect(areaCell(l, 'patchRaw:2', '2020-01-03')).toBeNull();
+		expect(areaCell(l, 'source', '2020-01-02')).toBe('patch 1: Ridge');
+		expect(areaCell(l, 'source', '2020-01-03')).toBe('patch 3: Vlei');
+		expect(areaCell(lines({ patches: undefined }), 'patchRaw:1', '2020-01-01')).toBeNull();
+	});
+});
+
 describe('a unit without a station: its §2.4h chain (issue #613 slice 2)', () => {
 	const chain = (over: Partial<UnitChainLines> = {}, recipe: Partial<UnitChainLines['recipe']> = {}): UnitChainLines =>
 		({

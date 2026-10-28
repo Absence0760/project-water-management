@@ -54,7 +54,7 @@ describe('groupedCsv', () => {
 
 	it('full: every stored series group by group, a unit’s own under it, and its derived columns and the day’s source', () => {
 		const r = rows(groupedCsv('full', groups, VALUES, AREAS, META));
-		expect(r[2]).toBe('# Unit A: CHIRPS factors Jan to Dec 2 2 2 2 2 2 2 2 2 2 2 2');
+		expect(r[2]).toBe('# Unit A: CHIRPS factors Jan to Dec 2 2 2 2 2 2 2 2 2 2 2 2 (fitted for this area: its CHIRPS against its correcting station adjusted to its MAP)');
 		expect(r[3]).toBe(
 			'date,Bergwater (mm),chirps (mm),chirpsA (mm),Unit A: station × ratio (mm),Unit A: CHIRPS corrected (mm),Unit A: rain used (mm),Unit A: rain used from,flow (m³/s),evap (mm)'
 		);
@@ -63,6 +63,29 @@ describe('groupedCsv', () => {
 		// A patch day names its station (issue #612).
 		const patched: ExportArea = { ...AREAS[0]!, lines: { ...lines('2021-01-02'), source: ['station', 'patch', 'none'], patchFrom: [null, 'patch 1: Ridge', null] } };
 		expect(rows(groupedCsv('full', groups, VALUES, [patched], META))[6]).toBe('2021-01-03,0.5,1.5,2.5,,2,2,patch 1: Ridge,3.5,4.5');
+	});
+
+	it('full: each patch station × its ratio follows the station’s, in the patching priority, and the `#` lines name the chain (issue #613 slice 3)', () => {
+		const patched: ExportArea = {
+			...AREAS[0]!,
+			lines: {
+				...lines('2021-01-02'),
+				source: ['station', 'patch', 'patch'],
+				patchFrom: [null, 'patch 1: Ridge', 'patch 3: Vlei'],
+				patches: [
+					{ place: 1, stationId: 'ridge', stationName: 'Ridge', ratio: 1.25, raw: [2, 4, null], scaled: [2.5, 5, null] },
+					{ place: 3, stationId: 'vlei', stationName: 'Vlei', ratio: 0.8, raw: [1, null, 5], scaled: [0.8, null, 4] }
+				]
+			}
+		};
+		const r = rows(groupedCsv('full', groups, VALUES, [patched], META));
+		expect(r[2]).toBe('# Unit A: station gaps patched from patch 1: Ridge × 1.25%2C then patch 3: Vlei × 0.8');
+		const header = r.find((l) => l.startsWith('date,'))!;
+		expect(header).toContain('Unit A: station × ratio (mm),Unit A: patch 1: Ridge × ratio (mm),Unit A: patch 3: Vlei × ratio (mm),Unit A: CHIRPS corrected (mm)');
+		expect(r.find((l) => l.startsWith('2021-01-03,'))).toBe('2021-01-03,0.5,1.5,2.5,,5,,2,2,patch 1: Ridge,3.5,4.5');
+		expect(r.find((l) => l.startsWith('2021-01-04,'))).toBe('2021-01-04,,,,0,,4,0,0,patch 3: Vlei,,');
+		// Compact keeps the rain used alone; the patch stations are stored stations there already.
+		expect(rows(groupedCsv('compact', groups, VALUES, [patched], META)).find((l) => l.startsWith('date,'))).toBe('date,Bergwater (mm),Unit A: rain used (mm),flow (m³/s)');
 	});
 
 	it('the average catchment rainfall leads the catchment group; an area without lines adds no columns', () => {
