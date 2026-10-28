@@ -8,6 +8,16 @@
 // that region, which the privacy notes record). The SDK is imported when a
 // call is made, never at load. An upstream error is reported by its name
 // alone, never its message.
+//
+// Prompt caching (a Claude model, which is all production allows): a
+// `cachePoint` closes the system prompt, so the tools and the system prompt
+// (Bedrock caches tools → system → messages, in that order) are one cached
+// prefix, and a second closes the newest message, so each hop of a turn
+// reads the hop before it from the cache instead of paying for it again.
+// Two of the four checkpoints a request may carry; a prefix under the
+// model's minimum (512 tokens for Sonnet 5.5) is simply not cached. The
+// usage counts cache reads and writes as input tokens, so the budget sees
+// every token the request carried.
 import type { ContentBlock, ConverseStreamCommandInput, ConverseStreamOutput, Message } from '@aws-sdk/client-bedrock-runtime';
 import type { AssistantConfig } from '../config.js';
 import type { AssistantProvider, ProviderEvent, ProviderRequest, ToolCall, TurnMessage } from '../types.js';
@@ -49,12 +59,21 @@ export function toConverseMessages(messages: TurnMessage[]): Message[] {
 	return out;
 }
 
+/** Bedrock's prompt caching applies to Claude models (an `anthropic.` model id or inference profile). */
+export const cachesPrompts = (model: string) => /(^|[.:/])anthropic\./.test(model);
+
+const CACHE_POINT = { cachePoint: { type: 'default' as const } };
+
 /** The ConverseStream input for one hop (exported for the tests). */
 export function converseInput(model: string, req: ProviderRequest): ConverseStreamCommandInput {
+	const cache = cachesPrompts(model);
+	const messages = toConverseMessages(req.messages);
+	const last = messages.at(-1);
+	if (cache && last?.content?.length) messages[messages.length - 1] = { ...last, content: [...last.content, CACHE_POINT] };
 	return {
 		modelId: model,
-		system: [{ text: req.system }],
-		messages: toConverseMessages(req.messages),
+		system: cache ? [{ text: req.system }, CACHE_POINT] : [{ text: req.system }],
+		messages,
 		inferenceConfig: { maxTokens: req.maxOutputTokens },
 		...(req.tools.length
 			? { toolConfig: { tools: req.tools.map((t) => ({ toolSpec: { name: t.name, description: t.description, inputSchema: { json: t.parameters as never } } })) } }

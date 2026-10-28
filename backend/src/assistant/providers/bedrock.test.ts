@@ -66,11 +66,51 @@ describe('bedrock provider', () => {
 		]);
 		expect(sent[0]).toEqual({
 			modelId: MODEL,
-			system: [{ text: 'You help with a catchment model.' }],
-			messages: [{ role: 'user', content: [{ text: 'Why no response at gauge X?' }] }],
+			system: [{ text: 'You help with a catchment model.' }, { cachePoint: { type: 'default' } }],
+			messages: [{ role: 'user', content: [{ text: 'Why no response at gauge X?' }, { cachePoint: { type: 'default' } }] }],
 			inferenceConfig: { maxTokens: 512 },
 			toolConfig: { tools: [{ toolSpec: { name: 'get_series', description: 'A series', inputSchema: { json: { type: 'object', properties: { node: { type: 'string' } } } } } }] }
 		});
+	});
+
+	it('caches the tools + system prompt and the turn so far: a cachePoint after the system prompt and after the newest message only', () => {
+		const input = converseInput(
+			'global.anthropic.claude-sonnet-5-5',
+			req({
+				messages: [
+					{ role: 'user', content: 'q' },
+					{ role: 'assistant', content: '', toolCalls: [{ id: 't1', name: 'a', arguments: {} }, { id: 't2', name: 'b', arguments: {} }] },
+					{ role: 'tool', toolCallId: 't1', name: 'a', content: 'r1' },
+					{ role: 'tool', toolCallId: 't2', name: 'b', content: 'r2' }
+				]
+			})
+		);
+		expect(input.system).toEqual([{ text: 'You help with a catchment model.' }, { cachePoint: { type: 'default' } }]);
+		// The tools come before the system prompt in Bedrock's cache order, so they carry no checkpoint of their own.
+		expect(JSON.stringify(input.toolConfig)).not.toContain('cachePoint');
+		expect(input.messages).toEqual([
+			{ role: 'user', content: [{ text: 'q' }] },
+			{ role: 'assistant', content: [{ toolUse: { toolUseId: 't1', name: 'a', input: {} } }, { toolUse: { toolUseId: 't2', name: 'b', input: {} } }] },
+			{
+				role: 'user',
+				content: [{ toolResult: { toolUseId: 't1', content: [{ text: 'r1' }] } }, { toolResult: { toolUseId: 't2', content: [{ text: 'r2' }] } }, { cachePoint: { type: 'default' } }]
+			}
+		]);
+		// Two checkpoints of the four a request may carry.
+		expect(JSON.stringify(input).match(/cachePoint/g)).toHaveLength(2);
+	});
+
+	it('sends no cachePoint to a model that isn’t Claude', () => {
+		const input = converseInput('amazon.nova-pro-v1:0', req());
+		expect(JSON.stringify(input)).not.toContain('cachePoint');
+		expect(['anthropic.claude-sonnet-5-5', 'global.anthropic.claude-sonnet-5-5', 'arn:aws:bedrock:af-south-1:000000000000:inference-profile/global.anthropic.claude-sonnet-5-5'].every((m) => JSON.stringify(converseInput(m, req())).includes('cachePoint'))).toBe(true);
+	});
+
+	it('counts cache reads and writes as input tokens', async () => {
+		const events = await collect(
+			bedrockProvider(cfg, { client: fake([ev({ metadata: { usage: { inputTokens: 20, outputTokens: 7, totalTokens: 1227, cacheReadInputTokens: 900, cacheWriteInputTokens: 300 } } })]) }).complete(req())
+		);
+		expect(events).toEqual([{ type: 'usage', inputTokens: 1220, outputTokens: 7 }]);
 	});
 
 	it('assembles tool calls from input deltas, after the text; JSON that doesn’t parse goes to the tool as text', async () => {

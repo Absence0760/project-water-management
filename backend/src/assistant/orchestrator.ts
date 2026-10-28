@@ -7,9 +7,17 @@
 //     turn with an `assistant_hop_limit` error event;
 //   - output: cfg.maxOutputTokens per call, passed to the provider, and cut
 //     here too if a provider streams past it (`assistant_output_limit`);
+//   - tool calls: cfg.maxToolCallsPerHop run per hop; each call past it gets
+//     a tool error result saying so, and the model can ask again next hop;
+//   - tokens: cfg.maxTurnTokens weighted tokens (config.ts weightedTokens)
+//     for the whole turn; before each hop after the first, the tokens so far
+//     plus an estimate of that hop's input passing it ends the turn with an
+//     `assistant_turn_limit` error event;
 //   - tool results: cfg.maxToolResultChars each, cut with a note;
 //   - input: cfg.maxInputChars of conversation, oldest turns dropped first;
-//   - time: cfg.turnSeconds for the whole turn (`assistant_timeout`).
+//   - time: cfg.turnSeconds for the whole turn (`assistant_timeout`). A tool
+//     gets the turn's signal and is raced against it, so one that hangs ends
+//     the turn at the deadline like a slow model call, never as a tool failure.
 // A malformed or unknown tool call becomes a tool error result the model
 // sees, never a crash. A provider failure is an `assistant_provider_error`
 // event with fixed words; nothing a provider or a tool throws reaches the
@@ -19,7 +27,7 @@
 // the route can charge them (usage.ts).
 import { logEvent } from '../logging/logEvent.js';
 import { safeError } from '../logging/safeError.js';
-import type { AssistantConfig } from './config.js';
+import { weightedTokens, type AssistantConfig } from './config.js';
 import { systemPrompt } from './prompt.js';
 import type {
 	AssistantProvider,
@@ -34,6 +42,7 @@ import type {
 /** The `error` events a turn can end with (also in http/errors.ts MACHINE_ERROR_CODES). */
 export const TURN_ERRORS = {
 	assistant_hop_limit: 'The assistant needed more steps than one answer may take. Ask a narrower question.',
+	assistant_turn_limit: 'The assistant needed more reading than one answer may take. Ask a narrower question, e.g. about one node or a shorter window.',
 	assistant_output_limit: 'The answer was cut off at its length limit.',
 	assistant_timeout: 'The assistant took too long to answer. Try again, or ask a narrower question.',
 	assistant_provider_error: 'The assistant’s model could not be reached or failed. Try again in a moment.'
@@ -49,8 +58,12 @@ export interface TurnDeps {
 	provider: AssistantProvider;
 	tools: readonly AssistantTool[];
 	cfg: AssistantConfig;
-	/** Runs one tool as the caller, inside withUser(…, { readOnly: true }) (routes.ts). */
-	runTool: (tool: AssistantTool, args: unknown) => Promise<ToolResult>;
+	/**
+	 * Runs one tool as the caller, inside withUser(…, { readOnly: true })
+	 * (routes.ts). `signal` is the turn's: it fires at the deadline or when the
+	 * client goes away, and the turn stops waiting for the tool then.
+	 */
+	runTool: (tool: AssistantTool, args: unknown, signal: AbortSignal) => Promise<ToolResult>;
 	emit: (event: AssistantStreamEvent) => void;
 	/** Aborted when the client goes away: the turn stops quietly. */
 	signal?: AbortSignal;
@@ -112,6 +125,18 @@ const estimate = (chars: number) => Math.ceil(chars / CHARS_PER_TOKEN);
 const transcriptChars = (system: string, messages: TurnMessage[]) =>
 	messages.reduce((n, m) => n + m.content.length + (m.role === 'assistant' ? JSON.stringify(m.toolCalls ?? []).length : 0), system.length);
 
+/** The words a tool call past cfg.maxToolCallsPerHop gets instead of running. */
+export const toolCallLimitError = (max: number) =>
+	`Not run: one step may run at most ${max} tool calls, and the first ${max} ran. Ask for this one again in the next step if you still need it.`;
+
+/** Rejects once `signal` aborts (with its reason), so a tool that ignores the signal can't hold the turn. */
+function abortion(signal: AbortSignal): Promise<never> {
+	return new Promise((_, reject) => {
+		if (signal.aborted) reject(signal.reason);
+		else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+	});
+}
+
 export async function runTurn(deps: TurnDeps, conversation: readonly ChatMessage[]): Promise<TurnOutcome> {
 	const { provider, cfg, emit } = deps;
 	const system = deps.system ?? systemPrompt();
@@ -131,10 +156,15 @@ export async function runTurn(deps: TurnDeps, conversation: readonly ChatMessage
 	const stopped = (): TurnOutcome | null => (deps.signal?.aborted ? outcome('aborted') : deadline.signal.aborted ? fail('assistant_timeout') : null);
 
 	const transcript: TurnMessage[] = (capConversation(conversation, cfg.maxInputChars) ?? []).map((m) => ({ role: m.role, content: m.content }));
+	const specChars = JSON.stringify(specs).length;
 	try {
 		for (let hop = 0; hop < cfg.maxHops; hop++) {
 			const early = stopped();
 			if (early) return early;
+			// Each hop resends the whole transcript, so input grows hop by hop: stop before a hop would pass the turn's ceiling.
+			if (hop > 0 && weightedTokens(usage.inputTokens, usage.outputTokens) + estimate(transcriptChars(system, transcript) + specChars) > cfg.maxTurnTokens) {
+				return fail('assistant_turn_limit');
+			}
 			let text = '';
 			const calls: ToolCall[] = [];
 			let reported = false;
@@ -178,8 +208,20 @@ export async function runTurn(deps: TurnDeps, conversation: readonly ChatMessage
 			if (!calls.length) return outcome('answered');
 			// Tools asked for on the last allowed call would need another call to be read.
 			if (hop === cfg.maxHops - 1) return fail('assistant_hop_limit');
-			for (const call of calls) {
-				const content = await dispatch(deps, byName, call);
+			for (const [i, call] of calls.entries()) {
+				// Every call gets a result (providers refuse a tool call left unanswered); those past the cap get an error instead of running.
+				let content: string;
+				if (i >= cfg.maxToolCallsPerHop) content = JSON.stringify({ ok: false, error: toolCallLimitError(cfg.maxToolCallsPerHop) });
+				else {
+					try {
+						content = await dispatch(deps, byName, call, signal);
+					} catch (err) {
+						// Only the turn's signal escapes dispatch: the deadline or the client going away.
+						const s = stopped();
+						if (s) return s;
+						throw err;
+					}
+				}
 				transcript.push({ role: 'tool', toolCallId: call.id, name: call.name, content });
 				const after = stopped();
 				if (after) return after;
@@ -192,7 +234,7 @@ export async function runTurn(deps: TurnDeps, conversation: readonly ChatMessage
 }
 
 /** Runs one call and returns what the model sees: the result's JSON, size-capped. Emits the panel's tool events. */
-async function dispatch(deps: TurnDeps, byName: Map<string, AssistantTool>, call: ToolCall): Promise<string> {
+async function dispatch(deps: TurnDeps, byName: Map<string, AssistantTool>, call: ToolCall, signal: AbortSignal): Promise<string> {
 	const { emit, cfg } = deps;
 	const tool = typeof call.name === 'string' ? byName.get(call.name) : undefined;
 	const name = typeof call.name === 'string' ? call.name.slice(0, 64) : '';
@@ -207,8 +249,15 @@ async function dispatch(deps: TurnDeps, byName: Map<string, AssistantTool>, call
 			result = { ok: false, error: parsed.error };
 		} else {
 			try {
-				result = await deps.runTool(tool, parsed.args);
+				const running = deps.runTool(tool, parsed.args, signal);
+				running.catch(() => {}); // settles after the race when the turn stopped first
+				result = await Promise.race([running, abortion(signal)]);
 			} catch (err) {
+				if (signal.aborted) {
+					// The turn stopped (deadline or client gone), not the tool: runTurn ends it as such.
+					emit({ type: 'tool', name: tool.spec.name, label: tool.label, status: 'error' });
+					throw err;
+				}
 				// A tool's thrown text could be a database error: the model gets fixed words, the log only the error's name and frames.
 				logEvent('warn', { event: 'assistant_tool_failed', tool: tool.spec.name, ...safeError(err) });
 				result = { ok: false, error: 'The tool failed. Answer from what you have, or try another tool.' };

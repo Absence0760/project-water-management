@@ -1,10 +1,11 @@
 // One assistant turn (orchestrator.ts) against scripted providers and fake
-// tools: the hop cap, a malformed and an unknown tool call, the tool result
-// cap, the conversation cap, the proposal event, the output cap, the turn
-// deadline, a provider failure, and the client going away.
+// tools: the hop cap, the tool calls per hop cap, the turn's token ceiling, a
+// malformed and an unknown tool call, the tool result cap, the conversation
+// cap, the proposal event, the output cap, the turn deadline (a hanging tool
+// included), a provider failure, and the client going away.
 import { describe, expect, it } from 'vitest';
-import { assistantConfig, type AssistantConfig } from './config.js';
-import { capConversation, capToolResult, parseArguments, runTurn, TURN_ERRORS, type TurnDeps } from './orchestrator.js';
+import { assistantConfig, weightedTokens, type AssistantConfig } from './config.js';
+import { capConversation, capToolResult, parseArguments, runTurn, toolCallLimitError, TURN_ERRORS, type TurnDeps } from './orchestrator.js';
 import type { AssistantProvider, AssistantStreamEvent, AssistantTool, ProviderEvent, ProviderRequest, SettingsProposal, ToolResult } from './types.js';
 
 const cfg = (over: Partial<AssistantConfig> = {}): AssistantConfig => ({ ...assistantConfig({}), ...over });
@@ -86,6 +87,44 @@ describe('runTurn', () => {
 		expect(p.requests).toHaveLength(3);
 		expect(runs).toBe(2);
 		expect(events.at(-1)).toEqual({ type: 'error', code: 'assistant_hop_limit', error: TURN_ERRORS.assistant_hop_limit });
+	});
+
+	it('runs only maxToolCallsPerHop calls of one hop; each call past it gets a tool error saying so', async () => {
+		const ran: unknown[] = [];
+		const p = scripted((hop) =>
+			hop === 0 ? [call('t', { n: 1 }, 'c1'), call('t', { n: 2 }, 'c2'), call('t', { n: 3 }, 'c3'), call('t', { n: 4 }, 'c4'), usage()] : [{ type: 'text', delta: 'ok' }, usage()]
+		);
+		const { d, events } = deps(p, [tool('t', (args) => (ran.push(args), { ok: true, data: 1 }))], { cfg: cfg({ maxToolCallsPerHop: 2 }) });
+		expect((await runTurn(d, ask)).end).toBe('answered');
+		expect(ran).toEqual([{ n: 1 }, { n: 2 }]);
+		const results = p.requests[1]!.messages.filter((m) => m.role === 'tool') as { toolCallId: string; content: string }[];
+		// Every call is answered, in order, so the provider sees no tool call left without a result.
+		expect(results.map((r) => r.toolCallId)).toEqual(['c1', 'c2', 'c3', 'c4']);
+		expect(JSON.parse(results[1]!.content)).toEqual({ ok: true, data: 1 });
+		for (const r of results.slice(2)) expect(JSON.parse(r.content)).toEqual({ ok: false, error: toolCallLimitError(2) });
+		expect(events.filter((e) => e.type === 'tool' && e.status === 'start')).toHaveLength(2);
+	});
+
+	it('defaults to 4 tool calls a hop', () => {
+		expect(cfg().maxToolCallsPerHop).toBe(4);
+	});
+
+	it('ends with assistant_turn_limit before a hop that would pass maxTurnTokens, still reporting the tokens spent', async () => {
+		const big = 'x'.repeat(4000); // about 1,000 tokens of tool result
+		const p = scripted((hop) => [call('t', {}, `c${hop}`), usage(500, 100)]);
+		// Hop 0 costs 500 + 5 × 100 = 1,000; hop 1 would resend ~1,000 tokens more, so a 1,500 ceiling stops it.
+		const { d, events } = deps(p, [tool('t', () => ({ ok: true, data: big }))], { cfg: cfg({ maxTurnTokens: 1500, maxToolResultChars: 10_000 }) });
+		const out = await runTurn(d, ask);
+		expect(out).toEqual({ inputTokens: 500, outputTokens: 100, end: 'assistant_turn_limit' });
+		expect(weightedTokens(out.inputTokens, out.outputTokens)).toBe(1000);
+		expect(p.requests).toHaveLength(1);
+		expect(events.at(-1)).toEqual({ type: 'error', code: 'assistant_turn_limit', error: TURN_ERRORS.assistant_turn_limit });
+	});
+
+	it('lets a turn under maxTurnTokens run every hop it needs', async () => {
+		const p = scripted((hop) => (hop < 2 ? [call('t', {}, `c${hop}`), usage(500, 100)] : [{ type: 'text', delta: 'ok' }, usage(500, 100)]));
+		const { d } = deps(p, [tool('t', () => ({ ok: true, data: 1 }))], { cfg: cfg({ maxTurnTokens: 10_000 }) });
+		expect(await runTurn(d, ask)).toEqual({ inputTokens: 1500, outputTokens: 300, end: 'answered' });
 	});
 
 	it('answers a malformed call (arguments that are not JSON, or not an object) with a tool error the model sees; the tool never runs', async () => {
@@ -199,6 +238,41 @@ describe('runTurn', () => {
 		expect(signal?.aborted).toBe(true);
 		expect(out.end).toBe('assistant_timeout');
 		expect(events.at(-1)).toMatchObject({ type: 'error', code: 'assistant_timeout' });
+	});
+
+	it('passes the turn’s signal to the tool, and a tool that hangs past turnSeconds ends the turn as a timeout, not a tool failure', async () => {
+		let toolSignal: AbortSignal | undefined;
+		const p = scripted((hop) => (hop === 0 ? [call('t'), usage(30, 4)] : [{ type: 'text', delta: 'never' }, usage()]));
+		// The tool ignores its signal: the turn must still stop waiting for it.
+		const { d, events } = deps(p, [tool('t', () => new Promise<ToolResult>(() => {}))], {
+			cfg: cfg({ turnSeconds: 0.05 }),
+			runTool: (t, args, signal) => {
+				toolSignal = signal;
+				return t.run({ db: null as never, userId: 'u', projectId: 'p', runId: null }, args);
+			}
+		});
+		const out = await runTurn(d, ask);
+		expect(toolSignal?.aborted).toBe(true);
+		expect(out).toEqual({ inputTokens: 30, outputTokens: 4, end: 'assistant_timeout' });
+		expect(p.requests).toHaveLength(1);
+		expect(events.at(-1)).toEqual({ type: 'error', code: 'assistant_timeout', error: TURN_ERRORS.assistant_timeout });
+		expect(events.filter((e) => e.type === 'error')).toHaveLength(1);
+	});
+
+	it('stops quietly when the client goes away during a tool that rejects on the signal, tokens still reported', async () => {
+		const gone = new AbortController();
+		const p = scripted((hop) => (hop === 0 ? [call('t'), usage(9, 3)] : [usage()]));
+		const { d, events } = deps(p, [tool('t', () => ({ ok: true, data: 1 }))], {
+			signal: gone.signal,
+			runTool: (_t, _args, signal) =>
+				new Promise<ToolResult>((_, reject) => {
+					signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+					gone.abort();
+				})
+		});
+		expect(await runTurn(d, ask)).toEqual({ inputTokens: 9, outputTokens: 3, end: 'aborted' });
+		expect(events.some((e) => e.type === 'error')).toBe(false);
+		expect(p.requests).toHaveLength(1);
 	});
 
 	it('stops quietly when the client goes away: no error event, the tokens still reported', async () => {
