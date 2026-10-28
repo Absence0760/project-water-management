@@ -13,7 +13,10 @@
 // - the units' rain reviewed together in the sheet: unticked until Tick all,
 //   applied only after the confirm, and the item turns Done;
 // - the points step makes units' boundaries (F13): Sub-catchments, one per
-//   click, saves its piece and comes back to the sheet with it as a unit.
+//   click, saves its piece and comes back to the sheet with it as a unit;
+// - the A-pan row (issue #646 item 5) reads "A-pan not set" until the A-pan
+//   is, and a unit boundary redrawn after the start shows in the Checks as an
+//   area from an earlier outline, whose Use takes the area now (item 4, F6).
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject } from '../support/api.ts';
@@ -173,4 +176,47 @@ test('the points step makes units’ boundaries: Sub-catchments, one per click, 
 	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'points');
 	await expect(startSheet(page).getByTestId('start-points').locator('select[id*="-role-"]')).toHaveCount(1);
 	await expect(startSheet(page).getByTestId('start-points').locator('select[id*="-role-"]').first()).toHaveValue('unit');
+});
+
+test('the A-pan row says it isn’t set until it is, and a redrawn unit boundary offers its area now in the Checks', async ({ page, owner }) => {
+	void owner;
+	test.setTimeout(60_000);
+	const id = await startedProject(page.request, 'Start data stale');
+	await openMap(page, id, '&start=1');
+	await expect(listItem(page, 'evaporation')).toHaveAttribute('data-status', 'todo');
+	await expect(listItem(page, 'evaporation')).toContainText('A-pan not set: crop demand and dam evaporation are zero.');
+	const r = await page.request.patch(`${API_URL}/projects/${id}`, { data: { settings: { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110] } } });
+	expect(r.status(), await r.text()).toBe(200);
+	await openMap(page, id, '&start=1');
+	await expect(listItem(page, 'evaporation')).toHaveAttribute('data-status', 'done');
+	await expect(listItem(page, 'evaporation')).toContainText('The monthly A-pan is set.');
+
+	// Redraw the upper unit's boundary smaller: the model keeps the area Start took, and the Checks say so.
+	const map = await (await page.request.get(`${API_URL}/projects/${id}/map/features`)).json();
+	const upper = map.features.find((f: { name: string }) => f.name === 'Upper unit');
+	const unit = map.nodes.find((n: { areaFeatureId: string | null }) => n.areaFeatureId === upper.id);
+	const xs = FIXTURE_UPPER_UNIT.map((p) => p[0]);
+	const ys = FIXTURE_UPPER_UNIT.map((p) => p[1]);
+	const [cx, cy] = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+	const d = (Math.max(...xs) - Math.min(...xs)) / 6;
+	const smaller = area([
+		[cx - d, cy - d],
+		[cx + d, cy - d],
+		[cx + d, cy + d],
+		[cx - d, cy + d],
+		[cx - d, cy - d]
+	]);
+	const patched = await page.request.patch(`${API_URL}/projects/${id}/map/features/${upper.id}`, { data: { geometry: smaller } });
+	expect(patched.status(), await patched.text()).toBe(200);
+	const nowKm2 = (await patched.json()).feature.areaM2 / 1e6;
+
+	await openMap(page, id, '&checks=1');
+	const check = page.getByTestId('map-checks').locator(`[data-check="earlier-outline:${unit.id}"]`);
+	await expect(check).toContainText(`${unit.name}'s area is from an earlier outline of Upper unit:`);
+	await expectNoViolations(page);
+	await check.getByTestId('map-check-use').click();
+	await answerConfirm(page, true, `Set ${unit.name}’s area from the map?`);
+	await expect(check).toHaveCount(0);
+	const after = await (await page.request.get(`${API_URL}/projects/${id}/map/features`)).json();
+	expect(after.nodes.find((n: { id: string }) => n.id === unit.id).areaKm2).toBeCloseTo(nowKm2, 9);
 });
