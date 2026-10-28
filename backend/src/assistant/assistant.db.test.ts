@@ -24,6 +24,9 @@ import { withUser } from '../db/tx.js';
 import { MOCK_IDLE_ANSWER } from './providers/mock.js';
 import { ASSISTANT_DISCLAIMER, setAssistantTools, setProviderFactory } from './routes.js';
 import type { AssistantProvider, AssistantStreamEvent, ProviderEvent } from './types.js';
+import { assistantConfig } from './config.js';
+import { firstHopInput, turnFloor } from './orchestrator.js';
+import { systemPrompt } from './prompt.js';
 import { chargeTurn } from './usage.js';
 import { ASSISTANT_USAGE_RETENTION_MONTHS, runTick } from '../jobs/runner.js';
 import { runToolBounded, TOOL_STATEMENT_TIMEOUT_MS } from './routes.js';
@@ -65,17 +68,47 @@ const usageRows = (pid = projectId) =>
 		`SELECT user_id, input_tokens::int AS input, output_tokens::int AS output, messages FROM assistant_usage WHERE project_id = $1 ORDER BY user_id`,
 		[pid]
 	) as Promise<{ user_id: string | null; input: number; output: number; messages: number }[]>;
-/** This month's weighted tokens across every project (other files' rows included): the deployment's cap is set from it. */
+/** This month's weighted tokens across every project, spent and reserved (other files' rows included): the deployment's cap is set from it. */
 const monthTotal = async () =>
 	Number(
 		(
 			await asOwner(
-				`SELECT coalesce(sum(input_tokens + 5 * output_tokens), 0)::bigint AS t FROM assistant_usage WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date`
+				`SELECT (SELECT coalesce(sum(input_tokens + 5 * output_tokens), 0) FROM assistant_usage WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date)
+				      + (SELECT coalesce(sum(reserved), 0) FROM assistant_reservation WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date) AS t`
 			)
 		)[0]!.t
 	);
+/** The reservations on the two projects (264), oldest first. */
+const reservations = () =>
+	asOwner(
+		`SELECT id, user_id, project_id, reserved::int AS reserved, month::text AS month FROM assistant_reservation WHERE project_id = ANY($1) ORDER BY created_at, id`,
+		[[projectId, otherId]]
+	) as Promise<{ id: string; user_id: string | null; project_id: string; reserved: number; month: string }[]>;
+/**
+ * app_assistant_begin as the route calls it, with the caps given (the others far off): the hourly cap 1000, a turn
+ * at most `max` and at least `min` weighted tokens, a reservation of 300 s.
+ */
+function begin(u: User, pid: string, caps: { project?: number; user?: number; total?: number; max?: number; min?: number } = {}) {
+	return withUser(u.id, async (db) => {
+		const { rows } = await db.query<{ outcome: string; reservation_id: string | null; budget: string | null }>(
+			'SELECT outcome, reservation_id, budget FROM app_assistant_begin($1, $2, 1000, $3, $4, $5, $6, 300)',
+			[pid, caps.project ?? 1e9, caps.user ?? 1e9, caps.total ?? 1e13, caps.max ?? 20_000, caps.min ?? 5_000]
+		);
+		const r = rows[0]!;
+		return { outcome: r.outcome, reservationId: r.reservation_id, budget: r.budget === null ? null : Number(r.budget) };
+	});
+}
+const charge = (u: User, pid: string, reservationId: string | null, input: number, output: number) =>
+	withUser(u.id, (db) => db.query('SELECT * FROM app_assistant_charge($1, $2, $3, $4)', [pid, reservationId, input, output]));
+const usedBy = async (u: User, pid = projectId) => {
+	const { rows } = await withUser(u.id, (db) => db.query<{ p: string; u: string; t: string }>('SELECT project_used AS p, user_used AS u, total_used AS t FROM app_assistant_used($1)', [pid]));
+	return { project: Number(rows[0]!.p), user: Number(rows[0]!.u), total: Number(rows[0]!.t) };
+};
+/** This UTC month, as Postgres has it (YYYY-MM-01). */
+const utcMonth = async () => (await asOwner(`SELECT date_trunc('month', now() AT TIME ZONE 'UTC')::date::text AS m`))[0]!.m as string;
 const rateOf = (u: User) => asOwner('SELECT messages FROM assistant_rate WHERE user_id = $1', [u.id]).then((r) => (r[0]?.messages as number | undefined) ?? 0);
 const clearCounts = async () => {
+	await asOwner('DELETE FROM assistant_reservation WHERE project_id = ANY($1)', [[projectId, otherId]]);
 	await asOwner('DELETE FROM assistant_usage WHERE project_id = ANY($1)', [[projectId, otherId]]);
 	await asOwner('DELETE FROM assistant_rate WHERE user_id = ANY($1)', [[owner, editor, viewer, contributor, farmer, outsider].map((u) => u.id)]);
 };
@@ -124,6 +157,7 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+	await asOwner('DELETE FROM assistant_reservation WHERE project_id = ANY($1)', [[projectId, otherId]]);
 	await asOwner('DELETE FROM assistant_usage WHERE project_id = ANY($1)', [[projectId, otherId]]);
 });
 
@@ -201,6 +235,8 @@ describe('the assistant, on (mock)', () => {
 		expect([usage.inputTokens, usage.outputTokens, usage.tokensUsed]).toEqual([rows[0]!.input, rows[0]!.output, rows[0]!.input + 5 * rows[0]!.output]);
 		expect((await viewer.call('GET', at('/assistant'))).body.budget.tokensUsed).toBe(usage.tokensUsed);
 		expect(await rateOf(viewer)).toBe(1);
+		// The turn's reservation is settled by its charge (264): nothing left reserved.
+		expect(await reservations()).toEqual([]);
 		// One line for the turn's spend, counts only: the hourly spend alarm sums weightedTokens (infra/alarms.tf).
 		const turn = logs.mock.calls.map((c) => (typeof c[0] === 'string' ? JSON.parse(c[0]) : c[0])).find((l) => l.event === 'assistant_turn');
 		expect(turn).toEqual({ event: 'assistant_turn', inputTokens: rows[0]!.input, outputTokens: rows[0]!.output, weightedTokens: usage.tokensUsed, end: 'answered' });
@@ -263,10 +299,10 @@ describe('the assistant, on (mock)', () => {
 
 	it('refuses a turn once the project’s month is spent: 429 assistant_budget_spent with Retry-After to the month’s end; another project still chats', async () => {
 		vi.stubEnv('ASSISTANT_PROVIDER', 'mock');
-		vi.stubEnv('ASSISTANT_TOKENS_PER_MONTH', '1000');
+		vi.stubEnv('ASSISTANT_TOKENS_PER_MONTH', '100000');
 		await asOwner(
-			// 500 + 5 × 100: the month's 1000 weighted tokens.
-			`INSERT INTO assistant_usage (project_id, user_id, month, input_tokens, output_tokens) VALUES ($1, $2, date_trunc('month', now() AT TIME ZONE 'UTC')::date, 500, 100)`,
+			// 50,000 + 5 × 10,000: the month's 100,000 weighted tokens (a cap well over a turn's floor, so the controls below can run).
+			`INSERT INTO assistant_usage (project_id, user_id, month, input_tokens, output_tokens) VALUES ($1, $2, date_trunc('month', now() AT TIME ZONE 'UTC')::date, 50000, 10000)`,
 			[projectId, owner.id]
 		);
 		const res = await post(viewer, ask());
@@ -277,7 +313,7 @@ describe('the assistant, on (mock)', () => {
 		const toMonthEnd = (Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1) - now.getTime()) / 1000;
 		expect(Math.abs(wait - toMonthEnd)).toBeLessThan(60);
 		expect(await rateOf(viewer)).toBe(0);
-		expect((await viewer.call('GET', at('/assistant'))).body.budget).toMatchObject({ tokensPerMonth: 1000, tokensUsed: 1000, scope: 'project' });
+		expect((await viewer.call('GET', at('/assistant'))).body.budget).toMatchObject({ tokensPerMonth: 100_000, tokensUsed: 100_000, scope: 'project' });
 		// Positive control: the same person on another project.
 		expect((await post(viewer, ask(), otherId)).status).toBe(200);
 		// Last month's spend doesn't count.
@@ -318,10 +354,10 @@ describe('the assistant, on (mock)', () => {
 
 	it('refuses a person whose month is spent across projects: 429 assistant_user_budget_spent; another person still chats', async () => {
 		vi.stubEnv('ASSISTANT_PROVIDER', 'mock');
-		vi.stubEnv('ASSISTANT_TOKENS_PER_USER_MONTH', '1000');
+		vi.stubEnv('ASSISTANT_TOKENS_PER_USER_MONTH', '100000');
 		// Spent on the other project: the person's cap spans their projects.
 		await asOwner(
-			`INSERT INTO assistant_usage (project_id, user_id, month, input_tokens, output_tokens) VALUES ($1, $2, date_trunc('month', now() AT TIME ZONE 'UTC')::date, 500, 100)`,
+			`INSERT INTO assistant_usage (project_id, user_id, month, input_tokens, output_tokens) VALUES ($1, $2, date_trunc('month', now() AT TIME ZONE 'UTC')::date, 50000, 10000)`,
 			[otherId, viewer.id]
 		);
 		const res = await post(viewer, ask());
@@ -329,20 +365,20 @@ describe('the assistant, on (mock)', () => {
 		expect(await res.json()).toMatchObject({ code: 'assistant_user_budget_spent', params: { scope: 'user', seconds: expect.any(Number) } });
 		expect(Number(res.headers.get('retry-after'))).toBeGreaterThan(0);
 		expect(await rateOf(viewer)).toBe(0);
-		expect((await viewer.call('GET', at('/assistant'))).body.budget).toMatchObject({ tokensPerMonth: 1000, tokensUsed: 1000, scope: 'user' });
+		expect((await viewer.call('GET', at('/assistant'))).body.budget).toMatchObject({ tokensPerMonth: 100_000, tokensUsed: 100_000, scope: 'user' });
 		// Positive control: someone else on the same project.
 		expect((await post(editor, ask())).status).toBe(200);
 	});
 
 	it('refuses everyone once the deployment’s month is spent, on any project: 429 assistant_total_budget_spent, parallel turns included', async () => {
 		vi.stubEnv('ASSISTANT_PROVIDER', 'mock');
-		// A cap a little over what every project has spent so far this month, then a row that passes it.
-		const cap = (await monthTotal()) + 1000;
+		// A cap well over what every project has spent so far this month (room for a turn's floor), then a row that passes it.
+		const cap = (await monthTotal()) + 100_000;
 		vi.stubEnv('ASSISTANT_TOKENS_PER_MONTH_TOTAL', String(cap));
 		// Positive control: below the cap the turn goes through.
 		expect((await post(editor, ask())).status).toBe(200);
 		await asOwner(
-			`INSERT INTO assistant_usage (project_id, user_id, month, input_tokens, output_tokens) VALUES ($1, $2, date_trunc('month', now() AT TIME ZONE 'UTC')::date, 1000, 0)`,
+			`INSERT INTO assistant_usage (project_id, user_id, month, input_tokens, output_tokens) VALUES ($1, $2, date_trunc('month', now() AT TIME ZONE 'UTC')::date, 100000, 0)`,
 			[otherId, owner.id]
 		);
 		const all = await Promise.all(
@@ -377,7 +413,7 @@ describe('the assistant, on (mock)', () => {
 
 	it('counts parallel charges once each, output weighted ×5', async () => {
 		const n = 12;
-		const totals = await Promise.all(Array.from({ length: n }, () => chargeTurn(viewer.id, projectId, 10, 5)));
+		const totals = await Promise.all(Array.from({ length: n }, () => chargeTurn(viewer.id, projectId, null, 10, 5)));
 		expect(totals.every((t) => t !== null)).toBe(true);
 		const projectTotals = totals.map((t) => t!.project);
 		expect(Math.max(...projectTotals)).toBe(n * 35);
@@ -387,10 +423,218 @@ describe('the assistant, on (mock)', () => {
 	});
 });
 
+describe('reservations: nobody passes a cap (264_assistant_reservation)', () => {
+	it('reserves the least of the turn’s ceiling and what each cap has left (positive control: far under every cap, the whole ceiling)', async () => {
+		expect(await begin(viewer, projectId, { max: 20_000 })).toMatchObject({ outcome: 'ok', budget: 20_000 });
+		expect(await begin(viewer, projectId, { user: 50_000, max: 40_000 })).toMatchObject({ outcome: 'ok', budget: 30_000 });
+		expect((await reservations()).map((r) => r.reserved)).toEqual([20_000, 30_000]);
+	});
+
+	it('counts parallel begins by one person one by one: what they reserve never passes what their month has left', async () => {
+		// 50,000 left of the person's month (spent on the other project: the cap spans their projects).
+		await asOwner(
+			`INSERT INTO assistant_usage (project_id, user_id, month, input_tokens) VALUES ($1, $2, date_trunc('month', now() AT TIME ZONE 'UTC')::date, 950000)`,
+			[otherId, viewer.id]
+		);
+		const all = await Promise.all(Array.from({ length: 8 }, (_, i) => begin(viewer, i % 2 ? otherId : projectId, { user: 1_000_000, max: 20_000, min: 5_000 })));
+		const ok = all.filter((r) => r.outcome === 'ok');
+		// 20,000 + 20,000 + 10,000, then less than a turn's floor (5,000) is left: refused as the person's month.
+		expect(ok.map((r) => r.budget).sort((a, b) => b! - a!)).toEqual([20_000, 20_000, 10_000]);
+		expect(all.filter((r) => r.outcome !== 'ok').map((r) => r.outcome)).toEqual(Array(5).fill('user_budget'));
+		expect((await reservations()).reduce((n, r) => n + r.reserved, 0)).toBe(50_000);
+		// Only the turns that began were counted as messages.
+		expect(await rateOf(viewer)).toBe(3);
+		// Positive control: someone else still begins.
+		expect(await begin(editor, projectId, { user: 1_000_000 })).toMatchObject({ outcome: 'ok' });
+	});
+
+	it('the same for the project’s cap across its members, and the deployment’s across every project', async () => {
+		const project = await Promise.all([viewer, editor, owner, viewer, editor, owner].map((u) => begin(u, projectId, { project: 45_000, max: 20_000, min: 5_000 })));
+		expect(project.filter((r) => r.outcome === 'ok').reduce((n, r) => n + r.budget!, 0)).toBe(45_000);
+		expect(project.filter((r) => r.outcome !== 'ok').map((r) => r.outcome)).toEqual(Array(3).fill('budget'));
+		await clearCounts();
+		// 37,000 left of the deployment's month, whatever other files have spent.
+		const total = (await monthTotal()) + 37_000;
+		const all = await Promise.all(
+			(
+				[
+					[viewer, projectId],
+					[viewer, otherId],
+					[editor, projectId],
+					[owner, otherId],
+					[owner, projectId],
+					[editor, projectId]
+				] as const
+			).map(([u, pid]) => begin(u, pid, { total, max: 20_000, min: 5_000 }))
+		);
+		expect(all.filter((r) => r.outcome === 'ok').reduce((n, r) => n + r.budget!, 0)).toBe(37_000);
+		expect(all.filter((r) => r.outcome !== 'ok').map((r) => r.outcome)).toEqual(Array(4).fill('total_budget'));
+		expect(await monthTotal()).toBe(total);
+	});
+
+	it('settles a reservation at charge: the real tokens counted, the rest freed for the next turn', async () => {
+		const turn = await begin(viewer, projectId, { user: 30_000, max: 20_000 });
+		expect(turn).toMatchObject({ outcome: 'ok', budget: 20_000 });
+		// While the turn runs, the status counts its reservation as spent.
+		expect((await usedBy(viewer)).user).toBe(20_000);
+		// 10,000 left: a second turn gets that, not the ceiling.
+		const second = await begin(viewer, projectId, { user: 30_000, max: 20_000 });
+		expect(second).toMatchObject({ outcome: 'ok', budget: 10_000 });
+		await charge(viewer, projectId, turn.reservationId, 1000, 100);
+		// 1,000 + 5 × 100 spent, and the second's 10,000 still reserved.
+		expect((await usedBy(viewer)).user).toBe(11_500);
+		expect((await reservations()).map((r) => r.id)).toEqual([second.reservationId]);
+		await charge(viewer, projectId, second.reservationId, 2000, 0);
+		expect(await reservations()).toEqual([]);
+		expect(await usageRows()).toEqual([{ user_id: viewer.id, input: 3000, output: 100, messages: 2 }]);
+		// What the turns didn't spend is free again: 30,000 − 3,500.
+		expect(await begin(viewer, projectId, { user: 30_000, max: 50_000 })).toMatchObject({ outcome: 'ok', budget: 26_500 });
+	});
+
+	it('charges an expired, unsettled reservation in full (its Lambda died), at the next begin and at the tick', async () => {
+		const dead = await begin(viewer, projectId, { max: 20_000 });
+		const expire = (id: string | null) =>
+			asOwner(`UPDATE assistant_reservation SET created_at = now() - interval '10 minutes', expires_at = now() - interval '1 second' WHERE id = $1`, [id]);
+		// Expired but not yet converted, it still counts, in full.
+		await expire(dead.reservationId);
+		expect((await usedBy(viewer)).user).toBe(20_000);
+		// The next begin (anyone's, on any project) charges it to its person's row, as input tokens.
+		const live = await begin(owner, otherId, { max: 5_000 });
+		expect(live.outcome).toBe('ok');
+		expect(await usageRows()).toEqual([{ user_id: viewer.id, input: 20_000, output: 0, messages: 1 }]);
+		expect((await reservations()).map((r) => r.id)).toEqual([live.reservationId]);
+		// A charge arriving after that (it can't on Lambda, whose timeout comes first) adds its tokens again: never short.
+		await charge(viewer, projectId, dead.reservationId, 700, 0);
+		expect((await usageRows())[0]).toMatchObject({ input: 20_700 });
+		// The tick converts one too, with no begin.
+		const other = await begin(viewer, projectId, { max: 6_000 });
+		await expire(other.reservationId);
+		const tick = await runTick({ feeds: false, reports: false, alerts: false, maxJobs: 0 });
+		expect(tick.assistantPurged).toBeGreaterThanOrEqual(1);
+		expect((await usageRows())[0]).toMatchObject({ input: 26_700 });
+		// Positive control: the live one, not yet expired, stays.
+		expect((await reservations()).map((r) => r.id)).toEqual([live.reservationId]);
+	});
+
+	it('lets nobody read the reservations, and nobody settle another’s (positive control: its owner does)', async () => {
+		const turn = await begin(viewer, projectId);
+		await expect(withUser(viewer.id, (db) => db.query('SELECT * FROM assistant_reservation'))).rejects.toMatchObject({ code: '42501' });
+		await expect(withUser(viewer.id, (db) => db.query('DELETE FROM assistant_reservation'))).rejects.toMatchObject({ code: '42501' });
+		// Another member of the project, and the owner, can't settle it: it stays, uncharged.
+		for (const u of [editor, owner]) await expect(charge(u, projectId, turn.reservationId, 1, 0)).rejects.toMatchObject({ code: '42501' });
+		// Nor can its own person charge it to another project.
+		await expect(charge(viewer, otherId, turn.reservationId, 1, 0)).rejects.toMatchObject({ code: '42501' });
+		expect((await reservations()).map((r) => r.id)).toEqual([turn.reservationId]);
+		expect(await usageRows()).toEqual([{ user_id: viewer.id, input: 0, output: 0, messages: 1 }]);
+		await charge(viewer, projectId, turn.reservationId, 5, 1);
+		expect(await reservations()).toEqual([]);
+		expect(await usageRows()).toEqual([{ user_id: viewer.id, input: 5, output: 1, messages: 1 }]);
+	});
+
+	it('refuses parameters a turn can’t run with: a floor past the ceiling, no floor, an endless reservation', async () => {
+		for (const sql of [
+			'SELECT * FROM app_assistant_begin($1, 1000000, 30, 1000000, 100000000, 1000, 2000, 300)',
+			'SELECT * FROM app_assistant_begin($1, 1000000, 30, 1000000, 100000000, 1000, 0, 300)',
+			'SELECT * FROM app_assistant_begin($1, 1000000, 30, 1000000, 100000000, 1000, 100, 0)',
+			'SELECT * FROM app_assistant_begin($1, 1000000, 30, 1000000, 100000000, 1000, 100, 86400)'
+		]) {
+			await expect(
+				withUser(viewer.id, (db) => db.query(sql, [projectId])),
+				sql
+			).rejects.toMatchObject({ code: '22023' });
+		}
+		expect(await rateOf(viewer)).toBe(0);
+	});
+
+	it('reserves against the UTC month whatever the session’s time zone, and a turn begun last month is charged to last month', async () => {
+		const month = await utcMonth();
+		for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+			const { rows } = await withUser(viewer.id, async (db) => {
+				await db.query(`SELECT set_config('TimeZone', $1, true)`, [zone]);
+				return db.query<{ reservation_id: string }>('SELECT reservation_id FROM app_assistant_begin($1, 1000000, 1000, 1000000, 10000000000000, 20000, 5000, 300)', [projectId]);
+			});
+			expect((await reservations()).find((r) => r.id === rows[0]!.reservation_id)?.month, zone).toBe(month);
+		}
+		await asOwner('DELETE FROM assistant_reservation WHERE project_id = $1', [projectId]);
+		// One begun before the month turned: it counts against last month, not this one ...
+		const old = await begin(viewer, projectId, { user: 25_000, max: 20_000 });
+		await asOwner(`UPDATE assistant_reservation SET month = ($1::date - interval '1 month')::date WHERE id = $2`, [month, old.reservationId]);
+		expect(await begin(viewer, projectId, { user: 25_000, max: 20_000 })).toMatchObject({ outcome: 'ok', budget: 20_000 });
+		// ... and its charge goes to last month's row.
+		await charge(viewer, projectId, old.reservationId, 900, 0);
+		const lastMonth = (await asOwner(`SELECT ($1::date - interval '1 month')::date::text AS m`, [month]))[0]!.m;
+		const rows = await asOwner(`SELECT month::text AS month, input_tokens::int AS input FROM assistant_usage WHERE project_id = $1 AND user_id = $2 ORDER BY month`, [projectId, viewer.id]);
+		expect(rows).toEqual([
+			{ month: lastMonth, input: 900 },
+			{ month, input: 0 }
+		]);
+	});
+});
+
+describe('the route reserves the turn’s budget', () => {
+	/** A model that spends as much as the contract lets it: input as high as the estimate, its whole output cap, and a tool call each hop. */
+	const greedy: AssistantProvider = {
+		name: 'mock',
+		async *complete(req): AsyncIterable<ProviderEvent> {
+			yield { type: 'tool_call', call: { id: `c${req.messages.length}`, name: 'probe', arguments: {} } };
+			yield { type: 'usage', inputTokens: firstHopInput(req.system, req.tools, req.messages), outputTokens: req.maxOutputTokens };
+		}
+	};
+	const probe = { spec: { name: 'probe', description: 'probe', parameters: { type: 'object', properties: {} } }, label: 'Probing', run: async () => ({ ok: true as const, data: 'ok' }) };
+	const floorOf = (content = 'Hello') => turnFloor(assistantConfig(), systemPrompt(), [probe], [{ role: 'user', content }]);
+
+	it('stops a turn at what the person’s month had left, not the turn’s ceiling: spent up to the cap, never past it', async () => {
+		vi.stubEnv('ASSISTANT_PROVIDER', 'mock');
+		setAssistantTools([probe]);
+		setProviderFactory(() => greedy);
+		const cap = floorOf() + 3000;
+		vi.stubEnv('ASSISTANT_TOKENS_PER_USER_MONTH', String(cap));
+		const evs = await events(await post(viewer, ask()));
+		expect(evs.find((e) => e.type === 'error')).toMatchObject({ code: 'assistant_turn_limit' });
+		const [row] = await usageRows();
+		expect(row!.input + 5 * row!.output).toBeLessThanOrEqual(cap);
+		expect(await reservations()).toEqual([]);
+		// Less than a turn's floor is left now: refused, though the month isn't quite spent.
+		const res = await post(viewer, ask());
+		expect(res.status).toBe(429);
+		expect(await res.json()).toMatchObject({ code: 'assistant_user_budget_spent' });
+	});
+
+	it('refuses a turn when the month has less than its floor left (positive control: exactly the floor runs)', async () => {
+		vi.stubEnv('ASSISTANT_PROVIDER', 'mock');
+		setAssistantTools([probe]);
+		setProviderFactory(() => greedy);
+		vi.stubEnv('ASSISTANT_TOKENS_PER_USER_MONTH', String(floorOf() - 1));
+		const res = await post(viewer, ask());
+		expect(res.status).toBe(429);
+		expect(await res.json()).toMatchObject({ code: 'assistant_user_budget_spent' });
+		expect(await rateOf(viewer)).toBe(0);
+		vi.stubEnv('ASSISTANT_TOKENS_PER_USER_MONTH', String(floorOf()));
+		const ok = await post(viewer, ask());
+		expect(ok.status).toBe(200);
+		await ok.text();
+	});
+
+	it('refuses with 413 a conversation whose first call alone needs more than ASSISTANT_MAX_TURN_TOKENS, counting nothing', async () => {
+		vi.stubEnv('ASSISTANT_PROVIDER', 'mock');
+		setAssistantTools([probe]);
+		vi.stubEnv('ASSISTANT_MAX_TURN_TOKENS', String(floorOf('x'.repeat(20)) - 1));
+		const res = await post(viewer, ask('x'.repeat(20)));
+		expect(res.status).toBe(413);
+		expect(await res.json()).toMatchObject({ code: 'assistant_input_too_large' });
+		expect(await rateOf(viewer)).toBe(0);
+		expect(await reservations()).toEqual([]);
+		// Positive control: a shorter one fits.
+		const ok = await post(viewer, ask('x'));
+		expect(ok.status).toBe(200);
+		await ok.text();
+	});
+});
+
 describe('the usage tables under RLS', () => {
 	it('lets a person read their own usage rows only (positive control: they do), and write neither table directly', async () => {
-		await chargeTurn(viewer.id, projectId, 3, 4);
-		await chargeTurn(editor.id, projectId, 5, 6);
+		await chargeTurn(viewer.id, projectId, null, 3, 4);
+		await chargeTurn(editor.id, projectId, null, 5, 6);
 		const own = await withUser(viewer.id, (db) => db.query('SELECT user_id, input_tokens::int AS i FROM assistant_usage WHERE project_id = $1', [projectId]));
 		expect(own.rows).toEqual([{ user_id: viewer.id, i: 3 }]);
 		// The project's total is the definer function's, for any member.
@@ -413,18 +657,18 @@ describe('the usage tables under RLS', () => {
 
 	it('refuses the functions to a non-member, a farmer and no user: nobody spends another project’s budget', async () => {
 		for (const u of [outsider, farmer]) {
-			await expect(withUser(u.id, (db) => db.query('SELECT app_assistant_charge($1, 1, 1)', [projectId]))).rejects.toMatchObject({ code: '42501' });
-			await expect(withUser(u.id, (db) => db.query('SELECT * FROM app_assistant_begin($1, 100, 10, 100, 100)', [projectId]))).rejects.toMatchObject({ code: '42501' });
+			await expect(withUser(u.id, (db) => db.query('SELECT app_assistant_charge($1, NULL, 1, 1)', [projectId]))).rejects.toMatchObject({ code: '42501' });
+			await expect(withUser(u.id, (db) => db.query('SELECT * FROM app_assistant_begin($1, 100, 10, 100, 100, 100, 10, 60)', [projectId]))).rejects.toMatchObject({ code: '42501' });
 			expect((await withUser(u.id, (db) => db.query('SELECT * FROM app_assistant_used($1)', [projectId]))).rows[0]).toEqual({ project_used: null, user_used: null, total_used: null });
 		}
-		expect(await chargeTurn(outsider.id, projectId, 1, 1)).toBeNull();
+		expect(await chargeTurn(outsider.id, projectId, null, 1, 1)).toBeNull();
 		expect(await usageRows()).toEqual([]);
 	});
 });
 
 describe('Download my data', () => {
 	it('carries the person’s usage rows, counts only', async () => {
-		await chargeTurn(viewer.id, projectId, 7, 8);
+		await chargeTurn(viewer.id, projectId, null, 7, 8);
 		await asOwner('UPDATE app_user SET data_exported_at = NULL WHERE id = $1', [viewer.id]);
 		const r = await viewer.call('GET', '/auth/me/export');
 		expect(r.status).toBe(200);

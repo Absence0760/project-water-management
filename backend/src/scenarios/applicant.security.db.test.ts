@@ -241,8 +241,9 @@ beforeAll(async () => {
 		   AND has_table_privilege('water_app', c.oid, 'SELECT')
 		 ORDER BY 1`
 	);
-	// The app role can't read these at all (owner-only, read through definer functions, #523 G): no applicant can.
-	// Any other table it can't read is a lost grant, not a pass.
+	// The app role can't read these at all (owner-only, read through definer functions): the allocation holder salt
+	// (#523 G) and a running assistant turn's reservation (264). No applicant can. Any other table it can't read is a
+	// lost grant, not a pass.
 	const unreadable = await asOwner(
 		`SELECT c.relname AS t FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 		 WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
@@ -250,7 +251,7 @@ beforeAll(async () => {
 		   AND NOT has_table_privilege('water_app', c.oid, 'SELECT')
 		 ORDER BY 1`
 	);
-	expect(unreadable.map((r: { t: string }) => r.t)).toEqual(['allocation_holder_salt']);
+	expect(unreadable.map((r: { t: string }) => r.t)).toEqual(['allocation_holder_salt', 'assistant_reservation']);
 	tables = await Promise.all(scoped.map(async ({ t }: { t: string }) => ({ t, key: await keyExpr(t) })));
 }, 180_000);
 

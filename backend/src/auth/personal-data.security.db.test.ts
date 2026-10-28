@@ -296,12 +296,15 @@ beforeAll(async () => {
 			[projectId, runId, farm.id]
 		)
 	);
-	// A turn they asked the assistant (262), counted as its route counts one, without a provider: their
-	// hourly count (assistant_rate, CASCADE) and their month's tokens on the project (assistant_usage, SET NULL).
+	// A turn they asked the assistant (262, 264), counted as its route counts one, without a provider: their
+	// hourly count (assistant_rate, CASCADE) and their month's tokens on the project (assistant_usage, SET NULL);
+	// and one still running, its reservation unsettled (assistant_reservation, SET NULL).
+	const BEGIN = 'SELECT reservation_id FROM app_assistant_begin($1, 1000000, 30, 1000000, 100000000, 10000, 1000, 300)';
 	await withUser(subject.id, async (tx) => {
-		await tx.query('SELECT * FROM app_assistant_begin($1, 1000000, 30, 1000000, 100000000)', [projectId]);
-		await tx.query('SELECT app_assistant_charge($1, 1200, 300)', [projectId]);
+		const { rows } = await tx.query(BEGIN, [projectId]);
+		await tx.query('SELECT app_assistant_charge($1, $2, 1200, 300)', [projectId, rows[0].reservation_id]);
 	});
+	await withUser(subject.id, (tx) => tx.query(BEGIN, [projectId]));
 	// The calibration rules signed off by them, as a typed signature (issue #153), and a run of the rules they asked for
 	// and whose fit they applied (108): created_by and applied_by. Planted as they make it, without its jobs.
 	const rules = (await call(subject, 'GET', `/projects/${projectId}`)).project.settings.calibrationRules;
