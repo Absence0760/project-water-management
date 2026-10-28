@@ -40,6 +40,26 @@
 #                    https://<host>/api/health still
 #                    answers 200 (the API keeps serving a former hostname, for
 #                    one-click unsubscribes and logger pushes).
+#   assistant-*      Only while the assistant's Lambda exists (assistant_enabled;
+#                    lambda get-function-configuration, ResourceNotFound means
+#                    off and skips them):
+#     assistant-logging  Bedrock model invocation logging is off in <region>:
+#                    get-model-invocation-logging-configuration returns no
+#                    loggingConfig. It is an account-level setting Terraform
+#                    doesn't manage (its resource can only turn logging on),
+#                    and turned on it would keep every prompt, tool result
+#                    and answer, which the privacy notice says nothing does
+#                    (docs/security.md § Assistant). FAILS if any is set.
+#     assistant-budget   The assistant's budget (alarms.tf, BillingEntity =
+#                    AWS Marketplace) has seen a charge this month. WARN until
+#                    it has: billing lags a day or two after the first model
+#                    call, so re-run then; still $0 days after real use means
+#                    the filter doesn't catch the model's charge (Cost
+#                    Explorer, group by Billing entity, says where it went).
+#     assistant-quota    Records the account's Bedrock tokens-per-minute quota
+#                    for the model's cross-Region profile (Service Quotas),
+#                    the ceiling on what the assistant can spend a minute.
+#                    WARN if no such quota is listed.
 #
 # --rds-event-test (opt-in; it changes nothing either): the topic policy lets
 # events.rds.amazonaws.com publish only with aws:SourceAccount = this account
@@ -69,6 +89,8 @@ project="water-management"
 topic="$project-prod-alerts"
 repo="$project-renderer"
 api_function="$project-backend"
+assistant_function="$project-assistant"
+assistant_budget="$project-assistant"
 
 usage() {
 	sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//' >&2
@@ -304,6 +326,68 @@ if out="$(aws_in "$region" lambda get-function-url-config --function-name "$api_
 	fi
 else
 	fail function-url "$api_function: $(last_error)"
+fi
+
+# --- The assistant (assistant.tf), only while it exists ----------------------------
+
+assistant=0
+if out="$(aws_in "$region" lambda get-function-configuration --function-name "$assistant_function")"; then
+	assistant=1
+	model="$(jq -r '.Environment.Variables.ASSISTANT_MODEL // empty' <<<"$out")"
+elif ! grep -q 'ResourceNotFoundException' "$errfile"; then
+	fail assistant "$assistant_function: $(last_error)"
+fi
+
+if [ "$assistant" = 1 ]; then
+	if out="$(aws_in "$region" bedrock get-model-invocation-logging-configuration)"; then
+		if jq -e '.loggingConfig // empty | length > 0' <<<"$out" >/dev/null; then
+			dests="$(jq -r '.loggingConfig | [(if .cloudWatchConfig then "CloudWatch Logs" else empty end), (if .s3Config then "S3" else empty end)] | join(" and ") | if . == "" then "a destination" else . end' <<<"$out")"
+			fail assistant-logging "Bedrock model invocation logging is ON in $region (to $dests): every prompt and answer is kept, against the privacy notice. Turn it off: aws bedrock delete-model-invocation-logging-configuration --region $region (docs/deployment.md § The assistant)"
+		else
+			pass assistant-logging "Bedrock model invocation logging is off in $region"
+		fi
+	else
+		fail assistant-logging "get-model-invocation-logging-configuration failed: $(last_error)"
+	fi
+
+	if [ -z "$account" ]; then
+		fail assistant-budget "can't read the account ID (sts get-caller-identity)"
+	elif out="$(aws_in us-east-1 budgets describe-budget --account-id "$account" --budget-name "$assistant_budget")"; then
+		spent="$(jq -r '.Budget.CalculatedSpend.ActualSpend.Amount // "0"' <<<"$out")"
+		if jq -e --arg s "$spent" -n '($s | tonumber) > 0' >/dev/null 2>&1; then
+			pass assistant-budget "$assistant_budget has seen \$$spent of AWS Marketplace charges this month: its filter catches the model's charge"
+		else
+			warn assistant-budget "$assistant_budget has seen \$0 this month. Billing lags a day or two after the first model call: re-run then. Still \$0 days after real use means its BillingEntity = AWS Marketplace filter misses the charge (Cost Explorer, group by Billing entity; alarms.tf aws_budgets_budget.assistant)"
+		fi
+	elif grep -q 'NotFoundException' "$errfile"; then
+		warn assistant-budget "no $assistant_budget budget (assistant_budget_monthly_usd or budget_monthly_usd is 0): nothing reports the model's spend in dollars"
+	else
+		fail assistant-budget "$assistant_budget: $(last_error)"
+	fi
+
+	# The model's words as Service Quotas names them: claude-sonnet-5-5 -> "claude sonnet 5.5".
+	base="${model#*anthropic.}"
+	words="$(sed -E 's/-([0-9]+)-([0-9]+)$/ \1.\2/; s/-/ /g' <<<"$base")"
+	case "${model%%.*}" in
+	global) scope="Global cross-region" ;;
+	anthropic) scope="On-demand" ;;
+	*) scope="Cross-region" ;;
+	esac
+	if [ -z "$model" ]; then
+		warn assistant-quota "$assistant_function has no ASSISTANT_MODEL: can't tell which quota applies"
+	elif out="$(aws_in "$region" service-quotas list-service-quotas --service-code bedrock)"; then
+		found="$(jq -r --arg w "$words" --arg scope "$scope" '
+			[.Quotas[]? | select((.QuotaName | ascii_downcase) as $n
+				| ($n | startswith($scope | ascii_downcase)) and ($n | contains("tokens per minute")) and ($n | contains($w | ascii_downcase)))
+			| "\(.QuotaName) = \(.Value | floor)"] | join("; ")' <<<"$out")"
+		if [ -n "$found" ]; then
+			pass assistant-quota "$found (record it: the most the assistant can spend a minute, output tokens counting 5x)"
+		else
+			warn assistant-quota "no \"$scope ... tokens per minute\" quota for $words in $region's Service Quotas: look it up in the console and record it (docs/deployment.md § The assistant)"
+		fi
+	else
+		fail assistant-quota "list-service-quotas failed: $(last_error)"
+	fi
 fi
 
 echo
