@@ -226,6 +226,10 @@ test('a viewer kept from the registered volumes reads a cap run’s row as withh
 	const dam = item.locator('dd').filter({ hasText: why });
 	await expect(dam).toHaveText(`Withheld ${why}`);
 	await expect(dam).toHaveClass(/muted/);
+	// The drought badge (issue #620) rests on rain and evaporation, not the registered volumes: never withheld.
+	const drought = item.locator('dl.p-facts > div').filter({ has: v.locator('dt', { hasText: /^Drought$/ }) }).locator('dd');
+	await expect(drought.getByTestId('drought-tag')).toBeVisible();
+	await expect(drought).not.toContainText('Withheld');
 	await expectNoViolations(v);
 });
 

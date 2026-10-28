@@ -2555,7 +2555,7 @@ in the Data column (in the lines under the name when the column folds), and
 on the team page as a fourth fact, **Drought**, beside Hydrological units
 short, Lowest dam and Alerts. Workspace pages only, in English: no farmer
 page shows it (#620's open question 4), and a farmer's or applicant's row has
-no figures at all. `projects.spec.ts` pins it.
+no figures at all. `projects.spec.ts` pins it on the list, `portfolio.spec.ts` on the team page (never withheld: it rests on rain and evaporation), `DroughtTag.test.ts` its markup.
 
 **The status is irrigation supply** (issue #558, the operator's decision:
 "take it out and show irrigation instead"): the share of all units' demand
