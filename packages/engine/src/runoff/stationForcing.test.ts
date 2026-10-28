@@ -763,9 +763,16 @@ describe('resolvePatch and stationPatchUsability', () => {
 		const plain = withP({ catchment: chain, units: { A: chain } });
 		const x = withP({ catchment: chain, units: { A: chain } });
 		x.series = { ...x.series, rain_forecast_mm: forecast };
-		const base = runModel(plain).summary.stations!;
-		const out = runModel(x).summary.stations!;
-		expect(runModel(x).summary.historyDays).toBe(DAYS);
+		const baseOut = runModel(plain);
+		const xOut = runModel(x);
+		const base = baseOut.summary.stations!;
+		const out = xOut.summary.stations!;
+		expect(xOut.summary.historyDays).toBe(DAYS);
+		// Only the counts change: the history days' rain and flow are the run's without the forecast, day for day.
+		const col = (o: typeof xOut, key: string, nodeId: string | null = null) => Array.from(o.series.find((s) => s.nodeId === nodeId && s.key === key)!.values.slice(0, DAYS));
+		for (const [key, nodeId] of [['rain_used', null], ['natural_flow', null], ['rain_unit', 'A']] as const) {
+			expect(col(xOut, key, nodeId), `${key}@${nodeId ?? ''}`).toEqual(col(baseOut, key, nodeId));
+		}
 		for (const [a, b] of [
 			[out.catchment!, base.catchment!],
 			[out.units.find((u) => u.nodeId === 'A')!, base.units.find((u) => u.nodeId === 'A')!]
@@ -774,12 +781,34 @@ describe('resolvePatch and stationPatchUsability', () => {
 			const q = b.patches![0] as typeof p;
 			expect(p.gapDays).toBe(q.gapDays); // not q.gapDays + TAIL
 			expect(p.fills).toBe(q.fills);
+			expect(p.days).toBe(q.days); // the days it gave the rain: the same, as no tail day is patched
 			expect(p.forecastDays).toBe(TAIL);
 			expect(q.forecastDays).toBeUndefined();
 		}
 		const c = stationPatchChoices(x, { stationId: 'S' });
 		const q = base.catchment!.patches![0] as { gapDays: number; fills: number };
 		expect(c.P).toMatchObject({ usable: true, gapDays: q.gapDays, fills: q.fills, forecastDays: TAIL, windowFrom: START, windowTo: '2020-12-31' });
+	});
+
+	it('the counted window’s dates don’t move with the machine’s time zone', () => {
+		const tz = process.env.TZ;
+		const tail = withP({ catchment: { stationId: 'S' } });
+		tail.series = { ...tail.series, rain_forecast_mm: { startDate: '2021-01-01', values: Array.from({ length: 10 }, () => 2) } };
+		const read = () => {
+			const u = stationPatchUsability({ main: [1, null, null, null], patch: [null, 3, null, 4], scaleToMap: false, stationMapMm: null, historyDays: 3, startDate: '2020-12-30' });
+			const c = stationPatchChoices(tail, { stationId: 'S' }).P!;
+			return JSON.stringify([u, c]);
+		};
+		try {
+			process.env.TZ = 'Pacific/Kiritimati';
+			const east = read();
+			expect(JSON.parse(east)[0]).toMatchObject({ gapDays: 2, fills: 1, forecastDays: 1, windowFrom: '2020-12-30', windowTo: '2021-01-01' });
+			expect(JSON.parse(east)[1]).toMatchObject({ windowFrom: START, windowTo: '2020-12-31', forecastDays: 10 });
+			process.env.TZ = 'Pacific/Pago_Pago';
+			expect(read()).toBe(east);
+		} finally {
+			process.env.TZ = tz;
+		}
 	});
 
 	it('stationPatchChoices: every station of the input against a unit’s main station, over the run window', () => {
