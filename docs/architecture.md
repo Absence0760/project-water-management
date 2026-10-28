@@ -2587,7 +2587,10 @@ sequenceDiagram
   comment keeps CloudFront's 35 s gap from cutting a slow tool call off.
 - **No transcript is stored**, and no prompt or answer is logged: the server
   keeps only the token and message counts (`assistant_usage`, `assistant_rate`)
-  and, while a turn runs, its reservation (`assistant_reservation`).
+  and, while a turn runs, its reservation (`assistant_reservation`). The
+  person's past chats are kept by the page in the browser's IndexedDB, never
+  sent anywhere but as a new turn's conversation, and deleted on sign-out
+  (docs/ui.md § Assistant).
 
 ### Assistant tools
 

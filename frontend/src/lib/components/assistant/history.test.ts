@@ -8,7 +8,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AssistantProposal } from '#lib/api/types.js';
 import type { Turn } from './chat.svelte';
-import { ChatHistory, MAX_CHATS_PER_PROJECT, TITLE_CHARS, idbBackend, restoreTurns, storeTurns, titleOf, type ChatRecord, type HistoryBackend } from './history';
+import { ChatHistory, HISTORY_DB, MAX_CHATS_PER_PROJECT, TITLE_CHARS, idbBackend, restoreTurns, storeTurns, titleOf, type ChatRecord, type HistoryBackend } from './history';
 import { CHAT_HISTORY_DB, clearAllChatHistory } from './historyClear';
 
 function memory(): HistoryBackend & { rows: Map<string, ChatRecord> } {
@@ -187,6 +187,8 @@ describe('storage that isn’t there', () => {
 		const deleteDatabase = vi.fn();
 		clearAllChatHistory({ deleteDatabase } as unknown as IDBFactory);
 		expect(deleteDatabase).toHaveBeenCalledWith(CHAT_HISTORY_DB);
+		// The database sign-out deletes is the one the history opens.
+		expect(CHAT_HISTORY_DB).toBe(HISTORY_DB);
 		expect(() =>
 			clearAllChatHistory({
 				deleteDatabase: () => {

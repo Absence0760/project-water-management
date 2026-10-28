@@ -20,9 +20,13 @@
 // MAX_BYTES_PER_USER across the person's projects, the oldest dropped first.
 // Every chat in the browser is deleted on sign-out (historyClear.ts), and
 // another user's are deleted as soon as this one's are read.
-import { CHAT_HISTORY_DB } from './historyClear';
 import type { ProposalEntry, ToolLine, Turn } from './chat.svelte';
 
+/**
+ * The IndexedDB database, the same name historyClear.ts deletes on sign-out (history.test.ts checks they agree).
+ * Not imported from there: that module is in every page's chunk, and sharing it made a chunk of its own.
+ */
+export const HISTORY_DB = 'wm-assistant-history';
 export const MAX_CHATS_PER_PROJECT = 20;
 /** Bytes of stored JSON a person may keep, across their projects (about 2 MB). */
 export const MAX_BYTES_PER_USER = 2_000_000;
@@ -256,7 +260,7 @@ export function idbBackend(factory?: IDBFactory | null): HistoryBackend | null {
 	let opening: Promise<IDBDatabase> | null = null;
 	const db = () =>
 		(opening ??= new Promise<IDBDatabase>((resolve, reject) => {
-			const req = f.open(CHAT_HISTORY_DB, 1);
+			const req = f.open(HISTORY_DB, 1);
 			req.onupgradeneeded = () => {
 				if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE, { keyPath: 'key' });
 			};

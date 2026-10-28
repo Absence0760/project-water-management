@@ -108,8 +108,8 @@
 		<li>
 			<strong>The assistant, if you use it:</strong> how many messages you sent it in the last hour, and how many tokens (the
 			pieces of text the AI model reads and writes) your messages used in each project each month. Not what you or the assistant
-			wrote: the conversation stays in your browser tab, is sent with each new message, and is gone when you close the tab. We
-			don’t keep it or log it.
+			wrote: the conversation stays in your browser, is sent with each new message, and is never kept or logged on our servers.
+			Your browser keeps your past chats on your device (section 8) until you delete them or sign out.
 		</li>
 		<li><strong>Server logs:</strong> requests and errors, kept briefly to run and fix the service.</li>
 	</ul>
@@ -310,6 +310,11 @@
 		<li>
 			on a farmer’s phone, a copy of the farm’s latest figures, so the farm page opens without a signal; it is removed after 30
 			days unused, and the farm page’s “Don’t keep a copy on this phone” turns it off;
+		</li>
+		<li>
+			the assistant’s past chats, if you use it: your conversations on each project (the newest 20), so you can open one again;
+			you can delete one or all of them in the assistant, and signing out deletes them, so the next person on a shared computer
+			sees none;
 		</li>
 		<li>after you sign up, the address the confirmation link went to, so the sign-in page can show it, until you sign in or close the tab.</li>
 	</ul>

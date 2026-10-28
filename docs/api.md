@@ -3950,7 +3950,9 @@ contributors get `403`, a stranger `404`. The assistant only reads: a
 recommendation comes back as a `proposal` event, which the Settings page
 loads into its draft and an editor saves with the normal `PATCH
 /projects/:id`. No conversation is stored: the page keeps it and sends it
-with every turn.
+with every turn (its newest 200 messages, starting at a question; a past
+chat the page kept in the browser and reopened is sent the same way,
+docs/ui.md § Assistant).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |

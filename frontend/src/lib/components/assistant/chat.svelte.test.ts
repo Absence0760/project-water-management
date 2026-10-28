@@ -230,7 +230,7 @@ describe('AssistantChat past chats', () => {
 			remove: async (keys) => keys.forEach((k) => rows.delete(k))
 		};
 	}
-	const answerWith = (text: string, extra: AssistantStreamEvent[] = []) => async () => streamOf(sse([{ type: 'text', delta: text }, ...extra, { type: 'done' }]));
+	const answerWith = (text: string, extra: AssistantStreamEvent[] = []) => async (_body: AssistantRequest, _signal: AbortSignal) => streamOf(sse([{ type: 'text', delta: text }, ...extra, { type: 'done' }]));
 	let n = 0;
 	function chatOn(be: HistoryBackend | null, send: (body: AssistantRequest, signal: AbortSignal) => Promise<ReadableStream<Uint8Array>> = answerWith('An answer.'), userId = 'user-a', projectId = 'p1') {
 		return new AssistantChat({

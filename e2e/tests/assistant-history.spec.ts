@@ -28,7 +28,9 @@ test('a chat is kept in this browser: after a reload it is in Past chats, reopen
 	await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 	await expect(sheet.getByRole('heading', { name: 'Past chats on this project' })).toBeFocused();
 	await expect(sheet.getByTestId('assistant-past-empty')).toBeVisible();
-	await toggle.click();
+	await sheet.getByRole('button', { name: 'Back to the conversation' }).click();
+	await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+	await expect(sheet.getByTestId('assistant-kept-note')).toBeVisible();
 
 	const first = await ask(sheet, RECOMMEND);
 	await expect(first.getByRole('button', { name: 'Apply to the settings form' })).toBeVisible();

@@ -146,7 +146,7 @@
 		const yes = await confirmDialog({
 			title: 'Clear past chats?',
 			message: 'Every past chat on this project is deleted from this browser, and a new conversation starts. This can’t be undone.',
-			confirmLabel: 'Clear history',
+			confirmLabel: 'Clear past chats',
 			danger: true
 		});
 		if (!yes) return;
@@ -227,12 +227,25 @@
 			<section class="past" id="assistant-past" aria-labelledby="assistant-past-h" data-testid="assistant-past">
 				<h3 id="assistant-past-h" tabindex="-1" bind:this={pastHeading}>Past chats on this project</h3>
 				<p class="hint">{KEPT_NOTE}</p>
+				{#if chat.busy && chat.past.length}
+					<p class="hint" id="assistant-past-busy" data-testid="assistant-past-busy">Wait for the answer, or press Stop, to open another chat.</p>
+				{/if}
 				{#if chat.past.length}
 					<ul class="past-list">
 						{#each chat.past as c, i (c.id)}
 							{@const current = c.id === chat.id}
 							<li class="past-row" class:current>
-								<button type="button" class="past-open" data-testid="assistant-past-chat" aria-current={current || undefined} onclick={() => reopen(c.id, c.title)}>
+								<!-- While an answer streams, opening another chat would cut it short: offered, not taken (aria-disabled
+								     keeps it in the Tab order with its reason, ui-playbook § 3). -->
+								<button
+									type="button"
+									class="past-open"
+									data-testid="assistant-past-chat"
+									aria-current={current || undefined}
+									aria-disabled={chat.busy || undefined}
+									aria-describedby={chat.busy ? 'assistant-past-busy' : undefined}
+									onclick={() => !chat.busy && reopen(c.id, c.title)}
+								>
 									<span class="past-title">{c.title}</span>
 									<span class="past-when">{fmtWhen(c.updatedAt)}{current ? ' · open now' : ''}</span>
 								</button>
@@ -246,14 +259,18 @@
 							</li>
 						{/each}
 					</ul>
-					<div class="past-foot">
-						<button type="button" class="btn btn-ghost btn-sm danger-text" onclick={clearPast}>Clear history</button>
-					</div>
 				{:else}
 					<p class="past-empty" data-testid="assistant-past-empty">
 						No past chats on this project yet. Once the assistant answers, the conversation is kept here so you can open it again.
 					</p>
 				{/if}
+				<!-- The way back, beside the toggle above it: on a phone a tinted toggle alone reads as a filter. -->
+				<div class="past-foot">
+					<button type="button" class="btn btn-ghost btn-sm" onclick={togglePast}>Back to the conversation</button>
+					{#if chat.past.length}
+						<button type="button" class="btn btn-ghost btn-sm btn-danger" onclick={clearPast}>Clear past chats</button>
+					{/if}
+				</div>
 			</section>
 		{:else if chat.turns.length === 0}
 			<div class="empty">
@@ -271,7 +288,7 @@
 						</li>
 					{/each}
 				</ul>
-				<p class="hint" data-testid="assistant-kept-note">{chat.historyOff ? OFF_NOTE : KEPT_NOTE}</p>
+				{#if !chat.historyOff}<p class="hint" data-testid="assistant-kept-note">{KEPT_NOTE}</p>{/if}
 			</div>
 		{:else}
 			<ol class="log" bind:this={log} aria-label="Conversation">
@@ -454,9 +471,12 @@
 		margin-left: 0.4rem;
 		padding: 0 0.4rem;
 		border-radius: 999px;
-		background: var(--surface-2);
+		background: var(--accent-soft);
 		font-size: var(--font-xs);
 		font-variant-numeric: tabular-nums;
+	}
+	.past-toggle[aria-expanded='true'] .count {
+		background: var(--surface);
 	}
 	/* Past chats: a list read from the top, not settled at the foot as the conversation is. */
 	.past {
@@ -516,10 +536,16 @@
 	}
 	.past-foot {
 		display: flex;
-		justify-content: flex-end;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: 0.5rem;
 	}
-	.danger-text {
-		color: var(--danger);
+	.past-open[aria-disabled='true'] {
+		cursor: not-allowed;
+		color: var(--text-2);
+	}
+	.past-open[aria-disabled='true']:hover {
+		background: none;
 	}
 	.past-empty {
 		margin: 0;

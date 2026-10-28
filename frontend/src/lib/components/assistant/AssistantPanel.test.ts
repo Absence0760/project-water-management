@@ -192,6 +192,12 @@ describe('AssistantPanel', () => {
 		expect(out).toMatch(/aria-expanded="false"[^>]*aria-controls="assistant-past"|aria-controls="assistant-past"[^>]*aria-expanded="false"/);
 	});
 
+	it('says history is off once, not in both the bar and the empty state', () => {
+		const c = chat();
+		c.historyOff = true;
+		expect(html(c).match(/Past chats are off/g)).toHaveLength(1);
+	});
+
 	it('with history off, says so quietly instead of offering Past chats', () => {
 		const c = chat();
 		c.historyOff = true;

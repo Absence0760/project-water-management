@@ -11965,7 +11965,41 @@ with read-only tools over the project's data. It never changes anything.
   stored on the server, so the whole conversation goes with each turn,
   along with the run the page shows (a run tab's `run=`, the run carried
   between tabs, else the default). A question that got no answer is left
-  out of what is sent.
+  out of what is sent, and at most the newest 200 messages go (the server's
+  cap), starting at a question; the server then keeps the newest that fit
+  `ASSISTANT_MAX_INPUT_CHARS`.
+- **Past chats, kept only in this browser** (`history.ts`, a chunk the page
+  loads when the sheet opens; `historyClear.ts`). Each conversation is saved
+  in the browser's IndexedDB when an answer ends (and after an Apply), under
+  the signed-in person's id and the project's, titled by its first question
+  (cut to 80 characters) with the time it was last updated. Nothing of it
+  goes to the server. **Past chats** sits fixed over the sheet's body (the
+  Dialog's `subhead`), with how many there are; pressed (`aria-expanded`),
+  the body shows the list in place of the conversation, newest first, its
+  heading taking the focus, under the line "Chats are kept only in this
+  browser, and deleted when you sign out." (the empty state's foot says the
+  same, unless history is off). A row opens its chat (the conversation open now is marked **open
+  now**); the box takes the focus and a status line says which opened, and
+  asking continues it through the same send path (the whole transcript, as
+  above). While an answer streams the rows stay offered but can't be
+  opened (`aria-disabled`, with "Wait for the answer, or press Stop, to open
+  another chat."), since opening one would cut the answer short. Each row
+  has **Delete** and the list **Clear past chats**, each confirmed in the
+  app's dialog; deleting the open chat starts a new one, and the focus goes
+  to the next row's Delete, else the heading. **Back to the conversation**
+  at the list's foot is the visible way back (the toggle is the other).
+  With none yet the list says so. The newest 20 chats a project are kept, and about
+  2 MB a person across projects, the oldest dropped first (a chat bigger
+  than that alone keeps its newest turns). **A reopened chat's recommended
+  changes are read-only**: kept as shown, without what Apply would do, the
+  card says "From a past chat, so it can't be applied: the project may have
+  changed since. Ask again for a fresh recommendation." ("Applied at the
+  time." first when it was). Every sign-out deletes them all, and so does
+  an ended session (docs/security.md § Personal information, "Kept only in
+  the browser"); another person signing in on the same browser sees none.
+  Without storage (a private window, blocked site data) the sheet says
+  "Past chats are off: …" in place of the control, and the conversation
+  works as before. `assistant-history.spec.ts`.
 - **Refusals before an answer** put the question back in the box and say
   why above it. A 429 is the hourly limit: "limit of 30 messages an hour.
   Try again in about 4 min", from `Retry-After`, after which the box takes
