@@ -135,7 +135,8 @@ describe('the same split under both flow generation methods (issue #615)', () =>
 		expect(sum).toBeCloseTo(1, 12);
 		// A's MAP is the highest, so its share of the runoff (and of the EWR) is above its share of the area.
 		expect(farm(out, 'A').ewrShare!).toBeGreaterThan(farm(out, 'A').flowShare!);
-		expect(out.summary.warnings.filter((w) => w.startsWith('the EWR is split between the units by each unit’s natural MAR over the 5 complete water years 1 Oct 2015 – 30 Sep 2020'))).toHaveLength(1);
+		// Every unit on its own rain: nothing to note (the summary records the split).
+		expect(out.summary.warnings.filter((w) => w.includes('natural MAR'))).toEqual([]);
 		expect(checkEwrSplit(catchment(), out)).toBeNull();
 	});
 
@@ -150,7 +151,7 @@ describe('the same split under both flow generation methods (issue #615)', () =>
 		// One note, naming the unit on the catchment rain, not a warning per unit, and none of the Per unit forcing's own warnings.
 		const notes = frag.summary.warnings.filter((w) => w.includes('natural MAR'));
 		expect(notes).toHaveLength(1);
-		expect(notes[0]).toMatch(/for these shares only/);
+		expect(notes[0]).toMatch(/^the EWR is split between the units by each unit’s natural MAR over the 5 complete water years 1 Oct 2015 – 30 Sep 2020: .*for these shares only/);
 		expect(notes[0]).toMatch(/"Unit D" has no rain of its own .* its share follows its area/);
 		expect(frag.summary.warnings.some((w) => w.startsWith('unit rain:'))).toBe(false);
 		expect(checkEwrSplit(catchment({}, false), frag)).toBeNull();

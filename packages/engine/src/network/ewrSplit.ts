@@ -192,8 +192,9 @@ const names = (units: readonly EwrSplitUnit[]): string => {
 };
 
 /**
- * The run's note on its EWR split (pushed with the warnings): how the units' shares were made, from 1.105.0 on
- * every run with a land unit. One note, naming the land units a Fragmentation run's shares put on the catchment rain.
+ * The run's note on its EWR split (pushed with the warnings), only when there is something to say: a fallback, or
+ * the land units a Fragmentation run's shares put on the catchment rain (one note, naming them). A split by natural
+ * MAR with every unit on its own rain gives none; RunSummary.ewrSplit records it.
  */
 export function ewrSplitNote(info: EwrSplitInfo): string | null {
 	// Only runModelWith supplies natural flow without the units' runoff (a test harness, not a project's run): no note.
@@ -204,6 +205,8 @@ export function ewrSplitNote(info: EwrSplitInfo): string | null {
 	if (!p) return null;
 	const over = p.waterYears > 0 ? `${p.waterYears === 1 ? 'the 1 complete water year' : `the ${p.waterYears} complete water years`} ${dayText(p.start)} – ${dayText(p.end)}` : `the whole run, ${dayText(p.start)} – ${dayText(p.end)}, which holds no complete water year`;
 	if (info.applied === 'area') return `no unit made natural runoff over ${over}, so the EWR is split between the units by their area`;
+	// The split worked as documented with every unit on its own rain: nothing to say (the summary records it).
+	if (!info.catchmentRain?.length) return null;
 	const pinned = info.pinned ? ' (the capture run’s shares)' : '';
 	const how =
 		info.runoffFrom === 'shareRuns'

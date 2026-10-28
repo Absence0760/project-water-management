@@ -157,19 +157,28 @@ describe('engine invariants on the example catchments', () => {
 		expect(checkAll(input, 1)).toBeNull();
 	}, 60_000);
 
-	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h, issue #482): off, it changes nothing
-	// to the bit (absent, null, catchment mode, unit records in the input or not); on, every invariant holds.
-	it('per-unit rain off gives the identical run on every example', () => {
+	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h, issue #482). Off (Fragmentation), absent,
+	// null and `catchment` are one setting, the same run to the bit. The units' own records and MAPs never reach the
+	// flow there: the natural flow and every unit's runoff are the run without them, to the bit. From engine 1.105.0
+	// (issue #615, §2.5b) they set the EWR shares, which are the Per unit run's on the same inputs, to the bit.
+	it('per-unit rain off: one setting whatever its form, the flow untouched by the units’ records, which set only the EWR shares', () => {
+		const flowSide = (o: ReturnType<typeof runModel>) => JSON.stringify(o.series.filter((x) => x.key === 'natural_flow' || x.key === 'runoff' || x.key === 'rain_used'));
 		for (const ex of examples) {
 			const base = inputOf(ex);
-			const before = JSON.stringify(runModel(base));
-			for (const unitRain of [null, { mode: 'catchment' as const }]) {
-				const off = structuredClone(base);
-				off.settings = { ...off.settings, unitRain };
-				Object.assign(off.series, unitRecords(off));
-				for (const n of off.model.nodes) if (n.kind === 'farm') Object.assign(n, { mapMm: 600, mapSource: 'invented' });
-				expect(JSON.stringify(runModel(off)), `${ex.name} ${JSON.stringify(unitRain)}`).toBe(before);
-			}
+			const before = runModel(base);
+			const withRecords = (unitRain: unknown) => {
+				const x = structuredClone(base);
+				x.settings = { ...x.settings, unitRain } as never;
+				Object.assign(x.series, unitRecords(x));
+				for (const n of x.model.nodes) if (n.kind === 'farm') Object.assign(n, { mapMm: 600, mapSource: 'invented' });
+				return x;
+			};
+			const asNull = runModel(withRecords(null));
+			const asCatchment = runModel(withRecords({ mode: 'catchment' }));
+			expect(JSON.stringify(asCatchment), ex.name).toBe(JSON.stringify(asNull));
+			expect(flowSide(asNull), ex.name).toBe(flowSide(before));
+			const perUnit = runModel(withRecords({ mode: 'perUnit' }));
+			for (const f of perUnit.summary.farms) expect(asNull.summary.farms.find((g) => g.nodeId === f.nodeId)!.ewrShare, `${ex.name} ${f.nodeId}`).toBe(f.ewrShare);
 		}
 	}, 120_000);
 
