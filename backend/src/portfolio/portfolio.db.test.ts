@@ -220,6 +220,14 @@ describe('the figures, and where they come from', () => {
 		// The project list reads the same figure.
 		expect(byId((await outcomes(admin)).body.projects, pid)!.drought).toEqual(stored);
 
+		// RLS: a team member who didn't make the run sees the badge (positive control)…
+		expect(byId((await portfolio(teamViewer)).body.projects, pid)!.drought).toEqual(stored);
+		expect(byId(await withUser(teamViewer.id, (db) => loadMyOutcomes(db, new Date())), pid)!.drought).toEqual(stored);
+		// …a non-member never gets the row, nor its badge, through either query.
+		expect(await withUser(stranger.id, (db) => loadPortfolio(db, teamId, new Date()))).toEqual([]);
+		expect(byId(await withUser(stranger.id, (db) => loadMyOutcomes(db, new Date())), pid)).toBeUndefined();
+		expect(byId((await outcomes(stranger)).body.projects, pid)).toBeUndefined();
+
 		// A run saved before the badge existed: nothing, not a guess.
 		await asOwner(`UPDATE model_run SET summary = summary - 'drought' WHERE id = $1`, [runId]);
 		expect(byId((await portfolio(admin)).body.projects, pid)!.drought).toBeNull();
