@@ -1970,8 +1970,11 @@ exist only with `era5l_enabled = true` (default false), which needs
 The operator, once:
 
 1. **The CDS account.** Register at cds.climate.copernicus.eu (an ECMWF
-   account) with the project's role mailbox, not a personal address, and
-   record it in the vendor registry (`project-mgmt` docs/vendor-accounts.md).
+   account) with the owner identity (the personal email, its password in
+   Bitwarden, 2FA where offered), never a project-domain address: the CDS has
+   no organisation or project level, so its key is account-wide and the
+   account is used once for the estate (`project-mgmt`
+   docs/vendor-accounts.md, rules 1 and 5). Record it in that registry.
 2. **Accept the dataset's licence.** Signed in, open the dataset
    "ERA5-Land hourly data from 1950 to present" (`reanalysis-era5-land`),
    go to its Download tab, and accept the licence under "Terms of use"
