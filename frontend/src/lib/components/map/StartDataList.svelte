@@ -96,12 +96,12 @@
 		align-items: baseline;
 	}
 	.status {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		color: var(--text-2);
 	}
 	.next {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 700;
 		padding: 0 0.4rem;
 		border-radius: 999px;

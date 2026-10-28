@@ -302,8 +302,9 @@ function steps(text: string): string[] {
 	const out: string[] = [];
 	for (;;) {
 		const arrow = rest.indexOf(' → ');
-		// A backtick ends a template literal in source: the path's text stops there.
-		const stop = rest.search(/[.,;:()’'"`?!]|$/);
+		// A backtick ends a template literal in source: the path's text stops there. A ’ inside a word is an apostrophe
+		// ("The catchment’s rainfall station"), not a closing quote.
+		const stop = rest.search(/[.,;:()'"`?!]|’(?![A-Za-z])|$/);
 		if (arrow >= 0 && arrow < stop) {
 			out.push(rest.slice(0, arrow).trim());
 			rest = rest.slice(arrow + 3);
@@ -352,6 +353,10 @@ describe('Settings paths named in help and in the app', () => {
 		expect(settingsPaths('`pick a gauge in Calibration → Calibration record`')).toEqual([{ page: 'calibration', steps: ['Calibration record'] }]);
 		expect(settingsPaths('keep them dry in Settings -> Rain gaps -> Flagged rain')).toEqual([{ page: 'settings', steps: ['Rain gaps', 'Flagged rain'] }]);
 		expect(settingsPaths('as Model settings → Rain gaps → Flagged rain says')).toEqual([{ page: 'settings', steps: ['Rain gaps', 'Flagged rain says'] }]);
+		expect(settingsPaths('in Model settings → Model selection for flow generation → The catchment’s rainfall station.')).toEqual([
+			{ page: 'settings', steps: ['Model selection for flow generation', 'The catchment’s rainfall station'] }
+		]);
+		expect(settingsPaths('under ‘Model settings → Rain gaps’ there')).toEqual([{ page: 'settings', steps: ['Rain gaps'] }]);
 		// "Settings & calibration" is the old page's name, never the Calibration page's.
 		expect(settingsPaths('Open Settings & calibration → Demand.').map((p) => p.page)).toEqual(['settings']);
 		expect(pathProblem(['Flow share', 'Method'])).toMatch(/no Settings panel/);
