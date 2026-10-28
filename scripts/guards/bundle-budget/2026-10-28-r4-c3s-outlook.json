@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "#620 step 7: the C3S forecast chances panel and the farm card line (ForecastChances.svelte, forecast.ts; 2232 → 2236 KB, measured before and after the merge)"
+}

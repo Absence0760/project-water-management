@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "#555: zones on the Network and Map, the zone statistics table, the evidence pack section and the run comparison per zone (2236 → 2240 KB, measured before and after the merge)"
+}
