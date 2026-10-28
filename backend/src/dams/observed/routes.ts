@@ -8,6 +8,7 @@
 // flagged (./compare.ts). The run is `run` when given, else the project's
 // newest, the one the Dams tab shows. Read only, under the caller's RLS.
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { AuthEnv } from '../../auth/middleware.js';
 import { withUser } from '../../db/tx.js';
 import { notFound } from '../../http/errors.js';
@@ -15,10 +16,16 @@ import { requireRole, UUID } from '../../projects/access.js';
 import { OBSERVED } from './compare.js';
 import { compareAll, compareRun, OBSERVED_ATTRIBUTION, observationsOf, observedFeatures } from './read.js';
 
+// Parsed as one object, as every other route parses its query: a single
+// named query read is reserved for credential slots, which
+// auth/token-confusion.security.db.test.ts lists one by one.
+const ObservationsQuery = z.object({ run: z.string().optional(), node: z.string().optional() });
+
 export const damObservedRoutes = new Hono<AuthEnv>().get('/:id/dams/observations', async (c) => {
 	const id = c.req.param('id');
-	const runParam = c.req.query('run') ?? null;
-	const nodeParam = c.req.query('node') ?? null;
+	const q = ObservationsQuery.parse(c.req.query());
+	const runParam = q.run ?? null;
+	const nodeParam = q.node ?? null;
 	return withUser(c.get('userId'), async (db) => {
 		await requireRole(db, id, 'viewer');
 		if ((runParam !== null && !UUID.test(runParam)) || (nodeParam !== null && !UUID.test(nodeParam))) throw notFound();
