@@ -980,12 +980,6 @@ const ValidationTest = z.object({ params, calibration: ScoredPeriod, validation:
 const flowKind = z.enum(CALIBRATION_FLOW_KINDS);
 
 /**
- * The record of the fit whose parameters Apply wrote (engine FitRecord). The
- * browser runs the fit, so this is what the client reports; `editedParams`
- * is recomputed by the server on every save (routes.ts), whatever is sent,
- * and the seed and engine version let anyone reproduce the fit.
- */
-/**
  * The regional GR4J prior a fit used (engine calibrate/prior.ts PriorFitResult,
  * issue #622): its weight, whether it bounded the search, the ranges and the
  * provenance the prior route gave. Checked by the engine's own rule.
@@ -1006,6 +1000,12 @@ const PriorFitResult = z
 		else if (JSON.stringify(v.provenance).length > 8_000) ctx.addIssue({ code: 'custom', message: 'regional prior: the provenance is too large' });
 	});
 
+/**
+ * The record of the fit whose parameters Apply wrote (engine FitRecord). The
+ * browser runs the fit, so this is what the client reports; `editedParams`
+ * is recomputed by the server on every save (routes.ts), whatever is sent,
+ * and the seed and engine version let anyone reproduce the fit.
+ */
 export const FitRecord = z
 	.object({
 		fittedAt: z.iso.datetime({ offset: true }),

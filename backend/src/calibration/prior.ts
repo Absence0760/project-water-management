@@ -148,6 +148,8 @@ interface Loaded {
 	boundary: Geometry | null;
 	gauge: [number, number] | null;
 	referenceLoad: PriorProvenance['referenceLoad'];
+	/** The project's updated_at when read: the start refuses to write over a project changed since (a save between the read and the write). */
+	updatedAt: string;
 }
 
 /** Everything the prior needs, read as the user (the caller checks the role first). */
@@ -173,8 +175,8 @@ async function load(db: Db, projectId: string, zone: string | null, wanted: stri
 	const soilResult = soil && boundary ? await summariseSoil(db, soil, boundary) : null;
 	const line = dataset ? (await referenceProvenance(db)).find((r) => r.kind === 'gr4j-donors' && r.dataset === dataset.dataset) : undefined;
 	const referenceLoad = line ? { loadedAt: line.recordedOn, upstreamVersion: line.version, licence: line.licence } : null;
-	const { rows: p } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
-	return { input: await loadModelInput(db, projectId), stored: p[0]?.settings, dataset, datasets, donors, soil, soilResult, boundary, gauge, referenceLoad };
+	const { rows: p } = await db.query<{ settings: unknown; updated_at: Date }>('SELECT settings, updated_at FROM project WHERE id = $1', [projectId]);
+	return { input: await loadModelInput(db, projectId), stored: p[0]?.settings, dataset, datasets, donors, soil, soilResult, boundary, gauge, referenceLoad, updatedAt: p[0]!.updated_at.toISOString() };
 }
 
 /** The prior from what `load` read (no transaction open: the target's climate takes a run's preparation). */
@@ -273,6 +275,39 @@ export const donorsMatch = (l: Pick<Loaded, 'dataset' | 'donors'>) => !l.dataset
 
 const fmt = (x: number) => (Math.abs(x) >= 10 ? x.toFixed(0) : x.toFixed(2));
 
+/**
+ * Write a start record and its parameters, in the caller's transaction, as one
+ * settings revision. Refuses (409) when the project changed since `readAt`,
+ * its updated_at when the prior was computed: the record would describe a
+ * model that no longer exists.
+ */
+export async function writePriorStart(db: Db, id: string, zone: string | null, readAt: string, record: PriorStartRecord) {
+	const before = await beginSettingsChange(db, id);
+	const { rows } = await db.query<{ settings: unknown; updated_at: Date }>('SELECT settings, updated_at FROM project WHERE id = $1', [id]);
+	if (rows[0]!.updated_at.toISOString() !== readAt) throw new ApiError(409, 'The project changed while the prior was computed: try again.');
+	const stored = rows[0]?.settings;
+	const current = mergeSettings(stored);
+	const params = record.params;
+	const others = ((current as { gr4jPrior?: PriorStartRecord[] | null }).gr4jPrior ?? []).filter((r) => (r?.provenance?.target?.zoneNodeId ?? null) !== zone);
+	let patch: Record<string, unknown>;
+	if (zone === null) patch = { gr4j: { ...current.gr4j, ...params } };
+	else {
+		const zones = (current.calibrationZones ?? []) as CalibrationZone[];
+		if (!zones.some((z) => z.nodeId === zone)) throw new ApiError(400, 'That gauge is not a calibration zone of the project.');
+		patch = { calibrationZones: zones.map((z) => (z.nodeId === zone ? { ...z, gr4j: { ...params } } : z)) };
+	}
+	patch.gr4jPrior = [...others, record];
+	await db.query('UPDATE project SET settings = $2::jsonb, updated_at = now() WHERE id = $1', [id, JSON.stringify(patchSettings(stored, patch))]);
+	const pv = record.provenance;
+	const n = pv.donors.length;
+	const where = zone === null ? 'GR4J’s parameters' : 'the calibration zone’s GR4J parameters';
+	const reason =
+		`${where} started from the regional prior: X1 ${fmt(params.x1)} mm, X3 ${fmt(params.x3)} mm, X4 ${fmt(params.x4)} days, the medians of ${n} donor basin${n === 1 ? '' : 's'} ` +
+		`of donor set “${pv.dataset}” (${pv.datasetVersion}, SHA-256 ${pv.donorSetSha256.slice(0, 12)}…)${pv.x1From === 'soil' ? ', X1 from the soil water capacity relation' : ''}; not calibrated.`;
+	const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: reason.slice(0, 500) });
+	return { params, record, revisionId: revision?.id ?? null };
+}
+
 export const priorRoutes = new Hono<AuthEnv>()
 	.get('/:id/gr4j-prior', async (c) => {
 		const id = c.req.param('id');
@@ -307,27 +342,7 @@ export const priorRoutes = new Hono<AuthEnv>()
 		const record: PriorStartRecord = { appliedAt: new Date().toISOString(), engineVersion: ENGINE_VERSION, params, ranges: p.ranges, provenance: p.provenance };
 		const out = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
-			const before = await beginSettingsChange(db, id);
-			const { rows } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [id]);
-			const stored = rows[0]?.settings;
-			const current = mergeSettings(stored);
-			const others = ((current as { gr4jPrior?: PriorStartRecord[] | null }).gr4jPrior ?? []).filter((r) => (r?.provenance?.target?.zoneNodeId ?? null) !== zone);
-			let patch: Record<string, unknown>;
-			if (zone === null) patch = { gr4j: { ...current.gr4j, ...params } };
-			else {
-				const zones = (current.calibrationZones ?? []) as CalibrationZone[];
-				if (!zones.some((z) => z.nodeId === zone)) throw new ApiError(400, 'That gauge is not a calibration zone of the project.');
-				patch = { calibrationZones: zones.map((z) => (z.nodeId === zone ? { ...z, gr4j: { ...params } } : z)) };
-			}
-			patch.gr4jPrior = [...others, record];
-			await db.query('UPDATE project SET settings = $2::jsonb, updated_at = now() WHERE id = $1', [id, JSON.stringify(patchSettings(stored, patch))]);
-			const n = p.provenance!.donors.length;
-			const where = zone === null ? 'GR4J’s parameters' : 'the calibration zone’s GR4J parameters';
-			const reason =
-				`${where} started from the regional prior: X1 ${fmt(params.x1)} mm, X3 ${fmt(params.x3)} mm, X4 ${fmt(params.x4)} days, the medians of ${n} donor basin${n === 1 ? '' : 's'} ` +
-				`of donor set “${p.provenance!.dataset}” (${p.provenance!.datasetVersion}, SHA-256 ${p.provenance!.donorSetSha256.slice(0, 12)}…)${p.provenance!.x1From === 'soil' ? ', X1 from the soil water capacity relation' : ''}; not calibrated.`;
-			const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: reason.slice(0, 500) });
-			return { params, record, revisionId: revision?.id ?? null };
+			return writePriorStart(db, id, zone, loaded.updatedAt, record);
 		});
 		return c.json(out);
 	});

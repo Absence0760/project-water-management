@@ -17,6 +17,7 @@ import { loadSyntheticDonors } from '../../scripts/import-gr4j-donors.js';
 import { loadSyntheticSoils } from '../../scripts/import-soils.js';
 import { monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { writePriorStart } from './prior.js';
 import { loadModelInput } from '../runs/execute.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -123,6 +124,10 @@ describe('the catchment’s prior', () => {
 		// A save carrying its own start record is stripped of it: only the route writes one.
 		const forged = await owner.call('PATCH', `/projects/${id}`, { settings: { gr4jPrior: [] } });
 		expect([200, 400]).toContain(forged.status);
+		expect((await viewer.call('GET', `/projects/${id}`)).body.project.settings.gr4jPrior).toHaveLength(1);
+		// A start computed before a save that changed the project is refused, writing nothing (the read-to-write race).
+		const stale = withUser(owner.id, (db) => writePriorStart(db, id, null, '2000-01-01T00:00:00.000Z', s.body.record));
+		await expect(stale).rejects.toMatchObject({ status: 409 });
 		expect((await viewer.call('GET', `/projects/${id}`)).body.project.settings.gr4jPrior).toHaveLength(1);
 		// Editing x1 by hand: the GET no longer says it is started.
 		expect((await owner.call('PATCH', `/projects/${id}`, { settings: { gr4j: { x1: s.body.params.x1 + 50 } } })).status).toBe(200);
