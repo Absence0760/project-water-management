@@ -16,7 +16,9 @@ one. Round 5 (R5-E) added daily reference evaporation: AgERA5's FAO-56 ET₀
 (`agera5.py`, product `agera5_et0`, the same CDS machinery, now shared in
 `cdsjob.py`) and its fallback, NASA POWER's daily meteorology turned into
 FAO-56 ET₀ by us (`nasapower.py` + `fao56.py`, product `power_et0`; § Reference
-evaporation).
+evaporation). Issue #620 added C3S's seasonal forecasts and hindcasts
+(`c3s_seasonal.py`, products `c3s/<init>` and `c3s-hc/<system>/<MM>` on a
+1° grid, the same CDS submit-then-collect rules; § The C3S seasonal job).
 
 | File | What it does |
 | --- | --- |
@@ -25,8 +27,11 @@ evaporation).
 | `era5land.py` | The ERA5-Land job (§ The ERA5-Land job): submit a month's CDS request, collect it on a later run, the 0.1° remap, the revision rule, and its own handler (`lambda_handler.py` hands `era5l` events to it). |
 | `cdsjob.py` | The CDS submit-then-collect machinery `era5land.py` and `agera5.py` share: the request state, the intent before a submit, adopting a queued request, backoff and the give-up rule, the refusal marker, the lease, `LiveCds` and the handler that publishes the lag on every exit. Each product brings a `CdsProduct` spec. |
 | `era5request.py`, `agera5request.py` | Each CDS product's request (dataset, a month's request, the month a request names), shared by its job and `fakecds.py` so the fake never imports the job that imports it; `CdsError` and `CDS_URL` are `cdsjob.py`'s. |
-| `fakecds.py` | Fixtures mode's stand-in for the CDS: submit, status, find and download, serving `fixtures/era5land/`'s synthetic NetCDF (`FakeCds`) and `fixtures/agera5/`'s synthetic zip (`FakeAgera5Cds`), checking each request against the request modules. Not in the image. |
+| `fakecds.py` | Fixtures mode's stand-in for the CDS: submit, status, find and download, serving `fixtures/era5land/`'s synthetic NetCDF (`FakeCds`), `fixtures/agera5/`'s synthetic zip (`FakeAgera5Cds`) and `fixtures/c3s/`'s synthetic GRIB (`FakeC3sCds`), checking each request against the request modules. Not in the image. |
 | `agera5.py` | AgERA5's daily FAO-56 reference ET into `agera5_et0` (§ Reference evaporation): the month request, the reader (a zip of daily NetCDFs or one NetCDF, cells placed by coordinate), the 0–30 mm check, the revision rule; its runs are `cdsjob.py`'s. |
+| `c3s_seasonal.py` | C3S's seasonal forecasts and hindcasts into `c3s/<init>` and `c3s-hc/<system>/<MM>` (§ The C3S seasonal job): per-system requests keyed by init, submit on one run and collect on a later one (cdsjob.py's rules and pieces), the GRIB reader and de-accumulation, the group arrays, the manifests, `c3s/index.json` and its own handler. |
+| `c3srequest.py` | C3S's request module: the dataset, `SYSTEMS`, the centres' names, the release days, a key's request and the key a request names; shared with `fakecds.py`. |
+| `fixtures/c3s/make_c3s_fixture.py` | Writes a synthetic C3S request's GRIB2 (accumulated `tp` per start, member and lead on the 1° grid; any member and lead count, a hindcast's years); `fakecds.py` calls it for each download. |
 | `fixtures/agera5/make_agera5_fixture.py` | Writes a synthetic AgERA5 month (a zip of daily NetCDF-4 files, or one file; x.x5 cells, or x.x0 points); `fakecds.py` calls it for each download. |
 | `nasapower.py` | The fallback, `power_et0` (§ Reference evaporation): NASA POWER's daily regional API, one parameter a request over 12 tiles, FAO-56 ET₀ per POWER point, the nearest point for each 0.1° cell, the last N days re-read each run, 120 days kept. |
 | `fao56.py` | FAO-56 Penman-Monteith ET₀, daily (eq. 6 with eqs. 7–40), from Tmax, Tmin, Tdew, u2, Rs and P. Tested against FAO-56's worked examples. |
@@ -75,13 +80,16 @@ monthly run takes none. An `imerg_late` event takes an optional `days`
 { "product": "agera5_et0", "mode": "monthly" }
 { "product": "agera5_et0", "mode": "backfill", "month": "YYYY-MM" }
 { "product": "power_et0", "mode": "recent", "days": 30 }
+{ "product": "c3s", "mode": "monthly" }
+{ "product": "c3s", "mode": "backfill", "month": "MM", "system": "ecmwf-51" }
 ```
 
 A backfill names its month (from 1981-01 for `rnl`, 2000-06 for `sat`); a
 monthly run takes none. Any other key is refused. An `era5l` backfill
 names a month from 1950-01 to the newest complete one, an `agera5_et0`
 backfill one from 1979-01. A `power_et0` event takes an optional `days`
-(1–60, default 30).
+(1–60, default 30). A `c3s` backfill names a hindcast init month
+(`"01"`–`"12"`) and, optionally, one system of `c3srequest.SYSTEMS`.
 
 | Variable | Meaning |
 | --- | --- |
@@ -90,7 +98,7 @@ backfill one from 1979-01. A `power_et0` event takes an optional `days`
 | `INGEST_CONTACT` | The contact address in the User-Agent. Optional. |
 | `INGEST_FIXTURE_VARIANT` | Fixtures mode only: `rewritten` or `changed` serves that variant of the synthetic directory. |
 | `EARTHDATA_TOKEN_SECRET_ARN` | Live mode, `imerg_late` only: the Secrets Manager secret holding the Earthdata token (`infra/imerg.tf`). Read at run time, never logged; fixtures mode reads nothing. |
-| `CDS_KEY_SECRET_ARN` | Live `era5l` and `agera5_et0` runs only: the Secrets Manager secret holding the CDS API key (`infra/era5land.tf`; one Copernicus account, one key, for both), read at run time and never logged. Fixtures mode never reads it. `power_et0` needs no key. |
+| `CDS_KEY_SECRET_ARN` | Live `era5l`, `agera5_et0` and `c3s` runs only: the Secrets Manager secret holding the CDS API key (`infra/era5land.tf`; one Copernicus account, one key, for both), read at run time and never logged. Fixtures mode never reads it. `power_et0` needs no key. |
 | `MIRROR_METRIC_NAMESPACE` | Optional: the metric's namespace, default `water-management/Mirror`. |
 
 Fixtures mode runs exactly the live code with three differences: CHC is
@@ -356,6 +364,73 @@ the CDS key, and we make no live request from a session):
 Operator steps (turning the schedules on, the CDS licence for AgERA5 on the
 existing account): docs/deployment.md § AgERA5.
 
+## The C3S seasonal job
+
+Issue #620 step 5: the multi-system seasonal forecasts the outlook will be
+conditioned on (steps 6–7; nothing reads the copy yet). `c3s_seasonal.py`'s
+docstring is the spec; in short:
+
+- **Source:** CDS dataset `seasonal-original-single-levels`,
+  `total_precipitation` (accumulated since the start, m), every member,
+  `leadtime_hour` 24–5160 (215 days), area [-8, 10, -36, 41] at the native
+  1°, GRIB. One request per **system** (`c3srequest.SYSTEMS`,
+  `<centre>-<system>`: `ecmwf-51`, `ukmo-604`, `meteo_france-9`, `dwd-22`,
+  `cmcc-35`, `ncep-2`, `jma-3`, `eccc-4`, `eccc-5`) per **init month**, and,
+  for the hindcasts, one per system per init calendar month asking every
+  year of 1993–2016 at once.
+- **When:** ECMWF's init M is on the CDS from the 6th of M at 12 UTC, the
+  others' from the 10th (`release_at`); a run asks for it 30 minutes after.
+  The daily `monthly` run collects what is ready, then submits each system's
+  newest released init (and the one before it if missed, `CATCH_UP_INITS`),
+  newest first, then the wanted hindcasts. A `backfill` event marks one init
+  month's hindcast wanted (every system, or one) and does the same.
+- **The machinery is ERA5-Land's**, keyed by request (`fc/<system>/<YYYY-MM>`,
+  `hc/<system>/<MM>`) in `ingest-state/c3s/requests.json`: the intent
+  before the submit, adopting a queued request after a crash or a lost
+  state, at most 4 queued, backoff 1–16 days and `RequestsFailed` after 5,
+  the same-day refusal marker on a 401/403, the lease (`c3s`), the polite
+  download, the key from `CDS_KEY_SECRET_ARN` in live mode only. It reuses
+  `cdsjob.py`'s pieces (`LiveCds`, the key, the backoff) but runs its own
+  loop, since `cdsjob.run` is keyed by month.
+- **Decoding:** eccodes reads the GRIB twice, the headers (which starts,
+  members and leads are there; anything but the request's own `tp` is
+  refused) and then the values. The points are the 1° grid's cell centres,
+  so no remap. Day d = 1000 × (tp[24(d+1) h] − tp[24d h]) mm, tp[0 h] = 0,
+  de-accumulated in place; noise down to −5 mm clamped to 0; further below
+  or above 2000 mm fails before anything is written. A missing field leaves
+  the days it bounds NaN; the lead axis is always 215 long.
+- **The grid:** `grid.C3S`, the third grid spec beside 0.05° and 0.1°: D1's
+  bounds snapped outward to whole degrees as the cell centres (36–8° S,
+  10–41° E), 29 rows × 32 columns, [0, 0] centred at 36° S, 10° E, rows
+  northwards; its box `grid.SEASONAL_REGION` (9.5–41.5° E, 36.5–7.5° S) is
+  what the arrays' and manifests' `region` says
+  (`backend/src/mirror/grid.ts` `SEASONAL_REGION` agrees).
+- **What is written:** Zarr groups with one float32 array `tp_mm` (mm/day,
+  NaN fill, gzip, one chunk per member's whole forecast):
+  `c3s/<YYYY-MM>/tp_mm` (system, member, lead_day, lat, lon), each system
+  written into its slot as it is collected, members padded with NaN to the
+  largest system's; `c3s-hc/<system>/<MM>/tp_mm` (year, member, lead_day,
+  lat, lon), written whole. The group's attributes carry the coordinates
+  (`systems` or `years`, `members`, `init`/`initMonth`, `firstDay`,
+  `leadDays`) and the credit: `source`, `licence`, `credit`, `citation` and
+  `centres` (the contributing centres' names). Each product's manifest lists
+  one file per request (`cds://seasonal-original-single-levels/total_precipitation/<system>/<YYYY-MM>`
+  or `…/hindcast/<MM>`, no ETag; `years` the init's to the last lead's, or
+  the hindcast years held), and `c3s/index.json` what is held:
+  `{"inits": {"YYYY-MM": [systems]}, "hindcasts": {system: ["MM"]}}`.
+- **`MirrorLagDays{Product=c3s}`:** today minus the 1st of the newest init
+  every system of `SYSTEMS` is held for; none held, nothing published (the
+  alarm treats that as breaching).
+
+**Unverified until the first live run** (no live request is made from a
+session): the GRIB's exact keys for each centre (lagged-start systems'
+`dataDate`s are taken by year and month only), whether the CDS accepts a
+whole hindcast month in one request, and each system's member and hindcast
+year counts.
+
+Operator steps (both licences on the dataset's page, turning it on, the
+hindcast backfill): docs/deployment.md § C3S seasonal forecasts.
+
 ## The ECMWF forecast job
 
 `ecmwf.py` (issue #604 D17, R4-C; its docstring is the spec) copies each
@@ -545,6 +620,7 @@ pnpm dev:ingest:run imerg_late  # IMERG Late's last ten days from the fake Earth
 pnpm dev:ingest:run ecmwf    # the ECMWF forecast from the committed synthetic GRIB2 (a daily run)
 pnpm dev:ingest:run agera5_et0  # AgERA5 reference ET from the fake CDS: the first run submits, the second collects
 pnpm dev:ingest:run power_et0   # NASA POWER ET0 from the fake POWER (a recent run, 30 days)
+pnpm dev:ingest:run c3s      # C3S seasonal from the fake CDS: four systems a run, submitted then collected (run it 3-4 times)
 pnpm test:ingest             # the unittest suite
 ```
 
@@ -570,6 +646,7 @@ They cover:
 - **IMERG Late** (`test_imerg.py`): a known cell of a synthetic *global* file in IMERG's layout lands at its lat/lon (neighbours east and north, the region's four corners, nothing from outside), the whole region cell by cell, an OPeNDAP subset reading the same as the global file, a north-first (lat, lon) file still placed by coordinate, the units (mm/day read as the day's mm; mm/hr, V06's `precipitationCal`, the wrong day, 2500 mm and a login page refused), the CMR search (the newest version wins, a missing OPeNDAP link or a wrong time stops), the last 10 days newest first, held days skipped with no request, a gap (not held, `prelimThrough` still the newest day, and one older than the 10-day search blocking no later day), the time budget, keeping 30 days (manifest and chunks), the per-day version (V08 replacing V07 with and without a change of values), a 403 or 401 from either host stopping with the same-day marker, the lease (local and S3), the metric on every exit, and the token read from Secrets Manager and sent only to OPeNDAP, never on a redirect.
 - **ERA5-Land** (`test_era5land.py`): each 00 UTC step as the day before's total, m to mm, the record's first day, the four-corner remap (inland and coastal), packing noise and a real negative, the 2000 mm bound, the phase from `expver`; a known cell and day at its array index and chunk; submit on one run and collect on a later one, one submit per month however often it runs, a held month never requested again, the gap after the newest held month, state lost while queued (adopted, not resubmitted), an intent without an id, state lost after collecting, a failed request's 1/2/4/8-day backoff and the loud stop after 5, the in-flight cap and the queue it drains; a re-check with the same values (no bump), with changed values (a bump with its `changes`), one still preliminary, and one with no `expver` (asked again every 30 days, up to the 180-day cap, and no more once a read says consolidated); a 401 and a 403 that stop the run and the rest of the UTC day; `LiveCds`'s 401/403/404/5xx mapping; the lease; the metric on every exit; the key read by ARN and not at all when no CDS call is needed; and the event through `lambda_handler.py`. The CDS is `fakecds.FakeCds`; nothing touches the network or needs a key.
 - **AgERA5** (`test_agera5.py`): a zip of daily files and one NetCDF, x.x5 cells taken as they are and x.x0 points remapped, cells placed by coordinate (north-first files), the month's own days (a missing day refused), units (another unit refused), the 30 mm bound, packing noise and a real negative; the request's shape and recognising it; the events and the backfill's bounds; submit then collect into the finals (year from 1979, the cell, the credit); a re-check with the same values (no bump) and changed values (a bump with its `changes`), the recheck's cap; a 403/401 silencing the day; the metric on every exit; the manifest's URL and coverage rules. The CDS is `fakecds.FakeAgera5Cds`.
+- **C3S seasonal** (`test_c3s_seasonal.py`): the 1° grid (D1 snapped outward, whole-degree centres) and the manifest's step; a request names its key back, someone else's doesn't; the release days (the 6th for ECMWF, the 10th for the rest, after 12 UTC plus the margin); the GRIB reader (de-accumulation to mm/day against the fixture's days, south-up, any lead count padded with NaN, a missing field leaving the two days it bounds NaN, packing noise clamped, a real drop or a flood refused, another request's file and a field twice refused, a hindcast's years); submit on one run and collect on a later one (four queued, nothing downloaded on the first run, a slow request, done means asked for nothing), the array (systems, members padded to the largest, the credit, the licence and the centres), the manifests and index, a re-collected forecast with other values (one revision), the catch-up bound; a failed request's backoff and the loud stop, a 403 silencing the day, a lost state adopting the queued request; the events; a hindcast backfill for one system and for all; the manifest's URL rules; the handler's routing, the lag on a failure, and the credit matching the engine's. The CDS is `fakecds.FakeC3sCds`.
 - **FAO-56** (`test_fao56.py`): Example 8's Ra, Example 18's Ra, Rn and ET₀ (3.9 mm/day, from ea and from a dew point), eq. 7 both ways, e°, and NaN and no negative through the arrays.
 - **NASA POWER** (`test_nasapower.py`): the tiles, one parameter a request in AG/JSON/LST, the JSON parser (fill and days not yet published NaN, units checked, other shapes refused), nearest-point placement and cells beyond the points NaN, a non-lattice refused, a run end to end (72 requests, ET₀ at a known cell equal to `fao56` of its point), a day POWER lacks skipped, the revision rule (25 cells changed for one point), the 120-day window, an implausible ET₀ and a deadline writing nothing, a 403/401 silencing the day, the metric on every exit, and the handler's routing.
 - **The round trip** (`test_roundtrip.py`): Python writes the copy from the synthetic NetCDF, and Node's `backend/src/mirror/` reads it through `tests/roundtrip.ts`, bit for bit, with the same hash and manifest; `agera5_et0` and `power_et0` are read back whole the same way (the `blocks` mode). It needs the pnpm install (`backend/node_modules/.bin/tsx`) and skips without it, except in CI, where `INGEST_REQUIRE_NODE=1` makes it fail.
@@ -626,6 +703,15 @@ packs a constant in no bits, so a file is about 1.5 KB); the tests write
 their own structured fields. Regenerate with
 `ingest/.venv/bin/python ingest/fixtures/ecmwf/make_ecmwf_fixtures.py`; a
 test fails if they drift.
+
+`fixtures/c3s/make_c3s_fixture.py` writes C3S seasonal requests' GRIB2 for
+any key (`fc/<system>/YYYY-MM` or `hc/<system>/MM`) from an invented daily
+pattern (`daily_mm`, 0–11 mm in 0.5 mm steps, different by system, member,
+year, day and cell), accumulated per start as the CDS gives it. Nothing is
+committed but the script: `FakeC3sCds` writes each download (2 members, 3
+for ECMWF, every lead, the first three hindcast years by default; the tests
+ask for 5 leads), and `ingest/.venv/bin/python ingest/fixtures/c3s/make_c3s_fixture.py fc/ecmwf-51/2026-10 out.grib`
+writes one by hand.
 
 ## The image
 

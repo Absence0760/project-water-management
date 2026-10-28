@@ -1679,6 +1679,30 @@ def daily_et0_monthly_pe(pe_kind: str = "monthly", zero_row: bool = False) -> di
     return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
 
 
+def forecast_member_rescaled() -> dict:
+    """A member of the forecast-conditioned outlook (issue #620, §2.15d) is an
+    ordinary run: 91 days of recorded rain (January–March 2020), then a
+    forecast tail for April and May made of the record's own first 61 days
+    rescaled month by month, as a member whose analogue is that stretch: April
+    × 1.5 (a wetter month than the analogue's), May × 0.4, and the tail's last
+    week × 0 (a dry month asked to stay dry). Its dam, demand and EWR run on
+    the tail as on any rain (§2.4a, §2.4f, §2.15)."""
+    rain = [0.0, 14.0, 3.0, 0.0, 0.0, 22.0, 0.0, 6.5, 0.0, 0.0, 1.5, 9.0, 0.0] * 7
+    factor = [1.5] * 30 + [0.4] * 24 + [0.0] * 7
+    nodes = [
+        _node("o", "gauge", None),
+        _node("f", "farm", "o", areaKm2=4, damCapacityM3=150000, damInitialPct=0.3, damMinPct=0.05,
+              pctUpstreamToDam=1, pctRunoffToDam=0.3),
+    ]
+    crops, areas = _crop("f", 400000)
+    series = {
+        "rain_catchment_mm": {"startDate": "2020-01-01", "values": rain},
+        "rain_forecast_mm": {"startDate": "2020-04-01", "values": [r * k for r, k in zip(rain, factor)]},
+    }
+    s = _settings(ewrPragmaticM3PerDay=[400] * 12, effectiveRainFraction=0)
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []}, "series": series}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -1743,4 +1767,6 @@ PROBES = {
     "daily-et0-monthly-pe": daily_et0_monthly_pe(),
     "daily-et0-pan-pe": daily_et0_monthly_pe("pan"),
     "daily-et0-zero-row": daily_et0_monthly_pe(zero_row=True),
+    # The forecast-conditioned outlook's member (issue #620 step 6).
+    "forecast-member-rescaled": forecast_member_rescaled(),
 }

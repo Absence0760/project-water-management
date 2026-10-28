@@ -85,6 +85,10 @@ Every job that fetches from an upstream:
 | [dem](#dem) | Copernicus GLO-30 DEM, Mapterhorn's Terrarium tiles | reference load (tiles) | `download.mapterhorn.com` | – | `bin/tiles-dev.sh` (`dev:tiles:terrain`), `tiles-upload.ts` |
 | [basemap](#basemap) | Protomaps basemap (OpenStreetMap) and its label fonts | reference load (tiles) | `build.protomaps.com`, `codeload.github.com` | – | `bin/tiles-dev.sh` (`dev:tiles:fetch`, `dev:tiles:fonts`), `tiles-upload.ts` |
 | [waas-map](#waas-map) | WAAS Southwestern Cape MAP grid | reference load | none (a copy from the client) | – | `pnpm import:map-grid` |
+| [grdc-caravan](#grdc-caravan) | GRDC-Caravan v0.6 daily streamflow and basin polygons (the GR4J donors, issue #622) | reference load (the donor fit is offline, `pnpm fit-donors`; only the fitted parameters are loaded) | `zenodo.org` | – | `backend/scripts/fit-donors.ts`, `pnpm import:gr4j-donors` (kind `gr4j-donors`) |
+| [hydroatlas](#hydroatlas) | HydroATLAS v1.0 basin attributes (BasinATLAS; the donors' copy comes inside GRDC-Caravan) | reference load (the donors' attributes; a target's, from BasinATLAS, with #622 step 5) | `zenodo.org` (inside GRDC-Caravan); `figshare.com` (BasinATLAS) | – | `backend/scripts/fit-donors.ts` |
+| [soilgrids](#soilgrids) | SoilGrids 2.0 water retention, `wv0033` and `wv1500` at six depths to 200 cm (the soil water capacity grid) | reference load | `storage.googleapis.com` (bucket `isric-share-soilgrids`) | – | `ingest/soils.py`, `pnpm import:soils` (kind `soils`) |
+| [isdasoil](#isdasoil) | iSDAsoil v1 depth to bedrock (the soil grid's root depth) | reference load | `s3://isdasoil` (us-west-2) | – | `ingest/soils.py`, `pnpm import:soils` (kind `soils`) |
 | [quaternaries](#quaternaries) | Quaternary outlines and WR2012 values | blocked | `www.dws.gov.za`, WRC (the operator's download) | – | `pnpm import:quaternaries` |
 | [dam-register](#dam-register) | DWS List of Registered Dams and its overlay | blocked | `www.dws.gov.za` | – | `pnpm import:dam-register` |
 | [gauge-stations](#gauge-stations) | DWS hydrological station catalogue | blocked | `www.dws.gov.za` | – | `pnpm import:gauge-stations` |
@@ -95,6 +99,7 @@ Every job that fetches from an upstream:
 | [agera5](#agera5) | AgERA5 v2.0 daily FAO-56 reference ET | built R5-E; the copy's job off in production until `agera5_enabled` (the CDS key is ERA5-Land's) | `cds.climate.copernicus.eu` | `agera5_et0` | `ingest/agera5.py` (the copy), `backend/src/feeds/fromMirrorEt0.ts` (feeds read it), `infra/agera5.tf` |
 | [nasa-power](#nasa-power) | NASA POWER daily weather, our FAO-56 ET₀ from it (AgERA5's fallback) | built R5-E; off until `power_et0_enabled` | `power.larc.nasa.gov` | – (read by `agera5_et0` feeds) | `ingest/nasapower.py`, `ingest/fao56.py`, `infra/agera5.tf` |
 | [climate-indices](#climate-indices) | NOAA CPC's ONI (ENSO) and AAO (the SAM's proxy), monthly | built (#620); the fetcher's indices pass off in production until `climate_indices_enabled` | `www.cpc.ncep.noaa.gov` | – | `backend/src/feeds/sources/cpc.ts`, `backend/src/ingest/indices.ts`, `infra/climate_indices.tf` |
+| [c3s-seasonal](#c3s-seasonal) | C3S multi-system seasonal forecasts and hindcasts, daily precipitation (1°) | built (#620 step 5); the copy's job off in production until `c3s_enabled` (the CDS key is ERA5-Land's; both licences accepted first); nothing reads it yet (#620 step 6–7) | `cds.climate.copernicus.eu` | – | `ingest/c3s_seasonal.py`, `ingest/c3srequest.py`, `infra/c3s.tf` |
 
 ## Live feeds
 
@@ -548,9 +553,74 @@ in the reference bucket.
 | <a id="dem"></a>dem | Copernicus WorldDEM-30 licence, commercial use allowed (read 2026-10-01); tiles by Mapterhorn (code BSD-3) | the Art. 6(b) notice and "© Mapterhorn" while the relief is drawn; Art. 6(c) on `/data-sources` | mapterhorn.com | `pmtiles extract` of the region's byte ranges from the planet archive | one extract a refresh; ETag-consistent reads | the PMTiles in the tiles bucket | `reference_load` (kind `tiles`, dataset `terrain`): SHA-256, version, ETag, Last-Modified, licence, the extract as its original | operator; `bin/tiles-dev.sh`  |
 | <a id="basemap"></a>basemap | ODbL 1.0 for the OpenStreetMap data (openstreetmap.org/copyright, read 2026-10-01); label fonts SIL OFL 1.1 | "© Protomaps © OpenStreetMap contributors", always on the map; the OFL notice beside the glyphs | protomaps.com; OpenStreetMap Foundation | `pmtiles extract` of one daily build (`TILES_BUILD`) for the region; fonts as one archive of a pinned commit (`FONTS_REF`) | one extract and one archive a refresh | the PMTiles and fonts in the tiles bucket | `reference_load` (kind `tiles`, datasets `basemap` and `fonts`): SHA-256, build date or commit, ETag, licence, the extract and the fonts archive as originals | operator; `bin/tiles-dev.sh`  |
 | <a id="waas-map"></a>waas-map | terms not stated; the operator's decision (2026-10-23) to use it, [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23) | "Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1." | the client | a file from the client; no download | none fetched | the file in the reference bucket | `rain_map_dataset` (recorded source, version, credit); `reference_load` (kind `map-grid`) | operator; `pnpm import:map-grid`  |
+| <a id="grdc-caravan"></a>grdc-caravan | CC BY 4.0 (Zenodo record 10.5281/zenodo.15349031, v0.6 of 2025-05-06, and the archive's `licenses/grdc/license_grdc.md`, read 2026-10-28); the per-country terms in `licenses/grdc/LicensesCaravan.xlsx` (read 2026-10-28): South Africa (DWS) and Namibia, the only countries in region D1, "Free to use" ([below](#gr4j-priors-issue-622)) | "Donor flow records: GRDC-Caravan (Färber et al. 2025, Zenodo 10.5281/zenodo.15349031), CC BY 4.0, from data held by the Global Runoff Data Centre (GRDC); South Africa’s and Namibia’s records © their departments of water."; cite Färber et al. (2025) and Kratzert et al. (2023) | the Zenodo record; GRDC (BfG, Koblenz) | one zip (`GRDC_Caravan_extension_csv.zip`, 8.8 GB), whole, by the operator; the donor fit reads it offline | one download a refresh; never fetched by the app | the zip in the reference bucket (`originals/gr4j-donors/`); the synthetic donors locally | `gr4j_donor_dataset` (source, version, method, engine version, the set's SHA-256); `reference_load` (kind `gr4j-donors`) | operator; `backend/scripts/fit-donors.ts` |
+| <a id="hydroatlas"></a>hydroatlas | CC BY 4.0 ("The HydroATLAS database is licensed under a Creative Commons Attribution (CC-BY) 4.0 International License", hydrosheds.org/hydroatlas, read 2026-10-28) | "Basin attributes: HydroATLAS v1.0 (BasinATLAS; Linke et al. 2019, Lehner et al. 2022), CC BY 4.0." | hydrosheds.org | the donors': GRDC-Caravan's `attributes_hydroatlas_grdc.csv`, no download of its own; a target's: BasinATLAS v1.0 (figshare 10.6084/m9.figshare.9890531), one download, with #622 step 5 | none fetched by the app | the files in the reference bucket | with the donors (`gr4j_donor`) | operator; `backend/scripts/fit-donors.ts` |
+| <a id="soilgrids"></a>soilgrids | CC BY 4.0: the layers' own records on data.isric.org (wv0033 `14e7c761-6f87-4f4c-9035-adb282439a44`, wv1500 `f5a1188a-09f8-4ef6-b841-93f08e3903f4`: "Attribution 4.0 International (CC BY 4.0)") and ISRIC's SoilGrids FAQ ("SoilGrids products are provided under the CC BY 4.0"), read 2026-10-28 | "Soil water retention: SoilGrids 2.0 © ISRIC – World Soil Information, CC BY 4.0."; cite Turek et al. (2023) | soilgrids@isric.org | the twelve mean GeoTIFFs (two properties × six depths, about 2.2 GB each), read by GDAL over HTTP for region D1 only, by the operator | twelve files a refresh; the REST API is not used (paused, and 5 calls a minute) | the resampled grids in the reference bucket; the synthetic grid locally | `soil_dataset` (source, version, method); `reference_load` (kind `soils`) | operator; `ingest/soils.py` |
+| <a id="isdasoil"></a>isdasoil | CC BY 4.0 (the AWS Registry of Open Data entry iSDA manages, registry.opendata.aws/isdasoil: "License: CC-BY 4.0", read 2026-10-28) | "Depth to bedrock: iSDAsoil © Innovative Solutions for Decision Agriculture (iSDA), CC BY 4.0."; the registry asks for "iSDAsoil was accessed on DATE from https://registry.opendata.aws/isdasoil" | iSDA (isda-africa.com) | one cloud-optimised GeoTIFF (`soil_data/bedrock_depth/bedrock_depth.tif`, 23.6 GB, EPSG:3857), read by GDAL for region D1 at its overviews | one file a refresh | the resampled grid in the reference bucket | with the soil grid (`soil_dataset`) | operator; `ingest/soils.py` |
 | <a id="quaternaries"></a>quaternaries | **blocked:** DWS outlines' commercial terms unconfirmed; WR2012 redistribution terms unpublished | DWS; WR2012 (WRC 2015) | DWS; WRC | the operator's download, loaded into the operator's own database only | – | the synthetic fixture everywhere else | – (never loaded in production) | operator; `pnpm import:quaternaries`  |
 | <a id="dam-register"></a>dam-register | **blocked:** no terms on the DSO page; DWS's general terms are non-commercial | "Department of Water and Sanitation" | DWS Dam Safety Office | the operator's XLS and KMZ download | – | the synthetic list | – (never loaded in production) | operator; `pnpm import:dam-register`  |
 | <a id="gauge-stations"></a>gauge-stations | **blocked:** unconfirmed (the Verified pages answer 403 outside South Africa) | "Department of Water and Sanitation" | GeoRequests@dws.gov.za | the operator's catalogue download | – | the synthetic stations | – (never loaded in production) | operator; `pnpm import:gauge-stations`  |
+
+### GR4J priors (issue #622)
+
+Four sources feed the regional GR4J prior ([model.md §2.10m](./model.md)).
+Each is a reference load: the operator downloads it, the app never fetches
+it. Licences read on the publishers' own pages on 2026-10-28, against
+Decision D-B.
+
+- **GRDC-Caravan** (Färber, C., Plessow, H., Mischel, S., Kratzert, F.,
+  Addor, N., Shalev, G. & Looser, U. (2025), *GRDC-Caravan: extending the
+  original dataset with data from the Global Runoff Data Centre* (0.6),
+  Zenodo, 10.5281/zenodo.15349031). **CC BY 4.0** on the record and in the
+  archive's `licenses/grdc/license_grdc.md`, which adds "All hydrological
+  data remain property of the owner". The per-country terms are in
+  `licenses/grdc/LicensesCaravan.xlsx`, read from the archive itself
+  (2026-10-28). Region D1 holds only South Africa's 434 stations and
+  Namibia's 51: "South Africa - Department of Water and Sanitation (DWA) |
+  Free to use | personal communication", and Namibia (Ministry of
+  Agriculture, Water & Forestry) the same. Passes D-B: commercial use with
+  attribution. The countries whose terms fail it (Belgium's
+  non-commercial records, Czechia's CC BY-NC-ND 3.0, Brazil's CC BY-ND 3.0)
+  are all outside D1, and `fit-donors.ts` takes only basins inside D1.
+  **What we keep:** each donor's fitted parameters, scores and attributes.
+  No flow is stored or shown, so the derived work is the parameter set. The
+  fit never reads Caravan's ERA5-Land forcing: parameters absorb forcing
+  bias, so a donor is refitted on our own CHIRPS v3 and dPET.
+  Also cite Kratzert, F. et al. (2023), *Caravan, a global community
+  dataset for large-sample hydrology*, Sci. Data 10, 61.
+- **HydroATLAS v1.0**: **CC BY 4.0** (hydrosheds.org/hydroatlas). Cite
+  Linke, S. et al. (2019), Sci. Data 6, 283, and Lehner, B. et al. (2022),
+  *Global hydro-environmental lake characteristics at high spatial
+  resolution*, Sci. Data 9, 351, as the page asks. The donors' attributes
+  come inside GRDC-Caravan (`attributes_hydroatlas_grdc.csv`), so no
+  download of its own until step 5. That step reads a target catchment's
+  attributes from BasinATLAS. Its figshare copy's own licence field
+  (10.6084/m9.figshare.9890531) is read when that download is added.
+- **SoilGrids 2.0** water retention (Turek, M.E. et al. (2023), *Global
+  mapping of volumetric water retention at 100, 330 and 15 000 cm suction
+  using the WoSIS database*, ISWCR 11(2), 225–239). **CC BY 4.0** on both
+  layers' records on data.isric.org (DOIs
+  10.17027/isric-soilgrids.14e7c761-6f87-4f4c-9035-adb282439a44 and
+  10.17027/isric-soilgrids.f5a1188a-09f8-4ef6-b841-93f08e3903f4). The water
+  retention layers are **not** on the WebDAV share `files.isric.org`
+  (`soilgrids/latest/data/` lists no `wv*`, checked 2026-10-28). Their
+  records distribute them as GeoTIFFs at
+  `storage.googleapis.com/isric-share-soilgrids/pre-release/wv0033/` and
+  `…/wv1500/`, one per depth and statistic. We read the six `_mean`
+  files of each. Units: 10⁻³ cm³/cm³, which is mm of water per m of soil.
+  The REST API is paused and allowed 5 calls a minute; we never use it.
+- **iSDAsoil** depth to bedrock (iSDA; Hengl, T. et al. (2021), Sci. Rep.
+  11, 6130). **CC BY 4.0** on the AWS Registry of Open Data entry that iSDA
+  manages. iSDA's own site links its Terms of Use without stating a data
+  licence. The layer is
+  `s3://isdasoil/soil_data/bedrock_depth/bedrock_depth.tif` (band 1, the
+  predicted mean, cm, 0–200; EPSG:3857 at 30 m; its STAC item covers to
+  34.89° S). A value of 200 means at least 200 cm. Some land is masked;
+  `ingest/soils.py` takes a cell with no value as deep, and counts them.
+
+Status: all four `reference load`, allowed in `load-reference.yml` (kinds
+`soils` and `gr4j-donors`). The feature does nothing until the operator
+loads them, and the synthetic grid and donors stand in for dev, CI and e2e.
 
 ## The copy's reference evaporation
 
@@ -705,6 +775,81 @@ read two monthly indices from our own copy, never from CPC at run time.
   and the committed synthetic copy `backend/fixtures/mirror/indices/`
   (`pnpm gen:mirror-fixture`).
 
+## Seasonal forecasts
+
+The seasonal outlook's forecast-conditioned chances (issue #620 steps 5–7)
+read C3S's multi-system seasonal forecasts from our own copy. Step 5 builds
+the copy; nothing in the app reads it yet.
+
+### c3s-seasonal
+
+- **Source:** the Copernicus Climate Change Service (C3S) multi-system
+  seasonal forecasts, CDS dataset `seasonal-original-single-levels`
+  (*Seasonal forecast daily and subdaily data on single levels*, DOI
+  10.24381/cds.181d637e), variable `total_precipitation` (24 h
+  accumulations since the start), every member, leads 24 h to 5160 h (215
+  days), the CDS's native 1° grid. One system per contributing centre
+  (`ingest/c3srequest.py` `SYSTEMS`: ECMWF 51, Met Office 604,
+  Météo-France 9, DWD 22, CMCC 35, NCEP 2, JMA 3, ECCC 4 and 5; C3S changes
+  a centre's system from time to time and the table is updated by hand).
+  Released once a month: ECMWF's on the 6th at 12 UTC, the other centres'
+  on the 10th at 12 UTC (the dataset page, read 2026-10-28). **Hindcasts**
+  for 1993–2016, the multi-system's common period, from the same dataset:
+  one request per system per init calendar month, every year at once.
+  The dataset page lists GRIB as its format; the reader decodes GRIB with
+  eccodes and refuses anything but the request's own fields. The request's
+  exact form (and whether the CDS takes a whole hindcast month in one
+  request) is **unverified until the first live run**.
+- **Host:** `cds.climate.copernicus.eu` (the CDS API).
+- **Licence:** CC BY 4.0 ("CC-BY licence" on the dataset page) **plus the
+  *Additional licence to use non European contributions***, both read
+  2026-10-28 on the dataset page. The additional licence covers the
+  centres outside Europe (NCEP, JMA, ECCC): the source must be
+  acknowledged; there is no guarantee of continuity or quality, and no
+  liability. The multi-system data "may be used and redistributed without
+  restrictions" otherwise (issue #620, read 2026-10-27). Commercial use
+  allowed; D-B passes. Both licences are accepted once on the CDS account
+  that holds ERA5-Land's key (operator step, [deployment.md § C3S seasonal
+  forecasts](./deployment.md#c3s-seasonal-forecasts)).
+- **Attribution:** wherever its values show, Copernicus's notice
+  "Contains modified Copernicus Climate Change Service information [year].
+  Neither the European Commission nor ECMWF is responsible for any use that
+  may be made of the Copernicus information or data it contains.", the
+  citation "Copernicus Climate Change Service, Climate Data Store (2018): Seasonal forecast daily and subdaily data on single levels. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). DOI: 10.24381/cds.181d637e",
+  and the contributing centres of the systems used: European Centre for
+  Medium-Range Weather Forecasts (ECMWF), Met Office, Météo-France,
+  Deutscher Wetterdienst (DWD), Euro-Mediterranean Center on Climate Change
+  (CMCC), NOAA National Centers for Environmental Prediction (NCEP), Japan
+  Meteorological Agency (JMA), Environment and Climate Change Canada
+  (ECCC). The engine holds these words (`liability/rainCredits.ts`
+  `c3sSeasonalCredit`, for the outlook panel in step 7) and every array of
+  the copy carries them (`credit`, `citation`, `centres`, `licence`).
+- **Contact:** ECMWF support (CDS).
+- **Access pattern:** the mirror-ingest Lambda once a day at 13:00 UTC
+  (`{"product":"c3s","mode":"monthly"}`, `infra/c3s.tf`), ERA5-Land's
+  submit-then-collect machinery keyed by request: per system, the newest
+  released init (and one missed before it at most), submitted on one run
+  and collected on a later one, into Zarr `c3s/<YYYY-MM>/tp_mm` (system,
+  member, lead day, lat, lon; mm/day de-accumulated). The hindcasts by
+  `{"product":"c3s","mode":"backfill","month":"MM"}` (twelve invocations,
+  each marking that month wanted for every system), into
+  `c3s-hc/<system>/<MM>/tp_mm` (year, member, lead day, lat, lon), the
+  years held recorded. `c3s/index.json` lists what is held.
+- **Limits we keep to:** at most one request per system and init (or
+  hindcast month) and 4 queued in all; one API call a second; a failed
+  request backs off 1–16 days and stops after 5 (`RequestsFailed`); a
+  401/403 stops the run for the UTC day; never waits inside a Lambda.
+- **Fallback:** none upstream; without a copy the outlook stays ESP (the
+  default), as #620 says.
+- **Owner:** the operator; code `ingest/c3s_seasonal.py`,
+  `ingest/c3srequest.py`, `infra/c3s.tf`. Freshness alarm
+  `mirror-lag-c3s` (MirrorLagDays{Product=c3s}: days since the 1st of the
+  newest init every system is held for, past `c3s_lag_alarm_days`, 45).
+- **Fixtures:** invented values written on the fly by
+  `ingest/fixtures/c3s/make_c3s_fixture.py` (GRIB2 in the CDS's layout: a
+  few members, any lead count, three hindcast years), served by
+  `ingest/fakecds.py` `FakeC3sCds` under `FEED_SOURCE=fixtures`.
+
 ## Planned sources
 
 From #604's Rounds 4 and 5. Each gets its full section here when its round
@@ -776,9 +921,7 @@ its comments 4, 6, 7 and 8).
 
 | Source | Licence | Access | Use |
 | --- | --- | --- | --- |
-| C3S multi-system seasonal | CC BY, plus the additional licence for non-European contributions | CDS API, 1° monthly | seasonal outlook per restriction level |
 | NEX-GDDP-CMIP6 | CC0 (NASA's expert-use caveat) | S3 us-west-2 | future yield in evidence packs |
-| iSDAsoil, SoilGrids 2.0, HydroATLAS, GRDC-Caravan | CC BY 4.0 (SoilGrids' REST allows 5 calls a minute) | S3 us-west-2; WCS; downloads; Zenodo | GR4J priors for ungauged units |
 | GloFAS v4 reanalysis | CEMS-FLOODS, free with attribution | EWDS API | modelled daily flow for ungauged catchments |
 | WaPOR v3 actual ET | **contested** (CC BY-SA, CC BY-NC-SA, FAO terms); ask FAO first | `s3://wapor-v3/` af-south-1 | observed vs modelled water use; SSEBop at 1 km if FAO says no |
 | Sentinel-1/2 water masks, SWOT lake heights | Copernicus free and open; SWOT terms unconfirmed | DE Africa STAC; PO.DAAC | small dams through cloud; area–volume curves (trial) |

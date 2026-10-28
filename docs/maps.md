@@ -2827,6 +2827,12 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | GeoNames gazetteer, South Africa and its six neighbours (`ZA.txt`, and `BW.txt`, `LS.txt`, `MZ.txt`, `NA.txt`, `SZ.txt`, `ZW.txt` inside the basemap's extent: place and farm names, feature class, province, country, position): the Map's search ([§ Search](#search)) | GeoNames ([geonames.org](https://www.geonames.org), [download.geonames.org/export/dump](https://download.geonames.org/export/dump/)) | **CC BY 4.0**: "This work is licensed under a Creative Commons Attribution 4.0 License" (the dump's `readme.txt`, read 2026-10-13; the seven countries' dumps carry the same `readme.txt`); commercial use allowed with attribution | "GeoNames (geonames.org), CC BY 4.0", stored on every place and shown under every search that lists one, and on the Data sources and credits page (`/data-sources#geonames`) | the operator's download date (`--dataset GeoNames-ZA-<date>`, `GeoNames-neighbours-<date>`) | daily dumps; refreshed when the operator re-loads | **Allowed.** The operator's own download, never committed; built and tested against the synthetic gazetteer |
 | Surveyor-General's farm names (registered farm names and numbers), considered for the search | Chief Surveyor-General, Department of Agriculture, Land Reform and Rural Development | **Unconfirmed**: no reuse terms for a commercial service found in writing | – | – | – | **Blocked: licence unconfirmed.** Not loaded; a later dataset once its reuse licence is confirmed in writing, recorded here with the date |
 | Synthetic gazetteer (`backend/fixtures/geo/gazetteer.synthetic.txt`) | this repo (invented places, GeoNames' format) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm setup`) |
+| SoilGrids 2.0 water retention, `wv0033` and `wv1500` (water content at 33 and 1500 kPa, six depths to 200 cm, 250 m): the soil water capacity grid ([§ Soil water capacity](#soil-water-capacity)) | ISRIC – World Soil Information; Turek, M.E. et al. (2023), ISWCR 11(2) | **CC BY 4.0** on each layer's data.isric.org record and in ISRIC's SoilGrids FAQ (read 2026-10-28; [data-sources.md § GR4J priors](./data-sources.md#gr4j-priors-issue-622)) | "Soil water retention: SoilGrids 2.0 © ISRIC – World Soil Information, CC BY 4.0.", stored on the dataset | SoilGrids 2.0 (water retention of 2023; files of 2021-10-27) | none announced | allowed (`load-reference.yml` kind `soils`) |
+| iSDAsoil depth to bedrock (30 m, 0–200 cm): the soil grid's root depth | Innovative Solutions for Decision Agriculture (iSDA); Hengl, T. et al. (2021), Sci. Rep. 11 | **CC BY 4.0** (the AWS Registry of Open Data entry iSDA manages, read 2026-10-28) | "Depth to bedrock: iSDAsoil © Innovative Solutions for Decision Agriculture (iSDA), CC BY 4.0.", stored on the dataset | v1 (2001–2017) | none announced | allowed (with SoilGrids, kind `soils`) |
+| GRDC-Caravan v0.6 (daily streamflow and basin polygons of GRDC stations; South Africa's 434, Namibia's 51): the GR4J donor basins, fitted offline (`pnpm fit-donors`), never shown | Färber, C. et al. (2025), Zenodo 10.5281/zenodo.15349031; data from the Global Runoff Data Centre and its providers (DWS, Namibia's ministry) | **CC BY 4.0** on the record and in the archive's licence file; South Africa and Namibia "Free to use" in its per-country table (read 2026-10-28) | the donor set's attribution (`GR4J_DONORS`, `backend/src/geo/gr4jDonors.ts`), stored on the dataset | 0.6 (2025-05-06) | per Zenodo release | allowed (kind `gr4j-donors`; only fitted parameters are loaded) |
+| HydroATLAS v1.0 (BasinATLAS attributes: aridity, precipitation, slope, clay, sand, forest, regulation): the donors' similarity attributes | WWF / McGill University (HydroSHEDS); Linke, S. et al. (2019), Sci. Data 6 | **CC BY 4.0** (hydrosheds.org/hydroatlas, read 2026-10-28) | "Basin attributes: HydroATLAS v1.0 (BasinATLAS; Linke et al. 2019, Lehner et al. 2022), CC BY 4.0." | 1.0 | none | allowed (with GRDC-Caravan, kind `gr4j-donors`) |
+| Synthetic soil water capacity grid (`backend/fixtures/soils/soils.synthetic.json`) | this repo (invented soil over region Z) | the repo's own | none | 1 | never | in use (tests, `pnpm setup`) |
+| Synthetic GR4J donors (`backend/fixtures/gr4j-donors/gr4j-donors.synthetic.json`) | this repo (14 invented basins) | the repo's own | none | 1 | never | in use (tests, `pnpm setup`) |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
 
 **Which version is in use.** The table's Version column is the version the
@@ -2845,6 +2851,43 @@ through `app_reference_provenance()`), e.g. "… (version 0.0.13, upstream
 file of 2026-09-30, recorded 2026-10-27)". The Data sources page
 (`/data-sources`) is prerendered static text and shows the licence's
 reading, not the deployment's version.
+
+### Soil water capacity
+
+The regional GR4J prior ([model.md §2.10m](./model.md)) relates x1, GR4J's
+production store, to the soil's root-zone plant-available water capacity
+(PAWC, mm). The grid is built offline from two CC BY 4.0 sources (issue
+#622 step 2):
+
+- **SoilGrids 2.0** water content at field capacity (`wv0033`, 33 kPa) and
+  at wilting point (`wv1500`, 1500 kPa), at 0–5, 5–15, 15–30, 30–60, 60–100
+  and 100–200 cm, in 10⁻³ cm³/cm³ (mm per m);
+- **iSDAsoil** depth to bedrock, cm (0–200; 200 means at least 200).
+
+For each cell, PAWC = Σ over the layers of max(0, wv0033 − wv1500) × the
+layer's thickness inside the root zone ÷ 100. The root zone ends at
+min(200 cm, the depth to bedrock). A cell missing a layer it needs is left
+out. A cell iSDAsoil masks is taken as deep (200 cm), and `ingest/soils.py`
+counts how many. A cell with bedrock at the surface has no root zone and is
+left out.
+
+- **Build:** `ingest/soils.py` (standard library only, `ingest/test_soils.py`)
+  reads the thirteen layers as ESRI ASCII grids on one WGS 84 grid, keeps the
+  cells inside region D1 and writes the JSON grid
+  ([deployment.md § Reference datasets](./deployment.md#reference-datasets),
+  *Soils and GR4J donors*, has the GDAL recipe).
+- **Load:** `pnpm import:soils <soils.json.gz> --dataset <label>` locally;
+  `load-reference.yml` kind `soils` in production. Both go into
+  `soil_dataset` and `soil_cell_reference` (migration 268). `pnpm setup`
+  loads the synthetic grid. A load replaces its dataset in one transaction;
+  a production load records its file in `reference_load`.
+- **Read:** `backend/src/geo/soilGrid.ts` `summariseSoil` gives a catchment
+  or unit polygon's PAWC and root depth. Each cell is weighted by its area on
+  the ellipsoid × the share of it inside (`gridShares`, as the evaporation
+  grid's months are). Cells with no value are left out, and below 50 % cover
+  it gives no value. `fit-donors.ts` records it per donor today. A target
+  project reads it when the prior is wired in (#622 step 5). No route or
+  screen reads it yet.
 
 ### Credits on the map
 
