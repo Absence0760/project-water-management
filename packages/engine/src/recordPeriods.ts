@@ -52,6 +52,11 @@ export function isFlowRecordKey(key: string): boolean {
 	return FLOW_KINDS.has(at < 0 ? key : key.slice(0, at));
 }
 
+/** A key JSON.parse keeps but a plain object would answer from its prototype (`__proto__`, `constructor`, `prototype`); never written. */
+function unsafeKey(k: string): boolean {
+	return k === '__proto__' || k === 'constructor' || k === 'prototype';
+}
+
 /**
  * settings.flowMissing as the engine reads it: an object of series id → a
  * period list (sanitizeExclusions's rules). A malformed entry is dropped with
@@ -66,7 +71,7 @@ export function resolveFlowMissing(raw: unknown, warnings: string[]): FlowMissin
 	}
 	const out: FlowMissingSettings = {};
 	for (const [id, list] of Object.entries(raw as Record<string, unknown>)) {
-		if (!id) continue;
+		if (!id || unsafeKey(id)) continue;
 		const periods = sanitizeExclusions(list, warnings, 'flow missing period');
 		if (periods.length) out[id] = periods;
 	}
@@ -145,7 +150,7 @@ export function withRecordPeriods(settings: Pick<ProjectSettings, 'flowMissing' 
 	let out: Record<string, DailySeries> | null = null;
 	const all = series as Record<string, DailySeries | undefined>;
 	for (const [key, s] of Object.entries(all)) {
-		if (!s) continue;
+		if (!s || unsafeKey(key)) continue;
 		const ranges: [number, number][] =
 			key === 'rain_catchment_alt_mm'
 				? altRanges

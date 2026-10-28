@@ -11,7 +11,7 @@ import { fromEpochDay, toEpochDay } from './calendar';
 import { prepareCalibration } from './calibrate/calibrate';
 import { FLOW_FLAG_CODE, FLOW_QUALITY_COLUMN, recordFlowFlags } from './calibrate/dayFlags';
 import { defaultQualityFlags } from './calibrate/qualityFlagSettings';
-import { withRecordPeriods } from './recordPeriods';
+import { resolveFlowMissing, withRecordPeriods } from './recordPeriods';
 import { gaugeSeriesKey, type DailySeries, type ModelInput, type ModelOutput, type NetworkNode } from './project';
 import { mergeSettings } from './prepare';
 import { seriesRowFlags } from './quality';
@@ -255,5 +255,14 @@ describe('settings.checksKept: a kept outlier or flat stretch is scored as read 
 		expect(q[400]).toBe(FLOW_FLAG_CODE.inRange);
 		expect(q[310]).toBe(FLOW_FLAG_CODE.suspect);
 		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+	});
+});
+
+describe('resolveFlowMissing', () => {
+	it('never writes a prototype key from the stored settings', () => {
+		const raw = JSON.parse('{"__proto__": [{"start": "2019-01-01", "end": "2019-01-05", "reason": "gauge fault"}], "s1": [{"start": "2019-01-01", "end": "2019-01-05", "reason": "gauge fault"}]}');
+		const out = resolveFlowMissing(raw, [])!;
+		expect(Object.keys(out)).toEqual(['s1']);
+		expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
 	});
 });
