@@ -274,6 +274,20 @@ describe('RLS on a plan request (272)', () => {
 		// A request is a click or a plan, never both nor neither.
 		await expect(asOwner(`INSERT INTO delineation_request (project_id, click_kind, click_lon, click_lat, plan_kind, plan_body, from_window) VALUES ($1, 'outlet', 20.7, -33.4, 'start', '{}', 1024)`, [v.id])).rejects.toMatchObject({ code: '23514' });
 		await expect(asOwner(`INSERT INTO delineation_request (project_id, from_window) VALUES ($1, 1024)`, [v.id])).rejects.toMatchObject({ code: '23514' });
+		// The proposal links are same-project by construction (composite keys): another project's proposal is refused, this one's
+		// (the positive control) taken; a link only with `proposed`.
+		const other = await valley('Plan request, other project');
+		process.env.DEM_URL = '';
+		const theirs = (await editor.call('POST', other.at('/map/start'), other.body)).body.proposal.id as string;
+		process.env.DEM_URL = FIXTURE;
+		const insert = (pid: string) =>
+			asOwner(`INSERT INTO delineation_request (project_id, plan_kind, plan_body, from_window, fallback_proposal_id) VALUES ($1, 'start', '{}', 1024, $2) RETURNING id`, [v.id, pid]);
+		await expect(insert(theirs)).rejects.toMatchObject({ code: '23503' });
+		const mine = (await insert(r.body.proposal.id))[0]!.id as string;
+		await expect(asOwner(`UPDATE delineation_request SET plan_proposal_id = $2 WHERE id = $1`, [mine, r.body.proposal.id])).rejects.toMatchObject({ code: '23514' });
+		// A finished request keeps its plan: the final trigger compares the plan's columns too.
+		await expect(asOwner(`UPDATE delineation_request SET plan_body = '{"points": []}' WHERE id = $1`, [rid])).rejects.toMatchObject({ code: '23514' });
+		await expect(asOwner(`UPDATE delineation_request SET plan_kind = 'divide' WHERE id = $1`, [rid])).rejects.toMatchObject({ code: '23514' });
 		// A Divide has no fallback.
 		await expect(asOwner(`INSERT INTO delineation_request (project_id, plan_kind, plan_body, from_window, fallback_proposal_id) VALUES ($1, 'divide', '{}', 1024, $2)`, [v.id, r.body.proposal.id])).rejects.toMatchObject({ code: '23514' });
 	});
