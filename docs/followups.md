@@ -643,7 +643,14 @@ runs and accumulations are real) can't be decided without the client.
       `c3s-hc/<system>/<MM>`), the outlook job running it beside the ESP,
       the routes, the panel's chance of each restriction level with the
       systems, the skill and the Copernicus credit, and the farm card
-      (api.md, ui.md, e2e).
+      (api.md, ui.md, e2e). Step 7 also passes only forecasts *issued* on or
+      before the decision date (C3S publishes between the 6th and the 13th;
+      the engine has no issue date, model.md §2.15d), says on the panel that
+      the chance reflects storage only (not a rule's EWR trigger, the
+      filling-dam reading or the hold), and adds the methodology statement's
+      paragraph on the forecast-conditioned outlook once the chances reach a
+      report (a new methodology version if methodology-13 is published by
+      then).
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
