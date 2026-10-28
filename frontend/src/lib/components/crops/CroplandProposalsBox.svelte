@@ -161,7 +161,7 @@
 	onretry={() => load(nodeId)}
 >
 	{#snippet intro()}<p class="hint muted">
-			The area a land-cover map shows as cropland in this unit’s parcels on the map. It shows where land is cultivated, not what grows there,
+			The area a land-cover map shows as cropland in this unit’s boundary or parcels on the map. It shows where land is cultivated, not what grows there,
 			so you choose the crop. Nothing changes until you use a value and confirm it.
 		</p>
 		<p class="alert alert-warning" data-testid="cropland-caution">{CAUTION}</p>{/snippet}
@@ -175,7 +175,7 @@
 			{/if}
 			{#if parcels.length === 0}
 				<p class="alert alert-info slim" data-testid="cropland-no-parcels">
-					No boundary or farm parcel on the map is linked to {data.nodeName}. On the Map, draw or import its boundary and choose Use this area for {data.nodeName}, or draw its farm parcels and link them to it; its cultivated area is summed from there.
+					No boundary or farm parcel on the map is linked to {data.nodeName}. On the Map, draw or import its boundary, link it to {data.nodeName} and Use its area, or draw its farm parcels and link them to it; its cultivated area is summed from there.
 					<a href="?tab=map">Open the Map</a>
 				</p>
 			{:else}
