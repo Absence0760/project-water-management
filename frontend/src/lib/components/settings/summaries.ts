@@ -9,7 +9,6 @@ import { gapRainChoiceText } from '#lib/components/series/gapRain.js';
 import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
 import { fmtDay, fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 import type { SettingsSectionId } from './sections';
-import { ewrSplitSummary } from './ewrSplit';
 
 /** What Model settings' lines read. */
 export interface SummaryInput {
@@ -128,21 +127,19 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			`rain threshold ${fmtNum(s.calibration?.rainThresholdMm ?? 0, 1, true)} mm`,
 			s.lakeEvapFactorMonthly ? 'dam evaporation by month' : `dam evaporation ${fmtNum(s.lakeEvapFactor ?? 0, 2, true)} × A-pan`
 		].join(' · '),
-		// Model selection for flow generation (issue #553 round 3): the method, then what the flow share splits under it;
-		// the EWR split (round 4) only when it isn't the flow share.
-		'set-share':
-			s.unitRain?.mode === 'perUnit'
-				? [
-						'Per unit',
-						(() => {
-							const n = Object.keys(s.rainStations?.units ?? {}).length;
-							return n ? `${plural(n, 'unit')} on a rainfall station` : 'no unit on a rainfall station';
-						})(),
-						ewrSplitSummary(s.ewrSplit, true) ?? `EWR flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`
-					].join(' · ')
-				: [`Fragmentation · flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`, ewrSplitSummary(s.ewrSplit, false)]
-						.filter(Boolean)
-						.join(' · '),
+		// Model selection for flow generation (issue #553 round 3): the method, the units on a station (the Per unit setup,
+		// which Fragmentation's EWR shares read too, issue #615), what the flow share splits, and the EWR split.
+		'set-share': [
+			s.unitRain?.mode === 'perUnit' ? 'Per unit' : `Fragmentation · flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`,
+			(() => {
+				const n = Object.keys(s.rainStations?.units ?? {}).length;
+				// Under Fragmentation said only when a unit has one: a new project has none and needs no word of it.
+				return n ? `${plural(n, 'unit')} on a rainfall station` : s.unitRain?.mode === 'perUnit' ? 'no unit on a rainfall station' : null;
+			})(),
+			'EWR by each unit’s natural MAR'
+		]
+			.filter(Boolean)
+			.join(' · '),
 		'set-restrict': restrict ? `On: ${plural(restrict.levels?.length ?? 0, 'level')}, reviewed on ${plural(restrict.reviewDates?.length ?? 0, 'date')}` : 'Off',
 		'set-ewr': [
 			i.ewrSource,

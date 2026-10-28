@@ -4,7 +4,7 @@
 // body (or mirror in zod). Pure: no I/O.
 import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { REACH_LOSS_FRAC_MAX } from '../network/reachLoss';
-import { EWR_SPLIT_METHODS, type EwrSplitMethod } from '../network/ewrSplit';
+import { EWR_SPLIT_RETIRED_IN } from '../network/ewrSplit';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
 import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/compare';
 import { dayText, isIsoDate } from '../calendar';
@@ -434,8 +434,6 @@ export interface SettingsPathValues {
 	panCoefficient: number[];
 	ewrPragmaticM3PerDay: number[];
 	flowShareMethod: FlowShareMethod;
-	/** How the EWR is split between the units (engine ≥ 1.94.0, issue #553): the flow share or each unit's natural MAR. */
-	ewrSplit: EwrSplitMethod;
 	'hiLoSplit.hi': number;
 	'hiLoSplit.lo': number;
 	'gr4j.x1': number;
@@ -521,7 +519,6 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	panCoefficient: monthlyOf(range(0, 2)),
 	ewrPragmaticM3PerDay: monthlyOf(nonNeg),
 	flowShareMethod: oneOf(['area', 'hiLo', 'manual']),
-	ewrSplit: oneOf(EWR_SPLIT_METHODS),
 	'hiLoSplit.hi': frac,
 	'hiLoSplit.lo': frac,
 	'gr4j.x1': gr4j('x1'),
@@ -571,16 +568,25 @@ export const RETIRED_SETTINGS_PATHS: readonly string[] = [
 	'calibration.summerFactor',
 	'calibration.winterFactor',
 	'calibration.baseFlowInitial',
-	'calibration.summerMonths'
+	'calibration.summerMonths',
+	// The EWR split (engine 1.94.0 – 1.104.x, issue #553): from 1.105.0 the EWR is always split by each unit's natural MAR (issue #615).
+	'ewrSplit'
 ];
 const RETIRED_PATH_REASON = 'belonged to the legacy runoff model, removed in engine 1.0.0: delete this change';
+const RETIRED_EWR_SPLIT_REASON = `the choice of EWR split was removed in engine ${EWR_SPLIT_RETIRED_IN} (the EWR is always split by each unit's natural MAR): delete this change`;
+
+/** Why a stored op on a retired path is refused, or null when the path isn't retired. */
+export function retiredPathReason(path: unknown): string | null {
+	if (typeof path !== 'string' || !RETIRED_SETTINGS_PATHS.includes(path)) return null;
+	return path === 'ewrSplit' ? RETIRED_EWR_SPLIT_REASON : RETIRED_PATH_REASON;
+}
 
 const SETTINGS_CHECK = checksOf(SETTINGS_CHECKS);
 
 export function settingsValueError(path: string, value: unknown): string | null {
 	const c = checkFor(SETTINGS_CHECK, path);
 	if (c) return c(value);
-	return RETIRED_SETTINGS_PATHS.includes(path) ? RETIRED_PATH_REASON : `"${path}" is not a setting a scenario can change`;
+	return retiredPathReason(path) ?? `"${path}" is not a setting a scenario can change`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1371,7 +1377,7 @@ function validateOne(input: unknown, where: string, errors: string[]): ScenarioO
 			break;
 		case 'settings.set': {
 			const path = need('path', (v) =>
-				typeof v === 'string' && SETTINGS_CHECK.byName.has(v) ? null : typeof v === 'string' && RETIRED_SETTINGS_PATHS.includes(v) ? RETIRED_PATH_REASON : 'is not a setting a scenario can change'
+				typeof v === 'string' && SETTINGS_CHECK.byName.has(v) ? null : (retiredPathReason(v) ?? 'is not a setting a scenario can change')
 			);
 			if (typeof path === 'string' && SETTINGS_CHECK.byName.has(path)) need('value', (v) => settingsValueError(path, v));
 			op = { op: 'settings.set', path, value: cloneValue(raw.value) } as ScenarioOp;

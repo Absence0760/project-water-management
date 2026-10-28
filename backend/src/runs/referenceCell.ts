@@ -52,8 +52,8 @@ export interface ReferenceCell {
 }
 
 /**
- * The reference cell of a project's settings.unitRain, or null: per-unit rain
- * off, no reference, or a reference unit with no single parcel on the map
+ * The reference cell of a project's settings.unitRain, or null: no unit rain
+ * setting, no reference, or a reference unit with no single parcel on the map
  * (the engine then warns that it has no cell series and fits nothing).
  * `runSeries`: the series the run reads (loadLiveInput's); the cell is read in
  * the product of the reference unit's own CHIRPS among them
@@ -65,7 +65,8 @@ export async function referenceCell(
 	unitRain: UnitRainSettings | null | undefined,
 	runSeries: Readonly<Record<string, DailySeries | undefined>>
 ): Promise<ReferenceCell | null> {
-	const ref = unitRain?.mode === 'perUnit' ? unitRain.reference : null;
+	// Whatever the flow generation method (issue #615): under Fragmentation the EWR shares run on the Per unit forcing too.
+	const ref = unitRain?.reference ?? null;
 	if (!ref || typeof ref.unitId !== 'string') return null;
 	// The unit's polygon as the unit feeds pick it (fromUnits.ts unitParcel): the parcel its area came from, else its only parcel.
 	const { rows } = await db.query<{ geometry: Geometry }>(

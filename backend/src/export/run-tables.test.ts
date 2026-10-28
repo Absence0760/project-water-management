@@ -124,8 +124,20 @@ describe('summary sheet', () => {
 		// A resumed run's natural MAR shares are the capture run's; one complete water year is singular.
 		const pinned = rowOf({ ...summary, ewrSplit: { method: 'naturalMar', applied: 'naturalMar', period: { start: '2000-10-01', end: '2001-09-30', waterYears: 1 }, pinned: true } });
 		expect(pinned.lines).toContain('EWR split between units by,each unit’s natural MAR,2000-10-01 – 2001-09-30 (1 complete water year; the capture run’s shares)');
-		// The default writes no line.
+		// The default of 1.94.0 – 1.104.x writes no line.
 		expect(rowOf({ ...summary, ewrSplit: { method: 'flowShare', applied: 'flowShare' } }).lines.some((l) => l.startsWith('EWR split'))).toBe(false);
+		// Engine ≥ 1.105.0 (issue #615): always the natural MAR, said under both methods; Fragmentation's share runs and the units on the catchment rain.
+		const frag105 = rowOf({
+			...summary,
+			ewrSplit: { applied: 'naturalMar', period: { start: '2000-10-01', end: '2005-09-30', waterYears: 5 }, runoffFrom: 'shareRuns', catchmentRain: [{ nodeId: 'n', name: 'Farm, lower' }] }
+		});
+		expect(frag105.lines).toContain(
+			'EWR split between units by,each unit’s natural MAR,"2000-10-01 – 2005-09-30 (5 complete water years); Fragmentation: GR4J also ran on each unit’s own rain, for the shares only; on the catchment rain (share by area): Farm, lower"'
+		);
+		const area = rowOf({ ...summary, ewrSplit: { applied: 'area', why: 'noRunoff', period: { start: '2000-10-01', end: '2001-09-30', waterYears: 1 }, runoffFrom: 'unitRain' } });
+		expect(area.lines).toContain('EWR split between units by,each unit’s area,2000-10-01 – 2001-09-30 (1 complete water year); no unit made natural runoff');
+		const bare = rowOf({ ...summary, ewrSplit: { applied: 'flowShare', why: 'noLandUnit' } });
+		expect(bare.lines).toContain('EWR split between units by,the flow share,the flow share: no unit has an area');
 	});
 
 	it('writes the rainfall stations block (engine ≥ 1.91.0, issue #553) only when the run had it: each area, then each pairing', () => {

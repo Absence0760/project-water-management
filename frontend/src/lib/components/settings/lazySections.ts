@@ -15,6 +15,5 @@ export { default as QualityFlagsFields } from './QualityFlagsFields.svelte';
 export { default as FlowGapFillFields } from './FlowGapFillFields.svelte';
 export { default as UnitRainFields } from './UnitRainFields.svelte';
 export { default as FlowGenerationUnits } from './FlowGenerationUnits.svelte';
-export { default as EwrSplitFields } from './EwrSplitFields.svelte';
 export { default as EvaporationProposal } from './EvaporationProposal.svelte';
 export { default as EvidenceRuleFields } from './EvidenceRuleFields.svelte';

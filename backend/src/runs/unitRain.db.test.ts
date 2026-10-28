@@ -263,4 +263,23 @@ describe('rain for each unit, from the feeds to the run and the fit', () => {
 			await call('PATCH', `/projects/${pid}`, { settings: { unitRain } });
 		}
 	});
+
+	it('under Fragmentation the input still carries the reference cell: the EWR shares run on the Per unit forcing (issue #615)', async () => {
+		const [north] = units;
+		const key = `rain_chirps_cell_mm@${north!.id}`;
+		const reference = { gauge: 'rain_catchment_mm', unitId: north!.id };
+		try {
+			await call('PATCH', `/projects/${pid}`, { settings: { unitRain: { ...unitRain, reference } } });
+			const perUnit = (((await call('GET', `/projects/${pid}/model-input`)).input as ModelInput).series as Record<string, unknown>)[key];
+			// The positive control: Per unit reads it.
+			expect(perUnit).toBeDefined();
+			await call('PATCH', `/projects/${pid}`, { settings: { unitRain: { ...unitRain, mode: 'catchment', reference } } });
+			const input = (await call('GET', `/projects/${pid}/model-input`)).input as ModelInput;
+			expect((input.series as Record<string, unknown>)[key]).toEqual(perUnit);
+			// And the run builder keeps the setting whole under Fragmentation.
+			expect(input.settings.unitRain).toMatchObject({ mode: 'catchment', reference });
+		} finally {
+			await call('PATCH', `/projects/${pid}`, { settings: { unitRain } });
+		}
+	});
 });

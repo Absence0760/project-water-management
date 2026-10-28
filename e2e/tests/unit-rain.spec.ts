@@ -166,9 +166,10 @@ test('Settings switches rain for each unit on, reads the gauge’s MAP from the 
 	await group.getByLabel('First year').fill('2018');
 	await group.getByLabel('First year').blur();
 	await expect(group.getByTestId('unit-rain-period-note')).toContainText('3 years: the MAP factor wants at least 10 complete years');
-	// Switched off and on again before saving, it comes back as it was.
+	// Switched off and on again before saving, it comes back as it was. Fragmentation keeps the setup on show: its EWR
+	// shares run on it (issue #615).
 	await off.check();
-	await expect(group.getByLabel('First year')).toHaveCount(0);
+	await expect(group.getByLabel('First year')).toHaveValue('2018');
 	await sw.check();
 	await expect(group.getByLabel('First year')).toHaveValue('2018');
 	await expectNoViolations(page, { include: '[data-testid="unit-rain-settings"]' });

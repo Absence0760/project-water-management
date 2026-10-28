@@ -1370,7 +1370,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'ewr-share',
 		term: 'Hydrological unit EWR share',
-		short: 'The hydrological unit’s part of the pragmatic EWR (EWR × its flow share), added up down the river to give the EWR each point must pass.',
+		short: 'The unit’s part of the pragmatic EWR (EWR × its natural MAR share), added up down the river to give the EWR each point must pass.',
 		units: 'm³/day',
 		category: 'ewr',
 		fields: ['run.ewr_cumulative']
@@ -1489,11 +1489,11 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'ewr-split',
-		term: 'Split the EWR between units by',
-		short: 'Each unit’s EWR share: its flow share (default) or its natural MAR ÷ the units’ total, which differs only with rain for each unit.',
+		term: 'How the EWR is split between units',
+		short: 'Each unit’s EWR share is its natural MAR ÷ the units’ total, from its own GR4J runoff under both Per unit and Fragmentation.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'ewr',
-		fields: ['settings.ewrSplit', 'summary.ewrShare']
+		fields: ['summary.ewrShare']
 	},
 	{
 		id: 'ewr-daily-source',

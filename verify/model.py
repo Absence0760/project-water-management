@@ -32,6 +32,7 @@ lists what an input uses beyond that.
 from __future__ import annotations
 
 import datetime as _dt
+import copy
 import math
 
 NAN = float("nan")
@@ -1395,6 +1396,7 @@ def run(doc: dict) -> dict:
     if tot_share > 1 + 0.0002:
         raise Refused("flow shares over 1")
     local: dict[str, list[float]] | None = None
+    share_local: dict[str, list[float]] | None = None
     if not per_unit:
         model_g = Gr4j(g["x1"], g["x2"], g["x3"], g["x4"])
         for k in range(int(g.get("warmupDays", 365))):
@@ -1410,6 +1412,23 @@ def run(doc: dict) -> dict:
             uhs.append(model_g.uh_store())
             exch.append(r["exchange"])
         rain_gr4j = p_used
+        # §2.5b (engine >= 1.105.0, issue #615): Fragmentation's EWR shares come from GR4J once per land unit on the
+        # Per unit forcing (settings.unitRain with its mode set to perUnit), with the same parameters, PE and warm-up,
+        # for the shares only; the catchment's one run above still makes the flow. Its diagnostics stay out (Per unit's).
+        land = sorted((f for f in farms if (f.get("areaKm2") or 0) > 0), key=lambda x: x["id"])
+        if land:
+            sur = dict(ur) if isinstance(ur, dict) else {}
+            sur["mode"] = "perUnit"
+            sforcing = unit_rain_forcing(sur, settings, series, rain, days, finals, sources, p_used, land, doc.get("forecastRainSource"), copy.deepcopy(diag), st)
+            share_local = {}
+            for u in land:
+                a = float(u["areaKm2"])
+                pu = sforcing[u["id"]]
+                gu = Gr4j(g["x1"], g["x2"], g["x3"], g["x4"])
+                for k in range(int(g.get("warmupDays", 365))):
+                    i = k % hist if hist > 0 else 0
+                    gu.step(pu[i], pet[i])
+                share_local[u["id"]] = [gu.step(pu[i], pet[i])["q"] * a * 1000 for i in range(n)]
     else:
         forcing = unit_rain_forcing(ur, settings, series, rain, days, finals, sources, p_used, units, doc.get("forecastRainSource"), diag, st)
         local = {}
@@ -1996,16 +2015,18 @@ def run(doc: dict) -> dict:
     sim_out = [0.0] * n
     cat_short = [0.0] * n
     ewr_share = {x["id"]: shares.get(x["id"], 0.0) for x in farms}
-    # §2.5b (engine >= 1.94.0): settings.ewrSplit 'naturalMar' under per-unit rain splits the EWR by each
-    # unit's natural MAR: its own runoff over the complete water years of the historical days (else all of
-    # them) / the units' total, a negative day counting 0; no runoff over the period keeps the flow share.
-    if settings.get("ewrSplit") == "naturalMar" and local is not None:
+    # §2.5b (engine >= 1.105.0, issue #615): the EWR is split by each unit's natural MAR under both methods: its own
+    # runoff (Per unit's, or Fragmentation's share runs) over the complete water years of the historical days (else
+    # all of them) / the units' total, a negative day counting 0; no runoff over the period: the area shares; no land
+    # unit: the flow share. settings.ewrSplit (1.94.0 – 1.104.x) is retired and ignored.
+    split_src = local if local is not None else share_local
+    if split_src is not None:
         full = [i for i in range(hist) if water_year(days[i]) != water_year(days[0]) or _dt.date.fromordinal(days[0]).strftime("%m-%d") == "10-01"]
         full = [i for i in full if water_year(days[i]) != water_year(days[hist - 1]) or _dt.date.fromordinal(days[hist - 1]).strftime("%m-%d") == "09-30"]
         period = full if full else list(range(hist))
         vol = {}
         for x in sorted(farms, key=lambda f: f["id"]):
-            q = local.get(x["id"])
+            q = split_src.get(x["id"])
             v = 0.0
             if q is not None:
                 for i in period:
@@ -2018,6 +2039,13 @@ def run(doc: dict) -> dict:
         if tot > 0 and math.isfinite(tot):
             ewr_share = {fid: v / tot for fid, v in vol.items()}
             diag["ewr_split_mar"] = diag.get("ewr_split_mar", 0) + 1
+        else:
+            area = {x["id"]: (float(x.get("areaKm2") or 0) if (x.get("areaKm2") or 0) > 0 else 0.0) for x in farms}
+            atot = 0.0
+            for fid in sorted(area):
+                atot += area[fid]
+            ewr_share = {fid: a / atot for fid, a in area.items()}
+            diag["ewr_split_area"] = diag.get("ewr_split_area", 0) + 1
     use_y: dict[tuple, float] = {}
 
     def spend(nid, src, v):

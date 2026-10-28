@@ -249,10 +249,7 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 
 **`settings.set` paths:** `februaryDays`, `effectiveRainFraction`,
 `effectiveRainFractionMonthly`, `effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,
-`ewrPragmaticM3PerDay`, `flowShareMethod`, from engine 1.94.0 (issue #553)
-`ewrSplit` (`flowShare` | `naturalMar`: how the EWR is split between the
-units, [model.md §2.5b](./model.md); a baseline assumption like every
-settings op), `hiLoSplit.hi`, `hiLoSplit.lo`,
+`ewrPragmaticM3PerDay`, `flowShareMethod`, `hiLoSplit.hi`, `hiLoSplit.lo`,
 `gr4j.x1`–`gr4j.x4`, `gr4j.warmupDays`,
 `chirpsBiasCorrection`, `zeroRainRuns.mode`, `zeroRainRuns.accumulationMode`,
 `calibration.rainThresholdMm`, `calibration.catchmentAreaKm2`,
@@ -304,6 +301,15 @@ of potential evaporation: `{ kind: 'pan' }` with no other key, or
 a source that is not blank when trimmed, at most 600 characters. Like every
 `settings.set`, it is classified baseline.
 Every path is one the input diff reports, so no setting changes silently.
+
+`ewrSplit` (engines 1.94.0 – 1.104.x, issue #553) is retired: from engine
+1.105.0 the EWR is always split by each unit's natural MAR (issue #615,
+[model.md §2.5b](./model.md)), so a stored `settings.set` on it is refused
+with "the choice of EWR split was removed in engine 1.105.0 (the EWR is
+always split by each unit's natural MAR): delete this change"
+(`RETIRED_SETTINGS_PATHS`, as the legacy runoff model's paths are). A
+decided scenario's ops are immutable and hashed, so no migration rewrites
+them.
 
 **Retired paths (engine 1.0.0, issue #16).** `runoffModel`,
 `calibration.a`, `calibration.b`, `calibration.summerFactor`,

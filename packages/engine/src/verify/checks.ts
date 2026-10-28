@@ -17,7 +17,7 @@ import { curveAreaAt, fixedReleaseRoom, passInflowTarget, resolveDamCurve, resol
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../network/development';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
-import { ewrSplitDays, naturalMarShares, resolveEwrSplit } from '../network/ewrSplit';
+import { ewrSplitDays, naturalMarShares } from '../network/ewrSplit';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
 import { canMove, externalRuleKeys, externalRules, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
@@ -2201,24 +2201,28 @@ export function checkLandCover(input: ModelInput, out: ModelOutput): string | nu
 }
 
 /**
- * The EWR split between the units (engine ≥ 1.94.0, settings.ewrSplit,
- * ../network/ewrSplit.ts, docs/model.md §2.5b), from the run's own series:
+ * The EWR split between the units (engine ≥ 1.94.0; by each unit's natural
+ * MAR under both methods from 1.105.0, ../network/ewrSplit.ts, docs/model.md
+ * §2.5b), from the run's own series and inputs:
  * - every farm's EWR share series Y is the outlet EWR × its applied share
- *   (FarmSummary.ewrShare), every day;
- * - the flow share applied: each farm's EWR share is its flow share; asked
- *   for the natural MAR, only under catchment rain (the shares are the flow
- *   shares) or with no unit runoff over the period;
- * - the natural MAR applied: under runoff from each unit's own rain only,
- *   the shares add up to 1, and (unless pinned from a snapshot) each is the
- *   unit's own runoff over the complete water years of the historical days
- *   (else all of them) ÷ the units' total, recomputed here.
- * A run before 1.94.0 records no split and is skipped.
+ *   (FarmSummary.ewrShare), every day, so Σ Y over the farms is the outlet
+ *   EWR × Σ shares;
+ * - the flow share applied only with no land unit (or a resumed run whose
+ *   snapshot pinned none), each farm's EWR share its flow share;
+ * - otherwise the shares add up to 1 and a farm with no area has 0; the area
+ *   split (no runoff) is each land unit's area ÷ Σ;
+ * - the natural MAR from Per unit's own runoff (unless pinned) is each unit's
+ *   runoff_natural over the complete water years of the historical days
+ *   (else all of them) ÷ the units' total, recomputed here;
+ * - Fragmentation's share runs aren't in the output, but the units they put
+ *   on the catchment rain (rule 4) all ran on the same rain in mm, so their
+ *   shares stand in the ratio of their areas.
+ * A run before 1.94.0 records no split, and one from 1.94.0 – 1.104.x a
+ * retired choice (`method`): both are skipped.
  */
 export function checkEwrSplit(input: ModelInput, out: ModelOutput): string | null {
 	const split = out.summary.ewrSplit;
-	if (!split) return null;
-	const want = resolveEwrSplit(input.settings.ewrSplit, []);
-	if (split.method !== want) return `the EWR split records ${split.method}, the settings ask for ${want}`;
+	if (!split || split.method !== undefined) return null;
 	const get = seriesMap(out);
 	const ewr = get.get('null|ewr');
 	if (!ewr) return 'the outlet EWR series is missing';
@@ -2230,16 +2234,40 @@ export function checkEwrSplit(input: ModelInput, out: ModelOutput): string | nul
 		if (!y) return `${f.nodeId}: its EWR share series is missing`;
 		for (let t = 0; t < out.days; t++) if (y[t] !== ewr[t]! * k) return `${f.nodeId} day ${t}: EWR share ${y[t]} ≠ the EWR ${ewr[t]} × ${k}`;
 	}
+	const area = new Map(input.model.nodes.filter((n) => n.kind === 'farm').map((n) => [n.id, n.areaKm2 > 0 && Number.isFinite(n.areaKm2) ? n.areaKm2 : 0]));
+	const land = [...area.values()].filter((a) => a > 0).length;
 	if (split.applied === 'flowShare') {
-		if (split.method === 'naturalMar' && !(split.why === 'catchmentRain' ? !out.summary.unitRain : split.why === 'noRunoff' || split.why === 'resumed')) return `the natural MAR split fell back to the flow share (${String(split.why)}) where it shouldn't`;
+		if (split.why === 'noLandUnit' && land > 0) return 'the EWR split fell back to the flow share with no land unit, but the model has one';
+		if (split.why === 'noUnitRunoff' && (land === 0 || out.summary.unitRain)) return 'the EWR split fell back to the flow share without the units’ runoff, but it had it or there is no land unit';
+		if (split.why !== 'noLandUnit' && split.why !== 'noUnitRunoff' && split.why !== 'resumed') return `the EWR split fell back to the flow share (${String(split.why)}) where it shouldn't`;
 		return null;
 	}
-	if (!out.summary.unitRain) return 'an EWR split by natural MAR without runoff from each unit’s own rain';
-	if (!split.period) return 'an EWR split by natural MAR without its period';
+	if (!split.period) return 'an EWR split by natural MAR or area without its period';
 	let sum = 0;
-	for (const f of out.summary.farms) sum += f.ewrShare!;
-	if (Math.abs(sum - 1) > 1e-12) return `the natural MAR EWR shares add up to ${sum}, not 1`;
+	for (const f of out.summary.farms) {
+		sum += f.ewrShare!;
+		if (!(area.get(f.nodeId)! > 0) && f.ewrShare !== 0) return `${f.nodeId}: has no area but an EWR share of ${f.ewrShare}`;
+	}
+	if (Math.abs(sum - 1) > 1e-12) return `the EWR shares add up to ${sum}, not 1`;
+	if (split.applied === 'area') {
+		let total = 0;
+		for (const a of area.values()) total += a;
+		for (const f of out.summary.farms) if (Math.abs(f.ewrShare! - area.get(f.nodeId)! / total) > 1e-12) return `${f.nodeId}: area EWR share ${f.ewrShare} ≠ its area's share`;
+		return null;
+	}
 	if (split.pinned) return null;
+	if (split.runoffFrom === 'shareRuns') {
+		const rule4 = split.catchmentRain ?? [];
+		const first = rule4.find((u) => area.get(u.nodeId)! > 0);
+		for (const u of rule4) {
+			const f = out.summary.farms.find((x) => x.nodeId === u.nodeId);
+			if (!f || !(area.get(u.nodeId)! > 0)) return `${u.name}: named as on the catchment rain, but it isn't a unit with land`;
+			const ratio = (f.ewrShare! / area.get(u.nodeId)!) / (out.summary.farms.find((x) => x.nodeId === first!.nodeId)!.ewrShare! / area.get(first!.nodeId)!);
+			if (Number.isFinite(ratio) && Math.abs(ratio - 1) > 1e-9) return `${u.name}: on the catchment rain, its EWR share per km² differs from ${first!.name}'s`;
+		}
+		return null;
+	}
+	if (!out.summary.unitRain) return 'an EWR split by natural MAR from each unit’s own runoff without runoff from each unit’s own rain';
 	const d0 = toEpochDay(out.startDate);
 	const days = ewrSplitDays(d0, out.summary.historyDays ?? out.days);
 	if (fromEpochDay(d0 + days.from) !== split.period.start || fromEpochDay(d0 + days.to - 1) !== split.period.end || days.waterYears !== split.period.waterYears)

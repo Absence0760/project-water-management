@@ -20,6 +20,7 @@ import {
 	tidyStations,
 	unitRatio,
 	unitStationRows,
+	unitsOnCatchmentRain,
 	withStationSite,
 	withUnitCorrectAgainst,
 	withUnitScale,
@@ -176,5 +177,21 @@ describe('writing settings.rainStations', () => {
 	it('tidies an emptied setting to null, keeping any part still set', () => {
 		expect(tidyStations({ units: {}, sites: {}, unreliable: {}, catchment: null, catchmentMapMm: null })).toBeNull();
 		expect(tidyStations({ units: {}, catchmentMapMm: 650, catchmentMapSource: 'x' })).toEqual({ catchmentMapMm: 650, catchmentMapSource: 'x' });
+	});
+});
+
+describe('the units on the catchment rain (issue #615)', () => {
+	const rain = (kind: string, siteNodeId: string | null = null, mapMm: number | null = null) => ({ kind, siteNodeId, station: { mapMm } });
+	it('names each land unit with no station, no record of its own and no MAP to scale a gauge with a MAP by', () => {
+		// a has a MAP, b a MAP, c none; d has no land. No gauge MAP: a MAP alone doesn't give a unit rain of its own.
+		expect(unitsOnCatchmentRain(nodes, {}, [rain('rain_catchment_mm')]).map((n) => n.id)).toEqual(['a', 'b', 'c']);
+		// The catchment station's MAP (or a gauge MAP in the settings) makes a unit with a MAP run on gauge × MAP ratio.
+		expect(unitsOnCatchmentRain(nodes, {}, [rain('rain_catchment_mm', null, 600)]).map((n) => n.id)).toEqual(['c']);
+		expect(unitsOnCatchmentRain(nodes, { unitRain: { gaugeMapMm: 640 } }, [rain('rain_catchment_mm')]).map((n) => n.id)).toEqual(['c']);
+		// Without a catchment gauge there is nothing to scale.
+		expect(unitsOnCatchmentRain(nodes, { unitRain: { gaugeMapMm: 640 } }, []).map((n) => n.id)).toEqual(['a', 'b', 'c']);
+		// A station, or a gauge or CHIRPS series of its own.
+		const series = [rain('rain_catchment_mm'), rain('rain_chirps_mm', 'b'), rain('rain_catchment_mm', 'c')];
+		expect(unitsOnCatchmentRain(nodes, { rainStations: { units: { a: { stationId: 's' } } } }, series)).toEqual([]);
 	});
 });

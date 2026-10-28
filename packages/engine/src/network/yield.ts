@@ -93,7 +93,19 @@ export function prepareYield(input: ModelInput, naturalFlow?: (ctx: RunContext) 
 	if (nf.naturalFlowM3Day.length !== days) throw new Error(`natural flow has ${nf.naturalFlowM3Day.length} days, expected ${days}`);
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
 	// Each land unit's own runoff under per-unit rain (engine ≥ 1.78.0, docs/model.md §2.4h), as runModel's plan has it.
-	const { plan } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : {}, historyDays);
+	// Fragmentation's EWR shares (engine ≥ 1.105.0, §2.5b) likewise.
+	const { plan } = buildNetworkPlan(
+		input,
+		settings,
+		days,
+		month,
+		aligned,
+		natural,
+		warnings,
+		start,
+		nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : nf.shareRunoff ? { shareRunoff: nf.shareRunoff, shareCatchmentRain: nf.shareCatchmentRain ?? [] } : {},
+		historyDays
+	);
 	const yearOfDay = new Int32Array(days);
 	const wyMonth = new Uint8Array(days);
 	const y0 = waterYearOf(run.start);

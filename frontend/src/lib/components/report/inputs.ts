@@ -88,8 +88,11 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		// Engine ≥ 0.30.0 (issue #40 b); a snapshot without it had none.
 		['Rain source periods', rainSourceText(s.rainSource ?? [])],
 		['Effective rainfall', `${fmtPct(s.effectiveRainFraction, 0)} of rain, soil-water store ${fmtNum(s.effectiveRainStoreMm, 1, true)} mm`],
-		// Engine ≥ 1.94.0 (issue #553): only on a run that asked for the natural MAR, so older reports and the default read as before.
-		...(s.ewrSplit === 'naturalMar' ? [['EWR split between units', ewrSplitText(s, run.summary?.ewrSplit)] as [string, string]] : []),
+		// Engine ≥ 1.105.0 (issue #615): every run records how its EWR was split; 1.94.0 – 1.104.x only a run that asked
+		// for the natural MAR, so older reports and that default read as before.
+		...(isCurrentSplit(run.summary?.ewrSplit) || (s as { ewrSplit?: unknown }).ewrSplit === 'naturalMar'
+			? [['EWR split between units', ewrSplitText(s, run.summary?.ewrSplit)] as [string, string]]
+			: []),
 		// Engine ≥ 1.77.0; the Reserve table it reads, engine ≥ 1.90.0 (issue #552). Only on a run that had one, so older reports read as before.
 		...(s.ewrDailySource ? [['Daily EWR at the outlet', describeEwrDailySource(s.ewrDailySource)] as [string, string]] : []),
 		// Monthly factors (engine ≥ 0.35.0, WP-3.5) are listed with the monthly rows; engine ≥ 1.49.0 adds where
@@ -103,18 +106,35 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 	return rows;
 }
 
+/** A split recorded by engine ≥ 1.105.0, which has no setting behind it (no `method`). */
+const isCurrentSplit = (x: EwrSplitInfo | undefined): boolean => !!x && x.method === undefined;
+
+const NATURAL_MAR_TEXT = 'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review';
+
 /**
- * How the EWR was split between the units under settings.ewrSplit 'naturalMar' (engine ≥ 1.94.0), in words: what
- * the run applied (summary.ewrSplit, which can fall back to the flow share under per-unit rain too), else what the
- * settings imply.
+ * How the EWR was split between the units, in words. Engine ≥ 1.105.0 (issue #615): always by each unit's natural
+ * MAR (summary.ewrSplit), under Fragmentation from GR4J runs on each unit's own rain made for the shares only.
+ * 1.94.0 – 1.104.x, a run that asked for it (settings.ewrSplit 'naturalMar'): what it applied (summary.ewrSplit, which
+ * can fall back to the flow share), else what the settings imply.
  */
 function ewrSplitText(s: RunSettings, applied?: EwrSplitInfo): string {
+	if (applied && isCurrentSplit(applied)) {
+		if (applied.applied === 'flowShare')
+			return applied.why === 'noLandUnit'
+				? 'the flow share: no unit has an area, so there is no natural MAR to split by'
+				: applied.why === 'noUnitRunoff'
+					? 'the flow share: the natural flow came without the units’ runoff'
+					: 'the flow share: the run resumed from a snapshot that pinned no shares';
+		if (applied.applied === 'area') return 'each unit’s area: no unit made natural runoff over the run';
+		const frag = applied.runoffFrom === 'shareRuns' ? '; under Fragmentation, from GR4J runs on each unit’s own rain made for the shares only (the flow is the catchment’s one run, split by the flow share)' : '';
+		const rule4 = applied.catchmentRain?.length ? `; on the catchment rain, so their share follows their area: ${applied.catchmentRain.map((u) => u.name).join(', ')}` : '';
+		return NATURAL_MAR_TEXT + frag + rule4;
+	}
 	if (applied?.applied === 'flowShare' && applied.why === 'noRunoff') return 'the flow share: natural MAR was asked for, but no unit made natural runoff over the run';
 	if (applied?.applied === 'flowShare' && applied.why === 'resumed')
 		return 'the flow share: natural MAR was asked for, but the run resumed from a snapshot of a run that split the EWR by the flow share';
 	const perUnit = applied ? applied.applied === 'naturalMar' : s.runoffModel === 'gr4j' && s.unitRain?.mode === 'perUnit';
-	if (perUnit)
-		return 'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review';
+	if (perUnit) return NATURAL_MAR_TEXT;
 	return 'the flow share: natural MAR was asked for, but GR4J ran once on the catchment rain, so each unit’s natural MAR share is its flow share';
 }
 

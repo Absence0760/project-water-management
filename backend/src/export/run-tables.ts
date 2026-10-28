@@ -187,7 +187,7 @@ const PERCENT_KEYS = new Set(['flowShare', 'ewrShare', 'fractionSupplied', 'ewrF
 const FARM_COLUMNS: [key: string, header: string][] = [
 	// Engine ≥ 0.27.0; empty on older runs. The share of the flow (I), and of the EWR (Y) unless split otherwise.
 	['flowShare', 'Flow share (%)'],
-	// Engine ≥ 1.94.0 (settings.ewrSplit, issue #553): the share of the EWR (Y) as applied; an older run's is its flow share.
+	// Engine ≥ 1.94.0 (issue #553; the natural MAR share from 1.105.0, issue #615): the share of the EWR (Y) as applied; an older run's is its flow share.
 	['ewrShare', 'EWR share (%)'],
 	['avgCropRequirementM3Day', 'Average crop water requirement (m³/day)'],
 	['avgDemandM3Day', 'Average abstraction demand (m³/day)'],
@@ -1178,19 +1178,29 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield csvRow(['Farm summary']);
-	// How the EWR was split between the units (engine ≥ 1.94.0, issue #553): only when a split other than the flow share was asked for.
+	// How the EWR was split between the units (engine ≥ 1.94.0, issue #553; every run with a land unit from 1.105.0, issue
+	// #615): only when a split other than the flow share was asked for (1.94.0 – 1.104.x), or applied (1.105.0 on).
 	const split = summary.ewrSplit;
-	if (split && split.method !== 'flowShare')
+	if (split && (split.method !== undefined ? split.method !== 'flowShare' : true))
 		yield csvRow([
 			'EWR split between units by',
 			EWR_SPLIT_LABEL[split.applied],
-			split.period
-				? `${split.period.start} – ${split.period.end} (${split.period.waterYears ? `${split.period.waterYears} complete water year${split.period.waterYears === 1 ? '' : 's'}` : 'the whole run: no complete water year'}${split.pinned ? '; the capture run’s shares' : ''})`
-				: split.why === 'catchmentRain'
-					? 'the flow share: GR4J ran once on the catchment rain'
-					: split.why === 'resumed'
-						? 'the flow share: resumed from a snapshot of a run that split the EWR by the flow share'
-						: 'the flow share: no unit made natural runoff'
+			[
+				split.period
+					? `${split.period.start} – ${split.period.end} (${split.period.waterYears ? `${split.period.waterYears} complete water year${split.period.waterYears === 1 ? '' : 's'}` : 'the whole run: no complete water year'}${split.pinned ? '; the capture run’s shares' : ''})`
+					: split.why === 'catchmentRain'
+						? 'the flow share: GR4J ran once on the catchment rain'
+						: split.why === 'resumed'
+							? 'the flow share: resumed from a snapshot of a run that split the EWR by the flow share'
+							: split.why === 'noLandUnit'
+								? 'the flow share: no unit has an area'
+								: split.why === 'noUnitRunoff'
+									? 'the flow share: the natural flow came without the units’ runoff'
+								: 'the flow share: no unit made natural runoff',
+				...(split.why === 'noRunoff' && split.period ? ['no unit made natural runoff'] : []),
+				...(split.runoffFrom === 'shareRuns' ? ['Fragmentation: GR4J also ran on each unit’s own rain, for the shares only'] : []),
+				...(split.catchmentRain?.length ? [`on the catchment rain (share by area): ${split.catchmentRain.map((u) => u.name).join('; ')}`] : [])
+			].join('; ')
 		]);
 	const farms = summary.farms as unknown as Record<string, unknown>[];
 	const known = new Set(['nodeId', 'name', ...FARM_COLUMNS.map(([k]) => k)]);

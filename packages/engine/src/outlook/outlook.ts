@@ -41,7 +41,8 @@ import { unitForecastSeriesKey, UNIT_RAIN_SERIES, type DailySeries, type ModelIn
 import { prepareRun } from '../prepare';
 import { unitRainRecipes, type UnitRainRecipe } from '../runoff/unitRain';
 import { pairingFactors } from '../runoff/stationForcing';
-import { captureModelState, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
+import { captureModelState, ewrSplitPinOf, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
+import type { PinnedEwrSplit } from '../network/ewrSplit';
 import { withAllocationKnownBefore, type ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
 import { applyScenario } from '../scenario/overrides';
@@ -241,7 +242,18 @@ export function outlookMemberInput(
 	const factors = prep?.stations ? pairingFactors(prep.stations.context) : null;
 	if (factors && Object.keys(factors).length && settings.rainStations)
 		settings.rainStations = { ...settings.rainStations, pinnedFactors: { ...(settings.rainStations.pinnedFactors ?? {}), ...factors } };
-	return withLevel({ settings, model: input.model, series, ...(input.stations ? { stations: input.stations } : {}) }, ops);
+	// The EWR split (engine ≥ 1.105.0, §2.5b): the base run's shares, as a member from the snapshot takes the capture run's,
+	// not shares worked out on the history cut at the decision date.
+	const split = baseEwrSplit(input);
+	return withLevel({ settings, model: input.model, series, ...(input.stations ? { stations: input.stations } : {}), ...(split ? { ewrSplitPinned: split } : {}) }, ops);
+}
+
+/** The base input's EWR split, once per base input (an outlook builds a member per analogue and level from one). */
+const splitCache = new WeakMap<ModelInput, PinnedEwrSplit | null>();
+function baseEwrSplit(input: ModelInput): PinnedEwrSplit | null {
+	if (input.ewrSplitPinned) return input.ewrSplitPinned;
+	if (!splitCache.has(input)) splitCache.set(input, ewrSplitPinOf(input));
+	return splitCache.get(input)!;
 }
 
 /** The base input's unit rain recipes (prepareRun's CHIRPS correction for the bias sub-rule); null without per-unit rain. */
