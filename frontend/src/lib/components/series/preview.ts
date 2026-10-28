@@ -360,7 +360,15 @@ export function filterPreviewRows(rows: readonly PreviewRow[], { query, missingO
 // and where each day's rain used came from. The lines are computed by SeriesTab (derivedRain.ts, the engine's
 // stationAreaRain over the model input a run reads) and handed in; nothing here runs the engine.
 
-export type AreaLine = 'stationRaw' | 'stationScaled' | 'chirpsRaw' | 'chirpsCorrected' | 'rainUsed' | 'source' | ChainLine;
+export type AreaLine = 'stationRaw' | 'stationScaled' | 'chirpsRaw' | 'chirpsCorrected' | 'rainUsed' | 'source' | ChainLine | PatchLine;
+/** A patch station's line (issue #613 slice 3): its record as stored or × its ratio, by its place in the patching priority (1 first). */
+export type PatchLine = `patchRaw:${number}` | `patchScaled:${number}`;
+const patchLine = (kind: 'patchRaw' | 'patchScaled', place: number): PatchLine => `${kind}:${place}`;
+/** A patch line's kind and place, or null for any other line. */
+const parsePatchLine = (line: AreaLine): { kind: 'patchRaw' | 'patchScaled'; place: number } | null => {
+	const m = /^(patchRaw|patchScaled):(\d+)$/.exec(line);
+	return m ? { kind: m[1] as 'patchRaw' | 'patchScaled', place: Number(m[2]) } : null;
+};
 /** A §2.4h unit's own links (issue #613 slice 2): its own gauge after the checks, the catchment gauge × its MAP ratio, its CHIRPS levelled. */
 export type ChainLine = 'ownGauge' | 'gaugeScaled' | 'chirpsLevelled';
 
@@ -435,6 +443,12 @@ export function buildAreaColumns(areas: readonly PreviewArea[]): PreviewColumn[]
 		for (const l of isChainData(data) ? CHAIN_LINES : AREA_LINES) {
 			if (!l.inAll || !hasLine(data, l.line)) continue;
 			out.push({ id: areaColumnId(a.nodeId, l.line), label: `${areaTitle(a)}: ${l.what}`, unit: l.unit, group: 'area', area: { nodeId: a.nodeId, line: l.line }, helpKey: l.helpKey });
+			// Each patch station × its ratio follows the station's, in the patching priority (the Full CSV's order).
+			if (l.line === 'stationScaled' && !isChainData(data))
+				for (const p of data.patches ?? []) {
+					const line = patchLine('patchScaled', p.place);
+					out.push({ id: areaColumnId(a.nodeId, line), label: `${areaTitle(a)}: patch ${p.place}: ${p.stationName} × ratio`, unit: 'mm', group: 'area', area: { nodeId: a.nodeId, line }, helpKey: 'preview.areaPatchScaled' });
+				}
 		}
 	}
 	return out;
@@ -482,15 +496,45 @@ export function areaViewColumns(a: PreviewArea, stationName: (id: string) => str
 		rainUsed: `${name} rain used`,
 		source: `${name} rain used from`
 	};
-	return AREA_LINES.filter((l) => hasLine(lines, l.line)).map((l) => ({
-		id: areaColumnId(a.nodeId, l.line),
-		label: label[l.line]!,
-		unit: l.unit,
-		group: 'area' as const,
-		area: { nodeId: a.nodeId, line: l.line },
-		helpKey: l.helpKey,
-		...(l.line === 'stationRaw' ? { seriesId: f.stationId } : l.line === 'chirpsRaw' && chirpsSeriesId ? { seriesId: chirpsSeriesId } : {})
-	}));
+	const out: PreviewColumn[] = [];
+	for (const l of AREA_LINES) {
+		if (!hasLine(lines, l.line)) continue;
+		out.push({
+			id: areaColumnId(a.nodeId, l.line),
+			label: label[l.line]!,
+			unit: l.unit,
+			group: 'area' as const,
+			area: { nodeId: a.nodeId, line: l.line },
+			helpKey: l.helpKey,
+			...(l.line === 'stationRaw' ? { seriesId: f.stationId } : l.line === 'chirpsRaw' && chirpsSeriesId ? { seriesId: chirpsSeriesId } : {})
+		});
+		// Each patch station, raw then adjusted, in the patching priority, between the main station and the CHIRPS (issue #613 slice 3).
+		if (l.line === 'stationScaled') out.push(...patchViewColumns(a.nodeId, to, lines));
+	}
+	return out;
+}
+
+/** An area's patch stations in its own view: "Patch 1: <station> raw", then "Patch 1: <station> adjusted to <area> (× r)", by place. */
+function patchViewColumns(nodeId: string | null, to: string, lines: AreaRainLines): PreviewColumn[] {
+	return (lines.patches ?? []).flatMap((p) => [
+		{
+			id: areaColumnId(nodeId, patchLine('patchRaw', p.place)),
+			label: `Patch ${p.place}: ${p.stationName} raw`,
+			unit: 'mm',
+			group: 'area' as const,
+			area: { nodeId, line: patchLine('patchRaw', p.place) },
+			helpKey: 'preview.areaPatchRaw',
+			seriesId: p.stationId
+		},
+		{
+			id: areaColumnId(nodeId, patchLine('patchScaled', p.place)),
+			label: `Patch ${p.place}: ${p.stationName} adjusted to ${to} (× ${fmtNum(p.ratio, 3)})`,
+			unit: 'mm',
+			group: 'area' as const,
+			area: { nodeId, line: patchLine('patchScaled', p.place) },
+			helpKey: 'preview.areaPatchScaled'
+		}
+	]);
 }
 
 /**
@@ -627,6 +671,12 @@ export function areaCell(lines: AreaRainLines | UnitChainLines, line: AreaLine, 
 		if (line === 'source') return CHAIN_FROM_LABEL[lines.source[i]!];
 		const c = line === 'rainUsed' ? lines.rainUsed : line === 'ownGauge' ? lines.ownGauge : line === 'gaugeScaled' ? lines.gaugeScaled : line === 'chirpsRaw' ? lines.chirpsRaw : line === 'chirpsLevelled' ? lines.chirpsLevelled : null;
 		const v = c?.[i];
+		return v == null || !Number.isFinite(v) ? null : v;
+	}
+	const patch = parsePatchLine(line);
+	if (patch) {
+		const p = lines.patches?.find((x) => x.place === patch.place);
+		const v = patch.kind === 'patchRaw' ? p?.raw[i] : p?.scaled[i];
 		return v == null || !Number.isFinite(v) ? null : v;
 	}
 	// A patch day names its station and its place in the priority (issue #612), "patch 1: Ridge".

@@ -5796,10 +5796,13 @@ with the table the data needs).
     built in the browser): **Compact** (the stations, the average
     catchment rainfall, each unit's rain used, the flow records) or
     **Full** (every stored series group by group, a unit's under it, and
-    each area's station × ratio, corrected CHIRPS, rain used and *rain
-    used from*: station, chirps, fallback or none), one row a day over
+    each area's station × ratio, each patch station × its ratio in the
+    patching priority (*patch N: <station> × ratio*, issue #613 slice 3),
+    corrected CHIRPS, rain used and *rain used from*: station, *patch N:
+    <station>*, chirps, fallback or none), one row a day over
     every column's span. Both open with `#` lines: the export, the engine
-    version and date, and each area's sentence (Full adds the factors; a
+    version and date, each area's sentence and its patch stations with their
+    ratios (Full adds the factors, fitted for that area; a
     refused pairing or an area that couldn't be computed says so). Header
     cells that read as a formula get an apostrophe, and a `#` line's
     commas, quotes and line breaks are percent-encoded, so it stays one
@@ -6235,18 +6238,29 @@ and the column picker then lists, and hides, only that view's columns:
 **All** (the default: every column above, unchanged); **each land unit** (listed under *Units with land*) by
 name, in the model's order, showing only what its rain is made of, side by
 side: *<station> raw*, *<station> adjusted to <unit> (× r)* with r to three
-decimals, *<unit> CHIRPS raw*, *<unit> CHIRPS bias-corrected (f(m) against
-<station>)*, *<unit> rain used* and *<unit> rain used from*, then the other
+decimals, each patch station of its patching priority (issue #612; issue #613
+slice 3) as *Patch N: <station> raw* and *Patch N: <station> adjusted to <unit>
+(× r)*, r that station's own ratio (unit MAP ÷ its MAP), N its place in the
+priority (a CHIRPS earlier in the list keeps its place; a station the run skips
+has no lines; help `preview.areaPatchRaw`, `preview.areaPatchScaled`), *<unit>
+CHIRPS raw*, *<unit> CHIRPS bias-corrected (f(m) against <station>)*, *<unit>
+rain used* and *<unit> rain used from* (a day a patch station filled reads
+*patch N: <station>*), then the other
 series stored at the unit (a gauge with its m³/day; its CHIRPS series is the
-raw line already; the raw lines read their stored series, so the search, *Missing only*, *Flagged only* and the check flags work on them), with the twelve monthly factors, the station they were
-fitted against, or why the pairing was refused, listed above the table
-(`data-testid="preview-factors"`); and the groups **All rainfall stations**,
+raw line already; the raw lines read their stored series, so the search, *Missing only*, *Flagged only* and the check flags work on them), with the twelve monthly factors (fitted for that unit since engine 1.105.0:
+its station's rain taken to the unit's MAP over the unit's own CHIRPS), the
+station they were fitted against, or why the pairing was refused, listed above
+the table (`data-testid="preview-factors"`), and, when the patching priority
+lists a station, the whole priority with each station's ratio and the days
+each source filled, or why the run skipped it
+(`data-testid="preview-patch-chain"`); and the groups **All rainfall stations**,
 **Average catchment rainfall** (when Settings assigns the catchment a station:
 its lines as for a unit, then the catchment's own stored rain) and **All
 flow** (every flow record with its m³/day, and Excluded from calibration),
-each offered only when it would show something. The raw station and raw
-CHIRPS lines (help `preview.areaStationRaw`, `preview.areaChirpsRaw`) are in
-an area's own view only: in All they are stored series columns already
+each offered only when it would show something. The raw station, raw patch station and raw
+CHIRPS lines (help `preview.areaStationRaw`, `preview.areaPatchRaw`, `preview.areaChirpsRaw`) are in
+an area's own view only (All gains each patch station × its ratio after the
+station × ratio, as the Full CSV does): in All they are stored series columns already
 (issue #619's recommendation). A unit with no station, under per-unit rain
 (issue #613 slice 2), shows its own §2.4h chain instead (the engine's
 `unitAreaRain`, the run's `rain_unit` to the bit; `derivedRain.ts`
