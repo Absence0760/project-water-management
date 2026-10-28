@@ -966,8 +966,8 @@ describe('the station paths stay unchanged (golden)', () => {
 			},
 			rest: {
 				sum: 1015456949.4520895,
-				sumSq: 68071024411652.23,
-				weighted: 1521261352.5445035
+				sumSq: 67625179408458.5,
+				weighted: 1520772933.3445058
 			},
 			summary: {
 				sum: 25414.456551038187,

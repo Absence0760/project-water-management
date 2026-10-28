@@ -40,7 +40,7 @@ function resolveSettings(raw: ModelInput['settings']): ModelInput['settings'] {
 	const d = defaultProjectSettings() as unknown as Record<string, unknown>;
 	const r = raw as Record<string, unknown>;
 	const merge = (k: string) => ({ ...(d[k] as object), ...((r[k] as object | undefined) ?? {}) });
-	return { ...d, ...r, calibration: merge('calibration'), hiLoSplit: merge('hiLoSplit'), gr4j: merge('gr4j'), zeroRainRuns: merge('zeroRainRuns'), dataQuality: merge('dataQuality'), wr2012: merge('wr2012') } as ModelInput['settings'];
+	return { ...d, ...r, calibration: merge('calibration'), gr4j: merge('gr4j'), zeroRainRuns: merge('zeroRainRuns'), dataQuality: merge('dataQuality'), wr2012: merge('wr2012') } as ModelInput['settings'];
 }
 
 /** What a run stores about its input (backend runs/execute.ts); the values' JSON stands in for their SHA-256. */

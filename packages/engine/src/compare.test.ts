@@ -643,6 +643,49 @@ describe('diffInputs', () => {
 		expect(texts(a, d)).toEqual([]);
 	});
 
+	it('lists the retired flow-share method and Hi/Lo split (engine 1.105.0, issue #616): changed, removed, or none', () => {
+		const a = snapshot();
+		const d = copyWithFreshIds(a);
+		const set = (x: RunInputsSnapshot, k: string, v: unknown) => ((x.settings as Record<string, unknown>)[k] = v);
+		// Both older runs recorded it: a change of value, as before.
+		set(a, 'flowShareMethod', 'area');
+		set(d, 'flowShareMethod', 'manual');
+		expect(texts(a, d)).toEqual(['Flow-share method: area → specific shares']);
+		set(d, 'flowShareMethod', 'area');
+		expect(texts(a, d)).toEqual([]);
+		// Only the earlier one had it: named as removed, with its Hi/Lo split when it ran Hi/Lo.
+		delete (d.settings as Record<string, unknown>).flowShareMethod;
+		expect(texts(a, d)).toEqual(['Flow-share method: area → removed in engine 1.105.0 (the flow is split by each unit’s natural MAR)']);
+		set(a, 'flowShareMethod', 'hiLo');
+		set(a, 'hiLoSplit', { hi: 0.8, lo: 0.2 });
+		expect(texts(a, d)).toEqual([
+			'Flow-share method: Hi/Lo MAP → removed in engine 1.105.0 (the flow is split by each unit’s natural MAR)',
+			'Hi/lo MAP split: 0.8/0.2 → removed in engine 1.105.0 (the flow is split by each unit’s natural MAR)'
+		]);
+		// Neither has it (both from 1.105.0 on): nothing; the engine version line says which engines.
+		delete (a.settings as Record<string, unknown>).flowShareMethod;
+		delete (a.settings as Record<string, unknown>).hiLoSplit;
+		expect(texts(a, d)).toEqual([]);
+	});
+
+	it('lists the retired high-, low-MAP areas and specific share of a unit (engine 1.105.0, issue #616) from the raw snapshot', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		const raw = (x: RunInputsSnapshot, id: string) => x.model.nodes.find((n) => n.id === id) as unknown as Record<string, unknown>;
+		Object.assign(raw(a, 'f1'), { areaHiKm2: 3, areaLoKm2: 0, flowShareManual: 0.4 });
+		// The later run has none of them: the ones that did something are named as removed, a 0 area isn't.
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: high-MAP area 3 km² → removed in engine 1.105.0 (the flow is split by each unit’s natural MAR)',
+			'Rooikloof: manual flow share 40% → removed in engine 1.105.0 (the flow is split by each unit’s natural MAR)'
+		]);
+		// Both older runs had them: a change of value.
+		Object.assign(raw(b, 'f1'), { areaHiKm2: 2, areaLoKm2: 0, flowShareManual: 0.4 });
+		expect(texts(a, b)).toEqual(['Rooikloof: high-MAP area 3 km² → 2 km²']);
+		// Neither: nothing.
+		for (const x of [a, b]) for (const k of ['areaHiKm2', 'areaLoKm2', 'flowShareManual']) delete raw(x, 'f1')[k];
+		expect(texts(a, b)).toEqual([]);
+	});
+
 	it('lists demand objects added, changed and removed, matched across a copy by unit and object name (engine 1.7.0)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);
@@ -997,6 +1040,8 @@ describe('diffInputs', () => {
 	it('describes settings: scalars, calibration, monthly tables and unknown keys', () => {
 		// Two legacy runs, so the legacy model's own calibration settings count too.
 		const a = legacySnapshot();
+		// Both from before engine 1.105.0, so both recorded the flow-share method (retired by issue #616).
+		(a.settings as Record<string, unknown>).flowShareMethod = 'hiLo';
 		const b = structuredClone(a);
 		const ca = a.settings.calibration as unknown as Record<string, number[]>;
 		const cb = b.settings.calibration as unknown as Record<string, unknown>;
@@ -1007,7 +1052,7 @@ describe('diffInputs', () => {
 		b.settings.simulationStart = '2005-10-01';
 		(b.settings as Record<string, unknown>).ewrPragmaticM3PerDay = [100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 		(b.settings as Record<string, unknown>).apanMm = new Array(12).fill(150);
-		b.settings.hiLoSplit = { hi: 0.7, lo: 0.3 };
+		(b.settings as Record<string, unknown>).hiLoSplit = { hi: 0.7, lo: 0.3 };
 		(b.settings as Record<string, unknown>).futureKnob = 3;
 		expect(texts(a, b)).toEqual([
 			'Effective rain fraction: 0.65 → 0.7',

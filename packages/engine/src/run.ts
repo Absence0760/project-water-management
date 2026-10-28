@@ -1900,6 +1900,13 @@ export function buildNetworkPlan(
 		},
 		scaledObjects: (i, k) => (factored(nodes[i]!) && objectsBy.has(nodes[i]!.id) ? objectsOf(nodes[i]!, { scale: k }) : undefined)
 	});
+	// Each unit's one share (engine ≥ 1.105.0, ./network/ewrSplit.ts, §2.5 and §2.5b): its natural MAR share, from Per
+	// unit's own runoff or Fragmentation's share runs, set on the plan's farms. It splits the flow under Fragmentation,
+	// the EWR and the land-cover threshold (all read at simulation time) and the senior users' claims, made from it here.
+	const shareRunoffOf = unitRunoffOf.size ? unitRunoffOf : new Map((warm.shareRunoff ?? []).map((u) => [u.nodeId, u.runoffM3Day]));
+	const ewrSplit = planUnitShares(plan, nodes, shareRunoffOf, unitRunoffOf.size ? 'unitRain' : 'shareRuns', unitRunoffOf.size ? [] : (warm.shareCatchmentRain ?? []), start, historyDays, warm.ewrSplit);
+	// The daily outlet EWR reads the natural flow at the outlet, which crosses the units by their shares when a reach
+	// loses (naturalAtOutlet): filled once the shares are set.
 	let outletEwr: OutletEwrPlan | undefined;
 	if (ewrSource) {
 		for (const note of ewrDailySourceNotes(ewrSource)) warnings.push(`daily EWR at the outlet: ${note}`);
@@ -1908,11 +1915,6 @@ export function buildNetworkPlan(
 		const areaKm2 = resolveCatchmentAreaKm2(settings.calibration, { ...input, model });
 		outletEwr = { source: ewrSource, info: fillPlanOutletEwr(plan, topo.outflow, natural, ewrSource, areaKm2, historyDays, days, warm.outletEwr) };
 	}
-	// Each unit's one share (engine ≥ 1.105.0, ./network/ewrSplit.ts, §2.5 and §2.5b): its natural MAR share, from Per
-	// unit's own runoff or Fragmentation's share runs, set on the plan's farms. It splits the flow under Fragmentation,
-	// the EWR and the land-cover threshold (all read at simulation time) and the senior users' claims, made from it here.
-	const shareRunoffOf = unitRunoffOf.size ? unitRunoffOf : new Map((warm.shareRunoff ?? []).map((u) => [u.nodeId, u.runoffM3Day]));
-	const ewrSplit = planUnitShares(plan, nodes, shareRunoffOf, unitRunoffOf.size ? 'unitRain' : 'shareRuns', unitRunoffOf.size ? [] : (warm.shareCatchmentRain ?? []), start, historyDays, warm.ewrSplit);
 	const claimsOn = (w: string[] | null) => {
 		const share = plan.nodes.map((n) => n.share);
 		applySeniorClaims(plan.nodes, seniorClaims(nodes, topo, share, reaches, days, users, w, cutOf), !!restriction?.userCut);

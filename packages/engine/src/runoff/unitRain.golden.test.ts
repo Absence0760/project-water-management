@@ -121,7 +121,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 	fragmentation: {
 		units: null,
 		golden: {
-			shape: "ad7590d5bbce8db0",
+			shape: "2576a5878b5d8952",
 			series: {
 				"natural_flow@": {
 					sum: 31197362.536312077,
@@ -250,7 +250,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "767f9b8c73543fe1",
+			shape: "ea03178df0d44190",
 			series: {
 				"natural_flow@": {
 					sum: 42767824.923284635,
@@ -419,7 +419,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "7a38a3338456e296",
+			shape: "85cc857a5bba823f",
 			series: {
 				"natural_flow@": {
 					sum: 40724533.36977918,
@@ -588,7 +588,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "3f3c4380773662dd",
+			shape: "c61ecc818cd6231c",
 			series: {
 				"natural_flow@": {
 					sum: 17320217.189539496,

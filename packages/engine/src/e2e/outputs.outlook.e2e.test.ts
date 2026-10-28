@@ -14,7 +14,7 @@ import type { ModelInput, ModelOutput } from '../project';
 import { runModelWithoutChecks } from '../run';
 import { testCatchment } from '../outlook/testCatchment';
 import { outlookAnalogues, outlookSeasonInput, runSeasonalOutlook } from '../outlook/outlook';
-import { captureModelState, runModelFrom } from '../run';
+import { captureModelState, ewrSplitPinOf, runModelFrom } from '../run';
 
 function series(out: Pick<ModelOutput, 'series'>, nodeId: string | null, key: string): number[] {
 	const s = out.series.find((x) => x.nodeId === nodeId && x.key === key);
@@ -33,7 +33,8 @@ function handAnalogueStart(decisionDate: string, wy: number): number {
 }
 
 /** The plain run a member stands for, built by hand. */
-function plainMemberInput(base: ModelInput, baseRun: ModelOutput, decisionDate: string, seasonEnd: string, wy: number, factor: number): ModelInput {
+/** `pinned`: the base run's unit shares (engine ≥ 1.105.0, §2.5), as the member takes the capture run's. */
+function plainMemberInput(base: ModelInput, baseRun: ModelOutput, decisionDate: string, seasonEnd: string, wy: number, factor: number, pinned: ModelInput['ewrSplitPinned']): ModelInput {
 	const from = toEpochDay(decisionDate);
 	const days = toEpochDay(seasonEnd) - from + 1;
 	const rain = base.series.rain_catchment_mm!;
@@ -47,7 +48,8 @@ function plainMemberInput(base: ModelInput, baseRun: ModelOutput, decisionDate: 
 		...base,
 		settings: { ...base.settings, simulationEnd: seasonEnd, ...(factor !== 1 ? { demandFactorFrom: decisionDate } : {}) },
 		model: factor === 1 ? base.model : { ...base.model, nodes: base.model.nodes.map((n) => (n.kind === 'farm' ? { ...n, demandFactor: new Array(12).fill(factor) } : n)) },
-		series: { rain_catchment_mm: { startDate: rain.startDate, values: [...history, ...season] } }
+		series: { rain_catchment_mm: { startDate: rain.startDate, values: [...history, ...season] } },
+		...(pinned ? { ewrSplitPinned: pinned } : {})
 	};
 }
 
@@ -78,9 +80,12 @@ const KEYS: [string | null, string][] = [
 
 describe('outputs e2e: outlook members are plain runs with shifted climate (§2.15)', () => {
 	const baseRun = runModelWithoutChecks(BASE);
+	// The base run's unit shares (engine ≥ 1.105.0, §2.5), which the members take from the snapshot.
+	const pinned = ewrSplitPinOf(BASE);
 	for (const [name, decisionDate, seasonEnd] of SEASONS) {
 		it(`${name}: every analogue at 100 % and 70 %, the member’s season equals the plain run’s`, () => {
 			const season = { decisionDate, seasonEnd };
+			expect(pinned?.shares.length).toBeGreaterThan(0);
 			const { analogues, excluded } = outlookAnalogues(baseRun, season);
 			// The season's own water year is not an analogue in a hindcast.
 			const own = excluded.find((e) => e.reason === 'theSeason');
@@ -95,7 +100,7 @@ describe('outputs e2e: outlook members are plain runs with shifted climate (§2.
 				for (const f of [1, 0.7]) {
 					const ops = f === 1 ? [] : [{ op: 'demand.scale' as const, factor: f }];
 					const member = runModelFrom(snap, outlookSeasonInput(BASE, baseRun, season, a, ops).input);
-					const plain = runModelWithoutChecks(plainMemberInput(BASE, baseRun, decisionDate, seasonEnd, a.waterYear, f));
+					const plain = runModelWithoutChecks(plainMemberInput(BASE, baseRun, decisionDate, seasonEnd, a.waterYear, f, pinned));
 					expect(plain.endDate).toBe(seasonEnd);
 					for (const [n, key] of KEYS) {
 						const m = series(member, n, key);

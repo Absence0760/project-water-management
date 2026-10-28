@@ -559,12 +559,13 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		const runoffTo = splitRefill ? Math.max(n, splitRefill.days.to) : n;
 		return (p: ParamSet): Float64Array => {
 			runoff(p, runoffTo);
-			// The daily outlet EWR from the DRM tables follows each candidate's natural flow, as a run on it would.
-			if (outletEwr) fillPlanOutletEwr(plan, topo.outflow, natural, outletEwr.source, areaKm2, historyDays, n);
 			// The unit shares follow each candidate's units' runoff (Per unit's, or Fragmentation's share runs), as a run on
 			// it would: the flow under Fragmentation, the EWR and the land-cover threshold read them as the network runs,
 			// and the senior users' claims are made again from them (engine 1.105.0, issue #616).
 			refillShares?.();
+			// The daily outlet EWR from the DRM tables follows each candidate's natural flow, as a run on it would: after
+			// the shares, which the natural flow crosses the units by when a reach loses.
+			if (outletEwr) fillPlanOutletEwr(plan, topo.outflow, natural, outletEwr.source, areaKm2, historyDays, n);
 			if (siteIndex < 0) return new Float64Array(days);
 			return simulateNetwork(shortPlan).nodes[siteIndex]!.outflow;
 		};

@@ -30,6 +30,7 @@ import {
 	LEGACY_LOSS_RETURN_FIELD,
 	nodeFieldError,
 	reductions,
+	retiredNodeFieldReason,
 	settingsValueError,
 	transferFieldError,
 	type ScenarioOp
@@ -536,6 +537,9 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			}
 			// The field written is the allowlist's own name for it, never the op's text (so never `__proto__`).
 			const settable: readonly string[] = Object.hasOwn(NODE_SET_FIELDS, n.kind) ? NODE_SET_FIELDS[n.kind] : [];
+			// A stored op on a field retired with the flow-share methods (engine 1.105.0, issue #616) says why it is refused.
+			const retired = retiredNodeFieldReason(op.field);
+			if (retired) fail(retired);
 			const field = allowed(settable, op.field) ?? fail(`"${String(op.field)}" can't be set on a ${n.kind}`);
 			const e = nodeFieldError(field, op.value);
 			if (e) fail(`${field} ${e}`);

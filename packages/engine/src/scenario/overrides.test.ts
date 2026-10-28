@@ -26,8 +26,6 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		downstreamNodeId: null,
 		sortOrder: 0,
 		areaKm2: 5,
-		areaHiKm2: 2.5,
-		areaLoKm2: 2.5,
 		pctUpstreamToDam: 0.5,
 		pctRunoffToDam: 0.8,
 		damCapacityM3: 0,
@@ -241,17 +239,22 @@ describe('applyScenario: each op', () => {
 		expect(nodeOf(r.input, 'A')!.name).toBe('Farm A');
 	});
 
-	it('refuses flow shares over 100 % (the run would refuse them) and takes ones that fit', () => {
-		const b = base();
-		b.settings = { ...b.settings, flowShareMethod: 'manual' };
-		for (const [id, v] of [['A', 0.4], ['B', 0.3], ['C', 0.3]] as const) nodeOf(b, id)!.flowShareManual = v;
-		const r = one({ op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.9 }, b);
-		expect(r.problems[0]).toMatch(/flow shares sum to 150\.00%, more than 100%/);
-		expect(nodeOf(r.input, 'A')!.flowShareManual).toBe(0.4);
-		expect(one({ op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.2 }, b).problems).toEqual([]);
-		const hiLo = base();
-		hiLo.settings = { ...hiLo.settings, flowShareMethod: 'hiLo' };
-		expect(one({ op: 'settings.set', path: 'hiLoSplit.hi', value: 0.95 }, hiLo).problems[0]).toMatch(/sum to 145\.00%/);
+	it('refuses a stored op on a retired flow-share path or field, saying why (engine 1.105.0, issue #616)', () => {
+		for (const [path, value] of [['flowShareMethod', 'manual'], ['hiLoSplit.hi', 0.95], ['hiLoSplit.lo', 0.05]] as const) {
+			expect(one({ op: 'settings.set', path, value } as unknown as ScenarioOp).problems[0], path).toMatch(/the flow-share method was removed in engine 1\.105\.0 .*: delete this change/);
+			expect(validateScenarioOps([{ op: 'settings.set', path, value }]).errors[0], path).toMatch(/flow-share method was removed in engine 1\.105\.0/);
+		}
+		for (const [field, what] of [['flowShareManual', 'the specific flow share'], ['areaHiKm2', 'the high-MAP area'], ['areaLoKm2', 'the low-MAP area']] as const) {
+			const op = { op: 'node.set', nodeId: 'A', field, value: 0.4 } as unknown as ScenarioOp;
+			const r = one(op);
+			expect(r.problems[0], field).toContain(`${what} was removed in engine 1.105.0`);
+			expect(r.problems[0], field).toMatch(/delete this change$/);
+			expect(r.applied).toEqual([]);
+			expect((nodeOf(r.input, 'A') as unknown as Record<string, unknown>)[field]).toBeUndefined();
+			expect(validateScenarioOps([op]).errors[0], field).toContain(`${what} was removed in engine 1.105.0`);
+		}
+		// Control: the area that stays is still set.
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'areaKm2', value: 4 }).problems).toEqual([]);
 	});
 
 	it('node.set takes a gauge off the EWR sites (engine ≥ 1.5.0), never the outlet, always a baseline assumption', () => {
@@ -1921,7 +1924,6 @@ describe('classifyOp', () => {
 		expect(classifyOp({ op: 'demand.scale', factor: 0.85, category: 'user' }, ['A', 'B', 'C'], b)).toBe('baseline');
 		expect(cls({ op: 'node.set', nodeId: 'B', field: 'damCapacityM3', value: 1 })).toBe('baseline');
 		expect(cls({ op: 'node.set', nodeId: 'A', field: 'areaKm2', value: 9 })).toBe('baseline');
-		expect(cls({ op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.9 })).toBe('baseline');
 		expect(cls({ op: 'landCover.remove', patchId: 'lc1' })).toBe('baseline');
 		// t1 runs C → A: it touches C, which A's owner doesn't own.
 		expect(cls({ op: 'transfer.set', transferId: 't1', field: 'enabled', value: false })).toBe('baseline');
@@ -1933,7 +1935,6 @@ describe('classifyOp', () => {
 		expect(cls({ op: 'node.add', node: pump })).toBe('proposal');
 		expect(cls({ op: 'node.add', node: { ...pump, areaKm2: 1 } })).toBe('baseline');
 		expect(cls({ op: 'node.add', node: { ...pump, kind: 'gauge' } })).toBe('baseline');
-		expect(cls({ op: 'node.add', node: { ...pump, flowShareManual: 0.9 } })).toBe('baseline');
 	});
 
 	it('removing a node needs the input, and is baseline for land or a gauge', () => {
@@ -1945,8 +1946,9 @@ describe('classifyOp', () => {
 		expect(cls({ op: 'node.remove', nodeId: 'A' })).toBe('baseline');
 		// A (land-free) still hosts an EWR rule table, which the removal drops.
 		expect(classifyOp({ op: 'node.remove', nodeId: 'A' }, owned, { ...noLand, settings: { ...noLand.settings, ewrRules: [blankEwrRuleTable('A')] } })).toBe('baseline');
+		// A retired specific share on a stored unit no longer makes it land (engine 1.105.0, issue #616).
 		Object.assign(nodeOf(noLand, 'A')!, { flowShareManual: 0.3 });
-		expect(classifyOp({ op: 'node.remove', nodeId: 'A' }, owned, noLand)).toBe('baseline');
+		expect(classifyOp({ op: 'node.remove', nodeId: 'A' }, owned, noLand)).toBe('proposal');
 	});
 
 	it('classifyScenario counts nodes the scenario added as owned', () => {
@@ -2361,43 +2363,30 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		expect(plain).toEqual([expect.stringMatching(/^ops 1–2 \(node\.set, "Farm C"\): .*Secret hole/)]);
 	});
 
-	it('says only that for the catchment-wide value rules too, while any node is hidden', () => {
-		const b = baseM();
-		(b.settings as Record<string, unknown>).flowShareMethod = 'manual';
-		nodeOf(b, 'C')!.flowShareManual = 0.5;
-		const shares: ScenarioOp = { op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.6 };
-		expect(applyScenario(b, [shares]).problems).toEqual([expect.stringContaining('more than 100%')]);
-		expect(apply([shares], b).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
+	it('says only that for the catchment-wide value rule too, while any node is hidden', () => {
 		// No land left once their own farm's goes, because no hidden farm has any.
 		const dry = baseM();
 		for (const id of ['B', 'C']) Object.assign(nodeOf(dry, id)!, { areaKm2: 0 });
-		const noLand: ScenarioOp[] = (['areaKm2', 'areaHiKm2', 'areaLoKm2'] as const).map((field) => ({ op: 'node.set', nodeId: 'A', field, value: 0 }));
+		const noLand: ScenarioOp[] = [{ op: 'node.set', nodeId: 'A', field: 'areaKm2', value: 0 }];
 		const plain = applyScenario(dry, noLand).problems;
 		expect(plain).toEqual([expect.stringContaining('the catchment has no area left')]);
 		expect(apply(noLand, dry).problems).toEqual([plain[0]!.replace(/: the catchment has no area left.*$/, `: ${MASKED_RULE}`)]);
 		// With no node hidden, nothing to hide: the rule keeps its words.
-		expect(applyScenario(b, [shares], { mask: { crops: ['c2'] } }).problems).toEqual(applyScenario(b, [shares]).problems);
+		expect(applyScenario(dry, noLand, { mask: { crops: ['c2'] } }).problems).toEqual(plain);
 	});
 
 	it(`gives the catchment's value and the hidden units' aggregate at ${FARMER_K} or more hidden holders, never below (164)`, () => {
-		const b = baseM();
-		(b.settings as Record<string, unknown>).flowShareMethod = 'manual';
-		nodeOf(b, 'C')!.flowShareManual = 0.5;
-		const shares: ScenarioOp = { op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.6 };
-		const at = (hiddenHolders: number) => applyScenario(b, [shares], { mask: { ...mask, hiddenHolders } });
-		const hiddenShare = (['B', 'C'] as const).reduce((x, id) => x + (nodeOf(b, id)!.flowShareManual ?? 0), 0);
-		expect(at(FARMER_K).problems).toEqual([`op 1 (node.set): ${MASKED_RULE_AGGREGATE('shares', 0.6 + hiddenShare, hiddenShare)}`]);
-		expect(at(FARMER_K).problems[0]).toMatch(/flow shares would total \d+\.\d %, more than 100 %; the units you can't see hold \d+\.\d % of them between them/);
-		// Below k the aggregate is a holder's own figure: the generic words (control).
-		expect(at(FARMER_K - 1).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
-		expect(apply([shares], b).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
-		// Never a hidden unit's own name or value, at any count.
-		for (const n of [FARMER_K - 1, FARMER_K]) expect(at(n).problems.join()).not.toMatch(/Farm B|Farm C|Secret/);
-		// The area rule, the same way.
 		const dry = baseM();
 		for (const id of ['B', 'C']) Object.assign(nodeOf(dry, id)!, { areaKm2: 0 });
-		const noLand: ScenarioOp[] = (['areaKm2', 'areaHiKm2', 'areaLoKm2'] as const).map((field) => ({ op: 'node.set', nodeId: 'A', field, value: 0 }));
-		expect(applyScenario(dry, noLand, { mask: { ...mask, hiddenHolders: FARMER_K } }).problems[0]).toMatch(
+		const noLand: ScenarioOp[] = [{ op: 'node.set', nodeId: 'A', field: 'areaKm2', value: 0 }];
+		const at = (hiddenHolders: number) => applyScenario(dry, noLand, { mask: { ...mask, hiddenHolders } });
+		expect(at(FARMER_K).problems).toEqual([`op 1 (node.set): ${MASKED_RULE_AGGREGATE('area', 0, 0)}`]);
+		// Below k the aggregate is a holder's own figure: the generic words (control).
+		expect(at(FARMER_K - 1).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
+		expect(apply(noLand, dry).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
+		// Never a hidden unit's own name, at any count.
+		for (const n of [FARMER_K - 1, FARMER_K]) expect(at(n).problems.join()).not.toMatch(/Farm B|Farm C|Secret/);
+		expect(at(FARMER_K).problems[0]).toMatch(
 			/: the catchment would have 0\.00 km² of land; the units you can't see hold 0\.00 km² between them$/
 		);
 		// A rule that isn't catchment-wide stays generic whatever the count.

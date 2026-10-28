@@ -111,8 +111,8 @@ describe('a gauge with units of zero area', () => {
 		checksPass(o);
 		allFinite(o);
 		expect(o.summary.farms.map((f) => f.flowShare)).toEqual([0, 0]);
-		expect(o.summary.warnings).toContain('area flow shares: total unit area is 0');
-		expect(o.summary.warnings.some((w) => /flow shares sum to 0\.00%.*not fully allocated/.test(w))).toBe(true);
+		// No land unit, so no natural MAR share (engine 1.105.0, issue #616): the run says so once.
+		expect(o.summary.warnings.filter((w) => /no unit has an area, so no unit has a natural MAR share: no unit generates any of the natural flow, and the EWR is not split/.test(w))).toHaveLength(1);
 		for (const id of ['A', 'B']) expect(col(o, id, 'runoff')).toEqual(new Array(o.days).fill(0));
 	});
 

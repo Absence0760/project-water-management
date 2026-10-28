@@ -76,22 +76,34 @@ function everyRule(): ModelInput {
 }
 
 describe('settings.unitRain off', () => {
-	it('absent, null and catchment mode give the same output to the bit; unit records move only the EWR shares (issue #615)', () => {
+	it('absent, null and catchment mode give the same output to the bit; unit records move only the unit shares (issues #615, #616)', () => {
 		const plain = runModel(catchment('absent'));
 		for (const u of [null, { mode: 'catchment' as const }, { mode: 'catchment' as const, gaugeMapMm: 500, gaugeMapSource: 'x' }]) {
 			const o = runModel(catchment(u));
 			const diff = o.series.find((s, i) => JSON.stringify(s) !== JSON.stringify(plain.series[i]));
 			expect(diff?.key ?? null, JSON.stringify(u)).toBeNull();
 			expect(JSON.stringify(o.summary.warnings)).toBe(JSON.stringify(plain.summary.warnings));
-			expect(JSON.stringify(o.summary), JSON.stringify(u)).toBe(JSON.stringify(plain.summary));
-			expect(JSON.stringify(o), JSON.stringify(u)).toBe(JSON.stringify(plain));
+			// The share runs' forcing fingerprint (engine ≥ 1.105.0, issue #616) records the Per unit setup they read, a
+			// gauge MAP included even when no unit uses it, as Per unit's own fingerprint does: everything else is the same.
+			const noShareRain = (x: Out) => ({ ...x, summary: { ...x.summary, shareRain: null } });
+			expect(o.summary.shareRain?.gaugeMapMm ?? null, JSON.stringify(u)).toBe(u && 'gaugeMapMm' in u ? u.gaugeMapMm : null);
+			expect(JSON.stringify(noShareRain(o).summary), JSON.stringify(u)).toBe(JSON.stringify(noShareRain(plain).summary));
+			expect(JSON.stringify(noShareRain(o)), JSON.stringify(u)).toBe(JSON.stringify(noShareRain(plain)));
 		}
-		// Fragmentation reads the Per unit setup for the EWR shares only (engine ≥ 1.105.0, §2.5b): the flow is the same
-		// to the bit, and each unit's EWR share is the Per unit run's.
+		// Fragmentation reads the Per unit setup for the unit shares only (engine ≥ 1.105.0, §2.5, §2.5b): the catchment's
+		// rain and natural flow are the same to the bit, and each unit's share is the Per unit run's. The shares split the
+		// flow between the units (issue #616), so the outflow (no abstraction here) is the same natural flow summed in
+		// other parts: equal to float rounding, not to the bit.
 		const withRecords = everyRule();
 		withRecords.settings.unitRain = { ...withRecords.settings.unitRain!, mode: 'catchment' };
 		const frag = runModel(withRecords);
-		for (const key of ['natural_flow', 'rain_used', 'simulated_outflow']) expect(col(frag, key), key).toEqual(col(plain, key));
+		for (const key of ['natural_flow', 'rain_used']) expect(col(frag, key), key).toEqual(col(plain, key));
+		const outFrag = col(frag, 'simulated_outflow')!;
+		const outPlain = col(plain, 'simulated_outflow')!;
+		expect(outFrag).toHaveLength(outPlain.length);
+		for (let t = 0; t < outPlain.length; t++) expect(Math.abs(outFrag[t]! - outPlain[t]!), `day ${t}`).toBeLessThanOrEqual(1e-12 * Math.max(1, Math.abs(outPlain[t]!)));
+		// The split itself moved: unit A's part of the flow follows its own rain, not its area.
+		expect(col(frag, 'runoff', 'A')).not.toEqual(col(plain, 'runoff', 'A'));
 		expect(frag.summary.unitRain).toBeUndefined();
 		const per = runModel(everyRule());
 		for (const f of per.summary.farms) expect(frag.summary.farms.find((g) => g.nodeId === f.nodeId)!.ewrShare, f.nodeId).toBe(f.ewrShare);

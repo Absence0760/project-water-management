@@ -51,6 +51,13 @@ describe('settings.damStorageReset (engine 0.46.0)', () => {
 			const d = new Rng(seed ^ 0x5e7).int(1, x.days - 1);
 			const storageM3 = Object.fromEntries(ds.map((n) => [n.id, col(x, n.id, 'dam_storage')![d - 1]!]));
 			const y = runModel(withReset(base, { date: fromEpochDay(toEpochDay(x.startDate) + d), storageM3 }));
+			// A full dam whose capacity shrinks that day (silting, dam_capacity) is set to the day's capacity, not above it
+			// (§2.15a): the step is the capacity lost, which the plain run spills instead. Checked, then the seed is not the case.
+			const over = ds.filter((n) => storageM3[n.id]! > (col(x, n.id, 'dam_capacity')?.[d] ?? Infinity));
+			if (over.length) {
+				for (const n of over) expect(col(y, n.id, 'dam_storage_set')![d], `seed ${seed} ${n.id}`).toBeCloseTo(col(x, n.id, 'dam_capacity')![d]! - storageM3[n.id]!, 9);
+				continue;
+			}
 			for (const s of x.series) expect(col(y, s.nodeId, s.key), `seed ${seed} ${s.nodeId}/${s.key}`).toEqual(s.values);
 			for (const n of ds) expect(col(y, n.id, 'dam_storage_set')!.every((v) => v === 0), `seed ${seed} ${n.id}`).toBe(true);
 			expect(y.summary.warnings).toEqual(x.summary.warnings);

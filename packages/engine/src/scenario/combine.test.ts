@@ -20,8 +20,6 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		downstreamNodeId: null,
 		sortOrder: 0,
 		areaKm2: 5,
-		areaHiKm2: 2.5,
-		areaLoKm2: 2.5,
 		pctUpstreamToDam: 0.5,
 		pctRunoffToDam: 0.8,
 		damCapacityM3: 0,

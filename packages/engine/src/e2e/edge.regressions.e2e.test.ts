@@ -70,11 +70,12 @@ describe('fixed in 1.69.0, EDGE-1: an impossible calendar date in a window setti
 // EDGE-2. A network with no unit at all (one gauge) and a catchment area set: the natural flow reaches no
 // unit, so the gauge sees 0 and the EWR fails every day, yet the run gives no word. §2.5: when the shares sum
 // to less than 1 (here 0) "the run warns that natural flow and EWR are not fully allocated to farms"; a
-// gauge with zero-area units does warn. network/shares.ts skips the warning when there are no farms.
+// gauge with zero-area units does warn. network/shares.ts skipped the warning when there were no farms. From
+// engine 1.105.0 (issue #616) the shares are the natural MAR shares, and the run says no unit has one.
 describe('fixed in 1.69.0, EDGE-2: a gauge-only network', () => {
 	it('warns that the natural flow and the EWR are not allocated to any unit (§2.5)', () => {
 		const o = runModelChecked(input({ calibration: { catchmentAreaKm2: 5 } }, [{ ...NODE, id: 'G', name: 'Gauge', kind: 'gauge', downstreamNodeId: null }]));
 		expect(o.summary.catchment.ewrDaysNotMet).toBe(o.days);
-		expect(o.summary.warnings.some((w) => /not fully allocated/.test(w))).toBe(true);
+		expect(o.summary.warnings.some((w) => /no unit has an area, so no unit has a natural MAR share: no unit generates any of the natural flow/.test(w))).toBe(true);
 	});
 });
