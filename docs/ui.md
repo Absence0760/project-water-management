@@ -5955,6 +5955,10 @@ with the table the data needs).
   word (issue #586). Deleting the charted series drops the parameter
   (`goto` with `replace`); an upload through **Add data** on this tab charts the
   uploaded series (`series=<id>`, with `replace`, the page's `onUploaded`).
+  A `view=<start>~<end>` beside `series=` (a flagged period's **View** on
+  Warnings) opens the chart on that period, with context on each side, and
+  hatches it (**Flagged**); a malformed or backwards `view` is ignored, and a
+  zoom or pan after that is the reader's.
   The chart sits under the table, so after a pick it scrolls just into view
   (smoothly, unless the viewer prefers reduced motion; not at all when it is
   already in view, and not for the upload's replacing pick).
@@ -6830,6 +6834,13 @@ linking to where it is fixed; and the shown run's warnings.
   warnings about the record and its data in this run…**, from its
   `calibration.*` and `data.*` codes). It carries `run=` like the run pages
   (`tabLinks.ts` `RUN_TABS`).
+- **Every flagged period has a View** (a link, for viewers too, before an
+  editor's decisions): it opens the record on Data's chart, on the period
+  with as many days again on each side (at least 30), the period hatched and
+  keyed **Flagged** (`series/viewPeriod.ts` `viewPeriodHref`:
+  `?tab=series&series=<id>&view=<start>~<end>#data-chart`; the chart's
+  `focus` and `band`, `charts/series.ts` `focusWindow`). So a reader sees the
+  days a check flagged before patching, excluding or keeping them.
 - **Every row is solvable** (operator, issue #611): each says **How to fix:**
   in plain words and carries one primary action, and every row an editor
   can't fix can be kept. A run warning's fix is its `WARNING_CODES` code's

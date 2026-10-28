@@ -38,6 +38,7 @@
 	import { fmtNum, fmtWhen } from '#lib/format/number.js';
 	import { landOnAnchor } from '#lib/help/anchor.js';
 	import { followAnchors } from '#lib/nav/anchorLanding.js';
+	import { viewPeriodHref } from '#lib/components/series/viewPeriod.js';
 	import { SearchStep } from '#lib/nav/searchStep.js';
 	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import type { Daily } from '#lib/components/series/coverage.js';
@@ -774,7 +775,7 @@
 										<th scope="col">Record</th>
 										<th scope="col">What the check saw</th>
 										<th scope="col">Status</th>
-										{#if isEditor}<th scope="col"><span class="visually-hidden">Decision</span></th>{/if}
+										<th scope="col"><span class="visually-hidden">{isEditor ? 'View and decision' : 'View'}</span></th>
 									</tr>
 								</thead>
 								<tbody id="warn-rows">
@@ -804,9 +805,11 @@
 												<span class="pill tone-{i.status}">{STATUS_LABEL[i.status]}</span>
 												<span class="sub">{statusDetail(i)}{#if href}{' '}<a href={href}>In settings</a>{/if}</span>
 											</td>
-											{#if isEditor}
-												<td class="c-act">
-													<div class="row-actions">
+											<td class="c-act">
+												<div class="row-actions">
+													<!-- The record on Data's chart, opened on this period and hatched, for anyone who can read the page. -->
+													<a class="btn btn-sm go" href={viewPeriodHref(i.seriesId, i.start, i.end)} aria-label="View on the chart: {what}" data-testid="warn-view">View</a>
+													{#if isEditor}
 														{#each decisionsFor(i) as d, k (d)}
 															<button
 																type="button"
@@ -821,9 +824,9 @@
 																>Reopen</button
 															>
 														{/each}
-													</div>
-												</td>
-											{/if}
+													{/if}
+												</div>
+											</td>
 										</tr>
 									{/each}
 								</tbody>

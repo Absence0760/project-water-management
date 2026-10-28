@@ -154,6 +154,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	's.href': { why: 'MapSetupPill: a step\'s link, map/mapSetup.ts dataStep copying a map/startData.ts item\'s literal "?tab=…" constant (#646)', in: ['lib/components/map/MapSetupPill.svelte'] },
 	's.more.href': { why: 'MapSetupPill: a step\'s second link, a map/startData.ts item\'s literal "?tab=…#…" constant (#646)', in: ['lib/components/map/MapSetupPill.svelte'] },
 	startHref: { why: 'MapSetupPill prop: MapTab passes withParam(page.url, "start", "1") (#646)', in: ['lib/components/map/MapSetupPill.svelte'] },
+	viewPeriodHref: { why: 'WarningsTab: series/viewPeriod.ts, the literal "?tab=series&series=" + encodeURIComponent(series id) + "&view=" + encodeURIComponent(the period\'s two ISO days) + "#data-chart"', in: ['lib/components/warnings/WarningsTab.svelte'] },
 	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=series&rain=boundary#data-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },
 	reportHref: { why: 'report job page: `<base>/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	'register.registerUrl': {

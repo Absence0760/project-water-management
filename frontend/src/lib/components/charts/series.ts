@@ -120,6 +120,21 @@ export function bandSpan(band: { from: string; to?: string }, x: readonly number
 	return Number.isFinite(start) && Number.isFinite(end) && end > start ? { start, end } : null;
 }
 
+/** The fewest days of context a focused period opens with on each side. */
+export const FOCUS_PAD_DAYS = 30;
+
+/**
+ * The window a daily chart opens on to show one period (a warning's View, e.g.): the period with as many days again
+ * on each side, at least FOCUS_PAD_DAYS, clipped to the data. Null when the period misses the data or isn't a date.
+ */
+export function focusWindow(focus: { start: string; end: string }, lo: number, hi: number): { min: number; max: number } | null {
+	const start = Date.parse(`${focus.start}T00:00:00Z`) / 1000;
+	const end = Date.parse(`${focus.end}T00:00:00Z`) / 1000;
+	if (!Number.isFinite(start) || !Number.isFinite(end) || end < start || end < lo || start > hi) return null;
+	const pad = Math.max(FOCUS_PAD_DAYS * 86_400, end - start + 86_400);
+	return { min: Math.max(lo, start - pad), max: Math.min(hi, end + pad) };
+}
+
 const isoDayOf = (epochSec: number) => new Date(epochSec * 1000).toISOString().slice(0, 10);
 
 /**
