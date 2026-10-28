@@ -1822,8 +1822,25 @@ per month, **one month at a time** (a finals chunk holds a whole year, so two
 months of one year written at once would lose one) and **waits 60 s after
 each** (`ingest_backfill_wait_seconds`, D4's one file a minute). A month that
 fails, an HTTP 403 above all, fails the execution; only Lambda's own service
-errors (throttling, a transient API error) are retried. Nothing schedules it:
-the operator starts it.
+errors (throttling, a transient API error) and the two waits are retried:
+`MirrorBusy` (the daily run holds the product's lease) and `HostBusy` (the
+fetcher Lambda holds CHC's one request slot, which the two share so CHC sees
+one of our processes at a time; architecture.md § Data feeds, Throttling).
+A month that meets `HostBusy` asked CHC nothing and is retried every 2
+minutes for an hour; an execution that still fails on it means the fetcher
+held CHC that long (a long per-feed backfill): let the feeds' fetches settle
+and resume as in step 3. While a backfill runs, the fetcher's daily
+preliminary and GEFS passes may log `stopped: "host_busy"` on a run whose
+three-minute wait found the slot held; their next run catches up. Nothing
+schedules it: the operator starts it.
+
+**Rolling out the shared slot:** apply Terraform (the fetcher's
+`fetcher_chc_slot` grant on that one key, the state machine's `HostBusy`
+retrier) **before** the backend release that brings it, since without the
+grant the fetcher fails its CHC fetches closed ("the request slot could not
+be taken") and its daily passes error. The Python side takes the slot from
+the first ingest image built after it (move `ingest_image_tag`); until then
+only the fetcher does, so start a backfill only once both carry it.
 
 1. Write the month list for a product with `ingest/backfill_plan.py`; with
    the product's manifest it leaves out the months already copied:

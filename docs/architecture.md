@@ -1614,7 +1614,7 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
   The old fetcher read six files at a time with two fetcher Lambdas
   (about 3.6 requests a second) and was blocked. Their download guide asks
   for 0.5 s plus up to 0.5 s of jitter between requests
-  (<https://github.com/chc-ucsb/chc-data-download#downloading-politely>). Four
+  (<https://github.com/chc-ucsb/chc-data-download#downloading-politely>). Five
   pieces keep to it:
   - **Pacing, per process.** The live client (`feeds/http.ts` `hostPacer`)
     holds, per host, at most one request in flight and starts each request
@@ -1637,6 +1637,34 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
     message holds its group, the queue's visibility is twice the fetcher's
     900 s timeout rather than the other queues' six times (no throttled
     receives to absorb).
+  - **One process at a time, across Lambdas.** The fetcher is not CHC's
+    only client: the Python mirror-ingest Lambda (`ingest/`) asks it for
+    `rnl` and `sat` every night and for hours during a backfill, each
+    paced to about a request a second, so while both ran CHC saw about 2 a
+    second. Both take one shared slot before asking CHC anything:
+    `ingest-state/hosts/chc/lease.json` in the mirror bucket
+    (`feeds/hostSlot.ts`, `ingest/lease.py` `hold_host`), created with S3's
+    `If-None-Match: *`, taken over from a dead holder with `If-Match` on its
+    ETag, released by its owner at the end. Its expiry is the holder's own
+    deadline (the Lambda's time left) plus a minute, so no renewal is
+    needed and a Lambda killed by its timeout frees it a minute later. Held
+    by the other side, nothing waits on the fetcher's per-feed path: the
+    fetch answers `{ok: false, deferred: "host_busy"}` at once (the message
+    answered and deleted, no receive counting towards the DLQ, no
+    `feed_fetch_failed`), and the worker's `feed_ingest` releases the
+    feed's fetch and queues it again in `HOST_BUSY_RETRY_SECONDS` (120),
+    the feed's health untouched. The fetcher's scheduled passes (preliminary
+    days, GEFS), with no retry but their next run, wait up to three
+    minutes (a look every 15 s, `takeHostSlotWaiting`), since a backfill
+    month holds the slot a minute or two and then pauses at least a minute,
+    and otherwise skip the run (`stopped: "host_busy"`, logged, no lag
+    datapoint that run). A backfill month raises `HostBusy`, which the state
+    machine retries every 2 minutes for an hour; a daily `rnl`/`sat` run
+    ends quietly. A slot that can't be read or written fails the fetch
+    closed ("the request slot could not be taken"); CHC is never asked
+    without it. With no `MIRROR_URL` (a local run, the tests) there is no
+    slot and nothing changes; with a `file://` one it is the same file,
+    created with `O_EXCL`. A 403 still stops whichever run met it.
   - **One file at a time.** `CHC_CONCURRENCY` (1) is the default for every
     CHC read (`fetchChirps`, `fetchChirpsCells`, `fetchGefs`,
     `recheckChirpsFinals`); DWS is one page per fetch.

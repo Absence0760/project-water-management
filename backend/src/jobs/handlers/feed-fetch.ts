@@ -78,7 +78,9 @@ export { feedFetchDedupeKey } from '../../feeds/store.js';
  * CHIRPS-GEFS) asked for one file at a time and about one request a second in
  * total (2026-10-27, issue #604), which the live client's own pacing
  * (feeds/http.ts PACE_*) holds within an instance. DWS is its own group, so a
- * CHIRPS backfill doesn't hold up a gauge's fetch.
+ * CHIRPS backfill doesn't hold up a gauge's fetch. Across Lambdas (the Python
+ * mirror-ingest asks CHC too), the fetcher takes CHC's shared request slot
+ * (feeds/hostSlot.ts) on top of this.
  */
 export const fetchGroup = (source: FeedSource): 'chc' | 'dws' => (source === 'dws' ? 'dws' : 'chc');
 

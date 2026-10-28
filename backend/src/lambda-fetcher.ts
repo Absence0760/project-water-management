@@ -42,6 +42,14 @@
 // into the mirror bucket, for the worker to load into dam_observation, and
 // publishes its heartbeat and recency metrics (DamObservations namespace).
 //
+// CHC's request slot (feeds/hostSlot.ts): every path here that asks CHC
+// (a CHIRPS or CHIRPS-GEFS fetch request, the daily preliminary pass, the
+// GEFS pass) first takes the one slot it shares with the Python mirror-ingest
+// Lambda, so at most one of our processes asks CHC at a time. A fetch request
+// that finds it held is answered HOST_BUSY_ANSWER at once (the worker queues
+// the fetch again; no failure, no SQS retry); a scheduled pass waits a little
+// for it, then skips that run (`stopped: "host_busy"`), its next run catching up.
+//
 // Like lambda.ts, this must never import a module that loads dotenv
 // (lambda-fetcher.test.ts bundles it to check).
 import type { Context, SQSBatchResponse, SQSEvent } from 'aws-lambda';
@@ -49,6 +57,7 @@ import { z } from 'zod';
 import { assertLambdaEnv } from './config/production.js';
 import { FEED_SERVER_ERROR_PREFIX, FeedFormatError, FeedRefusedError, FeedServerError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
 import { type FetchAnswer, type FetchRequest, runFetch, utcToday } from './feeds/fetch.js';
+import { HOST_BUSY_ANSWER, type HostBusyAnswer, type HostSlots, hostSlots, type SlotTake, slotHostFor, takeHostSlotWaiting } from './feeds/hostSlot.js';
 import { allowLiveFeedRequests, type FeedHttp, feedHttp, feedSourceMode } from './feeds/http.js';
 import { DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL, dwsFailureLabel } from './feeds/sources/dws.js';
 import { type IngestResultMessage, MAX_MESSAGE_BYTES, parseFetchRequest, sendToQueue } from './jobs/transport.js';
@@ -66,6 +75,8 @@ export const FETCH_SEND_MARGIN_MS = 15_000;
 const DEFAULT_BUDGET_MS = 885_000;
 
 const TOO_SLOW = feedErrorMessage(new FeedUnavailableError('it did not answer in time'));
+/** CHC's shared request slot couldn't be read or written (an S3 failure): fail closed, never ask CHC without it. */
+const SLOT_FAILED = feedErrorMessage(new FeedUnavailableError('the request slot could not be taken'));
 const INVALID_REQUEST = 'the fetch request was not valid, so nothing was fetched';
 
 const UNAVAILABLE = feedErrorMessage(new FeedUnavailableError(''));
@@ -109,7 +120,8 @@ const SAFE_DETAILS: readonly string[] = [
 	'the source redirected somewhere it may not',
 	'the request was refused (not a known source host)',
 	'a file changed while it was being read',
-	'it did not answer in time'
+	'it did not answer in time',
+	'the request slot could not be taken'
 ];
 /** The longest detail logged (each above is shorter; the cap guards one added later). */
 export const FAILURE_DETAIL_MAX = 80;
@@ -178,6 +190,74 @@ async function fetchWithin(req: FetchRequest, http: FeedHttp, ms: number): Promi
 		return await Promise.race([runFetch(req, withDeadline(http, deadline), { stopAt: deadline }), late]);
 	} finally {
 		clearTimeout(timer);
+	}
+}
+
+/**
+ * A per-feed fetch, holding CHC's request slot when its source is CHC's. Held
+ * by the other Lambda (or a scheduled pass): HOST_BUSY_ANSWER at once, never
+ * a wait, so the message is answered and deleted (no receive spent towards
+ * the DLQ) and the worker asks again later. The slot unreadable: a failed
+ * fetch (fail closed: CHC is never asked without it).
+ */
+async function fetchHoldingSlot(
+	req: FetchRequest,
+	http: FeedHttp,
+	slots: HostSlots | null,
+	context: Pick<Context, 'getRemainingTimeInMillis'> | undefined,
+	ids: { feedId: string; fetchJobId: string }
+): Promise<FetchAnswer | HostBusyAnswer> {
+	// Measured when the fetch starts, so the slot's S3 round trips come out of it.
+	const budget = () => (context ? context.getRemainingTimeInMillis() - FETCH_SEND_MARGIN_MS : DEFAULT_BUDGET_MS);
+	const host = slotHostFor(req.source);
+	if (!host || !slots) return fetchWithin(req, http, budget());
+	let take: SlotTake;
+	try {
+		take = await slots.take(host, { holder: `fetcher:${req.source}`, remainingMs: context ? context.getRemainingTimeInMillis() : null });
+	} catch (err) {
+		logEvent('error', { event: 'host_slot_failed', host, feedId: ids.feedId, fetchJobId: ids.fetchJobId, ...safeError(err) });
+		return { ok: false, error: SLOT_FAILED };
+	}
+	if ('busy' in take) {
+		logEvent('info', { event: 'feed_fetch_deferred', feedId: ids.feedId, fetchJobId: ids.fetchJobId, source: req.source, heldBy: take.busy.holder, heldUntil: take.busy.until });
+		return HOST_BUSY_ANSWER;
+	}
+	try {
+		return await fetchWithin(req, http, budget());
+	} finally {
+		await take.held.release();
+	}
+}
+
+/**
+ * Run a scheduled pass that asks CHC (the preliminary days, GEFS) holding
+ * CHC's request slot, waiting a little for a held one (feeds/hostSlot.ts
+ * takeHostSlotWaiting); the pass measures its own budget once it holds it.
+ * Still held at the wait's end: the pass is skipped, logged (`host_busy`,
+ * not an error, no lag datapoint this run), and its next run catches up. A
+ * failure to read or write the slot throws: the invocation fails (the
+ * Errors alarm) without asking CHC.
+ */
+async function holdingPassSlot<T>(
+	product: 'prelim' | 'gefs',
+	context: Pick<Context, 'getRemainingTimeInMillis'> | undefined,
+	skipped: T,
+	pass: () => Promise<T>
+): Promise<T> {
+	const { dailyMirrorUrl } = await import('./ingest/daily.js');
+	const slots = hostSlots(dailyMirrorUrl());
+	if (!slots) return pass();
+	const started = Date.now();
+	const deadline = started + (context ? context.getRemainingTimeInMillis() - DAILY_SAVE_MARGIN_MS : DEFAULT_BUDGET_MS);
+	const take = await takeHostSlotWaiting(slots, 'chc', { holder: `fetcher:${product}`, deadline });
+	if ('busy' in take) {
+		logEvent('warn', { event: 'mirror_daily_ingest', product, stopped: 'host_busy', heldBy: take.busy.holder, heldUntil: take.busy.until, requests: 0, ms: Date.now() - started });
+		return skipped;
+	}
+	try {
+		return await pass();
+	} finally {
+		await take.held.release();
 	}
 }
 
@@ -288,6 +368,7 @@ export interface GefsIngestAnswer {
 	copied: string | null;
 	newest: string | null;
 	lagDays: number | null;
+	/** `host_busy`: CHC's request slot stayed held through the pass's wait, so it asked nothing (feeds/hostSlot.ts). */
 	stopped: string;
 }
 
@@ -297,6 +378,7 @@ export interface DailyIngestAnswer {
 	dropped: number;
 	prelimThrough: string | null;
 	lagDays: number | null;
+	/** `host_busy`: CHC's request slot stayed held through the pass's wait, so it asked nothing (feeds/hostSlot.ts). */
 	stopped: string;
 }
 
@@ -561,7 +643,13 @@ export async function handler(
 	event: SQSEvent | DailyIngestEvent | DwsWeeklyEvent | DamsWeeklyEvent,
 	context?: Pick<Context, 'getRemainingTimeInMillis'>
 ): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer | IndicesIngestAnswer | DwsWeeklyAnswer | DamsWeeklyAnswer> {
-	if (isDailyIngestEvent(event)) return isGefsPass(event) ? gefsIngest(context) : isIndicesPass(event) ? indicesIngest() : dailyIngest(context);
+	if (isDailyIngestEvent(event)) {
+		// The indices pass reads CPC (NOAA), not CHC, so it takes no CHC slot.
+		if (isIndicesPass(event)) return indicesIngest();
+		return isGefsPass(event)
+			? holdingPassSlot<GefsIngestAnswer>('gefs', context, { copied: null, newest: null, lagDays: null, stopped: 'host_busy' }, () => gefsIngest(context))
+			: holdingPassSlot<DailyIngestAnswer>('prelim', context, { copied: 0, dropped: 0, prelimThrough: null, lagDays: null, stopped: 'host_busy' }, () => dailyIngest(context));
+	}
 	if (isDwsWeeklyEvent(event)) return dwsWeekly(context);
 	if (isDamsWeeklyEvent(event)) return damsWeekly(context);
 	if (!Array.isArray((event as SQSEvent | undefined)?.Records)) {
@@ -575,15 +663,16 @@ export async function handler(
 async function fetchBatch(event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse> {
 	const failures: SQSBatchResponse['batchItemFailures'] = [];
 	const http = await feedHttp();
+	// CHC's shared request slot (feeds/hostSlot.ts), in the copy MIRROR_URL names; none without one (a local run).
+	const slots = hostSlots(process.env.MIRROR_URL);
 	for (const record of event.Records) {
 		const req = parseFetchRequest(record.body);
 		let ids: z.output<typeof FetchEnvelope>;
-		let result: FetchAnswer;
+		let result: FetchAnswer | HostBusyAnswer;
 		const started = Date.now();
 		if (req) {
 			ids = req;
-			const budget = context ? context.getRemainingTimeInMillis() - FETCH_SEND_MARGIN_MS : DEFAULT_BUDGET_MS;
-			result = await fetchWithin(req.request, http, budget);
+			result = await fetchHoldingSlot(req.request, http, slots, context, ids);
 		} else {
 			const env = envelope(record.body);
 			if (!env) {
@@ -602,6 +691,8 @@ async function fetchBatch(event: SQSEvent, context?: Pick<Context, 'getRemaining
 			failures.push({ itemIdentifier: record.messageId });
 			continue;
 		}
+		// Deferred, not failed: the worker queues the fetch again (feed-ingest.ts). Not a feed_fetch_failed, and nothing fetched to log.
+		if ('deferred' in result) continue;
 		// The answer went back, but it says the fetch failed: the Lambda itself
 		// succeeded, so its Errors metric never sees this. One line per failed
 		// answer (a retried send logs nothing until it goes through), metric

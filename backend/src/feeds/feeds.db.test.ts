@@ -36,6 +36,7 @@ import { CHIRPS_REVISION_DAYS, FEED_META_MAX_BYTES, runFetch, utcToday } from '.
 import { dwsFixtureLastDataDay, FIXTURE_CELL, fixtureHttp } from './fixtures.js';
 import { MAX_FEEDS, RUN_NOW_RATE, runNowWait } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
+import { HOST_BUSY_RETRY_SECONDS } from './hostSlot.js';
 import { ingestResult } from './ingest.js';
 import { claimFeed, feedForJob, listDueFeeds, takeFeedFetch } from './store.js';
 import { recordMirrorCopy } from './mirrorRevision.js';
@@ -819,6 +820,32 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		await tick();
 		expect((await series(o.owner, o.pid, 'rain_chirps_mm'))!.values).toEqual([1.5, null, 2.5]);
 		expect(await feedRow(o.feedId)).toMatchObject({ last_data_date: plus(o.window.start, 2), last_value: 2.5, consecutive_failures: 0, last_meta: { through: o.window.end } });
+	});
+
+	it('a host_busy answer (CHC’s shared slot was held, feeds/hostSlot.ts) is no failure: the feed’s health is untouched and its fetch is queued again later', async () => {
+		const o = await fetchJob();
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		expect(await acceptIngestResult(msg(o, { ok: false, deferred: 'host_busy' }))).toBe('queued');
+		expect((await tick()).done).toBe(1);
+		const row = await feedRow(o.feedId);
+		expect(row).toMatchObject({ consecutive_failures: 0, last_error: null });
+		expect((await asOwner('SELECT fetch_job_id FROM data_feed WHERE id = $1', [o.feedId]))[0]).toEqual({ fetch_job_id: null });
+		const queued = await asOwner(
+			`SELECT status, extract(epoch FROM run_after - now())::int AS wait FROM job WHERE kind = 'feed_fetch' AND project_id = $1 AND id <> $2`,
+			[o.pid, o.jobId]
+		);
+		expect(queued).toHaveLength(1);
+		expect(queued[0].status).toBe('queued');
+		expect(queued[0].wait).toBeGreaterThan(HOST_BUSY_RETRY_SECONDS - 30);
+		expect(queued[0].wait).toBeLessThanOrEqual(HOST_BUSY_RETRY_SECONDS);
+		expect(info.mock.calls.map((c) => JSON.parse(String(c[0]))).find((l) => l.event === 'feed_fetch_requeued')).toMatchObject({ feedId: o.feedId, fetchJobId: o.jobId, reason: 'host_busy' });
+		// Positive control: when it runs, the fetch goes out again, and its answer is applied.
+		await asOwner(`UPDATE job SET run_after = now() WHERE kind = 'feed_fetch' AND project_id = $1 AND status = 'queued'`, [o.pid]);
+		const again = await runFetchJob();
+		expect(again.feedId).toBe(o.feedId);
+		expect(await acceptIngestResult(msg({ ...o, jobId: again.fetchJobId }, result(o)))).toBe('queued');
+		await tick();
+		expect((await series(o.owner, o.pid, 'rain_chirps_mm'))!.values).toEqual([1.5, null, 2.5]);
 	});
 
 	it('a failed answer that comes back before the fetch job commits is recorded: the feed shows the failure (the fetch is committed before the request leaves)', async () => {
