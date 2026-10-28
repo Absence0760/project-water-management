@@ -11,6 +11,7 @@
 	import { untrack } from 'svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { goto } from '$app/navigation';
+	import { trackClose } from '#lib/nav/closeNav.js';
 	import { resolve } from '$app/paths';
 	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
@@ -104,7 +105,8 @@
 	});
 	$effect(() => {
 		// Closed (Done, Esc, the ✕): drop `settings` in place.
-		if (!settingsOpen && untrack(() => settingsParam)) void goto(withoutParam(page.url, 'settings'), { replace: true, reset: false });
+		// The sheet shuts before the URL follows: a link to it waits for the drop (lib/nav/closeNav.ts).
+		if (!settingsOpen && untrack(() => settingsParam)) void trackClose(goto(withoutParam(page.url, 'settings'), { replace: true, reset: false }));
 	});
 	const settingsHref = $derived(withParam(page.url, 'settings', '1'));
 

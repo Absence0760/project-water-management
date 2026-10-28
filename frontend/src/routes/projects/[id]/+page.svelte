@@ -43,6 +43,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { afterNavigate, goto } from '$app/navigation';
+	import { trackClose } from '#lib/nav/closeNav.js';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import type { SeriesMeta } from '@water-management/engine';
@@ -743,7 +744,10 @@
 		gridOpen = !!openGrid;
 	});
 	$effect(() => {
-		if (!gridOpen && untrack(() => gridParam) && !isTabGridId(untrack(() => gridParam)) && !untrack(() => movedGridHref(page.url))) goto(withoutParam(page.url, 'grid'), { replace: true, reset: false });
+		if (!gridOpen && untrack(() => gridParam) && !isTabGridId(untrack(() => gridParam)) && !untrack(() => movedGridHref(page.url))) {
+			// The modal shuts before the URL follows: a link to a grid waits for the drop (lib/nav/closeNav.ts).
+			void trackClose(goto(withoutParam(page.url, 'grid'), { replace: true, reset: false }));
+		}
 	});
 	// A grid that left the modal: its old link goes where the grid is now (grid=demand → Crops & demand's table, issue #174).
 	$effect(() => {

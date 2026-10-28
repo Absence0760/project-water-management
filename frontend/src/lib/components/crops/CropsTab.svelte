@@ -23,6 +23,7 @@
 	// inline the same way.
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { closeSettled, trackClose } from '#lib/nav/closeNav.js';
 	import { page } from '$app/state';
 	import type { ProjectSettings } from '@water-management/engine';
 	import Sparkline from '#lib/components/charts/Sparkline.svelte';
@@ -176,26 +177,13 @@
 	$effect(() => {
 		sheetOpen = !!sheetCrop;
 	});
-	// The sheet shuts at once, but the URL only drops `crop` once SvelteKit's navigation lands. An Edit
-	// pressed in between built its URL from the one still naming the closed crop, and SvelteKit keeps only
-	// the newest navigation, so the drop was abandoned: the same crop's Edit changed nothing (the sheet
-	// stayed shut under a URL naming it) and another crop's left Back reopening the closed one. So an
-	// open waits for the drop under way.
-	let dropping: Promise<void> | null = null;
 	$effect(() => {
 		// Closed (Done, Esc, the ✕, the crop removed): drop `crop` in place, so Back goes to where it was opened from.
-		if (!sheetOpen && untrack(() => cropParam)) {
-			const drop = goto(withoutParam(page.url, 'crop'), { replace: true, reset: false });
-			dropping = drop;
-			void drop.finally(() => {
-				if (dropping === drop) dropping = null;
-			});
-		}
+		// The sheet shuts before the URL follows: an open waits for the drop (lib/nav/closeNav.ts).
+		if (!sheetOpen && untrack(() => cropParam)) void trackClose(goto(withoutParam(page.url, 'crop'), { replace: true, reset: false }));
 	});
-	const settled = () => {};
 	async function openCrop(id: string) {
-		// Waits for the drop to land or fail; a failure is reported where the drop is, not swallowed here.
-		await dropping?.then(settled, settled);
+		await closeSettled();
 		await goto(withParam(page.url, 'crop', id), { reset: false });
 	}
 	function add() {

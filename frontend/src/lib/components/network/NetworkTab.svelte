@@ -2,6 +2,7 @@
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { closeSettled, trackClose } from '#lib/nav/closeNav.js';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
@@ -224,14 +225,16 @@
 			url.searchParams.delete('section');
 			const picked = url.searchParams.get('node');
 			if (picked && !untrack(() => nodes.some((n) => n.id === picked))) url.searchParams.delete('node');
-			void goto(withoutParam(url, 'edit'), { replace: true, reset: false });
+			// The sheet shuts before the URL follows: an open waits for the drop (lib/nav/closeNav.ts).
+			void trackClose(goto(withoutParam(url, 'edit'), { replace: true, reset: false }));
 		}
 	});
 	$effect(() => {
 		if (editing) untrack(() => (selectedId = editing.id));
 	});
 	/** Opens a node's form; `replace` switches the open sheet to another node (‹ ›, the picker). */
-	function openEdit(id: string, replace = false) {
+	async function openEdit(id: string, replace = false) {
+		await closeSettled();
 		// The node edited is the one picked (node=), so closing the sheet leaves the map on it.
 		const q = new URLSearchParams(page.url.search);
 		q.set('edit', id);

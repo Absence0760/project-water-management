@@ -9,7 +9,7 @@ import { pinClockToProject } from '../support/clock.ts';
 import { waitForMapFit } from '../support/diagrams.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { closeModal, openNodeForm, openNodeSection, openNodeTable } from '../support/network.ts';
+import { closeModal, doneThenClick, openNodeForm, openNodeSection, openNodeTable } from '../support/network.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { expectAbove } from '../support/reflow.ts';
 import { showHeaderControls } from '../support/sectionHeader.ts';
@@ -652,4 +652,52 @@ test('a double-click on a node in the drawing opens its form; a single click onl
 	await expect(page).toHaveURL(/[?&]edit=/);
 	// Nothing changed: a double-click isn't a drag onto another node.
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toHaveCount(0);
+});
+
+// A sheet or grid shuts at once on Done, and its parameter leaves the URL only when the navigation
+// lands. An open in that gap overtook the drop: the same one's link or Edit did nothing, and another's
+// left Back reopening the one just closed (frontend/src/lib/nav/closeNav.ts).
+test('a grid link pressed as the grid closes, before the URL drops it, opens that grid, and Back closes it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Grid quick reopen');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const menuLink = (name: string) => page.locator('.grids-pop a', { hasText: new RegExp(`^${name}$`) });
+
+	await (await gridLink(page, 'Planted areas')).click();
+	await expect(page.getByRole('dialog', { name: 'Planted areas' })).toBeVisible();
+	await doneThenClick(page, menuLink('Planted areas'));
+	await expect(page.getByRole('dialog', { name: 'Planted areas' })).toBeVisible();
+	await expect(page).toHaveURL(/\?tab=network&grid=planted-areas$/);
+	await page.goBack();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page).toHaveURL(/\?tab=network$/);
+
+	await (await gridLink(page, 'Planted areas')).click();
+	await expect(page.getByRole('dialog', { name: 'Planted areas' })).toBeVisible();
+	await doneThenClick(page, menuLink('Crop factors'));
+	await expect(page.getByRole('dialog', { name: 'Crop factors' })).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page).toHaveURL(/\?tab=network$/);
+});
+
+test('a unit’s Edit pressed as its sheet closes, before the URL drops it, opens that unit, and Back closes it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Node sheet quick reopen');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const rowEdit = (name: string) => page.locator('button.row-edit', { hasText: name });
+
+	await openNodeForm(page, 'Upper farm', { folded: true });
+	await doneThenClick(page, rowEdit('Upper farm'));
+	await expect(page.getByRole('dialog', { name: 'Edit Upper farm' })).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page).not.toHaveURL(/[?&]edit=/);
+
+	await openNodeForm(page, 'Upper farm', { folded: true });
+	await doneThenClick(page, rowEdit('Lower farm'));
+	await expect(page.getByRole('dialog', { name: 'Edit Lower farm' })).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page).not.toHaveURL(/[?&]edit=/);
 });

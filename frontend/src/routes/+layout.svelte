@@ -19,6 +19,7 @@
 	import ConfirmHost from '#lib/components/common/ConfirmHost.svelte';
 	import { installLeaveGuard } from '#lib/nav/leaveGuard.js';
 	import { installBackScroll } from '#lib/nav/backScroll.js';
+	import { holdLinksWhileClosing } from '#lib/nav/closeNav.js';
 	import AppShell from '#lib/components/layout/AppShell.svelte';
 	import { msg, type Msg } from '#lib/i18n/msg.js';
 
@@ -81,6 +82,8 @@
 	// own dialog before a navigation drops it; ConfirmHost below shows every such question.
 	installLeaveGuard();
 	installBackScroll();
+	// A link clicked while a closing sheet's URL drop is still under way waits for it (lib/nav/closeNav.ts).
+	onMount(() => holdLinksWhileClosing(document, location.origin));
 	// Wide tables and drawings that scroll sideways take keyboard focus when they overflow.
 	onMount(() => watchScrollRegions(document.body));
 
