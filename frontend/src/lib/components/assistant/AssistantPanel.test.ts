@@ -53,10 +53,20 @@ describe('AssistantPanel', () => {
 		expect(out).not.toContain('New conversation');
 	});
 
-	it('shows the disclaimer a paragraph each, with `{site}` filled in with this site’s address', () => {
-		const out = html(chat({ status: { ...STATUS, disclaimer: 'Advice, not model output.\n\nSee {site}/terms.' } }));
-		expect(out).toMatch(/data-testid="assistant-disclaimer"[^>]*>(<!--\[-->)?<p[^>]*>Advice, not model output\.<\/p><p[^>]*>See [^<]*\/terms\.<\/p>/);
+	it('keeps the disclaimer’s first line in view and folds the rest a paragraph each, `{site}` filled in', () => {
+		const out = html(chat({ status: { ...STATUS, disclaimer: 'Advice, not model output.\n\nThese are estimates.\n\nSee {site}/terms.' } }));
+		// One fold: its line is the first paragraph, its action names the rest; the rest in a box that scrolls.
+		expect(out).toMatch(/<details class="fold disclaimer[^"]*"[^>]*data-testid="assistant-disclaimer"/);
+		expect(out).toMatch(/<summary[^>]*>.*<span[^>]*class="fold-line[^"]*"[^>]*>Advice, not model output\.<\/span>.*Read the full disclaimer/s);
+		expect(out).toMatch(/aria-label="The full disclaimer"[^>]*>(<!--\[-->)?<p[^>]*>These are estimates\.<\/p><p[^>]*>See [^<]*\/terms\.<\/p>/);
 		expect(out).not.toContain('{site}');
+		expect(out).not.toMatch(/<details[^>]*\sopen/);
+	});
+
+	it('has one way out, the ✕: no Close button in the foot', () => {
+		const out = html(chat({ turns: [{ role: 'user', text: 'Q' }, answer({ text: 'A' })] }));
+		expect(out).toContain('aria-label="Close dialog"');
+		expect(out).not.toContain('>Close</button>');
 	});
 
 	it('shows the question, a line for each tool and the answer', () => {
