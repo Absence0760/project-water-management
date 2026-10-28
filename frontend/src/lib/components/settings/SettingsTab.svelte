@@ -350,7 +350,7 @@
 			<h3 class="sub first">The catchment’s rainfall station <HelpTip key="catchment-rain-station" /></h3>
 			<Lazy load={loadFlowGenCatchment}>
 				{#snippet children(FlowGenerationCatchment)}
-					<FlowGenerationCatchment bind:value={s.rainStations} {readonly} {stations} projectId={project.id} />
+					<FlowGenerationCatchment bind:value={s.rainStations} {readonly} {stations} projectId={project.id} nodes={editor?.model.nodes ?? []} />
 				{/snippet}
 			</Lazy>
 		</div>

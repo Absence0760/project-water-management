@@ -3154,8 +3154,9 @@ and demand's and the dams' under either): **Station** (*No station* keeps
 the catchment rain series), **Then patch gaps from**, **Scale to catchment
 MAP** and **Gaps: CHIRPS corrected against**, with the units' controls and
 stored defaults (`settings/PatchChain.svelte` is the patching priority's
-pull-downs for both). `catchmentMapMm` has no field yet (the API takes it;
-[followups.md](./followups.md)).
+pull-downs for both). **Catchment MAP (mm)** and **MAP source** set
+`catchmentMapMm` / `catchmentMapSource` below them (blank = the units'
+area-weighted mean).
 `unreliable` is set under Model settings → Rain gaps → Flagged rain
 (**Unreliable periods of a rain record**, issue #611): From/To rows for every
 rain record of the project. A fit's forcing records each unit's station, so the form says
