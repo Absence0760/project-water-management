@@ -5288,19 +5288,16 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       source note from an entered MAP. Trigger: the hydrologist setting a
       correction by hand in the app.
 
-- [ ] **Rainfall station settings with no field yet** (issue #553 round 3,
-      2026-10-24; narrowed by the #612 follow-up, 2026-10-28). Settings →
-      Model selection for flow generation sets each land unit's station and
-      the catchment's (`settings.rainStations.units`, `.catchment`: the
-      station, its patching priority, scaling and correcting station), each
-      station's site, and Rain gaps → Flagged rain the `unreliable` periods
-      (issue #611). One part stays API-only: `catchmentMapMm` /
-      `catchmentMapSource`, the catchment MAP the catchment station's ratio
-      uses (absent = the land units' area-weighted mean MAP, [model.md
-      §2.4i](./model.md)). Durable fix: a MAP and source field under The
-      catchment's rainfall station, showing the units' mean it replaces and
-      the ratio it gives. Trigger: the operator has a catchment MAP from a
-      study that differs from the units' mean.
+- [x] **Rainfall station settings with no field yet** (issue #553 round 3,
+      2026-10-24; narrowed by the #612 follow-up; done 2026-10-28, #612
+      follow-up round 3). Every part of `settings.rainStations` now has a
+      field: each land unit's station and the catchment's (the station, its
+      patching priority, scaling and correcting station), each station's
+      site, Rain gaps → Flagged rain the `unreliable` periods (issue #611),
+      and **Catchment MAP (mm)** / **MAP source** (`catchmentMapMm` /
+      `catchmentMapSource`) under The catchment's rainfall station, blank
+      for the land units' area-weighted mean, with the ratio it gives
+      ([ui.md § Model settings](./ui.md)). Test: `catchment-rain-map.spec.ts`.
 
 ## Notes (WP-2.7)
 
