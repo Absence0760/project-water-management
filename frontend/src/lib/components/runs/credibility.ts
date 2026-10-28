@@ -8,6 +8,7 @@
 // the scores and is only toned when the NSE is no better than the mean flow, as
 // the NSE card is (#586 D12).
 import type { RunSummary } from '@water-management/engine';
+import { isWarningCode, WARNING_CODES, type CodedWarning } from '@water-management/engine/warnings';
 import { fmtNum } from '#lib/format/number.js';
 import { checksHeadline } from './checks';
 import { findings } from './plausibility';
@@ -19,7 +20,9 @@ import { calibrationHref } from '#lib/components/calibration/links.js';
  * Warnings that report how the engine handled the input data, as it was set
  * up to: informative, but not a reason to doubt the run. Anything not listed
  * here is something to check (a new engine warning included: unknown texts
- * stay prominent).
+ * stay prominent). The fallback for a warning without a code (a run before
+ * engine 1.102.0, or a warning not coded yet): a coded one is grouped by its
+ * code's group in the engine's catalogue (warningCodes.ts).
  */
 const DATA_NOTES: RegExp[] = [
 	/^CHIRPS rain bias-corrected on /,
@@ -36,11 +39,23 @@ const DATA_NOTES: RegExp[] = [
  */
 export const warningItem = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 
-export function warningGroups(warnings: readonly string[] | undefined): { check: string[]; data: string[] } {
+/** True when a warning reports how the data were handled: by its code when it has one the catalogue knows, else by its text. */
+function isDataNote(w: string, codeOf: ReadonlyMap<string, string>): boolean {
+	const code = codeOf.get(w);
+	if (code !== undefined && isWarningCode(code)) return WARNING_CODES[code].group === 'note';
+	return DATA_NOTES.some((re) => re.test(w));
+}
+
+/**
+ * The run's warnings split into what to check and notes on how the data were handled, each as an item. `codes` is
+ * summary.warningCodes (engine ≥ 1.102.0): a warning with a code is grouped by it; one without (an older run, a
+ * warning not coded yet, a code from a newer engine this page doesn't know) by its text.
+ */
+export function warningGroups(warnings: readonly string[] | undefined, codes?: readonly Pick<CodedWarning, 'code' | 'text'>[] | null): { check: string[]; data: string[] } {
 	const check: string[] = [];
 	const data: string[] = [];
-	// Grouped on the engine's own text (DATA_NOTES match it), then shown as items.
-	for (const w of warnings ?? []) (DATA_NOTES.some((re) => re.test(w)) ? data : check).push(warningItem(w));
+	const codeOf = new Map<string, string>((codes ?? []).map((c) => [c.text, c.code]));
+	for (const w of warnings ?? []) (isDataNote(w, codeOf) ? data : check).push(warningItem(w));
 	return { check, data };
 }
 

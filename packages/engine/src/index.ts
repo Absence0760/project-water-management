@@ -14,6 +14,7 @@ export * from './run';
 export * from './warmstart/snapshot';
 export { prepareRun, type PreparedRun } from './prepare';
 export * from './version';
+export * from './warningCodes';
 export * from './places';
 export * from './languages';
 export * from './legal';

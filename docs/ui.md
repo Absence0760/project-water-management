@@ -8765,7 +8765,10 @@ read it before.
      #586 round 2), then, collapsed,
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
-     stretches). Each place a warning names ("Model settings → Rain gaps →
+     stretches). A warning with a stable code (`summary.warningCodes`, engine
+     ≥ 1.102.0, [model.md § Run warning codes](./model.md#28-outputs)) is
+     grouped by its code's group in the engine's catalogue; one without (an
+     older run, a warning not coded yet) by its text, as before. Each place a warning names ("Model settings → Rain gaps →
      Flagged rain", "Calibration → Plausibility checks": the engine writes
      them as page → panel heading, `packages/engine/src/places.ts`, engine
      ≥ 1.98.0, issue #586 D19) is a link to that panel, on Calibration for the

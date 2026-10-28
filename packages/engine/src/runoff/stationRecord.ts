@@ -29,6 +29,7 @@
 import { fromEpochDay, isIsoDate, toEpochDay } from '../calendar';
 import { blankFitExcluded, checkedRain } from '../prepare';
 import { stationChirpsSeriesKey, stationSeriesKey, unitRainSeriesKey, type DailySeries, type ModelInput, type ProjectSettings } from '../project';
+import { warn } from '../warningCodes';
 
 /** Where the CHIRPS at a station is read: its own cell, the unit it stands in, or none. */
 export type StationChirpsSource = { at: 'cell'; key: string; series: DailySeries } | { at: 'unit'; unitId: string; key: string; series: DailySeries | null } | { at: 'none' };
@@ -151,7 +152,7 @@ export function checkedStationRecord(
 	for (const p of Array.isArray(periods) ? periods : []) {
 		const [from, to] = Array.isArray(p) ? p : [];
 		if (!isIsoDate(from) || !isIsoDate(to) || from > to) {
-			warnings.push(`${who} has an unreliable period that isn’t two dates in order (${JSON.stringify(p)}): it is ignored`);
+			warnings.push(warn('rain.station.unreliableInvalid', { station: stationId }, `${who} has an unreliable period that isn’t two dates in order (${JSON.stringify(p)}): it is ignored`));
 			continue;
 		}
 		const a = Math.max(toEpochDay(from) - d0, 0);
@@ -166,18 +167,32 @@ export function checkedStationRecord(
 
 	const z = r.zeroRain?.infill;
 	if (z && z.days > 0)
-		warnings.push(`${who} is treated as missing on ${plural(z.days, 'day')} of flagged zero runs (§2.4c, with the catchment’s settings). The stored series is unchanged.`);
+		warnings.push(warn('rain.station.zeroRun.missing', { station: stationId, days: z.days }, `${who} is treated as missing on ${plural(z.days, 'day')} of flagged zero runs (§2.4c, with the catchment’s settings). The stored series is unchanged.`));
 	if (z && z.asRecordedDays > 0)
-		warnings.push(`${who} has flagged zero runs on ${plural(z.asRecordedDays, 'day')} run as recorded (dry): Model settings → Rain gaps → Flagged rain → Flagged zero runs is "Run as recorded (dry)".`);
+		warnings.push(
+			warn('rain.station.zeroRun.asRecorded', { station: stationId, days: z.asRecordedDays }, `${who} has flagged zero runs on ${plural(z.asRecordedDays, 'day')} run as recorded (dry): Model settings → Rain gaps → Flagged rain → Flagged zero runs is "Run as recorded (dry)".`)
+		);
 	const acc = r.accumulation?.info;
 	if (!opts.fitExcludeAccumulations && acc && acc.spreadWindows > 0)
-		warnings.push(`${who} has ${plural(acc.spreadWindows, 'multi-day accumulation')} spread over ${plural(acc.spreadDays, 'day')} (${mm(acc.spreadMm)}) in proportion to CHIRPS (§2.4d, with the catchment’s settings). The stored series is unchanged.`);
+		warnings.push(
+			warn(
+				'rain.station.accumulation.spread',
+				{ station: stationId, windows: acc.spreadWindows, days: acc.spreadDays, mm: Math.round(acc.spreadMm) },
+				`${who} has ${plural(acc.spreadWindows, 'multi-day accumulation')} spread over ${plural(acc.spreadDays, 'day')} (${mm(acc.spreadMm)}) in proportion to CHIRPS (§2.4d, with the catchment’s settings). The stored series is unchanged.`
+			)
+		);
 	const outages = (acc?.windows ?? []).filter((w) => w.status === 'setAside').length;
-	if (outages > 0) warnings.push(`${who} has ${plural(outages, 'reading')} after a blank outage set aside as missing (§2.4d): each may hold the outage’s rain.`);
+	if (outages > 0) warnings.push(warn('rain.station.accumulation.setAside', { station: stationId, readings: outages }, `${who} has ${plural(outages, 'reading')} after a blank outage set aside as missing (§2.4d): each may hold the outage’s rain.`));
 	const asRecorded = (acc?.windows ?? []).filter((w) => w.status === 'asRecorded').length;
 	if (asRecorded > 0)
-		warnings.push(`${who} has ${plural(asRecorded, 'multi-day accumulation')} run as recorded, because Model settings → Rain gaps → Flagged rain → Multi-day accumulations → Accumulated readings is "Run as recorded (one day)".`);
-	if (unreliable > 0) warnings.push(`${who} is treated as missing on ${plural(unreliable, 'day')} the user marked unreliable. The stored series is unchanged.`);
+		warnings.push(
+			warn(
+				'rain.station.accumulation.asRecorded',
+				{ station: stationId, windows: asRecorded },
+				`${who} has ${plural(asRecorded, 'multi-day accumulation')} run as recorded, because Model settings → Rain gaps → Flagged rain → Multi-day accumulations → Accumulated readings is "Run as recorded (one day)".`
+			)
+		);
+	if (unreliable > 0) warnings.push(warn('rain.station.unreliable', { station: stationId, days: unreliable }, `${who} is treated as missing on ${plural(unreliable, 'day')} the user marked unreliable. The stored series is unchanged.`));
 
 	return { record: { startDate: fromEpochDay(d0), values }, setAside: { checks, unreliable }, warnings, ...(forcing ? { forcing: { startDate: fromEpochDay(d0), values: forcing } } : {}) };
 }

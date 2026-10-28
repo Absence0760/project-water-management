@@ -109,6 +109,7 @@ import {
 } from './project';
 import type { AllocationLimitBound, DemandPart } from './project';
 import { ENGINE_VERSION } from './version';
+import { warn, warningCodesOf } from './warningCodes';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
 import { pairingFactors, rainStationSummary } from './runoff/stationForcing';
@@ -1008,14 +1009,14 @@ function runNetwork(
 				fitStatus: calibrationFitStatus(settings, calKind, calSite?.nodeId ?? null)
 			}
 		: null;
-	if (!calKind) warnings.push('no observed flow series: calibration statistics not computed');
+	if (!calKind) warnings.push(warn('calibration.noObserved', {}, 'no observed flow series: calibration statistics not computed'));
 	else if (calibration && calibration.days === 0) {
 		warnings.push(
 			calibration.excludedDays
-				? 'every observed day inside the calibration window falls in a calibration exclusion'
+				? warn('calibration.allExcluded', { days: calibration.excludedDays }, 'every observed day inside the calibration window falls in a calibration exclusion')
 				: settings.calibrationStart || settings.calibrationEnd
-					? 'observed flow has no values inside the calibration window'
-					: 'observed flow has no values inside the simulation period'
+					? warn('calibration.noValuesInWindow', { kind: calKind }, 'observed flow has no values inside the calibration window')
+					: warn('calibration.noValuesInPeriod', { kind: calKind }, 'observed flow has no values inside the simulation period')
 		);
 	}
 
@@ -1053,7 +1054,7 @@ function runNetwork(
 	// impossible or suspicious values? Do the farm areas add up?
 	const agreement = observedAgreement(series, agreementOptions(settings.dataQuality));
 	const agreementNote = agreementWarning(agreement);
-	if (agreementNote) warnings.push(agreementNote);
+	if (agreementNote) warnings.push(warn('data.flowAgreement', { years: agreement!.flaggedYears.length }, agreementNote));
 	const checks = seriesChecks(series, settings.dataQuality);
 	// The double-mass check (engine ≥ 0.18.0) follows the catchment rain's own checks.
 	const dmCheck = doubleMassCheck(doubleMass, chirpsCorrection?.fitPeriod?.period);
@@ -1064,7 +1065,7 @@ function runNetwork(
 		});
 		checks.splice(at, 0, dmCheck);
 	}
-	for (const c of checks) warnings.push(c.text);
+	for (const c of checks) warnings.push(warn(`data.${c.check}`, { series: c.seriesKind, days: c.days }, c.text));
 	const areas = areaMismatches(nodes, settings.flowShareMethod);
 	const areaNote = areaMismatchWarning(areas);
 	if (areaNote) warnings.push(areaNote);
@@ -1292,7 +1293,9 @@ function runNetwork(
 			rainAccumulation: accumulation?.info ?? null,
 			...(apanDaily ? { apanDaily } : {}),
 			...(assurance ? { supplyAssurance: assurance } : {}),
-			warnings
+			warnings,
+			// Stable codes for the warnings that have one (engine ≥ 1.102.0, ./warningCodes.ts, issue #611).
+			warningCodes: warningCodesOf(warnings)
 		}
 	};
 }
@@ -1436,13 +1439,17 @@ function runCalibrationSite(input: ModelInput, siteNodeId: string | null, outflo
 	const err = calibrationSiteError(nodes, outflow, siteNodeId);
 	const fallback = 'the run’s calibration statistics use the outlet’s record, and Fit automatically refuses the site';
 	if (err) {
-		warnings.push(`Calibration site: ${err}. Until it is changed, ${fallback}.`);
+		warnings.push(warn('calibration.site.unusable', { site: siteNodeId, reason: err }, `Calibration site: ${err}. Until it is changed, ${fallback}.`));
 		return null;
 	}
 	const node = nodes.findIndex((n) => n.id === siteNodeId);
 	if (!calibrationRecordsAt(input.series, siteNodeId).length) {
 		warnings.push(
-			`Calibration site: the gauge "${nodes[node]!.name}" has no observed flow record attached: attach one on the Data page, or pick another site in Calibration → Calibration record. Until then, ${fallback}.`
+			warn(
+				'calibration.site.noRecord',
+				{ site: siteNodeId, name: nodes[node]!.name },
+				`Calibration site: the gauge "${nodes[node]!.name}" has no observed flow record attached: attach one on the Data page, or pick another site in Calibration → Calibration record. Until then, ${fallback}.`
+			)
 		);
 		return null;
 	}
@@ -3076,10 +3083,14 @@ function missingRainWarning(
 	const more = ranges.length - named.length;
 	const whole = window.from === 0 && window.to === days - 1;
 	warnings.push(
-		`${missing} of ${days} days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm): ` +
-			named.join(', ') +
-			(more ? ` and ${more} more period${more === 1 ? '' : 's'}` : '') +
-			(whole ? '' : `; ${inReport} of them fall in the reporting window (${dayText(window.reportStart)} to ${dayText(window.reportEnd)})`)
+		warn(
+			'rain.missingDays',
+			{ days: missing, runDays: days, periods: ranges.length, ...(whole ? {} : { inReport }) },
+			`${missing} of ${days} days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm): ` +
+				named.join(', ') +
+				(more ? ` and ${more} more period${more === 1 ? '' : 's'}` : '') +
+				(whole ? '' : `; ${inReport} of them fall in the reporting window (${dayText(window.reportStart)} to ${dayText(window.reportEnd)})`)
+		)
 	);
 }
 
@@ -3203,9 +3214,9 @@ export function pickObservedKind(
 ): CalibrationFlowKind | null {
 	if (wanted) {
 		if (series[wanted]) return wanted;
-		warnings.push(`calibration flow series "${wanted}" is missing; using the default observed series`);
+		warnings.push(warn('calibration.flowKindMissing', { kind: wanted }, `calibration flow series "${wanted}" is missing; using the default observed series`));
 	} else if (series.flow_observed_m3s && series.flow_logger_m3s) {
-		warnings.push(DEFAULT_GAUGE_PICK_WARNING);
+		warnings.push(warn('calibration.defaultGaugePick', {}, DEFAULT_GAUGE_PICK_WARNING));
 	}
 	return series.flow_observed_m3s ? 'flow_observed_m3s' : series.flow_logger_m3s ? 'flow_logger_m3s' : null;
 }

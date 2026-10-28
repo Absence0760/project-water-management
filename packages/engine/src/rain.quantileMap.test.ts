@@ -22,6 +22,7 @@ import { compareRuns, diffInputs } from './compare';
 import { checkInvariants } from './testing/invariants';
 import { tailDifference } from './testing/warmstartInvariants';
 import { openSnapshot } from './warmstart/snapshot';
+import { warningCodesOf } from './warningCodes';
 import { ensembleContext, memberInput, resolveEnsembleOptions } from './uncertainty/ensemble';
 import { checkChirpsGapMap } from './verify/checks';
 
@@ -242,6 +243,11 @@ describe('CHIRPS gap map: what it keeps', () => {
 			`CHIRPS quantile map falls back to the monthly factor alone on ${winter} gap days (Jun, Jul, Aug): those months have fewer than 30 wet days (≥ 1 mm) on the catchment or the CHIRPS side over the fit period, even pooled over their 3-month season. Their gap days keep CHIRPS’ own wet-day distribution, at the catchment’s level.`
 		);
 		expect(on.run.warnings).toContain(fb);
+		// Their stable codes (engine ≥ 1.102.0, warningCodes.ts), the texts exactly the warnings'.
+		expect(warningCodesOf([chirpsCorrectionWarning(corr)!, fb]).map((c) => [c.code, c.params])).toEqual([
+			['rain.chirps.corrected', { days: corr.correctedDays, rawMm: Math.round(corr.fallbackRawMm), correctedMm: Math.round(corr.fallbackCorrectedMm) }],
+			['rain.chirps.quantileMapFallback', { days: winter, partialDays: 0 }]
+		]);
 		expect(chirpsQuantileMapFallbackWarning(off.run.chirpsCorrection)).toBeNull();
 	});
 

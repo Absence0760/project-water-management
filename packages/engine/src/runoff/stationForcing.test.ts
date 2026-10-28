@@ -197,6 +197,11 @@ describe('a land unit on its station', () => {
 		// Before T's record (2015–2016): the catchment rain, × 1.
 		for (let t = 0; t < day('2017-01-01'); t += 37) expect(a[t]).toBe(Math.max(0, c[t]!));
 		expect(out.summary.stations!.units.find((u) => u.nodeId === 'A')).toMatchObject({ correctedBy: null, days: { station: DAYS - day('2017-01-01'), chirps: 0, fallback: day('2017-01-01'), none: 0 } });
+		// The run says so, with its stable code (engine ≥ 1.102.0, warningCodes.ts), the text exactly the warning's.
+		const fell = out.summary.warningCodes!.filter((w) => w.code === 'rain.unit.catchmentFallback');
+		expect(fell.map((w) => w.params.unit)).toEqual(expect.arrayContaining(['A', 'C']));
+		for (const w of fell) expect(out.summary.warnings).toContain(w.text);
+		expect(fell.find((w) => w.params.unit === 'A')!.params.days).toBe(day('2017-01-01'));
 		// C has no CHIRPS of its own: S's gaps fall to the catchment forcing.
 		const uc = out.summary.stations!.units.find((u) => u.nodeId === 'C')!;
 		expect(uc.correctedBy).toBeNull();

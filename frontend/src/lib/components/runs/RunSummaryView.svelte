@@ -79,7 +79,7 @@
 	const c = $derived(summary.catchment);
 	// The cards below in one or two plain sentences (runs/runSentence.ts).
 	const lede = $derived(runSentence(summary, headline));
-	const groups = $derived(warningGroups(summary.warnings));
+	const groups = $derived(warningGroups(summary.warnings, summary.warningCodes));
 	const checksFolded = $derived(foldChecks && groups.check.length > CHECKS_SHOWN);
 	const shownChecks = $derived(checksFolded && !checksOpen ? groups.check.slice(0, CHECKS_SHOWN) : groups.check);
 	const checkItems = $derived(credibility(summary, calibrationHref));
