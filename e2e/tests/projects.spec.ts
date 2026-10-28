@@ -6,6 +6,7 @@ import { API_URL } from '../support/env.ts';
 import { importButton, irrigationPill, irrigationUnits, openRowMenu, outcomesReady, row, type IrrigationFigure } from '../support/projects.ts';
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { dropRunDrought } from '../support/db.ts';
 import { runsList } from '../support/runs.ts';
 import { pinClock, pinClockToProject } from '../support/clock.ts';
 
@@ -434,6 +435,52 @@ test('each row says how its catchment is doing, from the portfolio’s figures, 
 	await page.goBack();
 	await expect(page).not.toHaveURL(/sort=/);
 	await expect(page.getByLabel('Sort')).toHaveValue('updated');
+});
+
+// The drought badge (issue #620, docs/ui.md § Project list): the source run's summary.drought, the driest SPI or
+// SPEI for its last whole month. The rain is the Summary card's in overview.spec.ts: 31 years from 1991, the
+// last Aug–Oct bone dry, so the driest is the SPI-6, extremely dry.
+test('each row shows its run’s drought badge, with the value in the tooltip; a run without one says so', async ({ page, owner }) => {
+	void owner;
+	const dry = await createProject(page.request, 'Drought dry');
+	await putModel(page.request, dry.id, sampleModel());
+	await updateSettings(page.request, dry.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110] });
+	const start = Date.UTC(1991, 0, 1);
+	const days = (Date.UTC(2021, 9, 31) - start) / 86_400_000 + 1;
+	const values = Array.from({ length: days }, (_, i) => {
+		const d = new Date(start + i * 86_400_000);
+		const y = d.getUTCFullYear();
+		const m = d.getUTCMonth() + 1;
+		if (y === 2021 && m >= 8) return 0;
+		const wetness = 0.5 + ((y * 7 + m * 13) % 11) / 10;
+		return i % 3 === 0 ? Math.round(wetness * (m >= 11 || m <= 4 ? 9 : 2) * 10) / 10 : 0;
+	});
+	await putSeries(page.request, dry.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '1991-01-01', values });
+	await createRun(page.request, dry.id, 'Baseline');
+	// Four months of rain: too short a record for any index.
+	const short = await seedRunnableProject(page.request, 'Drought short');
+	await createRun(page.request, short.id, 'Baseline');
+	// A run saved before the badge existed.
+	const old = await seedRunnableProject(page.request, 'Drought old run');
+	await dropRunDrought(await createRun(page.request, old.id, 'Baseline'));
+	await createProject(page.request, 'Drought no run');
+
+	await page.goto('/');
+	await outcomesReady(page);
+	const tag = (name: string) => row(page, name).locator('td.c-data').getByTestId('drought-tag');
+	await expect(tag('Drought dry')).toHaveText(/^Extremely dry · SPI-6\./);
+	await expect(tag('Drought dry')).toHaveAttribute('data-tone', 'dry');
+	await expect(tag('Drought dry')).toHaveAttribute('title', /^Extremely dry: SPI-6 −\d\.\d\d over May–Oct 2021, the driest index for the run’s last whole month$/);
+	await expect(tag('Drought short')).toHaveText(/^Drought –/);
+	await expect(tag('Drought short')).toHaveAttribute('title', 'No drought index for this run: a fit needs at least 20 years of rain in each calendar month');
+	await expect(tag('Drought old run')).toHaveAttribute('title', 'No drought index for this run');
+	await expect(tag('Drought no run')).toHaveCount(0);
+	await expectNoViolations(page, { include: 'table.projects' });
+
+	// A phone: the Data column folds into the lines under the name, and the badge goes with it.
+	await resizeTo(page, { width: 390, height: 844 });
+	await expect(row(page, 'Drought dry').locator('.meta-narrow').getByTestId('drought-tag')).toBeVisible();
+	await expectNoSidewaysScroll(page);
 });
 
 test('owner chips, search and sort live in the URL; old links still work', async ({ page, owner }) => {

@@ -29,7 +29,8 @@ Anyone holding a pack can hash the file at the engine's tag and compare.
 | [v9](./v9.md) | 2026-10-12 | 1.88.0 – 1.89.0 | §4: a transfer out of the catchment counts as its source unit's use in the allocations comparison and under a cap; a Priority user's fixed % applies only at a drought restriction level that cuts some unit's demand (issue #523, X1 and P2) |
 | [v10](./v10.md) | 2026-10-23 | 1.90.0 – 1.93.0 | §5: the DRM percentile tables read the total Reserve flow or, by the project's choice, the Reserve flow without high flows (issue #552) |
 | [v11](./v11.md) | 2026-10-24 | 1.94.0 – 1.103.0 | §3, §5: the EWR may be split between the units by each unit's natural MAR under per-unit rain, its period provisional (issue #553) |
-| [v12](./v12.md) | 2026-10-27 | ≥ 1.104.0 | §2: the gap-filling product (ERA5-Land, IMERG Late; issue #604 R4-B), and GR4J on a daily FAO-56 reference ET record under a monthly PE row (issue #604 R5-E), both opt-in and provisional |
+| [v12](./v12.md) | 2026-10-27 | 1.104.0 | §2: the gap-filling product (ERA5-Land, IMERG Late; issue #604 R4-B), and GR4J on a daily FAO-56 reference ET record under a monthly PE row (issue #604 R5-E), both opt-in and provisional |
+| [v13](./v13.md) | 2026-10-28 | ≥ 1.105.0 | §3, §5: the EWR is split by each unit's natural MAR under both flow generation methods; under catchment rain from GR4J runs on each unit's own rain, for the shares only (issue #615); §3: rainfall stations, with each area's CHIRPS corrected against its station's rain at the area's MAP and a patching priority of stations then CHIRPS (issue #612) |
 
 The highest version is the current one: new sign-offs and packs cite it.
 

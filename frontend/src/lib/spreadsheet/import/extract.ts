@@ -6,7 +6,7 @@
 // Python's project.json key for key and value for value, and `notes` are its
 // `note:` / `WARNING:` lines, same text, same order (the parity tests check
 // both). `unmapped` is TypeScript-only (plan.md 1b).
-import { DEFAULT_IRRIGATION_SYSTEMS, type CalibrationParams, type EwrDailySource, type DemandObject, type FlowShareMethod, type IrrigationSystemDef, type NetworkNode, type ProjectModel, type ProjectSettings } from '@water-management/engine';
+import { DEFAULT_IRRIGATION_SYSTEMS, type CalibrationParams, type EwrDailySource, type DemandObject, type IrrigationSystemDef, type NetworkNode, type ProjectModel, type ProjectSettings } from '@water-management/engine';
 import type { WorkbookSource } from './source';
 import { clean, num } from './cells';
 import { extractCalibration, extractCalibrationWindow } from './calibration';
@@ -32,9 +32,6 @@ export type ImportedSettings = Pick<
 > & {
 	/** A-pan evaporation, mm per water-year month (12 values). */
 	apanMm: number[];
-	/** null only in the corner case FarmSpecTable.method describes. */
-	flowShareMethod: FlowShareMethod | null;
-	hiLoSplit: { hi: number; lo: number };
 	calibration: CalibrationParams;
 	/** Pragmatic EWR, m³/day per water-year month (one per row of zEWR_Pragmatic, 12 in b023). */
 	ewrPragmaticM3PerDay: number[];
@@ -173,9 +170,6 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 			downstreamNodeId: down ? uid(`node:${down}`) : null,
 			sortOrder: order,
 			areaKm2: s.areaKm2 ?? 0,
-			areaHiKm2: s.areaHiKm2 ?? 0,
-			areaLoKm2: s.areaLoKm2 ?? 0,
-			flowShareManual: isFarm ? (s.flowShareManual ?? null) : null,
 			pctUpstreamToDam: s.pctUpstreamToDam ?? 1,
 			pctRunoffToDam: s.pctRunoffToDam ?? 0,
 			damCapacityM3: s.damCapacityM3 ?? 0,
@@ -315,8 +309,6 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 		februaryDays: februaryDays(wb),
 		effectiveRainFraction: crops.effectiveRainFraction,
 		apanMm: crops.apan,
-		flowShareMethod: spec.method,
-		hiLoSplit: spec.hiLoSplit,
 		calibration,
 		ewrPragmaticM3PerDay: ewr,
 		simulationStart: null as string | null,

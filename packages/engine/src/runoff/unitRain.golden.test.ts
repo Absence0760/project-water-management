@@ -36,7 +36,7 @@ const withGaps = (v: (number | null)[], from: number[]): (number | null)[] => {
 
 /** A gauge with four land units above it (A–D) and a no-area farm E; catchment gauge rain and catchment CHIRPS over six years, observed flow at the outlet. */
 function catchment(unitRain: UnitRainSettings | 'absent'): ModelInput {
-	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const node = { sortOrder: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const unit = (id: string, areaKm2: number) => ({ ...node, id, name: `Unit ${id}`, kind: 'farm' as const, downstreamNodeId: 'G', areaKm2 });
 	return {
 		settings: { runoffModel: 'gr4j', apanMm: apan as never, ...(unitRain !== 'absent' ? { unitRain } : {}) },
@@ -112,14 +112,16 @@ function fingerprint(out: ModelOutput) {
  * 195e66c86 (issue #553 round 1, pushed), which gives the same values on macOS and Linux; the shapes re-pinned at
  * engine 1.98.0, whose warnings name Model settings and Calibration (issue #586 round 3: text only, every series'
  * sums unchanged), and unitGauge's and reference's at 1.100.0, whose warnings write their days day first (#586 R4-O:
- * text only, every series' and the summary's sums unchanged). Print them with
+ * text only, every series' and the summary's sums unchanged), and fragmentation's at 1.105.0, whose run notes the
+ * units its EWR shares put on the catchment rain (issue #615: a note's text only; the forcing, every series' and the
+ * summary's sums unchanged). Print them with
  * `GOLDEN_PRINT=1 pnpm -C packages/engine exec vitest run src/runoff/unitRain.golden.test.ts`.
  */
 const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 	fragmentation: {
 		units: null,
 		golden: {
-			shape: "92bd1ca403d76ee9",
+			shape: "2576a5878b5d8952",
 			series: {
 				"natural_flow@": {
 					sum: 31197362.536312077,
@@ -248,7 +250,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "767f9b8c73543fe1",
+			shape: "ea03178df0d44190",
 			series: {
 				"natural_flow@": {
 					sum: 42767824.923284635,
@@ -417,7 +419,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "7a38a3338456e296",
+			shape: "85cc857a5bba823f",
 			series: {
 				"natural_flow@": {
 					sum: 40724533.36977918,
@@ -586,7 +588,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "3f3c4380773662dd",
+			shape: "c61ecc818cd6231c",
 			series: {
 				"natural_flow@": {
 					sum: 17320217.189539496,

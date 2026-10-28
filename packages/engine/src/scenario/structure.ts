@@ -9,7 +9,6 @@
 // "new" one; texts are for people.
 import type { ModelInput } from '../project';
 import { modelRuleIssues } from '../modelRules';
-import { inputFlowShares, overAllocationError } from '../network/shares';
 import { resolveCatchmentAreaKm2 } from '../runoff/area';
 
 export type StructureIssues = Map<string, string>;
@@ -25,9 +24,8 @@ export function structureIssues(input: ModelInput): StructureIssues {
 	if (m.nodes.length && !(resolveCatchmentAreaKm2({ catchmentAreaKm2: cal.catchmentAreaKm2 ?? null }, input) > 0))
 		add('area', 'the catchment has no area left: no unit has land and calibration.catchmentAreaKm2 is not set');
 
-	// Flow shares over 100 % make water from nowhere: runModel refuses them (network/shares.ts).
-	const over = overAllocationError(inputFlowShares(input).sum);
-	if (over) add('shares', over);
+	// Flow shares over 100 % (engines up to 1.104.x, the specific shares) can't happen from 1.105.0: each unit's natural
+	// MAR share adds up to 1 by construction (issue #616, network/ewrSplit.ts).
 
 	// Windows: a start after its end.
 	for (const [a, b, label] of [

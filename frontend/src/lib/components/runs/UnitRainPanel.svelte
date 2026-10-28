@@ -14,7 +14,7 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { foldList } from '#lib/components/common/fold.js';
 	import { fmtNum } from '#lib/format/number.js';
-	import { catchmentMapText, chirpsAtText, correctedByName, pairingFactorsText, pairingPeriodText, ratioText, stationAreas, stationNotes, type StationsResult } from './stationRain';
+	import { catchmentMapText, chirpsAtText, correctedByName, pairingFactorsText, pairingPeriodText, patchText, ratioText, stationAreas, stationNotes, type StationsResult } from './stationRain';
 	import { factorClamped, factorOutsideBand, factorText, periodText, referenceFactorsText, referenceFitText, RULE_LABEL, sortResultUnits, unitRainNotes, type UnitRainResult } from './unitRain';
 
 	/** order: node ids in the run's farm order (summary.farms), which the rows follow within each rank. */
@@ -148,7 +148,7 @@
 	{#if stations}
 		{#if result}<h4>Rainfall stations</h4>{/if}
 		<p class="muted small">
-			Each area’s rain is its station’s × area MAP ÷ station MAP; on the station’s gaps and unreliable days, the area’s own CHIRPS corrected against a station.{#if mapLine}{' '}Catchment MAP {mapLine}.{/if}
+			Each area’s rain is its station’s × area MAP ÷ station MAP; on the station’s gaps and unreliable days, its patching priority: other stations × area MAP ÷ their MAP, then the area’s own CHIRPS corrected against a station’s rain at the area’s MAP.{#if mapLine}{' '}Catchment MAP {mapLine}.{/if}
 		</p>
 		{#if sNotes.length}
 			<div class="alert alert-warning notes" data-testid="run-station-notes">
@@ -178,15 +178,20 @@
 					{#each sAreas as a (a.nodeId ?? '(catchment)')}
 						{@const by = correctedByName(stations, a)}
 						{@const aside = a.setAside.checks + a.setAside.unreliable}
+						{@const patched = patchText(a)}
 						<tr data-testid="run-station-row">
 							<th scope="row">{a.nodeId === null ? `${a.name} (catchment)` : a.name}</th>
 							<td>
 								<span class="rule">{a.stationName}</span>
-								<span class="factor">{ratioText(a)}{#if a.clamped}{' '}<strong class="tag">held at the bound</strong>{/if}; gaps from CHIRPS {by ? `corrected against ${by}` : 'not corrected (no pairing)'}</span>
+								<span class="factor"
+									>{ratioText(a)}{#if a.clamped}{' '}<strong class="tag">held at the bound</strong>{/if}; {#if patched}gaps patched from {patched}{#if a.patches?.some((p) => p.source === 'chirps')}, CHIRPS {by ? `corrected against ${by}` : 'not corrected (no pairing)'}{/if}{:else}gaps from CHIRPS {by
+											? `corrected against ${by}`
+											: 'not corrected (no pairing)'}{/if}</span
+								>
 							</td>
 							<td class="num">{fmtNum(a.areaMapMm)}</td>
 							<td class="num">{fmtNum(a.stationMapMm)}</td>
-							<td class="num">{fmtNum(a.days.station)}</td>
+							<td class="num">{fmtNum(a.days.station)}{#if a.days.patch}<span class="factor">+ {fmtNum(a.days.patch)} from patch stations</span>{/if}</td>
 							<td class="num">{fmtNum(a.days.chirps)}</td>
 							<td class="num">{fmtNum(a.days.fallback)}{#if a.days.none}<span class="factor">{fmtNum(a.days.none)} none</span>{/if}</td>
 							<td class="num">{fmtNum(aside)}{#if aside}<span class="factor">{fmtNum(a.setAside.checks)} by the checks, {fmtNum(a.setAside.unreliable)} unreliable</span>{/if}</td>
@@ -209,18 +214,18 @@
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div class="table-wrap" tabindex="0" role="region" aria-label="Stations’ CHIRPS pairings">
 				<table class="data compact" aria-labelledby="{uid}-pcap">
-					<caption id="{uid}-pcap">Each station’s CHIRPS pairing: the monthly factors that correct CHIRPS to its level</caption>
+					<caption id="{uid}-pcap">Each CHIRPS pairing: the monthly factors that bring an area’s CHIRPS to its station’s rain at the area’s MAP</caption>
 					<thead>
 						<tr>
 							<th scope="col">Station</th>
-							<th scope="col">CHIRPS at</th>
+							<th scope="col">CHIRPS of</th>
 							<th scope="col">Fit period</th>
 							<th scope="col" class="num">Shared days</th>
 							<th scope="col">Monthly factors</th>
 						</tr>
 					</thead>
 					<tbody>
-						{#each stations.pairings as p (p.stationId)}
+						{#each stations.pairings as p (`${p.stationId}|${p.areaId ?? ''}`)}
 							<tr data-testid="run-station-pairing" data-refused={p.refused !== null}>
 								<th scope="row">{p.stationName}</th>
 								<td>{chirpsAtText(p)}</td>

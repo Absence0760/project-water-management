@@ -9,6 +9,9 @@ import { fmtDay, fmtNum, fmtPct, fmtWhen, localIsoDate } from '#lib/format/numbe
 import { kindLabel } from '#lib/series/kinds.js';
 import { KIND_NAME } from '#lib/components/alerts/alerts.js';
 
+// The flow-share methods migration 266 (issue #616) retired, as the History names them.
+const FLOW_SHARE_METHOD_LABEL: Record<string, string> = { area: 'By area', hiLo: 'Hi/Lo MAP', manual: 'Specific shares' };
+
 /** The filter's event kinds: '' is everything, 'revision' the model and settings, the rest an event noun. */
 export const KIND_FILTERS: { value: string; label: string }[] = [
 	{ value: '', label: 'All changes' },
@@ -403,6 +406,14 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const rules = Array.isArray(s.rules) ? (s.rules as Record<string, unknown>[]) : [];
 			const words = rules.map(ewrRuleWords).filter(Boolean);
 			return `Switched off ${plural(rules.length, 'rule')} keeping water for the EWR${words.length ? ` (${words.join('; ')})` : ''}: in the baseline the EWR is assessed and reported, never applied (a scenario keeps it)`;
+		}
+		// 266 (issue #616): the area, Hi/Lo MAP and specific flow shares were removed; each unit now has one natural-MAR share.
+		case 'settings.flow_share_reset': {
+			const method = FLOW_SHARE_METHOD_LABEL[str(s.method)] ?? FLOW_SHARE_METHOD_LABEL.area;
+			const split = s.hiLoSplit as { hi?: unknown; lo?: unknown } | null | undefined;
+			const hiLo = str(s.method) === 'hiLo' && split ? `, ${fmtPct(num(split.hi), 0)} High / ${fmtPct(num(split.lo), 0)} Low` : '';
+			const units = Array.isArray(s.units) ? s.units.length : 0;
+			return `The flow split “${method}${hiLo}” was replaced by each unit’s natural-MAR share${units ? ` (${plural(units, 'unit')} had High-MAP, Low-MAP or manual values)` : ''}: the area, Hi/Lo MAP and specific shares were removed`;
 		}
 		case 'allocation.created':
 			return `Added a registered volume${str(s.registrationNo) ? ` (${str(s.registrationNo)})` : ''}`;

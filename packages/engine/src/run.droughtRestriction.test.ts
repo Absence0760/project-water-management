@@ -31,9 +31,6 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		downstreamNodeId: null,
 		sortOrder: 0,
 		areaKm2: 1,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 0,
 		pctRunoffToDam: 1,
 		damCapacityM3: 0,
@@ -529,27 +526,6 @@ describe('which storage, which units, and the EWR trigger (engine 1.54.0)', () =
 		// A shortfall column the trigger didn't follow fails the self-check (the outlet's: the catchment column).
 		const tampered = { ...out, series: out.series.map((x) => (x.nodeId === null && x.key === 'ewr_shortfall' ? { ...x, values: x.values.map((v, t) => (t === 3 ? 0 : v)) } : x)) };
 		expect(checkDroughtRestriction(input, tampered)).toMatch(/day 4: drought restriction level 1 ≠ 0/);
-	});
-
-	it('the EWR trigger at the outlet reads the catchment’s EWR, not the outflow node’s share of it (shares summing below 1)', () => {
-		// A and B take 45 % of the natural flow each (no dams, no crops): 90 of 100 m³/day reaches the outlet G.
-		// The catchment's EWR of 95 isn't met (90 < 95); G's own share-weighted EWR, 0.9 × 95 = 85.5, is.
-		const rule: DroughtRestrictionRule = { reviewDates: ['10-01', '10-05'], levels: [{ belowPct: 0.1, cuts: { crops: 0.5 } }], ewrTrigger: { siteNodeId: null, level: 1 } };
-		const input: ModelInput = {
-			settings: { ewrPragmaticM3PerDay: flat(95) as unknown as Monthly, apanMm: flat(0) as unknown as Monthly, lakeEvapFactor: 0, effectiveRainStoreMm: 0, flowShareMethod: 'manual', droughtRestriction: rule },
-			model: {
-				nodes: [node('A', { downstreamNodeId: 'G', flowShareManual: 0.45 }), node('B', { downstreamNodeId: 'G', flowShareManual: 0.45, sortOrder: 1 }), node('G', { kind: 'gauge', areaKm2: 0, flowShareManual: 0, sortOrder: 2 })],
-				crops: [],
-				cropAreas: [],
-				transfers: []
-			},
-			series: { rain_catchment_mm: { startDate: '2020-10-01', values: new Array(10).fill(0) } }
-		};
-		const out = withVerification(input, runModelWith(input, (ctx) => ({ naturalFlowM3Day: new Array(ctx.days).fill(100) })));
-		expect(get(out, null, 'ewr_shortfall')[3]).toBeLessThan(0);
-		expect(get(out, 'G', 'ewr_shortfall')[3]).toBe(0);
-		expect(level(out, null)).toEqual([0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
-		passed(out);
 	});
 
 	it('a gauge that isn’t an EWR site can’t be the trigger’s site', () => {

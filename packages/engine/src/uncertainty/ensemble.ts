@@ -35,7 +35,7 @@ import { ENGINE_VERSION } from '../version';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { referenceFit, referenceGaugeRecord, unitRainRecipes } from '../runoff/unitRain';
 import { chirpsFactorOn } from '../rain';
-import { pairingFactors } from '../runoff/stationForcing';
+import { fitEveryPairing, pairingFactors } from '../runoff/stationForcing';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { hasDailyEt0Value } from '../evaporation/et0Daily';
 import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
@@ -240,11 +240,8 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	// station reading to fit them on, as the reference gauge's are.
 	let rainStations = input.settings.rainStations ?? null;
 	if (run.stations && run.settings.rainStations) {
-		const as = run.settings.rainStations;
-		const used = new Set<string>();
-		if (as.catchment) used.add(as.catchment.correctAgainst ?? as.catchment.stationId);
-		for (const a of Object.values(as.units ?? {})) used.add(a.correctAgainst ?? a.stationId);
-		for (const id of [...used].sort()) run.stations.context.pairing(id);
+		// Every area's pairing (per area since engine 1.105.0, issue #612), fitted on the base input.
+		fitEveryPairing(run.stations.context);
 		const all = series as Record<string, DailySeries | undefined>;
 		for (const k of stationKeys) all[k] = { startDate: all[k]!.startDate, values: all[k]!.values.map(() => null) };
 		rainStations = { ...(rainStations ?? {}), pinnedFactors: { ...(rainStations?.pinnedFactors ?? {}), ...pairingFactors(run.stations.context) } };

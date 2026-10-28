@@ -1,5 +1,6 @@
-// A rainfall station's pairing with the CHIRPS at it (issue #553, docs/model.md §2.4i): monthly
-// Σ station ÷ Σ CHIRPS factors, refused under STATION_PAIRING_MIN_YEARS complete years in common.
+// A rainfall station's pairing with an area's CHIRPS (issue #553; per area since engine 1.105.0, issue #612,
+// docs/model.md §2.4i): monthly Σ (station × r) ÷ Σ CHIRPS_area factors, refused under STATION_PAIRING_MIN_YEARS
+// complete years in common.
 // Synthetic values only (public repo).
 import { describe, expect, it } from 'vitest';
 import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
@@ -10,7 +11,6 @@ import {
 	stationSeriesKey,
 	type DailySeries,
 	type ModelInput,
-	type NetworkNode,
 	type ProjectSettings,
 	type RainStationInputs,
 	type RainStationSettings
@@ -32,23 +32,25 @@ const scaled = (start: string, chirps: readonly (number | null)[], k: (month: nu
 
 const K = [1.2, 1.1, 1.3, 0.9, 0.8, 0.7, 1.0, 1.05, 1.15, 1.4, 1.25, 1.35];
 const STATIONS: RainStationInputs = { S1: { name: 'Hill station', mapMm: 700, mapSource: 'invented', lat: null, lon: null } };
-const node = (id: string, name: string) => ({ id, name, kind: 'farm', areaKm2: 5 }) as unknown as NetworkNode;
-const NODES = [node('U', 'Unit U'), node('V', 'Unit V')];
 const settingsWith = (rainStations: RainStationSettings | null = null): ProjectSettings => ({ ...mergeSettings({}, []), rainStations });
 const seriesOf = (m: Record<string, DailySeries>) => m as unknown as ModelInput['series'];
 
-function pairing(opts: { start?: string; end?: string; chirps?: (number | null)[]; station?: (number | null)[]; rainStations?: RainStationSettings | null; chirpsKey?: string; extra?: Record<string, DailySeries>; settings?: ProjectSettings } = {}) {
+/** The pairing of S1 with the area U ("Unit U", or the catchment with areaId null) whose CHIRPS is `chirps`, at ratio `ratio` (default 1). */
+function pairing(
+	opts: { start?: string; end?: string; chirps?: (number | null)[]; station?: (number | null)[]; rainStations?: RainStationSettings | null; settings?: ProjectSettings; ratio?: number; areaId?: string | null; extra?: Record<string, DailySeries> } = {}
+) {
 	const start = opts.start ?? '2015-01-01';
 	const days = daysBetween(start, opts.end ?? '2021-01-01');
 	const chirps = opts.chirps ?? chirpsOver(start, days);
 	const station = opts.station ?? scaled(start, chirps, (m) => K[m - 1]!);
-	const series = seriesOf({
-		[stationSeriesKey('S1')]: { startDate: start, values: station },
-		[opts.chirpsKey ?? stationChirpsSeriesKey('S1')]: { startDate: start, values: chirps },
-		...(opts.extra ?? {})
-	});
+	// The same CHIRPS at the station's cell, which its record checks (§2.4c/§2.4d) read; the pairing doesn't.
+	const series = seriesOf({ [stationSeriesKey('S1')]: { startDate: start, values: station }, [stationChirpsSeriesKey('S1')]: { startDate: start, values: chirps }, ...(opts.extra ?? {}) });
 	const warnings: string[] = [];
-	const fit = fitStationPairing({ settings: opts.settings ?? settingsWith(opts.rainStations ?? null), series, stations: STATIONS, nodes: NODES, stationId: 'S1' }, warnings);
+	const areaId = opts.areaId === undefined ? 'U' : opts.areaId;
+	const fit = fitStationPairing(
+		{ settings: opts.settings ?? settingsWith(opts.rainStations ?? null), series, stations: STATIONS, stationId: 'S1', area: { id: areaId, name: areaId === null ? 'the catchment' : 'Unit U', chirps: { startDate: start, values: chirps }, ratio: opts.ratio ?? 1 } },
+		warnings
+	);
 	return { fit, warnings, chirps, station, start };
 }
 
@@ -57,8 +59,8 @@ describe('fitStationPairing: the factors', () => {
 		const { fit, warnings, chirps, station, start } = pairing();
 		expect(fit.refused).toBeNull();
 		expect(fit.pinned).toBe(false);
-		expect(fit.chirpsAt).toEqual({ cell: true });
-		expect(fit.stationName).toBe('Hill station');
+		expect(fit.chirpsAt).toEqual({ unitId: 'U', unitName: 'Unit U' });
+		expect(fit).toMatchObject({ stationName: 'Hill station', areaId: 'U', areaName: 'Unit U', ratio: 1 });
 		expect(fit.months).toHaveLength(12);
 		const d0 = toEpochDay(start);
 		for (let m = 1; m <= 12; m++) {
@@ -108,7 +110,7 @@ describe('fitStationPairing: the factors', () => {
 		expect(jul).toMatchObject({ fitted: false, ownFactor: null, factor: 1, clamped: false, outsideBand: false, chirpsMm: 0, sharedDays: 6 * 31 });
 		expect(fit.months[5]!.factor).toBeCloseTo(2, 12);
 		expect(warnings).toContain(
-			'station pairing: "Hill station": the station and the CHIRPS at it have too little in common in Jul (fewer than 90 shared days, or under 50 mm of CHIRPS on them), so that month’s factor is 1'
+			'station pairing: "Hill station" for "Unit U": the station and the CHIRPS have too little in common in Jul (fewer than 90 shared days, or under 50 mm of CHIRPS on them), so that month’s factor is 1'
 		);
 	});
 
@@ -121,58 +123,137 @@ describe('fitStationPairing: the factors', () => {
 		expect(fit.months[1]!.factor).toBeCloseTo(2.5, 12);
 		expect(fit.months[11]).toMatchObject({ factor: 0.25, clamped: true, outsideBand: true });
 		expect(fit.months[2]).toMatchObject({ clamped: false, outsideBand: false });
-		expect(warnings.some((w) => /^station pairing: "Hill station": the factor for Jan is 5 \(\d+ ÷ \d+ mm\), outside 0\.25–4; using 4 \(clamped\)$/.test(w))).toBe(true);
-		expect(warnings.some((w) => /^station pairing: "Hill station": the factor for Feb is 2\.5 \(.*\), outside 0\.5–2: used as it is/.test(w))).toBe(true);
+		expect(warnings.some((w) => /^station pairing: "Hill station" for "Unit U": the factor for Jan is 5 \(\d+ ÷ \d+ mm\), outside 0\.25–4; using 4 \(clamped\)$/.test(w))).toBe(true);
+		expect(warnings.some((w) => /^station pairing: "Hill station" for "Unit U": the factor for Feb is 2\.5 \(.*\), outside 0\.5–2: used as it is/.test(w))).toBe(true);
 		expect(warnings.some((w) => w.includes('factor for Dec is 0.1') && w.includes('using 0.25 (clamped)'))).toBe(true);
 		expect(warnings).toHaveLength(3);
 	});
 });
 
-describe('fitStationPairing: where the CHIRPS at the station is read', () => {
-	it('the station’s own cell when the input has it, even with a site', () => {
+describe('fitStationPairing: the area’s CHIRPS against the station’s adjusted rain (issue #612)', () => {
+	it('the numerator is the station × r: f_a(m) = Σ (station × r) ÷ Σ CHIRPS_a, r times the unscaled factor', () => {
+		const { fit, chirps, station, start } = pairing({ ratio: 1.6 });
+		expect(fit.ratio).toBe(1.6);
+		const d0 = toEpochDay(start);
+		for (let m = 1; m <= 12; m++) {
+			let g = 0;
+			let c = 0;
+			for (let i = 0; i < chirps.length; i++)
+				if (monthOfEpochDay(d0 + i) === m) {
+					g += station[i]! * 1.6;
+					c += chirps[i]!;
+				}
+			expect(fit.months[m - 1]!.gaugeMm).toBeCloseTo(g, 9);
+			expect(fit.months[m - 1]!.ownFactor!).toBeCloseTo(g / c, 12);
+			expect(fit.months[m - 1]!.factor).toBeCloseTo(K[m - 1]! * 1.6, 12);
+		}
+	});
+
+	it('mass check: on the shared days, Σ CHIRPS_a × f_a(m) per month = Σ station × r per month (unclamped)', () => {
+		const r = 0.7;
+		const { fit, chirps, station, start } = pairing({ ratio: r });
+		const d0 = toEpochDay(start);
+		const corrected = new Array<number>(12).fill(0);
+		const adjusted = new Array<number>(12).fill(0);
+		for (let i = 0; i < chirps.length; i++) {
+			const m = monthOfEpochDay(d0 + i) - 1;
+			corrected[m]! += chirps[i]! * pairingFactorOn(fit, d0 + i)!;
+			adjusted[m]! += station[i]! * r;
+		}
+		for (let m = 0; m < 12; m++) {
+			expect(fit.months[m]!.clamped).toBe(false);
+			expect(corrected[m]!).toBeCloseTo(adjusted[m]!, 8);
+		}
+	});
+
+	it('reads the area’s CHIRPS, never the CHIRPS at the station’s cell or the unit it stands in', () => {
 		const start = '2015-01-01';
-		const other = chirpsOver(start, daysBetween(start, '2021-01-01'), 3).map((v) => v * 3);
-		const { fit } = pairing({ rainStations: { sites: { S1: { unitId: 'U' } } }, extra: { 'rain_chirps_mm@U': { startDate: start, values: other } } });
-		expect(fit.chirpsAt).toEqual({ cell: true });
+		const cell = chirpsOver(start, daysBetween(start, '2021-01-01'), 3).map((v) => v * 3);
+		const { fit } = pairing({
+			rainStations: { sites: { S1: { unitId: 'V' } } },
+			extra: {
+				[stationChirpsSeriesKey('S1')]: { startDate: start, values: cell },
+				'rain_chirps_mm@V': { startDate: start, values: cell }
+			}
+		});
+		expect(fit.chirpsAt).toEqual({ unitId: 'U', unitName: 'Unit U' });
 		expect(fit.months[0]!.factor).toBeCloseTo(K[0]!, 12);
 	});
 
-	it('else the CHIRPS of the unit it stands in, named', () => {
-		const { fit } = pairing({ rainStations: { sites: { S1: { unitId: 'U' } } }, chirpsKey: 'rain_chirps_mm@U' });
-		expect(fit.refused).toBeNull();
-		expect(fit.chirpsAt).toEqual({ unitId: 'U', unitName: 'Unit U' });
-		expect(fit.months[3]!.factor).toBeCloseTo(K[3]!, 12);
+	it('the catchment’s pairing names the catchment', () => {
+		const { fit, warnings } = pairing({
+			areaId: null,
+			start: '2016-01-01',
+			end: '2018-01-01'
+		});
+		expect(fit).toMatchObject({ areaId: null, chirpsAt: { catchment: true } });
+		expect(warnings[0]).toMatch(/^station pairing: "Hill station" for the catchment is refused: the station and the catchment’s CHIRPS have 2 complete/);
 	});
 
-	it('refused without CHIRPS at the station: no cell and no site, or a site whose unit has none', () => {
-		const none = pairing({ chirpsKey: 'rain_chirps_mm' }); // only the catchment's CHIRPS, which is no station's
-		expect(none.fit).toMatchObject({ refused: 'there is no CHIRPS at the station: it has no CHIRPS cell series and no unit it stands in', months: [], pinned: false });
-		expect(none.warnings).toEqual(['station pairing: "Hill station" is refused: there is no CHIRPS at the station: it has no CHIRPS cell series and no unit it stands in. Its areas’ CHIRPS isn’t corrected against it']);
-		const site = pairing({ rainStations: { sites: { S1: { unitId: 'V' } } }, chirpsKey: 'rain_chirps_mm@U' });
-		expect(site.fit.chirpsAt).toEqual({ unitId: 'V', unitName: 'Unit V' });
-		expect(site.fit.refused).toBe('there is no CHIRPS for the unit it stands in ("Unit V")');
-		expect(site.fit.months).toEqual([]);
+	it('refused without CHIRPS for the area', () => {
+		const warnings: string[] = [];
+		const fit = fitStationPairing(
+			{
+				settings: settingsWith(),
+				series: seriesOf({
+					[stationSeriesKey('S1')]: {
+						startDate: '2015-01-01',
+						values: chirpsOver('2015-01-01', 3000)
+					}
+				}),
+				stations: STATIONS,
+				stationId: 'S1',
+				area: { id: 'U', name: 'Unit U', chirps: null, ratio: 1 }
+			},
+			warnings
+		);
+		expect(fit).toMatchObject({
+			refused: '"Unit U" has no CHIRPS of its own',
+			months: [],
+			pinned: false
+		});
+		expect(warnings).toEqual(['station pairing: "Hill station" for "Unit U" is refused: "Unit U" has no CHIRPS of its own. Its CHIRPS isn’t corrected against it']);
 	});
 
 	it('refused without a record for the station', () => {
 		const warnings: string[] = [];
 		const fit = fitStationPairing(
-			{ settings: settingsWith(), series: seriesOf({ [stationChirpsSeriesKey('S1')]: { startDate: '2015-01-01', values: chirpsOver('2015-01-01', 3000) } }), stations: STATIONS, nodes: NODES, stationId: 'S1' },
+			{
+				settings: settingsWith(),
+				series: seriesOf({}),
+				stations: STATIONS,
+				stationId: 'S1',
+				area: {
+					id: 'U',
+					name: 'Unit U',
+					chirps: {
+						startDate: '2015-01-01',
+						values: chirpsOver('2015-01-01', 3000)
+					},
+					ratio: 1
+				}
+			},
 			warnings
 		);
-		expect(fit).toMatchObject({ refused: 'the station has no record', months: [], days: 0, commonYears: 0, fitFrom: null, fitTo: null });
+		expect(fit).toMatchObject({
+			refused: 'the station has no record',
+			months: [],
+			days: 0,
+			commonYears: 0,
+			fitFrom: null,
+			fitTo: null
+		});
 		expect(warnings).toHaveLength(1);
 	});
 });
-
 describe('fitStationPairing: complete years in common', () => {
 	it(`refused with ${STATION_PAIRING_MIN_YEARS - 1} complete years, accepted with ${STATION_PAIRING_MIN_YEARS}`, () => {
 		const four = pairing({ start: '2016-01-01', end: '2020-01-01' });
 		expect(four.fit.commonYears).toBe(4);
-		expect(four.fit.refused).toBe('the station and the CHIRPS at it have 4 complete calendar years in common (every day a reading in both), fewer than 5');
+		expect(four.fit.refused).toBe('the station and "Unit U"’s CHIRPS have 4 complete calendar years in common (every day a reading in both), fewer than 5');
 		expect(four.fit.months).toEqual([]);
 		expect(four.fit).toMatchObject({ fitFrom: '2016-01-01', fitTo: '2019-12-31', days: daysBetween('2016-01-01', '2020-01-01') });
-		expect(four.warnings[0]).toMatch(/^station pairing: "Hill station" is refused: .*4 complete calendar years/);
+		expect(four.warnings[0]).toMatch(/^station pairing: "Hill station" for "Unit U" is refused: .*4 complete calendar years/);
 		const five = pairing({ start: '2016-01-01', end: '2021-01-01' });
 		expect(five.fit.commonYears).toBe(5);
 		expect(five.fit.refused).toBeNull();
@@ -313,21 +394,31 @@ describe('fitStationPairing: multi-day accumulations and complete years (provisi
 describe('fitStationPairing: pinned factors and determinism', () => {
 	const PIN = [1, 2, 3, 4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3];
 	it('pinned factors replace the fit, warn about nothing, and are never refused', () => {
-		const { fit, warnings } = pairing({ rainStations: { pinnedFactors: { S1: PIN } } });
+		const { fit, warnings } = pairing({ rainStations: { pinnedFactors: { 'S1|U': PIN } } });
 		expect(fit.pinned).toBe(true);
 		expect(fit.months.map((m) => m.factor)).toEqual(PIN);
 		expect(fit.months.every((m) => !m.clamped && !m.outsideBand)).toBe(true);
 		expect(warnings).toEqual([]);
-		const short = pairing({ start: '2018-01-01', end: '2019-01-01', rainStations: { pinnedFactors: { S1: PIN } } });
+		const short = pairing({ start: '2018-01-01', end: '2019-01-01', rainStations: { pinnedFactors: { 'S1|U': PIN } } });
 		expect(short.fit.refused).toBeNull();
 		expect(short.fit.months.map((m) => m.factor)).toEqual(PIN);
 	});
 
 	it('pinned factors that aren’t 12 positive numbers are fitted instead, with a warning', () => {
-		const { fit, warnings } = pairing({ rainStations: { pinnedFactors: { S1: [1, 2] } } });
+		const { fit, warnings } = pairing({ rainStations: { pinnedFactors: { 'S1|U': [1, 2] } } });
 		expect(fit.pinned).toBe(false);
 		expect(fit.months[0]!.factor).toBeCloseTo(K[0]!, 12);
-		expect(warnings).toEqual(['station pairing: "Hill station": its pinned factors aren’t 12 positive numbers, so they are fitted instead']);
+		expect(warnings).toEqual(['station pairing: "Hill station" for "Unit U": its pinned factors aren’t 12 positive numbers, so they are fitted instead']);
+	});
+
+	it('pins only its own area’s key: another area’s, or a station id alone (from before engine 1.105.0), leaves it fitted', () => {
+		for (const pinnedFactors of [{ 'S1|V': PIN }, { 'S1|': PIN }, { S1: PIN }] as Record<string, number[]>[]) {
+			const { fit, warnings } = pairing({ rainStations: { pinnedFactors } });
+			expect(fit.pinned).toBe(false);
+			expect(fit.months[0]!.factor).toBeCloseTo(K[0]!, 12);
+			expect(warnings).toEqual([]);
+		}
+		expect(pairing({ areaId: null, rainStations: { pinnedFactors: { 'S1|': PIN } } }).fit.pinned).toBe(true);
 	});
 
 	it('is deterministic: the same input gives the same fit and warnings', () => {

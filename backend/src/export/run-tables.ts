@@ -184,11 +184,30 @@ const pct = (v: unknown): unknown => (typeof v === 'number' ? Number((v * 100).t
 /** Fields converted with `pct` (the engine's own key names). */
 const PERCENT_KEYS = new Set(['flowShare', 'ewrShare', 'fractionSupplied', 'ewrFractionDaysNotMet']);
 
-const FARM_COLUMNS: [key: string, header: string][] = [
+/** The share columns of a run before engine 1.105.0 (issue #616), as it recorded them. */
+const RECORDED_SHARE_COLUMNS: [key: string, header: string][] = [
 	// Engine ≥ 0.27.0; empty on older runs. The share of the flow (I), and of the EWR (Y) unless split otherwise.
 	['flowShare', 'Flow share (%)'],
-	// Engine ≥ 1.94.0 (settings.ewrSplit, issue #553): the share of the EWR (Y) as applied; an older run's is its flow share.
-	['ewrShare', 'EWR share (%)'],
+	// Engine ≥ 1.94.0 (issue #553; the natural MAR share from 1.105.0, issue #615): the share of the EWR (Y) as applied; an older run's is its flow share.
+	['ewrShare', 'EWR share (%)']
+];
+/**
+ * From engine 1.105.0 (issue #616) a unit has one share, its natural MAR share: it splits the flow under Fragmentation,
+ * the EWR, the land-cover threshold and the senior users' claims (FarmSummary.flowShare === ewrShare), so one column.
+ */
+const NATURAL_MAR_SHARE_COLUMNS: [key: string, header: string][] = [['ewrShare', 'Natural MAR share (%)']];
+/** The engine version from which a run's summary has one share per unit (engine compare.ts FLOW_SHARE_RETIRED_IN). */
+const ONE_SHARE_SINCE = [1, 105, 0] as const;
+
+/** Whether `version` (x.y.z, as a run records it) is `since` or later; an unreadable one reads as older. */
+export function engineAtLeast(version: string, since: readonly number[]): boolean {
+	const parts = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim())?.slice(1).map(Number);
+	if (!parts) return false;
+	for (let i = 0; i < since.length; i++) if (parts[i] !== since[i]) return parts[i]! > since[i]!;
+	return true;
+}
+
+const FARM_COLUMNS: [key: string, header: string][] = [
 	['avgCropRequirementM3Day', 'Average crop water requirement (m³/day)'],
 	['avgDemandM3Day', 'Average abstraction demand (m³/day)'],
 	['avgSuppliedM3Day', 'Average supplied (m³/day)'],
@@ -1126,9 +1145,18 @@ export function* stationLines(st: RainStationSummary): Generator<string> {
 		'Days: fallback',
 		'Days: none',
 		'Set aside: checks',
-		'Set aside: unreliable'
+		'Set aside: unreliable',
+		// The patching priority (engine ≥ 1.105.0, issue #612): blank on a run from before.
+		'Days: patch stations',
+		'Gaps patched from'
 	]);
 	const name = new Map(st.pairings.map((p) => [p.stationId, p.stationName]));
+	const patched = (a: StationAreaForcing) =>
+		a.patches === undefined
+			? ''
+			: a.patches.length
+				? a.patches.map((p) => (p.source === 'chirps' ? `CHIRPS (${p.days} days)` : p.skipped ? `${p.stationName} (skipped: ${p.skipped})` : `${p.stationName} x ${p.ratio} (${p.days} days)`)).join('; then ')
+				: 'nothing';
 	const row = (a: StationAreaForcing) =>
 		csvRow([
 			a.nodeId === null ? `${a.name} (catchment)` : a.name,
@@ -1147,16 +1175,19 @@ export function* stationLines(st: RainStationSummary): Generator<string> {
 			a.days.fallback,
 			a.days.none,
 			a.setAside.checks,
-			a.setAside.unreliable
+			a.setAside.unreliable,
+			a.days.patch ?? '',
+			patched(a)
 		]);
 	if (st.catchment) yield row(st.catchment);
 	for (const a of st.units) yield row(a);
 	if (!st.pairings.length) return;
-	yield csvRow(['Station CHIRPS pairings (monthly factors: the station ÷ the CHIRPS at it on their shared days)']);
+	yield csvRow(["Station CHIRPS pairings (monthly factors: the station's rain at the area's MAP ÷ the area's CHIRPS on their shared days; before engine 1.105.0 the station ÷ the CHIRPS at it)"]);
 	yield csvRow(['Station', 'CHIRPS at', 'Refused', 'Fit from', 'Fit to', 'Complete years (accumulations counted)', 'Shared days', 'Pinned', ...MONTHS]);
 	for (const p of st.pairings) {
 		const factors = p.refused === null ? MONTHS.map((_, i) => p.months.find((m) => m.month === i + 1)?.factor ?? null) : MONTHS.map(() => null);
-		yield csvRow([p.stationName, 'unitId' in p.chirpsAt ? `the CHIRPS of ${p.chirpsAt.unitName || p.chirpsAt.unitId}` : "the station's own CHIRPS cell", p.refused ?? '', p.fitFrom ?? '', p.fitTo ?? '', p.commonYears, p.days, p.pinned ? 'yes' : 'no', ...factors]);
+		const at = 'catchment' in p.chirpsAt ? "the catchment's CHIRPS" : 'unitId' in p.chirpsAt ? `the CHIRPS of ${p.chirpsAt.unitName || p.chirpsAt.unitId}` : "the station's own CHIRPS cell";
+		yield csvRow([p.stationName, at, p.refused ?? '', p.fitFrom ?? '', p.fitTo ?? '', p.commonYears, p.days, p.pinned ? 'yes' : 'no', ...factors]);
 	}
 }
 
@@ -1178,22 +1209,39 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield csvRow(['Farm summary']);
-	// How the EWR was split between the units (engine ≥ 1.94.0, issue #553): only when a split other than the flow share was asked for.
+	// How the EWR was split between the units (engine ≥ 1.94.0, issue #553; every run from 1.105.0, issue #615, when the
+	// one unit share splits the flow too, issue #616): only when a split other than the flow share was asked for
+	// (1.94.0 – 1.104.x), or applied (1.105.0 on). The "the flow share: …" reasons are those older runs' (no period).
 	const split = summary.ewrSplit;
-	if (split && split.method !== 'flowShare')
+	if (split && (split.method !== undefined ? split.method !== 'flowShare' : true))
 		yield csvRow([
 			'EWR split between units by',
 			EWR_SPLIT_LABEL[split.applied],
-			split.period
-				? `${split.period.start} – ${split.period.end} (${split.period.waterYears ? `${split.period.waterYears} complete water year${split.period.waterYears === 1 ? '' : 's'}` : 'the whole run: no complete water year'}${split.pinned ? '; the capture run’s shares' : ''})`
-				: split.why === 'catchmentRain'
-					? 'the flow share: GR4J ran once on the catchment rain'
-					: split.why === 'resumed'
-						? 'the flow share: resumed from a snapshot of a run that split the EWR by the flow share'
-						: 'the flow share: no unit made natural runoff'
+			[
+				split.period
+					? `${split.period.start} – ${split.period.end} (${split.period.waterYears ? `${split.period.waterYears} complete water year${split.period.waterYears === 1 ? '' : 's'}` : 'the whole run: no complete water year'}${split.pinned ? '; the capture run’s shares' : ''})`
+					: split.why === 'catchmentRain'
+						? 'the flow share: GR4J ran once on the catchment rain'
+						: split.why === 'resumed'
+							? 'the flow share: resumed from a snapshot of a run that split the EWR by the flow share'
+							: split.why === 'noLandUnit'
+								? 'the flow share: no unit has an area'
+								: split.why === 'noUnitRunoff'
+									? 'the flow share: the natural flow came without the units’ runoff'
+								: 'the flow share: no unit made natural runoff',
+				...(split.why === 'noRunoff' && split.period ? ['no unit made natural runoff'] : []),
+				// Engine ≥ 1.105.0's other fallbacks, which record the period too (issue #616).
+				...(split.why === 'noLandUnit' && split.period ? ['no unit has an area: every share is 0'] : []),
+				...(split.why === 'noUnitRunoff' && split.period ? ['the natural flow came without the units’ runoff: by area'] : []),
+				...(split.why === 'resumed' && split.period ? ['resumed from a snapshot that pinned no shares: by area'] : []),
+				...(split.runoffFrom === 'shareRuns' ? ['Fragmentation: GR4J also ran on each unit’s own rain, for the shares only'] : []),
+				...(split.catchmentRain?.length ? [`on the catchment rain (share by area): ${split.catchmentRain.map((u) => u.name).join('; ')}`] : [])
+			].join('; ')
 		]);
 	const farms = summary.farms as unknown as Record<string, unknown>[];
-	const known = new Set(['nodeId', 'name', ...FARM_COLUMNS.map(([k]) => k)]);
+	const farmColumns = [...(engineAtLeast(meta.engineVersion, ONE_SHARE_SINCE) ? NATURAL_MAR_SHARE_COLUMNS : RECORDED_SHARE_COLUMNS), ...FARM_COLUMNS];
+	// flowShare and ewrShare both stay known: a 1.105.0 run's flowShare is its natural MAR share, the column already written.
+	const known = new Set(['nodeId', 'name', 'flowShare', 'ewrShare', ...FARM_COLUMNS.map(([k]) => k)]);
 	const extra = [...new Set(farms.flatMap((f) => Object.keys(f)))].filter(
 		(k) => !known.has(k) && farms.some((f) => scalar(f[k]) !== undefined)
 	);
@@ -1203,7 +1251,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	const endCapacity = capacity && meta.damCapacityEndM3 && Object.keys(meta.damCapacityEndM3).length ? meta.damCapacityEndM3 : null;
 	yield csvRow([
 		'Farm',
-		...FARM_COLUMNS.map(([, h]) => h),
+		...farmColumns.map(([, h]) => h),
 		...(capacity ? ['Dam capacity (m³)'] : []),
 		...(endCapacity ? ['Dam capacity on the last day (m³)'] : []),
 		...extra.map((k) => OPTIONAL_FARM_LABELS[k] ?? k)
@@ -1212,7 +1260,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		const id = String(f.nodeId);
 		yield csvRow([
 			String(f.name ?? ''),
-			...FARM_COLUMNS.map(([k]) => {
+			...farmColumns.map(([k]) => {
 				// A run before engine 1.94.0 split the EWR by the flow share.
 				const v = k === 'ewrShare' ? (f.ewrShare ?? f.flowShare) : f[k];
 				return scalar(PERCENT_KEYS.has(k) ? pct(v) : v) ?? null;

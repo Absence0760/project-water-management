@@ -69,7 +69,7 @@ function twelveUnits(perUnit: boolean): ModelInput {
 	const start = '1981-01-01';
 	const days = toEpochDay('2025-03-31') - toEpochDay(start) + 1;
 	const rain = (k: number, phase: number) => Array.from({ length: days }, (_, i) => ((i + phase) % 11 === 0 ? 25 * k : (i + phase) % 3 === 0 ? 1.5 * k : 0));
-	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0.5, pctRunoffToDam: 0.5, damCapacityM3: 200_000, damInitialPct: 0.5, damMinPct: 0, divertCapacityM3Day: 2000, irrigationEfficiency: 0.8, returnFlowFraction: 0.1, damAreaFullM2: 40_000, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const node = { sortOrder: 0, pctUpstreamToDam: 0.5, pctRunoffToDam: 0.5, damCapacityM3: 200_000, damInitialPct: 0.5, damMinPct: 0, divertCapacityM3Day: 2000, irrigationEfficiency: 0.8, returnFlowFraction: 0.1, damAreaFullM2: 40_000, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const nodes = [{ ...node, id: 'g', name: 'Gauge', kind: 'gauge' as const, downstreamNodeId: null, areaKm2: 0, damCapacityM3: 0 }];
 	const series: Record<string, { startDate: string; values: number[] }> = {
 		rain_catchment_mm: { startDate: start, values: rain(1, 0) },
@@ -96,6 +96,8 @@ describe('runModel and calibration performance: per-unit rain on a synthetic 12-
 	// Measured medians (2026-10-09, Node 24, the 20-thread dev laptop, nothing else running; docs/model.md §2.4h):
 	// a run 140 ms on the catchment rain, 295 ms per unit; a calibration evaluation 29 ms and 49 ms. The budgets
 	// (1 s, 200 ms) leave room for a slower or busier machine; a median creeping towards them is a regression.
+	// From engine 1.105.0 (issue #615) the catchment-rain case runs the units' GR4J too, for the EWR shares, so it
+	// holds the same budgets: 283 ms and 91 ms measured (2026-10-28, other work running).
 	const catchment = twelveUnits(false);
 	const perUnit = twelveUnits(true);
 
@@ -104,6 +106,8 @@ describe('runModel and calibration performance: per-unit rain on a synthetic 12-
 		const ms = medianMs(7, () => runModel(perUnit));
 		console.log(`12-unit run: catchment rain ${base.toFixed(1)} ms, per-unit rain ${ms.toFixed(1)} ms`);
 		expect(ms).toBeLessThan(1000);
+		// Fragmentation runs GR4J per unit too, for the EWR shares (engine ≥ 1.105.0, issue #615): the same budget.
+		expect(base).toBeLessThan(1000);
 	});
 
 	it('a calibration evaluation (12 GR4J runs and the network) stays well under 200 ms (median of 7)', () => {
@@ -113,5 +117,7 @@ describe('runModel and calibration performance: per-unit rain on a synthetic 12-
 		const ms = medianMs(7, () => pb.simulate(pb.startParams));
 		console.log(`12-unit calibration evaluation: catchment rain ${base.toFixed(1)} ms, per-unit rain ${ms.toFixed(1)} ms`);
 		expect(ms).toBeLessThan(200);
+		// Under Fragmentation each evaluation reruns the units' GR4J for the EWR shares (engine ≥ 1.105.0, issue #615).
+		expect(base).toBeLessThan(200);
 	});
 });

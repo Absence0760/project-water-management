@@ -100,6 +100,8 @@
 	import { GRID_TAB, isGridId, isTabGridId, movedGridHref, withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import {
 		ALL_TABS,
+		addsData,
+		REFUSED_DROP_TEXT,
 		canOpenTab,
 		hasModelInputsToggle,
 		hiddenChoice,
@@ -275,7 +277,7 @@
 	/** The save bar's optional "Reason for this change", kept with the change in the History tab. */
 	let saveReason = $state('');
 
-	// --- data freshness, "Add data" (button or drop a CSV anywhere) ------------
+	// --- data freshness, "Add data" (button or drop a CSV on its tabs) ---------
 	// The project's calendar date (its time zone), as on the project list and the portfolio (issue #137).
 	const today = $derived(projectToday(project?.timeZone));
 	const fresh = $derived(freshness(series ?? [], today));
@@ -360,17 +362,21 @@
 	});
 	$effect(() => () => stopField());
 
-	// `?add=data` (the project list's Add data link): the dialog opens once the role is known, for an
-	// editor, and the param goes so Back or a reload doesn't reopen it.
+	// `?add=data` (the project list's Add data link, the Warnings page's fixes): the dialog opens once the
+	// role is known, for an editor, and the param goes so Back or a reload doesn't reopen it. On a tab
+	// without Add data (issue #601) it opens over Data instead, so closing it leaves you where the button is.
 	$effect(() => {
 		if (page.url.searchParams.get('add') !== 'data' || !project) return;
 		untrack(() => {
 			if (canEdit) openAddData();
-			void goto(withoutParam(page.url, 'add'), { replace: true, reset: false });
+			const to = new URL(withoutParam(page.url, 'add'), page.url.href);
+			if (canEdit && !addsData(tab)) to.searchParams.set('tab', 'series');
+			void goto(`${to.pathname}${to.search}${to.hash}`, { replace: true, reset: false });
 		});
 	});
 	const carriesFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-	const hasFiles = (e: DragEvent) => canEdit && carriesFiles(e);
+	// A file dropped on a tab without Add data (issue #601), or by a viewer, is refused: never opened in place of the page.
+	const hasFiles = (e: DragEvent) => showsAddData && carriesFiles(e);
 	function onDragEnter(e: DragEvent) {
 		if (!hasFiles(e)) return;
 		e.preventDefault();
@@ -378,8 +384,8 @@
 		dragDepth++;
 	}
 	function onDragOver(e: DragEvent) {
-		// A viewer's file is refused here too, so the browser doesn't open it in place of the page.
-		if (!canEdit && carriesFiles(e)) {
+		// A viewer's file, or one on a tab without Add data, is refused here too, so the browser doesn't open it in place of the page.
+		if (!showsAddData && carriesFiles(e)) {
 			e.preventDefault();
 			if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
 			return;
@@ -396,6 +402,11 @@
 		if (!canEdit && carriesFiles(e)) {
 			e.preventDefault();
 			banner = { text: 'View only: ask an editor to add data.', added: 0 };
+			return;
+		}
+		if (!showsAddData && carriesFiles(e)) {
+			e.preventDefault();
+			banner = { text: REFUSED_DROP_TEXT, added: 0 };
 			return;
 		}
 		if (!hasFiles(e)) return;
@@ -446,12 +457,14 @@
 	}
 
 	const canEdit = $derived(hasRole(project?.role, 'editor'));
+	// Add data (the header's button and a dropped file) only on the tabs it adds data to (TAB_ADDS_DATA, issue #601).
+	const showsAddData = $derived(canEdit && addsData(tab));
 	/** A run started on this tab opens on it (startRun): Calibration shows the new run's fit itself. */
 	const runOpensHere = $derived(tab === 'calibration');
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
 
 	// --- the section header (SectionHeader, issue #17) -------------------------
-	// For an editor every section ends on Add data, then Run model: the header's RunButton, which
+	// For an editor every section ends on Run model (after Add data, on the tabs that have it, TAB_ADDS_DATA): the header's RunButton, which
 	// opens a small form so the run can be named, or on Runs & results the tab's own run form
 	// (headerSlot.main: Run label, Run forecast, Run model), never both.
 	// The Data badge in the sections: series a run is driven by that are behind today (freshness.ts).
@@ -716,7 +729,7 @@
 		if (await saveBeforeRun()) await startRun(label, forecast);
 	}
 	// What the header's Run model needs before a run can start (runs/runReady.ts, as Runs & results' form).
-	const runReady = $derived(runBlockers(editor.model, project?.settings ?? {}, series));
+	const runReady = $derived(runBlockers(editor.model, series));
 
 	// --- the farm drawer: open while the URL names a farm ---------------------
 	// Closing it (Done, Esc, the ✕) drops `farm` from the URL in place, so Back
@@ -1040,9 +1053,10 @@
 		><span class="assist-text">Assistant</span>
 	</button>
 {/snippet}
-<!-- Add data, then Run model (the tab's main action on Runs & results, its run form): what every section ends on. -->
+<!-- Add data (on the tabs it adds data to, TAB_ADDS_DATA), then Run model (the tab's main action on Runs & results,
+     its run form): what every section ends on. -->
 {#snippet headerMain()}
-	{#if canEdit}
+	{#if showsAddData}
 		<button
 			type="button"
 			class="btn add"
@@ -1060,7 +1074,6 @@
 		<!-- Not on Runs & results, even while its chunk loads: its run form is the one Run model there. -->
 		<RunButton
 			missing={runReady.missing}
-			overAllocated={runReady.overAllocated}
 			hasForecast={hasForecastRain(series)}
 			modelDirty={unsaved}
 			problems={unsaved ? saveProblems.length : 0}

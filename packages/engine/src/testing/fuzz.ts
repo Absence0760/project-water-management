@@ -92,14 +92,6 @@ function flowSeries(rng: Rng, days: number, scale: number): (number | null)[] {
  * One random valid ModelInput. Node ids are "n0", "n1", …; the outflow node is
  * always n0 (the invariance test shuffles the array, so nothing may rely on it).
  */
-function capFlowShares(settings: Partial<ProjectSettings>, nodes: NetworkNode[]): void {
-	const split = settings.hiLoSplit!;
-	if (split.hi + split.lo > 1) settings.hiLoSplit = { hi: split.hi / (split.hi + split.lo), lo: split.lo / (split.hi + split.lo) };
-	const farms = nodes.filter((n) => n.kind === 'farm');
-	const sum = farms.reduce((a, n) => a + (n.flowShareManual ?? 0), 0);
-	if (sum > 1) for (const n of farms) if (n.flowShareManual !== null) n.flowShareManual /= sum;
-}
-
 export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const rng = new Rng(seed);
 	// Irrigation efficiency and loss return (engine ≥ 0.16.0) come from their own
@@ -129,7 +121,11 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		const hasDam = rng.bool(0.65);
 		const cap = !hasDam ? 0 : rng.bool(0.1) ? rng.float(0, 5) : rng.bool(0.3) ? Math.round(rng.logFloat(10, 3e6)) : rng.logFloat(10, 3e6);
 		const area = rng.bool(0.1) ? 0 : rng.logFloat(0.01, 150);
-		const hiPart = rng.frac(0.2, 0.2);
+		// The draws the retired high-/low-MAP areas and specific share took (engines up to 1.104.x, issue #616), kept so
+		// the rest of a seed's network is what it was.
+		rng.frac(0.2, 0.2);
+		rng.bool(0.1);
+		if (!rng.bool(0.1)) rng.frac(0.1, 0.05);
 		nodes.push({
 			id: `n${i}`,
 			name: `Node ${i}`,
@@ -137,9 +133,6 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 			downstreamNodeId: down === null ? null : `n${down}`,
 			sortOrder: i,
 			areaKm2: area,
-			areaHiKm2: area * hiPart,
-			areaLoKm2: rng.bool(0.1) ? area : area * (1 - hiPart),
-			flowShareManual: rng.bool(0.1) ? null : rng.frac(0.1, 0.05),
 			pctUpstreamToDam: rng.frac(),
 			pctRunoffToDam: rng.frac(),
 			damCapacityM3: cap,
@@ -156,8 +149,6 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	if (!nodes.some((x) => x.kind === 'farm' && x.areaKm2 > 0)) {
 		const f = nodes.find((x) => x.kind === 'farm')!;
 		f.areaKm2 = rng.logFloat(0.1, 50);
-		f.areaHiKm2 = f.areaKm2 / 2;
-		f.areaLoKm2 = f.areaKm2 / 2;
 	}
 	// Other water users (WP-1.33), from their own stream so the rest of a seed's network is what it was.
 	addUsers(new Rng(seed ^ 0x510e527f), nodes);
@@ -242,12 +233,19 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// --- settings ------------------------------------------------------------------------
 	const ewrScale = rng.pick([0, 0, 100, 10_000, 1e6, 1e10]);
 	const iso = (off: number) => fromEpochDay(start + off);
+	const februaryDays = rng.pick([28.25, 28.25, 28, 29]);
+	const effectiveRainFraction = rng.frac(0.1, 0.1);
+	const apanMm = monthly(() => (rng.bool(0.1) ? 0 : rng.float(0, 300)));
+	// The retired flow-share method and Hi/Lo split's draws (issue #616), kept so the rest of a seed's settings is what it was.
+	rng.pick(['area', 'area', 'hiLo', 'manual'] as const);
+	if (!rng.bool(0.7)) {
+		rng.frac();
+		rng.frac();
+	}
 	const settings: Partial<ProjectSettings> = {
-		februaryDays: rng.pick([28.25, 28.25, 28, 29]),
-		effectiveRainFraction: rng.frac(0.1, 0.1),
-		apanMm: monthly(() => (rng.bool(0.1) ? 0 : rng.float(0, 300))),
-		flowShareMethod: rng.pick(['area', 'area', 'hiLo', 'manual'] as const),
-		hiLoSplit: rng.bool(0.7) ? { hi: 0.5, lo: 0.5 } : { hi: rng.frac(), lo: rng.frac() },
+		februaryDays,
+		effectiveRainFraction,
+		apanMm,
 		ewrPragmaticM3PerDay: monthly(() => (rng.bool(0.1) ? 0 : rng.float(0, ewrScale))),
 		calibration: {
 			...defaultCalibrationOverrides(rng)
@@ -365,12 +363,6 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		if (em.bool(0.4)) settings.lowFlowMeasure = 'baseflow';
 	}
 
-	// Flow shares over 100 % are refused by the run (engine 0.27.1: they make
-	// water from nowhere), so scale them down to 100 % after every draw: the
-	// random stream, and so the rest of each seed, is unchanged. Under 100 %
-	// stays, since the run allows it with a warning.
-	capFlowShares(settings, nodes);
-
 	// The daily outlet EWR from the DRM tables (engine ≥ 1.77.0, ../reserve/dailySource.ts), from its own stream so the
 	// rest of the seed is unchanged: TAB or percentile, either scaling, rows that rise and a driest point of 0 included.
 	const dsr = new Rng(seed ^ 0x3c7a91d5);
@@ -400,10 +392,6 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		daily.lowFlowPctM3s = daily.naturalPctM3s!.map((r) => r.map((v) => v * lfr.float(0.05, 1)));
 		daily.reserveTable = lfr.pick(['total', 'withoutHighFlows'] as const);
 	}
-
-	// The EWR split by natural MAR (engine ≥ 1.94.0, ../network/ewrSplit.ts), from its own stream so earlier seeds don't
-	// move: under catchment rain it falls back to the flow share; withUnitRain below applies it.
-	if (new Rng(seed ^ 0x2d4f8a61).bool(0.2)) settings.ewrSplit = 'naturalMar';
 
 	// Land cover (WP-1.35), from its own stream: the rest of the seed is unchanged.
 	const landCover = randomLandCover(new Rng(seed ^ 0x1f83d9ac), nodes);
@@ -1152,9 +1140,6 @@ function addUsers(g: Rng, nodes: NetworkNode[]): void {
 			downstreamNodeId: into.id,
 			sortOrder: nodes.length,
 			areaKm2: 0,
-			areaHiKm2: 0,
-			areaLoKm2: 0,
-			flowShareManual: null,
 			pctUpstreamToDam: 0,
 			pctRunoffToDam: 0,
 			damCapacityM3: 0,
@@ -1352,15 +1337,6 @@ export function shrink(input: ModelInput, fails: (x: ModelInput) => boolean, max
 		cur = next;
 	}
 	return cur;
-}
-
-/**
- * The EWR split by each unit's natural MAR (engine ≥ 1.94.0, settings.ewrSplit, ../network/ewrSplit.ts) on about
- * half the seeds, from its own stream; for withUnitRain's inputs, where it differs from the flow share.
- */
-export function withEwrSplit(input: ModelInput, seed: number): ModelInput {
-	if (new Rng(seed ^ 0x2d4f8a62).bool(0.5)) input.settings.ewrSplit = 'naturalMar';
-	return input;
 }
 
 /**

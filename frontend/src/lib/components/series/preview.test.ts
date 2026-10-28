@@ -2,12 +2,13 @@ import { defaultProjectSettings, SERIES_KINDS, type NetworkNode, type ProjectSet
 import { describe, expect, it } from 'vitest';
 import type { Daily } from './coverage';
 import { helpFor } from '#lib/help/content.js';
-import type { AreaRainLines } from './derivedRain';
+import type { AreaRainLines, UnitChainLines } from './derivedRain';
 import {
 	areaCell,
 	areaColumnId,
 	areaViewColumns,
 	buildAreaColumns,
+	chirpsLevelText,
 	buildPreviewColumns,
 	buildPreviewRows,
 	columnsForView,
@@ -396,6 +397,10 @@ describe('each area’s derived rain (issue #553)', () => {
 		expect(areaCell(l, 'stationScaled', '2020-01-02')).toBeNull();
 		expect(areaCell(l, 'chirpsCorrected', '2020-01-03')).toBe(2.5);
 		expect(areaCell(l, 'source', '2020-01-02')).toBe('no source (dry)');
+		// A patch day names its station and place (issue #612); without the label, the plain words.
+		const p = lines({ source: ['station', 'patch', 'patch'], patchFrom: [null, 'patch 1: Ridge', null] });
+		expect(areaCell(p, 'source', '2020-01-02')).toBe('patch 1: Ridge');
+		expect(areaCell(p, 'source', '2020-01-03')).toBe('patch station');
 		expect(areaCell(l, 'source', '2020-01-03')).toBe('corrected CHIRPS');
 		expect(areaCell(l, 'rainUsed', '2019-12-31')).toBeNull();
 		expect(areaCell(l, 'rainUsed', '2020-01-04')).toBeNull();
@@ -540,5 +545,158 @@ describe('the View select’s views and their columns (issue #613)', () => {
 		expect(filterPreviewRows(rows, { query: '> 20', missingOnly: false, flaggedOnly: false, visibleSeriesIds }).map((r) => r.date)).toEqual(['2020-01-02']);
 		const flowIds = shownSeriesIds(columnsForView('flow', all, ctx));
 		expect(filterPreviewRows(rows, { query: '', missingOnly: true, flaggedOnly: false, visibleSeriesIds: flowIds }).map((r) => r.date)).toEqual(['2020-01-01']);
+	});
+});
+
+describe('a unit’s patch stations (issue #613 slice 3)', () => {
+	const list = [
+		meta({ id: 'berg', kind: 'rain_catchment_mm', name: 'Bergwater' }),
+		meta({ id: 'ridge', kind: 'rain_catchment_mm', name: 'Ridge' }),
+		meta({ id: 'vlei', kind: 'rain_catchment_mm', name: 'Vlei' }),
+		meta({ id: 'chu1', kind: 'rain_chirps_mm', name: 'CHIRPS Upper', siteNodeId: 'u1' })
+	];
+	const lines = (over: Partial<AreaRainLines> = {}): AreaRainLines =>
+		({
+			startDate: '2020-01-01',
+			rainUsed: [4, 5, 2.4],
+			source: ['station', 'patch', 'patch'],
+			patchFrom: [null, 'patch 1: Ridge', 'patch 3: Vlei'],
+			// Place 2 is CHIRPS, which isn't a station line: the numbers stay the priority's.
+			patches: [
+				{ place: 1, stationId: 'ridge', stationName: 'Ridge', ratio: 1.25, raw: [3, 4, null], scaled: [3.75, 5, null] },
+				{ place: 3, stationId: 'vlei', stationName: 'Vlei', ratio: 0.8, raw: [null, null, 3], scaled: [null, null, 2.4] }
+			],
+			stationRaw: [3.2, null, null],
+			stationScaled: [4, null, null],
+			chirpsRaw: [1, 0, 0],
+			chirpsCorrected: [1.25, 0, 0],
+			factors: Array.from({ length: 12 }, () => 1.25),
+			refused: null,
+			correctAgainst: 'berg',
+			forcing: { stationId: 'berg', stationName: 'Bergwater', ratio: 1.25 } as AreaRainLines['forcing'],
+			warnings: [],
+			...over
+		}) as AreaRainLines;
+	const areas = [{ nodeId: 'u1', name: 'Upper unit', lines: lines() }];
+	const all = [...buildPreviewColumns(list), ...buildAreaColumns(areas)];
+
+	it('the unit view: the main station, each patch station raw and adjusted in priority order, then the CHIRPS', () => {
+		const cols = columnsForView('unit:u1', all, { list, areas });
+		expect(cols.map((c) => c.label)).toEqual([
+			'Bergwater raw',
+			'Bergwater adjusted to Upper unit (× 1.250)',
+			'Patch 1: Ridge raw',
+			'Patch 1: Ridge adjusted to Upper unit (× 1.250)',
+			'Patch 3: Vlei raw',
+			'Patch 3: Vlei adjusted to Upper unit (× 0.800)',
+			'Upper unit CHIRPS raw',
+			'Upper unit CHIRPS bias-corrected (f(m) against Bergwater)',
+			'Upper unit rain used',
+			'Upper unit rain used from'
+		]);
+		expect(cols.slice(2, 6).map((c) => c.id)).toEqual(['area:u1:patchRaw:1', 'area:u1:patchScaled:1', 'area:u1:patchRaw:3', 'area:u1:patchScaled:3']);
+		for (const c of cols) expect(helpFor(c.helpKey), c.helpKey).toBeTruthy();
+		// A patch station's raw line reads its stored series, so Missing only and the search read it in this view.
+		expect(shownSeriesIds(cols)).toEqual(['berg', 'ridge', 'vlei', 'chu1']);
+		// No CHIRPS of its own: the patch stations still follow the main station's lines.
+		const bare = areaViewColumns({ nodeId: 'u1', name: 'Upper unit', lines: lines({ chirpsRaw: null, chirpsCorrected: null }) });
+		expect(bare.map((c) => c.area!.line)).toEqual(['stationRaw', 'stationScaled', 'patchRaw:1', 'patchScaled:1', 'patchRaw:3', 'patchScaled:3', 'rainUsed', 'source']);
+	});
+
+	it('All gains each patch station × its ratio after the station’s (the Full CSV’s), not its raw record', () => {
+		expect(buildAreaColumns(areas).map((c) => c.label)).toEqual([
+			'Upper unit: station × ratio',
+			'Upper unit: patch 1: Ridge × ratio',
+			'Upper unit: patch 3: Vlei × ratio',
+			'Upper unit: CHIRPS corrected',
+			'Upper unit: rain used',
+			'Upper unit: rain used from'
+		]);
+	});
+
+	it('reads a patch line by date; the rain used from names the patch station and its place', () => {
+		const l = lines();
+		expect(areaCell(l, 'patchRaw:1', '2020-01-02')).toBe(4);
+		expect(areaCell(l, 'patchScaled:1', '2020-01-02')).toBe(5);
+		expect(areaCell(l, 'patchScaled:3', '2020-01-02')).toBeNull();
+		expect(areaCell(l, 'patchScaled:3', '2020-01-03')).toBe(2.4);
+		expect(areaCell(l, 'patchRaw:2', '2020-01-03')).toBeNull();
+		expect(areaCell(l, 'source', '2020-01-02')).toBe('patch 1: Ridge');
+		expect(areaCell(l, 'source', '2020-01-03')).toBe('patch 3: Vlei');
+		expect(areaCell(lines({ patches: undefined }), 'patchRaw:1', '2020-01-01')).toBeNull();
+	});
+});
+
+describe('a unit without a station: its §2.4h chain (issue #613 slice 2)', () => {
+	const chain = (over: Partial<UnitChainLines> = {}, recipe: Partial<UnitChainLines['recipe']> = {}): UnitChainLines =>
+		({
+			startDate: '2020-01-01',
+			nodeId: 'u2',
+			rule: 'unitGauge',
+			recipe: { nodeId: 'u2', rule: 'unitGauge', hasGauge: true, gaugeMapFactor: 1.4, gaugeMapOwnFactor: 1.4, gaugeMapClamped: false, gaugeMapOutsideBand: false, chirps: { source: 'map', factor: 1.2345 }, ...recipe },
+			mapMm: 700,
+			gaugeMapMm: 500,
+			rainUsed: [5, 2.4, 1.2, 0],
+			source: ['unitGauge', 'unitChirps', 'gaugeMap', 'none'],
+			ownGauge: [5, null, null, null],
+			gaugeScaled: [7, 1.4, 1.2, null],
+			chirpsRaw: [1, 2, null, null],
+			chirpsLevelled: [1.2, 2.4, null, null],
+			warnings: [],
+			...over
+		}) as UnitChainLines;
+	const list = [meta({ id: 'chu2', kind: 'rain_chirps_mm', name: 'CHIRPS Lower', siteNodeId: 'u2' }), meta({ id: 'gau2', kind: 'rain_catchment_mm', name: 'Lower gauge', siteNodeId: 'u2' })];
+	const areas = [{ nodeId: 'u2', name: 'Lower unit', lines: null, chain: chain() }];
+	const all = [...buildPreviewColumns(list), ...buildAreaColumns(areas)];
+
+	it('its view: own gauge (checked), the catchment gauge × its ratio, CHIRPS raw and levelled, rain used and its source, then the gauge stored at it', () => {
+		const cols = columnsForView('unit:u2', all, { list, areas });
+		expect(cols.map((c) => c.label)).toEqual([
+			'Lower unit own gauge (checked)',
+			'Catchment gauge adjusted to Lower unit (× 1.400)',
+			'Lower unit CHIRPS raw',
+			'Lower unit CHIRPS levelled (× 1.235 to its MAP)',
+			'Lower unit rain used',
+			'Lower unit rain used from',
+			// The stored gauge as recorded (its CHIRPS is the raw line already).
+			'Rainfall — catchment · Lower gauge'
+		]);
+		expect(cols.slice(0, 6).map((c) => c.id)).toEqual(['ownGauge', 'gaugeScaled', 'chirpsRaw', 'chirpsLevelled', 'rainUsed', 'source'].map((l) => `area:u2:${l}`));
+		expect(cols[2]!.seriesId).toBe('chu2');
+		for (const c of cols) expect(helpFor(c.helpKey), c.helpKey).toBeTruthy();
+	});
+
+	it('All has its derived links (the Full CSV’s), not the raw CHIRPS', () => {
+		expect(buildAreaColumns(areas).map((c) => c.label)).toEqual([
+			'Lower unit: own gauge (checked)',
+			'Lower unit: catchment gauge × MAP ratio',
+			'Lower unit: CHIRPS levelled',
+			'Lower unit: rain used',
+			'Lower unit: rain used from'
+		]);
+	});
+
+	it('only the links its rule reads: rule 3 has no gauge lines, rule 4 only the rain used and its source', () => {
+		const r3 = { nodeId: 'u2', name: 'Lower unit', lines: null, chain: chain({ rule: 'unitChirps', ownGauge: null, gaugeScaled: null }, { gaugeMapFactor: null }) };
+		expect(areaViewColumns(r3).map((c) => c.area!.line)).toEqual(['chirpsRaw', 'chirpsLevelled', 'rainUsed', 'source']);
+		const r4 = { nodeId: 'u2', name: 'Lower unit', lines: null, chain: chain({ rule: 'catchment', ownGauge: null, gaugeScaled: null, chirpsRaw: null, chirpsLevelled: null }, { gaugeMapFactor: null, chirps: null }) };
+		expect(areaViewColumns(r4).map((c) => c.label)).toEqual(['Lower unit rain used', 'Lower unit rain used from']);
+	});
+
+	it('reads each link by date, the source as the link in words', () => {
+		const l = chain();
+		expect(areaCell(l, 'ownGauge', '2020-01-01')).toBe(5);
+		expect(areaCell(l, 'gaugeScaled', '2020-01-03')).toBe(1.2);
+		expect(areaCell(l, 'chirpsLevelled', '2020-01-02')).toBe(2.4);
+		expect(areaCell(l, 'chirpsRaw', '2020-01-03')).toBeNull();
+		expect(['2020-01-01', '2020-01-02', '2020-01-03', '2020-01-04'].map((d) => areaCell(l, 'source', d))).toEqual(['own gauge', 'own CHIRPS (levelled)', 'catchment gauge × MAP ratio', 'no source (dry)']);
+		expect(areaCell(l, 'rainUsed', '2020-01-05')).toBeNull();
+	});
+
+	it('says how its CHIRPS is levelled', () => {
+		expect(chirpsLevelText(chain({}, { chirps: { source: 'bias' } }))).toBe('× the catchment’s monthly bias factors × 1.400');
+		expect(chirpsLevelText(chain({}, { gaugeMapFactor: null, chirps: { source: 'bias' } }))).toBe('× the catchment’s monthly bias factors');
+		expect(chirpsLevelText(chain({}, { chirps: { source: 'reference', factors: [], kUnit: { factor: 0.9 } } as never }))).toBe('× the reference gauge’s f(m) × k_unit 0.900');
+		expect(chirpsLevelText(chain({}, { chirps: { source: 'raw' } }))).toBe('raw: nothing to level it with');
 	});
 });

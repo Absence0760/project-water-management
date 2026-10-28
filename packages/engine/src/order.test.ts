@@ -12,7 +12,7 @@ import { runModel, runModelWith } from './run';
 import { resolveCatchmentAreaKm2 } from './runoff/area';
 import { attributeEwrShortfall } from './network/attribution';
 import { resolveLandCover } from './network/landcover';
-import { flowShares } from './network/shares';
+import { areaShares, naturalMarShares } from './network/ewrSplit';
 import { buildTopology, canonicalOrder } from './network/topology';
 
 function node(id: string, kind: NetworkNode['kind'], down: string | null, over: Partial<NetworkNode> = {}): NetworkNode {
@@ -23,9 +23,6 @@ function node(id: string, kind: NetworkNode['kind'], down: string | null, over: 
 		downstreamNodeId: down,
 		sortOrder: 0,
 		areaKm2: 0,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 1,
 		pctRunoffToDam: 1,
 		damCapacityM3: 0,
@@ -42,9 +39,8 @@ function node(id: string, kind: NetworkNode['kind'], down: string | null, over: 
 }
 
 /** Three farms of 0.1, 0.2 and 0.3 km² above gauge G: Σ area depends on the order it is added in. */
-const farms = () => [node('G', 'gauge', null), node('a', 'farm', 'G', { areaKm2: 0.1, areaHiKm2: 0.1, areaLoKm2: 0.3 }), node('b', 'farm', 'G', { areaKm2: 0.2, areaHiKm2: 0.2, areaLoKm2: 0.2 }), node('c', 'farm', 'G', { areaKm2: 0.3, areaHiKm2: 0.3, areaLoKm2: 0.1 })];
+const farms = () => [node('G', 'gauge', null), node('a', 'farm', 'G', { areaKm2: 0.1 }), node('b', 'farm', 'G', { areaKm2: 0.2 }), node('c', 'farm', 'G', { areaKm2: 0.3 })];
 const reversed = <T>(xs: T[]) => [...xs].reverse();
-const byId = (nodes: readonly NetworkNode[], v: ArrayLike<number>) => Object.fromEntries(nodes.map((n, i) => [n.id, v[i]!]));
 
 describe('cmpStr', () => {
 	it('orders by code unit, the same in every locale', () => {
@@ -58,15 +54,11 @@ describe('sums over lists run in id order', () => {
 		expect(0.1 + 0.2 + 0.3).not.toBe(0.3 + 0.2 + 0.1);
 	});
 
-	it('flow shares (area and hi/lo) are bit-identical whatever the node order', () => {
-		for (const method of ['area', 'hiLo'] as const) {
-			const a = farms();
-			const b = reversed(a);
-			const sa = flowShares(a, method, { hi: 0.6, lo: 0.4 });
-			const sb = flowShares(b, method, { hi: 0.6, lo: 0.4 });
-			expect(byId(b, sb.share), method).toEqual(byId(a, sa.share));
-			expect(sb.sum, method).toBe(sa.sum);
-		}
+	it('the unit shares (natural MAR and area) are bit-identical whatever the node order', () => {
+		const a = farms().map((n) => ({ nodeId: n.id, areaKm2: n.areaKm2, runoffM3Day: [n.areaKm2, 0.3 - n.areaKm2, 0.1] }));
+		const b = [...a].reverse();
+		expect([...naturalMarShares(b, 0, 3)!].sort()).toEqual([...naturalMarShares(a, 0, 3)!].sort());
+		expect([...areaShares(b)!].sort()).toEqual([...areaShares(a)!].sort());
 	});
 
 	it('the catchment area (Σ farm area) is bit-identical whatever the node order', () => {

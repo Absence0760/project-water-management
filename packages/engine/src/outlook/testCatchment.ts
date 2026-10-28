@@ -14,9 +14,6 @@ function node(over: Partial<NetworkNode> & Pick<NetworkNode, 'id' | 'name' | 'ki
 		downstreamNodeId: null,
 		sortOrder: 0,
 		areaKm2: 0,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 0,
 		pctRunoffToDam: 0,
 		damCapacityM3: 0,
@@ -89,8 +86,8 @@ export function testCatchment(options: TestCatchmentOptions = {}): ModelInput {
 			// engine's estimate for an unknown area (7.2 × capacity^0.77 since engine 1.63.0).
 			nodes: [
 				node({ id: 'g', name: 'Outlet', kind: 'gauge', sortOrder: 0 }),
-				node({ id: 'a', name: 'Farm A', kind: 'farm', sortOrder: 1, downstreamNodeId: 'g', areaKm2: 22, areaHiKm2: 18, areaLoKm2: 4, pctUpstreamToDam: 1, pctRunoffToDam: 0.8, damCapacityM3: 300_000, damInitialPct: 0.6, damMinPct: 0.05, damAreaFullM2: 300_000 / 3 }),
-				node({ id: 'b', name: 'Farm B', kind: 'farm', sortOrder: 2, downstreamNodeId: 'g', areaKm2: 18, areaHiKm2: 14, areaLoKm2: 4, pctUpstreamToDam: 1, pctRunoffToDam: 0.7, damCapacityM3: 150_000, damInitialPct: 0.6, damMinPct: 0.05, damAreaFullM2: 150_000 / 3 })
+				node({ id: 'a', name: 'Farm A', kind: 'farm', sortOrder: 1, downstreamNodeId: 'g', areaKm2: 22, pctUpstreamToDam: 1, pctRunoffToDam: 0.8, damCapacityM3: 300_000, damInitialPct: 0.6, damMinPct: 0.05, damAreaFullM2: 300_000 / 3 }),
+				node({ id: 'b', name: 'Farm B', kind: 'farm', sortOrder: 2, downstreamNodeId: 'g', areaKm2: 18, pctUpstreamToDam: 1, pctRunoffToDam: 0.7, damCapacityM3: 150_000, damInitialPct: 0.6, damMinPct: 0.05, damAreaFullM2: 150_000 / 3 })
 			],
 			// Vines, water-year order (Oct … Sep).
 			crops: [{ id: 'v', name: 'Vines', cropFactor: [0.4, 0.6, 0.7, 0.7, 0.6, 0.5, 0.3, 0, 0, 0, 0, 0.2] }],

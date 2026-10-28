@@ -10,7 +10,6 @@ from __future__ import annotations
 import datetime as dt
 
 import grid
-from cdsjob import CDS_URL, CdsError  # noqa: F401  (one CdsError for every CDS product; cdsjob imports no job module)
 
 DATASET = "reanalysis-era5-land"
 VARIABLE = "total_precipitation"

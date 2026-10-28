@@ -114,7 +114,7 @@ exports round for display.
 | Sheet | Holds | App equivalent |
 | --- | --- | --- |
 | `[Network]` | Elements (Farm or Gauge), upstream elements (up to 7), "Has transfer?", the one **outflow gauge**. The rows must be in calculation order (upstream first). Bifurcation is not allowed. | `node` rows; `downstream_node_id` gives the tree, and the engine works out the calculation order |
-| `[Farm spec]` | Areas (total, high-MAP, low-MAP), the fragmentation method (Area / Hi-Lo / Specific), % upstream inflow "above dam", % farm runoff into dam, dam capacity, initial %, min % for transfers, downstream diversion back to dam (m³/s → m³/day), irrigation return flow % | `node` farm columns + `project.settings.flowShareMethod`, `hiLoSplit`. The return flow % r becomes `irrigationEfficiency` 1 − r and `returnFlowFraction` r, all the losses returning (N1); the min % is not imported (Q5) |
+| `[Farm spec]` | Areas (total, high-MAP, low-MAP), the fragmentation method (Area / Hi-Lo / Specific), % upstream inflow "above dam", % farm runoff into dam, dam capacity, initial %, min % for transfers, downstream diversion back to dam (m³/s → m³/day), irrigation return flow % | `node` farm columns (`areaKm2`, the total). The high- and low-MAP areas and the fragmentation method are read and not used: from engine 1.105.0 (issue #616) the flow is split by each unit's natural MAR (§2.5), and the importer notes the method it skipped. The return flow % r becomes `irrigationEfficiency` 1 − r and `returnFlowFraction` r, all the losses returning (N1); the min % is not imported (Q5) |
 | `[Crop demand]` | WR90 A-pan evaporation by month, effective-rainfall %, crop factors by month | `settings.apanMm`, `settings.effectiveRainFraction`, `crop` |
 | `[Farm demand]` | Crop area (m²) per farm per crop, days per month (Feb = 28.25 by default) | `crop_area`, `settings.februaryDays` |
 | `[Transfers]` | Hand-written transfer formulas, plus per-transfer parameters (from, to, months, max m³/s, min dam %) | `transfer` rows (structured rules) |
@@ -667,7 +667,7 @@ The engine's runoff model is **GR4J** (Perrin, Michel & Andréassian 2003, *J. H
 published daily rainfall–runoff model with four parameters. It is written from
 the paper's equations in `packages/engine/src/runoff/gr4j.ts`. The reference
 implementation, the R package airGR, is GPL-2, and no code is taken from it.
-Everything downstream (flow shares, farms, dams, transfers, EWR) is the same
+Everything downstream (unit shares, farms, dams, transfers, EWR) is the same
 as under the legacy recession model (§2.4) it replaced, so a stored legacy run
 and a GR4J run compare day by day. GR4J was selectable from engine
 0.5.0, the default from 0.11.0 (the calibration research's CR-17), and the
@@ -2525,7 +2525,8 @@ GR4J's parameters were fitted to other rain, so refit.
 
 **Why.** The glossary has always given a hydrological unit "its own area,
 MAP and rain gauge" (§7), but GR4J ran once for the catchment and split the
-flow by area or the Hi/Lo MAP shares. With a rain record per unit (its own
+flow by area or the Hi/Lo MAP shares (engines up to 1.104.x; from 1.105.0
+by each unit's natural MAR, §2.5). With a rain record per unit (its own
 gauge, or the area-weighted CHIRPS over its polygon, which part B of issue
 #482 builds), a wet unit on the ridge and a dry one in the valley make their
 own runoff. GR4J is nonlinear, so the sum of the units' runs is not the
@@ -2891,11 +2892,11 @@ place of natural × share; a farm with no area has none. Natural flow at the
 outlet is the units' runoff summed in node-id order (the network routes
 within the day, so the sum is the routed flow; with bed losses on, the
 WR2012 check and a Reserve rule table read it routed down the reaches net
-of the natural losses, §2.6b). The land cover's low-flow threshold
-(`Q75 × share`, §2.5a) still uses the flow shares, and so does the EWR
-split (`ewr × share`) unless `settings.ewrSplit` is `'naturalMar'`, which
-splits it by each unit's own natural runoff instead (§2.5b, engine ≥
-1.94.0). The catchment area is the land units' areas summed:
+of the natural losses, §2.6b). Each unit's one share, its natural MAR share
+(§2.5, §2.5b, engine ≥ 1.105.0), comes from this runoff: it splits the EWR,
+sets the land cover's low-flow threshold (`Q75 × share`, §2.5a) and the
+senior users' claims (§2.7c); under Fragmentation it comes from GR4J runs on
+this forcing made for the shares only, and also splits the flow. The catchment area is the land units' areas summed:
 `calibration.catchmentAreaKm2` is ignored, with a warning when it differs
 by more than 1 % (`resolveCatchmentAreaKm2`). With no land unit at all (no
 farm has an area), the setting can't apply: GR4J runs on the catchment rain
@@ -3035,17 +3036,25 @@ for each unit](./maps.md#map-for-each-unit).
   CHIRPS, not on the unit's cells;
 - the run window still follows the catchment's rain series (§2.1), so a
   project needs a catchment series or a set simulation period;
-- the land cover's low-flow threshold stays on the flow shares, while each
-  unit's runoff is its own (engine-audit.md U1); the EWR split does too
-  unless `settings.ewrSplit` is `'naturalMar'` (§2.5b, engine ≥ 1.94.0,
-  its period provisional, engine-audit.md ES1);
+- each unit's share (the EWR split, the land cover's low-flow threshold,
+  the senior users' claims and, under Fragmentation, the flow) is its
+  natural MAR share under both methods (§2.5, §2.5b, engine ≥ 1.105.0, its
+  period provisional, engine-audit.md ES1, U1, FM1);
 - the reference fit reads the checked catchment rain over its whole record,
   including the days a §2.4e rain-source period sets from an alternate
   series or the reanalysis fallback: the fit then compares that series, not
   the gauge, with the cell on those days. Whether to leave them out is the
   hydrologist's call ([followups.md § Hydrologist](./followups.md#hydrologist)).
 
-### 2.4i Rainfall stations (engine ≥ 1.91.0, issue #553)
+The Data tab's Preview all data shows a unit's chain day by day (issue #613
+slice 2, ui.md § Data): `unitAreaRain(input, nodeId)`
+(`runoff/unitAreaRain.ts`) reads each link as `unitRainForcing` makes it (the
+checked own gauge, the catchment rain × k2, the unit's CHIRPS × its level)
+beside the rain used and each day's link, which are `unitRainForcing`'s own,
+so they match the run's `rain_unit` to the bit. It is read-only and changes
+no run output, so it needs no `ENGINE_VERSION` bump.
+
+### 2.4i Rainfall stations (engine ≥ 1.91.0, issue #553; patching priority and per-area pairing ≥ 1.105.0, issue #612)
 
 `settings.rainStations` (`RainStationSettings` in
 `packages/engine/src/project.ts`; the forcing in
@@ -3069,21 +3078,35 @@ the station's own 0.05° cell, when the backend has it, is
 
 **The setting.**
 
-- `catchment`: `{ stationId, scaleToMap?, correctAgainst? }` or null, the
+- `catchment`: `{ stationId, scaleToMap?, correctAgainst?, patch? }` or null, the
   station of Fragmentation's average catchment rainfall (the one GR4J run,
   §2.4a, §2.5);
-- `units`: land unit id → the same assignment, read only under per-unit
-  rain (`settings.unitRain` `perUnit`, §2.4h);
-- `scaleToMap` defaults to true; `correctAgainst` (the station whose
-  pairing corrects the area's CHIRPS) defaults to the area's own station;
+- `units`: land unit id → the same assignment, read under per-unit
+  rain (`settings.unitRain` `perUnit`, §2.4h) and, under Fragmentation, by
+  the share runs that make the units' natural MAR shares (§2.5b);
+- `scaleToMap` defaults to true and covers every station of the
+  assignment, its main station and its patch stations alike;
+  `correctAgainst` (the station whose rain, at the area's MAP, the area's
+  CHIRPS is corrected against) defaults to the area's own station;
+- `patch` (engine ≥ 1.105.0, issue #612): the **patching priority**, an
+  ordered list of sources for the days the main station has no checked
+  reading, each `{ source: 'station', stationId }` or `{ source: 'chirps' }`.
+  Absent or null = `[{ source: 'chirps' }]`, the rule before 1.105.0, so a
+  stored assignment (a chain of one) runs unchanged in meaning; `[]` = no
+  patching (the gaps go to the next fallback). At most 8 sources
+  (`RAIN_PATCH_MAX`), CHIRPS at most once and anywhere in the list, a
+  station at most once and never the main station: the API refuses each,
+  and the engine drops an entry it can't use with a warning
+  (`resolvePatch`). No SQL migration: the default is applied when the
+  setting is resolved, as `mergeSettings` gives other keys theirs;
 - `catchmentMapMm` / `catchmentMapSource`: the catchment's MAP for its
   ratio; absent = the **land units' area-weighted mean MAP** (Σ MAP × area ÷
   Σ area over every farm with an area, node-id order). If any land unit has
   no MAP, there is no catchment MAP: the ratio is 1, with a warning naming
   the units;
 - `sites`: station id → `{ unitId }`, the land unit a station stands in,
-  whose CHIRPS (`rain_chirps_mm@<unit>`) its pairing reads when it has no
-  cell series of its own;
+  whose CHIRPS (`rain_chirps_mm@<unit>`) its record checks read when it has
+  no cell series of its own (until engine 1.104.0 its pairing read it too);
 - `unreliable`: rain record id → inclusive `[from, to]` ISO date ranges the
   user marks unreliable. Until engine 1.102.0 only a station's; from it
   (issue #611) any rain record's: a station's (read while it is assigned,
@@ -3094,9 +3117,13 @@ the station's own 0.05° cell, when the backend has it, is
   catchment gauge's own days are `settings.zeroRainRuns.missing`'s, as
   before. Each record is matched by `DailySeries.seriesId`; the API refuses
   an id that isn't a rain record of the project;
-- `pinnedFactors` (engine-only, never stored by the API): station id → 12
-  factors used instead of fitting the pairing (a resumed run, an outlook
-  member, the ensemble's CHIRPS-only member).
+- `pinnedFactors` (engine-only, never stored by the API):
+  `stationPairingKey(station, area)` (`<station id>|<unit id>`, or
+  `<station id>|` for the catchment; a station id alone up to 1.104.0) → 12
+  factors used instead of fitting that pairing (a resumed run, an outlook
+  member, the ensemble's CHIRPS-only member). A key from before matches no
+  pairing, so it is refitted; a snapshot from another engine is refused by
+  its engine version anyway.
 
 An assignment without a station id is dropped with a warning
 (`resolveRainStations`); so is an unusable catchment MAP (outside
@@ -3106,14 +3133,29 @@ An assignment without a station id is dropped with a warning
 calibration](./ui.md)): Settings → Model selection for flow generation, with Per unit chosen,
 lists every land unit with its **Station** (the project's stations, or *No
 station*, which keeps the unit on §2.4h's chain; satellite rain is never an
-option, CHIRPS only fills gaps), **Scale to unit MAP** (`scaleToMap`) with
-the ratio it gives, and **Gaps: CHIRPS corrected against**
-(`correctAgainst`), then each station in use once with its MAP and, for a
-station without coordinates, the unit it **Stands in** (`sites`). The form
-stores defaults as none (scaling on, the unit's own station), and an
-emptied setting as null, so assigning a station and taking it away again
-stores what was there. `units` stays stored under Fragmentation, unused.
-`catchment` and `catchmentMapMm` have no field yet (the API takes them).
+option, CHIRPS only fills gaps), **Then patch gaps from** (`patch`, issue
+#612: an ordered list of pull-downs, each another station or *CHIRPS,
+corrected*, with Up, Down, Remove and Add a source; each station shows how
+many of the main station's gap days in the run's history it fills, which
+days it counted, or why it can't help, and a station that can't help is
+greyed out in the pull-down),
+**Scale to unit MAP** (`scaleToMap`) with the ratio it gives, and **Gaps:
+CHIRPS corrected against** (`correctAgainst`), then each station in use
+(main, correcting or patching) once with its MAP and, for a station without
+coordinates, the unit it **Stands in** (`sites`). Ticking units sets one
+station and one patching priority for all of them. The form stores
+defaults as none (scaling on, the unit's own station, the patching
+priority [CHIRPS]), and an emptied setting as null, so assigning a station
+and taking it away again stores what was there. Under Fragmentation `units` stays stored and only the share runs read it (§2.5b).
+`catchment` is set above the units' table under **The catchment's
+rainfall station** (issue #612 follow-up, `settings/FlowGenerationCatchment.svelte`,
+shown under both methods: the catchment rain is GR4J's under Fragmentation
+and demand's and the dams' under either): **Station** (*No station* keeps
+the catchment rain series), **Then patch gaps from**, **Scale to catchment
+MAP** and **Gaps: CHIRPS corrected against**, with the units' controls and
+stored defaults (`settings/PatchChain.svelte` is the patching priority's
+pull-downs for both). `catchmentMapMm` has no field yet (the API takes it;
+[followups.md](./followups.md)).
 `unreliable` is set under Model settings → Rain gaps → Flagged rain
 (**Unreliable periods of a rain record**, issue #611): From/To rows for every
 rain record of the project. A fit's forcing records each unit's station, so the form says
@@ -3126,8 +3168,10 @@ differs. On run day *t* of calendar month *m*:
 
 | Day | Rain on the area |
 | --- | --- |
-| The station has a reading in its checked record | station(*t*) × *r*, *r* = clamp(area MAP ÷ station MAP, 0.25, 4); *r* = 1 with `scaleToMap` false or either MAP missing (warns) |
-| Otherwise, the area has CHIRPS on *t* and the pairing of `correctAgainst` isn't refused | CHIRPS_area(*t*) × f(*m*), **as is**: no MAP ratio on top |
+| The main station has a reading in its checked record | station(*t*) × *r*, *r* = clamp(area MAP ÷ station MAP, 0.25, 4); *r* = 1 with `scaleToMap` false or either MAP missing (warns) |
+| Otherwise, the first source of `patch` (default `[CHIRPS]`) with a value on *t*: | |
+| · a patch station with a reading in its checked record (its own §2.4c/§2.4d checks and unreliable periods) | patch(*t*) × *r*ₚ, *r*ₚ = clamp(area MAP ÷ its MAP, 0.25, 4); × 1 with `scaleToMap` false or the area's MAP missing. With scaling on and no MAP of its own, or no record in the input, it is **skipped**, with a warning (never × 1, which would put gap days at the wrong level) |
+| · CHIRPS, when the area has CHIRPS on *t* and the area's pairing against `correctAgainst` isn't refused | CHIRPS_area(*t*) × f_area(*m*), **as is**: the area's level is inside the factors (below) |
 | Otherwise | the area's next fallback: the catchment → the forecast (`rain_forecast_mm`); a unit → its own forecast (`rain_forecast_mm@<unit>`, outlook members only), then the catchment forcing (catchment ?? CHIRPS ?? forecast, × 1); else dry (0 mm, counted) |
 
 CHIRPS_area is the catchment's `rain_chirps_mm` for the catchment and the
@@ -3138,16 +3182,50 @@ unit factor (§2.4h): a ratio past 0.25–4 is clamped and warns; one outside
 0.5–2 warns and is used as it is.
 
 **Why the gaps take the corrected CHIRPS as is** (the operator, 2026-10-23,
-issue #553). The area's own CHIRPS already carries its location, and the
-pairing's factors carry the station's level; × the MAP ratio as well would
-count the spatial difference twice. For a unit this is decided; for the
-catchment it is the same call, provisional ([engine-audit.md § Rainfall
-stations](./engine-audit.md#provisional-decisions-2026-10-23-rainfall-stations-issue-553)).
-A station's days and its gaps therefore sit at different levels when the
-area's MAP differs from the station's: station × *r* is at the area's MAP,
-the corrected CHIRPS at the CHIRPS-over-the-area's level brought to the
-station's season and bias. Satellite rain is never the primary source of an
-area with a station.
+issue #553; the factors' rule since engine 1.105.0, issue #612, decided
+2026-10-28). The area's pairing is fitted against the correcting station's
+rain **× its ratio to the area**, over **the area's own CHIRPS** (below), so
+its factors already take the area's CHIRPS to the station's rain at the
+area's MAP. × the MAP ratio again would count it twice. A gap day therefore
+sits at the area's MAP as a station day does: on the fit's shared days the
+corrected CHIRPS has, month by month, the totals of station × *r*. Up to
+1.104.0 the factors were fitted against the CHIRPS at the station's cell
+with no × *r*, so the gaps sat at the CHIRPS-over-the-area's level brought
+to the station's season and bias, not at the area's MAP
+([engine-audit.md RS7](./engine-audit.md#provisional-decisions-2026-10-23-rainfall-stations-issue-553)).
+Satellite rain is never the primary source of an area with a station.
+
+**A patch station** (issue #612) is read as the main station is: its own
+checked record (the same §2.4c/§2.4d checks, compared against the CHIRPS at
+it, and its own unreliable periods) × its own ratio to the area, so each
+station used for patching is adjusted to the area's MAP. It isn't fitted,
+so record length alone doesn't disqualify it. **Usability**
+(`stationPatchUsability`, shown in the form and warned by the run): a
+station can't help when it is the main station, has no record, has no MAP
+while scaling is on, or **has a reading on none of the main station's gap
+days in the run's history** (the client's "too short" case). The fill count
+"fills *N* of the main station's *G* gap days" is always given, with the
+days it counted and the record's span; no minimum-years rule applies to a patch station (the 5-year
+rule stays on the CHIRPS fit, where the factors depend on it). A station
+that fills none is kept in the list and changes nothing; the run warns.
+
+**The window the gaps are counted over** (engine 1.105.0, the #612
+follow-up): the run's **history**, the run window less its forecast tail
+(`forecastTail`, §2.4f): the days after the last
+day any other source has rain, which the forecast fills. No source of the
+patching priority fills a tail day (if one had a reading there, the day
+wouldn't be in the tail), so counting them made *G* the history's gaps plus
+every forecast day, and the percentage too low. The form's count
+(`stationPatchChoices`) takes the tail of the stored input's run;
+the run's own count (`StationAreaForcing.patches[].gapDays`, with
+`forecastDays` when a tail was left out) takes its own: a unit's from the
+run's `historyDays`, the catchment's from the same split over the
+catchment forcing it builds (`tailOfSource`), since that forcing is made
+before the prepared run. The reason and the run's warning say "before the
+forecast" when a tail was left out, "in the run window" otherwise; the form
+gives the dates ("gaps counted 2015-01-01 to 2020-12-31, the run's 30
+forecast days left out"). Only the count changed: which day takes which
+source is as before.
 
 **The checked record** (`checkedStationRecord`). The station's stored
 record goes through the catchment's §2.4c zero-run and §2.4d accumulation
@@ -3166,21 +3244,39 @@ past the stored series. Then the user's unreliable
 periods are blanked. A day either sets aside is a gap. The checks run on the
 whole stored record, so a day's value doesn't depend on the window.
 
-**The pairing** (`fitStationPairing`). For each calendar month *m*,
-f(*m*) = Σ station ÷ Σ CHIRPS over the days of *m* where both the checked
-station record (accumulation windows left out, as §2.4b's fit leaves them
-out) and the CHIRPS at the station have a reading, over their whole
-records. The CHIRPS at the station is its own cell when the input has it,
-else the CHIRPS of the unit it stands in (`sites`). A month needs §2.4b's 90
-shared days and 50 mm of CHIRPS, else its factor is 1, with a warning;
-factors are clamped to 0.25–4 and banded at 0.5–2. **Refused** (no factors,
-a reason in `refused`, a warning) when the station has no record, there is
-no CHIRPS at it, or the two have fewer than `STATION_PAIRING_MIN_YEARS` = 5
-complete calendar years in common (a year every day of which both have a
-reading in the checked record **as the forcing reads it**; not necessarily
-consecutive). A refused pairing corrects nothing:
-its areas' gap days take the next fallback. Each pairing is fitted once per
-run, however many areas use it, and its factors are what a snapshot pins.
+**The pairing** (`fitStationPairing`; per area since engine 1.105.0, issue
+#612). For area *a* corrected against station *s*, for each calendar month
+*m*:
+
+f_a(*m*) = Σ (station_s × *r*_{s→a}) ÷ Σ CHIRPS_a
+
+over the days of *m* where both the checked station record (accumulation
+windows left out, as §2.4b's fit leaves them out) and the area's own CHIRPS
+(a unit's `rain_chirps_mm@<unit>`, the catchment's `rain_chirps_mm`) have a
+reading, over their whole records. *r*_{s→a} is the ratio the area reads
+station *s* at (area MAP ÷ *s*'s MAP, clamped; 1 with `scaleToMap` false or
+a MAP missing). Why the area's CHIRPS and not the CHIRPS at the station's
+cell: station × *r* is the area's rain at its MAP, and CHIRPS_a is CHIRPS
+over the area, so their ratio is CHIRPS's bias over that area. The cell's
+CHIRPS would count the station-to-area gradient twice, once in *r* and once
+in CHIRPS_a ÷ CHIRPS_station, which is why no × *r* was put on top before.
+The CHIRPS at the station (its cell, else `sites`) is still what the
+station's record checks compare it with; the pairing doesn't read it. A
+month needs §2.4b's 90 shared days and 50 mm of CHIRPS, else its factor is
+1, with a warning; factors are clamped to 0.25–4 and banded at 0.5–2.
+**Refused** (no factors, a reason in `refused`, a warning) when the station
+has no record, the area has no CHIRPS, or the two have fewer than
+`STATION_PAIRING_MIN_YEARS` = 5 complete calendar years in common (a year
+every day of which both have a reading in the checked record **as the
+forcing reads it**; not necessarily consecutive). A refused pairing
+corrects nothing: the area's CHIRPS gives no day, and its gaps take the next
+source. A pairing is fitted once per run for each (correcting station, area)
+whose patching priority has CHIRPS, so two units on one station get factors
+of their own; its factors are what a snapshot pins. Mass check
+(`stationPairing.test.ts`): on the shared days, Σ CHIRPS_a × f_a(*m*) per
+month = Σ station × *r* per month when no factor is clamped; and a run made
+only of CHIRPS days has the area's MAP as its mean annual rain when the
+station's MAP is its own mean annual (`stationForcing.test.ts`).
 
 **Accumulations and complete years** (provisional, engine 1.96.0, pending
 the client's hydrologist; [engine-audit.md RS6](./engine-audit.md#provisional-decisions-2026-10-23-rainfall-stations-issue-553)).
@@ -3213,8 +3309,9 @@ rain as before, or the unit's §2.4h rule.
 **The catchment under its station.** The catchment rain every reader sees
 (`aligned('rain_catchment_mm')`: GR4J, demand's effective rain, the WR2012
 check, a rule-4 unit, `rain_final`) is station × *r* on the station's days,
-and `aligned('rain_chirps_mm')` the catchment CHIRPS × f on the others (null
-where the pairing can't correct, so the forecast fills). The stored
+and a patch station × its ratio on the days it patches (issue #612), and
+`aligned('rain_chirps_mm')` the catchment CHIRPS × f on the days CHIRPS
+patches (null where nothing patches, so the forecast fills). The stored
 `rain_catchment_mm` is not read: not for the forcing, not for §2.4b's fit,
 §2.4c–§2.4e or the double-mass check (`summary.chirpsCorrection` is mode
 `none`, and the rain-source periods warn that they are not read unless the
@@ -3243,8 +3340,12 @@ catchment gauge, so results change and a refit is due.
 **Per-unit rain.** A land unit with a station takes rule `'station'`
 (`UNIT_RAIN_RULES`), recorded in `summary.unitRain.units[]` as `rainKey:
 'rain_station_mm#<id>'`, `factor` = *r*, `factorSource: 'gaugeMap'` (a gauge
-× a MAP ratio, as rule 2), its station days counted under `days.gaugeMap`
-and its corrected CHIRPS days under `days.unitChirps`. No areal correction
+× a MAP ratio, as rule 2), its station days and patch-station days
+counted under `days.gaugeMap` and its corrected CHIRPS days under
+`days.unitChirps`. A unit's day codes (`UNIT_RAIN_SOURCE`): station 5,
+corrected CHIRPS 6, patch station 7 (engine ≥ 1.105.0), with
+`UnitForcing.patchIndex` the patching priority's index of the source that
+gave a patch or CHIRPS day (−1 on the others). No areal correction
 (the station sets the level). A unit without a station keeps its §2.4h
 chain, which reads "the catchment's rain" as the catchment forcing, the
 station's when the catchment has one.
@@ -3254,7 +3355,12 @@ station's when the catchment has one.
 station, `scaleToMap`, the correcting station, the catchment MAP, the ratio
 and the pairing's 12 factors, null when refused; absent without one) and,
 in the per-unit fingerprint, each station unit's correcting station and 12
-factors. A station assigned to or removed from the catchment, another
+factors, and since engine 1.105.0 a marker (`stationFit: 'adjusted'`) and
+the patching priority (`patch` / `stationPatch`, `chirps` or
+`station:<id>` in order): a fit made under the old pairing rule has no
+marker, so it reads "Forcing changed since fit" even when its factors moved
+less than 2 %, and another patching priority (from the settings alone too)
+is a change. A station assigned to or removed from the catchment, another
 station, scaling or correcting station (read from the settings alone), or,
 against a run, the ratio, the catchment MAP or a factor moving by more than
 2 % is its own "Forcing changed since fit" reason
@@ -3265,19 +3371,25 @@ factor drift. A screen with a run builds the comparison with
 isn't missed.
 
 **What the run records.** `summary.stations` (`RainStationSummary`, only
-when some area has a station): `pairings` (each station used, station-id
-order: `StationPairingFit`, its CHIRPS source, fit period, complete years,
+when some area has a station): `pairings` (each pairing used, by station id
+then area, the catchment first: `StationPairingFit` with its `areaId` (null
+for the catchment), `areaName` and `ratio` since 1.105.0, the CHIRPS it
+corrected (`chirpsAt`), fit period, complete years,
 shared days, pinned, the 12 months as the reference gauge's, or `refused`
 with its reason), `catchment` and `units` (`StationAreaForcing`: the
 station, both MAPs and sources, `ownRatio` and `ratio`, `clamped`,
-`scaleToMap`, `correctedBy`, the run days by source `{ station, chirps,
-fallback, none }`, and the station days set aside inside the run window
-`{ checks, unreliable }`; a day both set aside counts under the checks),
+`scaleToMap`, `correctedBy`, the run days by source `{ station, patch,
+chirps, fallback, none }` (`patch` since 1.105.0), the station days set
+aside inside the run window `{ checks, unreliable }`; a day both set aside
+counts under the checks; and `patches`, the patching priority as run, each
+station with its ratio, why it was skipped, the main station's gap days in
+the window, how many of them it has a reading on and the days it gave),
 `catchmentMapMm` and `catchmentMapFromUnits`. Warnings start "station:" or
 "station pairing:".
 
 **Copies of the input.** A snapshot pins every pairing's factors
-(`PreparedFits.stationFactors`) and each unit's station recipe, so a resumed
+(`PreparedFits.stationFactors`, by `stationPairingKey`) and each unit's
+station recipe (with its resolved patching priority), so a resumed
 run is the uninterrupted one to the bit. A scenario keeps the input's
 `stations`. A seasonal outlook member keeps them and pins the base input's
 pairing factors (`pinnedFactors`), so a history cut at the decision date
@@ -3287,49 +3399,81 @@ applies, with no station day) and pins the base's factors, so every area
 reads its CHIRPS × f on every day.
 
 **The Data tab** reads an area's rain used and each day's source from the
-same code (`stationAreaRain(input, nodeId | null)`), so the view and a run
-of the same input can't disagree.
+same code (`stationAreaRain(input, nodeId | null)`, with `patchStationId`
+and `patchPlace` on a patch day, shown as "patch 1: <station>"), so the
+view and a run of the same input can't disagree. Settings reads each
+station's usability from the same code over the stored model input
+(`stationPatchChoices`).
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
-Each farm gets a fixed **share** (`frag[f]`, 0–1) of the catchment flow. The
-method is chosen in `[Farm spec]`:
+Each land unit (a farm with an area) has one **share** (`share[f]`, 0–1) of
+the catchment: its **natural MAR share**, the unit's own GR4J natural runoff
+over the MAR period ÷ the land units' total (§2.5b says how it is worked
+out). There is no method to choose (engine 1.105.0, issue #616). The shares
+add up to 1 by construction, a farm with no area has 0, and the one share
+sets everything a unit's share sets:
+
+- **The flow under Fragmentation**: `runoff[f][t] = naturalFlow[t] × share[f]`,
+  so the units' runoff adds up to the catchment's natural flow every day
+  (workbook: `× frag[f]`, `ROUND(…, 0)`; the engine doesn't round). The
+  catchment's one GR4J run makes the natural flow; the share runs of §2.5b
+  make only the shares. Under Per unit (§2.4h, engine ≥ 1.78.0) a land
+  unit's runoff is its own GR4J runoff instead, and the share does the rest
+  below. Settings → Model selection for flow generation says which.
+- **The EWR**: `ewr[f][t] = outlet EWR[t] × share[f]` (§2.5b; workbook:
+  `pragmaticEwr[month(t)] × frag[f]`, `ROUND(…, 0)`), under both methods.
+- **The land cover's low-flow threshold**: `q = share × Q75` (§2.5a), under
+  both methods.
+- **The senior users' claims** (§2.7c), under both methods.
+
+So under Fragmentation the EWR and the flow are split by the same shares,
+and at any unit or EWR site the requirement ÷ the natural flow reaching it is
+the outlet's ratio. The fallbacks (the area shares, or every share 0 with no
+land unit) are §2.5b's.
+
+**Before engine 1.105.0** the flow share was chosen in `[Farm spec]`
+(`settings.flowShareMethod`):
 
 | Method | Share |
 | --- | --- |
-| **Area** | `farmArea / Σ farmArea`, where `farmArea = hiMapArea + loMapArea` |
-| **Hi/Lo** | `hiArea/ΣhiArea × hiSplit + loArea/ΣloArea × loSplit` (Pitman split; defaults to 50 / 50 since engine 1.15.0 and is set per project; an imported workbook brings its own) |
-| **Specific** | A value entered by hand ("external fragmentation") |
+| **Area** | `farmArea / Σ farmArea` |
+| **Hi/Lo** | `hiArea/ΣhiArea × hiSplit + loArea/ΣloArea × loSplit` (Pitman split, `settings.hiLoSplit`; 50 / 50 by default from engine 1.15.0) |
+| **Specific** | A value entered by hand (`flowShareManual`, "external fragmentation") |
 
-The shares should sum to 1 within `0.0002` (fragmentation tolerance). Below
-that the run warns that natural flow and EWR are not fully allocated to farms,
-a network of gauges alone included (engine ≥ 1.69.0).
-**Above it the run is refused** (engine ≥ 0.27.1, `overAllocationError`): the
-farms would generate more runoff than the catchment's natural flow, water from
-nowhere that lifts the outflow and hides EWR failures while every self-check
-still closes (each checks the balance it is given). Manual shares and a
-high/low MAP split whose two parts add up to more than 1 both trip it; the Run
-button says so before a run is tried, a scenario op that would cause it is
-refused, and an older run made with such shares can't be nominated as
-evidence. The run also warns, once, about any farm whose area differs from its hi + lo areas by
-more than 1 %: the hi/lo shares use hi + lo, the area share and the rain volume
-use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
-§2.10a). Then:
-
-- Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`); under
-  runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0) a land unit's runoff
-  is its own GR4J runoff instead, and the share still splits the EWR (and
-  the land cover's low-flow threshold, §2.5a): Settings → Model selection for flow generation
-  says which, by the method chosen (Fragmentation or Per unit, issue #553)
-- Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`);
-  from engine 1.94.0 `frag[f]` here is the unit's EWR share, which is its flow
-  share unless `settings.ewrSplit` asks for each unit's natural MAR (§2.5b)
+Hi/Lo and Specific shares could add up to more than 1, so engines 0.27.1 –
+1.104.x refused such a run (`overAllocationError`, errata ER-4): the farms
+would have generated more runoff than the catchment's natural flow, water
+from nowhere that hid EWR failures while every self-check still closed.
+Shares more than `0.0002` (b023's fragmentation tolerance) below 1 ran
+with a warning that the flow and the EWR were not fully allocated, and a
+farm whose area differed from its high + low MAP areas by more than 1 % was
+warned about once (audit W3, review F7, `areaMismatches`, §2.10a). Engine
+1.105.0 retired the methods, `settings.hiLoSplit` and the node fields
+`areaHiKm2`, `areaLoKm2` and `flowShareManual` (`RETIRED_SETTINGS_KEYS`,
+`RETIRED_NODE_FIELDS`; ignored when read). Migration 266 strips the method
+and split from stored projects and writes one History event
+(`settings.flow_share_reset`) per project that had a Hi/Lo or Specific
+method or any high-, low-MAP or specific value, listing what it held; the
+node columns stay, unread, until a later migration drops them. A stored
+input that still names Hi/Lo or Specific runs on the natural MAR shares with
+one run note saying the method was removed; Area gives no note (with every
+unit on the catchment rain the natural MAR shares are the area shares). A
+scenario op that sets any of these is refused with a reason to delete it
+([scenarios.md](./scenarios.md)), and the run comparison lists them as
+removed ([run-comparison.md](./run-comparison.md)). The over-allocation check
+survives only to read an older run's snapshot (`legacy/flowShares.ts`):
+evidence nomination still refuses a run whose shares summed past 100 %,
+which only a run before engine 0.27.1 can have.
 
 Both sheets, every farm side by side, are the run's **Fragmented flow / EWR —
 all farms** downloads (`export/farms.csv?key=runoff|ewr`, [api.md § Export](./api.md#export)).
-The run records each farm's share as applied (`FarmSummary.flowShare`, engine
-≥ 0.27.0), so the summary CSV's `Flow share (%)` column stays right after the
-network's areas or method change; the Network tab shows the current setting.
+The run records each farm's share as applied (`FarmSummary.flowShare` and
+`ewrShare`, the same share on a run from engine 1.105.0), so the summary CSV
+stays right after the network changes: a run from 1.105.0 writes one
+`Natural MAR share (%)` column, an older run its `Flow share (%)` and
+`EWR share (%)`. The Network tab's hydrological unit table shows the latest
+run's share.
 
 ### 2.5a Land-cover streamflow reductions (engine ≥ 0.24.0, roadmap WP-1.35)
 
@@ -3375,9 +3519,12 @@ in mm/yr over its condensed area, the figure Le Maitre et al. compare
 (≈ 97 mm/yr nationally).
 
 **Each day**, per farm with land cover (network/landcover.ts), with I0 = its
-natural runoff (natural flow × share) and q = share × the catchment's natural
-flow exceeded on 75 % of the run's days (its low-flow threshold; from engine
-1.28.0 of its historical days, so a forecast tail doesn't move it, §2.4f):
+natural runoff (natural flow × share; under Per unit its own GR4J runoff) and
+q = share × the catchment's natural flow exceeded on 75 % of the run's days
+(its low-flow threshold; from engine 1.28.0 of its historical days, so a
+forecast tail doesn't move it, §2.4f). The share is the unit's natural MAR
+share under both methods from engine 1.105.0 (§2.5, issue #616; before, its
+flow share, engine-audit.md U1):
 
 ```
 MAR_u  = Σ_p f_p × mar_p          LOW_u = Σ_p f_p × lowFlow_p
@@ -3422,75 +3569,125 @@ close to, but not exactly, `MAR_u` (low-flow days lose `LOW_u`).
   0 ≤ reduction ≤ that, the reduction follows the formula from the run's own
   natural flow, and the catchment series and summary add up.
 
-### 2.5b The EWR split between units (engine ≥ 1.94.0, issue #553)
+### 2.5b The unit shares and the EWR split (engine ≥ 1.105.0, issues #615 and #616)
 
 Each unit's EWR requirement `Y` is the outlet's EWR (the pragmatic EWR, or
 the daily EWR of §2.9f) × the unit's **EWR share**; an EWR site's requirement
-`Z` adds up the shares above it (§2.7). `settings.ewrSplit` chooses the
-share (Settings → Flow share → *Split the EWR between units by*; operator
-decision 2026-10-23):
+`Z` adds up the shares above it (§2.7). The EWR is split **one way only, by
+each unit's natural MAR**, under both flow generation methods (the client,
+issue #615; decisions in issue #619). From issue #616 the same share is the
+unit's only share: it also splits the flow under Fragmentation, sets the
+land cover's low-flow threshold and the senior users' claims (§2.5):
 
-| `ewrSplit` | A unit's EWR share |
-| --- | --- |
-| `'flowShare'` (the default; absent means it) | its flow share `frag[f]` (§2.5), by the flow-share method: area, Hi/Lo MAP or specific. Every run before engine 1.94.0 did this, and a run with the default is the same to the bit |
-| `'naturalMar'` | `MAR_f ÷ Σ MAR_u`, its natural MAR over the units' total, where `MAR_f` is the unit's natural runoff summed over the **MAR period** |
+    EWR share[f] = MAR_f ÷ Σ MAR_u
 
-- **Natural runoff.** Under runoff from each unit's own rain (§2.4h) a land
-  unit's natural runoff is its own GR4J runoff from its own rain (the
-  `runoff_natural` column), before land cover (§2.5a) and base flow (§2.6b)
-  touch it; a farm with no area has none and an EWR share of 0. Each day
-  counts its runoff when it is above 0. The units are summed in node-id
-  order, so the shares are the same to the bit however the network is
-  listed. Under fragmentation (catchment rain) a unit's natural runoff is
-  `naturalFlow × frag[f]`, so the natural MAR shares are the flow shares:
-  the run applies the flow shares and says so (`why: 'catchmentRain'`), and
-  the option matters only under Per unit flow generation, which Settings says.
+where `MAR_f` is the unit's natural runoff summed over the **MAR period**.
+
+- **Natural runoff.** A land unit's own GR4J natural runoff from its own rain
+  (§2.4h), before land cover (§2.5a) and base flow (§2.6b) touch it: its
+  **incremental** runoff, never the flow accumulated from the units above
+  it. A farm with no area has none and an EWR share of 0. Each day counts
+  its runoff when it is above 0. The units are summed in node-id order, so
+  the shares are the same to the bit however the network is listed.
+- **"The cumulative flow."** The shares add up to 1, and `Z` at a unit or
+  EWR site is Σ `Y` over it and everything above it, so
+  `Z = EWR × (cumulative natural MAR at that point ÷ the catchment's natural
+  MAR)`: the requirement follows the cumulative natural MAR, as the client
+  asked. Shares taken from the accumulated MAR would count headwater runoff
+  once for every unit below it, add up to more than 1 and ask the units for
+  more EWR than the outlet needs.
+- **Per unit** (`settings.unitRain` `perUnit`): the units' own GR4J runs,
+  the runoff they feed the network (the `runoff_natural` column).
+- **Fragmentation** (engine-audit.md FM1): the run also runs GR4J once per
+  land unit on the **Per unit forcing** (§2.4h's chain and the units'
+  rainfall stations, §2.4i, with the MAP period and reference gauge kept in
+  `settings.unitRain`, whose mode is `catchment`), with the run's one
+  parameter set, PE and warm-up, **for the shares only**. The catchment's
+  one GR4J run makes the flow, split by these shares (§2.5, engine 1.105.0,
+  issue #616). These runs' daily series are not
+  output, and their forcing warnings stay out of the run (Per unit gives
+  them). The shares are the same, to the bit, as a Per unit run's on the
+  same inputs. Cost: on the 12-unit synthetic catchment of `run.perf.test.ts` a
+  Fragmentation run took a median 283 ms (140 ms before) and a calibration
+  evaluation 91 ms (29 ms; it now also runs the units to the MAR period's
+  end), inside the 1 s and 200 ms budgets (2026-10-28, a dev laptop).
+- **Units on the catchment rain.** A land unit with no rain of its own (no
+  station, no gauge or CHIRPS series of its own, no MAP with a gauge MAP)
+  runs on the catchment forcing (§2.4h rule 4), so its natural MAR is in
+  proportion to its area. Under Fragmentation the run lists those units by
+  name in its one note on the split (`ewrSplit.catchmentRain`), and Run
+  readiness and Model settings → Model selection for flow generation name
+  them; the run is never refused for them. With every unit on rule 4 the
+  shares are the area shares (to 1e-12).
 - **The MAR period** (provisional, engine-audit.md ES1): the run's complete
   water years (1 October to 30 September, every day inside the run),
   historical days only, never a forecast tail's (§2.4f); a run without one
-  complete water year takes every historical day instead. With no runoff
-  from any unit over the period there is nothing to split by, and the run
-  keeps the flow shares (`why: 'noRunoff'`).
-- **The shares add up to 1** under `'naturalMar'`, the whole EWR asked of
-  the units, where flow shares that add up to less leave the rest of the EWR
-  to no unit (§2.5).
+  complete water year takes every historical day instead.
+- **Fallbacks.** No runoff from any unit over the period: there is nothing
+  to split by, and each land unit's share is its area ÷ the land units'
+  total (`applied: 'area'`, `why: 'noRunoff'`, with a note). No land unit
+  at all (no farm has an area): every share is 0, so no unit generates any
+  of the natural flow and the EWR isn't split (`why: 'noLandUnit'`, with a
+  note asking for the units' areas). Natural flow supplied without the
+  units' runoff (`runModelWith`: the workbook regression and hand networks
+  that feed their own natural flow) takes the area shares, b023's own Area
+  method, with no note (`why: 'noUnitRunoff'`).
 - **What follows the split.** Only `Y` changes, so `Z` at every unit and
   gauge, every EWR site's shortfall, the attribution and charge (§2.7b; at a
   site whose charge follows its rule table, `ewrChargeSource: 'ruleTable'`,
   the table instead), the curtailment (§2.11), the hands-off EWR flows
   (§2.7h, `handsOffEwr`) and the drought restriction's EWR trigger at a
   gauge (§2.7i) all read the split EWR. At the outlet the trigger reads the
-  whole EWR, and the outlet's own `Z` is the shares' sum × the EWR: the
-  whole EWR under `'naturalMar'`, but only Σ flow shares × the EWR when
-  the flow shares add up to less than 1, so switching such a project to the
-  natural MAR raises the outlet's requirement too. The flow itself (`I`)
-  and the land cover's low-flow threshold stay on the flow shares.
-- **Resumed runs and calibration.** A run resumed from a snapshot (a
-  seasonal outlook's members, §2.15) takes the capture run's period and
-  shares, so it splits its EWR as the uninterrupted run did; one whose
-  capture run pinned none (it fell back to the flow share) keeps the flow
-  share rather than work shares out on its own days (`why: 'resumed'`; a
-  snapshot refuses a resume under other settings, so this is the fallback
-  case, or a seasonal outlook member's). Calibration
-  refills each candidate's shares from that candidate's own unit runoff,
-  over the same period, so a scored day is the run's to the bit (§2.10).
-- **The record.** `RunSummary.ewrSplit` holds the method asked for, the one
-  applied, why they differ and the period (`{ start, end, waterYears }`,
-  `waterYears` 0 for the whole run); each `FarmSummary.ewrShare` is the
-  share applied, beside its `flowShare`. A split other than the default is a
-  run warning (its note), the summary CSV's `EWR share (%)` column sits
-  beside `Flow share (%)` (an older run's is its flow share) under an
-  `EWR split between units by` line naming the split applied and its period
-  or why it fell back, the report's Inputs table names the split the run
-  applied (`ewrSplit.applied`; a run before it, from its settings), a scenario can set it (`settings.set`
-  `ewrSplit`, [scenarios.md](./scenarios.md)) and the run comparison lists
-  a change ([run-comparison.md](./run-comparison.md)).
-- **Checks** (`checkEwrSplit`, in the invariant tests): every unit's `Y` is
-  the outlet EWR × its recorded share every day; under the flow share the
-  share is the flow share; under the natural MAR the shares add up to 1 and
-  each is recomputed from the run's own `runoff_natural` columns over the
-  recorded period. `verify/` writes the split from this section
-  (`model.py`, probes `ewr-split-station-units` and `ewr-split-short-run`).
+  whole EWR, and the outlet's own `Z` is the shares' sum × the EWR, the
+  whole EWR. From engine 1.105.0 (issue #616) the flow under Fragmentation
+  (`I`), the senior users' claims and the land cover's low-flow threshold
+  use the same share, so the requirement ÷ the natural flow reaching an
+  inner EWR site or a hands-off EWR flow is the outlet's ratio. (With #615
+  alone, never released, Fragmentation split the EWR and the flow by
+  different shares, issue #619's sequencing.)
+- **Resumed runs, outlooks and calibration.** A run resumed from a snapshot
+  (a seasonal outlook's members, §2.15) takes the capture run's period,
+  shares and record, so it splits its EWR as the uninterrupted run did; a
+  re-run outlook member (`outlookMemberInput`) takes its base run's
+  (`ModelInput.ewrSplitPinned`, `ewrSplitPinOf`) rather than work shares out
+  on the history cut at the decision date. One resumed from a snapshot that
+  pinned none takes the area shares (`why: 'resumed'`; a snapshot refuses
+  another engine version, so this is a fallback only). Calibration refills
+  each candidate's shares from that candidate's own unit runoff, Per unit's
+  or Fragmentation's share runs, over the same period, and the senior
+  users' claims made from them (`refillShares`), then the daily outlet EWR,
+  so a scored day is the run's to the bit (§2.10). Scenarios, firm yield, sensitivity and the
+  uncertainty ensemble each run `runModel`, so each works its shares out
+  from its own inputs.
+- **The record.** `RunSummary.ewrSplit` holds the split applied, why it
+  fell back, the period (`{ start, end, waterYears }`, `waterYears` 0 for
+  the whole run), where the runoff came from (`runoffFrom`: `unitRain` or
+  `shareRuns`) and the units on the catchment rain; each
+  `FarmSummary.ewrShare` is the share applied, and from engine 1.105.0
+  (issue #616) its `flowShare` is the same share. A run notes the split (one run warning) only when there is something to say: a fallback, or units a Fragmentation run put on the catchment rain; a clean split is in the summary alone. The summary CSV
+  writes one `Natural MAR share (%)` column for a run from 1.105.0 (an older
+  run keeps `Flow share (%)` and `EWR share (%)`) under an `EWR split
+  between units by` line, and the report's
+  Inputs table names the split.
+- **The retired choice.** Engines 1.94.0 – 1.104.x had `settings.ewrSplit`
+  (`'flowShare'`, the default, or `'naturalMar'`, which applied only under
+  Per unit). From 1.105.0 a stored or patched value is ignored (engine and
+  API `mergeSettings`, `RETIRED_SETTINGS_KEYS`), the API drops it from a
+  patch, migration 265 strips it from stored projects, a scenario's
+  `settings.set ewrSplit` is refused with a reason to delete it
+  ([scenarios.md](./scenarios.md)), and the run comparison lists it as
+  removed ([run-comparison.md](./run-comparison.md)). An older run's summary
+  keeps its record, with the method it asked for (`ewrSplit.method`).
+- **Checks** (`checkEwrSplit`, in the invariant tests): every unit's flow
+  share and EWR share are the same; its `Y` is the outlet EWR × that share
+  every day; under Fragmentation its runoff + land-cover reduction is the
+  natural flow × that share every day; with no land unit every share is 0;
+  otherwise the shares add up to 1, a farm without area has 0, the area split is the area shares, Per
+  unit's shares are recomputed from the run's own `runoff_natural` columns
+  over the recorded period, and Fragmentation's units on the catchment rain
+  have equal shares per km². `verify/` writes the split from this section
+  (`model.py`, probes `ewr-split-station-units`, `ewr-split-short-run` and
+  `ewr-split-fragmentation`).
 
 ### 2.6 Transfers (`[Transfers]`)
 
@@ -4165,7 +4362,7 @@ below it, is not taken off):
   longer counts a loss twice.
 - **The pragmatic EWR** is a fixed flow the hydrologist sets at the outlet
   (§2.5), not one read from the natural flow, so it doesn't change: it is
-  split between the units by flow share and passed down whole, as above.
+  split between the units and passed down whole, as above.
   Set it knowing the losses above the outlet. The run says so whenever bed
   losses are on.
 
@@ -4946,7 +5143,7 @@ is our pick pending the client's hydrologist's confirmation (#507 item 4).
 | `pumpCapacityM3Day` P | its river pump's capacity, m³/day (engine ≥ 1.58.0; the farm's field, §2.7e, in the form pumps × m³/h × 24); null = no limit (the default, every user before 1.58.0, no warning); 0 = no river pump |
 | `userRestrictionPct` c | a Priority user's fixed restriction, the share (0–1) of its demand it gives up when restricted (engine 1.86.0, issue #523 B3; below); null / 0 = uncurtailed (the default, every user before 1.86.0). Priority users only: the API refuses it on a Non-priority user and the run ignores it there with a warning |
 
-It has no area, flow share, dam, crops, transfers, EWR share or supply
+It has no area, unit share, dam, crops, transfers, EWR share or supply
 rule; the API refuses crop areas and transfers on it
 (`backend/src/model/validate.ts`) and a supply rule other than `damFirst`
 (`modelRuleIssues`; the run ignores one with a warning).
@@ -4969,8 +5166,9 @@ Z  = Σ upstream Z                 (no EWR share of its own; its shortfall MIN(U
 **Priority against the farms: the priority requirement.** The network is
 solved upstream first, so without a rule a user below a farm could only have
 what the farm leaves. A priority user's demand is instead a requirement the
-farms upstream of it must pass, fragmented to them by flow share the way the
-pragmatic EWR is (§2.5):
+farms upstream of it must pass, fragmented to them by each unit's share (its
+natural MAR share from engine 1.105.0, issue #616; the flow share before)
+the way the EWR is (§2.5):
 
 ```
 C_u  = MIN(D_u, P_u)                    the user's claim: its demand, up to its pump capacity (engine ≥ 1.58.0; = D_u without one)
@@ -4993,7 +5191,7 @@ condition on a dam, and for a dam-less farm it is real-time curtailment of its
 river take. It never breaks the farm balance: only the split between the dam
 and the river below it changes. It does not make a farm release stored water,
 so a priority user can still be short when the farms upstream are dry. A priority
-user with no farm flow share upstream of it can't be protected this way: it
+user with no unit with a share upstream of it can't be protected this way: it
 takes what reaches it, and the run warns. Several priority users in series are
 served by position (the upstream one first), never by list order: the claims
 of several priority users on one farm, and each user's Σ upstream shares, are
@@ -6306,8 +6504,8 @@ each **pending the hydrologist**, listed in
   the storage does, from the site's pragmatic EWR shortfall on the day
   before (§2.7): at the outlet the catchment's `ewr_shortfall`, the outflow
   against the whole EWR, which the compliance report counts (not the outflow
-  node's own share-weighted column, lower when the flow shares sum below
-  1); at a gauge its own, and only a gauge that is an EWR site. Known at the
+  node's own share-weighted column, which was lower when an older run's flow
+  shares summed below 1); at a gauge its own, and only a gauge that is an EWR site. Known at the
   start of the review day, so it stays causal and holds with the rest until the next
   review or lift. A fresh run's first day has no day before and isn't
   raised. Only the day before is read, not a count of recent days, and not
@@ -6841,8 +7039,9 @@ at). Only the actionable warnings are coded so far:
 | A unit's own gauge (§2.4h) | `rain.unitGauge.zeroRun.*`, `rain.unitGauge.accumulation.*`, `rain.unitGauge.unreliable`; `rain.unit.catchmentFallback` | `unit`, … | `set-rain`; the fallback `set-unit-rain` |
 | Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord` | `kind`, `site`, … | `set-record` (no values in the period: `set-period`) |
 
-Not coded on purpose: the area-fragmentation, High/Low-MAP, `areaMismatches`
-and EWR-split warnings, which issues #615–#617 remove or reword, and every
+Not coded on purpose: the EWR-split note and the retired flow-share method's
+note (issues #615 and #616 reworded them; the area-fragmentation, High/Low-MAP
+and `areaMismatches` warnings are gone from engine 1.105.0), and every
 settings-validation warning. An uncoded warning is in `warnings` only.
 The texts travel through the engine as plain strings, so `warn(code,
 params, text)` returns the text for the usual `warnings.push` and records
@@ -6868,7 +7067,8 @@ chooses Fragmentation or Per unit is now **Model selection for flow
 generation**, first on Model settings, so the warnings that name it say
 "Model settings → Model selection for flow generation": the "Parameters not
 fitted for this method" fit caveat (`calibrate/provenance.ts`) and the
-over-allocated flow shares' error (`network/shares.ts`). `places.ts` keeps
+over-allocated flow shares' error (`network/shares.ts`, retired in engine
+1.105.0 with the flow-share methods, issue #616). `places.ts` keeps
 each panel's former headings (`FORMER_PANELS`, `share: ['Flow
 generation']`), so `placesIn` still finds an older run's "Model settings →
 Flow generation" (1.98.0 to 1.102.0) and "Settings → Flow generation"
@@ -7653,7 +7853,7 @@ Both are banded by the uncertainty ensemble (§2.10e, `noFlowDays`,
 ### 2.9f The daily EWR at the outlet: pragmatic, DRM TAB file or DRM percentile tables (engine ≥ 1.77.0, issue #455)
 
 The daily EWR at the outlet (`ewr`, §2.5) is what every day is judged by: it
-is fragmented to the units by flow share (`ewr`, `ewr_cumulative` per unit),
+is fragmented to the units by their natural MAR share (§2.5b; `ewr`, `ewr_cumulative` per unit),
 each unit's flow is compared with its cumulative share (`ewr_shortfall`), and
 the shortfall attribution and charge (§2.7b), curtailment, the compliance grid
 (§2.9), the observed-record agreement (§2.9b), the drought restriction's EWR
@@ -8440,6 +8640,14 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   GR4J fit made under `pe.kind: 'pan'` with the settings still on `'pan'`:
   under a monthly PE the series doesn't reach GR4J. A record made before 0.38.0, or a caller that doesn't
   know the series (a run stored before `valuesSha256`), compares nothing.
+  **The share runs' forcing (engine ≥ 1.105.0, issue #616, §2.5).** Under
+  Fragmentation each unit's natural MAR share splits the flow the fit was
+  scored on, so the forcing also records `shareRain`: the Per unit setup's
+  fingerprint the share runs ran on (null with no land unit; absent under
+  Per unit, where `unitRain` is it). A change to the Per unit setup's gauge
+  MAP, MAP period, reference gauge or a unit's station (or, when a run says
+  what it is now, a unit's rule, record or factors) sets `shareRainChanged`,
+  and with it `forcingChanged`. A record made before it compares nothing.
 - **Cost.** Each candidate is a full model run, so 1 500 runs per fit and
   three fits (full, split, dry → wet) mean several thousand model runs.
   `onProgress` reports every run and returns true to cancel, which
@@ -8636,9 +8844,9 @@ flagged, never a model result. An invalid stored value (min ratio outside
 its default with a run warning. The Time series tab shows the same table
 before any run, with the project's thresholds.
 
-**Other input checks** (`seriesChecks`, `areaMismatches` in `quality.ts`),
-reported as run warnings, in `RunSummary.dataQuality.seriesChecks` /
-`areaMismatches`, and on the Time series tab:
+**Other input checks** (`seriesChecks` in `quality.ts`), reported as run
+warnings, in `RunSummary.dataQuality.seriesChecks`, and on the Time series
+tab (an older run's `areaMismatches`, below, still reads):
 
 The negative, outlier and flat-line checks run on every series present,
 the alternative catchment gauge and the reanalysis (§2.4e, engine ≥ 0.30.0)
@@ -8653,7 +8861,7 @@ primary catchment series only.
 | Zero-rain runs (issue #2) | catchment rain (`rain_catchment_mm`) exactly 0 on consecutive days, with **60+ of those days in the wet season**: the six calendar months with the highest mean daily rain in the series itself. Without a usable climatology (a calendar month with fewer than 56 valid days, or a series that never rains) the rule is a plain **180+ days** in any season. A blank, negative or non-zero day ends a run | missing data exported as 0 (see below) |
 | Low vs CHIRPS (issue #2) | per water year, catchment rain on the days both it and CHIRPS have a reading, as a share of CHIRPS on those days, **below 50 % of the record's usual share** (the median over the judged years: with an even number of them, the mean of the two middle ones; verify/ probe `low-vs-chirps-median`). A year is judged with 180+ shared days and 50+ mm of CHIRPS; with fewer than 5 judged years the usual share is taken as 100 % | as above; also catches years that are only partly zero-filled |
 | Double mass vs CHIRPS (CR-20, engine ≥ 0.18.0) | cumulative catchment rain against cumulative CHIRPS over water years with **300+ shared days and 100+ mm of CHIRPS** (10+ such years, else no result); a **break** where the slope (Σ catchment / Σ CHIRPS) changes by **20 %+** and a Pettitt test or the BIC gain confirms it (see below) | a station change, a moved gauge or a new way of building the catchment average; the CHIRPS factors then blend eras |
-| Farm area vs hi + lo (review F7) | \|areaKm2 − (areaHiKm2 + areaLoKm2)\| > 1 % of the larger. Farms with hi = lo = 0 are skipped unless the flow-share method is hi/lo | the area share and rain volume use `areaKm2`, the hi/lo share uses the split, so drift makes the two methods disagree |
+| Farm area vs hi + lo (review F7) | **Retired for new runs** (engine 1.105.0, issue #616): the high- and low-MAP areas are gone, so a run from 1.105.0 makes no `areaMismatches`. Engines up to 1.104.x: \|areaKm2 − (areaHiKm2 + areaLoKm2)\| > 1 % of the larger; farms with hi = lo = 0 were skipped unless the flow-share method was hi/lo | the area share and rain volume used `areaKm2`, the hi/lo share the split, so drift made the two methods disagree |
 
 **Flow flat-lines by resolution (engine ≥ 1.12.0, issue #46 item 17; a
 draft, pending the hydrologist).** Up to 1.9 a flow flat-line was 14 days of
@@ -8929,7 +9137,7 @@ are in the private source repo (decided in issue #1; the hydrologist's
 agreement is assumed, not yet in writing; §2.10 and the first hydrologist
 question in [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
-**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep the outlier and flat-line limits, the zero-rain and low-vs-CHIRPS checks, and the four alternatives off (deciding them needs a semi-arid record with a known drought). Where entered catchment areas disagree, the area to model is the one draining to the calibration point, which needs the client's boundary; the `areaMismatches` warning shows the gap meanwhile.
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep the outlier and flat-line limits, the zero-rain and low-vs-CHIRPS checks, and the four alternatives off (deciding them needs a semi-arid record with a known drought). Where entered catchment areas disagree, the area to model is the one draining to the calibration point, which needs the client's boundary; the `areaMismatches` warning showed the gap meanwhile, until engine 1.105.0 retired it with the high- and low-MAP areas (issue #616).
 
 ### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
 
@@ -9085,8 +9293,8 @@ and PBIAS as a check, §2.10k). At the gauge:
   calibration statistics score, the calibration site's when it scores one,
   `gaugeCheckKind`, engine-audit.md **G2**);
 - **S** is the simulated flow at the gauge, its outflow U;
-- **N** is the catchment's natural flow × `naturalShare`, the flow shares
-  (§2.5) of the gauge and every node above it, which is what the network
+- **N** is the catchment's natural flow × `naturalShare`, the shares
+  (§2.5; the natural MAR shares from engine 1.105.0) of the gauge and every node above it, which is what the network
   routes there before any use;
 - the **dams** and **land cover** terms sum only the nodes above the gauge;
   A = N − S as at the outlet, so a transfer across the gauge falls in *use*;
@@ -10353,7 +10561,7 @@ that never sets it fits exactly as before.
   record measures: the natural flow of the gauge's sub-catchment with every
   use, dam and transfer above it. Nothing below the gauge can change a score.
   The fitted parameters are still the catchment's GR4J parameters: one runoff
-  model runs for the whole catchment and the flow shares (§2.5) route it to
+  model runs for the whole catchment and the unit shares (§2.5) route it to
   each node, so a fit at a gauge assumes the sub-catchment above it responds
   as the whole catchment does.
 - **No gauged range and no gap filling.** `settings.qualityFlags.ratings` and
@@ -12115,6 +12323,180 @@ another day refused.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep terciles by calendar day (the lowest band from the lowest storage on record, the total shared pro rata to capacity) and the table drawn on the latest review date the record holds.
 
+### 2.15b Drought badge: SPI and SPEI (issue #620)
+
+How dry the catchment has been, as the **Standardized Precipitation Index**
+(SPI; McKee, Doesken and Kleist 1993; WMO-No. 1090, 2012) and the
+**Standardized Precipitation-Evapotranspiration Index** (SPEI;
+Vicente-Serrano, Beguería and López-Moreno 2010) over 3, 6 and 12 months.
+Computed from a run's own daily `rain_final` and `pet` (the GR4J forcing,
+§2.4), so it needs no new upstream and avoids SPEIbase's ODbL share-alike.
+A **derived view** of a run's record (`packages/engine/src/drought/`,
+`droughtBadge`): `runModel`'s numbers don't change, and `ENGINE_VERSION`
+doesn't move for it (1.105.0 carries `summary.drought`, below). The
+Summary's Drought index card shows it, worked out in the browser from the
+run's stored series ([ui.md § Summary](./ui.md#summary)).
+
+- **Month.** The badge is for the last whole calendar month of the run's
+  history: a forecast run's days from `forecastFrom` on are never read. A
+  partial first or last month is left out; a month with a missing day (null
+  or NaN in `rain_final`, which is already the gap-filled series) has no
+  total, and no accumulation over it has a value. No infilling here.
+- **SPI.** Monthly rain summed over k = 3, 6, 12 months. For each calendar
+  month of the accumulation's last month, a two-parameter gamma is fitted to
+  the non-zero totals by Thom's (1958) approximation to the
+  maximum-likelihood shape, α = (1 + √(1 + 4A/3)) / 4A with
+  A = ln x̄ − mean(ln x), and β = x̄ / α (the WMO user guide's method). Zero
+  totals are mixed in, H(x) = q + (1 − q) G(x) with q = zeros / (n + 1), and
+  a zero total sits at the centre of the zeros' mass,
+  (zeros + 1) / 2(n + 1) (Stagge et al. 2015), so a dry season with
+  many zero totals doesn't pile its index on one value. SPI = Φ⁻¹(H). A fit
+  needs ≥ 20 totals and ≥ 10 non-zero ones.
+- **SPEI.** The monthly climatic water balance D = P − PET, accumulated the
+  same way, and per calendar month a three-parameter log-logistic (Hosking's
+  generalised logistic, GLO) fitted by L-moments from unbiased
+  probability-weighted moments (Beguería et al. 2014, the SPEI R package's
+  default since 1.7): k = −τ3, α = λ2 sin(kπ) / kπ,
+  ξ = λ1 − α(1/k − π / sin(kπ)), F(x) = 1 / (1 + e^−y),
+  y = −k⁻¹ ln(1 − k(x − ξ)/α). SPEI = Φ⁻¹(F). Without a `pet` series (a run
+  whose natural flow isn't GR4J's) the SPEI has no value.
+- **Reference period.** 1991–2020, the WMO climatological standard normal,
+  when every calendar month has at least 25 of those 30 years; otherwise
+  the whole record. The card names the years, and the fewest a month's fit
+  had when that is under 30. WMO-No. 1090 asks for 20–30 years at the
+  least, so a calendar month with fewer than 20 values in its reference has
+  no fit and no index ("Record too short").
+- **Clamp and classes.** Values are held to ±3 (probability 0.00135 /
+  0.99865): further out, a fit to 20–40 values says nothing, and the GLO's
+  bounded tail would give ±∞. Classes as McKee et al. and WMO-No. 1090
+  Table 1: ≥ 2 extremely wet, 1.5 to 2 very wet, 1 to 1.5 moderately wet,
+  −1 to 1 near normal, −1 to −1.5 moderately dry, −1.5 to −2 severely dry,
+  ≤ −2 extremely dry. The card's headline is the driest index with a value.
+- **Numerics.** ln Γ by Lanczos (g = 7), the regularised incomplete gamma
+  P(a, x) by its series below a + 1 and the continued fraction above
+  (Numerical Recipes §6.2), Φ⁻¹ by Wichura's AS 241 (PPND16). No dependency.
+
+**Tests** (`drought/spi.test.ts`, synthetic): P(a, x) against closed forms
+(a = 1, ½, 5/2, 7) and Simpson's rule, Φ⁻¹ against Python's
+`statistics.NormalDist`, the L-moments against their order-statistic
+definition, a gamma fit and three SPI values and a GLO fit and three SPEI
+values against references computed in Python with no shared code; monthly
+totals (partial months, a missing day, `lastDay`) under two skewed `TZ`s;
+the reference period chosen; over a 44-year synthetic record the SPI-3 is
+about standard normal over 1991–2020 and never falls as the total rises;
+the badge reads the last whole month of history and ignores forecast days
+after it, a dry spell reads dry, and each kind of gap is named. The
+Summary's e2e (`overview.spec.ts`) seeds 31 years of rain whose last
+Aug–Oct is bone dry, and checks its SPI-3 is Φ⁻¹(1/62) = −2.14.
+
+**Stored headline (`summary.drought`, engine 1.105.0).** The project list
+and the team portfolio can't load every run's daily series, so a saved run
+carries the badge's headline in its summary (`drought/summary.ts`
+`runDrought`, attached by `runModelChecked`): `month` (the last whole month
+of history, `YYYY-MM`), `driest` (the driest index with a value: `kind`
+`spi`/`spei`, `scale` 3/6/12, `value`, `class`, and `from`, the first month
+of the period it covers) or null with a `gap`: `no-rain` (no catchment
+`rain_final`), `no-month` (no whole month), `short-record` (a calendar month
+under 20 years) or `missing-month`. The same badge as the card's, so the
+two agree. It never reads a forecast day: a forecast-mode run's summary is
+its run without the tail's (§ Forecast mode), and an ordinary run whose rain
+went on past the record on forecast rain (`summary.forecastRain`) is cut at
+`forecastRain.lastRecorded` (`droughtLastDay`; the card uses the same day).
+Forecast rain filling a gap before that is history, as everywhere else.
+Output only, so `ENGINE_VERSION` stays; a run from before has no
+`summary.drought` and the list says "No drought index for this run". The
+portfolio query reads the one key from the source run's summary
+(`backend/src/portfolio/portfolio.ts`, api.md § Portfolio). Tests:
+`drought/summary.test.ts` (the driest index and its period, the
+forecast-rain cut with a positive control, each gap), `forecast.test.ts`
+(a forecast-mode run's badge is its history's), the portfolio DB test and
+`e2e/tests/projects.spec.ts`.
+
+**Later slices of #620** build on this module. The analogue outlook
+(§2.15c) chooses past seasons by their ENSO and SAM state alone, not the
+SPI-3 at the decision date (§2.15c says why). The C3S outlook can report
+its members' season totals against the same per-calendar-month fits
+(`fitIndex`, `indexValue`). Neither needs a change here.
+
+### 2.15c Past seasons like this one: the climate-state analogues (issue #620)
+
+"In past seasons that started like this one, how did the dams end?" The ESP
+(§2.15) weighs every analogue year alike. With the outlook's method
+`climateState` the result also carries the same members **summarised on the
+k analogue years whose ENSO and SAM state before their season was nearest
+this season's**: a conditioned ESP in the manner of Hamlet and Lettenmaier
+(1999), who subset the ESP traces by ENSO phase, with the phase replaced by
+a nearest-neighbour distance (Lall and Sharma 1996) so the SAM can count
+too. Pure, in `packages/engine/src/outlook/climate.ts`
+(`selectClimateAnalogues`, `climateConditionedOutlook`, and
+`runSeasonalOutlook`'s `climateIndices` option). A **derived view** of the
+ESP members: no member is run again, the ESP result is unchanged to the bit
+(`climate.test.ts`), the outlook's default method stays `esp`, and
+`ENGINE_VERSION` doesn't move.
+
+- **The indices.** Two monthly NOAA CPC series from the data mirror's copy
+  (`indices/{oni,aao}.json`, [data-sources.md §
+  climate-indices](./data-sources.md#climate-indices)): the **ONI**, a
+  3-month running mean of the Niño 3.4 anomaly kept under its centre month,
+  and CPC's **AAO**, the SAM's usual proxy. The ONI is already a 3-month
+  mean, so it is read as one value: the newest season wholly before the
+  decision date (1 October reads JAS, centred on August). The AAO is noisy
+  month to month, so it is the mean of the 3 months before the decision date
+  (July to September for 1 October).
+- **No look-ahead.** A value is used only when every month it averages lies
+  before the decision date (the ONI's season reaches a month past its
+  centre), so no year's state reads the season it is meant to stand for.
+  When the copy doesn't hold this season's newest month yet (CPC publishes
+  early in the following month), the window steps back a month, at most
+  `CLIMATE_INDEX_MAX_LAG_MONTHS` = 2, and **every** year is read over the
+  same calendar months; the panel says so. Each analogue year W is read over
+  those months counted back from its own season start (`analogueStart`).
+- **The distance.** Each index is standardised by its sample standard
+  deviation across the candidate years (the ESP's analogue years, after
+  any the backend left out, that have both indices), then the distance is
+  the weighted root mean square of the standardised differences from this
+  season's state: 0.5 is half a standard deviation apart on average. Equal
+  weights: ENSO is the stronger driver of summer rain in the north-east of
+  the country and the SAM of winter rain in the south-western Cape (Reason
+  and Rouault 2005), and the app serves both. An index that is the same in
+  every candidate separates nothing and adds 0. Ties go to the newer year,
+  so the choice is deterministic.
+- **k.** A third of the candidates (`CLIMATE_ANALOGUE_SHARE`; the ENSO-phase
+  subsets of conditioned ESP are about a tercile), never fewer than
+  `OUTLOOK_MIN_YEARS` = 10, so the subset has percentiles and a planning
+  figure. With fewer than `CLIMATE_ANALOGUE_MIN_CANDIDATES` = 20 candidates,
+  10 would be half the record or more, which is no conditioning to speak
+  of: none is drawn and the result says why (`tooFewYears`). An index the
+  copy doesn't hold for the window says so too (`indexNotHeld`). Either
+  way the ESP stands as it is.
+- **The summary.** `summariseOutlook` (§2.15) on the chosen years' members
+  alone, in the analogues' order: each level's season-end storage, years
+  met and planning figure, beside the same figures over every year.
+- **Not a term: the antecedent wetness.** The SPI-3 at the decision date
+  (§2.15b) is left out of the distance: every member already starts from
+  this season's own state (its dams, soils and groundwater, §2.16), so the
+  antecedent conditions are in the outlook once, and rain anomalies persist
+  too little month to month to say much about the season's weather.
+
+**What it can't say.** It is a choice among past seasons, not a forecast:
+ENSO and the SAM explain only part of a South African season's rain, and
+with 30-odd years of record a third is about ten seasons, so a percentile
+moves with one year in or out. The panel says both ([ui.md § Seasonal
+outlook](./ui.md#seasonal-outlook)). There is no skill score yet; the C3S
+slice of #620 adds a hindcast score for the forecast-conditioned outlook.
+
+**Tests** (`outlook/climate.test.ts`, invented index values): the months
+read for the ONI and the AAO, the step back when the copy is a month short
+(every year alike, at most 2), no month of the season itself read; the
+ranking against a hand-computed distance, ties to the newer year; k at a
+third with the floor and the minimum; years an index doesn't reach (the AAO
+from 1979) listed and left out; the conditioned summary equal to
+`summariseOutlook` on the chosen members; and the ESP part of an outlook
+equal to the plain ESP **to the bit** with the indices, with none held and
+with too few years, and the same choice under two skewed `TZ`s. The backend
+(`outlooks.db.test.ts`) checks the same against the committed synthetic
+copy.
+
 ### 2.16 Starting a run from a saved state: model-state snapshots (engine ≥ 1.1.0, issue #53)
 
 A run can stop at the start of any day and a later run carry on from
@@ -12314,7 +12696,7 @@ from the workbook.
 | Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** `damMinPct` is the dam's minimum operating level; irrigation draws only above `cap × damMinPct` and transfers keep `cap × MAX(rule min, damMinPct)`. Stored values were reset to 0 (they held the transfer minimum), so no result changes until a level is entered (§2.7). | Confirm the rule, and which dams keep a reserve. Provisionally confirmed 2026-10-01 (issue #90), to be confirmed by the client's hydrologist; which dams keep a reserve, and how much, is client data (the node form flags a dam irrigation may empty). |
 | Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. The larger issue, rain offsetting only the day it falls on, is N3: engine 0.14.0 carries it over through a soil-water store (§2.3 step 4). Since engine 1.0.0 only the offset reads the threshold: GR4J has none (§2.4a). |
 | Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. Engines 0.4.0–0.9.0 warned with the number of fallback days (audit W5); engine 0.10.0 removed the fallback and the Pitman input (audit P1). Days without rain data are still warned about (W2). |
-| Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In a workbook the Hi+Lo area sum can differ slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
+| Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In a workbook the Hi+Lo area sum can differ slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. Moot from engine 1.105.0 (issue #616): the Hi/Lo method is retired and every unit's share is its natural MAR share (§2.5). |
 | Q9 | Several | The blank template and a client workbook can differ in their summer months and crop factors. | Settings are per project, so this is fine. It shows that defaults must not be trusted blindly. |
 | Q10 | EWR Cfg | Pragmatic EWR = one percentile of the Desktop Reserve "without high flows" table, scaled and converted to m³/day, with manual overrides. The source table and scale factor are catchment-specific. | V1 stores only the final 12 numbers. Ask whether the app must derive them. |
 | Q11 | Shortfalls M/N | **The target ignores the network.** The equitable share gives every farm the same fraction of its demand (ΣI/ΣH), as if water could be moved freely between any two farms. In practice, a downstream farm's surplus can't reach an upstream farm, and a farm without a dam can't store a "gain". The reduce/gain column is a *fairness* target, not a feasible schedule. It also sets no farm-specific priorities or licensed volumes. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0 — labels only:** K_tot is the *equitable share of supply (fairness benchmark)*, M the *equitable share volume*, N *above (−) / below (+) equitable share*; no label says "gain", and the UI and summary CSV carry the footnote "… Not an allocation or licence condition." (§2.11). The computation is unchanged. | A network-aware, authorisation-based allocation (licensed / WARMS volumes, NWA Schedule 3 item 6 restrictions as % of authorised use) is future work and would change every target. |
@@ -12322,7 +12704,7 @@ from the workbook.
 | Q13 | Shortfalls R/S/U | The EWR shortfall is the farm's **incremental** shortfall (Element AB). With quirk Q4 in play, that is the whole outflow compared with the farm's own fragment. A farm with no irrigation demand can still carry an EWR "reduction" (S < 0, U < 0) that it has no irrigation to cut. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR charge (Q17) splits into an irrigation part and a *store less / pass inflow* part (§2.7b); only the irrigation part becomes a supply cut ΔG = R_irr / (1 − β(1 − e)). A farm with no demand gets a supply cut of 0. S = N − ΔG, U = MAX(M − ΔG, 0), V in 0–1, and a cut beyond the equitable share is flagged (§2.11). | Confirm the split and that the storage part is to be written as a release / bypass condition. |
 | Q14 | Shortfalls K total | `K_tot = ΣI / ΣH` has no zero guard. With no demand in the window the workbook shows `#DIV/0!` in every target. The engine returns `equitableFraction = null` and targets of 0. The sheet also divides the **rounded** farm averages (H, I). **Fixed (engine 0.4.0, audit R1):** the engine uses the unrounded averages. | Cosmetic. The rounding effect was at most ½ m³/day per farm. |
 | Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Fixed (engine 0.4.0, audit R1):** the engine returns `N / 86.4` unrounded and the UI rounds for display, so a small cut stays visible. | Truncation understated every cut and every gain by up to 0.1 l/s. |
-| Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In the client workbook some farm rows' M cells are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. A workbook on the Area method is unaffected, but switching it to Hi/Lo or Specific would give those farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
+| Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In the client workbook some farm rows' M cells are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. A workbook on the Area method is unaffected, but switching it to Hi/Lo or Specific would give those farms area shares and the sum would no longer be 1. The engine applied the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. Moot for the app from engine 1.105.0 (issue #616): it has no method to choose (§2.5), and every client extract uses Area. |
 | Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) was **mirrored** until engine 0.17.0. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR is assessed at EWR sites (the outlet and every gauge); each site's shortfall is charged to the farms upstream pro rata to their net impact `H + I + J_int − U`, at most what each took, the rest reported as natural; a farm under several sites carries the largest charge (§2.7b). AB stays as the diagnostic reach shortfall. Engine 1.5.0: a gauge can be taken off the EWR sites (`ewrSite`, WP-3.7). | Confirm the rule and the site list (which gauges are EWR sites, now a per-gauge flag; gazetted tables are WP-3.7). It changes every farm's curtailment. |
 | Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. The client catchment regression doesn't exercise it. **Not mirrored:** the engine first split the available volume in rule order (engine review F1), which makes no difference when the draws fit. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. Engine ≥ 1.70.0 (issue #90 Q25): the limit is the rule's daily limit alone, never first cut to the source's free water, so a rule split into several gets the same total (proportional rationing, §2.6a). | Provisionally confirmed 2026-10-01 (issue #90), to be confirmed by the client's hydrologist ([§2.6](#26-transfers-transfers)). |
 
@@ -12533,7 +12915,7 @@ boreholes pumped 116 938 m³ in one order and nothing in the other; 7094: the
 catchment area, and with it every natural flow, differed in the last bit; 27
 seeds over both runoff models). So every sum that feeds the daily balance runs
 in **id order** (`packages/engine/src/order.ts`), never list order: the
-farms' flow shares (area and hi/lo totals), the catchment area Σ farm area,
+units' shares (the natural MAR and area totals, §2.5b), the catchment area Σ farm area,
 each farm's crops and crop areas (crop id, then area), the land-cover patches
 on a unit (patch id, §2.5a), the priority users' claims on a farm and each
 user's upstream share total (node id, §2.7c), the transfer rules (id, §2.6),
@@ -12688,7 +13070,7 @@ step when a definition changes.
 | **Potential evaporation (PE)** | The evaporation GR4J's soil store is drawn down by. Pan coefficient × A-pan by default, or a monthly row entered directly, such as a station ET₀ (`settings.pe`, engine ≥ 0.31.0, §2.4a). |
 | **Effective rainfall** | The share of rain on cropped land that reduces irrigation need (a project setting). |
 | **Soil-water store** | Effective rain the crop can't use on the day it falls, kept for the following days up to `effectiveRainStoreMm` (25 mm by default, engine ≥ 0.14.0). |
-| **MAP** | Mean Annual Precipitation (mm/yr). "Hi/Lo MAP" splits a catchment into high- and low-rainfall parts. |
+| **MAP** | Mean Annual Precipitation (mm/yr). "Hi/Lo MAP" split a catchment into high- and low-rainfall parts for b023's Hi/Lo fragmentation, retired in engine 1.105.0 (issue #616, §2.5). |
 | **MAR** | Mean Annual Runoff (M.m³/yr). |
 | **M.m³** | Million cubic metres (10⁶ m³). 1 m³/s = 86 400 m³/day. |
 | **Pitman** | A monthly rainfall-runoff model used in South African water-resource studies (WR90/WR2012). "Pitman flow" = its naturalised flow series. |
@@ -12697,7 +13079,8 @@ step when a definition changes.
 | **Fallback-rain year** | A water year where more than half the rain, or more than half the days, came from CHIRPS, forecast, spread or blank days instead of a catchment station reading (§2.10d). |
 | **Dry season** | Here: the six consecutive calendar months with the lowest mean flow (§2.10d). |
 | **Low-flow duration curve** | The flow duration curve of the dry-season days only; Q90 is the flow equalled or exceeded 90 % of them. |
-| **Fragmentation** | Splitting catchment flow (or EWR) into per-farm shares. |
+| **Fragmentation** | Splitting the catchment's flow and EWR into per-unit shares; from engine 1.105.0 (issue #616) each unit's one share is its natural MAR share (§2.5). Also the name of the flow generation method that runs GR4J once for the catchment and splits its flow this way (§2.4h). |
+| **Natural MAR share** | A unit's own natural runoff over the MAR period ÷ all the land units' (§2.5b). It splits the flow under Fragmentation, the EWR, the land cover's low-flow threshold and the senior users' claims (engine ≥ 1.105.0). |
 | **EWR** | Environmental Water Requirement: the flow that must stay in the river for the ecosystem. |
 | **IFR / Reserve** | Instream Flow Requirement or Ecological Reserve, the South African legal terms for the EWR. |
 | **Desktop Reserve Model** ("Desktop Version 2") | Software that produces monthly EWR tables by percentile and ecological category (e.g. by ecological category and regional hydrological type). |

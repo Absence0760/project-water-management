@@ -24,15 +24,17 @@ let holder: User; // farmer: two hidden farms under one holder
 let projectId: string;
 let published: string;
 
-// Gauge ← Rooikloof (the applicant's) and five hidden farms with manual flow shares (0.18 each: 90 %).
-const outlet = node('Gauge', null);
-const rooikloof = node('Rooikloof', outlet.id, { flowShareManual: 0.05 });
+// Gauge ← Rooikloof (the applicant's, the catchment's only land) and five hidden farms with no land of their own.
+// The catchment-wide rule a hidden farm's values take part in is the land left (engine structure.ts 'area'; flow
+// shares over 100 %, 'shares', went with the specific shares in engine 1.105.0, issue #616).
+const outlet = node('Gauge', null, { areaKm2: 0 });
+const rooikloof = node('Rooikloof', outlet.id, { areaKm2: 5 });
 const HIDDEN = ['Kalkoenkrans', 'Bergvliet', 'Doornhoek', 'Waterval', 'Sonskyn'];
-const hidden = HIDDEN.map((n) => node(n, outlet.id, { flowShareManual: 0.18 }));
+const hidden = HIDDEN.map((n) => node(n, outlet.id, { areaKm2: 0 }));
 
 const P = () => `/projects/${projectId}`;
-/** Rooikloof's share to 30 %: the catchment's shares then total 120 %, and only the hidden farms' 90 % makes it so. */
-const tooMuch = { op: 'node.set', nodeId: rooikloof.id, field: 'flowShareManual', value: 0.3 };
+/** Rooikloof's land to 0 km²: the catchment then has none left, which turns on the hidden farms having none either. */
+const tooMuch = { op: 'node.set', nodeId: rooikloof.id, field: 'areaKm2', value: 0 };
 /** An op on a node that doesn't exist: a problem in plain words, no hidden rule. */
 const missing = { op: 'node.set', nodeId: crypto.randomUUID(), field: 'damCapacityM3', value: 1 };
 const rowsAs = async <T = Record<string, unknown>>(u: User, sql: string, params: unknown[] = []) =>
@@ -50,7 +52,7 @@ beforeAll(async () => {
 	projectId = (await owner.call('POST', '/projects', { name: 'Questions' })).body.project.id;
 	const model = { nodes: [outlet, rooikloof, ...hidden], crops: [{ id: crypto.randomUUID(), name: 'Citrus', cropFactor: monthly(0.7) }], cropAreas: [], transfers: [] };
 	expect((await owner.call('PUT', `${P()}/model`, model)).status).toBe(200);
-	expect((await owner.call('PATCH', P(), { settings: { apanMm: monthly(150), flowShareMethod: 'manual' } })).status).toBe(200);
+	expect((await owner.call('PATCH', P(), { settings: { apanMm: monthly(150) } })).status).toBe(200);
 	const days = 60;
 	const rain = Array.from({ length: days }, (_, i) => (i % 7 === 0 ? 20 : 0));
 	expect((await owner.call('PUT', `${P()}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
@@ -74,13 +76,13 @@ describe('a rule broken by hidden farms', () => {
 	let sid: string;
 
 	it(`gives the applicant the catchment's aggregate at ${FARMER_K} hidden holders, and the rule's line, ops and kind, never the real words`, async () => {
-		const res = await applicant.call('POST', `${P()}/scenarios`, { name: 'Rooikloof shares', baseRunId: published, ops: [tooMuch] });
+		const res = await applicant.call('POST', `${P()}/scenarios`, { name: 'Rooikloof land', baseRunId: published, ops: [tooMuch] });
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
 		sid = res.body.scenario.id;
 		expect(res.body.check.problems).toEqual([
-			"op 1 (node.set): flow shares would total 120.0 %, more than 100 %; the units you can't see hold 90.0 % of them between them"
+			"op 1 (node.set): the catchment would have 0.00 km² of land; the units you can't see hold 0.00 km² between them"
 		]);
-		expect(res.body.check.maskedRules).toEqual([{ problem: 0, ops: [0], rules: ['shares'] }]);
+		expect(res.body.check.maskedRules).toEqual([{ problem: 0, ops: [0], rules: ['area'] }]);
 		// Never the assessors' fields.
 		expect(res.body.check).not.toHaveProperty('assessorProblems');
 		expect(res.body.check).not.toHaveProperty('renamed');
@@ -111,10 +113,10 @@ describe('a rule broken by hidden farms', () => {
 		const res = await applicant.call('GET', `${P()}/scenarios/${sid}`);
 		expect(res.status).toBe(200);
 		expect(res.body.check.problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
-		expect(res.body.check.maskedRules).toEqual([{ problem: 0, ops: [0], rules: ['shares'] }]);
+		expect(res.body.check.maskedRules).toEqual([{ problem: 0, ops: [0], rules: ['area'] }]);
 		// Back to five.
 		expect((await owner.call('PUT', `${P()}/farmers/${holder.id}`, { nodeIds: [hidden[0]!.id] })).status).toBe(200);
-		expect((await applicant.call('GET', `${P()}/scenarios/${sid}`)).body.check.problems[0]).toContain('90.0 %');
+		expect((await applicant.call('GET', `${P()}/scenarios/${sid}`)).body.check.problems[0]).toContain('0.00 km² of land');
 	});
 
 	it('counts the hidden holders for the server only, and for nobody who can’t read the application (control: its applicant)', async () => {
@@ -135,7 +137,7 @@ describe('Ask the assessors why', () => {
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
 		sid = res.body.scenario.id;
 		expect(res.body.check.problems).toHaveLength(2);
-		expect(res.body.check.maskedRules).toEqual([{ problem: 0, ops: [0], rules: ['shares'] }]);
+		expect(res.body.check.maskedRules).toEqual([{ problem: 0, ops: [0], rules: ['area'] }]);
 		line = res.body.check.problems[0];
 	});
 
@@ -143,7 +145,7 @@ describe('Ask the assessors why', () => {
 		const res = await applicant.call('POST', `${P()}/scenarios/${sid}/questions`, { problem: 0, line });
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
 		questionId = res.body.question.id;
-		expect(res.body.question).toEqual({ id: questionId, askedAt: expect.any(String), problem: line, opIndexes: [0], rules: ['shares'], answer: null, answeredAt: null });
+		expect(res.body.question).toEqual({ id: questionId, askedAt: expect.any(String), problem: line, opIndexes: [0], rules: ['area'], answer: null, answeredAt: null });
 		leaksNoHiddenFarm(res.body);
 	});
 
@@ -180,7 +182,7 @@ describe('Ask the assessors why', () => {
 		const list = await assessor.call('GET', `${P()}/application-questions`);
 		expect(list.status).toBe(200);
 		const q = list.body.questions.find((x: { id: string }) => x.id === questionId);
-		expect(q).toMatchObject({ scenarioId: sid, scenarioName: 'Rooikloof asks', problem: line, opIndexes: [0], ops: [tooMuch], rules: ['shares'], answer: null });
+		expect(q).toMatchObject({ scenarioId: sid, scenarioName: 'Rooikloof asks', problem: line, opIndexes: [0], ops: [tooMuch], rules: ['area'], answer: null });
 		// The rule in its own words, not the applicant's.
 		expect(q.assessorText).not.toBe(line);
 		expect(q.assessorText).toMatch(/^op 1 \(node\.set\): /);
@@ -196,12 +198,12 @@ describe('Ask the assessors why', () => {
 	it('is answered once, by an editor; the parties read the answer', async () => {
 		expect((await applicant.call('POST', `${P()}/application-questions/${questionId}/answer`, { answer: 'self-answered' })).status).toBe(403);
 		expect((await viewer.call('POST', `${P()}/application-questions/${questionId}/answer`, { answer: 'x' })).status).toBe(403);
-		const res = await assessor.call('POST', `${P()}/application-questions/${questionId}/answer`, { answer: 'The other units hold 90 % between them; reduce your share to 10 %.' });
+		const res = await assessor.call('POST', `${P()}/application-questions/${questionId}/answer`, { answer: 'The other units have no land of their own; keep some of yours.' });
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
-		expect(res.body.question).toMatchObject({ id: questionId, answer: 'The other units hold 90 % between them; reduce your share to 10 %.', answeredAt: expect.any(String) });
+		expect(res.body.question).toMatchObject({ id: questionId, answer: 'The other units have no land of their own; keep some of yours.', answeredAt: expect.any(String) });
 		expect((await assessor.call('POST', `${P()}/application-questions/${questionId}/answer`, { answer: 'again' })).status).toBe(409);
 		const mine = await applicant.call('GET', `${P()}/scenarios/${sid}/questions`);
-		expect(mine.body.questions[0]).toMatchObject({ answer: 'The other units hold 90 % between them; reduce your share to 10 %.', answeredAt: expect.any(String) });
+		expect(mine.body.questions[0]).toMatchObject({ answer: 'The other units have no land of their own; keep some of yours.', answeredAt: expect.any(String) });
 	});
 
 	it('is written only through its functions: no one updates or inserts a row', async () => {
@@ -213,17 +215,17 @@ describe('Ask the assessors why', () => {
 		// Nor through the table, nor insert one at all: they ask through the function.
 		await expect(rowsAs(applicant, `UPDATE application_question SET answer = 'x' WHERE id = $1`, [questionId])).rejects.toThrow(/permission denied/);
 		await expect(
-			rowsAs(applicant, `INSERT INTO application_question (project_id, scenario_id, scenario_name, problem, op_indexes, ops, rules, assessor_text) VALUES ($1, $2, 'n', 'p', '{0}', '[]', '{shares}', 't')`, [projectId, sid])
+			rowsAs(applicant, `INSERT INTO application_question (project_id, scenario_id, scenario_name, problem, op_indexes, ops, rules, assessor_text) VALUES ($1, $2, 'n', 'p', '{0}', '[]', '{area}', 't')`, [projectId, sid])
 		).rejects.toThrow(/permission denied/);
 		// Not on another applicant's application (control: their own goes in, under its own project and name).
-		const ask = `SELECT app_ask_assessors($1, 'p', '{0}', '[]', '{shares}', 't') AS id`;
+		const ask = `SELECT app_ask_assessors($1, 'p', '{0}', '[]', '{area}', 't') AS id`;
 		await expect(rowsAs(other, ask, [sid])).rejects.toThrow(/only a party/);
 		const [own] = await rowsAs<{ id: string }>(applicant, ask, [sid]);
 		const [row] = await rowsAs<{ project_id: string; scenario_name: string }>(assessor, 'SELECT project_id, scenario_name FROM application_question WHERE id = $1', [own!.id]);
 		expect(row).toEqual({ project_id: projectId, scenario_name: 'Rooikloof asks' });
 		// The guard holds for the owner's own writes too: no question is born answered.
 		await expect(
-			asOwner(`INSERT INTO application_question (project_id, scenario_id, scenario_name, problem, op_indexes, ops, rules, assessor_text, answer) VALUES ($1, $2, 'n', 'p', '{0}', '[]', '{shares}', 't', 'x')`, [projectId, sid])
+			asOwner(`INSERT INTO application_question (project_id, scenario_id, scenario_name, problem, op_indexes, ops, rules, assessor_text, answer) VALUES ($1, $2, 'n', 'p', '{0}', '[]', '{area}', 't', 'x')`, [projectId, sid])
 		).rejects.toThrow(/asked without an answer/);
 	});
 
@@ -234,8 +236,8 @@ describe('Ask the assessors why', () => {
 			[projectId]
 		);
 		expect(rows.map((r) => r.kind)).toEqual(['application.question_asked', 'application.question_answered']);
-		expect(rows[0]!.subject).toEqual({ scenarioId: sid, questionId, application: true, ops: [0], rules: ['shares'] });
-		expect(JSON.stringify(rows)).not.toMatch(/90(\.0)? %|Rooikloof asks|between them/);
+		expect(rows[0]!.subject).toEqual({ scenarioId: sid, questionId, application: true, ops: [0], rules: ['area'] });
+		expect(JSON.stringify(rows)).not.toMatch(/km²|Rooikloof asks|between them/);
 	});
 
 	it('outlives its deleted draft, answer and all, for the assessors only (234, issue #523 G7)', async () => {
@@ -253,7 +255,7 @@ describe('Ask the assessors why', () => {
 			scenarioName: 'Rooikloof asks',
 			problem: line,
 			ops: [tooMuch],
-			answer: 'The other units hold 90 % between them; reduce your share to 10 %.',
+			answer: 'The other units have no land of their own; keep some of yours.',
 			answeredAt: expect.any(String)
 		});
 		expect(q.assessorText).toMatch(/^op 1 \(node\.set\): /);

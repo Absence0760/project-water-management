@@ -6,9 +6,10 @@
 // The other forms that use it are covered by their own specs (settings, dam-development, report-window,
 // licence-record, applications, publication, unit-rain, …).
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, createRun, nominateRun, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { createProject, createRun, nominateRun, seedRunnableProject } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { anySaveBar, saveSettings } from '../support/settings.ts';
@@ -101,32 +102,12 @@ test('a form refuses to submit a day it can’t read', async ({ page, owner }) =
 
 // A field's error line never moves its row (issue #521, round 6; app.css, after .form-row): rows align their fields
 // to the bottom, so an error under one field used to push its neighbours down by the error's height.
-test('a day or number field showing its error leaves its neighbour’s input where it was', async ({ page, owner }) => {
+test('a day field showing its error leaves its neighbour’s input where it was', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const project = await createProject(page.request, 'Errors in a row');
-	await updateSettings(page.request, project.id, { flowShareMethod: 'hiLo' });
 	await page.goto(`/projects/${project.id}?tab=settings`);
-	const pairs = [
-		{ field: page.getByLabel('Simulation start'), neighbour: page.getByLabel('Simulation end'), text: 'soon' },
-		{ field: page.getByLabel('High (%)'), neighbour: page.getByLabel('Low (%)'), text: '150' }
-	];
-	for (const { field, neighbour, text } of pairs) {
-		await neighbour.scrollIntoViewIfNeeded();
-		const before = (await neighbour.boundingBox())!;
-		// Side by side in one row at 1440.
-		expect(Math.round((await field.boundingBox())!.y)).toBe(Math.round(before.y));
-		await field.fill(text);
-		await field.blur();
-		await expect(field).toHaveAttribute('aria-invalid', 'true');
-		const err = page.locator(`#${await field.getAttribute('id')}-err`);
-		await expect(err).toBeVisible();
-		const after = (await neighbour.boundingBox())!;
-		expect(after.y).toBeCloseTo(before.y, 0);
-		expect(after.x).toBeCloseTo(before.x, 0);
-		// The field's own input stays level with it too.
-		expect((await field.boundingBox())!.y).toBeCloseTo(before.y, 0);
-	}
+	await expectRowStays(page, page.getByLabel('Simulation start'), page.getByLabel('Simulation end'), 'soon');
 	// The error lines wrap inside their fields on a phone.
 	for (const width of [390, 320]) {
 		await page.setViewportSize({ width, height: 844 });
@@ -134,3 +115,33 @@ test('a day or number field showing its error leaves its neighbour’s input whe
 		await expectNoSidewaysScroll(page);
 	}
 });
+
+// The same for a number field (a NumberInput's own range error). The Hi/Lo MAP split's High and Low were the pair until
+// engine 1.105.0 retired it (issue #616); the WR2012 reference's period is a number pair in one row.
+test('a number field showing its error leaves its neighbour’s input where it was', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const project = await seedRunnableProject(page.request, 'Number errors in a row');
+	await page.goto(`/projects/${project.id}?tab=calibration`);
+	const wr = page.getByRole('region', { name: /^WR2012 check/ });
+	await wr.getByLabel('Compare runs with WR2012 naturalised flow').check();
+	await expectRowStays(page, wr.getByLabel('From', { exact: true }), wr.getByLabel('To', { exact: true }), '1500');
+});
+
+/** `field` and `neighbour` side by side in one row; `text` makes `field` show its error, which moves neither input. */
+async function expectRowStays(page: Page, field: Locator, neighbour: Locator, text: string): Promise<void> {
+	await neighbour.scrollIntoViewIfNeeded();
+	const before = (await neighbour.boundingBox())!;
+	// Side by side in one row at 1440.
+	expect(Math.round((await field.boundingBox())!.y)).toBe(Math.round(before.y));
+	await field.fill(text);
+	await field.blur();
+	await expect(field).toHaveAttribute('aria-invalid', 'true');
+	const err = page.locator(`#${await field.getAttribute('id')}-err`);
+	await expect(err).toBeVisible();
+	const after = (await neighbour.boundingBox())!;
+	expect(after.y).toBeCloseTo(before.y, 0);
+	expect(after.x).toBeCloseTo(before.x, 0);
+	// The field's own input stays level with it too.
+	expect((await field.boundingBox())!.y).toBeCloseTo(before.y, 0);
+}

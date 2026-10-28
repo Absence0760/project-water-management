@@ -20,7 +20,7 @@
 import { fromEpochDay, toEpochDay, type SeriesMeta } from '@water-management/engine';
 import { kindLabel } from '#lib/series/kinds.js';
 import type { Daily } from './coverage';
-import type { AreaRainLines } from './derivedRain';
+import type { AreaRainLines, UnitChainLines } from './derivedRain';
 import type { SeriesGroup } from './groups';
 
 export type ExportSize = 'compact' | 'full';
@@ -75,6 +75,8 @@ export interface ExportArea {
 	/** groups.ts areaSentence. */
 	sentence: string | null;
 	lines: AreaRainLines | null;
+	/** A unit without a station under per-unit rain: its §2.4h chain (issue #613 slice 2), in place of `lines`. */
+	chain?: UnitChainLines | null;
 	/** Why the lines couldn't be computed, when they couldn't. */
 	error?: string | null;
 }
@@ -94,7 +96,13 @@ export function exportComments(size: ExportSize, areas: readonly ExportArea[], m
 		}
 		if (a.sentence) out.push(`${who}: ${a.sentence}`);
 		if (a.lines?.refused) out.push(`${who}: CHIRPS gaps not corrected; the pairing is refused (${a.lines.refused})`);
-		if (size === 'full' && a.lines?.factors) out.push(`${who}: CHIRPS factors Jan to Dec ${a.lines.factors.map((k) => (Math.round(k * 1000) / 1000).toString()).join(' ')}`);
+		if (a.chain) out.push(`${who}: no rainfall station; its rain follows rule ${a.chain.rule} of the per-unit chain (§2.4h)${a.chain.recipe.gaugeMapFactor !== null ? `, MAP ratio ${Math.round(a.chain.recipe.gaugeMapFactor * 1000) / 1000}` : ''}`);
+		if (a.lines?.patches?.length)
+			out.push(`${who}: station gaps patched from ${a.lines.patches.map((p) => `patch ${p.place}: ${p.stationName} × ${Math.round(p.ratio * 1000) / 1000}`).join(', then ')}`);
+		if (size === 'full' && a.lines?.factors)
+			out.push(
+				`${who}: CHIRPS factors Jan to Dec ${a.lines.factors.map((k) => (Math.round(k * 1000) / 1000).toString()).join(' ')} (fitted for this area: its CHIRPS against ${a.lines.correctAgainst === a.lines.forcing.stationId ? a.lines.forcing.stationName : 'its correcting station'} adjusted to its MAP)`
+			);
 	}
 	return out;
 }
@@ -102,8 +110,10 @@ export function exportComments(size: ExportSize, areas: readonly ExportArea[], m
 /**
  * The columns of an export: the stored series as the grouped list orders
  * them (Compact: stations and flow records only), and each area's derived
- * columns (Compact: its rain used; Full: station × ratio, corrected CHIRPS,
- * rain used and the day's source). An area without lines adds none.
+ * columns (Compact: its rain used; Full: station × ratio, each patch station ×
+ * its ratio, corrected CHIRPS, rain used and the day's source, or for a unit without a station its §2.4h
+ * links: own gauge checked, catchment gauge × MAP ratio, CHIRPS levelled).
+ * An area without lines adds none.
  */
 export function exportColumns(size: ExportSize, groups: readonly SeriesGroup<SeriesMeta>[], values: Readonly<Record<string, Daily>>, areas: readonly ExportArea[]): CsvColumn[] {
 	const cols: CsvColumn[] = [];
@@ -112,14 +122,29 @@ export function exportColumns(size: ExportSize, groups: readonly SeriesGroup<Ser
 		if (v) cols.push({ header: seriesHeader(s), startDate: v.startDate, values: v.values });
 	};
 	const area = (a: ExportArea) => {
+		const ch = a.chain;
+		if (!a.lines && ch) {
+			// A §2.4h unit (issue #613 slice 2): each link its rule reads, then the rain used and the link of each day.
+			if (size === 'full') {
+				if (ch.ownGauge) cols.push({ header: areaHeader(a, 'own gauge, checked (mm)'), startDate: ch.startDate, values: ch.ownGauge });
+				if (ch.gaugeScaled) cols.push({ header: areaHeader(a, 'catchment gauge × MAP ratio (mm)'), startDate: ch.startDate, values: ch.gaugeScaled });
+				if (ch.chirpsLevelled) cols.push({ header: areaHeader(a, 'CHIRPS levelled (mm)'), startDate: ch.startDate, values: ch.chirpsLevelled });
+			}
+			cols.push({ header: areaHeader(a, 'rain used (mm)'), startDate: ch.startDate, values: ch.rainUsed });
+			if (size === 'full') cols.push({ header: areaHeader(a, 'rain used from'), startDate: ch.startDate, values: ch.source });
+			return;
+		}
 		const l = a.lines;
 		if (!l) return;
 		if (size === 'full') {
 			cols.push({ header: areaHeader(a, 'station × ratio (mm)'), startDate: l.startDate, values: l.stationScaled });
+			// Each patch station × its ratio, in the patching priority (issue #613 slice 3).
+			for (const p of l.patches ?? []) cols.push({ header: areaHeader(a, `patch ${p.place}: ${p.stationName} × ratio (mm)`), startDate: l.startDate, values: p.scaled });
 			if (l.chirpsCorrected) cols.push({ header: areaHeader(a, 'CHIRPS corrected (mm)'), startDate: l.startDate, values: l.chirpsCorrected });
 		}
 		cols.push({ header: areaHeader(a, 'rain used (mm)'), startDate: l.startDate, values: l.rainUsed });
-		if (size === 'full') cols.push({ header: areaHeader(a, 'rain used from'), startDate: l.startDate, values: l.source });
+		// The engine's codes, a patch day naming its station (issue #612): "patch 1: Ridge".
+		if (size === 'full') cols.push({ header: areaHeader(a, 'rain used from'), startDate: l.startDate, values: l.source.map((s, i) => (s === 'patch' ? (l.patchFrom?.[i] ?? s) : s)) });
 	};
 	const catchment = areas.find((a) => a.nodeId === null);
 	const units = areas.filter((a) => a.nodeId !== null);

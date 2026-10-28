@@ -28,6 +28,8 @@
 	import { api, type Outlook, type OutlookPublication, type OutlookSettings, type Project, type RunMeta } from '#lib/api/index.js';
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { buildTriggersView, triggerRuleView } from './triggers';
+	import ClimateAnalogues from './ClimateAnalogues.svelte';
+	import { buildClimateView } from './climate';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import { fmtDate, fmtDay } from '#lib/format/number.js';
 	import { monthName } from '#lib/format/months.js';
@@ -78,6 +80,8 @@
 	let submitting = $state(false);
 	let levelsText = $state(DEFAULT_OUTLOOK_LEVELS.join(', '));
 	let withPlan = $state(false);
+	// Also the years nearest this season's ENSO and SAM state (issue #620, method climateState).
+	let byClimate = $state(false);
 	let planLabel = $state('Monthly plan');
 	let planPct = $state<Record<number, number>>(Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 1, 100])));
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -98,6 +102,7 @@
 		if (!outlook || shown?.kind !== 'complete' || !outlook.result) return null;
 		return buildOutlookView({ ...outlook, result: outlook.result }, daily);
 	});
+	const climateView = $derived(view && outlook?.result ? buildClimateView(outlook.result) : null);
 	const dataState = $derived(loading ? 'loading' : !outlook ? 'empty' : (shown?.kind ?? 'loading'));
 	const triggers = $derived(outlook && shown?.kind === 'complete' ? buildTriggersView(outlook) : null);
 	// The trigger table as the drought restriction rule (engine ≥ 1.54.0, WP-3.8): an editor saves it to Settings.
@@ -214,7 +219,7 @@
 		submitting = true;
 		submitError = null;
 		try {
-			const body = outlookRequest(run.id, parsed.levels, plan ? { label: planLabel.trim(), ops: plan.ops } : null);
+			const body = outlookRequest(run.id, parsed.levels, plan ? { label: planLabel.trim(), ops: plan.ops } : null, byClimate ? 'climateState' : 'esp');
 			const res = await api.outlooks.create(projectId, body);
 			outlook = res.outlook;
 			await poll(res.outlook.id);
@@ -283,7 +288,14 @@
 						<input type="checkbox" bind:checked={withPlan} disabled={busy} />
 						Add a monthly plan
 					</label>
+					<label class="check">
+						<input type="checkbox" bind:checked={byClimate} disabled={busy} aria-describedby="outlook-climate-hint" />
+						Also compare past seasons like this one
+					</label>
 				</div>
+				<span class="visually-hidden" id="outlook-climate-hint">
+					The same years, also summarised on the third nearest this season’s ENSO and SAM state (the ONI and AAO before the decision date).
+				</span>
 				{#if withPlan}
 					<fieldset class="plan">
 						<legend>Monthly plan <span class="u">(% of today’s hydrological unit demand, by month of the season)</span></legend>
@@ -404,6 +416,7 @@
 			<p class="hint">
 				This counts past years; it is not a decision. The WUA decides the season’s level and publishes it as the restriction notice.
 			</p>
+			{#if climateView}<ClimateAnalogues view={climateView} />{/if}
 
 			{#if triggers && triggers.kind !== 'none'}
 				<h4 id="triggers-h">Review triggers <HelpTip key="review-triggers" /></h4>

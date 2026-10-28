@@ -25,6 +25,7 @@ import {
 	evidenceLines,
 	nodeColumnHeader,
 	seriesKeyOrder,
+	engineAtLeast,
 	summaryCsvLines,
 	verificationLines,
 	waterBalanceLines,
@@ -124,8 +125,62 @@ describe('summary sheet', () => {
 		// A resumed run's natural MAR shares are the capture run's; one complete water year is singular.
 		const pinned = rowOf({ ...summary, ewrSplit: { method: 'naturalMar', applied: 'naturalMar', period: { start: '2000-10-01', end: '2001-09-30', waterYears: 1 }, pinned: true } });
 		expect(pinned.lines).toContain('EWR split between units by,each unit’s natural MAR,2000-10-01 – 2001-09-30 (1 complete water year; the capture run’s shares)');
-		// The default writes no line.
+		// The default of 1.94.0 – 1.104.x writes no line.
 		expect(rowOf({ ...summary, ewrSplit: { method: 'flowShare', applied: 'flowShare' } }).lines.some((l) => l.startsWith('EWR split'))).toBe(false);
+		// Engine ≥ 1.105.0 (issue #615): always the natural MAR, said under both methods; Fragmentation's share runs and the units on the catchment rain.
+		const frag105 = rowOf({
+			...summary,
+			ewrSplit: { applied: 'naturalMar', period: { start: '2000-10-01', end: '2005-09-30', waterYears: 5 }, runoffFrom: 'shareRuns', catchmentRain: [{ nodeId: 'n', name: 'Farm, lower' }] }
+		});
+		expect(frag105.lines).toContain(
+			'EWR split between units by,each unit’s natural MAR,"2000-10-01 – 2005-09-30 (5 complete water years); Fragmentation: GR4J also ran on each unit’s own rain, for the shares only; on the catchment rain (share by area): Farm, lower"'
+		);
+		const area = rowOf({ ...summary, ewrSplit: { applied: 'area', why: 'noRunoff', period: { start: '2000-10-01', end: '2001-09-30', waterYears: 1 }, runoffFrom: 'unitRain' } });
+		expect(area.lines).toContain('EWR split between units by,each unit’s area,2000-10-01 – 2001-09-30 (1 complete water year); no unit made natural runoff');
+		// Engine ≥ 1.105.0's other fallbacks (issue #616) record the period and say why.
+		const p = { start: '2000-10-01', end: '2001-09-30', waterYears: 1 };
+		expect(rowOf({ ...summary, ewrSplit: { applied: 'area', why: 'noLandUnit', period: p } }).lines).toContain(
+			'EWR split between units by,each unit’s area,2000-10-01 – 2001-09-30 (1 complete water year); no unit has an area: every share is 0'
+		);
+		expect(rowOf({ ...summary, ewrSplit: { applied: 'area', why: 'noUnitRunoff', period: p } }).lines).toContain(
+			'EWR split between units by,each unit’s area,2000-10-01 – 2001-09-30 (1 complete water year); the natural flow came without the units’ runoff: by area'
+		);
+		expect(rowOf({ ...summary, ewrSplit: { applied: 'area', why: 'resumed', period: p } }).lines).toContain(
+			'EWR split between units by,each unit’s area,2000-10-01 – 2001-09-30 (1 complete water year); resumed from a snapshot that pinned no shares: by area'
+		);
+		const bare = rowOf({ ...summary, ewrSplit: { applied: 'flowShare', why: 'noLandUnit' } });
+		expect(bare.lines).toContain('EWR split between units by,the flow share,the flow share: no unit has an area');
+	});
+
+	it('writes one Natural MAR share (%) column for a run from engine 1.105.0 (issue #616); an older run keeps its recorded two', () => {
+		const farm = { ...summary.farms[0]!, flowShare: 0.25, ewrShare: 0.25 };
+		const farmRows = (engineVersion: string) => {
+			const lines = [...summaryCsvLines({ ...meta, engineVersion }, { ...summary, farms: [farm] })];
+			const at = lines.findIndex((l) => l.startsWith('Farm,'));
+			return [lines[at]!, lines[at + 1]!];
+		};
+		for (const v of ['1.105.0', '1.105.3', '1.106.0', '2.0.0']) {
+			const [header, row] = farmRows(v);
+			expect(header, v).toMatch(/^Farm,Natural MAR share \(%\),Average crop water requirement/);
+			expect(header, v).not.toMatch(/Flow share|EWR share/);
+			expect(row, v).toBe('"Farm, upper",25,90,100,80,20,80,-5,3');
+		}
+		// The positive control: 1.104.x and an unreadable version keep "Flow share (%)" / "EWR share (%)" as recorded.
+		for (const v of ['1.104.9', '0.99.200', 'dev']) {
+			const [header, row] = farmRows(v);
+			expect(header, v).toMatch(/^Farm,Flow share \(%\),EWR share \(%\),Average crop water requirement/);
+			expect(row, v).toBe('"Farm, upper",25,25,90,100,80,20,80,-5,3');
+		}
+	});
+
+	it('engineAtLeast compares x.y.z versions number by number', () => {
+		expect(engineAtLeast('1.105.0', [1, 105, 0])).toBe(true);
+		expect(engineAtLeast('1.105.1', [1, 105, 0])).toBe(true);
+		expect(engineAtLeast('1.104.99', [1, 105, 0])).toBe(false);
+		expect(engineAtLeast('1.99.0', [1, 105, 0])).toBe(false);
+		expect(engineAtLeast('2.0.0', [1, 105, 0])).toBe(true);
+		expect(engineAtLeast('0.200.0', [1, 105, 0])).toBe(false);
+		expect(engineAtLeast('', [1, 105, 0])).toBe(false);
 	});
 
 	it('writes the rainfall stations block (engine ≥ 1.91.0, issue #553) only when the run had it: each area, then each pairing', () => {
@@ -165,16 +220,30 @@ describe('summary sheet', () => {
 		expect(at).toBeGreaterThan(0);
 		expect(lines.slice(at + 1, at + 6)).toEqual([
 			"Catchment MAP (mm),800,the units' area-weighted mean",
-			'Area,Station,Area MAP (mm),Area MAP source,Station MAP (mm),Station MAP source,Scaled to MAP,Own ratio,Ratio applied,Clamped,CHIRPS corrected against,Days: station,Days: corrected CHIRPS,Days: fallback,Days: none,Set aside: checks,Set aside: unreliable',
-			'Synthetic catchment (catchment),Hill station,800,,745,station record,yes,1.074,1.074,no,Hill station,3000,150,0,2,14,30',
-			'Upper unit,Hill station,860,invented isohyet,745,station record,yes,1.154,1.154,no,Hill station,3000,150,0,2,14,30',
-			'Lower unit,Short station,860,invented isohyet,745,station record,yes,5,4,yes,none (the next fallback),2000,0,80,0,0,0'
+			'Area,Station,Area MAP (mm),Area MAP source,Station MAP (mm),Station MAP source,Scaled to MAP,Own ratio,Ratio applied,Clamped,CHIRPS corrected against,Days: station,Days: corrected CHIRPS,Days: fallback,Days: none,Set aside: checks,Set aside: unreliable,Days: patch stations,Gaps patched from',
+			'Synthetic catchment (catchment),Hill station,800,,745,station record,yes,1.074,1.074,no,Hill station,3000,150,0,2,14,30,,',
+			'Upper unit,Hill station,860,invented isohyet,745,station record,yes,1.154,1.154,no,Hill station,3000,150,0,2,14,30,,',
+			'Lower unit,Short station,860,invented isohyet,745,station record,yes,5,4,yes,none (the next fallback),2000,0,80,0,0,0,,'
 		]);
 		expect(lines[at + 6]).toMatch(/^Station CHIRPS pairings/);
 		expect(lines[at + 7]).toBe('Station,CHIRPS at,Refused,Fit from,Fit to,Complete years (accumulations counted),Shared days,Pinned,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec');
 		expect(lines[at + 8]).toBe("Hill station,the station's own CHIRPS cell,,1995-01-01,2020-12-31,26,9400,no,1,1.01,1.02,1.03,1.04,1.05,1.06,1.07,1.08,1.09,1.1,1.11");
 		expect(lines[at + 9]).toBe('Short station,the CHIRPS of Lower unit,only 3 complete years in common (5 needed),,,3,1000,no,,,,,,,,,,,,');
 		expect(lines[at + 10]).toBe('');
+		// A run with a patching priority (engine ≥ 1.105.0, issue #612): its patch days and its chain; a per-area pairing names its area's CHIRPS.
+		const p = structuredClone(s);
+		p.stations!.units[0] = {
+			...p.stations!.units[0]!,
+			days: { ...p.stations!.units[0]!.days, patch: 40 },
+			patches: [
+				{ source: 'station', stationId: 's2', stationName: 'Short station', stationMapMm: 700, ownRatio: 1.2, ratio: 1.2, clamped: false, skipped: null, gapDays: 150, fills: 40, days: 40 },
+				{ source: 'chirps', days: 110 }
+			]
+		};
+		p.stations!.pairings[0] = { ...p.stations!.pairings[0]!, chirpsAt: { catchment: true }, areaId: null };
+		const q = [...summaryCsvLines(meta, p)];
+		expect(q[at + 4]).toBe('Upper unit,Hill station,860,invented isohyet,745,station record,yes,1.154,1.154,no,Hill station,3000,150,0,2,14,30,40,Short station x 1.2 (40 days); then CHIRPS (110 days)');
+		expect(q[at + 8]).toMatch(/^Hill station,the catchment's CHIRPS,/);
 	});
 
 	it('writes the per-unit rain block (engine ≥ 1.78.0) only when the run had it', () => {

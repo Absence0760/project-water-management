@@ -5,7 +5,7 @@
 <svg
 	viewBox="0 0 660 480"
 	role="img"
-	aria-label="Daily rain and A-pan evaporation drive the runoff model, GR4J, which makes the catchment's natural flow. Flow shares split the natural flow, and the EWR, between the hydrological units. Rain, A-pan evaporation and the crops and their areas give each hydrological unit's irrigation demand. The hydrological unit balance, run for each hydrological unit from upstream down, takes the hydrological unit runoff and the demand, and handles dam capture, diversion, transfers, irrigation, spill and return flow. What leaves the last element is the simulated outflow at the outflow gauge, which is checked against the EWR and scored against observed flow."
+	aria-label="Daily rain and A-pan evaporation drive the runoff model, GR4J, which makes the catchment's natural flow. Each hydrological unit's natural MAR share splits the natural flow, and the EWR, between the hydrological units. Rain, A-pan evaporation and the crops and their areas give each hydrological unit's irrigation demand. The hydrological unit balance, run for each hydrological unit from upstream down, takes the hydrological unit runoff and the demand, and handles dam capture, diversion, transfers, irrigation, spill and return flow. What leaves the last element is the simulated outflow at the outflow gauge, which is checked against the EWR and scored against observed flow."
 >
 	<defs>
 		<marker id="pl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">

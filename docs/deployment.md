@@ -2458,6 +2458,39 @@ v0.0.3, historical extent (CC BY 4.0)"). The file is capped at 64 MB
 replaces the dataset and makes the worker match every dam again on its
 next ticks (200 a tick).
 
+## Climate indices
+
+NOAA CPC's ONI and AAO in the data mirror's `indices/`, which an outlook
+run with *Also compare past seasons like this one* reads (issue #620; the
+flow: [architecture.md § Data feeds](./architecture.md#data-feeds); the
+source: [data-sources.md § climate-indices](./data-sources.md#climate-indices)).
+One Terraform variable, off by default:
+
+- **`climate_indices_enabled`** (default `false`, `infra/climate_indices.tf`)
+  turns on the `water-management-indices-ingest` EventBridge rule (daily at
+  05:50 UTC, `{"mode":"daily-ingest","pass":"indices"}` to the fetcher,
+  never retried), the fetcher's reads and writes under `indices/` in the
+  mirror bucket (no delete), and the `mirror-lag-indices` alarm
+  (MirrorLagDays{Product=indices} ≥ 75 days, essential tier, breaching on
+  missing data). The worker already reads the whole mirror bucket.
+
+To turn it on, after a backend release with the pass is deployed:
+
+1. Set `climate_indices_enabled = true` and apply.
+2. Run the pass once by hand rather than wait for 05:50:
+   `aws lambda invoke --function-name water-management-fetcher --cli-binary-format raw-in-base64-out --payload '{"mode":"daily-ingest","pass":"indices"}' --region af-south-1 --profile water-management /tmp/indices.json && cat /tmp/indices.json`.
+   It answers `{ changed, through, lagDays, stopped }`: both indices
+   changed on the first run, `through` the newest month of each, `stopped`
+   `done`.
+3. Run an outlook with the box ticked: *Past seasons like this one* lists
+   the years chosen and the source line names the months held.
+
+Until it is on, such an outlook says the indices aren't held and shows the
+ESP alone. A 403 from CPC ends the run (log `reason refused`); the alarm
+fires if the copy falls behind, and outlooks keep reading the last copy,
+stepping back at most two months. Turning it off stops the copy; the files
+stay in the bucket.
+
 ## The cutover
 
 Issue #604 moves every feed off its upstream: CHIRPS and CHIRPS-GEFS onto

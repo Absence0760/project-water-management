@@ -194,12 +194,12 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 
 	// Ranges (the API rejects these with a 400)
 	const FRACTIONS = ['pctUpstreamToDam', 'pctRunoffToDam', 'damInitialPct', 'damMinPct', 'irrigationEfficiency', 'returnFlowFraction', 'damSeepagePerDay'] as const;
-	const NON_NEG = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'damCapacityM3', 'divertCapacityM3Day'] as const;
+	const NON_NEG = ['areaKm2', 'damCapacityM3', 'divertCapacityM3Day'] as const;
 	for (const n of nodes) {
 		const label = `"${nodeName(n.id)}"`;
 		if (n.name.trim().length > 100) issues.push({ area: 'network', itemId: n.id, message: `${label}: names are limited to 100 characters.` });
 		if (hasNameControlChars(n.name)) issues.push({ area: 'network', itemId: n.id, message: `${label}: names ${ONE_LINE}.` });
-		const badFrac = FRACTIONS.some((k) => !inRange(n[k], 0, 1)) || (n.flowShareManual !== null && !inRange(n.flowShareManual, 0, 1));
+		const badFrac = FRACTIONS.some((k) => !inRange(n[k], 0, 1));
 		if (badFrac) issues.push({ area: 'network', itemId: n.id, message: `${label}: percentages must be between 0% and 100%.` });
 		else if (!(n.irrigationEfficiency > 0)) issues.push({ area: 'network', itemId: n.id, message: `${label}: irrigation efficiency must be above 0%.` });
 

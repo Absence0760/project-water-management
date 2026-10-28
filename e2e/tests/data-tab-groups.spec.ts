@@ -104,7 +104,8 @@ test('the list is grouped: stations with their MAPs and areas, the catchment’s
 	await expect(seriesRow(page, 'CHIRPS Upper unit')).toBeVisible();
 	await expect(seriesRow(page, 'CHIRPS Upper unit').getByTestId('series-role')).toHaveText('Upper unit’s own rain');
 	const panel = page.getByTestId('area-rain');
-	await expect(panel.getByTestId('area-rain-days')).toHaveText(/^2.182 days from the station, 10 from corrected CHIRPS\. CHIRPS factors against Bergwater, January to December: Jan 2\.00, /);
+	await expect(panel.getByTestId('area-rain-days')).toHaveText(/^2.182 days from the station, 10 from corrected CHIRPS\. CHIRPS factors for Upper unit, fitted against Bergwater adjusted to its MAP, January to December: Jan 2\.32, /);
+	// 2.32: Bergwater is twice the unit's CHIRPS, taken to the unit's MAP (863.1 ÷ 745; one pairing per area since engine 1.105.0, issue #612).
 	const chart = panel.locator('figure.chart');
 	await expect(chart).toHaveAttribute('data-ready', 'true');
 	await expect(chart).toContainText('Upper unit: rain used and the lines behind it');

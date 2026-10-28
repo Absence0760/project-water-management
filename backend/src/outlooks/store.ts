@@ -4,8 +4,10 @@
 // jobs/handlers/outlook.ts).
 import { randomUUID } from 'node:crypto';
 import {
+	climateConditionedOutlook,
 	ENGINE_VERSION,
 	fromEpochDay,
+	selectClimateAnalogues,
 	outlookAnalogues,
 	outlookBaseAndSnapshot,
 	outlookLevelProblems,
@@ -29,6 +31,9 @@ import {
 	type ReviewTriggerBandPlan,
 	type ReviewTriggerRow,
 	type ReviewTriggers,
+	type ClimateIndexId,
+	type ClimateOutlook,
+	type OutlookSummaryInput,
 	type ScenarioOp,
 	type SeasonalOutlook,
 	type TriggerBandMembers,
@@ -38,9 +43,11 @@ import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { JobError, LeaseLostError } from '../jobs/errors.js';
 import { enqueueJob, type JobMeta, type JobStatus } from '../jobs/queue.js';
+import { readClimateIndices, type IndexEntry } from '../ingest/indices.js';
+import { mirrorStore } from '../mirror/source.js';
 import { outlookSeasonFor, resolveOutlook, reviewDateFor } from '../projects/outlookSettings.js';
 import { loadBaseInput } from '../scenarios/execute.js';
-import { type CreateOutlookBody, OUTLOOK_YEARS_MAX, OUTLOOKS_KEPT, TRIGGER_BANDS_MAX } from './schema.js';
+import { type CreateOutlookBody, type OutlookMethod, OUTLOOK_YEARS_MAX, OUTLOOKS_KEPT, TRIGGER_BANDS_MAX } from './schema.js';
 
 export type OutlookStatus = 'pending' | 'complete';
 
@@ -63,11 +70,20 @@ export interface MemberFailure {
 }
 
 /**
+ * The climate-state outlook as stored (issue #620, method `climateState`):
+ * the engine's ClimateOutlook (the selection, and the ESP members of the
+ * chosen years summarised), and which copy of each index it read (the data
+ * mirror's manifest entry: the months held, the revision, when fetched).
+ */
+export type StoredClimateOutlook = ClimateOutlook & { source: Partial<Record<ClimateIndexId, Pick<IndexEntry, 'url' | 'through' | 'revision' | 'fetchedAt'>>> };
+
+/**
  * An outlook's result: the engine's SeasonalOutlook (summariseOutlook), its
  * `excluded` with the years this backend left out as well, and the members
- * the engine refused.
+ * the engine refused. With the method `climateState`, `climate` beside it
+ * (the ESP figures are the same either way).
  */
-export type OutlookResult = Omit<SeasonalOutlook, 'excluded'> & { excluded: StoredExcluded[]; failures: MemberFailure[] };
+export type OutlookResult = Omit<SeasonalOutlook, 'excluded' | 'climate'> & { excluded: StoredExcluded[]; failures: MemberFailure[]; climate?: StoredClimateOutlook };
 
 /** A trigger table as stored: the engine's ReviewTriggers without each band's whole outlook (its per-level summary stays). */
 export type StoredTriggerTable = Omit<ReviewTriggers, 'rows'> & { rows: Omit<ReviewTriggerRow, 'outlook'>[] };
@@ -104,6 +120,8 @@ export interface OutlookRow {
 	planningShare: number | null;
 	levels: StoredLevel[];
 	analogueYears: number[] | null;
+	/** esp (the default): every analogue year alike; climateState: also the years nearest this season's ENSO and SAM state (issue #620). */
+	method: OutlookMethod;
 	status: OutlookStatus;
 	engineVersion: string | null;
 	/** The job computing it (null once the 30-day purge removed it): a dead job's error says why an outlook stayed pending. */
@@ -120,7 +138,7 @@ export interface OutlookRow {
 const outlookSelect = (withResult: boolean) => `SELECT o.id, o.name, o.base_run_id AS "baseRunId",
 	jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) AS "baseRun",
 	o.decision_date AS "decisionDate", o.season_end AS "seasonEnd", o.review_date AS "reviewDate", o.planning_share AS "planningShare",
-	o.levels, o.analogue_years AS "analogueYears", o.status, o.engine_version AS "engineVersion",
+	o.levels, o.analogue_years AS "analogueYears", o.method, o.status, o.engine_version AS "engineVersion",
 	CASE WHEN j.id IS NULL THEN NULL ELSE jsonb_build_object('id', j.id, 'status', j.status, 'error', j.last_error, 'progress', j.progress) END AS job,
 	u.display_name AS "createdBy", o.created_at AS "createdAt", o.completed_at AS "completedAt"${withResult ? ', o.result, o.triggers' : ''}
 	FROM seasonal_outlook o JOIN model_run r ON r.id = o.base_run_id
@@ -187,8 +205,8 @@ export async function createOutlook(db: Db, projectId: string, body: CreateOutlo
 	// The job first, so the outlook row can name it (the guard checks it is this project's outlook job).
 	const { job } = await enqueueJob(db, { projectId, kind: 'outlook', payload: { outlookId }, maxAttempts: 2 });
 	await db.query(
-		`INSERT INTO seasonal_outlook (id, project_id, base_run_id, job_id, name, decision_date, season_end, planning_share, levels, analogue_years, review_date)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		`INSERT INTO seasonal_outlook (id, project_id, base_run_id, job_id, name, decision_date, season_end, planning_share, levels, analogue_years, review_date, method)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		[
 			outlookId,
 			projectId,
@@ -200,7 +218,8 @@ export async function createOutlook(db: Db, projectId: string, body: CreateOutlo
 			body.planningShare ?? setting.planningShare,
 			JSON.stringify(levels),
 			body.analogueYears ?? null,
-			reviewDate
+			reviewDate,
+			body.method ?? 'esp'
 		]
 	);
 	await db.query(
@@ -282,14 +301,17 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 		planningShare: number | null;
 		levels: StoredLevel[];
 		analogueYears: number[] | null;
+		method: OutlookMethod;
 	}>(
 		`SELECT base_run_id AS "baseRunId", status, decision_date AS "decisionDate", season_end AS "seasonEnd", review_date AS "reviewDate",
-			planning_share AS "planningShare", levels, analogue_years AS "analogueYears"
+			planning_share AS "planningShare", levels, analogue_years AS "analogueYears", method
 		 FROM seasonal_outlook WHERE project_id = $1 AND id = $2`,
 		[projectId, outlookId]
 	);
 	const o = rows[0];
 	if (!o || o.status === 'complete') return false;
+	// The climate indices first (issue #620), so a copy that can't be read fails the job before any member runs.
+	const indices = o.method === 'climateState' ? await readClimateIndices(mirrorStore()) : null;
 	// A base run that can no longer be rebuilt fails the job (an ApiError: no retry), the outlook stays pending.
 	// Without the drought restriction rule (engine ≥ 1.54.0, withoutDroughtRestriction): the triggers become that
 	// rule, and a demand level on top of it would cut twice; the history and every member run unrestricted.
@@ -382,7 +404,7 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 	const failedYears = new Set(failures.filter((f) => !levels.find((l) => l.level.id === f.levelId)!.problems.length).map((f) => f.waterYear));
 	for (const wy of [...failedYears].sort((a, b) => a - b)) excluded.push({ waterYear: wy, reason: 'memberFailed' });
 	const kept = analogues.filter((a) => !failedYears.has(a.waterYear));
-	const summary = summariseOutlook({
+	const summaryInput: OutlookSummaryInput = {
 		season,
 		model: base.model,
 		analogues: kept,
@@ -395,8 +417,17 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 		})),
 		startStorageM3: startStorage(base, baseRun, season.decisionDate),
 		...(o.planningShare !== null ? { planningShare: o.planningShare } : {})
-	});
+	};
+	// The ESP summary (no `climate`: only runSeasonalOutlook adds one); the stored one is added below.
+	const summary = summariseOutlook(summaryInput);
 	const result: OutlookResult = { ...summary, excluded, failures };
+	if (indices) {
+		// The same members summarised on the years nearest this season's ENSO and SAM state: nothing more is run.
+		const climate = climateConditionedOutlook(summaryInput, selectClimateAnalogues(season, kept, indices.series));
+		const source: StoredClimateOutlook['source'] = {};
+		for (const [id, e] of Object.entries(indices.entries) as [ClimateIndexId, IndexEntry][]) source[id] = { url: e.url, through: e.through, revision: e.revision, fetchedAt: e.fetchedAt };
+		result.climate = { ...climate, source };
+	}
 
 	// The review triggers (R6): every storage band × every level that ran × the table's analogue years.
 	let triggers: StoredTriggers | null = null;

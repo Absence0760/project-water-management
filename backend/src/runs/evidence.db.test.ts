@@ -116,6 +116,13 @@ describe('POST /projects/:id/evidence', () => {
 		const other = await runnableProject(editor, 'Elsewhere');
 		const otherRun = await newRun(editor, other, 'Theirs');
 		expect((await nominate(editor, otherRun)).status).toBe(404);
+		// A run from engine 1.105.0 on (issue #616) names no flow-share method: its shares add up to 1, so it isn't checked,
+		// even when its nodes still carry a retired manual share (a snapshot written mid-upgrade).
+		const newer = (await asOwner('SELECT inputs FROM model_run WHERE id = $1', [otherRun]))[0] as { inputs: { settings: Record<string, unknown>; model: { nodes: Record<string, unknown>[] } } };
+		expect('flowShareMethod' in newer.inputs.settings).toBe(false);
+		for (const n of newer.inputs.model.nodes) if (n.kind === 'farm') n.flowShareManual = 2;
+		await asOwner('UPDATE model_run SET inputs = $2 WHERE id = $1', [otherRun, newer.inputs]);
+		expect((await nominate(editor, otherRun, 'Checked', other)).status).toBe(201);
 		for (const body of [{}, { runId: gr4jB }, { runId: gr4jB, reason: '   ' }, { runId: gr4jB, reason: 'x'.repeat(2001) }, { runId: 'nope', reason: 'r' }, { runId: gr4jB, reason: 'nul \u0000' }, { runId: gr4jB, reason: 'r', nominatedBy: owner.id }]) {
 			const res = await owner.call('POST', `/projects/${projectId}/evidence`, body);
 			expect(res.status, JSON.stringify(body)).toBe(400);

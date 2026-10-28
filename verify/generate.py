@@ -102,14 +102,18 @@ def random_input(seed: int, dense: bool = False) -> dict:
         below = rng.choice(nodes)
         nodes.append({"id": _uuid(rng), "name": f"{kind} {k}", "kind": kind, "downstreamNodeId": below["id"]})
 
-    method = rng.choice(["area", "area", "hiLo", "manual"])
+    # The retired flow-share method's and specific shares' draws (engine 1.105.0, issue #616), kept so the rest of a
+    # seed's network is what it was.
+    rng.choice(["area", "area", "hiLo", "manual"])
     farms = [n for n in nodes if n["kind"] == "farm"]
-    manual = [rng.random() for _ in farms]
-    tot = sum(manual) / rng.uniform(0.7, 1.0) if manual else 1
+    for _ in farms:
+        rng.random()
+    if farms:
+        rng.uniform(0.7, 1.0)
     for idx, n in enumerate(nodes):
         n["sortOrder"] = idx
         base = {
-            "areaKm2": 0, "areaHiKm2": 0, "areaLoKm2": 0, "flowShareManual": None, "pctUpstreamToDam": 0,
+            "areaKm2": 0, "pctUpstreamToDam": 0,
             "pctRunoffToDam": 0, "damCapacityM3": 0, "damInitialPct": 0, "damMinPct": 0, "divertCapacityM3Day": 0,
             "irrigationEfficiency": 1, "returnFlowFraction": 0, "damAreaFullM2": None, "damAreaExponent": 0.7,
             "damSeepagePerDay": 0,
@@ -121,7 +125,7 @@ def random_input(seed: int, dense: bool = False) -> dict:
                 n["ewrSite"] = False
             continue
         area = round(rng.uniform(0.5, 60), 2) if rng.random() > 0.05 else 0
-        hi = round(area * rng.uniform(0.2, 0.8), 2)
+        rng.uniform(0.2, 0.8)  # the retired high-MAP area's draw (issue #616)
         # The same draws, in the same order, as before engine 1.71.0: β, a share of the losses, is
         # stored as the return flow r = β(1 − e), a share of the water supplied.
         up = rng.choice([0, 0, 1, round(rng.random(), 2)])
@@ -130,9 +134,6 @@ def random_input(seed: int, dense: bool = False) -> dict:
         beta = rng.choice([0, 0.5, 1, round(rng.random(), 2)])
         n.update(
             areaKm2=area,
-            areaHiKm2=hi,
-            areaLoKm2=round(area - hi, 2),
-            flowShareManual=math.floor(manual[farms.index(n)] / tot * 1e4) / 1e4 if method == "manual" else None,
             pctUpstreamToDam=up,
             pctRunoffToDam=ro,
             irrigationEfficiency=e,
@@ -212,8 +213,8 @@ def random_input(seed: int, dense: bool = False) -> dict:
             "x4": round(rng.uniform(0.6, 4), 2),
             "warmupDays": rng.choice([0, 30, 365, 3000]),
         },
-        "flowShareMethod": method,
-        "hiLoSplit": {"hi": 0.5, "lo": 0.5} if rng.random() < 0.5 else {"hi": 0.7, "lo": 0.3},
+        # The retired Hi/Lo split's draw (issue #616), kept in place so the rest of a seed is what it was; dropped below.
+        "_retiredHiLoDraw": rng.random(),
         "effectiveRainFraction": round(rng.uniform(0, 1), 2),
         "effectiveRainStoreMm": rng.choice([0, 25, round(rng.uniform(0, 60), 1)]),
         "lakeEvapFactor": rng.choice([0.75, 0, round(rng.uniform(0.5, 1), 2)]),
@@ -231,6 +232,7 @@ def random_input(seed: int, dense: bool = False) -> dict:
             "fillAboveChirpsMm": random.Random(seed * 999983 + 5).choice([2, 2, 0, 0.5, 5]),
         },
     }
+    del settings["_retiredHiLoDraw"]
     if rng.random() < 0.2:
         settings["effectiveRainFractionMonthly"] = _monthly(rng, 0, 1, 2)
     if rng.random() < 0.2:
@@ -262,19 +264,9 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_unit_rain_decisions(random.Random(seed * 32452843 + 7), doc)
     add_external_transfers(random.Random(seed * 49979687 + 13), doc, dense)
     add_rain_stations(random.Random(seed * 67867967 + 5), doc, start, days, dense)
-    add_ewr_split(random.Random(seed * 86028121 + 3), doc)
+    # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
+    # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
-
-
-def add_ewr_split(rng: random.Random, doc: dict) -> None:
-    """The EWR split by each unit's natural MAR (§2.5b, engine >= 1.94.0),
-    from its own stream so the rest of a network is unchanged: on half the
-    per-unit networks, and now and then under catchment rain, where it is the
-    flow share."""
-    s = doc["settings"]
-    per_unit = (s.get("unitRain") or {}).get("mode") == "perUnit"
-    if rng.random() < (0.5 if per_unit else 0.1):
-        s["ewrSplit"] = "naturalMar"
 
 
 def _unit_series(rng: random.Random, start: dt.date, days: int, scale: float, chirps: bool) -> dict:
@@ -452,7 +444,11 @@ def add_rain_stations(rng: random.Random, doc: dict, start: dt.date, days: int, 
     catchment MAP, one out of range, or the farms' mean, which needs every
     land unit's MAP); under per-unit rain each land unit has one 60 % of the
     time, often with CHIRPS of its own for the gaps. Now and then an
-    assignment names a station with no record, or has no station id."""
+    assignment names a station with no record, or has no station id. Last,
+    so every draw above is as before: a patching priority (issue #612) on
+    40 % of the assignments, a shuffled list of other stations (now and then
+    the main one, a repeat or one with no record) with CHIRPS somewhere or
+    absent, and now and then empty."""
     if rng.random() >= (0.65 if dense else 0.3):
         return
     s = doc["settings"]
@@ -528,6 +524,20 @@ def add_rain_stations(rng: random.Random, doc: dict, start: dt.date, days: int, 
             rs["units"] = units
     if not rs.get("catchment") and not rs.get("units"):
         return
+    for a in [rs.get("catchment"), *(rs.get("units") or {}).values()]:
+        if not a or rng.random() >= 0.4:
+            continue
+        if rng.random() < 0.1:
+            a["patch"] = []
+            continue
+        pool = [x for x in ids if rng.random() < 0.7] + (["no-such-station"] if rng.random() < 0.05 else [])
+        rng.shuffle(pool)
+        patch = [{"source": "station", "stationId": x} for x in pool]
+        if rng.random() < 0.75:
+            patch.insert(rng.randint(0, len(patch)), {"source": "chirps"})
+        if patch and rng.random() < 0.05:
+            patch.append(dict(patch[0]))
+        a["patch"] = patch
     s["rainStations"] = rs
     doc["stations"] = stations
 
@@ -635,7 +645,7 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
             child = rng.choice([x for x in nodes if x["downstreamNodeId"] is not None])
             u = {
                 "id": _uuid(rng), "name": f"user {k}", "kind": "user", "downstreamNodeId": child["downstreamNodeId"],
-                "sortOrder": len(nodes), "areaKm2": 0, "areaHiKm2": 0, "areaLoKm2": 0, "flowShareManual": None,
+                "sortOrder": len(nodes), "areaKm2": 0,
                 "pctUpstreamToDam": 0, "pctRunoffToDam": 0, "damCapacityM3": 0, "damInitialPct": 0, "damMinPct": 0,
                 "divertCapacityM3Day": 0, "irrigationEfficiency": 1, "returnFlowFraction": 0, "damAreaFullM2": None,
                 "damAreaExponent": 0.7, "damSeepagePerDay": 0,

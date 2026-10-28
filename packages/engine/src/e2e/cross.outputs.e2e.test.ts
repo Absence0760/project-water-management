@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import type { DemandObject, ModelInput, ModelOutput, NetworkNode, Transfer } from '../project';
 import type { AllocationEntry } from '../allocations/compare';
-import { captureModelState, runModel, runModelFrom, runModelWithoutChecks, withVerification } from '../run';
+import { captureModelState, ewrSplitPinOf, runModel, runModelFrom, runModelWithoutChecks, withVerification } from '../run';
 import { testCatchment } from '../outlook/testCatchment';
 import { outlookAnalogues, outlookSeasonInput, runSeasonalOutlook } from '../outlook/outlook';
 import { applyScenario, type ScenarioOp } from '../scenario';
@@ -49,7 +49,7 @@ function withCanal(x: ModelInput, allocations: AllocationEntry[], mode: 'none' |
 		enabled: true,
 		note: ''
 	};
-	const canal: NetworkNode = { ...x.model.nodes[1]!, id: 'c', name: 'Canal head', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, damCapacityM3: 0, damInitialPct: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damAreaFullM2: null, sortOrder: 3, downstreamNodeId: 'g' };
+	const canal: NetworkNode = { ...x.model.nodes[1]!, id: 'c', name: 'Canal head', areaKm2: 0, damCapacityM3: 0, damInitialPct: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damAreaFullM2: null, sortOrder: 3, downstreamNodeId: 'g' };
 	const ot: Transfer = { id: 'ot', fromNodeId: 'a', toNodeId: 'c', months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], maxRateM3s: 0.01, dailyCapM3: 400, minStoragePct: 0, enabled: true, priority: 0, source: 'river', sizing: 'demand', lossPct: 0.1, handsOffM3Day: 150, handsOffEwr: false, topUpDam: false };
 	return {
 		...x,
@@ -193,6 +193,8 @@ describe('the seasonal outlook on a network with a river off-take and an allocat
 		const { analogues } = outlookAnalogues(baseRun, season);
 		expect(analogues.length).toBeGreaterThanOrEqual(10);
 		const snap = captureModelState(BASE, season.decisionDate);
+		const pinned = ewrSplitPinOf(BASE);
+		expect(pinned?.shares.length).toBeGreaterThan(0);
 		const k = toEpochDay(season.decisionDate) - toEpochDay(baseRun.startDate);
 		const rain = BASE.series.rain_catchment_mm!;
 		const rf = series(baseRun, null, 'rain_final');
@@ -207,7 +209,10 @@ describe('the seasonal outlook on a network with a river off-take and an allocat
 					...BASE,
 					settings: { ...BASE.settings, simulationEnd: season.seasonEnd, ...(f !== 1 ? { demandFactorFrom: season.decisionDate } : {}) },
 					model: f === 1 ? BASE.model : { ...BASE.model, nodes: BASE.model.nodes.map((n) => (n.kind === 'farm' ? { ...n, demandFactor: new Array(12).fill(f) } : n)) },
-					series: { rain_catchment_mm: { startDate: rain.startDate, values: [...rain.values.slice(0, k), ...rf.slice(ai, ai + days)] } }
+					series: { rain_catchment_mm: { startDate: rain.startDate, values: [...rain.values.slice(0, k), ...rf.slice(ai, ai + days)] } },
+					// The base run's unit shares, as the member takes the capture run's (engine ≥ 1.105.0, §2.5): not shares made
+					// over the plain run's own record, which ends in the analogue's season.
+					ewrSplitPinned: pinned
 				};
 				const plain = runModelWithoutChecks(plainInput);
 				for (const [n, key] of KEYS) {

@@ -13,13 +13,14 @@ import { GROUPS, hasDam, hasDamDevelopment, NODE_FIELDS, type NodeField } from '
 import { hasSupplySettings } from './supply';
 
 /** A field group of NODE_FIELDS, or one of the form's own sections. */
-export type NodeSection = NodeField['group'] | 'damSurvey' | 'supply' | 'demand' | 'boreholes' | 'cover';
+export type NodeSection = NodeField['group'] | 'share' | 'damSurvey' | 'supply' | 'demand' | 'boreholes' | 'cover';
 
 export const SECTION_ORDER: readonly NodeSection[] = ['area', 'share', 'dam', 'damSurvey', 'routing', 'supply', 'irrigation', 'demand', 'groundwater', 'boreholes', 'cover', 'baseflow', 'reach'];
 
 /** Each section's legend in the form. */
 export const SECTION_TITLE: Record<NodeSection, string> = {
 	...GROUPS,
+	share: 'Flow share',
 	damSurvey: 'Dam survey and releases',
 	supply: 'Supply',
 	demand: 'Demand objects',
@@ -47,6 +48,8 @@ export function nodeSections(node: NetworkNode, demandObjects: number): NodeSect
 	const groups = new Set(NODE_FIELDS.filter((f) => fieldShows(f, node.kind)).map((f) => f.group));
 	const farm = node.kind === 'farm';
 	const own: Record<Exclude<NodeSection, NodeField['group']>, boolean> = {
+		// The unit's share in the latest run: shown, not edited (issue #616).
+		share: farm,
 		damSurvey: hasDam(node) || hasDamDevelopment(node),
 		supply: farm || hasSupplySettings(node),
 		demand: farm || demandObjects > 0,

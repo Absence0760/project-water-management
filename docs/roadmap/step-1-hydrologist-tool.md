@@ -1676,8 +1676,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     - a TypeScript port of `scripts/wbt-import/extract_project.py` and
       `calibration.py` (about 870 lines of Python) using SheetJS;
     - it outputs a `ProjectFile` plus an **unmapped report** (hand-written
-      transfer formulas that don't fit the rule shape, a Specific method
-      with no values, M1-style month-list notes). This closes plan.md 1b ⬜;
+      transfer formulas that don't fit the rule shape (and, until engine
+      1.105.0 retired the method, a Specific method with no values), M1-style month-list notes). This closes plan.md 1b ⬜;
     - it submits through `POST /projects/import` (WP-1.8).
   - Read-only parsing: never evaluate formulas or macros, only cached cell
     values; limit the file size (e.g. 30 MB) and the sheet count.
@@ -1780,7 +1780,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 > **Built 2026-09-25 (engine 0.22.0, migration 011), off by default.** As
 > specified, with two decisions made pending WP-1.1: a priority user's demand is
-> passed down by the farms upstream (fragmented by flow share, like the EWR),
+> passed down by the farms upstream (fragmented by flow share, like the EWR;
+> from engine 1.105.0, issue #616, by each unit's natural MAR share),
 > and priority users are not curtailed for the EWR while non-priority ones are.
 > [model.md §2.7c](../model.md).
 

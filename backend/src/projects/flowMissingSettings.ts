@@ -54,8 +54,15 @@ function collect(settings: Record<string, unknown>, out: Set<string>): void {
 	const rs = settings.rainStations;
 	if (isObj(rs)) {
 		const add = (id: unknown) => typeof id === 'string' && out.add(id);
-		for (const a of [rs.catchment, ...Object.values(isObj(rs.units) ? rs.units : {})]) if (isObj(a)) add(a.stationId), add(a.correctAgainst);
-		for (const key of ['sites', 'unreliable', 'pinnedFactors'] as const) if (isObj(rs[key])) for (const id of Object.keys(rs[key] as object)) out.add(id);
+		for (const a of [rs.catchment, ...Object.values(isObj(rs.units) ? rs.units : {})])
+			if (isObj(a)) {
+				add(a.stationId), add(a.correctAgainst);
+				// A patching priority's stations (issue #612).
+				if (Array.isArray(a.patch)) for (const p of a.patch) if (isObj(p)) add(p.stationId);
+			}
+		for (const key of ['sites', 'unreliable'] as const) if (isObj(rs[key])) for (const id of Object.keys(rs[key] as object)) out.add(id);
+		// pinnedFactors' keys are `<station>|<area>` since engine 1.105.0 (a station id alone before).
+		if (isObj(rs.pinnedFactors)) for (const k of Object.keys(rs.pinnedFactors)) out.add(k.split('|')[0]!);
 	}
 	if (isObj(settings.flowMissing)) for (const id of Object.keys(settings.flowMissing)) out.add(id);
 	// The fit record's own (engine ≥ 1.102.0): the series it was fitted to, and the kept checks it ran on.

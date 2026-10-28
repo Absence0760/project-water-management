@@ -20,9 +20,6 @@ function farm(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		downstreamNodeId: 'G',
 		sortOrder: 0,
 		areaKm2: 1,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 0,
 		pctRunoffToDam: 0,
 		damCapacityM3: 0,
@@ -187,39 +184,27 @@ describe('fragmentation and accumulation down the network (§2.5, §2.7)', () =>
 		passes(input, out);
 	});
 
-	it('manual shares below 100 %: the missing share never reaches the river, with a warning', () => {
+	it('shares by area when the natural flow is supplied without the units’ runoff: Σ runoff = the natural flow', () => {
 		const input = build({
-			nodes: [gauge(), farm('A', { flowShareManual: 0.3, downstreamNodeId: 'B' }), farm('B', { flowShareManual: 0.5 })],
-			settings: { flowShareMethod: 'manual' },
+			nodes: [gauge(), farm('A', { areaKm2: 3, downstreamNodeId: 'B' }), farm('B', { areaKm2: 1 })],
 			days: 2
 		});
 		const out = run(input, [1000, 10]);
-		expect(get(out, 'A', 'runoff')).toEqual([300, 3]);
-		expect(get(out, 'B', 'runoff')).toEqual([500, 5]);
-		expect(get(out, 'G', 'outflow')).toEqual([800, 8]);
-		expect(out.summary.warnings.some((w) => /sum to 80\.00%/.test(w))).toBe(true);
+		expect(get(out, 'A', 'runoff')).toEqual([750, 7.5]);
+		expect(get(out, 'B', 'runoff')).toEqual([250, 2.5]);
+		expect(get(out, 'G', 'outflow')).toEqual([1000, 10]);
+		passes(input, out);
 	});
 
-	it('manual shares above 100 % are refused: water from nowhere', () => {
+	it('a stored Hi/Lo MAP or specific method and its node fields are ignored (engine 1.105.0, issue #616)', () => {
 		const input = build({
-			nodes: [gauge(), farm('A', { flowShareManual: 0.7 }), farm('B', { flowShareManual: 0.5 })],
-			settings: { flowShareMethod: 'manual' },
-			days: 2
-		});
-		expect(() => run(input, [1, 1])).toThrow(/more than 100%/);
-	});
-
-	it('hi/lo shares: hi/Σhi × split.hi + lo/Σlo × split.lo', () => {
-		// hi areas 1, 3 (Σ 4); lo areas 2, 2 (Σ 4); split 0.6 / 0.4.
-		// A: 0.25 × 0.6 + 0.5 × 0.4 = 0.35; B: 0.75 × 0.6 + 0.5 × 0.4 = 0.65.
-		const input = build({
-			nodes: [gauge(), farm('A', { areaKm2: 3, areaHiKm2: 1, areaLoKm2: 2 }), farm('B', { areaKm2: 5, areaHiKm2: 3, areaLoKm2: 2 })],
-			settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.6, lo: 0.4 } },
+			nodes: [gauge(), farm('A', { areaKm2: 3, ...({ areaHiKm2: 1, areaLoKm2: 2, flowShareManual: 0.7 } as object) }), farm('B', { areaKm2: 5, ...({ areaHiKm2: 3, areaLoKm2: 2, flowShareManual: 0.5 } as object) })],
+			settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.6, lo: 0.4 } } as object,
 			days: 1
 		});
 		const out = run(input, [1000]);
-		near(get(out, 'A', 'runoff'), [350]);
-		near(get(out, 'B', 'runoff'), [650]);
+		near(get(out, 'A', 'runoff'), [375]);
+		near(get(out, 'B', 'runoff'), [625]);
 		near(get(out, 'G', 'outflow'), [1000]);
 	});
 

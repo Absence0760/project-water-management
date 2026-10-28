@@ -94,6 +94,7 @@ Every job that fetches from an upstream:
 | [sanlc](#sanlc) | SANLC orchard and vine classes | built R5-D; blocked in production until its terms are recorded (synthetic grid in dev, CI and e2e) | `egis.environment.gov.za` | `crop_type_dataset` | `pnpm import:crop-types` |
 | [agera5](#agera5) | AgERA5 v2.0 daily FAO-56 reference ET | built R5-E; the copy's job off in production until `agera5_enabled` (the CDS key is ERA5-Land's) | `cds.climate.copernicus.eu` | `agera5_et0` | `ingest/agera5.py` (the copy), `backend/src/feeds/fromMirrorEt0.ts` (feeds read it), `infra/agera5.tf` |
 | [nasa-power](#nasa-power) | NASA POWER daily weather, our FAO-56 ET₀ from it (AgERA5's fallback) | built R5-E; off until `power_et0_enabled` | `power.larc.nasa.gov` | – (read by `agera5_et0` feeds) | `ingest/nasapower.py`, `ingest/fao56.py`, `infra/agera5.tf` |
+| [climate-indices](#climate-indices) | NOAA CPC's ONI (ENSO) and AAO (the SAM's proxy), monthly | built (#620); the fetcher's indices pass off in production until `climate_indices_enabled` | `www.cpc.ncep.noaa.gov` | – | `backend/src/feeds/sources/cpc.ts`, `backend/src/ingest/indices.ts`, `infra/climate_indices.tf` |
 
 ## Live feeds
 
@@ -652,6 +653,58 @@ as it stands ([model.md §2.4a](./model.md) *Daily reference ET*).
 - **Owner:** the operator; code `ingest/nasapower.py`, `ingest/fao56.py`,
   `infra/agera5.tf`.
 
+## Climate indices
+
+The seasonal outlook's climate-state analogues (issue #620,
+[model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues))
+read two monthly indices from our own copy, never from CPC at run time.
+
+### climate-indices
+
+- **Source:** NOAA Climate Prediction Center. The **Oceanic Niño Index**
+  (ONI, ERSSTv5): the 3-month running mean of the Niño 3.4 sea-surface
+  temperature anomaly, `oni.ascii.txt`, one row per overlapping season from
+  DJF 1950, published early in the month after a season ends. The
+  **Antarctic Oscillation** (AAO): CPC's monthly index of the Southern
+  Annular Mode (the leading pattern of 700 hPa height south of 20° S), from
+  January 1979, published early in the following month. We keep each ONI
+  season under its centre month (JAS → August).
+- **Host:** `www.cpc.ncep.noaa.gov`, two plain-text files fetched whole:
+  `/data/indices/oni.ascii.txt` and
+  `/products/precip/CWlink/daily_ao_index/aao/monthly.aao.index.b79.current.ascii`.
+- **Licence:** US-government work, not under copyright in the US; no
+  licence terms on either page beyond NOAA's general disclaimer (read
+  2026-10-27, issue #620). Commercial use allowed; D-B passes. We use CPC's
+  AAO, **not** the Marshall (BAS) SAM index: its terms couldn't be found, so
+  it stays out until BAS confirms them.
+- **Attribution:** "ONI and AAO: NOAA Climate Prediction Center", shown under
+  the outlook's Past seasons like this one with the months the copy holds and
+  when it was read (each outlook stores the copy's manifest entry, docs/api.md
+  § Seasonal outlooks).
+- **Contact:** NOAA CPC (the contact link on www.cpc.ncep.noaa.gov).
+- **Access pattern:** the fetcher's indices pass once a day
+  (`{"mode":"daily-ingest","pass":"indices"}`, 05:50 UTC,
+  `infra/climate_indices.tf`): each file fetched whole, parsed strictly (a
+  changed page refuses the whole file), written to `indices/<id>.json` only
+  when its values changed, and recorded in `indices/manifest.json` (URL,
+  SHA-256, months held, revision, when fetched and changed). A file shorter
+  than the copy's is refused and the copy's kept. The worker reads the copy
+  when an outlook asks for it ([architecture.md § Data
+  feeds](./architecture.md#data-feeds)).
+- **Limits we keep to:** two requests a day, one a second, with the
+  descriptive User-Agent; a 403 or throttle ends the run with no retry; at
+  most 512 kB a file (both are under 40 kB).
+- **Fallback:** the copy's last revision; the outlook reads a month or two
+  earlier when this season's months aren't held yet, and otherwise says the
+  indices aren't held and shows the ESP alone.
+- **Owner:** the operator; code `backend/src/feeds/sources/cpc.ts`,
+  `backend/src/ingest/indices.ts`, `infra/climate_indices.tf`. Freshness
+  alarm `mirror-lag-indices` (MirrorLagDays{Product=indices} ≥ 75 days).
+- **Fixtures:** invented values (`backend/src/feeds/sources/cpc.ts`
+  `oniFixtureText`, `aaoFixtureText`, answered under `FEED_SOURCE=fixtures`)
+  and the committed synthetic copy `backend/fixtures/mirror/indices/`
+  (`pnpm gen:mirror-fixture`).
+
 ## Planned sources
 
 From #604's Rounds 4 and 5. Each gets its full section here when its round
@@ -724,7 +777,6 @@ its comments 4, 6, 7 and 8).
 | Source | Licence | Access | Use |
 | --- | --- | --- | --- |
 | C3S multi-system seasonal | CC BY, plus the additional licence for non-European contributions | CDS API, 1° monthly | seasonal outlook per restriction level |
-| ENSO / SAM indices | NOAA public; cite Marshall | NOAA PSL ASCII | analogue-year outlook |
 | NEX-GDDP-CMIP6 | CC0 (NASA's expert-use caveat) | S3 us-west-2 | future yield in evidence packs |
 | iSDAsoil, SoilGrids 2.0, HydroATLAS, GRDC-Caravan | CC BY 4.0 (SoilGrids' REST allows 5 calls a minute) | S3 us-west-2; WCS; downloads; Zenodo | GR4J priors for ungauged units |
 | GloFAS v4 reanalysis | CEMS-FLOODS, free with attribution | EWDS API | modelled daily flow for ungauged catchments |

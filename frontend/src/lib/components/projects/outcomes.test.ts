@@ -48,6 +48,7 @@ const outcome = (id: string, over: Partial<PortfolioProject> = {}): PortfolioPro
 	feeds: { total: 0, ok: 0, failing: 0 },
 	alertsFiring: 0,
 	restriction: null,
+	drought: null,
 	...over
 });
 

@@ -93,6 +93,9 @@ describe('the series ids settings name, and a copy’s or import’s fresh ones'
 		expect([...settingSeriesIds(settings)].sort()).toEqual([ST, GAUGE, OBS, LOG].sort());
 		expect(settingSeriesIds({}).size).toBe(0);
 		expect(settingSeriesIds(null).size).toBe(0);
+		// A patching priority's stations (issue #612) are named too.
+		const P = 'f0000000-0000-4000-8000-00000000000f';
+		expect([...settingSeriesIds({ rainStations: { units: { [OBS]: { stationId: ST, patch: [{ source: 'station', stationId: P }, { source: 'chirps' }] } } } })].sort()).toEqual([ST, P].sort());
 	});
 
 	it('follows fresh ids; an id not in the map, and anything else, stays', () => {

@@ -27,6 +27,15 @@ export const OUTLOOK_JOBS_PER_USER = 2;
 /** Outlooks kept per project, newest first; creating one deletes older ones. */
 export const OUTLOOKS_KEPT = 20;
 
+/**
+ * How the analogue years are used (267_outlook_method CHECK): `esp` every
+ * year alike; `climateState` also the years nearest this season's ENSO and
+ * SAM state (issue #620). A forecast-conditioned method (C3S, issue #620
+ * steps 5–7) would be a third value.
+ */
+export const OUTLOOK_METHODS = ['esp', 'climateState'] as const;
+export type OutlookMethod = (typeof OUTLOOK_METHODS)[number];
+
 const noNul = (s: string) => !s.includes('\u0000');
 const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date, YYYY-MM-DD');
 
@@ -69,7 +78,14 @@ export const CreateOutlookBody = z
 		 */
 		reviewDate: IsoDate.nullable().optional(),
 		/** Analogue water years; absent: every one the record holds but the season's own. */
-		analogueYears: z.array(z.number().int().min(1800).max(2200)).min(1).max(200).optional()
+		analogueYears: z.array(z.number().int().min(1800).max(2200)).min(1).max(200).optional(),
+		/**
+		 * esp (absent: the default): every analogue year alike. climateState: also
+		 * the same members summarised on the years nearest this season's ENSO and
+		 * SAM state (issue #620, the engine's selectClimateAnalogues); the ESP
+		 * figures are the same either way.
+		 */
+		method: z.enum(OUTLOOK_METHODS).optional()
 	})
 	.strict()
 	.superRefine((b, ctx) => {

@@ -25,7 +25,9 @@
 // That run writes the mirror bucket (MIRROR_URL); the per-feed mode above
 // stays as it is until the worker reads the copy everywhere (R3-C). The same
 // mode with `"pass":"gefs"` copies the newest CHIRPS-GEFS issue instead
-// (ingest/gefs.ts, issue #604 R3-A), on its own rule.
+// (ingest/gefs.ts, issue #604 R3-A), on its own rule, and with
+// `"pass":"indices"` NOAA CPC's ONI and AAO climate indices (ingest/indices.ts,
+// issue #620), on a rule of its own too.
 //
 // A third (issue #604 R3-B): a weekly schedule invokes it with
 // `{"mode":"dws-weekly"}` (DWS_WEEKLY_EVENT, infra/feeds.tf), and it reads the
@@ -278,6 +280,52 @@ export function isDailyIngestEvent(event: unknown): event is DailyIngestEvent {
 // requests at one a second don't fit one 120 s run.
 export const GEFS_INGEST_EVENT = { mode: 'daily-ingest', pass: 'gefs' } as const;
 const isGefsPass = (event: DailyIngestEvent) => (event as { pass?: unknown }).pass === GEFS_INGEST_EVENT.pass;
+
+// --- The indices pass (issue #620) --------------------------------------------------------
+// `{"mode":"daily-ingest","pass":"indices"}` (infra/feeds.tf, its own daily rule, off until
+// climate_indices_enabled): CPC's ONI and AAO files into the copy (ingest/indices.ts). Two
+// requests, so it would fit after another pass, but a rule of its own keeps a CPC refusal
+// from failing CHC's run and the reverse.
+export const INDICES_INGEST_EVENT = { mode: 'daily-ingest', pass: 'indices' } as const;
+const isIndicesPass = (event: DailyIngestEvent) => (event as { pass?: unknown }).pass === INDICES_INGEST_EVENT.pass;
+
+/** What an indices pass answers (the schedule ignores it; a manual invoke shows it). */
+export interface IndicesIngestAnswer {
+	changed: string[];
+	through: Record<string, string>;
+	lagDays: number | null;
+	stopped: string;
+}
+
+async function indicesIngest(): Promise<IndicesIngestAnswer> {
+	const { runIndicesIngest, indicesLagMetricLine } = await import('./ingest/indices.js');
+	const { dailyMirrorUrl, REQUEST_INTERVAL_MS } = await import('./ingest/daily.js');
+	const { openStore } = await import('./mirror/store.js');
+	const started = Date.now();
+	const r = await runIndicesIngest({
+		store: openStore(dailyMirrorUrl()),
+		http: await feedHttp(),
+		today: utcToday(),
+		intervalMs: feedSourceMode() === 'live' ? REQUEST_INTERVAL_MS : 0
+	});
+	if (r.lagDays !== null) emitMetricLine(indicesLagMetricLine(r.lagDays));
+	const message = r.error !== null ? feedErrorMessage(r.error) : null;
+	// Index ids, months and a reason code, never an upstream body.
+	logEvent(message !== null ? 'error' : 'info', {
+		event: 'mirror_daily_ingest',
+		product: 'indices',
+		changed: r.changed,
+		unchanged: r.unchanged,
+		through: r.through,
+		lagDays: r.lagDays,
+		stopped: r.stopped,
+		requests: r.requests,
+		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
+		ms: Date.now() - started
+	});
+	if (r.error !== null) throw r.error;
+	return { changed: r.changed, through: r.through, lagDays: r.lagDays, stopped: r.stopped };
+}
 
 async function gefsIngest(context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<GefsIngestAnswer> {
 	const { runGefsIngest, gefsLagMetricLine } = await import('./ingest/gefs.js');
@@ -588,14 +636,16 @@ async function damsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): 
 }
 
 export async function handler(event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse>;
-export async function handler(event: DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DailyIngestAnswer | GefsIngestAnswer>;
+export async function handler(event: DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DailyIngestAnswer | GefsIngestAnswer | IndicesIngestAnswer>;
 export async function handler(event: DwsWeeklyEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DwsWeeklyAnswer>;
 export async function handler(event: DamsWeeklyEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DamsWeeklyAnswer>;
 export async function handler(
 	event: SQSEvent | DailyIngestEvent | DwsWeeklyEvent | DamsWeeklyEvent,
 	context?: Pick<Context, 'getRemainingTimeInMillis'>
-): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer | DwsWeeklyAnswer | DamsWeeklyAnswer> {
+): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer | IndicesIngestAnswer | DwsWeeklyAnswer | DamsWeeklyAnswer> {
 	if (isDailyIngestEvent(event)) {
+		// The indices pass reads CPC (NOAA), not CHC, so it takes no CHC slot.
+		if (isIndicesPass(event)) return indicesIngest();
 		return isGefsPass(event)
 			? holdingPassSlot<GefsIngestAnswer>('gefs', context, { copied: null, newest: null, lagDays: null, stopped: 'host_busy' }, () => gefsIngest(context))
 			: holdingPassSlot<DailyIngestAnswer>('prelim', context, { copied: 0, dropped: 0, prelimThrough: null, lagDays: null, stopped: 'host_busy' }, () => dailyIngest(context));

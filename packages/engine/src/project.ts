@@ -2,6 +2,7 @@
 // validation) and the frontend (forms). See docs/data-model.md for how each
 // field maps onto the b023 workbook.
 import type { ForecastSummary } from './forecast';
+import type { RunDrought } from './drought/summary';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { FlowMissingSettings } from './recordPeriods';
 import type { WarningKept } from './checkItems';
@@ -22,11 +23,12 @@ import type { RainAccumulationInfo } from './accumulation';
 import type { Wr2012FitStats } from './reference/wr2012Fit';
 import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
+import type { UnitRainFingerprint } from './runoff/unitRainFingerprint';
 import type { SeriesProvenance } from './seriesProvenance';
 import { QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN } from './quantileMap';
 import type { Wr2012Report } from './reference/wr2012';
 import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/rules';
-import type { EwrSplitInfo, EwrSplitMethod } from './network/ewrSplit';
+import type { EwrSplitInfo, PinnedEwrSplit } from './network/ewrSplit';
 import type { EwrDailySource, OutletEwrInfo } from './reserve/dailySource';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import type { NoFlowSummary, ServedWhileEwrFailsSite } from './reserve/riverMeasures';
@@ -37,7 +39,12 @@ import { defaultWr2012Settings, type Wr2012Settings } from './reference/wr2012Se
 import { defaultCalibrationRules, type CalibrationRules } from './calibrate/rulesSettings';
 import type { DeclaredUncertaintyRule } from './uncertainty/options';
 
-/** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
+/**
+ * How each farm's share of catchment natural flow was derived (b023 [Farm spec]), engines up to 1.104.x:
+ * settings.flowShareMethod. Retired in 1.105.0 (issue #616): every unit's share is its natural MAR share
+ * (./network/ewrSplit.ts, docs/model.md §2.5). Kept as a type for reading older runs' snapshots
+ * (./legacy/flowShares.ts).
+ */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
 
 /**
@@ -313,6 +320,31 @@ export interface CalibrationParams {
 export const LEGACY_UPGRADED_WARNING =
 	'LEGACY_UPGRADED: this project was set to the legacy runoff model (the original workbook’s), removed in engine 1.0.0; it ran GR4J. Check the GR4J parameters (Calibration → Flow calibration) or refit them.';
 
+/**
+ * Top-level settings an engine retired: ignored when read (prepare.ts mergeSettings, the backend's too) and stripped
+ * from stored projects by a migration. `ewrSplit` (engines 1.94.0 – 1.104.x, issue #553): from 1.105.0 the EWR is
+ * always split by each unit's natural MAR (issue #615, ./network/ewrSplit.ts, 265_retire_ewr_split.sql).
+ * `flowShareMethod` and `hiLoSplit` (b023's area, Hi/Lo MAP and specific fragmentation): from 1.105.0 the flow is
+ * split by the same natural MAR shares (issue #616, docs/model.md §2.5, 266_retire_flow_share_method.sql); a run
+ * whose input still names Hi/Lo MAP or specific says so once (FLOW_SHARE_METHOD_RETIRED_WARNING).
+ */
+export const RETIRED_SETTINGS_KEYS = ['ewrSplit', 'flowShareMethod', 'hiLoSplit'] as const;
+
+/**
+ * Node fields an engine retired: dropped when read (upgradeLegacyModel) and no longer stored. `areaHiKm2`,
+ * `areaLoKm2` and `flowShareManual` (b023's Hi/Lo MAP and specific fragmentation) went with
+ * settings.flowShareMethod in engine 1.105.0 (issue #616): a run snapshot or model revision still carries them.
+ */
+export const RETIRED_NODE_FIELDS = ['areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
+
+/**
+ * The run note for an input whose settings still name a retired flow-share method (Hi/Lo MAP or specific; engine
+ * 1.105.0, issue #616): the flow is split by each unit's natural MAR instead. Once per run.
+ */
+export function flowShareMethodRetiredWarning(method: 'hiLo' | 'manual'): string {
+	return `this project's flow-share method (${method === 'hiLo' ? 'Hi/Lo MAP' : 'specific shares'}) was removed in engine 1.105.0: the flow is now split between the units by each unit's natural MAR, as the EWR is (Model settings → Model selection for flow generation)`;
+}
+
 /** The legacy runoff model's keys under settings.calibration, dropped since engine 1.0.0 (issue #16). */
 export const RETIRED_CALIBRATION_KEYS = [
 	'a',
@@ -416,18 +448,6 @@ export interface ProjectSettings {
 	allocationTolerance?: number;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
-	flowShareMethod: FlowShareMethod;
-	/**
-	 * How the EWR is split between the units (engine ≥ 1.94.0, issue #553,
-	 * ./network/ewrSplit.ts, docs/model.md §2.5b): 'flowShare' (the default,
-	 * the flow share of flowShareMethod) or 'naturalMar' (each unit's natural
-	 * MAR ÷ Σ the units', which differs only under runoff from each unit's own
-	 * rain). Optional so settings stored before it still type; absent =
-	 * 'flowShare'.
-	 */
-	ewrSplit?: EwrSplitMethod;
-	/** Pitman high/low MAP split used by the `hiLo` flow-share method. */
-	hiLoSplit: { hi: number; lo: number };
 	/**
 	 * Rain → natural-flow model (./runoff): 'gr4j', the only one since engine
 	 * 1.0.0 removed the legacy b023 recession model (issue #16). Not a choice
@@ -965,9 +985,6 @@ export function defaultProjectSettings(): ProjectSettings {
 		lakeEvapFactorMonthly: null,
 		lakeEvapFactorSource: '',
 		apanMm: zeros,
-		flowShareMethod: 'area',
-		ewrSplit: 'flowShare',
-		hiLoSplit: { hi: 0.5, lo: 0.5 },
 		runoffModel: 'gr4j',
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
@@ -1188,10 +1205,33 @@ export interface RainStationSettings {
 	/**
 	 * Engine-only (never stored by the API): pairing factors to use instead
 	 * of fitting them, as UnitRainSettings.pinned (a seasonal outlook member,
-	 * a resumed run). Station id → 12 monthly factors.
+	 * a resumed run). stationPairingKey(station id, area) → 12 monthly
+	 * factors (engine ≥ 1.105.0, issue #612: a pairing is per area; a key of
+	 * a station id alone, from before, matches no pairing and is refitted).
 	 */
 	pinnedFactors?: Record<string, number[]> | null;
 }
+
+/**
+ * One source of an assignment's patching priority (RainStationAssignment
+ * .patch, engine ≥ 1.105.0, issue #612): another station, read × its own
+ * area MAP ÷ station MAP, or the area's CHIRPS corrected against
+ * `correctAgainst`'s adjusted rain.
+ */
+export type RainPatchSource = { source: 'station'; stationId: string } | { source: 'chirps' };
+
+/** The most sources a patching priority may list (the API refuses more; the engine reads the first ones). */
+export const RAIN_PATCH_MAX = 8;
+
+/** The patching priority an assignment without `patch` runs: the area's corrected CHIRPS alone (the rule before issue #612). */
+export const DEFAULT_RAIN_PATCH: readonly RainPatchSource[] = [{ source: 'chirps' }];
+
+/**
+ * pinnedFactors' key of a pairing (engine ≥ 1.105.0): the correcting
+ * station and the area whose CHIRPS it corrects (a land unit's node id, or
+ * null for the catchment).
+ */
+export const stationPairingKey = (stationId: string, areaId: string | null): string => `${stationId}|${areaId ?? ''}`;
 
 /** One area's station (RainStationSettings.catchment / .units[id]). */
 export interface RainStationAssignment {
@@ -1199,11 +1239,26 @@ export interface RainStationAssignment {
 	stationId: string;
 	/** Scale the station's rain by area MAP ÷ station MAP (clamped 0.25–4). Default true. */
 	scaleToMap?: boolean;
-	/** The station whose pairing factors correct this area's CHIRPS on gap days. Default stationId. */
+	/**
+	 * The station whose adjusted rain (its record × area MAP ÷ its MAP) this
+	 * area's CHIRPS is corrected against, for the CHIRPS source of `patch`.
+	 * Default stationId.
+	 */
 	correctAgainst?: string | null;
+	/**
+	 * The patching priority (engine ≥ 1.105.0, issue #612): on a day the main
+	 * station has no checked reading, the first of these with one gives the
+	 * area's rain. A station is read × area MAP ÷ its MAP under `scaleToMap`
+	 * (skipped, with a warning, when it has no MAP); CHIRPS is the area's own,
+	 * corrected against `correctAgainst`. Absent / null = [CHIRPS], the rule
+	 * before; [] = no patching (gaps go to the next fallback). At most
+	 * RAIN_PATCH_MAX; CHIRPS at most once, a station at most once and never
+	 * the main station.
+	 */
+	patch?: RainPatchSource[] | null;
 }
 
-/** Complete calendar years a station and the CHIRPS at it need in common for a pairing (issue #553): fewer refuses it. */
+/** Complete calendar years a station and the CHIRPS it corrects need in common for a pairing (issue #553; the area's CHIRPS since 1.105.0, issue #612): fewer refuses it. */
 export const STATION_PAIRING_MIN_YEARS = 5;
 
 /** ModelInput.series key of a station's record (issue #553): `rain_station_mm#<series id>`. Not a stored kind. */
@@ -1591,10 +1646,6 @@ export interface NetworkNode {
 	downstreamNodeId: string | null;
 	sortOrder: number;
 	areaKm2: number;
-	areaHiKm2: number;
-	areaLoKm2: number;
-	/** Used when settings.flowShareMethod === 'manual'. 0–1. */
-	flowShareManual: number | null;
 	/**
 	 * The land unit's mean annual precipitation, mm (issue #482): under
 	 * settings.unitRain `perUnit` it sets the level of the unit's own CHIRPS
@@ -2174,9 +2225,6 @@ export function newNetworkNode(id: string, sortOrder: number, downstreamNodeId: 
 		downstreamNodeId,
 		sortOrder,
 		areaKm2: 0,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 1,
 		pctRunoffToDam: 0,
 		damCapacityM3: 0,
@@ -2275,6 +2323,8 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 		? model.nodes.map((raw) => {
 				if (!raw || typeof raw !== 'object') return raw;
 				const { returnFlowPct, lossReturnFraction, ...n } = raw as Record<string, unknown>;
+				// The flow-share fields engines up to 1.104.x read (b023's Hi/Lo MAP and specific shares; issue #616): dropped.
+				for (const k of RETIRED_NODE_FIELDS) delete n[k];
 				if (n.irrigationEfficiency === undefined || n.returnFlowFraction === undefined) {
 					// Engine 0.16.0–1.70.0: β, a share of the losses (migration 197); before that, returnFlowPct (migration 006).
 					if (n.irrigationEfficiency !== undefined && typeof lossReturnFraction === 'number') {
@@ -3144,6 +3194,12 @@ export interface ModelInput {
 	seriesChoice?: SeriesChoice | null;
 	/** Every rainfall station by series id (issue #553, engine ≥ 1.91.0); read only under settings.rainStations. Its records are series[stationSeriesKey(id)]. */
 	stations?: RainStationInputs | null;
+	/**
+	 * The EWR split's period and shares to apply instead of working them out (engine ≥ 1.105.0, issue #615,
+	 * ./network/ewrSplit.ts): a seasonal outlook's re-run member takes its base run's (ewrSplitPinOf), as a member
+	 * resumed from a snapshot takes the capture run's. Never stored with a project.
+	 */
+	ewrSplitPinned?: PinnedEwrSplit | null;
 }
 
 /**
@@ -3197,14 +3253,20 @@ export interface FarmSummary {
 	/**
 	 * The farm's share of the catchment flow and of the EWR, 0–1 (docs/model.md
 	 * §2.5, the workbook's [Fragmented flow] / [Fragmented EWR] factor), as the
-	 * run applied it (engine ≥ 0.27.0); absent on older runs.
+	 * run applied it (engine ≥ 0.27.0); absent on older runs. From 1.105.0
+	 * (issue #616) its natural MAR share, the same as `ewrShare`: one share per
+	 * unit for the flow, the EWR, the land-cover threshold and the senior
+	 * users' claims. Before, the area, Hi/Lo MAP or specific share.
 	 */
 	flowShare?: number;
 	/**
 	 * The farm's share of the EWR, 0–1, as the run applied it (engine ≥
-	 * 1.94.0, settings.ewrSplit, docs/model.md §2.5b): its flow share, or
-	 * under 'naturalMar' with runoff from each unit's own rain its natural MAR
-	 * ÷ Σ the units'. Absent on older runs, whose EWR the flow share split.
+	 * 1.94.0, docs/model.md §2.5b): from 1.105.0 its natural MAR ÷ Σ the
+	 * units' under both flow generation methods (its area share with no
+	 * runoff over the period or no units' runoff supplied, 0 with no land
+	 * unit), and `flowShare` is the same; 1.94.0 – 1.104.x its flow
+	 * share unless settings.ewrSplit asked for the natural MAR under Per unit.
+	 * Absent on older runs, whose EWR the flow share split.
 	 */
 	ewrShare?: number;
 	/**
@@ -3965,8 +4027,23 @@ export interface UnitRainSummary {
 export interface StationPairingFit {
 	stationId: string;
 	stationName: string;
-	/** Where the CHIRPS at the station came from: its own cell, or the CHIRPS of the unit it stands in. */
-	chirpsAt: { cell: true } | { unitId: string; unitName: string };
+	/**
+	 * The area whose CHIRPS the pairing corrects (engine ≥ 1.105.0, issue #612:
+	 * one pairing per area and correcting station): a land unit's node id, or
+	 * null for the catchment. Absent on a summary from before, when a pairing
+	 * was the station's alone.
+	 */
+	areaId?: string | null;
+	/** That area's name (absent before 1.105.0). */
+	areaName?: string;
+	/** The ratio the station's record was taken to the area's level by before the fit (area MAP ÷ station MAP, clamped; 1 without). Absent before 1.105.0. */
+	ratio?: number;
+	/**
+	 * The CHIRPS the fit compared the station with: since 1.105.0 the area's
+	 * own (a unit's, or `catchment`); before, the station's own cell or the
+	 * CHIRPS of the unit it stands in.
+	 */
+	chirpsAt: { cell: true } | { unitId: string; unitName: string } | { catchment: true };
 	/** Null = refused (too short, or no CHIRPS at the station); `refused` says why. */
 	refused: string | null;
 	/** The first and last shared day of the fit's record (accumulation windows left out). */
@@ -3999,11 +4076,39 @@ export interface StationAreaForcing {
 	scaleToMap: boolean;
 	/** The pairing correcting this area's CHIRPS (its station id); null when refused or absent (its gaps fall to the next fallback). */
 	correctedBy: string | null;
-	/** Run days by source: the station (× ratio), the corrected CHIRPS, the next fallback, none (dry). */
-	days: { station: number; chirps: number; fallback: number; none: number };
+	/** Run days by source: the station (× ratio), a patch station (× its ratio, engine ≥ 1.105.0; absent before), the corrected CHIRPS, the next fallback, none (dry). */
+	days: { station: number; patch?: number; chirps: number; fallback: number; none: number };
 	/** Station days set aside: by the station checks (zero runs, accumulations) and by the user's unreliable periods. */
 	setAside: { checks: number; unreliable: number };
+	/** The patching priority as the run read it, in order (engine ≥ 1.105.0, issue #612); absent before. */
+	patches?: StationPatchUse[];
 }
+
+/** One source of an area's patching priority as a run read it (StationAreaForcing.patches). */
+export type StationPatchUse =
+	| {
+			source: 'station';
+			stationId: string;
+			stationName: string;
+			stationMapMm: number | null;
+			/** area MAP ÷ this station's MAP before and after the clamp; null at × 1. */
+			ownRatio: number | null;
+			ratio: number;
+			clamped: boolean;
+			/** Why the run skipped it (no record, no MAP under scaling, the main station), or null. */
+			skipped: string | null;
+			/**
+			 * The main station's gap days in the run's history (the run window less its forecast tail, which is never
+			 * patched), and how many of them this station has a checked reading on.
+			 */
+			gapDays: number;
+			fills: number;
+			/** The forecast tail days left out of gapDays; absent without a tail. */
+			forecastDays?: number;
+			/** The days it gave the area's rain (after the sources before it). */
+			days: number;
+	  }
+	| { source: 'chirps'; days: number };
 
 /** RunSummary.stations (issue #553, engine ≥ 1.91.0): present when settings.rainStations assigns any area. */
 export interface RainStationSummary {
@@ -4272,12 +4377,25 @@ export interface RunSummary {
 	stations?: RainStationSummary;
 	/**
 	 * How the EWR was split between the units (engine ≥ 1.94.0,
-	 * settings.ewrSplit, ./network/ewrSplit.ts): the method asked for, the one
-	 * applied and, for a natural MAR split, the days it was taken over. Each
-	 * unit's share is FarmSummary.ewrShare. Absent on older runs (the flow
+	 * ./network/ewrSplit.ts): the split applied, the days its natural MAR was
+	 * taken over and (≥ 1.105.0) where the units' runoff came from and which
+	 * units ran on the catchment rain; 1.94.0 – 1.104.x also the retired
+	 * setting asked for (`method`). Each unit's share is FarmSummary.ewrShare.
+	 * From 1.105.0 (issue #616) the same shares split the flow under
+	 * Fragmentation, the land-cover threshold and the senior users' claims, so
+	 * this is the record of the unit shares. Absent on older runs (the flow
 	 * share).
 	 */
 	ewrSplit?: EwrSplitInfo;
+	/**
+	 * Under Fragmentation, the forcing the share runs ran on (engine ≥ 1.105.0,
+	 * issue #616): the Per unit setup's fingerprint (each unit's rule, record
+	 * and factors), as a Fragmentation fit records it (FitRecord.forcing
+	 * .shareRain), so the fit reads "Forcing changed since fit" when it moved.
+	 * null when the run had no land unit; absent under Per unit (`unitRain`
+	 * is it), on a resumed run, and before 1.105.0.
+	 */
+	shareRain?: UnitRainFingerprint | null;
 	catchment: {
 		meanNaturalFlowM3Day: number;
 		meanSimulatedOutflowM3Day: number;
@@ -4358,7 +4476,12 @@ export interface RunSummary {
 		 * ('doublemass').
 		 */
 		seriesChecks?: SeriesCheck[];
-		/** Farms whose area differs from high-MAP + low-MAP area by more than 1 %. */
+		/**
+		 * Farms whose area differs from high-MAP + low-MAP area by more than 1 %
+		 * (audit W3). Engines up to 1.104.x only: 1.105.0 retired the high- and
+		 * low-MAP areas with the Hi/Lo MAP method (issue #616), so a newer run
+		 * carries none.
+		 */
 		areaMismatches?: AreaMismatch[];
 		/**
 		 * The double-mass curve of catchment rain against CHIRPS (engine ≥
@@ -4444,6 +4567,13 @@ export interface RunSummary {
 	 * before `forecast.from` only. Absent on ordinary runs and older runs.
 	 */
 	forecast?: ForecastSummary;
+	/**
+	 * The drought badge's headline (engine 1.105.0, issue #620, ./drought/summary.ts, model.md §2.15b):
+	 * the driest of SPI and SPEI over 3, 6 and 12 months for the last whole month of the run's history,
+	 * from its own rain_final and pet, for the project list and the team portfolio. Never reads a
+	 * forecast day. Absent on older runs.
+	 */
+	drought?: RunDrought;
 	/**
 	 * Assurance of supply per farm and user, stress classes and the water
 	 * account (engine ≥ 0.32.0, WP-3.4, ./network/reliability.ts, model.md

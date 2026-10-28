@@ -97,11 +97,11 @@ export interface PinnedStatistics {
 	 */
 	outletEwr?: OutletEwrInfo;
 	/**
-	 * A natural MAR EWR split's period and each farm's share (engine ≥
-	 * 1.94.0, settings.ewrSplit 'naturalMar', ../network/ewrSplit.ts): the
-	 * capture run's, so a resumed run splits its EWR as the uninterrupted run
-	 * did; no shares when the capture run had no runoff to split by (the flow
-	 * share). Absent with the flow share asked for, or under catchment rain.
+	 * The EWR split's period, each farm's share and the run's record of it
+	 * (engine ≥ 1.94.0; pinned by every run from 1.105.0, under both flow
+	 * generation methods, ../network/ewrSplit.ts): the capture run's, so a
+	 * resumed run (a seasonal outlook member) splits its EWR as the
+	 * uninterrupted run did. No shares without a land unit (the flow share).
 	 */
 	ewrSplit?: PinnedEwrSplit;
 }

@@ -158,7 +158,7 @@ describe('dam storage (WP-3.5)', () => {
 
 	it('a pump capacity on an other water user (engine 1.58.0): accepted, null by default, refused negative; a supply rule on it is refused', () => {
 		const out = node('Gauge', null);
-		const user = node('Town', out.id, { kind: 'user', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, userDemandM3Day: Array(12).fill(500) });
+		const user = node('Town', out.id, { kind: 'user', areaKm2: 0, userDemandM3Day: Array(12).fill(500) });
 		const parse = (over: object) => ModelBody.safeParse({ nodes: [out, { ...user, ...over }], crops: [], cropAreas: [], transfers: [] });
 		expect(parse({}).data!.nodes[1]).toMatchObject({ kind: 'user', pumpCapacityM3Day: null });
 		const capped = parse({ pumpCapacityM3Day: 1200 });

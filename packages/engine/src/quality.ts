@@ -15,8 +15,10 @@
 // reading, so it blocks the CHIRPS fallback that a blank day gets. The
 // double-mass check against CHIRPS ('doublemass', engine ≥ 0.18.0) lives in
 // ./doublemass.ts, because it needs the zero-rain settings (./rain.ts).
-// areaMismatches: farms whose area is not
-// the sum of their high- and low-MAP areas (engine-review F7).
+// AreaMismatch: the record older runs (engines up to 1.104.x) keep of farms
+// whose area was not the sum of their high- and low-MAP areas (engine-review
+// F7, audit W3); 1.105.0 retired those areas with the Hi/Lo MAP method
+// (issue #616), so no newer run makes one.
 //
 // None of these change a model result. They become run warnings and
 // RunSummary.dataQuality, and the Time series tab shows them before a run.
@@ -29,8 +31,6 @@ import {
 	ZERO_RUN_RULES,
 	type DailySeries,
 	type DataQualitySettings,
-	type FlowShareMethod,
-	type NetworkNode,
 	type SeriesKind
 } from './project';
 
@@ -1017,9 +1017,7 @@ export function rainVsChirpsCheck(r: RainVsChirps | null): SeriesCheck | null {
 // Farm area vs high- + low-MAP area (engine-review F7)
 // ---------------------------------------------------------------------------
 
-/** Relative difference above which a farm's areas count as inconsistent. */
-export const AREA_TOLERANCE = 0.01;
-
+/** An older run's record (engines up to 1.104.x): a farm whose area differed from its high- + low-MAP area by more than 1 %. */
 export interface AreaMismatch {
 	nodeId: string;
 	name: string;
@@ -1030,33 +1028,3 @@ export interface AreaMismatch {
 	difference: number;
 }
 
-/**
- * Farms whose area (used by the area share and the rain volume) differs from
- * areaHiKm2 + areaLoKm2 (used by the hi/lo share) by more than 1 %. Farms that
- * leave hi and lo both at 0 are skipped unless the hi/lo method is chosen:
- * they simply haven't split their area.
- */
-export function areaMismatches(nodes: readonly NetworkNode[], method: FlowShareMethod): AreaMismatch[] {
-	const out: AreaMismatch[] = [];
-	for (const n of nodes) {
-		if (n.kind !== 'farm') continue;
-		const hiLo = (n.areaHiKm2 || 0) + (n.areaLoKm2 || 0);
-		const area = n.areaKm2 || 0;
-		if (hiLo === 0 && method !== 'hiLo') continue;
-		const big = Math.max(area, hiLo);
-		if (!(big > 0)) continue;
-		const difference = Math.abs(area - hiLo) / big;
-		if (difference > AREA_TOLERANCE) out.push({ nodeId: n.id, name: n.name, areaKm2: area, hiLoKm2: hiLo, difference });
-	}
-	return out;
-}
-
-/** One run warning for the area mismatches, or null. */
-export function areaMismatchWarning(list: readonly AreaMismatch[]): string | null {
-	if (list.length === 0) return null;
-	const parts = list.map((m) => `${m.name}: ${fmt(m.areaKm2)} km² vs ${fmt(m.hiLoKm2)} km²`);
-	return (
-		`Unit area differs from high-MAP + low-MAP area by more than ${AREA_TOLERANCE * 100} % (${parts.join('; ')}). ` +
-		'The area flow share uses the unit area and the hi/lo share uses the split, so the two methods disagree for these units.'
-	);
-}

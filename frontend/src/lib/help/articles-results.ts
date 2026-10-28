@@ -32,7 +32,7 @@ export const RESULTS_ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §4 and §2.11a'
 	},
 	'water-account': {
-		long: 'In: natural flow, rain on the dams, groundwater pumped and net transfers. Out: runoff removed by land cover, natural flow no hydrological unit received (flow shares not summing to 1), consumptive irrigation (supplied − return flow), other users’ net take, dam evaporation, dam seepage lost from the catchment, stream depletion from boreholes and the outflow at the outlet. A dam storage reset, when one is set, counts on the In side. In − out − change in dam storage is the residual, float noise. Seepage that rejoins the river below the dam is shown as a memo. The EWR required and met at each site, per water year, is under the EWR by month grid on EWR.',
+		long: 'In: natural flow, rain on the dams, groundwater pumped and net transfers. Out: runoff removed by land cover, natural flow no hydrological unit received (when no unit has an area; on runs before engine 1.105.0, flow shares not summing to 1), consumptive irrigation (supplied − return flow), other users’ net take, dam evaporation, dam seepage lost from the catchment, stream depletion from boreholes and the outflow at the outlet. A dam storage reset, when one is set, counts on the In side. In − out − change in dam storage is the residual, float noise. Seepage that rejoins the river below the dam is shown as a memo. The EWR required and met at each site, per water year, is under the EWR by month grid on EWR.',
 		aliases: ['water balance', 'account', 'closure'],
 		related: ['assurance-of-supply', 'dam-evaporation', 'dam-seepage'],
 		source: 'docs/model.md §2.11b'

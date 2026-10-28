@@ -1,10 +1,10 @@
 // Model settings → Model selection for flow generation (issue #553 round 3; docs/ui.md § Model settings; docs/model.md §2.4h, §2.4i,
 // §2.5). On the sample model with two invented rainfall stations beside its catchment rain series:
 // - The panel leads Runoff & calibration with the Fragmentation / Per unit radio. Fragmentation (the default) shows
-//   the flow share; Per unit shows a row per land unit: its station (stations only, no satellite option), Scale to
+//   the units’ one share; Per unit shows a row per land unit: its station (stations only, no satellite option), Scale to
 //   unit MAP with the ratio it gives, and the station correcting its CHIRPS; and each station in use once, with its
 //   MAP. Ticking units gives them one station at once. Saved, the settings hold the radio as settings.unitRain and
-//   the rows as settings.rainStations.units, and a reload shows them again; Fragmentation keeps them, unused.
+//   the rows as settings.rainStations.units, and a reload shows them again; Fragmentation keeps them (its share runs read them, issue #615).
 // - A fit made under one method (on Calibration, issue #586 round 3), with the other chosen on Model settings, reads
 //   "Parameters not fitted for this method" in the panel, linking to Fit the parameters on Calibration, and in the
 //   fit record there, until the method the fit ran under is chosen again.
@@ -55,15 +55,20 @@ test('Model selection for flow generation switches between Fragmentation and Per
 	const fragmentation = method.getByRole('radio', { name: 'Fragmentation' });
 	const perUnit = method.getByRole('radio', { name: 'Per unit' });
 	await expect(fragmentation).toBeChecked();
-	await expect(page.getByTestId('summary-share')).toHaveText('Fragmentation · flow share: by catchment area');
+	await expect(page.getByTestId('summary-share')).toHaveText('Fragmentation · flow and EWR by each unit’s natural MAR');
 	await expect(panel(page).getByTestId('share-hint')).toHaveAttribute('data-unit-rain', 'off');
-	await expect(panel(page).getByLabel('Flow share method')).toBeVisible();
-	await expect(panel(page).getByTestId('flowgen-units')).toHaveCount(0);
+	// One share per unit, its natural MAR share: no method to pick (engine 1.105.0, issue #616).
+	await expect(panel(page).getByLabel('Flow share method')).toHaveCount(0);
+	await expect(panel(page).getByTestId('hilo-split')).toHaveCount(0);
+	// The Per unit setup shows under Fragmentation too: it makes each unit's natural MAR share of the EWR (issue #615).
+	await expect(panel(page).getByTestId('flowgen-units')).toBeVisible();
+	await expect(panel(page).getByTestId('flowgen-share-setup')).toBeVisible();
 
 	await perUnit.check();
 	await expect(panel(page).getByTestId('share-hint')).toHaveAttribute('data-unit-rain', 'on');
-	// The flow share stays: it still splits the EWR.
-	await expect(panel(page).getByRole('heading', { name: 'Flow share: the EWR between units' })).toBeVisible();
+	// The share stays: it splits the EWR, the land cover's low-flow threshold and the priority users' demand.
+	await expect(panel(page).getByRole('heading', { name: 'Flow share and the EWR split' })).toBeVisible();
+	await expect(panel(page).getByTestId('flowgen-share-setup')).toHaveCount(0);
 	await expect(panel(page).getByTestId('flowgen-row')).toHaveCount(2);
 	await expect(panel(page).getByTestId('flowgen-assigned')).toHaveText('0 of 2 units with land have a rainfall station.');
 	const upperStation = row(page, 'Upper farm').getByLabel('Station for Upper farm');
@@ -106,7 +111,7 @@ test('Model selection for flow generation switches between Fragmentation and Per
 	await stations.filter({ hasText: 'Ridge station' }).getByLabel('Stands in').selectOption({ label: 'Upper farm' });
 	await expectNoViolations(page, { include: '#set-share' });
 	await saveSettings(page);
-	await expect(page.getByTestId('summary-share')).toHaveText('Per unit · 2 units on a rainfall station · EWR flow share: by catchment area');
+	await expect(page.getByTestId('summary-share')).toHaveText('Per unit · 2 units on a rainfall station · EWR by each unit’s natural MAR');
 	expect(await storedSettings(page.request, id)).toMatchObject({
 		unitRain: { mode: 'perUnit' },
 		rainStations: { units: { [upper.id]: { stationId: ridge, correctAgainst: vlei }, [lower.id]: { stationId: vlei, scaleToMap: false } }, sites: { [ridge]: { unitId: upper.id } } }
@@ -129,11 +134,11 @@ test('saved stations come back after a reload, stay stored under Fragmentation, 
 	await expect(row(page, 'Upper farm').getByLabel('Station correcting Upper farm’s CHIRPS')).toHaveValue(vlei);
 	await expect(row(page, 'Lower farm').getByRole('checkbox', { name: 'Scale to unit MAP: Lower farm' })).not.toBeChecked();
 
-	// Fragmentation keeps the stations (unused), so Per unit brings them back.
+	// Fragmentation keeps the stations and the Per unit setup (they make each unit's EWR share, issue #615), so Per unit brings them back.
 	await fragmentation.check();
-	await expect(panel(page).getByTestId('flowgen-units')).toHaveCount(0);
+	await expect(upperStation).toHaveValue(ridge);
 	await saveSettings(page);
-	expect(await storedSettings(page.request, id)).toMatchObject({ unitRain: null, rainStations: { units: { [upper.id]: { stationId: ridge } } } });
+	expect(await storedSettings(page.request, id)).toMatchObject({ unitRain: { mode: 'catchment' }, rainStations: { units: { [upper.id]: { stationId: ridge } } } });
 	await perUnit.check();
 	await expect(upperStation).toHaveValue(ridge);
 

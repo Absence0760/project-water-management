@@ -1,0 +1,4 @@
+{
+	"addKb": 12,
+	"why": "Draft #638 round 1 beyond the drought card's own entry: the rain patch chain UI and patchChoices (#612), the station-less unit lines in Preview all data (#613 slice 2), the Add data tab rule and refused-drop notice (#601), and #615's settings and help changes. Total measured 2197 KB against 2187 KB at cc40d710e merged with #612 (+10 KB, rounded up to 12 for CI's ~2 KB difference). Headroom ~2 KB."
+}

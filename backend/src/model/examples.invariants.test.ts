@@ -157,19 +157,49 @@ describe('engine invariants on the example catchments', () => {
 		expect(checkAll(input, 1)).toBeNull();
 	}, 60_000);
 
-	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h, issue #482): off, it changes nothing
-	// to the bit (absent, null, catchment mode, unit records in the input or not); on, every invariant holds.
-	it('per-unit rain off gives the identical run on every example', () => {
+	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h, issue #482). Off (Fragmentation), absent,
+	// null and `catchment` are one setting, the same run to the bit. The units' own records and MAPs never reach the
+	// catchment's flow there: the rain GR4J runs on and the natural flow are the run without them, to the bit. They set
+	// each unit's one share, the Per unit run's on the same inputs to the bit (engine 1.105.0: the EWR's, issue #615,
+	// and the flow's, issue #616, §2.5), so each unit's runoff is the natural flow × its share, and the units' runoff
+	// still adds up to the natural flow every day.
+	it('per-unit rain off: one setting whatever its form, the catchment flow untouched by the units’ records, which set only the unit shares', () => {
+		const catchmentSide = (o: ReturnType<typeof runModel>) => JSON.stringify(o.series.filter((x) => x.nodeId === null && (x.key === 'natural_flow' || x.key === 'rain_used')));
+		const col = (o: ReturnType<typeof runModel>, nodeId: string | null, key: string) => o.series.find((x) => x.nodeId === nodeId && x.key === key)!.values as number[];
 		for (const ex of examples) {
 			const base = inputOf(ex);
-			const before = JSON.stringify(runModel(base));
-			for (const unitRain of [null, { mode: 'catchment' as const }]) {
-				const off = structuredClone(base);
-				off.settings = { ...off.settings, unitRain };
-				Object.assign(off.series, unitRecords(off));
-				for (const n of off.model.nodes) if (n.kind === 'farm') Object.assign(n, { mapMm: 600, mapSource: 'invented' });
-				expect(JSON.stringify(runModel(off)), `${ex.name} ${JSON.stringify(unitRain)}`).toBe(before);
+			const before = runModel(base);
+			const withRecords = (unitRain: unknown) => {
+				const x = structuredClone(base);
+				x.settings = { ...x.settings, unitRain } as never;
+				Object.assign(x.series, unitRecords(x));
+				for (const n of x.model.nodes) if (n.kind === 'farm') Object.assign(n, { mapMm: 600, mapSource: 'invented' });
+				return x;
+			};
+			const asNull = runModel(withRecords(null));
+			const asCatchment = runModel(withRecords({ mode: 'catchment' }));
+			expect(JSON.stringify(asCatchment), ex.name).toBe(JSON.stringify(asNull));
+			expect(catchmentSide(asNull), ex.name).toBe(catchmentSide(before));
+			// The shares are the Per unit run's, the same one share for the flow and the EWR.
+			const perUnit = runModel(withRecords({ mode: 'perUnit' }));
+			for (const f of perUnit.summary.farms) {
+				const g = asNull.summary.farms.find((h) => h.nodeId === f.nodeId)!;
+				expect(g.ewrShare, `${ex.name} ${f.nodeId}`).toBe(f.ewrShare);
+				expect(g.flowShare, `${ex.name} ${f.nodeId}`).toBe(g.ewrShare);
 			}
+			// Positive control: the records moved the shares (they aren't the area shares the plain run used).
+			expect(asNull.summary.farms.map((f) => f.flowShare), ex.name).not.toEqual(before.summary.farms.map((f) => f.flowShare));
+			// Each unit's runoff is the natural flow × its share, and the units' runoff adds up to the natural flow.
+			const natural = col(asNull, null, 'natural_flow');
+			const total = new Array(natural.length).fill(0);
+			for (const f of asNull.summary.farms) {
+				const runoff = col(asNull, f.nodeId, 'runoff');
+				for (let t = 0; t < natural.length; t++) {
+					expect(Math.abs(runoff[t]! - natural[t]! * f.flowShare!), `${ex.name} ${f.name} day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, natural[t]!));
+					total[t] += runoff[t]!;
+				}
+			}
+			for (let t = 0; t < natural.length; t++) expect(Math.abs(total[t] - natural[t]!), `${ex.name} day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, natural[t]!));
 		}
 	}, 120_000);
 

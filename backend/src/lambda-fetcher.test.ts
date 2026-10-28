@@ -37,6 +37,7 @@ const {
 	DWS_WEEKLY_EVENT,
 	FETCH_SEND_MARGIN_MS,
 	GEFS_INGEST_EVENT,
+	INDICES_INGEST_EVENT,
 	failureDetail,
 	fetchFailureReason,
 	handler,
@@ -380,6 +381,37 @@ describe('the fetcher’s daily-ingest mode (issue #604 R2-B)', () => {
 		expect(existsSync(join(dir, 'prelim'))).toBe(false);
 		expect(existsSync(join(dir, 'gefs', today, 'manifest.json'))).toBe(true);
 		expect(sent).toHaveLength(0);
+	});
+
+	it('runs the indices pass on {"mode":"daily-ingest","pass":"indices"} (issue #620): CPC’s two files into the copy, its own lag metric and log line', async () => {
+		const dir = mirrorDir();
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${dir}/`).href);
+		expect(isDailyIngestEvent(INDICES_INGEST_EVENT)).toBe(true);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = (await handler(INDICES_INGEST_EVENT as never)) as unknown as { changed: string[]; lagDays: number; stopped: string };
+		const metric = out.mock.calls.map(([l]) => String(l)).find((l) => l.includes('MirrorLagDays'));
+		out.mockRestore();
+		expect(res).toMatchObject({ changed: ['oni', 'aao'], stopped: 'done' });
+		expect(JSON.parse(metric!)).toMatchObject({ Product: 'indices', MirrorLagDays: res.lagDays });
+		const logged = info.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ product: 'indices', changed: ['oni', 'aao'], stopped: 'done', requests: 2 });
+		expect(existsSync(join(dir, 'indices', 'manifest.json'))).toBe(true);
+		// No other pass ran.
+		expect(existsSync(join(dir, 'prelim'))).toBe(false);
+		expect(sent).toHaveLength(0);
+	});
+
+	it('fails the indices pass on an HTTP 403 after logging it as refused, asking CPC nothing more', async () => {
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${mirrorDir()}/`).href);
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, rangeTagged: refuse, text: refuse };
+		await expect(handler(INDICES_INGEST_EVENT as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		const logged = error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest');
+		expect(logged).toMatchObject({ product: 'indices', changed: [], stopped: 'error', reason: 'refused', detail: 'HTTP 403', requests: 1 });
 	});
 
 	it('fails the GEFS pass on an HTTP 403 after logging it as refused, with no request after it', async () => {

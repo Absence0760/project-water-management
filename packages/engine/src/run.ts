@@ -2,7 +2,7 @@
 //
 // Pipeline (b023 sheet in brackets):
 //   1. natural flow from rain                     [Flow data]            → ./runoff (GR4J)
-//   2. per-farm share of flow and EWR             [Fragmented flow/EWR]  → ./network/shares.ts
+//   2. per-farm share of flow and EWR             [Fragmented flow/EWR]  → ./network/ewrSplit.ts (natural MAR)
 //   3. daily net irrigation demand                [Irrigation Demand]    → ./demand.ts
 //   4. transfers + farm dams, routed downstream   [Transfers], Elements  → ./network/simulate.ts
 //   5. EWR shortfalls, calibration statistics     [EWR shortfalls]       → ./network/stats.ts
@@ -11,8 +11,6 @@
 import {
 	agreementOptions,
 	agreementWarning,
-	areaMismatches,
-	areaMismatchWarning,
 	observedAgreement,
 	seriesChecks
 } from './quality';
@@ -28,6 +26,7 @@ import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags, wi
 import { dayText, daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
 import { cropFactorAreaM2, datedDemandFactorOf, demandFactorOf, demandFactorStart, hasDatedDemandFactor, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
+import { runDrought } from './drought/summary';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
 import { attributeEwrShortfall, bindingSite, siteUnits } from './network/attribution';
@@ -46,8 +45,7 @@ import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIE
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { baseflowOf, BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, hasBaseflow } from './network/baseflow';
 import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatural, SENIOR_REACH_LOSS_SERIES, type NaturalReaches, type PlanReachLoss } from './network/reachLoss';
-import { flowShares, overAllocationError } from './network/shares';
-import { ewrSplitDays, ewrSplitNote, ewrSplitPeriod, fillPlanEwrShares, resolveEwrSplit, type EwrSplitInfo, type EwrSplitMethod, type EwrSplitPlan, type PinnedEwrSplit } from './network/ewrSplit';
+import { ewrSplitDays, ewrSplitNote, ewrSplitPeriod, areaShares, fillPlanShares, type EwrSplitInfo, type EwrSplitPlan, type EwrSplitUnit, type PinnedEwrSplit } from './network/ewrSplit';
 import { EXTERNAL_TO, shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
@@ -252,7 +250,9 @@ const KEPT_COLUMNS = new Set<string>([FLOW_QUALITY_COLUMN.key]);
  * time budget and the tests that re-run the model don't pay for them.
  */
 export function runModelChecked(input: ModelInput): ModelOutput {
-	return withVerification(input, runModel(input));
+	const out = withVerification(input, runModel(input));
+	// The drought badge's headline (issue #620, ./drought/summary.ts): a view of the output, for the project list.
+	return { ...out, summary: { ...out.summary, drought: runDrought(out) } };
 }
 
 /**
@@ -369,15 +369,18 @@ function runNetworkIn(
 		...(capturing ? { captureAt: captureAt! } : {}),
 		// Each land unit's own runoff as its local inflow (engine ≥ 1.78.0, §2.4h).
 		...(nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : {}),
+		// Fragmentation's EWR shares (engine ≥ 1.105.0, §2.5b): the units' own runoff, for the shares only.
+		...(nf.shareRunoff ? { shareRunoff: nf.shareRunoff, shareCatchmentRain: nf.shareCatchmentRain ?? [] } : {}),
 		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {}),
 		...(resume && warm.runStart !== undefined ? { runStart: warm.runStart } : {}),
 		// The daily outlet EWR's scale factor (engine ≥ 1.77.0): the capture run's, as its other record-wide figures.
 		...(resume?.pinned.outletEwr ? { outletEwr: resume.pinned.outletEwr } : {}),
-		// A natural MAR EWR split's shares (engine ≥ 1.94.0), likewise; null = resumed from a run that pinned none.
-		...(resume ? { ewrSplit: resume.pinned.ewrSplit ?? null } : {})
+		// The EWR split's shares (engine ≥ 1.94.0; every run from 1.105.0), likewise; null = resumed from a run that pinned none.
+		// A seasonal outlook's re-run member brings its base run's (ModelInput.ewrSplitPinned).
+		...(resume ? { ewrSplit: resume.pinned.ewrSplit ?? null } : input.ewrSplitPinned ? { ewrSplit: input.ewrSplitPinned } : {})
 	}, historyDays);
 	const { plan, topo } = built;
-	// How the EWR was split between the units (engine ≥ 1.94.0, §2.5b): a split other than the flow share says so.
+	// How the EWR was split between the units (engine ≥ 1.105.0, §2.5b): every run with a land unit says so, in one note.
 	const splitNote = ewrSplitNote(built.ewrSplit.info);
 	if (splitNote) warnings.push(splitNote);
 	const outletEwr = built.outletEwr?.info;
@@ -889,9 +892,10 @@ function runNetworkIn(
 			avgDeficitM3Day: avgDemand - avgSupplied,
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgCropRequirementM3Day: avgCrop,
+			// Its one share as applied (engine ≥ 1.105.0, §2.5, ./network/ewrSplit.ts): its natural MAR share, which splits the
+			// flow under Fragmentation, the EWR, the land-cover threshold and the senior users' claims; both fields say it.
 			flowShare: plan.nodes[i]!.share,
-			// Its EWR share as applied (engine ≥ 1.94.0, settings.ewrSplit): the flow share unless split by natural MAR.
-			ewrShare: plan.nodes[i]!.ewrShare ?? plan.nodes[i]!.share,
+			ewrShare: plan.nodes[i]!.share,
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: 0 - mean(charge),
 			daysEwrNotMet: notMet,
@@ -1080,9 +1084,6 @@ function runNetworkIn(
 		checks.splice(at, 0, dmCheck);
 	}
 	for (const c of checks) warnings.push(warn(`data.${c.check}`, { series: c.seriesKind, days: c.days }, c.text));
-	const areas = areaMismatches(nodes, settings.flowShareMethod);
-	const areaNote = areaMismatchWarning(areas);
-	if (areaNote) warnings.push(areaNote);
 
 	const outflowNode = topo.outflow >= 0 ? nodes[topo.outflow]! : null;
 	const compliance = ewrCompliance(
@@ -1292,10 +1293,12 @@ function runNetworkIn(
 			curtailment,
 			ewrCompliance: compliance,
 			ewrSplit: built.ewrSplit.info,
+			// The forcing Fragmentation's share runs ran on (engine ≥ 1.105.0, issue #616), for its fit's provenance.
+			...(nf.shareRain !== undefined ? { shareRain: nf.shareRain } : {}),
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
 			...(servedWhileFails.length ? { servedWhileEwrFails: servedWhileFails } : {}),
 			...(wr2012 ? { wr2012 } : {}),
-			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
+			dataQuality: { observedAgreement: agreement, seriesChecks: checks, doubleMass },
 			...(checked ? { plausibility: checked.checks } : {}),
 			chirpsCorrection: summaryCorrection(chirpsCorrection),
 			// The gap-filling product (engine ≥ 1.101.0): absent with CHIRPS alone, as every run before it.
@@ -1589,8 +1592,14 @@ export function buildNetworkPlan(
 		 */
 		unitRunoff?: readonly { nodeId: string; runoffM3Day: Float64Array }[];
 		/**
-		 * A natural MAR EWR split's period and shares (engine ≥ 1.94.0): the capture run's, as its other record-wide
-		 * figures. null: a resumed run whose capture run pinned none (it split by the flow share), which keeps the flow share.
+		 * Fragmentation's EWR shares (engine ≥ 1.105.0, §2.5b): each land unit's natural runoff from the share runs
+		 * (runoff/simulate.ts ewrShareRunoff), and the units of those on the catchment rain. Ignored with unitRunoff.
+		 */
+		shareRunoff?: readonly { nodeId: string; runoffM3Day: Float64Array }[];
+		shareCatchmentRain?: readonly EwrSplitUnit[];
+		/**
+		 * The EWR split's period and shares (engine ≥ 1.94.0; every run from 1.105.0): the capture run's, as its other
+		 * record-wide figures. null: a resumed run whose capture run pinned none, which keeps the flow share.
 		 */
 		ewrSplit?: PinnedEwrSplit | null;
 	} = {},
@@ -1617,10 +1626,6 @@ export function buildNetworkPlan(
 	}
 	const topo = buildTopology(nodes);
 	warnings.push(...topo.warnings);
-	const shares = flowShares(nodes, settings.flowShareMethod, settings.hiLoSplit);
-	const overAllocated = overAllocationError(shares.sum);
-	if (overAllocated) throw new Error(overAllocated);
-	warnings.push(...shares.warnings);
 
 	const ewrWy = settings.ewrPragmaticM3PerDay;
 	const ewr = new Float64Array(days);
@@ -1749,17 +1754,14 @@ export function buildNetworkPlan(
 	if (reaches.some((p) => p))
 		warnings.push(
 			ewrSource
-				? `bed losses are on: a Reserve rule table${ewrSource.method === 'percentile' ? ' and the daily EWR’s percentile tables read' : ' reads'} the natural flow net of them, but the daily EWR at the outlet is split between the units by flow share and passed down whole, so it asks the units for the losses above the outlet too`
-				: 'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet'
+				? `bed losses are on: a Reserve rule table${ewrSource.method === 'percentile' ? ' and the daily EWR’s percentile tables read' : ' reads'} the natural flow net of them, but the daily EWR at the outlet is split between the units and passed down whole, so it asks the units for the losses above the outlet too`
+				: 'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units and passed down whole, so set it knowing the losses above the outlet'
 		);
 	// The Priority users' fixed restriction % (engine 1.86.0, issue #523 B3, ./network/restriction.ts): the curtailment
 	// table reads it always, the drought restriction rule when there is one.
 	const userCuts = nodes.map((n) => userRestrictionShare(n, warnings));
 	const users = otherUsers(
 		nodes,
-		topo,
-		shares.share,
-		reaches,
 		days,
 		month,
 		warnings,
@@ -1768,9 +1770,9 @@ export function buildNetworkPlan(
 			d.fill(0, 0, abstractFrom[i]!);
 			scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
 		},
-		datedOf,
-		settings.droughtRestriction != null ? (i) => userCuts[i]! : undefined
+		datedOf
 	);
+	const cutOf = settings.droughtRestriction != null ? (i: number) => userCuts[i]! : undefined;
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
 	// The drought restriction rule (engine ≥ 1.54.0, ./network/restriction.ts): its review and lift days need the run start.
 	const restrictionRule = resolveDroughtRestriction(settings.droughtRestriction, warnings);
@@ -1849,12 +1851,13 @@ export function buildNetworkPlan(
 		nodes: nodes.map((n, i) => {
 			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
 			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
-			const u = users.byNode.get(i);
+			const u = users.get(i);
 			const scale = start === undefined ? undefined : capacityScaleOf(n, start, days, warnings, warm.runStart ?? start);
 			const local = unitRunoffOf.get(n.id) ?? (unitRunoffOf.size && n.kind === 'farm' ? new Float64Array(days) : undefined);
 			return {
 				kind: n.kind,
-				share: shares.share[i]!,
+				// Its natural MAR share (engine ≥ 1.105.0, §2.5), set below by planUnitShares once the plan is built.
+				share: 0,
 				...(local ? { localRunoff: local } : {}),
 				pctUpstreamToDam: n.pctUpstreamToDam,
 				pctRunoffToDam: n.pctRunoffToDam,
@@ -1870,7 +1873,8 @@ export function buildNetworkPlan(
 				grossDemand: demand[i]!.gross,
 				rainOffset: demand[i]!.rainOffset,
 				soilWater: demand[i]!.soilWater,
-				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed, ...(u.pump !== undefined ? { userPumpM3Day: u.pump } : {}) } : {}),
+				// Whether a Priority user claims is seniorClaims', set below with the claims.
+				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: false, ...(u.pump !== undefined ? { userPumpM3Day: u.pump } : {}) } : {}),
 				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
 				...supplyOf(n, warnings, start === undefined ? undefined : { start, end: start + days - 1 }),
 				...operatingOf(n, warnings),
@@ -1879,12 +1883,8 @@ export function buildNetworkPlan(
 				...(tables[i]!.shares ? { cropDamShare: tables[i]!.shares!.dam } : {}),
 				...(remotes[i] ? { remote: remotes[i] } : {}),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
-				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),
-				...(restriction?.userCut && users.claimsCut?.[i] ? { seniorClaimCut: users.claimsCut[i] } : {}),
 				...(reaches[i] ? { reachLoss: reaches[i] } : {}),
 				...baseflowOf(n, warnings),
-				...(users.reachClaims[i] ? { seniorReachLoss: users.reachClaims[i] } : {}),
-				...(restriction?.userCut && users.reachClaimsCut?.[i] ? { seniorReachLossCut: users.reachClaimsCut[i] } : {}),
 				...(reset?.byNode.has(i) ? { storageResetM3: reset.byNode.get(i)! } : {})
 			};
 		})
@@ -1903,6 +1903,13 @@ export function buildNetworkPlan(
 		},
 		scaledObjects: (i, k) => (factored(nodes[i]!) && objectsBy.has(nodes[i]!.id) ? objectsOf(nodes[i]!, { scale: k }) : undefined)
 	});
+	// Each unit's one share (engine ≥ 1.105.0, ./network/ewrSplit.ts, §2.5 and §2.5b): its natural MAR share, from Per
+	// unit's own runoff or Fragmentation's share runs, set on the plan's farms. It splits the flow under Fragmentation,
+	// the EWR and the land-cover threshold (all read at simulation time) and the senior users' claims, made from it here.
+	const shareRunoffOf = unitRunoffOf.size ? unitRunoffOf : new Map((warm.shareRunoff ?? []).map((u) => [u.nodeId, u.runoffM3Day]));
+	const ewrSplit = planUnitShares(plan, nodes, shareRunoffOf, unitRunoffOf.size ? 'unitRain' : 'shareRuns', unitRunoffOf.size ? [] : (warm.shareCatchmentRain ?? []), start, historyDays, warm.ewrSplit);
+	// The daily outlet EWR reads the natural flow at the outlet, which crosses the units by their shares when a reach
+	// loses (naturalAtOutlet): filled once the shares are set.
 	let outletEwr: OutletEwrPlan | undefined;
 	if (ewrSource) {
 		for (const note of ewrDailySourceNotes(ewrSource)) warnings.push(`daily EWR at the outlet: ${note}`);
@@ -1911,66 +1918,114 @@ export function buildNetworkPlan(
 		const areaKm2 = resolveCatchmentAreaKm2(settings.calibration, { ...input, model });
 		outletEwr = { source: ewrSource, info: fillPlanOutletEwr(plan, topo.outflow, natural, ewrSource, areaKm2, historyDays, days, warm.outletEwr) };
 	}
-	// How the EWR is split between the units (engine ≥ 1.94.0, ./network/ewrSplit.ts, §2.5b): set on the plan's farms.
-	const ewrSplit = planEwrSplit(plan, nodes, resolveEwrSplit(settings.ewrSplit, []), unitRunoffOf, start, historyDays, warm.ewrSplit);
+	const claimsOn = (w: string[] | null) => {
+		const share = plan.nodes.map((n) => n.share);
+		applySeniorClaims(plan.nodes, seniorClaims(nodes, topo, share, reaches, days, users, w, cutOf), !!restriction?.userCut);
+	};
+	claimsOn(warnings);
+	// A calibration candidate's shares move with its parameters: the shares, then the claims made from them.
+	const refill = ewrSplit.refill;
+	if (refill)
+		ewrSplit.refillShares = () => {
+			fillPlanShares(plan.nodes, refill);
+			if (users.size) claimsOn(null);
+		};
 	const ewrPart = outletEwr ? { outletEwr, ewrSplit } : { ewrSplit };
 	if (warm.captureAt === undefined) return { plan, topo, allocation, ...ewrPart };
 	return { plan, topo, allocation, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0), ...ewrPart };
 }
 
 /**
- * A plan's EWR split (engine ≥ 1.94.0): what the run reports, and with a natural MAR split the farms and period
- * a calibration refills each candidate's shares from (`refill`, absent when the shares are pinned or the flow share).
+ * A plan's unit shares (engine ≥ 1.105.0, ./network/ewrSplit.ts): what the run reports, and the farms and period a
+ * calibration refills each candidate's shares from (`refill`, absent when the shares are pinned or fixed: the area
+ * shares or no land unit), with `refillShares`, which refills them and the senior claims made from them.
  */
 export interface PlannedEwrSplit {
 	info: EwrSplitInfo;
 	refill?: EwrSplitPlan;
-	/** The shares applied, by node id (natural MAR only). */
+	/** Refill the plan's shares from `refill`'s runoff buffers, and the senior users' claims from them (buildNetworkPlan). */
+	refillShares?: () => void;
+	/** The shares applied, by node id (absent with no land unit). */
 	shares?: Map<string, number>;
-	/** What a snapshot of this run pins (a natural MAR split asked for under per-unit rain): its period and shares, none without runoff. */
+	/** What a snapshot of this run pins: its period, shares and record. */
 	pin?: PinnedEwrSplit;
 }
 
 /**
- * Set the plan's farms' EWR shares for settings.ewrSplit (./network/ewrSplit.ts): nothing for the flow share (the
- * run is the one before, to the bit) or under catchment rain; a resumed run's pinned shares; else each unit's
- * natural MAR over the complete water years of the historical days.
+ * Set the plan's farms' shares (§2.5, §2.5b): a resumed run's pinned shares; else each land unit's natural MAR over
+ * the complete water years of the historical days, from its own runoff (Per unit's local runoff, or Fragmentation's
+ * share runs); the area shares with no runoff over the period, with natural flow supplied without the units' runoff
+ * (runModelWith), or on a resumed run whose snapshot pinned none; every share 0 without a land unit.
  */
-function planEwrSplit(
+function planUnitShares(
 	plan: NetworkPlan,
 	nodes: readonly NetworkNode[],
-	method: EwrSplitMethod,
-	unitRunoffOf: ReadonlyMap<string, Float64Array>,
+	runoffOf: ReadonlyMap<string, Float64Array>,
+	from: 'unitRain' | 'shareRuns',
+	catchmentRain: readonly EwrSplitUnit[],
 	start: number | undefined,
 	historyDays: number,
 	pinned: PinnedEwrSplit | null | undefined
 ): PlannedEwrSplit {
-	if (method === 'flowShare') return { info: { method, applied: 'flowShare' } };
-	if (!unitRunoffOf.size) return { info: { method, applied: 'flowShare', why: 'catchmentRain' } };
-	// Resumed from a run that split by the flow share (or had no runoff to split by): its own days are a part of the
-	// record, not the period, so it keeps the flow share rather than work shares out on them.
-	if (pinned === null) return { info: { method, applied: 'flowShare', why: 'resumed' } };
-	if (pinned) {
-		// The capture run had no runoff to split by (no shares pinned): the flow share, as it did.
-		if (!pinned.shares.length) return { info: { method, applied: 'flowShare', why: 'noRunoff', pinned: true }, pin: pinned };
-		// The snapshot's fingerprint refuses another model, so every farm is in the pinned shares; one that isn't gets 0.
-		const byId = new Map(pinned.shares.map((x) => [x.nodeId, x.share]));
-		nodes.forEach((n, i) => {
-			if (n.kind === 'farm') plan.nodes[i]!.ewrShare = byId.get(n.id) ?? 0;
-		});
-		return { info: { method, applied: 'naturalMar', period: pinned.period, pinned: true }, shares: byId, pin: pinned };
-	}
 	const days = ewrSplitDays(start, historyDays);
-	const refill: EwrSplitPlan = {
-		days,
-		farms: nodes.flatMap((n, i) => (n.kind === 'farm' ? [{ index: i, nodeId: n.id, runoff: plan.nodes[i]!.localRunoff }] : []))
-	};
-	const shares = fillPlanEwrShares(plan.nodes, refill);
 	const period = ewrSplitPeriod(start, days);
-	const info: EwrSplitInfo = shares ? { method, applied: 'naturalMar', period } : { method, applied: 'flowShare', why: 'noRunoff' };
-	// What a snapshot pins: the shares, or none when there was no runoff to split by, so a resumed run does as this one did.
-	const pin: PinnedEwrSplit = { period, shares: shares ? [...shares].map(([nodeId, share]) => ({ nodeId, share })) : [] };
-	return { info, refill, pin, ...(shares ? { shares } : {}) };
+	const farms = nodes.flatMap((n, i) => (n.kind === 'farm' ? [{ index: i, nodeId: n.id, areaKm2: n.areaKm2 }] : []));
+	const byArea = areaShares(farms);
+	const setAll = (shares: ReadonlyMap<string, number>) => {
+		for (const f of farms) plan.nodes[f.index]!.share = shares.get(f.nodeId) ?? 0;
+	};
+	// No land unit (no farm, or none with an area): nothing to split by, every share 0 (the run's note says so).
+	const none = (): PlannedEwrSplit => {
+		const info: EwrSplitInfo = { applied: 'area', why: 'noLandUnit', period };
+		return { info, pin: { period, shares: [], info } };
+	};
+	const fixed = (why: 'noUnitRunoff' | 'resumed'): PlannedEwrSplit => {
+		if (!byArea) return none();
+		setAll(byArea);
+		const info: EwrSplitInfo = { applied: 'area', why, period };
+		return { info, shares: byArea, pin: { period, shares: [...byArea].map(([nodeId, share]) => ({ nodeId, share })), info } };
+	};
+	// Resumed from a snapshot that pinned none (not one of this engine's: its snapshots always pin the shares).
+	if (pinned === null) return fixed('resumed');
+	if (pinned) {
+		const byId = new Map(pinned.shares.map((x) => [x.nodeId, x.share]));
+		// The snapshot's fingerprint refuses another model, so every farm is in the pinned shares; one that isn't gets 0.
+		// No land unit in the capture run either: every share 0, as it had.
+		setAll(byId);
+		const info: EwrSplitInfo = pinned.info ? { ...structuredClone(pinned.info), pinned: true } : { applied: pinned.shares.length ? 'naturalMar' : 'area', period: pinned.period, pinned: true };
+		return { info, ...(pinned.shares.length ? { shares: byId } : {}), pin: pinned };
+	}
+	// Natural flow supplied without the units' runoff (runModelWith: the workbook regression and the hand networks
+	// that feed their own natural flow) has no natural MAR to split by: the area shares, b023's own default method.
+	if (!runoffOf.size) return fixed('noUnitRunoff');
+	const refill: EwrSplitPlan = { days, farms: farms.map((f) => ({ ...f, runoff: runoffOf.get(f.nodeId) ?? plan.nodes[f.index]!.localRunoff })) };
+	const filled = fillPlanShares(plan.nodes, refill);
+	if (!filled) return none();
+	const info: EwrSplitInfo = {
+		applied: filled.applied,
+		...(filled.applied === 'area' ? { why: 'noRunoff' as const } : {}),
+		period,
+		runoffFrom: from,
+		...(catchmentRain.length ? { catchmentRain: catchmentRain.map((u) => ({ ...u })) } : {})
+	};
+	const pin: PinnedEwrSplit = { period, shares: [...filled.shares].map(([nodeId, share]) => ({ nodeId, share })), info };
+	return { info, refill, pin, shares: filled.shares };
+}
+
+/**
+ * The EWR split a run of `input` makes (its snapshot pin: period, shares and record), without running the network
+ * (engine ≥ 1.105.0): the natural flow and the plan only. A seasonal outlook's re-run member takes it
+ * (ModelInput.ewrSplitPinned), so it splits its EWR as the base run did and as a member from the snapshot does.
+ */
+export function ewrSplitPinOf(input: ModelInput): PinnedEwrSplit | null {
+	const run = prepareRun(input);
+	const { settings, days, startDate, aligned, month, start } = run;
+	const { historyDays } = forecastTail(run);
+	const read = run.series !== input.series ? { ...input, series: run.series } : input;
+	const nf = naturalFlowFor(settings.runoffModel)(read, { settings, startDate, days, aligned, historyDays, chirpsCorrection: run.chirpsCorrection, stations: run.stations?.context ?? null });
+	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
+	const warm = nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : nf.shareRunoff ? { shareRunoff: nf.shareRunoff, shareCatchmentRain: nf.shareCatchmentRain ?? [] } : {};
+	return buildNetworkPlan(read, settings, days, month, aligned, natural, [], start, warm, historyDays).ewrSplit.pin ?? null;
 }
 
 /** The daily outlet EWR's source when it isn't the pragmatic EWR (engine ≥ 1.77.0), and what the plan's `ewr` was filled from. */
@@ -2354,23 +2409,16 @@ function consumptivePerSupplied(n: NetworkPlan['nodes'][number]): number {
 
 /**
  * Other water users (WP-1.33, docs/model.md §2.7c): each user node's daily
- * demand (its monthly m³/day, water-year months), return share and priority,
- * and the priority users' demand fragmented to the farms upstream of each by
- * flow share (claims[farm][t] = Σ_u D_u[t] × share_farm / Σ upstream shares of
- * u), the rule the EWR is fragmented by. A priority user with no farm share
- * upstream can't be protected that way: it takes what reaches it, with a
- * warning. Map keyed by node index; claims only for farms that carry one.
- * A farm's claim is grossed up for the bed losses of every reach between it
- * and the user (engine ≥ 1.75.0, docs/model.md §2.6b), so that what it passes
- * still arrives; `reachClaims[k]` adds up what the gross-ups put on for the
- * reach below node k, which the simulation takes off the requirement as it
- * crosses that reach, so it nets exactly to what the claims need below it.
+ * demand (its monthly m³/day, water-year months), return share and priority.
+ * The priority users' claims on the farms above them are seniorClaims', made
+ * once the farms' shares are known (they are the natural MAR shares from
+ * engine 1.105.0, set after the plan is built, and a calibration refills them
+ * for each candidate). Map keyed by node index.
  */
 interface OtherUser {
 	demand: Float64Array;
 	returnPct: number;
 	senior: boolean;
-	claimed: boolean;
 	/** Its river pump capacity, m³/day (engine ≥ 1.58.0); absent = no limit. */
 	pump?: number;
 }
@@ -2380,47 +2428,16 @@ type DatedFactorOf = (n: NetworkNode, part: DemandPart | undefined, warnings: st
 
 function otherUsers(
 	nodes: readonly NetworkNode[],
-	topo: ReturnType<typeof buildTopology>,
-	share: Float64Array,
-	reaches: readonly (PlanReachLoss | undefined)[],
 	days: number,
 	month: Uint8Array,
 	warnings: string[],
 	factorFrom: number,
 	/** allocationMode 'fullAllocation' (engine ≥ 1.18.0): scales user i's demand in place before its claim is passed down, and (engine ≥ 1.70.0) before its demand factor. */
 	scale?: (i: number, demand: Float64Array) => void,
-	datedOf?: DatedFactorOf,
-	/**
-	 * Each user's fixed restriction share (engine 1.86.0, issue #523 B3,
-	 * userRestrictionShare; 0 = none): when a Priority user with claims has
-	 * one, `claimsCut` and `reachClaimsCut` are every claim again with that
-	 * user's demand × (1 − share), what the farms pass on the days the
-	 * drought restriction cuts it.
-	 */
-	cutOf?: (i: number) => number
-): {
-	byNode: Map<number, OtherUser>;
-	claims: (Float64Array | undefined)[];
-	reachClaims: (Float64Array | undefined)[];
-	claimsCut: (Float64Array | undefined)[] | null;
-	reachClaimsCut: (Float64Array | undefined)[] | null;
-} {
+	datedOf?: DatedFactorOf
+): Map<number, OtherUser> {
 	const byNode = new Map<number, OtherUser>();
-	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
-	const reachClaims: (Float64Array | undefined)[] = nodes.map(() => undefined);
-	// The claims on the days the restriction cuts the users with a fixed %, made only when one of them claims (engine 1.86.0).
-	const cutClaims = nodes.some((n, i) => n.kind === 'user' && (cutOf?.(i) ?? 0) > 0 && (n.userPriority ?? 'senior') !== 'junior');
-	const claimsCut: (Float64Array | undefined)[] | null = cutClaims ? nodes.map(() => undefined) : null;
-	const reachClaimsCut: (Float64Array | undefined)[] | null = cutClaims ? nodes.map(() => undefined) : null;
-	// Each node's downstream node, only when some reach has bed losses to gross the claims up for (engine ≥ 1.75.0).
-	let down: Int32Array | null = null;
-	if (reaches.some((p) => p)) {
-		down = new Int32Array(nodes.length).fill(-1);
-		topo.upstream.forEach((ups, d) => {
-			for (const u of ups) down![u] = d;
-		});
-	}
-	// Users in node-id order: a farm below two priority users adds their claims in that order.
+	// Users in node-id order: a farm below two priority users adds their claims in that order (seniorClaims).
 	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
 	for (const i of byId) {
 		const n = nodes[i]!;
@@ -2447,57 +2464,136 @@ function otherUsers(
 		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
 		const senior = (n.userPriority ?? 'senior') !== 'junior';
 		const { userPumpM3Day: pump } = userPumpOf(n, warnings);
-		let claimed = false;
-		if (senior && demand.some((v) => v > 0)) {
-			// Farms upstream of the user, and their flow shares.
-			const up: number[] = [];
-			const stack = [...topo.upstream[i]!];
-			while (stack.length) {
-				const j = stack.pop()!;
-				if (nodes[j]!.kind === 'farm' && share[j]! > 0) up.push(j);
-				stack.push(...topo.upstream[j]!);
-			}
-			// In node-id order, so the total (and every claim) is the same to the last bit however the nodes are listed.
-			up.sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
-			const total = up.reduce((s, j) => s + share[j]!, 0);
-			if (total > 0) {
-				claimed = true;
-				// Its claims as they are, then (with a fixed restriction %, engine 1.86.0) at the restricted demand on
-				// the cut set, the others' claims added to it unchanged.
-				const uc = cutOf?.(i) ?? 0;
-				const restricted = uc > 0 ? demand.map((d) => d * (1 - uc)) : demand;
-				const sets: [(Float64Array | undefined)[], (Float64Array | undefined)[], Float64Array][] = [[claims, reachClaims, demand]];
-				if (claimsCut) sets.push([claimsCut, reachClaimsCut!, restricted]);
-				for (const [claimSet, reachSet, dem] of sets)
-					for (const j of up) {
-						const c = (claimSet[j] ??= new Float64Array(days));
-						const f = share[j]! / total;
-						// The reaches with bed losses between the farm and the user, nearest the user first (engine ≥ 1.75.0).
-						const path: number[] = [];
-						if (down) for (let k = j; k !== i && k >= 0; k = down[k]!) if (reaches[k]) path.unshift(k);
-						if (path.length) {
-							const add = path.map((k) => (reachSet[k] ??= new Float64Array(days)));
-							for (let t = 0; t < days; t++) {
-								let v = (pump === undefined ? dem[t]! : Math.min(dem[t]!, pump)) * f;
-								for (let a = 0; a < path.length; a++) {
-									const g = reachGross(reaches[path[a]!]!, v);
-									add[a]![t]! += g - v;
-									v = g;
-								}
-								c[t]! += v;
-							}
-						}
-						// The farms pass what its pump can take (engine ≥ 1.58.0): MIN(D, capacity), not water it can't lift.
-						else if (pump === undefined) for (let t = 0; t < days; t++) c[t]! += dem[t]! * f;
-						else for (let t = 0; t < days; t++) c[t]! += Math.min(dem[t]!, pump) * f;
-					}
-			} else {
-				warnings.push(`priority user "${n.name}" has no unit with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
-			}
-		}
-		byNode.set(i, { demand, returnPct, senior, claimed, ...(pump !== undefined ? { pump } : {}) });
+		byNode.set(i, { demand, returnPct, senior, ...(pump !== undefined ? { pump } : {}) });
 	}
-	return { byNode, claims, reachClaims, claimsCut, reachClaimsCut };
+	return byNode;
+}
+
+/**
+ * The priority users' demand fragmented to the farms upstream of each by
+ * their share (WP-1.33, docs/model.md §2.7c): claims[farm][t] = Σ_u D_u[t] ×
+ * share_farm / Σ upstream shares of u, the rule the EWR is fragmented by. From
+ * engine 1.105.0 (issue #616) the shares are the farms' natural MAR shares,
+ * the EWR's own. A priority user with no farm share upstream can't be
+ * protected that way: it takes what reaches it (`claimed` false), with a
+ * warning when `warnings` is given (the plan's own call; a calibration
+ * candidate's refill passes none). A farm's claim is grossed up for the bed
+ * losses of every reach between it and the user (engine ≥ 1.75.0,
+ * docs/model.md §2.6b), so that what it passes still arrives; `reachClaims[k]`
+ * adds up what the gross-ups put on for the reach below node k, which the
+ * simulation takes off the requirement as it crosses that reach, so it nets
+ * exactly to what the claims need below it.
+ */
+function seniorClaims(
+	nodes: readonly NetworkNode[],
+	topo: ReturnType<typeof buildTopology>,
+	share: ArrayLike<number>,
+	reaches: readonly (PlanReachLoss | undefined)[],
+	days: number,
+	users: ReadonlyMap<number, OtherUser>,
+	warnings: string[] | null,
+	/**
+	 * Each user's fixed restriction share (engine 1.86.0, issue #523 B3,
+	 * userRestrictionShare; 0 = none): when a Priority user with claims has
+	 * one, `claimsCut` and `reachClaimsCut` are every claim again with that
+	 * user's demand × (1 − share), what the farms pass on the days the
+	 * drought restriction cuts it.
+	 */
+	cutOf?: (i: number) => number
+): {
+	claimed: Set<number>;
+	claims: (Float64Array | undefined)[];
+	reachClaims: (Float64Array | undefined)[];
+	claimsCut: (Float64Array | undefined)[] | null;
+	reachClaimsCut: (Float64Array | undefined)[] | null;
+} {
+	const claimed = new Set<number>();
+	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
+	const reachClaims: (Float64Array | undefined)[] = nodes.map(() => undefined);
+	// The claims on the days the restriction cuts the users with a fixed %, made only when one of them claims (engine 1.86.0).
+	const cutClaims = nodes.some((n, i) => n.kind === 'user' && (cutOf?.(i) ?? 0) > 0 && (n.userPriority ?? 'senior') !== 'junior');
+	const claimsCut: (Float64Array | undefined)[] | null = cutClaims ? nodes.map(() => undefined) : null;
+	const reachClaimsCut: (Float64Array | undefined)[] | null = cutClaims ? nodes.map(() => undefined) : null;
+	// Each node's downstream node, only when some reach has bed losses to gross the claims up for (engine ≥ 1.75.0).
+	let down: Int32Array | null = null;
+	if (reaches.some((p) => p)) {
+		down = new Int32Array(nodes.length).fill(-1);
+		topo.upstream.forEach((ups, d) => {
+			for (const u of ups) down![u] = d;
+		});
+	}
+	// Users in node-id order (otherUsers' map is): a farm below two priority users adds their claims in that order.
+	for (const [i, u] of users) {
+		const n = nodes[i]!;
+		const demand = u.demand;
+		const pump = u.pump;
+		if (!u.senior || !demand.some((v) => v > 0)) continue;
+		// Farms upstream of the user, and their shares.
+		const up: number[] = [];
+		const stack = [...topo.upstream[i]!];
+		while (stack.length) {
+			const j = stack.pop()!;
+			if (nodes[j]!.kind === 'farm' && share[j]! > 0) up.push(j);
+			stack.push(...topo.upstream[j]!);
+		}
+		// In node-id order, so the total (and every claim) is the same to the last bit however the nodes are listed.
+		up.sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+		const total = up.reduce((s, j) => s + share[j]!, 0);
+		if (!(total > 0)) {
+			warnings?.push(`priority user "${n.name}" has no unit with a share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
+			continue;
+		}
+		claimed.add(i);
+		// Its claims as they are, then (with a fixed restriction %, engine 1.86.0) at the restricted demand on
+		// the cut set, the others' claims added to it unchanged.
+		const uc = cutOf?.(i) ?? 0;
+		const restricted = uc > 0 ? demand.map((d) => d * (1 - uc)) : demand;
+		const sets: [(Float64Array | undefined)[], (Float64Array | undefined)[], Float64Array][] = [[claims, reachClaims, demand]];
+		if (claimsCut) sets.push([claimsCut, reachClaimsCut!, restricted]);
+		for (const [claimSet, reachSet, dem] of sets)
+			for (const j of up) {
+				const c = (claimSet[j] ??= new Float64Array(days));
+				const f = share[j]! / total;
+				// The reaches with bed losses between the farm and the user, nearest the user first (engine ≥ 1.75.0).
+				const path: number[] = [];
+				if (down) for (let k = j; k !== i && k >= 0; k = down[k]!) if (reaches[k]) path.unshift(k);
+				if (path.length) {
+					const add = path.map((k) => (reachSet[k] ??= new Float64Array(days)));
+					for (let t = 0; t < days; t++) {
+						let v = (pump === undefined ? dem[t]! : Math.min(dem[t]!, pump)) * f;
+						for (let a = 0; a < path.length; a++) {
+							const g = reachGross(reaches[path[a]!]!, v);
+							add[a]![t]! += g - v;
+							v = g;
+						}
+						c[t]! += v;
+					}
+				}
+				// The farms pass what its pump can take (engine ≥ 1.58.0): MIN(D, capacity), not water it can't lift.
+				else if (pump === undefined) for (let t = 0; t < days; t++) c[t]! += dem[t]! * f;
+				else for (let t = 0; t < days; t++) c[t]! += Math.min(dem[t]!, pump) * f;
+			}
+	}
+	return { claimed, claims, reachClaims, claimsCut, reachClaimsCut };
+}
+
+/**
+ * Put seniorClaims' result on the plan's nodes (and take an earlier candidate's off): a farm's claims, a reach's
+ * gross-ups, and whether each user claims. `cut` keeps the restricted sets only when the drought restriction has a
+ * user cut, as the plan always did.
+ */
+function applySeniorClaims(planNodes: NetworkPlan['nodes'], c: ReturnType<typeof seniorClaims>, cut: boolean): void {
+	planNodes.forEach((p, i) => {
+		const set = <K extends 'seniorClaim' | 'seniorClaimCut' | 'seniorReachLoss' | 'seniorReachLossCut'>(k: K, v: Float64Array | undefined) => {
+			if (v) p[k] = v;
+			else delete p[k];
+		};
+		set('seniorClaim', c.claims[i]);
+		set('seniorClaimCut', cut ? c.claimsCut?.[i] : undefined);
+		set('seniorReachLoss', c.reachClaims[i]);
+		set('seniorReachLossCut', cut ? c.reachClaimsCut?.[i] : undefined);
+		if (p.kind === 'user' && p.senior !== undefined) p.seniorClaimed = c.claimed.has(i);
+	});
 }
 
 /**

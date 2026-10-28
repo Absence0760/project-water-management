@@ -40,6 +40,16 @@ export function forecastTail(prep: Pick<PreparedRun, 'days' | 'aligned' | 'rainS
 	const source = prep.rainSource
 		? prep.rainSource.column
 		: rainSourceCodes(prep.aligned('rain_catchment_mm'), prep.aligned('rain_chirps_mm'), prep.aligned('rain_forecast_mm'));
+	return { source, ...tailOfSource(source, days) };
+}
+
+/**
+ * The tail of a per-day rain source column (RAIN_SOURCE_CODE, NaN for none):
+ * forecastTail's split, for a reader that builds the column itself (a
+ * catchment station's patch counts, ./runoff/stationForcing.ts, before the
+ * prepared run exists).
+ */
+export function tailOfSource(source: ArrayLike<number>, days: number = source.length): Omit<ForecastTail, 'source'> {
 	let last = -1;
 	for (let t = 0; t < days; t++) if (!Number.isNaN(source[t]!) && source[t] !== RAIN_SOURCE_CODE.forecast) last = t;
 	let from = -1;
@@ -51,5 +61,5 @@ export function forecastTail(prep: Pick<PreparedRun, 'days' | 'aligned' | 'rainS
 			}
 		}
 	}
-	return { source, lastObserved: last, from, historyDays: from >= 0 ? from : days };
+	return { lastObserved: last, from, historyDays: from >= 0 ? from : days };
 }

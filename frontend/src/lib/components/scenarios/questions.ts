@@ -6,6 +6,7 @@ import type { ApplicationQuestion, MaskedRuleRef } from '#lib/api/index.js';
 /** A rule's kind (the check's `maskedRules[].rules`) in words: what it is about, never which unit. */
 export function ruleLabel(kind: string): string {
 	switch (kind) {
+		// A question asked before engine 1.105.0 retired the specific flow shares (issue #616): no new check names it.
 		case 'shares':
 			return 'flow shares';
 		case 'area':

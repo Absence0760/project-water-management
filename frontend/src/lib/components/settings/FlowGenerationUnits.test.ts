@@ -64,6 +64,27 @@ describe('FlowGenerationUnits', () => {
 		expect(body).toContain('Its CHIRPS is read at its own place');
 	});
 
+	it('gives each unit with a station its patching priority (issue #612): the corrected CHIRPS by default, an ordered list of pull-downs', () => {
+		const def = text(render(FlowGenerationUnits, { props: { value: { units: { a: { stationId: 's1' } } }, nodes, stations } }).body);
+		expect(def).toContain('aria-label="Patch source 1 for Upper unit"');
+		expect(def.match(/data-testid="flowgen-patch-entry" data-source="chirps"/g)).toHaveLength(1);
+		// The main station's own select still offers stations only.
+		const main = def.match(/aria-label="Station for Upper unit"[\s\S]*?<\/select>/)![0];
+		expect(main).not.toMatch(/CHIRPS/);
+		const value = { units: { a: { stationId: 's1', patch: [{ source: 'station' as const, stationId: 's2' }, { source: 'chirps' as const }] }, b: { stationId: 's2', patch: [] } } };
+		const body = text(render(FlowGenerationUnits, { props: { value, nodes, stations } }).body);
+		const a = body.match(/aria-label="Then patch gaps from, for Upper unit"[\s\S]*?<\/ol>/)![0];
+		expect(a.match(/data-testid="flowgen-patch-entry" data-source="([^"]+)"/g)!.map((x) => x.split('"').at(-2))).toEqual(['s2', 'chirps']);
+		// The main station is no choice in its own patch list.
+		expect(a).not.toMatch(/<option value="s1"/);
+		expect(a).toContain('aria-label="Move patch source 1 for Upper unit up"');
+		expect(a).toContain('aria-label="Remove patch source 2 for Upper unit"');
+		// An empty list says where the gaps go.
+		expect(body).toContain('data-testid="flowgen-patch-none"');
+		// Vlei patches Upper unit, so it is a station in use.
+		expect(body).toContain('Patches Upper unit.');
+	});
+
 	it('names a station the project no longer has instead of picking another', () => {
 		const body = text(render(FlowGenerationUnits, { props: { value: { units: { a: { stationId: 'gone' } } }, nodes, stations } }).body);
 		expect(body).toContain('A station the project no longer has');

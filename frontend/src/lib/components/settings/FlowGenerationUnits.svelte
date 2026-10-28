@@ -4,7 +4,9 @@
 	to the unit's MAP (the ratio shown beside it), and the station whose monthly factors correct the unit's CHIRPS on
 	the station's gaps; then each station in use, once, with its MAP and where its CHIRPS is read (its coordinates, or
 	the unit it stands in, settings.rainStations.sites). Satellite rain is never a unit's station: it only fills the
-	station's gaps. "No station" keeps the unit on the rule it ran on before stations (§2.4h), so a project from
+	station's gaps. Each unit's gaps follow its patching priority (issue #612, settings.rainStations.units[id].patch):
+	an ordered list of pull-downs, other stations and CHIRPS, each station with how many of the main station's gaps
+	it fills or why it can't help (patchChoices.ts, loaded when a unit has a station). "No station" keeps the unit on the rule it ran on before stations (§2.4h), so a project from
 	before them runs as it did. Several units may share a station; ticking rows sets one station for all of them.
 	Bind the setting (null = none). Its own chunk (lazySections.ts): the Settings tab chunk sits at its ceiling.
 -->
@@ -12,9 +14,13 @@
 	import type { RainStationSettings } from '@water-management/engine';
 	import { fmtNum } from '#lib/format/number.js';
 	import { stationHref } from './unitRain';
+	import PatchChain from './PatchChain.svelte';
 	import {
 		assignmentLine,
+		CHIRPS_PATCH,
 		namesLine,
+		patchFromValues,
+		withUnitPatch,
 		stationsInUse,
 		unitStationRows,
 		withStationSite,
@@ -22,6 +28,8 @@
 		withUnitScale,
 		withUnitStation,
 		withUnitsStation,
+		type PatchUsability,
+		type PatchValue,
 		type StationOption,
 		type UnitNode
 	} from './flowGeneration';
@@ -30,13 +38,16 @@
 		value = $bindable(),
 		readonly = false,
 		nodes = [],
-		stations
+		stations,
+		projectId
 	}: {
 		value: RainStationSettings | null | undefined;
 		readonly?: boolean;
 		nodes?: readonly UnitNode[];
 		/** The project's rainfall stations (flowGeneration.ts stationOptions); undefined until the series list loads. */
 		stations?: readonly StationOption[];
+		/** The project, for each patch station's fill count (patchChoices.ts); without it the counts aren't shown. */
+		projectId?: string;
 	} = $props();
 
 	const uid = $props.id();
@@ -48,6 +59,35 @@
 	let picked = $state<string[]>([]);
 	const pickedNow = $derived(picked.filter((id) => rows.some((r) => r.unit.id === id)));
 	let bulkStation = $state('');
+	/** The patching priority the select-several action gives (issue #612): the default, the corrected CHIRPS alone. */
+	let bulkPatch = $state<PatchValue[]>([CHIRPS_PATCH]);
+
+	// Each patch station's fill of the main station's gaps, or why it can't help (issue #612): asked for once per
+	// main station and scaling, from the engine over the stored model input, when a unit has a station.
+	const choiceKey = (main: string, scale: boolean) => `${main}|${scale}`;
+	let usability = $state<Record<string, Record<string, PatchUsability>>>({});
+	let choicesFailed = $state(false);
+	const asked = new Set<string>();
+	let forgot = false;
+	$effect(() => {
+		if (!projectId) return;
+		const ids = list.map((st) => st.id);
+		for (const r of rows) {
+			if (!r.station) continue;
+			const k = `${choiceKey(r.station.id, r.scale)}|${ids.join(',')}`;
+			if (asked.has(k)) continue;
+			asked.add(k);
+			const [main, scale] = [r.station.id, r.scale];
+			import('./patchChoices')
+				.then((m) => {
+					if (!forgot) m.forgetPatchChoices(projectId), (forgot = true);
+					return m.patchChoices(projectId, main, scale, ids);
+				})
+				.then((c) => (usability = { ...usability, [k]: c }))
+				.catch(() => (choicesFailed = true));
+		}
+	});
+	const usabilityOf = (r: (typeof rows)[number]) => (r.station ? (usability[`${choiceKey(r.station.id, r.scale)}|${list.map((st) => st.id).join(',')}`] ?? null) : null);
 	const allPicked = $derived(rows.length > 0 && pickedNow.length === rows.length);
 
 	const ratioText = (r: (typeof rows)[number]) => {
@@ -62,10 +102,24 @@
 		picked = on ? [...pickedNow.filter((x) => x !== id), id] : pickedNow.filter((x) => x !== id);
 	}
 	function assignPicked() {
-		value = withUnitsStation(value, pickedNow, bulkStation || null);
+		value = withUnitsStation(value, pickedNow, bulkStation || null, patchFromValues(bulkPatch));
 		picked = [];
 	}
 </script>
+
+<!-- One patching priority (issue #612): PatchChain.svelte, shared with the catchment's station. -->
+{#snippet chain(values: PatchValue[], set: (v: PatchValue[]) => void, mainId: string | null, who: string, use: Record<string, PatchUsability> | null)}
+	<PatchChain
+		{values}
+		{set}
+		{mainId}
+		{who}
+		{use}
+		stations={list}
+		{readonly}
+		chirpsText="the unit’s own CHIRPS, corrected month by month against the station’s rain at the unit’s MAP"
+	/>
+{/snippet}
 
 <div class="flowgen-units" id="fld-stations" data-testid="flowgen-units">
 	<p class="hint state" data-testid="flowgen-assigned">{assignmentLine(rows)}</p>
@@ -84,6 +138,12 @@
 					{#each list as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
 				</select>
 				<button type="button" class="btn btn-sm" disabled={!pickedNow.length} onclick={assignPicked}>Assign to the ticked units</button>
+				{#if bulkStation}
+					<div class="bulk-chain">
+						<span class="lbl">Then patch gaps from</span>
+						{@render chain(bulkPatch, (v) => (bulkPatch = v), bulkStation, 'the ticked units', null)}
+					</div>
+				{/if}
 			</div>
 		{/if}
 		<div class="rows-box">
@@ -100,6 +160,7 @@
 							{/if}
 							<th scope="col">Unit and its MAP</th>
 							<th scope="col">Station</th>
+							<th scope="col">Then patch gaps from</th>
 							<th scope="col">Scale to unit MAP</th>
 							<th scope="col">Gaps: CHIRPS corrected against</th>
 						</tr>
@@ -129,6 +190,13 @@
 										{#each list as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
 									</select>
 									{#if r.missing}<span class="err small" data-testid="flowgen-missing">Its station was deleted: runs keep the unit on the rule before stations until another is picked.</span>{/if}
+								</td>
+								<td data-label="Then patch gaps from">
+									{#if r.station}
+										{@render chain(r.patch, (v) => (value = withUnitPatch(value, r.unit.id, patchFromValues(v))), r.station.id, r.unit.name, usabilityOf(r))}
+									{:else}
+										<span class="muted small">–</span>
+									{/if}
 								</td>
 								<td data-label="Scale to unit MAP">
 									{#if r.station}
@@ -168,10 +236,15 @@
 				</table>
 			</div>
 		</div>
+		{#if choicesFailed}
+			<p class="hint" role="note" data-testid="flowgen-patch-unknown">How many gaps each station fills shows once the project has rain to run on.</p>
+		{/if}
 		<span class="hint explain">
 			On a station’s days the unit runs on its rain × unit MAP ÷ station MAP (held between 0.25 and 4), or as recorded with scaling off. On its gaps and
-			unreliable days the unit’s own CHIRPS fills in, corrected month by month against the station chosen, as it is: satellite rain is never a unit’s
-			station. A unit with no station keeps the rule it ran on before stations (Units without a station, below).
+			unreliable days the first source in its patching priority with a reading fills in: another station × unit MAP ÷ that station’s MAP, or the unit’s
+			own CHIRPS, corrected month by month against the chosen station’s rain at the unit’s MAP, so a filled day sits at the unit’s MAP like a station day.
+			A station that has no reading on any of the main station’s gaps can’t help, and says so. Satellite rain is never a unit’s station. A unit with no
+			station keeps the rule it ran on before stations (Units without a station, below).
 		</span>
 	{/if}
 	{#if inUse.length}
@@ -184,6 +257,7 @@
 				<li data-testid="flowgen-station" data-station={u.station.id}>
 					<strong>{u.station.name}</strong>: MAP <span data-testid="flowgen-station-map">{mapText(st?.mapMm, st?.mapSource)}</span>.
 					{#if u.units.length}<span class="muted">Runs {namesLine(u.units)}.</span>{/if}
+					{#if u.patches.length}<span class="muted">Patches {namesLine(u.patches)}.</span>{/if}
 					<a href={stationHref(u.station)}>{readonly ? 'See it in Series details' : st?.mapMm == null ? 'Set its MAP in Series details' : 'Change it in Series details'}</a>
 					{#if placed}
 						<span class="small block">Its CHIRPS is read at its own place ({fmtNum(st!.lat!, 4, true)}, {fmtNum(st!.lon!, 4, true)}).</span>
@@ -267,6 +341,9 @@
 	}
 	.pick {
 		width: 2rem;
+	}
+	.bulk-chain {
+		flex-basis: 100%;
 	}
 	.stations {
 		margin: 0.5rem 0 0;

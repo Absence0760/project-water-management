@@ -13,14 +13,14 @@ import { sameOutput } from '../testing/invariants';
 import { checkResume } from '../testing/warmstartInvariants';
 import { outlookMemberInput } from '../outlook/outlook';
 import { ensembleContext, resolveEnsembleOptions } from '../uncertainty/ensemble';
-import { stationAreaRain } from './stationAreaRain';
-import { catchmentMapOf, stationAreaDays, stationRatio, STATION_DAY_SOURCE } from './stationForcing';
+import { stationAreaRain, stationPatchChoices } from './stationAreaRain';
+import { catchmentMapOf, resolvePatch, stationAreaDays, stationPatchUsability, stationRatio, STATION_DAY_SOURCE } from './stationForcing';
 import { checkedStationRecord } from './stationRecord';
 import { pairingFactorOn } from './stationPairing';
 import { goldenDiff, goldenFingerprint, type GoldenFingerprint } from '../testing/golden';
 import { calibrate } from '../calibrate/calibrate';
 import { fitFlowMethod, fitRecordCaveats, fitRecordFromReport, fitRecordStatus, flowMethodOf } from '../calibrate/provenance';
-import { catchmentStationFingerprint, catchmentStationFingerprintError } from './stationFingerprint';
+import { catchmentStationFingerprint, catchmentStationFingerprintChanged, catchmentStationFingerprintError, catchmentStationSettingChanged } from './stationFingerprint';
 import { unitRainFingerprintChanged, unitRainFingerprintOfSummary } from './unitRainFingerprint';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100]; // Oct … Sep
@@ -36,7 +36,7 @@ const UNRELIABLE: [string, string] = ['2015-06-01', '2015-06-05'];
 
 /** A gauge with land units A–D (MAPs 900, 600, 750, 600 mm) above it; catchment rain, CHIRPS, two stations (S: MAP 600, T: MAP 500). */
 function catchment(opts: { unitRain?: UnitRainSettings | null; rainStations?: RainStationSettings | null } = {}): ModelInput {
-	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const node = { sortOrder: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const unit = (id: string, areaKm2: number, mapMm: number) => ({ ...node, id, name: `Unit ${id}`, kind: 'farm' as const, downstreamNodeId: 'G', areaKm2, mapMm, mapSource: 'invented' });
 	const s: (number | null)[] = rainOf(1.6, 1);
 	for (const t of GAP) s[t] = null;
@@ -110,6 +110,22 @@ describe('the daily rule (stationAreaDays)', () => {
 		expect(d.values).toEqual([15, 8, null, 4]);
 		expect(Array.from(d.source)).toEqual([STATION_DAY_SOURCE.station, STATION_DAY_SOURCE.chirps, STATION_DAY_SOURCE.none, STATION_DAY_SOURCE.chirps]);
 	});
+	it('a chain: the first link with a value, a station patch already × its ratio, with its index', () => {
+		const d = stationAreaDays({
+			start: D0,
+			days: 4,
+			station: [10, null, null, null],
+			ratio: 1.5,
+			chain: [
+				{ kind: 'station', values: [7, null, 6, null] },
+				{ kind: 'station', values: null },
+				{ kind: 'chirps', chirps: [99, 4, 4, null], pairing: fit(2) }
+			]
+		});
+		expect(d.values).toEqual([15, 8, 6, null]);
+		expect(Array.from(d.source)).toEqual([STATION_DAY_SOURCE.station, STATION_DAY_SOURCE.chirps, STATION_DAY_SOURCE.patch, STATION_DAY_SOURCE.none]);
+		expect(Array.from(d.patchIndex)).toEqual([-1, 2, 0, -1]);
+	});
 	it('a refused pairing leaves the CHIRPS unread', () => {
 		const d = stationAreaDays({ start: D0, days: 2, station: [null, 3], ratio: 1, chirps: [4, 4], pairing: { ...fit(2), refused: 'too short', months: [] } });
 		expect(d.values).toEqual([null, 3]);
@@ -134,16 +150,20 @@ describe('the daily rule (stationAreaDays)', () => {
 describe('a land unit on its station', () => {
 	const input = () => catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'S' }, B: { stationId: 'S' } }, sites: SITES, unreliable: { S: [UNRELIABLE] } } });
 
-	it('reads the station × unit MAP ÷ station MAP on its days, and its own CHIRPS × S’s factors as is on the gaps and unreliable days', () => {
+	it('reads the station × unit MAP ÷ station MAP on its days, and its own CHIRPS × its own pairing’s factors as is on the gaps and unreliable days', () => {
 		const x = input();
 		const out = runModel(x);
 		const rec = checkedStationRecord(settingsOf(x), x.series, 'S')!.record.values;
 		const chA = x.series['rain_chirps_mm@A']!.values as number[];
 		const chB = x.series['rain_chirps_mm@B']!.values as number[];
-		const fit = out.summary.stations!.pairings.find((p) => p.stationId === 'S')!;
+		const fit = out.summary.stations!.pairings.find((p) => p.stationId === 'S' && p.areaId === 'A')!;
+		const fitB = out.summary.stations!.pairings.find((p) => p.stationId === 'S' && p.areaId === 'B')!;
 		expect(fit.refused).toBeNull();
-		// S is twice A's CHIRPS on every shared day: every month's factor is 2.
-		for (const m of fit.months) expect(m.factor).toBeCloseTo(2, 12);
+		expect(fitB.refused).toBeNull();
+		// S is twice A's CHIRPS on every shared day, and A reads S × 1.5 (900 ÷ 600): every month's factor is 3
+		// (issue #612: fitted against the station's adjusted rain over the unit's own CHIRPS).
+		for (const m of fit.months) expect(m.factor).toBeCloseTo(3, 12);
+		expect(fit).toMatchObject({ areaId: 'A', areaName: 'Unit A', ratio: 1.5, chirpsAt: { unitId: 'A', unitName: 'Unit A' } });
 		const a = col(out, 'rain_unit', 'A');
 		const b = col(out, 'rain_unit', 'B');
 		let station = 0;
@@ -154,20 +174,23 @@ describe('a land unit on its station', () => {
 				expect(b[t]).toBe(rec[t]! * 1); // 600 ÷ 600
 				station++;
 			} else {
-				const k = pairingFactorOn(fit, D0 + t)!;
-				expect(a[t]).toBe(chA[t]! * k); // no MAP ratio on top
-				expect(b[t]).toBe(chB[t]! * k);
+				expect(a[t]).toBe(chA[t]! * pairingFactorOn(fit, D0 + t)!); // no MAP ratio on top: it is inside the factors
+				expect(b[t]).toBe(chB[t]! * pairingFactorOn(fitB, D0 + t)!);
 				gap++;
 			}
 		}
 		for (const t of GAP) expect(rec[t]).toBeNull();
 		for (let t = day(UNRELIABLE[0]); t <= day(UNRELIABLE[1]); t++) expect(rec[t]).toBeNull();
 		expect(gap).toBeGreaterThanOrEqual(GAP.length + 5);
-		// Two units, one station: one pairing.
-		expect(out.summary.stations!.pairings.map((p) => p.stationId)).toEqual(['S']);
+		// Two units, one station: one pairing each, since each corrects its own CHIRPS (issue #612).
+		expect(out.summary.stations!.pairings.map((p) => [p.stationId, p.areaId])).toEqual([
+			['S', 'A'],
+			['S', 'B']
+		]);
 		const ua = out.summary.stations!.units.find((u) => u.nodeId === 'A')!;
 		expect(ua).toMatchObject({ stationId: 'S', stationName: 'Station S', areaMapMm: 900, stationMapMm: 600, ratio: 1.5, ownRatio: 1.5, clamped: false, scaleToMap: true, correctedBy: 'S' });
-		expect(ua.days).toEqual({ station, chirps: gap, fallback: 0, none: 0 });
+		expect(ua.days).toEqual({ station, patch: 0, chirps: gap, fallback: 0, none: 0 });
+		expect(ua.patches).toEqual([{ source: 'chirps', days: gap }]);
 		expect(ua.setAside).toEqual({ checks: 0, unreliable: 5 });
 		const sa = out.summary.unitRain!.units.find((u) => u.nodeId === 'A')!;
 		expect(sa).toMatchObject({ rule: 'station', rainKey: 'rain_station_mm#S', factor: 1.5, factorSource: 'gaugeMap' });
@@ -189,14 +212,14 @@ describe('a land unit on its station', () => {
 	it('a refused pairing (four complete years) sends the gaps to the catchment forcing, and a unit without CHIRPS too', () => {
 		const x = catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'T' }, C: { stationId: 'S' } }, sites: SITES } });
 		const out = runModel(x);
-		const fitT = out.summary.stations!.pairings.find((p) => p.stationId === 'T')!;
+		const fitT = out.summary.stations!.pairings.find((p) => p.stationId === 'T' && p.areaId === 'A')!;
 		expect(fitT.refused).toMatch(/4 complete calendar years/);
 		const prep = prepareRun(x);
 		const c = prep.aligned('rain_catchment_mm');
 		const a = col(out, 'rain_unit', 'A');
 		// Before T's record (2015–2016): the catchment rain, × 1.
 		for (let t = 0; t < day('2017-01-01'); t += 37) expect(a[t]).toBe(Math.max(0, c[t]!));
-		expect(out.summary.stations!.units.find((u) => u.nodeId === 'A')).toMatchObject({ correctedBy: null, days: { station: DAYS - day('2017-01-01'), chirps: 0, fallback: day('2017-01-01'), none: 0 } });
+		expect(out.summary.stations!.units.find((u) => u.nodeId === 'A')).toMatchObject({ correctedBy: null, days: { station: DAYS - day('2017-01-01'), patch: 0, chirps: 0, fallback: day('2017-01-01'), none: 0 } });
 		// The run says so, with its stable code (engine ≥ 1.102.0, warningCodes.ts), the text exactly the warning's.
 		const fell = out.summary.warningCodes!.filter((w) => w.code === 'rain.unit.catchmentFallback');
 		expect(fell.map((w) => w.params.unit)).toEqual(expect.arrayContaining(['A', 'C']));
@@ -269,7 +292,7 @@ describe('the catchment on its station', () => {
 		const out = runModel(catchment({ rainStations: { catchment: { stationId: 'T' } } }));
 		const c = out.summary.stations!.catchment!;
 		expect(c.correctedBy).toBeNull();
-		expect(c.days).toEqual({ station: DAYS - day('2017-01-01'), chirps: 0, fallback: 0, none: 0 });
+		expect(c.days).toEqual({ station: DAYS - day('2017-01-01'), patch: 0, chirps: 0, fallback: 0, none: 0 });
 		const plain = runModel(catchment());
 		const missing = runModel(catchment({ rainStations: { catchment: { stationId: 'nowhere' } } }));
 		expect(col(missing, 'rain_used')).toEqual(col(plain, 'rain_used'));
@@ -342,11 +365,12 @@ describe('carry-through', () => {
 	it('the ensemble’s CHIRPS-only member blanks the stations: every area reads its CHIRPS × the base’s pinned pairing factors', () => {
 		const x = catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'S' } }, catchment: { stationId: 'S' }, sites: SITES } });
 		const base = runModel(x);
-		const fit = base.summary.stations!.pairings.find((p) => p.stationId === 'S')!;
+		const fit = base.summary.stations!.pairings.find((p) => p.stationId === 'S' && p.areaId === 'A')!;
 		const { options } = resolveEnsembleOptions(x, { members: 30, rainSources: ['recorded', 'chirps'] });
 		const member = ensembleContext(x, options).chirps!;
 		expect((member.series[stationSeriesKey('S')]!.values as unknown[]).every((v) => v === null)).toBe(true);
-		expect(member.settings.rainStations?.pinnedFactors?.S).toEqual(fit.months.map((m) => m.factor));
+		expect(member.settings.rainStations?.pinnedFactors?.['S|A']).toEqual(fit.months.map((m) => m.factor));
+		expect(member.settings.rainStations?.pinnedFactors?.['S|']).toEqual(base.summary.stations!.pairings.find((p) => p.stationId === 'S' && p.areaId === null)!.months.map((m) => m.factor));
 		const out = runModel(member);
 		const chA = x.series['rain_chirps_mm@A']!.values as number[];
 		const a = col(out, 'rain_unit', 'A');
@@ -372,7 +396,7 @@ describe('carry-through', () => {
 			const baseC = base.summary.unitRain!.units.find((u) => u.nodeId === 'C')!;
 			expect(baseC.rule, String(scaleToMap)).toBe('gaugeMap');
 			expect(baseC.gaugeMapFactor).toBeCloseTo(ratio, 12);
-			const fit = base.summary.stations!.pairings.find((p) => p.stationId === 'S')!;
+			const fit = base.summary.stations!.pairings.find((p) => p.stationId === 'S' && p.areaId === null)!;
 			const { options } = resolveEnsembleOptions(x, { members: 30, rainSources: ['recorded', 'chirps'] });
 			const out = runModel(ensembleContext(x, options).chirps!);
 			expect(out.summary.stations!.catchment).toMatchObject({ ratio: r, days: { station: 0, chirps: DAYS } });
@@ -396,9 +420,517 @@ describe('carry-through', () => {
 		const member = outlookMemberInput(x, base, { decisionDate: '2020-06-01', seasonEnd: '2020-08-31' }, { waterYear: 2018, label: '2018/19', from: '2019-06-01', to: '2019-08-31' }).input;
 		expect(member.stations).toEqual(x.stations);
 		const factors = base.summary.stations!.pairings[0]!.months.map((m) => m.factor);
-		expect(member.settings.rainStations?.pinnedFactors?.S).toEqual(factors);
+		expect(base.summary.stations!.pairings[0]!.areaId).toBeNull();
+		expect(member.settings.rainStations?.pinnedFactors?.['S|']).toEqual(factors);
+		expect(member.settings.rainStations?.pinnedFactors?.['S|A']).toEqual(base.summary.stations!.pairings[1]!.months.map((m) => m.factor));
 		const out = runModel(member);
 		expect(out.summary.stations!.pairings[0]!.pinned).toBe(true);
+	});
+});
+
+// The patching priority (issue #612, engine ≥ 1.105.0, docs/model.md §2.4i): station P (MAP 450) covers the whole
+// span but is blank on S's second gap day, so the chain's order shows on S's gap days.
+const P_BLANK = GAP[1]!;
+function withP(rs: RainStationSettings, opts: { unitRain?: UnitRainSettings | null; pMap?: number | null } = {}): ModelInput {
+	const x = catchment({
+		unitRain: opts.unitRain === undefined ? PER_UNIT : opts.unitRain,
+		rainStations: { sites: SITES, unreliable: { S: [UNRELIABLE] }, ...rs }
+	});
+	const p: (number | null)[] = rainOf(1.1, 7).map((v) => v + 0.5);
+	p[P_BLANK] = null;
+	x.series = {
+		...x.series,
+		[stationSeriesKey('P')]: { startDate: START, values: p }
+	};
+	x.stations = {
+		...x.stations!,
+		P: {
+			name: 'Station P',
+			mapMm: opts.pMap === undefined ? 450 : opts.pMap,
+			mapSource: 'invented',
+			lat: null,
+			lon: null
+		}
+	};
+	return x;
+}
+
+describe('the patching priority (issue #612)', () => {
+	it('a gap takes the first source in order with a reading: P × unit MAP ÷ P’s MAP, then the unit’s corrected CHIRPS', () => {
+		const x = withP({
+			units: {
+				A: {
+					stationId: 'S',
+					patch: [{ source: 'station', stationId: 'P' }, { source: 'chirps' }]
+				}
+			}
+		});
+		const out = runModel(x);
+		const rec = checkedStationRecord(settingsOf(x), x.series, 'S')!.record.values;
+		const p = x.series[stationSeriesKey('P')]!.values;
+		const chA = x.series['rain_chirps_mm@A']!.values as number[];
+		const fit = out.summary.stations!.pairings.find((q) => q.areaId === 'A')!;
+		const a = col(out, 'rain_unit', 'A');
+		let patched = 0;
+		let chirps = 0;
+		for (let t = 0; t < DAYS; t++) {
+			if (rec[t] != null) expect(a[t]).toBe(rec[t]! * 1.5);
+			else if (p[t] != null) {
+				expect(a[t]).toBe(p[t]! * 2); // 900 ÷ 450: P's own ratio, not S's
+				patched++;
+			} else {
+				expect(a[t]).toBe(chA[t]! * pairingFactorOn(fit, D0 + t)!);
+				chirps++;
+			}
+		}
+		expect(chirps).toBe(1); // P_BLANK
+		const gaps = patched + chirps;
+		const u = out.summary.stations!.units.find((v) => v.nodeId === 'A')!;
+		expect(u.days).toEqual({
+			station: DAYS - gaps,
+			patch: patched,
+			chirps,
+			fallback: 0,
+			none: 0
+		});
+		expect(u.patches).toEqual([
+			{
+				source: 'station',
+				stationId: 'P',
+				stationName: 'Station P',
+				stationMapMm: 450,
+				ownRatio: 2,
+				ratio: 2,
+				clamped: false,
+				skipped: null,
+				gapDays: gaps,
+				fills: patched,
+				days: patched
+			},
+			{ source: 'chirps', days: chirps }
+		]);
+		// Patch days count as station days (a gauge × MAP ratio) in the unit rain summary.
+		const sa = out.summary.unitRain!.units.find((v) => v.nodeId === 'A')!;
+		expect(sa.days.gaugeMap).toBe(DAYS - gaps + patched);
+		// The Data tab's sources: a patch day names its station and its place.
+		const r = stationAreaRain(x, 'A')!;
+		expect(r.rainMm).toEqual(a);
+		const days = r.source.flatMap((v, t) => (v === 'patch' ? [t] : []));
+		expect(days).toHaveLength(patched);
+		for (const t of days) expect([r.patchStationId[t], r.patchPlace[t]]).toEqual(['P', 1]);
+		expect(r.patchStationId[P_BLANK]).toBeNull();
+		expect(r.source[P_BLANK]).toBe('chirps');
+	});
+
+	it('the order is the priority: CHIRPS first leaves P nothing to fill', () => {
+		const out = runModel(
+			withP({
+				units: {
+					A: {
+						stationId: 'S',
+						patch: [{ source: 'chirps' }, { source: 'station', stationId: 'P' }]
+					}
+				}
+			})
+		);
+		const u = out.summary.stations!.units.find((v) => v.nodeId === 'A')!;
+		expect(u.days.patch).toBe(0);
+		expect(u.patches![0]).toMatchObject({
+			source: 'chirps',
+			days: u.days.chirps
+		});
+		expect(u.patches![1]).toMatchObject({
+			source: 'station',
+			stationId: 'P',
+			days: 0
+		});
+		expect((u.patches![1] as { fills: number }).fills).toBeGreaterThan(0); // it could have: the count is its own, not after CHIRPS
+	});
+
+	it('an empty list patches nothing: the gaps go to the next fallback (the catchment rain here)', () => {
+		const out = runModel(withP({ units: { A: { stationId: 'S', patch: [] } } }));
+		const u = out.summary.stations!.units.find((v) => v.nodeId === 'A')!;
+		expect(u).toMatchObject({
+			correctedBy: null,
+			patches: [],
+			days: { patch: 0, chirps: 0 }
+		});
+		expect(u.days.fallback).toBeGreaterThan(0);
+		expect(out.summary.stations!.pairings).toEqual([]); // no CHIRPS in the chain: no pairing fitted
+	});
+
+	it('absent, null and [CHIRPS] run the same, to the bit', () => {
+		const plain = runModel(withP({ units: { A: { stationId: 'S' } } }));
+		for (const patch of [null, [{ source: 'chirps' as const }]]) expect(sameOutput(runModel(withP({ units: { A: { stationId: 'S', patch } } })), plain), JSON.stringify(patch)).toBe(true);
+	});
+
+	it('a patch station with no MAP is skipped under scaling (warned), and read × 1 with scaling off', () => {
+		const patch = [{ source: 'station' as const, stationId: 'P' }, { source: 'chirps' as const }];
+		const out = runModel(withP({ units: { A: { stationId: 'S', patch } } }, { pMap: null }));
+		const u = out.summary.stations!.units.find((v) => v.nodeId === 'A')!;
+		expect(u.patches![0]).toMatchObject({
+			skipped: 'it has no MAP to scale its rain to the area’s MAP by',
+			days: 0
+		});
+		expect(u.days.patch).toBe(0);
+		expect(out.summary.warnings).toContain('station: "Unit A"’s patch station "Station P" is skipped: it has no MAP to scale its rain to the area’s MAP by');
+		const off = runModel(withP({ units: { A: { stationId: 'S', scaleToMap: false, patch } } }, { pMap: null }));
+		const v = off.summary.stations!.units.find((w) => w.nodeId === 'A')!;
+		expect(v.patches![0]).toMatchObject({ skipped: null, ratio: 1 });
+		expect(v.days.patch).toBeGreaterThan(0);
+		const x = withP({ units: { A: { stationId: 'S', scaleToMap: false, patch } } }, { pMap: null });
+		const p = x.series[stationSeriesKey('P')]!.values;
+		expect(col(off, 'rain_unit', 'A')[GAP[0]!]).toBe(p[GAP[0]!]);
+	});
+
+	it('a patch station that fills none of the main station’s gaps warns, and changes nothing', () => {
+		// T's record starts in 2017, after every gap of S.
+		const x = withP({
+			units: {
+				A: {
+					stationId: 'S',
+					patch: [{ source: 'station', stationId: 'T' }, { source: 'chirps' }]
+				}
+			}
+		});
+		const out = runModel(x);
+		const u = out.summary.stations!.units.find((v) => v.nodeId === 'A')!;
+		expect(u.patches![0]).toMatchObject({
+			source: 'station',
+			stationId: 'T',
+			skipped: null,
+			fills: 0,
+			days: 0
+		});
+		expect(out.summary.warnings.some((w) => w.startsWith('station: "Unit A"’s patch station "Station T" has no reading on any of the main station’s'))).toBe(true);
+		expect(col(out, 'rain_unit', 'A')).toEqual(col(runModel(withP({ units: { A: { stationId: 'S' } } })), 'rain_unit', 'A'));
+	});
+
+	it('the catchment follows the same rule: P × catchment MAP ÷ P’s MAP on S’s gaps, as station-like catchment rain', () => {
+		const x = withP(
+			{
+				catchment: {
+					stationId: 'S',
+					patch: [{ source: 'station', stationId: 'P' }]
+				}
+			},
+			{ unitRain: null }
+		);
+		const out = runModel(x);
+		const map = (10 * 900 + 6 * 600 + 3 * 750 + 1.5 * 600) / 20.5;
+		const rec = checkedStationRecord(settingsOf(x), x.series, 'S')!.record.values;
+		const p = x.series[stationSeriesKey('P')]!.values;
+		const used = col(out, 'rain_used');
+		for (let t = 0; t < DAYS; t++) if (rec[t] == null && p[t] != null) expect(used[t]).toBeCloseTo(p[t]! * (map / 450), 12);
+		const c = out.summary.stations!.catchment!;
+		expect(c.days.patch).toBeGreaterThan(0);
+		expect(c.days.chirps).toBe(0); // no CHIRPS in its chain
+		const r = stationAreaRain(x, null)!;
+		expect(r.rainMm).toEqual(used);
+		expect(r.source.filter((v) => v === 'patch')).toHaveLength(c.days.patch!);
+		expect(r.patchStationId.filter((v) => v === 'P')).toHaveLength(c.days.patch!);
+	});
+
+	it('a resumed run keeps the chain (to the bit)', () => {
+		const x = withP({
+			units: {
+				A: {
+					stationId: 'S',
+					patch: [{ source: 'station', stationId: 'P' }, { source: 'chirps' }]
+				}
+			},
+			catchment: {
+				stationId: 'S',
+				patch: [{ source: 'station', stationId: 'P' }, { source: 'chirps' }]
+			}
+		});
+		for (const k of [0, 400]) expect(checkResume(x, k)).toBeNull();
+	});
+});
+
+describe('resolvePatch and stationPatchUsability', () => {
+	it('drops what can’t be a source, a second CHIRPS, a repeated station and the main station, each with a warning', () => {
+		const w: string[] = [];
+		expect(resolvePatch(undefined, 'S', 'u', w)).toEqual([{ source: 'chirps' }]);
+		expect(resolvePatch([], 'S', 'u', w)).toEqual([]);
+		expect(w).toEqual([]);
+		expect(
+			resolvePatch(
+				[{ source: 'station', stationId: 'S' }, { source: 'station', stationId: 'P' }, { source: 'chirps' }, { source: 'station', stationId: 'P' }, { source: 'chirps' }, { source: 'cloud' }, null],
+				'S',
+				'u',
+				w
+			)
+		).toEqual([{ source: 'station', stationId: 'P' }, { source: 'chirps' }]);
+		expect(w).toHaveLength(5);
+		expect(resolvePatch('chirps', 'S', 'u', w)).toEqual([{ source: 'chirps' }]);
+		const many = Array.from({ length: 10 }, (_, i) => ({
+			source: 'station',
+			stationId: `X${i}`
+		}));
+		expect(resolvePatch(many, 'S', 'u', [])).toHaveLength(8);
+	});
+
+	it('usable when it reads on some of the main station’s gaps; else the reason, always with the fill count', () => {
+		const main = [1, null, null, 2, null];
+		expect(
+			stationPatchUsability({
+				main,
+				patch: [5, 6, null, 7, 8],
+				scaleToMap: true,
+				stationMapMm: 500
+			})
+		).toMatchObject({ usable: true, reason: null, gapDays: 3, fills: 2 });
+		expect(
+			stationPatchUsability({
+				main,
+				patch: [5, null, null, 7, null],
+				scaleToMap: true,
+				stationMapMm: 500
+			})
+		).toMatchObject({
+			usable: false,
+			gapDays: 3,
+			fills: 0,
+			reason: 'it has no reading on any of the main station’s 3 gap days in the run window'
+		});
+		expect(
+			stationPatchUsability({
+				main,
+				patch: [5, 6, 6, 7, 8],
+				scaleToMap: true,
+				stationMapMm: null
+			}).reason
+		).toBe('it has no MAP to scale its rain by');
+		expect(
+			stationPatchUsability({
+				main,
+				patch: [5, 6, 6, 7, 8],
+				scaleToMap: false,
+				stationMapMm: null
+			}).usable
+		).toBe(true);
+		expect(
+			stationPatchUsability({
+				main,
+				patch: null,
+				scaleToMap: true,
+				stationMapMm: 500
+			}).reason
+		).toBe('it has no record');
+		expect(
+			stationPatchUsability({
+				main,
+				patch: main,
+				isMain: true,
+				scaleToMap: true,
+				stationMapMm: 500
+			}).reason
+		).toBe('it is the main station');
+		expect(
+			stationPatchUsability({
+				main,
+				patch: [5, 6, 6, 7, 8],
+				scaleToMap: true,
+				stationMapMm: 500,
+				record: { startDate: '2020-01-01', values: [null, 1, 2, null] }
+			})
+		).toMatchObject({ from: '2020-01-02', to: '2020-01-03' });
+	});
+
+	it('counts only the run’s history: a forecast tail day is no gap a patch station could fill', () => {
+		const main = [1, null, null, 2, null, null, null];
+		const u = stationPatchUsability({ main, patch: [5, 6, null, 7, null, 8, 9], scaleToMap: true, stationMapMm: 500, historyDays: 5, startDate: '2020-01-30' });
+		expect(u).toMatchObject({ usable: true, gapDays: 3, fills: 1, forecastDays: 2, windowFrom: '2020-01-30', windowTo: '2020-02-03' });
+		// Only the tail would have it: it can't help, and the reason names the window.
+		expect(stationPatchUsability({ main, patch: [5, null, null, 7, null, 8, 9], scaleToMap: true, stationMapMm: 500, historyDays: 5 })).toMatchObject({
+			usable: false,
+			gapDays: 3,
+			fills: 0,
+			forecastDays: 2,
+			windowFrom: null,
+			reason: 'it has no reading on any of the main station’s 3 gap days before the forecast'
+		});
+		expect(stationPatchUsability({ main: [1, 2, null], patch: [1, 2, 3], scaleToMap: false, stationMapMm: null, historyDays: 2 }).reason).toBe('the main station has no gap before the forecast');
+		// Without a tail: every day, as before.
+		expect(stationPatchUsability({ main, patch: [5, null, null, 7, null, 8, 9], scaleToMap: true, stationMapMm: 500 })).toMatchObject({ usable: true, gapDays: 5, fills: 2, forecastDays: 0 });
+	});
+
+	it('a forecast tail is left out of the fill count, in the run’s summary and the form’s choices alike (catchment and unit)', () => {
+		const TAIL = 30;
+		const forecast = { startDate: '2021-01-01', values: Array.from({ length: TAIL }, (_, i) => (i % 3 === 0 ? 4 : 0)) };
+		const chain = { stationId: 'S', patch: [{ source: 'station' as const, stationId: 'P' }, { source: 'chirps' as const }] };
+		const plain = withP({ catchment: chain, units: { A: chain } });
+		const x = withP({ catchment: chain, units: { A: chain } });
+		x.series = { ...x.series, rain_forecast_mm: forecast };
+		const baseOut = runModel(plain);
+		const xOut = runModel(x);
+		const base = baseOut.summary.stations!;
+		const out = xOut.summary.stations!;
+		expect(xOut.summary.historyDays).toBe(DAYS);
+		// Only the counts change: the history days' rain and flow are the run's without the forecast, day for day.
+		const col = (o: typeof xOut, key: string, nodeId: string | null = null) => Array.from(o.series.find((s) => s.nodeId === nodeId && s.key === key)!.values.slice(0, DAYS));
+		for (const [key, nodeId] of [['rain_used', null], ['natural_flow', null], ['rain_unit', 'A']] as const) {
+			expect(col(xOut, key, nodeId), `${key}@${nodeId ?? ''}`).toEqual(col(baseOut, key, nodeId));
+		}
+		for (const [a, b] of [
+			[out.catchment!, base.catchment!],
+			[out.units.find((u) => u.nodeId === 'A')!, base.units.find((u) => u.nodeId === 'A')!]
+		] as const) {
+			const p = a.patches![0] as Extract<NonNullable<typeof a.patches>[number], { source: 'station' }>;
+			const q = b.patches![0] as typeof p;
+			expect(p.gapDays).toBe(q.gapDays); // not q.gapDays + TAIL
+			expect(p.fills).toBe(q.fills);
+			expect(p.days).toBe(q.days); // the days it gave the rain: the same, as no tail day is patched
+			expect(p.forecastDays).toBe(TAIL);
+			expect(q.forecastDays).toBeUndefined();
+		}
+		const c = stationPatchChoices(x, { stationId: 'S' });
+		const q = base.catchment!.patches![0] as { gapDays: number; fills: number };
+		expect(c.P).toMatchObject({ usable: true, gapDays: q.gapDays, fills: q.fills, forecastDays: TAIL, windowFrom: START, windowTo: '2020-12-31' });
+	});
+
+	it('the counted window’s dates don’t move with the machine’s time zone', () => {
+		const tz = process.env.TZ;
+		const tail = withP({ catchment: { stationId: 'S' } });
+		tail.series = { ...tail.series, rain_forecast_mm: { startDate: '2021-01-01', values: Array.from({ length: 10 }, () => 2) } };
+		const read = () => {
+			const u = stationPatchUsability({ main: [1, null, null, null], patch: [null, 3, null, 4], scaleToMap: false, stationMapMm: null, historyDays: 3, startDate: '2020-12-30' });
+			const c = stationPatchChoices(tail, { stationId: 'S' }).P!;
+			return JSON.stringify([u, c]);
+		};
+		try {
+			process.env.TZ = 'Pacific/Kiritimati';
+			const east = read();
+			expect(JSON.parse(east)[0]).toMatchObject({ gapDays: 2, fills: 1, forecastDays: 1, windowFrom: '2020-12-30', windowTo: '2021-01-01' });
+			expect(JSON.parse(east)[1]).toMatchObject({ windowFrom: START, windowTo: '2020-12-31', forecastDays: 10 });
+			process.env.TZ = 'Pacific/Pago_Pago';
+			expect(read()).toBe(east);
+		} finally {
+			process.env.TZ = tz;
+		}
+	});
+
+	it('stationPatchChoices: every station of the input against a unit’s main station, over the run window', () => {
+		const x = withP({ units: { A: { stationId: 'S' } } });
+		const c = stationPatchChoices(x, { stationId: 'S' });
+		expect(Object.keys(c)).toEqual(['P', 'S', 'T']);
+		expect(c.S).toMatchObject({
+			usable: false,
+			reason: 'it is the main station'
+		});
+		expect(c.T).toMatchObject({ usable: false, fills: 0 });
+		expect(c.T!.reason).toMatch(/^it has no reading on any of the main station’s \d+ gap days/);
+		expect(c.P).toMatchObject({
+			usable: true,
+			gapDays: GAP.length + 5,
+			fills: GAP.length + 5 - 1
+		});
+	});
+});
+
+describe('the CHIRPS level (issue #612): a gap day sits at the area’s MAP', () => {
+	it('a run made only of CHIRPS days has the unit’s MAP as its mean annual rain, when the station’s MAP is its own mean annual', () => {
+		for (const [mapA, phase] of [
+			[900, 1],
+			[450, 3],
+			[1300, 5]
+		] as const) {
+			const x = catchment({
+				unitRain: PER_UNIT,
+				rainStations: { units: { A: { stationId: 'S' } }, sites: SITES }
+			});
+			x.model.nodes.find((n) => n.id === 'A')!.mapMm = mapA;
+			x.series = {
+				...x.series,
+				'rain_chirps_mm@A': {
+					startDate: START,
+					values: rainOf(0.8, phase).map((v, i) => v * (1 + 0.3 * Math.sin(i / 40)))
+				}
+			};
+			const s = x.series[stationSeriesKey('S')]!.values;
+			const years = DAYS / 365.25;
+			const meanAnnual = s.reduce<number>((acc, v) => acc + (v ?? 0), 0) / years;
+			x.stations!.S = { ...x.stations!.S!, mapMm: meanAnnual };
+			const base = runModel(x);
+			// The CHIRPS-only member: S blanked, every day CHIRPS × the base's pinned factors.
+			const { options } = resolveEnsembleOptions(x, {
+				members: 30,
+				rainSources: ['recorded', 'chirps']
+			});
+			const out = runModel(ensembleContext(x, options).chirps!);
+			expect(out.summary.stations!.units.find((u) => u.nodeId === 'A')!.days).toMatchObject({ station: 0, chirps: DAYS });
+			const total = col(out, 'rain_unit', 'A').reduce((acc, v) => acc + (v ?? 0), 0);
+			// Within 2 %: the gaps in S's record (left out of the fit) are the only difference.
+			expect(Math.abs(total / years - mapA) / mapA, `MAP ${mapA}`).toBeLessThan(0.02);
+			expect(base.summary.stations!.pairings[0]!.ratio).toBeCloseTo(mapA / meanAnnual, 12);
+		}
+	});
+});
+
+describe('fit provenance of the pairing rule and the chain (issue #612)', () => {
+	it('a fingerprint from before 1.105.0 (no marker) reads as changed, unit and catchment; another chain too', () => {
+		const x = withP({
+			units: { A: { stationId: 'S' } },
+			catchment: { stationId: 'S' }
+		});
+		const out = runModel(x);
+		const unit = unitRainFingerprintOfSummary(out.summary.unitRain, out.summary.stations)!;
+		const a = unit.units.find((u) => u.nodeId === 'A')!;
+		expect(a).toMatchObject({
+			stationFit: 'adjusted',
+			stationPatch: ['chirps']
+		});
+		expect(unitRainFingerprintChanged(unit, structuredClone(unit))).toBe(false);
+		const old = structuredClone(unit);
+		delete old.units.find((u) => u.nodeId === 'A')!.stationFit;
+		delete old.units.find((u) => u.nodeId === 'A')!.stationPatch;
+		expect(unitRainFingerprintChanged(old, unit)).toBe(true);
+		const chain = structuredClone(unit);
+		chain.units.find((u) => u.nodeId === 'A')!.stationPatch = ['station:P', 'chirps'];
+		expect(unitRainFingerprintChanged(chain, unit)).toBe(true);
+		const fp = catchmentStationFingerprint(out.summary.stations)!;
+		expect(fp).toMatchObject({ stationFit: 'adjusted', patch: ['chirps'] });
+		expect(catchmentStationFingerprintError(fp)).toBeNull();
+		expect(catchmentStationFingerprintError({ ...fp, stationFit: 'raw' })).toMatch(/marker/);
+		const { stationFit: _m, patch: _p, ...before } = fp;
+		expect(catchmentStationFingerprintChanged(before, fp)).toBe(true);
+		expect(catchmentStationFingerprintChanged({ ...fp, patch: ['station:P'] }, fp)).toBe(true);
+		// The Settings form (no run): a chain other than the fit's is a change.
+		expect(catchmentStationSettingChanged({ catchment: { stationId: 'S', patch: [{ source: 'chirps' }] } }, fp)).toBe(false);
+		expect(
+			catchmentStationSettingChanged(
+				{
+					catchment: {
+						stationId: 'S',
+						patch: [{ source: 'station', stationId: 'P' }, { source: 'chirps' }]
+					}
+				},
+				fp
+			)
+		).toBe(true);
+	});
+
+	it('the Settings form sees a unit’s chain change against the fit', () => {
+		const ctxOf = (x: ModelInput) => ({
+			settings: settingsOf(x),
+			validate: false,
+			validationRecord: null,
+			engineVersion: 'test',
+			fittedAt: '2026-10-28T00:00:00Z'
+		});
+		const x = withP({ units: { A: { stationId: 'S' } } });
+		const record = fitRecordFromReport(calibrate(x, { budget: 10, seed: 1 }), ctxOf(x));
+		expect(fitRecordStatus(settingsOf(x), record).forcingChanged).toBe(false);
+		const chained = withP({
+			units: {
+				A: {
+					stationId: 'S',
+					patch: [{ source: 'station', stationId: 'P' }, { source: 'chirps' }]
+				}
+			}
+		});
+		expect(fitRecordStatus(settingsOf(chained), record).forcingChanged).toBe(true);
 	});
 });
 
@@ -417,37 +949,37 @@ describe('the station paths stay unchanged (golden)', () => {
 	};
 	const EXPECTED: Record<string, GoldenFingerprint> = {
 		units: {
-			shape: "d0109dbbdce02042",
+			shape: "ac1555d75f0ec526",
 			series: {
 				"natural_flow@": {
-					sum: 128066827.65488726,
-					sumSq: 12322294468981.275,
-					weighted: 191590881.01926374
+					sum: 128449487.38522124,
+					sumSq: 12411305812885.041,
+					weighted: 192135434.12114853
 				},
 				"rain_used@": {
-					sum: 11708.702439024437,
-					sumSq: 426076.32009518397,
-					weighted: 17526.253977616107
+					sum: 11727.698612054523,
+					sumSq: 426909.59848762874,
+					weighted: 17548.738045071306
 				},
 				"rain_unit@A": {
-					sum: 14499.199999999877,
-					sumSq: 879677.4400000048,
-					weighted: 21776.149058473744
+					sum: 14524.799999999876,
+					sumSq: 882570.2400000049,
+					weighted: 21822.355599603572
 				},
 				"runoff_natural@A": {
-					sum: 87632065.14679271,
-					sumSq: 6577981097196.878,
-					weighted: 131478323.7500499
+					sum: 87886716.2949189,
+					sumSq: 6630405712440.632,
+					weighted: 131848114.54363628
 				},
 				"rain_unit@B": {
-					sum: 9664,
-					sumSq: 390843.1999999973,
-					weighted: 14484.739345887025
+					sum: 9686.236924519457,
+					sumSq: 392535.0123451333,
+					weighted: 14522.674313401616
 				},
 				"runoff_natural@B": {
-					sum: 25929635.20352118,
-					sumSq: 489396273362.35394,
-					weighted: 38796329.666292705
+					sum: 26057643.78572906,
+					sumSq: 495478118816.12683,
+					weighted: 38978625.34355641
 				},
 				"rain_unit@C": {
 					sum: 9310.80000000008,
@@ -455,7 +987,7 @@ describe('the station paths stay unchanged (golden)', () => {
 					weighted: 13985.253121902873
 				},
 				"runoff_natural@C": {
-					sum: 12221040.651818942,
+					sum: 12221040.651818946,
 					sumSq: 135464241181.33746,
 					weighted: 18394389.13823712
 				},
@@ -476,58 +1008,58 @@ describe('the station paths stay unchanged (golden)', () => {
 				}
 			},
 			rest: {
-				sum: 939106316.3656577,
-				sumSq: 66724202343827.79,
-				weighted: 1406976650.0052392
+				sum: 941785191.317333,
+				sumSq: 67225262324328.68,
+				weighted: 1410857194.2589192
 			},
 			summary: {
-				sum: 31724.292682926836,
-				sumSq: 32526085.046638917,
-				weighted: 49787.40681428123
+				sum: 52289.393773014956,
+				sumSq: 53819957.745771684,
+				weighted: 77631.11138236058
 			}
 		},
 		catchment: {
-			shape: "ec4d5ef6e927bac3",
+			shape: "9ef861481d952b7d",
 			series: {
 				"natural_flow@": {
-					sum: 138623085.4897218,
-					sumSq: 15134798380845.465,
-					weighted: 207495758.86422086
+					sum: 139036884.13131243,
+					sumSq: 15253739085967.236,
+					weighted: 208092671.15366083
 				},
 				"rain_used@": {
-					sum: 12378.45853658533,
-					sumSq: 641135.2665318329,
-					weighted: 18534.396712514215
+					sum: 12399.004364569928,
+					sumSq: 643128.281687236,
+					weighted: 18560.278106540507
 				},
 				"rain_final@": {
-					sum: 12378.45853658533,
-					sumSq: 641135.2665318329,
-					weighted: 18598.527332060243
+					sum: 12399.004364569928,
+					sumSq: 643128.281687236,
+					weighted: 18638.883760659843
 				}
 			},
 			rest: {
-				sum: 1012560294.6910626,
-				sumSq: 67547501347099.91,
-				weighted: 1517035258.1143231
+				sum: 1015456949.4520895,
+				sumSq: 67625179408458.5,
+				weighted: 1520772933.3445058
 			},
 			summary: {
-				sum: 23283.14634146342,
-				sumSq: 21200486.972575862,
-				weighted: 34815.677524233135
+				sum: 25414.456551038187,
+				sumSq: 25721476.42279408,
+				weighted: 37724.807020861255
 			}
 		},
 		both: {
-			shape: "75c0ed02aeddb027",
+			shape: "521b4d9dcf0f2078",
 			series: {
 				"natural_flow@": {
-					sum: 71115359.22886102,
-					sumSq: 3682536249636.605,
-					weighted: 106451406.03283477
+					sum: 71118750.87790546,
+					sumSq: 3682781115155.2305,
+					weighted: 106456204.4606722
 				},
 				"rain_used@": {
-					sum: 8257.629268292743,
-					sumSq: 223803.0314814928,
-					weighted: 12348.901461089721
+					sum: 8257.839897304297,
+					sumSq: 223803.33476563872,
+					weighted: 12349.312072849607
 				},
 				"rain_unit@A": {
 					sum: 9683.2,
@@ -537,7 +1069,7 @@ describe('the station paths stay unchanged (golden)', () => {
 				"runoff_natural@A": {
 					sum: 43411054.420888096,
 					sumSq: 1375291381002.549,
-					weighted: 65109267.84987923
+					weighted: 65109267.849879235
 				},
 				"rain_unit@B": {
 					sum: 3599.999999999979,
@@ -546,44 +1078,44 @@ describe('the station paths stay unchanged (golden)', () => {
 				},
 				"runoff_natural@B": {
 					sum: 1719329.4970369388,
-					sumSq: 1842740815.3652272,
-					weighted: 2578325.660730049
+					sumSq: 1842740815.3652284,
+					weighted: 2578325.6607300495
 				},
 				"rain_unit@C": {
-					sum: 11299.866666666727,
-					sumSq: 533908.3555555585,
-					weighted: 16932.787710604553
+					sum: 11300.82619883047,
+					sumSq: 533914.6496376487,
+					weighted: 16934.60882467152
 				},
 				"runoff_natural@C": {
-					sum: 17323316.87395721,
-					sumSq: 228273767179.6699,
-					weighted: 26053530.49314315
+					sum: 17325577.973320175,
+					sumSq: 228318495894.3953,
+					weighted: 26056886.40737766
 				},
 				"rain_unit@D": {
-					sum: 11299.866666666727,
-					sumSq: 533908.3555555585,
-					weighted: 17045.17066402378
+					sum: 11300.82619883047,
+					sumSq: 533914.6496376487,
+					weighted: 17046.598075101854
 				},
 				"runoff_natural@D": {
-					sum: 8661658.436978605,
-					sumSq: 57068441794.91747,
-					weighted: 12955509.454962527
+					sum: 8662788.986660087,
+					sumSq: 57079623973.59882,
+					weighted: 12957146.950765396
 				},
 				"rain_final@": {
-					sum: 11299.866666666727,
-					sumSq: 533908.3555555585,
-					weighted: 16881.28695077635
+					sum: 11300.82619883047,
+					sumSq: 533914.6496376487,
+					weighted: 16882.320658865534
 				}
 			},
 			rest: {
-				sum: 539877311.4503478,
-				sumSq: 18628451479368.44,
-				weighted: 809508693.7585994
+				sum: 539900904.9778585,
+				sumSq: 18629409593374.035,
+				weighted: 809543615.9372909
 			},
 			summary: {
-				sum: 26921.133333333346,
-				sumSq: 27113181.522222236,
-				weighted: 40970.035513709954
+				sum: 46986.50379941149,
+				sumSq: 44512235.38133074,
+				weighted: 71708.037692478
 			}
 		}
 	};

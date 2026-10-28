@@ -9,8 +9,7 @@ import { gr4j } from './gr4j';
 import { GR4J_PARAMS, type Gr4jParams } from './params';
 import { GR4J_NO_PET, hasPotentialEvaporation } from './pet';
 import type { DayFluxes, NaturalFlowGenerator, NaturalFlowInput, ParamSpec, RunContext, RunoffModel } from './types';
-import { simulateUnits, unitRainForcing, unitRainOn, unitRainSummary } from './unitRain';
-import { cmpStr } from '../order';
+import { shareForcingSettings, simulateUnits, unitRainFingerprint, unitRainForcing, unitRainOn, unitRainSummary, type UnitRainFingerprint } from './unitRain';
 import { UNIT_RAIN_SERIES, type ModelInput } from '../project';
 
 /** Daily model drivers (mm/day). */
@@ -191,6 +190,10 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 	}
 	const forcing = runoffForcing(ctx.settings, ctx);
 	const w = ctx.warm;
+	// Fragmentation's EWR shares (engine ≥ 1.105.0, §2.5b): each land unit's own runoff, for the shares only. A resumed
+	// run takes the capture run's shares from its snapshot instead, and an outlook's re-run member its base run's (ModelInput.ewrSplitPinned).
+	const tried = w?.resume === undefined && !input.ewrSplitPinned;
+	const share = tried ? ewrShareRunoff(input, ctx, p, warmupDays) : null;
 	const tr = simulateRunoff(gr4j, p, forcing, {
 		warmupDays,
 		...(ctx.historyDays !== undefined ? { cycleDays: ctx.historyDays } : {}),
@@ -228,9 +231,60 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 			storesStartMm: Object.fromEntries(gr4j.stores.map((s, j) => [s.key, tr.storesStartMm[j]!])),
 			storageEndMm: tr.storageEndMm
 		},
-		...(tr.captured ? { state: tr.captured } : {})
+		...(tr.captured ? { state: tr.captured } : {}),
+		...(share ? { shareRunoff: share.unitRunoff, shareCatchmentRain: share.catchmentRain } : {}),
+		...(tried ? { shareRain: share?.fingerprint ?? null } : {})
 	};
 };
+
+/**
+ * Fragmentation's EWR shares (engine ≥ 1.105.0, issue #615, docs/model.md §2.5b, engine-audit.md FM1): GR4J once
+ * per land unit on the Per unit forcing (shareForcingSettings: the same chain, stations, MAP period and reference
+ * gauge, whatever the method), with the run's parameters, PE and warm-up, the units' runoff exactly as a Per unit
+ * run makes it. Used for the shares only: the catchment's one run still makes the flow. The forcing's own warnings
+ * stay out of the run (Per unit gives them); the run's one note names the units on the catchment rain (rule 4).
+ * Null without a land unit.
+ */
+export function ewrShareRunoff(
+	input: ModelInput,
+	ctx: RunContext,
+	p: Gr4jParams,
+	warmupDays: number
+): { unitRunoff: { nodeId: string; runoffM3Day: Float64Array }[]; catchmentRain: { nodeId: string; name: string }[]; fingerprint: UnitRainFingerprint | null } | null {
+	const settings = shareForcingSettings(ctx.settings);
+	const built = unitRainForcing(
+		{
+			settings,
+			series: input.series ?? {},
+			nodes: input.model.nodes,
+			startDate: ctx.startDate,
+			days: ctx.days,
+			aligned: ctx.aligned,
+			chirpsCorrection: ctx.chirpsCorrection ?? null,
+			...(ctx.historyDays !== undefined ? { historyDays: ctx.historyDays } : {}),
+			...(input.forecastRainSource ? { forecastRainSource: input.forecastRainSource } : {}),
+			stations: ctx.stations ?? null,
+			stationInputs: input.stations ?? null
+		},
+		[],
+		settings.unitRain?.pinned ?? undefined
+	);
+	if (!built) return null;
+	const petMm = runoffForcing({ ...ctx.settings, arealRain: null }, ctx).petMm;
+	const traces = simulateUnits(built.units, p, petMm, { warmupDays, trace: false, ...(ctx.historyDays !== undefined ? { cycleDays: ctx.historyDays } : {}) });
+	const unitRunoff = built.units.map((u, k) => {
+		const q = traces[k]!.qMm;
+		const runoff = new Float64Array(ctx.days);
+		for (let t = 0; t < ctx.days; t++) runoff[t] = q[t]! * u.areaKm2 * MM_KM2_TO_M3;
+		return { nodeId: u.nodeId, runoffM3Day: runoff };
+	});
+	return { unitRunoff, catchmentRain: catchmentRainUnits(built.units), fingerprint: unitRainFingerprint(settings.unitRain, built.recipes) };
+}
+
+/** The land units on rule 4 (the catchment rain), node-id order: the units a Fragmentation run's note names. */
+export function catchmentRainUnits(units: readonly { nodeId: string; name: string; recipe: { rule: string } }[]): { nodeId: string; name: string }[] {
+	return units.filter((u) => u.recipe.rule === 'catchment').map((u) => ({ nodeId: u.nodeId, name: u.name }));
+}
 
 /**
  * GR4J on each land unit's own rain (settings.unitRain `perUnit`, docs/model.md
@@ -331,9 +385,6 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 	const override = ctx.settings.calibration.catchmentAreaKm2;
 	if (override != null && override > 0 && Math.abs(override - area) > 0.01 * area)
 		warnings.push(`runoff from each unit's own rain runs on the units' areas (${Math.round(area * 100) / 100} km²), not the catchment area set in Calibration → Flow calibration (${override} km²)`);
-	const idle = input.model.nodes.filter((n) => n.kind === 'farm' && !(n.areaKm2 > 0)).sort((a, b) => cmpStr(a.id, b.id));
-	if (idle.length && ctx.settings.flowShareMethod !== 'area')
-		warnings.push(`runoff from each unit's own rain: ${idle.map((n) => `"${n.name}"`).join(', ')} ${idle.length === 1 ? 'has' : 'have'} no area, so no runoff of ${idle.length === 1 ? 'its' : 'their'} own, whatever flow share`);
 	return {
 		naturalFlowM3Day,
 		series,

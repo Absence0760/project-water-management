@@ -40,14 +40,16 @@ import { damCapacityOn } from '../network/development';
 import { unitForecastSeriesKey, UNIT_RAIN_SERIES, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind, type UnitForecastSeriesKey } from '../project';
 import { prepareRun } from '../prepare';
 import { unitRainRecipes, type UnitRainRecipe } from '../runoff/unitRain';
-import { pairingFactors } from '../runoff/stationForcing';
-import { captureModelState, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
+import { fitEveryPairing, pairingFactors } from '../runoff/stationForcing';
+import { captureModelState, ewrSplitPinOf, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
+import type { PinnedEwrSplit } from '../network/ewrSplit';
 import { withAllocationKnownBefore, type ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
 import { applyScenario } from '../scenario/overrides';
 import { quantileSorted } from '../uncertainty/bands';
 import type { OutcomeMetric } from '../views/outcomeMatrix';
 import { outlookAnalogue, resolveSeason, seasonWaterYear, type OutlookAnalogue, type OutlookSeason, type ResolvedSeason } from './season';
+import { climateConditionedOutlook, selectClimateAnalogues, type ClimateOutlook, type MonthlyIndexSeries } from './climate';
 
 /** A demand level: an id, a label ("85 %") and its ops (demand.scale only, e.g. one at factor 0.85, or R1's `months` form for a monthly plan). */
 export interface OutlookLevel {
@@ -238,10 +240,22 @@ export function outlookMemberInput(
 	if (pinned) settings.unitRain = { ...settings.unitRain!, pinned };
 	// Rainfall stations (engine ≥ 1.91.0, §2.4i): the base input's pairing factors, the catchment's and the units', so the
 	// history cut at the decision date isn't corrected by a refit on a shorter record (or refused for one).
+	if (prep?.stations) fitEveryPairing(prep.stations.context);
 	const factors = prep?.stations ? pairingFactors(prep.stations.context) : null;
 	if (factors && Object.keys(factors).length && settings.rainStations)
 		settings.rainStations = { ...settings.rainStations, pinnedFactors: { ...(settings.rainStations.pinnedFactors ?? {}), ...factors } };
-	return withLevel({ settings, model: input.model, series, ...(input.stations ? { stations: input.stations } : {}) }, ops);
+	// The EWR split (engine ≥ 1.105.0, §2.5b): the base run's shares, as a member from the snapshot takes the capture run's,
+	// not shares worked out on the history cut at the decision date.
+	const split = baseEwrSplit(input);
+	return withLevel({ settings, model: input.model, series, ...(input.stations ? { stations: input.stations } : {}), ...(split ? { ewrSplitPinned: split } : {}) }, ops);
+}
+
+/** The base input's EWR split, once per base input (an outlook builds a member per analogue and level from one). */
+const splitCache = new WeakMap<ModelInput, PinnedEwrSplit | null>();
+function baseEwrSplit(input: ModelInput): PinnedEwrSplit | null {
+	if (input.ewrSplitPinned) return input.ewrSplitPinned;
+	if (!splitCache.has(input)) splitCache.set(input, ewrSplitPinOf(input));
+	return splitCache.get(input)!;
 }
 
 /** The base input's unit rain recipes (prepareRun's CHIRPS correction for the bias sub-rule); null without per-unit rain. */
@@ -563,7 +577,16 @@ export interface SeasonalOutlook {
 	levels: OutlookLevelResult[];
 	planning: PlanningFigure;
 	warnings: string[];
+	/**
+	 * The outlook on the analogue years nearest this season's ENSO and SAM
+	 * state (issue #620, ./climate.ts, docs/model.md §2.15c), beside the ESP
+	 * above; present only when asked for (SeasonalOutlookOptions.climateIndices).
+	 */
+	climate?: ClimateOutlook;
 }
+
+/** The ESP summary alone (summariseOutlook): a SeasonalOutlook without `climate`, which only runSeasonalOutlook adds. */
+export type EspOutlook = Omit<SeasonalOutlook, 'climate'>;
 
 export interface SeasonalOutlookOptions extends OutlookSeason {
 	levels: readonly OutlookLevel[];
@@ -585,6 +608,12 @@ export interface SeasonalOutlookOptions extends OutlookSeason {
 	warmStart?: boolean;
 	/** The snapshot to start from (captureModelState(input, decisionDate)); captured here when absent. */
 	snapshot?: ModelStateSnapshot;
+	/**
+	 * The ONI and AAO series (issue #620): the result also carries `climate`,
+	 * the same members summarised on the years nearest this season's state
+	 * (selectClimateAnalogues). Absent: the ESP alone, as before.
+	 */
+	climateIndices?: readonly MonthlyIndexSeries[];
 }
 
 /**
@@ -665,7 +694,7 @@ export interface OutlookSummaryInput {
 }
 
 /** Choose the metric, work out every level's statistics and the planning figure. */
-export function summariseOutlook(x: OutlookSummaryInput): SeasonalOutlook {
+export function summariseOutlook(x: OutlookSummaryInput): EspOutlook {
 	const s = resolveSeason(x.season);
 	const share = x.planningShare ?? DEFAULT_PLANNING_SHARE;
 	if (!(Number.isFinite(share) && share > 0 && share <= 1)) throw new RangeError(`planning share ${String(share)} must be in (0, 1]`);
@@ -846,7 +875,7 @@ export function runSeasonalOutlook(raw: ModelInput, options: SeasonalOutlookOpti
 		}
 		return { id: level.id, label: level.label, problems, members };
 	});
-	return summariseOutlook({
+	const summaryInput: OutlookSummaryInput = {
 		season,
 		model: input.model,
 		analogues,
@@ -856,7 +885,10 @@ export function runSeasonalOutlook(raw: ModelInput, options: SeasonalOutlookOpti
 		...(options.metric !== undefined ? { metric: options.metric } : {}),
 		siteNodeId,
 		...(options.planningShare !== undefined ? { planningShare: options.planningShare } : {})
-	});
+	};
+	const outlook = summariseOutlook(summaryInput);
+	if (!options.climateIndices) return outlook;
+	return { ...outlook, climate: climateConditionedOutlook(summaryInput, selectClimateAnalogues(season, analogues, options.climateIndices)) };
 }
 
 const pct = (v: number) => `${Math.round(v * 100)} %`;

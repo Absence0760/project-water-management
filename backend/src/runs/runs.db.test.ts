@@ -44,26 +44,26 @@ describe('POST /projects/:id/runs', () => {
 		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'pan' })).status).toBe(201);
 	});
 
-	it('refuses flow shares over 100 % with the reason, stores no run, and runs once they fit (engine 0.27.1)', async () => {
+	it('runs a project an older backend stored with manual shares over 100 %: the method and the shares are retired (engine 1.105.0, issue #616)', async () => {
 		const u = await signUp('Overshare');
 		const projectId = await runnable(u);
-		// Each share is within 0–1 (the model save checks that); two farms at 0.75 make 150 %.
-		const model = (await u.call('GET', `/projects/${projectId}/model`)).body as { nodes: (Omit<ReturnType<typeof node>, 'flowShareManual'> & { flowShareManual: number | null })[] };
-		const outlet = model.nodes.find((n) => n.downstreamNodeId === null)!;
+		const outlet = (await asOwner('SELECT id FROM node WHERE project_id = $1 AND downstream_node_id IS NULL', [projectId]))[0] as { id: string };
+		const model = (await u.call('GET', `/projects/${projectId}/model`)).body as { nodes: Record<string, unknown>[] };
 		model.nodes.push({ ...node('Lower', outlet.id), sortOrder: 2 });
-		const share = async (v: number) => {
-			for (const n of model.nodes) if (n.kind === 'farm') n.flowShareManual = v;
-			expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
-		};
-		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { flowShareMethod: 'manual' } })).status).toBe(200);
-		await share(0.75);
-		const res = await u.call('POST', `/projects/${projectId}/runs`, { label: 'over' });
-		expect(res.status).toBe(400);
-		expect(res.body.error).toMatch(/flow shares sum to 150\.00%, more than 100%.*add up to 100%/);
-		expect((await u.call('GET', `/projects/${projectId}/runs`)).body.runs).toEqual([]);
-		// Positive control: the same farms at 50 % each run.
-		await share(0.5);
-		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'fits' })).status).toBe(201);
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		// Test state only: the rows as engines up to 1.104.x stored them, two farms at 75 % (150 %, which those runs refused).
+		await asOwner(`UPDATE project SET settings = settings || '{"flowShareMethod": "manual", "hiLoSplit": {"hi": 0.6, "lo": 0.4}}' WHERE id = $1`, [projectId]);
+		await asOwner(`UPDATE node SET flow_share_manual = 0.75, area_hi_km2 = 3 WHERE project_id = $1 AND kind = 'farm'`, [projectId]);
+		const res = await u.call('POST', `/projects/${projectId}/runs`, { label: 'shares by natural MAR' });
+		expect(res.status).toBe(201);
+		const [{ inputs, summary }] = (await asOwner('SELECT inputs, summary FROM model_run WHERE id = $1', [res.body.run.id])) as [
+			{ inputs: { settings: Record<string, unknown>; model: { nodes: Record<string, unknown>[] } }; summary: { farms: { flowShare: number }[] } }
+		];
+		// Neither reaches the run: its snapshot names no method, its nodes carry no retired share, and its shares add up to 1.
+		expect(['flowShareMethod', 'hiLoSplit'].filter((k) => k in inputs.settings)).toEqual([]);
+		for (const n of inputs.model.nodes) expect(['areaHiKm2', 'areaLoKm2', 'flowShareManual'].filter((k) => k in n)).toEqual([]);
+		expect(summary.farms).toHaveLength(2);
+		expect(summary.farms.reduce((t, f) => t + f.flowShare, 0)).toBeCloseTo(1, 9);
 	});
 
 	it('reports which stored runs used the legacy runoff model (audit H1), on the list and on each run', async () => {

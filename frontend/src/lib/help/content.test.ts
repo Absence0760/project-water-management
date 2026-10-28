@@ -29,8 +29,8 @@ import { TIPS, tipFor } from './tips';
 // Exhaustive `Record<keyof T, true>` objects: the typecheck fails if the engine
 // renames a field, so help keys can't silently drift from the model.
 const NODE: Record<keyof NetworkNode, true> = {
-	id: true, name: true, kind: true, downstreamNodeId: true, sortOrder: true, areaKm2: true, areaHiKm2: true,
-	areaLoKm2: true, flowShareManual: true, pctUpstreamToDam: true, pctRunoffToDam: true, damCapacityM3: true,
+	id: true, name: true, kind: true, downstreamNodeId: true, sortOrder: true, areaKm2: true,
+	pctUpstreamToDam: true, pctRunoffToDam: true, damCapacityM3: true,
 	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, irrigationEfficiency: true, returnFlowFraction: true,
 	damAreaFullM2: true, damAreaExponent: true, damSeepagePerDay: true,
 	userDemandM3Day: true, userReturnPct: true, userPriority: true,
@@ -136,7 +136,10 @@ const PREVIEW_KEYS = [
 	// Each area's derived rain (issue #553), every line present.
 	...buildAreaColumns([{ nodeId: null, name: '', lines: { startDate: '2020-01-01', rainUsed: [], source: [], stationScaled: [], chirpsCorrected: [] } as never }]).map((c) => c.helpKey),
 	// A unit's own view (issue #613): every line, and the View select.
-	...areaViewColumns({ nodeId: 'u', name: 'U', lines: { startDate: '2020-01-01', rainUsed: [], source: [], stationRaw: [], stationScaled: [], chirpsRaw: [], chirpsCorrected: [], correctAgainst: 's', forcing: { stationId: 's', stationName: 'S', ratio: 1 } } as never }).map((c) => c.helpKey),
+	...areaViewColumns({ nodeId: 'u', name: 'U', lines: { startDate: '2020-01-01', rainUsed: [], source: [], stationRaw: [], stationScaled: [], chirpsRaw: [], chirpsCorrected: [], correctAgainst: 's', forcing: { stationId: 's', stationName: 'S', ratio: 1 }, patches: [{ place: 1, stationId: 'p', stationName: 'P', ratio: 1, raw: [], scaled: [] }] } as never }).map((c) => c.helpKey),
+	// A unit without a station (issue #613 slice 2): its §2.4h chain, every link present.
+	...buildAreaColumns([{ nodeId: 'u', name: 'U', lines: null, chain: { startDate: '2020-01-01', rule: 'unitGauge', rainUsed: [], source: [], ownGauge: [], gaugeScaled: [], chirpsRaw: [], chirpsLevelled: [], recipe: { gaugeMapFactor: 1, chirps: { source: 'raw' } } } as never }]).map((c) => c.helpKey),
+	'preview.areaChirpsRaw',
 	'preview.view'
 ];
 

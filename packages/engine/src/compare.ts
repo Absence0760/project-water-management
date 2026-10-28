@@ -15,7 +15,7 @@ import { dayText, fromEpochDay, toEpochDay } from './calendar';
 import { ewrSourceConfidence, type EwrRuleTable, type EwrRuleSourceKind } from './reserve/rules';
 import { EWR_DAILY_SOURCE_LABEL, ewrDailySourceChanges } from './reserve/dailySource';
 import { isEwrSite } from './network/topology';
-import { EWR_SPLIT_LABEL } from './network/ewrSplit';
+import { EWR_SPLIT_LABEL, EWR_SPLIT_RETIRED_IN } from './network/ewrSplit';
 import { hasMonthlyRates, transferRatesM3s } from './network/transferRates';
 import { isRiverOfftake } from './network/offtake';
 import { droughtRestrictionChanges } from './network/restriction';
@@ -26,6 +26,7 @@ import { defaultFlowGapFill, gapFillRecordLabel, GAP_FILL_KINDS, type FlowGapFil
 import { qualityFlagChanges, resolveQualityFlags, type QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import { calibrationRulesChanges, resolveCalibrationRules } from './calibrate/rulesSettings';
 import { chirpsQuantileMapText, fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
+import { patchChainOfSetting } from './runoff/stationFingerprint';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import { declaredRuleText } from './uncertainty/options';
 import {
@@ -754,6 +755,9 @@ function stationAssignmentText(raw: unknown, stationName: StationName): string {
 	const parts = [stationName(a.stationId)];
 	if (a.scaleToMap === false) parts.push('not scaled to MAP');
 	if (typeof a.correctAgainst === 'string' && a.correctAgainst !== a.stationId) parts.push(`gaps corrected against ${stationName(a.correctAgainst)}`);
+	// The patching priority (engine ≥ 1.105.0, issue #612), when it isn't the default [CHIRPS].
+	const chain = patchChainOfSetting((a as { patch?: unknown }).patch, a.stationId);
+	if (chain.join() !== 'chirps') parts.push(`gaps patched from ${chain.length ? chain.map((k) => (k === 'chirps' ? 'CHIRPS' : stationName(k.slice('station:'.length)))).join(' then ') : 'nothing'}`);
 	return parts.join(', ');
 }
 
@@ -829,6 +833,15 @@ interface ScalarField {
 	fmt: Fmt;
 }
 
+const EWR_SPLIT_FIELD = 'EWR split between units by';
+const FLOW_SHARE_FIELD = 'Flow-share method';
+const HI_LO_FIELD = 'Hi/lo MAP split';
+/** The engine version that retired settings.flowShareMethod, settings.hiLoSplit and the nodes' high-, low-MAP and specific shares (issue #616). */
+export const FLOW_SHARE_RETIRED_IN = EWR_SPLIT_RETIRED_IN;
+const flowShareText: Fmt = (v) => (v === 'hiLo' ? 'Hi/Lo MAP' : v === 'manual' ? 'specific shares' : v === 'area' || v === undefined ? 'area' : String(v));
+const flowShareGone = `removed in engine ${FLOW_SHARE_RETIRED_IN} (the flow is split by ${EWR_SPLIT_LABEL.naturalMar})`;
+const ewrSplitText: Fmt = (v) => (v === 'naturalMar' ? EWR_SPLIT_LABEL.naturalMar : v === 'flowShare' || v === undefined ? EWR_SPLIT_LABEL.flowShare : String(v));
+
 const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	februaryDays: { label: 'Days in February', fmt: plain },
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
@@ -841,9 +854,10 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	allocationTolerance: { label: 'Allocation comparison band', fmt: (v) => `±${pct(v)}` },
 	// Issue #71 (ER3): the rule an evidence report's cited ensemble must follow; never changes a result. Absent = not declared.
 	evidenceUncertaintyRule: { label: 'Declared uncertainty rule (evidence)', fmt: declaredRuleText },
-	flowShareMethod: { label: 'Flow-share method', fmt: plain },
-	// Engine ≥ 1.94.0 (issue #553); a snapshot without it split the EWR by the flow share, which is what older runs did.
-	ewrSplit: { label: 'EWR split between units by', fmt: (v) => (v === 'naturalMar' ? EWR_SPLIT_LABEL.naturalMar : v === 'flowShare' || v === undefined ? EWR_SPLIT_LABEL.flowShare : String(v)) },
+	// Engines up to 1.104.x, retired in 1.105.0 (issue #616): compared by flowShareChanges, not the loop.
+	flowShareMethod: { label: FLOW_SHARE_FIELD, fmt: flowShareText },
+	// Engines 1.94.0 – 1.104.x (issue #553), retired in 1.105.0 (issue #615): compared by ewrSplitChange, not the loop.
+	ewrSplit: { label: EWR_SPLIT_FIELD, fmt: ewrSplitText },
 	// Engine ≥ 1.3.0 (issue #64); a snapshot without them ran the defaults, which is what older runs did.
 	ewrChargeSource: {
 		label: 'EWR charge follows',
@@ -1002,7 +1016,6 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		allocationTolerance: r.allocationTolerance ?? DEFAULT_ALLOCATION_TOLERANCE,
 		evidenceUncertaintyRule: r.evidenceUncertaintyRule ?? null,
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
-		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
 		// Engine ≥ 1.22.0: absent means the defaults (a run before them had no gauged range, and its fit's flags don't reach it).
 		qualityFlags: resolveQualityFlags(r.qualityFlags, []),
@@ -1043,6 +1056,54 @@ function gapRainText(v: unknown): string {
 	return g.imergLate === true ? `${product}, and IMERG Late for the recent days` : product;
 }
 
+/**
+ * The retired settings.ewrSplit between two snapshots (engines 1.94.0 – 1.104.x; issue #615 retired it in
+ * EWR_SPLIT_RETIRED_IN, from which the EWR is always split by each unit's natural MAR). Both recorded it: a change
+ * of value, as before. Only A did: B is the later one, which no longer has it (265_retire_ewr_split.sql strips it).
+ * Only B did: A is from before 1.94.0, the flow share. Neither: nothing (the engine version line says which engines).
+ */
+function ewrSplitChange(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInputsSnapshot['settings'] | undefined): string | null {
+	const has = (s: unknown) => !!s && typeof s === 'object' && Object.hasOwn(s, 'ewrSplit');
+	const va = has(ra) ? (ra as Record<string, unknown>).ewrSplit : undefined;
+	const vb = has(rb) ? (rb as Record<string, unknown>).ewrSplit : undefined;
+	const gone = `removed in engine ${EWR_SPLIT_RETIRED_IN} (the EWR is split by ${EWR_SPLIT_LABEL.naturalMar})`;
+	if (has(ra) && has(rb)) return same(va, vb) ? null : `${EWR_SPLIT_FIELD}: ${ewrSplitText(va)} → ${ewrSplitText(vb)}`;
+	if (has(ra)) return `${EWR_SPLIT_FIELD}: ${ewrSplitText(va)} → ${gone}`;
+	// Only B recorded it: A is from before 1.94.0, which split by the flow share (the setting's default).
+	if (has(rb)) return vb === 'flowShare' ? null : `${EWR_SPLIT_FIELD}: ${ewrSplitText(undefined)} → ${ewrSplitText(vb)}`;
+	return null;
+}
+
+/**
+ * The retired settings.flowShareMethod and settings.hiLoSplit between two snapshots (engines up to 1.104.x; issue
+ * #616 retired them in FLOW_SHARE_RETIRED_IN, from which the flow is split by each unit's natural MAR). Both recorded
+ * them: a change of value, as before. Only A did: B is the later one, which no longer has them
+ * (266_retire_flow_share_method.sql strips them); the split is named only when A ran Hi/Lo MAP. Only B did: A
+ * predates the setting, which ran the area shares.
+ */
+function flowShareChanges(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInputsSnapshot['settings'] | undefined): [string, string][] {
+	const out: [string, string][] = [];
+	const get = (s: unknown, k: string) => (!!s && typeof s === 'object' && Object.hasOwn(s, k) ? { v: (s as Record<string, unknown>)[k] } : null);
+	const ma = get(ra, 'flowShareMethod');
+	const mb = get(rb, 'flowShareMethod');
+	if (ma && mb) {
+		if (!same(ma.v, mb.v)) out.push([FLOW_SHARE_FIELD, `${FLOW_SHARE_FIELD}: ${flowShareText(ma.v)} → ${flowShareText(mb.v)}`]);
+	} else if (ma) out.push([FLOW_SHARE_FIELD, `${FLOW_SHARE_FIELD}: ${flowShareText(ma.v)} → ${flowShareGone}`]);
+	else if (mb && mb.v !== 'area') out.push([FLOW_SHARE_FIELD, `${FLOW_SHARE_FIELD}: ${flowShareText(undefined)} → ${flowShareText(mb.v)}`]);
+	const split = (h: { v: unknown } | null) => ({ hi: 0.5, lo: 0.5, ...((h?.v as object | undefined) ?? {}) }) as Record<string, unknown>;
+	const ha = get(ra, 'hiLoSplit');
+	const hb = get(rb, 'hiLoSplit');
+	if (ma && mb) {
+		const a = split(ha);
+		const b = split(hb);
+		if (!same(a, b)) out.push([HI_LO_FIELD, `${HI_LO_FIELD}: ${fmtValue(a.hi)}/${fmtValue(a.lo)} → ${fmtValue(b.hi)}/${fmtValue(b.lo)}`]);
+	} else if (ma?.v === 'hiLo') {
+		const a = split(ha);
+		out.push([HI_LO_FIELD, `${HI_LO_FIELD}: ${fmtValue(a.hi)}/${fmtValue(a.lo)} → ${flowShareGone}`]);
+	}
+	return out;
+}
+
 function diffSettings(
 	ra: RunInputsSnapshot['settings'] | undefined,
 	rb: RunInputsSnapshot['settings'] | undefined,
@@ -1056,8 +1117,11 @@ function diffSettings(
 	const push = (subject: string, text: string) => out.push({ area: 'settings', kind: 'changed', subject, text });
 
 	for (const [k, f] of Object.entries(SETTINGS_FIELDS)) {
+		if (k === 'ewrSplit' || k === 'flowShareMethod') continue;
 		if (!same(a[k], b[k])) push(f.label, `${f.label}: ${f.fmt(a[k])} → ${f.fmt(b[k])}`);
 	}
+	const split = ewrSplitChange(ra, rb);
+	if (split) push(EWR_SPLIT_FIELD, split);
 	for (const [k, f] of Object.entries(SETTINGS_MONTHLY)) {
 		const c = monthlyChange(a[k], b[k], f.unit);
 		if (c) push(f.label, `${f.label}: ${c}`);
@@ -1075,9 +1139,7 @@ function diffSettings(
 	const unitRain = unitRainChange(a.unitRain, b.unitRain);
 	if (unitRain) push(UNIT_RAIN_LABEL, `${UNIT_RAIN_LABEL}: ${unitRain}`);
 	for (const t of rainStationChanges(a.rainStations, b.rainStations, (id) => siteName(id), stations.a, stations.b, recordName)) push(RAIN_STATIONS_LABEL, `${RAIN_STATIONS_LABEL}: ${t}`);
-	const ha = a.hiLoSplit as Record<string, unknown>;
-	const hb = b.hiLoSplit as Record<string, unknown>;
-	if (!same(ha, hb)) push('Hi/lo MAP split', `Hi/lo MAP split: ${fmtValue(ha.hi)}/${fmtValue(ha.lo)} → ${fmtValue(hb.hi)}/${fmtValue(hb.lo)}`);
+	for (const [subject, text] of flowShareChanges(ra, rb)) push(subject, text);
 
 	const qa = a.dataQuality as Record<string, unknown>;
 	const qb = b.dataQuality as Record<string, unknown>;
@@ -1392,12 +1454,34 @@ function diffFitRecord(ra: unknown, rb: unknown): InputChange[] {
 	return same(a, b) ? [] : [{ area: 'settings', kind: 'changed', subject, text: 'Fit record changed' }];
 }
 
+/**
+ * The node fields engines up to 1.104.x read (issue #616 retired them in FLOW_SHARE_RETIRED_IN): compared on the
+ * snapshots' raw nodes, since upgradeLegacyModel drops them. Both have one: a change of value, as before. Only A has a
+ * value that did something (an area above 0, a specific share): the later B has none, so it is named as removed.
+ */
+const RETIRED_NODE_FIELDS_COMPARED: [string, string, Fmt, (v: unknown) => boolean][] = [
+	['areaHiKm2', 'high-MAP area', withUnit('km²'), (v) => typeof v === 'number' && v > 0],
+	['areaLoKm2', 'low-MAP area', withUnit('km²'), (v) => typeof v === 'number' && v > 0],
+	['flowShareManual', 'manual flow share', (v) => (v === null || v === undefined ? 'none' : pct(v)), (v) => typeof v === 'number']
+];
+
+function retiredNodeChanges(x: unknown, y: unknown): string[] {
+	const out: string[] = [];
+	const rx = (x ?? {}) as Record<string, unknown>;
+	const ry = (y ?? {}) as Record<string, unknown>;
+	for (const [k, label, fmt, set] of RETIRED_NODE_FIELDS_COMPARED) {
+		const hx = Object.hasOwn(rx, k);
+		const hy = Object.hasOwn(ry, k);
+		if (hx && hy) {
+			if (!same(rx[k], ry[k])) out.push(`${label} ${fmt(rx[k])} → ${fmt(ry[k])}`);
+		} else if (hx && set(rx[k])) out.push(`${label} ${fmt(rx[k])} → ${flowShareGone}`);
+	}
+	return out;
+}
+
 const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['kind', 'kind', plain],
 	['areaKm2', 'area', withUnit('km²')],
-	['areaHiKm2', 'high-MAP area', withUnit('km²')],
-	['areaLoKm2', 'low-MAP area', withUnit('km²')],
-	['flowShareManual', 'manual flow share', (v) => (v === null || v === undefined ? 'none' : pct(v))],
 	['pctUpstreamToDam', 'upstream inflow to dam', pct],
 	['pctRunoffToDam', 'own runoff to dam', pct],
 	['damCapacityM3', 'dam capacity', withUnit('m³', 0)],
@@ -1501,6 +1585,10 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 	// A run saved by an older engine is compared as migration 006 stored its model (return flow % → efficiency).
 	const a: ProjectModel = upgradeLegacyModel({ nodes: [], crops: [], cropAreas: [], transfers: [], ...(ma ?? {}) });
 	const b: ProjectModel = upgradeLegacyModel({ nodes: [], crops: [], cropAreas: [], transfers: [], ...(mb ?? {}) });
+	// The snapshots' nodes as stored, for the fields upgradeLegacyModel drops (RETIRED_NODE_FIELDS_COMPARED).
+	const rawNodes = (m: typeof ma) => new Map(((m?.nodes ?? []) as unknown as Record<string, unknown>[]).flatMap((n) => (n && typeof n === 'object' && typeof n.id === 'string' ? [[n.id, n] as [string, unknown]] : [])));
+	const rawA = rawNodes(ma);
+	const rawB = rawNodes(mb);
 	const out: InputChange[] = [];
 	const nameOf = (m: ProjectModel) => {
 		const nodes = new Map(m.nodes.map((n) => [n.id, n.name] as [string, string]));
@@ -1532,6 +1620,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		for (const [k, label, fmt] of NODE_FIELDS) {
 			if (!same(x[k], y[k])) parts.push(`${label} ${fmt(x[k])} → ${fmt(y[k])}`);
 		}
+		parts.push(...retiredNodeChanges(rawA.get(x.id), rawB.get(y.id)));
 		// The unit's MAP and its source (engine ≥ 1.78.0, docs/model.md §2.4h); absent = none.
 		if ((x.mapMm ?? null) !== (y.mapMm ?? null)) parts.push(`MAP ${withUnit('mm', 0)(x.mapMm ?? null)} → ${withUnit('mm', 0)(y.mapMm ?? null)}`);
 		if ((x.mapSource ?? null) !== (y.mapSource ?? null)) parts.push(`MAP source ${x.mapSource ? `"${x.mapSource}"` : 'none'} → ${y.mapSource ? `"${y.mapSource}"` : 'none'}`);
@@ -2089,7 +2178,7 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 		['Monthly dam evaporation factors', 'lakeEvapFactorMonthly'],
 		['Monthly effective rain fractions', 'effectiveRainFractionMonthly'],
 		[PE_LABEL, 'pe'],
-		['Hi/lo MAP split', 'hiLoSplit'],
+		[HI_LO_FIELD, 'hiLoSplit'],
 		[EWR_DAILY_SOURCE_LABEL, 'ewrDailySource'],
 		[RAIN_STATIONS_LABEL, 'rainStations'],
 		['Kept data checks', 'checksKept'],
@@ -2107,6 +2196,7 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 export function nodeChangeFields(): [label: string, key: string][] {
 	return [
 		...NODE_FIELDS.map(([k, label]): [string, string] => [label, String(k)]),
+		...RETIRED_NODE_FIELDS_COMPARED.map(([k, label]): [string, string] => [label, k]),
 		['demand', 'userDemandM3Day'],
 		['demand factor', 'demandFactor'],
 		...DEMAND_PARTS.map((p): [string, string] => [`${p} demand factor`, 'partDemandFactor']),

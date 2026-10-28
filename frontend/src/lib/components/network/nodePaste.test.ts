@@ -70,9 +70,9 @@ describe('planNodePaste', () => {
 		const p = plan(planNodePaste('20\t1\n30\t2', nodes, { row: 1, col: area }));
 		expect(p.changes.map((c) => [c.rowId, c.key, c.to])).toEqual([
 			['u', 'areaKm2', 20],
-			['u', 'areaHiKm2', 1],
+			['u', 'damCapacityM3', 1],
 			['l', 'areaKm2', 30],
-			['l', 'areaHiKm2', 2]
+			['l', 'damCapacityM3', 2]
 		]);
 	});
 
@@ -88,10 +88,9 @@ describe('planNodePaste', () => {
 		expect(p.notes).toContain("Left out a column the table doesn't have: Total.");
 	});
 
-	it('clears a nullable field only by typing it: a blank leaves it', () => {
+	it('leaves a value as it is under a blank cell', () => {
 		const nodes = sample();
-		nodes[1]!.flowShareManual = 0.4;
-		const p = plan(planNodePaste('Name\tManual flow share\nUpper farm\t', nodes));
+		const p = plan(planNodePaste('Name\tArea\nUpper farm\t', nodes));
 		expect(p.changes).toEqual([]);
 	});
 });
@@ -101,7 +100,7 @@ describe('nodeTableCsv', () => {
 		const nodes = sample();
 		const csv = nodeTableCsv(nodes);
 		const cells = readPastedBlock(csv).cells;
-		expect(cells[0]!.slice(0, 5)).toEqual(['Name', 'Area (km²)', 'High-MAP area (km²)', 'Low-MAP area (km²)', 'Dam capacity (m³)']);
+		expect(cells[0]!.slice(0, 3)).toEqual(['Name', 'Area (km²)', 'Dam capacity (m³)']);
 		// Every column a paste can write: not the efficiency, which is worked out (engine 1.72.0).
 		const pasteable = TABLE_FIELDS.filter((f) => !f.derived);
 		expect(cells[0]!.length).toBe(1 + pasteable.length);

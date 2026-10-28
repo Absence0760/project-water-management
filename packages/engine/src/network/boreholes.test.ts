@@ -17,9 +17,6 @@ function node(id: string, kind: NetworkNode['kind'], down: string | null, over: 
 		downstreamNodeId: down,
 		sortOrder: 0,
 		areaKm2: kind === 'farm' ? 1 : 0,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 1,
 		pctRunoffToDam: 1,
 		damCapacityM3: 0,
@@ -245,6 +242,13 @@ describe('boreholes (WP-1.34)', () => {
 		// days n1's dam (minimum level 100 %) needs the river to refill.
 		// Engine 1.65.0's river abstractions are taken off, so the case is the one found.
 		const input = withoutRiverSources(randomInput(2909));
+		// The seed drew the retired Hi/Lo MAP flow shares (engines up to 1.104.x). From 1.105.0 every unit's share is its
+		// natural MAR share, which on the catchment rain follows its area (issue #616): the farms' areas are set to the
+		// Hi/Lo shares it ran on (same total), so the case is the one found.
+		const hiLo: Record<string, number> = { n1: 0.015534220444896104, n2: 0.05613031535444796, n3: 0.00019401628946472287, n4: 0.8133925513787557, n5: 0.08914229716918382, n6: 0.00008335028925937776, n7: 0.025523249073992352 };
+		const farms = input.model.nodes.filter((n) => n.kind === 'farm' && n.areaKm2 > 0);
+		const total = farms.reduce((a, n) => a + n.areaKm2, 0);
+		for (const n of farms) n.areaKm2 = hiLo[n.id]! * total;
 		expect(input.model.boreholes!.some((b) => b.nodeId === 'n2' && b.annualCapM3 !== null && b.depletionFactor > 0)).toBe(true);
 		const rules = droughtBoreholesAsSupplemental(input);
 		for (const b of rules.model.boreholes ?? []) b.annualCapM3 = input.model.boreholes!.find((x) => x.id === b.id)!.annualCapM3;

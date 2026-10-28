@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "The seasonal outlook's Past seasons like this one panel (ClimateAnalogues.svelte and its view model outlook/climate.ts, in the EWR page's chunk) and the engine's climate selection it imports: measured +1 KB gzipped rounded (2198 to 2199 on the branch before merging the draft; 2204 against 2203 after), 2 to absorb the rounding"
+}

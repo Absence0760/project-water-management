@@ -31,13 +31,14 @@ const nodes = [
 ];
 
 describe('UnitRainFields', () => {
-	it('has no switch of its own (the flow generation radio is), and shows none of its fields while off', () => {
+	it('has no switch of its own (the flow generation radio is), and shows its fields under Fragmentation too (issue #615)', () => {
+		// Fragmentation's EWR shares run on this setup, so a project that never set it (null) shows the defaults.
 		const { body } = render(UnitRainFields, { props: { value: null, nodes } });
 		expect(body).toContain('Units without a station');
 		expect(body).not.toContain('type="checkbox"');
 		expect(body).not.toContain('Runoff from each unit’s own rain');
-		expect(body).not.toContain('MAP period');
-		expect(body).not.toContain('Rain gauge’s MAP');
+		expect(body).toContain('MAP period');
+		expect(body).toContain('Rain gauge’s MAP');
 		expect(body).toContain('id="set-unit-rain"');
 	});
 

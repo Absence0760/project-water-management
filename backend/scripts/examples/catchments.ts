@@ -258,9 +258,6 @@ export function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			downstreamNodeId: f.into ? nodeId(f.into) : null,
 			sortOrder: i,
 			areaKm2: f.areaKm2 ?? 0,
-			areaHiKm2: 0,
-			areaLoKm2: 0,
-			flowShareManual: null,
 			// The share of upstream inflow INTO the dam (model.md §3 Q1); all of it by default.
 			pctUpstreamToDam: f.upstreamToDam ?? 1,
 			pctRunoffToDam: f.runoffToDam ?? 0.6,
@@ -351,13 +348,24 @@ export function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 	const model: ProjectModel = { nodes, crops, cropAreas, transfers, ...(demandObjects.length ? { demandObjects } : {}) };
 
 	const truthRain = dailyRain(spec.climate, START, DAYS, spec.seed, spec.rainScale);
+	// A Per unit rain setup (issue #615, docs/model.md §2.5b): each unit with land a MAP and the rain gauge its MAP, so
+	// every unit runs on the gauge × its MAP ratio (§2.4h rule 2) and the EWR is split by MAP-weighted natural runoff,
+	// under Fragmentation as under Per unit, with no unit left on the catchment rain. Invented: the catchment's mean
+	// annual rain, the units a little wetter or drier round it.
+	const gaugeMapMm = Math.round((truthRain.reduce((a, b) => a + b, 0) / DAYS) * 365.25);
+	const UNIT_MAP_FACTORS = [1.15, 1, 0.9, 1.05, 0.95];
+	nodes.forEach((n, i) => {
+		if (n.kind === 'farm' && n.areaKm2 > 0) Object.assign(n, { mapMm: Math.round(gaugeMapMm * UNIT_MAP_FACTORS[i % UNIT_MAP_FACTORS.length]!), mapSource: 'Invented for the demo: the catchment’s mean annual rain, a little wetter or drier' });
+	});
 	const d = defaultProjectSettings();
 	const settings: Partial<ProjectSettings> = {
 		// Explicit, as a project saved from Settings is: a stored fit is judged against it.
 		runoffModel: 'gr4j',
 		...spec.settings,
 		apanMm: spec.apan as unknown as ProjectSettings['apanMm'],
-		calibration: { ...d.calibration, ...spec.calibration }
+		calibration: { ...d.calibration, ...spec.calibration },
+		// Fragmentation, with the Per unit setup its EWR shares run on (issue #615).
+		unitRain: { mode: 'catchment', gaugeMapMm, gaugeMapSource: 'Invented for the demo: the gauge’s mean annual rain over its record' }
 	};
 
 	// First pass on the true rain, without EWR or observed flow, to learn the

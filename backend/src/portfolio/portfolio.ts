@@ -12,6 +12,9 @@
 //              run). Only the outlet EWR, counted in SQL from that run's one
 //              outlet series over the same 30-day window; farm figures stay
 //              unknown until a run is published.
+// Either way the drought badge (issue #620) is the source run's summary.drought:
+// the driest SPI/SPEI for its last whole month of history, stored with the run
+// (engine drought/summary.ts), so no row reads a run's daily series for it.
 // Either way the irrigation figure (issue #558, the project list's status) is
 // the source run's whole record, from its summary's units (model_run.summary
 // farms): their summed mean supply over their summed mean demand, and how many
@@ -22,6 +25,7 @@
 // that project's time zone (project.time_zone, 058), so a team with
 // catchments in several zones gets each row right, and a South African one
 // isn't a day behind from 22:00 to 24:00 UTC.
+import type { RunDrought } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { appliedThresholds } from '../teams/settings.js';
 import { localDate } from '../projects/timeZone.js';
@@ -84,6 +88,11 @@ export interface PortfolioProject {
 	alertsFiring: number;
 	/** The current publication's restriction; null when nothing is published. */
 	restriction: { level: RestrictionLevel; pct: number | null } | null;
+	/**
+	 * The source run's drought badge (summary.drought, issue #620, docs/model.md §2.15b): the driest SPI or
+	 * SPEI for the last whole month of its history; null without a source run or for a run from before it.
+	 */
+	drought: RunDrought | null;
 }
 
 export interface PortfolioRow {
@@ -121,6 +130,8 @@ export interface PortfolioRow {
 	irr_demand: number;
 	irr_supplied: number;
 	irr_below: number;
+	/** The source run's summary.drought; null without a run or on a run from before it. */
+	drought: RunDrought | null;
 	alerts_firing: number;
 	feeds: (Omit<HealthInput, 'config'> & { config: FeedConfig; source: FeedSource })[];
 }
@@ -169,6 +180,8 @@ const portfolioSql = (projects: string) => `
 		-- The source run caps use at, or scales demand to, the registered volumes, and the user isn't one who reads each
 		-- (231, app_reads_allocation_units): its use share and farm dam levels rest on those volumes (#523 I).
 		(src.verdicts_only AND NOT app_reads_allocation_units(pr.id)) AS figures_withheld,
+		-- The source run's drought badge, stored in its summary (issue #620): one key, no series.
+		src.drought,
 		-- Firing alerts (051_alerts; alert_event_project_idx covers it).
 		(SELECT count(*)::int FROM alert_event e WHERE e.project_id = pr.id AND e.state = 'firing') AS alerts_firing,
 		fd.feeds
@@ -195,7 +208,8 @@ const portfolioSql = (projects: string) => `
 		WHERE r.id = COALESCE(pub.run_id, lr.id)
 	) irr ON true
 	LEFT JOIN LATERAL (
-		SELECT COALESCE(r.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation'), false) AS verdicts_only
+		SELECT COALESCE(r.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation'), false) AS verdicts_only,
+			CASE WHEN jsonb_typeof(r.summary->'drought') = 'object' THEN r.summary->'drought' END AS drought
 		FROM model_run r WHERE r.id = COALESCE(pub.run_id, lr.id)
 	) src ON true
 	LEFT JOIN LATERAL (
@@ -288,7 +302,8 @@ export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrTh
 		damsKnown: published,
 		feeds: { total: r.feeds.length, ok, failing },
 		alertsFiring: r.alerts_firing,
-		restriction: published && r.restriction_level ? { level: r.restriction_level, pct: r.restriction_pct === null ? null : Number(r.restriction_pct) } : null
+		restriction: published && r.restriction_level ? { level: r.restriction_level, pct: r.restriction_pct === null ? null : Number(r.restriction_pct) } : null,
+		drought: source !== null ? (r.drought ?? null) : null
 	};
 }
 

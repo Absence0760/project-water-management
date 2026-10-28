@@ -49,6 +49,20 @@ describe('RainStations', () => {
 		expect(messages({ unreliable: { [A]: [['2021/02/01', '2021-03-01']] } })).toEqual(['a date is YYYY-MM-DD']);
 	});
 
+	it('takes a patching priority (issue #612), and refuses one that lists the area’s own station, a station or CHIRPS twice, or too many', () => {
+		const ok = { units: { [U1]: { stationId: A, patch: [{ source: 'station', stationId: B }, { source: 'chirps' }] } }, catchment: { stationId: A, patch: [] } };
+		expect(RainStations.parse(ok)).toEqual(ok);
+		expect(RainStations.parse({ units: { [U1]: { stationId: A, patch: null } } })).toEqual({ units: { [U1]: { stationId: A, patch: null } } });
+		expect(messages({ units: { [U1]: { stationId: A, patch: [{ source: 'station', stationId: A }] } } })).toEqual(['rainfall stations: an area’s own station can’t also patch its gaps']);
+		expect(messages({ units: { [U1]: { stationId: A, patch: [{ source: 'chirps' }, { source: 'chirps' }] } } })).toEqual(['rainfall stations: CHIRPS is listed twice in a patching priority']);
+		expect(messages({ catchment: { stationId: A, patch: [{ source: 'station', stationId: B }, { source: 'station', stationId: B }] } })).toEqual(['rainfall stations: a station is listed twice in a patching priority']);
+		const nine = Array.from({ length: 9 }, (_, i) => ({ source: 'station', stationId: `f0000000-0000-4000-8000-00000000000${i}` }));
+		expect(messages({ units: { [U1]: { stationId: A, patch: nine } } })).toEqual(['rainfall stations: at most 8 sources to patch a station’s gaps from']);
+		expect(messages({ units: { [U1]: { stationId: A, patch: [{ source: 'station', stationId: 'gauge' }] } } })).toEqual(['a rainfall station is named by its series id']);
+		expect(messages({ units: { [U1]: { stationId: A, patch: [{ source: 'era5' }] } } })).not.toEqual([]);
+		expect(messages({ units: { [U1]: { stationId: A, patch: [{ source: 'chirps', stationId: B }] } } })).not.toEqual([]);
+	});
+
 	it('refuses ids that aren’t ids, and fields it doesn’t know', () => {
 		expect(messages({ catchment: { stationId: 'gauge' } })).toEqual(['a rainfall station is named by its series id']);
 		expect(messages({ units: { 'unit 1': { stationId: A } } })).toEqual(['a land unit is named by its node id']);
@@ -83,5 +97,14 @@ describe('remapRainStations', () => {
 		// remapSettingNodeIds (a copy, an import) moves the units only.
 		expect(remapSettingNodeIds({ rainStations: rs }, nodes).rainStations).toEqual({ ...rs, units: { [N1]: rs.units[U1], [N2]: rs.units[U2] }, sites: { [B]: { unitId: N2 } } });
 		expect(remapRainStations(null, nodes)).toBeNull();
+	});
+
+	it('a patching priority’s stations and the per-area pinned factors’ keys follow too (issue #612)', () => {
+		const nodes = new Map([[U1, N1]]);
+		const withPatch = { units: { [U1]: { stationId: B, patch: [{ source: 'station', stationId: A }, { source: 'chirps' }] } }, pinnedFactors: { [`${A}|${U1}`]: [1], [`${A}|`]: [2] } };
+		expect(remapRainStations(withPatch, nodes, new Map([[A, A2]]))).toEqual({
+			units: { [N1]: { stationId: B, patch: [{ source: 'station', stationId: A2 }, { source: 'chirps' }] } },
+			pinnedFactors: { [`${A2}|${N1}`]: [1], [`${A2}|`]: [2] }
+		});
 	});
 });

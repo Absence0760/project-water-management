@@ -12,7 +12,6 @@ import {
 	exclusionKey,
 	EXCLUSIONS_MAX,
 	EWR_CHARGE_SOURCES,
-	EWR_SPLIT_METHODS,
 	EWR_NATURAL_SOURCES,
 	EWR_RULE_COMPONENTS,
 	EWR_RULE_POINTS_MAX,
@@ -47,6 +46,7 @@ import {
 	AREAL_RAIN_METHODS,
 	resolveFitRecord,
 	RETIRED_CALIBRATION_KEYS,
+	RETIRED_SETTINGS_KEYS,
 	RUNOFF_MODELS,
 	WR2012_MAX_PENALTY_WEIGHT,
 	WR2012_SCALINGS,
@@ -131,12 +131,16 @@ export function mergeSettings(stored: unknown): ProjectSettings {
  * Settings with what the legacy runoff model left behind removed (engine
  * 1.0.0, issue #16; migration 064 does the same to the stored rows): the
  * model is GR4J, the calibration group loses the legacy model's keys, and a
- * fit of the legacy model is dropped. A run's snapshot comes from here
+ * fit of the legacy model is dropped. A retired setting (RETIRED_SETTINGS_KEYS,
+ * engine ≥ 1.105.0) is dropped too. A run's snapshot comes from here
  * (runs/execute.ts), and a snapshot that names any model but 'gr4j' reads as
  * a legacy run, so a project still stored as 'legacy' must not reach one.
  */
 function withoutLegacyRunoff(s: Json): Json {
 	s.runoffModel = 'gr4j';
+	// Retired settings (engine RETIRED_SETTINGS_KEYS: ewrSplit, issue #615, 265_retire_ewr_split.sql strips the rows;
+	// flowShareMethod and hiLoSplit, issue #616, 266_retire_flow_share_method.sql).
+	for (const k of RETIRED_SETTINGS_KEYS) delete s[k];
 	if (isObj(s.calibration)) s.calibration = withoutRetiredCalibration(s.calibration);
 	if (isObj(s.fitRecord) && s.fitRecord.model !== 'gr4j') s.fitRecord = null;
 	return s;
@@ -1097,6 +1101,15 @@ export const FitRecord = z
 						if (err) ctx.addIssue({ code: 'custom', message: `unit rain fingerprint: ${err}` });
 					})
 					.optional(),
+				// Engine ≥ 1.105.0 (issue #616): under Fragmentation, the Per unit forcing the unit shares ran on (null with no
+				// land unit). Optional, as above; absent = a Per unit fit (`unitRain` is it) or one made before.
+				shareRain: z
+					.unknown()
+					.superRefine((v, ctx) => {
+						const err = unitRainFingerprintError(v);
+						if (err) ctx.addIssue({ code: 'custom', message: `share rain fingerprint: ${err}` });
+					})
+					.optional(),
 				// Engine ≥ 1.91.0 (issue #553): the catchment's rainfall station, recorded only with one. Optional, as above.
 				catchmentStation: z
 					.unknown()
@@ -1158,10 +1171,8 @@ export const SettingsPatch = z
 		// Where the dam evaporation factors came from (engine ≥ 1.49.0): free text, e.g. a lake-factor preset's note; provenance only; '' = none.
 		lakeEvapFactorSource: z.string().trim().max(PE_SOURCE_MAX),
 		apanMm: monthlyNonNeg,
-		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
-		// How the EWR is split between the units (engine ≥ 1.94.0, issue #553): the flow share or each unit's natural MAR.
-		ewrSplit: z.enum(EWR_SPLIT_METHODS),
-		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
+		// ewrSplit (engine 1.94.0 – 1.104.x, issue #615), flowShareMethod and hiLoSplit (issue #616) are retired: not here,
+		// so an older web build's patch with them still saves, the keys stripped like any other unknown one.
 		// GR4J is the only model since engine 1.0.0 (issue #16); the setting records it.
 		runoffModel: z.enum(RUNOFF_MODELS, { error: 'the legacy runoff model was removed in engine 1.0.0: GR4J is the only runoff model' }),
 		// GR4J parameters inside the bounds calibration searches (engine

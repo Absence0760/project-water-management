@@ -50,6 +50,7 @@ import {
 	LAND_COVER_FIELD_SPECS,
 	SCHEDULE_LABEL,
 	NODE_FIELD_SPECS,
+	RETIRED_FIELD_LABELS,
 	SETTINGS_SPECS,
 	TRANSFER_FIELD_SPECS,
 	formatValue,
@@ -240,7 +241,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const f = NODE_FIELD_SPECS[op.field as NodeSetField];
 			const node = m?.nodes.find((n) => n.id === op.nodeId);
 			const was = node ? (node as unknown as Record<string, unknown>)[op.field] : undefined;
-			return `${nodeName(op.nodeId)}: ${f?.label ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
+			return `${nodeName(op.nodeId)}: ${f?.label ?? RETIRED_FIELD_LABELS[op.field] ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
 		}
 		case 'node.add': {
 			const n = op.node;
@@ -342,7 +343,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			// So has no drought restriction rule (engine ≥ 1.54.0): off; and no daily EWR source (engine ≥ 1.77.0): the pragmatic EWR.
 			const unsetIsNull = f?.spec.t === 'date' || f?.spec.t === 'pe' || f?.spec.t === 'restriction' || f?.spec.t === 'ewrDaily';
 			const was = before ? (settingsValue(before.settings, op.path) ?? (unsetIsNull ? null : undefined)) : undefined;
-			return `${f?.label ?? op.path}: ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
+			return `${f?.label ?? RETIRED_FIELD_LABELS[op.path] ?? op.path}: ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
 		}
 		case 'series.scale': {
 			const pct = (op.factor - 1) * 100;

@@ -13,8 +13,8 @@ import datetime as dt
 
 def _node(i: str, kind: str, down: str | None, **kw) -> dict:
     n = {
-        "id": i, "name": i, "kind": kind, "downstreamNodeId": down, "sortOrder": 0, "areaKm2": 0, "areaHiKm2": 0,
-        "areaLoKm2": 0, "flowShareManual": None, "pctUpstreamToDam": 0, "pctRunoffToDam": 0, "damCapacityM3": 0,
+        "id": i, "name": i, "kind": kind, "downstreamNodeId": down, "sortOrder": 0, "areaKm2": 0,
+        "pctUpstreamToDam": 0, "pctRunoffToDam": 0, "damCapacityM3": 0,
         "damInitialPct": 0, "damMinPct": 0, "divertCapacityM3Day": 0, "irrigationEfficiency": 1,
         "returnFlowFraction": 0, "damAreaFullM2": 1, "damAreaExponent": 0.7, "damSeepagePerDay": 0,
     }
@@ -1294,14 +1294,60 @@ def station_units() -> dict:
     return doc
 
 
+def station_patch() -> dict:
+    """The patching priority (§2.4i, issue #612, engine 1.105.0) on
+    station_units' network and records, with a third station C (no MAP,
+    every day read): u1 (MAP 720) on A patched from B (MAP 900, ratio 0.8,
+    not A's 1.2) then CHIRPS, so A's gaps read B where B reads and u1's
+    CHIRPS on B's own gaps; u2 on A with CHIRPS before B, so B fills
+    nothing; u4 on A patched from C first, skipped (no MAP under scaling),
+    then B; u5 (scaleToMap false) patched from C × 1; u8 on A with an empty
+    priority, its gaps to the catchment forcing."""
+    doc = station_units()
+    n = len(doc["series"]["rain_station_mm#A"]["values"])
+    start = dt.date.fromisoformat(doc["series"]["rain_station_mm#A"]["startDate"])
+    doc["series"]["rain_station_mm#C"] = {"startDate": start.isoformat(), "values": _season(start, n, 12, 0.9)}
+    doc["stations"]["C"] = _station("C", None)
+    u = doc["settings"]["rainStations"]["units"]
+    b, c, ch = {"source": "station", "stationId": "B"}, {"source": "station", "stationId": "C"}, {"source": "chirps"}
+    u["u1"] = {"stationId": "A", "patch": [b, ch]}
+    u["u2"] = {"stationId": "A", "patch": [ch, b]}
+    u["u4"] = {"stationId": "A", "patch": [c, b, ch]}
+    u["u5"] = {**u["u5"], "patch": [c, ch]}
+    u["u8"] = {"stationId": "A", "patch": []}
+    return doc
+
+
 def ewr_split_station_units() -> dict:
     """The EWR split by each unit's natural MAR (§2.5b, engine >= 1.94.0) on
     station_units' network: u1 and u2 share station A, u2 drains into u1, so
     u1's requirement adds both shares; the period is the complete water years
     2006/07 … 2016/17 of the twelve calendar years."""
     doc = station_units()
-    doc["settings"]["ewrSplit"] = "naturalMar"
     doc["settings"]["ewrPragmaticM3PerDay"] = [4000, 4000, 5000, 6000, 6000, 5000, 4000, 3000, 2500, 2500, 3000, 3500]
+    return doc
+
+
+def ewr_split_fragmentation() -> dict:
+    """The same network under Fragmentation (engine >= 1.105.0, issues #615,
+    #616): the unit shares come from GR4J once per land unit on the Per unit
+    forcing (the stations, the gauge MAP), the same shares as under Per unit,
+    and they split both the catchment's one GR4J run's flow and the EWR."""
+    doc = ewr_split_station_units()
+    doc["settings"]["unitRain"] = {**doc["settings"]["unitRain"], "mode": "catchment"}
+    return doc
+
+
+def unit_shares_senior_user() -> dict:
+    """The senior users' claims on the unit shares (§2.7c, engine >= 1.105.0,
+    issue #616): ewr-split-fragmentation's network with a senior user s
+    between u1 and the outlet, so u1 and u2 (one station, MAPs 720 and 420,
+    areas 3 and 2) carry its demand by their natural MAR shares, not their
+    areas."""
+    doc = ewr_split_fragmentation()
+    nodes = doc["model"]["nodes"]
+    next(x for x in nodes if x["id"] == "u1")["downstreamNodeId"] = "s"
+    nodes.append(_node("s", "user", "o", userDemandM3Day=[2000, 2000, 2500, 3000, 3000, 2500, 2000, 1500, 1200, 1200, 1500, 1800], userPriority="senior", userReturnPct=0))
     return doc
 
 
@@ -1679,6 +1725,7 @@ PROBES = {
     "pool-storage-only": pool_storage_only(),
     # Rainfall stations (issue #553).
     "station-units": station_units(),
+    "station-patch": station_patch(),
     "station-pairing-refused": station_pairing_refused(),
     "station-pairing-as-recorded": station_pairing_as_recorded(),
     "station-catchment": station_catchment(),
@@ -1690,6 +1737,8 @@ PROBES = {
     # The EWR split (issue #553 round 4).
     "ewr-split-station-units": ewr_split_station_units(),
     "ewr-split-short-run": ewr_split_short_run(),
+    "ewr-split-fragmentation": ewr_split_fragmentation(),
+    "unit-shares-senior-user": unit_shares_senior_user(),
     # Daily reference ET (issue #604 R5-E).
     "daily-et0-monthly-pe": daily_et0_monthly_pe(),
     "daily-et0-pan-pe": daily_et0_monthly_pe("pan"),

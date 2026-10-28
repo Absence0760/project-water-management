@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
 import { DEFAULT_GAUGE_PICK_WARNING, pickObservedKind, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
-import { defaultProjectSettings, NEW_FARM_IRRIGATION, OBSERVED_SERIES_LABEL, upgradeLegacyModel } from './project';
+import { defaultProjectSettings, flowShareMethodRetiredWarning, NEW_FARM_IRRIGATION, OBSERVED_SERIES_LABEL, upgradeLegacyModel } from './project';
 
 import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
@@ -33,9 +33,6 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		downstreamNodeId: null,
 		sortOrder: 0,
 		areaKm2: 1,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 0,
 		pctRunoffToDam: 0,
 		damCapacityM3: 0,
@@ -1224,55 +1221,54 @@ describe('runModel — curtailment report', () => {
 	});
 });
 
-describe('runModel — flow shares', () => {
-	it('warns when manual shares do not sum to 1 and applies them anyway', () => {
+describe('runModel — flow shares (one natural MAR share per unit, engine 1.105.0, issue #616)', () => {
+	const legacy = (over: Record<string, unknown>) => over as Partial<NetworkNode>;
+	it('natural flow supplied without the units’ runoff is split by area: the flow and the EWR by the same share', () => {
 		const out = run({
-			nodes: [node('A', { flowShareManual: 0.5 }), node('B', { flowShareManual: 0.3, sortOrder: 1 })].map((n) =>
-				n.id === 'A' ? { ...n, downstreamNodeId: 'B' } : n
-			),
-			settings: { flowShareMethod: 'manual' },
+			nodes: [node('A', { downstreamNodeId: 'B', areaKm2: 3 }), node('B', { sortOrder: 1, areaKm2: 1 })],
 			natural: [1000]
 		});
-		expect(get(out, 'A', 'runoff')).toEqual([500]);
-		expect(get(out, 'B', 'runoff')).toEqual([300]);
-		expect(out.summary.warnings.some((w) => w.includes('sum to 80.00%'))).toBe(true);
+		expect(get(out, 'A', 'runoff')).toEqual([750]);
+		expect(get(out, 'B', 'runoff')).toEqual([250]);
+		for (const f of out.summary.farms) expect(f.flowShare).toBe(f.ewrShare);
+		expect(out.summary.ewrSplit).toMatchObject({ applied: 'area', why: 'noUnitRunoff' });
 	});
 
-	it('refuses manual shares over 100 %: the farms would make water the catchment never had', () => {
-		const over = () =>
-			run({
-				nodes: [node('A', { flowShareManual: 0.5 }), node('B', { flowShareManual: 0.6, sortOrder: 1 })].map((n) =>
-					n.id === 'A' ? { ...n, downstreamNodeId: 'B' } : n
-				),
-				settings: { flowShareMethod: 'manual' },
+	it('a stored Hi/Lo MAP or specific method is ignored, with one note; the retired node fields are dropped', () => {
+		for (const [method, label] of [
+			['hiLo', 'Hi/Lo MAP'],
+			['manual', 'specific shares']
+		] as const) {
+			const out = run({
+				nodes: [
+					node('A', { downstreamNodeId: 'B', areaKm2: 3, ...legacy({ areaHiKm2: 0, areaLoKm2: 3, flowShareManual: 0.9 }) }),
+					node('B', { sortOrder: 1, areaKm2: 1, ...legacy({ areaHiKm2: 1, areaLoKm2: 0, flowShareManual: 0.9 }) })
+				],
+				settings: { flowShareMethod: method, hiLoSplit: { hi: 0.9, lo: 0.9 } } as unknown as Partial<ProjectSettings>,
 				natural: [1000]
 			});
-		expect(over).toThrow(/sum to 110\.00%, more than 100%/);
+			expect(get(out, 'A', 'runoff')).toEqual([750]);
+			expect(get(out, 'B', 'runoff')).toEqual([250]);
+			const notes = out.summary.warnings.filter((w) => w.includes('flow-share method'));
+			expect(notes).toEqual([flowShareMethodRetiredWarning(method)]);
+			expect(notes[0]).toContain(label);
+			expect(out.summary.dataQuality?.areaMismatches).toBeUndefined();
+		}
 	});
 
-	it('refuses a high/low MAP split over 100 %, and runs one within the tolerance', () => {
-		const nodes = [
-			node('A', { downstreamNodeId: 'B', areaKm2: 4, areaHiKm2: 3, areaLoKm2: 1 }),
-			node('B', { sortOrder: 1, areaKm2: 4, areaHiKm2: 1, areaLoKm2: 3 })
-		];
-		expect(() => run({ nodes, settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.9, lo: 0.9 } }, natural: [1000] })).toThrow(/sum to 180\.00%/);
-		const out = run({ nodes, settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.6, lo: 0.4001 } }, natural: [1000] });
-		expect(out.summary.warnings.some((w) => w.includes('flow shares sum'))).toBe(false);
+	it('a stored area method runs without a note', () => {
+		const out = run({ nodes: [node('A', { areaKm2: 2 })], settings: { flowShareMethod: 'area' } as unknown as Partial<ProjectSettings>, natural: [1000] });
+		expect(get(out, 'A', 'runoff')).toEqual([1000]);
+		expect(out.summary.warnings.some((w) => w.includes('flow-share method'))).toBe(false);
 	});
 
-	it('hi/lo shares weight the high- and low-MAP areas by the split', () => {
-		const out = run({
-			nodes: [
-				node('A', { downstreamNodeId: 'B', areaKm2: 4, areaHiKm2: 3, areaLoKm2: 1 }),
-				node('B', { sortOrder: 1, areaKm2: 4, areaHiKm2: 1, areaLoKm2: 3 })
-			],
-			settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.8, lo: 0.2 } },
-			natural: [1000]
-		});
-		// A: 3/4 × 0.8 + 1/4 × 0.2 = 0.65; B: 0.35
-		expect(get(out, 'A', 'runoff')[0]).toBeCloseTo(650, 9);
-		expect(get(out, 'B', 'runoff')[0]).toBeCloseTo(350, 9);
-		expect(out.summary.warnings.some((w) => w.includes('flow shares'))).toBe(false);
+	it('no unit with an area: every share is 0, no unit generates flow, and the run says so', () => {
+		const out = run({ nodes: [node('A', { downstreamNodeId: 'B', areaKm2: 0 }), node('B', { sortOrder: 1, areaKm2: 0 })], natural: [1000] });
+		expect(get(out, 'A', 'runoff')).toEqual([0]);
+		expect(get(out, 'B', 'runoff')).toEqual([0]);
+		expect(out.summary.farms.map((f) => f.flowShare)).toEqual([0, 0]);
+		expect(out.summary.ewrSplit).toMatchObject({ applied: 'area', why: 'noLandUnit' });
+		expect(out.summary.warnings.some((w) => /no unit has an area/.test(w))).toBe(true);
 	});
 });
 
@@ -1551,13 +1547,13 @@ describe('runModel — input data quality', () => {
 		expect(checks[0]!.text).toMatch(/blocks the fallback to CHIRPS/);
 	});
 
-	it('warns when a farm area and its hi + lo areas differ by more than 1 % (F7)', () => {
+	it('no longer checks a farm area against high-MAP + low-MAP areas (F7, W3): engine 1.105.0 retired them (issue #616)', () => {
 		const out = run({
-			nodes: [node('A', { areaKm2: 10, areaHiKm2: 6, areaLoKm2: 3 }), node('B', { areaKm2: 5, areaHiKm2: 4, areaLoKm2: 1, downstreamNodeId: 'A' })],
+			nodes: [node('A', { areaKm2: 10, ...({ areaHiKm2: 6, areaLoKm2: 3 } as Partial<NetworkNode>) }), node('B', { areaKm2: 5, downstreamNodeId: 'A' })],
 			natural: [0]
 		});
-		expect(out.summary.dataQuality!.areaMismatches!.map((m) => m.nodeId)).toEqual(['A']);
-		expect(out.summary.warnings.some((w) => /A: 10 km² vs 9 km²/.test(w))).toBe(true);
+		expect(out.summary.dataQuality!.areaMismatches).toBeUndefined();
+		expect(out.summary.warnings.some((w) => /high-MAP/.test(w))).toBe(false);
 	});
 });
 
@@ -1940,6 +1936,20 @@ describe.skipIf(!clientCatchmentFixture)(
 			expect(store(on)).toBeLessThan(store(out));
 		});
 
+		it('splits the flow and the EWR by the workbook’s own fragmentation (the area shares, FM1)', () => {
+			// The unit shares here are the area shares (noUnitRunoff), which are b023's Selected fragmentation only while the
+			// workbook is on its area method. An extract on Hi/Lo MAP or Specific would fail here: feed its farmShares as the
+			// units' runoff (NaturalFlowInput.shareRunoff, a test-only override, as the N1 replay) before comparing columns.
+			const want = (expected as Expected & { farmShares?: Record<string, number> }).farmShares;
+			if (!want) return;
+			for (const f of out.summary.farms) {
+				const w = want[f.name];
+				if (w === undefined) continue;
+				expect(Math.abs(f.flowShare! - w)).toBeLessThan(1e-9);
+				expect(f.ewrShare).toBe(f.flowShare);
+			}
+		});
+
 		it('matches the catchment simulated outflow and EWR within the deviation list', () => {
 			// N1: when farms upstream of the outlet have return flow, its flow and shortfall come from the N1 replay.
 			// N4: at or below one end of a transfer both are skipped; below the join only the shortfall is.
@@ -1949,6 +1959,11 @@ describe.skipIf(!clientCatchmentFixture)(
 			const shortfallRule: Rule = n4 || n4Joined.has(outletId) ? { kind: 'skip', why: 'N4' } : { kind: 'mean' };
 			expect(compare(get(from, null, 'simulated_outflow'), expected.catchment.simulated_outflow!, flowRule)).toBeNull(); // R1
 			expect(compare(get(out, null, 'ewr'), expected.catchment.ewr!, { kind: 'exact' })).toBeNull();
+			// FM1 (engine 1.105.0, issues #615 and #616): this suite feeds the workbook's natural flow without the units'
+			// runoff, so the unit shares fall back to the area shares (b023's area method, which every client extract uses),
+			// and the fragmented flow and EWR are the workbook's [Fragmented flow] / [Fragmented EWR]. A run from rain splits
+			// both by each unit's natural MAR instead (FM1). Say so if that changes.
+			expect(out.summary.ewrSplit).toMatchObject({ applied: 'area', why: 'noUnitRunoff' });
 			expect(compare(get(from, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, shortfallRule)).toBeNull(); // R1
 		});
 
@@ -2337,19 +2352,6 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 		// More periods than it lists: counted, not named.
 		const patchy = runModel(rainInput([1, null, 1, null, 1, null, 1, null, 1, null, 1], '2021-01-01'));
 		expect(warns(patchy, /no rainfall value/)[0]).toMatch(/^5 of 11 days .*: 2 Jan 2021, 4 Jan 2021, 6 Jan 2021 and 2 more periods$/);
-	});
-
-	it('W3: hi/lo shares warn when a farm area differs from its hi + lo areas (rain volume uses the area)', () => {
-		const out = run({
-			nodes: [node('A', { areaKm2: 10, areaHiKm2: 6, areaLoKm2: 3, downstreamNodeId: 'B' }), node('B', { sortOrder: 1, areaKm2: 5, areaHiKm2: 2, areaLoKm2: 3 })],
-			settings: { flowShareMethod: 'hiLo' },
-			natural: [0]
-		});
-		// One warning for the run (quality.ts areaMismatches), naming A only.
-		expect(warns(out, /high-MAP \+ low-MAP area/)).toHaveLength(1);
-		expect(warns(out, /A: 10 km² vs 9 km²/)).toHaveLength(1);
-		expect(warns(out, /B: /)).toHaveLength(0);
-		expect(out.summary.dataQuality!.areaMismatches!.map((m) => m.nodeId)).toEqual(['A']);
 	});
 
 	it('P1: natural flow never falls back to a Pitman series, so there is no W5 warning', () => {

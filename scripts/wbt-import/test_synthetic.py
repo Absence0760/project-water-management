@@ -71,11 +71,15 @@ class SyntheticWorkbook(unittest.TestCase):
         self.assertIn("Echo Farm", nodes)  # "Echo  Farm" in [Network]: whitespace normalised
         self.assertEqual({n["kind"] for n in m["nodes"]}, {"farm", "gauge"})
         self.assertEqual([n["name"] for n in m["nodes"] if n["downstreamNodeId"] is None], ["Outlet Gauge"])
-        self.assertIsNone(nodes["Delta Farm"]["flowShareManual"])  # missing from [Farm spec]
-        self.assertEqual(nodes["Charlie Farm"]["flowShareManual"], 0)  # Specific method, blank cell
+        # The retired fragmentation fields aren't written (issue #616), though the workbook has the columns.
+        for retired in ("areaHiKm2", "areaLoKm2", "flowShareManual"):
+            with self.subTest(retired=retired):
+                self.assertFalse(any(retired in n for n in m["nodes"]))
+        self.assertEqual(nodes["Golf Farm"]["areaKm2"], 8.5)  # the total, not hi + lo (8.0)
         self.assertEqual(nodes["Foxtrot Farm"]["divertCapacityM3Day"], 4320)  # typed as text
         self.assertEqual(nodes["India Farm"]["damCapacityM3"], 20)  # the dummy dam is imported as it is, and only flagged
-        self.assertEqual(project["settings"]["flowShareMethod"], "manual")
+        self.assertNotIn("flowShareMethod", project["settings"])
+        self.assertNotIn("hiLoSplit", project["settings"])
         self.assertEqual(len(m["transfers"]), 6)  # 9 columns: no destination, rate 0 and unknown element dropped
         self.assertEqual([t["months"] for t in m["transfers"]], [[1, 2, 3, 11, 12], [11, 12], [7], [5, 6, 7], [10], list(range(1, 13))])
         # The last two columns' draw formulas are =0: switched off in the workbook, imported disabled (issue #54).
@@ -109,6 +113,7 @@ class SyntheticWorkbook(unittest.TestCase):
             "no Element sheet for Hotel Farm",
             "WARNING: [Farm demand] Charlie Farm: the gross demand in 12 of 12 months doesn't follow from its crop areas",
             "WARNING: farm India Farm: probable run-of-river",
+            "[Farm spec] the workbook's fragmentation method 'Specific' is not used",
         ):
             with self.subTest(note=fragment):
                 self.assertEqual(sum(fragment in n for n in notes), 1, fragment)
@@ -150,11 +155,29 @@ class Variants(unittest.TestCase):
         with unittest.mock.patch.object(gen, "ELEMENT_START_OFFSET", -5), self.assertRaisesRegex(ValueError, r"outside \[Flow data\]"):
             self.extract_all()
 
-    def test_unknown_fragmentation_method_falls_back_to_area(self):
-        with unittest.mock.patch.object(gen, "FRAGMENTATION_METHOD", "Equal shares"):
-            project, notes = self.extract()
-        self.assertEqual(project["settings"]["flowShareMethod"], "area")
-        self.assertIn("unknown fragmentation method 'Equal shares'; using area", notes)
+    def test_the_fragmentation_method_is_noted_unless_it_is_area(self):
+        # Issue #616: the app splits the flow by each unit's natural MAR, so any method but Area is noted as not used.
+        for method, noted in (("Area", False), ("Hi/Lo", True), ("Specific", True), ("Equal shares", True)):
+            with self.subTest(method=method), unittest.mock.patch.object(gen, "FRAGMENTATION_METHOD", method):
+                project, expected, notes = self.extract_all()
+                self.assertNotIn("flowShareMethod", project["settings"])
+                self.assertEqual(any(f"fragmentation method {method!r} is not used" in n for n in notes), noted)
+                # The workbook's Selected fragmentation still reaches expected.json for the regression suite.
+                self.assertEqual(expected["farmShares"]["Alpha Farm"], 0.12)
+
+    def test_a_workbook_without_the_hi_lo_area_columns_imports_the_same(self):
+        # The High-/Low-MAP area columns aren't read (issue #616): a workbook with or without them gives the same project.
+        build = gen.build
+
+        def without_hi_lo(*args, **kwargs):
+            wb = build(*args, **kwargs)
+            del wb.defined_names["rFarmSpec_DataAreas"]
+            return wb
+
+        base, _ = self.extract()
+        with unittest.mock.patch.object(gen, "build", without_hi_lo):
+            project, _ = self.extract()
+        self.assertEqual(project, base)
 
     def test_a_second_root_is_noted(self):
         network = [(n, t, [u for u in ups if u != "Golf Farm"]) for n, t, ups in gen.NETWORK]

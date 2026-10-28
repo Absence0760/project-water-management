@@ -4,7 +4,7 @@
 // invented values only (public repo).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runModel, stationSeriesKey, toEpochDay, type ModelInput, type RainStationSettings } from '@water-management/engine';
-import { areaRainLines, prepareFor } from './derivedRain';
+import { areaRainLines, isChain, prepareFor, unitChainLines } from './derivedRain';
 import { sourceCounts, sourceLanes, sourceSummary } from './rainSources';
 
 // Rule 7: dates, so under a skewed TZ (UTC+14 would move a local-midnight date a day).
@@ -25,7 +25,7 @@ const rainOf = (k: number, phase = 0) => Array.from({ length: DAYS }, (_, i) => 
 const GAP = [69, 70, 71]; // 11–13 March 2015: S has no reading
 
 function input(rainStations: RainStationSettings, perUnit = true): ModelInput {
-	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const node = { sortOrder: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const unit = (id: string, areaKm2: number, mapMm: number) => ({ ...node, id, name: `Unit ${id}`, kind: 'farm' as const, downstreamNodeId: 'G', areaKm2, mapMm, mapSource: 'invented' });
 	const s: (number | null)[] = rainOf(1.6, 1);
 	for (const t of GAP) s[t] = null;
@@ -158,6 +158,41 @@ describe('areaRainLines: the edges', () => {
 		expect(a.rainUsed).toEqual(col(runModel(x), 'rain_unit', 'A'));
 	});
 
+	it('a patch station’s days (issue #612) name it and its place: the run’s rain to the bit', () => {
+		const x = input({ units: { A: { stationId: 'S', patch: [{ source: 'station', stationId: 'T' }, { source: 'chirps' }] } }, sites: SITES });
+		// T covers S's gaps here: give it a record from the start.
+		x.series = { ...x.series, [stationSeriesKey('T')]: { startDate: START, values: rainOf(1.2, 5) } };
+		const a = areaRainLines(x, 'A')!;
+		expect(a.rainUsed).toEqual(col(runModel(x), 'rain_unit', 'A'));
+		expect(sourceCounts(a.source).patch).toBe(GAP.length);
+		for (const t of GAP) {
+			expect(a.source[t]).toBe('patch');
+			expect(a.patchFrom[t]).toBe('patch 1: Station T');
+		}
+		expect(a.patchFrom.filter((v) => v !== null)).toHaveLength(GAP.length);
+	});
+
+	it('each patch station’s lines (issue #613 slice 3): its record and × unit MAP ÷ its MAP, by place; on a patch day the rain used is that line', () => {
+		// CHIRPS first, T second: T keeps its place 2. A station listed but with no record is skipped: no lines.
+		const x = input({ units: { A: { stationId: 'S', patch: [{ source: 'chirps' }, { source: 'station', stationId: 'T' }, { source: 'station', stationId: 'U' }] } }, sites: SITES });
+		x.series = { ...x.series, [stationSeriesKey('T')]: { startDate: START, values: rainOf(1.2, 5) } };
+		x.stations = { ...x.stations, U: { name: 'Station U', mapMm: 700, mapSource: 'invented', lat: null, lon: null } };
+		const a = areaRainLines(x, 'A')!;
+		expect(a.patches!.map((p) => [p.place, p.stationId, p.stationName, p.ratio])).toEqual([[2, 'T', 'Station T', 900 / 500]]);
+		const t = a.patches![0]!;
+		const rec = rainOf(1.2, 5);
+		expect(t.raw).toEqual(rec);
+		expect(t.scaled).toEqual(rec.map((v) => v * (900 / 500)));
+		// T first in the priority: every gap day is T × 1.8, to the bit.
+		const y = input({ units: { A: { stationId: 'S', patch: [{ source: 'station', stationId: 'T' }, { source: 'chirps' }] } }, sites: SITES });
+		y.series = x.series;
+		const b = areaRainLines(y, 'A')!;
+		expect(b.patches!.map((p) => p.place)).toEqual([1]);
+		for (const d of GAP) expect(b.rainUsed[d]).toBe(b.patches![0]!.scaled[d]);
+		// Without a patch list: CHIRPS alone, no patch station lines.
+		expect(areaRainLines(input({ units: { A: { stationId: 'S' } }, sites: SITES }), 'A')!.patches).toEqual([]);
+	});
+
 	it('several areas read from one preparation give the same lines as each read alone', () => {
 		const x = input({ catchment: { stationId: 'S' }, units: { A: { stationId: 'S' }, B: { stationId: 'S' } }, sites: SITES });
 		const prep = prepareFor(x);
@@ -178,7 +213,31 @@ describe('the source strip and summary', () => {
 		expect(sourceLanes('2021-01-01', ['station', 'station'])).toEqual([]);
 		expect(sourceSummary(['station', 'station', 'chirps', 'none'])).toBe('2 days from the station, 1 from corrected CHIRPS, 1 with no rain from any source.');
 		expect(sourceSummary(['station', 'fallback', 'fallback'])).toBe('1 day from the station, 2 from the next fallback.');
+		expect(sourceLanes('2021-01-01', ['station', 'patch']).map((l) => [l.label, l.text])).toEqual([['Patch station', '1 day from a patch station × its MAP ratio (the station has no reading, or it was set aside)']]);
+		expect(sourceSummary(['station', 'patch', 'patch', 'chirps'])).toBe('1 day from the station, 2 from a patch station, 1 from corrected CHIRPS.');
 		const none = sourceLanes('2021-01-01', ['none', 'none']);
 		expect(none.map((l) => [l.label, l.text])).toEqual([['No rain', '2 days from no rain from any source (read as dry)']]);
+	});
+});
+
+describe('unitChainLines for a unit without a station (issue #613 slice 2)', () => {
+	// B has no station: under per-unit rain it runs its §2.4h chain (its own CHIRPS levelled to its MAP).
+	const x = input({ units: { A: { stationId: 'S' } }, sites: SITES });
+	const out = runModel(x);
+
+	it('the rain used is the run’s rain_unit to the bit, each day the link its source names', () => {
+		const b = unitChainLines(x, 'B', prepareFor(x))!;
+		expect(b.rule).toBe('unitChirps');
+		expect(b.rainUsed).toEqual(col(out, 'rain_unit', 'B'));
+		expect(b.chirpsRaw).not.toBeNull();
+		for (let t = 0; t < b.rainUsed.length; t++) if (b.source[t] === 'unitChirps') expect(b.rainUsed[t]).toBe(b.chirpsLevelled![t]);
+		expect(isChain(b)).toBe(true);
+		expect(isChain(areaRainLines(x, 'A')!)).toBe(false);
+	});
+
+	it('none for a unit on its station, or with per-unit rain off; areaRainLines has none for the chain unit', () => {
+		expect(unitChainLines(x, 'A')).toBeNull();
+		expect(areaRainLines(x, 'B')).toBeNull();
+		expect(unitChainLines(input({}, false), 'B')).toBeNull();
 	});
 });

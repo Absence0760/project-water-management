@@ -21,9 +21,6 @@ describe('extractProject on a small synthetic workbook', () => {
 			downstreamNodeId: uid('node:Farm B'),
 			sortOrder: 0,
 			areaKm2: 5,
-			areaHiKm2: 4,
-			areaLoKm2: 1,
-			flowShareManual: 0.5,
 			pctUpstreamToDam: 1,
 			pctRunoffToDam: 0.2,
 			damCapacityM3: 100000,
@@ -38,7 +35,7 @@ describe('extractProject on a small synthetic workbook', () => {
 		});
 		expect(b).toMatchObject({ downstreamNodeId: uid('node:Outlet'), irrigationEfficiency: 1, returnFlowFraction: 0 });
 		// A gauge takes the Python's defaults and no flow share.
-		expect(outlet).toMatchObject({ kind: 'gauge', downstreamNodeId: null, areaKm2: 0, flowShareManual: null, pctUpstreamToDam: 1, sortOrder: 2 });
+		expect(outlet).toMatchObject({ kind: 'gauge', downstreamNodeId: null, areaKm2: 0, pctUpstreamToDam: 1, sortOrder: 2 });
 		expect(project.model.crops.map((c) => c.id)).toEqual([uid('crop:Maize'), uid('crop:Wheat')]);
 		// Each planting on its farm's efficiency (engine 1.72.0): Farm A's 80 % is SABI's permanent sprinkler; Farm B,
 		// with no return flow, runs at 100 %, which no SABI system has, so a "Workbook, 100 %" row is added.
@@ -72,8 +69,6 @@ describe('extractProject on a small synthetic workbook', () => {
 			februaryDays: 28.25,
 			effectiveRainFraction: 0.7,
 			apanMm: [150, 190, 230, 240, 200, 170, 120, 90, 70, 75, 95, 120],
-			flowShareMethod: 'area',
-			hiLoSplit: { hi: 0.8, lo: 0.2 },
 			calibration: { rainThresholdMm: 2, catchmentAreaKm2: 12 },
 			ewrPragmaticM3PerDay: [900, 1200, 1500, 1500, 1400, 1300, 1100, 900, 800, 700, 700, 800],
 			simulationStart: null,
@@ -208,7 +203,7 @@ describe('extractProject errors and options', () => {
 		const b = syntheticB023().set('Farm spec', 'D31', 'Farm C');
 		const { notes, unmapped, project } = extractProject(b.build(), { fileName: FILE });
 		expect(notes.map((n) => n.message)).toContain('farm Farm B is missing from [Farm spec]; its parameters are 0, except upstream inflow to dam (100 %)');
-		expect(project.model.nodes[1]).toMatchObject({ areaKm2: 0, flowShareManual: null, pctUpstreamToDam: 1, irrigationEfficiency: 1 });
+		expect(project.model.nodes[1]).toMatchObject({ areaKm2: 0, pctUpstreamToDam: 1, irrigationEfficiency: 1 });
 		expect(unmapped.map((u) => u.message)).toContain('[Farm spec] farm Farm C is not in [Network]; ignored');
 	});
 });

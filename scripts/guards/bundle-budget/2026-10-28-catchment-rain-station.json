@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Model settings: the catchment's rainfall station card (FlowGenerationCatchment.svelte, catchmentRainStation.ts) and its help article (issue #612 follow-up); measured 2198 KB on feat/combined-oct28 vs 2200 KB with it"
+}

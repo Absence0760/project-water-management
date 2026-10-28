@@ -1,4 +1,4 @@
-import { createRun, putModel, putSeries, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
+import { createRun, putSeries, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { pinClockToProject, pinClockToRunNotes } from '../support/clock.ts';
 import { answerConfirm } from '../support/confirm.ts';
@@ -455,27 +455,6 @@ test('an editor writes a run note that is still there after a reload, with who c
 	await page.reload();
 	await expect(box).toHaveValue('The quaternary includes an irrigated tributary outside the model.');
 	await expect(notes).toContainText(/Last changed today \d\d:\d\d by Owner/);
-});
-
-test('flow shares over 100 % stop the Run button and say why, until they fit', async ({ page, owner }) => {
-	void owner;
-	const project = await seedRunnableProject(page.request, 'Over-allocated shares');
-	const setShares = async (v: number) => {
-		for (const n of project.model.nodes) if (n.kind === 'farm') n.flowShareManual = v;
-		await putModel(page.request, project.id, project.model);
-	};
-	await updateSettings(page.request, project.id, { flowShareMethod: 'manual' });
-	await setShares(0.7);
-	await page.goto(`/projects/${project.id}?tab=runs`);
-	const button = page.getByRole('button', { name: 'Run model' });
-	await expect(button).toBeDisabled();
-	await expect(page.getByTestId('shares-over')).toHaveText(/The run can't start: unit flow shares sum to 140\.00%, more than 100%/);
-
-	// Positive control: shares that add up to 100 % run.
-	await setShares(0.5);
-	await page.reload();
-	await expect(button).toBeEnabled();
-	await expect(page.getByTestId('shares-over')).toHaveCount(0);
 });
 
 test('with a gauge covering part of the run, the flow-duration curves rank the observed days, and the whole run is a click away', async ({ page, owner }) => {

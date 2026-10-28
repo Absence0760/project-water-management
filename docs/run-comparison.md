@@ -695,11 +695,26 @@ mm"*). Runs store their settings merged over the defaults, so a snapshot
 without a store size predates it (engine < 0.14.0) and compares as 0 mm, which
 is what that run used; the same rule reads a snapshot without a runoff model
 as legacy (a run from before the setting, so it did run the legacy model), and one without a dam evaporation factor (engine < 0.16.0) as 0,
-no dam evaporation. The EWR split (engine ≥ 1.94.0, issue #553,
+no dam evaporation. The EWR split (engines 1.94.0 – 1.104.x, issue #553,
 `settings.ewrSplit`, model.md §2.5b) is one line, *"EWR split between units
 by: the flow share → each unit’s natural MAR"*; a snapshot without it split
-the EWR by the flow share, so it compares as that and an older run against a
-new default one shows no line. A dam's area when full, area exponent and seepage have
+the EWR by the flow share, so an older run against a default one shows no
+line. Engine 1.105.0 retired the setting (issue #615: the EWR is always split
+by each unit's natural MAR): against a later snapshot, which has no such key,
+it reads *"EWR split between units by: the flow share → removed in engine
+1.105.0 (the EWR is split by each unit’s natural MAR)"*, and two later
+snapshots show no line (the engine version line says the engines differ).
+The flow-share method and the Hi/Lo MAP split (`settings.flowShareMethod`,
+`settings.hiLoSplit`, engines up to 1.104.x) go the same way (issue #616,
+`flowShareChanges`): two snapshots that both have them compare as before
+(*"Flow-share method: area → Hi/Lo MAP"*, *"Hi/lo MAP split: 0.6/0.4 →
+0.5/0.5"*); when only the earlier one does, *"Flow-share method: specific
+shares → removed in engine 1.105.0 (the flow is split by each unit’s
+natural MAR)"*, and the split likewise when that run ran Hi/Lo MAP. A
+unit's high-MAP area, low-MAP area and manual flow share are compared on
+the snapshots' raw nodes the same way (*"Upper: high-MAP area 3 km² →
+removed in engine 1.105.0 (…)"*, only when the earlier run's value did
+something). A dam's area when full, area exponent and seepage have
 their own network lines (*"Rooikloof: dam area when full 0 m² → estimated
 (7.2 × capacity^0.77)"*). Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is

@@ -1,17 +1,15 @@
-// [Farm spec]: each farm's areas, flow share, dam and irrigation parameters,
-// and the fragmentation method (extract_project.py read_farm_spec and
-// farm_operating_rules).
-import { DAM_AREA_EXPONENT, irrigationFromReturnFlow, type FlowShareMethod, type NetworkNode } from '@water-management/engine';
-import { cellAddress, clean, num, pyFormatG, pyRepr } from './cells';
+// [Farm spec]: each farm's area, dam and irrigation parameters, and the
+// workbook's selected fragmentation, for the note (extract_project.py
+// read_farm_spec and farm_operating_rules).
+import { DAM_AREA_EXPONENT, irrigationFromReturnFlow, type NetworkNode } from '@water-management/engine';
+import { clean, num, pyFormatG, pyRepr } from './cells';
 import type { Report } from './report';
 import type { B023Workbook } from './workbook';
 
 /** A [Farm spec] row, every value num()'d as the Python does. */
 export interface FarmSpec {
 	areaKm2: number;
-	areaHiKm2: number;
-	areaLoKm2: number;
-	flowShareManual: number;
+	/** "Selected fragmentation": expected.json's farmShares in the Python; not imported (issue #616). */
 	selectedShare: number;
 	pctUpstreamToDam: number;
 	pctRunoffToDam: number;
@@ -24,9 +22,6 @@ export interface FarmSpec {
 
 const LABELS: Record<keyof FarmSpec, string> = {
 	areaKm2: 'Total area',
-	areaHiKm2: 'Hi area',
-	areaLoKm2: 'Lo area',
-	flowShareManual: 'External fragmentation',
 	selectedShare: 'Selected fragmentation',
 	pctUpstreamToDam: 'Upstream inflow to dam %',
 	pctRunoffToDam: 'Farm runoff to dam %',
@@ -40,14 +35,21 @@ const LABELS: Record<keyof FarmSpec, string> = {
 export interface FarmSpecTable {
 	/** By farm name, in table order (a repeated name keeps its first position and its last row's values). */
 	farms: Map<string, FarmSpec>;
-	/** null only when the method matches a fourth or later entry of rFarmSpec_Methods (the Python's dict lookup gives None). */
-	method: FlowShareMethod | null;
-	hiLoSplit: { hi: number; lo: number };
 	/** Share-sum tolerance (expected.json only in the Python; kept for completeness). */
 	tolerance: number;
 }
 
-const METHODS: FlowShareMethod[] = ['area', 'hiLo', 'manual'];
+/**
+ * b023's fragmentation methods are retired (issue #616): under Fragmentation
+ * the app splits the flow by each unit's natural MAR, so the workbook's
+ * method, its Hi/Lo split and the High-/Low-MAP area and External
+ * fragmentation columns aren't read (a workbook that still has them imports
+ * as before). A method other than Area (Hi/Lo, Specific, or one the list
+ * doesn't have) gets this note (flow_share_method_note; same text).
+ */
+export function flowShareMethodNote(methodRaw: string): string {
+	return `[Farm spec] the workbook's fragmentation method ${pyRepr(methodRaw)} is not used: the app splits the flow by each unit's natural MAR (docs/model.md §2.5)`;
+}
 
 /**
  * The defined name a workbook whose "Upstream inflow above dam %" formula has
@@ -88,15 +90,9 @@ function convertUpstreamPct(wb: B023Workbook, farms: Map<string, FarmSpec>, repo
 export function readFarmSpec(wb: B023Workbook, report: Report): FarmSpecTable {
 	const { sheet, rows, names } = wb.tableRows('zFarmSpec_FarmNameLst');
 	const col = (n: string) => wb.ref(n).c1;
-	const { c1: cHi, c2: cLo } = wb.ref('rFarmSpec_DataAreas');
-	const cSel = col('zFarmSpec_PercFragmLst');
 	const cols: Record<keyof FarmSpec, number> = {
 		areaKm2: col('rFarmSpec_AreaTotal'),
-		areaHiKm2: cHi,
-		areaLoKm2: cLo,
-		// "External fragmentation copied (%)" sits just left of "Selected".
-		flowShareManual: cSel - 1,
-		selectedShare: cSel,
+		selectedShare: col('zFarmSpec_PercFragmLst'),
 		pctUpstreamToDam: col('zFarmSpec_PercUpstrInflowToDamLst'),
 		pctRunoffToDam: col('zFarmSpec_PercFarmRunoffToDamList'),
 		damCapacityM3: col('zFarmSpec_CompositeDamVol'),
@@ -106,45 +102,23 @@ export function readFarmSpec(wb: B023Workbook, report: Report): FarmSpecTable {
 		returnFlowPct: col('zFarmSpec_PercIrrReturnFlow')
 	};
 	const farms = new Map<string, FarmSpec>();
-	const blankShares: { name: string; row: number }[] = [];
 	rows.forEach((r, i) => {
 		const name = names[i]!;
 		const spec = {} as FarmSpec;
 		for (const key of Object.keys(cols) as (keyof FarmSpec)[]) {
-			const v = wb.cell(sheet, cols[key], r);
-			spec[key] = report.num(v, { sheet, col: cols[key], row: r, what: LABELS[key], element: name });
-			if (key === 'flowShareManual' && (v === null || v === '')) blankShares.push({ name, row: r });
+			spec[key] = report.num(wb.cell(sheet, cols[key], r), { sheet, col: cols[key], row: r, what: LABELS[key], element: name });
 		}
 		farms.set(name, spec);
 	});
 
 	convertUpstreamPct(wb, farms, report, sheet);
-	const methodRaw = clean(wb.cellNamed('rFarmSpec_SelectedMethod'));
-	const methods = wb.named('rFarmSpec_Methods').map((row) => clean(row[0]!)); // Area, Hi/Lo, Specific
-	const idx = methods.indexOf(methodRaw);
-	const method = idx >= 0 ? (METHODS[idx] ?? null) : 'area';
-	if (idx < 0) report.note('unknown-flow-share-method', `unknown fragmentation method ${pyRepr(methodRaw)}; using area`, { sheet });
-	// Specific (manual) shares with a blank share: the Python reads it as 0 without a word.
-	if (method === 'manual') {
-		for (const { name, row } of blankShares) {
-			report.unmap({
-				code: 'flow-share-missing',
-				message: `[Farm spec] the Specific fragmentation method is selected but ${name} has no External fragmentation value (${cellAddress(cols.flowShareManual, row)}); its flow share is imported as 0`,
-				sheet,
-				cell: cellAddress(cols.flowShareManual, row),
-				element: name
-			});
-		}
+	if (wb.has('rFarmSpec_SelectedMethod')) {
+		const methodRaw = clean(wb.cellNamed('rFarmSpec_SelectedMethod'));
+		const methods = wb.has('rFarmSpec_Methods') ? wb.named('rFarmSpec_Methods').map((row) => clean(row[0]!)) : []; // Area, Hi/Lo, Specific
+		const area = methods[0] ?? 'Area';
+		if (methodRaw && methodRaw !== area) report.note('unused-flow-share-method', flowShareMethodNote(methodRaw), { sheet });
 	}
-	const sel = wb.ref('rFarmSpec_SelectedMethod');
-	const hi = wb.cell(sel.sheet, cHi, sel.r1);
-	const lo = wb.cell(sel.sheet, cLo, sel.r1);
-	return {
-		farms,
-		method,
-		hiLoSplit: { hi: num(hi, 0.5), lo: num(lo, 0.5) },
-		tolerance: num(wb.cellNamed('rFarmSpec_FragmentationTolerance'), 0.0002)
-	};
+	return { farms, tolerance: num(wb.cellNamed('rFarmSpec_FragmentationTolerance'), 0.0002) };
 }
 
 export interface OperatingRules {

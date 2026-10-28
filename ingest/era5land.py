@@ -111,15 +111,12 @@ import cdsjob
 import chirps_final
 import grid
 from era5request import (  # noqa: F401  (re-exported: era5land.DATASET, era5land.month_request, … stay its names)
-    CDS_URL,
     DATASET,
     RECHECK_AFTER_DAYS,
     VARIABLE,
-    CdsError,
     month_end,
     month_request,
     month_str,
-    next_month,
     request_month,
 )
 import manifest
@@ -172,8 +169,6 @@ ATTRIBUTION = (
     "Muñoz Sabater, J. (2019): ERA5-Land hourly data from 1950 to present. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). "
     "DOI: 10.24381/cds.e2161bac"
 )
-
-_MONTH = cdsjob.MONTH_RE
 
 
 BadEvent = cdsjob.BadEvent
@@ -388,9 +383,6 @@ def refused_key() -> str:
     return cdsjob.refused_key(PRODUCT)
 
 
-_ENTRY = cdsjob.ENTRY
-
-
 def read_state(mirror) -> tuple[dict, bool]:
     """(the state, whether it existed)."""
     return cdsjob.read_state(mirror, PRODUCT)
@@ -398,10 +390,6 @@ def read_state(mirror) -> tuple[dict, bool]:
 
 def write_state(mirror, st: dict) -> None:
     cdsjob.write_state(mirror, PRODUCT, st)
-
-
-_iso = cdsjob._iso
-_epoch = cdsjob._epoch
 
 
 def backoff_seconds(attempts: int) -> float:
@@ -419,7 +407,6 @@ def recheck_at(ym, preliminary: bool | None, today: dt.date) -> str | None:
 # --- the CDS clients ------------------------------------------------------------------
 
 LiveCds = cdsjob.LiveCds
-_LazyLiveCds = cdsjob.LazyLiveCds
 Run = cdsjob.Run
 
 

@@ -19,9 +19,6 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		downstreamNodeId: null,
 		sortOrder: 0,
 		areaKm2: 5,
-		areaHiKm2: 2.5,
-		areaLoKm2: 2.5,
-		flowShareManual: null,
 		pctUpstreamToDam: 0.5,
 		pctRunoffToDam: 0.8,
 		damCapacityM3: 0,
@@ -48,7 +45,7 @@ function base(): ModelInput {
 		},
 		model: {
 			nodes: [
-				node('G', { name: 'Outlet gauge', kind: 'gauge', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 }),
+				node('G', { name: 'Outlet gauge', kind: 'gauge', areaKm2: 0, divertCapacityM3Day: 0 }),
 				node('A', { downstreamNodeId: 'G', damCapacityM3: 200_000, sortOrder: 1 }),
 				node('B', { downstreamNodeId: 'G', sortOrder: 2 }),
 				node('C', { downstreamNodeId: 'A', sortOrder: 3 })
@@ -139,7 +136,7 @@ describe('cumulativeImpact', () => {
 
 	it('existing users are the baseline’s units: a farm a scenario adds is left out of every column', () => {
 		const b = base();
-		const add: ScenarioOp[] = [{ op: 'node.add', node: node('N', { name: 'New farm', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 }) }];
+		const add: ScenarioOp[] = [{ op: 'node.add', node: node('N', { name: 'New farm', downstreamNodeId: 'G', areaKm2: 0 }) }];
 		const single = run(applyScenario(b, add).input);
 		const r = cumulativeImpact(run(b), [{ id: 'n', name: 'New farm', ...single }], single);
 		const supplied = r.rows.find((x) => x.metric === 'existing_supplied')!;

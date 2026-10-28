@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { NetworkNode, SeriesMeta } from '@water-management/engine';
 import { BOM, commentLine, datedCsv, groupedCsv, textCell, type ExportArea } from './groupedCsv';
-import type { AreaRainLines } from './derivedRain';
+import type { AreaRainLines, UnitChainLines } from './derivedRain';
 import { groupSeries } from './groups';
 
 // Rule 7: dates, so under a skewed TZ (UTC+14 would move a local-midnight date a day).
@@ -26,6 +26,7 @@ const lines = (startDate: string): AreaRainLines =>
 		startDate,
 		rainUsed: [1.5, 2, 0],
 		source: ['station', 'chirps', 'none'],
+		patchFrom: [null, null, null],
 		stationRaw: [1, null, 0],
 		stationScaled: [1.5, null, 0],
 		chirpsRaw: [0.4, 1, 0],
@@ -53,12 +54,38 @@ describe('groupedCsv', () => {
 
 	it('full: every stored series group by group, a unit’s own under it, and its derived columns and the day’s source', () => {
 		const r = rows(groupedCsv('full', groups, VALUES, AREAS, META));
-		expect(r[2]).toBe('# Unit A: CHIRPS factors Jan to Dec 2 2 2 2 2 2 2 2 2 2 2 2');
+		expect(r[2]).toBe('# Unit A: CHIRPS factors Jan to Dec 2 2 2 2 2 2 2 2 2 2 2 2 (fitted for this area: its CHIRPS against its correcting station adjusted to its MAP)');
 		expect(r[3]).toBe(
 			'date,Bergwater (mm),chirps (mm),chirpsA (mm),Unit A: station × ratio (mm),Unit A: CHIRPS corrected (mm),Unit A: rain used (mm),Unit A: rain used from,flow (m³/s),evap (mm)'
 		);
 		expect(r[5]).toBe('2021-01-02,,,,1.5,0.8,1.5,station,,');
 		expect(r[6]).toBe('2021-01-03,0.5,1.5,2.5,,2,2,chirps,3.5,4.5');
+		// A patch day names its station (issue #612).
+		const patched: ExportArea = { ...AREAS[0]!, lines: { ...lines('2021-01-02'), source: ['station', 'patch', 'none'], patchFrom: [null, 'patch 1: Ridge', null] } };
+		expect(rows(groupedCsv('full', groups, VALUES, [patched], META))[6]).toBe('2021-01-03,0.5,1.5,2.5,,2,2,patch 1: Ridge,3.5,4.5');
+	});
+
+	it('full: each patch station × its ratio follows the station’s, in the patching priority, and the `#` lines name the chain (issue #613 slice 3)', () => {
+		const patched: ExportArea = {
+			...AREAS[0]!,
+			lines: {
+				...lines('2021-01-02'),
+				source: ['station', 'patch', 'patch'],
+				patchFrom: [null, 'patch 1: Ridge', 'patch 3: Vlei'],
+				patches: [
+					{ place: 1, stationId: 'ridge', stationName: 'Ridge', ratio: 1.25, raw: [2, 4, null], scaled: [2.5, 5, null] },
+					{ place: 3, stationId: 'vlei', stationName: 'Vlei', ratio: 0.8, raw: [1, null, 5], scaled: [0.8, null, 4] }
+				]
+			}
+		};
+		const r = rows(groupedCsv('full', groups, VALUES, [patched], META));
+		expect(r[2]).toBe('# Unit A: station gaps patched from patch 1: Ridge × 1.25%2C then patch 3: Vlei × 0.8');
+		const header = r.find((l) => l.startsWith('date,'))!;
+		expect(header).toContain('Unit A: station × ratio (mm),Unit A: patch 1: Ridge × ratio (mm),Unit A: patch 3: Vlei × ratio (mm),Unit A: CHIRPS corrected (mm)');
+		expect(r.find((l) => l.startsWith('2021-01-03,'))).toBe('2021-01-03,0.5,1.5,2.5,,5,,2,2,patch 1: Ridge,3.5,4.5');
+		expect(r.find((l) => l.startsWith('2021-01-04,'))).toBe('2021-01-04,,,,0,,4,0,0,patch 3: Vlei,,');
+		// Compact keeps the rain used alone; the patch stations are stored stations there already.
+		expect(rows(groupedCsv('compact', groups, VALUES, [patched], META)).find((l) => l.startsWith('date,'))).toBe('date,Bergwater (mm),Unit A: rain used (mm),flow (m³/s)');
 	});
 
 	it('the average catchment rainfall leads the catchment group; an area without lines adds no columns', () => {
@@ -86,6 +113,37 @@ describe('groupedCsv', () => {
 		const r = rows(groupedCsv('compact', groups, VALUES, [{ ...AREAS[0]!, lines: refused }, { nodeId: null, name: 'the catchment', sentence: null, lines: null, error: 'no model input' }], META));
 		expect(r[2]).toBe('# Unit A: CHIRPS gaps not corrected; the pairing is refused (fewer than 5 complete years)');
 		expect(r[3]).toBe('# Average catchment rainfall: not computed (no model input)');
+	});
+});
+
+describe('groupedCsv: a unit without a station (issue #613 slice 2)', () => {
+	const groups = groupSeries(LIST, NODES, { unitRain: { mode: 'perUnit' } } as never);
+	const chain = {
+		startDate: '2021-01-01',
+		nodeId: 'A',
+		rule: 'gaugeMap',
+		recipe: { gaugeMapFactor: 1.6 } as never,
+		mapMm: 800,
+		gaugeMapMm: 500,
+		rainUsed: [1.6, 0.8, 0],
+		source: ['gaugeMap', 'unitChirps', 'none'],
+		ownGauge: null,
+		gaugeScaled: [1.6, null, null],
+		chirpsRaw: [0.4, 1, null],
+		chirpsLevelled: [0.32, 0.8, null],
+		warnings: []
+	} satisfies UnitChainLines;
+	const areas: ExportArea[] = [{ nodeId: 'A', name: 'Unit A', sentence: null, lines: null, chain }];
+
+	it('compact: its rain used; full: the links its rule reads, the rain used and the link of each day', () => {
+		const c = rows(groupedCsv('compact', groups, VALUES, areas, META));
+		expect(c[1]).toBe('# Unit A: no rainfall station; its rain follows rule gaugeMap of the per-unit chain (§2.4h)%2C MAP ratio 1.6');
+		expect(c[2]).toBe('date,Bergwater (mm),Unit A: rain used (mm),flow (m³/s)');
+		const f = rows(groupedCsv('full', groups, VALUES, areas, META));
+		expect(f[2]).toBe(
+			'date,Bergwater (mm),chirps (mm),chirpsA (mm),Unit A: catchment gauge × MAP ratio (mm),Unit A: CHIRPS levelled (mm),Unit A: rain used (mm),Unit A: rain used from,flow (m³/s),evap (mm)'
+		);
+		expect(f[4]).toBe('2021-01-02,,,,,0.8,0.8,unitChirps,,');
 	});
 });
 

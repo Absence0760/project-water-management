@@ -80,7 +80,6 @@ export function networkView(model: ModelLike) {
 				...(n.downstreamNodeId === null ? { outlet: true } : { drainsInto: n.downstreamNodeId }),
 				areaKm2: r4(n.areaKm2),
 				...(n.mapMm ? { mapMm: r4(n.mapMm) } : {}),
-				...(n.flowShareManual !== null && n.flowShareManual !== undefined ? { flowShareManual: r4(n.flowShareManual) } : {}),
 				...(n.kind === 'farm' ? { dam: damOf(n), irrigationEfficiency: r4(n.irrigationEfficiency), returnFlowFraction: r4(n.returnFlowFraction) } : {}),
 				...(crops ? { cropHa: Object.fromEntries(Object.entries(crops).map(([k, v]) => [k, r4(v)])) } : {}),
 				...(count(model.boreholes, n.id) ? { boreholes: count(model.boreholes, n.id) } : {}),

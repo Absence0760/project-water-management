@@ -23,7 +23,7 @@ function base(): ModelInput {
 			transfers: [{ id: T, fromNodeId: UP, toNodeId: LO, months: [11, 12], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0.2, enabled: true, priority: 0 }],
 			landCover: [{ id: P, nodeId: LO, coverClass: 'pine', areaKm2: 1.5, densityPct: 0.5, factors: null }]
 		},
-		{ flowShareMethod: 'area', simulationStart: null, apanMm: new Array(12).fill(100) }
+		{ simulationStart: null, apanMm: new Array(12).fill(100) }
 	);
 }
 
@@ -97,7 +97,6 @@ describe('describeOp', () => {
 		expect(d({ op: 'transfer.set', transferId: T, field: 'toNodeId', value: G })).toBe('The transfer Upper farm → Lower farm: Destination Lower farm → Outflow gauge');
 		expect(d({ op: 'transfer.remove', transferId: T })).toBe('Remove the transfer Upper farm → Lower farm');
 		expect(d({ op: 'landCover.remove', patchId: P })).toBe('Lower farm: remove Pine plantation (mature) (1.5 km²)');
-		expect(d({ op: 'settings.set', path: 'flowShareMethod', value: 'manual' })).toBe('Flow-share method: By area → Manual');
 		expect(d({ op: 'settings.set', path: 'simulationStart', value: '2022-01-01' })).toBe('Simulation start: first day with rain → 1 Jan 2022');
 		// An unset PE input is pan × A-pan (a project saved before engine 0.31.0).
 		expect(d({ op: 'settings.set', path: 'pe', value: { kind: 'monthly', mm: new Array<number>(12).fill(100) as unknown as Monthly, source: 'Station ET₀' } })).toBe(
@@ -147,6 +146,17 @@ describe('describeOp', () => {
 		const old = { op: 'settings.set', path: 'calibration.a', value: 0.2 } as unknown as ScenarioOp;
 		expect(d(old)).toBe('calibration.a: → 0.2');
 		expect(checkOp(old)).toEqual({ ok: false, error: expect.stringMatching(/legacy runoff model, removed in engine 1\.0\.0: delete this change/) });
+	});
+
+	it('shows a stored change to the flow-share method or a High-MAP, Low-MAP or manual share (removed in engine 1.105.0, issue #616) by name, and checks it as retired', () => {
+		const method = { op: 'settings.set', path: 'flowShareMethod', value: 'manual' } as unknown as ScenarioOp;
+		expect(d(method)).toBe('Flow-share method: → manual');
+		expect(checkOp(method)).toEqual({ ok: false, error: expect.stringMatching(/flow-share method was removed in engine 1\.105\.0.*: delete this change/) });
+		const split = { op: 'settings.set', path: 'hiLoSplit.hi', value: 0.6 } as unknown as ScenarioOp;
+		expect(d(split)).toBe('High-MAP share of runoff: → 0.6');
+		const manual = { op: 'node.set', nodeId: UP, field: 'flowShareManual', value: 0.3 } as unknown as ScenarioOp;
+		expect(d(manual)).toBe('Upper farm: Manual flow share → 0.3');
+		expect(checkOp(manual)).toEqual({ ok: false, error: expect.stringMatching(/specific flow share was removed in engine 1\.105\.0/) });
 	});
 });
 
@@ -301,7 +311,7 @@ describe('buildOp', () => {
 			draft({ kind: 'transfer.remove', transferId: T }),
 			draft({ kind: 'landCover.add', nodeId: UP, coverClass: 'invasive', coverAreaKm2: '0.4', densityPct: '30' }),
 			draft({ kind: 'landCover.remove', patchId: P }),
-			draft({ kind: 'settings.set', field: 'flowShareMethod', value: 'hiLo' }),
+			draft({ kind: 'settings.set', field: 'chirpsBiasCorrection', value: 'none' }),
 			draft({ kind: 'settings.set', field: 'calibration.rainThresholdMm', value: '3' }),
 			draft({ kind: 'settings.set', field: 'pe', pe: { kind: 'monthly', mm: '100', source: ' Station ET₀ ' } }),
 			draft({ kind: 'series.scale', seriesKind: 'rain_catchment_mm', changePct: '-10', from: '2022-01-01', to: '' })

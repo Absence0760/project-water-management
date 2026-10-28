@@ -23,6 +23,7 @@
 import { FEEDS_CONTACT_RE } from '../config/production.js';
 import { FeedRefusedError, FeedThrottledError, FeedUnavailableError } from './errors.js';
 import { CHC_BASE } from './sources/chirps.js';
+import { CPC_BASE } from './sources/cpc.js';
 import { DWS_BASE } from './sources/dws.js';
 import { DEAFRICA_SERVICES_BASE } from '../dams/observed/upstream.js';
 import { WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
@@ -123,7 +124,9 @@ export const FEED_HOSTS: readonly string[] = [
 	// Digital Earth Africa's public bucket: the Waterbodies series and the WOfS scenes (dams/observed, issue #604 R5).
 	new URL(DEAFRICA_SERVICES_BASE).host,
 	// Digital Earth Africa's STAC search: the WOfS scenes over a dam (dams/observed/wofs, issue #604 R5-C).
-	new URL(WOFS_STAC_SEARCH).host
+	new URL(WOFS_STAC_SEARCH).host,
+	// NOAA CPC: the ONI and AAO climate indices (ingest/indices.ts, issue #620).
+	new URL(CPC_BASE).host
 ];
 /** Redirects followed per request, each checked against FEED_HOSTS. */
 const MAX_REDIRECTS = 3;

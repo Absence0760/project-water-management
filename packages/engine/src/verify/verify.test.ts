@@ -18,9 +18,6 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		downstreamNodeId: null,
 		sortOrder: 0,
 		areaKm2: 1,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 0,
 		pctRunoffToDam: 0,
 		damCapacityM3: 0,
@@ -193,12 +190,16 @@ describe('verification (engine 0.12.0)', () => {
 });
 
 describe('the assurance self-check (engine 1.34.0, issue #192)', () => {
-	// A random network with two demand nodes whose sums differ, so a swap between them shows.
+	// A random network with two demand nodes whose sums differ, so a swap between them shows, and supply in the stress
+	// grids (a node's and the system's), so a cell can be broken.
+	const supplied = (g: (number | null)[][]) => g.some((row) => row.some((v) => v !== null && v > 0.01));
 	const pick = () => {
 		for (let seed = 1; seed < 60; seed++) {
 			const input = randomInput(seed, { maxDays: 400 });
 			const out = runModelChecked(input);
 			const r = out.summary.supplyAssurance?.reliability ?? [];
+			const stress = out.summary.supplyAssurance?.stress;
+			if (!stress || !supplied(stress.system.ratio) || !stress.nodes.some((nd) => supplied(nd.ratio))) continue;
 			if (r.length >= 2 && r[0]!.demandM3 > 0 && r[1]!.demandM3 > 0 && r[0]!.demandM3 !== r[1]!.demandM3) return { input, out };
 		}
 		throw new Error('no random network with two demand nodes');
@@ -243,7 +244,10 @@ describe('the assurance self-check (engine 1.34.0, issue #192)', () => {
 			}
 			throw new Error('no cell with supply');
 		};
-		expect(check(cell(structuredClone(out), (sa) => sa.stress.nodes[0]!.ratio)).detail).toMatch(/^assurance stress grid "/);
+		// A node whose grid has a supplied cell (which one depends on the random network).
+		const k = out.summary.supplyAssurance!.stress.nodes.findIndex((nd) => supplied(nd.ratio));
+		expect(k).toBeGreaterThanOrEqual(0);
+		expect(check(cell(structuredClone(out), (sa) => sa.stress.nodes[k]!.ratio)).detail).toMatch(/^assurance stress grid "/);
 		expect(check(cell(structuredClone(out), (sa) => sa.stress.system.ratio)).detail).toMatch(/^assurance stress grid system /);
 	});
 
@@ -267,7 +271,9 @@ describe('the assurance self-check (engine 1.34.0, issue #192)', () => {
 
 	it('holds the water account’s EWR rows to each site’s own series, the pragmatic EWR and a rule table alike', () => {
 		const met: ModelOutput = structuredClone(out);
-		met.summary.supplyAssurance!.waterAccount.years[0]!.ewr[0]!.metM3 += 1;
+		// Off by 1 % (and 1 m³, for a year that met nothing): the random network's EWR may run to 10¹⁰ m³/day.
+		const row = met.summary.supplyAssurance!.waterAccount.years[0]!.ewr[0]!;
+		row.metM3 = row.metM3 * 1.01 + 1;
 		expect(check(met).detail).toMatch(/^assurance water account EWR at the outlet in \d{4}: required \/ met \/ days not met/);
 		const days: ModelOutput = structuredClone(out);
 		days.summary.supplyAssurance!.waterAccount.total.ewr[0]!.daysNotMet += 1;

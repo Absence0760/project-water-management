@@ -619,6 +619,16 @@ runs and accumulations are real) can't be decided without the client.
       stands; NASA POWER's computed ET₀ on the newest days, replaced by
       AgERA5's once its month lands, with no correction between them; sea
       cells left out of the feed's mean (engine-audit.md ET1–ET3).
+- [ ] **Past seasons like this one (issue #620, model.md §2.15c).** Built
+      opt-in (an outlook's method `climateState`; the default `esp` is
+      unchanged, and the ESP part of a `climateState` outlook is the same
+      to the bit). Calls made in the build, to confirm: the ONI as one
+      3-month value and the AAO as a 3-month mean, both wholly before the
+      decision date; the two indices weighted equally, each standardised
+      by its spread over the candidate years; k a third of the candidates,
+      at least 10, and none drawn under 20 candidates; the SPI-3 at the
+      decision date not a term. The issue asks for the hydrologist's
+      sign-off on the analogue count; no skill score until the C3S slice.
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
@@ -636,8 +646,9 @@ runs and accumulations are real) can't be decided without the client.
       1.80.0–1.84.0 had built item 1 from the issue's original wording.
       Still open, tracked below: the fit at the gauge's own cell (1b), and
       the MAP's own period. Also left: the run window still follows the
-      catchment rain series, and the EWR split and the land cover's
-      low-flow threshold stay on the flow shares (engine-audit U1).
+      catchment rain series. (The land cover's low-flow threshold, once on
+      the flow shares, is on each unit's natural MAR share from engine
+      1.105.0, issue #616, as the EWR split is, FM1.)
 - [ ] **Fit the reference gauge's factors at the gauge's own CHIRPS cell
       (issue #500 item 1b).** The decision is the cell the reference gauge
       sits in, with the reference unit's centre only when the gauge has no
@@ -706,16 +717,66 @@ runs and accumulations are real) can't be decided without the client.
       rain-source days out of the fit's record (and the count) if the
       hydrologist says so. Trigger: the same answer as U1's.
 - [ ] **The EWR split's MAR period (engine 1.94.0, issue #553,
-      engine-audit.md ES1, model.md §2.5b).** The operator chose the option
-      (split the EWR by the flow share, or by each unit's natural MAR ÷ the
-      units' total); the period the MAR is taken over is provisional: the
-      run's complete water years, or every historical day when there are
-      none. To confirm: is the run's own water years the right period, or a
-      fixed reference period (as the unit MAP period, 1991–2020); and
-      should a run without a complete water year refuse the split rather
-      than take every day? Off by default (the flow share). Durable fix:
+      engine-audit.md ES1, model.md §2.5b).** From engine 1.105.0 (issue
+      #615, FM1) every run splits the EWR by each unit's natural MAR ÷ the
+      units' total, under both methods; the period the MAR is taken over is
+      provisional: the run's complete water years, or every historical day
+      when there are none. To confirm: is the run's own water years the
+      right period, or a fixed reference period (as the unit MAP period,
+      1991–2020); should a run without a complete water year refuse the
+      split rather than take every day; and (issue #619) are shares from
+      each unit's own natural runoff, which give the cumulative natural MAR
+      at every site, what the client's "cumulative flow" meant? Durable fix:
       the hydrologist's answer, then change `ewrSplitDays` if it differs.
-      Trigger: the client's first per-unit run split by natural MAR.
+      Trigger: the client's first run on engine 1.105.0.
+- [x] **No release between #615 and #616 (issue #619 sequencing,
+      engine-audit.md FM1).** Engine 1.105.0 split the EWR by natural MAR
+      shares while Fragmentation's flow was still split by the flow share,
+      so an inner EWR site or hands-off EWR flow under Fragmentation read
+      a requirement out of proportion to the flow it was given. **Done:**
+      #616 ships in the same engine 1.105.0, so the flow, the EWR, the
+      land-cover threshold and the priority users' claims all follow one
+      natural MAR share per unit, and no release carries #615 alone.
+- [x] **The fit record doesn't fingerprint Fragmentation's EWR share
+      forcing (issue #615 acceptance, engine-audit.md FM1).** Under
+      Fragmentation each calibration candidate's EWR shares come from GR4J
+      runs on the Per unit forcing (built in engine 1.105.0, scored days
+      `runModel`'s to the bit), but `fitRecord.forcing` still records only
+      the catchment forcing, so a unit's station, MAP or CHIRPS level
+      moving after a Fragmentation fit doesn't read "Forcing changed since
+      fit". Durable fix: under Fragmentation record the share forcing's
+      `UnitRainFingerprint` in the fit record (a field of its own, so
+      `fitFlowMethod` keeps reading `fragmentation`), give the run summary
+      the same fingerprint, and compare both in `fitRecordStatus` as Per
+      unit's are. Trigger: before the client calibrates a Fragmentation
+      project on engine 1.105.0, or with #616, whichever is first.
+      **Done with #616 (engine 1.105.0):** the fit record carries
+      `forcing.shareRain` under Fragmentation (the Per unit forcing
+      fingerprint the share runs ran on; null with no land unit, absent
+      under Per unit), the run summary the same (`summary.shareRain`), and
+      `fitRecordStatus` sets `shareRainChanged` (and with it
+      `forcingChanged`) when it moves.
+- [ ] **The client regression suite's deviation list after FM1 (issue
+      #615, engine-audit.md FM1).** The suite feeds the workbook's own
+      natural flow, without the units' runoff, so its shares fall back to
+      the area shares (why `noUnitRunoff`), which is b023's area method,
+      and its flow and EWR columns match b023 (checked green against the
+      current extract with #616); once the client data is re-extracted
+      (issue #523), rerun it and confirm nothing else moved, and add a
+      run-from-rain check of the EWR columns under FM1 if it is to be
+      pinned. Trigger: the fresh re-extract.
+- [ ] **Drop the retired flow-share node columns (issue #616, contract
+      half of [266](./data-model.md#flow-share-methods-retired-266_retire_flow_share_methodsql)).**
+      Migration 266 stripped `flowShareMethod` and `hiLoSplit` from the
+      settings but kept `node.area_hi_km2`, `node.area_lo_km2` and
+      `node.flow_share_manual`, which the backend from engine 1.105.0
+      neither reads nor writes, so a backend still on the previous release
+      keeps working while the new one rolls out. Durable fix: a forward
+      migration that drops the three columns (no policy, function or view
+      reads them; check `catalogue.db.test.ts` and any `SELECT *` first),
+      with the `/safe-migration` checks. Trigger: once the `backend@`
+      release carrying migration 266 is in production and no older backend
+      can be rolled back to.
 - [x] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
@@ -980,8 +1041,8 @@ runs and accumulations are real) can't be decided without the client.
       - WP-1.33 other water users (engine 0.22.0): are there towns, industry
         or unlisted irrigators upstream of the logger, and what do they take
         (monthly m³/day) and return? Priority: a priority user's demand is
-        passed down by the farms upstream (fragmented by flow share like the
-        EWR; farms divert less, then pass inflow below the dam), and it is
+        passed down by the farms upstream (split by each unit's natural MAR
+        share like the EWR, engine 1.105.0, issue #616; farms divert less, then pass inflow below the dam), and it is
         **not curtailed** for the EWR (its charge stands, not moved onto
         farms; from engine 1.86.0 only by its fixed restriction %, when it has
         one); a non-priority user takes what reaches it and is curtailed like a
@@ -5228,18 +5289,18 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       correction by hand in the app.
 
 - [ ] **Rainfall station settings with no field yet** (issue #553 round 3,
-      2026-10-24). Settings → Model selection for flow generation sets each land unit's station,
-      scaling, correcting station and a station's site
-      (`settings.rainStations.units`, `.sites`), but three parts round 2's
-      engine runs are API-only: `catchment` (Fragmentation's average catchment
-      rainfall from a station, the operator's decision of 2026-10-23),
-      `catchmentMapMm` / `catchmentMapSource`, and each station's
-      `unreliable` periods ([model.md §2.4i](./model.md)). Durable fix: a
-      "Catchment rainfall" station select with the catchment MAP under
-      Fragmentation, and the unreliable periods on the station's Series
-      details. Trigger: the operator assigns a catchment station, or a
-      station needs a period set aside. Remaining #553 rounds (4 EWR split, 5
-      Data tab) don't cover them.
+      2026-10-24; narrowed by the #612 follow-up, 2026-10-28). Settings →
+      Model selection for flow generation sets each land unit's station and
+      the catchment's (`settings.rainStations.units`, `.catchment`: the
+      station, its patching priority, scaling and correcting station), each
+      station's site, and Rain gaps → Flagged rain the `unreliable` periods
+      (issue #611). One part stays API-only: `catchmentMapMm` /
+      `catchmentMapSource`, the catchment MAP the catchment station's ratio
+      uses (absent = the land units' area-weighted mean MAP, [model.md
+      §2.4i](./model.md)). Durable fix: a MAP and source field under The
+      catchment's rainfall station, showing the units' mean it replaces and
+      the ratio it gives. Trigger: the operator has a catchment MAP from a
+      study that differs from the units' mean.
 
 ## Notes (WP-2.7)
 
@@ -5597,7 +5658,9 @@ Applicant view and the Applications tab. Left:
       or the hidden values; the assessors, checking the same application,
       read the same words (the check is judged in the applicant's
       namespace). **Pending the client**: whether an applicant may be told
-      more (which rule, or "the catchment's flow shares would pass 100 %").
+      more (which rule, or "the catchment would have no land left"; for
+      that catchment-wide rule `MASKED_RULE_AGGREGATE` already gives the
+      aggregate when the hidden units have 5 or more holders).
       The refusal itself stays: a model breaking a save rule can't run.
       Trigger: the client's answer on issue #90.
 - [x] **Comments / NGO access** (WP-3.15, scenario half, issue #71): done in

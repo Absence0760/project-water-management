@@ -15,7 +15,7 @@ import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, stationSeriesKey, 
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import { unitRainFingerprintChanged, unitRainFingerprintOfSummary, type UnitRainFingerprint } from '../runoff/unitRainFingerprint';
-import { catchmentStationFingerprint, catchmentStationFingerprintChanged, catchmentStationSettingChanged, type CatchmentStationFingerprint } from '../runoff/stationFingerprint';
+import { catchmentStationFingerprint, catchmentStationFingerprintChanged, catchmentStationSettingChanged, patchChainOfSetting, type CatchmentStationFingerprint } from '../runoff/stationFingerprint';
 import type { RunSummary } from '../project';
 import type { RunoffModelId } from '../runoff/types';
 import { sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } from '../seriesProvenance';
@@ -324,6 +324,15 @@ export interface FitRecord {
 		 */
 		unitRain?: UnitRainFingerprint | null;
 		/**
+		 * Under Fragmentation, the forcing its share runs ran on (engine ≥
+		 * 1.105.0, issue #616, docs/model.md §2.5): the Per unit setup's
+		 * fingerprint, since each unit's natural MAR share splits the flow the
+		 * fit was scored on. A unit's station, MAP or CHIRPS level moving since
+		 * is a change. null = no land unit at the fit; absent under Per unit
+		 * (`unitRain` is it) and on a record made before it, never flagged.
+		 */
+		shareRain?: UnitRainFingerprint | null;
+		/**
 		 * The catchment's rainfall station (engine ≥ 1.91.0, settings.rainStations
 		 * .catchment, docs/model.md §2.4i): its station, scaling, correcting
 		 * station, the catchment MAP and ratio, and the pairing's factors.
@@ -568,6 +577,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			...(ctx.et0Daily !== undefined ? { et0Daily: ctx.et0Daily ? { ...ctx.et0Daily } : null } : {}),
 			rainChecks: rainChecksOf(ctx.settings.dataQuality),
 			...(r.unitRain ? { unitRain: structuredClone(r.unitRain) } : {}),
+			...(r.shareRain !== undefined ? { shareRain: r.shareRain ? structuredClone(r.shareRain) : null } : {}),
 			...(r.catchmentStation ? { catchmentStation: structuredClone(r.catchmentStation) } : {})
 		},
 		...(ctx.observedOrigin !== undefined ? { observedOrigin: ctx.observedOrigin ? { ...ctx.observedOrigin } : null } : {}),
@@ -713,6 +723,16 @@ export interface FitRecordStatus {
 	 * before `forcing` was recorded.
 	 */
 	methodChanged?: true;
+	/**
+	 * Under Fragmentation, the forcing the share runs read (engine ≥ 1.105.0,
+	 * issue #616, FitRecord.forcing.shareRain) differs from the fit's: the Per
+	 * unit setup's gauge MAP, MAP period, reference gauge or a unit's station,
+	 * or (when a run says what it is now) a unit's rule, record or factors, so
+	 * each unit's natural MAR share, and the flow it splits, moved. Also sets
+	 * `forcingChanged`. Absent when not, under Per unit, and on a record made
+	 * before it.
+	 */
+	shareRainChanged?: true;
 	/**
 	 * The fitted record now comes from another source, or was given in
 	 * another unit, than when it was fitted (107_series_source.sql, engine ≥
@@ -937,6 +957,7 @@ function unitStationsChanged(stations: unknown, then: UnitRainFingerprint): bool
 		const station = a && typeof a.stationId === 'string' && a.stationId ? a.stationId : null;
 		const was = u.rule === 'station' && u.rainKey?.startsWith(STATION_KEY_PREFIX) ? u.rainKey.slice(STATION_KEY_PREFIX.length) : null;
 		if (station !== was) return true;
+		if (station && u.stationPatch !== undefined && patchChainOfSetting(a?.patch, station).join('\n') !== u.stationPatch.join('\n')) return true;
 		if (station && u.stationCorrectAgainst !== undefined && (typeof a?.correctAgainst === 'string' && a.correctAgainst ? a.correctAgainst : station) !== u.stationCorrectAgainst) return true;
 	}
 	return false;
@@ -994,6 +1015,11 @@ export interface FitForcingNow {
 	 * Settings form, which has no run: then only settings.unitRain itself is compared).
 	 */
 	unitRain?: UnitRainFingerprint | null;
+	/**
+	 * Under Fragmentation, the forcing a run's share runs read (its summary.shareRain, engine ≥ 1.105.0; null = no
+	 * land unit); omit when not known (the Settings form, a run under Per unit, a resumed run or an older one).
+	 */
+	shareRain?: UnitRainFingerprint | null;
 }
 
 /**
@@ -1004,9 +1030,14 @@ export interface FitForcingNow {
  * summary from before engine 1.91.0 has no stations: no catchment station,
  * as it ran. Nothing without a summary (the Settings form).
  */
-export function runForcingOfSummary(summary: Pick<RunSummary, 'unitRain' | 'stations'> | null | undefined): Pick<FitForcingNow, 'unitRain' | 'catchmentStation'> {
+export function runForcingOfSummary(summary: Pick<RunSummary, 'unitRain' | 'stations' | 'shareRain'> | null | undefined): Pick<FitForcingNow, 'unitRain' | 'catchmentStation' | 'shareRain'> {
 	if (!summary) return {};
-	return { unitRain: unitRainFingerprintOfSummary(summary.unitRain, summary.stations), catchmentStation: catchmentStationFingerprint(summary.stations) };
+	return {
+		unitRain: unitRainFingerprintOfSummary(summary.unitRain, summary.stations),
+		catchmentStation: catchmentStationFingerprint(summary.stations),
+		// Fragmentation's share runs (engine ≥ 1.105.0, issue #616); a run without them says nothing of them.
+		...(summary.shareRain !== undefined ? { shareRain: summary.shareRain } : {})
+	};
 }
 
 /** A record's gap-fill spec, copied; null when it isn't filled (or isn't a record a spec fills). */
@@ -1091,6 +1122,16 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 	// The flow generation method (issue #553): Fragmentation or Per unit, now and at the fit.
 	const fitMethod = fitFlowMethod(record);
 	const methodChanged = fitMethod !== null && fitMethod !== flowMethodOf(settings.unitRain);
+	// Fragmentation's share forcing (engine ≥ 1.105.0, issue #616): the Per unit setup the shares are made on, compared
+	// as Per unit's own is: its settings (gauge MAP, period, reference, units' stations) when the fit recorded units, and
+	// a run's fingerprint when one says what it is now. Only between two Fragmentation setups: a method change says it.
+	const shareThen = record.forcing?.shareRain;
+	const shareRainChanged =
+		!methodChanged &&
+		fitMethod === 'fragmentation' &&
+		shareThen !== undefined &&
+		((!!shareThen && unitRainSettingChanged({ ...((settings.unitRain as object | null | undefined) ?? {}), mode: 'perUnit' }, shareThen, settings.rainStations)) ||
+			(now.shareRain !== undefined && unitRainFingerprintChanged(shareThen, now.shareRain)));
 	return {
 		editedParams: editedParams(settings, record),
 		otherModel: (record.model as string) !== 'gr4j',
@@ -1110,8 +1151,10 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		siteChanged: (settings.calibrationSiteNodeId ?? null) !== (record.siteNodeId ?? null),
 		...(catchmentStationChanged ? { catchmentStationChanged: true as const } : {}),
 		...(methodChanged ? { methodChanged: true as const } : {}),
+		...(shareRainChanged ? { shareRainChanged: true as const } : {}),
 		forcingChanged:
 			methodChanged ||
+			shareRainChanged ||
 			catchmentStationChanged ||
 			chirpsSourceChanged ||
 			apanDailyChanged ||

@@ -45,6 +45,7 @@
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '#lib/components/river/links.js';
 	import { hasForecastRain, runBlockers } from './runReady';
+	import { unitsOnCatchmentRain } from '#lib/components/settings/flowGeneration.js';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Hydrological units
@@ -522,9 +523,11 @@
 	// the section header's Run model on the other sections). The editor's model, like the Network tab's
 	// total (unsaved edits have their own note).
 	const hasForecast = $derived(hasForecastRain(series));
-	const blockers = $derived(runBlockers(editor.model, project.settings, series));
+	const blockers = $derived(runBlockers(editor.model, series));
 	const missing = $derived(blockers.missing);
-	const overAllocated = $derived(blockers.overAllocated);
+	// Run readiness (issue #615): the land units with no rain of their own run on the catchment rain, so their EWR share
+	// follows their area. A note, not a blocker: the run says so too.
+	const onCatchmentRain = $derived(series ? unitsOnCatchmentRain(editor.model.nodes, project.settings, series) : []);
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	// The in-page menu (SectionNav): above the results, or beside them from 62rem of results (a 1440 px
 	// window), where 13rem of index leaves the results about as wide as at 1280 px without it (issue #462). The index lists the
@@ -554,7 +557,7 @@
 	}
 
 	// The section header (workspace/SectionHeader) carries the title: the tab gives it the runs
-	// line and, for an editor, the run form, the one place a run starts from the header (last, after Add data).
+	// line and, for an editor, the run form, the one place a run starts from the header (last; Runs & results has no Add data, issue #601).
 	$effect(() => fillHeader({ context: headerContext, main: canRun ? runForm : undefined }));
 	const runCount = (n: number) => `${n} ${n === 1 ? 'run' : 'runs'}`;
 
@@ -587,7 +590,7 @@
 {#snippet headerContext()}
 	{#if loading && !runs.length}Loading runs…{:else if listFailed}Couldn’t load the runs{:else if !runs.length}No runs yet{:else}{runCount(runs.length)}{latest ? ` · newest ran ${ranAgo(latest.createdAt)}` : ''}{/if}
 {/snippet}
-<!-- The run form: in the section header, after Add data; its status line opens the page. -->
+<!-- The run form: in the section header, its main action; its status line opens the page. -->
 {#snippet runForm()}
 	<form class="run-form" onsubmit={run} aria-busy={runBusy}>
 		<label class="run-label" for="run-label">Run label <span class="visually-hidden">(optional)</span></label>
@@ -596,12 +599,12 @@
 			<button
 				type="button"
 				class="btn"
-				disabled={runBusy || missing.length > 0 || !!overAllocated}
+				disabled={runBusy || missing.length > 0}
 				aria-describedby="run-note"
 				onclick={() => start(true)}>Run forecast</button
 			>
 		{/if}
-		<button type="submit" class="btn btn-primary" disabled={runBusy || missing.length > 0 || !!overAllocated} aria-describedby="run-note">
+		<button type="submit" class="btn btn-primary" disabled={runBusy || missing.length > 0} aria-describedby="run-note">
 			{#if runBusy}<span class="spin" aria-hidden="true"></span>{/if}
 			{runBusy ? 'Running model…' : 'Run model'}
 		</button>
@@ -620,11 +623,6 @@
 					A run needs {missing.join(' and ')}. Set up the <a href="?tab=network">network</a> and upload
 					<a href="?tab=series">rainfall data</a> first.
 				</span>
-			{:else if overAllocated}
-				<span class="warn" data-testid="shares-over">
-					The run can't start: {overAllocated}. See the <a href="?tab=network">network</a> or
-					<a href="?tab=settings">model settings</a>.
-				</span>
 			{:else if modelDirty}
 				<span class="warn">The model has unsaved changes: Run model asks to save them first, since a run uses the saved model.</span>
 			{:else if stale}
@@ -635,6 +633,13 @@
 			{/if}
 		</p>
 		{#if runBusy}<div class="progress" aria-hidden="true"><span></span></div>{/if}
+		{#if !runBusy && onCatchmentRain.length}
+			<p class="note" data-testid="run-catchment-rain">
+				{onCatchmentRain.length === 1 ? '1 unit has' : `${onCatchmentRain.length} units have`} no rain of {onCatchmentRain.length === 1 ? 'its' : 'their'} own, so {onCatchmentRain.length === 1 ? 'its' : 'their'} share follows {onCatchmentRain.length === 1 ? 'its' : 'their'} area:
+				{onCatchmentRain.slice(0, 6).map((n) => n.name || 'unnamed').join(', ')}{onCatchmentRain.length > 6 ? ` and ${onCatchmentRain.length - 6} more` : ''}. Set up their rain in
+				<a href="?tab=settings#set-share">Model settings</a>.
+			</p>
+		{/if}
 	</div>
 {:else if stale}
 	<p class="alert alert-info">Inputs changed since the latest run ({stale.join('; ')}); an editor can run the model again.</p>
@@ -682,7 +687,7 @@
 			{:else if runs.length === 0}
 				<!-- "Run the model" only while it can start: otherwise the status line under the header says what a run needs. -->
 				<div class="empty">
-					<p>{!canRun ? 'No runs yet.' : missing.length || overAllocated ? 'No runs yet. A run can start once the note above is dealt with.' : 'No runs yet. Run the model to see results.'}</p>
+					<p>{!canRun ? 'No runs yet.' : missing.length ? 'No runs yet. A run can start once the note above is dealt with.' : 'No runs yet. Run the model to see results.'}</p>
 					<p class="muted small">{RESULTS_SHOW}</p>
 				</div>
 			{:else}

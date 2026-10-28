@@ -11,8 +11,8 @@ import { type Cell, cellAddress, isNumeric, num, pyRepr, pyStr } from './cells';
  * be checked against each other line by line.
  */
 export type ImportNoteCode =
-	/** [Farm spec] fragmentation method isn't Area, Hi/Lo or Specific; area is used. */
-	| 'unknown-flow-share-method'
+	/** [Farm spec] the workbook's fragmentation method isn't Area, so its shares aren't the app's (issue #616: the flow is split by each unit's natural MAR). */
+	| 'unused-flow-share-method'
 	/** [Farm spec] Upstream inflow above dam % stored as 1 − the value (b023's formula applied it below the dam, docs/model.md §3 Q1). */
 	| 'upstream-pct-converted'
 	/** [Farm spec] Upstream inflow above dam % imported as entered: the workbook's formula is the fixed one. */
@@ -108,8 +108,6 @@ export type UnmappedCode =
 	| 'transfer-zero-rate'
 	/** A transfer month list the workbook's substring match reads differently (audit M1; also a note). */
 	| 'transfer-months-substring'
-	/** Specific (manual) flow shares are selected but a farm's share is blank; imported as 0. */
-	| 'flow-share-missing'
 	/** A [Network] element type other than Farm or Gauge; imported as a farm. */
 	| 'element-type-unknown'
 	/** A [Farm spec] farm that isn't in [Network]; ignored. */

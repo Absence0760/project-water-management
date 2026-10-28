@@ -552,14 +552,15 @@ test('fields only another set-up reads fold behind one line saying why, read-onl
 	await expect(noDam.getByText('Enter a capacity to use these.', { exact: true })).toBeVisible();
 	await expect(minimum).toHaveAttribute('readonly', '');
 	await expect(minimum).toHaveAccessibleDescription(/^Not used without a dam \(capacity 0\)/);
-	// The flow-share method is by area: the manual share and the high/low split are not read.
+	// The flow share is the unit's natural MAR share, shown after a run, not a field (engine 1.105.0, issue #616): no
+	// manual share or high/low areas to fold away.
 	const share = await openNodeSection(sheet, 'Flow share');
-	await share.locator('details.unused > summary').click();
-	await expect(sheet.getByLabel('Manual (%)')).toHaveAttribute('readonly', '');
-	await expect(sheet.getByLabel('Manual (%)')).toHaveAccessibleDescription(/^Not used with the area flow share: Manual\./);
+	await expect(share.getByTestId('node-share')).toContainText('After a run');
+	await expect(share.locator('details.unused')).toHaveCount(0);
+	await expect(sheet.getByLabel('Manual (%)')).toHaveCount(0);
 	const area = await openNodeSection(sheet, 'Catchment area');
-	await area.locator('details.unused > summary').click();
-	await expect(sheet.getByLabel('High-MAP (km²)')).toHaveAccessibleDescription(/^Not used with the area flow share: High-MAP, Low-MAP\./);
+	await expect(area.locator('details.unused')).toHaveCount(0);
+	await expect(sheet.getByLabel('High-MAP (km²)')).toHaveCount(0);
 	// A capacity: the dam's fields are used, and editable among the first ones.
 	await sheet.getByLabel('Capacity (m³)').fill('5000');
 	await expect(minimum).not.toHaveAttribute('readonly', '');

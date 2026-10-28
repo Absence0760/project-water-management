@@ -714,18 +714,10 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'farm-area',
 		term: 'Hydrological unit area',
-		short: 'Land area of the hydrological unit, in km². Drives its share of catchment runoff under the Area method.',
+		short: 'Land area of the hydrological unit, in km². GR4J runs on it for the unit’s natural MAR share of the flow and the EWR.',
 		units: 'km²',
 		category: 'farm',
 		fields: ['node.areaKm2']
-	},
-	{
-		id: 'hi-lo-map-area',
-		term: 'High-MAP and low-MAP area',
-		short: 'The hydrological unit’s land in the wetter (high mean annual precipitation) and drier parts of the catchment, in km².',
-		units: 'km²',
-		category: 'farm',
-		fields: ['node.areaHiKm2', 'node.areaLoKm2']
 	},
 	{
 		id: 'unit-map',
@@ -738,18 +730,10 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'flow-share',
 		term: 'Flow share (fragmentation)',
-		short: 'The fixed fraction of catchment natural flow (and EWR) assigned to each hydrological unit. Shares should add up to 100 %.',
+		short: 'Each hydrological unit’s natural MAR share, from the latest run: it splits the natural flow and the EWR between the units.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
-		fields: ['settings.flowShareMethod', 'node.flowShareManual', 'summary.flowShare']
-	},
-	{
-		id: 'hi-lo-split',
-		term: 'Hi/Lo split',
-		short: 'How much runoff comes from the high-rainfall zone versus the low one (defaults to 50 % / 50 %; set per project). For the Hi/Lo method.',
-		units: 'fraction 0–1',
-		category: 'farm',
-		fields: ['settings.hiLoSplit']
+		fields: ['summary.flowShare']
 	},
 	{
 		id: 'upstream-to-dam',
@@ -1169,6 +1153,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.rainStations']
 	},
 	{
+		id: 'catchment-rain-station',
+		term: 'The catchment’s rainfall station',
+		short: 'The catchment rain from a station × catchment MAP ÷ its MAP, its gaps patched in the order you set; none = the rain series as before.',
+		units: 'mm/day',
+		category: 'flow'
+	},
+	{
 		id: 'actual-evaporation',
 		term: 'Actual evaporation (AET)',
 		short: 'Water the catchment actually evaporates each day in GR4J, in mm: never more than the potential evaporation.',
@@ -1370,7 +1361,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'ewr-share',
 		term: 'Hydrological unit EWR share',
-		short: 'The hydrological unit’s part of the pragmatic EWR (EWR × its flow share), added up down the river to give the EWR each point must pass.',
+		short: 'The unit’s part of the pragmatic EWR (EWR × its natural MAR share), added up down the river to give the EWR each point must pass.',
 		units: 'm³/day',
 		category: 'ewr',
 		fields: ['run.ewr_cumulative']
@@ -1489,11 +1480,11 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'ewr-split',
-		term: 'Split the EWR between units by',
-		short: 'Each unit’s EWR share: its flow share (default) or its natural MAR ÷ the units’ total, which differs only with rain for each unit.',
+		term: 'How the EWR is split between units',
+		short: 'Each unit’s EWR share is its natural MAR ÷ the units’ total, from its own GR4J runoff under both Per unit and Fragmentation.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'ewr',
-		fields: ['settings.ewrSplit', 'summary.ewrShare']
+		fields: ['summary.ewrShare']
 	},
 	{
 		id: 'ewr-daily-source',
@@ -1594,6 +1585,12 @@ export const TIPS: HelpTipText[] = [
 		units: 'mm/day',
 		category: 'data',
 		fields: ['run.rain_final', 'run.rain_used']
+	},
+	{
+		id: 'drought-index',
+		term: 'Drought index (SPI, SPEI)',
+		short: 'How unusual the last 3, 6 or 12 months were, in standard deviations from the median: SPI from the rain, SPEI from rain less evaporation.',
+		category: 'data'
 	},
 	{
 		id: 'chirps',
@@ -1799,6 +1796,22 @@ export const TIPS: HelpTipText[] = [
 		fields: ['preview.areaStationScaled']
 	},
 	{
+		id: 'preview-area-patch-raw',
+		term: 'Patch station raw (daily preview)',
+		short: 'A station in an area’s patching priority as recorded, over the run window, beside the same rain adjusted to the area’s MAP.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaPatchRaw']
+	},
+	{
+		id: 'preview-area-patch-scaled',
+		term: 'Patch station × ratio (daily preview)',
+		short: 'A patch station’s record × the area’s MAP ÷ that station’s MAP: what fills the main station’s gaps from it. Derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaPatchScaled']
+	},
+	{
 		id: 'preview-area-chirps-raw',
 		term: 'Area CHIRPS raw (daily preview)',
 		short: 'The area’s own CHIRPS as stored, over the run window, beside the same CHIRPS bias-corrected against its station.',
@@ -1825,9 +1838,33 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'preview-area-rain-from',
 		term: 'Rain used from (daily preview)',
-		short: 'Where each day of an area’s rain used came from: the station, corrected CHIRPS, the next fallback or no source.',
+		short: 'Where each day of an area’s rain used came from: the station, a patch station by name, corrected CHIRPS, the next fallback or none.',
 		category: 'data',
 		fields: ['preview.areaRainFrom']
+	},
+	{
+		id: 'preview-area-own-gauge',
+		term: 'Own gauge, checked (daily preview)',
+		short: 'A unit’s own rain gauge after the catchment’s checks and its unreliable periods, as a unit without a station reads it: derived when viewed.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaOwnGauge']
+	},
+	{
+		id: 'preview-area-gauge-scaled',
+		term: 'Catchment gauge × MAP ratio (daily preview)',
+		short: 'The catchment rain × the unit’s MAP ÷ the gauge’s MAP, as a unit without a station reads it: derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaGaugeScaled']
+	},
+	{
+		id: 'preview-area-chirps-levelled',
+		term: 'Unit CHIRPS levelled (daily preview)',
+		short: 'A unit’s own CHIRPS levelled as a run levels it (to its MAP, or by the bias or reference factors), for a unit without a station.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaChirpsLevelled']
 	},
 	{
 		id: 'wr90',

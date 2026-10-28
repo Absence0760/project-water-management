@@ -35,9 +35,8 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				downstreamNodeId: uuid.nullable(),
 				sortOrder: z.number().int(),
 				areaKm2: nonNeg,
-				areaHiKm2: nonNeg,
-				areaLoKm2: nonNeg,
-				flowShareManual: frac.nullable(),
+				// areaHiKm2, areaLoKm2 and flowShareManual (b023's Hi/Lo MAP and specific shares) are retired (engine 1.105.0,
+				// issue #616): an older web build still sends them, and upgradeLegacyModel drops them before this reads the node.
 				pctUpstreamToDam: frac,
 				pctRunoffToDam: frac,
 				damCapacityM3: nonNeg,

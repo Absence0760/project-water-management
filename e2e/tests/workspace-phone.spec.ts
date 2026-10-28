@@ -27,6 +27,9 @@ async function seedBig(page: Page, name: string) {
 	return p;
 }
 
+// The sections whose header has Add data (TAB_ADDS_DATA, issue #601; add-data-tabs.spec.ts pins them all).
+const ADDS_DATA = new Set(['overview', 'crops', 'series', 'settings', 'calibration']);
+
 // Each section and what shows in its header once it has loaded.
 const SECTIONS: { tab: string; ready: string | RegExp }[] = [
 	{ tab: 'overview', ready: 'Add data' },
@@ -41,7 +44,8 @@ const SECTIONS: { tab: string; ready: string | RegExp }[] = [
 	{ tab: 'river', ready: 'Open in Runs & results' },
 	{ tab: 'supply', ready: 'Open in Runs & results' },
 	{ tab: 'dams', ready: 'Open in Runs & results' },
-	{ tab: 'compare', ready: 'Add data' },
+	// No actions of its own yet and no Add data (issue #601): the run button, which says Re-run model once the series load.
+	{ tab: 'compare', ready: 'Re-run model' },
 	{ tab: 'scenarios', ready: '+ New scenario' },
 	{ tab: 'allocations', ready: '+ Add volume' },
 	{ tab: 'project', ready: /^Download/ }
@@ -78,7 +82,7 @@ test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
 	for (const size of PHONES)
-		test(`every section at ${size.width} px: the pills and More actions on one row, Add data and Run model last${size.width === 360 ? ', ending in the first half of the screen' : ''}`, async ({ page, owner }) => {
+		test(`every section at ${size.width} px: the pills and More actions on one row, Add data (where the tab has it) and Run model last${size.width === 360 ? ', ending in the first half of the screen' : ''}`, async ({ page, owner }) => {
 			test.setTimeout(180_000);
 			void owner;
 			await page.setViewportSize(size);
@@ -111,12 +115,15 @@ test.describe('phone', () => {
 					expect(Math.abs(m.more!.right - m.right), at).toBeLessThan(2);
 					expect(m.more!.width, at).toBeGreaterThanOrEqual(44);
 				}
-				// Add data, then Run model, end the header, on one row that fills it (Runs: under the run label's row).
+				// Add data (where the tab has it), then Run model, end the header, on one row that fills it (Runs: under
+				// the run label's row).
+				const adds = ADDS_DATA.has(s.tab);
 				const last = m.main.filter((c) => c.top === m.main.at(-1)!.top);
-				expect(last.length, `${at}: ${m.main.map((c) => c.text).join(' | ')}`).toBeGreaterThanOrEqual(2);
+				expect(last.length, `${at}: ${m.main.map((c) => c.text).join(' | ')}`).toBeGreaterThanOrEqual(adds ? 2 : 1);
 				expect(Math.abs(last[0]!.left - m.left), at).toBeLessThan(2);
 				expect(Math.abs(last.at(-1)!.right - m.right), at).toBeLessThan(2);
-				expect(last[0]!.text, at).toBe('Add data');
+				if (adds) expect(last[0]!.text, at).toBe('Add data');
+				else expect(m.main.map((c) => c.text), at).not.toContain('Add data');
 				if (s.tab === 'runs') {
 					expect(last.at(-1)!.text, at).toBe('Run model');
 					// The label and its name fill the row above.
@@ -312,7 +319,7 @@ test.describe('phone', () => {
 test.describe('desktop', () => {
 	test.use({ viewport: { width: 1440, height: 960 } });
 
-	test('the header controls stay one row, beside the title where they fit, Add data then Run model last', async ({ page, owner }) => {
+	test('the header controls stay one row, beside the title where they fit, Add data (where the tab has it) then Run model last', async ({ page, owner }) => {
 		// The same budget as the phone tests on this seed: two runs of 30 units and 44 volumes added one by one
 		// take most of the default 30 s on a busy machine before the page is opened.
 		test.setTimeout(60_000);
@@ -325,8 +332,9 @@ test.describe('desktop', () => {
 		for (const [tab, expected] of [['settings', true], ['network', null], ['allocations', false]] as const) {
 			await page.goto(`/projects/${p.id}?tab=${tab}`);
 			const h = header(page);
-			await expect(h.getByRole('button', { name: 'Add data' })).toBeVisible();
-			// Measure the settled header, never a partial one: Add data is the page's own, but the rain pill
+			const run = h.getByTestId('header-run');
+			await expect(run).toBeVisible();
+			// Measure the settled header, never a partial one: Run model is the page's own, but the rain pill
 			// waits on the series' freshness, and each tab is a lazy component that fills the header's context
 			// and controls only once it mounts (fillHeader). Measured before the Network's Map, Tables and
 			// + Add buttons arrived, the row "fit" and then wrapped under the title once they did (CI, #602).
@@ -354,13 +362,14 @@ test.describe('desktop', () => {
 			const beside = fits;
 			const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;
 			const pill = (await h.locator('summary', { hasText: 'Rain up to' }).boundingBox())!;
-			const add = (await h.getByRole('button', { name: 'Add data' }).boundingBox())!;
+			const runBox = (await run.boundingBox())!;
 			const mid = (b: { y: number; height: number }) => b.y + b.height / 2;
-			expect(Math.abs(mid(pill) - mid(add)), tab).toBeLessThan(4);
+			expect(Math.abs(mid(pill) - mid(runBox)), tab).toBeLessThan(4);
 			if (beside) expect(pill.x, tab).toBeGreaterThan(title.x + title.width);
 			else expect(pill.y, tab).toBeGreaterThan(title.y + title.height);
 			const buttons = await h.getByTestId('header-main').getByRole('button').allTextContents();
-			expect(buttons.map((t) => t.trim()), tab).toEqual(['Add data', 'Run model']);
+			// Add data only on Model settings of the three (issue #601).
+			expect(buttons.map((t) => t.trim()), tab).toEqual(tab === 'settings' ? ['Add data', 'Run model'] : ['Run model']);
 		}
 	});
 });
