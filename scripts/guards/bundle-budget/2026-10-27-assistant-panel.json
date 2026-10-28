@@ -1,0 +1,4 @@
+{
+	"addKb": 8,
+	"why": "Issue #610 assistant: the lazy AssistantPanel chunk (3.5 KB gz), the Ask the assistant guide in the help guides chunk (~2 KB), the conversation state, SSE reader and header button in the workspace page (~2 KB), the client's stream POST; measured 2122 KB total vs 2114 KB"
+}
