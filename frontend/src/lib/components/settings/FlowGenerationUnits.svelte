@@ -14,16 +14,12 @@
 	import type { RainStationSettings } from '@water-management/engine';
 	import { fmtNum } from '#lib/format/number.js';
 	import { stationHref } from './unitRain';
+	import PatchChain from './PatchChain.svelte';
 	import {
 		assignmentLine,
 		CHIRPS_PATCH,
 		namesLine,
-		patchAdd,
 		patchFromValues,
-		patchMove,
-		patchRemove,
-		patchSet,
-		patchUsabilityText,
 		withUnitPatch,
 		stationsInUse,
 		unitStationRows,
@@ -111,45 +107,18 @@
 	}
 </script>
 
-<!-- One patching priority (issue #612): an ordered list of pull-downs, each a station other than the main one or CHIRPS. -->
+<!-- One patching priority (issue #612): PatchChain.svelte, shared with the catchment's station. -->
 {#snippet chain(values: PatchValue[], set: (v: PatchValue[]) => void, mainId: string | null, who: string, use: Record<string, PatchUsability> | null)}
-	{@const next = patchAdd(values, list, mainId, use ? (id) => use[id]?.usable === true : undefined)}
-	{#if values.length}
-		<ol class="chain" aria-label="Then patch gaps from, for {who}" data-testid="flowgen-patch">
-			{#each values as v, i (v)}
-				{@const u = v === CHIRPS_PATCH ? null : (use?.[v] ?? null)}
-				<li data-testid="flowgen-patch-entry" data-source={v}>
-					<span class="chain-row">
-						<select aria-label="Patch source {i + 1} for {who}" disabled={readonly} value={v} onchange={(e) => set(patchSet(values, i, e.currentTarget.value))}>
-							{#each list.filter((st) => st.id !== mainId) as st (st.id)}
-								{@const su = use?.[st.id]}
-								<option value={st.id} disabled={!!su && !su.usable && st.id !== v}>{st.name}{su && !su.usable ? ` (can’t help: ${su.reason})` : ''}</option>
-							{/each}
-							<option value={CHIRPS_PATCH}>CHIRPS, corrected</option>
-							{#if v !== CHIRPS_PATCH && !list.some((st) => st.id === v)}<option value={v}>A station the project no longer has</option>{/if}
-						</select>
-						{#if !readonly}
-							<button type="button" class="btn btn-sm" aria-label="Move patch source {i + 1} for {who} up" disabled={i === 0} onclick={() => set(patchMove(values, i, -1))}>Up</button>
-							<button type="button" class="btn btn-sm" aria-label="Move patch source {i + 1} for {who} down" disabled={i === values.length - 1} onclick={() => set(patchMove(values, i, 1))}
-								>Down</button
-							>
-							<button type="button" class="btn btn-sm" aria-label="Remove patch source {i + 1} for {who}" onclick={() => set(patchRemove(values, i))}>Remove</button>
-						{/if}
-					</span>
-					{#if v === CHIRPS_PATCH}
-						<span class="small block muted">the unit’s own CHIRPS, corrected month by month against the station’s rain at the unit’s MAP</span>
-					{:else if u}
-						<span class="small block" class:err={!u.usable} data-testid="flowgen-patch-fill">{patchUsabilityText(u)}</span>
-					{/if}
-				</li>
-			{/each}
-		</ol>
-	{:else}
-		<span class="small block muted" data-testid="flowgen-patch-none">Nothing: the station’s gaps go to the next fallback.</span>
-	{/if}
-	{#if !readonly}
-		<button type="button" class="btn btn-sm add" disabled={!next} onclick={() => next && set(next)}>Add a source</button>
-	{/if}
+	<PatchChain
+		{values}
+		{set}
+		{mainId}
+		{who}
+		{use}
+		stations={list}
+		{readonly}
+		chirpsText="the unit’s own CHIRPS, corrected month by month against the station’s rain at the unit’s MAP"
+	/>
 {/snippet}
 
 <div class="flowgen-units" id="fld-stations" data-testid="flowgen-units">
@@ -373,22 +342,6 @@
 	.pick {
 		width: 2rem;
 	}
-	.chain {
-		margin: 0;
-		padding-left: 1.2rem;
-	}
-	.chain li + li {
-		margin-top: 0.3rem;
-	}
-	.chain-row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.25rem;
-	}
-	.add {
-		margin-top: 0.3rem;
-	}
 	.bulk-chain {
 		flex-basis: 100%;
 	}
@@ -419,8 +372,6 @@
 		td select,
 		.bulk select,
 		.bulk .btn,
-		.chain .btn,
-		.add,
 		.site select {
 			min-height: var(--tap);
 		}

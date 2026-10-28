@@ -1422,7 +1422,7 @@ left out, so nobody gets a catchment roll-up of their neighbours.
   traffic-light cut-offs every `ewr.status` below was judged by, in percent,
   and `source` says whether they are the team's (`team`) or the defaults
   (`default`), so the page can say which apply.
-- `PortfolioProject = { id, name, role, timeZone, today, dataUntil, lastRunAt, publishedAt, source, sourceRunId, figuresUntil, figuresAgeDays, stale, behindData, newerRun, ewr, irrigation, farmsShort7, farmsShort30, farmCount, lowestDamPct, damsKnown, figuresWithheld, feeds, alertsFiring, restriction }`, by name:
+- `PortfolioProject = { id, name, role, timeZone, today, dataUntil, lastRunAt, publishedAt, source, sourceRunId, figuresUntil, figuresAgeDays, stale, behindData, newerRun, ewr, irrigation, farmsShort7, farmsShort30, farmCount, lowestDamPct, damsKnown, figuresWithheld, feeds, alertsFiring, restriction, drought }`, by name:
   - `timeZone` / `today`: the project's time zone and the calendar day
     there when the server answered. `figuresAgeDays`, `stale` and the feeds'
     health count to that day, so a team with catchments in several zones
@@ -1492,6 +1492,16 @@ left out, so nobody gets a catchment roll-up of their neighbours.
     no alert switched on.
   - `restriction = { level, pct } | null`: the current publication's; `null`
     when nothing is published.
+  - `drought = { month, driest, gap? } | null` (issue #620): the source run's
+    `summary.drought`, the driest SPI or SPEI for the last whole month of its
+    history (`month`, `YYYY-MM`); `driest = { kind: 'spi' | 'spei', scale: 3 |
+    6 | 12, value, class, from }` (`from` the period's first month), or `null`
+    with `gap` `no-rain` / `no-month` / `short-record` / `missing-month`
+    ([model.md §2.15b](./model.md#215b-drought-badge-spi-and-spei-issue-620)).
+    Read from the summary only, never a series, and never a forecast day.
+    `null` without a source run and for a run saved before engine 1.105.0.
+    Not withheld with the figures above: it rests on rain and evaporation,
+    not on any registered volume.
 
 ## Alerts
 

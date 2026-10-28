@@ -3133,8 +3133,9 @@ station*, which keeps the unit on §2.4h's chain; satellite rain is never an
 option, CHIRPS only fills gaps), **Then patch gaps from** (`patch`, issue
 #612: an ordered list of pull-downs, each another station or *CHIRPS,
 corrected*, with Up, Down, Remove and Add a source; each station shows how
-many of the main station's gap days in the run window it fills, or why it
-can't help, and a station that can't help is greyed out in the pull-down),
+many of the main station's gap days in the run's history it fills, which
+days it counted, or why it can't help, and a station that can't help is
+greyed out in the pull-down),
 **Scale to unit MAP** (`scaleToMap`) with the ratio it gives, and **Gaps:
 CHIRPS corrected against** (`correctAgainst`), then each station in use
 (main, correcting or patching) once with its MAP and, for a station without
@@ -3143,7 +3144,15 @@ station and one patching priority for all of them. The form stores
 defaults as none (scaling on, the unit's own station, the patching
 priority [CHIRPS]), and an emptied setting as null, so assigning a station
 and taking it away again stores what was there. `units` stays stored under Fragmentation, unused.
-`catchment` and `catchmentMapMm` have no field yet (the API takes them).
+`catchment` is set above the units' table under **The catchment's
+rainfall station** (issue #612 follow-up, `settings/FlowGenerationCatchment.svelte`,
+shown under both methods: the catchment rain is GR4J's under Fragmentation
+and demand's and the dams' under either): **Station** (*No station* keeps
+the catchment rain series), **Then patch gaps from**, **Scale to catchment
+MAP** and **Gaps: CHIRPS corrected against**, with the units' controls and
+stored defaults (`settings/PatchChain.svelte` is the patching priority's
+pull-downs for both). `catchmentMapMm` has no field yet (the API takes it;
+[followups.md](./followups.md)).
 `unreliable` is set under Model settings → Rain gaps → Flagged rain
 (**Unreliable periods of a rain record**, issue #611): From/To rows for every
 rain record of the project. A fit's forcing records each unit's station, so the form says
@@ -3191,11 +3200,29 @@ so record length alone doesn't disqualify it. **Usability**
 (`stationPatchUsability`, shown in the form and warned by the run): a
 station can't help when it is the main station, has no record, has no MAP
 while scaling is on, or **has a reading on none of the main station's gap
-days in the run window** (the client's "too short" case). The fill count
+days in the run's history** (the client's "too short" case). The fill count
 "fills *N* of the main station's *G* gap days" is always given, with the
-record's span; no minimum-years rule applies to a patch station (the 5-year
+days it counted and the record's span; no minimum-years rule applies to a patch station (the 5-year
 rule stays on the CHIRPS fit, where the factors depend on it). A station
 that fills none is kept in the list and changes nothing; the run warns.
+
+**The window the gaps are counted over** (engine 1.105.0, the #612
+follow-up): the run's **history**, the run window less its forecast tail
+(`forecastTail`, §2.4f): the days after the last
+day any other source has rain, which the forecast fills. No source of the
+patching priority fills a tail day (if one had a reading there, the day
+wouldn't be in the tail), so counting them made *G* the history's gaps plus
+every forecast day, and the percentage too low. The form's count
+(`stationPatchChoices`) takes the tail of the stored input's run;
+the run's own count (`StationAreaForcing.patches[].gapDays`, with
+`forecastDays` when a tail was left out) takes its own: a unit's from the
+run's `historyDays`, the catchment's from the same split over the
+catchment forcing it builds (`tailOfSource`), since that forcing is made
+before the prepared run. The reason and the run's warning say "before the
+forecast" when a tail was left out, "in the run window" otherwise; the form
+gives the dates ("gaps counted 2015-01-01 to 2020-12-31, the run's 30
+forecast days left out"). Only the count changed: which day takes which
+source is as before.
 
 **The checked record** (`checkedStationRecord`). The station's stored
 record goes through the catchment's §2.4c zero-run and §2.4d accumulation
@@ -12245,7 +12272,7 @@ another day refused.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep terciles by calendar day (the lowest band from the lowest storage on record, the total shared pro rata to capacity) and the table drawn on the latest review date the record holds.
 
-### 2.15b Drought badge: SPI and SPEI (issue #620, slice 1)
+### 2.15b Drought badge: SPI and SPEI (issue #620)
 
 How dry the catchment has been, as the **Standardized Precipitation Index**
 (SPI; McKee, Doesken and Kleist 1993; WMO-No. 1090, 2012) and the
@@ -12254,9 +12281,10 @@ Vicente-Serrano, Beguería and López-Moreno 2010) over 3, 6 and 12 months.
 Computed from a run's own daily `rain_final` and `pet` (the GR4J forcing,
 §2.4), so it needs no new upstream and avoids SPEIbase's ODbL share-alike.
 A **derived view** of a run's record (`packages/engine/src/drought/`,
-`droughtBadge`): `runModel` doesn't change, nothing is stored, and
-`ENGINE_VERSION` doesn't move. The Summary's Drought index card shows it
-([ui.md § Summary](./ui.md#summary)).
+`droughtBadge`): `runModel`'s numbers don't change, and `ENGINE_VERSION`
+doesn't move for it (1.105.0 carries `summary.drought`, below). The
+Summary's Drought index card shows it, worked out in the browser from the
+run's stored series ([ui.md § Summary](./ui.md#summary)).
 
 - **Month.** The badge is for the last whole calendar month of the run's
   history: a forecast run's days from `forecastFrom` on are never read. A
@@ -12309,6 +12337,29 @@ the badge reads the last whole month of history and ignores forecast days
 after it, a dry spell reads dry, and each kind of gap is named. The
 Summary's e2e (`overview.spec.ts`) seeds 31 years of rain whose last
 Aug–Oct is bone dry, and checks its SPI-3 is Φ⁻¹(1/62) = −2.14.
+
+**Stored headline (`summary.drought`, engine 1.105.0).** The project list
+and the team portfolio can't load every run's daily series, so a saved run
+carries the badge's headline in its summary (`drought/summary.ts`
+`runDrought`, attached by `runModelChecked`): `month` (the last whole month
+of history, `YYYY-MM`), `driest` (the driest index with a value: `kind`
+`spi`/`spei`, `scale` 3/6/12, `value`, `class`, and `from`, the first month
+of the period it covers) or null with a `gap`: `no-rain` (no catchment
+`rain_final`), `no-month` (no whole month), `short-record` (a calendar month
+under 20 years) or `missing-month`. The same badge as the card's, so the
+two agree. It never reads a forecast day: a forecast-mode run's summary is
+its run without the tail's (§ Forecast mode), and an ordinary run whose rain
+went on past the record on forecast rain (`summary.forecastRain`) is cut at
+`forecastRain.lastRecorded` (`droughtLastDay`; the card uses the same day).
+Forecast rain filling a gap before that is history, as everywhere else.
+Output only, so `ENGINE_VERSION` stays; a run from before has no
+`summary.drought` and the list says "No drought index for this run". The
+portfolio query reads the one key from the source run's summary
+(`backend/src/portfolio/portfolio.ts`, api.md § Portfolio). Tests:
+`drought/summary.test.ts` (the driest index and its period, the
+forecast-rain cut with a positive control, each gap), `forecast.test.ts`
+(a forecast-mode run's badge is its history's), the portfolio DB test and
+`e2e/tests/projects.spec.ts`.
 
 **Later slices of #620** build on this module. The analogue outlook
 (§2.15c) chooses past seasons by their ENSO and SAM state alone, not the

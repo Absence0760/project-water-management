@@ -36,6 +36,12 @@ export interface AreaRainLines {
 	source: StationRainDaySource[];
 	/** On a `patch` day (issue #612), its source in words: "patch 1: <station>"; null on the others. */
 	patchFrom: (string | null)[];
+	/**
+	 * Each patch station the run reads for this area (issue #613 slice 3, issue #612), in its patching priority: its
+	 * record as stored and × the ratio the run applies to it (this area's MAP ÷ that station's MAP). A source the run
+	 * skips (no record, no MAP under scaling) and the CHIRPS entry aren't lines. Absent before engine 1.105.0.
+	 */
+	patches?: PatchStationLines[];
 	/** The station's record as stored (null: no reading). */
 	stationRaw: (number | null)[];
 	/** The stored record × the ratio the run applies (null: no reading). */
@@ -52,6 +58,20 @@ export interface AreaRainLines {
 	correctAgainst: string;
 	forcing: StationAreaForcing;
 	warnings: string[];
+}
+
+/** One patch station's lines for an area (AreaRainLines.patches). */
+export interface PatchStationLines {
+	/** Its place in the area's patching priority, 1 first (the "patch N" a patched day names; CHIRPS and skipped sources keep their places). */
+	place: number;
+	stationId: string;
+	stationName: string;
+	/** This area's MAP ÷ the station's MAP after the clamp, the ratio the run applies (1 with scaling off). */
+	ratio: number;
+	/** The station's record as stored (null: no reading). */
+	raw: (number | null)[];
+	/** The stored record × ratio (null: no reading). */
+	scaled: (number | null)[];
 }
 
 const reading = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
@@ -97,6 +117,12 @@ export function areaRainLines(input: ModelInput, nodeId: string | null, prep: Pr
 	// One per area since engine 1.105.0 (issue #612): fitted against the station's adjusted rain over this area's CHIRPS.
 	const pairing = prep.stations?.context.pairing(correctAgainst, nodeId) ?? null;
 	const patchName = (id: string) => input.stations?.[id]?.name ?? 'a station no longer in the project';
+	const patches: PatchStationLines[] = [];
+	(r.forcing.patches ?? []).forEach((p, i) => {
+		if (p.source !== 'station' || p.skipped !== null) return;
+		const raw = align(series[stationSeriesKey(p.stationId)], start, days);
+		patches.push({ place: i + 1, stationId: p.stationId, stationName: p.stationName || patchName(p.stationId), ratio: p.ratio, raw, scaled: raw.map((v) => (v === null ? null : v * p.ratio)) });
+	});
 	const patchFrom = r.patchStationId.map((id, t) => (id === null ? null : `patch ${r.patchPlace[t]}: ${patchName(id)}`));
 	const factors = pairing && pairing.refused === null && pairing.months.length === 12 ? pairing.months.map((m) => m.factor) : null;
 	const chirpsCorrected = chirpsRaw && factors ? chirpsRaw.map((v, t) => (v === null ? null : v * factors[monthOfEpochDay(start + t) - 1]!)) : null;
@@ -105,6 +131,7 @@ export function areaRainLines(input: ModelInput, nodeId: string | null, prep: Pr
 		rainUsed: r.rainMm,
 		source: r.source,
 		patchFrom,
+		patches,
 		stationRaw,
 		stationScaled,
 		chirpsRaw,

@@ -6,6 +6,8 @@ import {
 	curtailmentHref,
 	damText,
 	DEFAULT_SORT,
+	droughtTag,
+	NO_DROUGHT_INDEX,
 	ewrText,
 	ewrWindowLabel,
 	farmsShortText,
@@ -53,6 +55,7 @@ const row = (over: Partial<PortfolioProject> = {}): PortfolioProject => ({
 	feeds: { total: 0, ok: 0, failing: 0 },
 	alertsFiring: 0,
 	restriction: { level: 'advisory', pct: 12.5 },
+	drought: null,
 	...over
 });
 const unknown = (reason: 'no-figures' | 'no-ewr' | 'no-series') => ({ status: 'unknown' as const, daysNotMet30: null, days30: null, fraction30: null, reason });
@@ -247,5 +250,32 @@ describe('irrigation (the project list’s status, issue #558)', () => {
 	it('counts the irrigation statuses apart from the EWR’s', () => {
 		expect(statusCounts([row(), irr({})], 'irrigation')).toEqual({ red: 0, amber: 1, green: 1, unknown: 0 });
 		expect(statusCounts([row(), irr({})])).toEqual({ red: 2, amber: 0, green: 0, unknown: 0 });
+	});
+});
+
+describe('the drought badge (issue #620)', () => {
+	const spei = { month: '2026-08', driest: { kind: 'spei' as const, scale: 12 as const, value: -1.6249, class: 'severely-dry' as const, from: '2025-09' } };
+
+	it('names the class and the driest index, with the value and the months in the tooltip', () => {
+		expect(droughtTag(row({ drought: spei }))).toEqual({
+			kind: 'index',
+			label: 'Severely dry',
+			index: 'SPEI-12',
+			tone: 'dry',
+			title: 'Severely dry: SPEI-12 −1.62 over Sep 2025 – Aug 2026, the driest index for the run’s last whole month'
+		});
+		const wet = { month: '2026-08', driest: { kind: 'spi' as const, scale: 3 as const, value: 1.2, class: 'moderately-wet' as const, from: '2026-06' } };
+		expect(droughtTag(row({ drought: wet }))).toMatchObject({ label: 'Moderately wet', index: 'SPI-3', tone: 'wet' });
+		expect(droughtTag(row({ drought: wet }))!.title).toContain('over Jun–Aug 2026');
+	});
+
+	it('a run from before the badge, or without an index, shows a dash that says why; no run shows nothing', () => {
+		expect(droughtTag(row({ drought: null }))).toEqual({ kind: 'none', title: NO_DROUGHT_INDEX });
+		expect(droughtTag(row({ drought: { month: '2026-08', driest: null, gap: 'short-record' } }))).toEqual({
+			kind: 'none',
+			title: 'No drought index for this run: a fit needs at least 20 years of rain in each calendar month'
+		});
+		expect(droughtTag(row({ drought: { month: null, driest: null, gap: 'no-rain' } }))!.title).toContain('no final catchment rainfall');
+		expect(droughtTag(row({ source: null, drought: null }))).toBeNull();
 	});
 });

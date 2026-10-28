@@ -552,7 +552,7 @@ export function unitRainForcing(
 					)
 				);
 			const sm = sc.map(st.stationId);
-			const patches = patchUses(sc, patch, links, station, d, st.scaleToMap);
+			const patches = patchUses(sc, patch, links, station, d, st.scaleToMap, hist);
 			warnings.push(...idlePatchWarnings(`"${n.name}"`, patches));
 			stationForcings.push({
 				nodeId: n.id,

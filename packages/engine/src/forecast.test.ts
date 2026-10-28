@@ -108,6 +108,13 @@ describe('runForecastChecked', () => {
 		expect(out.summary.farms).toEqual(hist.summary.farms);
 		expect(out.summary.curtailment).toEqual(hist.summary.curtailment);
 		expect(out.summary.catchment).toEqual(hist.summary.catchment);
+		// The drought badge (issue #620) is the history's too: its last whole month is November, not the forecast's December.
+		expect(out.summary.drought).toEqual(hist.summary.drought);
+		expect(out.summary.drought).toEqual({ month: '2020-11', driest: null, gap: 'short-record' });
+		// The ordinary run of the same input stops at the last recorded day as well (summary.forecastRain)…
+		expect(runModelChecked(x).summary.drought?.month).toBe('2020-11');
+		// …positive control: a run that records December has it.
+		expect(runModelChecked(withRain(record(400))).summary.drought?.month).toBe('2021-01');
 	});
 
 	it('summarises the forecast days per farm and at the outlet, and adds the rain_source column', () => {

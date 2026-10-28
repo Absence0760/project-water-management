@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
+	import { droughtLastDay } from '@water-management/engine';
 	import { api, type Project, type Run, type RunMeta } from '#lib/api/index.js';
 	import AlertsPanel from '#lib/components/alerts/AlertsPanel.svelte';
 	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
@@ -323,9 +324,10 @@
 				<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
 				<AlertsPanel projectId={project.id} {canEdit} bind:ready={alertsReady} />
 				<!-- How dry the catchment has been: SPI and SPEI to the run's last whole month of history (issue #620),
-				     context for a restriction decision, under what to act on. -->
+				     context for a restriction decision, under what to act on. The day it counts to is the stored
+				     badge's (engine droughtLastDay): an ordinary run over forecast rain stops at the last recorded day. -->
 				{#if shown}
-					<DroughtIndex projectId={project.id} runId={shown.id} refs={droughtRefs} lastDay={historyEnd(pick.latest)} bind:ready={droughtReady} />
+					<DroughtIndex projectId={project.id} runId={shown.id} refs={droughtRefs} lastDay={droughtLastDay({ startDate: shown.startDate, endDate: historyEnd(pick.latest), summary: shown.summary })} bind:ready={droughtReady} />
 				{/if}
 			</div>
 			<div class="side">

@@ -421,12 +421,29 @@
 					{#if lines.refused}
 						<p>The pairing that corrects {viewArea.name}’s CHIRPS against {stationNameOf(lines.correctAgainst)} is refused: {lines.refused}. Its CHIRPS isn’t corrected, so its gaps fall to the next fallback.</p>
 					{:else if lines.factors}
-						<p>CHIRPS bias factors f(m) against {stationNameOf(lines.correctAgainst)}, January to December{lines.chirpsRaw ? '' : ` (${viewArea.name} has no CHIRPS of its own to correct)`}:</p>
+						<!-- One pairing per area since engine 1.105.0 (issue #612): fitted against the station's rain taken to this area's MAP over this area's own CHIRPS. -->
+						<p>
+							CHIRPS bias factors f(m) for {viewArea.name}, fitted against {stationNameOf(lines.correctAgainst)}’s rain adjusted to {viewArea.name}’s MAP over {viewArea.nodeId === null
+								? 'the catchment CHIRPS'
+								: 'its own CHIRPS'}, January to December{lines.chirpsRaw ? '' : ` (${viewArea.name} has no CHIRPS of its own to correct)`}:
+						</p>
 						<ul aria-label="CHIRPS bias factors by month">
 							{#each lines.factors as k, m (m)}<li><span class="muted">{MONTHS[m]}</span> {fmtNum(k, 2)}</li>{/each}
 						</ul>
 					{:else}
 						<p>No CHIRPS bias factors were fitted against {stationNameOf(lines.correctAgainst)}.</p>
+					{/if}
+					{#if (lines.forcing.patches ?? []).some((p) => p.source === 'station')}
+						<!-- The patching priority as the run reads it (issue #612): each station × its ratio, or why it is skipped, then CHIRPS. -->
+						<p data-testid="preview-patch-chain">
+							Its station’s gaps are patched from {(lines.forcing.patches ?? [])
+								.map((p, i) =>
+									p.source === 'chirps'
+										? `${i + 1}. its corrected CHIRPS (${p.days} ${p.days === 1 ? 'day' : 'days'})`
+										: `${i + 1}. ${p.stationName || stationNameOf(p.stationId)} × ${fmtNum(p.ratio, 3)} (${p.skipped ? `skipped: ${p.skipped}` : `${p.days} ${p.days === 1 ? 'day' : 'days'}`})`
+								)
+								.join(', ')}, in that order.
+						</p>
 					{/if}
 				{:else}
 					<p class="muted">A run reads no rain of {viewArea.name}’s own with the settings as saved (no rainfall station, and per-unit rain is off), so it has no derived rain lines; the series stored for it are shown.</p>

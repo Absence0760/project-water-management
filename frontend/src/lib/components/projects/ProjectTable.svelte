@@ -3,7 +3,8 @@
 	// list): each row says how the catchment is doing, from the portfolio's
 	// figures (GET /projects/outcomes): irrigation supplied (the status since issue #558; the EWR's
 	// is the teams pages' and the workspace's EWR page's), units short in the figures' last week,
-	// the lowest dam and the published restriction, data freshness, the last run
+	// the lowest dam and the published restriction, data freshness and the drought badge
+	// (issue #620, from the source run's summary), the last run
 	// and the alerts firing (the team portfolio's columns, folded in by issue #176).
 	// A click anywhere on a row opens the project (the name link stretches over
 	// the row, .name::after). Add data is the one row button; Copy and Delete
@@ -14,6 +15,7 @@
 	import { basePath } from '#lib/nav/base.js';
 	import { hasRole, roleLabel, type PortfolioProject, type ProjectSummary } from '#lib/api/index.js';
 	import StatusPill from '#lib/components/portfolio/StatusPill.svelte';
+	import DroughtTag from '#lib/components/portfolio/DroughtTag.svelte';
 	import {
 		ageText,
 		alertsText,
@@ -244,6 +246,7 @@
 						<span class="meta meta-narrow">
 							{@render freshBadge(p)}
 							{#if o?.behindData}<span class="badge badge-warn flag">Newer rain not in the figures</span>{/if}
+							{#if o}<DroughtTag p={o} />{/if}
 						</span>
 						<span class="meta meta-mid">
 							{@render lastRun(p)}
@@ -266,6 +269,8 @@
 					<td class="wide c-data">
 						{@render freshBadge(p)}
 						{#if o?.behindData}<span class="badge badge-warn flag">Newer rain not in the figures</span>{/if}
+						<!-- The source run's drought badge (issue #620): the driest SPI/SPEI for its last whole month. -->
+						{#if o}<span class="dline"><DroughtTag p={o} /></span>{/if}
 						{#if o && o.feeds.total}<span class="sub" class:warn={o.feeds.failing > 0}>{feedsText(o)}</span>{/if}
 					</td>
 					<td class="wide xwide c-run">
@@ -450,6 +455,10 @@
 	}
 	.sub.warn {
 		color: var(--warning);
+	}
+	.dline {
+		display: block;
+		margin-top: 0.2rem;
 	}
 	/* The rain badge and the flag wrap inside their cell: "Rain to 28 Aug 2025
 	   (13 months ago)" is wider than the Data column (and a 320 px phone's name
