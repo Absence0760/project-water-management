@@ -2427,6 +2427,120 @@ recorded bytes, runs the engine's `checkPackBundle` with the re-run, and
 records the outcome through `app_record_pack_reproduction`. The pack's page
 shows it (`reproduction` on `GET …/packs/:packId`); verify doesn't.
 
+## Assistant
+
+A chat about one project's model and results (issue #610,
+`backend/src/assistant/`; the API in [api.md § Assistant](./api.md#assistant),
+the counters in [data-model.md § Assistant usage](./data-model.md#assistant-usage-262_assistant_usagesql),
+the controls in [security.md § Assistant](./security.md#assistant)). The
+model is called from the backend only, never the browser, so the site's CSP
+doesn't change. The assistant reads; it never writes the project. A
+recommended settings change comes back as a proposal the person loads into
+the Settings draft and an editor saves with the normal Save.
+
+```mermaid
+sequenceDiagram
+  participant B as Browser (panel)
+  participant A as API (assistant routes)
+  participant P as Postgres (RLS)
+  participant M as Model (provider)
+  B->>A: POST /projects/:id/assistant/messages {messages, runId?}
+  A->>P: withUser: requireRole viewer, app_assistant_begin (rate, budget, count)
+  A-->>B: 200 text/event-stream (or a JSON 4xx before any byte)
+  loop each hop, at most ASSISTANT_MAX_HOPS
+    A->>M: system prompt + conversation + tool specs
+    M-->>A: text deltas, tool calls, usage
+    A-->>B: text / tool events (": keepalive" every 15 s)
+    A->>P: each tool call: withUser(…, readOnly), RLS + the routes' withholding
+  end
+  A->>P: app_assistant_charge (tokens)
+  A-->>B: usage, done
+```
+
+- **One turn** (`orchestrator.ts` `runTurn`): the fixed system prompt
+  (`prompt.ts`; nothing personal in it) and the page's conversation, cut to
+  `ASSISTANT_MAX_INPUT_CHARS` from the oldest end, go to the provider. Each
+  tool call it asks for runs in its own read-only transaction as the caller
+  (`withUser(…, { readOnly: true })`), so RLS and the run routes' withholding
+  decide what it reads, and its result is cut to
+  `ASSISTANT_MAX_TOOL_RESULT_CHARS` before the model sees it. A malformed or
+  unknown call becomes an error result the model reads, never a crash. The
+  turn ends when the model answers in text, or with an `error` event past
+  the hop cap, the output cap, the turn's `ASSISTANT_TURN_SECONDS`, or a
+  provider failure. A client that goes away aborts the provider's call.
+- **Counted, then charged**: the message is counted (the person's hour, the
+  months' caps) in the transaction that checked the role, before the
+  stream starts; the turn's tokens are charged after it ends, whatever the
+  outcome (`usage.ts`). A call a provider never reported usage for is
+  charged by estimate (characters ÷ 4).
+- **Bounded per turn**: at most `ASSISTANT_MAX_TOOL_CALLS_PER_HOP` (4) tool
+  calls run from one model call (the rest get an error result asking for
+  them next hop, since a provider refuses a call left without a result), and
+  before each hop after the first the turn ends with `assistant_turn_limit`
+  if its weighted tokens so far plus the next hop's estimated input would
+  pass `ASSISTANT_MAX_TURN_TOKENS` (150 K). The turn's signal (its deadline,
+  or the client gone) goes to every tool call: `routes.ts`
+  `runToolBounded` rejects at once when it fires, and caps each tool
+  statement at 10 s (`SET LOCAL statement_timeout`), under the 15 s between
+  the turn's deadline and the Lambda's timeout, since the Lambda's one pooled
+  connection must be free for the charge.
+- **Prompt caching** on Bedrock (`providers/bedrock.ts`): a `cachePoint`
+  after the system prompt (covering the tools, which Bedrock caches first)
+  and after the newest message, so each hop re-reads the turn so far at the
+  cache-read rate. Cache reads and writes are still counted as input tokens,
+  so the caps are stricter than the bill.
+- **The caps** (`usage.ts`, 262): weighted tokens (input + 5 × output) per
+  project, per person across projects and for the whole deployment, each
+  per UTC month, and messages per person per hour. Each turn logs one
+  `assistant_turn` line with its token counts (no text), which an hourly
+  alarm sums (infra/alarms.tf); a failed charge logs
+  `assistant_charge_failed`, which alarms on one.
+- **Providers** (`providers/`, one interface in `types.ts`): `off` (the
+  default: no panel, no calls), `mock` (scripted answers and tool calls, for
+  the tests and e2e; production refuses it), `ollama` (a local model), and
+  `anthropic` or `bedrock` for production. ASSISTANT_PROVIDER picks one
+  (`config.ts`).
+- **The stream** (`sse.ts`) is a plain `ReadableStream` body, so it takes the
+  same path as the CSV downloads: the Node server pipes it locally, and in
+  Lambda `http/lambdaStream.ts` pipes it in `RESPONSE_STREAM` mode
+  (`assistant/routes.test.ts` drives it through the adapter). The keepalive
+  comment keeps CloudFront's 35 s gap from cutting a slow tool call off.
+- **No transcript is stored**, and no prompt or answer is logged: the server
+  keeps only the token and message counts (`assistant_usage`, `assistant_rate`).
+
+### Assistant tools
+
+The assistant (issue #610) answers from the project's own data through six
+read-only tools, `backend/src/assistant/tools/` (`READ_TOOLS` in
+`readTools.ts`; the orchestrator adds `propose_settings`). Each validates the
+model's arguments with zod (its JSON Schema is made from the same schema,
+`common.ts` `specOf`), runs on the orchestrator's read-only transaction as
+the member asking, reads the conversation's run or the project's latest
+(`runs/read.ts` `latestRunId`: the model's own runs before a scenario's or a
+forecast), and answers `{ ok: false, error }` in the API's words for a bad
+argument, a missing run or node, or a withheld series:
+
+| Tool | Reads | Kept small by |
+| --- | --- | --- |
+| `get_run_summary` | `readRun`: the catchment's figures, warnings, `summary.calibration`, plausibility, data quality (also allocations, water balance on request); the run's id, dates and kind, never its label, notes or maker | 30 warnings, short arrays, 4 significant digits |
+| `get_settings` | the run's snapshot as it ran, or the project's merged over the engine's defaults (`mergeSettings`), model inputs only, picked by name (`MODEL_INPUT`), the calibration rules' sign-off as signed and its date, never the signer | `keys` picks top-level settings |
+| `get_network` | the run's model snapshot (or the project's model): each node's kind, drainage, area, dam, crops, and the units, dams and gauges above each gauge | fields picked by name |
+| `get_series` | `readSeries`: one series of a node or the catchment | monthly means (latest 120 months), water-year means, or up to 92 days |
+| `get_gauge_fit` | the calibration site's `summary.calibration`; at another gauge, `calibrationStats` on its `outflow` and `observed_flow_check` over the run's calibration window and exclusions | the scores and a few annual volumes |
+| `search_help` | `helpIndex.json`, no database | 8 hits, 700-character snippets |
+
+The run reads the tools share with the run routes live in `runs/read.ts`
+(`readRun`, `readSeries`, `readSeriesBulk`, `readDay`, `readModelInput`),
+with the withholding inside them ([security.md](./security.md), #523 I), so
+the two paths can't drift apart. The help guides and glossary are frontend
+code, which the backend doesn't import: `pnpm gen:assistant:help`
+(`scripts/gen-assistant-help.mjs`, Node's type stripping) copies them as
+plain text into `backend/src/assistant/helpIndex.json`, one entry per guide
+section and per glossary entry, and `scripts/guards/assistant_help_index.test.mjs`
+(`pnpm test:guards`) fails until it is rerun after a help text changes.
+`search_help` ranks entries by the query's words (title and aliases over the
+summary over the text).
+
 ## Key choices
 
 | Choice | Why |

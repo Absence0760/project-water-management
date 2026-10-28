@@ -80,6 +80,42 @@ export function rebaseSettings(draft: EditableSettings, before: EditableSettings
 	return out as unknown as EditableSettings;
 }
 
+/**
+ * The settings a patch replaces whole rather than merging one level deep: the server's own list
+ * (backend/src/projects/settings.ts REPLACED_WHOLE, which settingsDraft.test.ts checks this against).
+ */
+export const PATCH_REPLACED_WHOLE: ReadonlySet<string> = new Set([
+	'fitRecord',
+	'pe',
+	'arealRain',
+	'chirpsQuantileMap',
+	'gapRain',
+	'calibrationRules',
+	'evidenceUncertaintyRule',
+	'droughtRestriction',
+	'ewrHeadline',
+	'ewrDailySource',
+	'unitRain',
+	'rainStations',
+	'flowMissing'
+]);
+
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * `settings` with a settings patch over it, as the project save applies one (patchSettings): a top-level
+ * setting replaces, and a nested object (gr4j, dataQuality, wr2012, …) merges one level deep, except the
+ * ones the server replaces whole (PATCH_REPLACED_WHOLE). A deep copy; neither argument changes.
+ */
+export function withPatch(settings: EditableSettings, patch: Record<string, unknown>): EditableSettings {
+	const out = JSON.parse(JSON.stringify(settings)) as Record<string, unknown>;
+	for (const [k, v] of Object.entries(patch)) {
+		const copy = v === undefined ? undefined : (JSON.parse(JSON.stringify(v)) as unknown);
+		out[k] = !PATCH_REPLACED_WHOLE.has(k) && isObj(copy) && isObj(out[k]) ? { ...(out[k] as Record<string, unknown>), ...copy } : copy;
+	}
+	return out as unknown as EditableSettings;
+}
+
 /** The problems child sections report through `bind:error` (each its own check). */
 export const CHILD_ERRORS = [
 	'calWindow',
@@ -175,6 +211,17 @@ export class SettingsDraft {
 			this.saveError = null;
 			this.#openX2();
 		}
+	}
+
+	/**
+	 * A recommended change (the assistant's proposal, issue #610) put into the form, unsaved: its settings take
+	 * the patch's values over the saved ones and over any edit typed to them (the person asked for it), every
+	 * other edit stays, and the person saves it with the normal Save (or discards it). Nothing is sent here.
+	 */
+	applyPatch(patch: Record<string, unknown>): void {
+		this.s = withPatch($state.snapshot(this.s) as EditableSettings, patch);
+		this.saveError = null;
+		this.#openX2();
 	}
 
 	get dirty(): boolean {

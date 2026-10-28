@@ -113,6 +113,24 @@ What was checked (September 2026):
   the privacy notice and sub-processor list and has to be justified; keeping
   the data in af-south-1 removes that question entirely, and the client may
   simply require it (plan question 15).
+- **The assistant is the one exception, even in af-south-1** (issue #610,
+  [§ The assistant](#the-assistant)). Bedrock offers Anthropic's Claude
+  models in af-south-1 only through *global* cross-Region inference: In-Region
+  and geographic (Geo) inference are "not supported" there for Claude Haiku
+  5.5, Sonnet 5.5 and Opus 5.5, Global is
+  ([Bedrock, Regional availability](https://docs.aws.amazon.com/bedrock/latest/userguide/models-region-compatibility.html);
+  [Claude Sonnet 5.5's model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5-5.html),
+  read 2026-10-27). A global profile "routes your requests to supported
+  commercial AWS Regions worldwide", on AWS's network, encrypted between
+  regions, with CloudTrail logging each call in the source region
+  ([Global cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/global-cross-region-inference.html);
+  [Cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html)).
+  So a turn's prompt and the project data its tools read leave South Africa
+  while it is answered: an s72 transfer, recorded in
+  [security.md § Personal information (POPIA)](./security.md#personal-information-popia)
+  and disclosed in Privacy §6. No new sub-processor (Bedrock is AWS, and the
+  model provider never sees prompts:
+  [Bedrock data protection](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html)).
 - **Latency.** Users are in South Africa. Cape Town is roughly 20–50 ms from
   most of the country versus ~150–200 ms to Ireland. Static files come from
   CloudFront edges either way (Terraform uses **PriceClass_All**, the only
@@ -122,7 +140,7 @@ What was checked (September 2026):
 
 | | af-south-1 (recommended) | eu-west-1 (Ireland) | us-east-1 |
 | --- | --- | --- | --- |
-| POPIA | No cross-border transfer | s72 transfer: justify, disclose | s72 transfer: justify, disclose |
+| POPIA | No cross-border transfer (but the assistant's model calls are one, below) | s72 transfer: justify, disclose | s72 transfer: justify, disclose |
 | API latency from SA | ~20–50 ms | ~150–200 ms | ~230+ ms |
 | SES API + VPC endpoint | Yes (no SMTP; not needed) | Yes | Yes |
 | Opt-in region | Yes: enable first (operator step 2) | No | No |
@@ -855,7 +873,11 @@ the real plan stays an operator step
   the backup period the privacy notice states (issue #126). Migrations must stay backwards-compatible
   with the running code for that short window: add first, remove in a later
   release. The worker Lambda's code is updated right after the API's, and
-  the fetcher's after the worker's. Then the renderer's image (built in the
+  the fetcher's after the worker's, then the assistant's (§ The assistant;
+  skipped with a notice while `assistant_enabled` is false; with the
+  `ASSISTANT_FUNCTION_NAME` variable unset the step tries the conventional
+  `water-management-assistant`, so a forgotten variable can't leave the
+  function on older code). Then the renderer's image (built in the
   `build` job, no AWS credentials) is pushed to ECR and the renderer Lambda
   moved to it; until the operator has created the function (§ Reports) the
   step pushes the image and says what to do, and any other `get-function`
@@ -932,6 +954,7 @@ function threw, though its line and column point into one long minified line.
 | fetcher `lambda-fetcher.mjs` | 2.03 MB → 0.99 MB | 343 KB → 256 KB |
 | renderer `lambda-renderer.mjs` (image; gzip) | 2.33 MB → 1.16 MB | 390 KB → 296 KB |
 | migrate `lambda-migrate.mjs` | 202 KB → 99 KB | 191 KB → 180 KB (mostly SQL) |
+| assistant `lambda-assistant.mjs` | the API's bundle plus the Bedrock client (issue #610; not yet measured) | – |
 
 **Source maps are not shipped.** The `.map` files land in
 `backend/dist/sourcemaps/`, and `deploy-backend.yml` uploads them as the
@@ -3121,6 +3144,157 @@ between them. If freeable memory settles near the 64 MiB threshold
 afterwards rather than climbing back, the instance is too small for the data:
 move `db_instance_class` to `db.t4g.small` (2 GiB). On this single-AZ
 instance the resize restarts it, a few minutes down.
+
+## The assistant
+
+The AI assistant (issue #610; [architecture.md](./architecture.md),
+[security.md](./security.md)) answers a project's members about its model
+and results, from a hosted model. Off until the operator turns it on
+(`assistant_enabled`, `infra/assistant.tf`); off, the API answers its status
+with `available: false` and the page shows no chat.
+
+**Where it runs.** Its own Lambda, `water-management-assistant`
+(`backend/src/lambda-assistant.ts`): the API's bundle and app, serving only
+`/projects/:id/assistant` and below (every other path is a 404, so the
+longer timeout and the model permission can't be used for any other
+route), in the API's private subnets with its own security group (Postgres,
+the Secrets Manager endpoint, the Bedrock endpoint). It exists because a
+turn (up to 6 model calls with tool reads between) runs past the API's
+30 s. It has:
+
+- a 120 s timeout (`assistant_timeout_seconds`), with `ASSISTANT_TURN_SECONDS`
+  15 s below it, so a long turn ends with an error event, charged, before
+  the runtime cuts it off;
+- reserved concurrency 2 (`assistant_reserved_concurrency`): two turns at
+  once across all users, a third gets a 429 it can resend. It bounds the
+  model spend per minute and the database connections (2 × a pool of 1;
+  [infra/README.md § Connections](../infra/README.md#connections));
+- a Function URL in `RESPONSE_STREAM` mode, reached only through CloudFront's
+  `/api/projects/*/assistant/*` behaviour, ordered before `/api/*`, with the
+  same shared-secret header as the API's origin (the app refuses a request
+  without it: a direct call is a 403) and an origin read timeout of 60 s.
+  That timeout is the longest gap between two packets, not the response;
+  the stream sends a `: keepalive` comment every 15 s
+  (`ASSISTANT_KEEPALIVE_SECONDS`, kept at 1–30 s by the production check).
+  The status (`GET /api/projects/:id/assistant`) stays on the API, which
+  carries the same `ASSISTANT_*` values so it shows what the assistant
+  enforces;
+- its own runtime secret: the session key, its `water_app` connection
+  (`application_name=assistant`) and the CloudFront header. No model key.
+
+**How it reaches the model.** Amazon Bedrock, through a `bedrock-runtime`
+interface VPC endpoint with private DNS (~$9.56/month in af-south-1 per AZ,
+`bedrock_endpoint_az_count`): no NAT, no internet gateway, no API key. The
+assistant's role may call one model (`assistant_model_id`, default
+`global.anthropic.claude-sonnet-5-5`) with `bedrock:InvokeModel` and
+`bedrock:InvokeModelWithResponseStream`, in AWS's documented three-part shape
+for a global profile: the inference profile in af-south-1 (requested in
+af-south-1), the model in af-south-1 (requested in af-south-1) and the
+region-less model (`aws:RequestedRegion` = `unspecified`, which is how
+Bedrock evaluates the global routing), the last two only through that
+profile (`bedrock:InferenceProfileArn`). The id carries no date or version
+suffix: [the model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5-5.html)
+lists `global.anthropic.claude-sonnet-5-5` as the global inference id and
+af-south-1 as a Global source region (read 2026-10-27). The endpoint
+policy lets only that role make those calls on that model. The production
+check allows only `off` or `bedrock` as the provider on the API and only
+`bedrock` on the assistant, and refuses on both a model id that isn't
+Anthropic's on Bedrock, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` and
+`OLLAMA_URL`, and on the assistant a region other than the Lambda's own
+(where its endpoint is).
+
+**The model is answered outside South Africa.** From af-south-1, Claude is
+offered only through Bedrock's global cross-Region inference (§ Region
+recommendation), so each call may run in any commercial AWS region. That is
+recorded as an s72 transfer in
+[security.md § Personal information (POPIA)](./security.md#personal-information-popia),
+disclosed in Privacy §5–§6 (`LEGAL_VERSION` 2026-10-27), and named in the
+operator agreement (§ 11, clause 6.1). CloudTrail's `additionalEventData.inferenceRegion`
+shows where each call ran. If a model is ever served In-Region in
+af-south-1, set `assistant_model_id` to its plain `anthropic.…` id: the IAM
+policy follows (the in-region shape), and the transfer goes away.
+
+**Cost controls.** Every token cap counts **weighted tokens**: input + 5 ×
+output, because the model's output costs five times its input
+(`OUTPUT_TOKEN_WEIGHT`), so a cap is dollars at the input price. Claude
+Sonnet 5.5 through the global profile from af-south-1 costs $2.00 per
+million input and $10.00 per million output tokens (AWS Price List API,
+`AmazonBedrockFoundationModels`, af-south-1, read 2026-10-27;
+`assistant_input_usd_per_million`). In the app, each checked before a turn
+and charged after it: 2 M a project a month (`assistant_tokens_per_month`),
+1 M a person a month across projects (`assistant_tokens_per_user_month`),
+and a deployment-wide monthly cap (`assistant_tokens_per_month_total`,
+derived by default from the assistant's budget at the input price: 25 M
+for $50 at $2/M), so no number of projects or accounts gets past the
+budget by more than the turns in flight; then 30 messages a user an hour
+(`assistant_messages_per_hour`), and per turn 6 model calls
+(`assistant_max_hops`), 150 K weighted tokens (`assistant_max_turn_tokens`,
+since each call resends the transcript), 4 tool calls a model call
+(`assistant_max_tool_calls_per_hop`), 1,024 output tokens a call, 12,000
+characters a tool result and 40,000 of conversation (all pinned in the
+Lambda's environment, the bounds checked by Terraform and by the
+production check alike). In AWS:
+the reserved concurrency above, and a third budget,
+`water-management-assistant`, USD 50 a month (`assistant_budget_monthly_usd`,
+ACTUAL 80% and 100% to the us-east-1 alerts topic), on the account's **AWS
+Marketplace** charges: Anthropic's models on Bedrock are billed through AWS
+Marketplace, "under the model provider (not under Amazon Bedrock)", and
+nothing else in the account is. A third budget costs about $0.62 a month;
+Marketplace charges can lag a further 12–24 hours behind other billing
+data, so the app's caps are what stop a runaway and the hourly token alarm
+below is what reports one. With the assistant on, raise
+`budget_monthly_usd` by `assistant_budget_monthly_usd` (~$160 on the
+defaults): the account budget includes the model spend, and the
+assistant's ~$11 of fixed cost would otherwise put af-south-1's idle on the
+ACTUAL 80% line every month (infra/README.md § Cost).
+
+**Alarms** (`alarms.tf`, only while it exists). On the essential tier:
+`assistant-errors` (any failed invocation: an init failure such as a
+production-check refusal, a timeout or a crash; a model or tool error
+inside a turn is an error event to the page), `assistant-throttles` (any
+429 at the reserved concurrency), `assistant-charge-failed` (any turn whose
+tokens weren't charged, which would leave every cap counting nothing),
+`assistant-provider-failed` (more than 3 failed model calls in 15 minutes:
+a wrong model id, model access not enabled, a quota or IAM problem; the
+invocation is still a 200) and `assistant-tokens-hourly` (the turns'
+weighted tokens summed over an hour above `assistant_tokens_alarm_per_hour`,
+2 M ≈ $4 an hour, about 10× the expected use: the spend signal that doesn't
+wait for billing). Its unhandled 500s count toward `unhandled-error`. On
+the full tier: `assistant-duration-p95` (above 80% of the timeout for 10
+minutes), and its direct-traffic refusals count toward
+`origin-secret-rejected`. Each turn logs one `assistant_turn` line (its
+token counts and how it ended); prompts and answers are never logged.
+
+**Bedrock invocation logging stays off.** "No transcript is kept anywhere"
+([security.md](./security.md)) holds only while Bedrock's **model
+invocation logging** is off in the account's region. It is an account-level
+setting Terraform doesn't manage (its resource can only turn logging on),
+so `infra/scripts/postapply-check.sh` asserts it: `assistant-logging` fails
+if `aws bedrock get-model-invocation-logging-configuration --region
+af-south-1` returns a `loggingConfig`. Never turn it on in this account;
+if the check fails, `aws bedrock delete-model-invocation-logging-configuration
+--region af-south-1` turns it off. The same script's `assistant-budget`
+warns until the assistant's budget has seen a charge: re-run it a day or
+two after the first model call, and if it stays at $0 after real use, the
+`BillingEntity = AWS Marketplace` filter misses the model's charge (Cost
+Explorer, group by Billing entity, shows where it went). Its
+`assistant-quota` prints the account's Bedrock tokens-per-minute quota
+for the model's global profile (Service Quotas): record it in the release
+checkpoint, since it is the most the assistant can spend a minute (output
+tokens count 5× against it too).
+
+**Turning it on.** The operator steps are in
+[followups.md § Blocking releases (operator)](./followups.md#blocking-releases-operator):
+enable the model in the Bedrock console and run its first invocation there,
+check the endpoint service exists in the account's region, then set
+`assistant_enabled = true` (and `budget_monthly_usd` raised, above) and
+apply, set the GitHub variable `ASSISTANT_FUNCTION_NAME` (the
+`assistant_function_name` output; unset, the deploy uses the same
+conventional name), release `backend@…` so the deploy uploads its code,
+then run `infra/scripts/postapply-check.sh` (the three `assistant-*`
+checks above). The account's Lambda
+concurrency quota must cover the extra reservation (infra/README.md §
+Operator steps).
 
 ## Read-only production checks
 

@@ -3418,6 +3418,56 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Goes with the account (cascade) and is in the data-subject export
   (`preferences`).
 
+### Assistant usage (262_assistant_usage.sql)
+
+What the assistant costs, counted (issue #610; [api.md §
+Assistant](./api.md#assistant), [security.md §
+Assistant](./security.md#assistant)). No chat text is kept anywhere: the
+page holds the conversation and sends it with each turn.
+
+| Table | Holds |
+| --- | --- |
+| `assistant_usage` | One row per person per project per UTC month: `project_id` (cascade), `user_id` (set null), `month` (the month's first day), `input_tokens`, `output_tokens`, `messages`, `updated_at`; unique on (`project_id`, `month`, `user_id`), which covers the project key, and indexes on `user_id` and `month` |
+| `assistant_rate` | The hourly message cap: `user_id` (primary key, cascade), `window_start`, `messages`, a fixed one-hour window as `map_compute_throttle` (186); a row goes once its hour is over, at the person's next turn or the job tick |
+
+- Every cap counts weighted tokens, `input + 5 × output`
+  (`assistant_weighted`; assistant/config.ts `OUTPUT_TOKEN_WEIGHT`: output
+  costs five times input on Bedrock). Three monthly caps read the month's
+  rows: the project's (`ASSISTANT_TOKENS_PER_MONTH`, 2 M by default), the
+  person's across projects (`ASSISTANT_TOKENS_PER_USER_MONTH`, 1 M) and the
+  deployment's (`ASSISTANT_TOKENS_PER_MONTH_TOTAL`, 20 M locally; Terraform
+  derives it from the assistant's dollar budget). The hourly cap is the
+  person's, across projects (`ASSISTANT_MESSAGES_PER_HOUR`, 30).
+- Written only through SECURITY DEFINER functions, each requiring the caller
+  to be at least a viewer of the project (`42501` otherwise), so no one
+  spends another project's budget: `app_assistant_begin(project,
+  tokens_per_month, messages_per_hour, tokens_per_user_month,
+  tokens_total_per_month)` checks the hourly cap, then the deployment's, the
+  person's and the project's month, and counts the message only when all
+  pass (outcome `ok`, `rate`, `total_budget`, `user_budget` or `budget`,
+  with the seconds to wait, and the three months' weighted totals). It takes
+  a transaction-level advisory lock for the deployment, then one on the
+  project, then the person's `assistant_rate` row (`FOR UPDATE`), in that
+  order everywhere, so parallel turns are counted one by one and can't
+  deadlock. `app_assistant_charge(project, input, output)` adds a finished
+  turn's tokens in one upsert (parallel charges each count once) and returns
+  the three totals after it; `app_assistant_used(project)` reads them
+  (`project_used`, `user_used`, `total_used`; the deployment's is a sum
+  naming no one).
+- `assistant_usage` is read-only to `water_app`: one SELECT policy,
+  `assistant_usage_own` (`user_id = app_current_user_id()`), so a person
+  reads their own rows (the export's `assistantUsage`) and the totals come
+  only from the functions. `assistant_rate` has a deny-all policy. Proven
+  with positive controls in `src/assistant/assistant.db.test.ts`.
+- Retention: the job tick calls `app_purge_assistant(13)` (the worker only;
+  `jobs/runner.ts` `ASSISTANT_USAGE_RETENTION_MONTHS`), which deletes rate
+  rows whose hour is over and usage rows of months before the last 13 (the
+  current one included): a year of each project's spend to set against the
+  bill.
+- An account deletion clears `assistant_usage.user_id` (the spend stays
+  counted against the project's month, without the name, until its
+  retention ends) and removes the `assistant_rate` row.
+
 ### Two-step sign-in (150_mfa.sql, 206_mfa_email_code.sql)
 
 | Table | Holds |

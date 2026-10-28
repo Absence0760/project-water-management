@@ -96,12 +96,18 @@ import {
 	WARNINGS_KEPT_MAX
 } from '@water-management/engine';
 import { z } from 'zod';
+import type { Db } from '../db/tx.js';
+import { ApiError } from '../http/errors.js';
 import { AutoRunPatch } from '../runs/autoRun.js';
-import { OutcomesPatch } from './outcomeSettings.js';
+import { checkCalibrationSite } from './calibrationSite.js';
+import { baselineSettingsEwrRefusal } from './ewrRules.js';
+import { checkOutcomeSite, OutcomesPatch, resolveOutcomes } from './outcomeSettings.js';
 import { OutlookPatch } from './outlookSettings.js';
 import { ResponsibleAuthorityPatch } from './authoritySettings.js';
-import { EwrHeadlinePatch } from './ewrHeadlineSettings.js';
-import { RainStations, remapRainStations } from './rainStationSettings.js';
+import { checkEwrHeadline, EwrHeadlinePatch } from './ewrHeadlineSettings.js';
+import { checkRainStations, RainStations, remapRainStations } from './rainStationSettings.js';
+import { checkFlowMissing } from './flowMissingSettings.js';
+import { localDate } from './timeZone.js';
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -219,7 +225,7 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * (issue #553): a unit left out of a save is unassigned, not kept. And each
  * flow record's missing periods (issue #611): a record left out has none.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing']);
+export const REPLACED_WHOLE: ReadonlySet<string> = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -1295,3 +1301,59 @@ export const SettingsPatch = z
 	})
 	.partial()
 	.refine((s) => JSON.stringify(s).length <= 64_000, 'settings too large');
+
+/**
+ * A settings patch checked as a save checks it, before anything is stored
+ * (PATCH /projects/:id, and the assistant's propose_settings dry run, issue
+ * #610): the patch over the stored settings, or the ApiError the save
+ * answers. Only reads: the network and the project's records, for the sites
+ * and stations a patch names. `timeZone` dates a new sign-off of the
+ * calibration rules, on the project's calendar as `today` is.
+ */
+export async function checkedSettingsPatch(
+	db: Db,
+	projectId: string,
+	stored: unknown,
+	patch: z.infer<typeof SettingsPatch>,
+	timeZone: string
+): Promise<{ settings: ProjectSettings; signOff: 'signed' | 'withdrawn' | null }> {
+	// Licence data never drives the baseline (issue #507): a cap or a full allocation is a scenario's.
+	const allocError = baselineAllocationModeError(patch);
+	if (allocError) throw new ApiError(400, allocError);
+	// Nor does the baseline keep water for the EWR (issue #523 B4): the restriction's EWR trigger is a scenario's.
+	const ewrError = baselineSettingsEwrRefusal(patch);
+	if (ewrError) throw ewrError;
+	const settings = patchSettings(stored, patch);
+	const dqError = patch.dataQuality ? dataQualityPatchError(settings) : null;
+	if (dqError) throw new ApiError(400, dqError);
+	// An automated fit is the server's to write (issue #153): a save only carries the stored one back.
+	const autoError = patch.fitRecord !== undefined ? autoFitRecordError(mergeSettings(stored), settings) : null;
+	if (autoError) throw new ApiError(409, autoError);
+	// A new sign-off of the calibration rules is dated by the server, and it and a withdrawal are audited with the account (issue #153).
+	// Dated on the project's calendar (its time zone), as `today` is: UTC's date is a day behind around local midnight.
+	const signOff = patch.calibrationRules !== undefined ? signOffChange(stored, settings) : null;
+	if (signOff === 'signed') {
+		const on = localDate(new Date(), timeZone);
+		settings.calibrationRules = { ...settings.calibrationRules, signedOff: { by: settings.calibrationRules.signedOff!.by, on } };
+	}
+	const ewrRules = (settings as { ewrRules?: unknown }).ewrRules;
+	// The matrix's Reserve site: a change to a gauge is checked against the network and the rule tables being saved.
+	const site = (patch as { outcomes?: { siteNodeId?: string | null } }).outcomes?.siteNodeId;
+	if (typeof site === 'string' && site !== resolveOutcomes(stored).siteNodeId) await checkOutcomeSite(db, projectId, site, ewrRules);
+	// The EWR the results are judged by: a change to a rule-table site is checked the same way (ewrHeadlineSettings.ts).
+	if (patch.ewrHeadline !== undefined) await checkEwrHeadline(db, projectId, patch.ewrHeadline, stored, ewrRules);
+	// The outlet's Reserve rule table once: by null or by the outlet's id, never both (engine ≥ 1.69.0, §2.9c).
+	if (patch.ewrRules !== undefined) {
+		const { rows: outlets } = await db.query<{ id: string }>('SELECT id FROM node WHERE project_id = $1 AND downstream_node_id IS NULL', [projectId]);
+		const outletError = ewrOutletTableError(ewrRules, outlets.map((r) => r.id));
+		if (outletError) throw new ApiError(400, outletError);
+	}
+	// The rainfall stations (engine ≥ 1.91.0, issue #553): each named station a station of this project, each unit a land unit.
+	if (patch.rainStations) await checkRainStations(db, projectId, patch.rainStations, (stored as { rainStations?: unknown } | null)?.rainStations);
+	// One flow record's missing periods (engine ≥ 1.102.0, issue #611): each named record a flow record of this project.
+	if (patch.flowMissing) await checkFlowMissing(db, projectId, patch.flowMissing, (stored as { flowMissing?: unknown } | null)?.flowMissing);
+	// The calibration site (engine ≥ 1.41.0): a change to a gauge is checked against the network and its records.
+	const calSite = patch.calibrationSiteNodeId;
+	if (typeof calSite === 'string' && calSite !== (stored as { calibrationSiteNodeId?: unknown } | null)?.calibrationSiteNodeId) await checkCalibrationSite(db, projectId, calSite);
+	return { settings, signOff };
+}

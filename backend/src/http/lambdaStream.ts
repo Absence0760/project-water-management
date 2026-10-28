@@ -23,6 +23,7 @@ import { Readable, type Writable } from 'node:stream';
 import { finished, pipeline } from 'node:stream/promises';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import type { Context as LambdaContext, LambdaFunctionURLEvent } from 'aws-lambda';
+import { settleAfterResponse } from './afterResponse.js';
 
 /** What `HttpResponseStream.from` takes: the response's prelude. */
 export interface StreamMetadata {
@@ -101,6 +102,13 @@ export function streamingHandler(app: FetchApp, runtime: StreamingRuntime | unde
 		}
 		// pipeline destroys `out` if the body fails, and the rejection reaches the runtime: the
 		// client's response is cut off instead of ending as if complete.
-		await pipeline(Readable.fromWeb(res.body as NodeReadableStream<Uint8Array>), out);
+		// A client that goes away rejects the pipeline at once; work the response left running
+		// (the assistant's token charge, http/afterResponse.ts) still finishes before the handler
+		// settles, since the runtime may freeze the function after that.
+		try {
+			await pipeline(Readable.fromWeb(res.body as NodeReadableStream<Uint8Array>), out);
+		} finally {
+			await settleAfterResponse();
+		}
 	});
 }

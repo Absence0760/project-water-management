@@ -62,6 +62,59 @@ are in. Still open:
 
 The checklist for these is issue #62; the history scrub is #63.
 
+- [ ] **Turn the AI assistant on in production (issue #610).** Built off
+      (`assistant_enabled = false`), so nothing here blocks a release until
+      the chat is wanted. Then, in order (operator; [deployment.md § The
+      assistant](./deployment.md#the-assistant)):
+      1. Confirm the privacy notice that names the model (`LEGAL_VERSION`
+         2026-10-27, Privacy §3–§7) is live with the `web@` release that
+         ships the panel, and that the client accepts the transfer below
+         (operator agreement § 11, clause 6.1).
+      2. In the Bedrock console in af-south-1, open the model catalogue,
+         choose Claude Sonnet 5.5 and submit Anthropic's first-time use-case
+         form if it asks; then run one prompt in the playground with the
+         global profile `global.anthropic.claude-sonnet-5-5`. Anthropic's
+         models are sold through AWS Marketplace, and the first call
+         subscribes the account (it needs `aws-marketplace:Subscribe`,
+         which the assistant's role deliberately lacks), so the first call
+         must be the operator's.
+      3. Check the endpoint service exists in the account:
+         `aws ec2 describe-vpc-endpoint-services --region af-south-1 --service-names com.amazonaws.af-south-1.bedrock-runtime --query 'ServiceDetails[0].ServiceName' --output text`
+         (expect the name back), and that the Lambda concurrency quota
+         covers 2 more reserved (infra/README.md § Operator steps).
+      4. Set `assistant_enabled = true` in `prod.tfvars`, plan, and apply
+         through `scripts/tf.sh`.
+      5. Re-run `~/github/templates/scripts/export-tf-vars.sh infra/` so the
+         repository variable `ASSISTANT_FUNCTION_NAME` exists, then release
+         `backend@…`: the deploy skips the assistant until both exist.
+      6. Ask one question in a project; check CloudTrail's
+         `additionalEventData.inferenceRegion` on the `InvokeModelWithResponseStream`
+         event (where it ran) and that the `assistant-*` alarms are OK.
+      Trigger: the release that turns the chat on.
+- [ ] **The assistant's legal decisions (issue #610, counsel and the
+      operator; docs/legal-status.md § Other open items).** Before
+      `assistant_enabled = true`: (1) the transfer's s72 basis, AWS's DPA
+      and s72(1)(c)–(d) or consent at first use (s72(1)(b)), which would
+      need a first-use consent step in the panel; (2) operator agreement
+      clause 11.4 promises a Client its projects can be kept off, but the
+      switch is deployment-wide: confirm, narrow 11.4, or build a
+      per-project switch first; (3) the Terms don't mention the assistant
+      while the notice rests it on the agreement; (4) move `LEGAL_VERSION`
+      to the release that turns it on. Trigger: before step 1 above.
+- [ ] **If Bedrock's Claude ever stops being reachable from af-south-1
+      (issue #610, open decision).** On 2026-10-27 af-south-1 offers
+      Anthropic's models through the global inference profile only
+      (deployment.md § Region recommendation). If that route closes, the
+      fallback is the Anthropic API through an **out-of-VPC proxy Lambda**
+      holding the key in its own runtime secret, invoked by the assistant
+      through a Lambda interface endpoint: a new sub-processor (Anthropic),
+      its own s72 record, the key in `infra-secrets/water-management/prod.sops.yaml`,
+      and `ASSISTANT_PROVIDER=anthropic` allowed by `config/production.ts`
+      for the assistant (refused today). Not a NAT gateway: a fixed monthly
+      charge, and the whole VPC opened to the internet. Trigger: the global
+      profile missing from Bedrock's af-south-1 availability, or the client
+      refusing the global routing's transfer.
+
 - [ ] **Runs on the rejected reference-gauge formula (issue #500,
       engine 1.80.0–1.84.0).** Those engines levelled a unit's CHIRPS with a
       reference gauge set by × unit MAP ÷ the reference unit's MAP, which the
@@ -5780,6 +5833,26 @@ assume, the questions for counsel); these are the actions, with triggers.
       unsubscribe POST (RFC 8058, sent by mail clients that can't add that
       header) moves to a signed GET. Reasoning in docs/security.md
       § Infrastructure.
+- [ ] **Move the assistant's origin to CloudFront OAC for Lambda (issue
+      #610, the infra review of 2026-10-27).** Its Function URL is
+      `authorization_type = "NONE"` like the API's, so a direct call skips
+      the WAF and takes one of the assistant's **2** reserved slots while
+      the app answers 403: anyone who learns the URL id can throttle every
+      chat with ~5 concurrent requests (the API's lever is 20× dearer at 40
+      slots). Not switched: CloudFront OAC is documented for Function URLs
+      and response streaming behind CloudFront separately, and nothing says
+      OAC signs a `RESPONSE_STREAM` URL, so it needs proving first.
+      **Trigger:** the `assistant-throttles` alarm firing outside a known
+      burst, or before the assistant is turned on for a second client.
+      **Durable fix:** for this origin only, `authorization_type = "AWS_IAM"`,
+      an `aws_cloudfront_origin_access_control` of type `lambda` with
+      `signing_behavior = "always"`, and `lambda:InvokeFunctionUrl` +
+      `lambda:InvokeFunction` granted to the distribution (`AWS:SourceArn`);
+      the panel's POST then sends `x-amz-content-sha256` (WebCrypto SHA-256
+      of the body, `lib/components/assistant/stream.ts`); keep the shared
+      secret as a second layer. Prove it with one streamed request after a
+      staging apply before switching. (No messages POST is one-click from a
+      mail client, so the API's unsubscribe reason doesn't apply here.)
 - [ ] **Check the 404s on the live site after the first apply (issue #126).**
       `curl -sI https://<domain>/missing.pdf` should answer `404` with
       `content-type: text/html` (spa_rewrite's page, not S3 XML), and

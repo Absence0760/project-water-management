@@ -13,7 +13,7 @@
 #   group only. No role has logs:CreateLogGroup: every log group is
 #   Terraform-managed (retention set) and exists before its function
 #   (depends_on), so Lambda never needs to create one.
-# - The API, worker and migrate roles get the six EC2 actions AWS lists for a
+# - The API, worker, migrate and assistant roles get the six EC2 actions AWS lists for a
 #   VPC Lambda, which have no resource-level scoping ("*", as AWS documents:
 #   https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-permissions),
 #   plus AWS's recommended Deny on the same actions when the call comes from
@@ -25,23 +25,28 @@ locals {
   lambda_arn_prefix    = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:"
   log_group_arn_prefix = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:"
 
-  # Every Lambda: its role and its own (Terraform-managed) log group.
-  lambda_log_targets = {
+  # Every Lambda: its role and its own (Terraform-managed) log group. The
+  # assistant's only while it exists (assistant.tf, var.assistant_enabled).
+  lambda_log_targets = merge({
     api      = { role = aws_iam_role.lambda, log_group = aws_cloudwatch_log_group.lambda.name }
     migrate  = { role = aws_iam_role.migrate_lambda, log_group = aws_cloudwatch_log_group.migrate.name }
     worker   = { role = aws_iam_role.worker_lambda, log_group = aws_cloudwatch_log_group.worker.name }
     fetcher  = { role = aws_iam_role.fetcher_lambda, log_group = aws_cloudwatch_log_group.fetcher.name }
     renderer = { role = aws_iam_role.renderer_lambda, log_group = aws_cloudwatch_log_group.renderer.name }
     ingest   = { role = aws_iam_role.ingest_lambda, log_group = aws_cloudwatch_log_group.ingest.name }
-  }
+    }, local.assistant_enabled ? {
+    assistant = { role = aws_iam_role.assistant_lambda[0], log_group = aws_cloudwatch_log_group.assistant[0].name }
+  } : {})
 
   # The VPC Lambdas, by function ARN (built from the name: referencing the
   # function would cycle through its depends_on on these policies).
-  lambda_vpc_functions = {
+  lambda_vpc_functions = merge({
     api     = { role = aws_iam_role.lambda, function_arn = "${local.lambda_arn_prefix}${local.project}-backend" }
     migrate = { role = aws_iam_role.migrate_lambda, function_arn = "${local.lambda_arn_prefix}${local.project}-migrate" }
     worker  = { role = aws_iam_role.worker_lambda, function_arn = "${local.lambda_arn_prefix}${local.project}-worker" }
-  }
+    }, local.assistant_enabled ? {
+    assistant = { role = aws_iam_role.assistant_lambda[0], function_arn = local.assistant_function_arn }
+  } : {})
 
   lambda_vpc_eni_actions = [
     "ec2:CreateNetworkInterface",
