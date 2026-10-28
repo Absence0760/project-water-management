@@ -108,6 +108,8 @@ data "aws_iam_policy_document" "github_deploy" {
       local.renderer_function_arn,
       # The same for the mirror ingest job and ingest_image_tag (ingest.tf).
       local.ingest_function_arn,
+      # And the assistant, which exists only with assistant_enabled (assistant.tf).
+      local.assistant_function_arn,
     ]
   }
 

@@ -162,3 +162,21 @@ report_download_signing_key = "2026-09"
 # Empty: the CSP allows no WAF origin and the sign-in page says to wait
 # instead of showing the puzzle.
 # waf_captcha_integration_url = "https://<id>.edge.captcha-sdk.awswaf.com/<id>/"
+
+# The AI assistant (assistant.tf, docs/deployment.md § The assistant). Off by
+# default. Before turning it on: the privacy notice names the model's
+# provider and region (it does from LEGAL_VERSION 2026-10-27), and the model
+# is enabled in the Bedrock console with one invocation from it
+# (docs/followups.md § Blocking releases). From af-south-1 Anthropic's models
+# are reachable only through the global inference profile, which may run a
+# request in any commercial AWS region (a POPIA s72 transfer, recorded in
+# docs/security.md).
+# assistant_enabled              = false
+# assistant_model_id             = "global.anthropic.claude-sonnet-5-5"
+# assistant_reserved_concurrency = 2
+# assistant_timeout_seconds      = 120
+# assistant_tokens_per_month     = 2000000
+# assistant_messages_per_hour    = 30
+# assistant_max_hops             = 6
+# assistant_budget_monthly_usd   = 50
+# bedrock_endpoint_az_count      = 1

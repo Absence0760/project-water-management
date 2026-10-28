@@ -21,8 +21,8 @@ name: Deploy backend
 #              pointer to infra/README.md § Operator steps.
 #   build      no environment, no AWS. Runs the engine suite + soak
 #              (scripts/release/engine-build.mjs; its record goes into every
-#              bundle), installs deps and packages the four
-#              Lambda zips (API, migrate, worker, fetcher), and builds the
+#              bundle), installs deps and packages the five
+#              Lambda zips (API, migrate, worker, fetcher, assistant), and builds the
 #              report renderer's container image (backend/renderer.Dockerfile),
 #              saved as an artifact. Third-party npm code never runs in a job
 #              that holds AWS credentials.
@@ -35,7 +35,8 @@ name: Deploy backend
 #              `environment:production` subject the deploy role trusts.
 #              Migrations run BEFORE the API code is updated (expand/contract,
 #              CLAUDE.md rule 2); the worker's code follows the API's, and
-#              the fetcher's the worker's; then the renderer's image is
+#              the fetcher's the worker's, and the assistant's (once
+#              infra/assistant.tf has created it) the fetcher's; then the renderer's image is
 #              pushed to ECR as <version>-<sha12> and the renderer moved to
 #              it (skipped, with a
 #              notice, until the operator has created the function:
@@ -161,7 +162,8 @@ jobs:
 
       # backend/dist/lambda.zip (API) + backend/dist/migrate.zip (migrations +
       # owner-role runner) + backend/dist/worker.zip (background jobs) +
-      # backend/dist/fetcher.zip (data feeds, outside the VPC).
+      # backend/dist/fetcher.zip (data feeds, outside the VPC) +
+      # backend/dist/assistant.zip (the AI assistant, issue #610).
       # Layouts documented in the script.
       - name: Build and package Lambdas
         run: infra/scripts/package-lambdas.sh
@@ -208,6 +210,7 @@ jobs:
             backend/dist/migrate.zip
             backend/dist/worker.zip
             backend/dist/fetcher.zip
+            backend/dist/assistant.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -386,6 +389,37 @@ jobs:
             --query 'CodeSha256' --output text
           aws lambda wait function-updated --function-name "$FETCHER_FUNCTION_NAME"
 
+      # The AI assistant (infra/assistant.tf): the API's app on its own
+      # function, so the same code as the API, after it. It exists only once
+      # the operator has set assistant_enabled and applied: until then (or
+      # until the ASSISTANT_FUNCTION_NAME variable is set, from the
+      # assistant_function_name output) this says so and skips. Only
+      # ResourceNotFoundException means "not created yet"; any other error
+      # fails the deploy, as for the renderer below.
+      - name: Update assistant Lambda code
+        env:
+          ASSISTANT_FUNCTION_NAME: ${{ vars.ASSISTANT_FUNCTION_NAME }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ASSISTANT_FUNCTION_NAME" ]; then
+            echo "::notice::ASSISTANT_FUNCTION_NAME is not set: the assistant is not deployed (docs/deployment.md § The assistant)."
+            exit 0
+          fi
+          if get_err=$(aws lambda get-function --function-name "$ASSISTANT_FUNCTION_NAME" 2>&1 >/dev/null); then
+            aws lambda update-function-code \
+              --function-name "$ASSISTANT_FUNCTION_NAME" \
+              --zip-file "fileb://dist/assistant.zip" \
+              --query 'CodeSha256' --output text
+            aws lambda wait function-updated --function-name "$ASSISTANT_FUNCTION_NAME"
+          elif grep -q 'ResourceNotFoundException' <<<"$get_err"; then
+            echo "::notice::The assistant Lambda doesn't exist yet (assistant_enabled is false): its code was not deployed (docs/deployment.md § The assistant)."
+          else
+            # Its error code only: the text names the deploy role and account.
+            code=$(grep -oE 'An error occurred \([A-Za-z]+\)' <<<"$get_err" | head -n 1 || true)
+            echo "::error::Could not read the assistant Lambda ${ASSISTANT_FUNCTION_NAME} (${code:-no AWS error code}, not a ResourceNotFoundException); its code was NOT updated."
+            exit 1
+          fi
+
       # The report renderer (infra/reports.tf): push this release's image,
       # tagged <version>-<first 12 hex of the released commit> (the
       # repository's tags are immutable), then move the function to it. The
@@ -534,4 +568,5 @@ jobs:
           mv dist/migrate.zip "dist/backend-${VERSION}-migrate.zip"
           mv dist/worker.zip "dist/backend-${VERSION}-worker.zip"
           mv dist/fetcher.zip "dist/backend-${VERSION}-fetcher.zip"
+          mv dist/assistant.zip "dist/backend-${VERSION}-assistant.zip"
           gh release upload "$RELEASE_TAG" dist/*.zip --clobber --repo "$GITHUB_REPOSITORY"
