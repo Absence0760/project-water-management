@@ -22,7 +22,7 @@ workbook cells.
 | File | b023 source | What it does |
 | --- | --- | --- |
 | `topology.ts` | [Network] | Orders nodes upstream-first from `downstreamNodeId`. Throws on cycles, unknown links and more than one outflow node. |
-| `shares.ts` | [Farm spec] "Selected fragmentation" | Each farm's share of natural flow and EWR (area / hiLo / manual). Warns if the shares don't sum to 1 ±0.0002. |
+| `ewrSplit.ts` | [Farm spec] "Selected fragmentation" (replaced) | Each land unit's one share, its natural MAR share: its own GR4J natural runoff over the run's complete water years ÷ the land units' total, else the area shares (engine ≥ 1.105.0, issues #615 and #616, docs/model.md §2.5, §2.5b). It splits the flow under Fragmentation and the EWR, and sets the land-cover threshold and the senior users' claims. The b023 area / Hi/Lo / specific shares (`shares.ts`) were retired; `../legacy/flowShares.ts` reads them only from an older run's snapshot. |
 | `../demand.ts` | [Crop demand], [Farm demand], [Irrigation Demand] | Gross and net irrigation demand. |
 | `simulate.ts` | Element sheets (FarmTemplate/GaugeTemplate row 17), [Transfers], [Fragmented flow], [Fragmented EWR] | The daily loop. |
 | `stats.ts` | [Flow Calibration Cfg] | Calibration statistics over the calibration window: NSE, PBIAS, RMSE, KGE (r, α, β), R², log-NSE, volume error, annual volumes (no Moriasi rating words on daily scores, CR-6). |
@@ -88,8 +88,9 @@ Capacity is `damCapacityM3`; initial storage is `damInitialPct × capacity`
 An **other water user** (node kind `user`, engine ≥ 0.22.0, WP-1.33;
 docs/model.md §2.7c) takes G = MIN(D, H) (priority, stored `senior`) or MIN(D, MAX(0, H − Zs))
 (non-priority, `junior`) from the river, returns T = r × G, and passes U = H − G + T. A priority
-user's demand is fragmented to the farms upstream by flow share (`seniorClaim`,
-built in `../run.ts` `otherUsers`); each farm keeps MIN(Zs, H + I) below its
+user's demand is fragmented to the farms upstream by their unit shares (the
+natural MAR shares from engine 1.105.0; `seniorClaim`, built in `../run.ts`
+`otherUsers` and `seniorClaims`); each farm keeps MIN(Zs, H + I) below its
 dam (O cut first, then K and M pro rata; working column `passed_for_senior`),
 and Zs (`senior_requirement`) accumulates like Z and drops by D below the
 priority user. Users are EWR contributors in `attribution.ts` (e = H − U) and

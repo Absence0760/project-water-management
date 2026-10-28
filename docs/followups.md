@@ -636,9 +636,9 @@ runs and accumulations are real) can't be decided without the client.
       1.80.0–1.84.0 had built item 1 from the issue's original wording.
       Still open, tracked below: the fit at the gauge's own cell (1b), and
       the MAP's own period. Also left: the run window still follows the
-      catchment rain series, and the land cover's low-flow threshold stays
-      on the flow shares (engine-audit U1; the EWR is split by each unit's
-      natural MAR from engine 1.105.0, FM1, and #616 moves the threshold).
+      catchment rain series. (The land cover's low-flow threshold, once on
+      the flow shares, is on each unit's natural MAR share from engine
+      1.105.0, issue #616, as the EWR split is, FM1.)
 - [ ] **Fit the reference gauge's factors at the gauge's own CHIRPS cell
       (issue #500 item 1b).** The decision is the cell the reference gauge
       sits in, with the reference unit's centre only when the gauge has no
@@ -719,14 +719,15 @@ runs and accumulations are real) can't be decided without the client.
       at every site, what the client's "cumulative flow" meant? Durable fix:
       the hydrologist's answer, then change `ewrSplitDays` if it differs.
       Trigger: the client's first run on engine 1.105.0.
-- [ ] **No release between #615 and #616 (issue #619 sequencing,
-      engine-audit.md FM1).** Engine 1.105.0 splits the EWR by natural MAR
-      shares while Fragmentation's flow is still split by the flow share,
-      so an inner EWR site or hands-off EWR flow under Fragmentation reads
-      a requirement out of proportion to the flow it is given. Durable fix:
-      #616 (the flow split by the same shares). Trigger: hold any
-      `backend@` release until #616 is merged.
-- [ ] **The fit record doesn't fingerprint Fragmentation's EWR share
+- [x] **No release between #615 and #616 (issue #619 sequencing,
+      engine-audit.md FM1).** Engine 1.105.0 split the EWR by natural MAR
+      shares while Fragmentation's flow was still split by the flow share,
+      so an inner EWR site or hands-off EWR flow under Fragmentation read
+      a requirement out of proportion to the flow it was given. **Done:**
+      #616 ships in the same engine 1.105.0, so the flow, the EWR, the
+      land-cover threshold and the priority users' claims all follow one
+      natural MAR share per unit, and no release carries #615 alone.
+- [x] **The fit record doesn't fingerprint Fragmentation's EWR share
       forcing (issue #615 acceptance, engine-audit.md FM1).** Under
       Fragmentation each calibration candidate's EWR shares come from GR4J
       runs on the Per unit forcing (built in engine 1.105.0, scored days
@@ -739,13 +740,33 @@ runs and accumulations are real) can't be decided without the client.
       the same fingerprint, and compare both in `fitRecordStatus` as Per
       unit's are. Trigger: before the client calibrates a Fragmentation
       project on engine 1.105.0, or with #616, whichever is first.
+      **Done with #616 (engine 1.105.0):** the fit record carries
+      `forcing.shareRain` under Fragmentation (the Per unit forcing
+      fingerprint the share runs ran on; null with no land unit, absent
+      under Per unit), the run summary the same (`summary.shareRain`), and
+      `fitRecordStatus` sets `shareRainChanged` (and with it
+      `forcingChanged`) when it moves.
 - [ ] **The client regression suite's deviation list after FM1 (issue
       #615, engine-audit.md FM1).** The suite feeds the workbook's own
-      natural flow, without the units' runoff, so its EWR columns stay on
-      the flow share and match b023; once the client data is re-extracted
+      natural flow, without the units' runoff, so its shares fall back to
+      the area shares (why `noUnitRunoff`), which is b023's area method,
+      and its flow and EWR columns match b023 (checked green against the
+      current extract with #616); once the client data is re-extracted
       (issue #523), rerun it and confirm nothing else moved, and add a
       run-from-rain check of the EWR columns under FM1 if it is to be
       pinned. Trigger: the fresh re-extract.
+- [ ] **Drop the retired flow-share node columns (issue #616, contract
+      half of [264](./data-model.md#flow-share-methods-retired-264_retire_flow_share_methodsql)).**
+      Migration 264 stripped `flowShareMethod` and `hiLoSplit` from the
+      settings but kept `node.area_hi_km2`, `node.area_lo_km2` and
+      `node.flow_share_manual`, which the backend from engine 1.105.0
+      neither reads nor writes, so a backend still on the previous release
+      keeps working while the new one rolls out. Durable fix: a forward
+      migration that drops the three columns (no policy, function or view
+      reads them; check `catalogue.db.test.ts` and any `SELECT *` first),
+      with the `/safe-migration` checks. Trigger: once the `backend@`
+      release carrying migration 264 is in production and no older backend
+      can be rolled back to.
 - [x] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
@@ -1010,8 +1031,8 @@ runs and accumulations are real) can't be decided without the client.
       - WP-1.33 other water users (engine 0.22.0): are there towns, industry
         or unlisted irrigators upstream of the logger, and what do they take
         (monthly m³/day) and return? Priority: a priority user's demand is
-        passed down by the farms upstream (fragmented by flow share like the
-        EWR; farms divert less, then pass inflow below the dam), and it is
+        passed down by the farms upstream (split by each unit's natural MAR
+        share like the EWR, engine 1.105.0, issue #616; farms divert less, then pass inflow below the dam), and it is
         **not curtailed** for the EWR (its charge stands, not moved onto
         farms; from engine 1.86.0 only by its fixed restriction %, when it has
         one); a non-priority user takes what reaches it and is curtailed like a
@@ -5627,7 +5648,9 @@ Applicant view and the Applications tab. Left:
       or the hidden values; the assessors, checking the same application,
       read the same words (the check is judged in the applicant's
       namespace). **Pending the client**: whether an applicant may be told
-      more (which rule, or "the catchment's flow shares would pass 100 %").
+      more (which rule, or "the catchment would have no land left"; for
+      that catchment-wide rule `MASKED_RULE_AGGREGATE` already gives the
+      aggregate when the hidden units have 5 or more holders).
       The refusal itself stays: a model breaking a save rule can't run.
       Trigger: the client's answer on issue #90.
 - [x] **Comments / NGO access** (WP-3.15, scenario half, issue #71): done in

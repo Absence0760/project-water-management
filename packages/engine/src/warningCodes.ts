@@ -7,9 +7,10 @@
 //
 // Only the actionable warnings carry a code so far: the data checks, the rain
 // chain (zero runs, accumulations, the CHIRPS and gap-product fallbacks, rain
-// stations and unit gauges) and calibration. The area-fragmentation,
-// High/Low-MAP, areaMismatches and EWR-split warnings stay uncoded on purpose:
-// issues #615–#617 remove or reword them. An uncoded warning is in
+// stations and unit gauges) and calibration. The unit-share notes (the EWR
+// split and the retired flow-share method, issues #615 and #616) stay uncoded
+// for now; the area-fragmentation, High/Low-MAP and areaMismatches warnings
+// went with the flow-share methods in engine 1.105.0. An uncoded warning is in
 // summary.warnings only, as before. docs/model.md § Run warning codes.
 //
 // A module of its own, exported as `@water-management/engine/warnings`, so a

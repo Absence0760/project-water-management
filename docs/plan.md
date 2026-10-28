@@ -98,8 +98,9 @@ a second and third project (empty, or copied) side by side.
   end-to-end comparison with the workbook passed (engine 0.45.0).
 - ✅ Net irrigation demand per day (§2.3). The workbook's rounding was
   dropped in the engine audit (R1).
-- ✅ Flow shares by the Area, Hi/Lo and Specific methods, plus fragmented flow
-  and EWR (§2.5).
+- ✅ Flow shares and fragmented flow and EWR (§2.5). Built with b023's Area,
+  Hi/Lo and Specific methods; from engine 1.105.0 (issue #616) every unit has
+  one share, its natural MAR share, and those methods are retired.
 - ✅ Farm balance in network order, with gauges (§2.7).
 - ✅ Transfers from structured rules (§2.6).
 - ✅ EWR check at the outflow gauge, per-farm summaries, and calibration stats
@@ -134,8 +135,7 @@ departure, and it lists each affected column with its finding ID.
   the client workbook it gives the same `project.json` as the Python, and
   the imported project's run summary is identical.
 - ✅ The importer reports whatever it could not map: hand-written transfer
-  formulas that don't fit the rule shape, a Specific method with no values,
-  a rule with no destination or no rate, M1 month lists, unknown element
+  formulas that don't fit the rule shape, a rule with no destination or no rate, M1 month lists, unknown element
   types, number cells holding text (the TypeScript port's `unmapped` list,
   [scripts/wbt-import/README.md](../scripts/wbt-import/README.md#the-typescript-port-in-browser-import)).
   The import review shows it as its own section, with sheet, cell and

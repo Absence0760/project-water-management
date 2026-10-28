@@ -822,8 +822,8 @@ labels are reworded on the way in (`runs/checks.ts` `checkLabel`).
 
 Engine run warnings, save errors (model rules, scenario ops) and the
 workspace's API errors say **unit** too (engine 1.61.0: `unit "Upper": no
-river pump capacity is set …`, "only a unit has a dam", "unit flow shares
-sum to …"), and a new node is named `Unit N` (operator decision,
+river pump capacity is set …`, "only a unit has a dam", and "unit flow
+shares sum to …" until engine 1.105.0 removed that refusal), and a new node is named `Unit N` (operator decision,
 2026-10-01, from #54). Only the words changed, never a field name. A run
 from before 1.61.0 keeps its stored warnings as they were, so the first
 automatic run after the upgrade reads every such warning as new and isn't
@@ -2793,8 +2793,12 @@ and engine modules (comments, imports, type literals, a help entry's
    - **Unmapped report**, its own section and table (*Where*, *Element*,
      *What*, *In the workbook*): what couldn't be carried across as the
      workbook meant, such as a hand-written [Transfers] InOut formula (shown
-     verbatim), a draw rule with no destination, a blank Specific share, M1
-     month lists, number cells holding text. The importer never changes a
+     verbatim), a draw rule with no destination, M1 month lists, number
+     cells holding text. A workbook whose [Farm spec] fragmentation method
+     isn't Area gets a note instead ("the workbook's fragmentation method
+     'Hi/Lo' is not used: the app splits the flow by each unit's natural
+     MAR"; engine 1.105.0, issue #616); its High-MAP, Low-MAP and External
+     fragmentation columns aren't read. The importer never changes a
      value on its own; "Nothing: everything in the workbook was mapped" when
      empty.
 4. **Importing, Done, Failed:** as for a `.json` file (the server's 400 and
@@ -3088,7 +3092,8 @@ itself.
       capacity edit a line under the % naming the run's capacity ("of 150 000
       m³ in the run"). Then drains into,
       catchment area (a user: what it takes, `describeUser`), and for a farm
-      its flow share in use, dam capacity and irrigated area, a link ("20.00
+      its flow share in use (the latest run's natural MAR share, "after a
+      run" before one; issue #616), dam capacity and irrigated area, a link ("20.00
       ha, 1 crop") to the farm drawer. With nothing picked: "Select a node on
       the map or in the list to see it here."
     - **All hydrological units**: a button per node, in the model's order, with a dot for
@@ -3244,12 +3249,19 @@ itself.
   every field has
   a unit, a help tip and an entry in the field guide. Percentages are stored
   0–1 and shown 0–100. Fields that only apply to farms show "–" on gauge rows.
-  The flow share in use (with the Settings method) and its total are shown;
-  computed, it isn't a field, but it has its ⓘ (the Flow share glossary
-  entry) and a field-guide row like the fields, and the table's intro and the
-  one-node form link "Model settings" to the method
-  (`?tab=settings#set-share`). The method's hint in Settings links back to
-  the node table.
+  The flow share in use and its total are shown: each unit's natural MAR
+  share from the latest run (`FarmSummary.flowShare`), since it needs GR4J
+  on the units' own rain and isn't worked out while editing (engine 1.105.0,
+  issue #616). The table's **In use** column (under its own **Flow share**
+  header) shows it with two decimals, its header's title names the run's
+  date, and a unit shows "after a run" before a run, or when the latest run
+  didn't have it; gauges and other water users show "–". The intro says
+  "In use is each hydrological unit's natural MAR share of the flow and the
+  EWR, from the latest run (*date*)" ("shown after a run" before one) and
+  the units' total. It isn't a field, but it has its ⓘ (the Flow share
+  glossary entry) and a field-guide row like the fields. Settings' Flow
+  share card links to the node table. The High-MAP area, Low-MAP area and
+  Manual share columns are gone with the flow-share methods (issue #616).
   The one-node form and the view-only table show thousands separators
   (300 000, the app's usual `fmtNum` style, § Number style) on the non-% fields; a field
   switches to the plain number while it is being edited, and typed or pasted
@@ -3266,7 +3278,7 @@ itself.
   seven-digit value such as 1500000, so a dam capacity is never clipped.
   Every cell of a column carries its width class, not-used and footer cells
   included. Every field header is the label (hyphens don't break,
-  so "High-MAP" stays whole) over one line with the unit and its ⓘ, all
+  so a hyphenated label stays whole) over one line with the unit and its ⓘ, all
   bottom- and right-aligned, so the icons form one row. Numbers are
   right-aligned in even-width digits with no spin buttons, and each total
   lines up with the digits above it. Narrower screens scroll the table sideways inside its own
@@ -3276,8 +3288,9 @@ itself.
   restyled like the crop grids: a first line with the row's controls
   (drag handle, ↑/↓, notes, and ✕ at the top right), the name across the
   card, then Kind and Drains into and every field two to a row, each with a
-  visible label that names its group ("Dam capacity m³", "High-MAP area
-  km²"; `cardLabel` in `network/fields.ts`), and the flow share in use last.
+  visible label that names its group ("Dam capacity m³", "Dam initial
+  storage %"; `cardLabel` in `network/fields.ts`), and the flow share in use
+  last.
   Fields a node doesn't use (a gauge's dam, routing and irrigation) are left
   out rather than shown as "–". The totals are a card of their own lines
   ("Area 144.00 km²"). The inputs, their accessible names, validation and the
@@ -3331,23 +3344,25 @@ itself.
   ("Other water user"), above its folded boreholes and bed losses. The card
   stays `--surface`, since read-only inputs are `--surface-2`.
 - **Fields that don't apply** fold, in the one-node form, behind one line
-  per reason in their section ("Not used with the area flow share: High-MAP,
-  Low-MAP.", **Show**/**Hide**; `splitFields` and `unusedLine` in
-  `fields.ts`, issue #521) instead of being drawn greyed out; opened, they
-  show read-only with what would make them count ("Enter a capacity to use
-  these.") and their stored value kept, the line in each one's description
-  (`fieldUnused`/`unusedReason` in `fields.ts`, given the project's
-  flow-share method): on a unit with no dam (capacity 0, as the engine reads
-  it), the Dam fields other than Capacity ("Not used without a dam
-  (capacity 0)"), which move up among the first fields once a capacity is
-  typed; **High-MAP** and **Low-MAP** unless the method is the
-  high/low MAP split, and **Manual** unless it is Manual (Settings &
-  calibration). Routing to the dam stays live with no dam: what is routed to
-  it is irrigated straight from the river. The node table keeps them all
-  editable, so a pasted or typed row lands whole. With the high/low MAP
-  method, a line under the areas says when High-MAP + Low-MAP is more than
-  1 % off the area (`hiLoHint`, the run's own `areaMismatches` rule), so it
-  is caught while typing.
+  per reason in their section ("Not used without a dam (capacity 0): …",
+  **Show**/**Hide**; `splitFields` and `unusedLine` in `fields.ts`, issue
+  #521) instead of being drawn greyed out; opened, they show read-only with
+  what would make them count ("Enter a capacity to use these.") and their
+  stored value kept, the line in each one's description
+  (`fieldUnused`/`unusedReason` in `fields.ts`, `form` set): on a unit with
+  no dam (capacity 0, as the engine reads it), the Dam fields other than
+  Capacity, which move up among the first fields once a capacity is typed.
+  Routing to the dam stays live with no dam: what is routed to it is
+  irrigated straight from the river. The node table keeps them all
+  editable, so a pasted or typed row lands whole. (The High-MAP, Low-MAP
+  and Manual fields that folded here under another flow-share method, and
+  the High-MAP + Low-MAP check under the areas, went with those methods in
+  engine 1.105.0, issue #616.)
+- **Flow share** (the one-node form's section, units only): no field, the
+  unit's **Share in use**, its natural MAR share in the latest run with the
+  run's date ("After a run" before one), with the Flow share ⓘ and a line
+  saying it splits the catchment's flow and the EWR between the units
+  (`node-share`; issue #616).
 - **MAP** (a unit's own mean annual precipitation, mm, issue #482): in a
   unit's Catchment area section, after the areas, an optional **MAP**
   (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, once it is set,
@@ -7316,7 +7331,8 @@ two.
   `flowGeneration.ts`; the words lined up with the name, past the radio):
   **Fragmentation**, "one runoff run on the catchment rain, split between the
   units" (the default: `settings.unitRain` null, absent or `catchment`; GR4J
-  once on the catchment rain, its flow split by the flow share) or **Per
+  once on the catchment rain, its flow split by each unit's natural MAR
+  share) or **Per
   unit**, "a runoff run for each unit with land, on its own rain" (`{ mode:
   'perUnit' }`: GR4J on each land unit's own rain). The names stay: the fit
   record and the engine's "fitted under …" message use them. The radio writes the same `settings.unitRain` the checkbox did, so no
@@ -7331,9 +7347,9 @@ two.
   fitted under Fragmentation. Fit the parameters again …", linking to
   `#set-fit`, and the fit record lists the same caveat (`methodChanged`,
   `fitRecordCaveats`); choosing the fit's method again clears it. The
-  summary line names the method ("Fragmentation · flow share: by catchment
-  area · EWR by each unit's natural MAR", "Per unit · 2 units on a rainfall
-  station · EWR by each unit's natural MAR").
+  summary line names the method ("Fragmentation · flow and EWR by each
+  unit's natural MAR", "Per unit · 2 units on a rainfall station · EWR by
+  each unit's natural MAR"; `summaries.ts`).
   - **Per unit** shows two cards. **Each unit's rainfall station**
     (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
     helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
@@ -7383,33 +7399,33 @@ two.
     setup (`settings.unitRain` becomes `{ …, mode: 'catchment' }`, not
     null), so a unit's station, the MAP period and the reference gauge carry
     over both ways; a project that never set one shows the defaults.
-  - **Flow share and the EWR split**, a card. First a state line (shown with
-    the explanations off, `ewr-split-hint`): "The EWR is split between the
-    units by each unit's natural MAR: its own GR4J runoff over the run's
+  - **Flow share and the EWR split**, a card with nothing to set. First a
+    state line (shown with the explanations off, `ewr-split-hint`): "Each
+    unit's share is its natural MAR: its own GR4J runoff over the run's
     complete water years ÷ the units' total[, from the runs on each unit's
-    own rain above]. The run's summary lists each unit's share." There is no
-    choice: the split is the same under both methods (`settings.ewrSplit`,
-    1.94.0 – 1.104.x, is retired). Then, when some land unit has no rain of
-    its own (no station, rain gauge or CHIRPS series of its own, and no MAP
-    with a gauge MAP; `unitsOnCatchmentRain`, an estimate from the setup, as
-    the run decides from the records), a line naming them, up to six and a
-    count: they run on the catchment rain, so their EWR share follows their
-    area (`ewr-split-catchment-rain`). Then the **Flow share method** and
-    the **High/low MAP split** (High, Low, their Sum, amber unless 100 %)
-    only while the method is *High/low MAP split*, the one method that
-    reads it (issue #174); under *by area* or *manual* it is hidden and its
-    saved value kept. The line under them follows the method: Fragmentation,
-    "GR4J runs once on the catchment rain; the flow share splits its flow
-    between units. To give each unit its own runoff, choose Per unit above."
-    (an explanation); Per unit, "Each unit makes its own runoff; the flow
-    share now splits only the land cover's low-flow threshold between units,
-    not the flow or the EWR." (a state line;
-    `e2e/tests/flow-share-hint.spec.ts`). The panel's summary line ends
-    "EWR by each unit's natural MAR", after the units on a rainfall station
-    (under Fragmentation only when there are some; `e2e/tests/ewr-split.spec.ts`).
-    The hydrological unit table's *In use* column still shows the flow
-    share from the saved settings; issue #616 turns it into the latest
-    run's natural MAR share with the run's date.
+    own rain above]. It splits the EWR, the land cover's low-flow threshold
+    and the priority users' demand between the units. The run's summary
+    lists each unit's share, and the hydrological unit table's In use
+    column the latest run's." (the table linked, `grid=nodes`). There is no
+    choice: every unit has one share, the same under both methods
+    ([model.md §2.5](./model.md)). The **Flow share method** select (by
+    area, high/low MAP split, manual) and the **High/low MAP split**
+    fieldset are gone in engine 1.105.0 (issue #616), as
+    `settings.ewrSplit` (1.94.0 – 1.104.x) went in issue #615. Then, when
+    some land unit has no rain of its own (no station, rain gauge or CHIRPS
+    series of its own, and no MAP with a gauge MAP; `unitsOnCatchmentRain`,
+    an estimate from the setup, as the run decides from the records), a line
+    naming them, up to six and a count: they run on the catchment rain, so
+    their share follows their area (`ewr-split-catchment-rain`). The
+    line after it follows the method: Fragmentation, "GR4J runs once on the
+    catchment rain, and the units' shares split its flow between them. To
+    give each unit its own runoff, choose Per unit above." (an explanation);
+    Per unit, "Each unit makes its own runoff, so the shares don't split the
+    flow." (a state line; `e2e/tests/flow-share-hint.spec.ts`). The panel's
+    summary line ends "EWR by each unit's natural MAR" (Per unit) or "flow
+    and EWR by each unit's natural MAR" (Fragmentation), after the units on
+    a rainfall station (under Fragmentation only when there are some;
+    `e2e/tests/ewr-split.spec.ts`).
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,
@@ -9075,8 +9091,7 @@ read it before.
   editor the **run form** sits last in the header (no Add data here, issue #601), in place
   of the **Run model** button the other sections have ([§ Section
   header](#section-header)): a **Run label** field, **Run forecast** (with a forecast
-  series) and **Run model**. Its status (what a run still needs, flow shares
-  over 100 %, unsaved model changes (Run model asks to save them first),
+  series) and **Run model**. Its status (what a run still needs, unsaved model changes (Run model asks to save them first),
   inputs changed since the latest run,
   the progress while a run goes ("… for every hydrological unit"), else "Runs
   use the saved network…", with a sentence on what Run forecast does when it
@@ -9085,7 +9100,7 @@ read it before.
   description), with the progress bar under it. Under it, Run readiness
   names the land units with no rain of their own (no station, rain gauge or
   CHIRPS of their own, no MAP with a gauge MAP; issue #615): they run on the
-  catchment rain, so their EWR share follows their area, with a link to
+  catchment rain, so their share follows their area, with a link to
   Model settings (`run-catchment-rain`, a note, never a blocker). A run the header started on
   another section and still going when the page opens shows here the same
   way, the form waiting for it. A viewer gets no form, and
@@ -9397,9 +9412,9 @@ read it before.
   is the page's.
 - **Run model** (in the section header, above) takes an optional **Run label** (e.g. "Baseline"). The
   button is disabled, with links, until the project has a network and a
-  rainfall series, and while the farms' flow shares add up to more than 100 %
-  (the engine refuses those runs, [model.md §2.5](./model.md); the note gives
-  the total and links to Network and Model settings). While a run is going it shows progress. A note says when
+  rainfall series (`runs/runReady.ts`). Flow shares no longer stop a run:
+  each unit's is its natural MAR share and they add up to 100 % (engine
+  1.105.0, issue #616), so the block on shares over 100 % is gone. While a run is going it shows progress. A note says when
   inputs changed since the latest run.
 - **The runs list** (newest first, the newest marked "latest") selects the
   run shown; a run picked from the list (or **Show the newest run**, "go to
@@ -11507,7 +11522,8 @@ mode ("Your applications"; `?scenario=<id>` selects one):
 - **Rules you can't see** (`AskAssessors.svelte`, 164; for the
   application's parties, between the problems note and the changes): each
   problem line a rule hidden from them broke (`check.maskedRules`), the
-  changes it names and what the rule is about ("change 1: flow shares"), and
+  changes it names and what the rule is about ("change 1: catchment area";
+  "flow shares" only on a question asked before engine 1.105.0), and
   **Ask the assessors why**, which sends the line, those changes and the
   rule's kind (never anything hidden) to the assessors. The panel says what
   the assessors see (the question, the changes it names and the
@@ -11772,7 +11788,7 @@ unit's own fields). A field never changed since it was set shows nothing.
   drawer's planted area per crop (under the crop's name), and Settings &
   calibration's scalar parameters (effective rainfall, soil-water store, dam
   evaporation factor, days in February, catchment area, GR4J X1–X4 and
-  warm-up, the rain threshold, the flow-share method, the annual assurance
+  warm-up, the rain threshold, the annual assurance
   threshold, the data-quality thresholds). A twelve-month row set or cleared
   reads as its range on the line ("none → by month: 0–800 m³/day", "300
   m³/day every month", `compactMonths`); History keeps the full row. Other

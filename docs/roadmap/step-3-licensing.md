@@ -387,7 +387,7 @@ must build WP-2.15 Phase B.
         `landCover.set` (built, engine ≥ 1.35.0, issue #73).
     - Each op is classified as **proposal** (the applicant's own or new
       nodes, crops, pumps and boreholes) or **baseline assumption** (any
-      `settings.*`, EWR tables, calibration, flow-share method, series,
+      `settings.*`, EWR tables, calibration, series,
       other parties' nodes). `classifyOp(op, ownedNodeIds)` is exported.
     - The engine stays pure: the backend loads the base input, the engine
       transforms plain data, and `runModel` is unchanged.
@@ -1744,8 +1744,7 @@ must build WP-2.15 Phase B.
      - allocation sources and hashes; map feature sources and hashes;
      - EWR sites with their source and confidence.
   3. **Settings that drive results**, listed explicitly: EWR method and
-     sites, calibration window and observed record, flow-share method,
-     reporting window, assurance thresholds, allocation mode, operating
+     sites, calibration window and observed record, reporting window, assurance thresholds, allocation mode, operating
      rules.
   4. **Engine**: `ENGINE_VERSION`, git SHA, invariant and soak status, and
      any errata for that version.

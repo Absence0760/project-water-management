@@ -139,7 +139,9 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 `downstreamNodeId` (the network's shape: use `node.add`, `node.insert`,
 `node.move` or `node.remove`) or `sortOrder` (display only).
 
-- farm: `name`; land `areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`;
+- farm: `name`; land `areaKm2` (the only land field since engine 1.105.0,
+  issue #616: `areaHiKm2`, `areaLoKm2` and `flowShareManual` are retired and
+  refused with a reason, below);
   dam and irrigation `pctUpstreamToDam`, `pctRunoffToDam`, `damCapacityM3`,
   `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent` (0 < b ≤ 1
   from engine 1.63.0),
@@ -249,7 +251,7 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 
 **`settings.set` paths:** `februaryDays`, `effectiveRainFraction`,
 `effectiveRainFractionMonthly`, `effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,
-`ewrPragmaticM3PerDay`, `flowShareMethod`, `hiLoSplit.hi`, `hiLoSplit.lo`,
+`ewrPragmaticM3PerDay`,
 `gr4j.x1`–`gr4j.x4`, `gr4j.warmupDays`,
 `chirpsBiasCorrection`, `zeroRainRuns.mode`, `zeroRainRuns.accumulationMode`,
 `calibration.rainThresholdMm`, `calibration.catchmentAreaKm2`,
@@ -310,6 +312,19 @@ always split by each unit's natural MAR): delete this change"
 (`RETIRED_SETTINGS_PATHS`, as the legacy runoff model's paths are). A
 decided scenario's ops are immutable and hashed, so no migration rewrites
 them.
+
+The flow-share method is retired the same way in engine 1.105.0 (issue
+#616, [model.md §2.5](./model.md)): every unit has one share, its natural
+MAR share, so a `settings.set` on `flowShareMethod`, `hiLoSplit.hi` or
+`hiLoSplit.lo` is refused with "the flow-share method was removed in engine
+1.105.0 (the flow is split by each unit's natural MAR, as the EWR is):
+delete this change", and a `node.set` on `areaHiKm2`, `areaLoKm2` or
+`flowShareManual` with "the high-MAP area / the low-MAP area / the
+specific flow share was removed in engine 1.105.0 with the flow-share
+methods (the flow is split by each unit's natural MAR): delete this
+change" (`RETIRED_NODE_SET_FIELDS`, `retiredNodeFieldReason`). Stored ops
+are left alone, as above: a new one is refused when the ops are saved, a
+stored one shows as a problem when the scenario is checked or run.
 
 **Retired paths (engine 1.0.0, issue #16).** `runoffModel`,
 `calibration.a`, `calibration.b`, `calibration.summerFactor`,
@@ -665,12 +680,12 @@ red **Baseline assumptions changed** callout shows whenever any op is
 
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
-| `settings.set`, `series.scale`, `ewrRule.set`, `ewrRule.remove` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, flow-share method, climate) |
-| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own), or a unit's base-flow loss and gain, `baseflowLossM3Day` / `baseflowGainM3Day` (engine 1.86.0, the groundwater's); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), the river's bed losses and a unit's base-flow loss and gain |
-| `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
-| `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
-| `node.insert` | as `node.add`: not a gauge, and no land or manual flow share of its own; and not a priority other water user (the default priority) | baseline. A priority user inserted above other farms curtails them (they must pass its demand, [model.md §2.7c](./model.md)), and whether a new use ranks above existing lawful use is the authority's call, pending the hydrologist ([engine-audit.md](./engine-audit.md) L1), so it is a changed assumption, not the proposal. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |
-| `node.move` | owned, no land or manual flow share, not a gauge or a priority other water user, no node drains into it, and no EWR table sited at it (needs `input`) | baseline: moving the applicant's own abstraction point (a pump or dam they added or own, a leaf) is where they propose to take water; moving anything else, or a node others drain into, redraws the river as modelled. A node the scenario added or inserted counts as owned |
+| `settings.set`, `series.scale`, `ewrRule.set`, `ewrRule.remove` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, climate) |
+| `node.set` | the node is owned and the field is not land (`areaKm2`; it sets the unit's natural MAR share), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own), or a unit's base-flow loss and gain, `baseflowLossM3Day` / `baseflowGainM3Day` (engine 1.86.0, the groundwater's); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), the river's bed losses and a unit's base-flow loss and gain |
+| `node.add` | not a gauge, and no land of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land re-partitions the catchment |
+| `node.remove` | owned, not a gauge, no land, and no EWR rule table sited at it (needs `input`) | baseline |
+| `node.insert` | as `node.add`: not a gauge, and no land of its own; and not a priority other water user (the default priority) | baseline. A priority user inserted above other farms curtails them (they must pass its demand, [model.md §2.7c](./model.md)), and whether a new use ranks above existing lawful use is the authority's call, pending the hydrologist ([engine-audit.md](./engine-audit.md) L1), so it is a changed assumption, not the proposal. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |
+| `node.move` | owned, no land, not a gauge or a priority other water user, no node drains into it, and no EWR table sited at it (needs `input`) | baseline: moving the applicant's own abstraction point (a pump or dam they added or own, a leaf) is where they propose to take water; moving anything else, or a node others drain into, redraws the river as modelled. A node the scenario added or inserted counts as owned |
 | `cropArea.set`, `landCover.add` | on an owned node | baseline |
 | `crop.add` | always | |
 | `crop.set`, `crop.remove` | the crop is one the scenario itself added (`classifyScenario` passes them; `classifyOp`'s fourth argument) | baseline: a crop's factors and efficiency are agronomic data that apply on every farm growing it, farms the applicant may not see among them, so a change to one isn't theirs to propose (and classing by who grows it would tell an applicant whether a hidden farm does). Stopping a crop on their own farm is `cropArea.set` to 0, a proposal |
@@ -1042,7 +1057,7 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
 - **Then in order.** Without conflicts each scenario's ops apply to the
   result of the ones before (`applyScenario`, an application under its
   applicant's mask, as its own runs are). An op that applies alone but not
-  on top of the others (two new dams given one name, flow shares past 100 %
+  on top of the others (two new dams given one name, no catchment area left
   together) is a `problem` naming its scenario, and also refuses the
   combination: a result with an op skipped would not be the scenarios it
   names.
@@ -1449,13 +1464,14 @@ scenario is `'team'`, and behaves exactly as above).
   - a rule the op breaks because of hidden data (a rule about a hidden
     item, a hidden farm's drought borehole rule or supply rule (both read
     its hidden dam or levels), and, while any farm is
-    hidden, flow shares over 100 % or no catchment area left, which an op's
-    own range-checked value can't break alone) reads only `op N (…):
-    doesn't apply to the catchment as modelled` (`MASKED_RULE`). For the
-    catchment-wide rules (flow shares, area) the applicant reads the
-    catchment's value and the hidden units' aggregate instead
-    (`MASKED_RULE_AGGREGATE`: "flow shares would total 120.0 %, more than
-    100 %; the units you can't see hold 90.0 % of them between them") when
+    hidden, no catchment area left, which an op's own range-checked value
+    can't break alone) reads only `op N (…): doesn't apply to the catchment
+    as modelled` (`MASKED_RULE`). For the catchment-wide rule (the land
+    left) the applicant reads the catchment's value and the hidden units'
+    aggregate instead (`MASKED_RULE_AGGREGATE`: "the catchment would have
+    0.00 km² of land; the units you can't see hold 90.00 km² between them";
+    flow shares over 100 % were the other such rule until engine 1.105.0,
+    issue #616, since the natural MAR shares add up to 100 %) when
     the hidden farms have `FARMER_K` = 5 or more holders, the applicant
     left out (`app_application_hidden_holders`, counted as the k rule counts
     them, 164): an aggregate over that many holders relates to no one of
@@ -1482,8 +1498,9 @@ scenario is `'team'`, and behaves exactly as above).
     that the model can run the changes, not a refusal of a water use
     licence under s42 of the National Water Act (no authority has
     considered the application), and that the applicant can still apply to
-    DWS through its own channels (e-WULAAS). A masked line ("flow shares
-    over 100 %", "no catchment area left") is evidence that the catchment
+    DWS through its own channels (e-WULAAS). A masked line ("no catchment
+    area left", or "flow shares over 100 %" on a question asked before
+    engine 1.105.0) is evidence that the catchment
     is fully allocated, so the question and the answer are the
     application's record for the authority's s42 written reasons: a
     cumulative assessment shows and exports those on its applications, and

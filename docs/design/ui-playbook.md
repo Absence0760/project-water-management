@@ -826,9 +826,9 @@ section it belongs to, with the example that taught it.
   set to (`network/nodeSummary.ts`, unit-tested), so a closed card still
   answers "what is this unit's dam?"; only the first (or the one the section
   menu points at) opens, and the menu's jump folds the others. Inside, the
-  rarely changed fields fold (`.fold`, above), the fields the current method
-  doesn't use hide behind one "Not used with the area flow share: High-MAP,
-  Low-MAP." line instead of greyed-out cells (they open read-only, nothing
+  rarely changed fields fold (`.fold`, above), the fields the node doesn't
+  use hide behind one line per reason ("Not used without a dam (capacity
+  0): …") instead of greyed-out cells (they open read-only, nothing
   lost), and the help goes behind the explain switch. Three things keep it
   honest: the header shows **needs fixing** while anything inside is
   invalid or a problem shows; a link into the sheet can name its section

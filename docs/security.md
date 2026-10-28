@@ -2567,8 +2567,9 @@ In short:
     new item moves to a fresh id in that application's runs, and only the
     assessors are told (`check.reIds`). *Counts and rules*: removing a hidden
     farm reports nothing it carried, and a rule the op breaks only because
-    of hidden data (a hidden item, a hidden farm's borehole rule, flow
-    shares over 100 %, no catchment area left) says only that the op
+    of hidden data (a hidden item, a hidden farm's borehole rule, no
+    catchment area left; flow shares over 100 % too until engine 1.105.0
+    retired the specific shares, issue #616) says only that the op
     doesn't apply to the catchment as modelled. Whether it applies can't be
     hidden (a model that breaks a save rule can't run); the words are the
     client's call (issue #90).

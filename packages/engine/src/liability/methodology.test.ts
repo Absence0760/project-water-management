@@ -33,7 +33,8 @@ const PUBLISHED: Record<string, string> = {
 	'methodology-10': 'a5aefa72de72037f3483aa631b50efd1526d3e3a51b791e7635d1463f560f021',
 	'methodology-11': '7a458617797c09d0a57da182d758714ed79d6d0626f7dbb25fe5ca08547c6351',
 	'methodology-12': 'ac81926f72c3f59970c7a5e93e3e7d17e71e38e0a5b2addce621f2585827c949',
-	'methodology-13': 'b60675110eacce51bce3447c6dd4e9b3a0fa54d956e6671fd95bb955c4640737'
+	// Revised before its first release (issue #616, the flow split by the same natural MAR share, in the same draft as #615).
+	'methodology-13': '40ba78816e17c4a17dd9ddf7f2435dbb5a39e8b9db38a0d673b67f27bc85230a'
 };
 
 describe('methodology statement (generated from docs/methodology)', () => {

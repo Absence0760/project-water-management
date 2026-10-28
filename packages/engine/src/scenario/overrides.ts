@@ -1101,11 +1101,11 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 		case 'node.set':
 			// Any other field of the applicant's own node is theirs to propose: its dam, irrigation,
 			// boreholes, and how it takes water (the supply rule and river pump, WP-3.8), which is
-			// what a licence to abstract from the river asks for, like a new pump. Land and flow
-			// share split the catchment's natural runoff, so they stay baseline.
+			// what a licence to abstract from the river asks for, like a new pump. Land sets the unit's natural MAR share,
+			// which splits the catchment's natural runoff, so it stays baseline.
 			return ok(mine(op.nodeId) && !BASELINE_NODE_FIELDS.includes(op.field));
 		case 'node.add':
-			// A new gauge moves an EWR site; a new node with land or a manual flow share re-partitions the catchment's runoff.
+			// A new gauge moves an EWR site; a new node with land re-partitions the catchment's runoff (its natural MAR share).
 			return ok(!sharesRunoff(op.node));
 		case 'node.remove': {
 			const n = input?.model.nodes.find((x) => x.id === op.nodeId);
