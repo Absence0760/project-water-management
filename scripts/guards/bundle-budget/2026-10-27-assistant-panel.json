@@ -1,4 +1,4 @@
 {
-	"addKb": 8,
-	"why": "Issue #610 assistant: the lazy AssistantPanel chunk (3.5 KB gz), the Ask the assistant guide in the help guides chunk (~2 KB), the conversation state, SSE reader and header button in the workspace page (~2 KB), the client's stream POST; measured 2122 KB total vs 2114 KB"
+	"addKb": 9,
+	"why": "Issue #610 assistant: the lazy AssistantPanel chunk (3.5 KB gz), the Ask the assistant guide in the help guides chunk (~2 KB), the conversation state, SSE reader and the header's Assistant launcher in the workspace page (~2 KB), the client's stream POST, then the three monthly caps' budget-spent states (project, person, server) and the scope-aware status; measured 2123 KB total vs 2114 KB before the assistant. Lazy chunks count in the total, so moving the panel's code between chunks can't lower it"
 }
