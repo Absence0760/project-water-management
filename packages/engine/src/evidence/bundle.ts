@@ -602,7 +602,9 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 					startDate: s.startDate,
 					values: parsed.values,
 					...(s.provenance !== undefined ? { provenance: s.provenance } : {}),
-					...(s.origin !== undefined ? { origin: s.origin } : {})
+					...(s.origin !== undefined ? { origin: s.origin } : {}),
+					// The stored series it was read from (engine ≥ 1.102.0): settings.flowMissing and the like name it.
+					...(typeof s.seriesId === 'string' ? { seriesId: s.seriesId } : {})
 				};
 			} catch (e) {
 				problems.push(`${kind} (${file}): ${message(e)}`);

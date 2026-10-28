@@ -4,7 +4,9 @@
 //
 // Flow: each day of a calibration record gets one class, the strongest that
 // applies, in FLOW_FLAG_PRECEDENCE order (missing wins):
-// - missing: no reading (blank, NaN or negative, as alignFlow reads it);
+// - missing: no reading (blank, NaN or negative, as alignFlow reads it, or
+//   inside one of the record's settings.flowMissing periods, engine ≥
+//   1.102.0, which the run blanks before anything reads the record);
 // - infilled: a gap-filled value, not a reading (observedInfillMask, from
 //   settings.flowGapFill's fill, engine ≥ 1.23.0, docs/model.md §2.10i);
 // - periodHigh: inside one of the record's low-flow periods
@@ -29,7 +31,9 @@
 //   logger that fails also
 //   reads zero, which is why the rest are "check with the client". Engine
 //   1.62.0 – 1.80.0 trusted every zero stretch (QF-3). An exclusion period
-//   stays the manual override;
+//   stays the manual override. A day inside one of the record's kept outlier
+//   or flat-stretch items (settings.checksKept, engine ≥ 1.102.0, issue #611)
+//   is never suspect: the user kept it as recorded;
 // - aboveRating: above the highest field gauging (settings.qualityFlags
 //   .ratings), so the flow comes from an extrapolated rating curve;
 // - belowRating: above zero but below the lowest gauging;
@@ -52,6 +56,7 @@ import type { CalibrationFlowKind, DailySeries, DataQualitySettings } from '../p
 import { seriesRowFlags } from '../quality';
 import { RAIN_SOURCE_CODE } from '../rainSourcePeriods';
 import type { CalibrationExclusion } from './provenance';
+import { keptSuspectRanges } from '../checkItems';
 import { lowFlowThresholds, ratingOf, ZERO_FLOW_TRUST_MAX_DAYS, zeroFlowMonthsText, type AboveRatingUse, type GaugeRating, type LowFlowPeriod, type QualityFlagSettings } from './qualityFlagSettings';
 
 export * from './qualityFlagSettings';
@@ -120,6 +125,13 @@ export interface FlowFlagInput {
 	zeroFlowMonths?: readonly number[];
 	/** settings.qualityFlags.lowFlowPeriods (engine ≥ 1.90.0, issue #557): only this record's periods apply. Absent = none. */
 	lowFlowPeriods?: readonly LowFlowPeriod[];
+	/**
+	 * Inclusive epoch-day ranges of this record's kept outlier and flat-stretch
+	 * items (settings.checksKept, engine ≥ 1.102.0, issue #611,
+	 * ../recordPeriods.ts keptSuspectRanges): no day in them is suspect, so it
+	 * takes the class it would have without the data checks. Absent = none.
+	 */
+	kept?: readonly (readonly [number, number])[];
 }
 
 /**
@@ -190,6 +202,12 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 	const hi = x.rating?.gaugedMaxM3s ?? null;
 	const lo = x.rating?.gaugedMinM3s ?? null;
 	const thr = lowFlowThresholds(x.lowFlowPeriods, x.kind, x.start, x.days);
+	// A kept item's days (settings.checksKept): the user read them and keeps them, so they aren't suspect.
+	let kept: Uint8Array | null = null;
+	for (const [a, b] of x.kept ?? []) {
+		kept ??= new Uint8Array(x.days);
+		kept.fill(1, Math.max(0, a - x.start), Math.max(0, Math.min(x.days, b - x.start + 1)));
+	}
 	const from = Math.max(0, -offset);
 	const to = Math.min(s.values.length, x.days - offset);
 	for (let i = from; i < to; i++) {
@@ -202,7 +220,7 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 			? FLOW_FLAG_CODE.infilled
 			: thr && v > thr[t]!
 				? FLOW_FLAG_CODE.periodHigh
-				: (rows && (rows.outlier[i] || (rows.flatline[i] && v !== 0))) || zeroSuspect?.[i]
+				: !kept?.[t] && ((rows && (rows.outlier[i] || (rows.flatline[i] && v !== 0))) || zeroSuspect?.[i])
 					? FLOW_FLAG_CODE.suspect
 					: hi !== null && v > hi
 					? FLOW_FLAG_CODE.aboveRating
@@ -235,7 +253,7 @@ export interface RecordFlowFlagInput {
 	series: DailySeries | undefined;
 	start: number;
 	days: number;
-	settings: { qualityFlags: QualityFlagSettings; dataQuality?: DataQualitySettings };
+	settings: { qualityFlags: QualityFlagSettings; dataQuality?: DataQualitySettings; checksKept?: readonly string[] | null };
 	/** settings.calibrationSiteNodeId: null = the outlet. */
 	siteNodeId: string | null;
 	/** The run's gap-filled records (PreparedRun.flowFill): only the outlet's records are filled. */
@@ -252,6 +270,7 @@ export interface RecordFlowFlagInput {
  */
 export function recordFlowFlags(x: RecordFlowFlagInput): Uint8Array {
 	const q = siteQualityFlags(x.settings.qualityFlags, x.siteNodeId);
+	const kept = keptSuspectRanges(x.settings.checksKept, x.series?.seriesId);
 	return flowDayFlags({
 		kind: x.kind,
 		series: x.series,
@@ -262,7 +281,8 @@ export function recordFlowFlags(x: RecordFlowFlagInput): Uint8Array {
 		zeroFlowMonths: q.zeroFlowMonths ?? [],
 		...(q.lowFlowPeriods?.length ? { lowFlowPeriods: q.lowFlowPeriods } : {}),
 		...(x.settings.dataQuality ? { dataQuality: x.settings.dataQuality } : {}),
-		...(x.suspect === false ? { suspect: false } : {})
+		...(x.suspect === false ? { suspect: false } : {}),
+		...(kept.length ? { kept } : {})
 	});
 }
 

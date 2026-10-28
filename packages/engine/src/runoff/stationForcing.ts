@@ -44,6 +44,7 @@ import {
 import { isLandUnit } from './area';
 import { fitStationPairing, pairingFactorOn } from './stationPairing';
 import { checkedStationRecord, type CheckedStationRecord } from './stationRecord';
+import { warn } from '../warningCodes';
 
 /** What a day of an area's station forcing read (StationAreaDays.source). */
 export const STATION_DAY_SOURCE = { none: 0, station: 1, chirps: 2, fallback: 3 } as const;
@@ -350,7 +351,9 @@ export function catchmentStationPlan(ctx: StationContext, warnings: string[]): C
 	const stationId = a.stationId;
 	const rec = ctx.record(stationId);
 	if (!rec) {
-		warnings.push(`station: the catchment’s station "${ctx.name(stationId)}" has no record in this run’s input, so the catchment rain is read as without a station`);
+		warnings.push(
+			warn('rain.station.noRecord', { station: stationId, where: 'catchment' }, `station: the catchment’s station "${ctx.name(stationId)}" has no record in this run’s input, so the catchment rain is read as without a station`)
+		);
 		return null;
 	}
 	const scaleToMap = a.scaleToMap !== false;
@@ -456,7 +459,9 @@ export interface UnitStationRecipe {
 export function unitStationRecipe(ctx: StationContext, node: NetworkNode, a: RainStationAssignment, warnings: string[]): UnitStationRecipe | null {
 	const stationId = a.stationId;
 	if (!ctx.record(stationId)) {
-		warnings.push(`station: "${node.name}"’s station "${ctx.name(stationId)}" has no record in this run’s input, so the unit keeps its own rain rule`);
+		warnings.push(
+			warn('rain.station.noRecord', { station: stationId, where: 'unit', unit: node.id }, `station: "${node.name}"’s station "${ctx.name(stationId)}" has no record in this run’s input, so the unit keeps its own rain rule`)
+		);
 		return null;
 	}
 	const scaleToMap = a.scaleToMap !== false;

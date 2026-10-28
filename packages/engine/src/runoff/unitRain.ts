@@ -87,6 +87,7 @@ import {
 	type UnitStationRecipe
 } from './stationForcing';
 import type { RainStationInputs, StationAreaForcing } from '../project';
+import { warn } from '../warningCodes';
 
 export { isLandUnit, perUnitAreaKm2 } from './area';
 export * from './unitRainFingerprint';
@@ -520,7 +521,13 @@ export function unitRainForcing(
 				source[t] = code;
 			}
 			if (fell > 0)
-				warnings.push(`unit rain: "${n.name}" ran ${fell} of its ${hist} day${hist === 1 ? '' : 's'} on the catchment's rain, where its station and its corrected CHIRPS had no value`);
+				warnings.push(
+					warn(
+						'rain.unit.catchmentFallback',
+						{ unit: n.id, days: fell, runDays: hist },
+						`unit rain: "${n.name}" ran ${fell} of its ${hist} day${hist === 1 ? '' : 's'} on the catchment's rain, where its station and its corrected CHIRPS had no value`
+					)
+				);
 			const sm = sc.map(st.stationId);
 			stationForcings.push({
 				nodeId: n.id,

@@ -25,6 +25,11 @@ export const TAB_GROUP = {
 	crops: 'inputs',
 	transfers: 'inputs',
 	series: 'core',
+	// Every warning and problem in the project, each with its fix (issue #611): the data checks' flagged periods, the
+	// run's warnings, the model's and the settings' problems, failing feeds, data behind, runs an erratum may affect.
+	// A row of its own after Data, its count of open items beside it. Core: a viewer reads the list; its decisions
+	// are an editor's.
+	warnings: 'core',
 	settings: 'inputs',
 	// Fitting the runoff parameters and judging the fit, on one page (issue #586): core, as viewers read the fit's
 	// results on Runs & results today; its fit controls are editors', as the Map's edit tools are.
@@ -37,7 +42,8 @@ export const TAB_GROUP = {
 	supply: 'core',
 	// Each dam's level and storage in the latest run (issue #17 option A · Outcomes): anyone who can read runs.
 	dams: 'core',
-	// Two runs side by side (the /compare page's view, issue #17): anyone who can read runs.
+	// Two runs side by side (the /compare page's view, issue #17): anyone who can read runs. LINKED_ONLY since issue
+	// #611 gave its row to Warnings: it opens from Runs & results and Scenarios.
 	compare: 'core',
 	// Viewers can read scenarios (and compare them with the base run).
 	scenarios: 'core',
@@ -65,6 +71,7 @@ export const TAB_LABELS: Record<TabId, string> = {
 	crops: 'Crops & demand',
 	transfers: 'Transfers',
 	series: 'Data',
+	warnings: 'Warnings',
 	settings: 'Model settings',
 	calibration: 'Calibration',
 	runs: 'Runs & results',
@@ -83,14 +90,17 @@ export const TAB_LABELS: Record<TabId, string> = {
 export const ALL_TABS = Object.keys(TAB_GROUP) as TabId[];
 
 /**
- * Tabs reached from a link on another page rather than listed in the sidebar.
- * None now: the Map was one (issue #288, opened from the Network's header and
- * Settings → WR2012 check) until it got a sidebar row of its own with the
- * results on the map (#326 D3), taking the row the sidebar's budget had to
- * spare (app-sidebar.spec.ts). Kept for the next linked-only view: while one
- * is open the sidebar shows it in its place (stripTabs).
+ * Tabs reached from a link on another page rather than listed in the sidebar:
+ * while one is open the sidebar shows it in its place (stripTabs, NAV_SECTIONS
+ * order). Compare runs (issue #611) opens from Runs & results' Compare runs
+ * and Compare with published and from Scenarios, and shows under Runs &
+ * results while open: it gave its row to Warnings, as the sidebar's budget is
+ * full since Calibration took its last row (app-sidebar.spec.ts). A saved
+ * hidden-sections list that names it is harmless: hiddenTabs only counts tabs
+ * the sidebar lists. The Map was one too (issue #288) until it got a row of
+ * its own (#326 D3), and Warnings while it was new.
  */
-export const LINKED_ONLY: readonly TabId[] = [];
+export const LINKED_ONLY: readonly TabId[] = ['compare'];
 
 /** The tab that can never be hidden: the project's landing page. */
 export const ALWAYS_SHOWN: TabId = 'overview';
@@ -125,6 +135,7 @@ export const TAB_GUIDE: Readonly<Record<TabId, string>> = {
 	crops: 'set-up-crops-and-demand',
 	transfers: 'add-a-transfer',
 	series: 'add-data',
+	warnings: 'warnings-page',
 	settings: 'model-settings-page',
 	calibration: 'calibration-page',
 	runs: 'run-and-read-results',
@@ -264,8 +275,8 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
 export const NAV_SECTIONS = [
 	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
 	// Calibration after Settings (issue #586): fitting the runoff parameters is the last step of building the model.
-	{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration'] },
-	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] }
+	{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'warnings', 'settings', 'calibration'] },
+	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'compare', 'dams', 'scenarios', 'allocations'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];
 
 export type NavSectionId = (typeof NAV_SECTIONS)[number]['id'];

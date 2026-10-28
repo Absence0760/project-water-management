@@ -33,6 +33,7 @@ import { defaultZeroRainSettings, type DailySeries, type DataQualitySettings, ty
 import type { SeriesCheck } from './quality';
 import type { ChirpsFitRange } from './project';
 import { chirpsFitSegmentFor, fitSegmentFillText, fitSegmentName, suspectRainDays, type ChirpsCorrection, type ChirpsFitPeriodInfo } from './rain';
+import { warn } from './warningCodes';
 
 /** A water year is judged with this many shared days … */
 export const DOUBLE_MASS_MIN_DAYS = 300;
@@ -371,6 +372,17 @@ function segmentOf(dm: DoubleMass, wy: number): number {
  * doesn't follow the breaks).
  */
 export function doubleMassRunWarning(
+	dm: DoubleMass | null,
+	corr: ChirpsCorrection | null,
+	catchment: readonly (number | null)[],
+	chirps: readonly (number | null)[],
+	start: number
+): string | null {
+	const text = doubleMassRunText(dm, corr, catchment, chirps, start);
+	return text === null ? null : warn('rain.chirps.doubleMassBreak', { breaks: dm?.breaks.length ?? 0, ranges: corr!.fitPeriod?.segments.length ?? 0 }, text);
+}
+
+function doubleMassRunText(
 	dm: DoubleMass | null,
 	corr: ChirpsCorrection | null,
 	catchment: readonly (number | null)[],

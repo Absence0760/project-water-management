@@ -11,6 +11,7 @@ import { dayText, fromEpochDay, isIsoDate, toEpochDay } from './calendar';
 import { type DailySeries, type ModelInput, type SeriesPick, type SeriesSpan, unitRainSeriesKey, type UnitRainSettings } from './project';
 import { unitRainOn } from './runoff/unitRain';
 import { compareSeriesNames } from './seriesNames';
+import { warn } from './warningCodes';
 
 /** How many of the run's days [start, start + days) lie between `first` and `last` (epoch days, inclusive; null: none). */
 function spanDays(first: number | null, last: number | null, start: number, days: number): number {
@@ -77,8 +78,12 @@ export function chirpsChoiceWarnings(
 	const outlet = shadowed(choice.rain_chirps_mm, input.series.rain_chirps_mm, start, days);
 	if (outlet) {
 		out.push(
-			`the run read the CHIRPS series ${outlet}: ` +
-				'a run reads the first CHIRPS series by name and uses only that one wherever it reads CHIRPS (the fill of catchment rain’s blank days included). Rename or remove one of them so the run reads the record you mean'
+			warn(
+				'rain.chirpsShadowed',
+				{ where: 'catchment' },
+				`the run read the CHIRPS series ${outlet}: ` +
+					'a run reads the first CHIRPS series by name and uses only that one wherever it reads CHIRPS (the fill of catchment rain’s blank days included). Rename or remove one of them so the run reads the record you mean'
+			)
 		);
 	}
 	const units = choice.unitChirps;
@@ -92,8 +97,12 @@ export function chirpsChoiceWarnings(
 		if (!unit) continue;
 		const name = nodes.find((n) => n.id === id)!.name;
 		out.push(
-			`for the unit “${name}”, the run read the CHIRPS series ${unit}: ` +
-				'a run reads a unit’s first CHIRPS series by name and uses only that one for the unit’s own rain. Rename or remove one of them so the run reads the record you mean'
+			warn(
+				'rain.chirpsShadowed',
+				{ where: 'unit', unit: id, name },
+				`for the unit “${name}”, the run read the CHIRPS series ${unit}: ` +
+					'a run reads a unit’s first CHIRPS series by name and uses only that one for the unit’s own rain. Rename or remove one of them so the run reads the record you mean'
+			)
 		);
 	}
 	return out;

@@ -1842,3 +1842,66 @@ describe('describeFitRecord', () => {
 		expect(fit(run)).toBe(`GR4J fit of unknown time (${run}, seed 2)`);
 	});
 });
+
+describe('diffInputs: one record’s missing periods and the kept data checks (issue #611, engine ≥ 1.102.0)', () => {
+	const OBS = '00000000-0000-4000-8000-00000000f101';
+	const UNIT_GAUGE = '00000000-0000-4000-8000-00000000f104';
+	const withIds = () =>
+		snapshot({
+			series: {
+				rain_catchment_mm: { startDate: '2000-01-01', length: 366 },
+				flow_observed_m3s: { startDate: '2000-01-01', length: 366, seriesId: OBS },
+				'rain_catchment_mm@f1': { startDate: '2000-01-01', length: 366, seriesId: UNIT_GAUGE }
+			}
+		});
+
+	it('words a missing period added, removed or re-reasoned, naming the record by the series the runs read', () => {
+		const a = withIds();
+		a.settings.flowMissing = { [OBS]: [{ start: '2001-01-01', end: '2001-03-31', reason: 'Weir silted up' }] };
+		const b = withIds();
+		b.settings.flowMissing = { [OBS]: [{ start: '2001-01-01', end: '2001-03-31', reason: 'Weir silted up, per the client' }, { waterYear: 2003, reason: 'Logger drift' }] };
+		expect(texts(a, b)).toEqual([
+			'Missing period of Observed flow 1 Jan 2001 – 31 Mar 2001: reason “Weir silted up” → “Weir silted up, per the client”',
+			'Missing period of Observed flow WY 2003/04 added: “Logger drift”'
+		]);
+		expect(texts(b, withIds())).toEqual([
+			'Missing period of Observed flow 1 Jan 2001 – 31 Mar 2001 removed (was: “Weir silted up, per the client”)',
+			'Missing period of Observed flow WY 2003/04 removed (was: “Logger drift”)'
+		]);
+		// Absent, null and {} are all none; never a bare "Setting changed".
+		const none = withIds();
+		none.settings.flowMissing = {};
+		expect(texts(withIds(), none)).toEqual([]);
+		expect(diffInputs(a, b).some((c) => c.text.startsWith('Setting "flowMissing"'))).toBe(false);
+	});
+
+	it('names a unit gauge’s unreliable periods by its series, and counts the kept checks', () => {
+		const a = withIds();
+		const b = withIds();
+		b.settings.rainStations = { unreliable: { [UNIT_GAUGE]: [['2001-01-01', '2001-01-31']] } };
+		b.settings.checksKept = [`outlier:${OBS}:2001-02-01:2001-02-01`, `flatline:${OBS}:2001-03-01:2001-03-20`];
+		expect(texts(a, b)).toEqual([
+			"Rainfall stations: Rainfall (catchment) of the unit Rooikloof's unreliable periods: none → 2001-01-01 to 2001-01-31",
+			'Kept data checks: 2 checks kept'
+		]);
+		const c = structuredClone(b);
+		c.settings.checksKept = [`outlier:${OBS}:2001-02-01:2001-02-01`, `zerorun:${UNIT_GAUGE}:2001-04-01:2001-04-30`];
+		expect(texts(b, c)).toEqual(['Kept data checks: 1 check kept, 1 check no longer kept']);
+		expect(new Map(settingsChangePaths()).get('Kept data checks')).toBe('checksKept');
+	});
+
+	it('counts the kept run warnings and problems (issue #611), never a bare "Setting changed"', () => {
+		const a = withIds();
+		const b = withIds();
+		b.settings.warningsKept = [
+			{ id: 'run:rain.chirps.corrected:abc123', note: 'Expected: the gauge has gaps' },
+			{ id: 'problem:data:s1', note: '' }
+		];
+		expect(texts(a, b)).toEqual(['Kept warnings: 2 warnings kept']);
+		const c = structuredClone(b);
+		c.settings.warningsKept = [{ id: 'run:rain.chirps.corrected:abc123', note: 'Edited note' }];
+		expect(texts(b, c)).toEqual(['Kept warnings: 1 warning no longer kept']);
+		expect(new Map(settingsChangePaths()).get('Kept warnings')).toBe('warningsKept');
+	});
+});
+

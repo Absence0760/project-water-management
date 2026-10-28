@@ -388,7 +388,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const { name, timeZone } = await projectInfo(db, id);
 			const range = dayRange(s.startDate, s.values.length, q.from, q.to);
 			if (!range) throw new ApiError(400, 'the window is outside the series');
-			const series: ExportSeries = { ...s, label: s.name ? `${s.kind} – ${s.name}` : s.kind };
+			const series: ExportSeries = { ...s, id: seriesId, label: s.name ? `${s.kind} – ${s.name}` : s.kind };
 			const reading = await loadReadingRun(db, id, seriesId, s);
 			const columns = seriesExportColumns(series, mergeSettings(s.settings), reading?.columns ?? null);
 			const lines = () => dailyCsvLines(s.startDate, columns, range);

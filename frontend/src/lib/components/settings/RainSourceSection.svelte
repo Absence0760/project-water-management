@@ -83,7 +83,7 @@
 	}
 </script>
 
-<div class="rain-source" data-testid="rain-source">
+<div class="rain-source" id="fld-rain-source" data-testid="rain-source">
 	<div class="head">
 		<!-- The list's add action in its head row, beside its name (ui-playbook.md § 2). -->
 		<div class="head-row">
