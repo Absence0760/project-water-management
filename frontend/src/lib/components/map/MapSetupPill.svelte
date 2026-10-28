@@ -7,7 +7,10 @@
 	over the page, so opening it never moves the map; Escape closes it and
 	puts the focus back on the pill, a click outside closes it, and it is
 	nudged to stay inside the window. Each step left to do carries its way in.
-	It goes once every step is done.
+	It goes once every step is done. A model started from the map lists its
+	data step here (issue #646: startData.ts's items, each with its status and
+	link, and a link back to the Start sheet's data step) until a run has what
+	it needs.
 -->
 <script lang="ts">
 	import { setupCount, type MapSetupStep } from './mapSetup';
@@ -17,7 +20,8 @@
 		rainLink,
 		uploadHref,
 		ondrawboundary,
-		ondelineate = null
+		ondelineate = null,
+		startHref = null
 	}: {
 		steps: MapSetupStep[];
 		/** The rain step's link and its words (MapRainLink's state), or null when the step has none yet. */
@@ -27,7 +31,11 @@
 		ondrawboundary: (() => void) | null;
 		/** Delineate the boundary from its outlet (with an elevation model on the server; null without one), as the empty map leads with. */
 		ondelineate?: (() => void) | null;
+		/** The Start sheet's data step (a model started from the map), where each unit's rain and MAP are reviewed together. */
+		startHref?: string | null;
 	} = $props();
+	const STATUS: Record<string, string> = { done: 'Done', partial: 'Started', todo: 'To do', unknown: 'Checking' };
+	const word = (s: MapSetupStep) => STATUS[s.status ?? (s.done ? 'done' : 'todo')];
 
 	const id = $props.id();
 	let open = $state(false);
@@ -92,7 +100,7 @@
 		<p class="pop-h"><strong>Getting started</strong> <span class="muted">· {setupCount(steps)} done</span></p>
 		<ol class="steps">
 			{#each steps as s, i (s.id)}
-				<li class="step" class:done={s.done} data-step={s.id} data-done={s.done ? 'true' : 'false'}>
+				<li class="step" class:done={s.done} class:partial={s.status === 'partial'} data-step={s.id} data-done={s.done ? 'true' : 'false'} data-status={s.status ?? (s.done ? 'done' : 'todo')}>
 					<span class="icon" aria-hidden="true">
 						{#if s.done}
 							<svg viewBox="0 0 20 20" width="20" height="20"><circle cx="10" cy="10" r="9" /><path d="m6 10.5 2.6 2.5L14 7.5" /></svg>
@@ -101,7 +109,7 @@
 						{/if}
 					</span>
 					<div class="body">
-						<p class="title">{s.title}<span class="visually-hidden">: {s.done ? 'Done' : 'To do'}.</span></p>
+						<p class="title">{s.title}{#if s.status}<span class="status" aria-hidden="true">{word(s)}</span>{/if}<span class="visually-hidden">: {word(s)}.</span></p>
 						<p class="detail">{s.detail}</p>
 						{#if !s.done && s.id === 'boundary'}
 							<p class="ways">
@@ -109,6 +117,8 @@
 								{#if ondrawboundary}<button type="button" class={ondelineate ? 'btn btn-sm' : 'btn btn-sm btn-primary'} onclick={draw} data-testid="map-setup-draw-boundary">Draw the boundary</button>{/if}
 								<a class="btn btn-sm" href={uploadHref}>Upload a GeoJSON file</a>
 							</p>
+						{:else if !s.done && s.href}
+							<p class="ways"><a href={s.href} data-testid="map-setup-link-{s.id}">{s.where}</a>{#if s.more}<span aria-hidden="true">·</span><a href={s.more.href}>{s.more.text}</a>{/if}</p>
 						{:else if !s.done && s.id === 'rain' && rainLink}
 							<p class="ways"><a href={rainLink.href} data-testid="map-rain-link">{rainLink.text}</a></p>
 						{/if}
@@ -116,6 +126,9 @@
 				</li>
 			{/each}
 		</ol>
+		{#if startHref}
+			<p class="foot"><a href={startHref} data-testid="map-setup-start">Review each unit’s rain and MAP together</a> in the Start sheet’s data step.</p>
+		{/if}
 		{/if}
 	</div>
 </div>
@@ -172,6 +185,11 @@
 		box-shadow: var(--popover-shadow);
 		font-size: 0.9rem;
 		color: var(--text);
+	}
+	/* A started model's data step is a dozen lines: the list scrolls inside the window rather than past it. */
+	.pop {
+		max-height: min(70vh, 40rem);
+		overflow-y: auto;
 	}
 	.pop[hidden] {
 		display: none;
@@ -232,6 +250,21 @@
 		margin: 0;
 		font-weight: 600;
 	}
+	.status {
+		margin-left: 0.45rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--text-2);
+	}
+	.step.partial .icon circle {
+		stroke: var(--accent);
+	}
+	.foot {
+		margin: 0.4rem 0 0.2rem;
+		padding-top: 0.4rem;
+		border-top: 1px solid var(--border);
+		font-size: 0.85rem;
+	}
 	.detail {
 		margin: 0.2rem 0 0;
 		font-size: 0.85rem;
@@ -243,6 +276,12 @@
 		flex-wrap: wrap;
 		gap: 0.4rem;
 		align-items: center;
+	}
+	/* Two links side by side (a data item's place and its second way in) are each a 24 px target (WCAG 2.5.8). */
+	.ways a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
 	}
 	@container section-header (max-width: 640px) {
 		.pill {

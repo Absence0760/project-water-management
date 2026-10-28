@@ -771,7 +771,9 @@ when there are none. The checks are pure and in the browser
 thresholds named constants there:
 
 - **Units with no parcel**: a hydrological unit (farm node) that no farm
-  parcel is linked to.
+  parcel is linked to, and whose area came from no polygon on the map (an
+  *other* area a unit's area was taken from is its outline, as for the
+  per-unit proposals, issue #646 F1).
 - **Outside the boundary** (only with a boundary): a parcel, dam, point or
   line with any vertex outside the catchment boundary (a hole in it counts as
   outside). A vertex within `OUTSIDE_TOLERANCE_M` (10 m) of the boundary's
@@ -1011,11 +1013,17 @@ unit, averaged over the unit's own polygon, so that under
 ([model.md §2.4h](./model.md)).
 
 - **Which units.** Land units only: farm nodes with an area above 0 (gauges
-  and water users have no land and are never listed). A unit's polygon is its
-  farm parcel on the map: the parcel its area was accepted from
-  (`node.area_feature_id`, which Start from the map and Sub-catchments set
-  for every unit they save), else its only parcel. A unit with no parcel is
-  listed as without a polygon; one with several and none accepted is
+  and water users have no land and are never listed). **A unit's polygon**
+  (one rule for every per-unit proposal and the reference cell,
+  `geo/unitPolygon.ts`, issue #646 F1): the area feature its area was
+  accepted from (`node.area_feature_id`, which Start from the map, Divide and
+  Use this area set), of either area kind, a farm parcel or an *other* area
+  (as Sub-catchments from clicks saves its pieces and Start links them as
+  units' boundaries), linked to the unit or not, while it is a polygon; else
+  its only linked farm parcel. An *other* area alone (linked, but its area
+  not taken) is no unit's outline. Until #646 only farm parcels counted, so
+  units started from other areas had no polygon here. A unit with no polygon
+  is listed as without one; one with several parcels and none accepted is
   refused until one parcel's area is used for it.
 - **The proposal** (`GET /projects/:id/feeds/chirps/from-units`, editor): per
   unit, its parcel, area and cells (latitude, longitude, share inside,
@@ -1762,10 +1770,41 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   gauge in the network*; any of them *not in the model*; the outlet is a
   gauge or the boundary's own), the proposal (each value ticked on its own:
   the unit's area, what it drains into, the rest of the catchment as a
-  unit), and data and the first run (the existing proposals, linked in
-  order: rain from the boundary, the nearest gauging station, evaporation,
-  each unit's composite dam to enter, land cover, then Runs). Typing the
-  model in on the Network stays the other way; upload works at every step.
+  unit), and data and the first run (below). The points step makes units'
+  boundaries too: **Draw a unit's boundary** (an *other* area) and
+  **Sub-catchments, one per click** (with a DEM) sit beside Place a point,
+  and the sheet comes back once the area or the pieces are saved (#646
+  F13). Typing the model in on the Network stays the other way; upload
+  works at every step.
+- **Data and the first run: a to-do list** (issue #646 item 2, the
+  hydrologist's review F2–F4; `startData.ts`). Every data proposal a run
+  needs, in the order a run reads them: the units' areas and order, how
+  natural flow is made, rain from the boundary, the catchment's MAP, rain
+  for each unit, MAP for each unit, evaporation (the A-pan, and Evaporation
+  from the map), the WR2012 check, observed flow (its link opens Data
+  feeds on a DWS gauge with the nearest gauging stations proposed,
+  `?feed=dws`), each unit's composite dam, the cultivated area, then **Run
+  the model**. Each line has a status worked out from what the project
+  holds now, never a stored tick: Done, Started (done for some units),
+  To do, or Checking while it is read (a unit's rain is a CHIRPS feed with
+  that unit's mark; its MAP `mapMm`; observed flow an outlet record, or a
+  DWS feed waiting for its first fetch; a composite dam a volume above 0 on
+  each unit a dam on the map is part of; a run any run). The next one a run
+  needs is marked; the catchment's MAP, the WR2012 check, the cultivated
+  area and the units' areas are optional (a stand-in or a check). The list
+  outlives the sheet: once it is closed, the Map's **Getting started** pill
+  shows the same items, each with its link, and links back to the data
+  step, until every item a run needs is done. An editor's lines say the
+  feeds are an owner's to set up.
+- **Each unit's rain and MAP, together** (`StartUnitsData.svelte`,
+  `unitsData.ts`): under the list, one table with a row per land unit, its
+  MAP from the MAP grid and its own CHIRPS feed over its boundary, each with
+  its source and its own tick, unticked until the editor ticks it or
+  presses **Tick all**. **Apply the ticked values** asks first, then sends
+  the ticked units to MAP for each unit's and Rain for each unit's own
+  POSTs (`nodeIds`), each recorded as it is when used on its own page: the
+  server re-derives every value, refuses a mix of grids, and only an owner
+  can create feeds (an editor sees them without a tick).
 - **Units follow your boundaries** (`start-16`, #523 C1; the
   hydrologist's answer on #90, "Abstraction points from Start from the map /
   Divide"). Each hydrological unit is a boundary you put on the map (drawn,
@@ -2182,7 +2221,12 @@ the unit's name on Crops & demand, the Network, the Summary, Supply or Dams;
 [ui.md § Farm drawer](./ui.md#farm-drawer)) summarises, for one hydrological unit, the
 area a land-cover map shows as cropland inside each **farm parcel** on the map
 linked to that unit, the parcels' sum, and the catchment boundary's for
-reference. The modeller picks an area (all the unit's parcels, or one
+reference. A unit with no linked parcel is summed over its area feature
+instead, the polygon its area came from (an *other* area as Sub-catchments
+from clicks and Start leave a unit's boundary; issue #646 F1,
+`geo/unitPolygon.ts`): its whole sub-catchment's cropland. A unit with
+parcels of its own keeps theirs, since its boundary holds them and summing
+both would count them twice. The modeller picks an area (all the unit's parcels, or one
 parcel) and a crop, and **Use** sets that crop's planted area on the unit to
 it.
 
@@ -2635,10 +2679,11 @@ grid](#map-grid)), proposed beside what its form holds, and written to the
 units' `mapMm` / `mapSource` only when an editor uses it.
 
 - **Which units and polygons.** Land units only (farm nodes with an area
-  above 0), each over its farm parcel as for its rain ([§ Rain for each
-  unit](#rain-for-each-unit)): the parcel its area came from, else its only
-  one. A unit with no parcel is listed as without one; one with several and
-  none its area is refused until one is chosen.
+  above 0), each over its polygon as for its rain ([§ Rain for each
+  unit](#rain-for-each-unit)): the area feature its area came from (a parcel
+  or an *other* area, issue #646 F1), else its only parcel. A unit with no
+  polygon is listed as without one; one with several parcels and none its
+  area is refused until one is chosen.
 - **The mean.** Over the grid cells the parcel touches, each weighted by the
   share of the cell inside it (exact clipped overlap, `gridShares.ts`) × the
   cell's area on the ellipsoid (which carries the cos latitude), as the

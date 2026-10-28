@@ -3887,7 +3887,17 @@ map" card) stays the schematic; this is the geography.
   marker's `data-state`, `loading`, `current`, `changed`, `none`, `error`,
   says when it is in). The pill goes once both are done, and doesn't show
   while the feeds are still read or failed to load. Viewers don't get it (the
-  header's context line says "no boundary").
+  header's context line says "no boundary"). **A model started from the
+  map** (issue #646 F2, `startData.ts`) keeps its data step here once the
+  Start sheet is closed: the pill lists the same to-do items as the sheet's
+  data step (below), each with its status beside its title (Done, Started,
+  To do, Checking; `data-status` on the step), its detail line and, while
+  not done, a link to where it is accepted named by the place ("Data →
+  Data feeds", "Model settings → Demand" · "Evaporation from the map", each
+  link a 24 px target), and under the list **Review each unit’s rain and
+  MAP together** (`start=1`, the sheet's data step). The popover scrolls
+  inside the window. The pill goes once every item a run needs is done
+  (the optional ones aside).
 - **Section header** (`fillHeader`; the header's "Map" is the page's only
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
@@ -4109,8 +4119,11 @@ map" card) stays the schematic; this is the geography.
   composite dam, the default, / Another water user (no land) / Not in the
   model), other point (Its unit’s river pump, the default, / Another water
   user / Not in the model) and gauge (A gauge in the network (no land), the
-  default, / Not in the model) with a select, **Place a point** (into the
-  drawing mode, back after the save), the outlet (The boundary’s own
+  default, / Not in the model) with a select, **Draw a unit’s boundary**
+  (an *other* area), **Sub-catchments, one per click** (with a DEM; the
+  saved pieces' notice says "each is a unit’s boundary in the Start sheet")
+  and **Place a point** (each into its mode, back after the save; #646
+  F13), the outlet (The boundary’s own
   outlet, or a gauge), the count (`countText`: "2 units, plus the rest of
   the catchment; 1 dam or pump as part of the unit around it."), and
   **Propose the network**. **The proposal** (drawn on the map piece by
@@ -4143,10 +4156,37 @@ map" card) stays the schematic; this is the geography.
   which asks first ("The empty model gets 4 hydrological units, with 3 areas (a unit’s is
   its boundary on the map) and 2 drains-into from the proposal. Each unit’s
   dams and pump are linked to it, their sizes yours to enter. … It is
-  saved now as one change in History."). **Data and the first run**: links
-  to rain from the boundary, observed flow, evaporation (the A-pan the dams lose, to Settings' Demand group), each unit’s composite dam (its volume and the area draining to it yours to enter; the register a reference only), cultivated
-  area, the Network and **Run the model**. With nodes typed in, the sheet
-  says the model isn't started from the map and points to Divide the model.
+  saved now as one change in History."). **Data and the first run** (issue
+  #646 item 2; `StartDataList.svelte`, `startData.ts`): a to-do list in the
+  order a run reads it, each line numbered (a check once done), its title a
+  link to where it is accepted, its status (Done, Started, To do,
+  Checking), **Next** on the first a run still needs, "(optional)" on the
+  catchment's MAP, the WR2012 check, the cultivated area and the units'
+  areas, and a detail line with the place in words: The units’ areas and
+  order (Network), How natural flow is made (`#set-share`), Rain from the
+  boundary (`?rain=boundary`), The catchment’s MAP (`#set-share`), Rain for
+  each unit (`?rain=units`), MAP for each unit (`#set-unit-map`),
+  Evaporation (Settings' Demand group, the A-pan the dams lose, with
+  Evaporation from the map beside it), WR2012 check (`#set-wr2012`),
+  Observed flow (`?tab=series&feed=dws#data-feeds`: the attach card opens
+  on a DWS gauge with the nearest gauging stations proposed, for an
+  owner), Each unit’s composite dam (Dams: its volume and the area
+  draining to it yours to enter; the register a reference only),
+  Cultivated area (Crops) and **Run the model** (Runs & results). Each
+  status is worked out from what the project holds (the settings, the feed
+  list, the series list, the model, the runs), read when the Map opens and
+  again after an apply here. Under it, **Each unit’s rain and MAP,
+  together** (`StartUnitsData.svelte`): one row a land unit, its MAP from
+  the MAP grid ("640 mm (now 600 mm)", the grid cited above the table) and
+  its rain ("A new feed: 3 cells, 62 % of their area inside"), each with a
+  tick, unticked at first; a value already in the model, or none with the
+  reason ("None: outside the grid"); **Tick all** and **Apply the ticked
+  values** (asks first, naming the grid and the product; disabled while
+  the model has unsaved changes), then "Applied: …" and the list's
+  statuses follow. An editor sees the rain without a tick ("an owner sets
+  the feed up"). With nodes typed in, the sheet says the model isn't
+  started from the map and points to Divide the model (each unit's area
+  from its boundary, the elevation model ordering and checking them).
   With the sheet closed, a piece (or its number) under the pointer shows
   "Proposed piece 2 / <name>" over the map's corner, a click on one opens
   the sheet at its card, focused, and a line over the map ("A proposed
