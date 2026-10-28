@@ -137,6 +137,17 @@ describe('summary sheet', () => {
 		);
 		const area = rowOf({ ...summary, ewrSplit: { applied: 'area', why: 'noRunoff', period: { start: '2000-10-01', end: '2001-09-30', waterYears: 1 }, runoffFrom: 'unitRain' } });
 		expect(area.lines).toContain('EWR split between units by,each unit’s area,2000-10-01 – 2001-09-30 (1 complete water year); no unit made natural runoff');
+		// Engine ≥ 1.105.0's other fallbacks (issue #616) record the period and say why.
+		const p = { start: '2000-10-01', end: '2001-09-30', waterYears: 1 };
+		expect(rowOf({ ...summary, ewrSplit: { applied: 'area', why: 'noLandUnit', period: p } }).lines).toContain(
+			'EWR split between units by,each unit’s area,2000-10-01 – 2001-09-30 (1 complete water year); no unit has an area: every share is 0'
+		);
+		expect(rowOf({ ...summary, ewrSplit: { applied: 'area', why: 'noUnitRunoff', period: p } }).lines).toContain(
+			'EWR split between units by,each unit’s area,2000-10-01 – 2001-09-30 (1 complete water year); the natural flow came without the units’ runoff: by area'
+		);
+		expect(rowOf({ ...summary, ewrSplit: { applied: 'area', why: 'resumed', period: p } }).lines).toContain(
+			'EWR split between units by,each unit’s area,2000-10-01 – 2001-09-30 (1 complete water year); resumed from a snapshot that pinned no shares: by area'
+		);
 		const bare = rowOf({ ...summary, ewrSplit: { applied: 'flowShare', why: 'noLandUnit' } });
 		expect(bare.lines).toContain('EWR split between units by,the flow share,the flow share: no unit has an area');
 	});

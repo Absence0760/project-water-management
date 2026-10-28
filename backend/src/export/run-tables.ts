@@ -1209,8 +1209,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield csvRow(['Farm summary']);
-	// How the EWR was split between the units (engine ≥ 1.94.0, issue #553; every run with a land unit from 1.105.0, issue
-	// #615): only when a split other than the flow share was asked for (1.94.0 – 1.104.x), or applied (1.105.0 on).
+	// How the EWR was split between the units (engine ≥ 1.94.0, issue #553; every run from 1.105.0, issue #615, when the
+	// one unit share splits the flow too, issue #616): only when a split other than the flow share was asked for
+	// (1.94.0 – 1.104.x), or applied (1.105.0 on). The "the flow share: …" reasons are those older runs' (no period).
 	const split = summary.ewrSplit;
 	if (split && (split.method !== undefined ? split.method !== 'flowShare' : true))
 		yield csvRow([
@@ -1229,6 +1230,10 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 									? 'the flow share: the natural flow came without the units’ runoff'
 								: 'the flow share: no unit made natural runoff',
 				...(split.why === 'noRunoff' && split.period ? ['no unit made natural runoff'] : []),
+				// Engine ≥ 1.105.0's other fallbacks, which record the period too (issue #616).
+				...(split.why === 'noLandUnit' && split.period ? ['no unit has an area: every share is 0'] : []),
+				...(split.why === 'noUnitRunoff' && split.period ? ['the natural flow came without the units’ runoff: by area'] : []),
+				...(split.why === 'resumed' && split.period ? ['resumed from a snapshot that pinned no shares: by area'] : []),
 				...(split.runoffFrom === 'shareRuns' ? ['Fragmentation: GR4J also ran on each unit’s own rain, for the shares only'] : []),
 				...(split.catchmentRain?.length ? [`on the catchment rain (share by area): ${split.catchmentRain.map((u) => u.name).join('; ')}`] : [])
 			].join('; ')
