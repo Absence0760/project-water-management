@@ -64,8 +64,10 @@ locals {
   ingest_function_arn  = "${local.lambda_arn_prefix}${local.ingest_function_name}"
   ingest_enabled       = var.ingest_image_tag != ""
   ingest_timeout_s     = 900
-  ingest_memory_mb     = 3072
-  ingest_tmp_mb        = 2048
+  # 3008 MB is the most a new account may give a Lambda until AWS raises its
+  # quota: the first apply with 3072 failed CreateFunction (2026-10-28).
+  ingest_memory_mb = 3008
+  ingest_tmp_mb    = 2048
 
   # The products the job copies in Round 1 (the brief's D2 finals) and the
   # time of day (UTC) each runs, 20 minutes apart so two runs never overlap
