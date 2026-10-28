@@ -44,7 +44,7 @@
 	} = $props();
 
 	const uid = $props.id();
-	// Shown under both methods (issue #615): under Fragmentation it sets only the EWR shares' runs, and a project that
+	// Shown under both methods (issue #615): under Fragmentation it sets only the unit shares' runs (#616), and a project that
 	// never set it reads as Fragmentation's bare setting until a field is changed.
 	const cur = $derived<UnitRainSettings>(value ?? { mode: 'catchment' });
 	const problem = $derived(unitRainProblem(value));

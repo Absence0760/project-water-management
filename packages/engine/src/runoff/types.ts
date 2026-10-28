@@ -119,8 +119,9 @@ export interface NaturalFlowInput {
 	/** The land units on rule 'station' (engine ≥ 1.91.0, §2.4i), as summary.stations.units reports them; with unitRunoff. */
 	stationUnits?: StationAreaForcing[];
 	/**
-	 * Fragmentation's EWR shares (engine ≥ 1.105.0, issue #615, docs/model.md §2.5b): each land unit's own natural
-	 * runoff (m³/day) from GR4J on the Per unit forcing, node-id order, for the EWR shares only (never the flow).
+	 * Fragmentation's unit shares (engine ≥ 1.105.0, issues #615, #616, docs/model.md §2.5, §2.5b): each land unit's own
+	 * natural runoff (m³/day) from GR4J on the Per unit forcing, node-id order, for the shares only: the catchment's one
+	 * run makes the natural flow, which the shares split.
 	 * Absent under Per unit (unitRunoff is it), without a land unit, and on a resumed run (its snapshot pins the shares).
 	 */
 	shareRunoff?: { nodeId: string; runoffM3Day: Float64Array }[];

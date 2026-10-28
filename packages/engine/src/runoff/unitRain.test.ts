@@ -696,7 +696,7 @@ describe('more of the per-unit run', () => {
 		expect(unitRainFingerprintChanged(fa, structuredClone(fa))).toBe(false);
 	});
 
-	it('off runs the same flow to the bit on random networks, unit records and MAPs in the input or not (they move only the EWR shares)', () => {
+	it('off runs the same flow to the bit on random networks, unit records and MAPs in the input or not (they move only the unit shares, issues #615, #616)', () => {
 		for (let seed = 1; seed <= 25; seed++) {
 			const plain = randomInput(seed);
 			let before: string;
@@ -713,7 +713,7 @@ describe('more of the per-unit run', () => {
 				off.settings.unitRain = unitRain;
 				const out = runModel(off);
 				expect(flow(out), `seed ${seed}`).toBe(plainFlow);
-				// Null and `catchment` are the same setting: the same run to the bit, EWR shares too.
+				// Null and `catchment` are the same setting: the same run to the bit, the unit shares too.
 				const all = JSON.stringify(out);
 				if (last !== null) expect(all, `seed ${seed}`).toBe(last);
 				last = all;
