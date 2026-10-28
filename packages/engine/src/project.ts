@@ -316,7 +316,7 @@ export const LEGACY_UPGRADED_WARNING =
 /**
  * Top-level settings an engine retired: ignored when read (prepare.ts mergeSettings, the backend's too) and stripped
  * from stored projects by a migration. `ewrSplit` (engines 1.94.0 – 1.104.x, issue #553): from 1.105.0 the EWR is
- * always split by each unit's natural MAR (issue #615, ./network/ewrSplit.ts, 262_retire_ewr_split.sql).
+ * always split by each unit's natural MAR (issue #615, ./network/ewrSplit.ts, 263_retire_ewr_split.sql).
  */
 export const RETIRED_SETTINGS_KEYS = ['ewrSplit'] as const;
 

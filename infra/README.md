@@ -210,6 +210,31 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
   t4g.nano with an Elastic IP (~$7–10/month, but a public subnet, an
   internet gateway and an instance to patch, which the VPC deliberately
   has none of).
+- **The AI assistant** (`assistant.tf`, issue #610; [docs/deployment.md §
+  The assistant](../docs/deployment.md#the-assistant)), off by default
+  (`assistant_enabled`). On: `water-management-assistant`
+  (`backend/src/lambda-assistant.ts`), the API's app serving only the
+  assistant's paths (every other one a 404), in the private subnets with its
+  own security group (Postgres, the Secrets Manager and Bedrock endpoints
+  only), 1024 MB, `assistant_timeout_seconds` (120 s), reserved concurrency
+  `assistant_reserved_concurrency` (2) × a pool of 1 connection (§
+  Connections), its own runtime secret (the session key, its connection,
+  the CloudFront header), a Function URL in `RESPONSE_STREAM` mode behind
+  CloudFront's `/api/projects/*/assistant/*` behaviour (before `/api/*`,
+  the same shared-secret header, a 60 s origin read timeout against a 15 s
+  keepalive), and the account's only model permission: `InvokeModel` and
+  `InvokeModelWithResponseStream` on the one model `assistant_model_id`
+  names, through its inference profile when it has one, reached through a
+  `bedrock-runtime` interface endpoint (private DNS,
+  `bedrock_endpoint_az_count`) whose policy admits only that role and that
+  model. No NAT, no API key. From af-south-1 Anthropic's models are offered
+  only through the global inference profile, which may answer in any
+  commercial region: a POPIA s72 transfer (docs/security.md § Personal
+  information (POPIA)). The API carries the same `ASSISTANT_*` values
+  (`off` while disabled) for the status it answers. Alarms: errors and
+  throttles (essential), p95 duration (full), and the origin-secret filter
+  on its log group; a third budget, `assistant_budget_monthly_usd` (USD 50)
+  on the account's AWS Marketplace charges (the model's billing entity).
 - **TLS to RDS** is `sslmode=verify-full` (chain + hostname). Both zips carry
   `infra/certs/rds-global-bundle.pem` (the public AWS RDS CA bundle from
   `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`), and
@@ -222,7 +247,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | --- | --- |
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
 | `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `redirect_domains` (former hostnames → their zones, `{}` for none), `github_repo`, `budget_alert_email`, `feeds_contact`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
-| `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
+| `assistant.tf` | The AI assistant (issue #610), all behind `assistant_enabled`: its Lambda, role, log group, security group, Function URL (`RESPONSE_STREAM`), the one-model Bedrock policy (by model id: in-region, a geographic profile or the global profile), the `bedrock-runtime` interface endpoint, its security group and endpoint policy, and the rules to Postgres and the Secrets Manager endpoint; its CloudFront origin and behaviour are in `s3_cloudfront.tf`, its alarms and budget in `alarms.tf` |
+| `secrets.tf` | The API, worker, migrate (and, when enabled, assistant) Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
 | `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint (`secretsmanager_endpoint_az_count`) and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
 | `kms.tf` | The database's customer-managed KMS key (`rds_customer_managed_key`, on by default): yearly rotation, 30-day deletion window, `prevent_destroy`, an RDS-only key policy, `alias/water-management-rds`, and its alarm: an EventBridge rule on CloudTrail's `DisableKey` / `ScheduleKeyDeletion` / `PutKeyPolicy` / `RevokeGrant` for the key (by key ID or ARN) to the regional alerts topic (free; needs a CloudTrail trail, step 7a) |
@@ -246,11 +272,11 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | `iam.tf` | Every Lambda role's logs policy (create streams and put events in its own log group only; no `logs:CreateLogGroup`, no AWS-managed policy) and the API, worker and migrate roles' VPC ENI policy (AWS's six EC2 actions, denied to the function's own code) |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh`, and the `db_*` names `restore-db.sh` reads |
-| `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
+| `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker, fetcher and assistant Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` + `sops` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
 | `scripts/preapply-check.sh` | Read-only checks before the first apply (Operator steps 7a): the Lambda concurrency quota covers every `*_reserved_concurrency` (defaults, overridden by `--var-file`) + 10, the state bucket and sops key are in us-east-1, the SES endpoint service and the RDS instance class for the pinned PostgreSQL major exist, and a logging CloudTrail trail (this account's or the Organization's) records KMS write management events in the region (the database key alarm's source). PASS/FAIL per check, exit 1 on any FAIL. Tested against a fake `aws` (`preapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
-| `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) `--redirect-from <host>` (each former hostname in `redirect_domains`, issue #551) also checks that its pages 301 to the site and its `/api/health` still answers |
+| `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) `--redirect-from <host>` (each former hostname in `redirect_domains`, issue #551) also checks that its pages 301 to the site and its `/api/health` still answers. With the assistant's Lambda present: Bedrock model invocation logging off (FAIL otherwise), the assistant budget's Marketplace filter has seen a charge (WARN until billing catches up), and the account's tokens-per-minute quota for the model, recorded |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
@@ -258,6 +284,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | `tests/data.tftest.hcl` | The database's and frontend bucket's data-protection controls (5 runs; [Validating locally](#validating-locally)) |
 | `tests/ingest.tftest.hcl` | Plan-only: the mirror bucket is private, versioned and TLS only; the ingest Lambda, its schedule targets and freshness alarms exist only with `ingest_image_tag`; its role is scoped to the mirror; the worker and the S3 endpoint policy name the mirror; the freshness alarms breach on missing data |
 | `tests/logging.tftest.hcl` | Plan-only: every Lambda's JSON log format and levels, and every log metric filter matching `$.message.event` (see [Logs](#logs)) |
+| `tests/assistant.tftest.hcl` | Plan-only: the assistant off by default (nothing created, the API's provider `off`); on, its Lambda, settings and secret-free environment, its runtime secret, the streaming URL, the CloudFront behaviour before `/api/*` with the shared secret, the one-model IAM policy (global, geographic and in-region ids), the endpoint and its policy, the security groups and their descriptions, the alarms and budget, the deploy role; refusals of a non-Anthropic model id, unreserved concurrency and a cap that passes the database-connection sum |
 
 ## Decisions
 
@@ -320,6 +347,11 @@ second is headroom: the API is capped at 25 concurrent containers ×
 a `pg` pool of 2 (`DB_POOL_MAX`, `lambda.tf`) = 50, the worker at 8 × a pool
 of 2 = 16, plus the migrator's 2: 68 at the very worst, under the micro's
 limit with room for the operator and RDS's own, and a third of the small's.
+With `assistant_enabled`, the assistant adds its cap × a pool of **1**
+(`assistant.tf`: one message per container, which holds one connection at
+a time), 2 at the default: 70, the precondition's ceiling, so raising
+`assistant_reserved_concurrency` means lowering another cap or redoing this
+sum first (`tests/assistant.tftest.hcl` refuses 3).
 Before issue #541 the API was 10 × a pool of 5, the same 50, and a single
 cold load of the Project tab (about 10 panels at once) hit the cap of 10.
 Raising a reserved concurrency or a pool means redoing this sum. RDS
@@ -545,7 +577,7 @@ Idle to light use, on-demand, us-east-1:
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
 | KMS `alias/water-management-rds` (`rds_customer_managed_key`, default on; +$1 at each of the first two yearly rotations; requests within the free tier) | 1.00 |
-| CloudWatch: 44 alarms, 41 until the renderer is on, and 3 more with `dam_observations_enabled` (`dam-pass-waterbodies`, `dam-pass-wofs`, `dam-recency-wofs`, ≈ $0.30; `dam_observations.tf`) (incl. the CloudFront request-flood, egress (bytes) and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration, RDS CPU surplus credits charged), logs, RDS log export | ~4.30 |
+| CloudWatch: 44 alarms, 41 until the renderer is on, +6 with the assistant (costed in its own table below), and 3 more with `dam_observations_enabled` (`dam-pass-waterbodies`, `dam-pass-wofs`, `dam-recency-wofs`, ≈ $0.30; `dam_observations.tf`) (incl. the CloudFront request-flood, egress (bytes) and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration, RDS CPU surplus credits charged), logs, RDS log export | ~4.30 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $63** (list prices checked 2026-10-04; the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop, sign-in CAPTCHA and tiles rules $1.00 each, the S3 endpoint $7.30) |
@@ -616,6 +648,35 @@ instead of the endpoints would cost more (~$33 + data), and the fetcher
 Lambda outside the VPC (WP-2.10) is what keeps step 2's internet fetches from
 needing one.
 
+**The assistant (`assistant_enabled`, off by default) adds ≈ $10.90 a month
+fixed**, before any model spend, in af-south-1:
+
+| Item | $/month |
+| --- | --- |
+| bedrock-runtime interface endpoint, 1 AZ (`bedrock_endpoint_az_count`; $0.01309/h, ~$7.30 in us-east-1) | 9.56 |
+| Its runtime secret (`secrets.tf`) | 0.40 |
+| Its budget (`water-management-assistant`, a third budget: $0.02/day past the free two) | 0.62 |
+| CloudWatch: 5 essential alarms (errors, throttles, charge-failed, provider-failed, tokens-hourly) and 3 log metrics, 1 more alarm on the full tier (duration p95) | ~0.30–0.40 |
+| Lambda (`water-management-assistant`, 1 GB arm64: a turn of ~15 s ≈ $0.0003) | ~0 |
+| **Assistant fixed** | **≈ $10.90** |
+
+Model spend comes on top, billed through AWS Marketplace: Claude Sonnet 5.5
+through the global profile is $2.00 per million input and $10.00 per million
+output tokens from af-south-1 (AWS Price List API, read 2026-10-27), about
+$0.10 for a typical turn and capped per project, per person and
+deployment-wide in weighted tokens (input + 5 × output, so dollars at the
+input price; [docs/deployment.md § The
+assistant](../docs/deployment.md#the-assistant)). The deployment-wide cap
+defaults to `assistant_budget_monthly_usd` ($50) at that price, and the
+assistant's budget alerts on it. **With the assistant on, raise
+`budget_monthly_usd` to $110 + `assistant_budget_monthly_usd` (≈ $160 on the
+defaults)**: the idle becomes ≈ $88, exactly the $110 budget's ACTUAL 80%
+line, and the model spend counts toward the account total too, so the
+default would alert every month. The worst case AWS bounds is the
+assistant's own Lambda at its reserved concurrency (2 × 1 GB all month,
+≈ $106 with requests); the model spend is bounded by the app's caps, and
+`assistant-tokens-hourly` reports it within the hour.
+
 These are the minimal (default) figures. The full, highly available
 configuration (Multi-AZ `db.t4g.small`, endpoints in 2 AZs, ≈ $166 in
 af-south-1, ≈ $133 in us-east-1) is costed in
@@ -635,6 +696,7 @@ alarms are what bound and report a runaway while it happens.
 | Monthly, ACTUAL 80% | the month's spend passes $88 (on the default $110) | Early warning, set above the idle so it doesn't fire every month. |
 | Monthly, ACTUAL 100% | the month's spend passes the budget | |
 | Monthly, FORECASTED 100% | AWS forecasts the month past the budget | Needs ~5 weeks of cost history, so it is silent through the first month. |
+| Assistant, ACTUAL 80% and 100% | the month's AWS Marketplace charges (the model's spend) pass `assistant_budget_monthly_usd` ($50) | Only with `assistant_enabled`. A third budget, ~$0.62 a month. Marketplace charges lag a further 12–24 h; `assistant-tokens-hourly` is the real-time signal. `postapply-check.sh`'s `assistant-budget` confirms the filter catches the charge. |
 | Cost Anomaly Detection | one service's spend jumps, total impact ≥ `cost_anomaly_threshold_usd` (off by default; set $10 after the first apply, [§ Operator steps](#operator-steps) step 11) | AWS-services monitor, free, needs ~10 days of history. Off for the first apply because an account holds one services monitor and AWS may have made it already. |
 
 Each topic's policy admits only this account (`aws:SourceAccount`, plus
@@ -683,7 +745,9 @@ Claude does not run any of these, and none of them print a secret. Replace
    concurrent-executions quota is 10 and AWS keeps 10 unreserved, so any
    reservation fails until it is raised. The quota must cover the sum of the
    reservations plus 10: at the defaults 25 (API) + 1 (migrate) + 8 (worker)
-   + 2 (fetcher) + 2 (renderer) + 2 (mirror ingest) + 10 = **50**. Ask for 1000 (the usual
+   + 2 (fetcher) + 2 (renderer) + 2 (mirror ingest) + 2 (assistant, counted
+   by the pre-apply check even while `assistant_enabled` is false) + 10 =
+   **52**. Ask for 1000 (the usual
    default) and wait for it to be granted before planning the first apply.
    **Raising a reservation on a live account** (issue #541 took the API
    from 10 to 25, so 33 → 48) needs the same check first: an apply asking

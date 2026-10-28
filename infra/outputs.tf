@@ -47,6 +47,11 @@ output "renderer_function_name" {
   value       = local.renderer_function_name
 }
 
+output "assistant_function_name" {
+  description = "Assistant Lambda function name (the AI assistant, assistant.tf). deploy-backend.yml updates its code once it exists (it is created only when assistant_enabled is true). GitHub variable ASSISTANT_FUNCTION_NAME."
+  value       = local.assistant_function_name
+}
+
 output "renderer_ecr_repository" {
   description = "Name of the renderer image's ECR repository. deploy-backend.yml pushes each release's image to it (the registry URL comes from the account at deploy time)."
   value       = aws_ecr_repository.renderer.name

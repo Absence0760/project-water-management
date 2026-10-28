@@ -266,6 +266,7 @@ pnpm gen:help-art           # re-render the help pictures, by day and at dusk fo
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)
 pnpm gen:e2e:timings       # refresh e2e/shard-timings.json (CI's e2e shards are packed by it) from the newest green main run; needs gh (e2e/README.md § CI)
 pnpm gen:liability          # regenerate the known limitations, the engine errata and the methodology hashes from engine-audit.md, engine-errata.md and docs/methodology/ (after changing any)
+pnpm gen:assistant:help     # rewrite backend/src/assistant/helpIndex.json, the help guides and glossary the assistant's search_help reads (after changing any; a guard in test:guards fails until you do)
 pnpm gen:i18n:sheet [lang…]        # rewrite a language's translation sheet (default: every non-English language in
                              # packages/engine/src/languages.ts); check:i18n checks every language
 pnpm gen:i18n:stamp <lang> <id>    # re-stamp a farmer glossary translation from the current English, once the translator has re-checked it

@@ -6,6 +6,7 @@ import { csrf } from 'hono/csrf';
 import { alertProjectRoutes, alertPublicRoutes, meAlertRoutes } from './alerts/routes.js';
 import { licenceRecordRoutes } from './licence/routes.js';
 import { allocationRoutes } from './allocations/routes.js';
+import { assistantRoutes } from './assistant/routes.js';
 import { requireUser, type AuthEnv } from './auth/middleware.js';
 import { emailAuthRoutes } from './auth/email-routes.js';
 import { authRoutes } from './auth/routes.js';
@@ -231,6 +232,8 @@ export function createApp() {
 	projects.route('/', noteRoutes);
 	projects.route('/', apiKeyRoutes);
 	projects.route('/', alertProjectRoutes);
+	// The assistant (issue #610): viewers and above chat about the project; off unless ASSISTANT_PROVIDER names a model.
+	projects.route('/', assistantRoutes);
 	app.route('/projects', projects);
 
 	// Your own alert choices across projects (WP-2.13).

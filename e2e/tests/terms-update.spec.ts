@@ -18,8 +18,8 @@ test('after the terms change, the app waits for Accept; the legal pages stay ope
 	// Nothing of the app behind it: no sidebar, no catchment.
 	await expect(page.getByText('Terms-update catchment')).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'What changed' })).toBeVisible();
-	// Accepted a version before both listed ones: every change since, the first version's included (round 4).
-	await expect(page.locator('ul.changes').getByRole('listitem')).toHaveCount(11);
+	// Accepted a version before every listed one: every change since, the first version's included (round 4), 12 lines with the assistant's (2026-10-27).
+	await expect(page.locator('ul.changes').getByRole('listitem')).toHaveCount(12);
 	const summary = page.getByRole('region', { name: 'The main things you agree to' });
 	await expect(summary.getByRole('listitem')).toHaveCount(4);
 	await expectNoViolations(page);
@@ -62,9 +62,10 @@ test('an account that accepted the previous version is shown only what changed s
 	await page.goto('/');
 	await expect(page.getByRole('heading', { level: 1, name: 'Our terms have changed' })).toBeVisible();
 	const changes = page.locator('ul.changes').getByRole('listitem');
-	// 2026-10-09's one entry: who must use two-step sign-in, recovering it, and codes by email.
-	await expect(changes).toHaveCount(3);
-	await expect(changes.nth(0)).toHaveText(/Two-step sign-in is now needed only to publish to farmers/);
-	await expect(changes.nth(1)).toHaveText(/remove two-step sign-in yourself after a 3-day wait, or ask a team admin/);
-	await expect(changes.nth(2)).toHaveText(/get your sign-in codes by email/);
+	// 2026-10-27's entry (the assistant), then 2026-10-09's: who must use two-step sign-in, recovering it, and codes by email.
+	await expect(changes).toHaveCount(4);
+	await expect(changes.nth(0)).toHaveText(/Where a project has the assistant, you can ask an AI model/);
+	await expect(changes.nth(1)).toHaveText(/Two-step sign-in is now needed only to publish to farmers/);
+	await expect(changes.nth(2)).toHaveText(/remove two-step sign-in yourself after a 3-day wait, or ask a team admin/);
+	await expect(changes.nth(3)).toHaveText(/get your sign-in codes by email/);
 });

@@ -25,6 +25,12 @@ const confirmed = (region) => subs(region, `arn:aws:sns:${region}:${ACCOUNT}:wat
 const policy = (statements) => ({ repositoryName: 'water-management-renderer', policyText: JSON.stringify({ Version: '2012-10-17', Statement: statements }) });
 const LAMBDA_STATEMENT = { Sid: 'LambdaECRImageRetrievalPolicy', Effect: 'Allow', Principal: { Service: 'lambda.amazonaws.com' }, Action: ['ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer'] };
 
+const MODEL = 'global.anthropic.claude-sonnet-5-5';
+const QUOTA = 'Global cross-Region model inference tokens per minute for Anthropic Claude Sonnet 5.5';
+const assistantFn = (model = MODEL) => ({ FunctionName: 'water-management-assistant', Environment: { Variables: { ASSISTANT_PROVIDER: 'bedrock', ASSISTANT_MODEL: model } } });
+const budget = (amount) => ({ Budget: { BudgetName: 'water-management-assistant', CalculatedSpend: { ActualSpend: { Amount: amount, Unit: 'USD' } } } });
+const quotas = (names) => ({ Quotas: names.map(([QuotaName, Value]) => ({ ServiceCode: 'bedrock', QuotaName, Value })) });
+
 function healthyAws() {
 	return {
 		'sts get-caller-identity': { Account: ACCOUNT, Arn: `arn:aws:sts::${ACCOUNT}:assumed-role/Operator/test` },
@@ -35,6 +41,14 @@ function healthyAws() {
 		'sesv2 get-account': { ProductionAccessEnabled: true, SendingEnabled: true },
 		'ecr get-repository-policy': policy([LAMBDA_STATEMENT]),
 		'lambda get-function-url-config': { FunctionUrl: FN_URL, AuthType: 'NONE' },
+		'lambda get-function-configuration': assistantFn(),
+		'bedrock get-model-invocation-logging-configuration': {},
+		'budgets describe-budget': budget('3.21'),
+		'service-quotas list-service-quotas': quotas([
+			['Cross-region model inference tokens per minute for Anthropic Claude Sonnet 5.5', 2000000],
+			[QUOTA, 4000000.0],
+			['Global cross-Region model inference requests per minute for Anthropic Claude Sonnet 5.5', 200],
+		]),
 		'rds describe-events': { Events: [{ SourceIdentifier: 'water-management', EventCategories: ['availability'], Message: 'DB instance restarted' }] },
 		'cloudwatch get-metric-statistics': {
 			byArg: '--metric-name',
@@ -86,10 +100,10 @@ function run({ aws = {}, curl = {}, args = ['--profile', 'water-management', '--
 test('every check passes against a healthy stack, read-only, without leaking', () => {
 	const r = run();
 	assert.equal(r.status, 0, r.stdout + r.stderr);
-	for (const name of ['sns-af-south-1', 'sns-us-east-1', 'rds-events', 'ses-production', 'ecr-policy', 'function-url']) {
+	for (const name of ['sns-af-south-1', 'sns-us-east-1', 'rds-events', 'ses-production', 'ecr-policy', 'function-url', 'assistant-logging', 'assistant-budget', 'assistant-quota']) {
 		assert.match(r.line(name), /^PASS/, `${name}:\n${r.stdout}`);
 	}
-	assert.equal(r.count('PASS'), 12, r.stdout);
+	assert.equal(r.count('PASS'), 15, r.stdout);
 	assert.equal(r.count('FAIL') + r.count('WARN'), 0);
 	assert.ok(!r.stdout.includes('rds-delivery'), 'the delivery test is opt-in');
 	assert.match(r.stdout, /All post-apply checks passed/);
@@ -104,6 +118,14 @@ test('every check passes against a healthy stack, read-only, without leaking', (
 	assert.equal(r.aws.find((c) => c.op === 'get-repository-policy').args['--repository-name'], 'water-management-renderer');
 	assert.equal(r.aws.find((c) => c.op === 'get-function-url-config').args['--function-name'], 'water-management-backend');
 	assert.equal(r.aws.find((c) => c.op === 'describe-event-subscriptions').args['--subscription-name'], 'water-management-db-events');
+	assert.equal(r.aws.find((c) => c.op === 'get-function-configuration').args['--function-name'], 'water-management-assistant');
+	assert.equal(r.aws.find((c) => c.op === 'get-model-invocation-logging-configuration').global['--region'], 'af-south-1');
+	const b = r.aws.find((c) => c.op === 'describe-budget');
+	assert.deepEqual([b.global['--region'], b.args['--budget-name']], ['us-east-1', 'water-management-assistant']);
+	assert.equal(r.aws.find((c) => c.op === 'list-service-quotas').args['--service-code'], 'bedrock');
+	assert.match(r.line('assistant-quota'), new RegExp(`^PASS .*${QUOTA} = 4000000 `));
+	assert.ok(!r.line('assistant-quota').includes('requests per minute') && !r.line('assistant-quota').startsWith('PASS  assistant-quota    Cross'), 'only the global profile\'s tokens-per-minute quota');
+	assert.match(r.line('assistant-budget'), /^PASS .*\$3\.21 of AWS Marketplace charges/);
 
 	const urls = r.curl.map((a) => a.at(-1));
 	assert.deepEqual(urls, [
@@ -251,4 +273,52 @@ test('--redirect-from: a former hostname 301s a page to the same path on the sit
 	const none = run();
 	assert.ok(none.curl.every((a) => new URL(a.at(-1)).host !== new URL(OLD).host));
 	assert.equal(none.line('redirect-page'), '');
+});
+
+test('assistant: off (no function) skips its checks; any other error reading it fails', () => {
+	const off = run({ aws: { 'lambda get-function-configuration': { error: '(ResourceNotFoundException) Function not found: water-management-assistant' } } });
+	assert.equal(off.status, 0, off.stdout);
+	assert.equal(off.line('assistant'), '');
+	assert.ok(!/assistant-/.test(off.stdout), off.stdout);
+	assert.ok(off.aws.every((c) => !['bedrock', 'budgets', 'service-quotas'].includes(c.service)), 'no assistant call while it is off');
+
+	const denied = run({ aws: { 'lambda get-function-configuration': { error: '(AccessDeniedException) not authorized' } } });
+	assert.equal(denied.status, 1);
+	assert.match(denied.line('assistant'), /^FAIL .*AccessDeniedException/);
+});
+
+test('assistant: Bedrock model invocation logging on fails, naming where it goes', () => {
+	const on = run({
+		aws: { 'bedrock get-model-invocation-logging-configuration': { loggingConfig: { cloudWatchConfig: { logGroupName: 'bedrock', roleArn: `arn:aws:iam::${ACCOUNT}:role/x` }, textDataDeliveryEnabled: true } } },
+	});
+	assert.equal(on.status, 1);
+	assert.match(on.line('assistant-logging'), /^FAIL .*ON in af-south-1 \(to CloudWatch Logs\).*delete-model-invocation-logging-configuration/);
+	assert.ok(!on.stdout.includes(ACCOUNT), 'the role ARN is not printed');
+	const s3 = run({ aws: { 'bedrock get-model-invocation-logging-configuration': { loggingConfig: { s3Config: { bucketName: 'b' } } } } });
+	assert.match(s3.line('assistant-logging'), /^FAIL .*to S3/);
+	const err = run({ aws: { 'bedrock get-model-invocation-logging-configuration': { error: '(AccessDeniedException) no' } } });
+	assert.match(err.line('assistant-logging'), /^FAIL .*AccessDeniedException/);
+});
+
+test('assistant: a budget with no charge yet, or no budget, warns; a failure to read it fails', () => {
+	const zero = run({ aws: { 'budgets describe-budget': budget('0.0') } });
+	assert.equal(zero.status, 0, zero.stdout);
+	assert.match(zero.line('assistant-budget'), /^WARN .*\$0 this month.*re-run/);
+	const none = run({ aws: { 'budgets describe-budget': { error: '(NotFoundException) Unable to get budget' } } });
+	assert.match(none.line('assistant-budget'), /^WARN .*no water-management-assistant budget/);
+	const denied = run({ aws: { 'budgets describe-budget': { error: '(AccessDeniedException) no' } } });
+	assert.equal(denied.status, 1);
+	assert.match(denied.line('assistant-budget'), /^FAIL .*AccessDeniedException/);
+});
+
+test('assistant: the quota follows the model route, and a missing one warns', () => {
+	const geo = run({
+		aws: {
+			'lambda get-function-configuration': assistantFn('eu.anthropic.claude-sonnet-5-5'),
+		},
+	});
+	assert.match(geo.line('assistant-quota'), /^PASS  assistant-quota    Cross-region model inference tokens per minute for Anthropic Claude Sonnet 5\.5 = 2000000 /);
+	const missing = run({ aws: { 'service-quotas list-service-quotas': quotas([['Global cross-Region model inference tokens per minute for Anthropic Claude Opus 5', 1]]) } });
+	assert.equal(missing.status, 0, missing.stdout);
+	assert.match(missing.line('assistant-quota'), /^WARN .*claude sonnet 5\.5/);
 });

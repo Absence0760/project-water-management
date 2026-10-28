@@ -15,6 +15,7 @@ import { createApp } from '../app.js';
 import { BOM, EOL } from '../export/csv.js';
 import { csvDownload, csvTooLarge } from '../export/download.js';
 import { handleError } from './errors.js';
+import { afterResponse } from './afterResponse.js';
 import { functionUrlRequest, streamingHandler } from './lambdaStream.js';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -30,10 +31,19 @@ const bigLines = () => (function* () {
 })();
 const bigBody = () => BOM + [...bigLines()].map((l) => l + EOL).join('');
 
+/** Set once the work /gone-early leaves running has finished (the assistant's charge, issue #610). */
+let lateWorkDone = false;
+
 /** A small app with the shapes the adapter has to carry. */
 function testApp() {
 	let walks = 0;
 	return new Hono()
+		// A stream whose client goes away at once, leaving work running after it.
+		.get('/gone-early', (c) => {
+			lateWorkDone = false;
+			afterResponse(new Promise<void>((resolve) => setTimeout(() => ((lateWorkDone = true), resolve()), 50)));
+			return c.body(new ReadableStream({ start: (ctl) => ctl.error(new Error('client gone')) }), 200);
+		})
 		.get('/cookies', (c) => {
 			setCookie(c, 'a', '1', { path: '/', httpOnly: true });
 			setCookie(c, 'b', '2', { path: '/', sameSite: 'Lax' });
@@ -128,6 +138,12 @@ describe('the streaming Lambda adapter', () => {
 		expect(res.error).toBeInstanceOf(Error);
 		expect(String(res.error)).toMatch(/measured/);
 		expect(res.ended).toBe(false); // never a short file that looks complete
+	});
+
+	it('settles only after the work a response left running, even when the client went away', async () => {
+		const res = await invokeStreamed(testApp(), urlEvent('/gone-early'));
+		expect(res.error).toBeInstanceOf(Error);
+		expect(lateWorkDone).toBe(true);
 	});
 });
 

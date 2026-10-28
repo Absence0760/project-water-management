@@ -141,7 +141,8 @@ resource "aws_sns_topic_policy" "alerts" {
 # ses.tf) is created per var.alarm_tier. The CloudWatch free tier is 10 alarm
 # metrics shared across the whole AWS Organization, and "full" is ~50 here.
 # "essential" keeps the 13 that catch a client-visible outage or a risk to the
-# account: SES reputation (AWS pauses sending past its bounce/complaint
+# account (18 with the assistant on: its errors, throttles, failed charges,
+# failed model calls and hourly token spend): SES reputation (AWS pauses sending past its bounce/complaint
 # limits), dead-lettered work on the jobs, mail-events and feed queues, the
 # worker going quiet, RDS running out of disk, the site 5xxing, API errors,
 # the API at its reserved concurrency (throttles: saturation, and spend at
@@ -211,6 +212,51 @@ resource "aws_budgets_budget" "daily" {
   time_unit    = "DAILY"
 
   # ACTUAL alerts go out once per budget period: at most one mail a day.
+  notification {
+    comparison_operator       = "GREATER_THAN"
+    threshold                 = 100
+    threshold_type            = "PERCENTAGE"
+    notification_type         = "ACTUAL"
+    subscriber_sns_topic_arns = [aws_sns_topic.alerts_us_east_1.arn]
+  }
+
+  depends_on = [aws_sns_topic_policy.alerts_us_east_1]
+}
+
+# The assistant's own budget (assistant.tf, issue #610): Anthropic's models
+# on Bedrock are billed through AWS Marketplace, and nothing else in this
+# account is (the model card: "charges appear … under the model provider (not
+# under Amazon Bedrock)"), so the account's AWS Marketplace charges are the
+# assistant's model spend. ACTUAL 80% and 100% of
+# var.assistant_budget_monthly_usd (USD 50, issue #610's figure); no forecast,
+# which a usage-driven line with a short history only makes noisy. Billing
+# data lags a day, and Marketplace charges up to a day more: the app's own
+# monthly caps in weighted tokens (input + 5 x output; per project, per
+# person and deployment-wide, the last derived from this budget, all checked
+# before each turn) and the Lambda's reserved concurrency are what bound the
+# spend as it happens, and the hourly token alarm below is what reports it;
+# this says what it cost. A third budget, so about $0.62 a month.
+resource "aws_budgets_budget" "assistant" {
+  count        = local.assistant_enabled && var.budget_monthly_usd > 0 && var.assistant_budget_monthly_usd > 0 ? 1 : 0
+  name         = "${local.project}-assistant"
+  budget_type  = "COST"
+  limit_amount = tostring(var.assistant_budget_monthly_usd)
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  cost_filter {
+    name   = "BillingEntity"
+    values = ["AWS Marketplace"]
+  }
+
+  notification {
+    comparison_operator       = "GREATER_THAN"
+    threshold                 = 80
+    threshold_type            = "PERCENTAGE"
+    notification_type         = "ACTUAL"
+    subscriber_sns_topic_arns = [aws_sns_topic.alerts_us_east_1.arn]
+  }
+
   notification {
     comparison_operator       = "GREATER_THAN"
     threshold                 = 100
@@ -340,6 +386,183 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
   }
 }
 
+# --- Assistant Lambda (assistant.tf) ---------------------------------------
+# Only while it exists. Errors and throttles are essential: an error is a
+# turn that failed past the app's own error events (an init failure, a
+# timeout, a crash), and a throttle is every turn slot busy, which is also
+# the model spend at its per-minute ceiling. Duration is full tier. Its log
+# lines (failed charges, failed model calls, the hourly token sum) are
+# filtered after them, and its unhandled 500s count in unhandled_error.
+
+resource "aws_cloudwatch_metric_alarm" "assistant_errors" {
+  count               = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  alarm_name          = "${local.project}-assistant-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Assistant Lambda failed an invocation (init failure such as a production-check refusal, a timeout or a crash; a model or tool error inside a turn is an error event to the page, not this). Any one: at this traffic a broken deploy is hit once or twice, then the user gives up. Its log group has the error codes; prompts and answers are never logged."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.assistant[0].function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "assistant_throttles" {
+  count               = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  alarm_name          = "${local.project}-assistant-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Assistant Lambda hit its reserved concurrency (assistant_reserved_concurrency, ${var.assistant_reserved_concurrency}): every turn slot was busy and a message got a 429. Sustained, it is also the model spend at its per-minute ceiling: check the assistant budget and Bedrock's token metrics before raising the cap (and redo infra/README.md § Connections if you do)."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.assistant[0].function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "assistant_duration" {
+  count               = local.assistant_enabled && local.alarms_full ? 1 : 0
+  alarm_name          = "${local.project}-assistant-duration-p95"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  extended_statistic  = "p95"
+  threshold           = var.assistant_timeout_seconds * 1000 * 0.8
+  alarm_description   = "Assistant Lambda p95 duration above 80% of its timeout for 10 minutes: turns are running into ASSISTANT_TURN_SECONDS (slow model responses, or too many hops). Bedrock's InvocationLatency for the model says which."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.assistant[0].function_name
+  }
+}
+
+# --- The assistant's log lines (backend/src/assistant/) ---------------------
+# Each turn ends in one line, at info (the application log level keeps it):
+#   {"event":"assistant_turn","inputTokens":41200,"outputTokens":1450,"weightedTokens":48450,"end":"answered"}
+# token counts and how the turn ended, never a prompt, answer or name. A
+# failure the turn survives is a warn or error line with safeError's name and
+# code only:
+#   {"event":"assistant_charge_failed","error":"error","code":"42501"}
+#   {"event":"assistant_provider_failed","provider":"bedrock","error":"AccessDeniedException"}
+# Lambda's JSON log format nests each under message (logging/logEvent.ts).
+# All essential: a failed charge silently lifts every token cap, a broken
+# model route makes the chat dead with every invocation a 200, and the
+# hourly token sum is the only spend signal that doesn't wait for billing.
+
+# A turn's tokens weren't added to the month's counters (usage.ts): the caps
+# stop counting while it keeps failing. Any one.
+resource "aws_cloudwatch_log_metric_filter" "assistant_charge_failed" {
+  count          = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  name           = "${local.project}-assistant-charge-failed"
+  log_group_name = aws_cloudwatch_log_group.assistant[0].name
+  pattern        = "{ $.message.event = \"assistant_charge_failed\" }"
+
+  metric_transformation {
+    name          = "AssistantChargeFailed"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "assistant_charge_failed" {
+  count               = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  alarm_name          = "${local.project}-assistant-charge-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.assistant_charge_failed[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.assistant_charge_failed[0].metric_transformation[0].namespace
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "The assistant failed to charge a turn's tokens to the month's counters (app_assistant_charge): while it keeps failing, the per-project, per-person and deployment-wide token caps stop counting and only the Marketplace budget, a day or two late, is left. Search the assistant's log group for event = assistant_charge_failed (code is a Postgres SQLSTATE: 42501 a grant, 08xxx the connection). Turn the assistant off (assistant_enabled = false) if it doesn't clear."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
+# A model call failed (orchestrator.ts): the page gets an error event and
+# the invocation is still a 200. One upstream blip is normal; several in
+# 15 minutes is a broken route (a wrong assistant_model_id, model access not
+# enabled, a quota of 0 from this region, an IAM or endpoint-policy drift).
+resource "aws_cloudwatch_log_metric_filter" "assistant_provider_failed" {
+  count          = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  name           = "${local.project}-assistant-provider-failed"
+  log_group_name = aws_cloudwatch_log_group.assistant[0].name
+  pattern        = "{ $.message.event = \"assistant_provider_failed\" }"
+
+  metric_transformation {
+    name          = "AssistantProviderFailed"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "assistant_provider_failed" {
+  count               = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  alarm_name          = "${local.project}-assistant-provider-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.assistant_provider_failed[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.assistant_provider_failed[0].metric_transformation[0].namespace
+  period              = 900
+  statistic           = "Sum"
+  threshold           = 3
+  alarm_description   = "More than 3 assistant model calls failed in 15 minutes: the chat answers every message with an error while its Lambda reports success. Search the assistant's log group for event = assistant_provider_failed; error is the upstream's exception name (AccessDeniedException: model access or IAM; ValidationException: the model id; ThrottlingException: Bedrock's tokens-per-minute quota). docs/deployment.md § The assistant."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
+# The model spend as it happens: the weighted tokens (input + 5 x output, the
+# caps' unit, so dollars at the input price) of every turn in the hour. No
+# default_value: an hour with no turn publishes nothing (missing, not
+# breaching) rather than a zero for every line that isn't a turn.
+resource "aws_cloudwatch_log_metric_filter" "assistant_tokens" {
+  count          = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  name           = "${local.project}-assistant-tokens"
+  log_group_name = aws_cloudwatch_log_group.assistant[0].name
+  pattern        = "{ $.message.event = \"assistant_turn\" }"
+
+  metric_transformation {
+    name      = "AssistantWeightedTokens"
+    namespace = "${local.project}/Application"
+    value     = "$.message.weightedTokens"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "assistant_tokens_hourly" {
+  count               = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  alarm_name          = "${local.project}-assistant-tokens-hourly"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.assistant_tokens[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.assistant_tokens[0].metric_transformation[0].namespace
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = var.assistant_tokens_alarm_per_hour
+  alarm_description   = "The assistant used more than ${var.assistant_tokens_alarm_per_hour} weighted tokens (input + 5 x output) in an hour, about USD ${floor(var.assistant_tokens_alarm_per_hour * var.assistant_input_usd_per_million / 1000000)} at USD ${var.assistant_input_usd_per_million} per million input (assistant_tokens_alarm_per_hour, ~10x the expected use). The budgets see it a day or two later. Logs Insights on the assistant's log group: filter message.event = \"assistant_turn\" | stats sum(message.weightedTokens), count() by bin(5m). The deployment-wide cap (ASSISTANT_TOKENS_PER_MONTH_TOTAL) stops it at the month's limit; to stop it now, set assistant_enabled = false and apply."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
 # --- Backend self-checks ----------------------------------------------------
 # executeRun (backend/src/runs/execute.ts) logs a structured JSON line when a
 # saved run fails one of the engine's own invariant checks (docs/model.md §
@@ -457,9 +680,11 @@ resource "aws_cloudwatch_metric_alarm" "mail_send_failed" {
 # one structured line instead:
 #   {"event":"unhandled_error","method":"GET","route":"/projects/:id","error":"error","code":"42P01","at":["at …"]}
 # the route's pattern (never the concrete path, which can carry a token), the
-# error's name/code (safeError) and its stack frames, never its message. Only
-# the API runs the Hono app, so only its log group is filtered; the worker's
-# unexpected failures are job_failed / job_dead (jobs.tf).
+# error's name/code (safeError) and its stack frames, never its message. The
+# API and the assistant (lambda-assistant.ts serves the same app) run the Hono
+# app, so both log groups are filtered into the one metric and the one alarm
+# sees both; the worker's unexpected failures are job_failed / job_dead
+# (jobs.tf).
 
 resource "aws_cloudwatch_log_metric_filter" "unhandled_error" {
   count          = local.alarms_essential ? 1 : 0
@@ -476,6 +701,24 @@ resource "aws_cloudwatch_log_metric_filter" "unhandled_error" {
   }
 }
 
+# The assistant's: a 500 before its stream starts (a database error in the
+# budget check, a role lookup), which its invocation survives, so
+# assistant_errors never counts it.
+resource "aws_cloudwatch_log_metric_filter" "unhandled_error_assistant" {
+  count          = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  name           = "${local.project}-unhandled-error-assistant"
+  log_group_name = aws_cloudwatch_log_group.assistant[0].name
+  pattern        = aws_cloudwatch_log_metric_filter.unhandled_error[0].pattern
+
+  metric_transformation {
+    name          = aws_cloudwatch_log_metric_filter.unhandled_error[0].metric_transformation[0].name
+    namespace     = aws_cloudwatch_log_metric_filter.unhandled_error[0].metric_transformation[0].namespace
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
   count               = local.alarms_essential ? 1 : 0
   alarm_name          = "${local.project}-unhandled-error"
@@ -486,7 +729,7 @@ resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
   period              = 300
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "The API answered a request with an unhandled 500 (invisible to the Lambda Errors metric). Search the API log group for event = unhandled_error: route says which endpoint, error/code the exception's name and code (a Postgres SQLSTATE for a database error), at the stack frames. Runbook: docs/deployment.md § Runbooks."
+  alarm_description   = "The API (or the assistant) answered a request with an unhandled 500 (invisible to the Lambda Errors metric). Search the API's log group, and the assistant's if it is on, for event = unhandled_error: route says which endpoint, error/code the exception's name and code (a Postgres SQLSTATE for a database error), at the stack frames. Runbook: docs/deployment.md § Runbooks."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }
@@ -595,6 +838,23 @@ resource "aws_cloudwatch_log_metric_filter" "origin_secret_rejected" {
   metric_transformation {
     name          = "OriginSecretRejected"
     namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+# The assistant's Function URL is public by AWS design too, and its app
+# refuses a request without the header the same way: the same metric.
+resource "aws_cloudwatch_log_metric_filter" "origin_secret_rejected_assistant" {
+  count          = local.assistant_enabled && local.alarms_full ? 1 : 0
+  name           = "${local.project}-origin-secret-rejected-assistant"
+  log_group_name = aws_cloudwatch_log_group.assistant[0].name
+  pattern        = aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].pattern
+
+  metric_transformation {
+    name          = aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].metric_transformation[0].name
+    namespace     = aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].metric_transformation[0].namespace
     value         = "1"
     default_value = "0"
     unit          = "Count"

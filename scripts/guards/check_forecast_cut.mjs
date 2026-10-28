@@ -73,6 +73,7 @@ export const INVENTORY = [
 	{ path: 'frontend/src/lib/components/map/mapResults.svelte.ts', reads: 1, how: 'cut', evidence: ['meta.forecastFrom ?? null'], note: 'loadDamLevels cuts (overview/damLevels.ts)' },
 	{ path: 'frontend/src/lib/components/network/NetworkTab.svelte', reads: 2, how: 'cut', evidence: ['latestRun?.forecastFrom ?? null', 'damLevel(dam, s, latestRun?.forecastFrom'] },
 	{ path: 'frontend/src/lib/components/outcomes/OutcomeMatrixPanel.svelte', reads: 1, how: 'never', evidence: ['!run.forecastFrom'], note: 'a demand sweep is based on an ordinary run only' },
+	{ path: 'frontend/src/lib/components/overview/DroughtIndex.svelte', reads: 1, how: 'cut', evidence: ['droughtBadge({ rain, pet, lastDay })'], note: 'lastDay is historyEnd(pick.latest) (OverviewTab), the day before the forecast; the engine’s monthlyTotals stops there (drought/spi.ts)' },
 	{ path: 'frontend/src/lib/components/overview/FlowVsReserve.svelte', reads: 1, how: 'cut+band', evidence: ['belowReserve(record(flows.shortfall))', '{band}'] },
 	{ path: 'frontend/src/lib/components/overview/OverviewTab.svelte', reads: 1, how: 'cut', evidence: ['const forecastFrom = run.summary.forecast?.from ?? null;'], note: 'loadDamLevels cuts (overview/damLevels.ts)' },
 	{ path: 'frontend/src/lib/components/overview/damLevels.ts', reads: 0, how: 'cut', evidence: ['beforeForecast(series.values, series.startDate, forecastFrom)'], note: 'loadDamLevels / damLevel, which the dam readers call' },
@@ -114,7 +115,7 @@ export const INVENTORY = [
 	{ path: 'backend/src/portfolio/portfolio.ts', reads: 1, how: 'never', evidence: ["r.trigger <> 'forecast'"] },
 	{ path: 'backend/src/publish/publish.ts', reads: 1, how: 'cut', evidence: ["(summary->'forecast'->>'from')::date - 1"], note: 'the projection stops at observed_until; the forecast is its own part' },
 	{ path: 'backend/src/runs/reproduce.ts', reads: 1, how: 'whole', evidence: ['FROM run_series WHERE run_id = $1'], note: 'reproducing a run compares every stored day' },
-	{ path: 'backend/src/runs/routes.ts', reads: 4, how: 'passes-on', evidence: ['.get(\'/:id/runs/:runId/series\'', '.get(\'/:id/runs/:runId/day\''], note: 'the series route (the client cuts or bands), the series list (no values), and the day trace (one picked day)' },
+	{ path: 'backend/src/runs/read.ts', reads: 4, how: 'passes-on', evidence: ['.get(\'/:id/runs/:runId/series\'', '.get(\'/:id/runs/:runId/day\''], in: ['backend/src/runs/routes.ts', 'backend/src/runs/routes.ts'], note: 'the run routes\' readers, shared with the assistant\'s tools (issue #610): the series route (the client cuts or bands), the series list (no values), the day trace (one picked day); the assistant\'s get_series and get_gauge_fit cut a forecast run\'s forecast days off (tools/series.ts beforeForecastDays)' },
 	{
 		path: 'backend/src/scenarios/results.ts',
 		reads: 2,

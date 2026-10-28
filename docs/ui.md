@@ -1235,6 +1235,9 @@ role, freshness, Add data) and each tab's own header:
   (`TAB_GUIDE` in `lib/workspace/tabs.ts`, ids only so the workspace never
   loads the guides; `guides.test.ts` checks every tab has one, about that
   tab). The Applicant view's header links to the Applications guide.
+  After the guide, where the server has it on, the page's **Assistant**
+  ([§ Assistant](#assistant)): on the title's line, so it is in the same
+  place on every section and never among the actions.
 - **A one-line context** under it. A tab gives its own through
   `fillHeader({ context, actions })` (`workspace/headerSlot.svelte.ts`,
   called from an `$effect`, like the sidebar's slot): the Summary names the
@@ -11775,6 +11778,103 @@ after two saves and its link) and `e2e/tests/history-page.spec.ts` (the page: he
 deep link, the filters' URL and Back, pagination, a restore picking itself,
 empty states, a viewer, the phone layout, `?tab=changes`, axe at desktop
 light and dark and phone).
+
+## Assistant
+
+Issue #610 (`lib/components/assistant/`; [api.md § Assistant](./api.md#assistant)).
+A chat about one project's model and results ("Why does the simulated flow
+at gauge X not respond to rainfall?", "Which settings would you change to
+improve the fit at the outlet?"), answered by a model the backend calls
+with read-only tools over the project's data. It never changes anything.
+
+- **Where.** **Assistant** on the section header's title line, right after
+  **How this page works**, on every section: one place that doesn't move
+  with each tab's actions, never in More actions. A chat bubble with a
+  sparkle, then its word, tinted in the accent so it reads apart from the
+  tab's buttons while staying smaller than **Run model**; on a phone the
+  icon alone in the same 36 px circle as the guide's "?" (its target 44 px),
+  still named Assistant. Not among the actions: those end on Add data and
+  Run model, and one more control there made the header taller than the
+  first half of a 360 px phone on the Summary and pushed Model settings'
+  controls under its title at 1440 (`workspace-phone.spec.ts`). Not a
+  sidebar row either (the sidebar's row budget is full,
+  `app-sidebar.spec.ts`). `assistant.spec.ts` pins the place on four
+  sections at 1440 and 360.
+  The page asks `GET …/assistant` once per project, and the button shows only
+  when that says `available`. It doesn't show when the server has
+  `ASSISTANT_PROVIDER=off`, the default, which keeps the dev server
+  key-free, or when the caller can't use it (a farmer or an applicant
+  never reaches the workspace). Any member from viewer up can ask.
+- **The sheet** (`AssistantPanel.svelte`, a side sheet like Notes', fetched
+  the first time it opens) scrolls the conversation in its body and pins a
+  foot under it, so the box never moves however long the conversation gets.
+  While the conversation is empty the body holds a short line on what the
+  assistant reads and two example questions, full-width buttons that ask
+  them, settled at its foot right above the box (no gap between them); a
+  conversation settles there too, newest nearest the box, and follows the
+  answer while it streams unless you scrolled up (measured before each
+  update, so a proposal card taller than the slack doesn't leave it behind).
+  Opened again, it shows the newest words. The foot is one block: the box
+  (it has the focus when the sheet opens; **Enter** sends, **Shift+Enter** is
+  a new line), with the hint and **Send** (or **Stop** while an answer
+  streams) inside its border; under it one quiet line with the share of the
+  project's monthly budget left, when it starts again, and **New
+  conversation** once there is one; then the disclaimer the server sends.
+  Its first paragraph ("The assistant's answers are advice, not model
+  output, and they can be wrong.") is the line of a `common/Fold.svelte`,
+  always in view; the reports' `DISCLAIMER` paragraphs fold under it
+  (**Read the full disclaimer**) in a box that scrolls on its own (at most a
+  quarter of the window), so opening it never pushes the box off a phone.
+  The ✕ is the one way out (no Close button in the foot as well); Escape
+  closes it too. `assistant.spec.ts` pins the layout at 1440×960 and
+  390×844.
+- **An answer streams in** (`stream.ts`: `fetch` and a `ReadableStream` on
+  the POST, not `EventSource`, so the request goes through the same
+  credentials and CSRF handling as every other POST; keepalive comments are
+  ignored, and a chunk may end anywhere). Each tool the assistant reads the
+  project with shows as a line ("Reading the run summary"): a ring while it
+  runs, filled when it's done, red if it failed (named so for a screen
+  reader too). The text follows as it comes, as plain text with line breaks
+  kept, never `{@html}` or markdown. A polite status line says when the
+  answer is finished, without reading the words out as they arrive.
+  **Stop** aborts the fetch and keeps what came so far. An answer that ends
+  early says so.
+- **The conversation lives in the page** (`chat.svelte.ts` `AssistantChat`,
+  held by `routes/projects/[id]/+page.svelte`). Closing the sheet or changing
+  tab keeps it, and opening another project starts a new one. Nothing is
+  stored on the server, so the whole conversation goes with each turn,
+  along with the run the page shows (a run tab's `run=`, the run carried
+  between tabs, else the default). A question that got no answer is left
+  out of what is sent.
+- **Refusals before an answer** put the question back in the box and say
+  why above it. A 429 is the hourly limit: "limit of 30 messages an hour.
+  Try again in about 4 min", from `Retry-After`, after which the box takes
+  questions again. When the month's budget is used up (from the status, or
+  a refusal or stream error whose code names the budget), the sheet says
+  whose (the project's, yours across your projects, or the server's: three
+  monthly caps, docs/api.md § Assistant) and when it starts again, and the
+  box takes nothing. The share left under the box is of the cap nearest its
+  end. Any other refusal shows
+  its message.
+- **A recommended change** (the `propose_settings` tool) is a card in the
+  answer, **Recommended change**: its one-line summary, a table of the
+  engine's input-diff lines (Setting, Now, Suggested; `compare.ts`
+  `diffInputs`, run on the server against the stored settings) and why each
+  setting changes. For an editor (`canApply` in the status) it has **Apply to
+  the settings form**. A viewer sees the same card with "An editor can
+  apply this change."
+- **Apply** (`applyProposal` on the page) puts the patch into the settings
+  draft (`settingsDraft.svelte.ts` `applyPatch`). It merges as the save
+  does: a top-level setting replaces, and a nested one merges one level
+  deep, except those the server replaces whole (`PATCH_REPLACED_WHOLE`,
+  checked against `projects/settings.ts` `REPLACED_WHOLE`). The patch's
+  settings win over an edit typed to them, and every other edit stays. Then
+  the sheet closes, Model settings opens, and the save bar's **Reason for
+  this change** says "Assistant suggestion: <summary>". Nothing is saved:
+  the person checks the change and saves with the normal **Save changes**,
+  which the server validates as any save, and History keeps the reason.
+  Discarding the change clears the reason again. The card then says the
+  change is in the form, not saved.
 
 ## Notes
 

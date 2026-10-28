@@ -1,9 +1,10 @@
 // One header per workspace section (issue #17, option A; docs/ui.md §
-// Section header): the section's title, a one-line context, and on the right
-// the rain-freshness pill, the section's own actions, Add data (on the tabs it
-// adds data to, issue #601: add-data-tabs.spec.ts) and Run model (a button that
-// opens the Run label form; on Runs & results the tab's own run form instead,
-// so there is always exactly one Run model).
+// Section header): the section's title (with How this page works and, where
+// the server has it on, the Assistant after it), a one-line context, and on
+// the right the rain-freshness pill, the section's own actions, Add data (on
+// the tabs it adds data to, issue #601: add-data-tabs.spec.ts) and Run model
+// (a button that opens the Run label form; on Runs & results the tab's own run
+// form instead, so there is always exactly one Run model).
 // The notices (view only, new data) are one slim line under it; the
 // project's name and your role are at the top of the sidebar (a compact line
 // on a phone); Data carries a badge counting the series behind. Synthetic
@@ -56,7 +57,8 @@ test.describe('desktop', () => {
 		await expect(h.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
 		await expect(h.getByTestId('network-summary')).toContainText(/\d+ hydrological units? · \d+ dams? · \d+ gauges?/);
 		await expect(h.locator('details.grids-menu summary')).toHaveText(/Tables/);
-		const actions = h.getByRole('button');
+		// The actions alone: the Assistant is on the title's line, never among them (assistant.spec.ts).
+		const actions = h.getByTestId('header-actions').getByRole('button');
 		await expect(actions).toHaveText(['+ Add hydrological unit', '+ Add other user', 'Run model']);
 		await expectNoViolations(page);
 

@@ -224,6 +224,20 @@ resource "aws_lambda_function" "backend" {
       # water occurrence in the tiles bucket; empty turns it off (the
       # default, until dam_trace_water is set).
       WATER_URL = var.dam_trace_water ? "s3://${aws_s3_bucket.tiles.bucket}/${local.water_key}" : ""
+
+      # The assistant (assistant.tf, issue #610): the API answers its status
+      # (GET /projects/:id/assistant: whether the chat is on, the tokens left
+      # under the project's, the person's and the deployment's monthly caps)
+      # and never calls a model, which only the assistant's own Lambda can
+      # (its role, the Bedrock endpoint). The same values as that Lambda's,
+      # so the status shows what it enforces. off while assistant_enabled is
+      # false: the page shows no chat.
+      ASSISTANT_PROVIDER               = local.assistant_enabled ? "bedrock" : "off"
+      ASSISTANT_MODEL                  = var.assistant_model_id
+      ASSISTANT_TOKENS_PER_MONTH       = tostring(var.assistant_tokens_per_month)
+      ASSISTANT_TOKENS_PER_USER_MONTH  = tostring(var.assistant_tokens_per_user_month)
+      ASSISTANT_TOKENS_PER_MONTH_TOTAL = tostring(local.assistant_tokens_per_month_total)
+      ASSISTANT_MESSAGES_PER_HOUR      = tostring(var.assistant_messages_per_hour)
     }
   }
 
@@ -261,13 +275,16 @@ resource "aws_lambda_function" "backend" {
     # db.t4g.micro (~80 max_connections, the default class) room for the
     # operator and RDS's own. Checked on every tfvars, so raising a cap or a
     # pool past it fails the plan instead of the database (issue #541).
+    # The assistant (assistant.tf) counts only while it exists: its cap x a
+    # pool of 1.
     precondition {
       condition = (
         var.lambda_reserved_concurrency * tonumber(local.api_db_pool_max) +
         var.worker_reserved_concurrency * tonumber(local.worker_db_pool_max) +
-        var.migrate_reserved_concurrency * 2
+        var.migrate_reserved_concurrency * 2 +
+        local.assistant_count * var.assistant_reserved_concurrency * tonumber(local.assistant_db_pool_max)
       ) <= 70
-      error_message = "lambda_reserved_concurrency x DB_POOL_MAX + worker_reserved_concurrency x its DB_POOL_MAX + the migrator's 2 must stay <= 70 database connections (db.t4g.micro's ~80 less headroom). Redo infra/README.md § Connections (or move to RDS Proxy) before raising a cap or a pool."
+      error_message = "lambda_reserved_concurrency x DB_POOL_MAX + worker_reserved_concurrency x its DB_POOL_MAX + the migrator's 2 (+ assistant_reserved_concurrency x 1 when assistant_enabled) must stay <= 70 database connections (db.t4g.micro's ~80 less headroom). Redo infra/README.md § Connections (or move to RDS Proxy) before raising a cap or a pool."
     }
     precondition {
       condition     = !var.delineation_dem || (var.lambda_memory_mb >= 1024 && var.lambda_timeout_seconds >= 25)

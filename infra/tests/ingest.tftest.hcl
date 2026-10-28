@@ -859,7 +859,7 @@ run "ingest_on_with_a_tag" {
       aws_lambda_function.ingest[0].package_type == "Image" &&
       aws_lambda_function.ingest[0].image_uri == "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-mirror-ingest:0.7.0-0123456789ab" &&
       tolist(aws_lambda_function.ingest[0].architectures) == tolist(["arm64"]) &&
-      aws_lambda_function.ingest[0].memory_size == 3072 &&
+      aws_lambda_function.ingest[0].memory_size == 3008 &&
       one(aws_lambda_function.ingest[0].ephemeral_storage).size == 2048 &&
       aws_lambda_function.ingest[0].timeout == 900 &&
       aws_lambda_function.ingest[0].reserved_concurrent_executions == 2

@@ -873,6 +873,11 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `DELETE ${P}`, exempt: 'the project goes, and its history with it (cascade)' },
 	{ route: `POST ${P}/map/subcatchments`, exempt: 'previews the sub-catchments of the clicks and saves nothing; saving them is recorded (map.subcatchments_saved)' },
 	{ route: `POST ${P}/map/dam-trace`, exempt: 'proposes a dam outline and saves nothing; a traced outline is recorded when it is saved (map.feature_created, from dam_trace)' },
+	{
+		route: `POST ${P}/assistant/messages`,
+		exempt:
+			'asks the assistant and changes nothing the history covers: it reads the project and keeps only token and message counts (262_assistant_usage); a proposed settings change is applied by the settings PATCH, which records a revision'
+	},
 	{ route: `POST ${P}/jobs`, exempt: 'queues a model run; the run records run.created when it runs (runs/execute.ts storeRun)' },
 	{
 		route: `POST ${P}/auto-calibrations`,
