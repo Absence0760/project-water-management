@@ -152,7 +152,7 @@ describe('what an item says', () => {
 		expect(eventLine(ev('settings.allocation_mode_reset', { from: 'cap', to: 'none' }))).toBe(
 			'The baseline’s allocation mode “Cap use at the registered volume” was set to compare only: licence data never drives the baseline (a cap or a full allocation is a scenario)'
 		);
-		// 264 (issue #616): no actor; the retired method and how many units held values.
+		// 266 (issue #616): no actor; the retired method and how many units held values.
 		expect(eventLine(ev('settings.flow_share_reset', { method: 'hiLo', hiLoSplit: { hi: 0.6, lo: 0.4 }, units: [{ id: 'a' }, { id: 'b' }] }))).toBe(
 			'The flow split “Hi/Lo MAP, 60% High / 40% Low” was replaced by each unit’s natural-MAR share (2 units had High-MAP, Low-MAP or manual values): the area, Hi/Lo MAP and specific shares were removed'
 		);

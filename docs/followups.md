@@ -766,8 +766,8 @@ runs and accumulations are real) can't be decided without the client.
       run-from-rain check of the EWR columns under FM1 if it is to be
       pinned. Trigger: the fresh re-extract.
 - [ ] **Drop the retired flow-share node columns (issue #616, contract
-      half of [264](./data-model.md#flow-share-methods-retired-264_retire_flow_share_methodsql)).**
-      Migration 264 stripped `flowShareMethod` and `hiLoSplit` from the
+      half of [266](./data-model.md#flow-share-methods-retired-266_retire_flow_share_methodsql)).**
+      Migration 266 stripped `flowShareMethod` and `hiLoSplit` from the
       settings but kept `node.area_hi_km2`, `node.area_lo_km2` and
       `node.flow_share_manual`, which the backend from engine 1.105.0
       neither reads nor writes, so a backend still on the previous release
@@ -775,7 +775,7 @@ runs and accumulations are real) can't be decided without the client.
       migration that drops the three columns (no policy, function or view
       reads them; check `catalogue.db.test.ts` and any `SELECT *` first),
       with the `/safe-migration` checks. Trigger: once the `backend@`
-      release carrying migration 264 is in production and no older backend
+      release carrying migration 266 is in production and no older backend
       can be rolled back to.
 - [x] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),

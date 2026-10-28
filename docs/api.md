@@ -803,7 +803,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   1.105.0, issue #616: every unit has one share, its natural MAR share,
   [model.md §2.5](./model.md)), so an older web build's patch with them
   still saves; reading settings never returns them (`mergeSettings`, and
-  migration 264 removed them from stored projects).
+  migration 266 removed them from stored projects).
   `chirpsBiasCorrection` is `monthly` (the default: CHIRPS rain that fills in
   for blank catchment rain is scaled by a per-month catchment / CHIRPS factor,
   engine ≥ 0.7.0) or `none` (raw CHIRPS); [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
@@ -4526,7 +4526,7 @@ farmer view E3, migration 106).
   storage): an explicit review date is then `422`, an absent one is null.
   `analogueYears` (1–200 distinct water
   years): absent, every one the record holds but the season's own.
-  `method` (issue #620, migration 265): `esp` (absent: the default) uses
+  `method` (issue #620, migration 267): `esp` (absent: the default) uses
   every analogue year alike; `climateState` also adds `result.climate`,
   the same members summarised on the years nearest this season's ENSO and
   SAM state (below). Any other value is `400`. The ESP figures are the
