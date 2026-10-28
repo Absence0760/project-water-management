@@ -39,6 +39,8 @@ import type {
 	ScenarioConflict,
 	ScenarioOp,
 	SeasonalOutlook,
+	ClimateIndexId,
+	ClimateOutlook,
 	SeriesMeta,
 	StoredRunoffModelId,
 	YearClassMethod,
@@ -2694,11 +2696,24 @@ export interface AutoCalibration {
 /** A water year an outlook left out (docs/api.md § Seasonal outlooks): the engine's reasons, or the backend's. */
 export type OutlookExcludedYear = OutlookExcluded | { waterYear: number; reason: 'overLimit' | 'memberFailed' };
 
+/**
+ * The climate-state outlook as stored (issue #620, backend StoredClimateOutlook):
+ * the engine's ClimateOutlook and which copy of each index it read.
+ */
+export type OutlookClimate = ClimateOutlook & {
+	source: Partial<Record<ClimateIndexId, { url: string; through: string; revision: number; fetchedAt: string }>>;
+};
+
 /** An outlook's result: the engine's SeasonalOutlook, with the backend's exclusions and the members the engine refused. */
-export type OutlookResult = Omit<SeasonalOutlook, 'excluded'> & {
+export type OutlookResult = Omit<SeasonalOutlook, 'excluded' | 'climate'> & {
 	excluded: OutlookExcludedYear[];
 	failures: { levelId: string; label: string; waterYear: number; message: string }[];
+	/** Method climateState only (issue #620): the years nearest this season's ENSO and SAM state. */
+	climate?: OutlookClimate;
 };
+
+/** How an outlook uses its analogue years (backend outlooks/schema.ts OUTLOOK_METHODS). */
+export type OutlookMethod = 'esp' | 'climateState';
 
 /** A trigger table as stored (backend outlooks/store.ts StoredTriggerTable): the engine's ReviewTriggers without each band's whole outlook. */
 export type OutlookTriggerTable = Omit<ReviewTriggers, 'rows'> & { rows: Omit<ReviewTriggerRow, 'outlook'>[] };
@@ -2745,6 +2760,8 @@ export interface Outlook {
 	planningShare: number | null;
 	levels: { id: string; label: string; ops: ScenarioOp[] }[];
 	analogueYears: number[] | null;
+	/** Absent from an older API: esp. */
+	method?: OutlookMethod;
 	status: 'pending' | 'complete';
 	engineVersion: string | null;
 	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
@@ -2770,6 +2787,8 @@ export interface OutlookRequest {
 	/** Absent: the project's setting; null: no trigger table. */
 	reviewDate?: string | null;
 	analogueYears?: number[];
+	/** Absent: esp. */
+	method?: OutlookMethod;
 }
 
 /** A yield request's parameters (backend yield/store.ts YieldParams). */

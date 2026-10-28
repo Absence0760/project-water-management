@@ -13,7 +13,7 @@ import {
 	type OutlookStat,
 	type ScenarioOp
 } from '@water-management/engine';
-import type { Outlook, OutlookExcludedYear, OutlookRequest, OutlookResult, OutlookSeasonSetting } from '#lib/api/types.js';
+import type { Outlook, OutlookExcludedYear, OutlookMethod, OutlookRequest, OutlookResult, OutlookSeasonSetting } from '#lib/api/types.js';
 import { monthName } from '#lib/format/months.js';
 import { fmtDay, fmtNum } from '#lib/format/number.js';
 import { dailyEwrName, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
@@ -84,9 +84,10 @@ export function monthlyPlanOps(pcts: Readonly<Record<number, number>>, months: r
 }
 
 /** The request for these levels (and an optional monthly plan) on a base run; the season and share are the project's settings. */
-export function outlookRequest(baseRunId: string, levels: readonly number[], plan: { label: string; ops: ScenarioOp[] } | null = null): OutlookRequest {
+export function outlookRequest(baseRunId: string, levels: readonly number[], plan: { label: string; ops: ScenarioOp[] } | null = null, method: OutlookMethod = 'esp'): OutlookRequest {
 	const all = [...levels.map((p) => ({ label: levelLabel(p), ops: [{ op: 'demand.scale' as const, factor: p / 100 }] as ScenarioOp[] })), ...(plan ? [plan] : [])];
-	return { name: `Seasonal outlook ${all.map((l) => l.label).join(' / ')}`, baseRunId, levels: all };
+	// esp is the API's default: sent only when it is the other method.
+	return { name: `Seasonal outlook ${all.map((l) => l.label).join(' / ')}`, baseRunId, levels: all, ...(method === 'esp' ? {} : { method }) };
 }
 
 /** Where an outlook stands, from its real status and its job's (never a timer). */

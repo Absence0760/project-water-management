@@ -28,7 +28,8 @@
 // the invented 8 × 6 grid repeated around it, so a feed over a seeded
 // example's synthetic catchment (backend/scripts/examples/map.ts) reads rain
 // offline. DE Africa's STAC search and its WOfS scenes are answered by
-// dams/observed/wofs/fixtures.ts (wofs-sample.json). Any other URL is a 404. Invented grid and station: no real
+// dams/observed/wofs/fixtures.ts (wofs-sample.json), and NOAA CPC's ONI and
+// AAO files by sources/cpc.ts (invented values). Any other URL is a 404. Invented grid and station: no real
 // place, catchment or measurement.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -37,6 +38,7 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { utcToday } from './fetch.js';
 import type { FeedHttp } from './http.js';
 import { CHC_BASE, GEFS_DAYS } from './sources/chirps.js';
+import { AAO_URL, aaoFixtureText, ONI_URL, oniFixtureText } from './sources/cpc.js';
 import { DWS_BASE, parseDwsDaily } from './sources/dws.js';
 import { writeGrid } from './sources/tiff-write.js';
 import { wofsFixture } from '../dams/observed/wofs/fixtures.js';
@@ -219,6 +221,9 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 		},
 		async text(url) {
 			if (url.startsWith(`${WOFS_STAC_SEARCH}?`)) return wofsOf().search(url);
+			// NOAA CPC's climate indices (sources/cpc.ts): invented values, re-dated to today.
+			if (url === ONI_URL) return oniFixtureText(today());
+			if (url === AAO_URL) return aaoFixtureText(today());
 			if (!url.startsWith(`${DWS_BASE}?`)) return null;
 			const q = new URL(url).searchParams;
 			const station = (q.get('Station') ?? '').replace(/100\.00$/, '');
