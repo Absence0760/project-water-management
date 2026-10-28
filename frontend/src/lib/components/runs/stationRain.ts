@@ -38,9 +38,27 @@ export function ratioText(a: Pick<StationAreaForcing, 'ratio' | 'ownRatio' | 'sc
 	return `× ${fmtNum(a.ratio, 2, true)} (${fmtNum(a.areaMapMm)} ÷ ${fmtNum(a.stationMapMm)} mm)`;
 }
 
-/** Where a pairing read the CHIRPS at its station: its own cell, or the CHIRPS of the unit it stands in. */
+/**
+ * Which CHIRPS a pairing corrected: since engine 1.105.0 (issue #612) the area's own, a unit's or the catchment's;
+ * before, the CHIRPS at the station (its own cell, or the CHIRPS of the unit it stands in).
+ */
 export function chirpsAtText(p: Pick<StationPairingFit, 'chirpsAt'>): string {
+	if ('catchment' in p.chirpsAt) return 'the catchment’s CHIRPS';
 	return 'unitId' in p.chirpsAt ? `the CHIRPS of ${p.chirpsAt.unitName || p.chirpsAt.unitId}` : 'its own CHIRPS cell';
+}
+
+/**
+ * An area's patching priority as the run read it (issue #612), in words: "Ridge × 2.00 (40 days), then CHIRPS
+ * (12 days)"; "nothing" for an empty one. Null for the corrected CHIRPS alone (the default) and for a run from before.
+ */
+export function patchText(a: Pick<StationAreaForcing, 'patches'>): string | null {
+	const p = a.patches;
+	if (!p || (p.length === 1 && p[0]!.source === 'chirps')) return null;
+	if (!p.length) return 'nothing';
+	const days = (n: number) => (n === 1 ? '1 day' : `${fmtNum(n)} days`);
+	return p
+		.map((x) => (x.source === 'chirps' ? `CHIRPS (${days(x.days)})` : x.skipped ? `${x.stationName} (skipped: ${x.skipped})` : `${x.stationName} × ${fmtNum(x.ratio, 2, true)} (${days(x.days)})`))
+		.join(', then ');
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -81,10 +99,19 @@ export function catchmentMapText(s: Pick<StationsResult, 'catchmentMapMm' | 'cat
  */
 export function stationNotes(s: Pick<StationsResult, 'pairings' | 'catchment' | 'units'>): string[] {
 	const out: string[] = [];
-	for (const p of s.pairings) if (p.refused !== null) out.push(`${p.stationName}: its CHIRPS pairing was refused (${p.refused}), so the areas it corrects fill their gaps from the next fallback.`);
+	for (const p of s.pairings)
+		if (p.refused !== null)
+			out.push(
+				p.areaName
+					? `${p.stationName}: its CHIRPS pairing for ${p.areaId === null ? 'the catchment' : p.areaName} was refused (${p.refused}), so its CHIRPS doesn’t patch that area’s gaps.`
+					: `${p.stationName}: its CHIRPS pairing was refused (${p.refused}), so the areas it corrects fill their gaps from the next fallback.`
+			);
 	for (const a of stationAreas(s)) {
 		if (a.clamped) out.push(`${a.name}: the MAP ratio ${fmtNum(a.ownRatio, 2, true)} was held at the ${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX} bound; check its MAP and ${a.stationName}’s.`);
 		else if (a.scaleToMap && a.ownRatio === null) out.push(`${a.name}: ${ratioText(a).slice(5)}, so ${a.stationName}’s rain is used as recorded.`);
+		// A patch station that filled none of the main station's gaps (issue #612).
+		for (const p of a.patches ?? [])
+			if (p.source === 'station' && !p.skipped && p.fills === 0 && p.gapDays > 0) out.push(`${a.name}: the patch station ${p.stationName} has no reading on any of ${a.stationName}’s gap days, so it fills none.`);
 		if (a.correctedBy === null && a.days.fallback > 0)
 			out.push(`${a.name}: no CHIRPS pairing corrects its gaps, so ${a.days.fallback === 1 ? '1 day comes' : `${fmtNum(a.days.fallback)} days come`} from the next fallback (${a.nodeId === null ? 'the forecast rain' : 'the catchment rain'}).`);
 	}

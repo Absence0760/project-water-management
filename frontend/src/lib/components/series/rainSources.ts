@@ -6,7 +6,7 @@ import { fmtNum } from '#lib/format/number.js';
 
 /** The days by source, as the run counts them (StationAreaForcing.days). */
 export function sourceCounts(source: readonly StationRainDaySource[]): Record<StationRainDaySource, number> {
-	const n: Record<StationRainDaySource, number> = { station: 0, chirps: 0, fallback: 0, none: 0 };
+	const n: Record<StationRainDaySource, number> = { station: 0, patch: 0, chirps: 0, fallback: 0, none: 0 };
 	for (const s of source) n[s]++;
 	return n;
 }
@@ -20,6 +20,7 @@ export interface SourceLane {
 }
 
 const SOURCE_LANES: readonly { source: Exclude<StationRainDaySource, 'station'>; label: string; color: string; what: string }[] = [
+	{ source: 'patch', label: 'Patch station', color: '--series-8', what: 'a patch station × its MAP ratio (the station has no reading, or it was set aside)' },
 	{ source: 'chirps', label: 'Corrected CHIRPS', color: '--series-9', what: 'corrected CHIRPS (the station has no reading, or it was set aside)' },
 	{ source: 'fallback', label: 'Next fallback', color: '--series-10', what: 'the next fallback (no corrected CHIRPS that day)' },
 	{ source: 'none', label: 'No rain', color: '--text-muted', what: 'no rain from any source (read as dry)' }
@@ -49,6 +50,7 @@ export function sourceSummary(source: readonly StationRainDaySource[]): string {
 	const n = sourceCounts(source);
 	const day = (k: number) => `${fmtNum(k)} ${k === 1 ? 'day' : 'days'}`;
 	const parts = [`${day(n.station)} from the station`];
+	if (n.patch) parts.push(`${fmtNum(n.patch)} from a patch station`);
 	if (n.chirps) parts.push(`${fmtNum(n.chirps)} from corrected CHIRPS`);
 	if (n.fallback) parts.push(`${fmtNum(n.fallback)} from the next fallback`);
 	if (n.none) parts.push(`${fmtNum(n.none)} with no rain from any source`);

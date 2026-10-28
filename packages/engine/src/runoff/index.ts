@@ -29,15 +29,19 @@ export {
 	catchmentStationFingerprintChanged,
 	catchmentStationFingerprintError,
 	catchmentStationSettingChanged,
+	patchChainOfSetting,
 	type CatchmentStationFingerprint
 } from './stationFingerprint';
-export { stationAreaRain, type StationAreaRain, type StationRainDaySource } from './stationAreaRain';
+export { stationAreaRain, stationPatchChoices, type StationAreaRain, type StationRainDaySource } from './stationAreaRain';
 export {
 	catchmentMapOf,
+	resolvePatch,
 	resolveRainStations,
 	stationAreaDays,
+	stationPatchUsability,
 	stationRatio,
 	STATION_DAY_SOURCE,
+	type StationPatchUsability,
 	type UnitStationRecipe
 } from './stationForcing';
 

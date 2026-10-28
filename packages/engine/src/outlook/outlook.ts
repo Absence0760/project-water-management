@@ -40,7 +40,7 @@ import { damCapacityOn } from '../network/development';
 import { unitForecastSeriesKey, UNIT_RAIN_SERIES, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind, type UnitForecastSeriesKey } from '../project';
 import { prepareRun } from '../prepare';
 import { unitRainRecipes, type UnitRainRecipe } from '../runoff/unitRain';
-import { pairingFactors } from '../runoff/stationForcing';
+import { fitEveryPairing, pairingFactors } from '../runoff/stationForcing';
 import { captureModelState, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
 import { withAllocationKnownBefore, type ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
@@ -238,6 +238,7 @@ export function outlookMemberInput(
 	if (pinned) settings.unitRain = { ...settings.unitRain!, pinned };
 	// Rainfall stations (engine ≥ 1.91.0, §2.4i): the base input's pairing factors, the catchment's and the units', so the
 	// history cut at the decision date isn't corrected by a refit on a shorter record (or refused for one).
+	if (prep?.stations) fitEveryPairing(prep.stations.context);
 	const factors = prep?.stations ? pairingFactors(prep.stations.context) : null;
 	if (factors && Object.keys(factors).length && settings.rainStations)
 		settings.rainStations = { ...settings.rainStations, pinnedFactors: { ...(settings.rainStations.pinnedFactors ?? {}), ...factors } };

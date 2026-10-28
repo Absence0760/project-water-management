@@ -1,25 +1,30 @@
-// A rainfall station's pairing with the CHIRPS at it (issue #553,
-// docs/model.md §2.4i): 12 monthly factors that bring CHIRPS to the
-// station's level, fitted as §2.4b's and the reference gauge's (§2.4h,
-// ./unitRain.ts referenceFit) are.
+// A rainfall station's pairing with an area's CHIRPS (issue #553; per area
+// since engine 1.105.0, issue #612, docs/model.md §2.4i): 12 monthly factors
+// that bring the area's CHIRPS to the station's rain at the area's level,
+// fitted as §2.4b's and the reference gauge's (§2.4h, ./unitRain.ts
+// referenceFit) are.
 //
-// For each calendar month m: factor(m) = Σ station ÷ Σ CHIRPS over the days
-// of month m on which both the station's checked record (./stationRecord.ts,
-// with accumulation windows left out as §2.4b's fit leaves them out) and the
-// CHIRPS at the station have a reading (finite, not negative), over their
-// whole records. A month needs CHIRPS_FACTOR_MIN_DAYS shared days and
+// For area a corrected against station s, for each calendar month m:
+//   f_a(m) = Σ (station × r) ÷ Σ CHIRPS_a
+// over the days of month m on which both the station's checked record
+// (./stationRecord.ts, with accumulation windows left out as §2.4b's fit
+// leaves them out) and the area's own CHIRPS (`rain_chirps_mm@<unit>`, or
+// `rain_chirps_mm` for the catchment) have a reading (finite, not
+// negative), over their whole records. r is the ratio the area reads the
+// station at (area MAP ÷ station MAP, clamped 0.25–4; 1 with scaling off or
+// a MAP missing), so the corrected CHIRPS has the monthly totals of the
+// station's adjusted rain on the shared days and a gap day sits at the
+// area's MAP as a station day does. The area's CHIRPS is the denominator,
+// not the CHIRPS at the station's cell: the cell's would carry the
+// station-to-area gradient twice (once in r, once in CHIRPS_a ÷
+// CHIRPS_station). A month needs CHIRPS_FACTOR_MIN_DAYS shared days and
 // CHIRPS_FACTOR_MIN_MM of CHIRPS on them, else its factor is 1 (with a
 // warning); a fitted factor is clamped to 0.25–4 (warning), and one outside
 // the soft band 0.5–2 warns unchanged.
 //
-// The CHIRPS at the station is its own cell (stationChirpsSeriesKey) when
-// the input has it, else the CHIRPS of the unit it stands in
-// (settings.rainStations.sites[id], `rain_chirps_mm@<unit>`); with neither,
-// the pairing is refused.
-//
 // A complete year in common: a calendar year (1 January … 31 December, 365
 // or 366 days) on every day of which both the checked station record **as
-// the forcing reads it** and the CHIRPS at it have a reading. A multi-day
+// the forcing reads it** and the area's CHIRPS have a reading. A multi-day
 // accumulation's days count as read: its total is the station's, spread over
 // them by §2.4d (provisional, engine 1.96.0, model.md §2.4i: WMO-TD/No. 341
 // and Lynch 2004 count a reliable accumulated total as a usable month). A
@@ -32,9 +37,12 @@
 //
 // The station's record is checked as the forcing checks it: the catchment
 // gauge's full checks when stations[id].isCatchmentGauge, else a station's.
+// Those checks still compare it with the CHIRPS at the station
+// (./stationRecord.ts); the pairing doesn't read that CHIRPS.
 //
-// Pinned factors (settings.rainStations.pinnedFactors[id], 12 positive
-// finite numbers) replace the fit, and a pinned pairing is never refused.
+// Pinned factors (settings.rainStations.pinnedFactors[stationPairingKey(id,
+// area)], 12 positive finite numbers) replace the fit, and a pinned pairing
+// is never refused.
 import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
 import {
 	AREAL_RAIN_FACTOR_MAX,
@@ -43,16 +51,16 @@ import {
 	AREAL_RAIN_FACTOR_WARN_MIN,
 	outsideArealRainBand,
 	STATION_PAIRING_MIN_YEARS,
+	stationPairingKey,
 	type DailySeries,
 	type ModelInput,
-	type NetworkNode,
 	type ProjectSettings,
 	type RainStationInputs,
 	type StationPairingFit,
 	type UnitRainReferenceMonth
 } from '../project';
 import { CHIRPS_FACTOR_MIN_DAYS, CHIRPS_FACTOR_MIN_MM } from '../rain';
-import { checkedStationRecord, stationChirpsSource } from './stationRecord';
+import { checkedStationRecord } from './stationRecord';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const reading = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
@@ -115,36 +123,49 @@ function common(a: DailySeries, b: DailySeries) {
 	return { n, sa, sb, first, last };
 }
 
+/** The area a pairing corrects the CHIRPS of: a land unit (its node id) or the catchment (null), its own CHIRPS, and the ratio it reads the station at. */
+export interface PairingArea {
+	id: string | null;
+	name: string;
+	chirps: DailySeries | null | undefined;
+	ratio: number;
+}
+
 /**
- * Fit one station's pairing (see the header). Refused (a plain reason in
- * `refused`, months []) without a record for the station, without CHIRPS at
- * it, or with fewer than STATION_PAIRING_MIN_YEARS complete years in common.
- * A refusal and each month's warning go to `warnings` ("station pairing: …").
- * The record checks' own warnings are left to the forcing, which reads the
- * same record.
+ * Fit one station's pairing with one area (see the header). Refused (a plain
+ * reason in `refused`, months []) without a record for the station, without
+ * CHIRPS for the area, or with fewer than STATION_PAIRING_MIN_YEARS complete
+ * years in common. A refusal and each month's warning go to `warnings`
+ * ("station pairing: …"). The record checks' own warnings are left to the
+ * forcing, which reads the same record.
  */
 export function fitStationPairing(
-	args: { settings: ProjectSettings; series: ModelInput['series']; stations: RainStationInputs; nodes: readonly NetworkNode[]; stationId: string },
+	args: { settings: ProjectSettings; series: ModelInput['series']; stations: RainStationInputs; stationId: string; area: PairingArea },
 	warnings: string[]
 ): StationPairingFit {
-	const { settings, series, stations, nodes, stationId } = args;
+	const { settings, series, stations, stationId, area } = args;
 	const stationName = stations[stationId]?.name ?? stationId;
-	const who = `station pairing: "${stationName}"`;
-	const src = stationChirpsSource(settings, series, stationId);
-	const chirpsAt: StationPairingFit['chirpsAt'] = src.at === 'unit' ? { unitId: src.unitId, unitName: nodes.find((x) => x.id === src.unitId)?.name ?? src.unitId } : { cell: true };
-	const chirps = src.at === 'none' ? null : src.series;
+	const who = `station pairing: "${stationName}" for ${area.id === null ? 'the catchment' : `"${area.name}"`}`;
+	const chirpsAt: StationPairingFit['chirpsAt'] = area.id === null ? { catchment: true } : { unitId: area.id, unitName: area.name };
+	const chirps = area.chirps && area.chirps.values.length ? area.chirps : null;
+	const r = Number.isFinite(area.ratio) && area.ratio > 0 ? area.ratio : 1;
 	const checked = checkedStationRecord(settings, series, stationId, { fitExcludeAccumulations: true, name: stationName, isCatchmentGauge: stations[stationId]?.isCatchmentGauge === true });
-	const rec = checked?.record ?? null;
+	// The station's rain at the area's level: × r (a constant, so the complete years are the record's own).
+	const rec = checked ? (r === 1 ? checked.record : { startDate: checked.record.startDate, values: checked.record.values.map((v) => (reading(v) ? v * r : v)) }) : null;
 	// The factors read the fit's record (accumulation windows left out); the complete years, the forcing's.
-	const c = rec && chirps ? { ...common(rec, chirps), years: completeYears(checked!.forcing ?? rec, chirps) } : null;
+	const c = rec && chirps ? { ...common(rec, chirps), years: completeYears(checked!.forcing ?? checked!.record, chirps) } : null;
 
-	const pinnedRaw = settings.rainStations?.pinnedFactors?.[stationId];
+	const key = stationPairingKey(stationId, area.id);
+	const pinnedRaw = settings.rainStations?.pinnedFactors?.[key];
 	const pinned = validPinned(pinnedRaw) ? pinnedRaw : null;
 	if (pinnedRaw != null && !pinned) warnings.push(`${who}: its pinned factors aren’t 12 positive numbers, so they are fitted instead`);
 
 	const base = {
 		stationId,
 		stationName,
+		areaId: area.id,
+		areaName: area.name,
+		ratio: r,
 		chirpsAt,
 		fitFrom: c?.first != null ? fromEpochDay(c.first) : null,
 		fitTo: c?.last != null ? fromEpochDay(c.last) : null,
@@ -155,15 +176,13 @@ export function fitStationPairing(
 	if (!pinned) {
 		const refused = !rec
 			? 'the station has no record'
-			: src.at === 'none'
-				? 'there is no CHIRPS at the station: it has no CHIRPS cell series and no unit it stands in'
-				: !chirps
-					? `there is no CHIRPS for the unit it stands in ("${(chirpsAt as { unitName: string }).unitName}")`
-					: c!.years < STATION_PAIRING_MIN_YEARS
-						? `the station and the CHIRPS at it have ${c!.years} complete calendar ${c!.years === 1 ? 'year' : 'years'} in common (every day a reading in both), fewer than ${STATION_PAIRING_MIN_YEARS}`
-						: null;
+			: !chirps
+				? `${area.id === null ? 'the catchment has' : `"${area.name}" has`} no CHIRPS of its own`
+				: c!.years < STATION_PAIRING_MIN_YEARS
+					? `the station and ${area.id === null ? 'the catchment’s' : `"${area.name}"’s`} CHIRPS have ${c!.years} complete calendar ${c!.years === 1 ? 'year' : 'years'} in common (every day a reading in both), fewer than ${STATION_PAIRING_MIN_YEARS}`
+					: null;
 		if (refused) {
-			warnings.push(`${who} is refused: ${refused}. Its areas’ CHIRPS isn’t corrected against it`);
+			warnings.push(`${who} is refused: ${refused}. Its CHIRPS isn’t corrected against it`);
 			return { ...base, refused, pinned: false, months: [] };
 		}
 	}
@@ -191,7 +210,7 @@ export function fitStationPairing(
 		const short = months.filter((x) => !x.fitted);
 		if (short.length)
 			warnings.push(
-				`${who}: the station and the CHIRPS at it have too little in common in ${short.length === 12 ? 'every month' : short.map((x) => MONTH_NAMES[x.month - 1]).join(', ')} (fewer than ${CHIRPS_FACTOR_MIN_DAYS} shared days, or under ${CHIRPS_FACTOR_MIN_MM} mm of CHIRPS on them), so ${short.length === 1 ? 'that month’s factor is' : 'those months’ factors are'} 1`
+				`${who}: the station and the CHIRPS have too little in common in ${short.length === 12 ? 'every month' : short.map((x) => MONTH_NAMES[x.month - 1]).join(', ')} (fewer than ${CHIRPS_FACTOR_MIN_DAYS} shared days, or under ${CHIRPS_FACTOR_MIN_MM} mm of CHIRPS on them), so ${short.length === 1 ? 'that month’s factor is' : 'those months’ factors are'} 1`
 			);
 		for (const x of months) {
 			const w = x.ownFactor === null ? null : factorWarning(`${who}: the factor for ${MONTH_NAMES[x.month - 1]}`, x.ownFactor, x.factor, `${Math.round(x.gaugeMm)} ÷ ${Math.round(x.chirpsMm)} mm`);

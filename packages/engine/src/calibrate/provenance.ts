@@ -15,7 +15,7 @@ import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, stationSeriesKey, 
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import { unitRainFingerprintChanged, unitRainFingerprintOfSummary, type UnitRainFingerprint } from '../runoff/unitRainFingerprint';
-import { catchmentStationFingerprint, catchmentStationFingerprintChanged, catchmentStationSettingChanged, type CatchmentStationFingerprint } from '../runoff/stationFingerprint';
+import { catchmentStationFingerprint, catchmentStationFingerprintChanged, catchmentStationSettingChanged, patchChainOfSetting, type CatchmentStationFingerprint } from '../runoff/stationFingerprint';
 import type { RunSummary } from '../project';
 import type { RunoffModelId } from '../runoff/types';
 import { sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } from '../seriesProvenance';
@@ -937,6 +937,7 @@ function unitStationsChanged(stations: unknown, then: UnitRainFingerprint): bool
 		const station = a && typeof a.stationId === 'string' && a.stationId ? a.stationId : null;
 		const was = u.rule === 'station' && u.rainKey?.startsWith(STATION_KEY_PREFIX) ? u.rainKey.slice(STATION_KEY_PREFIX.length) : null;
 		if (station !== was) return true;
+		if (station && u.stationPatch !== undefined && patchChainOfSetting(a?.patch, station).join('\n') !== u.stationPatch.join('\n')) return true;
 		if (station && u.stationCorrectAgainst !== undefined && (typeof a?.correctAgainst === 'string' && a.correctAgainst ? a.correctAgainst : station) !== u.stationCorrectAgainst) return true;
 	}
 	return false;

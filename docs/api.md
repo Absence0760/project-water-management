@@ -834,7 +834,12 @@ alongside teams, e.g. to give an outside client `viewer` access.
   (the rain as before) or `{ catchment?, units?, catchmentMapMm?,
   catchmentMapSource?, sites?, unreliable? }`, replaced whole by a `PATCH`
   (a unit left out is unassigned). `catchment` (or `null`) and each
-  `units[<land unit id>]` are `{ stationId, scaleToMap?, correctAgainst? }`,
+  `units[<land unit id>]` are `{ stationId, scaleToMap?, correctAgainst?,
+  patch? }`; `patch` (engine ≥ 1.105.0, issue #612) is the patching
+  priority, `null`/absent (the corrected CHIRPS alone) or a list of at most 8
+  `{ source: 'station', stationId }` / `{ source: 'chirps' }`, with CHIRPS at
+  most once, a station at most once and never the assignment's own station
+  (each a `400`), its stations checked as the others are,
   station ids being the series ids of the project's rainfall stations
   (`rain_catchment_mm` with no site). `catchmentMapMm` (1–12 000 mm) needs
   `catchmentMapSource` (1–600 characters; blank = none); `sites` is

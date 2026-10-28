@@ -1,6 +1,8 @@
 // settings.rainStations (issue #553, engine ≥ 1.91.0, docs/model.md §2.4i,
 // docs/api.md § Projects): which rainfall station forces the catchment and
-// each land unit, which station corrects each one's CHIRPS, the catchment's
+// each land unit, the patching priority of each one's gaps (other stations,
+// then CHIRPS, in order; engine ≥ 1.105.0, issue #612), which station's
+// adjusted rain corrects each one's CHIRPS, the catchment's
 // own MAP, where a station without coordinates reads its CHIRPS (the unit it
 // stands in), and each station's unreliable periods. A station is named by
 // its series id (a catchment rain series, `rain_catchment_mm` with no site,
@@ -19,7 +21,7 @@
 // station or unit doesn't block other saves: the run warns about it (engine).
 // Replaced whole on a patch (settings.ts REPLACED_WHOLE), so a unit left out
 // is unassigned.
-import { mapMmError, MAP_MM_MAX, MAP_MM_MIN, PE_SOURCE_MAX, isIsoDate, RAIN_RECORD_KINDS, type RainStationSettings } from '@water-management/engine';
+import { mapMmError, MAP_MM_MAX, MAP_MM_MIN, PE_SOURCE_MAX, isIsoDate, RAIN_PATCH_MAX, RAIN_RECORD_KINDS, type RainStationSettings } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -48,14 +50,35 @@ const byId = <T extends z.ZodTypeAny>(value: T, what: 'station' | 'record' | 'un
 		if (keys.length > max) ctx.addIssue({ code: 'custom', message: `at most ${max} ${noun}` });
 	});
 
-/** One area's station (engine RainStationAssignment). */
+/** One source of a patching priority (engine RainPatchSource, issue #612). */
+const PatchSource = z.discriminatedUnion('source', [z.object({ source: z.literal('station'), stationId }).strict(), z.object({ source: z.literal('chirps') }).strict()]);
+
+/**
+ * One area's station (engine RainStationAssignment). Its patching priority
+ * (issue #612): at most RAIN_PATCH_MAX sources, CHIRPS at most once, each
+ * station at most once and never the area's own station. Absent or null is
+ * the default (the corrected CHIRPS alone, as before), so a setting stored
+ * before it runs unchanged; [] patches nothing.
+ */
 const Assignment = z
 	.object({
 		stationId,
 		scaleToMap: z.boolean().optional(),
-		correctAgainst: stationId.nullable().optional()
+		correctAgainst: stationId.nullable().optional(),
+		patch: z.array(PatchSource).max(RAIN_PATCH_MAX, `rainfall stations: at most ${RAIN_PATCH_MAX} sources to patch a station’s gaps from`).nullable().optional()
 	})
-	.strict();
+	.strict()
+	.superRefine((a, ctx) => {
+		const seen = new Set<string>();
+		for (const [i, p] of (a.patch ?? []).entries()) {
+			const key = p.source === 'chirps' ? 'chirps' : p.stationId;
+			if (p.source === 'station' && p.stationId === a.stationId)
+				ctx.addIssue({ code: 'custom', path: ['patch', i], message: 'rainfall stations: an area’s own station can’t also patch its gaps' });
+			else if (seen.has(key))
+				ctx.addIssue({ code: 'custom', path: ['patch', i], message: p.source === 'chirps' ? 'rainfall stations: CHIRPS is listed twice in a patching priority' : 'rainfall stations: a station is listed twice in a patching priority' });
+			seen.add(key);
+		}
+	});
 
 /**
  * The setting as a save sends it, or null to switch stations off (the rain
@@ -112,11 +135,13 @@ function namesOf(rs: RainStationSettings): { stations: Map<string, string>; reco
 	if (rs.catchment) {
 		station(rs.catchment.stationId, 'the catchment’s station');
 		station(rs.catchment.correctAgainst, 'the station correcting the catchment’s CHIRPS');
+		for (const p of rs.catchment.patch ?? []) if (p.source === 'station') station(p.stationId, 'a station patching the catchment’s gaps');
 	}
 	for (const [unit, a] of Object.entries(rs.units ?? {})) {
 		if (!units.has(unit)) units.set(unit, 'a unit given a station');
 		station(a.stationId, 'a unit’s station');
 		station(a.correctAgainst, 'the station correcting a unit’s CHIRPS');
+		for (const p of a.patch ?? []) if (p.source === 'station') station(p.stationId, 'a station patching a unit’s gaps');
 	}
 	for (const [id, site] of Object.entries(rs.sites ?? {})) {
 		station(id, 'a station’s site');
@@ -184,8 +209,11 @@ export function remapRainStations(raw: unknown, nodeIds: ReadonlyMap<string, str
 	if (!isObj(raw)) return raw;
 	const n = (id: string) => nodeIds.get(id) ?? id;
 	const s = (id: unknown) => (typeof id === 'string' ? (stationIds?.get(id) ?? id) : id);
+	const patch = (list: unknown) => (Array.isArray(list) ? list.map((p) => (isObj(p) && p.source === 'station' ? { ...p, stationId: s(p.stationId) } : p)) : list);
 	const assignment = (a: unknown) =>
-		isObj(a) ? { ...a, stationId: s(a.stationId), ...(typeof a.correctAgainst === 'string' ? { correctAgainst: s(a.correctAgainst) } : {}) } : a;
+		isObj(a)
+			? { ...a, stationId: s(a.stationId), ...(typeof a.correctAgainst === 'string' ? { correctAgainst: s(a.correctAgainst) } : {}), ...(Array.isArray(a.patch) ? { patch: patch(a.patch) } : {}) }
+			: a;
 	const byStation = (rec: unknown, value: (v: unknown) => unknown = (v) => v) =>
 		isObj(rec) ? Object.fromEntries(Object.entries(rec).map(([k, v]) => [s(k) as string, value(v)])) : rec;
 	const out: Record<string, unknown> = { ...raw };
@@ -193,6 +221,15 @@ export function remapRainStations(raw: unknown, nodeIds: ReadonlyMap<string, str
 	if (isObj(raw.units)) out.units = Object.fromEntries(Object.entries(raw.units).map(([k, v]) => [n(k), assignment(v)]));
 	if (raw.sites !== undefined) out.sites = byStation(raw.sites, (v) => (isObj(v) && typeof v.unitId === 'string' ? { ...v, unitId: n(v.unitId) } : v));
 	if (raw.unreliable !== undefined) out.unreliable = byStation(raw.unreliable);
-	if (raw.pinnedFactors !== undefined) out.pinnedFactors = byStation(raw.pinnedFactors);
+	// Keyed by the engine's stationPairingKey (`<station>|<unit, or empty for the catchment>`, engine ≥ 1.105.0).
+	if (raw.pinnedFactors !== undefined)
+		out.pinnedFactors = isObj(raw.pinnedFactors)
+			? Object.fromEntries(
+					Object.entries(raw.pinnedFactors).map(([k, v]) => {
+						const [st, area] = k.split('|');
+						return [area === undefined ? (s(st) as string) : `${s(st) as string}|${area ? n(area) : ''}`, v];
+					})
+				)
+			: raw.pinnedFactors;
 	return out;
 }

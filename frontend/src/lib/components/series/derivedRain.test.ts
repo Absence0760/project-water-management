@@ -158,6 +158,20 @@ describe('areaRainLines: the edges', () => {
 		expect(a.rainUsed).toEqual(col(runModel(x), 'rain_unit', 'A'));
 	});
 
+	it('a patch station’s days (issue #612) name it and its place: the run’s rain to the bit', () => {
+		const x = input({ units: { A: { stationId: 'S', patch: [{ source: 'station', stationId: 'T' }, { source: 'chirps' }] } }, sites: SITES });
+		// T covers S's gaps here: give it a record from the start.
+		x.series = { ...x.series, [stationSeriesKey('T')]: { startDate: START, values: rainOf(1.2, 5) } };
+		const a = areaRainLines(x, 'A')!;
+		expect(a.rainUsed).toEqual(col(runModel(x), 'rain_unit', 'A'));
+		expect(sourceCounts(a.source).patch).toBe(GAP.length);
+		for (const t of GAP) {
+			expect(a.source[t]).toBe('patch');
+			expect(a.patchFrom[t]).toBe('patch 1: Station T');
+		}
+		expect(a.patchFrom.filter((v) => v !== null)).toHaveLength(GAP.length);
+	});
+
 	it('several areas read from one preparation give the same lines as each read alone', () => {
 		const x = input({ catchment: { stationId: 'S' }, units: { A: { stationId: 'S' }, B: { stationId: 'S' } }, sites: SITES });
 		const prep = prepareFor(x);
@@ -178,6 +192,8 @@ describe('the source strip and summary', () => {
 		expect(sourceLanes('2021-01-01', ['station', 'station'])).toEqual([]);
 		expect(sourceSummary(['station', 'station', 'chirps', 'none'])).toBe('2 days from the station, 1 from corrected CHIRPS, 1 with no rain from any source.');
 		expect(sourceSummary(['station', 'fallback', 'fallback'])).toBe('1 day from the station, 2 from the next fallback.');
+		expect(sourceLanes('2021-01-01', ['station', 'patch']).map((l) => [l.label, l.text])).toEqual([['Patch station', '1 day from a patch station × its MAP ratio (the station has no reading, or it was set aside)']]);
+		expect(sourceSummary(['station', 'patch', 'patch', 'chirps'])).toBe('1 day from the station, 2 from a patch station, 1 from corrected CHIRPS.');
 		const none = sourceLanes('2021-01-01', ['none', 'none']);
 		expect(none.map((l) => [l.label, l.text])).toEqual([['No rain', '2 days from no rain from any source (read as dry)']]);
 	});

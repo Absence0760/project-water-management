@@ -165,16 +165,30 @@ describe('summary sheet', () => {
 		expect(at).toBeGreaterThan(0);
 		expect(lines.slice(at + 1, at + 6)).toEqual([
 			"Catchment MAP (mm),800,the units' area-weighted mean",
-			'Area,Station,Area MAP (mm),Area MAP source,Station MAP (mm),Station MAP source,Scaled to MAP,Own ratio,Ratio applied,Clamped,CHIRPS corrected against,Days: station,Days: corrected CHIRPS,Days: fallback,Days: none,Set aside: checks,Set aside: unreliable',
-			'Synthetic catchment (catchment),Hill station,800,,745,station record,yes,1.074,1.074,no,Hill station,3000,150,0,2,14,30',
-			'Upper unit,Hill station,860,invented isohyet,745,station record,yes,1.154,1.154,no,Hill station,3000,150,0,2,14,30',
-			'Lower unit,Short station,860,invented isohyet,745,station record,yes,5,4,yes,none (the next fallback),2000,0,80,0,0,0'
+			'Area,Station,Area MAP (mm),Area MAP source,Station MAP (mm),Station MAP source,Scaled to MAP,Own ratio,Ratio applied,Clamped,CHIRPS corrected against,Days: station,Days: corrected CHIRPS,Days: fallback,Days: none,Set aside: checks,Set aside: unreliable,Days: patch stations,Gaps patched from',
+			'Synthetic catchment (catchment),Hill station,800,,745,station record,yes,1.074,1.074,no,Hill station,3000,150,0,2,14,30,,',
+			'Upper unit,Hill station,860,invented isohyet,745,station record,yes,1.154,1.154,no,Hill station,3000,150,0,2,14,30,,',
+			'Lower unit,Short station,860,invented isohyet,745,station record,yes,5,4,yes,none (the next fallback),2000,0,80,0,0,0,,'
 		]);
 		expect(lines[at + 6]).toMatch(/^Station CHIRPS pairings/);
 		expect(lines[at + 7]).toBe('Station,CHIRPS at,Refused,Fit from,Fit to,Complete years (accumulations counted),Shared days,Pinned,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec');
 		expect(lines[at + 8]).toBe("Hill station,the station's own CHIRPS cell,,1995-01-01,2020-12-31,26,9400,no,1,1.01,1.02,1.03,1.04,1.05,1.06,1.07,1.08,1.09,1.1,1.11");
 		expect(lines[at + 9]).toBe('Short station,the CHIRPS of Lower unit,only 3 complete years in common (5 needed),,,3,1000,no,,,,,,,,,,,,');
 		expect(lines[at + 10]).toBe('');
+		// A run with a patching priority (engine ≥ 1.105.0, issue #612): its patch days and its chain; a per-area pairing names its area's CHIRPS.
+		const p = structuredClone(s);
+		p.stations!.units[0] = {
+			...p.stations!.units[0]!,
+			days: { ...p.stations!.units[0]!.days, patch: 40 },
+			patches: [
+				{ source: 'station', stationId: 's2', stationName: 'Short station', stationMapMm: 700, ownRatio: 1.2, ratio: 1.2, clamped: false, skipped: null, gapDays: 150, fills: 40, days: 40 },
+				{ source: 'chirps', days: 110 }
+			]
+		};
+		p.stations!.pairings[0] = { ...p.stations!.pairings[0]!, chirpsAt: { catchment: true }, areaId: null };
+		const q = [...summaryCsvLines(meta, p)];
+		expect(q[at + 4]).toBe('Upper unit,Hill station,860,invented isohyet,745,station record,yes,1.154,1.154,no,Hill station,3000,150,0,2,14,30,40,Short station x 1.2 (40 days); then CHIRPS (110 days)');
+		expect(q[at + 8]).toMatch(/^Hill station,the catchment's CHIRPS,/);
 	});
 
 	it('writes the per-unit rain block (engine ≥ 1.78.0) only when the run had it', () => {

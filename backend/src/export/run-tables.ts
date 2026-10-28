@@ -1126,9 +1126,18 @@ export function* stationLines(st: RainStationSummary): Generator<string> {
 		'Days: fallback',
 		'Days: none',
 		'Set aside: checks',
-		'Set aside: unreliable'
+		'Set aside: unreliable',
+		// The patching priority (engine ≥ 1.105.0, issue #612): blank on a run from before.
+		'Days: patch stations',
+		'Gaps patched from'
 	]);
 	const name = new Map(st.pairings.map((p) => [p.stationId, p.stationName]));
+	const patched = (a: StationAreaForcing) =>
+		a.patches === undefined
+			? ''
+			: a.patches.length
+				? a.patches.map((p) => (p.source === 'chirps' ? `CHIRPS (${p.days} days)` : p.skipped ? `${p.stationName} (skipped: ${p.skipped})` : `${p.stationName} x ${p.ratio} (${p.days} days)`)).join('; then ')
+				: 'nothing';
 	const row = (a: StationAreaForcing) =>
 		csvRow([
 			a.nodeId === null ? `${a.name} (catchment)` : a.name,
@@ -1147,16 +1156,19 @@ export function* stationLines(st: RainStationSummary): Generator<string> {
 			a.days.fallback,
 			a.days.none,
 			a.setAside.checks,
-			a.setAside.unreliable
+			a.setAside.unreliable,
+			a.days.patch ?? '',
+			patched(a)
 		]);
 	if (st.catchment) yield row(st.catchment);
 	for (const a of st.units) yield row(a);
 	if (!st.pairings.length) return;
-	yield csvRow(['Station CHIRPS pairings (monthly factors: the station ÷ the CHIRPS at it on their shared days)']);
+	yield csvRow(["Station CHIRPS pairings (monthly factors: the station's rain at the area's MAP ÷ the area's CHIRPS on their shared days; before engine 1.105.0 the station ÷ the CHIRPS at it)"]);
 	yield csvRow(['Station', 'CHIRPS at', 'Refused', 'Fit from', 'Fit to', 'Complete years (accumulations counted)', 'Shared days', 'Pinned', ...MONTHS]);
 	for (const p of st.pairings) {
 		const factors = p.refused === null ? MONTHS.map((_, i) => p.months.find((m) => m.month === i + 1)?.factor ?? null) : MONTHS.map(() => null);
-		yield csvRow([p.stationName, 'unitId' in p.chirpsAt ? `the CHIRPS of ${p.chirpsAt.unitName || p.chirpsAt.unitId}` : "the station's own CHIRPS cell", p.refused ?? '', p.fitFrom ?? '', p.fitTo ?? '', p.commonYears, p.days, p.pinned ? 'yes' : 'no', ...factors]);
+		const at = 'catchment' in p.chirpsAt ? "the catchment's CHIRPS" : 'unitId' in p.chirpsAt ? `the CHIRPS of ${p.chirpsAt.unitName || p.chirpsAt.unitId}` : "the station's own CHIRPS cell";
+		yield csvRow([p.stationName, at, p.refused ?? '', p.fitFrom ?? '', p.fitTo ?? '', p.commonYears, p.days, p.pinned ? 'yes' : 'no', ...factors]);
 	}
 }
 

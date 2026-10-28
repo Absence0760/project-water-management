@@ -3,6 +3,7 @@
 // Settings forms load doesn't pull in the runoff model (issue #9).
 import { DEFAULT_UNIT_MAP_PERIOD, MAP_MM_MAX, MAP_MM_MIN, stationSeriesKey, unitRainSeriesKey, type RainStationSummary, type UnitRainRule, type UnitRainSettings, type UnitRainSummary, type UnitChirpsLevel, type UnitRainUnit } from '../project';
 import type { UnitRainRecipe } from './unitRain';
+import { patchChainOfForcing } from './stationFingerprint';
 
 /** A unit's CHIRPS level as the fingerprint records it. */
 const chirpsLevel = (c: UnitChirpsLevel | null): { chirpsSource: UnitChirpsLevel['source'] | null; chirpsFactor: number | null; chirpsFactors?: number[] } =>
@@ -52,6 +53,10 @@ export interface UnitRainFingerprint {
 		/** Rule 'station' (engine ≥ 1.91.0, §2.4i): the station correcting its CHIRPS and that pairing's 12 factors (null: refused); compared only when both sides have it. */
 		stationCorrectAgainst?: string;
 		stationFactors?: number[] | null;
+		/** Rule 'station': its pairing was fitted against the station's MAP-adjusted rain over the unit's own CHIRPS (engine ≥ 1.105.0, issue #612); absent before, so such a fit reads "Forcing changed since fit". */
+		stationFit?: 'adjusted';
+		/** Rule 'station': its patching priority (stationFingerprint.ts patchChainOfSetting's form, engine ≥ 1.105.0); compared only when both sides have it. */
+		stationPatch?: string[];
 	}[];
 }
 
@@ -92,7 +97,14 @@ export function unitRainFingerprint(u: UnitRainSettings | null | undefined, reci
 			gaugeMapFactor: r.gaugeMapFactor,
 			...chirpsLevel(r.chirps),
 			...gaugeChecked(r.rule),
-			...(r.station ? { stationCorrectAgainst: r.station.correctAgainst, stationFactors: r.station.factors ? [...r.station.factors] : null } : {})
+			...(r.station
+				? {
+						stationCorrectAgainst: r.station.correctAgainst,
+						stationFactors: r.station.factors ? [...r.station.factors] : null,
+						stationFit: 'adjusted' as const,
+						stationPatch: (r.station.patch ?? [{ source: 'chirps' as const }]).map((p) => (p.source === 'chirps' ? 'chirps' : `station:${p.stationId}`))
+					}
+				: {})
 		}))
 	};
 }
@@ -123,12 +135,20 @@ export function unitRainFingerprintOfSummary(s: UnitRainSummary | null | undefin
 }
 
 /** A station unit's pairing as summary.stations recorded it (the fingerprint's stationCorrectAgainst / stationFactors); {} when it has none. */
-function stationOfSummary(nodeId: string, stations: RainStationSummary | null | undefined): { stationCorrectAgainst?: string; stationFactors?: number[] | null } {
+function stationOfSummary(
+	nodeId: string,
+	stations: RainStationSummary | null | undefined
+): { stationCorrectAgainst?: string; stationFactors?: number[] | null; stationFit?: 'adjusted'; stationPatch?: string[] } {
 	const u = stations?.units.find((x) => x.nodeId === nodeId);
 	if (!u || !stations) return {};
 	const against = u.correctedBy;
-	const p = against ? stations.pairings.find((x) => x.stationId === against) : null;
-	return against && p && p.refused === null ? { stationCorrectAgainst: against, stationFactors: p.months.map((m) => m.factor) } : {};
+	// The unit's own pairing (engine ≥ 1.105.0); a summary from before has one per station (no areaId).
+	const p = against ? (stations.pairings.find((x) => x.stationId === against && x.areaId === nodeId) ?? stations.pairings.find((x) => x.stationId === against && x.areaId === undefined)) : null;
+	const patch = patchChainOfForcing(u);
+	return {
+		...(against && p && p.refused === null ? { stationCorrectAgainst: against, stationFactors: p.months.map((m) => m.factor) } : {}),
+		...(patch ? { stationFit: 'adjusted' as const, stationPatch: patch } : {})
+	};
 }
 
 /** Relative tolerance two fingerprints' factors may differ by and still count as the same forcing (the CHIRPS factor drift's). */
@@ -155,7 +175,9 @@ export function unitRainFingerprintChanged(a: UnitRainFingerprint | null | undef
 			x.stationFactors !== undefined &&
 			y.stationFactors !== undefined &&
 			(x.stationCorrectAgainst !== y.stationCorrectAgainst || !x.stationFactors !== !y.stationFactors || (!!x.stationFactors && months(x.stationFactors, y.stationFactors ?? undefined)));
-		return x.nodeId !== y.nodeId || x.rule !== y.rule || x.rainKey !== y.rainKey || x.factorSource !== y.factorSource || !near(x.factor, y.factor) || !near(x.gaugeMapFactor, y.gaugeMapFactor) || chirps || checks || pairing;
+		// The pairing rule's marker on one side only (a fit from before engine 1.105.0, issue #612), or another patching priority.
+		const fitRule = x.stationFit !== y.stationFit || (!!x.stationPatch && !!y.stationPatch && (x.stationPatch.length !== y.stationPatch.length || x.stationPatch.some((k, j) => k !== y.stationPatch![j])));
+		return x.nodeId !== y.nodeId || x.rule !== y.rule || x.rainKey !== y.rainKey || x.factorSource !== y.factorSource || !near(x.factor, y.factor) || !near(x.gaugeMapFactor, y.gaugeMapFactor) || chirps || checks || pairing || fitRule;
 	});
 }
 
@@ -185,6 +207,9 @@ export function unitRainFingerprintError(raw: unknown): string | null {
 		if (x.stationCorrectAgainst !== undefined && !(typeof x.stationCorrectAgainst === 'string' && x.stationCorrectAgainst.length <= 200)) return 'a unit has a bad correcting station';
 		if (x.stationFactors !== undefined && !(x.stationFactors === null || (Array.isArray(x.stationFactors) && x.stationFactors.length === 12 && x.stationFactors.every((k) => typeof k === 'number' && Number.isFinite(k)))))
 			return 'a unit has bad station pairing factors';
+		if (x.stationFit !== undefined && x.stationFit !== 'adjusted') return 'a unit has a bad pairing rule marker';
+		if (x.stationPatch !== undefined && !(Array.isArray(x.stationPatch) && x.stationPatch.length <= 8 && x.stationPatch.every((k) => typeof k === 'string' && k.length > 0 && k.length <= 210)))
+			return 'a unit has a bad patching priority';
 	}
 	return null;
 }

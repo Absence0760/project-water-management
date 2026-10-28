@@ -26,6 +26,7 @@ import { defaultFlowGapFill, gapFillRecordLabel, GAP_FILL_KINDS, type FlowGapFil
 import { qualityFlagChanges, resolveQualityFlags, type QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import { calibrationRulesChanges, resolveCalibrationRules } from './calibrate/rulesSettings';
 import { chirpsQuantileMapText, fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
+import { patchChainOfSetting } from './runoff/stationFingerprint';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import { declaredRuleText } from './uncertainty/options';
 import {
@@ -754,6 +755,9 @@ function stationAssignmentText(raw: unknown, stationName: StationName): string {
 	const parts = [stationName(a.stationId)];
 	if (a.scaleToMap === false) parts.push('not scaled to MAP');
 	if (typeof a.correctAgainst === 'string' && a.correctAgainst !== a.stationId) parts.push(`gaps corrected against ${stationName(a.correctAgainst)}`);
+	// The patching priority (engine ≥ 1.105.0, issue #612), when it isn't the default [CHIRPS].
+	const chain = patchChainOfSetting((a as { patch?: unknown }).patch, a.stationId);
+	if (chain.join() !== 'chirps') parts.push(`gaps patched from ${chain.length ? chain.map((k) => (k === 'chirps' ? 'CHIRPS' : stationName(k.slice('station:'.length)))).join(' then ') : 'nothing'}`);
 	return parts.join(', ');
 }
 

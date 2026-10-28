@@ -517,6 +517,7 @@ export function columnsForView(view: PreviewViewId, columns: readonly PreviewCol
 /** The source of a day's rain used, in words (the CSV writes the engine's codes: station, chirps, fallback, none). */
 export const RAIN_FROM_LABEL: Record<StationRainDaySource, string> = {
 	station: 'station',
+	patch: 'patch station',
 	chirps: 'corrected CHIRPS',
 	fallback: 'next fallback',
 	none: 'no source (dry)'
@@ -526,7 +527,8 @@ export const RAIN_FROM_LABEL: Record<StationRainDaySource, string> = {
 export function areaCell(lines: AreaRainLines, line: AreaLine, date: string): number | string | null {
 	const i = toEpochDay(date) - toEpochDay(lines.startDate);
 	if (i < 0 || i >= lines.rainUsed.length) return null;
-	if (line === 'source') return RAIN_FROM_LABEL[lines.source[i]!];
+	// A patch day names its station and its place in the priority (issue #612), "patch 1: Ridge".
+	if (line === 'source') return (lines.source[i] === 'patch' ? lines.patchFrom?.[i] : null) ?? RAIN_FROM_LABEL[lines.source[i]!];
 	const v =
 		line === 'rainUsed'
 			? lines.rainUsed[i]

@@ -115,6 +115,10 @@ describe('rainfall stations in a run’s input', () => {
 		await refused({ catchmentMapMm: 700 }, /the catchment’s a MAP needs its source/);
 		await refused({ catchmentMapMm: 50_000, catchmentMapSource: 'x' }, /./);
 		await refused({ pinnedFactors: { [ridge]: Array(12).fill(1) } }, /pinned factors are the engine’s own/);
+		// A patching priority's stations (issue #612) are checked as the others are, and its shape.
+		await refused({ units: { [units[0]!]: { stationId: ridge, patch: [{ source: 'station', stationId: flow }, { source: 'chirps' }] } } }, /a station patching a unit’s gaps is not a rainfall station of this project/);
+		await refused({ catchment: { stationId: ridge, patch: [{ source: 'station', stationId: crypto.randomUUID() }] } }, /a station patching the catchment’s gaps is not a rainfall station/);
+		await refused({ units: { [units[0]!]: { stationId: ridge, patch: [{ source: 'station', stationId: ridge }] } } }, /an area’s own station can’t also patch its gaps/);
 		// Another project's station: refused here, though it is a station (RLS keeps it out of sight anyway).
 		const other = await importProjectData(small, stranger.email);
 		const theirs = ((await call(stranger, 'GET', `/projects/${other}/series`)).series as { id: string; kind: string }[]).find((s) => s.kind === 'rain_catchment_mm')!.id;
@@ -123,7 +127,12 @@ describe('rainfall stations in a run’s input', () => {
 	});
 
 	it('a stranger can’t save it (404) and a viewer can’t (403); an editor can (the positive control)', async () => {
-		const rs = { catchment: { stationId: ridge }, units: { [units[0]!]: { stationId: vlei }, [units[1]!]: { stationId: ridge, correctAgainst: vlei } }, sites: { [vlei]: { unitId: units[0]! } }, unreliable: { [ridge]: [['2012-01-01', '2012-01-10']] } };
+		const rs = {
+			catchment: { stationId: ridge },
+			units: { [units[0]!]: { stationId: vlei, patch: [{ source: 'station', stationId: ridge }, { source: 'chirps' }] }, [units[1]!]: { stationId: ridge, correctAgainst: vlei } },
+			sites: { [vlei]: { unitId: units[0]! } },
+			unreliable: { [ridge]: [['2012-01-01', '2012-01-10']] }
+		};
 		expect((await save(stranger, rs)).status).toBe(404);
 		expect((await save(viewer, rs)).status).toBe(403);
 		const ok = await save(editor, rs);
@@ -241,7 +250,7 @@ describe('rainfall stations in a run’s input', () => {
 		expect((await owner.call('POST', '/projects/import', bad)).status).toBe(400);
 	});
 
-	it('a run forces the catchment from its station × catchment MAP ÷ station MAP, and pairs it on its own cached cell (engine ≥ 1.91.0)', async () => {
+	it('a run forces the catchment from its station × catchment MAP ÷ station MAP, and pairs it with the catchment’s CHIRPS (engine ≥ 1.105.0, issue #612)', async () => {
 		const rs = { catchment: { stationId: ridge }, catchmentMapMm: 410, catchmentMapSource: 'an invented catchment MAP' };
 		expect((await save(owner, rs)).status).toBe(200);
 		const r = (await call(owner, 'POST', `/projects/${pid}/runs`, { label: 'station forcing' }, 201)).run;
@@ -249,9 +258,10 @@ describe('rainfall stations in a run’s input', () => {
 		expect(st.catchment).toMatchObject({ stationId: ridge, stationMapMm: 820, areaMapMm: 410 });
 		expect(st.catchment.ratio).toBeCloseTo(0.5, 12);
 		expect(st.catchment.days.station).toBeGreaterThan(0);
-		// The ridge's pairing reads its own cell, which this file cached for one year only: too short, so refused, saying so.
+		// The catchment's pairing with the ridge reads the catchment's own CHIRPS (since engine 1.105.0, not the ridge's cell,
+		// which only its checks read): too short in common, so refused, saying so.
 		const pairing = st.pairings.find((p) => p.stationId === ridge)!;
-		expect(pairing.chirpsAt).toEqual({ cell: true });
+		expect(pairing).toMatchObject({ chirpsAt: { catchment: true }, areaId: null });
 		expect(pairing.refused).toEqual(expect.any(String));
 		// The positive control: without the setting, no station summary.
 		expect((await save(owner, null)).status).toBe(200);

@@ -7280,13 +7280,28 @@ two.
     (operator, 2026-10-23). **Scale to unit MAP**, a checkbox (on by default,
     stored as none; off stores `scaleToMap: false`) with the ratio beside it
     (*× 1.5*, *× 4 (clamped from 6)*, *× 1: the unit has no MAP*, *× 1, as
-    recorded*); **Gaps: CHIRPS corrected against**, the station whose pairing
-    factors correct the unit's CHIRPS on the station's gaps (*Its station*
-    by default, stored as none). A unit whose station was deleted says so in
-    red and keeps its id until another is picked. Editors tick rows (or every
-    row) and give the ticked units one station with **Assign to the ticked
-    units**. Under the table, each station in use once (however many units
-    share it): its MAP and source, the units it runs, a link to edit it in
+    recorded*); **Then patch gaps from** (issue #612,
+    `settings.rainStations.units[id].patch`), the unit's patching priority:
+    an ordered list (`ol`) of pull-downs, each another station or *CHIRPS,
+    corrected*, with **Up**, **Down** and **Remove** buttons and **Add a
+    source** (the next free station that can help, then CHIRPS; at most 8);
+    *CHIRPS, corrected* alone by default (stored as none), an empty list
+    says the gaps go to the next fallback. Each station entry says what it
+    fills ("fills 40 of the main station's 52 gap days (77 %); record … to
+    …") or why it can't help (no reading on any of the gaps, no MAP while
+    scaling is on), in red; a station that can't help is disabled in the
+    pull-down with its reason. The counts are the engine's
+    `stationPatchChoices` over the model input (`settings/patchChoices.ts`,
+    loaded when a unit has a station, fetched once per visit); without rain
+    to run on, a note says they show later. **Gaps: CHIRPS corrected
+    against**, the station whose rain, at the unit's MAP, the unit's CHIRPS
+    is corrected against (*Its station* by default, stored as none). A unit
+    whose station was deleted says so in red and keeps its id until another
+    is picked. Editors tick rows (or every row) and give the ticked units one
+    station with **Assign to the ticked units**, and, once a station is
+    picked there, one patching priority too. Under the table, each station
+    in use once (main, correcting or patching, however many units share
+    it): its MAP and source, the units it runs and patches, a link to edit it in
     Series details, and either where its CHIRPS is read (its coordinates) or
     a **Stands in** select of the land units (`settings.rainStations.sites`;
     without either its pairing is refused). Under 40rem of width each row

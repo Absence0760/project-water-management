@@ -15,6 +15,14 @@ import {
 	methodLabel,
 	landUnits,
 	namesLine,
+	patchAdd,
+	patchFromValues,
+	patchMove,
+	patchOf,
+	patchRemove,
+	patchSet,
+	patchUsabilityText,
+	patchValues,
 	stationOptions,
 	stationsInUse,
 	tidyStations,
@@ -22,6 +30,7 @@ import {
 	unitStationRows,
 	withStationSite,
 	withUnitCorrectAgainst,
+	withUnitPatch,
 	withUnitScale,
 	withUnitStation,
 	withUnitsStation,
@@ -115,6 +124,12 @@ describe('the Per unit table', () => {
 			['s', ['Unit a', 'Unit b', 'Unit c'], ['Unit a', 'Unit c']],
 			['t', [], ['Unit b']]
 		]);
+		// A station only patching a unit's gaps is in use too (issue #612).
+		const patched = stationsInUse(unitStationRows(nodes, { units: { a: { stationId: 's', patch: [{ source: 'station', stationId: 'u' }, { source: 'chirps' }] } } }, [S, T, U]), [S, T, U]);
+		expect(patched.map((u) => [u.station.id, u.patches])).toEqual([
+			['s', []],
+			['u', ['Unit a']]
+		]);
 		expect(namesLine(['A'])).toBe('A');
 		expect(namesLine(['A', 'B', 'C'])).toBe('A, B and C');
 		expect(namesLine(['A', 'B', 'C', 'D', 'E', 'F'])).toBe('A, B, C, D and 2 more');
@@ -171,6 +186,53 @@ describe('writing settings.rainStations', () => {
 		expect(rs).toEqual({ units: { a: { stationId: 's' } }, sites: { s: { unitId: 'b' } } });
 		expect(withStationSite(rs, 's', null)).toEqual({ units: { a: { stationId: 's' } } });
 		expect(withStationSite(null, 's', '')).toBeNull();
+	});
+
+	it('sets a unit’s patching priority (issue #612): the default [CHIRPS] stored as none, its own station never in it', () => {
+		const base: RainStationSettings = { units: { a: { stationId: 's', scaleToMap: false } } };
+		const chain = patchFromValues(['t', 'chirps']);
+		const rs = withUnitPatch(base, 'a', chain);
+		expect(rs).toEqual({ units: { a: { stationId: 's', scaleToMap: false, patch: [{ source: 'station', stationId: 't' }, { source: 'chirps' }] } } });
+		expect(unitStationRows(nodes, rs, [S, T, U])[0]!.patch).toEqual(['t', 'chirps']);
+		expect(withUnitPatch(rs, 'a', [{ source: 'chirps' }])).toEqual(base);
+		expect(withUnitPatch(base, 'a', [])).toEqual({ units: { a: { stationId: 's', scaleToMap: false, patch: [] } } });
+		expect(withUnitPatch(base, 'a', patchFromValues(['s', 't']))!.units!.a!.patch).toEqual([{ source: 'station', stationId: 't' }]);
+		expect(withUnitPatch(base, 'nobody', chain)).toBe(base);
+		// A unit's new main station leaves its patching priority; the others stay.
+		expect(withUnitStation(rs, 'a', 't')!.units!.a).toEqual({ stationId: 't', scaleToMap: false });
+		expect(withUnitStation(rs, 'a', 'u')!.units!.a).toEqual({ stationId: 'u', scaleToMap: false, patch: [{ source: 'station', stationId: 't' }, { source: 'chirps' }] });
+	});
+
+	it('the bulk action gives every ticked unit the same chain, without its own station', () => {
+		const rs = withUnitsStation(null, ['a', 'b'], 's', patchFromValues(['t', 's', 'chirps']));
+		expect(rs).toEqual({ units: { a: { stationId: 's', patch: [{ source: 'station', stationId: 't' }, { source: 'chirps' }] }, b: { stationId: 's', patch: [{ source: 'station', stationId: 't' }, { source: 'chirps' }] } } });
+		expect(withUnitsStation(rs, ['a'], 's', [{ source: 'chirps' }])!.units!.a).toEqual({ stationId: 's' });
+	});
+
+	it('edits the list: set (no source twice), move, remove, add the next free station, then CHIRPS', () => {
+		expect(patchOf(undefined)).toEqual([{ source: 'chirps' }]);
+		expect(patchValues(patchOf({ patch: [{ source: 'station', stationId: 't' }] }))).toEqual(['t']);
+		expect(patchSet(['t', 'chirps'], 0, 'u')).toEqual(['u', 'chirps']);
+		expect(patchSet(['t', 'chirps', 'u'], 0, 'u')).toEqual(['u', 'chirps']);
+		expect(patchMove(['t', 'chirps', 'u'], 2, -1)).toEqual(['t', 'u', 'chirps']);
+		expect(patchMove(['t', 'chirps'], 0, -1)).toEqual(['t', 'chirps']);
+		expect(patchMove(['t', 'chirps'], 1, 1)).toEqual(['t', 'chirps']);
+		expect(patchRemove(['t', 'chirps'], 0)).toEqual(['chirps']);
+		expect(patchAdd(['chirps'], [S, T, U], 's')).toEqual(['chirps', 't']);
+		expect(patchAdd(['chirps'], [S, T, U], 's', (id) => id === 'u')).toEqual(['chirps', 'u']);
+		expect(patchAdd(['t', 'u'], [S, T, U], 's')).toEqual(['t', 'u', 'chirps']);
+		expect(patchAdd(['t', 'u', 'chirps'], [S, T, U], 's')).toBeNull();
+		expect(patchAdd(Array.from({ length: 8 }, (_, i) => `x${i}`), [S, T, U], 's')).toBeNull();
+	});
+
+	it('says what a patch station fills, or why it can’t help, always with the counts', () => {
+		expect(patchUsabilityText({ usable: true, reason: null, gapDays: 52, fills: 40, from: '1990-01-01', to: '2004-12-31' })).toBe('fills 40 of the main station’s 52 gap days (77 %); record 1990-01-01 to 2004-12-31');
+		expect(patchUsabilityText({ usable: false, reason: 'it has no reading on any of the main station’s 52 gap days in the run window', gapDays: 52, fills: 0, from: '2010-01-01', to: '2011-12-31' })).toBe(
+			'can’t help: it has no reading on any of the main station’s 52 gap days in the run window; record 2010-01-01 to 2011-12-31'
+		);
+		expect(patchUsabilityText({ usable: false, reason: 'it has no MAP to scale its rain to the unit’s MAP', gapDays: 52, fills: 30, from: null, to: null })).toBe(
+			'can’t help: it has no MAP to scale its rain to the unit’s MAP; fills 30 of the main station’s 52 gap days (58 %)'
+		);
 	});
 
 	it('tidies an emptied setting to null, keeping any part still set', () => {

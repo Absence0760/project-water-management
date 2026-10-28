@@ -26,6 +26,7 @@ const lines = (startDate: string): AreaRainLines =>
 		startDate,
 		rainUsed: [1.5, 2, 0],
 		source: ['station', 'chirps', 'none'],
+		patchFrom: [null, null, null],
 		stationRaw: [1, null, 0],
 		stationScaled: [1.5, null, 0],
 		chirpsRaw: [0.4, 1, 0],
@@ -59,6 +60,9 @@ describe('groupedCsv', () => {
 		);
 		expect(r[5]).toBe('2021-01-02,,,,1.5,0.8,1.5,station,,');
 		expect(r[6]).toBe('2021-01-03,0.5,1.5,2.5,,2,2,chirps,3.5,4.5');
+		// A patch day names its station (issue #612).
+		const patched: ExportArea = { ...AREAS[0]!, lines: { ...lines('2021-01-02'), source: ['station', 'patch', 'none'], patchFrom: [null, 'patch 1: Ridge', null] } };
+		expect(rows(groupedCsv('full', groups, VALUES, [patched], META))[6]).toBe('2021-01-03,0.5,1.5,2.5,,2,2,patch 1: Ridge,3.5,4.5');
 	});
 
 	it('the average catchment rainfall leads the catchment group; an area without lines adds no columns', () => {

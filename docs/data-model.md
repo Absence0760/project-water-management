@@ -547,7 +547,14 @@ mapMm, mapSource, lat, lon }`):
   save is checked only for the stations and units it names that the stored
   setting doesn't (`checkRainStations`'s `stored`), since the Settings form
   sends the whole setting with every save (issue #553 round 3). A save that
-  names it anew (one where the stored setting didn't) is refused.
+  names it anew (one where the stored setting didn't) is refused. An
+  assignment's patching priority (`units[id].patch`, `catchment.patch`,
+  engine ≥ 1.105.0, issue #612) names stations too, and is carried and
+  checked the same way. **No SQL migration**: an assignment without `patch`
+  is the default chain `[CHIRPS]`, which the engine applies when it
+  resolves the setting (`resolvePatch`), so every stored setting, and every
+  stored run's `model_run.inputs`, model revision and snapshot, reads as
+  before in meaning.
 - **Every setting that names a series by id** (issue #611, engine ≥
   1.102.0) is carried along the same way: `settings.rainStations.unreliable`
   (any rain record's, not only a station's), `settings.flowMissing` (a flow
@@ -569,8 +576,9 @@ mapMm, mapSource, lat, lon }`):
   to the catchment or a unit (`runs/stationInput.ts`): every station's
   record under `rain_station_mm#<series id>` and its name, MAP, source and
   place in `ModelInput.stations` (`isCatchmentGauge` on the one read as
-  `rain_catchment_mm`), and, for a station an assignment reads that has
-  coordinates, the CHIRPS of the 0.05° cell holding it from the shared cell
+  `rain_catchment_mm`), and, for a station an assignment reads (its main
+  station, the correcting one or a patch station) that has coordinates, the
+  CHIRPS of the 0.05° cell holding it from the shared cell
   cache (208) as `rain_chirps_station_mm#<series id>`, in the CHIRPS v3
   product of the series the run itself reads for the area it corrects (the
   first unit it corrects, by node id, whose own CHIRPS is v3, else the
@@ -578,9 +586,11 @@ mapMm, mapSource, lat, lon }`):
   [§ Which series a run reads](#which-series-a-run-reads)). Never a feed's
   product on its own: a feed whose series sorts after the record runs read
   (issue #561) isn't what the factors correct. Nothing fetches a station's cell on its own: the cache holds it
-  when a feed of any project covers it (a boundary or unit feed); without
-  it the engine pairs the station against the CHIRPS of the unit it stands
-  in (`rainStations.sites`), else refuses the pairing. A station's record
+  when a feed of any project covers it (a boundary or unit feed). The cell
+  feeds the station's record checks; without it they read the CHIRPS of the
+  unit it stands in (`rainStations.sites`), else the catchment's. Since
+  engine 1.105.0 (issue #612) the pairing that corrects an area's CHIRPS
+  reads the area's own CHIRPS, never the station's cell. A station's record
   names its series in `run_input_series.series_id` (241_station_input_series:
   `run_input_series_series_kind` takes `rain_station_mm#<id>` naming that
   very `rain_catchment_mm` series), so a manual run is a person accepting

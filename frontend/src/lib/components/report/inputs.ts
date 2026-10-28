@@ -11,7 +11,7 @@ import { fmtNum, fmtPct } from '#lib/format/number.js';
 import { seriesKindLabel } from '#lib/series/kinds.js';
 import { peText } from '#lib/components/settings/peInput.js';
 import { dataEnd } from '#lib/components/series/freshness.js';
-import { chirpsAtText, correctedByName, pairingFactorsText, pairingPeriodText, ratioText, stationAreas, stationsOf } from '#lib/components/runs/stationRain.js';
+import { chirpsAtText, correctedByName, pairingFactorsText, pairingPeriodText, patchText, ratioText, stationAreas, stationsOf } from '#lib/components/runs/stationRain.js';
 
 type RawSettings = Partial<Omit<ProjectSettings, 'runoffModel'>> & { runoffModel?: StoredRunoffModelId } & Record<string, unknown>;
 
@@ -247,7 +247,8 @@ export function stationRows(summary: unknown, order: readonly string[] = []): st
 	const src = (mm: number | null, source: string | null) => (mm === null ? '–' : `${fmtNum(mm)}${source ? ` (${source})` : ''}`);
 	return stationAreas(s, order).map((a) => [
 		a.nodeId === null ? `${a.name} (catchment)` : a.name,
-		a.stationName,
+		// The patching priority when it isn't the corrected CHIRPS alone (issue #612).
+		a.stationName + (patchText(a) ? `; gaps patched from ${patchText(a)}` : ''),
 		src(a.areaMapMm, a.areaMapSource),
 		src(a.stationMapMm, a.stationMapSource),
 		ratioText(a) + (a.clamped ? ', held at the bound' : ''),
@@ -259,7 +260,7 @@ export function stationRows(summary: unknown, order: readonly string[] = []): st
 }
 
 /** The report's Station CHIRPS pairings table (issue #553): its header and number columns. */
-export const PAIRING_HEAD = ['Station', 'CHIRPS at', 'Fit period', 'Shared days', 'Monthly factors'];
+export const PAIRING_HEAD = ['Station', 'CHIRPS of', 'Fit period', 'Shared days', 'Monthly factors'];
 export const PAIRING_NUMS = [3];
 
 /** Each station's CHIRPS pairing: where its CHIRPS came from, the fit period, the shared days, the 12 factors or why it was refused. */

@@ -100,6 +100,7 @@ import {
 	stationContext,
 	withPinnedStationFactors,
 	type CatchmentStationPlan,
+	type StationAreaDays,
 	type StationContext
 } from './runoff/stationForcing';
 import type { StationAreaForcing } from './project';
@@ -119,8 +120,10 @@ export interface PreparedFits {
 	rainSourceFactors: { key: string; factors: RainSourceFactorsOf }[];
 	/**
 	 * The rainfall stations' pairing factors (engine ≥ 1.91.0, issue #553,
-	 * docs/model.md §2.4i): station id → 12 monthly factors, for every pairing
-	 * the run used and didn't refuse. Absent on a snapshot from before, and
+	 * docs/model.md §2.4i): stationPairingKey(station, area) → 12 monthly
+	 * factors (per area since 1.105.0, issue #612; a snapshot from an older
+	 * engine is refused by its engine version), for every pairing the run used
+	 * and didn't refuse. Absent on a snapshot from before, and
 	 * without settings.rainStations.
 	 */
 	stationFactors?: Record<string, number[]>;
@@ -215,7 +218,7 @@ export interface PreparedRun {
 	 * settings.rainStations.catchment applies (then `aligned` reads it as the
 	 * catchment rain). Null without settings.rainStations.
 	 */
-	stations: { context: StationContext; catchment: StationAreaForcing | null; plan: CatchmentStationPlan | null } | null;
+	stations: { context: StationContext; catchment: StationAreaForcing | null; catchmentDays?: StationAreaDays | null; plan: CatchmentStationPlan | null } | null;
 }
 
 /** Merge the settings, work out the run window and align the input series to it. */
@@ -298,8 +301,8 @@ export function prepareRun(input: ModelInput, options: PrepareOptions = {}): Pre
 		if (note) warnings.push(note);
 	}
 	warnings.push(...prep.warnings);
-	const stations = stationCtx ? { context: stationCtx, catchment: prep.stationForcing, plan } : null;
-	const { stationForcing: _f, ...rest } = prep;
+	const stations = stationCtx ? { context: stationCtx, catchment: prep.stationForcing, catchmentDays: prep.stationDays, plan } : null;
+	const { stationForcing: _f, stationDays: _d, ...rest } = prep;
 	if (rest.fits && stationCtx) rest.fits = { ...rest.fits, stationFactors: pairingFactors(stationCtx) };
 	return { ...rest, warnings, settings, series, stations };
 }
@@ -394,7 +397,7 @@ function alignToWindow(
 	end: number,
 	options: PrepareOptions = {},
 	plan: CatchmentStationPlan | null = null
-): Omit<PreparedRun, 'settings' | 'series' | 'stations'> & { stationForcing: StationAreaForcing | null } {
+): Omit<PreparedRun, 'settings' | 'series' | 'stations'> & { stationForcing: StationAreaForcing | null; stationDays: StationAreaDays | null } {
 	const warnings: string[] = [];
 	const days = end - start + 1;
 	const startDate = fromEpochDay(start);
@@ -438,7 +441,10 @@ function alignToWindow(
 	// The catchment's station (engine ≥ 1.91.0, §2.4i): its days × the MAP ratio are the catchment rain, and the CHIRPS
 	// × its pairing's factors fills the others (null where it can't, so the forecast does).
 	const station = plan ? catchmentStationForcing(plan, start, days, chirpsClean, alignSeries(series.rain_forecast_mm, start, days)) : null;
-	if (station) for (let t = 0; t < days; t++) catchment[t] = station.catchment[t]!;
+	if (station) {
+		for (let t = 0; t < days; t++) catchment[t] = station.catchment[t]!;
+		warnings.push(...station.warnings);
+	}
 	const chirpsBase = station ? station.chirps : chirpsCorrected;
 	// The other products write into CHIRPS' blank gap days, so every reader of the gap fill (rain used, the zero-run fill,
 	// the rain-source fallback, the accumulations) reads the whole fill through aligned('rain_chirps_mm').
@@ -543,6 +549,7 @@ function alignToWindow(
 		flowFill,
 		gapRain,
 		stationForcing: station?.forcing ?? null,
+		stationDays: station?.days ?? null,
 		...(options.captureFits ? { fits: { chirpsCorrection: chirpsFit, rainSourceFactors: rsFit, ...(gapFitsCaptured ? { gapRain: gapFitsCaptured } : {}) } } : {})
 	};
 }

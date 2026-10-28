@@ -32,6 +32,8 @@ export interface AreaRainLines {
 	/** The rain the run reads (mm; 0 on a dry day). */
 	rainUsed: number[];
 	source: StationRainDaySource[];
+	/** On a `patch` day (issue #612), its source in words: "patch 1: <station>"; null on the others. */
+	patchFrom: (string | null)[];
 	/** The station's record as stored (null: no reading). */
 	stationRaw: (number | null)[];
 	/** The stored record × the ratio the run applies (null: no reading). */
@@ -90,13 +92,17 @@ export function areaRainLines(input: ModelInput, nodeId: string | null, prep: Pr
 	// The pairing the run fits for this area (prepareRun's station context, the same fit stationAreaRain's run reads).
 	// A run pins a unit's factors only from settings.unitRain.pinned / rainStations.pinnedFactors, which are the
 	// engine's own (an outlook member, a resumed run) and never stored, so the model input a view reads has none.
-	const pairing = prep.stations?.context.pairing(correctAgainst) ?? null;
+	// One per area since engine 1.105.0 (issue #612): fitted against the station's adjusted rain over this area's CHIRPS.
+	const pairing = prep.stations?.context.pairing(correctAgainst, nodeId) ?? null;
+	const patchName = (id: string) => input.stations?.[id]?.name ?? 'a station no longer in the project';
+	const patchFrom = r.patchStationId.map((id, t) => (id === null ? null : `patch ${r.patchPlace[t]}: ${patchName(id)}`));
 	const factors = pairing && pairing.refused === null && pairing.months.length === 12 ? pairing.months.map((m) => m.factor) : null;
 	const chirpsCorrected = chirpsRaw && factors ? chirpsRaw.map((v, t) => (v === null ? null : v * factors[monthOfEpochDay(start + t) - 1]!)) : null;
 	return {
 		startDate: r.startDate,
 		rainUsed: r.rainMm,
 		source: r.source,
+		patchFrom,
 		stationRaw,
 		stationScaled,
 		chirpsRaw,

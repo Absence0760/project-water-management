@@ -6,7 +6,7 @@ import type { StationAreaForcing, StationPairingFit } from '@water-management/en
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import UnitRainPanel from './UnitRainPanel.svelte';
-import { catchmentMapText, chirpsAtText, correctedByName, pairingFactorsText, pairingPeriodText, ratioText, stationAreas, stationNotes, stationsOf, type StationsResult } from './stationRain';
+import { catchmentMapText, chirpsAtText, correctedByName, pairingFactorsText, pairingPeriodText, patchText, ratioText, stationAreas, stationNotes, stationsOf, type StationsResult } from './stationRain';
 import type { UnitRainResult } from './unitRain';
 import { withoutComments } from '../__fixtures__/withoutComments';
 
@@ -90,6 +90,18 @@ describe('station helpers', () => {
 		expect(pairingPeriodText(pairing({ commonYears: 1 }))).toBe('1995-01-01 to 2020-12-31; 1 complete year (accumulations counted)');
 		expect(pairingFactorsText(pairing())).toMatch(/^Jan 1\.25, Feb 1, Mar 1, .*, Dec 1$/);
 		expect(pairingFactorsText(pairing({ refused: 'only 3 complete years in common (5 needed)', months: [] }))).toBe('refused: only 3 complete years in common (5 needed)');
+	});
+
+	it('words a per-area pairing (engine ≥ 1.105.0) and a patching priority (issue #612)', () => {
+		expect(chirpsAtText(pairing({ chirpsAt: { catchment: true } }))).toBe('the catchment’s CHIRPS');
+		expect(patchText({})).toBeNull(); // a run from before
+		expect(patchText({ patches: [{ source: 'chirps', days: 12 }] })).toBeNull(); // the default
+		expect(patchText({ patches: [] })).toBe('nothing');
+		const station = { source: 'station' as const, stationId: 's2', stationName: 'Vlei', stationMapMm: 500, ownRatio: 1.8, ratio: 1.8, clamped: false, skipped: null, gapDays: 52, fills: 40, days: 40 };
+		expect(patchText({ patches: [station, { source: 'chirps', days: 1 }] })).toBe('Vlei × 1.8 (40 days), then CHIRPS (1 day)');
+		expect(patchText({ patches: [{ ...station, skipped: 'it has no MAP to scale its rain to the area’s MAP by', days: 0 }] })).toBe('Vlei (skipped: it has no MAP to scale its rain to the area’s MAP by)');
+		const notes = stationNotes({ pairings: [], catchment: null, units: [{ ...area(), patches: [{ ...station, fills: 0, days: 0 }] }] });
+		expect(notes.some((n) => n.includes('the patch station Vlei has no reading on any of'))).toBe(true);
 	});
 
 	it('names the correcting station from its pairing, and the catchment MAP’s origin', () => {

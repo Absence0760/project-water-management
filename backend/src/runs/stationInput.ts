@@ -8,9 +8,11 @@
 // CHIRPS cell cache holds that cell (runs/referenceCell.ts reads it, as it
 // does the reference gauge's cell). Nothing fetches a station's cell on its
 // own: the cache holds it when a feed of any project (the catchment's
-// boundary feed, a unit's feed) covers it. Without it the engine pairs the
-// station against the CHIRPS of the unit it stands in (settings.rainStations
-// .sites) and refuses the pairing when it has neither.
+// boundary feed, a unit's feed) covers it. The station's record checks
+// (§2.4c/§2.4d) read it, else the CHIRPS of the unit it stands in
+// (settings.rainStations.sites). The pairing that corrects an area's CHIRPS
+// reads the area's own CHIRPS, not the station's (engine ≥ 1.105.0, issue
+// #612).
 //
 // Only when settings.rainStations assigns a station to the catchment or a
 // unit, so every other project's input is exactly as before.
@@ -29,10 +31,11 @@ import { DEFAULT_CELL_PRODUCT, referenceCellSeries, seriesChirpsProduct } from '
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** The stations an assignment names: its own and the one correcting its CHIRPS (default the same). */
-const named = (a: unknown): { stationId: string; correctAgainst: string } | null => {
+/** The stations an assignment names: its own, the one correcting its CHIRPS (default the same) and its patch stations (issue #612). */
+const named = (a: unknown): { stationId: string; correctAgainst: string; patch: string[] } | null => {
 	if (!isObj(a) || typeof a.stationId !== 'string') return null;
-	return { stationId: a.stationId, correctAgainst: typeof a.correctAgainst === 'string' ? a.correctAgainst : a.stationId };
+	const patch = Array.isArray(a.patch) ? a.patch.flatMap((p) => (isObj(p) && p.source === 'station' && typeof p.stationId === 'string' ? [p.stationId] : [])) : [];
+	return { stationId: a.stationId, correctAgainst: typeof a.correctAgainst === 'string' ? a.correctAgainst : a.stationId, patch };
 };
 
 /**
@@ -129,10 +132,11 @@ export async function stationInputs(
 			...(r.id === catchmentGaugeId ? { isCatchmentGauge: true } : {})
 		};
 	}
-	// The CHIRPS at each named station's own cell, only for a station some assignment reads (its own area or a correction).
+	// The CHIRPS at each named station's own cell, only for a station some assignment reads (its own area, a correction or
+	// a patch), for its record checks.
 	const wanted = new Set<string>();
 	for (const a of [rs.catchment, ...(isObj(rs.units) ? Object.values(rs.units) : [])].map(named)) {
-		if (a) wanted.add(a.stationId).add(a.correctAgainst);
+		if (a) for (const id of [a.stationId, a.correctAgainst, ...a.patch]) wanted.add(id);
 	}
 	const placed = rows.filter((r) => wanted.has(r.id) && r.station_lat !== null && r.station_lon !== null);
 	for (const r of placed) {

@@ -119,7 +119,8 @@ export function exportColumns(size: ExportSize, groups: readonly SeriesGroup<Ser
 			if (l.chirpsCorrected) cols.push({ header: areaHeader(a, 'CHIRPS corrected (mm)'), startDate: l.startDate, values: l.chirpsCorrected });
 		}
 		cols.push({ header: areaHeader(a, 'rain used (mm)'), startDate: l.startDate, values: l.rainUsed });
-		if (size === 'full') cols.push({ header: areaHeader(a, 'rain used from'), startDate: l.startDate, values: l.source });
+		// The engine's codes, a patch day naming its station (issue #612): "patch 1: Ridge".
+		if (size === 'full') cols.push({ header: areaHeader(a, 'rain used from'), startDate: l.startDate, values: l.source.map((s, i) => (s === 'patch' ? (l.patchFrom?.[i] ?? s) : s)) });
 	};
 	const catchment = areas.find((a) => a.nodeId === null);
 	const units = areas.filter((a) => a.nodeId !== null);

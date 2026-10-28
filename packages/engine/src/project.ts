@@ -1188,10 +1188,33 @@ export interface RainStationSettings {
 	/**
 	 * Engine-only (never stored by the API): pairing factors to use instead
 	 * of fitting them, as UnitRainSettings.pinned (a seasonal outlook member,
-	 * a resumed run). Station id → 12 monthly factors.
+	 * a resumed run). stationPairingKey(station id, area) → 12 monthly
+	 * factors (engine ≥ 1.105.0, issue #612: a pairing is per area; a key of
+	 * a station id alone, from before, matches no pairing and is refitted).
 	 */
 	pinnedFactors?: Record<string, number[]> | null;
 }
+
+/**
+ * One source of an assignment's patching priority (RainStationAssignment
+ * .patch, engine ≥ 1.105.0, issue #612): another station, read × its own
+ * area MAP ÷ station MAP, or the area's CHIRPS corrected against
+ * `correctAgainst`'s adjusted rain.
+ */
+export type RainPatchSource = { source: 'station'; stationId: string } | { source: 'chirps' };
+
+/** The most sources a patching priority may list (the API refuses more; the engine reads the first ones). */
+export const RAIN_PATCH_MAX = 8;
+
+/** The patching priority an assignment without `patch` runs: the area's corrected CHIRPS alone (the rule before issue #612). */
+export const DEFAULT_RAIN_PATCH: readonly RainPatchSource[] = [{ source: 'chirps' }];
+
+/**
+ * pinnedFactors' key of a pairing (engine ≥ 1.105.0): the correcting
+ * station and the area whose CHIRPS it corrects (a land unit's node id, or
+ * null for the catchment).
+ */
+export const stationPairingKey = (stationId: string, areaId: string | null): string => `${stationId}|${areaId ?? ''}`;
 
 /** One area's station (RainStationSettings.catchment / .units[id]). */
 export interface RainStationAssignment {
@@ -1199,11 +1222,26 @@ export interface RainStationAssignment {
 	stationId: string;
 	/** Scale the station's rain by area MAP ÷ station MAP (clamped 0.25–4). Default true. */
 	scaleToMap?: boolean;
-	/** The station whose pairing factors correct this area's CHIRPS on gap days. Default stationId. */
+	/**
+	 * The station whose adjusted rain (its record × area MAP ÷ its MAP) this
+	 * area's CHIRPS is corrected against, for the CHIRPS source of `patch`.
+	 * Default stationId.
+	 */
 	correctAgainst?: string | null;
+	/**
+	 * The patching priority (engine ≥ 1.105.0, issue #612): on a day the main
+	 * station has no checked reading, the first of these with one gives the
+	 * area's rain. A station is read × area MAP ÷ its MAP under `scaleToMap`
+	 * (skipped, with a warning, when it has no MAP); CHIRPS is the area's own,
+	 * corrected against `correctAgainst`. Absent / null = [CHIRPS], the rule
+	 * before; [] = no patching (gaps go to the next fallback). At most
+	 * RAIN_PATCH_MAX; CHIRPS at most once, a station at most once and never
+	 * the main station.
+	 */
+	patch?: RainPatchSource[] | null;
 }
 
-/** Complete calendar years a station and the CHIRPS at it need in common for a pairing (issue #553): fewer refuses it. */
+/** Complete calendar years a station and the CHIRPS it corrects need in common for a pairing (issue #553; the area's CHIRPS since 1.105.0, issue #612): fewer refuses it. */
 export const STATION_PAIRING_MIN_YEARS = 5;
 
 /** ModelInput.series key of a station's record (issue #553): `rain_station_mm#<series id>`. Not a stored kind. */
@@ -3965,8 +4003,23 @@ export interface UnitRainSummary {
 export interface StationPairingFit {
 	stationId: string;
 	stationName: string;
-	/** Where the CHIRPS at the station came from: its own cell, or the CHIRPS of the unit it stands in. */
-	chirpsAt: { cell: true } | { unitId: string; unitName: string };
+	/**
+	 * The area whose CHIRPS the pairing corrects (engine ≥ 1.105.0, issue #612:
+	 * one pairing per area and correcting station): a land unit's node id, or
+	 * null for the catchment. Absent on a summary from before, when a pairing
+	 * was the station's alone.
+	 */
+	areaId?: string | null;
+	/** That area's name (absent before 1.105.0). */
+	areaName?: string;
+	/** The ratio the station's record was taken to the area's level by before the fit (area MAP ÷ station MAP, clamped; 1 without). Absent before 1.105.0. */
+	ratio?: number;
+	/**
+	 * The CHIRPS the fit compared the station with: since 1.105.0 the area's
+	 * own (a unit's, or `catchment`); before, the station's own cell or the
+	 * CHIRPS of the unit it stands in.
+	 */
+	chirpsAt: { cell: true } | { unitId: string; unitName: string } | { catchment: true };
 	/** Null = refused (too short, or no CHIRPS at the station); `refused` says why. */
 	refused: string | null;
 	/** The first and last shared day of the fit's record (accumulation windows left out). */
@@ -3999,11 +4052,34 @@ export interface StationAreaForcing {
 	scaleToMap: boolean;
 	/** The pairing correcting this area's CHIRPS (its station id); null when refused or absent (its gaps fall to the next fallback). */
 	correctedBy: string | null;
-	/** Run days by source: the station (× ratio), the corrected CHIRPS, the next fallback, none (dry). */
-	days: { station: number; chirps: number; fallback: number; none: number };
+	/** Run days by source: the station (× ratio), a patch station (× its ratio, engine ≥ 1.105.0; absent before), the corrected CHIRPS, the next fallback, none (dry). */
+	days: { station: number; patch?: number; chirps: number; fallback: number; none: number };
 	/** Station days set aside: by the station checks (zero runs, accumulations) and by the user's unreliable periods. */
 	setAside: { checks: number; unreliable: number };
+	/** The patching priority as the run read it, in order (engine ≥ 1.105.0, issue #612); absent before. */
+	patches?: StationPatchUse[];
 }
+
+/** One source of an area's patching priority as a run read it (StationAreaForcing.patches). */
+export type StationPatchUse =
+	| {
+			source: 'station';
+			stationId: string;
+			stationName: string;
+			stationMapMm: number | null;
+			/** area MAP ÷ this station's MAP before and after the clamp; null at × 1. */
+			ownRatio: number | null;
+			ratio: number;
+			clamped: boolean;
+			/** Why the run skipped it (no record, no MAP under scaling, the main station), or null. */
+			skipped: string | null;
+			/** The main station's gap days in the run window, and how many of them this station has a checked reading on. */
+			gapDays: number;
+			fills: number;
+			/** The days it gave the area's rain (after the sources before it). */
+			days: number;
+	  }
+	| { source: 'chirps'; days: number };
 
 /** RunSummary.stations (issue #553, engine ≥ 1.91.0): present when settings.rainStations assigns any area. */
 export interface RainStationSummary {

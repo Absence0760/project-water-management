@@ -348,7 +348,7 @@
 				<h3 class="sub first">Each unit’s rainfall station <HelpTip key="settings.rainStations" /></h3>
 				<Lazy load={loadFlowGenUnits}>
 					{#snippet children(FlowGenerationUnits)}
-						<FlowGenerationUnits bind:value={s.rainStations} {readonly} nodes={editor?.model.nodes ?? []} {stations} />
+						<FlowGenerationUnits bind:value={s.rainStations} {readonly} nodes={editor?.model.nodes ?? []} {stations} projectId={project.id} />
 					{/snippet}
 				</Lazy>
 			</div>

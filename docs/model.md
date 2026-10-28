@@ -3045,7 +3045,7 @@ for each unit](./maps.md#map-for-each-unit).
   the gauge, with the cell on those days. Whether to leave them out is the
   hydrologist's call ([followups.md § Hydrologist](./followups.md#hydrologist)).
 
-### 2.4i Rainfall stations (engine ≥ 1.91.0, issue #553)
+### 2.4i Rainfall stations (engine ≥ 1.91.0, issue #553; patching priority and per-area pairing ≥ 1.105.0, issue #612)
 
 `settings.rainStations` (`RainStationSettings` in
 `packages/engine/src/project.ts`; the forcing in
@@ -3069,21 +3069,34 @@ the station's own 0.05° cell, when the backend has it, is
 
 **The setting.**
 
-- `catchment`: `{ stationId, scaleToMap?, correctAgainst? }` or null, the
+- `catchment`: `{ stationId, scaleToMap?, correctAgainst?, patch? }` or null, the
   station of Fragmentation's average catchment rainfall (the one GR4J run,
   §2.4a, §2.5);
 - `units`: land unit id → the same assignment, read only under per-unit
   rain (`settings.unitRain` `perUnit`, §2.4h);
-- `scaleToMap` defaults to true; `correctAgainst` (the station whose
-  pairing corrects the area's CHIRPS) defaults to the area's own station;
+- `scaleToMap` defaults to true and covers every station of the
+  assignment, its main station and its patch stations alike;
+  `correctAgainst` (the station whose rain, at the area's MAP, the area's
+  CHIRPS is corrected against) defaults to the area's own station;
+- `patch` (engine ≥ 1.105.0, issue #612): the **patching priority**, an
+  ordered list of sources for the days the main station has no checked
+  reading, each `{ source: 'station', stationId }` or `{ source: 'chirps' }`.
+  Absent or null = `[{ source: 'chirps' }]`, the rule before 1.105.0, so a
+  stored assignment (a chain of one) runs unchanged in meaning; `[]` = no
+  patching (the gaps go to the next fallback). At most 8 sources
+  (`RAIN_PATCH_MAX`), CHIRPS at most once and anywhere in the list, a
+  station at most once and never the main station: the API refuses each,
+  and the engine drops an entry it can't use with a warning
+  (`resolvePatch`). No SQL migration: the default is applied when the
+  setting is resolved, as `mergeSettings` gives other keys theirs;
 - `catchmentMapMm` / `catchmentMapSource`: the catchment's MAP for its
   ratio; absent = the **land units' area-weighted mean MAP** (Σ MAP × area ÷
   Σ area over every farm with an area, node-id order). If any land unit has
   no MAP, there is no catchment MAP: the ratio is 1, with a warning naming
   the units;
 - `sites`: station id → `{ unitId }`, the land unit a station stands in,
-  whose CHIRPS (`rain_chirps_mm@<unit>`) its pairing reads when it has no
-  cell series of its own;
+  whose CHIRPS (`rain_chirps_mm@<unit>`) its record checks read when it has
+  no cell series of its own (until engine 1.104.0 its pairing read it too);
 - `unreliable`: rain record id → inclusive `[from, to]` ISO date ranges the
   user marks unreliable. Until engine 1.102.0 only a station's; from it
   (issue #611) any rain record's: a station's (read while it is assigned,
@@ -3094,9 +3107,13 @@ the station's own 0.05° cell, when the backend has it, is
   catchment gauge's own days are `settings.zeroRainRuns.missing`'s, as
   before. Each record is matched by `DailySeries.seriesId`; the API refuses
   an id that isn't a rain record of the project;
-- `pinnedFactors` (engine-only, never stored by the API): station id → 12
-  factors used instead of fitting the pairing (a resumed run, an outlook
-  member, the ensemble's CHIRPS-only member).
+- `pinnedFactors` (engine-only, never stored by the API):
+  `stationPairingKey(station, area)` (`<station id>|<unit id>`, or
+  `<station id>|` for the catchment; a station id alone up to 1.104.0) → 12
+  factors used instead of fitting that pairing (a resumed run, an outlook
+  member, the ensemble's CHIRPS-only member). A key from before matches no
+  pairing, so it is refitted; a snapshot from another engine is refused by
+  its engine version anyway.
 
 An assignment without a station id is dropped with a warning
 (`resolveRainStations`); so is an unusable catchment MAP (outside
@@ -3106,13 +3123,19 @@ An assignment without a station id is dropped with a warning
 calibration](./ui.md)): Settings → Model selection for flow generation, with Per unit chosen,
 lists every land unit with its **Station** (the project's stations, or *No
 station*, which keeps the unit on §2.4h's chain; satellite rain is never an
-option, CHIRPS only fills gaps), **Scale to unit MAP** (`scaleToMap`) with
-the ratio it gives, and **Gaps: CHIRPS corrected against**
-(`correctAgainst`), then each station in use once with its MAP and, for a
-station without coordinates, the unit it **Stands in** (`sites`). The form
-stores defaults as none (scaling on, the unit's own station), and an
-emptied setting as null, so assigning a station and taking it away again
-stores what was there. `units` stays stored under Fragmentation, unused.
+option, CHIRPS only fills gaps), **Then patch gaps from** (`patch`, issue
+#612: an ordered list of pull-downs, each another station or *CHIRPS,
+corrected*, with Up, Down, Remove and Add a source; each station shows how
+many of the main station's gap days in the run window it fills, or why it
+can't help, and a station that can't help is greyed out in the pull-down),
+**Scale to unit MAP** (`scaleToMap`) with the ratio it gives, and **Gaps:
+CHIRPS corrected against** (`correctAgainst`), then each station in use
+(main, correcting or patching) once with its MAP and, for a station without
+coordinates, the unit it **Stands in** (`sites`). Ticking units sets one
+station and one patching priority for all of them. The form stores
+defaults as none (scaling on, the unit's own station, the patching
+priority [CHIRPS]), and an emptied setting as null, so assigning a station
+and taking it away again stores what was there. `units` stays stored under Fragmentation, unused.
 `catchment` and `catchmentMapMm` have no field yet (the API takes them).
 `unreliable` is set under Model settings → Rain gaps → Flagged rain
 (**Unreliable periods of a rain record**, issue #611): From/To rows for every
@@ -3126,8 +3149,10 @@ differs. On run day *t* of calendar month *m*:
 
 | Day | Rain on the area |
 | --- | --- |
-| The station has a reading in its checked record | station(*t*) × *r*, *r* = clamp(area MAP ÷ station MAP, 0.25, 4); *r* = 1 with `scaleToMap` false or either MAP missing (warns) |
-| Otherwise, the area has CHIRPS on *t* and the pairing of `correctAgainst` isn't refused | CHIRPS_area(*t*) × f(*m*), **as is**: no MAP ratio on top |
+| The main station has a reading in its checked record | station(*t*) × *r*, *r* = clamp(area MAP ÷ station MAP, 0.25, 4); *r* = 1 with `scaleToMap` false or either MAP missing (warns) |
+| Otherwise, the first source of `patch` (default `[CHIRPS]`) with a value on *t*: | |
+| · a patch station with a reading in its checked record (its own §2.4c/§2.4d checks and unreliable periods) | patch(*t*) × *r*ₚ, *r*ₚ = clamp(area MAP ÷ its MAP, 0.25, 4); × 1 with `scaleToMap` false or the area's MAP missing. With scaling on and no MAP of its own, or no record in the input, it is **skipped**, with a warning (never × 1, which would put gap days at the wrong level) |
+| · CHIRPS, when the area has CHIRPS on *t* and the area's pairing against `correctAgainst` isn't refused | CHIRPS_area(*t*) × f_area(*m*), **as is**: the area's level is inside the factors (below) |
 | Otherwise | the area's next fallback: the catchment → the forecast (`rain_forecast_mm`); a unit → its own forecast (`rain_forecast_mm@<unit>`, outlook members only), then the catchment forcing (catchment ?? CHIRPS ?? forecast, × 1); else dry (0 mm, counted) |
 
 CHIRPS_area is the catchment's `rain_chirps_mm` for the catchment and the
@@ -3138,16 +3163,32 @@ unit factor (§2.4h): a ratio past 0.25–4 is clamped and warns; one outside
 0.5–2 warns and is used as it is.
 
 **Why the gaps take the corrected CHIRPS as is** (the operator, 2026-10-23,
-issue #553). The area's own CHIRPS already carries its location, and the
-pairing's factors carry the station's level; × the MAP ratio as well would
-count the spatial difference twice. For a unit this is decided; for the
-catchment it is the same call, provisional ([engine-audit.md § Rainfall
-stations](./engine-audit.md#provisional-decisions-2026-10-23-rainfall-stations-issue-553)).
-A station's days and its gaps therefore sit at different levels when the
-area's MAP differs from the station's: station × *r* is at the area's MAP,
-the corrected CHIRPS at the CHIRPS-over-the-area's level brought to the
-station's season and bias. Satellite rain is never the primary source of an
-area with a station.
+issue #553; the factors' rule since engine 1.105.0, issue #612, decided
+2026-10-28). The area's pairing is fitted against the correcting station's
+rain **× its ratio to the area**, over **the area's own CHIRPS** (below), so
+its factors already take the area's CHIRPS to the station's rain at the
+area's MAP. × the MAP ratio again would count it twice. A gap day therefore
+sits at the area's MAP as a station day does: on the fit's shared days the
+corrected CHIRPS has, month by month, the totals of station × *r*. Up to
+1.104.0 the factors were fitted against the CHIRPS at the station's cell
+with no × *r*, so the gaps sat at the CHIRPS-over-the-area's level brought
+to the station's season and bias, not at the area's MAP
+([engine-audit.md RS7](./engine-audit.md#provisional-decisions-2026-10-23-rainfall-stations-issue-553)).
+Satellite rain is never the primary source of an area with a station.
+
+**A patch station** (issue #612) is read as the main station is: its own
+checked record (the same §2.4c/§2.4d checks, compared against the CHIRPS at
+it, and its own unreliable periods) × its own ratio to the area, so each
+station used for patching is adjusted to the area's MAP. It isn't fitted,
+so record length alone doesn't disqualify it. **Usability**
+(`stationPatchUsability`, shown in the form and warned by the run): a
+station can't help when it is the main station, has no record, has no MAP
+while scaling is on, or **has a reading on none of the main station's gap
+days in the run window** (the client's "too short" case). The fill count
+"fills *N* of the main station's *G* gap days" is always given, with the
+record's span; no minimum-years rule applies to a patch station (the 5-year
+rule stays on the CHIRPS fit, where the factors depend on it). A station
+that fills none is kept in the list and changes nothing; the run warns.
 
 **The checked record** (`checkedStationRecord`). The station's stored
 record goes through the catchment's §2.4c zero-run and §2.4d accumulation
@@ -3166,21 +3207,39 @@ past the stored series. Then the user's unreliable
 periods are blanked. A day either sets aside is a gap. The checks run on the
 whole stored record, so a day's value doesn't depend on the window.
 
-**The pairing** (`fitStationPairing`). For each calendar month *m*,
-f(*m*) = Σ station ÷ Σ CHIRPS over the days of *m* where both the checked
-station record (accumulation windows left out, as §2.4b's fit leaves them
-out) and the CHIRPS at the station have a reading, over their whole
-records. The CHIRPS at the station is its own cell when the input has it,
-else the CHIRPS of the unit it stands in (`sites`). A month needs §2.4b's 90
-shared days and 50 mm of CHIRPS, else its factor is 1, with a warning;
-factors are clamped to 0.25–4 and banded at 0.5–2. **Refused** (no factors,
-a reason in `refused`, a warning) when the station has no record, there is
-no CHIRPS at it, or the two have fewer than `STATION_PAIRING_MIN_YEARS` = 5
-complete calendar years in common (a year every day of which both have a
-reading in the checked record **as the forcing reads it**; not necessarily
-consecutive). A refused pairing corrects nothing:
-its areas' gap days take the next fallback. Each pairing is fitted once per
-run, however many areas use it, and its factors are what a snapshot pins.
+**The pairing** (`fitStationPairing`; per area since engine 1.105.0, issue
+#612). For area *a* corrected against station *s*, for each calendar month
+*m*:
+
+f_a(*m*) = Σ (station_s × *r*_{s→a}) ÷ Σ CHIRPS_a
+
+over the days of *m* where both the checked station record (accumulation
+windows left out, as §2.4b's fit leaves them out) and the area's own CHIRPS
+(a unit's `rain_chirps_mm@<unit>`, the catchment's `rain_chirps_mm`) have a
+reading, over their whole records. *r*_{s→a} is the ratio the area reads
+station *s* at (area MAP ÷ *s*'s MAP, clamped; 1 with `scaleToMap` false or
+a MAP missing). Why the area's CHIRPS and not the CHIRPS at the station's
+cell: station × *r* is the area's rain at its MAP, and CHIRPS_a is CHIRPS
+over the area, so their ratio is CHIRPS's bias over that area. The cell's
+CHIRPS would count the station-to-area gradient twice, once in *r* and once
+in CHIRPS_a ÷ CHIRPS_station, which is why no × *r* was put on top before.
+The CHIRPS at the station (its cell, else `sites`) is still what the
+station's record checks compare it with; the pairing doesn't read it. A
+month needs §2.4b's 90 shared days and 50 mm of CHIRPS, else its factor is
+1, with a warning; factors are clamped to 0.25–4 and banded at 0.5–2.
+**Refused** (no factors, a reason in `refused`, a warning) when the station
+has no record, the area has no CHIRPS, or the two have fewer than
+`STATION_PAIRING_MIN_YEARS` = 5 complete calendar years in common (a year
+every day of which both have a reading in the checked record **as the
+forcing reads it**; not necessarily consecutive). A refused pairing
+corrects nothing: the area's CHIRPS gives no day, and its gaps take the next
+source. A pairing is fitted once per run for each (correcting station, area)
+whose patching priority has CHIRPS, so two units on one station get factors
+of their own; its factors are what a snapshot pins. Mass check
+(`stationPairing.test.ts`): on the shared days, Σ CHIRPS_a × f_a(*m*) per
+month = Σ station × *r* per month when no factor is clamped; and a run made
+only of CHIRPS days has the area's MAP as its mean annual rain when the
+station's MAP is its own mean annual (`stationForcing.test.ts`).
 
 **Accumulations and complete years** (provisional, engine 1.96.0, pending
 the client's hydrologist; [engine-audit.md RS6](./engine-audit.md#provisional-decisions-2026-10-23-rainfall-stations-issue-553)).
@@ -3213,8 +3272,9 @@ rain as before, or the unit's §2.4h rule.
 **The catchment under its station.** The catchment rain every reader sees
 (`aligned('rain_catchment_mm')`: GR4J, demand's effective rain, the WR2012
 check, a rule-4 unit, `rain_final`) is station × *r* on the station's days,
-and `aligned('rain_chirps_mm')` the catchment CHIRPS × f on the others (null
-where the pairing can't correct, so the forecast fills). The stored
+and a patch station × its ratio on the days it patches (issue #612), and
+`aligned('rain_chirps_mm')` the catchment CHIRPS × f on the days CHIRPS
+patches (null where nothing patches, so the forecast fills). The stored
 `rain_catchment_mm` is not read: not for the forcing, not for §2.4b's fit,
 §2.4c–§2.4e or the double-mass check (`summary.chirpsCorrection` is mode
 `none`, and the rain-source periods warn that they are not read unless the
@@ -3243,8 +3303,12 @@ catchment gauge, so results change and a refit is due.
 **Per-unit rain.** A land unit with a station takes rule `'station'`
 (`UNIT_RAIN_RULES`), recorded in `summary.unitRain.units[]` as `rainKey:
 'rain_station_mm#<id>'`, `factor` = *r*, `factorSource: 'gaugeMap'` (a gauge
-× a MAP ratio, as rule 2), its station days counted under `days.gaugeMap`
-and its corrected CHIRPS days under `days.unitChirps`. No areal correction
+× a MAP ratio, as rule 2), its station days and patch-station days
+counted under `days.gaugeMap` and its corrected CHIRPS days under
+`days.unitChirps`. A unit's day codes (`UNIT_RAIN_SOURCE`): station 5,
+corrected CHIRPS 6, patch station 7 (engine ≥ 1.105.0), with
+`UnitForcing.patchIndex` the patching priority's index of the source that
+gave a patch or CHIRPS day (−1 on the others). No areal correction
 (the station sets the level). A unit without a station keeps its §2.4h
 chain, which reads "the catchment's rain" as the catchment forcing, the
 station's when the catchment has one.
@@ -3254,7 +3318,12 @@ station's when the catchment has one.
 station, `scaleToMap`, the correcting station, the catchment MAP, the ratio
 and the pairing's 12 factors, null when refused; absent without one) and,
 in the per-unit fingerprint, each station unit's correcting station and 12
-factors. A station assigned to or removed from the catchment, another
+factors, and since engine 1.105.0 a marker (`stationFit: 'adjusted'`) and
+the patching priority (`patch` / `stationPatch`, `chirps` or
+`station:<id>` in order): a fit made under the old pairing rule has no
+marker, so it reads "Forcing changed since fit" even when its factors moved
+less than 2 %, and another patching priority (from the settings alone too)
+is a change. A station assigned to or removed from the catchment, another
 station, scaling or correcting station (read from the settings alone), or,
 against a run, the ratio, the catchment MAP or a factor moving by more than
 2 % is its own "Forcing changed since fit" reason
@@ -3265,19 +3334,25 @@ factor drift. A screen with a run builds the comparison with
 isn't missed.
 
 **What the run records.** `summary.stations` (`RainStationSummary`, only
-when some area has a station): `pairings` (each station used, station-id
-order: `StationPairingFit`, its CHIRPS source, fit period, complete years,
+when some area has a station): `pairings` (each pairing used, by station id
+then area, the catchment first: `StationPairingFit` with its `areaId` (null
+for the catchment), `areaName` and `ratio` since 1.105.0, the CHIRPS it
+corrected (`chirpsAt`), fit period, complete years,
 shared days, pinned, the 12 months as the reference gauge's, or `refused`
 with its reason), `catchment` and `units` (`StationAreaForcing`: the
 station, both MAPs and sources, `ownRatio` and `ratio`, `clamped`,
-`scaleToMap`, `correctedBy`, the run days by source `{ station, chirps,
-fallback, none }`, and the station days set aside inside the run window
-`{ checks, unreliable }`; a day both set aside counts under the checks),
+`scaleToMap`, `correctedBy`, the run days by source `{ station, patch,
+chirps, fallback, none }` (`patch` since 1.105.0), the station days set
+aside inside the run window `{ checks, unreliable }`; a day both set aside
+counts under the checks; and `patches`, the patching priority as run, each
+station with its ratio, why it was skipped, the main station's gap days in
+the window, how many of them it has a reading on and the days it gave),
 `catchmentMapMm` and `catchmentMapFromUnits`. Warnings start "station:" or
 "station pairing:".
 
 **Copies of the input.** A snapshot pins every pairing's factors
-(`PreparedFits.stationFactors`) and each unit's station recipe, so a resumed
+(`PreparedFits.stationFactors`, by `stationPairingKey`) and each unit's
+station recipe (with its resolved patching priority), so a resumed
 run is the uninterrupted one to the bit. A scenario keeps the input's
 `stations`. A seasonal outlook member keeps them and pins the base input's
 pairing factors (`pinnedFactors`), so a history cut at the decision date
@@ -3287,8 +3362,11 @@ applies, with no station day) and pins the base's factors, so every area
 reads its CHIRPS × f on every day.
 
 **The Data tab** reads an area's rain used and each day's source from the
-same code (`stationAreaRain(input, nodeId | null)`), so the view and a run
-of the same input can't disagree.
+same code (`stationAreaRain(input, nodeId | null)`, with `patchStationId`
+and `patchPlace` on a patch day, shown as "patch 1: <station>"), so the
+view and a run of the same input can't disagree. Settings reads each
+station's usability from the same code over the stored model input
+(`stationPatchChoices`).
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 

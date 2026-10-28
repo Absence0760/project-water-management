@@ -396,6 +396,10 @@ describe('each area’s derived rain (issue #553)', () => {
 		expect(areaCell(l, 'stationScaled', '2020-01-02')).toBeNull();
 		expect(areaCell(l, 'chirpsCorrected', '2020-01-03')).toBe(2.5);
 		expect(areaCell(l, 'source', '2020-01-02')).toBe('no source (dry)');
+		// A patch day names its station and place (issue #612); without the label, the plain words.
+		const p = lines({ source: ['station', 'patch', 'patch'], patchFrom: [null, 'patch 1: Ridge', null] });
+		expect(areaCell(p, 'source', '2020-01-02')).toBe('patch 1: Ridge');
+		expect(areaCell(p, 'source', '2020-01-03')).toBe('patch station');
 		expect(areaCell(l, 'source', '2020-01-03')).toBe('corrected CHIRPS');
 		expect(areaCell(l, 'rainUsed', '2019-12-31')).toBeNull();
 		expect(areaCell(l, 'rainUsed', '2020-01-04')).toBeNull();

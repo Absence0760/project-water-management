@@ -230,13 +230,13 @@ describe('the station that is the catchment’s rain gauge (isCatchmentGauge)', 
 		const fitRec = checkedStationRecord(s, x, 'S1', { isCatchmentGauge: true, fitExcludeAccumulations: true })!;
 		expect(fitRec.record).toEqual(forcing.record); // no accumulations here, so the two agree day by day
 		const stations = { S1: { name: 'Gauge', mapMm: 600, mapSource: 'invented', lat: null, lon: null, isCatchmentGauge: true } };
-		const fit = fitStationPairing({ settings: s, series: x, stations, nodes: [], stationId: 'S1' }, []);
+		const fit = fitStationPairing({ settings: s, series: x, stations, stationId: 'S1', area: { id: 'U', name: 'U', chirps: (x as Record<string, DailySeries>)[stationChirpsSeriesKey('S1')], ratio: 1 } }, []);
 		expect(fit.refused).toBeNull();
 		const march = forcing.record.values.filter((v, i) => v !== null && monthOf(i) === 3).length;
 		expect(fit.months[2]!.sharedDays).toBe(march);
 		// Not the gauge: the missing list doesn't apply, so March keeps its 10 days, in the forcing's record and the
 		// fit's alike (the fit is refused here, its set-aside zero run breaking two years, but still counts its days).
-		const plain = fitStationPairing({ settings: s, series: x, stations: { S1: { ...stations.S1, isCatchmentGauge: false } }, nodes: [], stationId: 'S1' }, []);
+		const plain = fitStationPairing({ settings: s, series: x, stations: { S1: { ...stations.S1, isCatchmentGauge: false } }, stationId: 'S1', area: { id: 'U', name: 'U', chirps: (x as Record<string, DailySeries>)[stationChirpsSeriesKey('S1')], ratio: 1 } }, []);
 		const plainForcing = checkedStationRecord(s, x, 'S1')!;
 		expect(plain.refused).toMatch(/4 complete calendar years/);
 		expect(plainForcing.record.values.filter((v, i) => v !== null && monthOf(i) === 3).length).toBe(march + 10);
@@ -322,7 +322,7 @@ describe('the forcing’s record holds every day the fit’s record holds (RS6, 
 			// The pairing reads them so: its complete years on the forcing's record, never fewer than the fit's, and its
 			// shared days on the fit's.
 			const stations = { S1: { name: 'S1', mapMm: 600, mapSource: 'invented', lat: null, lon: null, ...(isCatchmentGauge ? { isCatchmentGauge: true } : {}) } };
-			const pairing = fitStationPairing({ settings: s, series: x, stations, nodes: [], stationId: 'S1' }, []);
+			const pairing = fitStationPairing({ settings: s, series: x, stations, stationId: 'S1', area: { id: 'U', name: 'U', chirps: (x as Record<string, DailySeries>)[stationChirpsSeriesKey('S1')], ratio: 1 } }, []);
 			expect(pairing.commonYears, `seed ${seed}`).toBe(completeYears(forcing.values, cell));
 			expect(pairing.commonYears, `seed ${seed}`).toBeGreaterThanOrEqual(completeYears(rec, cell));
 			expect(pairing.days, `seed ${seed}`).toBe(rec.filter((v, i) => v !== null && cell[i] != null).length);

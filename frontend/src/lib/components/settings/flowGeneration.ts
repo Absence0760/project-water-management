@@ -14,8 +14,10 @@ import {
 	AREAL_RAIN_FACTOR_WARN_MAX,
 	AREAL_RAIN_FACTOR_WARN_MIN,
 	flowMethodOf,
+	RAIN_PATCH_MAX,
 	type FlowGenerationMethod,
 	type NetworkNode,
+	type RainPatchSource,
 	type RainStationAssignment,
 	type RainStationSettings,
 	type SeriesMeta
@@ -87,15 +89,108 @@ const unitsOf = (rs: RainStationSettings | null | undefined): Record<string, Rai
 export function withUnitStation(rs: RainStationSettings | null | undefined, unitId: string, stationId: string | null): RainStationSettings | null {
 	const units = unitsOf(rs);
 	if (!stationId) delete units[unitId];
-	else units[unitId] = { ...(units[unitId] ?? {}), stationId };
+	else {
+		const a: RainStationAssignment = { ...(units[unitId] ?? {}), stationId };
+		// The new main station can't also patch its own gaps (issue #612): it leaves the patching priority.
+		if (Array.isArray(a.patch)) {
+			const patch = a.patch.filter((p) => !(p.source === 'station' && p.stationId === stationId));
+			units[unitId] = storedPatch(a, patch);
+		} else units[unitId] = a;
+	}
 	return tidyStations({ ...(rs ?? {}), units });
 }
 
-/** The setting with each of `unitIds` on `stationId` (or none): the select-several action. */
-export function withUnitsStation(rs: RainStationSettings | null | undefined, unitIds: readonly string[], stationId: string | null): RainStationSettings | null {
+/**
+ * The setting with each of `unitIds` on `stationId` (or none): the select-several action. With `patch`, each also
+ * takes that patching priority (issue #612; its own main station left out of it).
+ */
+export function withUnitsStation(rs: RainStationSettings | null | undefined, unitIds: readonly string[], stationId: string | null, patch?: readonly RainPatchSource[]): RainStationSettings | null {
 	let next = rs ?? null;
-	for (const id of unitIds) next = withUnitStation(next, id, stationId);
+	for (const id of unitIds) {
+		next = withUnitStation(next, id, stationId);
+		if (stationId && patch) next = withUnitPatch(next, id, patch);
+	}
 	return next;
+}
+
+// ---------------------------------------------------------------------------
+// The patching priority (issue #612, docs/model.md §2.4i)
+// ---------------------------------------------------------------------------
+
+/** One entry of a patching priority as the form's pull-down holds it: a station's id, or `chirps`. */
+export type PatchValue = string;
+export const CHIRPS_PATCH: PatchValue = 'chirps';
+
+const isDefaultPatch = (p: readonly RainPatchSource[]) => p.length === 1 && p[0]!.source === 'chirps';
+
+/** An assignment with `patch` stored: the default ([CHIRPS]) stored as none, so a unit left at it stores what it had. */
+function storedPatch(a: RainStationAssignment, patch: readonly RainPatchSource[]): RainStationAssignment {
+	const { patch: _p, ...rest } = a;
+	return isDefaultPatch(patch) ? rest : { ...rest, patch: patch.map((p) => ({ ...p })) };
+}
+
+/** An assignment's patching priority as the engine runs it: its own, or [CHIRPS] when it has none (the rule before). */
+export const patchOf = (a: Pick<RainStationAssignment, 'patch'> | null | undefined): RainPatchSource[] => (Array.isArray(a?.patch) ? a.patch.map((p) => ({ ...p })) : [{ source: 'chirps' }]);
+
+/** A patching priority's entries as the pull-downs hold them. */
+export const patchValues = (patch: readonly RainPatchSource[]): PatchValue[] => patch.map((p) => (p.source === 'chirps' ? CHIRPS_PATCH : p.stationId));
+/** And back. */
+export const patchFromValues = (values: readonly PatchValue[]): RainPatchSource[] => values.map((v) => (v === CHIRPS_PATCH ? { source: 'chirps' } : { source: 'station', stationId: v }));
+
+/** The setting with a unit's patching priority set (a unit without a station keeps none: it has no gaps to patch). */
+export function withUnitPatch(rs: RainStationSettings | null | undefined, unitId: string, patch: readonly RainPatchSource[]): RainStationSettings | null {
+	const units = unitsOf(rs);
+	const a = units[unitId];
+	if (!a) return rs ?? null;
+	units[unitId] = storedPatch(a, patch.filter((p) => !(p.source === 'station' && p.stationId === a.stationId)));
+	return tidyStations({ ...(rs ?? {}), units });
+}
+
+/** `values` with entry `i` set to `v`; `v` taken out of any other place it held, so no source is listed twice. */
+export function patchSet(values: readonly PatchValue[], i: number, v: PatchValue): PatchValue[] {
+	return values.map((x, j) => (j === i ? v : x)).filter((x, j) => j === i || x !== v);
+}
+
+/** `values` with entry `i` moved one place up (−1) or down (+1); unchanged at an end. */
+export function patchMove(values: readonly PatchValue[], i: number, by: -1 | 1): PatchValue[] {
+	const j = i + by;
+	if (i < 0 || i >= values.length || j < 0 || j >= values.length) return [...values];
+	const out = [...values];
+	[out[i], out[j]] = [out[j]!, out[i]!];
+	return out;
+}
+
+/** `values` without entry `i`. */
+export const patchRemove = (values: readonly PatchValue[], i: number): PatchValue[] => values.filter((_, j) => j !== i);
+
+/**
+ * `values` with one more source: the first station in the list's order not yet listed and not the main station
+ * (`usable` first, when given), else CHIRPS if it isn't listed; null when there is none left or the list is full.
+ */
+export function patchAdd(values: readonly PatchValue[], stations: readonly StationOption[], mainId: string | null, usable?: (id: string) => boolean): PatchValue[] | null {
+	if (values.length >= RAIN_PATCH_MAX) return null;
+	const free = stations.filter((s) => s.id !== mainId && !values.includes(s.id));
+	const next = (usable && free.find((s) => usable(s.id))) ?? free[0];
+	if (next) return [...values, next.id];
+	return values.includes(CHIRPS_PATCH) ? null : [...values, CHIRPS_PATCH];
+}
+
+/** The usability of one station as a unit's patch station (the engine's stationPatchUsability, read for the form). */
+export interface PatchUsability {
+	usable: boolean;
+	reason: string | null;
+	gapDays: number;
+	fills: number;
+	from: string | null;
+	to: string | null;
+}
+
+/** "fills 40 of 52 gap days (77 %), record 1990-01-01 to 2004-12-31", or the reason it can't help with the same counts. */
+export function patchUsabilityText(u: PatchUsability): string {
+	const pct = u.gapDays ? Math.round((100 * u.fills) / u.gapDays) : 0;
+	const span = u.from && u.to ? `; record ${u.from} to ${u.to}` : '';
+	const fills = u.gapDays ? `fills ${u.fills} of the main station’s ${u.gapDays} gap ${u.gapDays === 1 ? 'day' : 'days'} (${pct} %)` : 'the main station has no gaps in the run window';
+	return u.usable ? `${fills}${span}` : `can’t help: ${u.reason}${u.reason?.startsWith('it has no reading') || !u.gapDays ? '' : `; ${fills}`}${span}`;
 }
 
 /** The setting with a unit's "Scale to unit MAP" set. Scaling is the default, so on stores none. */
@@ -151,6 +246,8 @@ export interface UnitStationRow<N extends UnitNode = UnitNode> {
 	ratio: ReturnType<typeof unitRatio>;
 	/** Why the station's rain isn't scaled although scaling is on: no MAP on one side. */
 	noRatioWhy: string | null;
+	/** Its patching priority as the pull-downs hold it (issue #612): [`chirps`] by default; [] without a station. */
+	patch: PatchValue[];
 }
 
 export function unitStationRows<N extends UnitNode>(nodes: readonly N[], rs: RainStationSettings | null | undefined, stations: readonly StationOption[]): UnitStationRow<N>[] {
@@ -169,20 +266,22 @@ export function unitStationRows<N extends UnitNode>(nodes: readonly N[], rs: Rai
 			scale,
 			correctAgainst: assignment ? (assignment.correctAgainst ?? assignment.stationId) : null,
 			ratio: unitRatio(unit.mapMm, sMap, scale && !!station),
-			noRatioWhy
+			noRatioWhy,
+			patch: assignment ? patchValues(patchOf(assignment)) : []
 		};
 	});
 }
 
-/** The stations the table's rows use (assigned or correcting), each once, in the stations' order, with the units on it. */
-export function stationsInUse(rows: readonly UnitStationRow[], stations: readonly StationOption[]): { station: StationOption; units: string[]; corrects: string[] }[] {
+/** The stations the table's rows use (assigned, correcting or patching), each once, in the stations' order, with the units on it. */
+export function stationsInUse(rows: readonly UnitStationRow[], stations: readonly StationOption[]): { station: StationOption; units: string[]; corrects: string[]; patches: string[] }[] {
 	return stations
 		.map((station) => ({
 			station,
 			units: rows.filter((r) => r.station?.id === station.id).map((r) => r.unit.name),
-			corrects: rows.filter((r) => r.station && r.correctAgainst === station.id).map((r) => r.unit.name)
+			corrects: rows.filter((r) => r.station && r.correctAgainst === station.id).map((r) => r.unit.name),
+			patches: rows.filter((r) => r.station && r.patch.includes(station.id)).map((r) => r.unit.name)
 		}))
-		.filter((s) => s.units.length || s.corrects.length);
+		.filter((s) => s.units.length || s.corrects.length || s.patches.length);
 }
 
 /** "Upper farm, Lower farm and 2 more". */

@@ -1,11 +1,18 @@
 // Rain from rainfall stations (issue #553, engine ≥ 1.91.0, docs/model.md
 // §2.4i): one rule for the catchment and for a land unit.
 //
-//   station day (the checked station record has a reading):
+//   station day (the main station's checked record has a reading):
 //       rain = station × clamp(area MAP ÷ station MAP)   (× 1 with scaleToMap false or a MAP missing)
-//   otherwise, when the area has CHIRPS and the pairing of `correctAgainst`
-//   (default the same station) isn't refused:
-//       rain = the area's CHIRPS × that pairing's factor of the day's month, as is (no MAP ratio)
+//   otherwise the patching priority (`patch`, engine ≥ 1.105.0, issue #612;
+//   default [CHIRPS]), the first source in order with a value that day:
+//     a patch station: its checked reading × clamp(area MAP ÷ its MAP)
+//       (× 1 with scaleToMap false; skipped, with a warning, when scaling is
+//       on and it has no MAP);
+//     CHIRPS, when the area has CHIRPS and the area's pairing against
+//       `correctAgainst` (default the main station) isn't refused: the
+//       area's CHIRPS × that pairing's factor of the day's month, as is
+//       (the factors are fitted against the station's rain × r, so they
+//       already carry the area's level; ./stationPairing.ts)
 //   otherwise: the area's next fallback (the catchment: the forecast; a unit:
 //   its own forecast, then the catchment forcing), else dry.
 //
@@ -19,7 +26,7 @@
 // other days), so every reader of the catchment rain (GR4J, demand, the
 // WR2012 check, a rule-4 unit) reads the same rain. A unit's is built in
 // ./unitRain.ts (rule 'station'). This module is pure: no I/O.
-import { toEpochDay } from '../calendar';
+import { fromEpochDay, toEpochDay } from '../calendar';
 import { cmpStr } from '../order';
 import {
 	AREAL_RAIN_FACTOR_MAX,
@@ -29,7 +36,11 @@ import {
 	MAP_MM_MAX,
 	MAP_MM_MIN,
 	outsideArealRainBand,
+	DEFAULT_RAIN_PATCH,
+	RAIN_PATCH_MAX,
 	stationSeriesKey,
+	stationPairingKey,
+	unitRainSeriesKey,
 	type DailySeries,
 	type ModelInput,
 	type NetworkNode,
@@ -37,9 +48,11 @@ import {
 	type RainStationAssignment,
 	type RainStationInputs,
 	type RainStationSettings,
+	type RainPatchSource,
 	type RainStationSummary,
 	type StationAreaForcing,
-	type StationPairingFit
+	type StationPairingFit,
+	type StationPatchUse
 } from '../project';
 import { isLandUnit } from './area';
 import { fitStationPairing, pairingFactorOn } from './stationPairing';
@@ -47,7 +60,7 @@ import { checkedStationRecord, type CheckedStationRecord } from './stationRecord
 import { warn } from '../warningCodes';
 
 /** What a day of an area's station forcing read (StationAreaDays.source). */
-export const STATION_DAY_SOURCE = { none: 0, station: 1, chirps: 2, fallback: 3 } as const;
+export const STATION_DAY_SOURCE = { none: 0, station: 1, chirps: 2, fallback: 3, patch: 4 } as const;
 
 const usableMap = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= MAP_MM_MIN && v <= MAP_MM_MAX ? v : null);
 const reading = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
@@ -58,6 +71,46 @@ const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 
 // ---------------------------------------------------------------------------
 // The setting
 // ---------------------------------------------------------------------------
+
+/**
+ * A stored patching priority as the engine runs it (issue #612): absent or
+ * null = [CHIRPS] (the rule before); not a list = [CHIRPS] with a warning;
+ * an entry that isn't a source, a second CHIRPS, a station listed twice or
+ * the main station dropped with a warning; past RAIN_PATCH_MAX the rest
+ * dropped with a warning.
+ */
+export function resolvePatch(raw: unknown, mainStationId: string, where: string, warnings: string[]): RainPatchSource[] {
+	if (raw === null || raw === undefined) return DEFAULT_RAIN_PATCH.map((x) => ({ ...x }));
+	if (!Array.isArray(raw)) {
+		warnings.push(`rain stations: ${where}'s patching priority isn't a list, so its gaps take the corrected CHIRPS alone`);
+		return DEFAULT_RAIN_PATCH.map((x) => ({ ...x }));
+	}
+	const out: RainPatchSource[] = [];
+	const seen = new Set<string>();
+	for (const e of raw) {
+		const x = e as Partial<{ source: string; stationId: unknown }> | null;
+		const key = x && typeof x === 'object' ? (x.source === 'chirps' ? 'chirps' : x.source === 'station' && isId(x.stationId) ? `station:${x.stationId}` : null) : null;
+		if (key === null) {
+			warnings.push(`rain stations: ${where}'s patching priority has an entry that is neither a station nor CHIRPS, so it is skipped`);
+			continue;
+		}
+		if (key === `station:${mainStationId}`) {
+			warnings.push(`rain stations: ${where}'s patching priority lists its main station, so that entry is skipped`);
+			continue;
+		}
+		if (seen.has(key)) {
+			warnings.push(`rain stations: ${where}'s patching priority lists ${key === 'chirps' ? 'CHIRPS' : `the station ${(x as { stationId: string }).stationId}`} twice, so the second is skipped`);
+			continue;
+		}
+		if (out.length >= RAIN_PATCH_MAX) {
+			warnings.push(`rain stations: ${where}'s patching priority lists more than ${RAIN_PATCH_MAX} sources, so the rest are skipped`);
+			break;
+		}
+		seen.add(key);
+		out.push(key === 'chirps' ? { source: 'chirps' } : { source: 'station', stationId: (x as { stationId: string }).stationId });
+	}
+	return out;
+}
 
 /** One assignment as the engine runs it, or null (with a warning) when it can't be one. */
 function resolveAssignment(raw: unknown, where: string, warnings: string[]): RainStationAssignment | null {
@@ -71,9 +124,13 @@ function resolveAssignment(raw: unknown, where: string, warnings: string[]): Rai
 	return {
 		stationId: a.stationId,
 		scaleToMap: typeof a.scaleToMap === 'boolean' ? a.scaleToMap : true,
-		correctAgainst: isId(a.correctAgainst) ? a.correctAgainst : a.stationId
+		correctAgainst: isId(a.correctAgainst) ? a.correctAgainst : a.stationId,
+		patch: resolvePatch(a.patch, a.stationId, where, warnings)
 	};
 }
+
+/** An assignment's patching priority as run: its resolved `patch`, else the default (an assignment that didn't pass through resolveRainStations). */
+export const patchOf = (a: Pick<RainStationAssignment, 'patch'> | null | undefined): readonly RainPatchSource[] => (Array.isArray(a?.patch) ? a.patch : DEFAULT_RAIN_PATCH);
 
 /**
  * A stored settings.rainStations as the engine runs it (mergeSettings, only
@@ -115,7 +172,7 @@ export function resolveRainStations(raw: unknown, warnings: string[]): RainStati
 	return out;
 }
 
-/** The settings with `factors` (station id → 12) pinned over the stored pinnedFactors (a resumed run's, PreparedFits.stationFactors). */
+/** The settings with `factors` (stationPairingKey → 12) pinned over the stored pinnedFactors (a resumed run's, PreparedFits.stationFactors). */
 export function withPinnedStationFactors(settings: ProjectSettings, factors: Readonly<Record<string, number[]>> | null | undefined): ProjectSettings {
 	if (!settings.rainStations || !factors || !Object.keys(factors).length) return settings;
 	return { ...settings, rainStations: { ...settings.rainStations, pinnedFactors: { ...(settings.rainStations.pinnedFactors ?? {}), ...structuredClone(factors) } } };
@@ -126,9 +183,10 @@ export function withPinnedStationFactors(settings: ProjectSettings, factors: Rea
 // ---------------------------------------------------------------------------
 
 /**
- * Each station's checked record and pairing, computed once per run and shared
- * by the catchment and every unit (so a pairing's warnings come once). The
- * pairings used are summary.stations.pairings.
+ * Each station's checked record, computed once per run and shared by the
+ * catchment and every unit, and each (correcting station, area) pairing,
+ * fitted once per run (so their warnings come once). The pairings used are
+ * summary.stations.pairings.
  */
 export interface StationContext {
 	settings: ProjectSettings;
@@ -141,9 +199,14 @@ export interface StationContext {
 	map(id: string): { mapMm: number | null; mapSource: string | null };
 	/** The station's checked record (null: no record in the input); its check warnings go to the run once. */
 	record(id: string): CheckedStationRecord | null;
-	/** The station's pairing (fitted once; recorded as used). */
-	pairing(id: string): StationPairingFit;
-	/** Every pairing used so far, station-id order. */
+	/**
+	 * The pairing of station `id` with an area's CHIRPS (a land unit's node id,
+	 * or null for the catchment), fitted once and recorded as used. The area's
+	 * ratio to the station is its assignment's scaling (scaleToMap) of the
+	 * area's MAP ÷ the station's.
+	 */
+	pairing(id: string, areaId: string | null): StationPairingFit;
+	/** Every pairing used so far, station-id order, then the catchment, then units in node-id order. */
 	pairings(): StationPairingFit[];
 }
 
@@ -151,6 +214,10 @@ export function stationContext(args: { settings: ProjectSettings; series: ModelI
 	const stations = args.stations ?? {};
 	const records = new Map<string, CheckedStationRecord | null>();
 	const fits = new Map<string, StationPairingFit>();
+	const map = (id: string) => {
+		const mapMm = usableMap(stations[id]?.mapMm);
+		return { mapMm, mapSource: mapMm !== null && typeof stations[id]?.mapSource === 'string' ? stations[id]!.mapSource : null };
+	};
 	const isGauge = (id: string) => stations[id]?.isCatchmentGauge === true;
 	const name = (id: string) => (typeof stations[id]?.name === 'string' && stations[id]!.name ? stations[id]!.name : id);
 	return {
@@ -159,10 +226,7 @@ export function stationContext(args: { settings: ProjectSettings; series: ModelI
 		stations,
 		nodes: args.nodes,
 		name,
-		map: (id) => {
-			const mapMm = usableMap(stations[id]?.mapMm);
-			return { mapMm, mapSource: mapMm !== null && typeof stations[id]?.mapSource === 'string' ? stations[id]!.mapSource : null };
-		},
+		map,
 		record: (id) => {
 			if (!records.has(id)) {
 				const r = checkedStationRecord(args.settings, args.series, id, { name: name(id), isCatchmentGauge: isGauge(id) });
@@ -171,19 +235,46 @@ export function stationContext(args: { settings: ProjectSettings; series: ModelI
 			}
 			return records.get(id)!;
 		},
-		pairing: (id) => {
-			if (!fits.has(id)) fits.set(id, fitStationPairing({ settings: args.settings, series: args.series, stations, nodes: args.nodes, stationId: id }, warnings));
-			return fits.get(id)!;
+		pairing: (id, areaId) => {
+			const key = stationPairingKey(id, areaId);
+			if (!fits.has(key)) {
+				const rs = args.settings.rainStations;
+				const node = areaId === null ? null : args.nodes.find((n) => n.id === areaId);
+				const a = areaId === null ? rs?.catchment : rs?.units?.[areaId];
+				const areaMap = areaId === null ? catchmentMapOf(rs, args.nodes).mapMm : usableMap(node?.mapMm);
+				const ratio = stationRatio(areaMap, map(id).mapMm, a?.scaleToMap !== false).ratio;
+				const chirps = (args.series as Record<string, DailySeries | undefined>)[areaId === null ? 'rain_chirps_mm' : unitRainSeriesKey('rain_chirps_mm', areaId)] ?? null;
+				fits.set(key, fitStationPairing({ settings: args.settings, series: args.series, stations, stationId: id, area: { id: areaId, name: node?.name ?? areaId ?? 'the catchment', chirps, ratio } }, warnings));
+			}
+			return fits.get(key)!;
 		},
-		pairings: () => [...fits.values()].sort((a, b) => cmpStr(a.stationId, b.stationId))
+		pairings: () => [...fits.values()].sort((a, b) => cmpStr(a.stationId, b.stationId) || (a.areaId == null ? -1 : b.areaId == null ? 1 : cmpStr(a.areaId, b.areaId)))
 	};
 }
 
-/** The factors of every pairing used and not refused, for a snapshot to pin (PreparedFits.stationFactors). */
+/** The factors of every pairing used and not refused, by stationPairingKey, for a snapshot to pin (PreparedFits.stationFactors). */
 export function pairingFactors(ctx: StationContext | null | undefined): Record<string, number[]> {
 	const out: Record<string, number[]> = {};
-	for (const p of ctx?.pairings() ?? []) if (p.refused === null && p.months.length === 12) out[p.stationId] = p.months.map((m) => m.factor);
+	for (const p of ctx?.pairings() ?? []) if (p.refused === null && p.months.length === 12) out[stationPairingKey(p.stationId, p.areaId ?? null)] = p.months.map((m) => m.factor);
 	return out;
+}
+
+/**
+ * Fit every pairing settings.rainStations names (the catchment's and each
+ * land unit's in `nodes`, against its correctAgainst, when its patching
+ * priority has CHIRPS), so a pinned copy (an outlook member, an ensemble
+ * member) holds them all.
+ */
+export function fitEveryPairing(ctx: StationContext): void {
+	const rs = ctx.settings.rainStations;
+	if (!rs) return;
+	const chirps = (a: RainStationAssignment) => patchOf(a).some((x) => x.source === 'chirps');
+	if (rs.catchment && chirps(rs.catchment)) ctx.pairing(rs.catchment.correctAgainst ?? rs.catchment.stationId, null);
+	const ids = new Set(ctx.nodes.map((n) => n.id));
+	for (const id of Object.keys(rs.units ?? {}).sort(cmpStr)) {
+		const a = rs.units![id]!;
+		if (ids.has(id) && chirps(a)) ctx.pairing(a.correctAgainst ?? a.stationId, id);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -247,23 +338,48 @@ export function alignReadings(s: DailySeries | null | undefined, start: number, 
 	return out;
 }
 
+/** One link of an area's patching priority over a window (stationAreaDays). */
+export type PatchLink =
+	/** A patch station's checked readings already × its ratio; null = skipped (gives no day). */
+	| { kind: 'station'; values: readonly (number | null)[] | null }
+	/** The area's CHIRPS and the pairing correcting it (null or refused: gives no day). */
+	| { kind: 'chirps'; chirps: readonly (number | null)[] | null; pairing: StationPairingFit | null };
+
 /** An area's station rule over a window, before its next fallback. */
 export interface StationAreaDays {
-	/** The rain on station and CHIRPS days (mm, the value as computed: not floored); null on the days the next fallback takes. */
+	/** The rain on station, patch and CHIRPS days (mm, the value as computed: not floored); null on the days the next fallback takes. */
 	values: (number | null)[];
-	/** STATION_DAY_SOURCE per day: station, chirps, or none (left to the next fallback). */
+	/** STATION_DAY_SOURCE per day: station, patch (a patch station), chirps, or none (left to the next fallback). */
 	source: Uint8Array;
+	/** The index in the patching priority of the source that gave a patch or CHIRPS day; −1 on the others. */
+	patchIndex: Int8Array;
 }
 
 /**
- * The station rule on each day (see the header): station × ratio on its
- * days, else the area's CHIRPS × the pairing's factor of the day's month (no
- * ratio), else null. `pairing` null or refused leaves CHIRPS unread.
+ * The station rule on each day (see the header): the main station × ratio on
+ * its days, else the first link of `chain` with a value (a patch station's
+ * scaled reading, or the area's CHIRPS × the pairing's factor of the day's
+ * month, no ratio), else null. Without `chain`, the chain is [CHIRPS] of
+ * `chirps` and `pairing` (the rule before issue #612).
  */
-export function stationAreaDays(a: { start: number; days: number; station: readonly (number | null)[]; ratio: number; chirps: readonly (number | null)[] | null; pairing: StationPairingFit | null }): StationAreaDays {
+export function stationAreaDays(a: {
+	start: number;
+	days: number;
+	station: readonly (number | null)[];
+	ratio: number;
+	chain?: readonly PatchLink[];
+	chirps?: readonly (number | null)[] | null;
+	pairing?: StationPairingFit | null;
+}): StationAreaDays {
 	const values = new Array<number | null>(a.days).fill(null);
 	const source = new Uint8Array(a.days);
-	const corrected = a.chirps && a.pairing && a.pairing.refused === null ? a.pairing : null;
+	const patchIndex = new Int8Array(a.days).fill(-1);
+	const chain = a.chain ?? [{ kind: 'chirps', chirps: a.chirps ?? null, pairing: a.pairing ?? null }];
+	const links = chain.map((l) =>
+		l.kind === 'station'
+			? { station: l.values, chirps: null, pairing: null }
+			: { station: null, chirps: l.chirps, pairing: l.chirps && l.pairing && l.pairing.refused === null && l.pairing.months.length === 12 ? l.pairing : null }
+	);
 	for (let t = 0; t < a.days; t++) {
 		const s = a.station[t];
 		if (s != null) {
@@ -271,15 +387,158 @@ export function stationAreaDays(a: { start: number; days: number; station: reado
 			source[t] = STATION_DAY_SOURCE.station;
 			continue;
 		}
-		if (!corrected) continue;
-		const c = a.chirps![t];
-		if (c == null) continue;
-		const k = pairingFactorOn(corrected, a.start + t);
-		if (k === null) continue;
-		values[t] = c * k;
-		source[t] = STATION_DAY_SOURCE.chirps;
+		for (let i = 0; i < links.length; i++) {
+			const l = links[i]!;
+			if (l.station) {
+				const v = l.station[t];
+				if (v == null) continue;
+				values[t] = v;
+				source[t] = STATION_DAY_SOURCE.patch;
+				patchIndex[t] = i;
+				break;
+			}
+			if (!l.pairing) continue;
+			const c = l.chirps![t];
+			if (c == null) continue;
+			const k = pairingFactorOn(l.pairing, a.start + t);
+			if (k === null) continue;
+			values[t] = c * k;
+			source[t] = STATION_DAY_SOURCE.chirps;
+			patchIndex[t] = i;
+			break;
+		}
 	}
-	return { values, source };
+	return { values, source, patchIndex };
+}
+
+/** One source of an area's patching priority, resolved for a run: a station with its ratio (or why it is skipped), or CHIRPS. */
+export type ResolvedPatch =
+	| { source: 'station'; stationId: string; stationMapMm: number | null; ratio: number; ownRatio: number | null; clamped: boolean; skipped: string | null }
+	| { source: 'chirps' };
+
+/**
+ * An area's patching priority for a run (issue #612): each station with its
+ * ratio to the area (as the main station's: area MAP ÷ its MAP, clamped,
+ * × 1 without scaling or without the area's MAP), skipped with a warning
+ * when it has no record in the input or, under scaling, no MAP of its own.
+ */
+export function resolvePatchSources(ctx: StationContext, a: RainStationAssignment, area: string, areaMapMm: number | null, warnings: string[]): ResolvedPatch[] {
+	const scaleToMap = a.scaleToMap !== false;
+	return patchOf(a).map((p): ResolvedPatch => {
+		if (p.source === 'chirps') return { source: 'chirps' };
+		const m = ctx.map(p.stationId).mapMm;
+		const r = stationRatio(areaMapMm, m, scaleToMap);
+		const skipped =
+			p.stationId === a.stationId
+				? 'it is the main station'
+				: !ctx.record(p.stationId)
+					? 'it has no record in this run’s input'
+					: scaleToMap && m === null
+						? 'it has no MAP to scale its rain to the area’s MAP by'
+						: null;
+		if (skipped) warnings.push(`station: ${area}’s patch station "${ctx.name(p.stationId)}" is skipped: ${skipped}`);
+		else warnings.push(...ratioWarnings(area, ctx.name(p.stationId), areaMapMm, m, r, scaleToMap && m !== null, null));
+		return { source: 'station', stationId: p.stationId, stationMapMm: m, ratio: r.ratio, ownRatio: r.ownRatio, clamped: r.clamped, skipped };
+	});
+}
+
+/** The chain links of resolved patch sources over a window (stationAreaDays' `chain`). */
+export function patchLinks(ctx: StationContext, patch: readonly ResolvedPatch[], start: number, days: number, chirps: readonly (number | null)[] | null, pairing: StationPairingFit | null): PatchLink[] {
+	return patch.map((p): PatchLink => {
+		if (p.source === 'chirps') return { kind: 'chirps', chirps, pairing };
+		if (p.skipped) return { kind: 'station', values: null };
+		return { kind: 'station', values: alignReadings(ctx.record(p.stationId)?.record, start, days).map((v) => (v === null ? null : v * p.ratio)) };
+	});
+}
+
+/**
+ * Whether a station can patch an area's main station over a window (issue
+ * #612; pure): unusable, with the reason, when it is the main station, has
+ * no record, has no MAP while scaling is on, or has a reading on none of the
+ * main station's gap days; always with the main station's gap days in the
+ * window, how many of them it has a reading on, and its record's span.
+ */
+export interface StationPatchUsability {
+	usable: boolean;
+	reason: string | null;
+	gapDays: number;
+	fills: number;
+	from: string | null;
+	to: string | null;
+}
+
+export function stationPatchUsability(a: {
+	main: readonly (number | null)[];
+	patch: readonly (number | null)[] | null;
+	isMain?: boolean;
+	scaleToMap: boolean;
+	stationMapMm: number | null;
+	record?: DailySeries | null;
+}): StationPatchUsability {
+	let gapDays = 0;
+	let fills = 0;
+	for (let t = 0; t < a.main.length; t++) {
+		if (a.main[t] != null) continue;
+		gapDays++;
+		if (a.patch?.[t] != null) fills++;
+	}
+	let from: string | null = null;
+	let to: string | null = null;
+	if (a.record) {
+		const d0 = toEpochDay(a.record.startDate);
+		const i = a.record.values.findIndex(reading);
+		let j = a.record.values.length - 1;
+		while (j >= 0 && !reading(a.record.values[j])) j--;
+		if (i >= 0) {
+			from = fromEpochDay(d0 + i);
+			to = fromEpochDay(d0 + j);
+		}
+	}
+	const reason = a.isMain
+		? 'it is the main station'
+		: !a.patch
+			? 'it has no record'
+			: a.scaleToMap && a.stationMapMm === null
+				? 'it has no MAP to scale its rain to the unit’s MAP'
+				: fills === 0
+					? gapDays === 0
+						? 'the main station has no gap in the run window'
+						: `it has no reading on any of the main station’s ${gapDays} gap ${gapDays === 1 ? 'day' : 'days'} in the run window`
+					: null;
+	return { usable: reason === null, reason, gapDays, fills, from, to };
+}
+
+/** The run's record of a resolved patching priority (StationAreaForcing.patches): each source's days and, for a station, its fill of the main station's gaps. */
+export function patchUses(ctx: StationContext, patch: readonly ResolvedPatch[], links: readonly PatchLink[], main: readonly (number | null)[], d: StationAreaDays, scaleToMap: boolean): StationPatchUse[] {
+	const counts = new Array<number>(patch.length).fill(0);
+	for (let t = 0; t < d.patchIndex.length; t++) if (d.patchIndex[t]! >= 0) counts[d.patchIndex[t]!]!++;
+	return patch.map((p, i): StationPatchUse => {
+		if (p.source === 'chirps') return { source: 'chirps', days: counts[i]! };
+		const l = links[i] as Extract<PatchLink, { kind: 'station' }>;
+		const u = stationPatchUsability({ main, patch: l.values, scaleToMap, stationMapMm: p.stationMapMm });
+		return {
+			source: 'station',
+			stationId: p.stationId,
+			stationName: ctx.name(p.stationId),
+			stationMapMm: p.stationMapMm,
+			ownRatio: p.ownRatio,
+			ratio: p.ratio,
+			clamped: p.clamped,
+			skipped: p.skipped,
+			gapDays: u.gapDays,
+			fills: u.fills,
+			days: counts[i]!
+		};
+	});
+}
+
+/** A warning for each used patch station that fills none of the main station's gaps in the window (it changes nothing). */
+export function idlePatchWarnings(area: string, uses: readonly StationPatchUse[]): string[] {
+	return uses.flatMap((u) =>
+		u.source === 'station' && !u.skipped && u.fills === 0 && u.gapDays > 0
+			? [`station: ${area}’s patch station "${u.stationName}" has no reading on any of the main station’s ${u.gapDays} gap ${u.gapDays === 1 ? 'day' : 'days'} in the run window, so it fills none`]
+			: []
+	);
 }
 
 /**
@@ -311,11 +570,12 @@ export function setAsideInWindow(ctx: StationContext, stationId: string, start: 
 }
 
 /** Day counts by source over the run (StationAreaForcing.days). */
-export function stationDayCounts(source: ArrayLike<number>, fallback: (t: number) => boolean): StationAreaForcing['days'] {
-	const days = { station: 0, chirps: 0, fallback: 0, none: 0 };
+export function stationDayCounts(source: ArrayLike<number>, fallback: (t: number) => boolean): Required<StationAreaForcing['days']> {
+	const days = { station: 0, patch: 0, chirps: 0, fallback: 0, none: 0 };
 	for (let t = 0; t < source.length; t++) {
 		const s = source[t];
 		if (s === STATION_DAY_SOURCE.station) days.station++;
+		else if (s === STATION_DAY_SOURCE.patch) days.patch++;
 		else if (s === STATION_DAY_SOURCE.chirps) days.chirps++;
 		else if (fallback(t)) days.fallback++;
 		else days.none++;
@@ -331,19 +591,22 @@ export function stationDayCounts(source: ArrayLike<number>, fallback: (t: number
 export interface CatchmentStationPlan {
 	ctx: StationContext;
 	assignment: Required<Pick<RainStationAssignment, 'stationId'>> & { scaleToMap: boolean; correctAgainst: string };
+	/** The patching priority resolved for the run (issue #612). */
+	patch: ResolvedPatch[];
 	/** The checked station record (its whole span). */
 	record: DailySeries;
 	map: ReturnType<typeof catchmentMapOf>;
 	stationMap: { mapMm: number | null; mapSource: string | null };
 	ratio: ReturnType<typeof stationRatio>;
-	pairing: StationPairingFit;
+	/** The catchment's pairing against correctAgainst; null when the patching priority has no CHIRPS (none fitted). */
+	pairing: StationPairingFit | null;
 }
 
 /**
  * The catchment's station for a run, or null when settings.rainStations has
  * no catchment assignment (the catchment rain as before, bit for bit) or its
  * station has no record in the input (a warning: the catchment rain as
- * before). Fits the pairing it corrects against.
+ * before). Fits the pairing it corrects against when its patching priority has CHIRPS.
  */
 export function catchmentStationPlan(ctx: StationContext, warnings: string[]): CatchmentStationPlan | null {
 	const a = ctx.settings.rainStations?.catchment;
@@ -363,8 +626,9 @@ export function catchmentStationPlan(ctx: StationContext, warnings: string[]): C
 	const ratio = stationRatio(map.mapMm, stationMap.mapMm, scaleToMap);
 	const why = map.missing.length ? `the catchment MAP is the units’ area-weighted mean, and ${map.missing.map((n) => `"${n}"`).join(', ')} ${map.missing.length === 1 ? 'has' : 'have'} no MAP` : 'the catchment has no MAP (no unit with land, and none entered)';
 	warnings.push(...ratioWarnings('the catchment', ctx.name(stationId), map.mapMm, stationMap.mapMm, ratio, scaleToMap, why));
-	const pairing = ctx.pairing(correctAgainst);
-	return { ctx, assignment: { stationId, scaleToMap, correctAgainst }, record: rec.record, map, stationMap, ratio, pairing };
+	const patch = resolvePatchSources(ctx, a, 'the catchment', map.mapMm, warnings);
+	const pairing = patch.some((p) => p.source === 'chirps') ? ctx.pairing(correctAgainst, null) : null;
+	return { ctx, assignment: { stationId, scaleToMap, correctAgainst }, patch, record: rec.record, map, stationMap, ratio, pairing };
 }
 
 /**
@@ -388,10 +652,12 @@ export function catchmentStationReferenceRecord(ctx: StationContext): DailySerie
 
 /**
  * The catchment forcing over a window: the two arrays prepareRun's `aligned`
- * returns for `rain_catchment_mm` (station × ratio on its days, else null)
- * and `rain_chirps_mm` (the catchment CHIRPS × the pairing's factors on the
- * other days; as stored on station days; null on days the pairing can't
- * correct, so they fall to the forecast), with the day codes and the summary.
+ * returns for `rain_catchment_mm` (station × ratio on its days, a patch
+ * station × its ratio on the days it patches, else null) and
+ * `rain_chirps_mm` (the catchment CHIRPS × the pairing's factors on the days
+ * CHIRPS patches; as stored on station and patch days; null on days nothing
+ * patches, so they fall to the forecast), with the day codes, the summary
+ * and the warnings about the patch stations.
  */
 export function catchmentStationForcing(
 	plan: CatchmentStationPlan,
@@ -399,18 +665,22 @@ export function catchmentStationForcing(
 	days: number,
 	chirps: readonly (number | null)[],
 	forecast: readonly (number | null)[]
-): { catchment: (number | null)[]; chirps: (number | null)[]; days: StationAreaDays; forcing: StationAreaForcing } {
-	const d = stationAreaDays({ start, days, station: alignReadings(plan.record, start, days), ratio: plan.ratio.ratio, chirps, pairing: plan.pairing });
+): { catchment: (number | null)[]; chirps: (number | null)[]; days: StationAreaDays; forcing: StationAreaForcing; warnings: string[] } {
+	const ctx = plan.ctx;
+	const main = alignReadings(plan.record, start, days);
+	const links = patchLinks(ctx, plan.patch, start, days, chirps, plan.pairing);
+	const d = stationAreaDays({ start, days, station: main, ratio: plan.ratio.ratio, chain: links });
 	const catchment = new Array<number | null>(days).fill(null);
 	const ch = new Array<number | null>(days).fill(null);
 	for (let t = 0; t < days; t++) {
-		if (d.source[t] === STATION_DAY_SOURCE.station) {
+		// A patch station's day is station rain at the catchment's level, as the main station's is.
+		if (d.source[t] === STATION_DAY_SOURCE.station || d.source[t] === STATION_DAY_SOURCE.patch) {
 			catchment[t] = d.values[t]!;
 			ch[t] = chirps[t] ?? null;
 		} else if (d.source[t] === STATION_DAY_SOURCE.chirps) ch[t] = d.values[t]!;
 	}
-	const ctx = plan.ctx;
 	const id = plan.assignment.stationId;
+	const patches = patchUses(ctx, plan.patch, links, main, d, plan.assignment.scaleToMap);
 	return {
 		catchment,
 		chirps: ch,
@@ -428,10 +698,12 @@ export function catchmentStationForcing(
 			ratio: plan.ratio.ratio,
 			clamped: plan.ratio.clamped,
 			scaleToMap: plan.assignment.scaleToMap,
-			correctedBy: plan.pairing.refused === null ? plan.pairing.stationId : null,
+			correctedBy: plan.pairing && plan.pairing.refused === null ? plan.pairing.stationId : null,
 			days: stationDayCounts(d.source, (t) => forecast[t] != null),
-			setAside: setAsideInWindow(ctx, id, start, days)
-		}
+			setAside: setAsideInWindow(ctx, id, start, days),
+			patches
+		},
+		warnings: idlePatchWarnings('the catchment', patches)
 	};
 }
 
@@ -448,8 +720,10 @@ export interface UnitStationRecipe {
 	ratio: number;
 	ownRatio: number | null;
 	clamped: boolean;
-	/** The pairing's 12 factors (calendar months); null when refused (its gaps fall to the next fallback). */
+	/** The unit's pairing's 12 factors (calendar months); null when refused or when the patching priority has no CHIRPS (its gaps fall to the next fallback). */
 	factors: number[] | null;
+	/** The patching priority resolved for the run (issue #612); absent on a recipe from before, which ran [CHIRPS]. */
+	patch?: ResolvedPatch[];
 }
 
 /**
@@ -470,13 +744,28 @@ export function unitStationRecipe(ctx: StationContext, node: NetworkNode, a: Rai
 	const unitMap = usableMap(node.mapMm);
 	const r = stationRatio(unitMap, stationMap.mapMm, scaleToMap);
 	warnings.push(...ratioWarnings(`"${node.name}"`, ctx.name(stationId), unitMap, stationMap.mapMm, r, scaleToMap, null));
-	const p = ctx.pairing(correctAgainst);
-	return { stationId, correctAgainst, scaleToMap, stationMapMm: stationMap.mapMm, ratio: r.ratio, ownRatio: r.ownRatio, clamped: r.clamped, factors: p.refused === null && p.months.length === 12 ? p.months.map((m) => m.factor) : null };
+	const patch = resolvePatchSources(ctx, a, `"${node.name}"`, unitMap, warnings);
+	const p = patch.some((x) => x.source === 'chirps') ? ctx.pairing(correctAgainst, node.id) : null;
+	return {
+		stationId,
+		correctAgainst,
+		scaleToMap,
+		stationMapMm: stationMap.mapMm,
+		ratio: r.ratio,
+		ownRatio: r.ownRatio,
+		clamped: r.clamped,
+		factors: p && p.refused === null && p.months.length === 12 ? p.months.map((m) => m.factor) : null,
+		patch
+	};
 }
 
-/** The pairing a recipe's factors stand for (pinned ones read as a fit of those factors). */
-export function recipePairing(ctx: StationContext, r: UnitStationRecipe): StationPairingFit {
-	const fit = ctx.pairing(r.correctAgainst);
+/** A recipe's patching priority: its own, or [CHIRPS] for a recipe from before issue #612. */
+export const recipePatch = (r: UnitStationRecipe): readonly ResolvedPatch[] => r.patch ?? [{ source: 'chirps' }];
+
+/** The pairing a unit recipe's factors stand for (pinned ones read as a fit of those factors); null when its patching priority has no CHIRPS. */
+export function recipePairing(ctx: StationContext, r: UnitStationRecipe, unitId: string): StationPairingFit | null {
+	if (!recipePatch(r).some((x) => x.source === 'chirps')) return null;
+	const fit = ctx.pairing(r.correctAgainst, unitId);
 	if (r.factors === null) return { ...fit, refused: fit.refused ?? 'pinned as refused', months: [] };
 	const same = fit.refused === null && fit.months.length === 12 && fit.months.every((m, i) => m.factor === r.factors![i]);
 	if (same) return fit;

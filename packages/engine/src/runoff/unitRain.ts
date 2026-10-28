@@ -35,8 +35,10 @@
 // A land unit with a rainfall station (settings.rainStations.units[id],
 // engine ≥ 1.91.0, issue #553, docs/model.md §2.4i) takes rule 'station'
 // instead: the station × clamp(unit MAP ÷ station MAP) on the station's days,
-// its own CHIRPS × the pairing's monthly factors (as is) on the others, then
-// its own forecast, then the catchment forcing (× 1). ./stationForcing.ts has
+// then its patching priority (engine ≥ 1.105.0, issue #612: other stations ×
+// their own unit MAP ÷ station MAP, and its own CHIRPS × the unit's pairing
+// factors, as is; default [CHIRPS]) on the others, then its own forecast,
+// then the catchment forcing (× 1). ./stationForcing.ts has
 // the rule; a unit without a station keeps the chain above, bit for bit.
 import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
 import {
@@ -77,7 +79,11 @@ import {
 	alignReadings,
 	catchmentStationPlan,
 	catchmentStationReferenceRecord,
+	idlePatchWarnings,
+	patchLinks,
+	patchUses,
 	recipePairing,
+	recipePatch,
 	setAsideInWindow,
 	STATION_DAY_SOURCE,
 	stationAreaDays,
@@ -100,7 +106,7 @@ export * from './unitRainFingerprint';
 export const UNIT_MAP_MIN_YEARS = 10;
 
 /** The source codes of a unit's day (UnitForcing.source): which link of the chain gave its rain. */
-export const UNIT_RAIN_SOURCE = { unitGauge: 0, gaugeMap: 1, unitChirps: 2, catchment: 3, forecast: 4, station: 5, stationChirps: 6 } as const;
+export const UNIT_RAIN_SOURCE = { unitGauge: 0, gaugeMap: 1, unitChirps: 2, catchment: 3, forecast: 4, station: 5, stationChirps: 6, stationPatch: 7 } as const;
 
 /**
  * A unit's rule and factors, fixed for a run: everything about its forcing
@@ -137,6 +143,8 @@ export interface UnitForcing {
 	rainMm: Float64Array;
 	/** Rule 4 with an areal correction: the rain before it; absent otherwise. */
 	rainBeforeArealMm?: Float64Array;
+	/** Rule 'station' (engine ≥ 1.105.0, issue #612): the index in the unit's patching priority of the source that gave a stationPatch or stationChirps day; −1 on the others. Absent on the other rules. */
+	patchIndex?: Int8Array;
 	/** UNIT_RAIN_SOURCE of each day's rain; NaN where it had none. */
 	source: Float64Array;
 }
@@ -486,10 +494,12 @@ export function unitRainForcing(
 			const station = alignReadings(sc.record(st.stationId)?.record, d0, days);
 			const chirpsKey = unitRainSeriesKey('rain_chirps_mm', n.id);
 			const own = ctx.series[chirpsKey] ? alignReadings(ctx.series[chirpsKey], d0, days) : null;
-			const pairing = recipePairing(sc, st);
-			const d = stationAreaDays({ start: d0, days, station, ratio: st.ratio, chirps: own, pairing });
+			const pairing = recipePairing(sc, st, n.id);
+			const patch = recipePatch(st);
+			const links = patchLinks(sc, patch, d0, days, own, pairing);
+			const d = stationAreaDays({ start: d0, days, station, ratio: st.ratio, chain: links });
 			const ownForecast = ctx.series[unitForecastSeriesKey(n.id)] ? align(ctx.series[unitForecastSeriesKey(n.id)]) : null;
-			const counts = { station: 0, chirps: 0, fallback: 0, none: 0 };
+			const counts = { station: 0, patch: 0, chirps: 0, fallback: 0, none: 0 };
 			let fell = 0;
 			for (let t = 0; t < days; t++) {
 				let v: number | null = null;
@@ -498,6 +508,10 @@ export function unitRainForcing(
 					v = d.values[t]!;
 					code = UNIT_RAIN_SOURCE.station;
 					counts.station++;
+				} else if (d.source[t] === STATION_DAY_SOURCE.patch) {
+					v = d.values[t]!;
+					code = UNIT_RAIN_SOURCE.stationPatch;
+					counts.patch++;
 				} else if (d.source[t] === STATION_DAY_SOURCE.chirps) {
 					v = d.values[t]!;
 					code = UNIT_RAIN_SOURCE.stationChirps;
@@ -525,10 +539,12 @@ export function unitRainForcing(
 					warn(
 						'rain.unit.catchmentFallback',
 						{ unit: n.id, days: fell, runDays: hist },
-						`unit rain: "${n.name}" ran ${fell} of its ${hist} day${hist === 1 ? '' : 's'} on the catchment's rain, where its station and its corrected CHIRPS had no value`
+						`unit rain: "${n.name}" ran ${fell} of its ${hist} day${hist === 1 ? '' : 's'} on the catchment's rain, where its station and its patching sources had no value`
 					)
 				);
 			const sm = sc.map(st.stationId);
+			const patches = patchUses(sc, patch, links, station, d, st.scaleToMap);
+			warnings.push(...idlePatchWarnings(`"${n.name}"`, patches));
 			stationForcings.push({
 				nodeId: n.id,
 				name: n.name,
@@ -542,11 +558,12 @@ export function unitRainForcing(
 				ratio: st.ratio,
 				clamped: st.clamped,
 				scaleToMap: st.scaleToMap,
-				correctedBy: own && pairing.refused === null ? pairing.stationId : null,
+				correctedBy: own && pairing && pairing.refused === null ? pairing.stationId : null,
 				days: counts,
-				setAside: setAsideInWindow(sc, st.stationId, d0, days)
+				setAside: setAsideInWindow(sc, st.stationId, d0, days),
+				patches
 			});
-			return { ...base, rainMm, source };
+			return { ...base, rainMm, source, patchIndex: d.patchIndex };
 		}
 		if (r.rule === 'catchment') {
 			// The catchment forcing as without per-unit rain (runoffForcing): catchment ?? CHIRPS ?? forecast, × the areal factor.
@@ -690,7 +707,8 @@ export function unitRainSummary(u: UnitRainSettings, units: readonly UnitForcing
 				const s = x.source[t]!;
 				if (s === UNIT_RAIN_SOURCE.unitGauge) days.unitGauge++;
 				// A station's day is a gauge × MAP ratio, as rule 2's; its corrected CHIRPS the unit's own CHIRPS (§2.4i).
-				else if (s === UNIT_RAIN_SOURCE.gaugeMap || s === UNIT_RAIN_SOURCE.station) days.gaugeMap++;
+				// A patch station's day is a gauge × MAP ratio too (issue #612).
+				else if (s === UNIT_RAIN_SOURCE.gaugeMap || s === UNIT_RAIN_SOURCE.station || s === UNIT_RAIN_SOURCE.stationPatch) days.gaugeMap++;
 				else if (s === UNIT_RAIN_SOURCE.unitChirps || s === UNIT_RAIN_SOURCE.stationChirps) days.unitChirps++;
 				else if (s === UNIT_RAIN_SOURCE.catchment) days.catchment++;
 				else if (s === UNIT_RAIN_SOURCE.forecast) days.forecast++;

@@ -1762,6 +1762,20 @@ describe('diffInputs: rainfall stations (issue #553)', () => {
 		expect(new Map(settingsChangePaths()).get('Rainfall stations')).toBe('rainStations');
 	});
 
+	it('words a patching priority (issue #612), and reads an absent one and [CHIRPS] as the same', () => {
+		const a = snapshot({ stations });
+		a.settings.rainStations = { units: { f1: { stationId: 's1' } } };
+		const same = structuredClone(a);
+		same.settings.rainStations = { units: { f1: { stationId: 's1', patch: [{ source: 'chirps' }] } } };
+		expect(texts(a, same)).toEqual([]);
+		const b = structuredClone(a);
+		b.settings.rainStations = { units: { f1: { stationId: 's1', patch: [{ source: 'station', stationId: 's2' }, { source: 'chirps' }] } } };
+		expect(texts(a, b)).toEqual(["Rainfall stations: Rooikloof's station: Hill station → Hill station, gaps patched from Low station then CHIRPS"]);
+		const none = structuredClone(a);
+		none.settings.rainStations = { units: { f1: { stationId: 's1', patch: [] } } };
+		expect(texts(a, none)).toEqual(["Rainfall stations: Rooikloof's station: Hill station → Hill station, gaps patched from nothing"]);
+	});
+
 	it('reads a run without the setting as no station, and names a station by id when the snapshot lacks its name', () => {
 		const b = snapshot();
 		b.settings.rainStations = { catchment: { stationId: 'series-9' } };
