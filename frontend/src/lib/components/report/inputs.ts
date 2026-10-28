@@ -125,8 +125,16 @@ function ewrSplitText(s: RunSettings, applied?: EwrSplitInfo): string {
 				: applied.why === 'noUnitRunoff'
 					? 'the flow share: the natural flow came without the units’ runoff'
 					: 'the flow share: the run resumed from a snapshot that pinned no shares';
-		if (applied.applied === 'area') return 'each unit’s area: no unit made natural runoff over the run';
-		const frag = applied.runoffFrom === 'shareRuns' ? '; under Fragmentation, from GR4J runs on each unit’s own rain made for the shares only (the flow is the catchment’s one run, split by the flow share)' : '';
+		if (applied.applied === 'area')
+			return applied.why === 'noLandUnit'
+				? 'none: no unit has an area, so every unit’s share is 0'
+				: applied.why === 'noUnitRunoff'
+					? 'each unit’s area: the natural flow came without the units’ runoff'
+					: applied.why === 'resumed'
+						? 'each unit’s area: the run resumed from a snapshot that pinned no shares'
+						: 'each unit’s area: no unit made natural runoff over the run';
+		// From 1.105.0 (issue #616) the same shares split the flow under Fragmentation: the flow-share methods are gone.
+		const frag = applied.runoffFrom === 'shareRuns' ? '; under Fragmentation, from GR4J runs on each unit’s own rain made for the shares only (the flow is the catchment’s one run, split by the same shares)' : '';
 		const rule4 = applied.catchmentRain?.length ? `; on the catchment rain, so their share follows their area: ${applied.catchmentRain.map((u) => u.name).join(', ')}` : '';
 		return NATURAL_MAR_TEXT + frag + rule4;
 	}

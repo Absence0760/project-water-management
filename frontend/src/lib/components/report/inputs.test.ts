@@ -117,9 +117,13 @@ describe('settingsRows', () => {
 		const mar = 'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review';
 		expect(at({ applied: 'naturalMar', period, runoffFrom: 'unitRain' })).toBe(mar);
 		expect(at({ applied: 'naturalMar', period, runoffFrom: 'shareRuns', catchmentRain: [{ nodeId: 'd', name: 'Unit D' }] })).toBe(
-			`${mar}; under Fragmentation, from GR4J runs on each unit’s own rain made for the shares only (the flow is the catchment’s one run, split by the flow share); on the catchment rain, so their share follows their area: Unit D`
+			`${mar}; under Fragmentation, from GR4J runs on each unit’s own rain made for the shares only (the flow is the catchment’s one run, split by the same shares); on the catchment rain, so their share follows their area: Unit D`
 		);
 		expect(at({ applied: 'area', why: 'noRunoff', period })).toBe('each unit’s area: no unit made natural runoff over the run');
+		// The fallbacks from engine 1.105.0 (issue #616): by area, or every share 0 with no land unit.
+		expect(at({ applied: 'area', why: 'noUnitRunoff', period })).toBe('each unit’s area: the natural flow came without the units’ runoff');
+		expect(at({ applied: 'area', why: 'resumed', period })).toBe('each unit’s area: the run resumed from a snapshot that pinned no shares');
+		expect(at({ applied: 'area', why: 'noLandUnit', period })).toBe('none: no unit has an area, so every unit’s share is 0');
 		expect(at({ applied: 'flowShare', why: 'noLandUnit' })).toBe('the flow share: no unit has an area, so there is no natural MAR to split by');
 	});
 

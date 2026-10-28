@@ -40,7 +40,7 @@
 		/** The save bar's reason, shared. */
 		reason?: string;
 		projectId: string;
-		/** The project's runs (the node table's flow shares and the farmers' notes need none, but NetworkTab takes them). */
+		/** The project's runs: the node table's In use column shows the latest run's shares (issue #616). */
 		runs?: RunMeta[] | null;
 		/** The project has a daily A-pan series (the demand preview says it shows the monthly means, issue #173). */
 		apanDaily?: boolean;

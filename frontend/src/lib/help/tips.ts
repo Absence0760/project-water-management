@@ -714,18 +714,10 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'farm-area',
 		term: 'Hydrological unit area',
-		short: 'Land area of the hydrological unit, in km². Drives its share of catchment runoff under the Area method.',
+		short: 'Land area of the hydrological unit, in km². GR4J runs on it for the unit’s natural MAR share of the flow and the EWR.',
 		units: 'km²',
 		category: 'farm',
 		fields: ['node.areaKm2']
-	},
-	{
-		id: 'hi-lo-map-area',
-		term: 'High-MAP and low-MAP area',
-		short: 'The hydrological unit’s land in the wetter (high mean annual precipitation) and drier parts of the catchment, in km².',
-		units: 'km²',
-		category: 'farm',
-		fields: ['node.areaHiKm2', 'node.areaLoKm2']
 	},
 	{
 		id: 'unit-map',
@@ -738,18 +730,10 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'flow-share',
 		term: 'Flow share (fragmentation)',
-		short: 'The fixed fraction of catchment natural flow (and EWR) assigned to each hydrological unit. Shares should add up to 100 %.',
+		short: 'Each hydrological unit’s natural MAR share, from the latest run: it splits the natural flow and the EWR between the units.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
-		fields: ['settings.flowShareMethod', 'node.flowShareManual', 'summary.flowShare']
-	},
-	{
-		id: 'hi-lo-split',
-		term: 'Hi/Lo split',
-		short: 'How much runoff comes from the high-rainfall zone versus the low one (defaults to 50 % / 50 %; set per project). For the Hi/Lo method.',
-		units: 'fraction 0–1',
-		category: 'farm',
-		fields: ['settings.hiLoSplit']
+		fields: ['summary.flowShare']
 	},
 	{
 		id: 'upstream-to-dam',

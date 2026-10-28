@@ -29,8 +29,8 @@ import { TIPS, tipFor } from './tips';
 // Exhaustive `Record<keyof T, true>` objects: the typecheck fails if the engine
 // renames a field, so help keys can't silently drift from the model.
 const NODE: Record<keyof NetworkNode, true> = {
-	id: true, name: true, kind: true, downstreamNodeId: true, sortOrder: true, areaKm2: true, areaHiKm2: true,
-	areaLoKm2: true, flowShareManual: true, pctUpstreamToDam: true, pctRunoffToDam: true, damCapacityM3: true,
+	id: true, name: true, kind: true, downstreamNodeId: true, sortOrder: true, areaKm2: true,
+	pctUpstreamToDam: true, pctRunoffToDam: true, damCapacityM3: true,
 	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, irrigationEfficiency: true, returnFlowFraction: true,
 	damAreaFullM2: true, damAreaExponent: true, damSeepagePerDay: true,
 	userDemandM3Day: true, userReturnPct: true, userPriority: true,

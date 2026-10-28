@@ -27,7 +27,7 @@ let published: string;
 // Gauge ← Rooikloof (the applicant's, the catchment's only land) and five hidden farms with no land of their own.
 // The catchment-wide rule a hidden farm's values take part in is the land left (engine structure.ts 'area'; flow
 // shares over 100 %, 'shares', went with the specific shares in engine 1.105.0, issue #616).
-const outlet = node('Gauge', null);
+const outlet = node('Gauge', null, { areaKm2: 0 });
 const rooikloof = node('Rooikloof', outlet.id, { areaKm2: 5 });
 const HIDDEN = ['Kalkoenkrans', 'Bergvliet', 'Doornhoek', 'Waterval', 'Sonskyn'];
 const hidden = HIDDEN.map((n) => node(n, outlet.id, { areaKm2: 0 }));

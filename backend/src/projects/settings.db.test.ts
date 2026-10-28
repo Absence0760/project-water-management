@@ -17,17 +17,19 @@ describe('the retired flow-share settings (issue #616)', () => {
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		const read = (await u.call('GET', `/projects/${projectId}`)).body.project.settings as Record<string, unknown>;
 		expect(RETIRED.filter((k) => k in read)).toEqual([]);
-		expect(RETIRED.filter((k) => k in (await stored(projectId)))).toEqual([]);
+		const row = await stored(projectId);
+		expect(RETIRED.filter((k) => k in row)).toEqual([]);
 		// The positive control: the rest of the patch went in.
 		expect(read.lakeEvapFactor).toBe(0.66);
-		expect((await stored(projectId)).lakeEvapFactor).toBe(0.66);
+		expect(row.lakeEvapFactor).toBe(0.66);
 	});
 
 	it('a row an older backend stored with them reads without them, and the next save drops them', async () => {
 		const u = await signUp('Oldrow');
 		const projectId = (await u.call('POST', '/projects', { name: 'Old row' })).body.project.id as string;
 		await asOwner(`UPDATE project SET settings = settings || '{"flowShareMethod": "manual", "hiLoSplit": {"hi": 0.6, "lo": 0.4}}' WHERE id = $1`, [projectId]);
-		expect(RETIRED.filter((k) => k in (await stored(projectId)))).toEqual(RETIRED);
+		const before = await stored(projectId);
+		expect(RETIRED.filter((k) => k in before)).toEqual(RETIRED);
 		const read = (await u.call('GET', `/projects/${projectId}`)).body.project.settings as Record<string, unknown>;
 		expect(RETIRED.filter((k) => k in read)).toEqual([]);
 		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { lakeEvapFactor: 0.7 } })).status).toBe(200);

@@ -235,9 +235,9 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		countries: ['ZA']
 	},
 	'map': {
-		long: 'MAP varies across a catchment, which is why the Water Balance Tool workbook can split hydrological unit areas into high- and low-MAP zones.',
+		long: 'MAP varies across a catchment, which is why each hydrological unit can have its own MAP: under Per unit it sets the level of the unit’s rain, and with it the unit’s natural MAR share of the flow and the EWR. (The Water Balance Tool workbook split unit areas into high- and low-MAP zones instead; that split was removed in engine 1.105.0.)',
 		aliases: ['MAP', 'MAR', 'mean annual precipitation', 'mean annual runoff'],
-		related: ['hi-lo-map-area'],
+		related: ['unit-map', 'flow-share'],
 		source: 'docs/model.md §7'
 	},
 	// The Map tab and the values it proposes, the data feeds and the uploads.

@@ -289,7 +289,7 @@ describe('model store', () => {
 	});
 
 	it('ignores the retired High-MAP, Low-MAP and manual shares on save and leaves them out on read (engine 1.105.0, issue #616)', async () => {
-		const u = await signUp('Retired shares');
+		const u = await signUp('Retiredshares');
 		const projectId = await newProject(u, 'Retired shares');
 		const outlet = node('Outlet', null);
 		// An older web build still sends them, even out of their old range: dropped, not refused.
