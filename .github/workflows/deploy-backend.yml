@@ -391,20 +391,18 @@ jobs:
 
       # The AI assistant (infra/assistant.tf): the API's app on its own
       # function, so the same code as the API, after it. It exists only once
-      # the operator has set assistant_enabled and applied: until then (or
-      # until the ASSISTANT_FUNCTION_NAME variable is set, from the
-      # assistant_function_name output) this says so and skips. Only
-      # ResourceNotFoundException means "not created yet"; any other error
-      # fails the deploy, as for the renderer below.
+      # the operator has set assistant_enabled and applied: until then this
+      # says so and skips. The ASSISTANT_FUNCTION_NAME variable (the
+      # assistant_function_name output) names it; unset, the conventional
+      # name is tried, so a forgotten variable can't leave the function on
+      # the 503 stub or an older release's code against a contracted schema.
+      # Only ResourceNotFoundException means "not created yet"; any other
+      # error fails the deploy, as for the renderer below.
       - name: Update assistant Lambda code
         env:
-          ASSISTANT_FUNCTION_NAME: ${{ vars.ASSISTANT_FUNCTION_NAME }}
+          ASSISTANT_FUNCTION_NAME: ${{ vars.ASSISTANT_FUNCTION_NAME || 'water-management-assistant' }}
         run: |
           set -euo pipefail
-          if [ -z "$ASSISTANT_FUNCTION_NAME" ]; then
-            echo "::notice::ASSISTANT_FUNCTION_NAME is not set: the assistant is not deployed (docs/deployment.md § The assistant)."
-            exit 0
-          fi
           if get_err=$(aws lambda get-function --function-name "$ASSISTANT_FUNCTION_NAME" 2>&1 >/dev/null); then
             aws lambda update-function-code \
               --function-name "$ASSISTANT_FUNCTION_NAME" \
