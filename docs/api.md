@@ -3855,7 +3855,7 @@ RLS (`backend/src/dams/observed/routes.ts`, `read.ts`, `compare.ts`).
 ## Start from the map
 
 An empty model started from the map (issue #326 C3, `178_start_proposal.sql`,
-`backend/src/delineation/start.ts` and `subcatchments.ts`, [maps.md § Start
+`backend/src/delineation/start.ts`, its routes `startRoutes.ts`, and `subcatchments.ts`, [maps.md § Start
 from the map](./maps.md#start-from-the-map),
 [design/start-from-map.md](./design/start-from-map.md)): the server proposes
 a unit for each boundary the editor names (an *other* area or a parcel on
@@ -3867,7 +3867,7 @@ never sized from anything (their volume, contributing area and capacity are
 the user's). The editor applies the values they tick. With `DEM_URL` empty
 every unit drains into the outflow gauge, and the rest of the catchment is
 the boundary less the units. A model that has nodes is **divided** instead
-(`182_divide_proposal.sql`, `backend/src/delineation/divide.ts`): each
+(`182_divide_proposal.sql`, `backend/src/delineation/divide.ts`, its routes `divideRoutes.ts`): each
 unit's boundary stands for its node, and its area and drains-into are
 proposed beside the node's values now, taken only when ticked. A plan from
 before `start-16` (a unit at a dam or an abstraction point, `role` `dam` or

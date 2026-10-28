@@ -1246,7 +1246,10 @@ runs in production as `JOB_TRANSPORT=sqs` (infra/jobs.tf):
   the `jobs` queue and no `JOB_TRANSPORT` / `JOBS_QUEUE_URL` (the production
   settings check asks them of the API alone): a job that queues follow-up
   work leaves it to the tick. `backend/src/lambda-worker.test.ts` fails if
-  anything the worker bundles reaches `jobs/wake.ts` or a routes module, and
+  anything the worker bundles reaches `jobs/wake.ts` or a routes module (so
+  the plan code the worker shares with a route lives apart from it:
+  `delineation/start.ts` and `divide.ts` beside `startRoutes.ts` and
+  `divideRoutes.ts`), and
   `infra/tests/guardrails.tftest.hcl` if the worker's environment gets either
   setting back.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
