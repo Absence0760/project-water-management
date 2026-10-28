@@ -8149,7 +8149,17 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   warning stays visible). **Evaporation from the map** is a card of its own,
   its **Use as …** in the heading's row beside a **Saves now** tag (the
   button's description), since it saves straight to the project while every
-  other field here waits for the save bar. The **rain threshold for demand**
+  other field here waits for the save bar. **Evaporation stations**, the
+  card under it, works the same way (issue #646 item 6, `EvaporationStationProposal.svelte`):
+  the nearest DWS evaporation stations to the boundary as radio choices
+  (code, name, pan, distance, record and share of days read), the chosen
+  station's 12 monthly means beside the saved A-pan row, a tick for a
+  Class-A pan's daily record (**Also write its daily record (…) as the daily
+  A-pan series "DWS <code>"**, on by default), and for a Symons pan a choice of the S→A equation with
+  Taljaard's "cannot be inverted" warning, an equation that can't be used
+  disabled with its reason, and no A-pan or **Use as the A-pan** until one
+  is picked ([maps.md § Evaporation stations](./maps.md#evaporation-stations)).
+  The **rain threshold for demand**
   moved to Demand (it only affects irrigation demand under GR4J). The
   explanations under the rain-for-each-unit fields, the FAO-56 helper and
   the evaporation proposal are `.explain` (behind the explain switch). Then,

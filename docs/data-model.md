@@ -2024,6 +2024,24 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   proposal), `loaded_at`. Global: loaded by the operator as the schema owner
   (`pnpm import:gauge-stations`), SELECT for anyone signed in, read-only to
   `water_app` (the catalogue guard's `READ_ONLY`).
+- **`evaporation_station_reference`** (`274_evaporation_stations.sql`,
+  issue #646 item 6): the DWS evaporation stations whose daily pan record
+  the A-pan proposal reads ([maps.md § Evaporation
+  stations](./maps.md#evaporation-stations)). `code` (primary key, a DWS
+  weather-station code `^[A-Z][0-9]E[0-9]{3}$`, e.g. `A2E001`), `name`
+  (≤ 200), `pan` (`class_a` or `symons`), `lon`, `lat` (WGS84; indexed
+  `(lat, lon)` for the bounding-box first pass), `start_date` and `values`
+  (the daily record, mm, `values[1]` on `start_date`, NULL for a day not
+  read; 1–21 960 days, each 0–50 mm), `days_with_value` (stored with the
+  record so the station list never reads the array; a CHECK keeps it within
+  the record's length), `dataset` (`synthetic` for the committed fixture,
+  region Z; indexed), `source` (1–500, cited in every revision that uses
+  the station), `loaded_at`. Global: loaded by the operator as the schema
+  owner (`pnpm import:evaporation-stations`), SELECT for anyone signed in,
+  read-only to `water_app` (the catalogue guard's `READ_ONLY`). Accepting a
+  station writes no row of its own: it is a settings revision (and, for a
+  Class-A pan, an `evap_apan_mm` series named `DWS <code>`). Production
+  never loads it until DWS's permission covers evaporation records.
 - **`gazetteer_reference`** (`225_gazetteer.sql`, issue #523 C5): the
   named places the Map's search finds after the map's own layers
   ([maps.md § Search](./maps.md#search)). Keyed `(dataset, place_id)`
@@ -2288,7 +2306,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `load-reference.yml` load (kind `soils`) writes it as the schema owner.
 - **`gr4j_donor_dataset`** and **`gr4j_donor`** (`269_gr4j_donors.sql`,
   issue #622, [model.md §2.10m](./model.md)): the calibrated donor basins the
-  regional prior is built from. A dataset row: `dataset` (primary key; 
+  regional prior is built from. A dataset row: `dataset` (primary key;
   `synthetic` for the committed donors), `source`, `version`, `method` (the
   fit and the donor criteria in words), `attribution` (GRDC-Caravan's and
   HydroATLAS's), `engine_version` (the engine that fitted them),

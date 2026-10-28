@@ -23,7 +23,7 @@ This runs `pnpm install`, then `pnpm dev:db:up` (Postgres 17 on
 **127.0.0.1:5434**, waiting until it is healthy), then `pnpm dev:db:migrate`,
 then the synthetic reference data (`pnpm import:quaternaries`,
 `import:gauge-stations`, `import:dam-register`, `import:land-cover`, `import:crop-types`, `import:evaporation`,
-`import:map-grid`, `import:rivers`, `import:gazetteer`; see
+`import:evaporation-stations`, `import:map-grid`, `import:rivers`, `import:gazetteer`; see
 [Map](#map)), then `pnpm dev:mail:up` (Mailpit, see [Email](#email)), then `pnpm dev:s3:up`
 (MinIO, for report PDFs and evidence packs' reproduction bundles, see
 [Reports](#reports)).
@@ -617,6 +617,9 @@ pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB downloa
 pnpm import:land-cover      # the synthetic cropland grid (pnpm setup runs it): what a unit's planted-areas drawer (From land cover) sums its parcels from
 pnpm import:crop-types      # the synthetic orchard and vine grid (pnpm setup runs it): the drawer's Orchards and vines; <current.tif> --dataset <label> [--baseline <earlier.tif> --baseline-version <name>] loads your own SANLC for local evaluation (production refuses it until its terms are recorded; maps.md § Orchards and vines from SANLC)
 pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Calibration → Evaporation from the map averages over the boundary
+pnpm import:evaporation-stations  # the synthetic DWS evaporation stations (pnpm setup runs it): what Calibration → Evaporation stations proposes as the A-pan
+                            # or your own DWS reply: <stations.csv> --records <dir> --dataset <label> --source "<reply reference, date>", your own
+                            # database only (DWS's permission doesn't cover evaporation records yet; maps.md § Evaporation stations)
 pnpm import:map-grid        # the synthetic MAP grid (pnpm setup runs it): what Map → Layers → MAP grid draws
                             # or a real one: <grid.asc> --dataset <label> --source "…" [--bbox w,s,e,n]; add --out <file.json.gz> to write
                             # the cut grid for a production load instead (deployment.md § Reference datasets; maps.md § MAP grid)

@@ -2608,6 +2608,97 @@ only reads them.
 - **WR2012's evaporation** (S-pan per quaternary, with its evaporation zones'
   monthly distribution) stays **blocked** with the rest of WR2012 (§ Sources).
 
+## Evaporation stations
+
+**Evaporation stations**, in Calibration → Flow calibration under
+"Evaporation from the map" (issue #646 item 6, the hydrologist's F5;
+`EvaporationStationProposal.svelte`), proposes the nearest DWS evaporation
+station's pan record as the **A-pan**, the input dams and crops lose water to,
+the way [§ Gauging stations](#gauging-stations) proposes a flow record: the
+map proposes, the modeller picks and accepts.
+
+- **What is listed.** The stations within 100 km of the catchment boundary
+  (0 inside it, else to its nearest edge; `?within=` up to 300 km), nearest
+  first, at most eight, each with its code, name, pan (**Class-A** or
+  **Symons**), distance, record (first and last year, years, share of days
+  read) and the 12 monthly means of its record beside the saved A-pan row
+  (`backend/src/geo/evaporationStations.ts`). A month counts with 80 % of its
+  days read, and each of the 12 needs 3 counted years, else the station
+  proposes nothing and says which months are short
+  ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45),
+  *A station's pan record*). The nearest usable station is picked first.
+- **A Class-A pan** proposes its means as the A-pan row and, ticked by
+  default, its daily record as the daily A-pan series **`DWS <code>`**
+  (kind `evap_apan_mm`, which replaces the monthly row on every day it
+  covers). A project that already holds another daily A-pan series is
+  refused that part (409; a run reads one series of a kind): delete it on
+  the Data page first, or untick it and use the means only.
+- **A Symons pan** reads S-pan, so its means become A-pan only through the
+  S→A equation the user picks, **WR90** or **Taljaard (2023)**, both the
+  published S ← A equation inverted; none is picked for them, Taljaard's
+  warning that they "cannot be inverted" is shown beside the choice, and an
+  equation that would rest on its intercept (a month under its floor) is
+  disabled with the month named (model.md §2.3a). Its daily record is never
+  written: the equations are monthly.
+- **Use** (editors; "Saves now") asks first, then
+  `POST /projects/:id/evaporation-from-station`
+  ([api.md § Catchment map](./api.md#catchment-map)): the server re-reads the
+  station and re-derives the means, writes the A-pan row as one settings
+  revision whose reason cites the station, its pan, its distance, the
+  months the means came from, any conversion (its equation by name) and the
+  dataset's source, which History, run comparison and an evidence pack's
+  revisions carry, and writes the daily series when asked (queueing a
+  re-run and automatic calibration as any new series does). While Settings
+  has unsaved changes, Use waits. A Class-A or Symons pan only: the
+  dam-evaporation preset (Settings → Demand) still converts the A-pan row to
+  S-pan for the dams where the project uses one.
+- **Who sees it.** A viewer's read; a farmer gets 403 and a non-member 404.
+
+### Evaporation-station dataset
+
+`evaporation_station_reference` (274) holds each station with its whole
+verified daily record (one array of mm a day, `NULL` for a day not read). The
+**operator** loads it as the schema owner; the app only reads it.
+
+- **Committed: synthetic only.** `backend/fixtures/evaporation-stations/`
+  holds four invented stations in drainage region **Z** (DWS has none) round
+  the Sandspruit example's boundary, each reply marked "SYNTHETIC" and
+  "INVENTED", written by
+  `pnpm -C backend exec tsx scripts/gen-evaporation-stations-fixture.ts`
+  (a fixed seed): `Z1E001`, a Class-A pan inside the boundary, 2014–2017;
+  `Z1E002`, a Symons pan nearby, 2010–2013, whose July S-pan sits between
+  the two equations' floors (Taljaard converts it, WR90 refuses); `Z1E003`,
+  a Class-A pan with under two years (too short); `Z2E001`, about 200 km off
+  (outside the default radius). `pnpm import:evaporation-stations` with no
+  argument loads them as dataset `synthetic`; the panel marks them
+  "Synthetic test data". `pnpm setup` loads them; the DB and e2e tests load
+  them themselves.
+- **Real data: the operator's own request to DWS, once the permission covers
+  it** (§ Sources: blocked). DWS publishes a weather station's verified
+  daily records (an `E` code, `A2E001`) on the same `HyData.aspx` pages as
+  river flow (`SiteType=MET`); its per-area station lists
+  (`Verified/dwafapp2_wma/WMA*_Met.pdf`) mark each evaporation record `[A]`
+  Class-A or `[S]` Symons. The reader (`geo/dwsEvaporation.ts`) takes the
+  flow page's layout with the value column named for evaporation in mm; the
+  site answers our network with HTTP 403, so it is tested only against the
+  invented replies, and refuses a page whose header or unit block says
+  anything else. Load with
+  `pnpm import:evaporation-stations stations.csv --records <dir> --dataset "DWS 2026-11" --source "<DWS reply reference, date>"`:
+  the CSV is `code,name,pan,lat,lon[,source]` (pan `A`/`S`, decimal
+  degrees), and each station's reply is a file in `<dir>` whose name starts
+  with its code. A load replaces every row of its dataset in one
+  transaction; stations it can't take are listed as skipped. Load real
+  records into your own database only, and never commit them.
+- **Production loading is refused** until DWS's permission covers
+  evaporation station records: the reference-load kind
+  `evaporation-stations` is blocked in both the release gate
+  (`scripts/release/map-data-gates.mjs`, which offers only the allowed
+  kinds) and the migrate Lambda (`backend/src/geo/referenceLoad.ts`
+  `REFERENCE_KINDS`), and the `dws` kind takes only a river gauge (`H`)
+  code and a flow table, so a pan record can't arrive as flow
+  ([deployment.md § Reference datasets](./deployment.md#reference-datasets);
+  followups.md, *Decision: DWS evaporation station records*).
+
 ## Hydrological units layer
 
 The Map tab's **Hydrological units** layer (`layers=units`, a toggle in the
