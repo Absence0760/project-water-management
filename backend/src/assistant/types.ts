@@ -97,7 +97,11 @@ export type AssistantStatus =
 			provider: Exclude<AssistantProviderName, 'off'>;
 			/** The caller's role allows Apply (editor or above). */
 			canApply: boolean;
-			budget: { tokensPerMonth: number; tokensUsed: number; resetsAt: string };
+			/**
+			 * The month's cap nearest its end (usage.ts bindingBudget), in weighted tokens (input + 5 × output):
+			 * the project's, the caller's across projects (`user`) or the deployment's (`total`).
+			 */
+			budget: { tokensPerMonth: number; tokensUsed: number; resetsAt: string; scope: 'project' | 'user' | 'total' };
 			rate: { messagesPerHour: number };
 			/** The report disclaimer (liability/disclaimer.ts DISCLAIMER), shown under the panel. */
 			disclaimer: string;
@@ -119,7 +123,8 @@ export type AssistantStreamEvent =
 	| { type: 'text'; delta: string }
 	| { type: 'tool'; name: string; label: string; status: 'start' | 'done' | 'error' }
 	| { type: 'proposal'; proposal: SettingsProposal }
-	| { type: 'usage'; inputTokens: number; outputTokens: number; tokensUsed: number; tokensPerMonth: number }
+	/** After a turn: its tokens, and the month's cap nearest its end as the status's budget (tokensUsed, tokensPerMonth, scope). */
+	| { type: 'usage'; inputTokens: number; outputTokens: number; tokensUsed: number; tokensPerMonth: number; scope: 'project' | 'user' | 'total' }
 	| { type: 'error'; code: string; error: string }
 	| { type: 'done' };
 

@@ -110,7 +110,7 @@ describe('deleting a co-owner’s account', () => {
 		// A turn each with the assistant (258), counted as its route counts one: the co-owner's and the owner's (the positive control).
 		for (const [u, tokens] of [[coOwner, 700], [owner, 50]] as const) {
 			await withUser(u.id, async (tx) => {
-				await tx.query('SELECT * FROM app_assistant_begin($1, 1000000, 30)', [projectId]);
+				await tx.query('SELECT * FROM app_assistant_begin($1, 1000000, 30, 1000000, 100000000)', [projectId]);
 				await tx.query('SELECT app_assistant_charge($1, $2, 0)', [projectId, tokens]);
 			});
 		}
@@ -140,7 +140,7 @@ describe('deleting a co-owner’s account', () => {
 		expect(await asOwner('SELECT 1 FROM assistant_rate WHERE user_id = $1', [coOwner.id])).toEqual([]);
 		expect(await asOwner('SELECT messages FROM assistant_rate WHERE user_id = $1', [owner.id])).toEqual([{ messages: 1 }]);
 		// Every project member still reads the month's total, theirs included.
-		expect(await withUser(owner.id, async (tx) => (await tx.query('SELECT app_assistant_used($1)::int AS n', [projectId])).rows)).toEqual([{ n: 750 }]);
+		expect(await withUser(owner.id, async (tx) => (await tx.query('SELECT project_used::int AS n FROM app_assistant_used($1)', [projectId])).rows)).toEqual([{ n: 750 }]);
 	});
 
 	it('pseudonymises every event they made, and drops their pending invites', async () => {

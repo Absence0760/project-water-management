@@ -148,10 +148,13 @@ export const ERROR_CODES = [
  *     assistant_off (404, ASSISTANT_PROVIDER is off), assistant_rate_limited
  *     (429 + Retry-After, the person's messages this hour; params.seconds),
  *     assistant_budget_spent (429 + Retry-After, the project's tokens this
- *     month; params.seconds), assistant_input_too_large (413, the newest
- *     message alone passes ASSISTANT_MAX_INPUT_CHARS). As a stream's `error`
- *     event (assistant/orchestrator.ts TURN_ERRORS): assistant_hop_limit,
- *     assistant_output_limit, assistant_timeout, assistant_provider_error.
+ *     month), assistant_user_budget_spent (the person's this month, across
+ *     projects) and assistant_total_budget_spent (the deployment's this
+ *     month; each params.seconds and params.scope), assistant_input_too_large
+ *     (413, the newest message alone passes ASSISTANT_MAX_INPUT_CHARS). As a
+ *     stream's `error` event (assistant/orchestrator.ts TURN_ERRORS):
+ *     assistant_hop_limit, assistant_output_limit, assistant_turn_limit,
+ *     assistant_timeout, assistant_provider_error.
  */
 export const MACHINE_ERROR_CODES = [
 	'render_token_refused',
@@ -166,9 +169,12 @@ export const MACHINE_ERROR_CODES = [
 	'assistant_off',
 	'assistant_rate_limited',
 	'assistant_budget_spent',
+	'assistant_user_budget_spent',
+	'assistant_total_budget_spent',
 	'assistant_input_too_large',
 	'assistant_hop_limit',
 	'assistant_output_limit',
+	'assistant_turn_limit',
 	'assistant_timeout',
 	'assistant_provider_error'
 ] as const;

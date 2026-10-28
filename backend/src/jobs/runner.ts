@@ -146,6 +146,11 @@ export const DELETED_NOTE_RETENTION_DAYS = 90;
  * (`db_backup_retention_days`, at most 35), so a restore can always re-apply the erasures after its restore point.
  */
 export const ERASURE_LOG_RETENTION_DAYS = 40;
+/**
+ * The assistant's usage rows (258_assistant_usage) are kept for the month they count and the 12 before it:
+ * a year of each project's spend to set against the bill. Its rate rows go once their hour is over.
+ */
+export const ASSISTANT_USAGE_RETENTION_MONTHS = 13;
 
 /** Queue a job_dead check for one project at once (app_alert_schedule); a failure is logged, never thrown. */
 async function scheduleAlertCheck(projectId: string): Promise<void> {
@@ -196,6 +201,8 @@ export interface TickResult {
 	notesPurged: number;
 	/** Erasure log entries past ERASURE_LOG_RETENTION_DAYS deleted (159_erasure_log). */
 	erasuresPurged: number;
+	/** The assistant's rate rows past their hour and usage rows past ASSISTANT_USAGE_RETENTION_MONTHS deleted (258_assistant_usage). */
+	assistantPurged: number;
 	claimed: number;
 	done: number;
 	failed: number;
@@ -241,6 +248,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		invitesPurged: 0,
 		notesPurged: 0,
 		erasuresPurged: 0,
+		assistantPurged: 0,
 		claimed: 0,
 		done: 0,
 		failed: 0,
@@ -261,6 +269,9 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	);
 	result.erasuresPurged = await withoutUser(
 		async (db) => (await db.query<{ n: number }>('SELECT app_purge_erasure_log(make_interval(days => $1)) AS n', [ERASURE_LOG_RETENTION_DAYS])).rows[0]?.n ?? 0
+	);
+	result.assistantPurged = await withoutUser(
+		async (db) => (await db.query<{ n: number }>('SELECT app_purge_assistant($1) AS n', [ASSISTANT_USAGE_RETENTION_MONTHS])).rows[0]?.n ?? 0
 	);
 	const noticesPurged = await purgePackNotices();
 	const erratumPurged = await purgeErratumNotices();

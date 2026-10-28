@@ -15,17 +15,18 @@ import { DISCLAIMER } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
-import { withUser } from '../db/tx.js';
+import { withUser, type Db } from '../db/tx.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
+import { logEvent } from '../logging/logEvent.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
-import { assistantConfig, type AssistantConfig } from './config.js';
+import { assistantConfig, weightedTokens, type AssistantConfig } from './config.js';
 import { capConversation, runTurn } from './orchestrator.js';
 import { createProvider } from './providers/index.js';
 import { sseBody } from './sse.js';
 import { ASSISTANT_TOOLS } from './tools/index.js';
 import type { AssistantProvider, AssistantStatus, AssistantTool, ChatMessage } from './types.js';
-import { beginTurn, chargeTurn, monthResetsAt, projectTokensUsed } from './usage.js';
+import { beginTurn, bindingBudget, chargeTurn, monthResetsAt, tokensUsed } from './usage.js';
 
 /** Messages one request may carry; the character cap (maxInputChars) drops the oldest of them anyway. */
 export const MAX_MESSAGES = 200;
@@ -60,6 +61,55 @@ export function setAssistantTools(t: readonly AssistantTool[] | null): void {
 	tools = t ?? ASSISTANT_TOOLS;
 }
 
+/**
+ * How long one tool statement may run (SET LOCAL statement_timeout). Below the
+ * 15 s between the turn's deadline and the Lambda's timeout (ASSISTANT_TURN_SECONDS,
+ * infra/assistant.tf): the Lambda's pool has one connection, so a read still
+ * running when the turn ends holds it until this cuts it, and the turn's charge
+ * waits for it.
+ */
+export const TOOL_STATEMENT_TIMEOUT_MS = 10_000;
+
+/**
+ * One tool call in its own read-only transaction as the caller, its statements
+ * capped at TOOL_STATEMENT_TIMEOUT_MS. The turn's signal (its deadline, or the
+ * client gone) rejects the call at once with an AbortError, so the turn ends and
+ * its tokens are charged; the transaction still ends on its own, by the timeout
+ * at the latest, and rolls back.
+ */
+export function runToolBounded<T>(userId: string, run: (db: Db) => Promise<T>, signal?: AbortSignal): Promise<T> {
+	const call = withUser(
+		userId,
+		async (db) => {
+			await db.query(`SET LOCAL statement_timeout = ${TOOL_STATEMENT_TIMEOUT_MS}`);
+			return run(db);
+		},
+		{ readOnly: true }
+	);
+	if (!signal) return call;
+	if (signal.aborted) {
+		call.catch(() => {});
+		return Promise.reject(signal.reason ?? new DOMException('aborted', 'AbortError'));
+	}
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = () => {
+			call.catch(() => {});
+			reject(signal.reason ?? new DOMException('aborted', 'AbortError'));
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+		call.then(
+			(v) => {
+				signal.removeEventListener('abort', onAbort);
+				resolve(v);
+			},
+			(e) => {
+				signal.removeEventListener('abort', onAbort);
+				reject(e);
+			}
+		);
+	});
+}
+
 const off = () => ApiError.coded(404, 'assistant_off', 'The assistant is off on this server (ASSISTANT_PROVIDER is off).');
 
 export const assistantRoutes = new Hono<AuthEnv>()
@@ -75,7 +125,7 @@ export const assistantRoutes = new Hono<AuthEnv>()
 					available: true,
 					provider: cfg.provider,
 					canApply: rank[role] >= rank.editor,
-					budget: { tokensPerMonth: cfg.tokensPerMonth, tokensUsed: await projectTokensUsed(db, id), resetsAt: monthResetsAt() },
+					budget: { ...bindingBudget(cfg, await tokensUsed(db, id)), resetsAt: monthResetsAt() },
 					rate: { messagesPerHour: cfg.messagesPerHour },
 					disclaimer: ASSISTANT_DISCLAIMER
 				};
@@ -116,14 +166,18 @@ export const assistantRoutes = new Hono<AuthEnv>()
 					emit: out.send,
 					signal: out.signal,
 					// Each call its own read-only transaction as the caller: RLS and the routes' withholding decide what it reads.
-					runTool: (tool, args) => withUser(userId, (db) => tool.run({ db, ...ctx }, args), { readOnly: true })
+					runTool: (tool, args, signal) => runToolBounded(userId, (db) => tool.run({ db, ...ctx }, args), signal)
 				},
 				conversation!
 			);
 			// Charged whatever the outcome, the client gone included: the tokens were spent.
-			const total = await chargeTurn(userId, id, result.inputTokens, result.outputTokens);
+			const after = await chargeTurn(userId, id, result.inputTokens, result.outputTokens);
+			const weighted = weightedTokens(result.inputTokens, result.outputTokens);
+			// One line a turn, counts only (no text): the assistant's spend alarm sums weightedTokens (infra/alarms.tf).
+			logEvent('info', { event: 'assistant_turn', inputTokens: result.inputTokens, outputTokens: result.outputTokens, weightedTokens: weighted, end: result.end });
 			if (result.end === 'aborted') return;
-			out.send({ type: 'usage', inputTokens: result.inputTokens, outputTokens: result.outputTokens, tokensUsed: total ?? usedBefore + result.inputTokens + result.outputTokens, tokensPerMonth: cfg.tokensPerMonth });
+			const used = after ?? { project: usedBefore.project + weighted, user: usedBefore.user + weighted, total: usedBefore.total + weighted };
+			out.send({ type: 'usage', inputTokens: result.inputTokens, outputTokens: result.outputTokens, ...bindingBudget(cfg, used) });
 			out.send({ type: 'done' });
 		});
 		return c.body(stream, 200, {
