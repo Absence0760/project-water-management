@@ -3,11 +3,13 @@
 // Edit (`edit=<id>`). These open them the way a person does.
 import { expect, type Locator, type Page } from '@playwright/test';
 import { showHeaderControls } from './sectionHeader.ts';
+import { urlSettled } from './urlSettled.ts';
 
 /** Opens the node table (Tables → Node table) and returns the grid's dialog. */
 export async function openNodeTable(page: Page) {
 	const open = page.getByRole('dialog', { name: 'Hydrological unit table' });
 	// The URL already names it (a reload keeps `grid=nodes`): it opens with the page; wait for it.
+	await urlSettled(page);
 	if (/[?&]grid=nodes\b/.test(page.url())) {
 		await open.waitFor();
 		return open;
@@ -31,6 +33,7 @@ export async function openNodeForm(page: Page, name?: string, opts: { folded?: b
 	const sheet = page.getByRole('dialog', { name: /^(?:Edit .*|.*: details)$/ });
 	// Already open (the sheet stays open after a save, and a reload keeps `edit=`): its picker moves it
 	// to another node. Wait for it rather than click the map behind it.
+	await urlSettled(page);
 	if (/[?&]edit=/.test(page.url())) await sheet.waitFor();
 	else {
 		const list = page.getByRole('list', { name: 'All hydrological units' });
@@ -70,6 +73,26 @@ export async function saveModelChanges(page: Page) {
 	if (await modal.count()) await modal.getByRole('button', { name: 'Save changes' }).click();
 	else await page.getByRole('region', { name: 'Unsaved model changes' }).getByRole('button', { name: 'Save changes' }).click();
 	return saved;
+}
+
+/**
+ * Presses Done on the open sheet or grid, then clicks `opener` on the very next task: ahead of the
+ * navigation that drops the closed one from the URL, as a quick person can. `opener` is behind the
+ * modal until it shuts, so find it by CSS (a role query skips the inert page).
+ */
+export async function doneThenClick(page: Page, opener: Locator) {
+	const done = await page.locator('dialog[open]').getByRole('button', { name: 'Done', exact: true }).elementHandle();
+	const next = await opener.elementHandle();
+	await page.evaluate(
+		([d, n]) => {
+			(d as HTMLElement).click();
+			// Deliberately the very next task: the race trigger, not a wait. Done's click shuts the
+			// sheet and starts the URL drop in this task; the opener's click must land before that
+			// navigation does, which a second Playwright action (a round trip) can't promise.
+			setTimeout(() => (n as HTMLElement).click(), 0);
+		},
+		[done, next] as const
+	);
 }
 
 /** Closes the open grid or sheet with Done (Close for a viewer), leaving any edit for the save bar. */

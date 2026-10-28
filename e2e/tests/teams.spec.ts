@@ -8,6 +8,7 @@ import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeTeamSettings, openTeamSettings } from '../support/teams.ts';
+import { doneThenClick } from '../support/network.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { expectNoSidewaysScroll, layoutSettled } from '../support/reflow.ts';
 
@@ -170,6 +171,21 @@ test('a team viewer reads the team’s catchments but can’t add to the team', 
 	await expect(page.getByLabel('Team role for Team reviewer')).toHaveValue('member');
 	await reviewer.page.goto(`/teams/${team.id}`);
 	await expect(reviewer.page.getByRole('link', { name: 'New project', exact: true })).toBeVisible();
+});
+
+test('Team settings pressed as the sheet closes, before the URL drops it, opens it again, and Back closes it', async ({ page, owner }) => {
+	// The sheet shuts at once and `settings` leaves the URL when the navigation lands. A link
+	// followed in that gap overtook the drop and changed nothing (frontend/src/lib/nav/closeNav.ts).
+	void owner;
+	const { team } = (await (await page.request.post(`${API_URL}/teams`, { data: { name: 'Quick settings' } })).json()) as { team: { id: string } };
+	await page.goto(`/teams/${team.id}`);
+	await openTeamSettings(page);
+	await doneThenClick(page, page.locator('a.btn', { hasText: /^Team settings$/ }));
+	await expect(page.getByRole('dialog', { name: 'Team settings' })).toBeVisible();
+	await expect(page).toHaveURL(/[?&]settings=1$/);
+	await page.goBack();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page).toHaveURL(new RegExp(`/teams/${team.id}$`));
 });
 
 test('only a team admin edits the EWR traffic lights; a member reads which apply', async ({ page, owner, signIn }) => {

@@ -2,11 +2,13 @@
 // settings sheet (`?settings=1`, issue #17). These open and close it the way a
 // person does.
 import type { Page } from '@playwright/test';
+import { urlSettled } from './urlSettled.ts';
 
 /** Opens the team settings sheet from the page header and returns its dialog. */
 export async function openTeamSettings(page: Page) {
 	const sheet = page.getByRole('dialog', { name: 'Team settings' });
 	// The URL already names it (a reload keeps `settings=1`): it opens with the page; wait for it.
+	await urlSettled(page);
 	if (/[?&]settings=/.test(page.url())) {
 		await sheet.waitFor();
 		return sheet;

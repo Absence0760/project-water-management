@@ -2860,7 +2860,8 @@ a status line says so. Its accessible name is *Reset two-step sign-in for
 <name>*.
 
 **Team settings** (`?settings=1`, a side sheet,
-`lib/components/teams/TeamSettings.svelte`) holds what used to sit in the
+`lib/components/teams/TeamSettings.svelte`; a **Team settings** link clicked as it
+closes, before the URL drops `settings`, waits for that, `nav/closeNav.ts`) holds what used to sit in the
 reading path: **Team name** (admins; *Rename*), **EWR traffic lights**
 (below), **Privacy contact** (whom people ask about the personal information
 in the team's projects, POPIA s18(1)(b), 168: admins edit *Name or office*,
@@ -3067,7 +3068,8 @@ itself.
       sheet the focus goes to the **All hydrological units** heading.
 
   - **Node sheet** (`edit=<id>`, the `Dialog` `side extraWide` variant, 920 px,
-    three fields to a row, the whole width on a phone): "Edit *name*" ("*name*: details" for a
+    three fields to a row, the whole width on a phone; an Edit pressed as it closes,
+    before the URL drops `edit`, waits for that, `nav/closeNav.ts`): "Edit *name*" ("*name*: details" for a
     viewer), the node picker (‹ select ›, labelled "Hydrological unit to edit") and under it
     the form's section menu (the pages' `common/SectionNav` as a bar,
     "Sections of the form": Catchment area, Flow share, Dam, …, Bed losses in
@@ -4741,8 +4743,8 @@ One crop's name and 12 monthly factors in a side sheet over the page
 (`crops/CropSheet.svelte`), while the URL has `crop=<cropId>`, so it can be
 linked and Back closes it; Done, Esc or the ✕ drop `crop` in place
 (`withoutParam`). The sheet shuts at once and the URL follows when that
-navigation lands; an Edit pressed in between waits for it, so it opens its
-crop and Back still goes where the sheet was opened from. **+ Add crop** adds "Crop N", on drip (the new-unit
+navigation lands; an Edit pressed in between waits for it (`nav/closeNav.ts`),
+so it opens its crop and Back still goes where the sheet was opened from. **+ Add crop** adds "Crop N", on drip (the new-unit
 default), and opens its sheet with the name focused. Under the name, its
 default **Irrigation system** (the project's table, or none: each unit's own
 efficiency), with the units that put it on another named in the hint. The sheet shows the factors four to a row (labelled "Orchard
@@ -5217,7 +5219,11 @@ outflow gauge**), `crop-factors` and `planted-areas` (the
 [crop grids](#crop-grids), through `CropsTab`'s `sections` prop),
 `transfers` (the Transfers tab) and `demands` (the [Demands
 grid](#demands-grid)). Done, Esc, the ✕ or Back close it; closing drops `grid` from
-the URL in place (`withoutParam`). It isn't opened over the grid's own tab
+the URL in place (`withoutParam`). It shuts at once and the URL follows when that
+navigation lands; a plain click on a Tables menu link (or Crops' Edit areas) in
+between waits for that, 2 s at most (the links' `openAfterClose`, `nav/closeNav.ts`,
+as for the crop sheet, the node sheet and Team settings), so it opens its grid and
+Back still closes it. It isn't opened over the grid's own tab
 (`GRID_TAB`), where the grid is already on the page: the parameter is dropped.
 The node table and the crop grids have no such tab (`GRID_TAB` null: the
 Network is a map and Crops & demand cards and bars), so they open anywhere
