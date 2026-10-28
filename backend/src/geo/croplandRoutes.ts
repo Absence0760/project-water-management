@@ -77,6 +77,16 @@ interface Polygon {
  * theirs (summing both would count the parcels inside it twice).
  */
 async function unitParcels(db: Db, projectId: string, nodeId: string): Promise<Polygon[]> {
+	const { summed } = await unitPolygons(db, projectId, nodeId);
+	return summed;
+}
+
+/**
+ * Every candidate polygon of the unit (its linked parcels and its area feature, UNIT_POLYGONS_SQL), and the
+ * ones summed by default (unitParcels). One parcel picked by `featureId` is looked up in all of them, so the
+ * area feature can be picked beside linked parcels, as the unit's rain and MAP read it.
+ */
+async function unitPolygons(db: Db, projectId: string, nodeId: string): Promise<{ all: Polygon[]; summed: Polygon[] }> {
 	const { rows } = await db.query<Polygon & { linkedParcel: boolean }>(
 		`SELECT f.id, f.name, f.geometry, f.kind = 'farm_parcel' AS parcel, (f.node_id IS NOT DISTINCT FROM n.id AND f.kind = 'farm_parcel') AS "linkedParcel"
 		 FROM node n JOIN map_feature f ON ${UNIT_POLYGONS_SQL}
@@ -84,8 +94,9 @@ async function unitParcels(db: Db, projectId: string, nodeId: string): Promise<P
 		 ORDER BY f.created_at, f.id`,
 		[projectId, nodeId]
 	);
-	const linked = rows.filter((r) => r.linkedParcel);
-	return (linked.length ? linked : rows).map(({ linkedParcel: _linked, ...p }) => p);
+	const all = rows.map(({ linkedParcel: _linked, ...p }) => p);
+	const linked = all.filter((_, i) => rows[i]!.linkedParcel);
+	return { all, summed: linked.length ? linked : all };
 }
 
 /** The catchment boundary, if drawn. */
@@ -217,10 +228,10 @@ export const croplandRoutes = new Hono<AuthEnv>()
 			const typeSet = body.layer ? ((await cropTypeDatasets(db)).find((d) => d.dataset === body.dataset) ?? null) : null;
 			if (body.layer && !typeSet) throw new ApiError(400, `No crop-type dataset “${body.dataset}” is loaded.`);
 			const dataset = body.layer ? null : (await pickDataset(db, body.dataset)).dataset;
-			const all = await unitParcels(db, id, nodeId);
-			let parcels = all;
+			const polygons = await unitPolygons(db, id, nodeId);
+			let parcels = polygons.summed;
 			if (body.featureId) {
-				parcels = all.filter((p) => p.id === body.featureId);
+				parcels = polygons.all.filter((p) => p.id === body.featureId);
 				if (!parcels.length) {
 					const { rows } = await db.query('SELECT 1 FROM map_feature WHERE id = $1 AND project_id = $2', [body.featureId, id]);
 					if (!rows.length) throw notFound();

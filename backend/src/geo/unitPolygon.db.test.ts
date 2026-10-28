@@ -9,6 +9,8 @@
 //  - Parcel unit: a linked farm parcel, its area typed (the case before, unchanged: the positive control);
 //  - Piece unit: an *other* area linked to it, its area accepted from it (as Start leaves it);
 //  - Loose unit: an *other* area not linked to it, its area accepted from it;
+//  - Both unit: a linked farm parcel and, its area taken from it, an other area: the area is its polygon for
+//    rain, MAP and the reference cell, the land cover sums its parcel by default and takes the area when picked;
 //  - Typed unit: an *other* area linked to it but its area typed: no area feature, so no polygon (an other area
 //    alone is not a unit's outline);
 // each read through Rain for each unit, MAP for each unit, the land-cover
@@ -42,6 +44,8 @@ const PARCEL = rect(21.31, -33.69, 21.315, -33.685);
 const PIECE = rect(21.32, -33.69, 21.325, -33.685);
 const LOOSE = rect(21.33, -33.69, 21.335, -33.685);
 const TYPED = rect(21.34, -33.69, 21.345, -33.685);
+const BOTH_PARCEL = rect(21.31, -33.68, 21.312, -33.678);
+const BOTH_AREA = rect(21.31, -33.68, 21.315, -33.675);
 
 let owner: User;
 let editor: User;
@@ -52,6 +56,8 @@ const parcelUnit = node('Parcel unit', outlet.id);
 const pieceUnit = node('Piece unit', outlet.id);
 const looseUnit = node('Loose unit', outlet.id);
 const typedUnit = node('Typed unit', outlet.id);
+const bothUnit = node('Both unit', outlet.id);
+let bothParcel: string;
 const lucerne = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: Array(12).fill(0.9) };
 const featureOf: Record<string, string> = {};
 
@@ -65,7 +71,7 @@ beforeAll(async () => {
 	[owner, editor, stranger] = (await Promise.all(['UPowner', 'UPeditor', 'UPstranger'].map((n) => signUp(n)))) as [User, User, User];
 	pid = (await owner.call('POST', '/projects', { name: 'Unit polygons' })).body.project.id;
 	expect((await owner.call('POST', `/projects/${pid}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
-	const put = await owner.call('PUT', `/projects/${pid}/model`, { nodes: [outlet, parcelUnit, pieceUnit, looseUnit, typedUnit], crops: [lucerne], cropAreas: [], transfers: [] });
+	const put = await owner.call('PUT', `/projects/${pid}/model`, { nodes: [outlet, parcelUnit, pieceUnit, looseUnit, typedUnit, bothUnit], crops: [lucerne], cropAreas: [], transfers: [] });
 	expect(put.status, JSON.stringify(put.body)).toBe(200);
 	await loadSyntheticLandCover(process.env.TEST_MIGRATION_DATABASE_URL!);
 	await loadSyntheticMapGrid(process.env.TEST_MIGRATION_DATABASE_URL!);
@@ -73,14 +79,16 @@ beforeAll(async () => {
 	featureOf[pieceUnit.id] = await feature('other', 'Piece', pieceUnit.id, PIECE);
 	featureOf[looseUnit.id] = await feature('other', 'Loose', null, LOOSE);
 	featureOf[typedUnit.id] = await feature('other', 'Typed', typedUnit.id, TYPED);
-	for (const n of [pieceUnit, looseUnit]) {
+	bothParcel = await feature('farm_parcel', 'Both parcel', bothUnit.id, BOTH_PARCEL);
+	featureOf[bothUnit.id] = await feature('other', 'Both area', null, BOTH_AREA);
+	for (const n of [pieceUnit, looseUnit, bothUnit]) {
 		const r = await editor.call('POST', `/projects/${pid}/nodes/${n.id}/area-from-map`, { featureId: featureOf[n.id] });
 		expect(r.status, JSON.stringify(r.body)).toBe(200);
 	}
 });
 
 const ids = (rows: { nodeId: string }[]) => rows.map((r) => r.nodeId).sort();
-const withPolygon = [parcelUnit.id, pieceUnit.id, looseUnit.id].sort();
+const withPolygon = [parcelUnit.id, pieceUnit.id, looseUnit.id, bothUnit.id].sort();
 
 describe('a unit’s polygon (issue #646 F1)', () => {
 	it('names the area kinds the routes accept for a unit’s area', () => {
@@ -123,6 +131,12 @@ describe('a unit’s polygon (issue #646 F1)', () => {
 		expect(used.body.areaM2).toBe(piece.unit.cultivatedM2);
 		const [last] = await asOwner('SELECT reason FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1', [pid]);
 		expect(last!.reason).toContain('cultivated in its area “Piece”');
+		// A unit with its own parcel and an area feature: the parcel by default (never both summed), the area when picked.
+		const both = (await editor.call('GET', `/projects/${pid}/nodes/${bothUnit.id}/cropland-proposals`)).body;
+		expect(both.parcels.map((p: { featureId: string }) => p.featureId)).toEqual([bothParcel]);
+		const picked = await editor.call('POST', `/projects/${pid}/nodes/${bothUnit.id}/crop-area-from-land-cover`, { cropId: lucerne.id, dataset: piece.dataset.dataset, featureId: featureOf[bothUnit.id] });
+		expect(picked.status, JSON.stringify(picked.body)).toBe(200);
+		expect(picked.body.areaM2).toBeGreaterThan(both.unit.cultivatedM2);
 		expect((await editor.call('POST', `/projects/${pid}/nodes/${typedUnit.id}/crop-area-from-land-cover`, { cropId: lucerne.id, dataset: piece.dataset.dataset })).status).toBe(400);
 	});
 

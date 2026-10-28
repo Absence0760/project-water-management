@@ -44,6 +44,10 @@
 
 	const why = $derived({ map: mapError ? `the MAP proposal couldn’t be read (${mapError})` : 'no loaded MAP grid covers it', rain: rainError ? `the rain proposal couldn’t be read (${rainError})` : 'not loaded' });
 	const rows = $derived(unitDataRows(nodes, map, rain, why));
+	// Every listed row has its ticks, even one a later nodes prop lists before load() resets them.
+	$effect.pre(() => {
+		for (const r of rows) ticks[r.nodeId] ??= { map: false, rain: false };
+	});
 	const plan = $derived(unitApplyPlan(rows, ticks));
 	const offered = $derived(rows.some((r) => mapTickable(r.map) || rainTickable(r.rain)));
 	const editorOnly = $derived(rows.some((r) => r.rain.kind === 'offer' && !r.rain.owner));

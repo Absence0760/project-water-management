@@ -21,7 +21,7 @@ import { chcCell, seriesFromCache } from '../feeds/cellCache.js';
 import { cacheOrigin, readCellCache } from '../feeds/cellCacheStore.js';
 import { CHIRPS_PRODUCT_FIRST_DAY, type ChirpsDailyProduct } from '../feeds/config.js';
 import type { Geometry } from '../geo/geojson.js';
-import { UNIT_POLYGONS_SQL } from '../geo/unitPolygon.js';
+import { ONLY_PARCEL_SQL, UNIT_POLYGONS_SQL } from '../geo/unitPolygon.js';
 
 /**
  * The product a cell is read in when the series it is compared with isn't
@@ -73,7 +73,7 @@ export async function referenceCell(
 	const { rows } = await db.query<{ geometry: Geometry }>(
 		`SELECT f.geometry FROM node n JOIN map_feature f ON ${UNIT_POLYGONS_SQL}
 		 WHERE n.project_id = $1 AND n.id::text = $2 AND n.kind = 'farm' AND n.area_km2 > 0
-		   AND (f.id = n.area_feature_id OR (SELECT count(*) FROM map_feature g WHERE g.project_id = n.project_id AND g.node_id = n.id AND g.kind = 'farm_parcel') = 1)
+		   AND (f.id = n.area_feature_id OR ${ONLY_PARCEL_SQL})
 		 ORDER BY (f.id = n.area_feature_id) DESC NULLS LAST LIMIT 1`,
 		[projectId, ref.unitId]
 	);

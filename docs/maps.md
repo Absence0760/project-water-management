@@ -2226,7 +2226,9 @@ instead, the polygon its area came from (an *other* area as Sub-catchments
 from clicks and Start leave a unit's boundary; issue #646 F1,
 `geo/unitPolygon.ts`): its whole sub-catchment's cropland. A unit with
 parcels of its own keeps theirs, since its boundary holds them and summing
-both would count them twice. The modeller picks an area (all the unit's parcels, or one
+both would count them twice. One polygon picked on its own may be any of them, the area
+feature included, so the boundary's cropland can still be used beside the
+parcels. The modeller picks an area (all the unit's parcels, or one
 parcel) and a crop, and **Use** sets that crop's planted area on the unit to
 it.
 
