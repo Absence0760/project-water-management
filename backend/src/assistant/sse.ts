@@ -8,6 +8,7 @@
 //
 // The browser reads it with fetch on a POST (the CSRF and auth middleware
 // apply), not EventSource, so nothing here needs `id:` or `retry:`.
+import { afterResponse } from '../http/afterResponse.js';
 import type { AssistantStreamEvent } from './types.js';
 
 export const KEEPALIVE = ': keepalive\n\n';
@@ -74,9 +75,12 @@ export function sseBody(opts: SseOptions, turn: (out: SseWriter) => Promise<void
 			gone.signal.addEventListener('abort', () => {
 				if (timer) clearInterval(timer);
 			});
-			turn({ send: (e) => write(encodeEvent(e)), signal: gone.signal })
-				.catch(() => {})
-				.finally(finish);
+			// Registered so a Lambda isn't frozen before the turn (and its charge) ends, a client gone included.
+			afterResponse(
+				turn({ send: (e) => write(encodeEvent(e)), signal: gone.signal })
+					.catch(() => {})
+					.finally(finish)
+			);
 		},
 		cancel() {
 			gone.abort();
