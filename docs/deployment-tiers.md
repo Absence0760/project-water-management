@@ -38,6 +38,7 @@ The rates that set the bill, per month:
 | Database failure | ~10 min recovery, by AWS, on a new host | ~1–2 min automatic failover |
 | AZ outage | API down until the AZ recovers | API keeps serving |
 | Suggested `budget_monthly_usd` (its ACTUAL 80% alert above the idle; daily budget derived: `ceil(× 2.25 / 30)`) | 110 (af-south-1, the default) / 85 (us-east-1): $9 / $7 a day | 220 (af-south-1) / 180 (us-east-1): $17 / $14 a day |
+| The AI assistant (`assistant_enabled`, off by default; [§ The assistant](#the-assistant)) | + ≈ $10.90 fixed + model spend; budget + `assistant_budget_monthly_usd` ($50): 160 | + ≈ $20.50 fixed (endpoint in 2 AZs) + model spend; budget + $50: 270 |
 
 **Recommendation:** start on **minimal** in af-south-1. It is a complete,
 secure production deployment, not a demo: every feature, WAF, private
@@ -103,6 +104,8 @@ Cost:
 | 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 | 4.10 |
 | SQS polling by the six event sources (~2.9 M receives past the free tier), ECR images, S3 (incl. the tiles and reference buckets, ~$0.10, and the data mirror's ~6 GB, ~$0.20–0.30), SES, Lambda (the migrate Lambda's 3008 MB is billed only while it migrates or loads), CloudFront | ~1.90 | ~1.60 |
 | **Total** | **≈ $77** | **≈ $63** |
+| *With the assistant:* bedrock-runtime endpoint × 1 AZ, its runtime secret, its budget (a third, $0.62), 5 essential alarms + 3 log metrics | + ≈ 10.90 (9.56 + 0.40 + 0.62 + ~0.35) | + ≈ 8.65 (7.30 + 0.40 + 0.62 + ~0.35) |
+| *Total with the assistant*, before model spend | **≈ $88** | **≈ $72** |
 
 The line-by-line us-east-1 breakdown is
 [infra/README.md § Cost](../infra/README.md#cost).
@@ -156,6 +159,7 @@ Cost:
 | 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 | 4.10 |
 | SQS polling, ECR image, S3 (incl. the map tiles and reference buckets, ~$0.10), SES, Lambda, CloudFront | ~3.00 | ~2.50 |
 | **Total** | **≈ $166** | **≈ $133** |
+| *With the assistant:* bedrock-runtime endpoint × 2 AZs (`bedrock_endpoint_az_count = 2`), its secret, budget, 6 alarms + 3 log metrics | + ≈ 20.50 (19.11 + 0.40 + 0.62 + ~0.40) | + ≈ 16.00 (14.60 + 0.40 + 0.62 + ~0.40) |
 
 What it buys:
 
@@ -185,6 +189,27 @@ serverless (multi-AZ already) or degrades gracefully.
 
 Once the full tier has run stably for a few months, a 1-year RDS reserved
 instance cuts the database line by roughly a third.
+
+## The assistant
+
+The AI assistant (issue #610, [deployment.md § The
+assistant](./deployment.md#the-assistant)) is off on both tiers until
+`assistant_enabled = true`. Its fixed cost is almost all its bedrock-runtime
+interface endpoint (the rows above); the full tier's second ENI only keeps
+the chat up through one AZ's outage, so `bedrock_endpoint_az_count = 1` is
+a fair saving even there. The model's spend comes on top, billed through AWS
+Marketplace: Claude Sonnet 5.5 through the global profile costs $2.00 per
+million input and $10.00 per million output tokens from af-south-1 (AWS
+Price List API, read 2026-10-27), about $0.10 a typical turn. The app caps
+it per project, per person and deployment-wide in weighted tokens (input +
+5 × output), the deployment-wide cap derived from
+`assistant_budget_monthly_usd` ($50), so the month's model spend stays
+near that figure; `assistant-tokens-hourly` alarms within the hour.
+
+Raise `budget_monthly_usd` by `assistant_budget_monthly_usd` when you turn
+it on (≈ $160 minimal, ≈ $270 full, af-south-1): the account budget counts
+the model spend too, and on minimal the assistant's fixed cost alone puts
+the idle (≈ $88) on the default budget's ACTUAL 80% line.
 
 ## What grows with use
 

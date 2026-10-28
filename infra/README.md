@@ -268,7 +268,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` + `sops` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
 | `scripts/preapply-check.sh` | Read-only checks before the first apply (Operator steps 7a): the Lambda concurrency quota covers every `*_reserved_concurrency` (defaults, overridden by `--var-file`) + 10, the state bucket and sops key are in us-east-1, the SES endpoint service and the RDS instance class for the pinned PostgreSQL major exist, and a logging CloudTrail trail (this account's or the Organization's) records KMS write management events in the region (the database key alarm's source). PASS/FAIL per check, exit 1 on any FAIL. Tested against a fake `aws` (`preapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
-| `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) `--redirect-from <host>` (each former hostname in `redirect_domains`, issue #551) also checks that its pages 301 to the site and its `/api/health` still answers |
+| `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) `--redirect-from <host>` (each former hostname in `redirect_domains`, issue #551) also checks that its pages 301 to the site and its `/api/health` still answers. With the assistant's Lambda present: Bedrock model invocation logging off (FAIL otherwise), the assistant budget's Marketplace filter has seen a charge (WARN until billing catches up), and the account's tokens-per-minute quota for the model, recorded |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
@@ -569,7 +569,7 @@ Idle to light use, on-demand, us-east-1:
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
 | KMS `alias/water-management-rds` (`rds_customer_managed_key`, default on; +$1 at each of the first two yearly rotations; requests within the free tier) | 1.00 |
-| CloudWatch: 44 alarms, 41 until the renderer is on (incl. the CloudFront request-flood, egress (bytes) and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration, RDS CPU surplus credits charged), logs, RDS log export | ~4.30 |
+| CloudWatch: 44 alarms, 41 until the renderer is on, +6 with the assistant (costed in its own table below) (incl. the CloudFront request-flood, egress (bytes) and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration, RDS CPU surplus credits charged), logs, RDS log export | ~4.30 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $63** (list prices checked 2026-10-04; the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop, sign-in CAPTCHA and tiles rules $1.00 each, the S3 endpoint $7.30) |
@@ -640,6 +640,35 @@ instead of the endpoints would cost more (~$33 + data), and the fetcher
 Lambda outside the VPC (WP-2.10) is what keeps step 2's internet fetches from
 needing one.
 
+**The assistant (`assistant_enabled`, off by default) adds ≈ $10.90 a month
+fixed**, before any model spend, in af-south-1:
+
+| Item | $/month |
+| --- | --- |
+| bedrock-runtime interface endpoint, 1 AZ (`bedrock_endpoint_az_count`; $0.01309/h, ~$7.30 in us-east-1) | 9.56 |
+| Its runtime secret (`secrets.tf`) | 0.40 |
+| Its budget (`water-management-assistant`, a third budget: $0.02/day past the free two) | 0.62 |
+| CloudWatch: 5 essential alarms (errors, throttles, charge-failed, provider-failed, tokens-hourly) and 3 log metrics, 1 more alarm on the full tier (duration p95) | ~0.30–0.40 |
+| Lambda (`water-management-assistant`, 1 GB arm64: a turn of ~15 s ≈ $0.0003) | ~0 |
+| **Assistant fixed** | **≈ $10.90** |
+
+Model spend comes on top, billed through AWS Marketplace: Claude Sonnet 5.5
+through the global profile is $2.00 per million input and $10.00 per million
+output tokens from af-south-1 (AWS Price List API, read 2026-10-27), about
+$0.10 for a typical turn and capped per project, per person and
+deployment-wide in weighted tokens (input + 5 × output, so dollars at the
+input price; [docs/deployment.md § The
+assistant](../docs/deployment.md#the-assistant)). The deployment-wide cap
+defaults to `assistant_budget_monthly_usd` ($50) at that price, and the
+assistant's budget alerts on it. **With the assistant on, raise
+`budget_monthly_usd` to $110 + `assistant_budget_monthly_usd` (≈ $160 on the
+defaults)**: the idle becomes ≈ $88, exactly the $110 budget's ACTUAL 80%
+line, and the model spend counts toward the account total too, so the
+default would alert every month. The worst case AWS bounds is the
+assistant's own Lambda at its reserved concurrency (2 × 1 GB all month,
+≈ $106 with requests); the model spend is bounded by the app's caps, and
+`assistant-tokens-hourly` reports it within the hour.
+
 These are the minimal (default) figures. The full, highly available
 configuration (Multi-AZ `db.t4g.small`, endpoints in 2 AZs, ≈ $166 in
 af-south-1, ≈ $133 in us-east-1) is costed in
@@ -659,6 +688,7 @@ alarms are what bound and report a runaway while it happens.
 | Monthly, ACTUAL 80% | the month's spend passes $88 (on the default $110) | Early warning, set above the idle so it doesn't fire every month. |
 | Monthly, ACTUAL 100% | the month's spend passes the budget | |
 | Monthly, FORECASTED 100% | AWS forecasts the month past the budget | Needs ~5 weeks of cost history, so it is silent through the first month. |
+| Assistant, ACTUAL 80% and 100% | the month's AWS Marketplace charges (the model's spend) pass `assistant_budget_monthly_usd` ($50) | Only with `assistant_enabled`. A third budget, ~$0.62 a month. Marketplace charges lag a further 12–24 h; `assistant-tokens-hourly` is the real-time signal. `postapply-check.sh`'s `assistant-budget` confirms the filter catches the charge. |
 | Cost Anomaly Detection | one service's spend jumps, total impact ≥ `cost_anomaly_threshold_usd` (off by default; set $10 after the first apply, [§ Operator steps](#operator-steps) step 11) | AWS-services monitor, free, needs ~10 days of history. Off for the first apply because an account holds one services monitor and AWS may have made it already. |
 
 Each topic's policy admits only this account (`aws:SourceAccount`, plus
