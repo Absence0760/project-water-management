@@ -688,6 +688,8 @@ levelled CHIRPS; mutants move the day minimum by one, drop the 50 mm test,
 the clamp and the MAP ratio) and `unit-rain-reference-not-land` (a reference
 farm without area: each unit's CHIRPS levelled as without a reference).
 
+`forecast-member-rescaled` (issue #620 step 6, model.md §2.15d): a member of the forecast-conditioned outlook is an ordinary run, its `rain_forecast_mm` the record's own days rescaled month by month (× 1.5, × 0.4, × 0); nothing else of that outlook is mirrored here.
+
 Reference gauge, 2026-10-10 (engine 1.80.0): the examples, the 27 probes and
 30 random and 30 dense networks (seed 1000) agree on every compared column,
 written from §2.4h's text alone; `test_verify.py` with its six new mutants

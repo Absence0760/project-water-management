@@ -15,6 +15,7 @@ import { arealRainFormError } from './arealRain';
 import { dataQualityError } from './dataQuality';
 import { peFormError, peOf } from './peInput';
 import { saveBlockers, settingsPageOf, type SaveBlocker } from './sections';
+import { catchmentMapFormError } from './flowGeneration';
 import { unitRainFormError } from './unitRain';
 import type { ChildError, EditableSettings } from './settingsDraft.svelte';
 
@@ -38,6 +39,7 @@ export function settingsBlockers(s: EditableSettings, errors: Readonly<Record<Ch
 		{ id: 'set-restrict', message: errors.restrict },
 		{ id: 'set-reporting', message: reportingError(s) },
 		{ id: 'set-share', message: unitRainFormError(s.unitRain) },
+		{ id: 'set-share', message: catchmentMapFormError(s.rainStations) },
 		{ id: 'set-ewr', message: errors.ewrSource },
 		{ id: 'set-reserve', message: errors.reserve },
 		{ id: 'set-outcomes', message: outcomesError(s.outcomes) },

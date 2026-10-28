@@ -10,6 +10,8 @@ import { describe, expect, it } from 'vitest';
 import type { RainStationSettings } from '@water-management/engine';
 import {
 	assignmentLine,
+	catchmentMapFormError,
+	catchmentMapReadout,
 	FLOW_METHODS,
 	flowMethodOf,
 	methodLabel,
@@ -29,6 +31,7 @@ import {
 	unitRatio,
 	unitStationRows,
 	unitsOnCatchmentRain,
+	withCatchmentMap,
 	withStationSite,
 	withUnitCorrectAgainst,
 	withUnitPatch,
@@ -269,5 +272,62 @@ describe('the units on the catchment rain (issue #615)', () => {
 		// A station, or a gauge or CHIRPS series of its own.
 		const series = [rain('rain_catchment_mm'), rain('rain_chirps_mm', 'b'), rain('rain_catchment_mm', 'c')];
 		expect(unitsOnCatchmentRain(nodes, { rainStations: { units: { a: { stationId: 's' } } } }, series)).toEqual([]);
+	});
+});
+
+describe('the catchment MAP (issue #612 follow-up)', () => {
+	const mapped = [unit('a', 900, 10), unit('b', 600, 6)];
+	const mean = (900 * 10 + 600 * 6) / 16;
+
+	it('stores a MAP with its source, trims the source, and stores none when both are cleared', () => {
+		const rs: RainStationSettings = { catchment: { stationId: 's' } };
+		const set = withCatchmentMap(rs, 700, '  an invented study  ');
+		expect(set).toEqual({ catchment: { stationId: 's' }, catchmentMapMm: 700, catchmentMapSource: 'an invented study' });
+		// Cleared: the pair goes, so the engine takes the units' mean again, and the rest of the setting is untouched.
+		expect(withCatchmentMap(set, null, '')).toEqual(rs);
+		// A setting with nothing else in it tidies to none.
+		expect(withCatchmentMap({ catchmentMapMm: 700, catchmentMapSource: 'x' }, null, null)).toBeNull();
+		// Half entered is kept as typed (the API refuses it), never saved as something else.
+		expect(withCatchmentMap(rs, 700, ' ')).toEqual({ catchment: { stationId: 's' }, catchmentMapMm: 700 });
+		expect(withCatchmentMap(rs, null, 'a study')).toEqual({ catchment: { stationId: 's' }, catchmentMapSource: 'a study' });
+	});
+
+	it('says what the API would refuse, and nothing for none or a complete pair', () => {
+		expect(catchmentMapFormError(null)).toBeNull();
+		expect(catchmentMapFormError({ catchmentMapMm: 700, catchmentMapSource: 'a study' })).toBeNull();
+		expect(catchmentMapFormError({ catchmentMapMm: 700 })).toMatch(/needs its source/);
+		expect(catchmentMapFormError({ catchmentMapMm: 700, catchmentMapSource: '  ' })).toMatch(/needs its source/);
+		expect(catchmentMapFormError({ catchmentMapSource: 'a study' })).toMatch(/source needs its MAP/);
+		expect(catchmentMapFormError({ catchmentMapMm: 0.5, catchmentMapSource: 'x' })).toBe('The catchment MAP must be a number from 1 to 12000 mm.');
+		expect(catchmentMapFormError({ catchmentMapMm: 700, catchmentMapSource: 'x'.repeat(601) })).toMatch(/longer than 600/);
+	});
+
+	it('takes the units’ area-weighted mean when blank, and the entered MAP over it, for the ratio', () => {
+		const blank = catchmentMapReadout({ catchment: { stationId: 's' } }, mapped, S);
+		expect(blank.entered).toBeNull();
+		expect(blank.unitsMean).toBeCloseTo(mean, 12);
+		expect(blank.inUse).toBeCloseTo(mean, 12);
+		expect(blank.ratio.ratio).toBeCloseTo(mean / 600, 12);
+		expect(blank.noRatioWhy).toBeNull();
+		const entered = catchmentMapReadout({ catchment: { stationId: 's' }, catchmentMapMm: 1200, catchmentMapSource: 'a study' }, mapped, S);
+		expect(entered).toMatchObject({ entered: 1200, inUse: 1200, ratio: { ratio: 2, own: 2, clamped: false, outsideBand: false } });
+		expect(entered.unitsMean).toBeCloseTo(mean, 12);
+		// Clamped as the engine clamps it (0.25–4), and outside 0.5–2 flagged.
+		expect(catchmentMapReadout({ catchment: { stationId: 's' }, catchmentMapMm: 3000, catchmentMapSource: 'x' }, mapped, S).ratio).toMatchObject({ ratio: 4, own: 5, clamped: true });
+		// A stored MAP out of range is the engine's fallback to the units' mean.
+		expect(catchmentMapReadout({ catchment: { stationId: 's' }, catchmentMapMm: 50_000, catchmentMapSource: 'x' }, mapped, S).inUse).toBeCloseTo(mean, 12);
+	});
+
+	it('says why the station’s rain isn’t scaled', () => {
+		const rs = (extra: Partial<RainStationSettings> = {}): RainStationSettings => ({ catchment: { stationId: 's' }, ...extra });
+		expect(catchmentMapReadout(rs(), [unit('a', 900), unit('c', null)], S)).toMatchObject({ unitsMean: null, missing: ['Unit c'], noRatioWhy: 'the units’ mean needs every land unit’s MAP, and Unit c has none', ratio: { ratio: 1 } });
+		// An entered MAP stands in for the units' missing ones.
+		expect(catchmentMapReadout(rs({ catchmentMapMm: 600, catchmentMapSource: 'x' }), [unit('c', null)], S)).toMatchObject({ noRatioWhy: null, ratio: { ratio: 1, own: 1 } });
+		expect(catchmentMapReadout(rs(), [], S).noRatioWhy).toBe('there is no land unit to take a mean MAP from');
+		expect(catchmentMapReadout(rs(), mapped, station('n', null)).noRatioWhy).toBe('the station has no MAP');
+		expect(catchmentMapReadout({ catchment: { stationId: 's', scaleToMap: false } }, mapped, S)).toMatchObject({ noRatioWhy: 'scaling is off, so the station’s rain is taken as recorded', ratio: { ratio: 1, own: null } });
+		// Without the nodes the mean is unknown, not missing.
+		expect(catchmentMapReadout(rs(), undefined, S)).toMatchObject({ unitsMean: undefined, inUse: undefined, noRatioWhy: null });
+		expect(catchmentMapReadout(rs(), mapped, null).noRatioWhy).toBeNull();
 	});
 });
