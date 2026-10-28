@@ -2173,10 +2173,27 @@ C3S's multi-system seasonal forecasts and their hindcasts (issue #620 step
 Office, Météo-France, DWD, CMCC, NCEP, JMA and ECCC's two), leads to 215
 days, on a 1° grid, copied by the same `mirror-ingest` function
 (`ingest/c3s_seasonal.py`; how it works: ingest/README.md § The C3S
-seasonal job) into `c3s/<YYYY-MM>/` and `c3s-hc/<system>/<MM>/`. Nothing in
-the app reads the copy yet: the forecast-conditioned outlook is #620 steps
-6–7, and until then outlooks stay ESP. Like ERA5-Land, each request is
-submitted on one run and collected on a later one.
+seasonal job) into `c3s/<YYYY-MM>/` and `c3s-hc/<system>/<MM>/`. Like
+ERA5-Land, each request is submitted on one run and collected on a later
+one.
+
+**What the app does with it** (#620 step 7): an outlook run with *Also give
+the chance of each restriction level from the seasonal forecasts* (method
+`c3s`) has the worker read the copy (`MIRROR_URL`, the worker's read of the
+whole mirror bucket, `infra/ingest.tf` `worker_mirror`: nothing new) through
+`backend/src/outlooks/c3s.ts`: the newest init with a system issued by the
+decision date (ECMWF's on the 6th, the others' on the 10th), its hindcasts,
+averaged over the project's catchment boundary (else its units' polygons)
+([model.md §2.15d](./model.md#215d-the-forecast-conditioned-outlook-the-chance-of-each-restriction-level-issue-620-engine-11060)).
+**It is off until the copy holds them**: with `c3s_enabled = false` (the
+default) the copy has no `c3s/index.json`, so such an outlook says *No
+seasonal forecast issued by the decision date is held* and is the ESP alone,
+unchanged to the bit; once the forecasts are held but before the hindcast
+backfill below, it says the copy holds no hindcast. No new environment
+variable, flag or permission: the API never reads the copy (it isn't told
+where it is), only the worker. Each such outlook reads one chunk (~0.4 MB)
+per member per hindcast year of each system used, about 600 per system with
+25 hindcast members; see docs/followups.md § C3S outlook read cost.
 
 **No new secret.** The runs read ERA5-Land's `water-management/ingest/cds-key`
 (`infra/era5land.tf`). The daily rule (14:20 UTC,
