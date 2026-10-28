@@ -111,4 +111,13 @@ describe('the series ids settings name, and a copy’s or import’s fresh ones'
 		expect(remapSettingSeriesIds(settings, new Map([[LOG, N('4')]])).checksKept).toEqual([`outlier:${N('4')}:2001-01-05:2001-01-05`, 'not an item']);
 		expect(remapSettingSeriesIds(settings, new Map())).toBe(settings);
 	});
+
+	it('the fit record’s series and kept checks follow too, so a copy’s fit stays current', () => {
+		const N = 'f1000000-0000-4000-8000-0000000000ff';
+		const withFit = { fitRecord: { flowSeriesId: OBS, checksKept: [`outlier:${OBS}:2001-01-05:2001-01-05`], flowMissing: { [OBS]: [period(1)] } } };
+		expect([...settingSeriesIds(withFit)]).toEqual([OBS]);
+		expect(remapSettingSeriesIds(withFit, new Map([[OBS, N]])).fitRecord).toEqual({ flowSeriesId: N, checksKept: [`outlier:${N}:2001-01-05:2001-01-05`], flowMissing: { [N]: [period(1)] } });
+		expect(FitRecord.shape.flowSeriesId.safeParse(OBS).success).toBe(true);
+		expect(FitRecord.shape.flowSeriesId.safeParse('not a series').success).toBe(false);
+	});
 });

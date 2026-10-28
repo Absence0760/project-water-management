@@ -120,9 +120,22 @@ export function sanitizeExclusions(raw: unknown, warnings: string[], what = 'cal
 	return out;
 }
 
-/** The kept items of settings.checksKept that change a fit's days (a flow record's outliers and flat stretches), sorted. */
-const keptForFit = (kept: readonly string[] | null | undefined): string[] =>
-	[...new Set((kept ?? []).filter((id) => KEPT_SUSPECT_CHECKS.has(parseCheckItemId(id)?.check ?? '')))].sort();
+/**
+ * The kept items of settings.checksKept that change a fit's days: the fitted record's (`seriesId`) outliers and flat
+ * stretches, sorted, as keptSuspectRanges reads them. None without the record's id: no kept item reaches a record
+ * the input doesn't name.
+ */
+const keptForFit = (kept: readonly string[] | null | undefined, seriesId: string | null | undefined): string[] => {
+	if (!seriesId) return [];
+	return [
+		...new Set(
+			(kept ?? []).filter((id) => {
+				const r = parseCheckItemId(id);
+				return !!r && r.seriesId === seriesId && KEPT_SUSPECT_CHECKS.has(r.check);
+			})
+		)
+	].sort();
+};
 
 /** settings.flowMissing without its empty lists, {} for none: two that leave out the same days compare equal. */
 const nonEmpty = (fm: Record<string, CalibrationExclusion[]> | null | undefined): Record<string, CalibrationExclusion[]> =>
@@ -193,10 +206,13 @@ export interface FitRecord {
 	 * exclusions do. Absent = none (and on a record made before it).
 	 */
 	flowMissing?: Record<string, CalibrationExclusion[]>;
+	/** The stored series fitted to (engine ≥ 1.102.0, CalibrationReport.flowSeriesId): whose kept checks are the fit's. Absent when the input didn't say. */
+	flowSeriesId?: string;
 	/**
-	 * The kept outlier and flat-stretch items of settings.checksKept at the
-	 * time (engine ≥ 1.102.0, issue #611), sorted: their days weren't suspect,
-	 * so they decide the days fitted as settings.qualityFlags do. Absent = none.
+	 * The kept outlier and flat-stretch items of the fitted record
+	 * (`flowSeriesId`) in settings.checksKept at the time (engine ≥ 1.102.0,
+	 * issue #611), sorted: their days weren't suspect, so they decide the days
+	 * fitted as settings.qualityFlags do. Absent = none.
 	 */
 	checksKept?: string[];
 	/**
@@ -488,7 +504,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		calibrationEnd: ctx.settings.calibrationEnd ?? null,
 		exclusions: (ctx.settings.calibrationExclusions ?? []).map((x) => ({ ...x })),
 		...(ctx.settings.flowMissing && Object.keys(ctx.settings.flowMissing).length ? { flowMissing: structuredClone(ctx.settings.flowMissing) } : {}),
-		...(keptForFit(ctx.settings.checksKept).length ? { checksKept: keptForFit(ctx.settings.checksKept) } : {}),
+		...(r.flowSeriesId ? { flowSeriesId: r.flowSeriesId } : {}),
+		...(keptForFit(ctx.settings.checksKept, r.flowSeriesId).length ? { checksKept: keptForFit(ctx.settings.checksKept, r.flowSeriesId) } : {}),
 		qualityFlags: resolveQualityFlags(ctx.settings.qualityFlags, []),
 		...(r.dayQuality !== undefined ? { dayQuality: structuredClone(r.dayQuality) } : {}),
 		...(r.fitAllDays !== undefined ? { fitAllDays: r.fitAllDays } : {}),
@@ -1025,7 +1042,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		// The kept outliers and flat stretches (engine ≥ 1.102.0) decide the suspect days as the flags' treatments do.
 		qualityFlagsChanged:
 			(record.qualityFlags !== undefined && !sameJson(flagsAsScored(settings.qualityFlags, record), flagsAsScored(record.qualityFlags, record))) ||
-			!sameJson(keptForFit(settings.checksKept), record.checksKept ?? []),
+			!sameJson(keptForFit(settings.checksKept, record.flowSeriesId), record.checksKept ?? []),
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
 		flowKindChanged: kind !== null && kind !== record.flowKind,
 		siteChanged: (settings.calibrationSiteNodeId ?? null) !== (record.siteNodeId ?? null),

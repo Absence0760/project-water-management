@@ -236,6 +236,8 @@ export interface CalibrationReport {
 	 * compared with. Absent on a report from before: the outlet.
 	 */
 	siteNodeId?: string | null;
+	/** The stored series fitted to (engine ≥ 1.102.0, CalibrationProblem.flowSeriesId); absent when the input didn't say. */
+	flowSeriesId?: string;
 	simulatedKey: 'simulated_outflow';
 	fit: ScoredPeriod;
 	/** The project's current parameters scored on the same days. */
@@ -322,6 +324,8 @@ export interface CalibrationProblem {
 	flowKind: string;
 	/** Where the record is and the simulated flow is taken (engine ≥ 1.41.0): null = the outlet, else the gauge's node id. */
 	siteNodeId: string | null;
+	/** The stored series the fitted record is (DailySeries.seriesId, engine ≥ 1.102.0): whose kept checks change the scored days. Null when the input doesn't say. */
+	flowSeriesId: string | null;
 	/** The calibration records at the site, in CALIBRATION_FLOW_KINDS order: the fitted one and any for independent validation. */
 	records: CalibrationFlowKind[];
 	/** Observed flow (m³/day), NaN where missing. */
@@ -532,6 +536,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		startParams,
 		flowKind: kind,
 		siteNodeId,
+		flowSeriesId: siteSeries[kind]?.seriesId ?? null,
 		records: CALIBRATION_FLOW_KINDS.filter((k) => !!siteSeries[k]),
 		observed,
 		scoredDays: idx,
@@ -1067,6 +1072,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		startParams: pb.startParams,
 		flowKind: pb.flowKind,
 		siteNodeId: pb.siteNodeId,
+		...(pb.flowSeriesId ? { flowSeriesId: pb.flowSeriesId } : {}),
 		simulatedKey: 'simulated_outflow',
 		fit: fitClean,
 		before: scored(pb, pb.startParams, all),

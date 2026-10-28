@@ -939,6 +939,8 @@ export const FitRecord = z
 		flowKind,
 		// Engine ≥ 1.41.0: the gauge the fit was scored at (null = the outlet); absent on a record made before it.
 		siteNodeId: z.string().min(1).max(100).nullable().optional(),
+		// Engine ≥ 1.102.0 (issue #611): the stored series fitted to, whose kept checks are the fit's; absent when the input didn't say.
+		flowSeriesId: z.string().uuid().optional(),
 		simulatedKey: z.literal('simulated_outflow'),
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),

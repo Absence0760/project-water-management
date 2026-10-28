@@ -258,13 +258,23 @@ describe('fit record', () => {
 		const fm = { 'series-1': [{ start: '2013-01-01', end: '2013-02-01', reason: 'weir silted up' }] };
 		const kept = ['outlier:series-1:2013-05-01:2013-05-01', 'zerorun:series-2:2013-06-01:2013-06-30'];
 		const settings = { ...ctx.settings, panCoefficient: s.panCoefficient, apanMm: s.apanMm };
-		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...settings, flowMissing: fm, checksKept: kept } });
+		const rec = fitRecordFromReport(report({ flowSeriesId: 'series-1' }), { ...ctx, settings: { ...settings, flowMissing: fm, checksKept: kept } });
 		expect(rec.flowMissing).toEqual(fm);
+		expect(rec.flowSeriesId).toBe('series-1');
 		// Only the items that change a fit's days: a flow record's kept outliers and flat stretches.
 		expect(rec.checksKept).toEqual(['outlier:series-1:2013-05-01:2013-05-01']);
 		expect(fitRecordStatus({ ...s, flowMissing: fm, checksKept: kept }, rec)).toMatchObject({ exclusionsChanged: false, qualityFlagsChanged: false });
 		// The other kept item alone isn't the fit's days: no change.
 		expect(fitRecordStatus({ ...s, flowMissing: fm, checksKept: [...kept, 'lowvschirps:series-2:2014-10-01:2015-09-30'] }, rec).qualityFlagsChanged).toBe(false);
+		// Keeping a rain outlier, or an outlier of a record the fit doesn't score, leaves the fit current; positive control: one more of its own doesn't.
+		for (const other of ['outlier:rain-1:2013-05-02:2013-05-02', 'outlier:series-2:2013-05-03:2013-05-03', 'flatline:series-3:2013-07-01:2013-07-20']) {
+			expect(fitRecordStatus({ ...s, flowMissing: fm, checksKept: [...kept, other] }, rec).qualityFlagsChanged, other).toBe(false);
+		}
+		expect(fitRecordStatus({ ...s, flowMissing: fm, checksKept: [...kept, 'flatline:series-1:2013-07-01:2013-07-20'] }, rec).qualityFlagsChanged).toBe(true);
+		// …and the record stores only its own: a fit whose input names no series keeps none.
+		const other = fitRecordFromReport(report({ flowSeriesId: 'series-2' }), { ...ctx, settings: { ...settings, checksKept: kept } });
+		expect('checksKept' in other).toBe(false);
+		expect('checksKept' in fitRecordFromReport(report(), { ...ctx, settings: { ...settings, checksKept: kept } })).toBe(false);
 		expect(fitRecordStatus({ ...s, checksKept: kept }, rec).exclusionsChanged).toBe(true);
 		expect(fitRecordStatus({ ...s, flowMissing: fm }, rec).qualityFlagsChanged).toBe(true);
 		// A record made without either, and settings with none (absent, or an empty list): no change.

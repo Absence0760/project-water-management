@@ -247,6 +247,8 @@ describe('settings.checksKept: a kept outlier or flat stretch is scored as read 
 		const kept = prepareCalibration(input({ checksKept: [id] }, { flow_observed_m3s: flagged() }));
 		expect(Array.from(open.scoredDays)).not.toContain(400);
 		expect(Array.from(kept.scoredDays)).toContain(400);
+		// The problem names the record it fits, whose kept checks a fit record keeps (provenance.ts keptForFit).
+		expect(kept.flowSeriesId).toBe(OBS_ID);
 		// …and the run's own quality column agrees (stored: the open flat stretch is still suspect).
 		const out = runModelChecked(input({ checksKept: [id] }, { flow_observed_m3s: flagged() }));
 		const q = col(out, FLOW_QUALITY_COLUMN.key)!;

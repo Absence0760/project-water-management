@@ -58,7 +58,17 @@ function collect(settings: Record<string, unknown>, out: Set<string>): void {
 		for (const key of ['sites', 'unreliable', 'pinnedFactors'] as const) if (isObj(rs[key])) for (const id of Object.keys(rs[key] as object)) out.add(id);
 	}
 	if (isObj(settings.flowMissing)) for (const id of Object.keys(settings.flowMissing)) out.add(id);
-	if (Array.isArray(settings.checksKept)) for (const item of settings.checksKept) {
+	// The fit record's own (engine ≥ 1.102.0): the series it was fitted to, and the kept checks it ran on.
+	if (isObj(settings.fitRecord)) {
+		if (typeof settings.fitRecord.flowSeriesId === 'string') out.add(settings.fitRecord.flowSeriesId);
+		collectKept(settings.fitRecord.checksKept, out);
+	}
+	collectKept(settings.checksKept, out);
+}
+
+function collectKept(list: unknown, out: Set<string>): void {
+	if (!Array.isArray(list)) return;
+	for (const item of list) {
 		const ref = typeof item === 'string' ? parseCheckItemId(item) : null;
 		if (ref) out.add(ref.seriesId);
 	}
@@ -75,12 +85,20 @@ export function remapSettingSeriesIds(settings: Record<string, unknown>, ids: Re
 	const out = { ...settings };
 	if (isObj(out.rainStations)) out.rainStations = remapRainStations(out.rainStations, new Map(), ids);
 	if (isObj(out.flowMissing)) out.flowMissing = Object.fromEntries(Object.entries(out.flowMissing).map(([id, list]) => [ids.get(id) ?? id, list]));
-	if (Array.isArray(out.checksKept)) {
-		out.checksKept = out.checksKept.map((item) => {
+	const kept = (list: unknown[]) =>
+		list.map((item) => {
 			const ref = typeof item === 'string' ? parseCheckItemId(item) : null;
 			const to = ref ? ids.get(ref.seriesId) : undefined;
 			return ref && to ? `${ref.check}:${to}:${ref.start}:${ref.end}` : item;
 		});
+	if (Array.isArray(out.checksKept)) out.checksKept = kept(out.checksKept);
+	// The fit record names its series too (engine ≥ 1.102.0), so a copy's fit stays current with the copy's ids.
+	if (isObj(out.fitRecord)) {
+		const fr: Record<string, unknown> = { ...out.fitRecord };
+		if (typeof fr.flowSeriesId === 'string' && ids.has(fr.flowSeriesId)) fr.flowSeriesId = ids.get(fr.flowSeriesId);
+		if (Array.isArray(fr.checksKept)) fr.checksKept = (kept(fr.checksKept) as string[]).sort();
+		if (isObj(fr.flowMissing)) fr.flowMissing = Object.fromEntries(Object.entries(fr.flowMissing).map(([id, l]) => [ids.get(id) ?? id, l]));
+		out.fitRecord = fr;
 	}
 	return out;
 }
