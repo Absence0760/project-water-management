@@ -74,6 +74,28 @@ reload) lands on the same step.
    (Crops), and finally **Run the model** (Runs & results). Nothing there is
    new: the step links the proposals that already exist, in order.
 
+   **As a to-do list** (issue #646 item 2, the hydrologist's review F2–F4):
+   the step lists every proposal a run needs, in the order a run reads
+   them (the units' areas and order, how natural flow is made, rain from the
+   boundary, the catchment's MAP, rain for each unit, MAP for each unit,
+   evaporation, the WR2012 check, observed flow, each unit's composite dam,
+   the cultivated area, Run the model), each with a **status derived from
+   what the project holds now** (Done, Started for some units, To do), never
+   a stored tick, so it can't drift from the data: a unit's rain is a feed
+   with its unit mark, its MAP `mapMm`, observed flow a record at the outlet
+   or a DWS feed waiting for its fetch. The five proposals the first build
+   didn't link are in it (rain and MAP for each unit, the catchment's MAP,
+   the WR2012 lookup, the flow-method choice), and observed flow opens
+   the DWS form with the nearest stations (`?feed=dws`). The list outlives
+   the sheet: the Map's Getting started pill shows the same items once the
+   sheet is closed, until every item a run needs is done. One step reviews
+   the per-unit proposals together: each unit's MAP from the grid and its
+   own rain feed in one table, each value with its source and its own tick,
+   unticked until ticked or **Tick all**; **Apply the ticked values** asks
+   first and sends only the ticked units to each proposal's own POST. Still
+   nothing is filled in silently, and the A-pan, the WR2012 values and the
+   flow feed are accepted where they live, as before.
+
 **Typing stays.** The Network's *Add outflow gauge* is untouched, a GeoJSON
 upload works at every step (step 1 and 2 link it), and any applied value can
 be typed over afterwards (an area typed over goes back to *typed*, as now).

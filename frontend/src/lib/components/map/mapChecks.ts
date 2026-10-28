@@ -258,9 +258,10 @@ export function mapChecks(features: readonly MapFeature[], nodes: readonly MapNo
 	const proj = projection(lon0, lat0);
 	const polysOf = (f: MapFeature): Poly[] => polygonsOf(f.geometry).map((poly) => poly.map((ring) => ring.map(proj.to)));
 
-	// 1. Units with no farm parcel linked.
+	// 1. Units with no polygon: no farm parcel linked, and no area feature (a parcel or an other area, the rule of backend/src/geo/unitPolygon.ts; issue #646 F1).
+	const areaPolygon = (n: MapNodeArea) => !!n.areaFeatureId && features.some((f) => f.id === n.areaFeatureId && (f.kind === 'farm_parcel' || f.kind === 'other') && isPolygon(f.geometry));
 	for (const n of units) {
-		if (!parcelsOf(n.id).length) checks.push({ id: `unit-no-parcel:${n.id}`, text: `${n.name} has no farm parcel linked.`, featureIds: [], nodeIds: [n.id] });
+		if (!parcelsOf(n.id).length && !areaPolygon(n)) checks.push({ id: `unit-no-parcel:${n.id}`, text: `${n.name} has no farm parcel linked.`, featureIds: [], nodeIds: [n.id] });
 	}
 
 	// 2. Features with a vertex outside the boundary (only with a boundary).

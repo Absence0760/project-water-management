@@ -7,8 +7,12 @@
 	model, and the outlet; a dam or an abstraction point is part of the unit
 	whose boundary holds it, never a unit of its own: start-16, #523 C1), the
 	proposal (every value ticked one by one, nothing applied
-	unticked), and data and the first run (the existing proposals, linked in
-	order). Typing the model in on the Network stays the other way.
+	unticked), and data and the first run: a to-do list of the data proposals
+	in the order a run reads them, each with its status from what the project
+	holds now (startData.ts, StartDataList; the Getting started pill keeps the
+	same list once the sheet is closed, issue #646), and each unit's rain and
+	MAP reviewed together with a Tick all (StartUnitsData). Typing the model in
+	on the Network stays the other way.
 	Each proposed unit's card carries its piece's number and tint, as on the
 	map (pieces.ts): the cards are the map's key, and a card with the focus or
 	the pointer lights its piece (`onhighlight`); a piece clicked on the map
@@ -25,6 +29,9 @@
 	import AreaBasisChoice from './AreaBasisChoice.svelte';
 	import { offersEffective } from './areaBasis';
 	import PieceBadge from './PieceBadge.svelte';
+	import StartDataList from './StartDataList.svelte';
+	import StartUnitsData from './StartUnitsData.svelte';
+	import type { DataItem } from './startData';
 	import { proposalPieces, REST_KEY } from './pieces';
 	import { OUTLET_KEY, placementLine, withPlacement } from './placement';
 	import {
@@ -64,6 +71,12 @@
 		ondelineate,
 		ondraw,
 		onplace,
+		onsubcatchments = null,
+		ondrawunit,
+		dataItems = null,
+		nodes = [],
+		modelDirty = false,
+		ondataapplied,
 		onproposed,
 		onapplied,
 		ondiscarded,
@@ -83,6 +96,18 @@
 		ondelineate: (() => void) | null;
 		ondraw: () => void;
 		onplace: () => void;
+		/** Sub-catchments, one per click (with an elevation model; null without one): the pieces saved come back here as units' boundaries. */
+		onsubcatchments?: (() => void) | null;
+		/** Draw a unit's boundary (an other area). */
+		ondrawunit: () => void;
+		/** The data step's to-do list (startData.ts), null while MapTab reads what the project holds. */
+		dataItems?: readonly DataItem[] | null;
+		/** The model's nodes, for the units' rain and MAP review's rows. */
+		nodes?: readonly { id: string; name: string }[];
+		/** Unsaved model edits: the review's Apply waits. */
+		modelDirty?: boolean;
+		/** The units' rain or MAP was applied: the map reloads the model and the list. */
+		ondataapplied: () => Promise<void> | void;
 		onproposed: (p: StartProposal) => Promise<void> | void;
 		onapplied: (p: StartProposal) => Promise<void> | void;
 		ondiscarded: () => Promise<void> | void;
@@ -236,7 +261,7 @@
 
 		{#if step === 'closed'}
 			<p data-testid="start-closed">
-				The model has hydrological units already, so it isn’t started from the map. <strong>Divide the model from the map</strong> (under the map, at the end of the key row, with an elevation model on the server) proposes each unit’s own area and order from its point; the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
+				The model has hydrological units already, so it isn’t started from the map. <strong>Divide the model</strong> (in the header, with an elevation model on the server) proposes each unit’s area from its boundary on the map, the elevation model ordering and checking them; the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
 			</p>
 		{:else if step === 'boundary'}
 			<h3 class="sub">Put the catchment’s boundary on the map <HelpTip key="start-from-map" /></h3>
@@ -278,7 +303,11 @@
 				{:else}
 					<p class="muted" data-testid="start-no-points">No units’ boundaries, dams or points on the map yet: the whole catchment becomes one unit unless you draw or upload the units’ boundaries.</p>
 				{/if}
-				<p><button type="button" class="btn btn-sm" onclick={onplace} data-testid="start-place">Place a point</button></p>
+				<p class="ways">
+					<button type="button" class="btn btn-sm" onclick={ondrawunit} data-testid="start-draw-unit">Draw a unit’s boundary</button>
+					{#if onsubcatchments}<button type="button" class="btn btn-sm" onclick={onsubcatchments} data-testid="start-subcatchments">Sub-catchments, one per click</button>{/if}
+					<button type="button" class="btn btn-sm" onclick={onplace} data-testid="start-place">Place a point</button>
+				</p>
 				<div class="field">
 					<label for="{uid}-outlet">The outlet (the outflow gauge) <HelpTip key="outlet-placement" /></label>
 					<select id="{uid}-outlet" value={outlet} onchange={(e) => setOutlet(e.currentTarget.value)} data-testid="start-outlet">
@@ -435,16 +464,13 @@
 			</div>
 		{:else if step === 'data'}
 			<div data-testid="start-data">
-				<p class="lead">The network is in. Next, the data, each proposed from the map and accepted one value at a time where it lives:</p>
-				<ol class="todo">
-					{#if boundary}<li><a href="?tab=series&rain=boundary#data-feeds">Rain from the boundary</a>: the CHIRPS feed over its cells (Data → Data feeds).</li>{/if}
-					<li><a href="?tab=series#data-feeds">Observed flow</a>: the nearest gauging stations to the outlet (Data → Data feeds).</li>
-					<li><a href="?tab=settings#set-demand">Evaporation</a>: the monthly A-pan the dams and crops lose (Model settings → Demand; <a href="?tab=calibration#set-evaporation">Evaporation from the map</a>, on Calibration under Flow calibration, proposes it). An ET₀ row from the map feeds the runoff model only; with no A-pan the dams lose nothing.</li>
-					<li><a href="?tab=dams">Each unit’s composite dam</a>: its volume and the area draining to it are yours to enter (Dams; the register of dams there is a reference only, since many farm dams aren’t on it).</li>
-					<li><a href="?tab=crops">Cultivated area</a> from land cover, per unit (Crops).</li>
-					<li><a href="?tab=network">The Network</a>: anything not ticked (areas, the order), dam sizes and irrigation.</li>
-					<li><a href="?tab=runs" data-testid="start-run">Run the model</a> once rainfall is in (Runs &amp; results).</li>
-				</ol>
+				<p class="lead">The network is in. Next, the data, each proposed from the map and accepted where it lives, in the order a run reads it; each line says what the project holds now.</p>
+				{#if dataItems}
+					<StartDataList items={dataItems} />
+				{:else}
+					<p class="muted" data-testid="start-data-loading">Reading what the project holds…</p>
+				{/if}
+				<StartUnitsData {projectId} {nodes} {modelDirty} onapplied={ondataapplied} />
 			</div>
 		{/if}
 		{#if error}<p class="err" role="alert" data-testid="start-error">{error}</p>{/if}
@@ -532,8 +558,7 @@
 	}
 	.points,
 	.units,
-	.warnings,
-	.todo {
+	.warnings {
 		margin: 0;
 		padding: 0;
 		display: grid;
@@ -543,8 +568,7 @@
 	.units {
 		list-style: none;
 	}
-	.warnings,
-	.todo {
+	.warnings {
 		padding-left: 1.2rem;
 	}
 	.points li {

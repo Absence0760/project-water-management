@@ -156,7 +156,8 @@ test('an editor starts an empty model from the map: delineate, the units’ boun
 	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'data');
 	// The rain and the gauges are Data feeds, on the Data page (issue #586: it was on Settings); rain opens the boundary's proposal.
 	await expect(startSheet(page).getByRole('link', { name: 'Rain from the boundary' })).toHaveAttribute('href', '?tab=series&rain=boundary#data-feeds');
-	await expect(startSheet(page).getByRole('link', { name: 'Observed flow' })).toHaveAttribute('href', '?tab=series#data-feeds');
+	// Observed flow opens the DWS gauge's card, with the nearest gauging stations to the outlet proposed (#646 F4).
+	await expect(startSheet(page).getByRole('link', { name: 'Observed flow' })).toHaveAttribute('href', '?tab=series&feed=dws#data-feeds');
 	// Evaporation is a step of its own: with no A-pan the dams would lose nothing (round 4, persona-hydrologist).
 	// Model settings' Demand holds the A-pan row; Calibration's Evaporation from the map proposes it (issue #586 split the two).
 	await expect(startSheet(page).getByRole('link', { name: 'Evaporation', exact: true })).toHaveAttribute('href', '?tab=settings#set-demand');

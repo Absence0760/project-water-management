@@ -223,6 +223,23 @@
 		untrack(() => void startAdding(asked, true));
 	});
 
+	// ?feed=dws (the Map's Start sheet and Getting started pill, issue #646 F4) opens the card on a DWS gauge, so the
+	// nearest gauging stations to the outlet are proposed at once; once per arrival. An owner's only: an editor's card
+	// holds the map's rain proposals alone (DWS feeds are an owner's to attach).
+	const feedAsked = $derived(page.url.searchParams.get('feed') === 'dws');
+	let feedAnswered = false;
+	$effect(() => {
+		if (!feedAsked) {
+			feedAnswered = false;
+			return;
+		}
+		if (!data?.canEdit || feedAnswered || !data.sources.some((x) => x.source === 'dws')) return;
+		feedAnswered = true;
+		untrack(() => {
+			void startAdding().then(() => pickSource('dws'));
+		});
+	});
+
 	async function closeForm() {
 		adding = false;
 		await tick();
