@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { defaultProjectSettings, WARNING_CODES, type ProjectSettings, type WarningCode } from '@water-management/engine';
@@ -8,10 +8,10 @@ import { CODE_FIXES, codeFix, uncodedFix } from './fixes';
 function componentSources(): string {
 	const out: string[] = [];
 	const walk = (dir: string) => {
-		for (const name of readdirSync(dir)) {
-			const p = join(dir, name);
-			if (statSync(p).isDirectory()) walk(p);
-			else if (name.endsWith('.svelte')) out.push(readFileSync(p, 'utf8'));
+		for (const e of readdirSync(dir, { withFileTypes: true })) {
+			const p = join(dir, e.name);
+			if (e.isDirectory()) walk(p);
+			else if (e.name.endsWith('.svelte')) out.push(readFileSync(p, 'utf8'));
 		}
 	};
 	walk(join(__dirname, '..'));
