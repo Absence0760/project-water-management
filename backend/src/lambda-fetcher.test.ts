@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -17,6 +17,18 @@ const httpOverride: { next?: FeedHttp } = {};
 vi.mock('./feeds/http.js', async (orig) => {
 	const real = await orig<typeof import('./feeds/http.js')>();
 	return { ...real, feedHttp: async () => httpOverride.next ?? real.feedHttp() };
+});
+
+// CHC's request slot (feeds/hostSlot.ts): the real one unless a test swaps in its own slots, or shortens a pass's wait.
+const slotOverride: { slots?: import('./feeds/hostSlot.js').HostSlots; waitMs?: number } = {};
+vi.mock('./feeds/hostSlot.js', async (orig) => {
+	const real = await orig<typeof import('./feeds/hostSlot.js')>();
+	return {
+		...real,
+		hostSlots: (url: string | undefined, o?: Parameters<typeof real.hostSlots>[1]) => slotOverride.slots ?? real.hostSlots(url, o),
+		takeHostSlotWaiting: (slots: Parameters<typeof real.takeHostSlotWaiting>[0], host: 'chc', o: Parameters<typeof real.takeHostSlotWaiting>[2]) =>
+			real.takeHostSlotWaiting(slots, host, slotOverride.waitMs === undefined ? o : { ...o, waitMs: slotOverride.waitMs })
+	};
 });
 
 const {
@@ -40,6 +52,8 @@ afterEach(() => {
 	sent.length = 0;
 	sendToQueue.mockClear();
 	delete httpOverride.next;
+	delete slotOverride.slots;
+	delete slotOverride.waitMs;
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 });
@@ -659,6 +673,133 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 	it('refuses to write the committed synthetic copy, or no bucket at all', async () => {
 		vi.stubEnv('MIRROR_URL', '');
 		await expect(handler({ mode: 'dams-weekly' } as never)).rejects.toThrow(/MIRROR_URL must name/);
+	});
+});
+
+describe('CHC’s request slot, shared with the mirror-ingest Lambda (feeds/hostSlot.ts)', () => {
+	const dirs: string[] = [];
+	afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
+	const KEY = 'ingest-state/hosts/chc/lease.json';
+	/** A copy for the slot, optionally with the Python ingest holding it (its lease.hold_host body). */
+	const mirror = (heldBy?: string) => {
+		const d = mkdtempSync(join(tmpdir(), 'wm-fetcher-slot-'));
+		dirs.push(d);
+		if (heldBy) {
+			mkdirSync(join(d, 'ingest-state/hosts/chc'), { recursive: true });
+			writeFileSync(join(d, KEY), JSON.stringify({ owner: 'py', expires: Date.now() / 1000 + 600, holder: heldBy }));
+		}
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${d}/`).href);
+		return d;
+	};
+	const gefs = { v: 1, type: 'fetch', ...ids, request: { source: 'chirps_gefs', config: { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] }, start: today, end: today, today } };
+	const counting = () => {
+		const asked = { n: 0 };
+		const count = async () => {
+			asked.n++;
+			return null;
+		};
+		httpOverride.next = { range: count, rangeTagged: count, text: count };
+		return asked;
+	};
+
+	it('a CHC fetch with the slot free takes it, fetches as before, and lets it go (positive control)', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		const d = mirror();
+		expect(await handler({ Records: [record('m1', gefs)] } as never)).toEqual({ batchItemFailures: [] });
+		expect(sent[0]).toMatchObject({ message: { type: 'ingest', result: { ok: true, startDate: today } } });
+		expect(existsSync(join(d, KEY))).toBe(false);
+	});
+
+	it('a CHC fetch with the slot held answers host_busy at once: no request, no failure, no retry towards the DLQ', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const d = mirror('ingest:rnl:backfill');
+		const asked = counting();
+		// Answered and deleted (no batch item failure): the receive count never climbs.
+		expect(await handler({ Records: [record('m1', gefs)] } as never)).toEqual({ batchItemFailures: [] });
+		expect(asked.n).toBe(0);
+		expect(sent).toEqual([{ url: 'https://sqs.example/ingest-results', message: { v: 1, type: 'ingest', ...ids, result: { ok: false, deferred: 'host_busy' } } }]);
+		const lines = [...info.mock.calls, ...warn.mock.calls].map(([l]) => JSON.parse(l as string));
+		expect(lines.find((l) => l.event === 'feed_fetch_deferred')).toMatchObject({ feedId: ids.feedId, source: 'chirps_gefs', heldBy: 'ingest:rnl:backfill' });
+		expect(lines.some((l) => l.event === 'feed_fetch_failed' || l.event === 'feed_fetched')).toBe(false);
+		// The ingest's slot is left alone.
+		expect(JSON.parse(readFileSync(join(d, KEY), 'utf8')).owner).toBe('py');
+	});
+
+	it('a DWS fetch takes no slot: DWS is not CHC', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		mirror('ingest:rnl:backfill');
+		const asked = counting();
+		const dws = { v: 1, type: 'fetch', ...ids, request: { source: 'dws', config: { station: 'X0H000' }, start: today, end: today, today } };
+		await handler({ Records: [record('m1', dws)] } as never);
+		expect(asked.n).toBeGreaterThan(0);
+		expect((sent[0]!.message as { result: { deferred?: string } }).result.deferred).toBeUndefined();
+	});
+
+	it('fails the fetch closed when the slot can’t be read or written, never asking CHC without it', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		slotOverride.slots = {
+			take: async () => {
+				throw Object.assign(new Error('Access Denied'), { name: 'AccessDenied' });
+			}
+		};
+		const asked = counting();
+		expect(await handler({ Records: [record('m1', gefs)] } as never)).toEqual({ batchItemFailures: [] });
+		expect(asked.n).toBe(0);
+		const result = (sent[0]!.message as { result: { ok: boolean; error: string } }).result;
+		expect(result.ok).toBe(false);
+		expect(fetchFailureReason(result.error)).toBe('unavailable');
+		expect(failureDetail(result.error)).toBe('the request slot could not be taken');
+		expect(error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'host_slot_failed')).toMatchObject({ host: 'chc', feedId: ids.feedId });
+		expect(warn.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'feed_fetch_failed')).toMatchObject({ reason: 'unavailable', detail: 'the request slot could not be taken' });
+	});
+
+	it('the daily pass holds the slot while it runs and lets it go (positive control)', async () => {
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		let during: unknown = null;
+		const d = mirror();
+		const real = await (await vi.importActual<typeof import('./feeds/http.js')>('./feeds/http.js')).feedHttp();
+		const peek =
+			<A extends unknown[], R>(f: (...a: A) => Promise<R>) =>
+			async (...a: A) => {
+				during ??= JSON.parse(readFileSync(join(d, KEY), 'utf8')).holder;
+				return f(...a);
+			};
+		httpOverride.next = { range: peek(real.range), text: peek(real.text), ...(real.rangeTagged ? { rangeTagged: peek(real.rangeTagged) } : {}) };
+		const res = await handler({ mode: 'daily-ingest' } as never);
+		expect(res).toMatchObject({ stopped: 'max_files' });
+		expect(during).toBe('fetcher:prelim');
+		expect(existsSync(join(d, KEY))).toBe(false);
+	});
+
+	it('a scheduled pass that finds the slot held past its wait skips the run: asks nothing, logs host_busy, doesn’t fail', async () => {
+		slotOverride.waitMs = 0;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const d = mirror('ingest:sat:monthly');
+		const asked = counting();
+		for (const [event, product] of [
+			[DAILY_INGEST_EVENT, 'prelim'],
+			[GEFS_INGEST_EVENT, 'gefs']
+		] as const) {
+			const res = await handler(event as never);
+			expect(res).toMatchObject({ stopped: 'host_busy', lagDays: null });
+			expect(warn.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'mirror_daily_ingest' && l.product === product)).toMatchObject({
+				stopped: 'host_busy',
+				heldBy: 'ingest:sat:monthly',
+				requests: 0
+			});
+		}
+		expect(asked.n).toBe(0);
+		expect(existsSync(join(d, 'prelim'))).toBe(false);
+		expect(existsSync(join(d, 'gefs'))).toBe(false);
 	});
 });
 

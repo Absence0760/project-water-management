@@ -34,6 +34,12 @@ in the DLQ. infra/ingest.tf sets no retries. A backfill whose product is
 held by another run raises lease.MirrorBusy (the Step Functions map retries
 that); the daily monthly run just ends.
 
+**CHC's request slot** (lease.hold_host): rnl and sat take the one slot this
+job shares with the fetcher Lambda before they ask CHC anything, so at most
+one of our processes asks CHC at a time. Held by the other side, a backfill
+month raises lease.HostBusy (the state machine retries it) and a daily run
+ends quietly with `busy` in its answer, as for a held product lease.
+
 Run locally: `pnpm dev:ingest:run` (ingest/README.md).
 """
 
@@ -173,15 +179,21 @@ def handler(event, context=None, s3_client=None, opener=None, metrics=None, cloc
     # Every exit from here on publishes MirrorLagDays (the lag alarms treat
     # no datapoint as breaching), a failure before re-raising it.
     try:
-        if ev["mode"] == "monthly":
-            out = chirps_final.run_monthly(mirror, product, run)
-        else:
-            out = chirps_final.run_backfill(mirror, product, ev["month"], run)
+        # CHC's one request slot, shared with the fetcher Lambda (lease.hold_host),
+        # taken before the product's own lease and before anything is asked.
+        with lease.hold_host(mirror, "chc", run.budget.remaining_s(), holder=f"ingest:{product}:{ev['mode']}"):
+            if ev["mode"] == "monthly":
+                out = chirps_final.run_monthly(mirror, product, run)
+            else:
+                out = chirps_final.run_backfill(mirror, product, ev["month"], run)
     except lease.MirrorBusy as e:
         lag = _publish_lag(mirror, product, metrics, today())
         if ev["mode"] == "backfill":
             raise
-        log.info("%s: %s; the run holding it does this work", product, e)
+        if isinstance(e, lease.HostBusy):
+            log.info("%s: %s; tomorrow's run catches up", product, e)
+        else:
+            log.info("%s: %s; the run holding it does this work", product, e)
         out = {"busy": str(e), "files": [], "pending": None}
         return _result(ev, source, mirror, out, lag)
     except BaseException:
