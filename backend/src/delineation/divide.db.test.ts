@@ -122,7 +122,7 @@ describe('dividing the valley', () => {
 		expect((await stranger.call('POST', v.at('/map/divide'), v.body)).status).toBe(404);
 		const r = await owner.call('POST', v.at('/map/divide'), v.body);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
-		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-16' });
+		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-17' });
 		const plan = r.body.proposal.plan;
 		expect(plan.outlet).toMatchObject({ featureId: v.f.outlet, nodeId: v.nodes.weir.id, name: 'Valley weir', foundIn: 'gauge' });
 		// Upstream first: the upper unit drains into the new gauge, the gauge into the lower unit, the lower unit into the outflow.

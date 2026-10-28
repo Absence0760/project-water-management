@@ -34,6 +34,8 @@
 	import type { DataItem } from './startData';
 	import { proposalPieces, REST_KEY } from './pieces';
 	import { OUTLET_KEY, placementLine, withPlacement } from './placement';
+	import { isPlanWaiting, planOutcomeText, planWaitingText } from './planWait';
+	import { PlanWait } from './planWait.svelte';
 	import {
 		applySummary,
 		applyTicks,
@@ -51,7 +53,9 @@
 		outletGauges,
 		planBeforeBoundaries,
 		proposeBody,
+		restDrainsIntoName,
 		restOffersArea,
+		restOffersDrainsInto,
 		ROLE_LABEL,
 		startStep,
 		STEP_LABEL,
@@ -146,12 +150,29 @@
 		h.focus();
 	}
 
+	// --- a catchment too large to route within the request (#646 item 3): the proposal without the order now, the routed one from the worker ---
+	/** What came of the background routing, once it is done (refused, failed; a routed proposal says itself). */
+	let routed = $state<string | null>(null);
+	const plan = new PlanWait(
+		() => projectId,
+		async (r) => {
+			routed = planOutcomeText(r);
+			// The routed proposal replaced the one without the order: the sheet shows it (fresh ticks, its own id).
+			if (r.status === 'proposed' && r.proposal?.mode === 'start') await onproposed(r.proposal);
+		}
+	);
+	// svelte-ignore state_referenced_locally
+	if (info.request?.kind === 'start' && isPlanWaiting(info.request)) plan.start(info.request);
+	$effect(() => () => plan.stop());
+
 	async function proposeNow() {
 		busy = 'propose';
 		error = null;
+		routed = null;
 		try {
 			const body = withPlacement(proposeBody(Object.fromEntries(candidates.map((f) => [f.id, choiceOf(f)])), outlet), draft.placement);
 			const r = await api.start.propose(projectId, body);
+			plan.start(r.request);
 			await onproposed(r.proposal);
 			void focusTitle();
 		} catch (err) {
@@ -324,6 +345,14 @@
 				<p class="lead">
 					Tick each value to take it; anything unticked is left for you to type. The catchment above the outlet: <strong data-testid="start-catchment">{km2Text(p.catchment.areaM2 ?? p.catchment.boundaryAreaM2)}</strong>.
 				</p>
+				{#if plan.waiting && plan.waiting.fallbackId === pending.id}
+					<div class="waiting" role="status" data-testid="start-routing" data-status={plan.waiting.status}>
+						<p>{planWaitingText(plan.waiting)}</p>
+						{#if plan.waiting.status === 'running' && plan.waiting.progress !== null}<progress max="100" value={plan.waiting.progress} aria-label="How far it is"></progress>{/if}
+					</div>
+				{:else if routed}
+					<p class="hint" role="status" data-testid="start-routed">{routed}</p>
+				{/if}
 				{#if planBeforeBoundaries(p)}
 					<p class="err" role="alert" data-testid="start-before-boundaries">This proposal makes a unit at each dam and abstraction point, from before units followed your boundaries: discard it and propose again.</p>
 				{/if}
@@ -428,6 +457,14 @@
 								<label for="{uid}-rest-name">Its name</label>
 								<input id="{uid}-rest-name" bind:value={ticks.rest.name} maxlength="100" aria-invalid={bad(ticks.rest.name) ? 'true' : undefined} aria-describedby={bad(ticks.rest.name) ? `${uid}-names` : undefined} />
 							</div>
+							{#if restOffersDrainsInto(p)}
+								<label class="check">
+									<input type="checkbox" bind:checked={() => !!ticks.rest.drainsInto, (v) => (ticks.rest.drainsInto = v)} data-testid="start-tick-rest-drains" />
+									<span>Drains into <strong>{restDrainsIntoName(p, ticks)}</strong>: the first unit its flow path meets, from where most of it drains</span>
+								</label>
+							{:else}
+								<p class="hint" data-testid="start-rest-outflow">{p.fromDem && (p.rest.geometry || p.rest.drainsIntoProposed === false) ? 'Drains into the outflow gauge: no unit lies below it.' : 'Drains into the outflow gauge until you set the order on the Network.'}</p>
+							{/if}
 							{#if restOffersArea(p)}
 								<label class="check">
 									<input type="checkbox" bind:checked={ticks.rest.area} data-testid="start-tick-rest-area" />
@@ -608,6 +645,20 @@
 	.err {
 		color: var(--danger);
 		margin: 0;
+	}
+	.waiting {
+		display: grid;
+		gap: 0.4rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--accent-soft);
+	}
+	.waiting p {
+		margin: 0;
+	}
+	.waiting progress {
+		width: 100%;
 	}
 	.how summary {
 		cursor: pointer;

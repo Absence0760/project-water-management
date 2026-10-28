@@ -34,7 +34,8 @@ import {
 	WINDOWS,
 	worldPx,
 	type Aim,
-	type LargerChannel
+	type LargerChannel,
+	type WindowAim
 } from './delineate.js';
 import { GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, place } from './place.js';
 import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } from './flow.js';
@@ -71,8 +72,12 @@ import { findPans, ncAreaM2, panReport, type PanReferenceLoader, type PanReport 
  * inside the catchment (`placedBy: 'unit'`); the one whose most-drained cell is the outlet itself drains into the outflow and takes
  * the outlet's piece. The dams and abstraction points inside a unit become its composite dam and its river pump (start.ts).
  * Sub-catchments from clicks (clicks.ts) place and partition exactly as before; they carry the shared version.
+ * start-17 (#646 item 3, the hydrologist's review F10): beside the units' boundaries, the rest of the catchment (the cells in
+ * the catchment that no unit's boundary holds) drains into the first unit, water user or gauge its flow path meets, from where
+ * most of its area drains (`restDrains`), not always straight into the outflow; the areas unchanged. A request whose routing
+ * stops at its last window says where it stopped, so the worker can go on from the next (the plan job).
  */
-export const START_METHOD_VERSION = 'start-16';
+export const START_METHOD_VERSION = 'start-17';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
@@ -329,6 +334,63 @@ export function riverBelow(nx: number, dir: Uint8Array, acc: Int32Array, from: n
 	return -1;
 }
 
+/**
+ * Where the rest of the catchment drains beside units drawn as their boundaries (start-17, the hydrologist's review F10). The
+ * rest is the catchment's cells that no kept unit's boundary holds (`label` 0, or a dropped unit's). Each such cell's owner in the
+ * partition is the land-owning unit (or the outlet) its flow path meets first; the owner taking most of the rest's area is where
+ * the rest goes, from its most-accumulating cell there, down the D8 path to the first point in the order (`taken`: a unit's,
+ * a water user's or a gauge's cell, or the outlet's, ''), so a gauge on the way is met first. The outlet means the outflow, or
+ * `outletUnit` when a unit's boundary reaches it. `share` is that owner's fraction of the rest's area. Undefined when no cell
+ * is left to the rest. Pure.
+ */
+export function restDrainsOf(
+	nx: number,
+	dir: Uint8Array,
+	acc: Int32Array,
+	catchment: Uint8Array,
+	owner: Int32Array,
+	label: Uint8Array,
+	keptLabels: ReadonlySet<number>,
+	rowM2: Float64Array,
+	taken: ReadonlyMap<number, string>,
+	outletUnit: string | null
+): { into: string | null; share: number; areaM2: number } | undefined {
+	const areaOf = new Map<number, number>();
+	const best = new Map<number, number>();
+	let total = 0;
+	for (let i = 0; i < catchment.length; i++) {
+		if (!catchment[i] || (label[i] && keptLabels.has(label[i]!))) continue;
+		const o = owner[i]!;
+		if (o < 0) continue;
+		const a = rowM2[(i - (i % nx)) / nx]!;
+		areaOf.set(o, (areaOf.get(o) ?? 0) + a);
+		total += a;
+		const b = best.get(o);
+		if (b === undefined || acc[i]! > acc[b]!) best.set(o, i);
+	}
+	if (!(total > 0)) return undefined;
+	let top = -1;
+	for (const [o, a] of areaOf) if (top < 0 || a > areaOf.get(top)! || (a === areaOf.get(top)! && o < top)) top = o;
+	const n = catchment.length;
+	let c = best.get(top)!;
+	// Its most-accumulating cell may be a point's own (a gauge in the rest, or the outlet): the rest drains through it.
+	let at = taken.get(c);
+	for (let guard = 0; at === undefined && guard < n; guard++) {
+		const d = dir[c]!;
+		if (d === OUT) break;
+		c = c + DY[d]! * nx + DX[d]!;
+		at = taken.get(c);
+		if (at !== undefined) break;
+	}
+	const into = at === undefined || at === '' ? outletUnit : at;
+	return { into, share: areaOf.get(top)! / total, areaM2: total };
+}
+
+/** The refusal for a catchment boundary wider than the request's largest window (Start and Divide; F11). Pure. */
+export function boundaryTooLargeText(km: number): string {
+	return `The catchment boundary reaches beyond the ${km} km the app routes around its outlet, so the elevation model can’t order or check the units here. Each unit’s area is its own boundary’s: set the order on the Network.`;
+}
+
 // ---------------------------------------------------------------------------
 // The driver: reads the DEM, routes it, snaps, partitions and outlines.
 // ---------------------------------------------------------------------------
@@ -386,6 +448,13 @@ export interface Subcatchments {
 	dropped: { id: string; reason: string; placedBy?: PlacedBy; larger?: LargerChannel; damPosition?: DamPosition }[];
 	/** The outlet's own piece: what drains to it through no unit. */
 	rest: { geometry: Extract<Geometry, { type: 'Polygon' }> | null; areaM2: number; nonContributingM2: number; open?: boolean };
+	/**
+	 * With units drawn as their boundaries (start-17, F10): where the rest of the catchment (its cells in no kept unit's boundary)
+	 * drains, by the first unit, water user or gauge (its id) the flow path from it meets, or null for the outflow; `share` is the
+	 * fraction of that rest's area (its cells) draining that way, the rest of it reaching other units first. Absent without
+	 * boundaries, or when every cell of the catchment lies in a boundary.
+	 */
+	restDrains?: { into: string | null; share: number; areaM2: number };
 	/** The catchment's pans (pans.ts): what of it drains into one (NaN when the catchment is cut at the window, as its area), and the largest. */
 	pans: PanReport;
 	cellSizeM: number;
@@ -572,6 +641,10 @@ export async function delineateUnits(
 		now?: () => number;
 		/** The rivers and dams a depression passing the pan tests is checked against (panReference.ts); without it, not checked. */
 		panReference?: PanReferenceLoader;
+		/** Where an earlier try's last window cut the catchment (the request's, for the worker's plan job): the first window is placed over it. */
+		aim?: WindowAim | null;
+		/** Called before each window is read, with its place in the windows (the worker reports it as the job's progress). */
+		onWindow?: (index: number, of: number) => Promise<void> | void;
 	} = {}
 ): Promise<Subcatchments> {
 	const now = opts.now ?? (() => performance.now());
@@ -621,12 +694,14 @@ export async function delineateUnits(
 	// boundary with their margin, and the larger-channel guard's reach.
 	const keep = Math.max(Math.ceil(reach) + MARGIN_CELLS, Math.ceil(GUARD_RADIUS_M / cellSizeM) + 2);
 	/** Where the last window cut the catchment: the next window is placed over it. */
-	let aim: Aim | null = null;
+	let aim: Aim | null = opts.aim && opts.aim.zoom === z ? { box: opts.aim.box, cut: opts.aim.cut } : null;
 	if (first < 0) {
-		throw new DelineationRefused('too_large', `The catchment boundary reaches beyond the ${Math.round((windows[windows.length - 1]! * cellSizeM) / 1000)} km the app delineates around its outlet, so it can’t be divided into units here. Draw or type the units instead.`);
+		// The window it stopped at is the last one, so the worker goes on from the next (one large enough, or it refuses too).
+		throw new DelineationRefused('too_large', boundaryTooLargeText(Math.round((windows[windows.length - 1]! * cellSizeM) / 1000)), undefined, windows[windows.length - 1]);
 	}
 	for (let wi = first; wi < windows.length; wi++) {
 		const nCells = windows[wi]!;
+		await opts.onWindow?.(wi - first, windows.length - first);
 		const [x0, y0] = windowOrigin(nCells, gx, gy, Math.min(keep, Math.floor((nCells - 1) / 2)), aim);
 		const toGrid = ([lo, la]: Position): Pt => {
 			const [px, py] = toPx(lo, la, W);
@@ -743,7 +818,11 @@ export async function delineateUnits(
 			const next = windows[wi + 1];
 			const elapsed = now() - started;
 			if (next === undefined || elapsed * (1 + (next / nCells) ** 2) > budget) {
-				throw new DelineationRefused('too_large', tooLargeText('outlet', Math.round((nCells * cellSizeM) / 1000), req.outletMappedKm2));
+				// Where this window cut it, so the worker's first window goes over it (the plan job), as Delineate's does.
+				throw new DelineationRefused('too_large', tooLargeText('outlet', Math.round((nCells * cellSizeM) / 1000), req.outletMappedKm2), undefined, nCells, {
+					zoom: z,
+					...aimAt(catchment, nCells, x0, y0)
+				});
 			}
 			aim = aimAt(catchment, nCells, x0, y0);
 			continue;
@@ -767,6 +846,19 @@ export async function delineateUnits(
 			const d = dir[c]!;
 			return d === OUT ? -1 : c + DY[d]! * nCells + DX[d]!;
 		};
+		/**
+		 * Which unit boundary holds each cell (start-17, F10): its index in req.points + 1, 0 for none (the last kept wins where two
+		 * overlap). Only the kept units' (and the outlet's unit's) count for the rest of the catchment.
+		 */
+		const unitLabel = req.points.some((p) => p.role === 'unit' && p.geometry.type !== 'Point') ? new Uint8Array(nCells * nCells) : null;
+		/** Paint a kept unit's boundary (after the keep or drop decision, so a dropped one never takes a kept one's cells). */
+		const paint = (mask: Uint8Array | null, label: number) => {
+			if (!mask || !unitLabel) return;
+			for (let i = 0; i < mask.length; i++) if (mask[i]) unitLabel[i] = label;
+			keptLabels.add(label);
+		};
+		/** The labels of the units kept (a unit dropped is no unit, so its cells are the rest's). */
+		const keptLabels = new Set<number>();
 		/** An off-channel dam's own outflow cell, by its id: its catchment within the unit's piece is the dam's share. */
 		const damOwn = new Map<string, number>();
 		const riverSteps = Math.ceil(GUARD_RADIUS_M / cellSizeM);
@@ -777,10 +869,13 @@ export async function delineateUnits(
 			const below = riverBelow(nCells, dir, acc, own, LARGER_FACTOR * Math.max(1, cells), riverSteps);
 			return below >= 0 && !edge[below] ? below : own;
 		};
-		for (const p of req.points) {
+		for (const [pi, p] of req.points.entries()) {
 			if (p.id === outletId) continue;
 			let cell: number | null = null;
 			let moved: number | null = null;
+			const label = Math.min(255, pi + 1);
+			/** A unit's boundary in cells (inside the catchment), painted once it is kept. */
+			let unitMask: Uint8Array | null = null;
 			if (p.geometry.type === 'Point') {
 				cell = snapAt(p.geometry.coordinates, p.id, p);
 				if (cell !== null) moved = movedM(p.geometry.coordinates, cell);
@@ -789,6 +884,7 @@ export async function delineateUnits(
 				const rings = polygonRings(p.geometry);
 				const mask = rings.length ? rasterize(nCells, nCells, rings.map((r) => r.map(toGrid))) : null;
 				if (mask) for (let i = 0; i < mask.length; i++) if (!catchment[i]) mask[i] = 0;
+				unitMask = mask;
 				const c = mask ? mostDrained(mask, acc, edge) : -1;
 				how.set(p.id, { placedBy: 'unit' });
 				cell = c >= 0 ? c : null;
@@ -861,6 +957,7 @@ export async function delineateUnits(
 					continue;
 				}
 				outletUnit = p;
+				paint(unitMask, label);
 				continue;
 			}
 			// A gauge or water user on a unit boundary's outflow cell: one cell further down, so the unit drains into it.
@@ -874,7 +971,10 @@ export async function delineateUnits(
 				continue;
 			}
 			taken.set(cell, p.id);
-			if (p.role === 'unit') unitCells.add(cell);
+			if (p.role === 'unit') {
+				unitCells.add(cell);
+				paint(unitMask, label);
+			}
 			kept.push({ p, cell, snapDistanceM: moved });
 		}
 		const part = partition(
@@ -884,8 +984,9 @@ export async function delineateUnits(
 			outlet,
 			kept.map((k) => ({ cell: k.cell, owns: ownsLand(k.p.role) }))
 		);
-		// The pans: what drains into a closed depression (none at the outlet or a point), per owner.
 		const R = kept.length;
+		const restDrains = keptLabels.size && unitLabel ? restDrainsOf(nCells, dir, acc, catchment, part.owner, unitLabel, keptLabels, rowM2, taken, outletUnit?.id ?? null) : undefined;
+		// The pans: what drains into a closed depression (none at the outlet or a point), per owner.
 		const found = await findPans(
 			{ nx: nCells, ny: nCells, before, after: grid.z, dir, acc, mask: catchment, rowM2, toPos: cellPos, toGrid },
 			[outlet, ...kept.map((k) => k.cell)],
@@ -967,7 +1068,14 @@ export async function delineateUnits(
 		const whole = outline ? { geometry: outline.geometry, areaM2: catchmentM2 } : null;
 		const firstWhole = [...pieces, rest].find((p) => p.geometry)?.geometry;
 		const catchmentShape = whole ?? (truncated && firstWhole ? { geometry: firstWhole, areaM2: Number.NaN } : null);
-		if (!catchmentShape) throw new DelineationRefused('outline', 'The catchment’s outline could not be made into a valid polygon. Type the units in instead.');
+		if (!catchmentShape) {
+			throw new DelineationRefused(
+				'outline',
+				lowest
+					? 'The catchment’s outline could not be made into a valid polygon. Click elsewhere on the rivers, or draw the pieces instead.'
+					: 'The catchment’s outline could not be made into a valid polygon on the elevation model, so the units can’t be ordered or checked here: set the order on the Network (each unit’s area is its own boundary’s).'
+			);
+		}
 		// Totals: each unit's piece plus everything that drains into it, summed down the tree (the pans' share too).
 		const total = pieces.map((p) => p.areaM2);
 		const ncPiece = kept.map((_, i) => (open[i] ? 0 : ncOf[i]!));
@@ -1057,6 +1165,7 @@ export async function delineateUnits(
 			// A dropped point keeps its placement: one snapped into a gully beside its river names the river, so it can be moved there.
 			dropped: dropped.map((d) => ({ ...d, ...(how.get(d.id) ?? {}) })),
 			rest: outletUnit ? { geometry: null, areaM2: 0, nonContributingM2: 0 } : open[R] ? { ...rest, nonContributingM2: 0, open: true } : { ...rest, nonContributingM2: ncOf[R]! },
+			...(restDrains ? { restDrains } : {}),
 			pans: panReport(truncated ? Number.NaN : ncAreaM2(nCells, found.nc, rowM2), found.pans, found.onRiver),
 			cellSizeM,
 			zoom: z,

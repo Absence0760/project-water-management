@@ -151,9 +151,10 @@ export function tooLargeText(what: 'click' | 'outlet', km: number | null, reachK
 	const pieces = 'Sub-catchments, one per click (click down the river; the water from above the top click enters as an inflow)';
 	const mainStem = reachKm2 != null && km !== null && reachKm2 > km * km;
 	if (what === 'outlet') {
+		// Start and Divide (F11): each unit's area is its own boundary's since start-16, so only the order and the checks are lost.
 		return mainStem
-			? `The river at the outlet drains about ${km2Text(reachKm2)} (its mapped reach), more than fits in ${around} around it, so it can’t be divided into units here. Type the units in, or outline pieces of the river with ${pieces}.`
-			: `The catchment above the outlet reaches beyond ${around} around it, so it can’t be divided into units here. Pick an outlet gauge further upstream, or type the units in.`;
+			? `The river at the outlet drains about ${km2Text(reachKm2)} (its mapped reach), more than fits in ${around} around it, so the elevation model can’t order or check the units here. Each unit’s area is its own boundary’s: set the order on the Network, or outline pieces of the river with ${pieces}.`
+			: `The catchment above the outlet reaches beyond ${around} around it, so the elevation model can’t order or check the units here. Each unit’s area is its own boundary’s: set the order on the Network, or pick an outlet gauge further upstream.`;
 	}
 	return mainStem
 		? `The river here drains about ${km2Text(reachKm2)} (its mapped reach), more than fits in ${around} around a click, so it can’t be proposed in one piece. Divide it with ${pieces}, or draw or import the boundary.`

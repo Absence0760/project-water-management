@@ -2128,6 +2128,19 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `app_release_job` (191, the worker's own call) puts a claimed job back to
   `queued` 120 s on, giving back the attempt its claim counted: a delineate
   job the tick had too little time left for (never a failure, no backoff).
+  **Migration 272** (#646 item 3) lets a request be a Start or Divide plan
+  instead of a click: `plan_kind` (`start` | `divide`) and `plan_body`
+  (jsonb ≤ 16 KB: the editor's request body as sent), with the click
+  columns nullable and a check that a row is exactly one of the two;
+  `plan_proposal_id` (the `start_proposal` the job made, with `proposed`)
+  and `fallback_proposal_id` (a Start's proposal without the order, made
+  at once, that the routed one replaces while open; a Divide has none),
+  each a composite key → `start_proposal (id, project_id)`, `ON DELETE SET
+  NULL` of its own column (that table gained `UNIQUE (id, project_id)`),
+  each with a covering index. `refusal_code` also takes `off_channel` and
+  `map_changed` (a plan's feature gone before the job read the map), and
+  `delineation_request_final` (latest 272) compares the plan columns too.
+  The click views never show a plan, nor the plan view a click.
 - **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
   [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
   proposed for an empty project from its map, and the editor's decision.

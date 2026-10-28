@@ -182,8 +182,17 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    middle when the outlet is to be found in it), at the smallest of
    delineation's windows (1 024, 2 048, 3 072 cells) that holds the
    boundary's box. Filled and routed once; grown while the outlet's
-   catchment reaches the window's edge; refused at the cap (the ~100 km
-   limit stays, followups.md), as a single delineation is. Since
+   catchment reaches the window's edge. At the request's cap (3 072 cells,
+   about 100 km) or past its 20 s it is no longer refused (#646 item 3, the
+   hydrologist's review F11): the refusal carries the window it stopped at
+   and where it cut the catchment (`aim`), a Start answers with the plan a
+   server without a DEM makes from the same map (each unit's area is its
+   boundary's since `start-16`, so only the order and the checks are
+   missing, as its first warning says), and the plan goes to the worker's
+   `delineate` job, which routes it with windows up to 6 144 cells and
+   proposes the routed plan in its place while it is open; a Divide waits
+   for the worker (`202`). [delineation.md § Where it runs](./delineation.md#where-it-runs)
+   has the worker's side; past its 6 144 cells the job refuses. Since
    `start-12` (issue #390, the hydrologist persona's findings 1 and 6,
    as Delineate's `delineate-6`, [delineation.md § Method](./delineation.md#method)
    step 2):
@@ -308,6 +317,25 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    measure `geo/area.ts` uses), summed, so the pieces and the rest add up
    to the catchment exactly; the simplified outline's own area runs a
    little off it. The parcel saved for a piece stores the cells' area. The rest of the catchment is the outlet's own piece.
+   **Beside the units' boundaries** (`start-16`) the rest has no piece of
+   its own: it is the catchment's cells that no kept unit's boundary holds,
+   and since `start-17` (#646 item 3, the hydrologist's review F10;
+   `restDrainsOf`) it drains where they do, not always into the outflow.
+   Each such cell's owner in the partition (step 5) is the land-owning unit,
+   or the outlet, its D8 path meets first; the owner taking most of the
+   rest's area is where the rest goes, from the rest's most-accumulating
+   cell there down the D8 path to the first point in the order (a unit's,
+   a water user's or a gauge's cell, so a gauge on the way is met first).
+   The outlet is the outflow gauge, or the unit whose boundary holds it.
+   The share of the rest draining that way is kept, and under 90 % (for a
+   rest over 1 % of the catchment) it is said, since the rest of it reaches
+   other units first: one rest node can only drain one way, and the
+   durable answer is to draw its parts as units' boundaries. The review's
+   case is an undrawn headwater above the farmed units: draining straight
+   into the outflow, its runoff missed every unit below it (their river
+   pumps short of the inflow) while the outflow total, unchanged, hid it.
+   Without a DEM nothing says where the rest lies, so it drains into the
+   outflow gauge, with a warning.
 7. **Checks, as warnings**: the catchment above the outlet against the
    boundary's area (over 10 % apart: said, since a drawn boundary and the
    DEM disagree); a unit whose area is under one hectare; a dropped point.
@@ -450,7 +478,17 @@ API: `POST /projects/:id/map/divide` and `…/map/divide/:spid/apply`
   decided against by the client's hydrologist (#90): the composite dam's
   volume and contributing area and the pump's capacity are the user's
   input, the register a reference only.
-- **Catchments larger than about 100 km across**: refused, as delineation
-  is (followups.md, the worker-job path).
+- **Catchments larger than about 200 km across**: past the worker's
+  6 144-cell window a plan is refused there, as delineation is (a Start
+  keeping its plan without the order). Up to it, Start and Divide go to the
+  worker (#646 item 3, § Sub-catchments: the method, step 1); 8 192 cells
+  would need about 1.9 GB.
+- **A Divide without the order** (as a too-large Start gets): not built,
+  since a division has no plan without a DEM (Divide needs one); a
+  division too large for the request waits for the worker instead, and
+  locally without a worker it waits. A Divide that proposes only the
+  boundaries' areas beside the values now, with no order, would serve a
+  server without a DEM too (the hydrologist's review F9); trigger: a client
+  dividing without a DEM, or past the worker's window.
 - **Dividing without an elevation model**: there is nothing to divide by;
   the sheet says so, and the Network and the per-feature tools stay.
