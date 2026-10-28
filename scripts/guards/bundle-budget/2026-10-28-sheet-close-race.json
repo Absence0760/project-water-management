@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "PR #647: lib/nav/closeNav.ts (close tracking, 2 s fail-safe, afterNavigate clear) and the shared opener onclick on the Tables menus, Crops Edit and Team settings links. Measured in CI: main 2180 KB, this branch 2181 KB (+1 KB); headroom after this entry 0 KB."
+}
