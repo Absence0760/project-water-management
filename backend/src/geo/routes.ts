@@ -40,6 +40,8 @@ import {
 	GEO_MAX_BYTES,
 	GEO_MAX_FEATURES,
 	KIND_GEOMETRY,
+	KIND_NODES,
+	NODE_KIND_WORD,
 	overlapProblem,
 	parseGeoJson,
 	proposeKinds,
@@ -71,15 +73,6 @@ const KIND_TYPES: Record<MapFeatureKind, readonly Geometry['type'][]> = KIND_GEO
  * water surface or the whole catchment's boundary is never one unit's area.
  */
 export const AREA_KINDS: readonly MapFeatureKind[] = ['farm_parcel', 'other'];
-/** The node kinds a feature of each kind may stand for. */
-export const KIND_NODES: Record<MapFeatureKind, readonly string[]> = {
-	catchment_boundary: [],
-	farm_parcel: ['farm', 'user'],
-	dam: ['farm', 'user'],
-	gauge: ['gauge'],
-	river: [],
-	other: ['farm', 'user', 'gauge']
-};
 const KIND_LABEL: Record<MapFeatureKind, string> = {
 	catchment_boundary: 'a catchment boundary',
 	farm_parcel: 'a farm parcel',
@@ -90,8 +83,6 @@ const KIND_LABEL: Record<MapFeatureKind, string> = {
 };
 
 const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
-/** A hydrological unit's kind in words (the model's `farm` is a unit with land). */
-export const NODE_KIND_WORD: Record<string, string> = { farm: 'a unit with land', user: 'an other water user', gauge: 'a gauge' };
 const kindWord = (k: string) => NODE_KIND_WORD[k] ?? `a ${k}`;
 const kindsWord = (ks: readonly string[]) => ks.map(kindWord).join(' or ');
 

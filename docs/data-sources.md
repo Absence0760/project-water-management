@@ -99,6 +99,7 @@ Every job that fetches from an upstream:
 | [sanlc](#sanlc) | SANLC orchard and vine classes | built R5-D; blocked in production until its terms are recorded (synthetic grid in dev, CI and e2e) | `egis.environment.gov.za` | `crop_type_dataset` | `pnpm import:crop-types` |
 | [agera5](#agera5) | AgERA5 v2.0 daily FAO-56 reference ET | built R5-E; the copy's job off in production until `agera5_enabled` (the CDS key is ERA5-Land's) | `cds.climate.copernicus.eu` | `agera5_et0` | `ingest/agera5.py` (the copy), `backend/src/feeds/fromMirrorEt0.ts` (feeds read it), `infra/agera5.tf` |
 | [nasa-power](#nasa-power) | NASA POWER daily weather, our FAO-56 ET₀ from it (AgERA5's fallback) | built R5-E; off until `power_et0_enabled` | `power.larc.nasa.gov` | – (read by `agera5_et0` feeds) | `ingest/nasapower.py`, `ingest/fao56.py`, `infra/agera5.tf` |
+| [penpan-apan](#penpan-apan) | A modelled Class-A pan grid: PenPan from NASA POWER's daily weather, monthly means at 0.1° (issue #646 item 7) | blocked (built against synthetic weather; production waits for the validation against DWS Class-A pans and the hydrologist's sign-off) | `power.larc.nasa.gov` (the operator's offline run) | – | `ingest/penpan.py`, `ingest/apan_grid.py`, `pnpm import:evaporation` (kind `apan`) |
 | [climate-indices](#climate-indices) | NOAA CPC's ONI (ENSO) and AAO (the SAM's proxy), monthly | built (#620); the fetcher's indices pass off in production until `climate_indices_enabled` | `www.cpc.ncep.noaa.gov` | – | `backend/src/feeds/sources/cpc.ts`, `backend/src/ingest/indices.ts`, `infra/climate_indices.tf` |
 | [c3s-seasonal](#c3s-seasonal) | C3S multi-system seasonal forecasts and hindcasts, daily precipitation (1°) | built (#620 step 5); the copy's job off in production until `c3s_enabled` (the CDS key is ERA5-Land's; both licences accepted first); nothing reads it yet (#620 step 6–7) | `cds.climate.copernicus.eu` | – | `ingest/c3s_seasonal.py`, `ingest/c3srequest.py`, `infra/c3s.tf` |
 
@@ -724,6 +725,54 @@ as it stands ([model.md §2.4a](./model.md) *Daily reference ET*).
   then); else the monthly PE row.
 - **Owner:** the operator; code `ingest/nasapower.py`, `ingest/fao56.py`,
   `infra/agera5.tf`.
+
+### penpan-apan
+
+A **modelled** Class-A pan grid for Evaporation from the map's A-pan row
+where no pan station is near (issue #646 item 7, the hydrologist review's
+F5). Not a measured pan, and labelled so wherever it shows.
+
+- **Source:** our own computation. PenPan (Rotstayn, Roderick and Farquhar
+  2006, GRL 33, L17715), Penman's combination equation set up for a US
+  Class-A pan (Linacre's radiation on the pan and its walls, Thom et al.'s
+  vapour transfer), followed step by step as McMahon et al. (2013, HESS 17,
+  1331, Supplement S6, eqs. S6.1–S6.6) write it, from NASA POWER's daily
+  weather (the six parameters [nasa-power](#nasa-power) reads), as monthly
+  means. Why POWER and not AgERA5: the copy holds only each one's reference
+  ET, and adding AgERA5's other variables is five more CDS products, not a
+  small change (`ingest/apan_grid.py`'s docstring). PenPan-V2 (Lim et al.
+  2016) is not implemented: its equations could not be confirmed from a
+  readable copy (docs/followups.md, #646).
+- **Host:** `power.larc.nasa.gov`, the daily regional API, asked by the
+  operator's offline run (`apan_grid.py fetch`), never by the app or the
+  ingest Lambda.
+- **Licence:** POWER's CC BY 4.0 ([nasa-power](#nasa-power)); the model and
+  the grid are ours.
+- **Attribution:** "NASA Prediction of Worldwide Energy Resources (POWER)
+  Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan
+  (Rotstayn et al. 2006) from its daily meteorology", stored on the dataset
+  row. Its source always starts "Modelled Class-A pan (PenPan)", so the
+  proposal, the revision's reason and an evidence pack say modelled.
+- **Contact:** the POWER team ([nasa-power](#nasa-power)).
+- **Access pattern:** `apan_grid.py fetch --years 1991 2020`: for each year,
+  each tile of the box (South Africa's: 4) and each parameter one request,
+  24 a year, 720 for a 30-year normal, each year reduced to monthly means and
+  kept (`<year>.power-monthly.json`), so a cut-short run resumes.
+- **Limits we keep to:** as nasa-power's: one request a second through the
+  polite client, one at a time, a 403 or 401 stops the run with no retry.
+  One run per refresh of the normal.
+- **Status: blocked.** Built and tested against synthetic weather
+  (`power_fixture.FakePower`) and invented stations. Production waits for
+  two things: `apan_grid.py validate`'s report against DWS Class-A pan
+  stations (their monthly means; needs DWS's permission to cover evaporation
+  station records, #646 item 6), and the hydrologist's sign-off on it. Until
+  then the release gate (`map-data-gates.mjs`, a PenPan or A-pan key or label)
+  and the migrate Lambda (any grid not `et0`, `referenceLoad.ts`) refuse it.
+  Locally `pnpm import:evaporation` loads it (docs/maps.md § The evaporation
+  grid).
+- **Fallback:** the A-pan row typed by hand, or a daily A-pan record
+  (model.md §2.3a).
+- **Owner:** the operator; code `ingest/penpan.py`, `ingest/apan_grid.py`.
 
 ## Climate indices
 

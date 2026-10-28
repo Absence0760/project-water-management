@@ -621,6 +621,22 @@ and `ENGINE_VERSION` stays where it was.
   http://hdl.handle.net/10019.1/127336 (the same pages §2.7a checked on
   2026-09-30).
 
+**Where a modelled A-pan comes from, and its limits** (issue #646 item 7).
+With no pan station near, the A-pan row can be proposed from a **modelled**
+Class-A pan grid: PenPan (Rotstayn et al. 2006, as McMahon et al. 2013
+Supplement S6 set it out), Penman's equation for the pan itself, run each
+month as a steady state on NASA POWER's monthly mean weather
+([maps.md § The evaporation grid](./maps.md#the-evaporation-grid)). The
+engine doesn't change: the 12 values go into `settings.apanMm` like typed
+ones, with the dataset cited ("Modelled Class-A pan (PenPan)"). Unlike ET₀,
+they are A-pan values, so the crop and lake factors apply to them as they
+stand. The limits: the values are a normal (each month's mean over the
+years), not the season; POWER's 0.5° weather averages out relief and coasts;
+the model ignores a pan's siting and heat storage; and a measured record
+wins wherever there is one (the daily series above, or a nearby station's
+monthly means). Production refuses the grid until it is validated against
+DWS Class-A pans and the hydrologist signs off.
+
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
 **Retired in engine 1.0.0 (issue #16, 2026-09-26).** The engine's runoff
@@ -7082,6 +7098,7 @@ at). Only the actionable warnings are coded so far:
 | Rain stations (§2.4i) | `rain.station.noRecord`, `.unreliable`, `.unreliableInvalid`; `rain.station.zeroRun.*`, `rain.station.accumulation.*` | `station`, … | `set-share`; the checks `set-rain` |
 | A unit's own gauge (§2.4h) | `rain.unitGauge.zeroRun.*`, `rain.unitGauge.accumulation.*`, `rain.unitGauge.unreliable`; `rain.unit.catchmentFallback` | `unit`, … | `set-rain`; the fallback `set-unit-rain` |
 | Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord` | `kind`, `site`, … | `set-record` (no values in the period: `set-period`) |
+| Calibration zones (§2.10n) | `calibration.zone.notList`, `.noGauge`, `.duplicate`, `.badParams`, `.needsPerUnit`, `.unusable`, `.unfitted`; `.siteOnlyElsewhere` (a note) | `node`, `reason`, `name`, `gauges`; `units`, `zones` | `set-record` (Per unit needed: `set-share`; not fitted: `set-fit`) |
 
 Not coded on purpose: the EWR-split note and the retired flow-share method's
 note (issues #615 and #616 reworded them; the area-fragmentation, High/Low-MAP
@@ -7103,7 +7120,7 @@ figure moves, but the summary has a new field, so a 1.101.0 run made again
 at 1.102.0 has another results digest. A viewer kept from the registered
 volumes reads no warnings and no codes (`verdictsSummary`). Tests:
 `warningCodes.test.ts` triggers each code and checks its text is the plain
-warning's (four beside their texts' own tests, which it names), and that
+warning's (twelve beside their texts' own tests, which it names: the zone codes' in `calibrate/zones.test.ts`), and that
 every code in the catalogue is used by the engine.
 
 **Flow generation renamed (engine ≥ 1.103.0, issue #614).** The panel that
@@ -10812,7 +10829,10 @@ exclusions) or no dry → wet test (no dry year to fit on), the representativene
 and dry → wet notes beside it (`zoneCoverageNotes`). The API refuses a new
 row whose gauge isn't a gauge inside the network with a flow record, a
 gauge listed twice, and a ticked row that is the site or below it (api.md §
-Projects).
+Projects). Each zone warning a run gives has a stable code
+(`calibration.zone.*`, § Run warning codes in §2.8), so the Warnings page
+links it to the table (`?field=fld-cal-zones`), to Fit the parameters, or to
+Model selection for flow generation.
 
 **Not yet** (issue #555's next round, docs/followups.md): the zones on the
 Network tab and the Map, calibration statistics per ticked site in a run, the
@@ -12692,7 +12712,7 @@ run's stored series ([ui.md § Summary](./ui.md#summary)).
 definition, a gamma fit and three SPI values and a GLO fit and three SPEI
 values against references computed in Python with no shared code; monthly
 totals (partial months, a missing day, `lastDay`) under two skewed `TZ`s;
-the reference period chosen; over a 44-year synthetic record the SPI-3 is
+the reference period chosen; over a synthetic record of 1981–2024 the SPI-3 is
 about standard normal over 1991–2020 and never falls as the total rises;
 the badge reads the last whole month of history and ignores forecast days
 after it, a dry spell reads dry, and each kind of gap is named. The

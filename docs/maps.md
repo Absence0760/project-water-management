@@ -2561,6 +2561,10 @@ grid's kind, and **nothing is converted between them**:
   ([model.md §2.4a](./model.md) *Daily reference ET*). Both are reference
   ET, so neither is converted; the feed changes nothing under pan
   coefficient × A-pan.
+- **A-pan where no pan station is near**: a modelled Class-A pan grid
+  (PenPan from NASA POWER's weather, [§ The evaporation grid](#the-evaporation-grid))
+  proposes the A-pan row as "Modelled Class-A pan (PenPan)", locally only
+  until it is validated against DWS pans.
 
 ### The evaporation grid
 
@@ -2596,14 +2600,50 @@ only reads them.
 - **An A-pan grid** (kind `apan`) loads from the fixture form
   (`{ "kind": "apan", "cellDeg", "firstYear", "lastYear", "cells": [[lon,
   lat, [Oct … Sep]], …] }`), for example the operator's own interpolation of
-  station pans. No open A-pan grid passes D-B today (§ Sources).
+  station pans; such a grid names its own `--source` and `--attribution`
+  (dPET's lines are never put on it). No measured A-pan grid passes D-B
+  today (§ Sources).
+- **A modelled A-pan grid: PenPan** (issue #646 item 7;
+  [data-sources.md § penpan-apan](./data-sources.md#penpan-apan), blocked in
+  production). Where no pan station is near, `ingest/apan_grid.py` models a
+  US Class-A pan from weather. This is not the conversion "Why no
+  conversion" rules out, since no pan coefficient is guessed: PenPan
+  (Rotstayn et al. 2006; `ingest/penpan.py`, after McMahon et al. 2013
+  Supplement S6, eqs. S6.1–S6.6) is Penman's equation for the pan itself.
+  It takes the shortwave the pan and its walls catch (S6.4–S6.6, pan albedo
+  0.14), the net longwave (FAO-56 eq. 39) and Thom et al.'s vapour transfer
+  for a pan (S6.2), with a = 2.4. Each month runs as a steady state, and the
+  model is checked against McMahon's Worked example 9 (3.66 mm/day at Alice
+  Springs). The weather is NASA POWER's six daily parameters, since the copy
+  holds only reference ET. `fetch` reduces them to each 0.5° point's monthly
+  means a year at a time (resumable, one request a second). `grid` averages
+  each calendar month's PenPan total over the years (a point needs every
+  month of every year) and places it on 0.1° cells centred on x.x5°, each
+  the nearest point's, so 25 cells share one point. It writes the `apan`
+  form with a `model`: `name: "penpan"`, the ground albedo (0.23 by
+  default) and the screen factor (1 for an unscreened pan, 0.93 for a
+  bird-screened one). `pnpm import:evaporation <apan.json[.gz]> --dataset
+  <label>` loads it. Its source always starts "Modelled Class-A pan
+  (PenPan)" (an operator's `--source` is put after it) and the method says
+  "Modelled, not measured: PenPan …", so the proposal, the revision's reason
+  and the provenance row never present it as a measured pan. `validate`
+  compares it with Class-A pan stations, using their 12 monthly means at
+  each station's cell, and writes a Markdown report of the ratio grid ÷
+  station, the bias and the RMSE, by month and overall. The operator runs
+  that report on DWS stations, and production waits for it and the
+  hydrologist's sign-off. Limits: POWER's 0.5° weather smooths relief and
+  coasts, and the model ignores the pan's siting (a dry fetch or an
+  irrigated one) and its heat storage, so one month can be off even when
+  the normal holds. For scale, McMahon found PenPan ÷ pan of 1.078 over 68
+  Australian stations, after their screen factor.
 - **Production loading**: `pnpm import:evaporation <dir>/*.dpet-monthly.json
   --dataset <label> --out dpet.json.gz` writes the averaged grid in the
   fixture form instead of loading it, and `load-reference.yml` (kind
   `evaporation`) loads that file through the migrate Lambda
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
   Only a reference-ET grid (`et0`) loads there; an A-pan grid is refused
-  until its source has an allowed row here. The attribution, stored on the
+  until its source has an allowed row here. The release gate also refuses a
+  PenPan or A-pan key or label before the approval. The attribution, stored on the
   dataset row, is shown under every proposal (§ Sources).
 - **WR2012's evaporation** (S-pan per quaternary, with its evaporation zones'
   monthly distribution) stays **blocked** with the rest of WR2012 (§ Sources).
@@ -2973,6 +3013,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Synthetic soil water capacity grid (`backend/fixtures/soils/soils.synthetic.json`) | this repo (invented soil over region Z) | the repo's own | none | 1 | never | in use (tests, `pnpm setup`) |
 | Synthetic GR4J donors (`backend/fixtures/gr4j-donors/gr4j-donors.synthetic.json`) | this repo (14 invented basins) | the repo's own | none | 1 | never | in use (tests, `pnpm setup`) |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+| Modelled Class-A pan (PenPan), our own computation from NASA POWER's daily weather: the A-pan row where no pan station is near ([§ The evaporation grid](#the-evaporation-grid), issue #646 item 7) | NASA POWER (the weather); the model is ours (Rotstayn et al. 2006, after McMahon et al. 2013 Supplement S6) | **CC BY 4.0** (POWER, as [data-sources.md § nasa-power](./data-sources.md#nasa-power)); the grid is ours | "NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan (Rotstayn et al. 2006) from its daily meteorology", stored on the dataset row; its source always starts "Modelled Class-A pan (PenPan)" | the years run (e.g. 1991–2020) | per refresh of the normal | **Blocked in production** until `apan_grid.py validate`'s report against DWS Class-A pans and the hydrologist's sign-off ([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)); the release gate and the migrate Lambda refuse it. Locally it loads, built and tested against synthetic weather |
 
 **Which version is in use.** The table's Version column is the version the
 licence was read for. What a deployment actually serves is recorded with

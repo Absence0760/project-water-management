@@ -82,6 +82,7 @@ const SMALL_TEXT_EXCEPTIONS: Record<string, string[]> = {
 	'lib/components/help/Diagram.svelte': ['.diagram :global(.s)', '.diagram :global(.m)'],
 	'lib/components/landing/MiniChart.svelte': ['text'],
 	'lib/components/map/MapSetupPill.svelte': ['.icon text'],
+	'lib/components/map/StartDataList.svelte': ['.icon text'],
 	'lib/components/network/DamStorageFields.svelte': ['.tick, .axis-label'],
 	'lib/components/network/NetworkSchematic.svelte': ['.meta'],
 	'lib/components/overview/SetupSteps.svelte': ['.icon text'],

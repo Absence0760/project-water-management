@@ -18,7 +18,7 @@ export const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmtNu
 
 /**
  * The months an index was read over, in words: ONI by its 3-month season
- * ("JAS 2018", centred on August), AAO by its months ("Jul–Sep 2018").
+ * ("JAS 2015", centred on August), AAO by its months ("Jul–Sep 2015").
  */
 export function windowText(id: ClimateIndexId, from: string, to: string): string {
 	const [fy, fm] = [Number(from.slice(0, 4)), Number(from.slice(5, 7))];
@@ -51,7 +51,7 @@ export type ClimateView =
 	| { kind: 'problem'; message: string; state: string | null; source: string | null }
 	| {
 			kind: 'ready';
-			/** This season's state: "ONI JAS 2018 +0.45; AAO Jul–Sep 2018 −0.31." */
+			/** This season's state: "ONI JAS 2015 +0.45; AAO Jul–Sep 2015 −0.31." */
 			state: string;
 			/** How the years were chosen. */
 			how: string;

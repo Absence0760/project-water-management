@@ -8,19 +8,19 @@ import { runTurn } from '../orchestrator.js';
 import { TOOL_NAMES, type AssistantStreamEvent, type AssistantTool, type ChatMessage, type ToolResult } from '../types.js';
 import { gaugeAnswer, MOCK_IDLE_ANSWER, MOCK_PROPOSAL, mockProvider } from './mock.js';
 
-/** An invented network as get_network answers it: two dams above gauge G1 Weir (its `above.dams`), one below. */
+/** An invented network as get_network answers it: two dams above gauge Moddergat Weir (its `above.dams`), one below. */
 const NETWORK = {
 	source: 'run',
 	nodes: [
 		{ id: 'f1', name: 'Kliphoek', kind: 'farm', drainsInto: 'f2', dam: { capacityM3: 200_000 } },
 		{ id: 'f2', name: 'Rietvlei', kind: 'farm', drainsInto: 'g1', dam: { capacityM3: 50_000 } },
 		{ id: 'f3', name: 'Dry Farm', kind: 'farm', drainsInto: 'g1', dam: null },
-		{ id: 'g1', name: 'G1 Weir', kind: 'gauge', drainsInto: 'f4', above: { units: 3, dams: [{ id: 'f1', name: 'Kliphoek', capacityM3: 200_000 }, { id: 'f2', name: 'Rietvlei', capacityM3: 50_000 }], gauges: [] } },
+		{ id: 'g1', name: 'Moddergat Weir', kind: 'gauge', drainsInto: 'f4', above: { units: 3, dams: [{ id: 'f1', name: 'Kliphoek', capacityM3: 200_000 }, { id: 'f2', name: 'Rietvlei', capacityM3: 50_000 }], gauges: [] } },
 		{ id: 'f4', name: 'Below', kind: 'farm', outlet: true, dam: { capacityM3: 900_000 } }
 	]
 };
-const series = (key: string, mean: number) => ({ runId: 'r', node: { id: 'g1', name: 'G1 Weir', kind: 'gauge' }, key, unit: 'm³/day', resolution: 'monthly', mean, points: [] });
-const FIT = { runId: 'r', gauge: { id: 'g1', name: 'G1 Weir' }, source: 'computed', stats: { nse: 0.123, kge: -0.4567, pbias: 12.5, logNse: 0.9 } };
+const series = (key: string, mean: number) => ({ runId: 'r', node: { id: 'g1', name: 'Moddergat Weir', kind: 'gauge' }, key, unit: 'm³/day', resolution: 'monthly', mean, points: [] });
+const FIT = { runId: 'r', gauge: { id: 'g1', name: 'Moddergat Weir' }, source: 'computed', stats: { nse: 0.123, kge: -0.4567, pbias: 12.5, logNse: 0.9 } };
 
 function fakeTools(results: Partial<Record<string, ToolResult | ((args: unknown) => ToolResult)>>, calls: { name: string; args: unknown }[]): AssistantTool[] {
 	return Object.values(TOOL_NAMES).map((name) => ({
@@ -72,7 +72,7 @@ describe('the mock provider', () => {
 			{ name: TOOL_NAMES.gaugeFit, args: { node: 'g1' } }
 		]);
 		expect(text.split('\n')).toEqual([
-			'Gauge G1 Weir has 2 dam(s) upstream: Kliphoek, Rietvlei.',
+			'Gauge Moddergat Weir has 2 dam(s) upstream: Kliphoek, Rietvlei.',
 			'Runoff at Kliphoek averages 2.00 and the gauge’s outflow 1.00 in the series read.',
 			'The fit at the gauge: NSE 0.12, KGE -0.46, PBIAS 12.50.',
 			'The dams upstream fill before they spill, so rain above them reaches the gauge only once they are full: check their capacity and starting level before changing GR4J.'
