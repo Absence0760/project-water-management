@@ -260,7 +260,7 @@ provenance, `ingest/verify_copy.py`):
       daily runs with `MirrorLagDays` reporting, the backfill (`rnl` from
       1981-01, `sat` from 2000-06, its first byMonth file), verification
       (`ingest/dev.sh verify`), then `chirps_source = "mirror"`
-      and the paused CHIRPS feeds back on (#571), and once DWS answers
+      and the paused CHIRPS feeds back on (#571), and once the DWS records are loaded
       `dws_source = "store"`, whose apply removes the per-feed queues
       ([deployment.md § The cutover](./deployment.md#the-cutover)). Each
       `terraform apply` with the operator's go-ahead.

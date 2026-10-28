@@ -208,16 +208,21 @@ in `infra/feeds.tf`):
   non-South-African addresses with HTTP 403; from af-south-1 it answers
   (first production fetches 2026-10-26, which got its ScriptServer error
   page for a 10-year span, followups.md).
-- **Licence:** **unconfirmed.** DWS publishes no API and no terms for these
-  pages; its NIWIS wording elsewhere says data "may not be sold to third
-  parties" and is "restricted to use for academic, research or personal
-  purposes" ([maps.md § Sources](./maps.md#sources); followups.md, Terms of
-  use). The written request below asks for permission to store the data and
-  show derived results in a commercial tool.
+- **Licence:** **permission obtained** for storing DWS verified daily flow
+  and showing results derived from it in the tool, through the client's
+  hydrologist (recorded by the operator 2026-10-28, #618 step 6a; the
+  written permission is kept with the client's records, not in this public
+  repo). It covers the verified daily flow only: the station catalogue, the
+  register of dams and the quaternary outlines below have their own terms.
+  DWS publishes no API and no terms for these pages; its NIWIS wording
+  elsewhere says data "may not be sold to third parties" and is "restricted
+  to use for academic, research or personal purposes" ([maps.md §
+  Sources](./maps.md#sources); followups.md, Terms of use), so the tool
+  never sells or redistributes the raw values.
 - **Attribution:** "Department of Water and Sanitation" as the copyright
-  owner, if allowed.
+  owner.
 - **Contact:** DWS National Hydrological Services, GeoRequests@dws.gov.za
-  (Hydstra data). Letter not yet sent (#604 operator steps).
+  (Hydstra data), for full records on request.
 - **Access pattern with `DWS_SOURCE=live` (production today):** each DWS feed asks for a 2-year window
   (`DWS_WINDOW_DAYS`, 365-day re-read) per station; the site allows 20 years
   a request.
@@ -229,7 +234,7 @@ in `infra/feeds.tf`):
   name, the newest 2-year window each, and the worker loads it as `dws-web`.
   With `DWS_SOURCE=store` a feed reads the store and never asks DWS
   ([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
-  Production stays on `live` (and the pass off) until DWS answers; after
+  Production stays on `live` (and the pass off) until the records are loaded; after
   the cutover (`dws_source = "store"`) the weekly pass and the operator's
   loads of DWS's replies are the only access, and no feed asks DWS.
 - **Limits we keep to:** 1 request a second, one User-Agent; a 403,

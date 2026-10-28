@@ -1405,10 +1405,11 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 - **Sources' terms.** CHIRPS is public domain (the Climate Hazards Center
   waived copyright; cite it). CHIRPS-GEFS comes from the same server without a
   separate licence notice: confirm before relying on it commercially (the
-  roadmap's D7). DWS's terms of use for automated retrieval must be checked
-  before a DWS feed is used in production, and the DWS site answers our
-  (non-South-African) network with HTTP 403: confirm the fetcher's region can
-  reach it ([followups.md](./followups.md)).
+  roadmap's D7). DWS's permission to store the verified daily flow and show derived
+  results was obtained through the client's hydrologist (2026-10-28,
+  [data-sources.md § dws-flow](./data-sources.md#dws-flow)). The DWS site
+  answers non-South-African networks with HTTP 403; af-south-1 reaches it
+  (first production fetches 2026-10-26).
 - **Cost (idle delta ≈ +$1.00/month):** two more queues and two DLQs cost
   nothing at rest, but each SQS event source polls continuously (~0.65 M
   receives a month each); with the `jobs` queue's that is ~1.9 M, ~0.9 M past
@@ -2114,9 +2115,11 @@ under origin `fixtures` (what the local feeds read); try it on the invented
 and the migrate Lambda's reference load (`load-reference.yml`,
 § Reference datasets) knows no `dws` kind. Adding one (the same parser, a
 `dws` kind in `backend/src/geo/referenceLoad.ts` calling
-`gauge_record_write` with origin `dws`) waits on DWS's written answer, which
-decides whether the kind is allowed at all; until then `dws_source` stays
-`live`, or the store holds only the weekly pass's two years.
+`gauge_record_write` with origin `dws`) is allowed: the client's hydrologist
+obtained DWS's permission to store the verified daily flow (2026-10-28,
+#618 step 6a; [data-sources.md § dws-flow](./data-sources.md#dws-flow)).
+Until that kind is built and a record loaded, `dws_source` stays `live`, or
+the store holds only the weekly pass's two years.
 
 
 ## The cutover
@@ -2130,7 +2133,7 @@ on its own evidence, in either order:
    ([§ Backfill](#backfill), step 5), apply `chirps_source = "mirror"` and
    cut a backend release. CHIRPS and CHIRPS-GEFS feeds read the copy in the
    worker's job; DWS still goes to the fetcher.
-2. **DWS:** once DWS's written answer allows it and its reply is loaded
+2. **DWS:** once the stations' records are loaded (permission obtained 2026-10-28)
    ([§ Turning it on](#turning-it-on), step 4), apply `dws_source = "store"`.
 
 While either flag is on its old value (`chc`, `live`), per-feed fetching
