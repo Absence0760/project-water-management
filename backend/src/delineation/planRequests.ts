@@ -87,6 +87,19 @@ export async function waitingPlanRequest(db: Db, projectId: string): Promise<Pla
 	return rows[0] ? planView(db, projectId, rows[0]) : null;
 }
 
+/**
+ * A newer proposal was stored (the route's, or another job's): the project's other plan requests still waiting give way to
+ * it, their jobs cancelled, so a reopened sheet never waits on a plan already replaced. `except`: the job's own request.
+ */
+export async function supersedePlanRequests(db: Db, projectId: string, except: string | null = null): Promise<void> {
+	const { rows } = await db.query<{ id: string; job_id: string | null }>(
+		`UPDATE delineation_request SET status = 'superseded', finished_at = now()
+		 WHERE project_id = $1 AND plan_kind IS NOT NULL AND status = 'queued' AND id IS DISTINCT FROM $2 RETURNING id, job_id`,
+		[projectId, except]
+	);
+	for (const r of rows) if (r.job_id) await db.query('SELECT app_cancel_job($1)', [r.job_id]);
+}
+
 export interface QueuePlanOptions {
 	projectId: string;
 	userId: string;
@@ -121,7 +134,11 @@ export async function queuePlan(db: Db, o: QueuePlanOptions): Promise<{ request:
 		dedupeKey: `delineate:${o.userId}`,
 		maxAttempts: DELINEATE_MAX_ATTEMPTS
 	});
-	if (!created) throw new ApiError(429, 'You have a large delineation waiting; wait for it to finish.');
+	if (!created) {
+		// The caller may commit the rest of its transaction (a Start keeps its quick plan): leave no request waiting on no job.
+		await db.query(`UPDATE delineation_request SET status = 'superseded', finished_at = now() WHERE id = $1 AND project_id = $2`, [requestId, o.projectId]);
+		throw new ApiError(429, 'You have a large delineation waiting; wait for it to finish.');
+	}
 	await db.query('UPDATE delineation_request SET job_id = $2 WHERE id = $1', [requestId, job.id]);
 	await pruneRequests(db, o.projectId);
 	return { request: await loadPlanRequest(db, o.projectId, requestId), jobId: job.id };

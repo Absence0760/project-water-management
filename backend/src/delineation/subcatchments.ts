@@ -847,10 +847,16 @@ export async function delineateUnits(
 			return d === OUT ? -1 : c + DY[d]! * nCells + DX[d]!;
 		};
 		/**
-		 * Which unit boundary holds each cell (start-17, F10): its index in req.points + 1, 0 for none (the last drawn wins where two
+		 * Which unit boundary holds each cell (start-17, F10): its index in req.points + 1, 0 for none (the last kept wins where two
 		 * overlap). Only the kept units' (and the outlet's unit's) count for the rest of the catchment.
 		 */
-		const unitLabel = new Uint8Array(nCells * nCells);
+		const unitLabel = req.points.some((p) => p.role === 'unit' && p.geometry.type !== 'Point') ? new Uint8Array(nCells * nCells) : null;
+		/** Paint a kept unit's boundary (after the keep or drop decision, so a dropped one never takes a kept one's cells). */
+		const paint = (mask: Uint8Array | null, label: number) => {
+			if (!mask || !unitLabel) return;
+			for (let i = 0; i < mask.length; i++) if (mask[i]) unitLabel[i] = label;
+			keptLabels.add(label);
+		};
 		/** The labels of the units kept (a unit dropped is no unit, so its cells are the rest's). */
 		const keptLabels = new Set<number>();
 		/** An off-channel dam's own outflow cell, by its id: its catchment within the unit's piece is the dam's share. */
@@ -868,6 +874,8 @@ export async function delineateUnits(
 			let cell: number | null = null;
 			let moved: number | null = null;
 			const label = Math.min(255, pi + 1);
+			/** A unit's boundary in cells (inside the catchment), painted once it is kept. */
+			let unitMask: Uint8Array | null = null;
 			if (p.geometry.type === 'Point') {
 				cell = snapAt(p.geometry.coordinates, p.id, p);
 				if (cell !== null) moved = movedM(p.geometry.coordinates, cell);
@@ -876,7 +884,7 @@ export async function delineateUnits(
 				const rings = polygonRings(p.geometry);
 				const mask = rings.length ? rasterize(nCells, nCells, rings.map((r) => r.map(toGrid))) : null;
 				if (mask) for (let i = 0; i < mask.length; i++) if (!catchment[i]) mask[i] = 0;
-				else if (mask[i]) unitLabel[i] = label;
+				unitMask = mask;
 				const c = mask ? mostDrained(mask, acc, edge) : -1;
 				how.set(p.id, { placedBy: 'unit' });
 				cell = c >= 0 ? c : null;
@@ -949,7 +957,7 @@ export async function delineateUnits(
 					continue;
 				}
 				outletUnit = p;
-				keptLabels.add(label);
+				paint(unitMask, label);
 				continue;
 			}
 			// A gauge or water user on a unit boundary's outflow cell: one cell further down, so the unit drains into it.
@@ -965,7 +973,7 @@ export async function delineateUnits(
 			taken.set(cell, p.id);
 			if (p.role === 'unit') {
 				unitCells.add(cell);
-				keptLabels.add(label);
+				paint(unitMask, label);
 			}
 			kept.push({ p, cell, snapDistanceM: moved });
 		}
@@ -977,7 +985,7 @@ export async function delineateUnits(
 			kept.map((k) => ({ cell: k.cell, owns: ownsLand(k.p.role) }))
 		);
 		const R = kept.length;
-		const restDrains = keptLabels.size ? restDrainsOf(nCells, dir, acc, catchment, part.owner, unitLabel, keptLabels, rowM2, taken, outletUnit?.id ?? null) : undefined;
+		const restDrains = keptLabels.size && unitLabel ? restDrainsOf(nCells, dir, acc, catchment, part.owner, unitLabel, keptLabels, rowM2, taken, outletUnit?.id ?? null) : undefined;
 		// The pans: what drains into a closed depression (none at the outlet or a point), per owner.
 		const found = await findPans(
 			{ nx: nCells, ny: nCells, before, after: grid.z, dir, acc, mask: catchment, rowM2, toPos: cellPos, toGrid },

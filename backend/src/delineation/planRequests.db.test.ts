@@ -187,6 +187,21 @@ describe('a Start too large to route within the request (F11, #646 item 3)', () 
 		expect(audit[0]).toMatchObject({ actor_user_id: editor.id, subject: { fromDem: true, background: true } });
 	});
 
+	it('gives way at once to a newer Start that fits the request: its job cancelled, no stale wait on reopening', async () => {
+		const v = await valley('Start, too large, proposed again');
+		delineationLimits.requestWindows = [256];
+		const r = await editor.call('POST', v.at('/map/start'), v.body);
+		expect(r.body.request).toMatchObject({ status: 'queued' });
+		delineationLimits.requestWindows = before.limits.requestWindows;
+		const again = await editor.call('POST', v.at('/map/start'), v.body);
+		expect(again.status).toBe(201);
+		expect(again.body.request).toBeNull();
+		expect(await requestRow(r.body.request.id)).toMatchObject({ status: 'superseded' });
+		const [job] = await asOwner('SELECT j.status FROM job j JOIN delineation_request r ON r.job_id = j.id WHERE r.id = $1', [r.body.request.id]);
+		expect(job!.status).toBe('dead');
+		expect((await viewer.call('GET', v.at('/map/start'))).body.request).toBeNull();
+	});
+
 	it('stores nothing once the quick plan was applied: the request is superseded', async () => {
 		const v = await valley('Start, too large, applied first');
 		delineationLimits.requestWindows = [256];

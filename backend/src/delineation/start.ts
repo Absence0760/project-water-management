@@ -42,7 +42,7 @@ import { requireRole, UUID } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { DelineationRefused, type WindowAim } from './delineate.js';
 import { wakeWorker } from '../jobs/wake.js';
-import { loadPlanRequest, queuePlan, waitingPlanRequest, type PlanRequest } from './planRequests.js';
+import { loadPlanRequest, queuePlan, supersedePlanRequests, waitingPlanRequest, type PlanRequest } from './planRequests.js';
 import { delineationLimits, jobWindowsFrom, nextJobWindow } from './requests.js';
 import { PlacementChoice, placementOf, placementWarnings, type PointPlacement } from './pointPlacement.js';
 import { nearestReach } from './reach.js';
@@ -658,8 +658,10 @@ export function startRouting(inputs: MapInputs, placing: PointChoices): Subcatch
  * Store a Start proposal (the open one superseded), prune the old ones and audit it, as the transaction's user (an editor). 409
  * once the model has nodes, or when another proposal was stored at the same moment. `background`: the worker's plan job made it.
  */
-export async function storeStartProposal(db: Db, projectId: string, plan: StartPlan, meta: PlanMeta, background = false): Promise<StartProposal> {
+export async function storeStartProposal(db: Db, projectId: string, plan: StartPlan, meta: PlanMeta, background = false, requestId: string | null = null): Promise<StartProposal> {
 	if ((await nodeCount(db, projectId)) > 0) throw new ApiError(409, NOT_EMPTY);
+	// A plan still with the worker gives way to this one (but the job's own request, `requestId`).
+	await supersedePlanRequests(db, projectId, requestId);
 	await db.query(`UPDATE start_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [projectId]);
 	const { rows } = await db
 		.query<{ id: string }>(

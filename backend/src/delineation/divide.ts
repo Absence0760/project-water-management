@@ -38,7 +38,7 @@ import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
 import { wakeWorker } from '../jobs/wake.js';
-import { queuePlan } from './planRequests.js';
+import { queuePlan, supersedePlanRequests } from './planRequests.js';
 import { delineationLimits, jobWindowsFrom, nextJobWindow } from './requests.js';
 import { PlacementChoice, placementOf, placementWarnings, type PointPlacement } from './pointPlacement.js';
 import {
@@ -449,7 +449,9 @@ export function divideRouting(inputs: DivideInputs, placing: PointChoices): Subc
  * Store a division (the open proposal superseded), prune the old ones and audit it, as the transaction's user (an editor).
  * `background`: the worker's plan job made it.
  */
-export async function storeDivideProposal(db: Db, projectId: string, plan: DividePlan, r: Pick<Subcatchments, 'dataset' | 'method' | 'methodVersion'>, background = false) {
+export async function storeDivideProposal(db: Db, projectId: string, plan: DividePlan, r: Pick<Subcatchments, 'dataset' | 'method' | 'methodVersion'>, background = false, requestId: string | null = null) {
+	// A plan still with the worker gives way to this one (but the job's own request, `requestId`).
+	await supersedePlanRequests(db, projectId, requestId);
 	await db.query(`UPDATE start_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [projectId]);
 	const { rows } = await db
 		.query<{ id: string }>(

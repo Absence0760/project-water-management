@@ -127,7 +127,8 @@ export async function runPlanJob(ctx: Pick<JobContext<unknown>, 'db' | 'progress
 	// Locked, then re-read: a newer proposal or request may have come while the DEM was read; then nothing is stored.
 	const { rows: now } = await db.query<{ status: string }>('SELECT status FROM delineation_request WHERE id = $1 AND project_id = $2 FOR UPDATE', [req.id, job.projectId]);
 	if (now[0]?.status !== 'queued') return;
-	// The proposals are locked too, so an apply or a new proposal can't slip in between the check and the store.
+	// The open proposals are locked, so an apply or a discard can't slip in between the check and the store. A new proposal
+	// inserted meanwhile isn't locked by this: the open index refuses the second (409, retried), and the retry's check gives way.
 	await db.query('SELECT id FROM start_proposal WHERE project_id = $1 FOR UPDATE', [job.projectId]);
 	const after = await movedOn(db, job.projectId, req);
 	if (after) return supersede(after);
@@ -135,8 +136,8 @@ export async function runPlanJob(ctx: Pick<JobContext<unknown>, 'db' | 'progress
 	try {
 		if (start) {
 			const { plan, meta } = startPlanFrom(start, r);
-			proposalId = (await storeStartProposal(db, job.projectId, plan, meta, true)).id;
-		} else proposalId = (await storeDivideProposal(db, job.projectId, dividePlanFrom(divide!, r), r, true)).id;
+			proposalId = (await storeStartProposal(db, job.projectId, plan, meta, true, req.id)).id;
+		} else proposalId = (await storeDivideProposal(db, job.projectId, dividePlanFrom(divide!, r), r, true, req.id)).id;
 	} catch (err) {
 		// Another proposal stored at the same moment (the unique open index): the retry looks again, and gives way to it.
 		if (err instanceof ApiError && err.status === 409) throw new JobError(err.message, { retry: true });
