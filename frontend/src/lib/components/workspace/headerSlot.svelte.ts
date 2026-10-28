@@ -14,10 +14,10 @@ export interface HeaderParts {
 	context?: Snippet;
 	/** Beside the page's rain pill, before it (the Summary's "Setup complete" pill). */
 	status?: Snippet;
-	/** The section's own actions, placed before Add data. */
+	/** The section's own actions, placed before the main box (Add data, where the tab has it, then Run model). */
 	actions?: Snippet;
 	/**
-	 * The section's main action: last, after Add data, in place of the page's Run model button
+	 * The section's main action: last (after Add data, where the tab has it), in place of the page's Run model button
 	 * (RunButton). Runs & results puts its run form (label, Run forecast, Run model) here.
 	 */
 	main?: Snippet;

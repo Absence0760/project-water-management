@@ -1,8 +1,9 @@
 // One header per workspace section (issue #17, option A; docs/ui.md §
 // Section header): the section's title, a one-line context, and on the right
-// the rain-freshness pill, the section's own actions, Add data and Run model
-// (a button that opens the Run label form; on Runs & results the tab's own run
-// form instead, so there is always exactly one Run model).
+// the rain-freshness pill, the section's own actions, Add data (on the tabs it
+// adds data to, issue #601: add-data-tabs.spec.ts) and Run model (a button that
+// opens the Run label form; on Runs & results the tab's own run form instead,
+// so there is always exactly one Run model).
 // The notices (view only, new data) are one slim line under it; the
 // project's name and your role are at the top of the sidebar (a compact line
 // on a phone); Data carries a badge counting the series behind. Synthetic
@@ -50,13 +51,13 @@ test.describe('desktop', () => {
 		expect(add.x).toBeGreaterThan(title.x + title.width);
 		await expectNoViolations(page);
 
-		// Network: its summary, Tables and Add node come from the tab, before Add data.
+		// Network: its summary, Tables and Add node come from the tab, then Run model; no Add data (issue #601).
 		await nav(page).getByRole('link', { name: 'Network' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
 		await expect(h.getByTestId('network-summary')).toContainText(/\d+ hydrological units? · \d+ dams? · \d+ gauges?/);
 		await expect(h.locator('details.grids-menu summary')).toHaveText(/Tables/);
 		const actions = h.getByRole('button');
-		await expect(actions).toHaveText(['+ Add hydrological unit', '+ Add other user', 'Add data', 'Run model']);
+		await expect(actions).toHaveText(['+ Add hydrological unit', '+ Add other user', 'Run model']);
 		await expectNoViolations(page);
 
 		// Crops: its summary line and Add crop.
@@ -71,11 +72,10 @@ test.describe('desktop', () => {
 		await expect(h.getByTestId('section-context')).toHaveText('2 daily input series · 1 behind');
 		await expect(actions).toHaveText(['Preview all data', 'Add data', 'Run model']);
 
-		// Runs: the tab's own run form (with a label) in place of the header's button: one Run model, last, after a plain Add data.
+		// Runs: the tab's own run form (with a label) in place of the header's button: one Run model, last, and no Add data.
 		await nav(page).getByRole('link', { name: 'Runs & results' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Runs & results' })).toBeVisible();
-		await expect(actions).toHaveText(['Add data', 'Run model']);
-		await expect(h.getByRole('button', { name: 'Add data' })).not.toHaveClass(/btn-primary/);
+		await expect(actions).toHaveText(['Run model']);
 		await expect(h.getByLabel(/^Run label/)).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Run model' })).toHaveCount(1);
 	});
@@ -315,7 +315,8 @@ test.describe('phone', () => {
 		const h = header(page);
 		await expect(h.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
 		await expect(h.getByTestId('network-summary')).toBeVisible();
-		await expect(h.getByRole('button', { name: 'Add data' })).toBeVisible();
+		await expect(h.getByRole('button', { name: 'Run model' })).toBeVisible();
+		await expect(h.getByRole('button', { name: 'Add data' })).toHaveCount(0);
 		const toggle = (await page.getByRole('button', { name: /^Project sections:/ }).boundingBox())!;
 		const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;
 		expect(title.y).toBeGreaterThan(toggle.y);

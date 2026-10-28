@@ -197,6 +197,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await expectNoViolations(page);
 				await closeModal(page);
 
+				// The Network has no Add data (issue #601): the dialog from the Data page.
+				await page.goto(`/projects/${project.id}?tab=series`);
 				await page.getByRole('button', { name: 'Add data' }).click();
 				await expect(page.getByRole('dialog', { name: 'Add data' })).toBeVisible();
 				await expectNoViolations(page);

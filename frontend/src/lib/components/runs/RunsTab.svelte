@@ -554,7 +554,7 @@
 	}
 
 	// The section header (workspace/SectionHeader) carries the title: the tab gives it the runs
-	// line and, for an editor, the run form, the one place a run starts from the header (last, after Add data).
+	// line and, for an editor, the run form, the one place a run starts from the header (last; Runs & results has no Add data, issue #601).
 	$effect(() => fillHeader({ context: headerContext, main: canRun ? runForm : undefined }));
 	const runCount = (n: number) => `${n} ${n === 1 ? 'run' : 'runs'}`;
 
@@ -587,7 +587,7 @@
 {#snippet headerContext()}
 	{#if loading && !runs.length}Loading runs…{:else if listFailed}Couldn’t load the runs{:else if !runs.length}No runs yet{:else}{runCount(runs.length)}{latest ? ` · newest ran ${ranAgo(latest.createdAt)}` : ''}{/if}
 {/snippet}
-<!-- The run form: in the section header, after Add data; its status line opens the page. -->
+<!-- The run form: in the section header, its main action; its status line opens the page. -->
 {#snippet runForm()}
 	<form class="run-form" onsubmit={run} aria-busy={runBusy}>
 		<label class="run-label" for="run-label">Run label <span class="visually-hidden">(optional)</span></label>
