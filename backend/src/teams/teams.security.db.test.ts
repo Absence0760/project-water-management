@@ -258,8 +258,9 @@ describe('losing the team revokes every team project, rows the user wrote includ
 				 ORDER BY 1`
 			)
 		).map((r) => r.table_name as string);
-		// The app role can't read these at all (owner-only, read through definer functions, migration 219): no member
-		// can, so nothing to revoke. Any other table it can't read is a lost grant, not a pass.
+		// The app role can't read these at all (owner-only, read through definer functions: migration 219's allocation
+		// holder salt, migration 264's assistant turn reservations): no member can, so nothing to revoke. Any other
+		// table it can't read is a lost grant, not a pass.
 		const unreadable = (
 			await asOwner(
 				`SELECT c.table_name FROM information_schema.columns c
@@ -269,7 +270,7 @@ describe('losing the team revokes every team project, rows the user wrote includ
 				 ORDER BY 1`
 			)
 		).map((r) => r.table_name as string);
-		expect(unreadable).toEqual(['allocation_holder_salt']);
+		expect(unreadable).toEqual(['allocation_holder_salt', 'assistant_reservation']);
 		routes = [...new Set(app.routes.filter((r) => r.method !== 'ALL' && r.method !== 'OPTIONS').map((r) => `${r.method} ${r.path}`))];
 	});
 

@@ -2473,7 +2473,7 @@ sequenceDiagram
   participant P as Postgres (RLS)
   participant M as Model (provider)
   B->>A: POST /projects/:id/assistant/messages {messages, runId?}
-  A->>P: withUser: requireRole viewer, app_assistant_begin (rate, budget, count)
+  A->>P: withUser: requireRole viewer, app_assistant_begin (rate, caps, count, reserve the turn's budget)
   A-->>B: 200 text/event-stream (or a JSON 4xx before any byte)
   loop each hop, at most ASSISTANT_MAX_HOPS
     A->>M: system prompt + conversation + tool specs
@@ -2481,7 +2481,7 @@ sequenceDiagram
     A-->>B: text / tool events (": keepalive" every 15 s)
     A->>P: each tool call: withUser(…, readOnly), RLS + the routes' withholding
   end
-  A->>P: app_assistant_charge (tokens)
+  A->>P: app_assistant_charge (tokens; settles the reservation)
   A-->>B: usage, done
 ```
 
@@ -2496,17 +2496,43 @@ sequenceDiagram
   turn ends when the model answers in text, or with an `error` event past
   the hop cap, the output cap, the turn's `ASSISTANT_TURN_SECONDS`, or a
   provider failure. A client that goes away aborts the provider's call.
-- **Counted, then charged**: the message is counted (the person's hour, the
-  months' caps) in the transaction that checked the role, before the
-  stream starts; the turn's tokens are charged after it ends, whatever the
-  outcome (`usage.ts`). A call a provider never reported usage for is
-  charged by estimate (characters ÷ 4).
+- **Reserved, then charged** (`usage.ts`, 264_assistant_reservation): in
+  the transaction that checked the role, before the stream starts, the
+  message is counted and the turn's budget reserved: the least of
+  `ASSISTANT_MAX_TURN_TOKENS` (150 K) and what each month's cap (the
+  deployment's, the person's, the project's) has left after its spend and
+  every other turn's reservation. A cap with less left than the turn's floor
+  (`orchestrator.ts` `turnFloor`: its first call's input estimate plus a
+  whole call's output, weighted) refuses the turn (429), and a conversation
+  whose floor alone passes `ASSISTANT_MAX_TURN_TOKENS` is a 413. After the
+  turn, whatever the outcome, its tokens are charged and the reservation
+  settled in one transaction. A reservation never settled (its Lambda was
+  killed) expires `ASSISTANT_TURN_SECONDS` + 120 s after it began, past the
+  Lambda's timeout, and is then charged in full (Bedrock may have billed all
+  of it), at the next begin or the job tick. So the month's spend plus every
+  reservation never passes a cap, however many turns run at once; turns
+  aren't limited to one a person, since the second's budget is only what the
+  first left.
+- **The turn keeps to its budget** (`orchestrator.ts`): before every hop, the
+  first included, the tokens so far, that hop's input at most and its output
+  at most (×5) must fit the reserved budget. The hop's output cap
+  (`maxTokens`, `ASSISTANT_MAX_OUTPUT_TOKENS` at most) is cut to what the
+  budget leaves, and a hop left fewer than 256 output tokens ends the turn
+  with `assistant_turn_limit` instead. Input is estimated high: the first
+  hop by UTF-8 bytes (a byte-level tokenizer's tokens each cover at least one
+  byte) plus 1,000 tokens of provider framing (Anthropic documents 346 for
+  tool use) and 16 a message; each later hop from the provider's own count
+  of the previous call's input plus the new messages by the same rule. A
+  call a provider never reported usage for is charged at that estimate and
+  its streamed output (bytes, no more than its cap). The residual: spend can
+  pass the budget only if a provider counts more input tokens than bytes
+  plus that framing, or writes past the `maxTokens` it was given; neither
+  happens with the providers here, and `orchestrator.test.ts` holds spend
+  within the budget against a provider at both limits.
 - **Bounded per turn**: at most `ASSISTANT_MAX_TOOL_CALLS_PER_HOP` (4) tool
   calls run from one model call (the rest get an error result asking for
   them next hop, since a provider refuses a call left without a result), and
-  before each hop after the first the turn ends with `assistant_turn_limit`
-  if its weighted tokens so far plus the next hop's estimated input would
-  pass `ASSISTANT_MAX_TURN_TOKENS` (150 K). The turn's signal (its deadline,
+  the reserved budget above. The turn's signal (its deadline,
   or the client gone) goes to every tool call: `routes.ts`
   `runToolBounded` rejects at once when it fires, and caps each tool
   statement at 10 s (`SET LOCAL statement_timeout`), under the 15 s between
@@ -2517,9 +2543,11 @@ sequenceDiagram
   and after the newest message, so each hop re-reads the turn so far at the
   cache-read rate. Cache reads and writes are still counted as input tokens,
   so the caps are stricter than the bill.
-- **The caps** (`usage.ts`, 262): weighted tokens (input + 5 × output) per
+- **The caps** (`usage.ts`, 262, 264): weighted tokens (input + 5 × output) per
   project, per person across projects and for the whole deployment, each
-  per UTC month, and messages per person per hour. Each turn logs one
+  per UTC month, never passed (above), and messages per person per hour.
+  The status (`GET …/assistant`) counts running turns' reservations as
+  spent, so it shows what a new turn could have. Each turn logs one
   `assistant_turn` line with its token counts (no text), which an hourly
   alarm sums (infra/alarms.tf); a failed charge logs
   `assistant_charge_failed`, which alarms on one.
@@ -2534,7 +2562,8 @@ sequenceDiagram
   (`assistant/routes.test.ts` drives it through the adapter). The keepalive
   comment keeps CloudFront's 35 s gap from cutting a slow tool call off.
 - **No transcript is stored**, and no prompt or answer is logged: the server
-  keeps only the token and message counts (`assistant_usage`, `assistant_rate`).
+  keeps only the token and message counts (`assistant_usage`, `assistant_rate`)
+  and, while a turn runs, its reservation (`assistant_reservation`).
 
 ### Assistant tools
 

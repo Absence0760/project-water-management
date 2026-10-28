@@ -37,7 +37,12 @@ export interface AssistantConfig {
 	messagesPerHour: number;
 	/** Model calls in one turn; the turn ends with an error event past it. */
 	maxHops: number;
-	/** Weighted tokens one turn may use, every hop together; the turn ends with an `assistant_turn_limit` error event past it. */
+	/**
+	 * Weighted tokens one turn may use at most, every hop together: the ceiling of
+	 * the budget app_assistant_begin reserves (less when a month's cap has less
+	 * left; 264_assistant_reservation). The turn ends with an
+	 * `assistant_turn_limit` error event before a hop that wouldn't fit it.
+	 */
 	maxTurnTokens: number;
 	/** Tool calls run from one model call; the calls past it get an error result. */
 	maxToolCallsPerHop: number;
