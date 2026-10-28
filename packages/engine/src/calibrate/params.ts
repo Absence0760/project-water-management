@@ -16,6 +16,14 @@ export const CALIBRATION_PARAMS: Record<RunoffModelId, ParamSpec<Record<string, 
 /** 'wide': each parameter's min/max. 'typical': Perrin et al.'s (2003) 80 % range. */
 export const CALIBRATION_BOUNDS = ['wide', 'typical'] as const;
 export type CalibrationBounds = (typeof CALIBRATION_BOUNDS)[number];
+/**
+ * The boxes one fit may search: the two above, or 'prior', the regional GR4J
+ * prior's p10–p90 (issue #622, docs/model.md §2.10m), which needs the prior
+ * itself (CalibrateOptions.prior). The rules, the ensemble and the evidence
+ * rule keep to CALIBRATION_BOUNDS.
+ */
+export const FIT_BOUNDS = [...CALIBRATION_BOUNDS, 'prior'] as const;
+export type FitBounds = (typeof FIT_BOUNDS)[number];
 
 /** Most starts a fit may ask for, and how many the app asks for. */
 export const MAX_STARTS = 10;

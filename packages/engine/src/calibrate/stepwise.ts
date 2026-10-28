@@ -9,6 +9,7 @@ import type { ModelInput, ProjectSettings } from '../project';
 import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
 import { resolveParams } from '../runoff/simulate';
 import { calibrate, type CalibrateOptions, type CalibrationProgress, type CalibrationReport } from './calibrate';
+import type { CalibrationPrior } from './prior';
 import type { ParamSet } from './params';
 import { resolveZones, zoneFitError, zoneSiteName, type CalibrationZone, type ZoneAssignment } from './zones';
 
@@ -76,18 +77,31 @@ export function withZoneParams(input: ModelInput, zoneNodeId: string, params: Gr
  * starts, budget, bounds, objective and validation are the same for every
  * step) on the input with the zones fitted so far at their new parameters.
  * Without a zone, one step: calibrate(input, opts) itself, to the bit.
+ *
+ * The regional prior (issue #622, docs/model.md §2.10m): each step takes the
+ * prior built for its own zone (`prior(step)`: its gauge and land units),
+ * never the catchment's, since a zone's parameters describe its units only.
  */
-export function calibrateStepwise(input: ModelInput, opts: Omit<CalibrateOptions, 'zone' | 'onProgress'> & { onProgress?: (p: StepwiseProgress) => boolean | void } = {}): StepwiseCalibrationReport {
+export function calibrateStepwise(
+	input: ModelInput,
+	opts: Omit<CalibrateOptions, 'zone' | 'onProgress' | 'prior'> & {
+		onProgress?: (p: StepwiseProgress) => boolean | void;
+		/** The prior for one step, built for that step's zone; undefined = none for it. */
+		prior?: (step: ZoneFitPlanStep) => CalibrationPrior | undefined;
+	} = {}
+): StepwiseCalibrationReport {
 	const plan = zoneFitPlan(input) ?? [{ zoneNodeId: null, name: '', units: [] }];
 	const steps: ZoneFitStep[] = [];
 	let evaluations = 0;
 	let cancelled = false;
 	let cur = input;
 	for (const [i, step] of plan.entries()) {
-		const { onProgress: _p, ...rest } = opts;
+		const { onProgress: _p, prior: priorFor, ...rest } = opts;
+		const prior = priorFor?.(step);
 		const report = calibrate(cur, {
 			...rest,
 			...(step.zoneNodeId !== null ? { zone: step.zoneNodeId } : {}),
+			...(prior ? { prior } : {}),
 			...(opts.onProgress ? { onProgress: (p: CalibrationProgress) => opts.onProgress!({ ...p, step: i + 1, steps: plan.length, zoneNodeId: step.zoneNodeId }) } : {})
 		});
 		steps.push({ ...step, report });

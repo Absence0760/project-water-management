@@ -8,6 +8,7 @@ import type { AllocationComparison, AllocationStatus, AllocationWaterSource } fr
 import type { AllocationMode } from '../allocations/mode';
 import type { InputChange, RunInputsSnapshot } from '../compare';
 import type { Erratum } from '../liability/errata';
+import type { EvidenceRegionalPrior } from './regionalPrior';
 import type { Limitation } from '../liability/limitations';
 import type { MethodologyVersion } from '../liability/methodology';
 import type { DemandSourceShare } from '../network/demandSources';
@@ -154,8 +155,17 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * ≥ 99 % of its outline seen clearly) or neither, every observed date frozen
  * so reproduce:pack classifies them again. Null for baseline evidence and a team scenario. A pack
  * drafted before keeps its document, without them.
+ * evidence-22 (issue #622 step 5): § 3 (*Model and data*) names the regional
+ * GR4J prior when the baseline's parameters came from it
+ * (`credibility.regionalPrior`, evidence/regionalPrior.ts): a fit that used
+ * its penalty or box ("parameters calibrated with the regional prior, n
+ * donors"), or the donors' medians started from it with no fit since
+ * ("parameters from the regional prior, n donors"), with the donor set, its
+ * SHA-256 and the leave-one-out skill, and "no skill" when it has none. Null
+ * when the prior had no part. A pack drafted before keeps its document,
+ * without it.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-21';
+export const EVIDENCE_REPORT_VERSION = 'evidence-22';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -1125,6 +1135,8 @@ export interface EvidenceReport {
 	};
 	credibility: {
 		nominations: EvidenceNomination[];
+		/** evidence-22: where the regional GR4J prior had a part in the baseline's parameters; null when it had none, absent before evidence-22. */
+		regionalPrior?: EvidenceRegionalPrior | null;
 	};
 	users: EvidenceUser[];
 	/** § 4: users served in full while an EWR site below them fails. */

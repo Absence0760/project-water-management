@@ -44,7 +44,8 @@ import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012'
 import { wr2012FitStats, type Wr2012FitStats } from '../reference/wr2012Fit';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
 import { dds } from './dds';
-import { CALIBRATION_PARAMS, MAX_STARTS, type CalibrationBounds, type ParamSet } from './params';
+import { CALIBRATION_PARAMS, MAX_STARTS, type FitBounds, type ParamSet } from './params';
+import { calibrationPriorError, priorBox, priorPenalty, type CalibrationPrior, type ParamPriors, type PriorFitResult, type PriorParam } from './prior';
 import { excludedDayMask, exclusionRanges } from './provenance';
 import { bootstrapIntervals, scoreBenchmarks, type ScoreBenchmarks, type ScoreIntervals } from './bootstrap';
 import { fitScores, objectiveLoss, type FitScores } from './objective';
@@ -76,10 +77,11 @@ export interface CalibrateOptions {
 	 * §"make the logger fit identifiable"): 'wide' (default) is each
 	 * parameter's min/max (GR4J_PARAMS); 'typical' is Perrin et
 	 * al.'s (2003) 80 % range (`typical`), tighter but not always enough to
-	 * pin down a short, drought-dominated record either. The starting point is
-	 * clamped into whichever box is used.
+	 * pin down a short, drought-dominated record either; 'prior' is the regional
+	 * prior's p10–p90 box (issue #622, `prior` required; docs/model.md §2.10m).
+	 * The starting point is clamped into whichever box is used.
 	 */
-	bounds?: CalibrationBounds;
+	bounds?: FitBounds;
 	/** Model runs per optimisation (the full fit, and each validation fit). Default 1 500. */
 	budget?: number;
 	/** Default 1. The same seed gives the same result. */
@@ -137,6 +139,16 @@ export interface CalibrateOptions {
 	 * zone (with no ticked zone, every unit: every engine before).
 	 */
 	zone?: string | null;
+	/**
+	 * The regional GR4J prior (engine 1.106.0, issue #622, ./prior.ts,
+	 * docs/model.md §2.10m): with a weight over 0, every fit's loss adds
+	 * weight × priorPenalty over the free parameters (the log-normal penalty);
+	 * under `bounds: 'prior'` the search keeps to its p10–p90 box. It must be
+	 * built for the fit's target: the catchment, or under calibration zones
+	 * the zone being fitted (its gauge and land units). Absent: no prior, and
+	 * the fit is every engine's before it, to the bit.
+	 */
+	prior?: CalibrationPrior;
 }
 
 /** 'unpenalised': the second full fit, without the WR2012 MAR penalty, run only when the penalty is on. */
@@ -226,8 +238,8 @@ export interface StartResult {
 export interface CalibrationReport {
 	model: RunoffModelId;
 	objective: ObjectiveId;
-	/** The box the search explored (issue #4 phase 6 §"make the logger fit identifiable"). */
-	bounds: CalibrationBounds;
+	/** The box the search explored (issue #4 phase 6 §"make the logger fit identifiable"; 'prior': the regional prior's, issue #622). */
+	bounds: FitBounds;
 	budget: number;
 	seed: number;
 	/** Starts of the full fit, and each one's result (`CalibrateOptions.starts`). */
@@ -268,6 +280,8 @@ export interface CalibrationReport {
 	 * was on: its weight, and the fit with and without it. null (or absent) when off.
 	 */
 	marPenalty?: MarPenaltyResult | null;
+	/** The regional prior, when the fit used one (engine 1.106.0, issue #622): its penalty weight, box, ranges and provenance. Absent without. */
+	prior?: PriorFitResult;
 	/** Every period left out of the scores: the stored exclusions, then `exclusions`. */
 	exclusions: DateRange[];
 	/**
@@ -815,8 +829,9 @@ function fit(
 	stage: CalibrationStage,
 	onProgress: CalibrateOptions['onProgress'],
 	penalty: Wr2012Penalty | null = null,
-	bounds: CalibrationBounds = 'wide',
-	start?: { start: number; starts: number }
+	bounds: FitBounds = 'wide',
+	start?: { start: number; starts: number },
+	prior: FitPrior | null = null
 ): FitResult {
 	const specs = free.map((k) => CALIBRATION_PARAMS[pb.model].find((s) => s.key === k)!);
 	const p: ParamSet = { ...pb.startParams };
@@ -836,11 +851,13 @@ function fit(
 			obs[i] = sim[i]! >= c ? sim[i]! : c;
 		}
 		const l = objectiveLoss(objective, obs, sim, years);
-		return penalty ? l + penalty.penalty(pb.natural) : l;
+		const m = penalty ? l + penalty.penalty(pb.natural) : l;
+		// The regional prior's log-normal penalty over the free parameters (issue #622), when its weight is over 0.
+		return prior && prior.weight > 0 ? m + prior.weight * priorPenalty(prior.ranges, p) : m;
 	};
 	const res = dds(
 		loss,
-		specs.map((s) => (bounds === 'typical' ? { min: s.typical[0], max: s.typical[1] } : { min: s.min, max: s.max })),
+		specs.map((s) => boxOf(s, bounds, prior)),
 		{
 			budget,
 			seed,
@@ -851,6 +868,19 @@ function fit(
 	const params: ParamSet = { ...pb.startParams };
 	specs.forEach((s, j) => (params[s.key] = res.x[j]!));
 	return { params, loss: res.f, evaluations: res.evaluations, cancelled: res.stopped };
+}
+
+/** The prior as a fit reads it: its weight, and its ranges for the free parameters only (a fixed one is no choice of the fit's). */
+interface FitPrior {
+	weight: number;
+	ranges: Partial<ParamPriors>;
+	box: ReturnType<typeof priorBox>;
+}
+
+/** A parameter's search box: GR4J's min/max, Perrin's typical range, or the prior's p10–p90 (inside the min/max). */
+function boxOf(s: (typeof CALIBRATION_PARAMS)['gr4j'][number], bounds: FitBounds, prior: FitPrior | null): { min: number; max: number } {
+	if (bounds === 'prior') return prior!.box[s.key as PriorParam];
+	return bounds === 'typical' ? { min: s.typical[0], max: s.typical[1] } : { min: s.min, max: s.max };
 }
 
 /** Days grouped by water year, for water years with at least `minDays` scored days. */
@@ -958,6 +988,53 @@ export function validationNotes(
 const MIN_DAYS_PER_YEAR = 180;
 const WET_DRY_CONTRAST = 1.5;
 
+/**
+ * The prior as the fits read it, after checking it (issue #622): null with no
+ * prior. Throws on a prior that can't be one, `bounds: 'prior'` without one, a
+ * prior that would do nothing (no weight, no box), or one built for another
+ * target than the fit's (the catchment, or the calibration zone fitted).
+ */
+function fitPriorOf(p: CalibrationPrior | undefined, bounds: FitBounds, free: readonly string[], pb: CalibrationProblem): FitPrior | null {
+	if (!p) {
+		if (bounds === 'prior') throw new Error('the prior bounds need a regional prior');
+		return null;
+	}
+	const err = calibrationPriorError(p);
+	if (err) throw new Error(err);
+	if (!(p.weight > 0) && bounds !== 'prior') throw new Error('a regional prior with no penalty weight is used only as the search box (bounds “prior”)');
+	const t = p.provenance.target;
+	const units = pb.zoneUnits ? [...pb.zoneUnits].sort() : null;
+	const sameUnits = units === null ? t.units === null : t.units !== null && t.units.length === units.length && [...t.units].sort().every((u, i) => u === units[i]);
+	if ((t.zoneNodeId ?? null) !== (units === null ? null : (pb.zoneNodeId ?? null)) || !sameUnits) {
+		throw new Error(
+			units === null
+				? 'the regional prior was built for a calibration zone, but this fit is of the whole catchment: build the prior for the catchment'
+				: 'the regional prior was built for another target than the calibration zone fitted: build it for this zone’s land units'
+		);
+	}
+	const ranges: Partial<ParamPriors> = {};
+	for (const k of free) if (k in p.ranges) ranges[k as PriorParam] = p.ranges[k as PriorParam];
+	return { weight: p.weight, ranges, box: priorBox(p.ranges) };
+}
+
+/** What a fit with the regional prior says about it (issue #622): what it did, and when the prior has no skill. */
+export function priorNotes(p: CalibrationPrior, bounded: boolean): string[] {
+	const n = p.provenance.donors.length;
+	const how = [p.weight > 0 ? `a penalty of weight ${p.weight} pulled the parameters toward its medians` : null, bounded ? 'the search kept to its p10–p90 box' : null]
+		.filter(Boolean)
+		.join(', and ');
+	const out = [`The fit used the regional GR4J prior from ${n} donor basin${n === 1 ? '' : 's'} of ${p.provenance.donorCount} (${p.provenance.dataset}${p.provenance.synthetic ? ', invented donors' : ''}): ${how}.`];
+	const skill = p.provenance.leaveOneOutSkill;
+	if (skill === null || skill <= 0) {
+		out.push(
+			skill === null
+				? 'The prior has no leave-one-out score (too few donors), so how well it predicts a catchment’s parameters is unknown.'
+				: `The prior has no skill: left out in turn, the donors’ parameters are predicted no better than by the plain median of the others (skill ${skill.toFixed(2)}).`
+		);
+	}
+	return out;
+}
+
 /** Calibrate a runoff model's parameters against the project's observed flow. */
 export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): CalibrationReport {
 	const objective = opts.objective ?? 'kgePrime';
@@ -971,11 +1048,12 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	if (free.length === 0) throw new Error('no parameters to calibrate');
 	const unknown = free.filter((k) => !specs.some((s) => s.key === k));
 	if (unknown.length) throw new Error(`not a calibratable ${pb.model} parameter: ${unknown.join(', ')}`);
+	const prior = fitPriorOf(opts.prior, bounds, free, pb);
 	let evaluations = 0;
 	let cancelled = false;
 	const penalty = pb.marPenalty;
 	const fitOnce = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true, start?: { start: number; starts: number }) => {
-		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null, bounds, start);
+		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null, bounds, start, prior);
 		evaluations += r.evaluations;
 		cancelled ||= r.cancelled;
 		return r;
@@ -1131,7 +1209,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			startResults,
 			free.map((k) => {
 				const s = specs.find((x) => x.key === k)!;
-				const [lo, hi] = bounds === 'typical' ? s.typical : [s.min, s.max];
+				const { min: lo, max: hi } = boxOf(s, bounds, prior);
 				return { key: k, label: s.label, unit: s.unit, lo, hi };
 			})
 		)
@@ -1144,6 +1222,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		const at = pb.siteNodeId === null ? zoneSiteName(input.model.nodes, null) : (input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId);
 		notes.push(...zoneCoverageNotes(at, zoneCompleteWaterYears(pb.startDate, pb.allDays ?? all).length, differential !== null));
 	}
+	if (opts.prior) notes.push(...priorNotes(opts.prior, bounds === 'prior'));
 	if (cancelled) notes.push('Calibration was cancelled: the parameters are the best found before it stopped.');
 
 	const fitClean = scored(pb, params, all);
@@ -1173,6 +1252,18 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		differential,
 		independentRecord,
 		marPenalty,
+		...(opts.prior && prior
+			? {
+					prior: {
+						weight: opts.prior.weight,
+						bounded: bounds === 'prior',
+						ranges: structuredClone(opts.prior.ranges),
+						provenance: structuredClone(opts.prior.provenance),
+						penaltyAtFit: priorPenalty(prior.ranges, params),
+						penaltyAtStart: priorPenalty(prior.ranges, pb.startParams)
+					}
+				}
+			: {}),
 		notes,
 		exclusions: pb.exclusions,
 		representativeness,

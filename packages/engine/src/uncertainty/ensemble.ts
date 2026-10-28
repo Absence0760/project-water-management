@@ -307,7 +307,13 @@ export function resolveEnsembleOptions(input: ModelInput, req: EnsembleRequest =
 	// The fit's own box and objective, when the project's parameters come from a fit of this model: the ensemble then asks how
 	// uncertain *that* fit is. Otherwise Perrin et al.'s typical ranges: the wide bounds keep too few members at a few hundred.
 	const fit = settings.fitRecord && settings.fitRecord.model === model ? settings.fitRecord : null;
-	const bounds = req.bounds ?? fit?.bounds ?? ENSEMBLE_DEFAULTS.bounds;
+	// A fit held to the regional prior's box (bounds 'prior', issue #622) has no box of the ensemble's kinds: the
+	// ensemble samples Perrin's typical ranges then, and says so (sampling the prior's box is docs/followups.md's).
+	const fitBounds = fit?.bounds === 'prior' ? undefined : fit?.bounds;
+	if (!req.bounds && fit?.bounds === 'prior') {
+		notes.push('The fit searched the regional prior’s p10–p90 box; the ensemble samples Perrin et al.’s typical ranges instead, as for a project with no fit.');
+	}
+	const bounds = req.bounds ?? fitBounds ?? ENSEMBLE_DEFAULTS.bounds;
 	if (!CALIBRATION_BOUNDS.includes(bounds)) throw new Error(`unknown bounds "${String(bounds)}"`);
 	const specs = CALIBRATION_PARAMS[model];
 	const free = req.free ?? specs.filter((s) => !s.fixedByDefault).map((s) => s.key);

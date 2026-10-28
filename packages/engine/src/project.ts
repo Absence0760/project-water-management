@@ -5,6 +5,7 @@ import type { ForecastSummary } from './forecast';
 import type { RunDrought } from './drought/summary';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { CalibrationZone } from './calibrate/zones';
+import type { PriorStartRecord } from './calibrate/prior';
 import type { FlowMissingSettings } from './recordPeriods';
 import type { WarningKept } from './checkItems';
 import type { QualityFlagSettings } from './calibrate/qualityFlagSettings';
@@ -723,6 +724,16 @@ export interface ProjectSettings {
 	 * set by hand or imported. Never changes model results.
 	 */
 	fitRecord: FitRecord | null;
+	/**
+	 * Where GR4J's parameters were started from the regional prior (engine
+	 * 1.106.0, issue #622, ./calibrate/prior.ts PriorStartRecord, docs/model.md
+	 * §2.10m): one record per target (the catchment or the site's own zone,
+	 * and each calibration zone), written by the server's "Start from the
+	 * prior" (POST /projects/:id/gr4j-prior/start), never by a settings save.
+	 * Never changes model results: it says where the parameters came from.
+	 * Absent or [] = never started from the prior.
+	 */
+	gr4jPrior?: PriorStartRecord[] | null;
 	/**
 	 * Limits of the input data-quality checks (./quality.ts). The gauge-vs-logger,
 	 * outlier and flat-line limits only change what is flagged; the zero-run and
