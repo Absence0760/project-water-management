@@ -222,7 +222,7 @@ describe('applyPatch: a recommended change put into the form (the assistant, iss
 
 	it('replaces whole exactly the settings backend/src/projects/settings.ts REPLACED_WHOLE lists', () => {
 		const src = readFileSync(new URL('../../../../../backend/src/projects/settings.ts', import.meta.url), 'utf8');
-		const list = /const REPLACED_WHOLE = new Set\(\[([^\]]*)\]\)/.exec(src)?.[1] ?? '';
+		const list = /const REPLACED_WHOLE(?::[^=]+)? = new Set\(\[([^\]]*)\]\)/.exec(src)?.[1] ?? '';
 		const server = [...list.matchAll(/'([A-Za-z0-9]+)'/g)].map((m) => m[1]!);
 		expect(server.length).toBeGreaterThan(5);
 		expect([...PATCH_REPLACED_WHOLE].sort()).toEqual(server.sort());
