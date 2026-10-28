@@ -1761,3 +1761,98 @@ describe('settings.ewrHeadline (issue #444)', () => {
 		expect(remapSettingNodeIds({ ewrHeadline: { source: 'ruleTable', siteNodeId: 'gone' } }, ids)).toEqual({ ewrHeadline: { source: 'ruleTable', siteNodeId: 'gone' } });
 	});
 });
+
+describe('settings.calibrationZones (engine 1.106.0, issue #555)', () => {
+	const G = '00000000-0000-4000-8000-000000000011';
+	const K = '00000000-0000-4000-8000-000000000012';
+	const period = { start: '2012-10-01', end: '2014-09-30', waterYears: [2012, 2013], scores: { days: 730, kgePrime: 0.8, kgeYearly: null } };
+	const fit = {
+		fittedAt: '2026-10-28T10:00:00.000Z',
+		engineVersion: '1.106.0',
+		model: 'gr4j',
+		objective: 'kgePrime',
+		bounds: 'wide',
+		seed: 7,
+		budget: 300,
+		evaluations: 900,
+		cancelled: false,
+		free: ['x1', 'x3', 'x4'],
+		params: { x1: 900, x2: 0, x3: 220, x4: 3.1 },
+		startParams: { x1: 350, x2: 0, x3: 90, x4: 1.7 },
+		flowKind: 'flow_observed_m3s',
+		siteNodeId: G,
+		zone: { nodeId: G, units: ['f1'] },
+		simulatedKey: 'simulated_outflow',
+		calibrationStart: null,
+		calibrationEnd: null,
+		exclusions: [],
+		validate: false,
+		validationRecord: null,
+		fit: period,
+		before: period,
+		splitSample: null,
+		differential: null,
+		independentRecord: null,
+		notes: [],
+		editedParams: []
+	};
+	const row = {
+		nodeId: G,
+		enabled: true,
+		calibrationStart: '2001-10-01',
+		calibrationEnd: null,
+		calibrationFlowKind: null,
+		calibrationExclusions: [{ waterYear: 2004, reason: 'weir rebuilt' }],
+		qualityFlags: { suspect: 'include', zeroFlowMonths: [7, 8] },
+		gr4j: { x1: 900, x2: 0, x3: 220, x4: 3.1 },
+		fitRecord: fit
+	};
+	const ok = (calibrationZones: unknown) => SettingsPatch.safeParse({ calibrationZones }).success;
+
+	it('accepts rows with their own record settings, parameters and fit, and []', () => {
+		expect(ok([])).toBe(true);
+		expect(ok([row, { ...row, nodeId: K, enabled: false, qualityFlags: null, gr4j: null, fitRecord: null }])).toBe(true);
+	});
+
+	it('refuses a repeated gauge, a parameter out of bounds, an automated fit, a bad field or an unknown key', () => {
+		expect(ok([row, { ...row, enabled: false }])).toBe(false);
+		expect(ok([{ ...row, gr4j: { ...row.gr4j, x1: 5 } }])).toBe(false);
+		expect(ok([{ ...row, fitRecord: { ...fit, auto: {} } }])).toBe(false);
+		expect(ok([{ ...row, nodeId: 'H' }])).toBe(false);
+		expect(ok([{ ...row, calibrationStart: '2001-02-30' }])).toBe(false);
+		expect(ok([{ ...row, qualityFlags: { suspect: 'maybe' } }])).toBe(false);
+		expect(ok([{ ...row, qualityFlags: { suspect: 'include', zeroFlowMonths: [13] } }])).toBe(false);
+		expect(ok([{ ...row, extra: 1 }])).toBe(false);
+		expect(ok({})).toBe(false);
+	});
+
+	it('a save replaces the whole list and recomputes each zone fit’s edited parameters against the zone’s own', () => {
+		const stored = { calibrationZones: [row, { ...row, nodeId: K }] };
+		const out = patchSettings(stored, { calibrationZones: [{ ...row, gr4j: { ...row.gr4j, x1: 950 }, fitRecord: { ...fit, editedParams: ['x3'] } }] });
+		expect(out.calibrationZones).toHaveLength(1);
+		expect(out.calibrationZones![0]!.fitRecord!.editedParams).toEqual(['x1']);
+		// A zone with no parameters of its own is judged against the catchment's.
+		const bare = patchSettings({}, { gr4j: { x1: 900, x2: 0, x3: 220, x4: 3.1 }, calibrationZones: [{ ...row, gr4j: null }] });
+		expect(bare.calibrationZones![0]!.fitRecord!.editedParams).toEqual([]);
+		// [] where none is stored is no change (no zone either way), so nothing is stored; where [] is stored it stays.
+		expect('calibrationZones' in patchSettings({}, { calibrationZones: [] })).toBe(false);
+		expect(patchSettings({ calibrationZones: [] }, { calibrationZones: [] }).calibrationZones).toEqual([]);
+		expect(patchSettings({ calibrationZones: [row] }, { calibrationZones: [] }).calibrationZones).toEqual([]);
+		// Today's single site and parameters are untouched.
+		expect(out.gr4j).toEqual(defaultProjectSettings().gr4j);
+		expect(out.calibrationSiteNodeId).toBeNull();
+	});
+
+	it('a copy moves each row’s gauge and its fit’s site and zone, leaving an unknown gauge alone', () => {
+		const ids = new Map([
+			[G, 'new-g'],
+			['f1', 'new-f1']
+		]);
+		const out = remapSettingNodeIds({ calibrationZones: [row, { ...row, nodeId: 'gone', fitRecord: null }], fitRecord: { siteNodeId: null, zone: { nodeId: null, units: ['f1', 'f9'] } } }, ids);
+		const zones = out.calibrationZones as { nodeId: string; fitRecord: { siteNodeId: string; zone: { nodeId: string; units: string[] } } | null }[];
+		expect(zones.map((z) => z.nodeId)).toEqual(['new-g', 'gone']);
+		expect(zones[0]!.fitRecord!.siteNodeId).toBe('new-g');
+		expect(zones[0]!.fitRecord!.zone).toEqual({ nodeId: 'new-g', units: ['new-f1'] });
+		expect((out.fitRecord as { zone: unknown }).zone).toEqual({ nodeId: null, units: ['new-f1', 'f9'] });
+	});
+});

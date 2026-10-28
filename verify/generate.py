@@ -264,9 +264,69 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_unit_rain_decisions(random.Random(seed * 32452843 + 7), doc)
     add_external_transfers(random.Random(seed * 49979687 + 13), doc, dense)
     add_rain_stations(random.Random(seed * 67867967 + 5), doc, start, days, dense)
+    add_calibration_zones(random.Random(seed * 86028121 + 17), doc, dense)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
+
+
+def add_calibration_zones(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """Calibration zones (§2.10n, engine 1.106.0, issue #555), from their own
+    stream so the other draws don't move (the last stream drawn). Under Per
+    unit, in 90 % of networks with a gauge inside the network that a land unit
+    drains to (a dense one without such a gauge gets one, put on a land unit's
+    way down), a row for most gauges inside the network, most ticked, each
+    with its own X1–X4 inside the bounds, now and then none (not fitted yet)
+    or one outside them. Under Fragmentation, in 30 % of networks with a gauge
+    inside, rows that are in the input but unused."""
+    s = doc["settings"]
+    nodes = doc["model"]["nodes"]
+    per_unit = (s.get("unitRain") or {}).get("mode") == "perUnit"
+    by_id = {n["id"]: n for n in nodes}
+
+    def down(i):
+        out = []
+        while i is not None and i not in out:
+            out.append(i)
+            i = by_id[i].get("downstreamNodeId")
+        return out
+
+    units = sorted((n for n in nodes if n["kind"] == "farm" and (n.get("areaKm2") or 0) > 0), key=lambda n: n["id"])
+    inner = {n["id"] for n in nodes if n["kind"] == "gauge" and n.get("downstreamNodeId") is not None}
+    reached = {g for u in units for g in down(u["id"])[1:] if g in inner}
+    if per_unit and dense and not reached and units:
+        u = rng.choice(units)
+        gid = _uuid(rng)
+        nodes.append({
+            "id": gid, "name": "Zone weir", "kind": "gauge", "downstreamNodeId": u["downstreamNodeId"], "sortOrder": len(nodes),
+            "areaKm2": 0, "pctUpstreamToDam": 0, "pctRunoffToDam": 0, "damCapacityM3": 0, "damInitialPct": 0, "damMinPct": 0,
+            "divertCapacityM3Day": 0, "irrigationEfficiency": 1, "returnFlowFraction": 0, "damAreaFullM2": None, "damAreaExponent": 0.7,
+            "damSeepagePerDay": 0,
+        })
+        u["downstreamNodeId"] = gid
+        inner.add(gid)
+        reached.add(gid)
+    if not inner or rng.random() >= (0.9 if per_unit and reached else 0.3):
+        return
+    rows = []
+    for gid in sorted(inner):
+        if rng.random() < (0.15 if gid in reached else 0.5):
+            continue
+        p = {"x1": round(rng.uniform(50, 1500), 1), "x2": rng.choice([0, 0, round(rng.uniform(-2, 1), 2)]), "x3": round(rng.uniform(10, 400), 1), "x4": round(rng.uniform(0.6, 5), 2)}
+        r = rng.random()
+        gr4j = None if r < 0.15 else ({**p, "x1": 5} if r < 0.22 else p)
+        rows.append({
+            "nodeId": gid,
+            "enabled": rng.random() < 0.85,
+            "calibrationStart": None,
+            "calibrationEnd": None,
+            "calibrationFlowKind": None,
+            "calibrationExclusions": [],
+            "qualityFlags": None,
+            "gr4j": gr4j,
+            "fitRecord": None,
+        })
+    s["calibrationZones"] = rows
 
 
 def _unit_series(rng: random.Random, start: dt.date, days: int, scale: float, chirps: bool) -> dict:

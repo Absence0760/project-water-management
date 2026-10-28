@@ -2199,6 +2199,57 @@ the suggested order (the IDs carry the detail):
       scenario report, CR-32 dam and abstraction assumptions, CR-33 seasonal
       reporting.
 
+## Calibration zones (issue #555)
+
+Round 3 of the 2026-10-28 rounds (draft PR #644, engine 1.106.0) built
+`settings.calibrationZones` and migration 270, the zones in the run (Per unit
+only), the stepwise fit upstream first, the API's checks, the verify
+cross-check and Settings' *Calibrate at several gauges* table with the fit
+card's steps ([model.md §2.10n](./model.md), ui.md § Settings & calibration).
+Still open, for round 4 (each its own piece):
+
+- **Zones on the Network tab and the Map.** A zone column or colour per
+  unit, and on the Map when parcels exist, from `summary.unitRain.zones` or
+  the engine's `resolveZones`. Trigger: round 4.
+- **Calibration statistics per ticked site in a run**, each labelled in or
+  out of sample by its own fit record (`calibrationFitStatus` at the zone's
+  site and window). Today a run scores `RunSummary.calibration` at the
+  calibration site only; a zone's gauge has its out-of-sample
+  `plausibility.gauges[].fit` check. Trigger: round 4.
+- **The report and the evidence pack** list every zone's parameters and fit
+  record (today they show `gr4j` and `fitRecord`, the site's zone). The
+  evidence pack's manifest must take the zones' fit records into its hash.
+  Trigger: round 4, before a zoned project issues a pack.
+- **A per-zone run comparison**: compare.ts lists the ticked rows'
+  parameters as one *Calibration zones* line; it should diff each zone's
+  X1–X4 as the GR4J lines do. Trigger: round 4.
+- **Automated calibration and the uncertainty ensemble per zone.**
+  `calibrate/auto.ts` and `uncertainty/ensemble.ts` still fit or perturb the
+  site's zone's parameters alone (the zones above it stay at their stored
+  parameters). Durable fix: run the rules' cases stepwise, and perturb each
+  zone's parameters by its own fit's spread. Trigger: before a zoned project
+  signs off calibration rules or cites an ensemble.
+- **Warning codes for the zone warnings.** The run's *Calibration zone(s):
+  …* warnings are plain text: they need codes in `packages/engine/src/
+  warningCodes.ts` and fixes in `frontend/src/lib/components/warnings/
+  fixes.ts` (files outside this round's scope) so the Warnings page links
+  them to the table. Trigger: round 4.
+- **A help article** for calibration zones (`help/articles-fit.ts` and a
+  `calibration-zones` tip in `help/tips.ts`); the table and the steps borrow
+  the *calibration window* and *automatic calibration* tips meanwhile.
+- **The verify mutation test** (`verify/test_verify.py`, `verify/README.md`):
+  a mutant that drops a zone's parameters (`zone_p.get(u["id"], g)` → `g`)
+  so the self-test proves the cross-check reaches zones (diff.py's dense
+  networks reach zoned units in about half the cases, its random ones rarely).
+- **A zone step's score and the EWR shares.** While a zone above the site is
+  fitted, the units below it run on their pre-fit parameters, and the natural
+  MAR shares follow every unit's runoff, so a step's score can differ from a
+  run on the applied result wherever something above the gauge reads the
+  shares (model.md §2.10n). Durable fix if it matters in practice: pin the
+  shares to the start parameters' for the whole stepwise fit, or iterate the
+  steps once more. Trigger: a client catchment with an EWR charge above a
+  ticked gauge.
+
 ## Verification
 
 - ✅ **Engine audit** (engine 0.4.0, [engine-audit.md](./engine-audit.md)):

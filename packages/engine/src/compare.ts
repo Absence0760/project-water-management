@@ -910,8 +910,19 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	calibrationEnd: { label: 'Calibration window end', fmt: (v) => (v ? String(v) : 'end of record') },
 	calibrationFlowKind: { label: 'Calibration flow series', fmt: (v) => (v ? (SERIES_LABELS[String(v)] ?? String(v)) : 'default (observed, else logger)') },
 	// Engine ≥ 1.41.0; a snapshot without it calibrated at the outlet. Only calibration reads it, never the run.
-	calibrationSiteNodeId: { label: 'Calibration site', fmt: (v) => (v ? `gauge node ${String(v)}` : 'the outlet') }
+	calibrationSiteNodeId: { label: 'Calibration site', fmt: (v) => (v ? `gauge node ${String(v)}` : 'the outlet') },
+	// Engine 1.106.0 (issue #555); a snapshot without it (or with [] or every row unticked) ran one parameter set.
+	calibrationZones: { label: 'Calibration zones', fmt: calibrationZonesText }
 };
+
+/** The ticked calibration zones and their parameters, for the input diff (a per-zone diff is issue #555's next round). */
+function calibrationZonesText(v: unknown): string {
+	const ticked = (Array.isArray(v) ? v : []).filter((z): z is { nodeId: string; gr4j?: Record<string, unknown> | null } => !!z && typeof z === 'object' && (z as { enabled?: unknown }).enabled === true);
+	if (!ticked.length) return 'none (one parameter set)';
+	return ticked
+		.map((z) => `gauge node ${z.nodeId} (${z.gr4j ? ['x1', 'x2', 'x3', 'x4'].map((k) => `${k.toUpperCase()} ${fmtValue(z.gr4j![k])}`).join(', ') : 'the catchment’s parameters'})`)
+		.join('; ');
+}
 /** Engine ≥ 0.31.0; a snapshot without settings.pe ran pan coefficient × A-pan. */
 const PE_LABEL = 'Potential evaporation (GR4J)';
 const DATA_QUALITY_FIELDS: Record<string, ScalarField> = {
@@ -1118,7 +1129,8 @@ function diffSettings(
 
 	for (const [k, f] of Object.entries(SETTINGS_FIELDS)) {
 		if (k === 'ewrSplit' || k === 'flowShareMethod') continue;
-		if (!same(a[k], b[k])) push(f.label, `${f.label}: ${f.fmt(a[k])} → ${f.fmt(b[k])}`);
+		// The zones by what a run reads of them (the ticked rows' parameters): [] and absent, a window or a fit record, are no change.
+		if (k === 'calibrationZones' ? f.fmt(a[k]) !== f.fmt(b[k]) : !same(a[k], b[k])) push(f.label, `${f.label}: ${f.fmt(a[k])} → ${f.fmt(b[k])}`);
 	}
 	const split = ewrSplitChange(ra, rb);
 	if (split) push(EWR_SPLIT_FIELD, split);
