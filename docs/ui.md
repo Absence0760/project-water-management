@@ -7393,15 +7393,31 @@ two.
     stations; a deleted one says so in red), then, with a station, **Then
     patch gaps from** (the same pull-downs and fill counts as a unit's,
     named "for the catchment", the CHIRPS entry being the catchment's own
-    CHIRPS), **Scale to catchment MAP** (on by default, stored as none; the
-    catchment MAP is the units' area-weighted mean, `catchmentMapMm` has no
-    field yet) and **Gaps: CHIRPS corrected against** (*Its station* by
-    default, stored as none). Changing the station keeps the rest, less the
-    new main station from the patching priority; *No station* removes the
-    assignment, so a project that tries one and takes it away stores what
-    it had. The summary line adds "catchment rain from a station" when one
-    is set. Without any station a note says to add one in the Data tab.
-    `rain-patch-priority.spec.ts` covers it, with a forecast tail.
+    CHIRPS), **Scale to catchment MAP** (on by default, stored as none) and
+    **Gaps: CHIRPS corrected against** (*Its station* by default, stored as
+    none). Changing the station keeps the rest, less the new main station
+    from the patching priority; *No station* removes the assignment, so a
+    project that tries one and takes it away stores what it had. Below them,
+    with a station (or a MAP already stored, which then says it isn't used
+    without one, so it can be cleared), **Catchment MAP (mm)** and **MAP
+    source** (`catchmentMapMm` / `catchmentMapSource`, 1–12 000 mm, the
+    source required with a MAP and a MAP with a source, up to 600
+    characters; helpers `withCatchmentMap`, `catchmentMapFormError`,
+    `catchmentMapReadout` in `settings/flowGeneration.ts`): blank (the
+    default, stored as none) is the land units' area-weighted mean MAP, as
+    the engine takes it, and the line under the field says which is in use
+    and the ratio it gives the station's rain ("The station's rain × 1.25:
+    750 mm ÷ its 600 mm.", clamped and 0.5–2 flagged as a unit's), or why
+    it's × 1 (scaling off, the station without a MAP, a land unit without
+    one, no land unit). The units' mean in figures shows when the page
+    passes the model's `nodes`. A MAP without its source, or a source
+    without its MAP, is kept as typed and named in red under the source
+    (the API refuses it on Save); clearing both stores none again. The
+    summary line adds "catchment rain from a station" when one is set.
+    Without any station a note says to add one in the Data tab.
+    `rain-patch-priority.spec.ts` covers the station, with a forecast tail;
+    `catchment-rain-map.spec.ts` the MAP: entered, saved, scaling a run's
+    station rain, and cleared.
   - **Per unit** shows two cards. **Each unit's rainfall station**
     (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
     helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
