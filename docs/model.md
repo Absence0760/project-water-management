@@ -3490,7 +3490,12 @@ where `MAR_f` is the unit's natural runoff summed over the **MAR period**.
   whole EWR, and the outlet's own `Z` is the shares' sum × the EWR, the
   whole EWR. The flow itself (`I`), the senior users' claims and the land
   cover's low-flow threshold stay on the flow shares (issue #616 moves
-  them).
+  them). Until then, under Fragmentation, the EWR and the flow are split by
+  different shares, so at an inner EWR site or a hands-off EWR flow the
+  requirement ÷ the natural flow reaching it differs from the outlet's
+  ratio: a wet unit is asked a larger part of the flow it is given, a dry
+  one a smaller part. Per unit is unaffected. No release is cut between
+  #615 and #616 (issue #619's sequencing).
 - **Resumed runs, outlooks and calibration.** A run resumed from a snapshot
   (a seasonal outlook's members, §2.15) takes the capture run's period,
   shares and record, so it splits its EWR as the uninterrupted run did; a

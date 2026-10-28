@@ -2238,7 +2238,8 @@ export function checkEwrSplit(input: ModelInput, out: ModelOutput): string | nul
 	const land = [...area.values()].filter((a) => a > 0).length;
 	if (split.applied === 'flowShare') {
 		if (split.why === 'noLandUnit' && land > 0) return 'the EWR split fell back to the flow share with no land unit, but the model has one';
-		if (split.why === 'noUnitRunoff' && (land === 0 || out.summary.unitRain)) return 'the EWR split fell back to the flow share without the units’ runoff, but it had it or there is no land unit';
+		// Only natural flow supplied from outside (runModelWith) has no runoff model's balance: a GR4J run never falls back here.
+		if (split.why === 'noUnitRunoff' && (land === 0 || out.summary.unitRain || out.summary.runoff)) return 'the EWR split fell back to the flow share without the units’ runoff, but it had it or there is no land unit';
 		if (split.why !== 'noLandUnit' && split.why !== 'noUnitRunoff' && split.why !== 'resumed') return `the EWR split fell back to the flow share (${String(split.why)}) where it shouldn't`;
 		return null;
 	}

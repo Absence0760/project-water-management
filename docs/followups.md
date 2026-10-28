@@ -666,6 +666,13 @@ runs and accumulations are real) can't be decided without the client.
       at every site, what the client's "cumulative flow" meant? Durable fix:
       the hydrologist's answer, then change `ewrSplitDays` if it differs.
       Trigger: the client's first run on engine 1.105.0.
+- [ ] **No release between #615 and #616 (issue #619 sequencing,
+      engine-audit.md FM1).** Engine 1.105.0 splits the EWR by natural MAR
+      shares while Fragmentation's flow is still split by the flow share,
+      so an inner EWR site or hands-off EWR flow under Fragmentation reads
+      a requirement out of proportion to the flow it is given. Durable fix:
+      #616 (the flow split by the same shares). Trigger: hold any
+      `backend@` release until #616 is merged.
 - [ ] **The fit record doesn't fingerprint Fragmentation's EWR share
       forcing (issue #615 acceptance, engine-audit.md FM1).** Under
       Fragmentation each calibration candidate's EWR shares come from GR4J

@@ -1949,6 +1949,9 @@ describe.skipIf(!clientCatchmentFixture)(
 			const shortfallRule: Rule = n4 || n4Joined.has(outletId) ? { kind: 'skip', why: 'N4' } : { kind: 'mean' };
 			expect(compare(get(from, null, 'simulated_outflow'), expected.catchment.simulated_outflow!, flowRule)).toBeNull(); // R1
 			expect(compare(get(out, null, 'ewr'), expected.catchment.ewr!, { kind: 'exact' })).toBeNull();
+			// FM1 (engine 1.105.0): the units' EWR shares match b023's [Fragmented EWR] only because this suite feeds the
+			// workbook's natural flow without the units' runoff, so the split falls back to the flow share. Say so if that changes.
+			expect(out.summary.ewrSplit).toEqual({ applied: 'flowShare', why: 'noUnitRunoff' });
 			expect(compare(get(from, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, shortfallRule)).toBeNull(); // R1
 		});
 
