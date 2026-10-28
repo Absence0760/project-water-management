@@ -13,7 +13,7 @@
 -- the constraint is dropped by its exact name and added again with the third
 -- value. Every existing row is 'esp' or 'climateState', so the new CHECK
 -- holds on them all and the ADD validates without rewriting the table (a
--- CHECK scan, no lock beyond 267's). Nothing else changes: the method is
+-- CHECK scan of a small table under the ALTER's lock). Nothing else changes: the method is
 -- still fixed at insert (063's table-wide INSERT grant; no UPDATE grant names
 -- it), no new table, policy, trigger, function or index, and the guard
 -- (seasonal_outlook_guard, latest definition 106) reads no column of it.

@@ -346,7 +346,7 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 	// A base run that can no longer be rebuilt fails the job (an ApiError: no retry), the outlook stays pending.
 	const raw = await loadBaseInput(db, projectId, o.baseRunId);
 	// The seasonal forecasts likewise (issue #620, method c3s): the area, then the copy, before any member runs.
-	const c3s = o.method === 'c3s' ? await readForecastInputs(db, projectId, raw, o.decisionDate) : null;
+	const c3s = o.method === 'c3s' ? await readForecastInputs(db, projectId, raw, o.decisionDate, progress) : null;
 	// Without the drought restriction rule (engine ≥ 1.54.0, withoutDroughtRestriction): the triggers become that
 	// rule, and a demand level on top of it would cut twice; the history and every member run unrestricted.
 	const base = withoutDroughtRestriction(raw);
@@ -620,10 +620,14 @@ type ForecastInputs = { inputs: C3sInputs } | { problem: string };
  * the copy's forecasts issued by the decision date with their hindcasts. A
  * copy laid out otherwise fails the job (MirrorFormatError, no retry).
  */
-async function readForecastInputs(db: Db, projectId: string, raw: ModelInput, decisionDate: string): Promise<ForecastInputs> {
+async function readForecastInputs(db: Db, projectId: string, raw: ModelInput, decisionDate: string, progress: (pct: number) => Promise<boolean>): Promise<ForecastInputs> {
 	const area: ForecastArea | { problem: string } = await forecastArea(db, projectId, raw.settings.unitRain?.mode === 'perUnit');
 	if ('problem' in area) return { problem: area.problem };
-	return { inputs: await readC3sInputs(mirrorStore(), area, decisionDate) };
+	// A heartbeat after each system's reads (0 %: no member has run yet), so reading the copy keeps the lease; a lost lease stops here.
+	const onSystem = async () => {
+		if (!(await progress(0))) throw new LeaseLostError();
+	};
+	return { inputs: await readC3sInputs(mirrorStore(), area, decisionDate, { onSystem }) };
 }
 
 /**
@@ -673,6 +677,8 @@ function forecastOutlook(
 			...(!rule && o.reviewDate ? { reviewDates: [o.reviewDate] } : {})
 		});
 	} catch (err) {
+		// A programming error isn't the engine refusing the forecasts: it fails the job, as anywhere else.
+		if (err instanceof TypeError || err instanceof ReferenceError || err instanceof SyntaxError) throw err;
 		// The engine's words (plain text): the forecast part is off, the ESP stands.
 		return off('failed', `The forecast-conditioned outlook couldn’t be run: ${(err as Error).message}`, { source: inputs.source, area: inputs.area });
 	}

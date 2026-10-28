@@ -211,6 +211,20 @@ describe('readC3sInputs on the committed synthetic copy', () => {
 		expect(r.hindcasts).toEqual([]);
 		expect(r.source.notes).toEqual(['ecmwf-51: the copy holds no hindcast for its 09 init', 'ukmo-604: the copy holds no hindcast for its 09 init']);
 
+		// A forecast group whose members isn't a list per system is a copy laid out wrong, not "no members".
+		const g = join(copy, 'c3s/2018-09/zarr.json');
+		const meta = JSON.parse(readFileSync(g, 'utf8'));
+		const keep = meta.attributes.members;
+		meta.attributes.members = 3;
+		writeFileSync(g, JSON.stringify(meta));
+		await expect(readC3sInputs(openStore(pathToFileURL(`${copy}/`).href), area, '2018-10-01')).rejects.toThrow(/members is not a list per system/);
+		meta.attributes.members = keep;
+		writeFileSync(g, JSON.stringify(meta));
+		// The heartbeat runs once per system read.
+		let beats = 0;
+		await readC3sInputs(store, area, '2018-10-01', { onSystem: async () => void beats++ });
+		expect(beats).toBe(2);
+
 		// An index naming a hindcast the copy doesn't hold is a copy laid out wrong: the job fails rather than guess.
 		idx.hindcasts = { 'ecmwf-51': ['09'] };
 		writeFileSync(join(copy, 'c3s/index.json'), JSON.stringify(idx));

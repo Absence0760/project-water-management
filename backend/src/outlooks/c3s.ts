@@ -400,9 +400,10 @@ export interface C3sInputs {
  * decision date: no forecasts (the engine's `noForecast`); a system with no
  * hindcast of the init's month is passed without one (the engine leaves it
  * out, `noHindcast` when none has one). A copy laid out otherwise throws
- * MirrorFormatError: the job fails rather than read it wrongly.
+ * MirrorFormatError: the job fails rather than read it wrongly. `onSystem`
+ * is awaited before each system's reads (the job's lease heartbeat).
  */
-export async function readC3sInputs(store: MirrorStore, area: ForecastArea, decisionDate: string): Promise<C3sInputs> {
+export async function readC3sInputs(store: MirrorStore, area: ForecastArea, decisionDate: string, opts: { onSystem?: () => Promise<void> } = {}): Promise<C3sInputs> {
 	const source: C3sSource = { init: null, issued: [], notIssued: [], hindcasts: [], centres: [], fetchedAt: null, notes: [] };
 	const out: C3sInputs = { forecasts: [], hindcasts: [], source, area: { source: area.source, cells: area.cells.length, units: [], notes: [...area.notes] } };
 	const index = await readC3sIndex(store);
@@ -420,7 +421,9 @@ export async function readC3sInputs(store: MirrorStore, area: ForecastArea, deci
 	const fc = await openC3s(store, product, 'system');
 	if (!fc) throw new MirrorFormatError(`the rain data copy's c3s/index.json lists ${pick.init}, but ${product}/tp_mm isn't there`);
 	const systems = fc.attrs.systems ?? [];
-	const counts = Array.isArray(fc.attrs.members) ? fc.attrs.members : [];
+	// A forecast group lists each system's members (the ingest's `members`, 0 until collected); a bare number is a hindcast's.
+	if (!Array.isArray(fc.attrs.members)) throw new MirrorFormatError(`the rain data copy's ${product} is not laid out as expected (members is not a list per system)`);
+	const counts = fc.attrs.members;
 	const fetched: string[] = [];
 	const manifestTime = async (p: string) => {
 		const raw = await readJson(store, `${p}/manifest.json`);
@@ -434,6 +437,8 @@ export async function readC3sInputs(store: MirrorStore, area: ForecastArea, deci
 	const centres = new Set<string>();
 	const unitSums = new Map<string, { system: string; sums: number[]; n: number[] }[]>(area.units.map((u) => [u.nodeId, []]));
 	for (const { system } of issued) {
+		// Before each system's reads: the caller's heartbeat, so a long read of the copy keeps the job's lease.
+		await opts.onSystem?.();
 		const s = systems.indexOf(system);
 		if (s < 0 || s >= fc.arr.shape[0]!) throw new MirrorFormatError(`the rain data copy's ${product} doesn't hold ${system}, which c3s/index.json lists`);
 		let n = Math.min(counts[s] ?? 0, fc.arr.shape[1]!);
