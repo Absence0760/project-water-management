@@ -24,6 +24,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, confirmAsOperator, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
+import { loadSyntheticEvaporationStations } from '../../scripts/import-evaporation-stations.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { loadSyntheticMapGrid } from '../../scripts/import-map-grid.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
@@ -381,6 +382,13 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
 		await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } }));
 		return SAMPLE['POST /projects/:id/evaporation-from-map']!(ctx);
+	},
+	// A DWS evaporation station (issue #646 item 6, geo/evaporationRoutes.ts): the synthetic stations loaded, a boundary round them.
+	'POST /projects/:id/evaporation-from-station': async () => {
+		await loadSyntheticEvaporationStations(process.env.TEST_MIGRATION_DATABASE_URL!);
+		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+		await ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } });
+		return SAMPLE['POST /projects/:id/evaporation-from-station']!(ctx);
 	},
 	// Each unit's MAP from the synthetic MAP grid (issue #482, geo/unitMapRoutes.ts), the grid loaded first: the ladder's parcel lies in its region Z.
 	'POST /projects/:id/map/unit-map': async () => {

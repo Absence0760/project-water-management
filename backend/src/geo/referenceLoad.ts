@@ -116,6 +116,16 @@ export const REFERENCE_KINDS = {
 		sourcesRows: ['Hydrological station catalogue'],
 		why: "the DWS station catalogue's licence is unconfirmed (followups.md, Decision: the DWS station catalogue's licence)"
 	},
+	// DWS evaporation stations and their daily pan records (274, issue #646 item 6): built and loaded locally
+	// (`pnpm import:evaporation-stations`), refused here until DWS's permission, which covers verified daily flow
+	// only (2026-10-28), is extended to evaporation station records. To unblock: the Sources row and
+	// docs/data-sources.md § dws-evaporation, then status 'allowed' with a file and a loader branch below reading
+	// evaporationStationRecords into replaceEvaporationStations (geo/loadEvaporationStations.ts).
+	'evaporation-stations': {
+		status: 'blocked',
+		sourcesRows: ['DWS evaporation station records'],
+		why: "DWS's permission covers verified daily flow only, not evaporation station records (followups.md, Decision: DWS evaporation station records)"
+	},
 	// SANLC's orchard and vine grid (259, issue #604 R5-D): built and loaded locally (`pnpm import:crop-types`), refused
 	// here until its terms are recorded. To unblock: the Sources row, then status 'allowed' with a file and a loader
 	// branch below reading cropTypesFromJson into replaceCropTypeDataset (geo/cropTypeGrid.ts), from the file `--out` writes.

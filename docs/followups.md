@@ -4729,6 +4729,27 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `gauge-stations` kind on the production path (`geo/referenceLoad.ts`,
       `scripts/release/map-data-gates.mjs`, the workflow's choices), which
       refuses it until then.
+- [ ] **Decision: DWS evaporation station records** (operator, through the
+      client's hydrologist; issue #646 item 6, the hydrologist's F5; maps.md
+      § Evaporation stations, data-sources.md § dws-evaporation). DWS's
+      permission recorded 2026-10-28 covers verified daily **flow** only.
+      Ask DWS (GeoRequests@dws.gov.za, through the hydrologist, as for flow)
+      to extend it to the verified daily pan evaporation of weather stations
+      (`E` codes, Class-A and Symons) near the client's catchment, stored and
+      shown as results in the tool, and request those stations' records and
+      the area's station list (`WMA*_Met.pdf`). Until then the Calibration
+      page's Evaporation stations reads only the synthetic stations, and
+      production refuses the `evaporation-stations` load (the gate's
+      `LOADABLE` and `REFERENCE_KINDS`, `blocked`). On a yes: record the
+      permission in data-sources.md § dws-evaporation and the maps.md
+      Sources row (allowed), add a file shape and a loader branch to
+      `geo/referenceLoad.ts` (reading `evaporationStationRecords` into
+      `replaceEvaporationStations`, `geo/loadEvaporationStations.ts`), add
+      the kind to `LOADABLE` in `scripts/release/map-data-gates.mjs` and to
+      `load-reference.yml`'s choices, and check the reader
+      (`geo/dwsEvaporation.ts`) against a real reply first: it is built on
+      the flow page's layout, since DWS's evaporation page could not be read
+      from outside South Africa.
 - [ ] **Decision: the Lynch (2004) MAP grid's licence** (operator; maps.md §
       MAP grid, § Sources, decision D-B). The Lynch (2004) national grid
       from the WRC's Atlas of Climatology and Agrohydrology: its portal

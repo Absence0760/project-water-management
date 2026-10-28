@@ -578,6 +578,49 @@ GR4J fit made under pan coefficient × A-pan marks the fit stale
 The run's `fitStatus` (in-sample or not, §2.10) is unaffected: the scored days
 are still the fitted ones.
 
+**A station's pan record (issue #646 item 6).** Calibration → Flow calibration
+→ **Evaporation stations** proposes the nearest DWS evaporation station's
+record as the A-pan ([maps.md § Evaporation stations](./maps.md#evaporation-stations)).
+It writes nothing the engine didn't already read: the 12 monthly means go into
+`settings.apanMm`, and a Class-A pan's daily record into an `evap_apan_mm`
+series, both used exactly as above. The engine's only addition is
+`packages/engine/src/evaporation/spanToApan.ts`, a pure helper the backend
+calls to propose values; `runModel` never calls it, so results are unchanged
+and `ENGINE_VERSION` stays where it was.
+
+- **The 12 means.** A calendar month of the record counts when at least 80 %
+  of its days have a value; its total is then the mean of those days × the
+  month's days. Each water-year month's mean is over its counted years and
+  needs at least 3 of them, else the station proposes nothing (a mean of
+  one or two years is that year's weather).
+- **A Class-A pan** is the A-pan as it stands: its means are the row and its
+  record the daily series.
+- **A Symons (S) pan** is converted to A-pan only with the equation the user
+  picks, and the revision cites it. South Africa publishes only S ← A
+  equations (§2.7a's presets, `SPAN_FROM_APAN`), S = a × A + b on monthly
+  totals in mm: WR90's general monthly equation (a 0.8793, b −16.2354;
+  Midgley, Pitman & Middleton 1994, as reproduced in Taljaard 2023 Eq. 16,
+  Table 5-9) and Taljaard's new general monthly equation (a 0.8706,
+  b −11.1745; Taljaard 2023, Eq. 33, Table 5-10, p. 158). The proposal
+  inverts the chosen one, **A = (S − b) ÷ a**, and says so: Taljaard warns
+  these equations "can only be used as written and cannot be inverted"
+  (§2.6.1.4, p. 43), since a least-squares fit of S on A is not the fit of A
+  on S, and no national A ← S equation is published. So nothing converts by
+  default; the panel shows the warning beside the choice, and the revision's
+  reason names the inverse and the equation it came from. A month whose
+  S-pan mean is under the forward floor's S (−2b: WR90 32.5 mm, Taljaard
+  22.3 mm a month, where the intercept would be most of the A-pan) refuses
+  the conversion and names the month; the A-pan it does give is then always
+  at or above §2.7a's preset floor. A Symons record is **never** written as
+  the daily series: the equations are fitted on monthly totals, so scaling
+  each day would invent a daily relation nobody fitted. The 12 converted
+  means reach the model as the monthly row, spread over each month as any
+  monthly A-pan is.
+- **Source.** Taljaard, C.M.L. (2023), *A revision of evaporation and pan
+  factors in use in South Africa*, MEng thesis, Stellenbosch University,
+  http://hdl.handle.net/10019.1/127336 (the same pages §2.7a checked on
+  2026-09-30).
+
 **Where a modelled A-pan comes from, and its limits** (issue #646 item 7).
 With no pan station near, the A-pan row can be proposed from a **modelled**
 Class-A pan grid: PenPan (Rotstayn et al. 2006, as McMahon et al. 2013
