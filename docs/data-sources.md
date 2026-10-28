@@ -99,6 +99,7 @@ Every job that fetches from an upstream:
 | [agera5](#agera5) | AgERA5 v2.0 daily FAO-56 reference ET | built R5-E; the copy's job off in production until `agera5_enabled` (the CDS key is ERA5-Land's) | `cds.climate.copernicus.eu` | `agera5_et0` | `ingest/agera5.py` (the copy), `backend/src/feeds/fromMirrorEt0.ts` (feeds read it), `infra/agera5.tf` |
 | [nasa-power](#nasa-power) | NASA POWER daily weather, our FAO-56 ET₀ from it (AgERA5's fallback) | built R5-E; off until `power_et0_enabled` | `power.larc.nasa.gov` | – (read by `agera5_et0` feeds) | `ingest/nasapower.py`, `ingest/fao56.py`, `infra/agera5.tf` |
 | [climate-indices](#climate-indices) | NOAA CPC's ONI (ENSO) and AAO (the SAM's proxy), monthly | built (#620); the fetcher's indices pass off in production until `climate_indices_enabled` | `www.cpc.ncep.noaa.gov` | – | `backend/src/feeds/sources/cpc.ts`, `backend/src/ingest/indices.ts`, `infra/climate_indices.tf` |
+| [c3s-seasonal](#c3s-seasonal) | C3S multi-system seasonal forecasts and hindcasts, daily precipitation (1°) | built (#620 step 5); the copy's job off in production until `c3s_enabled` (the CDS key is ERA5-Land's; both licences accepted first); nothing reads it yet (#620 step 6–7) | `cds.climate.copernicus.eu` | – | `ingest/c3s_seasonal.py`, `ingest/c3srequest.py`, `infra/c3s.tf` |
 
 ## Live feeds
 
@@ -774,6 +775,81 @@ read two monthly indices from our own copy, never from CPC at run time.
   and the committed synthetic copy `backend/fixtures/mirror/indices/`
   (`pnpm gen:mirror-fixture`).
 
+## Seasonal forecasts
+
+The seasonal outlook's forecast-conditioned chances (issue #620 steps 5–7)
+read C3S's multi-system seasonal forecasts from our own copy. Step 5 builds
+the copy; nothing in the app reads it yet.
+
+### c3s-seasonal
+
+- **Source:** the Copernicus Climate Change Service (C3S) multi-system
+  seasonal forecasts, CDS dataset `seasonal-original-single-levels`
+  (*Seasonal forecast daily and subdaily data on single levels*, DOI
+  10.24381/cds.181d637e), variable `total_precipitation` (24 h
+  accumulations since the start), every member, leads 24 h to 5160 h (215
+  days), the CDS's native 1° grid. One system per contributing centre
+  (`ingest/c3srequest.py` `SYSTEMS`: ECMWF 51, Met Office 604,
+  Météo-France 9, DWD 22, CMCC 35, NCEP 2, JMA 3, ECCC 4 and 5; C3S changes
+  a centre's system from time to time and the table is updated by hand).
+  Released once a month: ECMWF's on the 6th at 12 UTC, the other centres'
+  on the 10th at 12 UTC (the dataset page, read 2026-10-28). **Hindcasts**
+  for 1993–2016, the multi-system's common period, from the same dataset:
+  one request per system per init calendar month, every year at once.
+  The dataset page lists GRIB as its format; the reader decodes GRIB with
+  eccodes and refuses anything but the request's own fields. The request's
+  exact form (and whether the CDS takes a whole hindcast month in one
+  request) is **unverified until the first live run**.
+- **Host:** `cds.climate.copernicus.eu` (the CDS API).
+- **Licence:** CC BY 4.0 ("CC-BY licence" on the dataset page) **plus the
+  *Additional licence to use non European contributions***, both read
+  2026-10-28 on the dataset page. The additional licence covers the
+  centres outside Europe (NCEP, JMA, ECCC): the source must be
+  acknowledged; there is no guarantee of continuity or quality, and no
+  liability. The multi-system data "may be used and redistributed without
+  restrictions" otherwise (issue #620, read 2026-10-27). Commercial use
+  allowed; D-B passes. Both licences are accepted once on the CDS account
+  that holds ERA5-Land's key (operator step, [deployment.md § C3S seasonal
+  forecasts](./deployment.md#c3s-seasonal-forecasts)).
+- **Attribution:** wherever its values show, Copernicus's notice
+  "Contains modified Copernicus Climate Change Service information [year].
+  Neither the European Commission nor ECMWF is responsible for any use that
+  may be made of the Copernicus information or data it contains.", the
+  citation "Copernicus Climate Change Service, Climate Data Store (2018): Seasonal forecast daily and subdaily data on single levels. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). DOI: 10.24381/cds.181d637e",
+  and the contributing centres of the systems used: European Centre for
+  Medium-Range Weather Forecasts (ECMWF), Met Office, Météo-France,
+  Deutscher Wetterdienst (DWD), Euro-Mediterranean Center on Climate Change
+  (CMCC), NOAA National Centers for Environmental Prediction (NCEP), Japan
+  Meteorological Agency (JMA), Environment and Climate Change Canada
+  (ECCC). The engine holds these words (`liability/rainCredits.ts`
+  `c3sSeasonalCredit`, for the outlook panel in step 7) and every array of
+  the copy carries them (`credit`, `citation`, `centres`, `licence`).
+- **Contact:** ECMWF support (CDS).
+- **Access pattern:** the mirror-ingest Lambda once a day at 13:00 UTC
+  (`{"product":"c3s","mode":"monthly"}`, `infra/c3s.tf`), ERA5-Land's
+  submit-then-collect machinery keyed by request: per system, the newest
+  released init (and one missed before it at most), submitted on one run
+  and collected on a later one, into Zarr `c3s/<YYYY-MM>/tp_mm` (system,
+  member, lead day, lat, lon; mm/day de-accumulated). The hindcasts by
+  `{"product":"c3s","mode":"backfill","month":"MM"}` (twelve invocations,
+  each marking that month wanted for every system), into
+  `c3s-hc/<system>/<MM>/tp_mm` (year, member, lead day, lat, lon), the
+  years held recorded. `c3s/index.json` lists what is held.
+- **Limits we keep to:** at most one request per system and init (or
+  hindcast month) and 4 queued in all; one API call a second; a failed
+  request backs off 1–16 days and stops after 5 (`RequestsFailed`); a
+  401/403 stops the run for the UTC day; never waits inside a Lambda.
+- **Fallback:** none upstream; without a copy the outlook stays ESP (the
+  default), as #620 says.
+- **Owner:** the operator; code `ingest/c3s_seasonal.py`,
+  `ingest/c3srequest.py`, `infra/c3s.tf`. Freshness alarm
+  `mirror-lag-c3s` (MirrorLagDays{Product=c3s}: days since the 1st of the
+  newest init every system is held for, past `c3s_lag_alarm_days`, 45).
+- **Fixtures:** invented values written on the fly by
+  `ingest/fixtures/c3s/make_c3s_fixture.py` (GRIB2 in the CDS's layout: a
+  few members, any lead count, three hindcast years), served by
+  `ingest/fakecds.py` `FakeC3sCds` under `FEED_SOURCE=fixtures`.
+
 ## Planned sources
 
 From #604's Rounds 4 and 5. Each gets its full section here when its round
@@ -845,7 +921,6 @@ its comments 4, 6, 7 and 8).
 
 | Source | Licence | Access | Use |
 | --- | --- | --- | --- |
-| C3S multi-system seasonal | CC BY, plus the additional licence for non-European contributions | CDS API, 1° monthly | seasonal outlook per restriction level |
 | NEX-GDDP-CMIP6 | CC0 (NASA's expert-use caveat) | S3 us-west-2 | future yield in evidence packs |
 | GloFAS v4 reanalysis | CEMS-FLOODS, free with attribution | EWDS API | modelled daily flow for ungauged catchments |
 | WaPOR v3 actual ET | **contested** (CC BY-SA, CC BY-NC-SA, FAO terms); ask FAO first | `s3://wapor-v3/` af-south-1 | observed vs modelled water use; SSEBop at 1 km if FAO says no |

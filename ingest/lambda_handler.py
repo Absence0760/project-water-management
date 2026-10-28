@@ -7,6 +7,7 @@ Event: {"product": "rnl" | "sat", "mode": "monthly"}
        {"product": "ecmwf", "mode": "daily"}   (ecmwf.py, its own run)
        {"product": "agera5_et0", "mode": "monthly" | "backfill", "month"?}  (agera5.py)
        {"product": "power_et0", "mode": "recent", "days": 1-60?}  (nasapower.py)
+       {"product": "c3s", "mode": "monthly" | "backfill", "month"?: "MM", "system"?}  (c3s_seasonal.py)
 Env:   MIRROR_URL      file:///abs/path or s3://bucket[/prefix] (required)
        FEED_SOURCE     fixtures (default: the synthetic byMonth directory in
                        fixtures/chirps/, served by fixturehttp.py, no
@@ -72,6 +73,11 @@ import agera5  # noqa: E402
 import nasapower  # noqa: E402
 
 # --- end reference evaporation -------------------------------------------------
+
+# --- C3S seasonal forecasts (issue #620): c3s_seasonal.py ------------------------
+import c3s_seasonal  # noqa: E402
+
+# --- end C3S seasonal ------------------------------------------------------------
 
 # Round 1's names for the single-file path, which now lives in chirps_final.
 ingest_file = chirps_final.ingest_file
@@ -139,6 +145,10 @@ def handler(event, context=None, s3_client=None, opener=None, metrics=None, cloc
     if isinstance(event, dict) and event.get("product") == nasapower.PRODUCT:
         return nasapower.handle(event, context, s3_client=s3_client, opener=opener, metrics=metrics, today=today, clock=clock, sleep=sleep)
     # --- end reference evaporation ---
+    # --- C3S seasonal forecasts (issue #620): submit-then-collect like era5l, keyed by system and init ---
+    if isinstance(event, dict) and event.get("product") == c3s_seasonal.PRODUCT:
+        return c3s_seasonal.handler(event, context, s3_client=s3_client, metrics=metrics, **({"clock": clock} if clock else {}), **({"today": today} if today else {}))
+    # --- end C3S seasonal ---
     # --- ECMWF ENS forecast (issue #604 R4-C): {"product": "ecmwf", "mode": "daily"}, ecmwf.py ---
     if isinstance(event, dict) and event.get("product") == "ecmwf":
         return _handle_ecmwf(event, context, s3_client, opener, metrics, clock, sleep, today)

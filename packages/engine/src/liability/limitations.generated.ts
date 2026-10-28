@@ -144,6 +144,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Built (engine 1.90.0), provisionally decided 2026-10-23, pending the client's hydrologist"
 	},
 	{
+		"id": "FC1",
+		"source": "finding",
+		"severity": "Medium (seasonal outlooks conditioned on the C3S forecasts; off until the data copy holds a hindcast, and the ESP stands alone)",
+		"title": "The forecast-conditioned outlook rests on 1° forecasts, month-scale rescaling and quantile mapping fitted on at most 24 hindcast years",
+		"status": "Built, pending the hydrologist"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,

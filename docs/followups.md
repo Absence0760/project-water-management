@@ -682,6 +682,28 @@ runs and accumulations are real) can't be decided without the client.
       at least 10, and none drawn under 20 candidates; the SPI-3 at the
       decision date not a term. The issue asks for the hydrologist's
       sign-off on the analogue count; no skill score until the C3S slice.
+- [ ] **The forecast-conditioned outlook (issue #620 step 6, engine
+      1.106.0, model.md §2.15d).** The engine part is built and off until the
+      copy holds a hindcast (`runForecastOutlook` returns `off` and runs
+      nothing; the ESP is unchanged to the bit). Calls made in the build, to
+      confirm with the skill gate (engine-audit.md FC1): Hazen positions,
+      held observed ends and multiplicative tails; 20 hindcast years per lead
+      month; the nearest analogue by standardised RMS distance; the 1 mm
+      zero-month rule; systems weighted equally; the skill scored from this
+      season's state, the forecast leading only above a CRPSS of 0. **Next,
+      step 7:** the backend bridge (the 1° cells averaged over the catchment
+      and summed into calendar months from `c3s/<init>` and
+      `c3s-hc/<system>/<MM>`), the outlook job running it beside the ESP,
+      the routes, the panel's chance of each restriction level with the
+      systems, the skill and the Copernicus credit, and the farm card
+      (api.md, ui.md, e2e). Step 7 also passes only forecasts *issued* on or
+      before the decision date (C3S publishes between the 6th and the 13th;
+      the engine has no issue date, model.md §2.15d), says on the panel that
+      the chance reflects storage only (not a rule's EWR trigger, the
+      filling-dam reading or the hold), and adds the methodology statement's
+      paragraph on the forecast-conditioned outlook once the chances reach a
+      report (a new methodology version if methodology-13 is published by
+      then).
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
@@ -5341,19 +5363,16 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       source note from an entered MAP. Trigger: the hydrologist setting a
       correction by hand in the app.
 
-- [ ] **Rainfall station settings with no field yet** (issue #553 round 3,
-      2026-10-24; narrowed by the #612 follow-up, 2026-10-28). Settings →
-      Model selection for flow generation sets each land unit's station and
-      the catchment's (`settings.rainStations.units`, `.catchment`: the
-      station, its patching priority, scaling and correcting station), each
-      station's site, and Rain gaps → Flagged rain the `unreliable` periods
-      (issue #611). One part stays API-only: `catchmentMapMm` /
-      `catchmentMapSource`, the catchment MAP the catchment station's ratio
-      uses (absent = the land units' area-weighted mean MAP, [model.md
-      §2.4i](./model.md)). Durable fix: a MAP and source field under The
-      catchment's rainfall station, showing the units' mean it replaces and
-      the ratio it gives. Trigger: the operator has a catchment MAP from a
-      study that differs from the units' mean.
+- [x] **Rainfall station settings with no field yet** (issue #553 round 3,
+      2026-10-24; narrowed by the #612 follow-up; done 2026-10-28, #612
+      follow-up round 3). Every part of `settings.rainStations` now has a
+      field: each land unit's station and the catchment's (the station, its
+      patching priority, scaling and correcting station), each station's
+      site, Rain gaps → Flagged rain the `unreliable` periods (issue #611),
+      and **Catchment MAP (mm)** / **MAP source** (`catchmentMapMm` /
+      `catchmentMapSource`) under The catchment's rainfall station, blank
+      for the land units' area-weighted mean, with the ratio it gives
+      ([ui.md § Model settings](./ui.md)). Test: `catchment-rain-map.spec.ts`.
 
 ## Notes (WP-2.7)
 
