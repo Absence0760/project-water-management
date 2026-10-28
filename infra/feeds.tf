@@ -28,6 +28,28 @@
 # fetchGroup): SQS hands Lambda one message of a group at a time, so at most
 # one fetch per host runs at once, whatever the concurrency.
 #
+# Across Lambdas, CHC's one request slot (backend/src/feeds/hostSlot.ts,
+# ingest/lease.py hold_host): the fetcher is not CHC's only client here; the
+# Python mirror-ingest Lambda (ingest.tf) asks it for rnl and sat every night
+# and for hours during a backfill (ingest_backfill.tf). Each paces itself, but
+# the FIFO group above only keeps the fetcher apart from itself, so while both
+# ran CHC saw about 2 a second. Before either asks CHC anything it takes one
+# lease object in the mirror bucket, ingest-state/hosts/chc/lease.json, by S3
+# conditional writes (If-None-Match to create, If-Match on the ETag to take
+# over an expired one); its expiry is the holder's own deadline plus a
+# minute, so a Lambda killed by its timeout frees it a minute later. Held by
+# the other side:
+#   - a per-feed fetch answers "deferred: host_busy" at once (no wait, the
+#     message answered and deleted, no receive spent towards the DLQ), and
+#     the worker queues the feed's fetch again two minutes on, its health
+#     untouched (jobs/handlers/feed-ingest.ts);
+#   - the daily and GEFS passes wait up to three minutes, then skip the run
+#     (stopped "host_busy"; the next run catches up);
+#   - a backfill month raises HostBusy, which the state machine retries
+#     (ingest_backfill.tf); a daily rnl/sat run ends quietly.
+# A 403 still stops whichever run met it, as before. The fetcher's grant on
+# that one key is fetcher_chc_slot below; the ingest's role has the bucket.
+#
 # Why not reserved concurrency 1: an SQS trigger's maximum_concurrency is at
 # least 2, and a reservation below it throttles the trigger, and each
 # throttled receive counts towards the DLQ's 5 (AWS: "Don't set maximum
@@ -288,6 +310,32 @@ resource "aws_lambda_event_source_mapping" "fetcher_requests" {
   scaling_config {
     maximum_concurrency = 2
   }
+}
+
+# --- CHC's request slot (see the header) -----------------------------------------------
+
+# Always: every fetcher mode that asks CHC (a per-feed CHIRPS / CHIRPS-GEFS
+# fetch, the daily and GEFS passes) takes the slot first, and fails closed
+# without it. Read, create or take over, and delete that one object, nothing
+# else in the bucket. ListBucket so a slot released between the conditional
+# put and the read answers 404 (taken again) rather than 403 (a failed fetch).
+data "aws_iam_policy_document" "fetcher_chc_slot" {
+  statement {
+    sid       = "ChcRequestSlot"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.mirror.arn}/ingest-state/hosts/chc/lease.json"]
+  }
+  statement {
+    sid       = "ListMirror"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.mirror.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "fetcher_chc_slot" {
+  name   = "chc-request-slot"
+  role   = aws_iam_role.fetcher_lambda.id
+  policy = data.aws_iam_policy_document.fetcher_chc_slot.json
 }
 
 # --- The daily ingest (issue #604 R2-B) ----------------------------------------------

@@ -159,8 +159,12 @@ in `infra/feeds.tf`):
     range over the region's rows, about 3 requests a file.
 
   Feeds read the copy in the worker's job; none asks CHC.
-- **Limits we keep to:** at most 1–2 requests in flight and about 1 a
-  second (dynamical.org settled on the same against CHC); about 50–60
+- **Limits we keep to:** one request in flight and about 1 a second **in
+  total across our Lambdas**, as CHC asked on 2026-10-27 (dynamical.org
+  settled on the same): each client paces itself, and the fetcher and the
+  mirror-ingest job share one request slot, a lease in the mirror bucket,
+  so only one of them asks CHC at a time
+  ([architecture.md § Data feeds](./architecture.md#data-feeds), Throttling); about 50–60
   requests a day for prelim and GEFS together, under 10 a month for finals,
   however many feeds or projects there are; a 403 stops the run and alerts.
   CHC publishes no rate limit.

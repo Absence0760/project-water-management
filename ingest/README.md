@@ -33,7 +33,7 @@ evaporation).
 | `power_fixture.py` | Fixtures mode's fake NASA POWER: regional JSON answers in POWER's shape with synthetic meteorology. Not in the image. |
 | `requirements.a.in` | R4-A's direct dependency (`ecmwf-datastores-client`, the CDS client), to be hash-pinned into `requirements.txt` at the round's merge. |
 | `cloudwatch.py` | The freshness metric `MirrorLagDays` (CloudWatch live, a local sink in fixtures mode). |
-| `lease.py` | One writer per product: a lease object taken with S3 conditional writes. |
+| `lease.py` | One writer per product: a lease object taken with S3 conditional writes. Also CHC's one request slot, shared with the fetcher Lambda (`hold_host`). |
 | `fixturehttp.py` | Fixtures mode's stand-in for CHC's server over `fixtures/chirps/`. Not in the image. |
 | `polite.py` | The one HTTP client (below). |
 | `zarrstore.py` | The Zarr v3 writer for both D2 layouts, against a local directory or S3. |
@@ -139,6 +139,22 @@ taken over from a dead run with `If-Match` on its ETag. A monthly run that
 finds it held ends quietly; a backfill raises `MirrorBusy`, for the Step
 Functions map to retry. A conditional put on the manifest alone wouldn't
 do: by then the chunks are already up.
+
+**One process asking CHC at a time.** CHC asked for about one request a
+second in total across all our Lambdas, and the backend's fetcher Lambda asks
+CHC too (per-feed fetches, the daily preliminary and GEFS passes). Before a
+`rnl` or `sat` run asks CHC anything (and before it takes the product's
+lease), it takes the slot it shares with the fetcher (`lease.hold_host`):
+`ingest-state/hosts/chc/lease.json`, by the same conditional writes, with the
+holder's name (`ingest:rnl:backfill`) and an expiry of the Lambda's time left
+plus a minute, so a run killed by its timeout frees it a minute later.
+Held by the fetcher, a monthly run ends quietly (`busy` in its answer, the lag
+still published; tomorrow's catches up) and a backfill month raises
+`HostBusy` (a `MirrorBusy`), which the state machine retries every 2 minutes
+for an hour (`infra/ingest_backfill.tf`). The Node side is
+`backend/src/feeds/hostSlot.ts`; both read and write the same JSON
+(`owner`, `expires` in epoch seconds, `holder`). Locally the slot is the same
+file under the `file://` copy.
 
 **A 403 stops the run** (`polite.StopRun`) with no retry. The error
 propagates, so the Lambda errors and the DLQ and the errors alarm see it.
