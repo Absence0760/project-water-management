@@ -49,6 +49,7 @@ import { doubleMass as doubleMassOf, doubleMassRunWarning, type DoubleMass } fro
 import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
+import { sanitizeCalibrationZones } from './calibrate/zones';
 import { resolveChecksKept, resolveFlowMissing, withRecordPeriods } from './recordPeriods';
 import { resolveWarningsKept } from './checkItems';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
@@ -841,6 +842,13 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		s.calibrationSiteNodeId = null;
 	}
 	s.calibrationSiteNodeId ??= null;
+	// Calibration zones (engine 1.106.0, issue #555, ./calibrate/zones.ts): only a non-empty list is kept, so settings
+	// without one (absent, or the [] migration 267 stores) normalise as before.
+	if (raw?.calibrationZones !== undefined) {
+		const zones = sanitizeCalibrationZones(raw.calibrationZones, warnings);
+		if (zones.length) s.calibrationZones = zones;
+		else delete s.calibrationZones;
+	}
 	s.calibrationExclusions = sanitizeExclusions(raw?.calibrationExclusions, warnings);
 	// One flow record's missing periods and the kept data checks (engine ≥ 1.102.0, issue #611, ./recordPeriods.ts):
 	// only when stored, so settings without them normalise as before.

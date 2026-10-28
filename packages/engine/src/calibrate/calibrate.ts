@@ -28,6 +28,7 @@ import { alignFlow } from '../prepare';
 import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, fillPlanOutletEwr, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
 import { calibrationSiteIndex } from './site';
+import { zoneCompleteWaterYears, resolveZones, zoneCalibrationSettings, zoneCoverageNotes, zoneParamsOf, zoneSiteName } from './zones';
 import { MM_KM2_TO_M3, requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
 import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
@@ -126,6 +127,16 @@ export interface CalibrateOptions {
 	validationRecord?: CalibrationFlowKind;
 	/** Progress after every model run; return true to cancel (the best so far is returned). */
 	onProgress?: (p: CalibrationProgress) => boolean | void;
+	/**
+	 * The calibration zone to fit (engine 1.106.0, issue #555, ./zones.ts,
+	 * docs/model.md §2.10n): a ticked row of settings.calibrationZones, by its
+	 * gauge. Only that zone's land units take the candidate parameters; every
+	 * other unit keeps its zone's (the site's zone: settings.gr4j), and the fit
+	 * reads the zone's site, window, exclusions, record and quality flags
+	 * (zoneCalibrationSettings). Absent or null = the calibration site's own
+	 * zone (with no ticked zone, every unit: every engine before).
+	 */
+	zone?: string | null;
 }
 
 /** 'unpenalised': the second full fit, without the WR2012 MAR penalty, run only when the penalty is on. */
@@ -238,6 +249,10 @@ export interface CalibrationReport {
 	siteNodeId?: string | null;
 	/** The stored series fitted to (engine ≥ 1.102.0, CalibrationProblem.flowSeriesId); absent when the input didn't say. */
 	flowSeriesId?: string;
+	/** The calibration zone fitted (engine 1.106.0, issue #555): its gauge, null = the site's own zone; absent without zones. */
+	zoneNodeId?: string | null;
+	/** The land units the fitted parameters are for (engine 1.106.0); absent without zones (every unit). */
+	zoneUnits?: string[];
 	simulatedKey: 'simulated_outflow';
 	fit: ScoredPeriod;
 	/** The project's current parameters scored on the same days. */
@@ -326,6 +341,10 @@ export interface CalibrationProblem {
 	flowKind: string;
 	/** Where the record is and the simulated flow is taken (engine ≥ 1.41.0): null = the outlet, else the gauge's node id. */
 	siteNodeId: string | null;
+	/** The calibration zone fitted (engine 1.106.0, CalibrateOptions.zone): its gauge, null = the site's own zone; absent without zones. */
+	zoneNodeId?: string | null;
+	/** The land units whose parameters the candidates move (engine 1.106.0); absent without zones (every unit). */
+	zoneUnits?: string[];
 	/** The stored series the fitted record is (DailySeries.seriesId, engine ≥ 1.102.0): whose kept checks change the scored days. Null when the input doesn't say. */
 	flowSeriesId: string | null;
 	/** The calibration records at the site, in CALIBRATION_FLOW_KINDS order: the fitted one and any for independent validation. */
@@ -410,16 +429,26 @@ export interface RecordProblem {
 }
 
 /** Build the calibration problem for a project. Throws when there is nothing to calibrate against. */
-export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = [], model?: RunoffModelId): CalibrationProblem {
+export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = [], model?: RunoffModelId, zoneNodeId: string | null = null): CalibrationProblem {
 	const run = prepareRun(input);
 	// The fit reads a record's own missing periods as gaps, as the run does (engine ≥ 1.102.0, ../recordPeriods.ts).
 	if (run.series !== input.series) input = { ...input, series: run.series };
 	const { settings, days, startDate, aligned, month, warnings, start } = run;
+	// Calibration zones (engine 1.106.0, issue #555, ./zones.ts): the zones the run applies, and the settings this fit
+	// reads its site, window, exclusions, record, quality flags and start from (the zone's, or the project's for the
+	// site's own zone). No ticked zone: `zones` is null and every unit takes the candidate, as before.
+	const baseParams = resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings);
+	const zones = resolveZones(input.model.nodes, settings, baseParams, warnings);
+	if (zoneNodeId !== null) {
+		if (!zones) throw new Error('calibration zones need Per unit flow generation and a ticked, usable gauge: there is no zone to fit');
+		if (!zones.zones.some((z) => z.nodeId === zoneNodeId)) throw new Error(`no ticked calibration zone at gauge node ${zoneNodeId}`);
+	}
+	const cs = zoneCalibrationSettings(settings, zoneNodeId);
 	const modelId = model ?? settings.runoffModel;
 	// Refused as runModel refuses it (runoff/simulate.ts).
 	if (!hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')), hasDailyEt0Value(aligned('evap_et0_mm')))) throw new Error(GR4J_NO_PET);
 	const area = requireCatchmentAreaKm2(settings.calibration, input);
-	const startParams: ParamSet = { ...resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings) };
+	const startParams: ParamSet = zoneNodeId === null ? { ...baseParams } : { ...resolveParams<Gr4jParams>(GR4J_PARAMS, cs.gr4j, 'GR4J', warnings) };
 	const natural = new Float64Array(days);
 	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.28.0).
 	const { historyDays } = forecastTail(run);
@@ -456,12 +485,12 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	);
 
 	// The site (engine ≥ 1.41.0, ./site.ts): the outlet's records and outflow, or an inner gauge's.
-	const siteNodeId = settings.calibrationSiteNodeId ?? null;
+	const siteNodeId = cs.calibrationSiteNodeId ?? null;
 	const siteIndex = calibrationSiteIndex(input.model.nodes, topo.outflow, siteNodeId);
 	const series = input.series ?? {};
 	const at = (k: CalibrationFlowKind) => series[calibrationSeriesKey(k, siteNodeId)];
 	const siteSeries: ModelInput['series'] = siteNodeId === null ? series : Object.fromEntries(CALIBRATION_FLOW_KINDS.flatMap((k) => (at(k) ? [[k, at(k)!]] : [])));
-	const kind = pickObservedKind(settings.calibrationFlowKind, siteSeries, warnings);
+	const kind = pickObservedKind(cs.calibrationFlowKind, siteSeries, warnings);
 	if (!kind) {
 		throw new Error(
 			siteNodeId === null
@@ -475,9 +504,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const observed = observedOf(kind);
 
 	const d0 = run.start;
-	const lo = settings.calibrationStart ? toEpochDay(settings.calibrationStart) - d0 : 0;
-	const hi = settings.calibrationEnd ? toEpochDay(settings.calibrationEnd) - d0 : days - 1;
-	const allExclusions: DateRange[] = [...exclusionRanges(settings.calibrationExclusions).map(({ start, end }) => ({ start, end })), ...exclusions];
+	const lo = cs.calibrationStart ? toEpochDay(cs.calibrationStart) - d0 : 0;
+	const hi = cs.calibrationEnd ? toEpochDay(cs.calibrationEnd) - d0 : days - 1;
+	const allExclusions: DateRange[] = [...exclusionRanges(cs.calibrationExclusions).map(({ start, end }) => ({ start, end })), ...exclusions];
 	const excluded = excludedDayMask(allExclusions, startDate, days);
 	const windowIdx: number[] = [];
 	for (let t = Math.max(0, lo); t <= Math.min(days - 1, hi); t++) if (!excluded[t]) windowIdx.push(t);
@@ -489,8 +518,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// The gauged ranges (settings.qualityFlags.ratings) are the outlet records' ratings, so a gauge's record has none:
 	// no day of it can be flagged as extrapolated. The data checks' suspect days still apply.
 	// The same classes the run stores as `observed_flow_quality` (recordFlowFlags).
-	const qf = siteQualityFlags(settings.qualityFlags, siteNodeId);
-	const flagsOf = (k: CalibrationFlowKind) => recordFlowFlags({ kind: k, series: siteSeries[k], start: d0, days, settings, siteNodeId, flowFill: run.flowFill });
+	const qf = siteQualityFlags(cs.qualityFlags, siteNodeId);
+	const flagsOf = (k: CalibrationFlowKind) => recordFlowFlags({ kind: k, series: siteSeries[k], start: d0, days, settings: cs, siteNodeId, flowFill: run.flowFill });
 	const flags = flagsOf(kind);
 	const scoring = scoringDays(windowIdx, flags, qf, ratingOf(qf, kind), days);
 	const idx = scoring.idx;
@@ -517,7 +546,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		if (perUnit) {
 			// The same products and the same node-id order as the run's (runoff/simulate.ts unitNaturalFlow), so a scored
 			// day's flow is runModel's to the bit.
-			const traces = simulateUnits(perUnit.units, p as unknown as Gr4jParams, forcing.petMm, { warmupDays, trace: false, days: n, cycleDays: historyDays });
+			// Under calibration zones only the fitted zone's units take the candidate; the rest keep their zone's.
+			const paramsOf = zoneParamsOf(zones, baseParams, { zone: zoneNodeId, free: p as unknown as Gr4jParams });
+			const traces = simulateUnits(perUnit.units, p as unknown as Gr4jParams, forcing.petMm, { warmupDays, trace: false, days: n, cycleDays: historyDays, ...(paramsOf ? { paramsOf } : {}) });
 			natural.fill(0, 0, n);
 			perUnit.units.forEach((u, k) => {
 				const q = traces[k]!.qMm;
@@ -579,6 +610,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		startParams,
 		flowKind: kind,
 		siteNodeId,
+		...(zones ? { zoneNodeId, zoneUnits: zoneNodeId === null ? [...zones.primaryUnits] : [...zones.zones.find((z) => z.nodeId === zoneNodeId)!.units] } : {}),
 		flowSeriesId: siteSeries[kind]?.seriesId ?? null,
 		records: CALIBRATION_FLOW_KINDS.filter((k) => !!siteSeries[k]),
 		observed,
@@ -601,7 +633,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		natural,
 		// On natural flow, never the outflow: WR2012 flows are naturalised. They are net of WRSM's Bedloss
 		// too, so with bed losses on (engine ≥ 1.76.0) on the natural flow at the outlet net of them.
-		marPenalty: netOfReachLosses(
+		// A zone above the site moves only its own units' flow, so the catchment's WR2012 MAR is no target for it.
+		marPenalty: zoneNodeId !== null ? null : netOfReachLosses(
 			wr2012Penalty(
 				settings.wr2012,
 				startDate,
@@ -644,6 +677,14 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
  */
 export const siteNote = (name: string): string =>
 	`Scored at the gauge "${name}": its record against the simulated flow there. The gauged ranges and gap filling in Calibration → Calibration record are the outlet records', so none applies to this record. A run scores its calibration statistics here too; the outlet's EWR test stays the outlet's.`;
+
+/** A fit of a calibration zone above the site (engine 1.106.0, issue #555): what it moves and what it leaves. */
+export const zoneNote = (name: string, units: number): string =>
+	`Fitted the calibration zone at the gauge "${name}": the parameters of its ${units} land unit${units === 1 ? '' : 's'} only, on that gauge's record against the simulated flow there, with every zone above it at its own parameters. The gauged ranges, gap filling and WR2012 MAR penalty are the outlet's, so none applies to this record; the run's calibration statistics stay at the calibration site.`;
+
+/** A fit of the site's own zone when zones above it apply (engine 1.106.0). */
+export const siteZoneNote = (units: number): string =>
+	`Fitted the calibration site's own zone: the parameters of its ${units} land unit${units === 1 ? '' : 's'}, with the units in the calibration zones above it at their zones' parameters.`;
 
 /** Observed and simulated values on the given days. */
 function pair(obs: Float64Array, sim: Float64Array, idx: Int32Array): [Float64Array, Float64Array] {
@@ -923,7 +964,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	const budget = Math.max(10, Math.floor(opts.budget ?? 1500));
 	const seed = opts.seed ?? 1;
 	const starts = Math.min(MAX_STARTS, Math.max(1, Math.floor(opts.starts ?? 1)));
-	const pb = prepareCalibration(input, opts.exclusions, opts.model);
+	const pb = prepareCalibration(input, opts.exclusions, opts.model, opts.zone ?? null);
 	const specs = CALIBRATION_PARAMS[pb.model];
 	const free = opts.free ?? specs.filter((s) => !s.fixedByDefault).map((s) => s.key);
 	if (free.length === 0) throw new Error('no parameters to calibrate');
@@ -1094,7 +1135,14 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			})
 		)
 	);
-	if (pb.siteNodeId !== null) notes.push(siteNote(input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId));
+	if (pb.zoneNodeId != null) notes.push(zoneNote(input.model.nodes.find((n) => n.id === pb.zoneNodeId)?.name ?? pb.zoneNodeId, pb.zoneUnits?.length ?? 0));
+	else if (pb.siteNodeId !== null) notes.push(siteNote(input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId));
+	if (pb.zoneNodeId === null && pb.zoneUnits) notes.push(siteZoneNote(pb.zoneUnits.length));
+	// Under calibration zones each step warns of a short record or no dry year at its gauge (issue #555).
+	if (pb.zoneUnits) {
+		const at = pb.siteNodeId === null ? zoneSiteName(input.model.nodes, null) : (input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId);
+		notes.push(...zoneCoverageNotes(at, zoneCompleteWaterYears(pb.startDate, pb.allDays ?? all).length, differential !== null));
+	}
 	if (cancelled) notes.push('Calibration was cancelled: the parameters are the best found before it stopped.');
 
 	const fitClean = scored(pb, params, all);
@@ -1115,6 +1163,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		startParams: pb.startParams,
 		flowKind: pb.flowKind,
 		siteNodeId: pb.siteNodeId,
+		...(pb.zoneUnits ? { zoneNodeId: pb.zoneNodeId ?? null, zoneUnits: [...pb.zoneUnits] } : {}),
 		...(pb.flowSeriesId ? { flowSeriesId: pb.flowSeriesId } : {}),
 		simulatedKey: 'simulated_outflow',
 		fit: fitClean,
