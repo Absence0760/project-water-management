@@ -212,6 +212,32 @@ A and C remain owed and should be done as soon as possible; setting
   assistant's model, AWS, no new sub-processor) and clause 11.4 its
   transfer (2026-10-27, issue #610); confirm with each client before the
   assistant is turned on for it (followups.md § Blocking releases).
+- [ ] **The assistant: four decisions for counsel and the operator before
+  it is turned on** (issue #610, the POPIA review of 2026-10-27; each is a
+  release blocker in followups.md § Blocking releases):
+  1. *The transfer's basis.* s72(1)(a) through AWS's DPA plus s72(1)(c)–(d)
+     for a region not named in advance, or the data subject's consent
+     (s72(1)(b)) at first use, which fits an optional feature better
+     (s72(1)(c)–(d) need the transfer to be necessary for a contract with
+     them). Consent would need a first-use step in the panel, recorded with
+     a way to withdraw it, and the route gated on it.
+  2. *Clause 11.4's "keep it off".* It is a deployment-wide switch today
+     (`assistant_enabled`), not per project: confirm that suffices for a
+     Client that refuses, or limit 11.4 to the deployment, or add a
+     per-project switch before that Client signs.
+  3. *The Terms say nothing of the assistant*, while the privacy notice's
+     basis for it is "our agreement with you" (s11(1)(b)): add a short Terms
+     clause (optional, answers are advice and not model results, no
+     reliance for licensing decisions) in the same `LEGAL_VERSION`, or rest
+     it on consent.
+  4. *`LEGAL_VERSION`'s date* is 2026-10-27, before the assistant ships:
+     move it (and the change-log entry) to the release that turns it on, so
+     accounts re-accept a notice for a feature that is live.
+  The notice and clause 6.1 were corrected on 2026-10-27: they no longer say
+  the model "never" sees names, since the names a project gives its farms,
+  dams and gauges go as written (a unit can be named after its owner);
+  whether those must be pseudonymised before sending is the responsible
+  party's call.
 - [ ] **Self-service deletion.** The notice promises deletion on an emailed
   request (runbook item 7 in deployment.md), which is how it works today
   for every account since 138. The Account page's **Delete my account** is
@@ -478,12 +504,15 @@ cl. 3). The licensing ones are rows in
   month, never the conversation), §4 the use, its lawful basis (the
   agreement, when the person chooses to use it; the counts, our legitimate
   interest), and what is sent to the model (the message, the conversation
-  so far, the project data the tools read, never names or emails, and that
+  so far, the project data the tools read, never members' or farmers'
+  names or emails though the project's own farm, dam and gauge names go as
+  written (corrected the same day after the POPIA review), and that
   the answers are advice, not model results, and change nothing until an
   editor saves them), §5 Amazon Bedrock among AWS's services, §6 the
   transfer (global cross-Region inference may answer in any commercial AWS
   region), §7 the counts' retention. A new use, a new kind of record kept
-  per person and a new transfer abroad, so a **material change**:
+  per person and a new transfer abroad, so a **material change**. Usage
+  counts are kept 13 months, the hourly count until its hour is over:
   `LEGAL_VERSION` 2026-10-27, with one entry on the re-acceptance step. The
   operator agreement adds Bedrock to clause 6.1 and the transfer as 11.4.
   The assistant is built off (`assistant_enabled`), so the text describes

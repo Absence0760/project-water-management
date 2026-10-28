@@ -18,8 +18,8 @@ test('after the terms change, the app waits for Accept; the legal pages stay ope
 	// Nothing of the app behind it: no sidebar, no catchment.
 	await expect(page.getByText('Terms-update catchment')).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'What changed' })).toBeVisible();
-	// Accepted a version before both listed ones: every change since, the first version's included (round 4).
-	await expect(page.locator('ul.changes').getByRole('listitem')).toHaveCount(11);
+	// Accepted a version before every listed one: every change since, the first version's included (round 4), 12 lines with the assistant's (2026-10-27).
+	await expect(page.locator('ul.changes').getByRole('listitem')).toHaveCount(12);
 	const summary = page.getByRole('region', { name: 'The main things you agree to' });
 	await expect(summary.getByRole('listitem')).toHaveCount(4);
 	await expectNoViolations(page);

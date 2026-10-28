@@ -27,7 +27,7 @@ export const TERMS_CHANGES: readonly TermsChange<Msg>[] = [
 	{
 		version: '2026-10-27',
 		items: [
-			msg('Where a project has the assistant, you can ask an AI model about the project’s model and results. What you type and the project data it reads are sent to the model, which may answer from an AWS region outside South Africa. It never sees names or email addresses, and we keep only counts of how much it is used, never the conversation.')
+			msg('Where a project has the assistant, you can ask an AI model about the project’s model and results. What you type and the project data it reads are sent to the model, which may answer from an AWS region outside South Africa. It is never sent members’ or farmers’ names or email addresses, but the names a project gives its farms, dams and gauges go as written. We keep only counts of how much it is used, never the conversation.')
 		]
 	},
 	// Two-step sign-in (the operator's decisions of 2026-10-08, docs/legal-status.md): who must use it (204, Privacy §9),

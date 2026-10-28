@@ -160,9 +160,10 @@
 	<p>
 		Where a project has the assistant, its members can ask an AI model about the project’s model and results. To answer, the
 		model is sent what you type and the conversation so far, and the project data it reads for you: the model settings, the
-		catchment network, run results and their series, and the help guides. It reads only what you can see in the project, and
-		never your or anyone’s name or email address, or the names of members, farmers or registered water users. Please don’t
-		type personal information into it. Its answers are advice to check, not results of the model: it never changes a project
+		catchment network, run results and their series, and the help guides. It reads only what you can see in the project. It
+		is never sent the accounts of the project’s members or farmers, their names or email addresses, or the names of
+		registered water users. The names the project gives its farms, dams, gauges and crops are sent as written, since they are
+		part of the model: if one is a person’s name, it goes too. Please don’t type personal information into it. Its answers are advice to check, not results of the model: it never changes a project
 		itself, and a setting it suggests changes nothing until someone with edit rights reviews and saves it.
 	</p>
 	<h3>Do you have to give it?</h3>
@@ -242,9 +243,9 @@
 		<li><strong>Sign-in attempts and wrong two-step sign-in codes:</strong> forgotten after a day without attempts. <strong>Account-email counts:</strong> 24 hours. <strong>Sign-in codes we emailed:</strong> until used or 10 minutes old; when we sent them, a day.</li>
 		<li><strong>Two-step sign-in:</strong> the app’s key, whether codes by email are on, and the recovery codes until you turn it off (a used recovery code is deleted at once); the record of when you turned it on or off until the account is deleted. A request to remove it when you can’t get a code: 90 days after it ended (the record that it happened stays with the account); its links until it ends; the count of requests 24 hours.</li>
 		<li>
-			<strong>The assistant’s counts:</strong> the messages in the last hour, an hour; the tokens each month, as long as the
-			project, as its record of what the assistant cost (if your account is deleted, they stay without your name). The
-			conversation itself is never kept.
+			<strong>The assistant’s counts:</strong> the messages in the last hour, until the hour is over; the tokens each month,
+			for that month and the 12 after it, as the record of what the assistant cost, then deleted (if your account is deleted
+			sooner, they stay without your name until then). The conversation itself is never kept.
 		</li>
 		<li><strong>Alert emails sent:</strong> 180 days. <strong>Report files:</strong> 7 days. <strong>Server logs:</strong> 30 days.</li>
 		<li>
