@@ -13,7 +13,12 @@ import {
 	AREAL_RAIN_FACTOR_MIN,
 	AREAL_RAIN_FACTOR_WARN_MAX,
 	AREAL_RAIN_FACTOR_WARN_MIN,
+	catchmentMapOf,
 	flowMethodOf,
+	MAP_MM_MAX,
+	MAP_MM_MIN,
+	mapMmError,
+	PE_SOURCE_MAX,
 	RAIN_PATCH_MAX,
 	type FlowGenerationMethod,
 	type NetworkNode,
@@ -337,3 +342,76 @@ export function assignmentLine(rows: readonly UnitStationRow[]): string {
 }
 
 export const methodLabel = (m: FlowGenerationMethod) => FLOW_METHODS.find((x) => x.value === m)!.label;
+
+// ---------------------------------------------------------------------------
+// The catchment's MAP (settings.rainStations.catchmentMapMm / catchmentMapSource, issue #612 follow-up, model.md §2.4i)
+// ---------------------------------------------------------------------------
+
+export { MAP_MM_MAX, MAP_MM_MIN, PE_SOURCE_MAX };
+
+/**
+ * The setting with the catchment's MAP and its source set. A blank source is none, and a MAP and source both blank
+ * remove the pair, so the engine takes the land units' area-weighted mean again (stored as none, as before the field).
+ * A MAP without its source (or a source without its MAP) is kept as typed: catchmentMapFormError says what's missing
+ * and the API refuses it, so nothing half-entered is saved as something else.
+ */
+export function withCatchmentMap(rs: RainStationSettings | null | undefined, mapMm: number | null, source: string | null): RainStationSettings | null {
+	const out: RainStationSettings = { ...(rs ?? {}) };
+	const src = source?.trim() ? source.trim() : null;
+	out.catchmentMapMm = mapMm;
+	out.catchmentMapSource = src;
+	return tidyStations(out);
+}
+
+/** Why the catchment's MAP can't be saved, or null: the API's rule (rainStationSettings.ts), in the form's words. */
+export function catchmentMapFormError(rs: RainStationSettings | null | undefined): string | null {
+	const map = rs?.catchmentMapMm ?? null;
+	const source = typeof rs?.catchmentMapSource === 'string' && rs.catchmentMapSource.trim() ? rs.catchmentMapSource : null;
+	if (map === null) return source === null ? null : 'The catchment MAP source needs its MAP: enter the MAP, or clear the source.';
+	const err = mapMmError(map, source);
+	if (err === null) return null;
+	if (err === 'a MAP needs its source') return 'The catchment MAP needs its source: the study or isohyet map it was read from.';
+	return `The catchment ${err}.`;
+}
+
+/** The catchment MAP the catchment station's ratio uses, as the engine takes it (stationForcing.ts catchmentMapOf), with the ratio. */
+export interface CatchmentMapReadout {
+	/** The stored MAP, or null (the units' mean). */
+	entered: number | null;
+	/** The land units' area-weighted mean MAP: null when a unit lacks one (`missing`) or there is no land unit; undefined when the nodes aren't known. */
+	unitsMean: number | null | undefined;
+	/** The land units without a MAP (the mean needs every one). */
+	missing: string[];
+	/** The MAP in use: the entered one, else the units' mean (undefined when that isn't known). */
+	inUse: number | null | undefined;
+	/** The station's rain × this: catchment MAP ÷ station MAP, clamped; × 1 without scaling or either MAP. */
+	ratio: ReturnType<typeof unitRatio>;
+	/** Why the rain isn't scaled although a station is set, or null. */
+	noRatioWhy: string | null;
+}
+
+export function catchmentMapReadout(
+	rs: RainStationSettings | null | undefined,
+	nodes: readonly (UnitNode & { mapMm?: number | null })[] | undefined,
+	station: StationOption | null
+): CatchmentMapReadout {
+	const entered = mapMmError(rs?.catchmentMapMm ?? null, 'x') === null ? (rs?.catchmentMapMm ?? null) : null;
+	const mean = nodes ? catchmentMapOf(null, nodes as unknown as NetworkNode[]) : null;
+	const unitsMean = mean ? mean.mapMm : undefined;
+	const inUse = entered ?? unitsMean;
+	const scale = rs?.catchment?.scaleToMap !== false;
+	const sMap = stationMap(station ?? undefined);
+	const ratio = unitRatio(inUse ?? null, sMap, scale);
+	const noRatioWhy = !station
+		? null
+		: !scale
+			? 'scaling is off, so the station’s rain is taken as recorded'
+			: sMap === null
+				? 'the station has no MAP'
+				: inUse === null
+					? mean?.missing.length
+						? `the units’ mean needs every land unit’s MAP, and ${namesLine(mean.missing)} ${mean.missing.length === 1 ? 'has' : 'have'} none`
+						: 'there is no land unit to take a mean MAP from'
+					: null;
+	return { entered, unitsMean, missing: mean?.missing ?? [], inUse, ratio, noRatioWhy };
+}

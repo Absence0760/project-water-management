@@ -55,6 +55,16 @@ requests (agera5.py), each URL exactly
 with no ETag or Last-Modified; month M's request holds exactly M's calendar
 days, and `finalThrough` (never `prelimThrough`) may not run past the
 contiguous run of months from the earliest (`agera5_coverage`).
+Seasonal forecasts (issue #620, c3s_seasonal.py): `c3s/<YYYY-MM>` (one init
+month, every system) and `c3s-hc/<system>/<MM>` (one system's hindcast for
+one init calendar month), on the 1 deg grid (step 1). Each file is one CDS
+request, its URL exactly
+`cds://seasonal-original-single-levels/total_precipitation/<system>/<YYYY-MM>`
+(a forecast, the product's init) or `…/<system>/hindcast/<MM>` (the
+product's system and month), with no ETag or Last-Modified; neither holds
+final or preliminary days (both null). `years` is the init's year to the
+last lead day's year for a forecast, and the hindcast years held for a
+hindcast (the array's `years` attribute lists them).
 `power_et0` (nasapower.py) is like `imerg_late`: no final days, one file a
 day, each URL exactly `power://temporal/daily/regional/fao56-et0/YYYY-MM-DD`
 with no ETag or Last-Modified (a day is computed from many responses), held
@@ -99,10 +109,23 @@ _FORECAST_STEPS = {"gefs": 0.05, "ecmwf": 0.1}
 _NO_PRELIM = ("rnl", "era5l", "agera5_et0")
 
 
+#: C3S's seasonal forecasts and hindcasts (issue #620, c3s_seasonal.py), on the 1 deg grid (grid.C3S).
+C3S_PRODUCT = re.compile(r"^(c3s/\d{4}-(0[1-9]|1[0-2])|c3s-hc/[a-z_]+-\d+/(0[1-9]|1[0-2]))$")
+_C3S_URL = re.compile(r"^cds://seasonal-original-single-levels/total_precipitation/([a-z_]+-\d+)/(\d{4}-(0[1-9]|1[0-2])|hindcast/(0[1-9]|1[0-2]))$")
+
+
+def c3s_file_request(url: str) -> tuple[str, str] | None:
+    """(system, init "YYYY-MM" or hindcast "hindcast/MM") a c3s file's URL (its CDS request) names, or None."""
+    m = _C3S_URL.match(url)
+    return (m[1], m[2]) if m else None
+
+
 def product_step(product: str) -> float | None:
     """The step of `product`'s grid, or None for a product the copy doesn't know."""
     if product in PRODUCT_STEPS:
         return PRODUCT_STEPS[product]
+    if C3S_PRODUCT.match(product):
+        return 1.0
     m = re.match(r"^(gefs|ecmwf)/\d{4}-\d{2}-\d{2}$", product)
     return _FORECAST_STEPS[m[1]] if m else None
 
@@ -362,6 +385,20 @@ def validate(m: dict) -> dict:
         held = power_held_days(m["files"])
         if m["prelimThrough"] is not None and (not held or m["prelimThrough"] > max(held)):
             _fail(f"prelimThrough {m['prelimThrough']} runs past the newest day the files hold ({max(held) if held else 'none'})")
+    if C3S_PRODUCT.match(m["product"]):
+        hindcast = m["product"].startswith("c3s-hc/")
+        for i, f in enumerate(m["files"]):
+            req = c3s_file_request(f["url"])
+            if req is None or req[1].startswith("hindcast/") != hindcast:
+                _fail(f"files[{i}].url is not a {m['product'].split('/')[0]} request (cds://seasonal-original-single-levels/total_precipitation/<system>/{'hindcast/MM' if hindcast else 'YYYY-MM'}), got {f['url']!r}")
+            if hindcast and (req[0] != m["product"].split("/")[1] or req[1][-2:] != m["product"][-2:]):
+                _fail(f"files[{i}].url names another system or month than {m['product']}")
+            if not hindcast and req[1] != m["product"][4:]:
+                _fail(f"files[{i}].url names another init than {m['product']}")
+            if f["etag"] is not None or f["lastModified"] is not None:
+                _fail(f"files[{i}] of {m['product']} has an etag or lastModified: the CDS gives neither")
+        if m["finalThrough"] is not None or m["prelimThrough"] is not None:
+            _fail(f"{m['product']} is a forecast: it holds no final or preliminary days")
     if m["product"] in FINALS_PRODUCTS:
         for i, f in enumerate(m["files"]):
             if file_month(f["url"]) is None:

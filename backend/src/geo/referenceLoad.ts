@@ -43,6 +43,8 @@ import { placeRecords, placesSummary, replacePlaces } from './loadGazetteer.js';
 import { rainMapFromJson, replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
 import { parseTileProvenance, recordReferenceOrigin, recordTileProvenance, referenceLoadOf, TILE_ARCHIVES, type ReferenceLoadRecord } from './referenceOrigin.js';
 import { replaceWaterbodies, WATERBODIES_SOURCE, waterbodyRecords } from '../dams/observed/loadWaterbodies.js';
+import { donorsFromJson, GR4J_DONORS, replaceDonorDataset } from './gr4jDonors.js';
+import { replaceSoilDataset, soilFromJson, soilMethodFor, SOILS } from './soilGrid.js';
 
 /** One dataset of a kind allowed dataset by dataset: its own Sources row, and what a load stores with it. */
 export type ReferenceDataset = {
@@ -177,6 +179,26 @@ export const REFERENCE_KINDS = {
 		what: 'one river gauge’s DWS daily flow table: a HyData.aspx page saved from the website, or DWS’s text reply (.txt, .html, .htm or .aspx, gzipped or not)',
 		// 20 years of days is about 7 300 rows, under 1 MB as a saved page. Far past that it is not one station's table.
 		limits: { object: 8 * 1024 * 1024, text: 16 * 1024 * 1024 }
+	},
+	// The soil water capacity grid the regional GR4J prior reads (268, issue #622 step 2): SoilGrids 2.0's water
+	// retention and iSDAsoil's depth to bedrock, both CC BY 4.0, combined by ingest/soils.py into PAWC per cell.
+	soils: {
+		status: 'allowed',
+		sourcesRows: ['SoilGrids 2.0', 'iSDAsoil'],
+		file: /\.json(\.gz)?$/,
+		what: 'the soil water capacity grid `ingest/soils.py` writes',
+		// Region D1 at 0.05° is 341 000 cells, about 12 MB of JSON. Far past that it is not the region's grid.
+		limits: { object: 32 * 1024 * 1024, text: 64 * 1024 * 1024 }
+	},
+	// The calibrated donor basins the regional GR4J prior is built from (269, issue #622 step 3): GRDC-Caravan's
+	// flow and HydroATLAS's attributes, both CC BY 4.0, fitted by fit-donors.ts on our own forcing. No flow is in the file.
+	'gr4j-donors': {
+		status: 'allowed',
+		sourcesRows: ['GRDC-Caravan', 'HydroATLAS'],
+		file: /\.json(\.gz)?$/,
+		what: 'the donor file `pnpm fit-donors … --out <file>` writes',
+		// Region D1 has under 500 Caravan basins, about 300 bytes of JSON each. Past this it is not one region's set.
+		limits: { object: 4 * 1024 * 1024, text: 8 * 1024 * 1024 }
 	}
 } as const satisfies Record<string, ReferenceKind>;
 
@@ -204,7 +226,7 @@ export interface LoadRequest {
 	sha256: string;
 	/** The dataset label it loads as (a load replaces that dataset). */
 	dataset: string;
-	/** Rivers: the source and attribution stored on every reach that has none of its own (HydroRIVERS has none). Land cover and evaporation: overrides the file’s own. Gazetteer: the credit stored on every place (GeoNames' attribution when null). MAP grid: always null (the dataset's recorded lines are stored). DWS: the record's reference (DWS's reply, or the permission it is held under), stored on every row, required. */
+	/** Rivers: the source and attribution stored on every reach that has none of its own (HydroRIVERS has none). Land cover, evaporation, soils and GR4J donors: overrides the file’s own. Gazetteer: the credit stored on every place (GeoNames' attribution when null). MAP grid: always null (the dataset's recorded lines are stored). DWS: the record's reference (DWS's reply, or the permission it is held under), stored on every row, required. */
 	source: string | null;
 	/** Rivers: leave out reaches below this Strahler order. */
 	minOrder: number;
@@ -311,7 +333,7 @@ export async function readReferenceText(req: LoadRequest, read: ReadObject, limi
 export interface LoadResult {
 	kind: AllowedKind;
 	dataset: string;
-	/** Rows written (reaches, cells with cropland, evaporation cells, places, or MAP grid cells). */
+	/** Rows written (reaches, cells with cropland, evaporation cells, places, MAP grid cells, soil cells or donors). */
 	written: number;
 	/** Features or cells the file had that the load couldn't take (their reasons are in CloudWatch). */
 	skipped: number;
@@ -425,6 +447,55 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		}
 	}
 	if (req.kind === 'dws') return loadDws(client, req, text, origin, replaced, log);
+	if (req.kind === 'soils') {
+		try {
+			doc = JSON.parse(text);
+		} catch {
+			throw new LoadError(`${req.key} is not JSON`, 'unreadable', 'the file is not JSON');
+		}
+		const got = soilFromJson(doc);
+		if (typeof got === 'string') throw new LoadError(`${req.key}: ${got}`, 'unreadable', 'the file is not a soil water capacity grid (kind pawc, cellDeg and cells)');
+		for (const p of got.problems.slice(0, 50)) log(`skipped: ${p}`);
+		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more skipped`);
+		if (!got.grid.cells.length) throw new LoadError(`${req.key}: no cells`, 'empty', 'the file has no cell with a soil water capacity');
+		const meta = {
+			dataset: req.dataset,
+			source: req.source ?? got.meta.source ?? SOILS.source,
+			version: got.meta.version ?? SOILS.version,
+			attribution: got.meta.attribution ?? SOILS.attribution,
+			method: soilMethodFor(got.grid.cellDeg)
+		};
+		try {
+			const written = await replaceSoilDataset(client, meta, got.grid, origin);
+			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
+		} catch (e) {
+			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
+		}
+	}
+	if (req.kind === 'gr4j-donors') {
+		try {
+			doc = JSON.parse(text);
+		} catch {
+			throw new LoadError(`${req.key} is not JSON`, 'unreadable', 'the file is not JSON');
+		}
+		const got = donorsFromJson(doc);
+		if (typeof got === 'string') throw new LoadError(`${req.key}: ${got}`, 'unreadable', 'the file is not a donor file (kind gr4j-donors and donors)');
+		const { source, version, method, engineVersion } = got.meta;
+		if (!source || !version || !method || !engineVersion) {
+			throw new LoadError(`${req.key}: no source, version, method or engineVersion`, 'unreadable', 'the donor file names no source, version, method or engine version (fit-donors.ts writes them)');
+		}
+		for (const p of got.problems.slice(0, 50)) log(`skipped: ${p}`);
+		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more skipped`);
+		if (!got.donors.length) throw new LoadError(`${req.key}: no donors`, 'empty', 'the file has no donor basin');
+		// The attribution is the recorded one: the licences decide it, not the file.
+		const meta = { dataset: req.dataset, source: req.source ?? source, version, method, engineVersion, attribution: GR4J_DONORS.attribution };
+		try {
+			const written = await replaceDonorDataset(client, meta, got.donors, origin);
+			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
+		} catch (e) {
+			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
+		}
+	}
 	if (req.kind === 'gazetteer') {
 		// Places of the kinds the search leaves out (roads, schools, …) are dropped quietly, not counted as skipped.
 		const got = placeRecords(text, name, req.source ?? GEONAMES_SOURCE);

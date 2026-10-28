@@ -2259,6 +2259,38 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   Lambda, for the one allowed dataset (`WAAS-SWCape-2007`, issue #560;
   deployment.md § Reference datasets), and migration 238 adds `map-grid` to
   `reference_load`'s kinds.
+- **`soil_dataset`** and **`soil_cell_reference`** (`268_soil_grid.sql`,
+  issue #622, [maps.md § Soil water capacity](./maps.md#soil-water-capacity)):
+  the soil water capacity grid the regional GR4J prior reads. A dataset
+  row: `dataset` (primary key, 1–50; `synthetic` for the committed
+  fixture), `source`, `version`, `method` (the computation in words),
+  `attribution` (SoilGrids 2.0's and iSDAsoil's), `cell_deg`, `origin_lon`
+  and `origin_lat` (0 ≤ origin < cell), `loaded_at`. A cell row: `dataset`
+  (cascades with it), `row_idx`, `col_idx` (keyed as the evaporation grid's;
+  primary key `(dataset, row_idx, col_idx)`, also a polygon's range lookup),
+  `pawc_mm` (root-zone plant-available water capacity, 0–1000) and
+  `root_depth_cm` (min(200, the depth to bedrock), over 0). A cell not
+  listed has no value. Global reference data: any signed-in user reads it,
+  water_app is granted SELECT only; `pnpm import:soils` or a production
+  `load-reference.yml` load (kind `soils`) writes it as the schema owner.
+- **`gr4j_donor_dataset`** and **`gr4j_donor`** (`269_gr4j_donors.sql`,
+  issue #622, [model.md §2.10m](./model.md)): the calibrated donor basins the
+  regional prior is built from. A dataset row: `dataset` (primary key; 
+  `synthetic` for the committed donors), `source`, `version`, `method` (the
+  fit and the donor criteria in words), `attribution` (GRDC-Caravan's and
+  HydroATLAS's), `engine_version` (the engine that fitted them),
+  `donor_set_sha256` (of the engine's `donorSetCanonical`, which a prior's
+  fit record will name), `loaded_at`. A donor row: `dataset` (cascades),
+  `basin_id` (GRDC-Caravan's gauge id; primary key `(dataset, basin_id)`),
+  `lon`, `lat`, `area_km2`, the HydroATLAS attributes in plain units
+  (`aridity` P/PET, `map_mm`, `slope_deg`, `clay_pct`, `sand_pct`,
+  `forest_pct`, each nullable), `dor_pct` (regulation, a CHECK holds it
+  under 5), `pawc_mm` (nullable), `flow_years` (a CHECK holds it at 8 or
+  more), `x1`–`x4` (GR4J's hard bounds) and `kge_fit`, `kge_validation`
+  (nullable). Every number is double precision, so the donors read back are
+  the values the SHA-256 was taken of. No flow is stored. Global reference
+  data, read and written as the soil grid is (`pnpm import:gr4j-donors`,
+  kind `gr4j-donors`).
 - **`evaporation_accepted`** (`181_evaporation_accepted.sql`): where an
   evaporation row accepted from the map came from. Primary key
   `(project_id, target)`, `target` `pe` (GR4J's monthly PE) or `apan` (the
@@ -4175,8 +4207,9 @@ the restored one.
 `reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
 keyed by `(kind, dataset)`: the reference-bucket object a production load
 of a map dataset read (`land-cover`, `evaporation`, `rivers`, since
-225 `gazetteer`, since 238 `map-grid`, and since 261 `waterbodies`, the
-DE Africa Waterbodies polygons) and the
+225 `gazetteer`, since 238 `map-grid`, since 261 `waterbodies`, the
+DE Africa Waterbodies polygons, since 268 `soils` and since 269
+`gr4j-donors`, the regional GR4J prior's soil grid and donors) and the
 SHA-256 it was checked against. Since 258 also `dws`: a production load of
 one river gauge's DWS flow table into the gauge record store (below, DWS
 gauge records), its `dataset` the operator's label for that file, written
@@ -4187,7 +4220,7 @@ kind production allows is in the constraint
 (`referenceLoad.db.test.ts` inserts a row of every kind production allows). Written in the same transaction as the
 dataset by the replace functions (`replaceCroplandDataset`,
 `replaceEvaporationDataset`, `replaceRivers`, `replacePlaces`,
-`replaceRainMapDataset`, through
+`replaceRainMapDataset`, `replaceSoilDataset`, `replaceDonorDataset`, through
 `geo/referenceOrigin.ts`), and deleted by any other replace of that
 dataset (a local `pnpm import:*`), so it never outlives the data it
 describes. No foreign key: rivers have no dataset table. Owner-only like

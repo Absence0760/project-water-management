@@ -12,7 +12,10 @@
 // 1200 × 3600 at 0.1°), so every index here is computed from origin and step
 // in whole cells, never by matching float coordinates. Both global grids
 // share their north-west corner, so 0.05° cell (r, c) lies in 0.1° cell
-// (⌊r/2⌋, ⌊c/2⌋) (feeds/cellCache.ts productCell).
+// (⌊r/2⌋, ⌊c/2⌋) (feeds/cellCache.ts productCell). A third grid (issue #620)
+// holds C3S's seasonal forecasts at 1°, cell centres on whole degrees over D1
+// snapped outward (SEASONAL_REGION: 29 rows × 32 columns, [0, 0] at 36° S,
+// 10° E); the cell cache never reads it.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError } from '../feeds/errors.js';
 import type { GridCell } from '../feeds/cellCache.js';
@@ -20,8 +23,12 @@ import type { GridCell } from '../feeds/cellCache.js';
 /** Degrees per cell, CHC's grid. */
 export const MIRROR_STEP = 0.05;
 
-/** The two array layouts (arrays.ts): finals (year, doy, lat, lon), or daily (day, lat, lon). */
-export type GridKind = 'finals' | 'daily';
+/**
+ * The array layouts: finals (year, doy, lat, lon) or daily (day, lat, lon), both read by arrays.ts;
+ * and seasonal, C3S's (system | year, member, lead_day, lat, lon) group arrays (issue #620), which
+ * nothing in the backend reads yet (#620 step 6–7).
+ */
+export type GridKind = 'finals' | 'daily' | 'seasonal';
 
 /** What the copy holds a product on: its grid's step, its layout, and its first day. */
 export interface ProductGrid {
@@ -31,6 +38,8 @@ export interface ProductGrid {
 	firstDay?: string;
 	/** The finals layout's year axis starts here (attrs.firstYear when the array is made); daily arrays carry attrs.firstDay. */
 	firstYear?: number;
+	/** The box the grid's cells tile, when it isn't D1 (MIRROR_REGION): the seasonal grid's (SEASONAL_REGION). */
+	region?: Region;
 }
 
 /**
@@ -63,9 +72,13 @@ const FORECAST_GRIDS: Record<string, ProductGrid> = {
 	ecmwf: { step: 0.1, kind: 'daily' }
 };
 
-/** The grid of `product` (a store path: `sat`, `era5l`, `gefs/2026-02-09`, …), or null for one the copy doesn't hold. */
+/** C3S's seasonal forecasts (`c3s/<YYYY-MM>`) and hindcasts (`c3s-hc/<centre>-<system>/<MM>`), issue #620. */
+const SEASONAL_PRODUCT = /^(c3s\/\d{4}-(0[1-9]|1[0-2])|c3s-hc\/[a-z_]+-\d+\/(0[1-9]|1[0-2]))$/;
+
+/** The grid of `product` (a store path: `sat`, `era5l`, `gefs/2026-02-09`, `c3s/2026-10`, …), or null for one the copy doesn't hold. */
 export function productGrid(product: string): ProductGrid | null {
 	if (Object.hasOwn(PRODUCT_GRIDS, product)) return PRODUCT_GRIDS[product as GridProduct];
+	if (SEASONAL_PRODUCT.test(product)) return SEASONAL_GRID;
 	const m = /^(gefs|ecmwf)\/\d{4}-\d{2}-\d{2}$/.exec(product);
 	return m ? FORECAST_GRIDS[m[1]!]! : null;
 }
@@ -91,6 +104,27 @@ export interface Region {
 }
 export const MIRROR_REGION: Region = { w: 10, s: -35.5, e: 41, n: -8 };
 
+/**
+ * The seasonal grid's box (issue #620; ingest/grid.py seasonal_region): `region`'s
+ * bounds snapped outward to whole multiples of `step`, which are the cells'
+ * centres (C3S's 1° points sit on whole degrees), widened by half a cell each
+ * way. D1 gives centres 36–8° S, 10–41° E: 29 rows × 32 columns in the box
+ * 9.5–41.5° E, 36.5–7.5° S, so gridOf(SEASONAL_REGION, 1) puts [0, 0] at 36° S, 10° E.
+ */
+export function seasonalRegion(region: Region = MIRROR_REGION, step = 1): Region {
+	const h = step / 2;
+	return {
+		w: round9(Math.floor(region.w / step) * step - h),
+		s: round9(Math.floor(region.s / step) * step - h),
+		e: round9(Math.ceil(region.e / step) * step + h),
+		n: round9(Math.ceil(region.n / step) * step + h)
+	};
+}
+export const SEASONAL_REGION: Region = seasonalRegion();
+
+/** The third grid: C3S's 1° seasonal forecasts and hindcasts, on SEASONAL_REGION. */
+const SEASONAL_GRID: ProductGrid = { step: 1, kind: 'seasonal', region: SEASONAL_REGION };
+
 /** The grid attributes every mirror array carries, and every manifest. */
 export interface MirrorGrid {
 	origin: { lat: number; lon: number };
@@ -108,7 +142,10 @@ export function regionSize(region: Region, step = MIRROR_STEP): { rows: number; 
 	return { rows: Math.round((region.n - region.s) / step), cols: Math.round((region.e - region.w) / step) };
 }
 
-const round9 = (x: number) => Number(x.toFixed(9));
+// A declaration, not a const: SEASONAL_REGION calls it while the module loads, above this line.
+function round9(x: number): number {
+	return Number(x.toFixed(9));
+}
 
 /** The global grids, as feeds/cellCache.ts names cells: their north-west corner (every step's). */
 const CHC_TOP = 60;
