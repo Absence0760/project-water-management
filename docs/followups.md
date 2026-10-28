@@ -2150,8 +2150,8 @@ Still open, for round 4 (each its own piece):
   the *calibration window* and *automatic calibration* tips meanwhile.
 - **The verify mutation test** (`verify/test_verify.py`, `verify/README.md`):
   a mutant that drops a zone's parameters (`zone_p.get(u["id"], g)` → `g`)
-  so the self-test proves the cross-check reaches zones (the random and
-  dense networks reach zoned units in about a third of the dense cases).
+  so the self-test proves the cross-check reaches zones (diff.py's dense
+  networks reach zoned units in about half the cases, its random ones rarely).
 - **A zone step's score and the EWR shares.** While a zone above the site is
   fitted, the units below it run on their pre-fit parameters, and the natural
   MAR shares follow every unit's runoff, so a step's score can differ from a
