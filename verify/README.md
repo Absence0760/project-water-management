@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 178 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 181 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -90,8 +90,10 @@ The core daily chain, with every setting of it the generator varies:
   rain on the dam, evaporation (single or monthly lake factor, the b > 1
   limiter), seepage and its return share, the minimum operating level, spill,
   sub-m³ dams, farms without a dam.
-- **Routing** (§2.5, §2.7): area, hi/lo and manual flow shares, the farm
-  balance K … V in network order, gauges.
+- **Routing** (§2.5, §2.7): under Fragmentation the natural flow split by
+  each unit's natural MAR share (engine 1.105.0, issue #616; the area, hi/lo
+  and manual flow shares are retired, and the generator no longer sets them),
+  the farm balance K … V in network order, gauges.
 - **Transfers** (§2.6): priorities, one rate or monthly rates, daily caps,
   the receiver's room (its dam's own gains and losses, its demand) shared pro
   rata, and the source's water in bands at each rule's reserve; a dam rule
@@ -105,8 +107,9 @@ The core daily chain, with every setting of it the generator varies:
 - **EWR** (§2.7, §2.7b): Y, Z, AA and AB; the outlet and gauge EWR sites
   (`ewrSite` on or off); the attribution with J_int, Σ A + N = D, the charge
   as the largest share, its irrigation part and the binding site.
-- **Refusals**: no evaporation (`GR4J_NO_PET`), flow shares over 1, no
-  catchment area.
+- **Refusals**: no evaporation (`GR4J_NO_PET`), no catchment area. (Flow
+  shares over 1 can't happen from engine 1.105.0: the natural MAR shares add
+  up to 1.)
 
 Every one of the engine's daily series for these is compared, except the
 observed-flow and rain-diagnostic series (`observed_flow`, `rain_chirps`,
@@ -391,26 +394,29 @@ and the forecast; no rule 2 without the station's MAP).
 
 ## What the EWR split covers
 
-The EWR split (model.md §2.5b; one way only from engine 1.105.0, issue #615):
-each unit's EWR share is its own natural runoff (days above 0) summed over
-the complete water years of the historical days, else every historical day,
+The unit shares (model.md §2.5, §2.5b; one way only from engine 1.105.0,
+issues #615 and #616): each unit's one share, which splits the EWR, the
+senior users' claims (§2.7c) and under Fragmentation the flow, is its own
+natural runoff (days above 0) summed over the complete water years of the historical days, else every historical day,
 ÷ the units' total in node-id order, every farm without runoff at 0; with no
 runoff over the period, each land unit's area ÷ the land units' total; with
-no land unit, the flow shares. Under Per unit the runoff is the units'
+no land unit, every share 0. Under Per unit the runoff is the units'
 `runoff_natural`; under Fragmentation the model runs GR4J once per land unit
 on the Per unit forcing (`settings.unitRain` with its mode set to
 `perUnit`), with the run's parameters, PE and warm-up, for the shares only,
-while the catchment's one run makes the flow. The retired
-`settings.ewrSplit` (1.94.0 – 1.104.x) is ignored, and the generator no
-longer draws it. Compared: every unit's `ewr` and everything downstream
+while the catchment's one run makes the flow they split. The retired
+`settings.ewrSplit` (1.94.0 – 1.104.x), `settings.flowShareMethod` and
+`settings.hiLoSplit` are ignored, and the generator no longer sets them. Compared: every unit's `ewr` and everything downstream
 (`ewr_cumulative`, `ewr_shortfall`), on every network. Probes:
 `ewr-split-station-units` (station-units' network: two units on one station,
 one draining into the other, twelve calendar years whose complete water years
 leave out the first nine months), `ewr-split-short-run` (eight months, no
 complete water year: the whole run) and `ewr-split-fragmentation` (the first
-under Fragmentation: the same shares, the catchment's flow). Mutants: the
-split ignored, Fragmentation's share runs ignored, and the MAR taken over
-every day instead of the complete water years.
+under Fragmentation: the same shares, splitting the catchment's flow) and
+`unit-shares-senior-user` (that network with a senior user below u1 and u2,
+whose claims the shares split, §2.7c). Mutants: the shares ignored, Fragmentation's share runs ignored, the MAR
+taken over every day instead of the complete water years, and the flow, the
+EWR or the senior claims split by area instead of the shares.
 
 ## Phase 2b (not covered yet)
 
