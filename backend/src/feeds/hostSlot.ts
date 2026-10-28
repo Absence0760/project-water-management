@@ -188,6 +188,13 @@ class S3Slots implements HostSlots {
 	}
 }
 
+// The local `file://` slot, for dev and tests only. Taking a free slot is
+// atomic (open 'wx'), but taking over an expired one and releasing are read
+// then remove, so two processes meeting the same expired file at the same
+// instant could both take it. Plain files offer no compare-and-swap (no flock
+// in Node, and ingest/lease.py shares this file), and locally the worst case is
+// two dev processes reading the fixtures at once. Production uses S3Slots,
+// whose conditional writes (IfNoneMatch, IfMatch) are atomic.
 class FileSlots implements HostSlots {
 	constructor(
 		readonly dir: string,
