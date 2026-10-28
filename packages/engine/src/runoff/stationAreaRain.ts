@@ -95,14 +95,17 @@ function patchDays(forcing: StationAreaForcing, index: readonly number[]): Pick<
 
 /**
  * Whether each of the input's stations can patch a main station's gaps
- * (issue #612, stationPatchUsability) over the run window `input` gives, for
- * Settings → Flow generation → Per unit: station id → its usability. The
- * records are the run's checked ones; `scaleToMap` the assignment's.
+ * (issue #612, stationPatchUsability) over the run's history `input` gives
+ * (the run window less its forecast tail, forecastTail: a tail day is never
+ * patched), for Settings → Model selection for flow generation (a unit's
+ * station or the catchment's): station id → its usability. The records are
+ * the run's checked ones; `scaleToMap` the assignment's.
  */
 export function stationPatchChoices(input: ModelInput, a: { stationId: string; scaleToMap?: boolean }, prep: PreparedRun = prepareRun(input)): Record<string, StationPatchUsability> {
 	const ctx = prep.stations?.context ?? stationContext({ settings: prep.settings, series: prep.series, stations: input.stations, nodes: input.model.nodes }, []);
 	const start = toEpochDay(prep.startDate);
 	const main = alignReadings(ctx.record(a.stationId)?.record, start, prep.days);
+	const { historyDays } = forecastTail(prep);
 	const out: Record<string, StationPatchUsability> = {};
 	for (const id of Object.keys(input.stations ?? {}).sort(cmpStr)) {
 		const rec = ctx.record(id)?.record ?? null;
@@ -112,7 +115,9 @@ export function stationPatchChoices(input: ModelInput, a: { stationId: string; s
 			isMain: id === a.stationId,
 			scaleToMap: a.scaleToMap !== false,
 			stationMapMm: ctx.map(id).mapMm,
-			record: rec
+			record: rec,
+			historyDays,
+			startDate: prep.startDate
 		});
 	}
 	return out;

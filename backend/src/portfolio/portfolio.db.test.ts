@@ -182,7 +182,8 @@ describe('the figures, and where they come from', () => {
 			figuresWithheld: false,
 			feeds: { total: 0, ok: 0, failing: 0 },
 			alertsFiring: 0,
-			restriction: null
+			restriction: null,
+			drought: null
 		});
 	});
 
@@ -195,6 +196,44 @@ describe('the figures, and where they come from', () => {
 		expect(row.ewr).toEqual({ status: 'unknown', daysNotMet30: null, days30: null, fraction30: null, reason: 'no-ewr' });
 		expect(row).toMatchObject({ farmsShort7: null, farmsShort30: null, farmCount: 3, lowestDamPct: null, damsKnown: false, publishedAt: null, restriction: null });
 	});
+
+	it('the drought badge comes from the source run’s summary, never its series; none for a run from before it (issue #620)', async () => {
+		// Two years and three months of rain: too short a record to fit (20 years a calendar month).
+		const short = byId((await portfolio(admin)).body.projects, runOnly)!;
+		expect(short.drought).toEqual({ month: '2023-11', driest: null, gap: 'short-record' });
+
+		// 25 years: the driest index has a value, and the row is exactly what the run stored.
+		const pid = await makeProject(admin, 'Foxtrot drought', teamId, { ewr: false });
+		const years = 25;
+		const start = '1999-01-01';
+		const n = Math.round(years * 365.25);
+		// A wet day every 4th day, wetter in some months than others, and the last 3 months dry.
+		const rain = Array.from({ length: n }, (_, i) => (i > n - 95 ? 0 : i % 4 === 0 ? (4 + ((i * 7919) % 13)) * (1 + 0.6 * Math.sin(Math.floor(i / 30) * 2.3)) : 0));
+		expect((await admin.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: start, values: rain })).status).toBe(200);
+		const runId = await run(admin, pid);
+		const stored = ((await asOwner(`SELECT summary->'drought' AS d FROM model_run WHERE id = $1`, [runId])) as { d: unknown }[])[0]!.d;
+		const row = byId((await portfolio(admin)).body.projects, pid)!;
+		expect(row.sourceRunId).toBe(runId);
+		expect(row.drought).toEqual(stored);
+		expect(row.drought!.driest).toMatchObject({ class: expect.stringMatching(/dry$/) });
+		expect(row.drought!.driest!.value).toBeLessThan(-1);
+		// The project list reads the same figure.
+		expect(byId((await outcomes(admin)).body.projects, pid)!.drought).toEqual(stored);
+
+		// RLS: a team member who didn't make the run sees the badge (positive control)…
+		expect(byId((await portfolio(teamViewer)).body.projects, pid)!.drought).toEqual(stored);
+		expect(byId(await withUser(teamViewer.id, (db) => loadMyOutcomes(db, new Date())), pid)!.drought).toEqual(stored);
+		// …a non-member never gets the row, nor its badge, through either query.
+		expect(await withUser(stranger.id, (db) => loadPortfolio(db, teamId, new Date()))).toEqual([]);
+		expect(byId(await withUser(stranger.id, (db) => loadMyOutcomes(db, new Date())), pid)).toBeUndefined();
+		expect(byId((await outcomes(stranger)).body.projects, pid)).toBeUndefined();
+
+		// A run saved before the badge existed: nothing, not a guess.
+		await asOwner(`UPDATE model_run SET summary = summary - 'drought' WHERE id = $1`, [runId]);
+		expect(byId((await portfolio(admin)).body.projects, pid)!.drought).toBeNull();
+		// Positive control: the other run's badge is still read.
+		expect(byId((await portfolio(admin)).body.projects, runOnly)!.drought).not.toBeNull();
+	}, 60_000);
 
 	it('a daily EWR from the DRM TAB file counts as an EWR set, though the pragmatic EWR is 0 (engine ≥ 1.77.0, issue #455)', async () => {
 		const pid = await makeProject(admin, 'Echo TAB file', teamId, { ewr: false });

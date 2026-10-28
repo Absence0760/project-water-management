@@ -612,3 +612,14 @@ export async function plantDamObservations(
 		]);
 	});
 }
+
+/**
+ * A run as one saved before its summary carried the drought badge (issue #620, engine 1.105.0): the
+ * project list must say it has none, not guess. Only the summary's one key goes.
+ */
+export async function dropRunDrought(runId: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(`UPDATE model_run SET summary = summary - 'drought' WHERE id = $1`, [runId]);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}

@@ -58,6 +58,8 @@ import { isLandUnit } from './area';
 import { fitStationPairing, pairingFactorOn } from './stationPairing';
 import { checkedStationRecord, type CheckedStationRecord } from './stationRecord';
 import { warn } from '../warningCodes';
+import { tailOfSource } from '../forecastTail';
+import { rainSourceCodes } from '../rainSourcePeriods';
 
 /** What a day of an area's station forcing read (StationAreaDays.source). */
 export const STATION_DAY_SOURCE = { none: 0, station: 1, chirps: 2, fallback: 3, patch: 4 } as const;
@@ -457,6 +459,11 @@ export function patchLinks(ctx: StationContext, patch: readonly ResolvedPatch[],
  * no record, has no MAP while scaling is on, or has a reading on none of the
  * main station's gap days; always with the main station's gap days in the
  * window, how many of them it has a reading on, and its record's span.
+ *
+ * The window is the run's history: its first `historyDays` days (forecastTail;
+ * all of them by default). A forecast tail day is never patched (the run reads
+ * the forecast there, after the last day any other source has rain), so it
+ * isn't counted as a gap a patch station could fill.
  */
 export interface StationPatchUsability {
 	usable: boolean;
@@ -465,7 +472,15 @@ export interface StationPatchUsability {
 	fills: number;
 	from: string | null;
 	to: string | null;
+	/** The days counted (the run's history), with `startDate`; null without it or when the window is empty. */
+	windowFrom: string | null;
+	windowTo: string | null;
+	/** The forecast tail days after the window, left out of the count (0 without a tail). */
+	forecastDays: number;
 }
+
+/** "in the run window", or "before the forecast" when a forecast tail is left out. */
+const gapWindowText = (forecastDays: number) => (forecastDays > 0 ? 'before the forecast' : 'in the run window');
 
 export function stationPatchUsability(a: {
 	main: readonly (number | null)[];
@@ -474,10 +489,16 @@ export function stationPatchUsability(a: {
 	scaleToMap: boolean;
 	stationMapMm: number | null;
 	record?: DailySeries | null;
+	/** The run's history days (forecastTail(prep).historyDays); absent = every day of `main`. */
+	historyDays?: number;
+	/** The run day of `main[0]`, ISO, for the window's dates. */
+	startDate?: string;
 }): StationPatchUsability {
 	let gapDays = 0;
 	let fills = 0;
-	for (let t = 0; t < a.main.length; t++) {
+	const hist = Math.max(0, Math.min(a.main.length, a.historyDays ?? a.main.length));
+	const forecastDays = a.main.length - hist;
+	for (let t = 0; t < hist; t++) {
 		if (a.main[t] != null) continue;
 		gapDays++;
 		if (a.patch?.[t] != null) fills++;
@@ -494,28 +515,44 @@ export function stationPatchUsability(a: {
 			to = fromEpochDay(d0 + j);
 		}
 	}
+	const win = gapWindowText(forecastDays);
 	const reason = a.isMain
 		? 'it is the main station'
 		: !a.patch
 			? 'it has no record'
 			: a.scaleToMap && a.stationMapMm === null
-				? 'it has no MAP to scale its rain to the unit’s MAP'
+				? 'it has no MAP to scale its rain by'
 				: fills === 0
 					? gapDays === 0
-						? 'the main station has no gap in the run window'
-						: `it has no reading on any of the main station’s ${gapDays} gap ${gapDays === 1 ? 'day' : 'days'} in the run window`
+						? `the main station has no gap ${win}`
+						: `it has no reading on any of the main station’s ${gapDays} gap ${gapDays === 1 ? 'day' : 'days'} ${win}`
 					: null;
-	return { usable: reason === null, reason, gapDays, fills, from, to };
+	const d0 = a.startDate ? toEpochDay(a.startDate) : null;
+	const windowFrom = d0 !== null && hist > 0 ? fromEpochDay(d0) : null;
+	const windowTo = d0 !== null && hist > 0 ? fromEpochDay(d0 + hist - 1) : null;
+	return { usable: reason === null, reason, gapDays, fills, from, to, windowFrom, windowTo, forecastDays };
 }
 
-/** The run's record of a resolved patching priority (StationAreaForcing.patches): each source's days and, for a station, its fill of the main station's gaps. */
-export function patchUses(ctx: StationContext, patch: readonly ResolvedPatch[], links: readonly PatchLink[], main: readonly (number | null)[], d: StationAreaDays, scaleToMap: boolean): StationPatchUse[] {
+/**
+ * The run's record of a resolved patching priority (StationAreaForcing.patches): each source's days and, for a
+ * station, its fill of the main station's gaps over the run's history (its first `historyDays` days: a forecast
+ * tail day is never patched).
+ */
+export function patchUses(
+	ctx: StationContext,
+	patch: readonly ResolvedPatch[],
+	links: readonly PatchLink[],
+	main: readonly (number | null)[],
+	d: StationAreaDays,
+	scaleToMap: boolean,
+	historyDays: number = main.length
+): StationPatchUse[] {
 	const counts = new Array<number>(patch.length).fill(0);
 	for (let t = 0; t < d.patchIndex.length; t++) if (d.patchIndex[t]! >= 0) counts[d.patchIndex[t]!]!++;
 	return patch.map((p, i): StationPatchUse => {
 		if (p.source === 'chirps') return { source: 'chirps', days: counts[i]! };
 		const l = links[i] as Extract<PatchLink, { kind: 'station' }>;
-		const u = stationPatchUsability({ main, patch: l.values, scaleToMap, stationMapMm: p.stationMapMm });
+		const u = stationPatchUsability({ main, patch: l.values, scaleToMap, stationMapMm: p.stationMapMm, historyDays });
 		return {
 			source: 'station',
 			stationId: p.stationId,
@@ -527,6 +564,7 @@ export function patchUses(ctx: StationContext, patch: readonly ResolvedPatch[], 
 			skipped: p.skipped,
 			gapDays: u.gapDays,
 			fills: u.fills,
+			...(u.forecastDays > 0 ? { forecastDays: u.forecastDays } : {}),
 			days: counts[i]!
 		};
 	});
@@ -536,7 +574,9 @@ export function patchUses(ctx: StationContext, patch: readonly ResolvedPatch[], 
 export function idlePatchWarnings(area: string, uses: readonly StationPatchUse[]): string[] {
 	return uses.flatMap((u) =>
 		u.source === 'station' && !u.skipped && u.fills === 0 && u.gapDays > 0
-			? [`station: ${area}’s patch station "${u.stationName}" has no reading on any of the main station’s ${u.gapDays} gap ${u.gapDays === 1 ? 'day' : 'days'} in the run window, so it fills none`]
+			? [
+					`station: ${area}’s patch station "${u.stationName}" has no reading on any of the main station’s ${u.gapDays} gap ${u.gapDays === 1 ? 'day' : 'days'} ${gapWindowText(u.forecastDays ?? 0)}, so it fills none`
+				]
 			: []
 	);
 }
@@ -680,7 +720,10 @@ export function catchmentStationForcing(
 		} else if (d.source[t] === STATION_DAY_SOURCE.chirps) ch[t] = d.values[t]!;
 	}
 	const id = plan.assignment.stationId;
-	const patches = patchUses(ctx, plan.patch, links, main, d, plan.assignment.scaleToMap);
+	// The fill counts cover the run's history: the forecast tail the run will find in this rain (forecastTail, as
+	// prepareRun reads it under a catchment station: no rain-source periods and no gap-filling product).
+	const { historyDays } = tailOfSource(rainSourceCodes(catchment, ch, forecast), days);
+	const patches = patchUses(ctx, plan.patch, links, main, d, plan.assignment.scaleToMap, historyDays);
 	return {
 		catchment,
 		chirps: ch,

@@ -1608,7 +1608,7 @@ put the results first; its first screen follows board A1 of the redesign
    Under the alerts, the **Drought index** card (`overview/DroughtIndex.svelte`,
    `drought.ts`; issue #620): SPI and SPEI over 3, 6 and 12 months to the
    last whole month of the latest run's history, from the run's own
-   `rain_final` and `pet` ([model.md §2.15b](./model.md#215b-drought-badge-spi-and-spei-issue-620-slice-1)).
+   `rain_final` and `pet` ([model.md §2.15b](./model.md#215b-drought-badge-spi-and-spei-issue-620)).
    A table, one row per period (its months, "Aug–Oct 2024"), each cell the
    value and its class, coloured dry or wet with the class written out; the
    headline badge is the driest index ("Severely dry · SPEI-12"), and the
@@ -1620,8 +1620,10 @@ put the results first; its first screen follows board A1 of the redesign
    restriction decision; it loads the two series through the Runs cache and
    is part of the Summary's `data-ready`. Workspace only, in English: the
    farm view shows the restriction level the WUA publishes, never a raw
-   index (#620's open question 4). The portfolio doesn't show it yet: that
-   needs the badge in the run summary, a later slice.
+   index (#620's open question 4). It counts to the same day as the run's
+   stored badge (`droughtLastDay`: an ordinary run over forecast rain stops at
+   the last recorded day), so its headline is the one the [project
+   list](#project-list) shows from `summary.drought`.
 3. **The published baseline and the links**: once there is a run, in the
    right-hand column under Supply by farm, which is usually shorter than
    Needs attention and the alerts, so a typical catchment (the example
@@ -2532,11 +2534,28 @@ pill (`portfolio.spec.ts` pins the withheld row); with the published restriction
 under it, "Restriction: Advisory · 15 %" or "Restriction: None"; nothing
 without a publication, where the dam already says *Not published*), **Data**
 (the rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in
-the figures*, the feeds' health), **Last run** (its age, then the date or
+the figures*, the drought badge below, the feeds' health), **Last run** (its age, then the date or
 when it was published) and **Alerts** (the alerts firing now, "None" or a
 "2 firing" badge, from `alertsFiring`, [§ Alerts](#alerts)). A
 project where your role is farmer or applicant has no figures ("Not shown
 to your role").
+
+**The drought badge** (`portfolio/DroughtTag.svelte`, `droughtTag`; issue
+#620): the driest SPI or SPEI for the last whole month of the source run's
+history, "Severely dry · SPEI-12", coloured dry or wet with the class written
+out, and its value and months in the tooltip ("Severely dry: SPEI-12 −1.62
+over Sep 2025 – Aug 2026, …"). It is the run summary's `summary.drought`
+([model.md §2.15b](./model.md#215b-drought-badge-spi-and-spei-issue-620),
+[api.md § Portfolio](./api.md#portfolio)), so the list loads no series for
+it; the Summary's Drought index card gives the full table. A run with no
+index (a record under 20 years a calendar month, no final rain) or from
+before the badge shows a muted *Drought –*, the tooltip saying why ("No
+drought index for this run"); a project with no run shows nothing. It sits
+in the Data column (in the lines under the name when the column folds), and
+on the team page as a fourth fact, **Drought**, beside Hydrological units
+short, Lowest dam and Alerts. Workspace pages only, in English: no farmer
+page shows it (#620's open question 4), and a farmer's or applicant's row has
+no figures at all. `projects.spec.ts` pins it on the list, `portfolio.spec.ts` on the team page (never withheld: it rests on rain and evaporation), `DroughtTag.test.ts` its markup.
 
 **The status is irrigation supply** (issue #558, the operator's decision:
 "take it out and show irrigation instead"): the share of all units' demand
@@ -5792,10 +5811,13 @@ with the table the data needs).
     built in the browser): **Compact** (the stations, the average
     catchment rainfall, each unit's rain used, the flow records) or
     **Full** (every stored series group by group, a unit's under it, and
-    each area's station × ratio, corrected CHIRPS, rain used and *rain
-    used from*: station, chirps, fallback or none), one row a day over
+    each area's station × ratio, each patch station × its ratio in the
+    patching priority (*patch N: <station> × ratio*, issue #613 slice 3),
+    corrected CHIRPS, rain used and *rain used from*: station, *patch N:
+    <station>*, chirps, fallback or none), one row a day over
     every column's span. Both open with `#` lines: the export, the engine
-    version and date, and each area's sentence (Full adds the factors; a
+    version and date, each area's sentence and its patch stations with their
+    ratios (Full adds the factors, fitted for that area; a
     refused pairing or an area that couldn't be computed says so). Header
     cells that read as a formula get an apostrophe, and a `#` line's
     commas, quotes and line breaks are percent-encoded, so it stays one
@@ -6231,18 +6253,29 @@ and the column picker then lists, and hides, only that view's columns:
 **All** (the default: every column above, unchanged); **each land unit** (listed under *Units with land*) by
 name, in the model's order, showing only what its rain is made of, side by
 side: *<station> raw*, *<station> adjusted to <unit> (× r)* with r to three
-decimals, *<unit> CHIRPS raw*, *<unit> CHIRPS bias-corrected (f(m) against
-<station>)*, *<unit> rain used* and *<unit> rain used from*, then the other
+decimals, each patch station of its patching priority (issue #612; issue #613
+slice 3) as *Patch N: <station> raw* and *Patch N: <station> adjusted to <unit>
+(× r)*, r that station's own ratio (unit MAP ÷ its MAP), N its place in the
+priority (a CHIRPS earlier in the list keeps its place; a station the run skips
+has no lines; help `preview.areaPatchRaw`, `preview.areaPatchScaled`), *<unit>
+CHIRPS raw*, *<unit> CHIRPS bias-corrected (f(m) against <station>)*, *<unit>
+rain used* and *<unit> rain used from* (a day a patch station filled reads
+*patch N: <station>*), then the other
 series stored at the unit (a gauge with its m³/day; its CHIRPS series is the
-raw line already; the raw lines read their stored series, so the search, *Missing only*, *Flagged only* and the check flags work on them), with the twelve monthly factors, the station they were
-fitted against, or why the pairing was refused, listed above the table
-(`data-testid="preview-factors"`); and the groups **All rainfall stations**,
+raw line already; the raw lines read their stored series, so the search, *Missing only*, *Flagged only* and the check flags work on them), with the twelve monthly factors (fitted for that unit since engine 1.105.0:
+its station's rain taken to the unit's MAP over the unit's own CHIRPS), the
+station they were fitted against, or why the pairing was refused, listed above
+the table (`data-testid="preview-factors"`), and, when the patching priority
+lists a station, the whole priority with each station's ratio and the days
+each source filled, or why the run skipped it
+(`data-testid="preview-patch-chain"`); and the groups **All rainfall stations**,
 **Average catchment rainfall** (when Settings assigns the catchment a station:
 its lines as for a unit, then the catchment's own stored rain) and **All
 flow** (every flow record with its m³/day, and Excluded from calibration),
-each offered only when it would show something. The raw station and raw
-CHIRPS lines (help `preview.areaStationRaw`, `preview.areaChirpsRaw`) are in
-an area's own view only: in All they are stored series columns already
+each offered only when it would show something. The raw station, raw patch station and raw
+CHIRPS lines (help `preview.areaStationRaw`, `preview.areaPatchRaw`, `preview.areaChirpsRaw`) are in
+an area's own view only (All gains each patch station × its ratio after the
+station × ratio, as the Full CSV does): in All they are stored series columns already
 (issue #619's recommendation). A unit with no station, under per-unit rain
 (issue #613 slice 2), shows its own §2.4h chain instead (the engine's
 `unitAreaRain`, the run's `rain_unit` to the bit; `derivedRain.ts`
@@ -7350,6 +7383,25 @@ two.
   summary line names the method ("Fragmentation · flow and EWR by each
   unit's natural MAR", "Per unit · 2 units on a rainfall station · EWR by
   each unit's natural MAR"; `summaries.ts`).
+  - **The catchment's rainfall station**, a card above the units' (issue
+    #612 follow-up, `settings/FlowGenerationCatchment.svelte`, helpers in
+    `settings/catchmentRainStation.ts`; `settings.rainStations.catchment`,
+    [model.md §2.4i](./model.md)), under both methods, since the catchment
+    rain is what GR4J runs on under Fragmentation and what demand and the
+    dams read under either: **Station** (*No station: the catchment rain
+    series, as before stations*, the default, or one of the project's
+    stations; a deleted one says so in red), then, with a station, **Then
+    patch gaps from** (the same pull-downs and fill counts as a unit's,
+    named "for the catchment", the CHIRPS entry being the catchment's own
+    CHIRPS), **Scale to catchment MAP** (on by default, stored as none; the
+    catchment MAP is the units' area-weighted mean, `catchmentMapMm` has no
+    field yet) and **Gaps: CHIRPS corrected against** (*Its station* by
+    default, stored as none). Changing the station keeps the rest, less the
+    new main station from the patching priority; *No station* removes the
+    assignment, so a project that tries one and takes it away stores what
+    it had. The summary line adds "catchment rain from a station" when one
+    is set. Without any station a note says to add one in the Data tab.
+    `rain-patch-priority.spec.ts` covers it, with a forecast tail.
   - **Per unit** shows two cards. **Each unit's rainfall station**
     (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
     helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
@@ -7370,13 +7422,19 @@ two.
     source** (the next free station that can help, then CHIRPS; at most 8);
     *CHIRPS, corrected* alone by default (stored as none), an empty list
     says the gaps go to the next fallback. Each station entry says what it
-    fills ("fills 40 of the main station's 52 gap days (77 %); record … to
-    …") or why it can't help (no reading on any of the gaps, no MAP while
-    scaling is on), in red; a station that can't help is disabled in the
-    pull-down with its reason. The counts are the engine's
+    fills and which days it counted ("fills 40 of the main station's 52 gap
+    days (77 %); gaps counted 2015-01-01 to 2020-12-31, the run's 30
+    forecast days left out; record … to …") or why it can't help (no reading
+    on any of the gaps before the forecast, no MAP while scaling is on), in
+    red; a station that can't help is disabled in the pull-down with its
+    reason. The gaps are counted over the run's history only: a forecast
+    tail day is never patched ([model.md §2.4i](./model.md), the window the
+    gaps are counted over). The counts are the engine's
     `stationPatchChoices` over the model input (`settings/patchChoices.ts`,
     loaded when a unit has a station, fetched once per visit); without rain
-    to run on, a note says they show later. **Gaps: CHIRPS corrected
+    to run on, a note says they show later. The pull-downs are
+    `settings/PatchChain.svelte`, shared with the catchment's station
+    below. **Gaps: CHIRPS corrected
     against**, the station whose rain, at the unit's MAP, the unit's CHIRPS
     is corrected against (*Its station* by default, stored as none). A unit
     whose station was deleted says so in red and keeps its id until another
@@ -10586,7 +10644,11 @@ confirmed farmers see the outlook, O5, issue #90).
   monthly plan** adds one more level: a name (default *Monthly plan*) and
   a % per month of the project's season (Oct … Apr by default), sent as
   R1's `months` form, one `demand.scale` per distinct % (so the plan and
-  the levels together are at most 6). **Run seasonal outlook**, in the
+  the levels together are at most 6). **Also compare past seasons like
+  this one** (off by default; issue #620) runs the outlook with the method
+  `climateState`: the same members, also summarised on the past seasons
+  nearest this one's ENSO and SAM state (below); its description for a
+  screen reader says how they are chosen. **Run seasonal outlook**, in the
   action row under the levels, hint and plan, queues an
   [outlook](./api.md#seasonal-outlooks) of the shown run; the season and
   the planning share are the project's settings (Settings → Seasonal
@@ -10620,6 +10682,25 @@ confirmed farmers see the outlook, O5, issue #90).
   them"), and that the WUA decides the level and publishes it as the
   restriction notice. **Too few years** (fewer than 10): a warning, no
   ranges and no planning figure; each year's values are still shown.
+- **Past seasons like this one** (method `climateState` only, issue #620,
+  `outlook/ClimateAnalogues.svelte`, view model `outlook/climate.ts`,
+  [model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620);
+  `data-testid="outlook-climate"`, `data-state` `ready` or `problem`), after
+  the planning figure's hint, beside the ESP rather than instead of it:
+  this season's state (*ONI JAS 2018 +0.45; AAO Jul–Sep 2018 −0.31*), a
+  headline (*In the 10 past seasons nearest this one, the dams ended at …
+  at 100 %, against … in all 31 years*), and a table per demand level of the
+  season-end dam storage and the years met in full, those seasons beside
+  every year. Then the planning figure counted on those seasons, how they
+  were chosen, the seasons chosen nearest first with their ONI, AAO and
+  distance (in standard deviations), the other seasons collapsed, any read
+  a month or two earlier because the copy didn't hold the newest month,
+  those an index doesn't reach, and that it is not a forecast (ENSO and the
+  SAM explain only part of a season's rain). Under it the source: *Indices:
+  NOAA Climate Prediction Center, ONI to …, AAO to …*. When no seasons
+  could be chosen (the copy doesn't hold the indices, or fewer than 20
+  candidate years) it says why in the engine's words, and the ESP above
+  stands as it is.
 - **Every analogue year** (collapsed): per year and level, the days below
   the EWR (or months met) and the season-end storage. Then the years not
   used and why (outside the record, a rainless day, the season itself,

@@ -127,11 +127,12 @@ describe('outputs e2e: outlook members are plain runs with shifted climate (§2.
 		expect(excluded.some((e) => e.waterYear === 2008)).toBe(false);
 		expect(analogues.map((a) => a.waterYear)).toEqual(Array.from({ length: 12 }, (_, i) => 1996 + i));
 		const snap = captureModelState(short, season.decisionDate);
+		const shortPinned = ewrSplitPinOf(short);
 		const k = shortRun.days;
 		const problems: string[] = [];
 		for (const a of analogues) {
 			const member = runModelFrom(snap, outlookSeasonInput(short, shortRun, season, a).input);
-			const plain = runModelWithoutChecks(plainMemberInput(short, shortRun, season.decisionDate, season.seasonEnd, a.waterYear, 1));
+			const plain = runModelWithoutChecks(plainMemberInput(short, shortRun, season.decisionDate, season.seasonEnd, a.waterYear, 1, shortPinned));
 			// The plain run's history is the base run itself.
 			expect(series(plain, 'a', 'dam_storage').slice(0, k)).toEqual(series(shortRun, 'a', 'dam_storage'));
 			for (const [n, key] of KEYS) {
@@ -169,7 +170,7 @@ describe('outputs e2e: outlook members are plain runs with shifted climate (§2.
 			let yearsMet = 0;
 			let meanDemand = 0;
 			for (const [yi, a] of o.analogues.entries()) {
-				const plain = runModelWithoutChecks(plainMemberInput(BASE, baseRun, decisionDate, seasonEnd, a.waterYear, f));
+				const plain = runModelWithoutChecks(plainMemberInput(BASE, baseRun, decisionDate, seasonEnd, a.waterYear, f, pinned));
 				const last = plain.days - 1;
 				let D = 0;
 				let G = 0;

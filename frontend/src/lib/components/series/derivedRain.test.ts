@@ -172,6 +172,27 @@ describe('areaRainLines: the edges', () => {
 		expect(a.patchFrom.filter((v) => v !== null)).toHaveLength(GAP.length);
 	});
 
+	it('each patch station’s lines (issue #613 slice 3): its record and × unit MAP ÷ its MAP, by place; on a patch day the rain used is that line', () => {
+		// CHIRPS first, T second: T keeps its place 2. A station listed but with no record is skipped: no lines.
+		const x = input({ units: { A: { stationId: 'S', patch: [{ source: 'chirps' }, { source: 'station', stationId: 'T' }, { source: 'station', stationId: 'U' }] } }, sites: SITES });
+		x.series = { ...x.series, [stationSeriesKey('T')]: { startDate: START, values: rainOf(1.2, 5) } };
+		x.stations = { ...x.stations, U: { name: 'Station U', mapMm: 700, mapSource: 'invented', lat: null, lon: null } };
+		const a = areaRainLines(x, 'A')!;
+		expect(a.patches!.map((p) => [p.place, p.stationId, p.stationName, p.ratio])).toEqual([[2, 'T', 'Station T', 900 / 500]]);
+		const t = a.patches![0]!;
+		const rec = rainOf(1.2, 5);
+		expect(t.raw).toEqual(rec);
+		expect(t.scaled).toEqual(rec.map((v) => v * (900 / 500)));
+		// T first in the priority: every gap day is T × 1.8, to the bit.
+		const y = input({ units: { A: { stationId: 'S', patch: [{ source: 'station', stationId: 'T' }, { source: 'chirps' }] } }, sites: SITES });
+		y.series = x.series;
+		const b = areaRainLines(y, 'A')!;
+		expect(b.patches!.map((p) => p.place)).toEqual([1]);
+		for (const d of GAP) expect(b.rainUsed[d]).toBe(b.patches![0]!.scaled[d]);
+		// Without a patch list: CHIRPS alone, no patch station lines.
+		expect(areaRainLines(input({ units: { A: { stationId: 'S' } }, sites: SITES }), 'A')!.patches).toEqual([]);
+	});
+
 	it('several areas read from one preparation give the same lines as each read alone', () => {
 		const x = input({ catchment: { stationId: 'S' }, units: { A: { stationId: 'S' }, B: { stationId: 'S' } }, sites: SITES });
 		const prep = prepareFor(x);

@@ -41,7 +41,7 @@ describe('patchChoices', () => {
 		const c = await patchChoices('p1', 'M', true, IDS, { modelInput, series });
 		expect(c.M).toMatchObject({ usable: false, reason: 'it is the main station' });
 		expect(c.P).toMatchObject({ usable: true, gapDays: 10, fills: 10 });
-		expect(c.L).toMatchObject({ usable: false, reason: 'it has no MAP to scale its rain to the unit’s MAP' });
+		expect(c.L).toMatchObject({ usable: false, reason: 'it has no MAP to scale its rain by' });
 		expect((await patchChoices('p1', 'M', false, IDS, { modelInput, series })).L).toMatchObject({ usable: false, fills: 0 });
 		expect(modelInput).toHaveBeenCalledTimes(1);
 		expect(series).not.toHaveBeenCalled();
@@ -57,6 +57,15 @@ describe('patchChoices', () => {
 		expect(series).toHaveBeenCalledTimes(3);
 		expect(c.P).toMatchObject({ usable: true, gapDays: 10, fills: 10 });
 		expect(c.L!.usable).toBe(false);
+	});
+
+	it('counts the gaps over the run’s days before the forecast, and says which (issue #612)', async () => {
+		const tail = input();
+		tail.series = { ...tail.series, rain_forecast_mm: { startDate: '2018-01-01', values: Array.from({ length: 20 }, () => 1) } };
+		forgetPatchChoices('p4');
+		const c = await patchChoices('p4', 'M', true, IDS, { modelInput: () => Promise.resolve(tail), series: () => Promise.reject(new Error('not needed')) });
+		// The 20 forecast days are gaps of M too, but no run patches them.
+		expect(c.P).toMatchObject({ usable: true, gapDays: 10, fills: 10, forecastDays: 20, windowFrom: START, windowTo: '2017-12-31' });
 	});
 
 	it('a failed fetch is tried again next time', async () => {

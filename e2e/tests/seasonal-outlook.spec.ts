@@ -341,3 +341,57 @@ test('the review triggers show for the review date, and a level published to far
 	await expect(farmer.page.locator('h1')).toHaveText('Upper farm');
 	await expect(farmer.page.getByTestId('farm-outlook')).toHaveCount(0);
 });
+
+test('with past seasons like this one, the panel lists the years chosen by their ONI and AAO beside the ESP, from the committed copy', async ({ page, owner }) => {
+	void owner;
+	// 24 water years (1989/90 … 2012/13) of invented rain, so there are 20 or more candidates (model.md §2.15c).
+	const start = '1989-10-01';
+	const days = (Date.parse('2013-10-01T00:00:00Z') - Date.parse(`${start}T00:00:00Z`)) / DAY;
+	const project = await createProject(page.request, 'Outlook climate');
+	await putModel(page.request, project.id, sampleModel());
+	await updateSettings(page.request, project.id, {
+		apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110],
+		ewrPragmaticM3PerDay: [400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400]
+	});
+	const rain = syntheticRain(days).map((v, t) => Math.round(v * YEAR_SCALE[Math.floor(t / 365.25) % YEAR_SCALE.length]! * 10) / 10);
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: start, values: rain });
+	const runId = await createRun(page.request, project.id, 'Base');
+
+	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
+	const panel = page.getByTestId('seasonal-outlook');
+	await panel.getByRole('button', { name: 'Run…' }).click();
+	const box = panel.getByRole('checkbox', { name: 'Also compare past seasons like this one' });
+	await expect(box).not.toBeChecked();
+	await expect(box).toHaveAccessibleDescription(/nearest this season’s ENSO and SAM state/);
+	await box.check();
+	await panel.getByRole('button', { name: 'Run seasonal outlook' }).click();
+	await expect(panel).toHaveAttribute('data-state', 'pending');
+	await runJobsTick({ projects: [project.id], schedule: false });
+	await expect(panel).toHaveAttribute('data-state', 'complete');
+
+	type Climate = {
+		selection: { k: number; nCandidates: number; problem: unknown; years: { label: string; chosen: boolean }[] };
+		outlook: { nYears: number };
+		source: Record<string, { through: string }>;
+	};
+	const { outlooks } = await getJson<{ outlooks: { id: string; method: string }[] }>(page.request, `/projects/${project.id}/outlooks?baseRunId=${runId}`);
+	expect(outlooks.map((o) => o.method)).toEqual(['climateState']);
+	const { outlook } = await getJson<{ outlook: { decisionDate: string; result: { nYears: number; climate: Climate } } }>(page.request, `/projects/${project.id}/outlooks/${outlooks[0]!.id}`);
+	expect(outlook.decisionDate).toBe('2013-10-01');
+	const c = outlook.result.climate;
+	expect(c.selection.problem).toBeNull();
+	expect(c.selection).toMatchObject({ nCandidates: outlook.result.nYears, k: 10 });
+	expect(c.outlook.nYears).toBe(10);
+
+	// The ESP table stays; the climate panel sits beside it, from the committed synthetic copy (ONI JAS, AAO Jul–Sep 2013).
+	await expect(panel.getByTestId('outlook-table')).toBeVisible();
+	const climate = panel.getByTestId('outlook-climate');
+	await expect(climate).toHaveAttribute('data-state', 'ready');
+	await expect(climate.getByRole('heading', { name: 'Past seasons like this one' })).toBeVisible();
+	await expect(climate.getByTestId('climate-state')).toHaveText(/^This season: ONI JAS 2013 [+−]?\d\.\d\d; AAO Jul–Sep 2013 [+−]?\d\.\d\d\.$/);
+	await expect(climate.getByTestId('climate-headline')).toContainText(`In the 10 past seasons nearest this one, the dams ended at`);
+	const chosen = c.selection.years.filter((y) => y.chosen).map((y) => y.label);
+	await expect(climate.getByTestId('climate-years').locator('tbody th')).toHaveText(chosen);
+	await expect(climate.getByTestId('climate-source')).toHaveText(`Indices: NOAA Climate Prediction Center, ONI to Dec 2025, AAO to Jan 2026.`);
+	await expectNoViolations(page, { include: '[data-testid="outlook-climate"]' });
+});

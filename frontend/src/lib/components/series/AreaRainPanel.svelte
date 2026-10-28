@@ -94,7 +94,7 @@
 			{#if lines.refused}
 				The station pairing for its CHIRPS gaps is refused: {lines.refused}.
 			{:else if lines.factors}
-				CHIRPS factors against {correctingName}, January to December: {lines.factors.map((k, m) => `${MONTHS[m]} ${fmtNum(k, 2)}`).join(', ')}.
+				CHIRPS factors for {name}, fitted against {correctingName} adjusted to its MAP, January to December: {lines.factors.map((k, m) => `${MONTHS[m]} ${fmtNum(k, 2)}`).join(', ')}.
 			{/if}
 		</p>
 		<DownloadMenu label="Rain used (CSV)" items={csvItem} align="end" />

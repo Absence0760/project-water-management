@@ -3136,8 +3136,9 @@ station*, which keeps the unit on §2.4h's chain; satellite rain is never an
 option, CHIRPS only fills gaps), **Then patch gaps from** (`patch`, issue
 #612: an ordered list of pull-downs, each another station or *CHIRPS,
 corrected*, with Up, Down, Remove and Add a source; each station shows how
-many of the main station's gap days in the run window it fills, or why it
-can't help, and a station that can't help is greyed out in the pull-down),
+many of the main station's gap days in the run's history it fills, which
+days it counted, or why it can't help, and a station that can't help is
+greyed out in the pull-down),
 **Scale to unit MAP** (`scaleToMap`) with the ratio it gives, and **Gaps:
 CHIRPS corrected against** (`correctAgainst`), then each station in use
 (main, correcting or patching) once with its MAP and, for a station without
@@ -3146,7 +3147,15 @@ station and one patching priority for all of them. The form stores
 defaults as none (scaling on, the unit's own station, the patching
 priority [CHIRPS]), and an emptied setting as null, so assigning a station
 and taking it away again stores what was there. Under Fragmentation `units` stays stored and only the share runs read it (§2.5b).
-`catchment` and `catchmentMapMm` have no field yet (the API takes them).
+`catchment` is set above the units' table under **The catchment's
+rainfall station** (issue #612 follow-up, `settings/FlowGenerationCatchment.svelte`,
+shown under both methods: the catchment rain is GR4J's under Fragmentation
+and demand's and the dams' under either): **Station** (*No station* keeps
+the catchment rain series), **Then patch gaps from**, **Scale to catchment
+MAP** and **Gaps: CHIRPS corrected against**, with the units' controls and
+stored defaults (`settings/PatchChain.svelte` is the patching priority's
+pull-downs for both). `catchmentMapMm` has no field yet (the API takes it;
+[followups.md](./followups.md)).
 `unreliable` is set under Model settings → Rain gaps → Flagged rain
 (**Unreliable periods of a rain record**, issue #611): From/To rows for every
 rain record of the project. A fit's forcing records each unit's station, so the form says
@@ -3194,11 +3203,29 @@ so record length alone doesn't disqualify it. **Usability**
 (`stationPatchUsability`, shown in the form and warned by the run): a
 station can't help when it is the main station, has no record, has no MAP
 while scaling is on, or **has a reading on none of the main station's gap
-days in the run window** (the client's "too short" case). The fill count
+days in the run's history** (the client's "too short" case). The fill count
 "fills *N* of the main station's *G* gap days" is always given, with the
-record's span; no minimum-years rule applies to a patch station (the 5-year
+days it counted and the record's span; no minimum-years rule applies to a patch station (the 5-year
 rule stays on the CHIRPS fit, where the factors depend on it). A station
 that fills none is kept in the list and changes nothing; the run warns.
+
+**The window the gaps are counted over** (engine 1.105.0, the #612
+follow-up): the run's **history**, the run window less its forecast tail
+(`forecastTail`, §2.4f): the days after the last
+day any other source has rain, which the forecast fills. No source of the
+patching priority fills a tail day (if one had a reading there, the day
+wouldn't be in the tail), so counting them made *G* the history's gaps plus
+every forecast day, and the percentage too low. The form's count
+(`stationPatchChoices`) takes the tail of the stored input's run;
+the run's own count (`StationAreaForcing.patches[].gapDays`, with
+`forecastDays` when a tail was left out) takes its own: a unit's from the
+run's `historyDays`, the catchment's from the same split over the
+catchment forcing it builds (`tailOfSource`), since that forcing is made
+before the prepared run. The reason and the run's warning say "before the
+forecast" when a tail was left out, "in the run window" otherwise; the form
+gives the dates ("gaps counted 2015-01-01 to 2020-12-31, the run's 30
+forecast days left out"). Only the count changed: which day takes which
+source is as before.
 
 **The checked record** (`checkedStationRecord`). The station's stored
 record goes through the catchment's §2.4c zero-run and §2.4d accumulation
@@ -12296,7 +12323,7 @@ another day refused.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep terciles by calendar day (the lowest band from the lowest storage on record, the total shared pro rata to capacity) and the table drawn on the latest review date the record holds.
 
-### 2.15b Drought badge: SPI and SPEI (issue #620, slice 1)
+### 2.15b Drought badge: SPI and SPEI (issue #620)
 
 How dry the catchment has been, as the **Standardized Precipitation Index**
 (SPI; McKee, Doesken and Kleist 1993; WMO-No. 1090, 2012) and the
@@ -12305,9 +12332,10 @@ Vicente-Serrano, Beguería and López-Moreno 2010) over 3, 6 and 12 months.
 Computed from a run's own daily `rain_final` and `pet` (the GR4J forcing,
 §2.4), so it needs no new upstream and avoids SPEIbase's ODbL share-alike.
 A **derived view** of a run's record (`packages/engine/src/drought/`,
-`droughtBadge`): `runModel` doesn't change, nothing is stored, and
-`ENGINE_VERSION` doesn't move. The Summary's Drought index card shows it
-([ui.md § Summary](./ui.md#summary)).
+`droughtBadge`): `runModel`'s numbers don't change, and `ENGINE_VERSION`
+doesn't move for it (1.105.0 carries `summary.drought`, below). The
+Summary's Drought index card shows it, worked out in the browser from the
+run's stored series ([ui.md § Summary](./ui.md#summary)).
 
 - **Month.** The badge is for the last whole calendar month of the run's
   history: a forecast run's days from `forecastFrom` on are never read. A
@@ -12361,13 +12389,113 @@ after it, a dry spell reads dry, and each kind of gap is named. The
 Summary's e2e (`overview.spec.ts`) seeds 31 years of rain whose last
 Aug–Oct is bone dry, and checks its SPI-3 is Φ⁻¹(1/62) = −2.14.
 
-**Later slices of #620** build on this module. The analogue outlook (ONI and
-CPC's AAO copied daily, `backend/src/ingest/indices.ts`) selects the k past
-seasons nearest this one's climate state in `outlookAnalogues`, and may add
-the SPI-3 at the decision date as a further distance term (`standardizedIndex`
-gives every month's value, not only the last). The C3S outlook can report
+**Stored headline (`summary.drought`, engine 1.105.0).** The project list
+and the team portfolio can't load every run's daily series, so a saved run
+carries the badge's headline in its summary (`drought/summary.ts`
+`runDrought`, attached by `runModelChecked`): `month` (the last whole month
+of history, `YYYY-MM`), `driest` (the driest index with a value: `kind`
+`spi`/`spei`, `scale` 3/6/12, `value`, `class`, and `from`, the first month
+of the period it covers) or null with a `gap`: `no-rain` (no catchment
+`rain_final`), `no-month` (no whole month), `short-record` (a calendar month
+under 20 years) or `missing-month`. The same badge as the card's, so the
+two agree. It never reads a forecast day: a forecast-mode run's summary is
+its run without the tail's (§ Forecast mode), and an ordinary run whose rain
+went on past the record on forecast rain (`summary.forecastRain`) is cut at
+`forecastRain.lastRecorded` (`droughtLastDay`; the card uses the same day).
+Forecast rain filling a gap before that is history, as everywhere else.
+Output only, so `ENGINE_VERSION` stays; a run from before has no
+`summary.drought` and the list says "No drought index for this run". The
+portfolio query reads the one key from the source run's summary
+(`backend/src/portfolio/portfolio.ts`, api.md § Portfolio). Tests:
+`drought/summary.test.ts` (the driest index and its period, the
+forecast-rain cut with a positive control, each gap), `forecast.test.ts`
+(a forecast-mode run's badge is its history's), the portfolio DB test and
+`e2e/tests/projects.spec.ts`.
+
+**Later slices of #620** build on this module. The analogue outlook
+(§2.15c) chooses past seasons by their ENSO and SAM state alone, not the
+SPI-3 at the decision date (§2.15c says why). The C3S outlook can report
 its members' season totals against the same per-calendar-month fits
 (`fitIndex`, `indexValue`). Neither needs a change here.
+
+### 2.15c Past seasons like this one: the climate-state analogues (issue #620)
+
+"In past seasons that started like this one, how did the dams end?" The ESP
+(§2.15) weighs every analogue year alike. With the outlook's method
+`climateState` the result also carries the same members **summarised on the
+k analogue years whose ENSO and SAM state before their season was nearest
+this season's**: a conditioned ESP in the manner of Hamlet and Lettenmaier
+(1999), who subset the ESP traces by ENSO phase, with the phase replaced by
+a nearest-neighbour distance (Lall and Sharma 1996) so the SAM can count
+too. Pure, in `packages/engine/src/outlook/climate.ts`
+(`selectClimateAnalogues`, `climateConditionedOutlook`, and
+`runSeasonalOutlook`'s `climateIndices` option). A **derived view** of the
+ESP members: no member is run again, the ESP result is unchanged to the bit
+(`climate.test.ts`), the outlook's default method stays `esp`, and
+`ENGINE_VERSION` doesn't move.
+
+- **The indices.** Two monthly NOAA CPC series from the data mirror's copy
+  (`indices/{oni,aao}.json`, [data-sources.md §
+  climate-indices](./data-sources.md#climate-indices)): the **ONI**, a
+  3-month running mean of the Niño 3.4 anomaly kept under its centre month,
+  and CPC's **AAO**, the SAM's usual proxy. The ONI is already a 3-month
+  mean, so it is read as one value: the newest season wholly before the
+  decision date (1 October reads JAS, centred on August). The AAO is noisy
+  month to month, so it is the mean of the 3 months before the decision date
+  (July to September for 1 October).
+- **No look-ahead.** A value is used only when every month it averages lies
+  before the decision date (the ONI's season reaches a month past its
+  centre), so no year's state reads the season it is meant to stand for.
+  When the copy doesn't hold this season's newest month yet (CPC publishes
+  early in the following month), the window steps back a month, at most
+  `CLIMATE_INDEX_MAX_LAG_MONTHS` = 2, and **every** year is read over the
+  same calendar months; the panel says so. Each analogue year W is read over
+  those months counted back from its own season start (`analogueStart`).
+- **The distance.** Each index is standardised by its sample standard
+  deviation across the candidate years (the ESP's analogue years, after
+  any the backend left out, that have both indices), then the distance is
+  the weighted root mean square of the standardised differences from this
+  season's state: 0.5 is half a standard deviation apart on average. Equal
+  weights: ENSO is the stronger driver of summer rain in the north-east of
+  the country and the SAM of winter rain in the south-western Cape (Reason
+  and Rouault 2005), and the app serves both. An index that is the same in
+  every candidate separates nothing and adds 0. Ties go to the newer year,
+  so the choice is deterministic.
+- **k.** A third of the candidates (`CLIMATE_ANALOGUE_SHARE`; the ENSO-phase
+  subsets of conditioned ESP are about a tercile), never fewer than
+  `OUTLOOK_MIN_YEARS` = 10, so the subset has percentiles and a planning
+  figure. With fewer than `CLIMATE_ANALOGUE_MIN_CANDIDATES` = 20 candidates,
+  10 would be half the record or more, which is no conditioning to speak
+  of: none is drawn and the result says why (`tooFewYears`). An index the
+  copy doesn't hold for the window says so too (`indexNotHeld`). Either
+  way the ESP stands as it is.
+- **The summary.** `summariseOutlook` (§2.15) on the chosen years' members
+  alone, in the analogues' order: each level's season-end storage, years
+  met and planning figure, beside the same figures over every year.
+- **Not a term: the antecedent wetness.** The SPI-3 at the decision date
+  (§2.15b) is left out of the distance: every member already starts from
+  this season's own state (its dams, soils and groundwater, §2.16), so the
+  antecedent conditions are in the outlook once, and rain anomalies persist
+  too little month to month to say much about the season's weather.
+
+**What it can't say.** It is a choice among past seasons, not a forecast:
+ENSO and the SAM explain only part of a South African season's rain, and
+with 30-odd years of record a third is about ten seasons, so a percentile
+moves with one year in or out. The panel says both ([ui.md § Seasonal
+outlook](./ui.md#seasonal-outlook)). There is no skill score yet; the C3S
+slice of #620 adds a hindcast score for the forecast-conditioned outlook.
+
+**Tests** (`outlook/climate.test.ts`, invented index values): the months
+read for the ONI and the AAO, the step back when the copy is a month short
+(every year alike, at most 2), no month of the season itself read; the
+ranking against a hand-computed distance, ties to the newer year; k at a
+third with the floor and the minimum; years an index doesn't reach (the AAO
+from 1979) listed and left out; the conditioned summary equal to
+`summariseOutlook` on the chosen members; and the ESP part of an outlook
+equal to the plain ESP **to the bit** with the indices, with none held and
+with too few years, and the same choice under two skewed `TZ`s. The backend
+(`outlooks.db.test.ts`) checks the same against the committed synthetic
+copy.
 
 ### 2.16 Starting a run from a saved state: model-state snapshots (engine ≥ 1.1.0, issue #53)
 

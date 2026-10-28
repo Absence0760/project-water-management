@@ -80,6 +80,9 @@ describe('settingsSummaries', () => {
 		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' }, rainStations: { units } }))['set-share']).toBe('Per unit · 2 units on a rainfall station · EWR by each unit’s natural MAR');
 		// Under Fragmentation the stations set the units' EWR shares (issue #615), so they count there too.
 		expect(settingsSummaries(base({ rainStations: { units } }))['set-share']).toBe('Fragmentation · 2 units on a rainfall station · flow and EWR by each unit’s natural MAR');
+		expect(settingsSummaries(base({ rainStations: { catchment: { stationId: 's' }, units } }))['set-share']).toBe(
+			'Fragmentation · catchment rain from a station · 2 units on a rainfall station · flow and EWR by each unit’s natural MAR'
+		);
 		// No longer said in Flow calibration's line.
 		expect(calibrationSummaries(cal({ unitRain: { mode: 'perUnit' } }))['set-flow']).not.toContain('rain for each unit');
 		// The retired EWR split (issue #615) and flow-share method (#616) change nothing: one share per unit, its natural MAR.

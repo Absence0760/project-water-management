@@ -1153,6 +1153,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.rainStations']
 	},
 	{
+		id: 'catchment-rain-station',
+		term: 'The catchment’s rainfall station',
+		short: 'The catchment rain from a station × catchment MAP ÷ its MAP, its gaps patched in the order you set; none = the rain series as before.',
+		units: 'mm/day',
+		category: 'flow'
+	},
+	{
 		id: 'actual-evaporation',
 		term: 'Actual evaporation (AET)',
 		short: 'Water the catchment actually evaporates each day in GR4J, in mm: never more than the potential evaporation.',
@@ -1789,6 +1796,22 @@ export const TIPS: HelpTipText[] = [
 		fields: ['preview.areaStationScaled']
 	},
 	{
+		id: 'preview-area-patch-raw',
+		term: 'Patch station raw (daily preview)',
+		short: 'A station in an area’s patching priority as recorded, over the run window, beside the same rain adjusted to the area’s MAP.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaPatchRaw']
+	},
+	{
+		id: 'preview-area-patch-scaled',
+		term: 'Patch station × ratio (daily preview)',
+		short: 'A patch station’s record × the area’s MAP ÷ that station’s MAP: what fills the main station’s gaps from it. Derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaPatchScaled']
+	},
+	{
 		id: 'preview-area-chirps-raw',
 		term: 'Area CHIRPS raw (daily preview)',
 		short: 'The area’s own CHIRPS as stored, over the run window, beside the same CHIRPS bias-corrected against its station.',
@@ -1815,7 +1838,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'preview-area-rain-from',
 		term: 'Rain used from (daily preview)',
-		short: 'Where each day of an area’s rain used came from: the station, corrected CHIRPS, the next fallback or no source.',
+		short: 'Where each day of an area’s rain used came from: the station, a patch station by name, corrected CHIRPS, the next fallback or none.',
 		category: 'data',
 		fields: ['preview.areaRainFrom']
 	},

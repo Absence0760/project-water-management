@@ -5,8 +5,10 @@
 //   Vlei says it fills all of Ridge's gap days; Short is greyed out in the pull-down with why it can't help.
 // - Saved, the setting holds the chain; a run patches Ridge's gaps from Vlei × unit MAP ÷ Vlei's MAP, and its panel
 //   says so with the days.
+// - The catchment's station (issue #612 follow-up): the same chain under The catchment's rainfall station, its fill
+//   count over the run's days before a 14-day forecast tail, which it says it left out.
 import type { APIRequestContext, Page } from '@playwright/test';
-import { createRun, putModel, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { createRun, putModel, putSeries, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openSettings, saveSettings } from '../support/settings.ts';
@@ -58,7 +60,7 @@ test('a unit’s gaps are patched from an ordered list of stations, then CHIRPS,
 	await upperRow.getByRole('button', { name: 'Move patch source 2 for Upper farm up' }).click();
 	await expect(upperRow.getByLabel('Patch source 1 for Upper farm', { exact: true })).toHaveValue(vlei);
 	await expect(upperRow.getByLabel('Patch source 2 for Upper farm', { exact: true })).toHaveValue('chirps');
-	await expect(chain.getByTestId('flowgen-patch-fill')).toHaveText(/^fills 10 of the main station’s 10 gap days \(100 %\); record 2021-10-01 to /);
+	await expect(chain.getByTestId('flowgen-patch-fill')).toHaveText(/^fills 10 of the main station’s 10 gap days \(100 %\); gaps counted 2021-10-01 to 2022-01-28; record 2021-10-01 to /);
 	// Vlei patches Upper farm, so it is a station in use, with its MAP.
 	await expect(panel(page).getByTestId('flowgen-station').filter({ hasText: 'Vlei station' })).toContainText('Patches Upper farm.');
 
@@ -73,4 +75,41 @@ test('a unit’s gaps are patched from an ordered list of stations, then CHIRPS,
 	const stationRow = page.getByTestId('run-unit-rain').getByTestId('run-station-row').filter({ hasText: 'Upper farm' });
 	await expect(stationRow.getByRole('cell').first()).toContainText('gaps patched from Vlei station × 1.8 (10 days), then CHIRPS (0 days)');
 	await expect(stationRow.getByRole('cell').nth(3)).toContainText('+ 10 from patch stations');
+});
+
+test('the catchment’s station takes a patching priority too, its fill count leaving the forecast tail out', async ({ page, owner }) => {
+	void owner;
+	const { id, ridge, vlei } = await seed(page.request);
+	// A forecast after the record (2021-10-01 + 120 days): 14 days no run patches, so no gap a station could fill.
+	await putSeries(page.request, id, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2022-01-29', values: Array.from({ length: 14 }, () => 1) });
+	await openSettings(page, id);
+	const card = panel(page).getByTestId('flowgen-catchment');
+	// No station by default: the catchment rain series, as before stations.
+	await expect(card.getByLabel('Station', { exact: true })).toHaveValue('');
+	await card.getByLabel('Station', { exact: true }).selectOption(ridge);
+	const chain = card.getByRole('list', { name: 'Then patch gaps from, for the catchment' });
+	await expect(card.getByLabel('Patch source 1 for the catchment', { exact: true })).toHaveValue('chirps');
+	// Short has no reading on any of Ridge's gap days before the forecast: greyed out, with why.
+	const short = card.getByLabel('Patch source 1 for the catchment', { exact: true }).locator('option', { hasText: 'Short station' });
+	await expect(short).toBeDisabled();
+	await expect(short).toContainText('can’t help: it has no reading on any of the main station’s 10 gap days before the forecast');
+
+	await card.getByRole('button', { name: 'Add a source' }).click();
+	await expect(card.getByLabel('Patch source 2 for the catchment', { exact: true })).toHaveValue(vlei);
+	await card.getByRole('button', { name: 'Move patch source 2 for the catchment up' }).click();
+	// 10 gap days, not 24: the forecast's 14 are left out, and the line says so.
+	await expect(chain.getByTestId('flowgen-patch-fill')).toHaveText(
+		/^fills 10 of the main station’s 10 gap days \(100 %\); gaps counted 2021-10-01 to 2022-01-28, the run’s 14 forecast days left out; record 2021-10-01 to /
+	);
+
+	await saveSettings(page);
+	const stored = (await (await page.request.get(`${API_URL}/projects/${id}`)).json()) as { project: { settings: { rainStations: { catchment: unknown } } } };
+	expect(stored.project.settings.rainStations.catchment).toEqual({ stationId: ridge, patch: [{ source: 'station', stationId: vlei }, { source: 'chirps' }] });
+
+	// Taking the station away again stores none.
+	await card.getByLabel('Station', { exact: true }).selectOption('');
+	await expect(card.getByTestId('flowgen-patch')).toHaveCount(0);
+	await saveSettings(page);
+	const after = (await (await page.request.get(`${API_URL}/projects/${id}`)).json()) as { project: { settings: { rainStations?: { catchment?: unknown } | null } } };
+	expect(after.project.settings.rainStations?.catchment).toBeUndefined();
 });

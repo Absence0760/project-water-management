@@ -619,6 +619,16 @@ runs and accumulations are real) can't be decided without the client.
       stands; NASA POWER's computed ET₀ on the newest days, replaced by
       AgERA5's once its month lands, with no correction between them; sea
       cells left out of the feed's mean (engine-audit.md ET1–ET3).
+- [ ] **Past seasons like this one (issue #620, model.md §2.15c).** Built
+      opt-in (an outlook's method `climateState`; the default `esp` is
+      unchanged, and the ESP part of a `climateState` outlook is the same
+      to the bit). Calls made in the build, to confirm: the ONI as one
+      3-month value and the AAO as a 3-month mean, both wholly before the
+      decision date; the two indices weighted equally, each standardised
+      by its spread over the candidate years; k a third of the candidates,
+      at least 10, and none drawn under 20 candidates; the SPI-3 at the
+      decision date not a term. The issue asks for the hydrologist's
+      sign-off on the analogue count; no skill score until the C3S slice.
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
@@ -5279,18 +5289,18 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       correction by hand in the app.
 
 - [ ] **Rainfall station settings with no field yet** (issue #553 round 3,
-      2026-10-24). Settings → Model selection for flow generation sets each land unit's station,
-      scaling, correcting station and a station's site
-      (`settings.rainStations.units`, `.sites`), but three parts round 2's
-      engine runs are API-only: `catchment` (Fragmentation's average catchment
-      rainfall from a station, the operator's decision of 2026-10-23),
-      `catchmentMapMm` / `catchmentMapSource`, and each station's
-      `unreliable` periods ([model.md §2.4i](./model.md)). Durable fix: a
-      "Catchment rainfall" station select with the catchment MAP under
-      Fragmentation, and the unreliable periods on the station's Series
-      details. Trigger: the operator assigns a catchment station, or a
-      station needs a period set aside. Remaining #553 rounds (4 EWR split, 5
-      Data tab) don't cover them.
+      2026-10-24; narrowed by the #612 follow-up, 2026-10-28). Settings →
+      Model selection for flow generation sets each land unit's station and
+      the catchment's (`settings.rainStations.units`, `.catchment`: the
+      station, its patching priority, scaling and correcting station), each
+      station's site, and Rain gaps → Flagged rain the `unreliable` periods
+      (issue #611). One part stays API-only: `catchmentMapMm` /
+      `catchmentMapSource`, the catchment MAP the catchment station's ratio
+      uses (absent = the land units' area-weighted mean MAP, [model.md
+      §2.4i](./model.md)). Durable fix: a MAP and source field under The
+      catchment's rainfall station, showing the units' mean it replaces and
+      the ratio it gives. Trigger: the operator has a catchment MAP from a
+      study that differs from the units' mean.
 
 ## Notes (WP-2.7)
 

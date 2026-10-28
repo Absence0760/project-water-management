@@ -14,6 +14,8 @@
 	const loadUnitRain = () => loadSections().then((m) => ({ default: m.UnitRainFields }));
 	// Model selection for flow generation → Per unit's station table (issue #553 round 3): in the same chunk, drawn whenever Per unit is chosen.
 	const loadFlowGenUnits = () => loadSections().then((m) => ({ default: m.FlowGenerationUnits }));
+	// … and the catchment's station (issue #612 follow-up), in the same chunk, drawn under both methods.
+	const loadFlowGenCatchment = () => loadSections().then((m) => ({ default: m.FlowGenerationCatchment }));
 	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
 	// Rain gaps' three cards, Gap-filling product (issue #604), CHIRPS gap filling and Flagged rain (issue #521), inside the fold that is one closed
@@ -342,6 +344,16 @@
 				Under Fragmentation the setup below sets only how the EWR is split: GR4J also runs once on each unit’s own rain, for each unit’s natural MAR share, and the catchment’s one run still makes the flow.
 			</p>
 		{/if}
+		<!-- The catchment's rainfall station (settings.rainStations.catchment, issue #612 follow-up): the catchment rain under
+		     either method (GR4J's one run under Fragmentation; demand and the dams always), so it shows under both. -->
+		<div class="sub-card" data-testid="flowgen-catchment-card">
+			<h3 class="sub first">The catchment’s rainfall station <HelpTip key="catchment-rain-station" /></h3>
+			<Lazy load={loadFlowGenCatchment}>
+				{#snippet children(FlowGenerationCatchment)}
+					<FlowGenerationCatchment bind:value={s.rainStations} {readonly} {stations} projectId={project.id} />
+				{/snippet}
+			</Lazy>
+		</div>
 		<div class="sub-card" data-testid="flowgen-stations-card">
 			<h3 class="sub first">Each unit’s rainfall station <HelpTip key="settings.rainStations" /></h3>
 			<Lazy load={loadFlowGenUnits}>

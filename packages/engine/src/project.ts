@@ -2,6 +2,7 @@
 // validation) and the frontend (forms). See docs/data-model.md for how each
 // field maps onto the b023 workbook.
 import type { ForecastSummary } from './forecast';
+import type { RunDrought } from './drought/summary';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { FlowMissingSettings } from './recordPeriods';
 import type { WarningKept } from './checkItems';
@@ -4096,9 +4097,14 @@ export type StationPatchUse =
 			clamped: boolean;
 			/** Why the run skipped it (no record, no MAP under scaling, the main station), or null. */
 			skipped: string | null;
-			/** The main station's gap days in the run window, and how many of them this station has a checked reading on. */
+			/**
+			 * The main station's gap days in the run's history (the run window less its forecast tail, which is never
+			 * patched), and how many of them this station has a checked reading on.
+			 */
 			gapDays: number;
 			fills: number;
+			/** The forecast tail days left out of gapDays; absent without a tail. */
+			forecastDays?: number;
 			/** The days it gave the area's rain (after the sources before it). */
 			days: number;
 	  }
@@ -4561,6 +4567,13 @@ export interface RunSummary {
 	 * before `forecast.from` only. Absent on ordinary runs and older runs.
 	 */
 	forecast?: ForecastSummary;
+	/**
+	 * The drought badge's headline (engine 1.105.0, issue #620, ./drought/summary.ts, model.md §2.15b):
+	 * the driest of SPI and SPEI over 3, 6 and 12 months for the last whole month of the run's history,
+	 * from its own rain_final and pet, for the project list and the team portfolio. Never reads a
+	 * forecast day. Absent on older runs.
+	 */
+	drought?: RunDrought;
 	/**
 	 * Assurance of supply per farm and user, stress classes and the water
 	 * account (engine ≥ 0.32.0, WP-3.4, ./network/reliability.ts, model.md

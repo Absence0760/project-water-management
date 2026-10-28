@@ -4,7 +4,10 @@
 // the tick itself), each member stored once and the engine's summary as the
 // result, a level whose ops don't apply, RLS (with a positive control),
 // write-once members and outcomes, the per-user limit, the project's cap,
-// and the job failing closed when its user lost the editor role.
+// and the job failing closed when its user lost the editor role. The
+// climate-state method (265_outlook_method, issue #620): the ESP part the
+// same to the bit, the years chosen from the committed synthetic copy of the
+// ONI and AAO, why none are chosen on a short record, and RLS on it.
 //
 // Synthetic catchment: a farm dam draining to an outlet gauge, 13 water
 // years (2000/01 … 2012/13) of invented winter rain, each year scaled
@@ -565,5 +568,112 @@ describe('review triggers (issue #53 R6)', () => {
 		expect(plain.body.outlook.reviewDate).toBeNull();
 		// Run it, so no later file's tick claims it (src/__tests__/db-setup.ts).
 		expect((await tick()).done).toBe(1);
+	});
+});
+
+describe('the climate-state analogues (issue #620, method climateState)', () => {
+	/** 23 water years, 1990/91 … 2012/13, one saved run (to 30 September 2013). Invented values. */
+	async function longCatchment(owner: User) {
+		const projectId = (await owner.call('POST', '/projects', { name: 'Outlook climate' })).body.project.id as string;
+		const outlet = node('Outlet', null);
+		const farm = node('Farm', outlet.id, { pctRunoffToDam: 1, damCapacityM3: 80_000, damInitialPct: 0.5, damMinPct: 0 });
+		const crop = { id: randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 150_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110], ewrPragmaticM3PerDay: monthly(800) } })).status).toBe(200);
+		const start = '1990-10-01';
+		const days = (Date.parse('2013-10-01T00:00:00Z') - Date.parse(`${start}T00:00:00Z`)) / DAY;
+		const rain = Array.from({ length: days }, (_, t) => {
+			const d = new Date(Date.parse(`${start}T00:00:00Z`) + t * DAY);
+			const wy = d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+			return t % 3 === 0 ? Math.round(MONTH_MM[d.getUTCMonth()]! * (0.3 + ((wy * 7) % 11) / 10) * 10) / 10 : 0;
+		});
+		expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: start, values: rain })).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'base' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		return { projectId, runId: run.body.run.id as string };
+	}
+
+	it('stores the method, keeps the ESP figures to the bit, and adds the k nearest years with their ONI and AAO from the copy', async () => {
+		const owner = await signUp('OutlookClimateOwner');
+		const c = await longCatchment(owner);
+		const esp = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId));
+		const cs = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { method: 'climateState' }));
+		expect(esp.body.outlook.method).toBe('esp');
+		expect(cs.body.outlook.method).toBe('climateState');
+		await tick();
+		const get = async (id: string) => (await owner.call('GET', `/projects/${c.projectId}/outlooks/${id}`)).body.outlook;
+		const a = await get(esp.body.outlook.id);
+		const b = await get(cs.body.outlook.id);
+		expect(a.status).toBe('complete');
+		expect(b.status).toBe('complete');
+		expect(a.result).not.toHaveProperty('climate');
+		const { climate, ...espPart } = b.result;
+		// The ESP figures are the same either way.
+		expect(espPart).toEqual(a.result);
+		expect(a.result.nYears).toBe(23);
+
+		// The committed synthetic copy (backend/fixtures/mirror/indices/, as of 2026-02-09): ONI centred on August 2013 (JAS), AAO July–September 2013.
+		expect(climate.method).toBe('climateState');
+		expect(climate.selection.problem).toBeNull();
+		expect(climate.selection.indices.map((w: { id: string; from: string; to: string; lagMonths: number }) => [w.id, w.from, w.to, w.lagMonths])).toEqual([
+			['oni', '2013-08', '2013-08', 0],
+			['aao', '2013-07', '2013-09', 0]
+		]);
+		expect(climate.selection).toMatchObject({ nCandidates: 23, k: 10, missing: [] });
+		const chosen = climate.selection.years.filter((y: { chosen: boolean }) => y.chosen).map((y: { waterYear: number }) => y.waterYear);
+		expect(chosen).toHaveLength(10);
+		expect(climate.source).toEqual({
+			oni: { url: 'https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt', through: '2025-12', revision: 1, fetchedAt: '2026-02-09T00:00:00.000Z' },
+			aao: { url: 'https://www.cpc.ncep.noaa.gov/products/precip/CWlink/daily_ao_index/aao/monthly.aao.index.b79.current.ascii', through: '2026-01', revision: 1, fetchedAt: '2026-02-09T00:00:00.000Z' }
+		});
+		// Summarised from the ESP's own members of those years, in the analogues' order: nothing more was run.
+		expect(climate.outlook.nYears).toBe(10);
+		expect(climate.outlook.analogues.map((x: { waterYear: number }) => x.waterYear)).toEqual(a.result.analogues.map((x: { waterYear: number }) => x.waterYear).filter((wy: number) => chosen.includes(wy)));
+		for (const [i, l] of climate.outlook.levels.entries()) expect(l.years).toEqual(a.result.levels[i].years.filter((y: { waterYear: number }) => chosen.includes(y.waterYear)));
+		const members = (await asOwner('SELECT count(*)::int AS n FROM seasonal_outlook_member WHERE outlook_id = $1', [cs.body.outlook.id])) as { n: number }[];
+		expect(members[0]!.n).toBe(3 * 23);
+	});
+
+	it('says why no years are chosen with fewer than 20 candidates, and refuses an unknown method', async () => {
+		const owner = await signUp('OutlookClimateShort');
+		const c = await catchment(owner);
+		const res = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { method: 'climateState' }, [{ label: '100 %', ops: scale(1) }]));
+		expect(res.status).toBe(202);
+		await tick();
+		const o = (await owner.call('GET', `/projects/${c.projectId}/outlooks/${res.body.outlook.id}`)).body.outlook;
+		expect(o.result.nYears).toBe(13);
+		expect(o.result.climate).toMatchObject({ outlook: null, selection: { nCandidates: 13, k: 0, problem: { reason: 'tooFewYears' } } });
+		const bad = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { method: 'c3s' }));
+		expect(bad.status).toBe(400);
+		// The column refuses one too, below the API.
+		const check = (await asOwner(`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'seasonal_outlook_method'`)) as { def: string }[];
+		expect(check[0]!.def).toBe("CHECK ((method = ANY (ARRAY['esp'::text, 'climateState'::text])))");
+	});
+
+	it('a viewer reads the method and the climate result, an outsider nothing, and no one changes the method', async () => {
+		const owner = await signUp('OutlookClimateRlsOwner');
+		const viewer = await signUp('OutlookClimateRlsViewer');
+		const outsider = await signUp('OutlookClimateRlsOutsider');
+		const c = await catchment(owner);
+		await member(owner, c.projectId, viewer, 'viewer');
+		const { outlook } = (await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { method: 'climateState' }, [{ label: '100 %', ops: scale(1) }]))).body;
+		// Not in the column grant: the method is fixed at insert, pending or complete.
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE seasonal_outlook SET method = 'esp' WHERE id = $1`, [outlook.id]))).rejects.toMatchObject({ code: '42501' });
+		await tick();
+
+		// Positive control: the viewer sees the method and the climate part of the result.
+		const seen = await viewer.call('GET', `/projects/${c.projectId}/outlooks/${outlook.id}`);
+		expect(seen.status).toBe(200);
+		expect(seen.body.outlook.method).toBe('climateState');
+		expect(seen.body.outlook.result.climate.selection.problem.reason).toBe('tooFewYears');
+		expect((await viewer.call('GET', `/projects/${c.projectId}/outlooks`)).body.outlooks.map((o: { method: string }) => o.method)).toEqual(['climateState']);
+		const rowsAs = (u: User) =>
+			withUser(u.id, async (db) => (await db.query(`SELECT method, result ? 'climate' AS climate FROM seasonal_outlook WHERE project_id = $1`, [c.projectId])).rows);
+		expect(await rowsAs(viewer)).toEqual([{ method: 'climateState', climate: true }]);
+
+		expect((await outsider.call('GET', `/projects/${c.projectId}/outlooks/${outlook.id}`)).status).toBe(404);
+		expect(await rowsAs(outsider)).toEqual([]);
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE seasonal_outlook SET method = 'esp' WHERE id = $1`, [outlook.id]))).rejects.toMatchObject({ code: '42501' });
 	});
 });

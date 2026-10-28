@@ -49,6 +49,7 @@ import { applyScenario } from '../scenario/overrides';
 import { quantileSorted } from '../uncertainty/bands';
 import type { OutcomeMetric } from '../views/outcomeMatrix';
 import { outlookAnalogue, resolveSeason, seasonWaterYear, type OutlookAnalogue, type OutlookSeason, type ResolvedSeason } from './season';
+import { climateConditionedOutlook, selectClimateAnalogues, type ClimateOutlook, type MonthlyIndexSeries } from './climate';
 
 /** A demand level: an id, a label ("85 %") and its ops (demand.scale only, e.g. one at factor 0.85, or R1's `months` form for a monthly plan). */
 export interface OutlookLevel {
@@ -576,7 +577,16 @@ export interface SeasonalOutlook {
 	levels: OutlookLevelResult[];
 	planning: PlanningFigure;
 	warnings: string[];
+	/**
+	 * The outlook on the analogue years nearest this season's ENSO and SAM
+	 * state (issue #620, ./climate.ts, docs/model.md §2.15c), beside the ESP
+	 * above; present only when asked for (SeasonalOutlookOptions.climateIndices).
+	 */
+	climate?: ClimateOutlook;
 }
+
+/** The ESP summary alone (summariseOutlook): a SeasonalOutlook without `climate`, which only runSeasonalOutlook adds. */
+export type EspOutlook = Omit<SeasonalOutlook, 'climate'>;
 
 export interface SeasonalOutlookOptions extends OutlookSeason {
 	levels: readonly OutlookLevel[];
@@ -598,6 +608,12 @@ export interface SeasonalOutlookOptions extends OutlookSeason {
 	warmStart?: boolean;
 	/** The snapshot to start from (captureModelState(input, decisionDate)); captured here when absent. */
 	snapshot?: ModelStateSnapshot;
+	/**
+	 * The ONI and AAO series (issue #620): the result also carries `climate`,
+	 * the same members summarised on the years nearest this season's state
+	 * (selectClimateAnalogues). Absent: the ESP alone, as before.
+	 */
+	climateIndices?: readonly MonthlyIndexSeries[];
 }
 
 /**
@@ -678,7 +694,7 @@ export interface OutlookSummaryInput {
 }
 
 /** Choose the metric, work out every level's statistics and the planning figure. */
-export function summariseOutlook(x: OutlookSummaryInput): SeasonalOutlook {
+export function summariseOutlook(x: OutlookSummaryInput): EspOutlook {
 	const s = resolveSeason(x.season);
 	const share = x.planningShare ?? DEFAULT_PLANNING_SHARE;
 	if (!(Number.isFinite(share) && share > 0 && share <= 1)) throw new RangeError(`planning share ${String(share)} must be in (0, 1]`);
@@ -859,7 +875,7 @@ export function runSeasonalOutlook(raw: ModelInput, options: SeasonalOutlookOpti
 		}
 		return { id: level.id, label: level.label, problems, members };
 	});
-	return summariseOutlook({
+	const summaryInput: OutlookSummaryInput = {
 		season,
 		model: input.model,
 		analogues,
@@ -869,7 +885,10 @@ export function runSeasonalOutlook(raw: ModelInput, options: SeasonalOutlookOpti
 		...(options.metric !== undefined ? { metric: options.metric } : {}),
 		siteNodeId,
 		...(options.planningShare !== undefined ? { planningShare: options.planningShare } : {})
-	});
+	};
+	const outlook = summariseOutlook(summaryInput);
+	if (!options.climateIndices) return outlook;
+	return { ...outlook, climate: climateConditionedOutlook(summaryInput, selectClimateAnalogues(season, analogues, options.climateIndices)) };
 }
 
 const pct = (v: number) => `${Math.round(v * 100)} %`;
