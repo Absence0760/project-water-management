@@ -191,6 +191,7 @@ the Client the current description on request.
 | --- | --- | --- |
 | **Amazon Web Services, Inc.** | Hosting: AWS Lambda (application, background jobs, report rendering, data-feed fetching), Amazon RDS for PostgreSQL (database and backups), Amazon S3 (site files, report PDFs), Amazon SES (email), Amazon SQS and EventBridge (job queues and schedules), Amazon CloudWatch (logs, metrics, alarms), AWS Secrets Manager and KMS (secrets), Amazon ECR (application images, no personal information), Amazon VPC | Stored in `af-south-1` (Cape Town) |
 | Amazon Web Services, Inc. | Amazon CloudFront (content delivery), AWS WAF (firewall) and AWS Certificate Manager (TLS certificates) | In transit only: requests pass through CloudFront edge locations worldwide; the firewall's configuration and rate counters sit in `us-east-1` and see each request's IP address and path. Nothing is stored there by the service. |
+| Amazon Web Services, Inc. | Amazon Bedrock, running Anthropic's Claude model for the AI assistant, only where the Client's projects use it: a member's question, the conversation so far, and the project data the assistant reads to answer it (settings, the catchment network, run results and series), never member, farmer or registered-user names or email addresses. Anthropic is not a sub-processor: Bedrock runs the model in AWS's own accounts and the model's maker has no access to what is sent. | Sent from `af-south-1` and processed, while it is answered, in any commercial AWS region (Bedrock's global inference, the only route to the model from Cape Town); AWS may keep it only to detect abuse of its service. Nothing is stored by the service there: no transcript is kept, and the assistant's usage counts stay in `af-south-1`. A transfer under clause 11.4. |
 | Migadu (Switzerland), the Operator's mailbox provider for `@jaredhoward.com` (per the estate's DNS records) | Receives email the Client or data subjects send to `jared@jaredhoward.com` (support, requests) | Switzerland *(the Operator's personal site also names Gmail for its email: confirm whether mail is forwarded there, and list Google too if so)* |
 
 6.2 The data-feed sources the service reads from (CHIRPS rainfall, the
@@ -317,6 +318,15 @@ agreement (clause 6) or with the Client's written consent.
 11.3 The Operator will not move the stored information out of South Africa
 without the Client's prior written consent.
 
+11.4 Where the Client's projects use the AI assistant (clause 6.1), the
+Operator transfers what each question sends to the model to Amazon Web
+Services, which may process it in any commercial AWS region to answer it.
+The parties agree this rests on section 72(1)(a) (AWS's Data Processing
+Addendum, clause 6.3) and section 72(1)(c)–(d) (it is needed to answer the
+question the data subject asked). The stored information stays in South
+Africa. The Client may ask the Operator to keep the assistant off for its
+projects, and the Operator will.
+
 ## 12. Liability
 
 12.1 Each party is responsible for its own compliance with POPIA.
@@ -384,6 +394,14 @@ Signed by the Operator: ____________________ Jared Howard Date: ________
   (2026-09-28); confirm the s57 reading before the first signature.
 - **Mailbox provider** (clause 6.1): confirm the provider and its data-
   protection terms before the first signature.
+- **The assistant's transfer** (clauses 6.1 and 11.4, added 2026-10-27 with
+  issue #610): whether s72(1)(a) through AWS's DPA and s72(1)(c)–(d) carry
+  a transfer to a region not named in advance (Bedrock's global routing),
+  or whether the notice should seek the data subject's consent (s72(1)(b))
+  when they first use the assistant. Clause 11.4's "keep it off" is a
+  per-deployment switch today (`assistant_enabled`), not a per-project one:
+  confirm that suffices for a Client that refuses, or ask for a project
+  setting before that Client signs.
 - **Clause 8.4 and the National Archives Act.** The standing instruction
   removes a deleted person's name from the evidence they made (POPIA s16
   rules out reassigning it; s14(1)(b) and s14(6)(b) support keeping a

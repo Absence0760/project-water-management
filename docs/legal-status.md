@@ -30,6 +30,13 @@ client goes live. Not customer-facing.
   disclosed under POPIA s72, naming the gateways relied on: s72(1)(c)/(d)
   (needed to provide the service) and s72(1)(a) (AWS's binding agreement).
   Counsel to confirm which gateway fits an operator that is itself offshore.
+  The AI assistant (issue #610), once turned on, is a second transfer: from
+  `af-south-1` Bedrock reaches Anthropic's models only by global
+  cross-Region inference, which may answer in any commercial AWS region.
+  Privacy §6 discloses it on the same gateways; security.md § Personal
+  information (POPIA) holds the record. Counsel to confirm the gateways
+  carry a destination not named in advance, or whether to ask consent
+  (s72(1)(b)) on first use.
 - **Deletion:** on a request by email or any other expedient way (POPIA
   s24, Regulation 3 as amended: Form 2 in any expedient manner, free), acted
   on as soon as reasonably practicable and answered with what was done
@@ -201,7 +208,10 @@ A and C remain owed and should be done as soon as possible; setting
   [legal/incident-procedure.md](./legal/incident-procedure.md) (who decides,
   timelines, the Regulator's eServices report, notices to data subjects).
   Before the first signature, confirm the mailbox provider listed as a
-  sub-processor (clause 6.1).
+  sub-processor (clause 6.1). Clause 6.1 also lists Amazon Bedrock (the
+  assistant's model, AWS, no new sub-processor) and clause 11.4 its
+  transfer (2026-10-27, issue #610); confirm with each client before the
+  assistant is turned on for it (followups.md § Blocking releases).
 - [ ] **Self-service deletion.** The notice promises deletion on an emailed
   request (runbook item 7 in deployment.md), which is how it works today
   for every account since 138. The Account page's **Delete my account** is
@@ -462,6 +472,23 @@ cl. 3). The licensing ones are rows in
   SACNASP-registration protocol (GN 320 of 2020) changes the product rule.
 
 ## Change log
+
+- 2026-10-27: the AI assistant (issue #610). Privacy §3 lists what is kept
+  (each person's messages in the last hour and tokens per project per
+  month, never the conversation), §4 the use, its lawful basis (the
+  agreement, when the person chooses to use it; the counts, our legitimate
+  interest), and what is sent to the model (the message, the conversation
+  so far, the project data the tools read, never names or emails, and that
+  the answers are advice, not model results, and change nothing until an
+  editor saves them), §5 Amazon Bedrock among AWS's services, §6 the
+  transfer (global cross-Region inference may answer in any commercial AWS
+  region), §7 the counts' retention. A new use, a new kind of record kept
+  per person and a new transfer abroad, so a **material change**:
+  `LEGAL_VERSION` 2026-10-27, with one entry on the re-acceptance step. The
+  operator agreement adds Bedrock to clause 6.1 and the transfer as 11.4.
+  The assistant is built off (`assistant_enabled`), so the text describes
+  it "where a project has the assistant". If it ships after 2026-10-27,
+  move `LEGAL_VERSION` (and this entry's date) to the deploy date.
 
 - 2026-09-27: first drafts; linked from the landing footer, under every
   sign-in form, and in the sign-up form's own sentence.
