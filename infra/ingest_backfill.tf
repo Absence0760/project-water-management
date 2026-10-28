@@ -20,6 +20,10 @@
 #     is what gets an address banned. Only Lambda's service errors (throttled
 #     by the ingest's reserved concurrency, a transient API error) are retried,
 #     after a minute. Re-running the plan skips the months the manifest holds.
+#     Two "busy" errors are waits, not failures, and are retried: MirrorBusy
+#     (the daily run holds the product's lease) and HostBusy (the fetcher
+#     Lambda holds CHC's one request slot, feeds.tf header): a month that
+#     meets either asked CHC nothing.
 #   - A plain (inline) Map over the list: ~900 months at ~10 history events
 #     each stays well under a Standard execution's 25,000-event history, and
 #     needs no S3 item reader or child executions.
@@ -124,6 +128,16 @@ resource "aws_sfn_state_machine" "ingest_backfill" {
                 ErrorEquals     = ["MirrorBusy"]
                 IntervalSeconds = 300
                 MaxAttempts     = 5
+                BackoffRate     = 1
+                }, {
+                # HostBusy: the fetcher Lambda holds CHC's one request slot
+                # (ingest/lease.py hold_host, backend/src/feeds/hostSlot.ts).
+                # A fetch holds it at most its 900 s, usually seconds; retry
+                # every 2 minutes for an hour before the execution fails
+                # (re-running the plan skips the months already held).
+                ErrorEquals     = ["HostBusy"]
+                IntervalSeconds = 120
+                MaxAttempts     = 30
                 BackoffRate     = 1
               }]
               Next = "Pace"

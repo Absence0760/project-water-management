@@ -1094,7 +1094,7 @@ run "daily_ingest_off_by_default" {
       length(aws_lambda_permission.fetcher_daily_ingest) == 0 &&
       length(aws_iam_role_policy.fetcher_mirror) == 0
     )
-    error_message = "Until daily_ingest_enabled is set the daily rule is disabled, targets nothing, may invoke nothing, and the fetcher can't touch the mirror bucket."
+    error_message = "Until daily_ingest_enabled is set the daily rule is disabled, targets nothing, may invoke nothing, and the fetcher can't touch the mirror bucket beyond CHC's request slot."
   }
   assert {
     condition     = length(aws_cloudwatch_metric_alarm.mirror_lag_prelim) == 0
@@ -1119,6 +1119,21 @@ run "daily_ingest_off_by_default" {
   assert {
     condition     = aws_lambda_function.fetcher.environment[0].variables["MIRROR_URL"] == "s3://water-management-mirror-000000000000"
     error_message = "The fetcher knows the copy it writes (MIRROR_URL = s3://<mirror bucket>)."
+  }
+  # CHC's request slot (feeds.tf header, backend/src/feeds/hostSlot.ts): always,
+  # since every mode that asks CHC takes it, and on that one object only.
+  assert {
+    condition = (
+      aws_iam_role_policy.fetcher_chc_slot.role == aws_iam_role.fetcher_lambda.id &&
+      length(data.aws_iam_policy_document.fetcher_chc_slot.statement) == 2 &&
+      alltrue([for s in data.aws_iam_policy_document.fetcher_chc_slot.statement :
+        s.effect != "Deny" && (
+          (toset(s.actions) == toset(["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]) && toset(s.resources) == toset(["${aws_s3_bucket.mirror.arn}/ingest-state/hosts/chc/lease.json"])) ||
+          (toset(s.actions) == toset(["s3:ListBucket"]) && toset(s.resources) == toset([aws_s3_bucket.mirror.arn]))
+        )
+      ])
+    )
+    error_message = "The fetcher may read, create, take over and delete CHC's request slot (ingest-state/hosts/chc/lease.json) and nothing else in the mirror bucket, daily ingest on or off."
   }
 }
 
@@ -1289,15 +1304,21 @@ run "backfill_one_month_at_a_time_paced_and_never_retrying_a_refusal" {
   }
   assert {
     condition = alltrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
-      alltrue([for e in r.ErrorEquals : (startswith(e, "Lambda.") && e != "Lambda.Unknown") || e == "MirrorBusy"])
+      alltrue([for e in r.ErrorEquals : (startswith(e, "Lambda.") && e != "Lambda.Unknown") || e == "MirrorBusy" || e == "HostBusy"])
     ])
-    error_message = "Only Lambda's own service errors and MirrorBusy are retried: never States.ALL, States.TaskFailed or StopRun, so a month that met HTTP 403 fails the execution at once."
+    error_message = "Only Lambda's own service errors, MirrorBusy and HostBusy are retried: never States.ALL, States.TaskFailed or StopRun, so a month that met HTTP 403 fails the execution at once."
   }
   assert {
     condition = anytrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
       contains(r.ErrorEquals, "MirrorBusy") && r.IntervalSeconds * r.MaxAttempts >= 1200
     ])
     error_message = "A month that meets the daily run's lease (MirrorBusy) is retried for longer than the lease's 20 minutes, not failed."
+  }
+  assert {
+    condition = anytrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
+      contains(r.ErrorEquals, "HostBusy") && r.IntervalSeconds * r.MaxAttempts >= 3600 && r.IntervalSeconds >= 60
+    ])
+    error_message = "A month that meets the fetcher holding CHC's request slot (HostBusy) waits it out, at least a minute between tries, for longer than a fetch's 900 s: it is not failed."
   }
   assert {
     condition = (

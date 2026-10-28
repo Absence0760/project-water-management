@@ -7,10 +7,10 @@
 // imported lazily so a bundle that never opens an s3:// mirror never loads
 // it); no other S3 library.
 import { gunzipSync, gzipSync } from 'node:zlib';
-import { fileURLToPath } from 'node:url';
 import FileSystemStore from '@zarrita/storage/fs';
 import type { AbsolutePath, AsyncMutable } from '@zarrita/storage';
 import * as zarr from 'zarrita';
+import { parseMirrorUrl } from './url.js';
 
 /** A mirror store: what zarrita reads and writes through. */
 export type MirrorStore = AsyncMutable;
@@ -65,26 +65,13 @@ export class S3Store implements AsyncMutable {
 	}
 }
 
-/** MIRROR_URL is neither file:///… nor s3://bucket[/prefix]. */
-export class MirrorUrlError extends Error {
-	override readonly name = 'MirrorUrlError';
-}
+export { MirrorUrlError } from './url.js';
 
 /** The store MIRROR_URL names. */
 export function openStore(url: string, opts: { s3?: S3Sender } = {}): MirrorStore {
 	registerNodeGzip();
-	if (url.startsWith('file://')) {
-		let dir: string;
-		try {
-			dir = fileURLToPath(url);
-		} catch {
-			throw new MirrorUrlError('MIRROR_URL file://… needs an absolute path (file:///abs/path)');
-		}
-		return new FileSystemStore(dir);
-	}
-	const m = /^s3:\/\/([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])(?:\/(.*))?$/.exec(url);
-	if (m) return new S3Store(m[1]!, m[2] ?? '', opts.s3);
-	throw new MirrorUrlError('MIRROR_URL must be file:///abs/path or s3://bucket[/prefix]');
+	const at = parseMirrorUrl(url);
+	return at.kind === 'file' ? new FileSystemStore(at.dir) : new S3Store(at.bucket, at.prefix, opts.s3);
 }
 
 /**

@@ -10,6 +10,7 @@ import datetime as dt
 import os
 import sys
 import tempfile
+import time
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -23,6 +24,8 @@ sys.path.insert(0, str(HERE / "fixtures"))
 import chcnetcdf  # noqa: E402
 import chirps_final  # noqa: E402
 import grid  # noqa: E402
+import json  # noqa: E402
+import lease  # noqa: E402
 import polite  # noqa: E402
 import lambda_handler  # noqa: E402
 import make_chc_fixture as fx  # noqa: E402
@@ -248,6 +251,74 @@ class FixturesRun(unittest.TestCase):
         self.assertIn("ingest-state/rnl/state.json", keys)
         self.assertNotIn("ingest-state/rnl/lease.json", keys)  # released
         self.assertTrue(all(k == "zarr.json" or k.startswith(("rnl/", "ingest-state/rnl/")) for k in keys), keys)
+
+    def test_chc_request_slot_is_taken_for_the_run_and_released(self):
+        # Positive control: slot free, the run asks CHC and releases the slot.
+        s3 = FakeS3()
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": "s3://mirror"}):
+            out = lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-02"}, None, s3_client=s3)
+        self.assertEqual(out["revision"], 1)
+        slot = lease.host_slot_key("chc")
+        self.assertEqual(slot, "ingest-state/hosts/chc/lease.json")
+        self.assertEqual(s3.calls[0], ("put", slot))  # taken before anything else, CHC included
+        self.assertIn(("delete", slot), s3.calls)
+        self.assertNotIn(slot, s3.keys("mirror"))  # released
+
+    def _held_by_fetcher(self, s3=None):
+        body = json.dumps({"owner": "fetcher-run", "expires": time.time() + 600, "holder": "fetcher"}).encode()
+        if s3 is not None:
+            s3.objects[("mirror", lease.host_slot_key("chc"))] = body
+        else:
+            p = self.root / lease.host_slot_key("chc")
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(body)
+
+    def test_a_backfill_month_raises_host_busy_while_the_fetcher_holds_the_slot(self):
+        s3 = FakeS3()
+        self._held_by_fetcher(s3)
+        asked = []
+
+        def opener(*a, **k):
+            asked.append(a)
+            raise AssertionError("asked CHC")
+
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": "s3://mirror"}):
+            with self.assertRaises(lease.HostBusy) as caught:
+                lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-02"}, None, s3_client=s3, opener=opener)
+        # The state machine retries it by this name (infra/ingest_backfill.tf), and it is a MirrorBusy.
+        self.assertEqual(type(caught.exception).__name__, "HostBusy")
+        self.assertIsInstance(caught.exception, lease.MirrorBusy)
+        self.assertRegex(str(caught.exception), "fetcher")
+        self.assertEqual(asked, [])
+        self.assertFalse(any(k.startswith("rnl/") for k in s3.keys("mirror")))
+        self.assertNotIn(("put", lease.lease_key("rnl")), s3.calls)  # the product lease was never taken
+        # The fetcher's slot is left alone.
+        self.assertEqual(json.loads(s3.objects[("mirror", lease.host_slot_key("chc"))])["owner"], "fetcher-run")
+
+    def test_a_daily_run_ends_quietly_while_the_slot_is_held_locally(self):
+        self._held_by_fetcher()
+        out = lambda_handler.handler({"product": "sat", "mode": "monthly"})
+        self.assertRegex(out["busy"], "chc request slot")
+        self.assertEqual(out["files"], [])
+        self.assertIsNone(out["revision"])
+        # Control: once the holder lets go, the next run copies.
+        (self.root / lease.host_slot_key("chc")).unlink()
+        self.assertEqual(lambda_handler.handler({"product": "sat", "mode": "monthly"})["revision"], 1)
+
+    def test_an_expired_slot_is_taken_over_and_the_expiry_follows_the_deadline(self):
+        s3 = FakeS3()
+        slot = lease.host_slot_key("chc")
+        s3.objects[("mirror", slot)] = json.dumps({"owner": "dead", "expires": 1.0}).encode()
+        mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
+        with lease.hold_host(mirror, "chc", 300.0, holder="ingest:rnl:monthly", now=lambda: 1000.0) as owner:
+            held = json.loads(s3.objects[("mirror", slot)])
+            self.assertEqual(held, {"owner": owner, "expires": 1000.0 + 300.0 + lease.HOST_SLOT_MARGIN_S, "holder": "ingest:rnl:monthly"})
+            with self.assertRaises(lease.HostBusy):
+                with lease.hold_host(mirror, "chc", None, holder="other", now=lambda: 1001.0):
+                    pass
+        self.assertNotIn(slot, s3.keys("mirror"))
+        with self.assertRaises(ValueError):
+            lease.host_slot_key("dws")
 
     def test_unknown_source_and_missing_mirror_refuse(self):
         with unittest.mock.patch.dict(os.environ, {"FEED_SOURCE": "nope"}):
