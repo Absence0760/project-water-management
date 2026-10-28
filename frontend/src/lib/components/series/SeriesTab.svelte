@@ -137,7 +137,7 @@
 		nodes?: readonly NetworkNode[];
 		/** The project's time zone: data ages count to its calendar date, as in the header and on the project list (issue #137). */
 		timeZone?: string | null;
-		/** The open warnings the Warnings page lists (issue #611; the page's count, its Data row badge's): null until counted. */
+		/** The open items the Warnings page lists (issue #611; its Open chip, the Warnings row's badge): null until counted. */
 		warningsOpen?: number | null;
 		onSeriesChange?: (list: SeriesMeta[]) => void;
 		/** Opens the page's Add data dialog (the header's button): the empty state's action, and the retired `#upload-csv` link. */

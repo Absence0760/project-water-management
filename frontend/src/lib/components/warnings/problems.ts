@@ -196,7 +196,11 @@ export function problems(p: ProblemInputs): Problem[] {
 
 const AREA_LABEL_OF_ISSUE: Record<ModelIssue['area'], string> = { network: 'Network', crops: 'Crops & demand', transfers: 'Transfers' };
 
-/** The Warnings row's badge: the data checks' open items and every problem from elsewhere. Null until the checks are counted. */
-export function badgeCount(openChecks: number | null, other: readonly Problem[]): number | null {
-	return openChecks === null ? null : openChecks + other.length;
+/**
+ * The Warnings row's badge, the page's Open chip with no filter: the open data-check periods and open run warnings
+ * (`openListed`, counted with the page's helpers in sources.ts) and every problem from elsewhere not kept
+ * (settings.warningsKept ids `problem:<id>`). Null until the checks and the run are counted.
+ */
+export function badgeCount(openListed: number | null, other: readonly Problem[], keptIds: ReadonlySet<string> = new Set()): number | null {
+	return openListed === null ? null : openListed + other.filter((p) => !keptIds.has(`problem:${p.id}`)).length;
 }

@@ -451,17 +451,18 @@
 	// (headerSlot.main: Run label, Run forecast, Run model), never both.
 	// The Data badge in the sections: series a run is driven by that are behind today (freshness.ts).
 	const behindCount = $derived(fresh?.behind.length ?? 0);
-	// The Warnings row's count (issue #611): every open item the page lists, by the same helpers. The data checks'
-	// open periods (warnings/items.ts openCount) for the run the page shows by default, and the failing or stale
-	// feeds, are read when the page is idle, from the Data tab's cached values (read once if not cached yet); the
+	// The Warnings row's count (issue #611): the page's Open chip with no filter, by the same helpers, so the two
+	// never disagree. The data checks' open periods (warnings/items.ts openCount) and the open run warnings (not kept,
+	// not fixed since) of the run the page shows by default, and the failing or stale feeds, are read when the page is
+	// idle, from the Data tab's cached values (read once if not cached yet); the
 	// model's and the unsaved settings' problems, the series behind and the runs an erratum may affect are the
-	// page's own (warnings/problems.ts). Null, no badge, until the checks are counted or when a read failed.
+	// page's own (warnings/problems.ts), less those kept. Null, no badge, until the checks are counted or a read failed.
 	let warningsOpen = $state<number | null>(null);
 	let feedProblems = $state.raw<FeedProblem[]>([]);
 	const otherProblems = $derived(
 		problems({ issues: editor.issues, blockers: settings.blockers, feeds: feedProblems, behind: fresh?.behind, runs, role: project?.role })
 	);
-	const warningsBadge = $derived(badgeCount(warningsOpen, otherProblems));
+	const warningsBadge = $derived(badgeCount(warningsOpen, otherProblems, new Set((project?.settings?.warningsKept ?? []).map((k) => k.id))));
 	$effect(() => {
 		const p = project;
 		const list = series;
@@ -877,7 +878,7 @@
 						{/if}
 						{#if id === 'warnings' && warningsBadge}
 							<!-- Every open item the Warnings page lists (issue #611), with a triangle so it never reads as Data's "behind" count. -->
-							<span class="count-badge warn-badge" title="{warningsBadge} open {warningsBadge === 1 ? 'item' : 'items'}: flagged periods to decide and problems to fix elsewhere"
+							<span class="count-badge warn-badge" title="{warningsBadge} open {warningsBadge === 1 ? 'item' : 'items'}: flagged periods, problems elsewhere and run warnings, as the page’s Open chip counts them"
 								><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M6 1.2 11 10.5H1Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg><span aria-hidden="true"
 									>{warningsBadge}</span
 								><span class="visually-hidden">({warningsBadge} open)</span></span
@@ -1157,7 +1158,7 @@
 								timeZone={project!.timeZone}
 								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
 								nodes={editor.model.nodes}
-								{warningsOpen}
+								warningsOpen={warningsBadge}
 								onSeriesChange={(l) => (series = l)}
 								onadddata={() => openAddData()}
 							/>

@@ -209,11 +209,22 @@ test.describe('1440×960', () => {
 		const run = await createRun(page.request, project.id, 'Baseline');
 		await pinClockToProject(page, project.id, 'lastRunAt');
 		await page.goto(`/projects/${project.id}?tab=series`);
-		// The Warnings row's count: the 3 open periods and the rain behind; Data's name keeps only its own count.
-		await expect(sections(page).getByRole('link', { name: /^Warnings/ })).toHaveAccessibleName('Warnings (4 open)');
+		// The Warnings row's count is the page's Open chip: the 3 open periods, the rain behind and the run's open warnings.
+		await page.goto(`/projects/${project.id}?tab=warnings`);
+		// Once every part has read what it lists: the table, the run's warnings, the feeds.
+		await expect(warningsTable(page)).toBeVisible();
+		await expect(page.getByTestId('warn-run-list')).toBeVisible();
+		await expect(page.getByText('Reading the data feeds…')).toHaveCount(0);
+		const openChip = page.getByTestId('warnings-status').getByRole('link', { name: /^Open \d+$/ });
+		const n = Number((await openChip.innerText()).replace(/\D/g, ''));
+		expect(n).toBeGreaterThan(4);
+		await expect(sections(page).getByRole('link', { name: /^Warnings/ })).toHaveAccessibleName(`Warnings (${n} open)`);
+		await page.goto(`/projects/${project.id}?tab=series`);
+		// Data's name keeps only its own count.
 		await expect(sections(page).getByRole('link', { name: /^Data/ })).toHaveAccessibleName('Data (1 series behind)');
 		const toWarnings = page.getByTestId('checks-to-warnings');
-		await expect(toWarnings).toHaveText('Patch, exclude or keep on Warnings (3 open)');
+		// The same number as the Warnings row's.
+		await expect(toWarnings).toHaveText(`Patch, exclude or keep on Warnings (${n} open)`);
 		await toWarnings.click();
 		await expect(page.getByRole('heading', { level: 1, name: 'Warnings' })).toBeVisible();
 		await expect(warningRows(page)).toHaveCount(3);

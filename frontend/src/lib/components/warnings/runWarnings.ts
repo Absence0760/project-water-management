@@ -5,7 +5,7 @@
 // uncoded ones listed as they are. Things to check first, then the notes on
 // how the data were handled, each in the run's order; a text the run repeats
 // shows once.
-import { isWarningCode, WARNING_CODES, type CodedWarning, type RunSummary, type WarningCode, type WarningParams } from '@water-management/engine';
+import { isWarningCode, WARNING_CODES, type CodedWarning, type RunSummary, type ProjectSettings, type WarningCode, type WarningParams } from '@water-management/engine';
 import { CODE_FIXES, uncodedFix, type Fix } from './fixes';
 import { runWarningId } from './ids';
 import type { Area } from './problems';
@@ -37,6 +37,16 @@ export function settingLink(code: WarningCode): { href: string; label: string } 
 	const anchor = WARNING_CODES[code].setting;
 	if (!anchor) return { href: '?tab=series', label: 'Go to Data' };
 	return { href: `?tab=${settingsPageOf(anchor === 'set-unit-rain' ? 'set-share' : anchor)}#${anchor}`, label: `Go to ${PANEL_LABEL[anchor] ?? 'the setting'}` };
+}
+
+/**
+ * A run warning row's state: kept (settings.warningsKept), fixed (its one-value fix is in the saved settings, so a
+ * new run should no longer warn), else open. The page and the Warnings row's badge both read it.
+ */
+export function runWarningState(r: Pick<RunWarningRow, 'id' | 'fix' | 'params'>, settings: ProjectSettings): 'open' | 'fixed' | 'kept' {
+	if ((settings.warningsKept ?? []).some((k) => k.id === r.id)) return 'kept';
+	const a = r.fix.action;
+	return a.kind === 'setting' && a.applied(settings, r.params) ? 'fixed' : 'open';
 }
 
 const areaOf = (code: string | null, fix: Fix): Area => {

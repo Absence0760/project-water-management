@@ -56,7 +56,9 @@ describe('problems', () => {
 
 	it('counts the badge once the checks are counted, and reads the source filter', () => {
 		expect(badgeCount(null, problems(inputs))).toBeNull();
+		// The open data checks and run warnings (counted in sources.ts) plus every problem not kept: the Open chip's count.
 		expect(badgeCount(3, problems(inputs))).toBe(10);
+		expect(badgeCount(3, problems(inputs), new Set(['problem:runs:r3', 'problem:data:s1']))).toBe(8);
 		expect(badgeCount(0, [])).toBe(0);
 		expect(parseSource('feeds')).toBe('feeds');
 		expect(parseSource('nope')).toBe('all');

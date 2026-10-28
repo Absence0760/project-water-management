@@ -544,7 +544,7 @@ export const PAGE_GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: '**Problems elsewhere** gathers what other pages show as needing attention, each with **Go to …** where it is fixed: problems in the model (the dot beside Network, Crops & demand or Transfers), unsaved settings that stop **Save changes**, data feeds that are failing or behind, series whose last day is old, and the newest or published run a known engine bug may affect. These have no tick box: their fix is on their own page. The **Source** chips at the top show one kind at a time (Data checks, Model, Unsaved settings, Data feeds, Data behind, Runs, Run warnings), each with its count, and the number beside **Warnings** in the sidebar counts the open data-check periods and these problems together.'
+						text: '**Problems elsewhere** gathers what other pages show as needing attention, each with **Go to …** where it is fixed: problems in the model (the dot beside Network, Crops & demand or Transfers), unsaved settings that stop **Save changes**, data feeds that are failing or behind, series whose last day is old, and the newest or published run a known engine bug may affect. These have no tick box: their fix is on their own page. The **Source** chips at the top show one kind at a time (Data checks, Model, Unsaved settings, Data feeds, Data behind, Runs, Run warnings), each with its count, and the number beside **Warnings** in the sidebar is the page’s **Open** count: the open data-check periods, these problems and the run’s open warnings, less those kept.'
 					}
 				]
 			},

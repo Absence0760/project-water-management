@@ -66,7 +66,7 @@
 		type SettingsPatch,
 		type WarningItem
 	} from './items';
-	import { runWarningRows, type RunWarningRow } from './runWarnings';
+	import { runWarningRows, runWarningState, type RunWarningRow } from './runWarnings';
 	import { loadFeedProblems, loadRunSummary, loadValues } from './sources';
 	import {
 		AREA_LABEL,
@@ -252,11 +252,7 @@
 			note: kept.get(`problem:${p.id}`)?.note ?? ''
 		}))
 	);
-	const runRowState = (r: RunWarningRow): RowState => {
-		if (kept.has(r.id)) return 'kept';
-		const a = r.fix.action;
-		return a.kind === 'setting' && a.applied(settings, r.params) ? 'fixed' : 'open';
-	};
+	const runRowState = (r: RunWarningRow): RowState => runWarningState(r, settings);
 	const warningRows = $derived<OtherRow[]>(
 		runRows.map((r) => ({
 			id: r.id,

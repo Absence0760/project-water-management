@@ -6507,8 +6507,10 @@ linking to where it is fixed; and the shown run's warnings.
   member). To keep the sidebar's budget (`app-sidebar.spec.ts`: every row
   fits 1440×960, none spare), Compare runs became `LINKED_ONLY` in its place
   (§ Compare runs). Its count of open items sits beside it (a triangle and
-  the number, named "(N open)"): the data checks' open periods plus every
-  problem from elsewhere (below), the same helpers as the page; Data's row
+  the number, named "(N open)"): the page's Open chip with no filter, so the
+  two never disagree (the open data-check periods, the problems from
+  elsewhere and the open run warnings, less those kept or fixed since the
+  run), by the same helpers as the page; Data's row
   keeps only its "(N series behind)". It also opens from Data's checks panel, the run warnings on Runs &
   results (**Each with its setting, on Warnings**, or a line under the
   summary when the run has only notes) and Calibration's shown run (**N
@@ -6650,10 +6652,10 @@ linking to where it is fixed; and the shown run's warnings.
   periods when idle (`warnings/sources.ts` `openWarningCount`, a chunk of its
   own, from the Data tab's cached values and the default run's summary, the
   same helper as the page's Open chip) with the failing and stale feeds read
-  then too, plus the problems the page holds itself (`problems.ts`
-  `badgeCount`). Run warnings aren't counted: they repeat inputs listed above
-  and clear only with a new run. No badge until the checks are counted, or
-  when a read fails.
+  then too, with the run's open warnings (`runWarnings.ts` `runWarningState`,
+  as the page reads them), plus the problems the page holds itself, less the
+  kept ones (`problems.ts` `badgeCount`). No badge until the checks are
+  counted, or when a read fails.
 - Tested by `e2e/tests/warnings.spec.ts` (chips and the record picker in the
   URL with Back, one title, the sidebar row and its count, the source chips
   and the problems elsewhere, a row's Patch and Exclude

@@ -10,6 +10,7 @@ import { runDetail } from '#lib/components/runs/cache.js';
 import { cachedValues, cacheValues } from '#lib/components/series/valuesCache.js';
 import type { Daily } from '#lib/components/series/coverage.js';
 import { openCount, warningItems } from './items';
+import { runWarningRows, runWarningState } from './runWarnings';
 import { feedsApi, healthMessage } from '#lib/components/feeds/feeds.js';
 import { kindLabel } from '#lib/series/kinds.js';
 import type { FeedProblem } from './problems';
@@ -45,7 +46,11 @@ export async function loadRunSummary(projectId: string, runId: string | null): P
 	return d.run.summary;
 }
 
-/** The open items' count for the Data row's badge (null when a read failed: no badge rather than a wrong one). */
+/**
+ * The open data-check periods and open run warnings (not kept, not fixed in the settings since the run), for the
+ * Warnings row's badge (problems.ts badgeCount adds the problems); null when a read failed: no badge rather than a
+ * wrong one.
+ */
 export async function openWarningCount(
 	projectId: string,
 	series: readonly SeriesMeta[],
@@ -55,7 +60,7 @@ export async function openWarningCount(
 ): Promise<number | null> {
 	const [{ values, failed }, run] = await Promise.all([loadValues(projectId, series), loadRunSummary(projectId, runId).catch(() => undefined)]);
 	if (Object.keys(failed).length || run === undefined) return null;
-	return openCount(warningItems({ series, values, settings, run, nodeName }));
+	return openCount(warningItems({ series, values, settings, run, nodeName })) + runWarningRows(run).filter((r) => runWarningState(r, settings) === 'open').length;
 }
 
 /**

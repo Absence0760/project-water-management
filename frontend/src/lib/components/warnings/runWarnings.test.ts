@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WARNING_CODES, type WarningCode } from '@water-management/engine';
-import { runWarningRows, settingLink } from './runWarnings';
+import { runWarningRows, runWarningState, settingLink } from './runWarnings';
 
 describe('settingLink', () => {
 	it('links a code to its settings panel on the page that has it, or to Data', () => {
@@ -11,6 +11,18 @@ describe('settingLink', () => {
 	});
 	it('names a real panel for every code in the catalogue', () => {
 		for (const code of Object.keys(WARNING_CODES) as WarningCode[]) expect(settingLink(code).label).not.toBe('Go to the setting');
+	});
+});
+
+describe('runWarningState (the page and the badge alike)', () => {
+	it('is kept by its id, fixed once its one-value fix is saved, else open', async () => {
+		const { defaultProjectSettings } = await import('@water-management/engine');
+		const base = defaultProjectSettings();
+		const [row] = runWarningRows({ warnings: ['acc'], warningCodes: [{ code: 'rain.accumulation.asRecorded', params: { windows: 1 }, text: 'acc' }] });
+		const asRecorded = { ...base, zeroRainRuns: { ...base.zeroRainRuns, accumulationMode: 'asRecorded' as const } };
+		expect(runWarningState(row!, asRecorded)).toBe('open');
+		expect(runWarningState(row!, base)).toBe('fixed');
+		expect(runWarningState(row!, { ...asRecorded, warningsKept: [{ id: row!.id, note: '' }] })).toBe('kept');
 	});
 });
 
