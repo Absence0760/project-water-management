@@ -1,0 +1,4 @@
+{
+	"addKb": 7,
+	"why": "Calibrate at several gauges: the gauges table chunk, the stepwise fit card and zone helpers (issue #555; 2203→2210 KB on its own branch)"
+}
