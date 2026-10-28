@@ -11,7 +11,7 @@ const STATUS: AssistantStatus = {
 	available: true,
 	provider: 'mock',
 	canApply: true,
-	budget: { tokensPerMonth: 1000, tokensUsed: 100, resetsAt: '2026-11-01T00:00:00Z' },
+	budget: { tokensPerMonth: 1000, tokensUsed: 100, resetsAt: '2026-11-01T00:00:00Z', scope: 'project' },
 	rate: { messagesPerHour: 30 },
 	disclaimer: 'Advice, not model output.'
 };
@@ -68,7 +68,7 @@ describe('AssistantChat', () => {
 					{ type: 'text', delta: 'The gauge ' },
 					{ type: 'text', delta: 'is fed by a dam.' },
 					{ type: 'proposal', proposal: PROPOSAL },
-					{ type: 'usage', inputTokens: 50, outputTokens: 20, tokensUsed: 170, tokensPerMonth: 1000 },
+					{ type: 'usage', inputTokens: 50, outputTokens: 20, tokensUsed: 170, tokensPerMonth: 1000, scope: 'project' },
 					{ type: 'done' }
 				])
 			)
@@ -147,16 +147,38 @@ describe('AssistantChat', () => {
 		const c = chatWith(send);
 		await c.load();
 		expect(await c.ask('Q')).toBe(false);
-		expect(c.refusal?.kind).toBe('budget');
+		expect(c.refusal).toMatchObject({ kind: 'budget', scope: 'project' });
 		expect(c.spent).toBe(true);
+		expect(c.spentScope).toBe('project');
 		expect(await c.ask('Again')).toBe(false);
 		expect(send).toHaveBeenCalledTimes(1);
 
 		const used = chatWith(send, { ...STATUS, budget: { ...STATUS.budget, tokensUsed: 1000 } } as AssistantStatus);
 		await used.load();
 		expect(used.spent).toBe(true);
+		expect(used.spentScope).toBe('project');
 		expect(await used.ask('Q')).toBe(false);
 		expect(send).toHaveBeenCalledTimes(1);
+	});
+
+	it('names whose month is spent: the person’s across projects, or the server’s, by the refusal’s code', async () => {
+		for (const [code, scope] of [
+			['assistant_user_budget_spent', 'user'],
+			['assistant_total_budget_spent', 'total']
+		] as const) {
+			const send = vi.fn(async (): Promise<ReadableStream<Uint8Array>> => Promise.reject(new ApiError(429, 'Spent', undefined, code)));
+			const c = chatWith(send);
+			await c.load();
+			expect(await c.ask('Q')).toBe(false);
+			expect(c.refusal).toMatchObject({ kind: 'budget', scope });
+			expect(c.spentScope).toBe(scope);
+			expect(await c.ask('Again')).toBe(false);
+			expect(send).toHaveBeenCalledTimes(1);
+		}
+		// The status's own cap when it is the one used up.
+		const used = chatWith(vi.fn(), { ...STATUS, budget: { ...STATUS.budget, tokensUsed: 1000, scope: 'user' } } as AssistantStatus);
+		await used.load();
+		expect(used.spentScope).toBe('user');
 	});
 
 	it('Stop aborts the fetch and keeps what had come', async () => {

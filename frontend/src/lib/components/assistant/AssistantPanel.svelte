@@ -42,6 +42,8 @@
 	let log: HTMLOListElement | undefined = $state();
 
 	const st = $derived(chat.status?.available ? chat.status : null);
+	// Whose month is spent: the project's, the person's across their projects, or the server's (usage.ts BudgetScope).
+	const SPENT_WHOSE = { project: 'This project’s', user: 'Your', total: 'This server’s' } as const;
 	const left = $derived(st ? chat.tokensLeft! / Math.max(1, st.budget.tokensPerMonth) : null);
 	const limited = $derived(chat.refusal?.kind === 'rate');
 	const blocked = $derived(chat.spent || limited);
@@ -124,7 +126,7 @@
 			</p>
 		{:else if chat.spent && st}
 			<p class="note warn" role="alert" data-testid="assistant-budget-spent">
-				This project’s assistant budget for the month is used up. It starts again on {fmtDay(st.budget.resetsAt)}.
+				{SPENT_WHOSE[chat.spentScope ?? 'project']} assistant budget for the month is used up. It starts again on {fmtDay(st.budget.resetsAt)}.
 			</p>
 		{:else if chat.refusal?.kind === 'error'}
 			<p class="note err" role="alert">The question wasn’t sent: {chat.refusal.message}</p>

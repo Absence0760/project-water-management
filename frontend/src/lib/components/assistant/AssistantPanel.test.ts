@@ -16,7 +16,7 @@ const STATUS: Extract<AssistantStatus, { available: true }> = {
 	available: true,
 	provider: 'mock',
 	canApply: true,
-	budget: { tokensPerMonth: 1000, tokensUsed: 250, resetsAt: '2026-11-01T00:00:00Z' },
+	budget: { tokensPerMonth: 1000, tokensUsed: 250, resetsAt: '2026-11-01T00:00:00Z', scope: 'project' },
 	rate: { messagesPerHour: 30 },
 	disclaimer: 'The assistant’s answers are advice, not model output.'
 };
@@ -124,6 +124,12 @@ describe('AssistantPanel', () => {
 		expect(out).toMatch(/used up\. It starts again on [^<]*2026/);
 		expect(out).toMatch(/<textarea[^>]*disabled/);
 		expect(out).toMatch(/0% of this month’s budget left/);
+		expect(out).toContain('This project’s assistant budget for the month is used up.');
+	});
+
+	it('says whose month is spent when it is the person’s or the server’s', () => {
+		expect(html(chat({ status: { ...STATUS, budget: { ...STATUS.budget, tokensUsed: 1000, scope: 'user' } } }))).toContain('Your assistant budget for the month is used up.');
+		expect(html(chat({ refusal: { kind: 'budget', scope: 'total', message: 'Spent' } }))).toContain('This server’s assistant budget for the month is used up.');
 	});
 
 	it('shows a turn that ended early, and a question that wasn’t sent', () => {

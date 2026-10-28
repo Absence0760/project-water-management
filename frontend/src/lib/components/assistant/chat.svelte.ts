@@ -9,7 +9,7 @@
 // cap, the month's budget spent, the assistant off) puts the message back and
 // says why instead.
 import { ApiError } from '#lib/api/client.js';
-import type { AssistantRequest, AssistantStatus, AssistantStreamEvent, ChatMessage, SettingsProposal } from '#lib/api/types.js';
+import type { AssistantBudgetScope, AssistantRequest, AssistantStatus, AssistantStreamEvent, ChatMessage, SettingsProposal } from '#lib/api/types.js';
 import { readEvents } from './stream';
 
 /** One tool the assistant used in a turn, as its `tool` events said (the label is the server's). */
@@ -43,7 +43,7 @@ export type Turn = UserTurn | AssistantTurn;
 /** Why a message wasn't taken, shown above the box until it no longer holds. */
 export type Refusal =
 	| { kind: 'rate'; seconds: number; message: string }
-	| { kind: 'budget'; message: string }
+	| { kind: 'budget'; scope: AssistantBudgetScope; message: string }
 	| { kind: 'error'; message: string };
 
 export interface AssistantDeps {
@@ -54,9 +54,14 @@ export interface AssistantDeps {
 }
 
 // The server's codes for these refusals (backend/src/http/errors.ts MACHINE_ERROR_CODES; docs/api.md § Assistant).
-const BUDGET_SPENT = 'assistant_budget_spent';
+// A spent month, by the cap that refused it: the project's, the person's across projects, the server's in all.
+const BUDGET_SPENT: Record<string, AssistantBudgetScope> = {
+	assistant_budget_spent: 'project',
+	assistant_user_budget_spent: 'user',
+	assistant_total_budget_spent: 'total'
+};
 const RATE_LIMITED = 'assistant_rate_limited';
-const isBudgetCode = (code: string | null | undefined) => code === BUDGET_SPENT;
+const budgetScopeOf = (code: string | null | undefined): AssistantBudgetScope | null => (code && Object.hasOwn(BUDGET_SPENT, code) ? BUDGET_SPENT[code]! : null);
 
 /** "about 3 min" / "about 40 s" for a wait in seconds. */
 export function waitText(seconds: number): string {
@@ -103,6 +108,12 @@ export class AssistantChat {
 	/** The month's budget is used up: nothing can be sent until it resets. */
 	get spent(): boolean {
 		return this.tokensLeft === 0 || this.refusal?.kind === 'budget';
+	}
+
+	/** Whose month is used up, while it is: the refusal's cap, else the status's. */
+	get spentScope(): AssistantBudgetScope | null {
+		if (this.refusal?.kind === 'budget') return this.refusal.scope;
+		return this.tokensLeft === 0 && this.status?.available ? this.status.budget.scope : null;
 	}
 
 	/** Read whether the assistant is on here (the page hides its button until it is). */
@@ -201,11 +212,14 @@ export class AssistantChat {
 				turn.proposals.push({ proposal: ev.proposal, applied: false });
 				break;
 			case 'usage':
-				if (this.status?.available) this.status.budget = { ...this.status.budget, tokensUsed: ev.tokensUsed, tokensPerMonth: ev.tokensPerMonth };
+				if (this.status?.available) this.status.budget = { ...this.status.budget, tokensUsed: ev.tokensUsed, tokensPerMonth: ev.tokensPerMonth, scope: ev.scope };
 				break;
 			case 'error':
 				turn.error = ev.error || 'The assistant had a problem answering.';
-				if (isBudgetCode(ev.code)) this.refusal = { kind: 'budget', message: ev.error };
+				{
+					const scope = budgetScopeOf(ev.code);
+					if (scope) this.refusal = { kind: 'budget', scope, message: ev.error };
+				}
 				break;
 			case 'done':
 				turn.done = true;
@@ -216,7 +230,8 @@ export class AssistantChat {
 	#refusalOf(e: unknown): Refusal {
 		if (e instanceof ApiError) {
 			this.#refusals++;
-			if (isBudgetCode(e.code)) return { kind: 'budget', message: e.message };
+			const scope = budgetScopeOf(e.code);
+			if (scope) return { kind: 'budget', scope, message: e.message };
 			if (e.code === RATE_LIMITED) {
 				const seconds = Number(e.params.retryAfter) || Number(e.params.seconds) || 60;
 				// Once the wait is over the box takes messages again (unless a newer refusal replaced this one).
