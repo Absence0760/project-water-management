@@ -207,9 +207,13 @@ async function snapshot() {
  * into it and no member, key or outsider can read them (catalogue.db.test.ts
  * OWNER_ONLY; docs/security.md § Allocations). The salt behind the allocation
  * holder keys (219_allocation_holder_keys): a secret that never leaves the
- * database. Any other table the app role can't read is a lost grant, and fails.
+ * database. A running assistant turn's reserved budget
+ * (264_assistant_reservation): written and read only by the assistant's
+ * definer functions, and nobody reads anyone's reservation, their own included
+ * (the status counts it through app_assistant_used). Any other table the app
+ * role can't read is a lost grant, and fails.
  */
-const OWNER_ONLY_TABLES = ['allocation_holder_salt'];
+const OWNER_ONLY_TABLES = ['allocation_holder_salt', 'assistant_reservation'];
 
 /** The project tables, split by whether water_app may read them at all. */
 const projectTables = async (granted: boolean) =>
