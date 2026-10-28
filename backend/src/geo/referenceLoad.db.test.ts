@@ -20,10 +20,19 @@
 //    (WAAS-SWCape-2007), cell for cell the same as the direct load, stored
 //    with the recorded credit line, never the file's own;
 //  - a file with nothing loadable fails and leaves the dataset as it was;
+//  - DWS flow (issue #618 step 6b): the synthetic reply loads into the gauge
+//    record store through gauge_record_write as dws-request rows, origin dws,
+//    with the source as their reference; a re-load writes the same rows, two
+//    windows of a station merge into one span, the station comes from the
+//    file or the request (and must agree), and a file the reader or the store
+//    refuses writes nothing, its earlier chunks included;
 //  - each load records the file's key and SHA-256 with the dataset
 //    (reference_load, 192), returns the one it replaced, keeps it on a failed
-//    load, and a local replace (no file) clears it.
+//    load, and a local replace (no file) clears it;
+//  - reference_load's kind check takes every kind production allows, so a
+//    migration that redefines it can't drop one.
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -34,12 +43,13 @@ import { loadSyntheticEvaporation, parseEvaporationArgs, writeEvaporationJson } 
 import { loadSyntheticLandCover, parseLandCoverArgs, writeLandCoverJson } from '../../scripts/import-land-cover.js';
 import { SYNTHETIC_RIVERS_FILE } from '../../scripts/import-rivers.js';
 import { SYNTHETIC_GAZETTEER_FILE } from '../../scripts/import-gazetteer.js';
+import { SYNTHETIC_DWS_REPLY } from '../../scripts/import-dws.js';
 import { loadSyntheticMapGrid, parseMapGridArgs, writeMapGridJson } from '../../scripts/import-map-grid.js';
 import { replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { asOwner } from '../__tests__/helpers.js';
 import { replaceCroplandDataset } from './croplandGrid.js';
-import { LoadError, loadReferenceText, parseLoadRequest, readReferenceText, type ReadObject } from './referenceLoad.js';
+import { LoadError, loadReferenceText, parseLoadRequest, readReferenceText, REFERENCE_KINDS, type ReadObject } from './referenceLoad.js';
 
 const LC = 'test-reference-load-lc';
 const RV = 'test-reference-load-rv';
@@ -287,5 +297,142 @@ describe('MAP grid, from the file `import:map-grid --out` writes (issue #560)', 
 		// A local import of the same label names no file: the record goes.
 		await replaceRainMapDataset(client, { dataset: MG, source: 'local', version: 'local', attribution: 'local' }, { cellDeg: 0.01, originLon: 0.005, originLat: 0.005, cells: [{ row: 1, col: 1, mapMm: 500 }] });
 		expect(await recorded('map-grid', MG)).toBeUndefined();
+	});
+});
+
+describe('DWS verified daily flow, into the gauge record store (issue #618 step 6b)', () => {
+	// The synthetic reply's invented station, and one only this describe writes. The gauge store has no dataset of its own:
+	// every row and span of these stations with origin dws is this describe's (DB files run one at a time).
+	const STATIONS = ['X0H001', 'X9H901'];
+	const LABELS = ['test-dws-jan-mar', 'test-dws-apr-jun', 'test-dws-bad', 'test-dws-future', 'test-dws-other', 'test-dws-given'];
+	const REF = 'SYNTHETIC-REPLY-0001';
+	const dws = (dataset: string, key = 'reference/dws/reply-01.txt.gz') => ({ kind: 'dws', key, dataset, source: REF });
+	const reply = () => readFileSync(SYNTHETIC_DWS_REPLY);
+
+	/** A DWS daily table (the HyData.aspx layout the feed reads) naming `named` before its header, with one row per day from `from`. */
+	const table = (named: string | null, from: string, values: (number | null)[]) =>
+		[
+			'SYNTHETIC test table: invented values.',
+			...(named ? [`${named} (SYNTHETIC WEIR)`] : []),
+			'POS.  1-8   = Date of daily flow  CCYYMMDD',
+			'POS. 10-18  = Daily avg flow rate in cubic metres/sec 99999.999',
+			'POS. 20-24  = Quality code',
+			'',
+			'DATE     D AVG F/R  QUAL',
+			...values.map((v, i) => `${fromEpochDay(toEpochDay(from) + i).replaceAll('-', '')}${(v === null ? '' : v.toFixed(3)).padStart(10)}${(v === null ? '170' : '1').padStart(6)}`)
+		].join('\n');
+
+	const rows = (station = 'X0H001') =>
+		asOwner(
+			`SELECT count(*)::int AS n, count(*) FILTER (WHERE source = 'dws-request' AND reference = $2)::int AS ours, count(*) FILTER (WHERE value IS NULL)::int AS gaps
+			 FROM gauge_record WHERE origin = 'dws' AND station = $1`,
+			[station, REF]
+		);
+	const spans = (station = 'X0H001') =>
+		asOwner(
+			`SELECT source, to_char(day_from, 'YYYY-MM-DD') AS f, to_char(day_to, 'YYYY-MM-DD') AS t, reference FROM gauge_record_span WHERE origin = 'dws' AND station = $1 ORDER BY day_from`,
+			[station]
+		);
+	const clean = async () => {
+		await asOwner(`DELETE FROM gauge_record WHERE origin = 'dws' AND station = ANY($1::text[])`, [STATIONS]);
+		await asOwner(`DELETE FROM gauge_record_span WHERE origin = 'dws' AND station = ANY($1::text[])`, [STATIONS]);
+		await asOwner(`DELETE FROM reference_load WHERE kind = 'dws' AND dataset = ANY($1::text[])`, [LABELS]);
+	};
+	beforeAll(clean);
+	afterAll(clean);
+
+	it('loads the synthetic reply (gzipped) as dws-request rows, origin dws, with its reference, and records the file', async () => {
+		const bytes = gzipSync(reply());
+		const got = await load(dws('test-dws-jan-mar'), bytes);
+		expect(got).toEqual({ kind: 'dws', dataset: 'test-dws-jan-mar', written: 89, skipped: 0, belowOrder: 0, replaced: null });
+		expect(await rows()).toEqual([{ n: 89, ours: 89, gaps: 1 }]);
+		expect(await spans()).toEqual([{ source: 'dws-request', f: '2010-01-01', t: '2010-03-31', reference: REF }]);
+		expect(await recorded('dws', 'test-dws-jan-mar')).toEqual({ key: 'reference/dws/reply-01.txt.gz', sha256: sha(bytes) });
+		// What a feed reads: the reply is the best source for these days.
+		expect(await asOwner(`SELECT DISTINCT source FROM gauge_record_current WHERE origin = 'dws' AND station = 'X0H001'`)).toEqual([{ source: 'dws-request' }]);
+	});
+
+	it('a re-load of the same file writes the same rows again, one span, and names the load it replaced', async () => {
+		const got = await load(dws('test-dws-jan-mar'), gzipSync(reply()));
+		expect(got.written).toBe(89);
+		expect(got.replaced).toMatchObject({ key: 'reference/dws/reply-01.txt.gz' });
+		expect(await rows()).toEqual([{ n: 89, ours: 89, gaps: 1 }]);
+		expect(await spans()).toHaveLength(1);
+	});
+
+	it('the next window of the station (a second file, plain text) merges with the first into one span', async () => {
+		const values = Array.from({ length: 91 }, (_, i) => 2 + i / 100);
+		const got = await load(dws('test-dws-apr-jun', 'reference/dws/reply-02.txt'), Buffer.from(table('X0H001', '2010-04-01', values)));
+		expect(got.written).toBe(91);
+		expect(await rows()).toEqual([{ n: 180, ours: 180, gaps: 1 }]);
+		expect(await spans()).toEqual([{ source: 'dws-request', f: '2010-01-01', t: '2010-06-30', reference: REF }]);
+		// Each file is recorded under its own label.
+		expect(await recorded('dws', 'test-dws-jan-mar')).toBeDefined();
+		expect(await recorded('dws', 'test-dws-apr-jun')).toMatchObject({ key: 'reference/dws/reply-02.txt' });
+	});
+
+	it('a file the reader refuses (a date that doesn’t exist) writes nothing and records nothing', async () => {
+		const bad = table('X0H001', '2010-07-01', [1, 2, 3]).replace('20100703', '20100231');
+		const err = await load(dws('test-dws-bad', 'reference/dws/bad.txt'), Buffer.from(bad)).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(LoadError);
+		expect((err as LoadError).code).toBe('unreadable');
+		// Fixed text only: the public log never quotes the file.
+		expect((err as LoadError).publicReason).toMatch(/^the file is not a DWS daily flow table/);
+		expect((err as LoadError).publicReason).not.toContain('20100231');
+		expect(await rows()).toEqual([{ n: 180, ours: 180, gaps: 1 }]);
+		expect(await recorded('dws', 'test-dws-bad')).toBeUndefined();
+	});
+
+	it('a file the store refuses in a later chunk (a day after today) writes nothing, not even the earlier chunk', async () => {
+		// 7 300 days ending tomorrow in South Africa: the first call (CHUNK_DAYS) is a good one, the second ends after today.
+		const today = (await asOwner(`SELECT to_char((now() AT TIME ZONE 'Africa/Johannesburg')::date, 'YYYY-MM-DD') AS d`))[0]!.d as string;
+		const first = fromEpochDay(toEpochDay(today) - 7298);
+		const tomorrow = fromEpochDay(toEpochDay(today) + 1).replaceAll('-', '');
+		const future = `${table('X9H901', first, [1, 2, 3])}\n${tomorrow}${'4.000'.padStart(10)}${'1'.padStart(6)}`;
+		const err = await load(dws('test-dws-future', 'reference/dws/future.txt'), Buffer.from(future)).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(LoadError);
+		expect((err as LoadError).code).toBe('load_failed');
+		expect((err as LoadError).publicReason).toMatch(/^the store refused a row/);
+		expect(await rows('X9H901')).toEqual([{ n: 0, ours: 0, gaps: 0 }]);
+		expect(await spans('X9H901')).toEqual([]);
+		expect(await recorded('dws', 'test-dws-future')).toBeUndefined();
+	});
+
+	it('the station: the file’s, else the one the request gives; a request naming another than the file’s is refused', async () => {
+		const values = [1.25, 1.5];
+		const other = await load({ ...dws('test-dws-other', 'reference/dws/reply-03.txt'), station: 'X9H901' }, Buffer.from(table('X0H001', '2011-01-01', values))).catch((e: unknown) => e);
+		expect(other).toBeInstanceOf(LoadError);
+		expect((other as LoadError).publicReason).toBe('the file names another station than the one given');
+		expect(await rows('X9H901')).toEqual([{ n: 0, ours: 0, gaps: 0 }]);
+
+		const unnamed = Buffer.from(table(null, '2011-01-01', values));
+		const none = await load(dws('test-dws-given', 'reference/dws/reply-04.txt'), unnamed).catch((e: unknown) => e);
+		expect(none).toBeInstanceOf(LoadError);
+		expect((none as LoadError).publicReason).toBe('the file names no station, or several: give the station');
+		expect((await load({ ...dws('test-dws-given', 'reference/dws/reply-04.txt'), station: 'X9H901' }, unnamed)).written).toBe(2);
+		expect(await spans('X9H901')).toEqual([{ source: 'dws-request', f: '2011-01-01', t: '2011-01-02', reference: REF }]);
+	});
+});
+
+describe('reference_load takes every kind production allows', () => {
+	it('a row of each allowed REFERENCE_KINDS kind passes reference_load_kind_check; a blocked kind does not', async () => {
+		const allowed = Object.entries(REFERENCE_KINDS)
+			.filter(([, spec]) => spec.status === 'allowed')
+			.map(([kind]) => kind);
+		expect(allowed).toContain('dws');
+		await client.query('BEGIN');
+		try {
+			for (const kind of allowed) {
+				// A tiles row names one of the archives at its served key (248's reference_load_tiles_archive).
+				const [dataset, key] = kind === 'tiles' ? ['basemap', 'tiles/south-africa.pmtiles'] : ['test-kind-check', `reference/${kind}/x`];
+				await client.query('DELETE FROM reference_load WHERE kind = $1 AND dataset = $2', [kind, dataset]);
+				await client.query('INSERT INTO reference_load (kind, dataset, source_key, source_sha256) VALUES ($1, $2, $3, $4)', [kind, dataset, key, 'a'.repeat(64)]);
+			}
+			await expect(
+				client.query(`INSERT INTO reference_load (kind, dataset, source_key, source_sha256) VALUES ('quaternaries', 'x', 'reference/quaternaries/x', $1)`, ['a'.repeat(64)])
+			).rejects.toMatchObject({ code: '23514' });
+		} finally {
+			await client.query('ROLLBACK');
+		}
 	});
 });

@@ -16,7 +16,9 @@
 // table in its <pre>) or as the plain text, gzipped or not, with the same
 // checks (the DATE … QUAL header, the flow in m³/s, real dates, each day
 // once). The station comes from --station, else the one river gauge code the
-// text before the table names, else the file name.
+// text before the table names, else the file name. The reading, the station
+// and the writes are src/feeds/gaugeRecordImport.ts, which production's
+// reference load (kind dws, src/geo/referenceLoad.ts) shares.
 //
 // The span recorded as covered is the reply's first to last listed day, or
 // --from/--to when the request asked for more (days DWS didn't list are
@@ -31,20 +33,19 @@
 // command was typed in. A reply is the client's to keep: never commit one
 // (the repo ships only backend/fixtures/dws/, invented).
 import { readFileSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import pg from 'pg';
 import { loadDevEnv } from '../src/config/devEnv.js';
 import { DWS_RIVER_GAUGE } from '../src/feeds/config.js';
-import { type DwsRowDay, parseDwsRows } from '../src/feeds/sources/dws.js';
+import { CHUNK_DAYS, type Plan, planImport, stationOf, writeGaugeRecordPlan } from '../src/feeds/gaugeRecordImport.js';
+
+export { CHUNK_DAYS, planImport, stationOf, type Plan };
 
 /** The committed synthetic reply (station X0H001, invented values). */
 export const SYNTHETIC_DWS_REPLY = fileURLToPath(new URL('../fixtures/dws/X0H001-reply.synthetic.txt', import.meta.url));
-
-/** Days one call of gauge_record_write may span (its cap is 7330: DWS's 20 years a request). */
-export const CHUNK_DAYS = 7000;
 
 export const SOURCES = ['dws-request', 'upload'] as const;
 export const USAGE =
@@ -103,45 +104,6 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
 	return { file: cliPath(positional[0]!, env), reference, station, source, from, to, origin };
 }
 
-const STATION_IN_TEXT = /\b([A-Z]\d[A-Z]\d{3})(?:100\.00)?\b/g;
-
-/** The station: given, else the one river gauge the text before the table names, else the file name's. */
-export function stationOf(text: string, file: string, given: string | null): string {
-	if (given) return given;
-	const head = text.split(/\r?\n/).findIndex((l) => /^\s*DATE(\s|$)/i.test(l));
-	const before = head === -1 ? text : text.split(/\r?\n/).slice(0, head).join('\n');
-	const named = new Set([...before.matchAll(STATION_IN_TEXT)].map((m) => m[1]!).filter((s) => DWS_RIVER_GAUGE.test(s)));
-	if (named.size === 1) return [...named][0]!;
-	const fromName = [...basename(file).matchAll(STATION_IN_TEXT)].map((m) => m[1]!).filter((s) => DWS_RIVER_GAUGE.test(s));
-	if (named.size === 0 && fromName.length === 1) return fromName[0]!;
-	throw new Error(`the file names ${named.size ? 'several stations' : 'no station'}: give it with --station`);
-}
-
-export interface Plan {
-	station: string;
-	rows: DwsRowDay[];
-	/** Each call's span (≤ CHUNK_DAYS days) and its rows. */
-	chunks: { from: string; to: string; rows: DwsRowDay[] }[];
-	gaps: number;
-}
-
-/** What a file loads: its station, its rows (read by the feed's reader) and the calls that write them. */
-export function planImport(text: string, args: Args): Plan {
-	const station = stationOf(text, args.file, args.station);
-	const parsed = parseDwsRows(text, args.from ? { start: args.from, end: args.to! } : undefined);
-	if (!parsed.rows.length) throw new Error('the file lists no days');
-	if (parsed.outside) throw new Error(`${parsed.outside} row(s) fall outside --from/--to`);
-	const from = args.from ?? parsed.rows[0]!.day;
-	const to = args.to ?? parsed.rows.at(-1)!.day;
-	const chunks: Plan['chunks'] = [];
-	for (let a = toEpochDay(from); a <= toEpochDay(to); a += CHUNK_DAYS) {
-		const lo = fromEpochDay(a);
-		const hi = fromEpochDay(Math.min(a + CHUNK_DAYS - 1, toEpochDay(to)));
-		chunks.push({ from: lo, to: hi, rows: parsed.rows.filter((r) => r.day >= lo && r.day <= hi) });
-	}
-	return { station, rows: parsed.rows, chunks, gaps: parsed.rejected };
-}
-
 /** Read the file (gzipped or not) as text. */
 export function readText(file: string): string {
 	const bytes = readFileSync(file);
@@ -155,14 +117,7 @@ export async function importDws(url: string, args: Args, now = new Date()): Prom
 	await client.connect();
 	try {
 		await client.query('BEGIN');
-		let written = 0;
-		for (const c of plan.chunks) {
-			const r = await client.query<{ written: number }>(
-				'SELECT written FROM gauge_record_write($1, $2, $3, $4, $5, $6::date[], $7::double precision[], $8::text[], $9, $10)',
-				[args.origin, plan.station, args.source, c.from, c.to, c.rows.map((x) => x.day), c.rows.map((x) => x.value), c.rows.map((x) => x.quality), now.toISOString(), args.reference]
-			);
-			written += r.rows[0]!.written;
-		}
+		const written = await writeGaugeRecordPlan(client, plan, { origin: args.origin, source: args.source, reference: args.reference, fetchedAt: now });
 		await client.query('COMMIT');
 		return { ...plan, written };
 	} catch (err) {

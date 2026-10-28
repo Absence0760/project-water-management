@@ -3447,8 +3447,9 @@ placed points. The server never trusts the browser with geometry:
   the same way but written by the data feeds, through checked functions
   (`chirps_cache_merge`, `chirps_recheck_claim`, `chirps_recheck_apply`,
   `app_mirror_apply_revision`, `app_mirror_record_copy`,
-  `app_gauge_record_load_web`, and the operator's `gauge_record_write`;
-  Input handling, above).
+  `app_gauge_record_load_web`, and the operator's `gauge_record_write`,
+  from `pnpm import:dws` locally or `load-reference.yml`'s `dws` kind in
+  production; Input handling, above).
 - No third-party origin: MapLibre is bundled, its worker is same-origin
   (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file
   with no glyphs or sprites; the CSP is unchanged ([maps.md § CSP and
@@ -4187,9 +4188,13 @@ key there would let any read-only principal forge any user's session.
   bucket (GetObject on `reference/*`, nothing else), refuses it unless it
   hashes to the SHA-256 in the approved run (so the approver approves those
   bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off; the
-  evaporation grid 32 MiB and 64 MiB), and
-  parses it with the same code as the local loaders (JSON only, no archive
-  formats, no external references). The kinds whose licence isn't
+  evaporation grid 32 MiB and 64 MiB, a DWS flow table 8 MiB and 16 MiB), and
+  parses it with the same code as the local loaders (JSON, a GeoNames dump
+  or a DWS daily table; no archive formats, no external references). A DWS
+  table is written through `gauge_record_write` with its bounds, in one
+  transaction with its `reference_load` row, and its station never reaches
+  the public log (the workflow prints counts; the station goes to
+  CloudWatch). The kinds whose licence isn't
   confirmed are refused in the workflow and again in the Lambda, by name,
   and so is an A-pan evaporation grid (only dPET's reference ET is allowed).
   Its answer and its failure summary carry counts, codes and fixed text

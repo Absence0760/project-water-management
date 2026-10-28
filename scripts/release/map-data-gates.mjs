@@ -15,12 +15,14 @@
 //
 //   node scripts/release/map-data-gates.mjs load
 //     load-reference.yml, before the production approval. LOAD_KIND,
-//     LOAD_KEY, LOAD_SHA256, LOAD_DATASET, LOAD_SOURCE and LOAD_MIN_ORDER
-//     (the workflow's inputs) must have the shapes the migrate Lambda accepts
-//     (backend/src/geo/referenceLoad.ts parseLoadRequest checks them again),
-//     the kind must be one the Sources table allows (land-cover,
-//     evaporation, rivers, gazetteer, map-grid), a MAP grid must name a
-//     dataset whose licence is recorded (DATASETS) and give no source, and
+//     LOAD_KEY, LOAD_SHA256, LOAD_DATASET, LOAD_SOURCE, LOAD_MIN_ORDER and
+//     LOAD_STATION (the workflow's inputs) must have the shapes the migrate
+//     Lambda accepts (backend/src/geo/referenceLoad.ts parseLoadRequest
+//     checks them again), the kind must be one the Sources table allows
+//     (land-cover, evaporation, rivers, gazetteer, map-grid, tiles, dws), a
+//     MAP grid must name a dataset whose licence is recorded (DATASETS) and
+//     give no source, a DWS flow table needs its reference (the source, at
+//     most 200 characters) and takes a station only as a river gauge code, and
 //     rivers need HydroSHEDS' Exhibit B statement in the app's legal text
 //     first (the HydroSHEDS licence, § 2.2), and the Terms' clause on map
 //     data licensed to us (§9: no stand-alone redistribution, no reverse
@@ -47,7 +49,7 @@ export const REQUIRED_TEXT = {
 };
 
 /** The kinds a production load may name (backend/src/geo/referenceLoad.ts REFERENCE_KINDS, the allowed ones; referenceLoad.test.ts keeps the two in step). */
-export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles'];
+export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'dws'];
 
 /**
  * The kinds allowed dataset by dataset, and the labels each may load as
@@ -113,6 +115,10 @@ export function loadProblems(env, hasText = legalTextHas) {
 	if (source.length > 500 || /[\u0000-\u001f]/.test(source)) problems.push('the source is at most 500 characters on one line');
 	if (Object.hasOwn(DATASETS, kind) && source.trim()) problems.push(`${kind} takes no source: the dataset's source and credit are the ones recorded with its licence`);
 	if (kind === 'rivers' && !source.trim()) problems.push('rivers need a source: the attribution stored on every reach');
+	if (kind === 'dws' && (!source.trim() || source.length > 200)) problems.push('dws needs a source of 1 to 200 characters: the record’s reference, stored on every row');
+	const station = env.LOAD_STATION ?? '';
+	if (station && kind !== 'dws') problems.push('station is for the dws kind only');
+	else if (station && !/^[A-Z][0-9]H[0-9]{3}$/.test(station)) problems.push('station must be a DWS river gauge code (an H code, e.g. A2H012)');
 	const order = env.LOAD_MIN_ORDER ?? '1';
 	if (!/^([1-9]|1[0-5])$/.test(order)) problems.push('min_order is a Strahler order, 1 to 15');
 	if (kind === 'rivers' && !hasText(REQUIRED_TEXT.rivers)) {
