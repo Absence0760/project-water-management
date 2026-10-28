@@ -10,7 +10,6 @@ import { GR4J_PARAMS, type Gr4jParams } from './params';
 import { GR4J_NO_PET, hasPotentialEvaporation } from './pet';
 import type { DayFluxes, NaturalFlowGenerator, NaturalFlowInput, ParamSpec, RunContext, RunoffModel } from './types';
 import { shareForcingSettings, simulateUnits, unitRainFingerprint, unitRainForcing, unitRainOn, unitRainSummary, type UnitRainFingerprint } from './unitRain';
-import { cmpStr } from '../order';
 import { UNIT_RAIN_SERIES, type ModelInput } from '../project';
 
 /** Daily model drivers (mm/day). */
