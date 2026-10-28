@@ -4815,7 +4815,9 @@ in use.
 One crop's name and 12 monthly factors in a side sheet over the page
 (`crops/CropSheet.svelte`), while the URL has `crop=<cropId>`, so it can be
 linked and Back closes it; Done, Esc or the ✕ drop `crop` in place
-(`withoutParam`). **+ Add crop** adds "Crop N", on drip (the new-unit
+(`withoutParam`). The sheet shuts at once and the URL follows when that
+navigation lands; an Edit pressed in between waits for it, so it opens its
+crop and Back still goes where the sheet was opened from. **+ Add crop** adds "Crop N", on drip (the new-unit
 default), and opens its sheet with the name focused. Under the name, its
 default **Irrigation system** (the project's table, or none: each unit's own
 efficiency), with the units that put it on another named in the hint. The sheet shows the factors four to a row (labelled "Orchard

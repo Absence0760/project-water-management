@@ -5,14 +5,21 @@
 // the model answers in text or a ceiling is hit:
 //   - hops: cfg.maxHops model calls; asking for tools on the last one ends the
 //     turn with an `assistant_hop_limit` error event;
-//   - output: cfg.maxOutputTokens per call, passed to the provider, and cut
-//     here too if a provider streams past it (`assistant_output_limit`);
+//   - output: cfg.maxOutputTokens per call, or less when the turn's budget
+//     leaves less (below), passed to the provider, and cut here too if a
+//     provider streams far past it (`assistant_output_limit`);
 //   - tool calls: cfg.maxToolCallsPerHop run per hop; each call past it gets
 //     a tool error result saying so, and the model can ask again next hop;
-//   - tokens: cfg.maxTurnTokens weighted tokens (config.ts weightedTokens)
-//     for the whole turn; before each hop after the first, the tokens so far
-//     plus an estimate of that hop's input passing it ends the turn with an
-//     `assistant_turn_limit` error event;
+//   - tokens: deps.budget weighted tokens (config.ts weightedTokens) for the
+//     whole turn, what app_assistant_begin reserved (264_assistant_reservation:
+//     at most cfg.maxTurnTokens, and no more than any monthly cap has left).
+//     Before every hop, the first included, the tokens so far plus a
+//     conservative estimate of that hop's input plus its output at most
+//     (weighted ×5) must fit: the hop's output cap is cut to what the budget
+//     leaves, and a hop that couldn't have MIN_HOP_OUTPUT_TOKENS ends the turn
+//     with an `assistant_turn_limit` error event instead. So a turn spends no
+//     more than its budget while the provider counts no more input tokens
+//     than the estimate (firstHopInput) and honours its output cap;
 //   - tool results: cfg.maxToolResultChars each, cut with a note;
 //   - input: cfg.maxInputChars of conversation, oldest turns dropped first;
 //   - time: cfg.turnSeconds for the whole turn (`assistant_timeout`). A tool
@@ -27,7 +34,7 @@
 // the route can charge them (usage.ts).
 import { logEvent } from '../logging/logEvent.js';
 import { safeError } from '../logging/safeError.js';
-import { weightedTokens, type AssistantConfig } from './config.js';
+import { OUTPUT_TOKEN_WEIGHT, weightedTokens, type AssistantConfig } from './config.js';
 import { systemPrompt } from './prompt.js';
 import type {
 	AssistantProvider,
@@ -36,6 +43,7 @@ import type {
 	ChatMessage,
 	ToolCall,
 	ToolResult,
+	ToolSpec,
 	TurnMessage
 } from './types.js';
 
@@ -49,10 +57,63 @@ export const TURN_ERRORS = {
 } as const;
 export type TurnErrorCode = keyof typeof TURN_ERRORS;
 
-/** About this many characters make a token, to estimate a call the provider never reported usage for. */
-const CHARS_PER_TOKEN = 4;
 /** A provider streaming past its output cap by this factor (in characters per token) is cut off. */
 const OUTPUT_CHARS_PER_TOKEN = 8;
+/**
+ * Tokens of framing a provider may add to one call beyond the text it is
+ * sent: the tool-use instructions (Anthropic documents 346 tokens for them on
+ * Claude), role and turn markers. Generous on purpose.
+ */
+export const HOP_FRAMING_TOKENS = 1000;
+/** Tokens of framing per message (its role, a tool result's id and name markers). */
+export const MESSAGE_FRAMING_TOKENS = 16;
+/**
+ * The fewest output tokens a hop is worth running with: a hop the budget
+ * leaves less for ends the turn (`assistant_turn_limit`) instead.
+ */
+export const MIN_HOP_OUTPUT_TOKENS = 256;
+
+const utf8 = new TextEncoder();
+/** UTF-8 bytes: no fewer than the tokens, since every token of a byte-level BPE (Claude's, Llama's) covers at least one byte. */
+const bytes = (s: string) => utf8.encode(s).length;
+
+/** One message's input tokens at most: its bytes (a tool call's arguments as JSON included) plus its framing. */
+export function messageTokens(m: TurnMessage): number {
+	let n = MESSAGE_FRAMING_TOKENS + bytes(m.content);
+	if (m.role === 'assistant' && m.toolCalls?.length) n += bytes(JSON.stringify(m.toolCalls));
+	// A provider's id and name could be anything; counted as the text they'd be sent as.
+	if (m.role === 'tool') n += bytes(String(m.toolCallId ?? '')) + bytes(String(m.name ?? ''));
+	return n;
+}
+
+/**
+ * A call's input tokens at most, from scratch: the framing, the system
+ * prompt, the tool specs as JSON and every message, each counted by its UTF-8
+ * bytes. Deliberately high (English runs about four characters a token), so
+ * the budget checks err towards spending less, never more. After the first
+ * hop runTurn starts from the provider's own count of the previous call's
+ * input instead, and adds only the messages since by this rule.
+ */
+export function firstHopInput(system: string, specs: readonly ToolSpec[], messages: readonly TurnMessage[]): number {
+	return messages.reduce((n, m) => n + messageTokens(m), HOP_FRAMING_TOKENS + bytes(system) + bytes(JSON.stringify(specs)));
+}
+
+/**
+ * The weighted tokens a turn needs reserved before it starts: its first
+ * call's input at most, plus a whole call's output (cfg.maxOutputTokens)
+ * weighted. app_assistant_begin refuses a turn when a monthly cap has less
+ * than this left; the route refuses a conversation whose floor passes
+ * cfg.maxTurnTokens (413) before that.
+ */
+export function turnFloor(
+	cfg: Pick<AssistantConfig, 'maxOutputTokens' | 'maxInputChars'>,
+	system: string,
+	tools: readonly AssistantTool[],
+	conversation: readonly ChatMessage[]
+): number {
+	const kept = capConversation(conversation, cfg.maxInputChars) ?? [];
+	return firstHopInput(system, tools.map((t) => t.spec), kept) + OUTPUT_TOKEN_WEIGHT * cfg.maxOutputTokens;
+}
 
 export interface TurnDeps {
 	provider: AssistantProvider;
@@ -69,6 +130,12 @@ export interface TurnDeps {
 	signal?: AbortSignal;
 	/** The system prompt; prompt.ts by default. */
 	system?: string;
+	/**
+	 * Weighted tokens this turn may spend, every hop together: what
+	 * app_assistant_begin reserved for it (usage.ts beginTurn). cfg.maxTurnTokens
+	 * when absent.
+	 */
+	budget?: number;
 }
 
 export interface TurnOutcome {
@@ -121,9 +188,6 @@ export function parseArguments(raw: unknown): { ok: true; args: unknown } | { ok
 	return { ok: true, args };
 }
 
-const estimate = (chars: number) => Math.ceil(chars / CHARS_PER_TOKEN);
-const transcriptChars = (system: string, messages: TurnMessage[]) =>
-	messages.reduce((n, m) => n + m.content.length + (m.role === 'assistant' ? JSON.stringify(m.toolCalls ?? []).length : 0), system.length);
 
 /** The words a tool call past cfg.maxToolCallsPerHop gets instead of running. */
 export const toolCallLimitError = (max: number) =>
@@ -156,51 +220,61 @@ export async function runTurn(deps: TurnDeps, conversation: readonly ChatMessage
 	const stopped = (): TurnOutcome | null => (deps.signal?.aborted ? outcome('aborted') : deadline.signal.aborted ? fail('assistant_timeout') : null);
 
 	const transcript: TurnMessage[] = (capConversation(conversation, cfg.maxInputChars) ?? []).map((m) => ({ role: m.role, content: m.content }));
-	const specChars = JSON.stringify(specs).length;
+	const budget = deps.budget ?? cfg.maxTurnTokens;
+	const minOutput = Math.min(MIN_HOP_OUTPUT_TOKENS, cfg.maxOutputTokens);
+	// The previous call's input tokens (as the provider counted them, else as estimated), and how many messages it was sent.
+	let lastInput = 0;
+	let lastSent = 0;
 	try {
 		for (let hop = 0; hop < cfg.maxHops; hop++) {
 			const early = stopped();
 			if (early) return early;
-			// Each hop resends the whole transcript, so input grows hop by hop: stop before a hop would pass the turn's ceiling.
-			if (hop > 0 && weightedTokens(usage.inputTokens, usage.outputTokens) + estimate(transcriptChars(system, transcript) + specChars) > cfg.maxTurnTokens) {
-				return fail('assistant_turn_limit');
-			}
+			// Each hop resends the whole transcript, so input grows hop by hop. This hop's input at most: from scratch on
+			// the first, else the previous call's plus the messages added since, each at most (messageTokens).
+			const hopInput = hop === 0 ? firstHopInput(system, specs, transcript) : lastInput + transcript.slice(lastSent).reduce((n, m) => n + messageTokens(m), 0);
+			// The output this hop may have: the turn's spend so far, this hop's input and its output (weighted) fit the budget.
+			const hopOutput = Math.min(cfg.maxOutputTokens, Math.floor((budget - weightedTokens(usage.inputTokens, usage.outputTokens) - hopInput) / OUTPUT_TOKEN_WEIGHT));
+			if (hopOutput < minOutput) return fail('assistant_turn_limit');
 			let text = '';
 			const calls: ToolCall[] = [];
 			let reported = false;
+			let hopReportedInput = 0;
 			let cut = false;
+			// A call the provider never reported (it failed, or doesn't report): counted at its most, this hop's input
+			// estimate and the output it streamed, no more than the cap the provider honours, so the budget still sees it.
+			const countUnreported = () => {
+				usage.inputTokens += hopInput;
+				usage.outputTokens += Math.min(hopOutput, bytes(text) + (calls.length ? bytes(JSON.stringify(calls)) : 0));
+			};
+			lastSent = transcript.length;
 			try {
-				for await (const ev of provider.complete({ system, messages: transcript, tools: specs, maxOutputTokens: cfg.maxOutputTokens, signal })) {
+				for await (const ev of provider.complete({ system, messages: transcript, tools: specs, maxOutputTokens: hopOutput, signal })) {
 					if (ev.type === 'text') {
 						text += ev.delta;
 						emit({ type: 'text', delta: ev.delta });
-						if (text.length > cfg.maxOutputTokens * OUTPUT_CHARS_PER_TOKEN) {
+						if (text.length > hopOutput * OUTPUT_CHARS_PER_TOKEN) {
 							cut = true;
 							break;
 						}
 					} else if (ev.type === 'tool_call') {
 						calls.push(ev.call);
 					} else if (ev.type === 'usage') {
-						usage.inputTokens += Math.max(0, Math.round(ev.inputTokens) || 0);
+						const input = Math.max(0, Math.round(ev.inputTokens) || 0);
+						usage.inputTokens += input;
 						usage.outputTokens += Math.max(0, Math.round(ev.outputTokens) || 0);
+						hopReportedInput += input;
 						reported = true;
 					}
 				}
 			} catch (err) {
-				if (!reported) {
-					usage.inputTokens += estimate(transcriptChars(system, transcript));
-					usage.outputTokens += estimate(text.length);
-				}
+				if (!reported) countUnreported();
 				const late = stopped();
 				if (late) return late;
 				logEvent('warn', { event: 'assistant_provider_failed', provider: provider.name, ...safeError(err) });
 				return fail('assistant_provider_error');
 			}
-			// A call the provider never reported (cut off, or a provider that doesn't): counted by estimate, so the budget still sees it.
-			if (!reported) {
-				usage.inputTokens += estimate(transcriptChars(system, transcript));
-				usage.outputTokens += estimate(text.length + (calls.length ? JSON.stringify(calls).length : 0));
-			}
+			if (!reported) countUnreported();
+			lastInput = reported ? hopReportedInput : hopInput;
 			if (cut) return fail('assistant_output_limit');
 			const late = stopped();
 			if (late) return late;

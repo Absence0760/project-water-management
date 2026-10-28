@@ -460,12 +460,15 @@ resource "aws_cloudwatch_metric_alarm" "assistant_duration" {
 #   {"event":"assistant_charge_failed","error":"error","code":"42501"}
 #   {"event":"assistant_provider_failed","provider":"bedrock","error":"AccessDeniedException"}
 # Lambda's JSON log format nests each under message (logging/logEvent.ts).
-# All essential: a failed charge silently lifts every token cap, a broken
+# All essential: a failed charge leaves the turn's whole reservation to be
+# charged when it expires (264_assistant_reservation), so every failing turn
+# costs its whole budget against the caps and the bill is misread; a broken
 # model route makes the chat dead with every invocation a 200, and the
 # hourly token sum is the only spend signal that doesn't wait for billing.
 
-# A turn's tokens weren't added to the month's counters (usage.ts): the caps
-# stop counting while it keeps failing. Any one.
+# A turn's tokens weren't added to the month's counters (usage.ts): its
+# reservation is charged in full once it expires, so the caps hold, but every
+# such turn counts its whole budget. Any one.
 resource "aws_cloudwatch_log_metric_filter" "assistant_charge_failed" {
   count          = local.assistant_enabled && local.alarms_essential ? 1 : 0
   name           = "${local.project}-assistant-charge-failed"
@@ -491,7 +494,7 @@ resource "aws_cloudwatch_metric_alarm" "assistant_charge_failed" {
   period              = 300
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "The assistant failed to charge a turn's tokens to the month's counters (app_assistant_charge): while it keeps failing, the per-project, per-person and deployment-wide token caps stop counting and only the Marketplace budget, a day or two late, is left. Search the assistant's log group for event = assistant_charge_failed (code is a Postgres SQLSTATE: 42501 a grant, 08xxx the connection). Turn the assistant off (assistant_enabled = false) if it doesn't clear."
+  alarm_description   = "The assistant failed to charge a turn's tokens to the month's counters (app_assistant_charge): each such turn's whole reserved budget is charged once its reservation expires, so the per-project, per-person and deployment-wide caps still hold but fill up faster than the real spend. Search the assistant's log group for event = assistant_charge_failed (code is a Postgres SQLSTATE: 42501 a grant, 08xxx the connection). Turn the assistant off (assistant_enabled = false) if it doesn't clear."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }
