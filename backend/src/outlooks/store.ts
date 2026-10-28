@@ -6,6 +6,8 @@ import { randomUUID } from 'node:crypto';
 import {
 	climateConditionedOutlook,
 	ENGINE_VERSION,
+	resolveDroughtRestriction,
+	runForecastOutlook,
 	fromEpochDay,
 	selectClimateAnalogues,
 	outlookAnalogues,
@@ -33,6 +35,9 @@ import {
 	type ReviewTriggers,
 	type ClimateIndexId,
 	type ClimateOutlook,
+	type ForecastMemberResult,
+	type ForecastOffReason,
+	type ForecastOutlook,
 	type OutlookSummaryInput,
 	type ScenarioOp,
 	type SeasonalOutlook,
@@ -45,6 +50,7 @@ import { JobError, LeaseLostError } from '../jobs/errors.js';
 import { enqueueJob, type JobMeta, type JobStatus } from '../jobs/queue.js';
 import { readClimateIndices, type IndexEntry } from '../ingest/indices.js';
 import { mirrorStore } from '../mirror/source.js';
+import { forecastArea, readC3sInputs, type C3sInputs, type C3sSource, type ForecastArea } from './c3s.js';
 import { outlookSeasonFor, resolveOutlook, reviewDateFor } from '../projects/outlookSettings.js';
 import { loadBaseInput } from '../scenarios/execute.js';
 import { type CreateOutlookBody, type OutlookMethod, OUTLOOK_YEARS_MAX, OUTLOOKS_KEPT, TRIGGER_BANDS_MAX } from './schema.js';
@@ -77,13 +83,38 @@ export interface MemberFailure {
  */
 export type StoredClimateOutlook = ClimateOutlook & { source: Partial<Record<ClimateIndexId, Pick<IndexEntry, 'url' | 'through' | 'revision' | 'fetchedAt'>>> };
 
+/** A forecast member as stored: the engine's without its whole season (`outcome`) or its months' make-up. */
+export type StoredForecastMember = Omit<ForecastMemberResult, 'outcome' | 'months'>;
+
+/**
+ * The forecast-conditioned outlook as stored (issue #620, method `c3s`,
+ * docs/model.md §2.15d): the engine's ForecastOutlook with its members
+ * compact, what the bridge read from the copy (`source`, outlooks/c3s.ts)
+ * and over what (`area`). Off for the engine's reasons, or the backend's:
+ * `noArea` (no boundary or unit polygon to average the forecasts over) and
+ * `failed` (the engine refused it: its words in `message`).
+ * The chances are at the full demand (no demand level's ops), on the rule's
+ * review dates, else the outlook's own review date.
+ */
+export type StoredForecastOutlook = Omit<ForecastOutlook, 'members' | 'reason'> & {
+	reason: ForecastOffReason | 'noArea' | 'failed' | null;
+	members: StoredForecastMember[];
+	source: C3sSource | null;
+	area: C3sInputs['area'] | null;
+};
+
 /**
  * An outlook's result: the engine's SeasonalOutlook (summariseOutlook), its
  * `excluded` with the years this backend left out as well, and the members
- * the engine refused. With the method `climateState`, `climate` beside it
- * (the ESP figures are the same either way).
+ * the engine refused. With the method `climateState`, `climate` beside it;
+ * with `c3s`, `forecast` (the ESP figures are the same in every method).
  */
-export type OutlookResult = Omit<SeasonalOutlook, 'excluded' | 'climate'> & { excluded: StoredExcluded[]; failures: MemberFailure[]; climate?: StoredClimateOutlook };
+export type OutlookResult = Omit<SeasonalOutlook, 'excluded' | 'climate'> & {
+	excluded: StoredExcluded[];
+	failures: MemberFailure[];
+	climate?: StoredClimateOutlook;
+	forecast?: StoredForecastOutlook;
+};
 
 /** A trigger table as stored: the engine's ReviewTriggers without each band's whole outlook (its per-level summary stays). */
 export type StoredTriggerTable = Omit<ReviewTriggers, 'rows'> & { rows: Omit<ReviewTriggerRow, 'outlook'>[] };
@@ -120,7 +151,7 @@ export interface OutlookRow {
 	planningShare: number | null;
 	levels: StoredLevel[];
 	analogueYears: number[] | null;
-	/** esp (the default): every analogue year alike; climateState: also the years nearest this season's ENSO and SAM state (issue #620). */
+	/** esp (the default): every analogue year alike; climateState: also the years nearest this season's ENSO and SAM state; c3s: also the chance of each restriction level from the C3S seasonal forecasts (issue #620). */
 	method: OutlookMethod;
 	status: OutlookStatus;
 	engineVersion: string | null;
@@ -313,9 +344,12 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 	// The climate indices first (issue #620), so a copy that can't be read fails the job before any member runs.
 	const indices = o.method === 'climateState' ? await readClimateIndices(mirrorStore()) : null;
 	// A base run that can no longer be rebuilt fails the job (an ApiError: no retry), the outlook stays pending.
+	const raw = await loadBaseInput(db, projectId, o.baseRunId);
+	// The seasonal forecasts likewise (issue #620, method c3s): the area, then the copy, before any member runs.
+	const c3s = o.method === 'c3s' ? await readForecastInputs(db, projectId, raw, o.decisionDate) : null;
 	// Without the drought restriction rule (engine ≥ 1.54.0, withoutDroughtRestriction): the triggers become that
 	// rule, and a demand level on top of it would cut twice; the history and every member run unrestricted.
-	const base = withoutDroughtRestriction(await loadBaseInput(db, projectId, o.baseRunId));
+	const base = withoutDroughtRestriction(raw);
 	const season: OutlookSeason = { decisionDate: o.decisionDate, seasonEnd: o.seasonEnd };
 	const { baseRun, snapshot } = outlookBaseAndSnapshot(base, season.decisionDate);
 	let picked: { analogues: OutlookAnalogue[]; excluded: OutlookExcluded[] };
@@ -349,7 +383,8 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 	const running = plan.filter((p) => !p.problems.length);
 	const table = o.reviewDate ? planTriggerTable(base, baseRun, o.reviewDate, season, o.analogueYears) : null;
 	const tableMembers = table && 'plan' in table ? table.plan.bands.length * running.length * table.analogues.length : 0;
-	const total = running.length * analogues.length + tableMembers;
+	// The forecast-conditioned outlook counts as one step (one engine call, after everything else).
+	const total = running.length * analogues.length + tableMembers + (c3s ? 1 : 0);
 	let done = 0;
 	const members = new Map<string, Map<number, OutlookMember>>();
 	const failures: MemberFailure[] = [];
@@ -488,6 +523,13 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 			triggers = { reviewDate: o.reviewDate, table: { ...t, rows: t.rows.map(({ outlook: _, ...r }) => r) }, problem: null, excluded: table.excluded, failures: tFailures };
 		}
 	}
+	if (c3s) {
+		// The chance of each restriction level from the forecasts (issue #620): its own ESP members from the same
+		// snapshot beside the forecast members, so nothing above changes. On the kept analogue years, at the full demand.
+		result.forecast = forecastOutlook(raw, c3s, { season, baseRun, snapshot, analogueYears: kept.map((a) => a.waterYear), reviewDate: o.reviewDate });
+		done++;
+		if (!(await progress((100 * done) / total))) throw new LeaseLostError();
+	}
 	await db.query(`UPDATE seasonal_outlook SET status = 'complete', result = $2, engine_version = $3, triggers = $4 WHERE id = $1`, [
 		outlookId,
 		JSON.stringify(result),
@@ -567,4 +609,72 @@ function planTriggerTable(base: ModelInput, baseRun: OutlookBaseRun, reviewDate:
 	const keep = new Set(byYear.slice(0, OUTLOOK_YEARS_MAX).map((a) => a.waterYear));
 	const excluded: StoredExcluded[] = [...picked.excluded, ...byYear.slice(OUTLOOK_YEARS_MAX).map((a) => ({ waterYear: a.waterYear, reason: 'overLimit' as const }))];
 	return { season: tableSeason, baseRun: tBase, snapshot, plan, analogues: picked.analogues.filter((a) => keep.has(a.waterYear)), pickedExcluded: picked.excluded, excluded };
+}
+
+/** What the c3s method read before any member runs: the engine's inputs, or why there are none (no area to average over). */
+type ForecastInputs = { inputs: C3sInputs } | { problem: string };
+
+/**
+ * The forecast area (outlooks/c3s.ts forecastArea: the catchment boundary,
+ * else the units' polygons; each unit's own under per-unit rain, §2.4h) and
+ * the copy's forecasts issued by the decision date with their hindcasts. A
+ * copy laid out otherwise fails the job (MirrorFormatError, no retry).
+ */
+async function readForecastInputs(db: Db, projectId: string, raw: ModelInput, decisionDate: string): Promise<ForecastInputs> {
+	const area: ForecastArea | { problem: string } = await forecastArea(db, projectId, raw.settings.unitRain?.mode === 'perUnit');
+	if ('problem' in area) return { problem: area.problem };
+	return { inputs: await readC3sInputs(mirrorStore(), area, decisionDate) };
+}
+
+/**
+ * Run the engine's forecast-conditioned outlook (docs/model.md §2.15d) and
+ * store it compact. Review dates: the drought restriction rule's in the
+ * season (the engine's default), else the outlook's own review date, else
+ * the engine's default review date. An engine error is stored as the
+ * outlook's message (off), never thrown: the ESP result beside it stands.
+ */
+function forecastOutlook(
+	raw: ModelInput,
+	got: ForecastInputs,
+	o: { season: OutlookSeason; baseRun: OutlookBaseRun; snapshot: ModelStateSnapshot | null; analogueYears: number[]; reviewDate: string | null }
+): StoredForecastOutlook {
+	const off = (reason: StoredForecastOutlook['reason'], message: string, x: Partial<StoredForecastOutlook> = {}): StoredForecastOutlook => ({
+		method: 'c3s',
+		status: 'off',
+		reason,
+		message,
+		decisionDate: o.season.decisionDate,
+		seasonEnd: o.season.seasonEnd,
+		init: null,
+		systems: [],
+		members: [],
+		chances: [],
+		espChances: [],
+		skill: null,
+		leads: 'esp',
+		warnings: [],
+		source: null,
+		area: null,
+		...x
+	});
+	if ('problem' in got) return off('noArea', `The forecasts can’t be averaged over the catchment: ${got.problem}. The outlook is the ESP alone.`);
+	const { inputs } = got;
+	const rule = resolveDroughtRestriction(raw.settings.droughtRestriction, []);
+	let f: ForecastOutlook;
+	try {
+		f = runForecastOutlook(raw, {
+			decisionDate: o.season.decisionDate,
+			seasonEnd: o.season.seasonEnd,
+			forecasts: inputs.forecasts,
+			hindcasts: inputs.hindcasts,
+			baseRun: o.baseRun,
+			...(o.snapshot ? { snapshot: o.snapshot } : {}),
+			...(o.analogueYears.length ? { analogueYears: o.analogueYears } : {}),
+			...(!rule && o.reviewDate ? { reviewDates: [o.reviewDate] } : {})
+		});
+	} catch (err) {
+		// The engine's words (plain text): the forecast part is off, the ESP stands.
+		return off('failed', `The forecast-conditioned outlook couldn’t be run: ${(err as Error).message}`, { source: inputs.source, area: inputs.area });
+	}
+	return { ...f, members: f.members.map(({ outcome: _o, months: _m, ...m }) => m), source: inputs.source, area: inputs.area };
 }
