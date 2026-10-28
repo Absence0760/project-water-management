@@ -586,7 +586,7 @@ export async function confirmAuthorityDelegate(projectId: string, userId: string
 }
 
 /**
- * Satellite views of a dam polygon (257_dam_observation, issue #604 R5-B), as
+ * Satellite views of a dam polygon (261_dam_observation, issue #604 R5-B), as
  * the worker's weekly pass loads them: its Waterbodies match recorded with
  * app_dam_match_write, then its WOfS rows with app_dam_observation_load. As
  * the schema owner with no user, so both run as the worker does. Invented

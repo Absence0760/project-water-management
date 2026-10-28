@@ -171,7 +171,7 @@
 	});
 
 	async function refresh() {
-		if (refreshing) return;
+		if (refreshing || busy) return;
 		message = error = null;
 		refreshing = true;
 		// A followed fetch that has run says so instead.
@@ -319,6 +319,10 @@
 		document.getElementById(`${uid}-name`)?.focus();
 	}
 
+	// One action at a time, on any card: each ends by re-reading the list, and
+	// two at once could lay an older list over a newer one. So while one saves,
+	// every card's buttons (and the form's) are aria-disabled, never live-looking
+	// buttons whose press is dropped (seen in production: 5 of 11 Switch on).
 	async function act(f: FeedMeta, what: 'run' | 'toggle' | 'remove' | 'replace' | 'withdraw') {
 		if (busy) return;
 		if (
@@ -593,15 +597,15 @@
 							<div class="row">
 								<button type="button" class="btn btn-sm btn-primary" bind:this={separateButton} onclick={() => answerTakeover(q.suggestion)}>Use a separate series: {q.suggestion}</button>
 								{#if q.clash}
-									<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy === 'add'} onclick={() => add(null, true)}>Replace the series with {q.clash.writes}</button>
+									<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy !== null} onclick={() => add(null, true)}>Replace the series with {q.clash.writes}</button>
 								{:else}
-									<button type="button" class="btn btn-sm" aria-disabled={busy === 'add'} onclick={() => add(null, true)}>Fill its empty days</button>
+									<button type="button" class="btn btn-sm" aria-disabled={busy !== null} onclick={() => add(null, true)}>Fill its empty days</button>
 								{/if}
 							</div>
 						</div>
 					{/if}
 					<div class="action-row">
-						<button type="submit" class="btn btn-primary" aria-disabled={busy === 'add'}>{busy === 'add' ? 'Attaching…' : 'Attach feed'}</button>
+						<button type="submit" class="btn btn-primary" aria-disabled={busy !== null}>{busy === 'add' ? 'Attaching…' : 'Attach feed'}</button>
 						<button type="button" class="btn" onclick={closeForm}>Cancel</button>
 					</div>
 				{/if}
@@ -638,19 +642,19 @@
 						{#if data.canRun || data.canEdit}
 							<div class="act">
 								{#if data.canRun && f.enabled}
-									<button type="button" class="btn btn-sm" aria-disabled={busy === f.id} aria-label="Run now: {describeTarget(f)}" onclick={() => act(f, 'run')}>Run now</button>
+									<button type="button" class="btn btn-sm" aria-disabled={busy !== null} aria-label="Run now: {describeTarget(f)}" onclick={() => act(f, 'run')}>Run now</button>
 								{/if}
 								{#if data.canEdit && f.versionConflict && f.replaceFrom === null}
-									<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy === f.id} aria-label="Replace the series: {describeTarget(f)}" onclick={() => act(f, 'replace')}>Replace the series</button>
+									<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy !== null} aria-label="Replace the series: {describeTarget(f)}" onclick={() => act(f, 'replace')}>Replace the series</button>
 								{/if}
 								{#if data.canEdit && f.replaceFrom !== null}
-									<button type="button" class="btn btn-sm" aria-disabled={busy === f.id} aria-label="Withdraw the replacement: {describeTarget(f)}" onclick={() => act(f, 'withdraw')}>Withdraw the replacement</button>
+									<button type="button" class="btn btn-sm" aria-disabled={busy !== null} aria-label="Withdraw the replacement: {describeTarget(f)}" onclick={() => act(f, 'withdraw')}>Withdraw the replacement</button>
 								{/if}
 								{#if data.canEdit}
-									<button type="button" class="btn btn-sm" aria-disabled={busy === f.id} aria-label="{f.enabled ? 'Switch off' : 'Switch on'}: {describeTarget(f)}" onclick={() => act(f, 'toggle')}>
+									<button type="button" class="btn btn-sm" aria-disabled={busy !== null} aria-label="{f.enabled ? 'Switch off' : 'Switch on'}: {describeTarget(f)}" onclick={() => act(f, 'toggle')}>
 										{f.enabled ? 'Switch off' : 'Switch on'}
 									</button>
-									<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy === f.id} aria-label="Remove feed: {describeTarget(f)}" onclick={() => act(f, 'remove')}>Remove</button>
+									<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy !== null} aria-label="Remove feed: {describeTarget(f)}" onclick={() => act(f, 'remove')}>Remove</button>
 								{/if}
 							</div>
 						{/if}

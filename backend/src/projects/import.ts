@@ -21,7 +21,7 @@ import { runLiveModel } from '../runs/execute.js';
 import { requireTeamRole } from '../teams/access.js';
 import { ProjectFile } from './document.js';
 import { normaliseBaselineEwrRules } from './ewrRules.js';
-import { remapRainStations } from './rainStationSettings.js';
+import { remapSettingSeriesIds } from './flowMissingSettings.js';
 import { importedAutoFitError, mergeSettings, normaliseBaselineAllocationMode, remapSettingNodeIds } from './settings.js';
 
 /**
@@ -85,10 +85,8 @@ export function projectFileProblems(data: ProjectFile): string[] {
 			const problem = stationProblem(s.kind, s.siteNodeId ?? null);
 			if (problem) problems.push(`series ${s.kind}${s.name ? ` "${s.name}"` : ''}: station: ${problem}`);
 		}
-		// Its id in the file, which settings.rainStations names it by: only a station's, and each once.
+		// Its id in the file, which the settings name it by (a station's, issue #553; any series', issue #611): each once.
 		if (s.id !== undefined) {
-			const problem = stationProblem(s.kind, s.siteNodeId ?? null);
-			if (problem) problems.push(`series ${s.kind}${s.name ? ` "${s.name}"` : ''}: id: ${problem}`);
 			if (ids.has(s.id)) problems.push(`series ${s.kind}${s.name ? ` "${s.name}"` : ''}: its id is another series’ too`);
 			ids.add(s.id);
 		}
@@ -115,7 +113,7 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	if (opts.teamId) await requireTeamRole(db, opts.teamId, 'member', 'team not found');
 	const { model: fresh, ids } = freshIds(data.model as ProjectModel);
 	const id = crypto.randomUUID();
-	// A rainfall station's fresh id (issue #553): settings.rainStations follows it from the file's.
+	// A series' fresh id (a station's, issue #553; any series the settings name, issue #611): the settings follow it from the file's.
 	const seriesIds = new Map(data.series.flatMap((s) => (s.id !== undefined ? [[s.id, crypto.randomUUID()] as const] : [])));
 	const settings = importedSettings(data.settings, ids, seriesIds);
 	// Licence data never drives the baseline (issue #507): a file that caps or fully allocates it imports comparing only, and the import's revision says so.
@@ -180,8 +178,9 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
  */
 function importedSettings(settings: ProjectFile['settings'], ids: ReadonlyMap<string, string>, seriesIds: ReadonlyMap<string, string>) {
 	const out = remapSettingNodeIds(settings, ids);
-	// The rainfall stations the setting names follow their series to the fresh ids (issue #553); one the file doesn't carry stays, and the run warns.
-	if (out.rainStations !== null && typeof out.rainStations === 'object') out.rainStations = remapRainStations(out.rainStations, new Map(), seriesIds);
+	// The series the settings name follow them to the fresh ids (the rainfall stations, issue #553; the records with unreliable or
+	// missing periods and the kept data checks, issue #611); one the file doesn't carry stays, and the run matches nothing (a station warns).
+	Object.assign(out, remapSettingSeriesIds(out, seriesIds));
 	if (out.fitRecord !== undefined) out.fitRecord = resolveFitRecord(mergeSettings(out) as unknown as Parameters<typeof resolveFitRecord>[0]);
 	return out;
 }

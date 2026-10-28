@@ -477,6 +477,49 @@ test('an action on a feed changed elsewhere says why it failed and shows the lis
 	await expect(panel.getByRole('alert')).toHaveCount(0);
 });
 
+test('while one feed saves, every card’s actions show as unavailable, and work again once it is back', async ({ page, owner, fetchRoute }) => {
+	void owner;
+	const project = await createProject(page.request, 'Feeds one at a time');
+	const rainId = await attachFeed(page.request, project.id);
+	const forecast = await page.request.post(`${API_URL}/projects/${project.id}/feeds`, {
+		data: { source: 'chirps_gefs', config: { cells: [{ lat: -20.12, lon: 25.17 }] } }
+	});
+	expect(forecast.status(), await forecast.text()).toBe(201);
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+	const cards = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(cards).toHaveCount(2);
+	const rainOff = panel.getByRole('button', { name: 'Switch off: Rainfall — CHIRPS' });
+	const forecastOff = panel.getByRole('button', { name: 'Switch off: Rainfall — forecast' });
+	const otherActions = [forecastOff, panel.getByRole('button', { name: 'Run now: Rainfall — forecast' }), panel.getByRole('button', { name: 'Remove feed: Rainfall — forecast' })];
+	for (const b of otherActions) await expect(b).toHaveAttribute('aria-disabled', 'false');
+
+	// Hold the CHIRPS feed's save: until it is back, the forecast card's buttons are unavailable too
+	// (they used to look live while their press was dropped: 5 of 11 Switch on lost in production).
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let reached!: () => void;
+	const arrived = new Promise<void>((r) => (reached = r));
+	const hold = await fetchRoute(page, `${API_URL}/projects/${project.id}/feeds/${rainId}`, async (route) => {
+		if (route.request().method() !== 'PATCH') return route.fallback();
+		reached();
+		await held;
+		return route.fulfill({ response: await route.fetch() });
+	});
+	await rainOff.click();
+	await arrived;
+	for (const b of [rainOff, ...otherActions, panel.getByRole('button', { name: 'Refresh status' })]) await expect(b).toHaveAttribute('aria-disabled', 'true');
+	release();
+	await hold.unroute();
+
+	// Back: the CHIRPS feed is off, and the forecast card's toggle works on the first press.
+	await expect(cards.filter({ hasText: 'Rainfall — CHIRPS' })).toHaveAttribute('data-state', 'disabled');
+	for (const b of otherActions) await expect(b).toHaveAttribute('aria-disabled', 'false');
+	await forecastOff.click();
+	await expect(cards.filter({ hasText: 'Rainfall — forecast' })).toHaveAttribute('data-state', 'disabled');
+	await expect(panel.getByRole('button', { name: 'Switch on: Rainfall — forecast' })).toHaveAttribute('aria-disabled', 'false');
+});
+
 test('the panel works from the keyboard: focus follows the form, a bad field is marked and focused, and a pressed button keeps focus', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Feeds keyboard');

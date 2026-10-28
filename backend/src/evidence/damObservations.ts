@@ -1,7 +1,7 @@
 // The observed wet days' data (report format evidence-21, issue #604 R5-C;
 // engine evidence/damObservations.ts, docs/evidence-pack.md § Observed wet
 // days): the project's traced dams on the given units, each with its WOfS
-// rows (257 dam_observation, source 'wofs') in the period. Read under the
+// rows (261 dam_observation, source 'wofs') in the period. Read under the
 // reader's RLS (withUser): a reader who can't see a dam or its rows gets
 // neither. The engine classifies each date (wet, dry, inconclusive) and freezes them.
 import type { EvidenceDamObservationInput } from '@water-management/engine';

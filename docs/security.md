@@ -3490,7 +3490,7 @@ placed points. The server never trusts the browser with geometry:
   the map feature, not a node, so the sweep can't tie a row to a farm
   without them, and once it seeds views it sees each farmer read their own
   dam's rows (the entries allow exactly the `dam` features on the farmer's
-  own farms). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the orchard and vine grid (`crop_type_dataset`, `crop_type_cell_reference`, 255, empty in production until SANLC's terms are recorded), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207), `river_reference` (171) and the gazetteer (`gazetteer_reference`, 225) are public reference data, readable by any
+  own farms). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the orchard and vine grid (`crop_type_dataset`, `crop_type_cell_reference`, 259, empty in production until SANLC's terms are recorded), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207), `river_reference` (171) and the gazetteer (`gazetteer_reference`, 225) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
   schema owner). The gazetteer's read policy is `FOR SELECT USING (true)`
   with `SELECT` granted to `water_app` and no write policy or grant; it is
@@ -3512,8 +3512,9 @@ placed points. The server never trusts the browser with geometry:
   the same way but written by the data feeds, through checked functions
   (`chirps_cache_merge`, `chirps_recheck_claim`, `chirps_recheck_apply`,
   `app_mirror_apply_revision`, `app_mirror_record_copy`,
-  `app_gauge_record_load_web`, and the operator's `gauge_record_write`;
-  Input handling, above).
+  `app_gauge_record_load_web`, and the operator's `gauge_record_write`,
+  from `pnpm import:dws` locally or `load-reference.yml`'s `dws` kind in
+  production; Input handling, above).
 - No third-party origin: MapLibre is bundled, its worker is same-origin
   (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file
   with no glyphs or sprites; the CSP is unchanged ([maps.md § CSP and
@@ -4252,9 +4253,13 @@ key there would let any read-only principal forge any user's session.
   bucket (GetObject on `reference/*`, nothing else), refuses it unless it
   hashes to the SHA-256 in the approved run (so the approver approves those
   bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off; the
-  evaporation grid 32 MiB and 64 MiB), and
-  parses it with the same code as the local loaders (JSON only, no archive
-  formats, no external references). The kinds whose licence isn't
+  evaporation grid 32 MiB and 64 MiB, a DWS flow table 8 MiB and 16 MiB), and
+  parses it with the same code as the local loaders (JSON, a GeoNames dump
+  or a DWS daily table; no archive formats, no external references). A DWS
+  table is written through `gauge_record_write` with its bounds, in one
+  transaction with its `reference_load` row, and its station never reaches
+  the public log (the workflow prints counts; the station goes to
+  CloudWatch). The kinds whose licence isn't
   confirmed are refused in the workflow and again in the Lambda, by name,
   and so is an A-pan evaporation grid (only dPET's reference ET is allowed).
   Its answer and its failure summary carry counts, codes and fixed text
@@ -4267,7 +4272,9 @@ key there would let any read-only principal forge any user's session.
   and no other field (refused before anything connects), the query runs in
   a `READ ONLY` transaction that is always rolled back, and the answer
   carries ids, engine versions, modes, dates and flags only (a unit test
-  holds the column allowlist; a DB test shows a write inside fails).
+  holds the column allowlist; a DB test shows a write inside fails), plus
+  the two named exceptions: `series-pick-moves`' series names and
+  `dws-coverage`'s station codes, which stay off public issues.
 - **No role can write either bucket** but the operator's own SSO session;
   the deploy role touches neither, and a guardrail test (`guardrails.tftest.hcl`) fails if any other role policy names either bucket. Uploading to the tiles bucket is itself
   publishing (the behaviour serves what is there), so the licence steps come

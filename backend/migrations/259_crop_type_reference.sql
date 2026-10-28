@@ -1,4 +1,4 @@
--- 255_crop_type_reference — the orchard and vine grid the planted-areas
+-- 259_crop_type_reference — the orchard and vine grid the planted-areas
 -- drawer proposes crop areas from, beside the land-cover cropland grid
 -- (issue #604 R5-D; docs/maps.md § Orchards and vines from SANLC,
 -- docs/data-model.md § Catchment map).
@@ -61,9 +61,9 @@ CREATE TABLE crop_type_cell_reference (
 );
 
 COMMENT ON TABLE crop_type_dataset IS
-	'Crop-type products (SANLC) loaded for the orchard and vine proposals (255, issue #604 R5-D): source, version, baseline edition, method, attribution, grid, classes. Loaded by the operator (pnpm import:crop-types), read-only to the app. The repo ships a synthetic grid only; production loads are refused until SANLC''s terms are recorded.';
+	'Crop-type products (SANLC) loaded for the orchard and vine proposals (259, issue #604 R5-D): source, version, baseline edition, method, attribution, grid, classes. Loaded by the operator (pnpm import:crop-types), read-only to the app. The repo ships a synthetic grid only; production loads are refused until SANLC''s terms are recorded.';
 COMMENT ON TABLE crop_type_cell_reference IS
-	'Per dataset, the grid cells with orchards or vines: the share of each that is orchard, vine, and orchard or vine new since the baseline edition (0-1), pre-summarised from the raster at import (255). A cell not listed has none.';
+	'Per dataset, the grid cells with orchards or vines: the share of each that is orchard, vine, and orchard or vine new since the baseline edition (0-1), pre-summarised from the raster at import (259). A cell not listed has none.';
 
 ALTER TABLE crop_type_dataset ENABLE ROW LEVEL SECURITY;
 ALTER TABLE crop_type_cell_reference ENABLE ROW LEVEL SECURITY;
@@ -75,4 +75,4 @@ GRANT SELECT ON crop_type_dataset, crop_type_cell_reference TO water_app;
 
 ALTER TABLE crop_area_land_cover ADD COLUMN layer text CHECK (layer IS NULL OR layer IN ('orchard', 'vine'));
 COMMENT ON COLUMN crop_area_land_cover.layer IS
-	'The crop-type layer an accepted area came from (255): orchard or vine; null for the land cover''s cultivated area.';
+	'The crop-type layer an accepted area came from (259): orchard or vine; null for the land cover''s cultivated area.';

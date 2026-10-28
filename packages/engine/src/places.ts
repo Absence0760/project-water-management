@@ -47,8 +47,8 @@ export interface PlaceMention {
 
 /**
  * A panel's former headings, for the runs that named it by them: Flow generation became Model selection for flow
- * generation in engine 1.102.0 (issue #614), so a warning that named it the old way, on Model settings (1.98.0 to
- * 1.101.0) or on Settings (before 1.98.0), still finds it.
+ * generation in engine 1.103.0 (issue #614), so a warning that named it the old way, on Model settings (1.98.0 to
+ * 1.102.0) or on Settings (before 1.98.0), still finds it.
  */
 const FORMER_PANELS: Partial<Record<WarningPlace, readonly string[]>> = {
 	share: ['Flow generation']

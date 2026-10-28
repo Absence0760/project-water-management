@@ -155,7 +155,12 @@ export interface RainGapSettings {
 	rainSource?: RainSourcePeriod[] | null;
 	/** The gap-filling product (engine ≥ 1.101.0); absent or null is CHIRPS alone. */
 	gapRain?: GapRainSettings | null;
+	/** The rain records' unreliable periods (settings.rainStations.unreliable, engine ≥ 1.102.0, issue #611), listed on the Flagged rain card. */
+	rainStations?: { unreliable?: Record<string, unknown[]> | null } | null;
 }
+
+/** How many unreliable periods the rain records keep (settings.rainStations.unreliable). */
+const unreliableCount = (s: RainGapSettings): number => Object.values(s.rainStations?.unreliable ?? {}).reduce((n, l) => n + (Array.isArray(l) ? l.length : 0), 0);
 
 /** Every Rain gaps setting at its default: CHIRPS fills the gaps, bias-corrected per month, no gap map, the whole record, zero runs missing above the default threshold, accumulations spread, nothing listed. */
 export function rainGapsAtDefaults(s: RainGapSettings): boolean {
@@ -172,7 +177,8 @@ export function rainGapsAtDefaults(s: RainGapSettings): boolean {
 		!z.missing?.length &&
 		!z.keepReadings?.length &&
 		!z.addAccumulations?.length &&
-		!s.rainSource?.length
+		!s.rainSource?.length &&
+		unreliableCount(s) === 0
 	);
 }
 
@@ -190,7 +196,8 @@ export function rainGapsLine(s: RainGapSettings): string {
 		z.mode === 'asRecorded' ? 'zero runs as recorded' : 'zero runs missing',
 		z.accumulationMode === 'asRecorded' ? 'accumulations as recorded' : 'accumulations spread',
 		listed ? `${count(listed, 'period')} listed` : null,
-		s.rainSource?.length ? count(s.rainSource.length, 'rain-source period') : null
+		s.rainSource?.length ? count(s.rainSource.length, 'rain-source period') : null,
+		unreliableCount(s) ? count(unreliableCount(s), 'unreliable period') : null
 	]
 		.filter(Boolean)
 		.join(', ');

@@ -1,5 +1,5 @@
 // Pre-summarise a crop-type raster (SANLC) into the orchard and vine grid the
-// app reads (255_crop_type_reference.sql; issue #604 R5-D, docs/maps.md
+// app reads (259_crop_type_reference.sql; issue #604 R5-D, docs/maps.md
 // § Orchards and vines from SANLC). The operator's tool, run as the schema
 // owner (`pnpm import:crop-types`); the app never reads a raster, and this
 // module is imported by backend/scripts/import-crop-types.ts and its tests

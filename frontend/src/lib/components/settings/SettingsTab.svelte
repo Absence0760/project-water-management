@@ -92,6 +92,7 @@
 	import OutcomeSettingsSection from '#lib/components/outcomes/OutcomeSettingsSection.svelte';
 	import OutlookSettingsSection from '#lib/components/outlook/OutlookSettingsSection.svelte';
 	import type { SettingsDraft } from './settingsDraft.svelte';
+	import type { RecordOption } from './recordPeriods';
 
 	let {
 		project,
@@ -100,6 +101,7 @@
 		seriesKinds = null,
 		catchmentRain,
 		rainSeries,
+		rainRecords = null,
 		readonly,
 		onModelChanged = () => {}
 	}: {
@@ -117,6 +119,8 @@
 		catchmentRain?: CatchmentStation | null;
 		/** The project's catchment rain series, the rainfall stations Model selection for flow generation → Per unit assigns (issue #553); undefined = not loaded. */
 		rainSeries?: (Pick<SeriesMeta, 'id' | 'name' | 'kind' | 'station'> & { siteNodeId?: string | null })[];
+		/** The project's rain records, each one's unreliable periods on Flagged rain (issue #611, recordPeriods.ts rainRecordOptions); null = not loaded. */
+		rainRecords?: RecordOption[] | null;
 		readonly: boolean;
 		/** A proposal saved to the model on the server (the units' MAP from the grid): the workspace reloads it. */
 		onModelChanged?: () => Promise<void> | void;
@@ -557,6 +561,14 @@
 				<h3 class="card-title">Flagged rain</h3>
 				<R.ZeroRainSection bind:value={s.zeroRainRuns} bind:error={draft.errors.zeroRain} {readonly} />
 				<R.RainSourceSection bind:value={s.rainSource} bind:error={draft.errors.rainSource} {readonly} />
+				<!-- Any rain record's unreliable periods (issue #611): a station's, a unit's own gauge's, the alternative gauge's.
+				     Emptied, the setting goes back to how it was saved (absent or null). -->
+				<R.RainRecordPeriods
+					bind:value={() => s.rainStations, (v) => (s.rainStations = v ?? (draft.saved.rainStations === undefined ? undefined : null))}
+					bind:error={draft.errors.rainUnreliable}
+					records={rainRecords}
+					{readonly}
+				/>
 			</div>
 				{/snippet}
 			</Lazy>

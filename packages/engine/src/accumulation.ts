@@ -46,6 +46,7 @@ import { exclusionRanges, type ExclusionRange } from './calibrate/provenance';
 import type { AccumulationMode, ChirpsBiasMode, DailySeries, SeriesKind, ZeroRainSettings } from './project';
 import { chirpsBiasFactors, chirpsFactorOn, type ChirpsCorrection, type ChirpsFitOptions } from './rain';
 import { zeroRainRuns } from './quality';
+import { warn } from './warningCodes';
 
 /** A reading must be at least this, mm, to be judged. */
 export const ACC_MIN_MM = 20;
@@ -535,50 +536,71 @@ export function accumulationWarnings(a: RainAccumulationInfo | null, doubleCount
 	const spread = by('spread');
 	if (spread.length) {
 		out.push(
-			`Catchment rain accumulations spread over the days they cover: ${plural(spread.length, 'window')}, ${plural(a.spreadDays, 'run day')}: ` +
-				`${listed(spread.map(windowLabel))}. Each looks like several days' rain read on one day after days left blank or set aside as a flagged zero run ` +
-				'(CHIRPS reads rain over the run and little on the reading day). Its recorded total is kept and spread in proportion to bias-corrected CHIRPS; ' +
-				'those days are not also filled from CHIRPS as gaps or a zero run, and they are left out of the CHIRPS factor fit. The stored series is unchanged. ' +
-				'Model settings → Rain gaps → Flagged rain → Multi-day accumulations keeps a reading as recorded.'
+			warn(
+				'rain.accumulation.spread',
+				{ windows: spread.length, days: a.spreadDays },
+				`Catchment rain accumulations spread over the days they cover: ${plural(spread.length, 'window')}, ${plural(a.spreadDays, 'run day')}: ` +
+					`${listed(spread.map(windowLabel))}. Each looks like several days' rain read on one day after days left blank or set aside as a flagged zero run ` +
+					'(CHIRPS reads rain over the run and little on the reading day). Its recorded total is kept and spread in proportion to bias-corrected CHIRPS; ' +
+					'those days are not also filled from CHIRPS as gaps or a zero run, and they are left out of the CHIRPS factor fit. The stored series is unchanged. ' +
+					'Model settings → Rain gaps → Flagged rain → Multi-day accumulations keeps a reading as recorded.'
+			)
 		);
 	}
 	const flat = by('noChirps');
 	if (flat.length) {
 		out.push(
-			`CHIRPS reads no rain over ${plural(flat.length, 'accumulation window')}, so each total stays on its reading day and the other days run as 0 mm: ` +
-				`${listed(flat.map(windowLabel))}.`
+			warn(
+				'rain.accumulation.noChirps',
+				{ windows: flat.length },
+				`CHIRPS reads no rain over ${plural(flat.length, 'accumulation window')}, so each total stays on its reading day and the other days run as 0 mm: ` +
+					`${listed(flat.map(windowLabel))}.`
+			)
 		);
 	}
 	const aside = by('setAside');
 	if (aside.length) {
 		out.push(
-			`${plural(aside.length, 'catchment reading')} after an outage set aside as missing: ` +
-				`${listed(aside.map((w) => `${dayText(w.end)} (${mm(w.readingMm)} read after a ${w.outageDays ?? 0}-day outage; ${mm(w.usedMm)} used instead)`))}. ` +
-				`Each is ${ACC_MIN_MM} mm or more on the first day after more than ${ACC_MAX_BLANK_DAYS} days blank, listed as missing or set aside as a flagged zero run, on a day CHIRPS was nearly dry after CHIRPS rained over the outage, ` +
-				"so it may hold the outage's rain (a gauge nobody read) rather than one day's. " +
-				'The run fills its day like the outage, from bias-corrected CHIRPS (then forecast rain), and leaves it out of the CHIRPS factor fit. The stored series is unchanged. ' +
-				'Model settings → Rain gaps → Flagged rain → Multi-day accumulations keeps a reading as recorded (Keep as recorded) or spreads it over days you list (Also spread).'
+			warn(
+				'rain.accumulation.setAside',
+				{ readings: aside.length },
+				`${plural(aside.length, 'catchment reading')} after an outage set aside as missing: ` +
+					`${listed(aside.map((w) => `${dayText(w.end)} (${mm(w.readingMm)} read after a ${w.outageDays ?? 0}-day outage; ${mm(w.usedMm)} used instead)`))}. ` +
+					`Each is ${ACC_MIN_MM} mm or more on the first day after more than ${ACC_MAX_BLANK_DAYS} days blank, listed as missing or set aside as a flagged zero run, on a day CHIRPS was nearly dry after CHIRPS rained over the outage, ` +
+					"so it may hold the outage's rain (a gauge nobody read) rather than one day's. " +
+					'The run fills its day like the outage, from bias-corrected CHIRPS (then forecast rain), and leaves it out of the CHIRPS factor fit. The stored series is unchanged. ' +
+					'Model settings → Rain gaps → Flagged rain → Multi-day accumulations keeps a reading as recorded (Keep as recorded) or spreads it over days you list (Also spread).'
+			)
 		);
 	}
 	const kept = by('kept');
 	if (kept.length) {
 		out.push(
-			`Detected accumulations kept as recorded, as Model settings → Rain gaps → Flagged rain → Multi-day accumulations says: ` +
-				`${listed(kept.map((w) => `${dayText(w.end)} (${mm(w.readingMm)}: ${w.keptReason})`))}.`
+			warn(
+				'rain.accumulation.kept',
+				{ windows: kept.length },
+				`Detected accumulations kept as recorded, as Model settings → Rain gaps → Flagged rain → Multi-day accumulations says: ` +
+					`${listed(kept.map((w) => `${dayText(w.end)} (${mm(w.readingMm)}: ${w.keptReason})`))}.`
+			)
 		);
 	}
 	const asRec = by('asRecorded');
 	if (asRec.length) {
 		out.push(
-			`${plural(asRec.length, 'multi-day accumulation')} run as recorded, because Model settings → Rain gaps → Flagged rain → Multi-day accumulations → Accumulated readings is "Run as recorded (one day)": ` +
-				`${listed(asRec.map(windowLabel))}.` +
-				(doubleCounted.length
-					? ` ${plural(doubleCounted.length, 'of them ends', 'of them end')} blank days, a flagged zero run or a blank outage that CHIRPS fills, so that rain may be counted twice (${doubleCounted.map((w) => dayText(w.end)).join(', ')}).`
-					: '')
+			warn(
+				'rain.accumulation.asRecorded',
+				{ windows: asRec.length, doubleCounted: doubleCounted.length },
+				`${plural(asRec.length, 'multi-day accumulation')} run as recorded, because Model settings → Rain gaps → Flagged rain → Multi-day accumulations → Accumulated readings is "Run as recorded (one day)": ` +
+					`${listed(asRec.map(windowLabel))}.` +
+					(doubleCounted.length
+						? ` ${plural(doubleCounted.length, 'of them ends', 'of them end')} blank days, a flagged zero run or a blank outage that CHIRPS fills, so that rain may be counted twice (${doubleCounted.map((w) => dayText(w.end)).join(', ')}).`
+						: '')
+			)
 		);
 	}
 	const none = by('noReading');
-	if (none.length) out.push(`Listed accumulation ${none.map((w) => `${dayText(w.start)} to ${dayText(w.end)}`).join(', ')} has no catchment reading to spread; ignored.`);
+	if (none.length)
+		out.push(warn('rain.accumulation.noReading', { windows: none.length }, `Listed accumulation ${none.map((w) => `${dayText(w.start)} to ${dayText(w.end)}`).join(', ')} has no catchment reading to spread; ignored.`));
 	out.push(...a.skipped);
 	return out;
 }

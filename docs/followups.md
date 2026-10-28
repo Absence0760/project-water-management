@@ -260,7 +260,7 @@ provenance, `ingest/verify_copy.py`):
       daily runs with `MirrorLagDays` reporting, the backfill (`rnl` from
       1981-01, `sat` from 2000-06, its first byMonth file), verification
       (`ingest/dev.sh verify`), then `chirps_source = "mirror"`
-      and the paused CHIRPS feeds back on (#571), and once DWS answers
+      and the paused CHIRPS feeds back on (#571), and once the DWS records are loaded
       `dws_source = "store"`, whose apply removes the per-feed queues
       ([deployment.md § The cutover](./deployment.md#the-cutover)). Each
       `terraform apply` with the operator's go-ahead.
@@ -279,14 +279,13 @@ provenance, `ingest/verify_copy.py`):
       shift the sample copy's days to today in fixtures mode (as the file
       fixtures re-date themselves), `rainCopy.ts` should report the shifted
       days too, so the line matches what feeds read.
-- [ ] **Loading DWS's reply in production** (R3-B). `pnpm import:dws`
-      writes `gauge_record` locally, but production's database is reachable
-      only through the migrate Lambda, whose reference load
-      (`backend/src/geo/referenceLoad.ts`, `load-reference.yml`) has no `dws`
-      kind. Add one (the reply uploaded to the reference bucket, loaded with
-      `source = 'dws-request'` through the same parser) once DWS's written
-      answer allows storing the data. Until then `dws_source` stays `live`.
-      Trigger: DWS's reply to the operator's request (#604 operator steps).
+- [x] **Loading DWS's reply in production** (R3-B). Built (#618 step 6b):
+      `load-reference.yml` kind `dws` loads one station's saved
+      `HyData.aspx` page or DWS reply from the reference bucket through
+      the migrate Lambda, as `dws-request` rows (origin `dws`) by the same
+      reader and writes as `pnpm import:dws`, recorded in `reference_load`
+      (258); the `dws-coverage` read-only check says which stations are
+      covered ([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
 - [ ] **Table datasets' originals and upstream versions** (R3-D). Migration
       248 records provenance for every `reference_load` kind, but only tile
       archives fill it: `load-reference.yml` takes no inputs for a table
@@ -395,7 +394,7 @@ open:
       [deployment.md § Dam observations](./deployment.md#dam-observations),
       *Turning it on*: the Waterbodies polygons loaded for the region
       (`load-reference.yml` kind `waterbodies`), a backend release with
-      migration 257 and the `dams-weekly` mode, at least one traced dam,
+      migration 261 and the `dams-weekly` mode, at least one traced dam,
       then `dam_observations_enabled = true` (plan, then the operator's
       go-ahead for the apply). Durable fix: those steps, then watch the
       first day's `dams_pass` and `dams_tick` log lines and both heartbeat
@@ -560,7 +559,7 @@ runs and accumulations are real) can't be decided without the client.
       (engine-audit.md GR1–GR6). Its control is Settings → Rain gaps →
       Gap-filling product (R4-E, ui.md § Model settings), and Data draws
       the products beside CHIRPS (ui.md § Data).
-- [ ] **Daily reference ET (engine 1.103.0, issue #604 R5-E, model.md
+- [ ] **Daily reference ET (engine 1.104.0, issue #604 R5-E, model.md
       §2.4a *Daily reference ET*).** Built opt-in (a project without an
       `evap_et0_mm` series runs as before, to the bit). Calls made in the
       build, to confirm: read only under a monthly PE row and as it
@@ -4624,7 +4623,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       resale and no competing products, and DFFE's e-GIS pages (the
       2018–2022 terms) refuse connections from outside South Africa. Its
       orchard and vine classes are **built** (issue #604 R5-D, maps.md
-      § Orchards and vines from SANLC: migration 255, `pnpm
+      § Orchards and vines from SANLC: migration 259, `pnpm
       import:crop-types`, a synthetic grid in dev, CI and e2e) and refused
       in production (`REFERENCE_KINDS['crop-types']` blocked, the release
       gate too), so the live site shows none. Read the EGIS terms (or ask

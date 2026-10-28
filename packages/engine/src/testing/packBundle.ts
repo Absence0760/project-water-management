@@ -94,7 +94,7 @@ function storedRun(hash: SyncHash, runId: string, input: ModelInput, out: ModelO
 	for (const [kind, s] of Object.entries(input.series)) {
 		if (!s) continue;
 		values[kind] = s.values.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : null));
-		series[kind] = { startDate: s.startDate, length: s.values.length, valuesSha256: hash(seriesDigest(values[kind]!)) };
+		series[kind] = { startDate: s.startDate, length: s.values.length, valuesSha256: hash(seriesDigest(values[kind]!)), ...(s.seriesId ? { seriesId: s.seriesId } : {}) };
 	}
 	return {
 		runId,

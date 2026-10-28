@@ -8,7 +8,7 @@ import { gr4jPeMonthlyMm, type PeInput } from '../project';
  * needs to run. `dailyApan` (engine ≥ 0.38.0, issue #45): the project's daily
  * A-pan series has a value above 0 in the run, which under `pe.kind: 'pan'`
  * gives GR4J evaporation (× a pan coefficient above 0) even when the monthly
- * means are all 0. `dailyEt0` (engine ≥ 1.103.0, issue #604 R5-E): the
+ * means are all 0. `dailyEt0` (engine ≥ 1.104.0, issue #604 R5-E): the
  * daily reference ET series has a value above 0 in the run, which GR4J reads
  * under `pe.kind: 'monthly'` even when that row is all 0.
  */

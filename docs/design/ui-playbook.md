@@ -1799,6 +1799,19 @@ Interaction details that bit:
   layout's `lib/nav/backScroll.ts` restores the place it saved, held while
   the section is still building (`back-scroll.spec.ts`: Dams, Hydrological
   units, Allocations, the section strip's arrow keys).
+- **A visually hidden part of a button's name adds a space.** The Warnings
+  page's row buttons read "Patch" with a `.visually-hidden` span
+  ": Flat stretch, Valley gauge, …" after it; the span is absolutely
+  positioned, so Chromium treats it as a block and the name came out
+  "Patch : Flat stretch…" (issue #611). Where the hidden words must join the
+  visible one, give the button an `aria-label` that starts with its visible
+  words ("Patch: Flat stretch, …", label-in-name) instead.
+- **A bulk action's button stays while it has nothing to do.** The Warnings
+  page's bulk row first listed **Patch** only while an open rain row was
+  left, so a bulk Patch of the last ones removed the button that had the
+  focus. Decide which bulk buttons show from what the list holds (a rain
+  record, a flow record), never from what is still undecided, and mark one
+  with nothing ticked `aria-disabled` (`warnings.spec.ts` checks the focus).
 - **A failed load says what failed and offers Try again.** A panel that reads
   on its own (Recent notes, Registration checks, the Outcome matrix's sweep,
   the Seasonal outlook, Automated calibration's fits) shows "Couldn’t look

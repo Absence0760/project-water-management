@@ -24,7 +24,7 @@ describe('warningParts (issue #586, D19)', () => {
 			{ text: 'pick a gauge in ' },
 			{ text: 'Settings → Calibration record', href: '?tab=calibration&run=r%201#set-record' }
 		]);
-		// Flow generation became Model selection for flow generation (engine 1.102.0, issue #614): its old name still links.
+		// Flow generation became Model selection for flow generation (engine 1.103.0, issue #614): its old name still links.
 		expect(warningParts('Parameters not fitted for this method (Model settings → Flow generation: Fragmentation).', href)).toEqual([
 			{ text: 'Parameters not fitted for this method (' },
 			{ text: 'Model settings → Flow generation', href: '?tab=settings#set-share' },

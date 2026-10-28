@@ -73,7 +73,7 @@ erDiagram
 | `borehole` | An individual borehole on a farm or other user (migration 043, engine ≥ 0.36.0, WP-3.9, [model.md §2.7d](./model.md)): `node_id`, `name` (1–200 chars), `capacity_m3_day` ≥ 0, `annual_cap_m3` ≥ 0 or null (no cap; per water year), `mode` (`none`, `supplemental`, `primary`, `emergency`), `emergency_below_pct` 0–1, `target` (`direct`, `dam`), `depletion_factor` 0–1 (CHECKs). They add to the node's combined `borehole_capacity_m3_day` (012), whose `stream_depletion_lag_days` they share. Part of the model document (`ProjectModel.boreholes`, present only when there are any), rewritten whole on save like `land_cover`; cascades with its node. RLS viewer/editor policies plus `borehole_select_farmer` (own linked farms only), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no boreholes) |
 | `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `priority_rank` smallint or null (migration 169, engine ≥ 1.64.0, issue #343: its rank within `first` or `last`, 1 supplied before 2, equal ranks pro rata, CHECKed to 1–99; null = 1, so every object saved before it runs unchanged; ignored on a `shared` object; the API's `rank`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `source` text or null (migration 139, engine ≥ 1.56.0, issue #54 Q11: where its number comes from, `meter`, `aadd`, `perCapita` or `other`, CHECKed to that list; the API refuses a source whose sizing the object doesn't have; null = not recorded), `water_source` text or null (migration 170, engine ≥ 1.65.0, issue #344: where its water comes from, `dam` or `river`, CHECKed to that list; null = the dam), `river_pump_m3_day` and `river_pool_m3` float8 ≥ 0 (finite) or null (its river abstraction's pump capacity, null = no limit, and pool, null or 0 = none; read only under `river`), `monthly_unit` text or null (migration 199, engine ≥ 1.72.0: the unit a monthly object's demand is entered and shown in, `ls` or `m3s`, CHECKed; null = m³/day; display only, `monthly_m3_day` holds the demand), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`); out of the catchment (migration 224, engine ≥ 1.86.0, [model.md §2.6](./model.md#26-transfers-transfers)): `to_node_id` NULL, a dam rule only (CHECK `transfer_external_from_dam`; every existing row names a unit; a farmer sees such a rule from a linked farm through `transfer_select_farmer`'s `from_node_id` arm) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
-| `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. So may catchment or CHIRPS rain: the land unit whose own rain it is (209, [Unit rain series](#unit-rain-series-209_unit_rain_seriessql)); none = the catchment's. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45); engine 1.103.0 adds `evap_et0_mm`, a daily FAO-56 reference ET record that GR4J reads as its PE under a monthly PE row, model.md §2.4a *Daily reference ET*; neither with a migration, since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. It also stores, with no `series_id`, what it read from the shared cell cache rather than a stored series: the reference cell's CHIRPS, and (engine 1.101.0, `settings.gapRain`) ERA5-Land as `rain_era5l_mm` and IMERG Late as one `rain_imerg_late_mm~<version>` per version, so `loadRunInput` reproduces them. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name, in the name's byte order whatever the database's collation ([Which series a run reads](#which-series-a-run-reads)) | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
+| `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. So may catchment or CHIRPS rain: the land unit whose own rain it is (209, [Unit rain series](#unit-rain-series-209_unit_rain_seriessql)); none = the catchment's. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45); engine 1.104.0 adds `evap_et0_mm`, a daily FAO-56 reference ET record that GR4J reads as its PE under a monthly PE row, model.md §2.4a *Daily reference ET*; neither with a migration, since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. It also stores, with no `series_id`, what it read from the shared cell cache rather than a stored series: the reference cell's CHIRPS, and (engine 1.101.0, `settings.gapRain`) ERA5-Land as `rain_era5l_mm` and IMERG Late as one `rain_imerg_late_mm~<version>` per version, so `loadRunInput` reproduces them. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name, in the name's byte order whatever the database's collation ([Which series a run reads](#which-series-a-run-reads)) | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model, and once that scenario is deleted), `from_scenario` (188), true for a run a scenario made whether or not the scenario still exists, and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`, and the answers to the evidence report's Appendix C prompts `purpose_need`, `mitigation`, `monitoring` (129); see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
@@ -548,6 +548,23 @@ mapMm, mapSource, lat, lon }`):
   setting doesn't (`checkRainStations`'s `stored`), since the Settings form
   sends the whole setting with every save (issue #553 round 3). A save that
   names it anew (one where the stored setting didn't) is refused.
+- **Every setting that names a series by id** (issue #611, engine ≥
+  1.102.0) is carried along the same way: `settings.rainStations.unreliable`
+  (any rain record's, not only a station's), `settings.flowMissing` (a flow
+  record's missing periods) and the series in each `settings.checksKept`
+  item id. A copy maps every series the settings name to the copy's of the
+  same kind and name (`projects/flowMissingSettings.ts`
+  `remapSettingSeriesIds`, after the series are copied); the project
+  document gives every such series its `id` (and every station, as before),
+  and an import follows the fresh ids. A save is refused when it names anew
+  a series that isn't a flow record of the project (`flowMissing`,
+  `checkFlowMissing`) or a rain record of it (`unreliable`: a catchment rain
+  series at any site or the alternative gauge, `checkRainStations`). A run
+  matches the ids through `DailySeries.seriesId`: `loadLiveInput` sets it on
+  every series it reads and the run's snapshot keeps it
+  (`model_run.inputs.series[key].seriesId`), so `loadRunInput`, a scenario
+  on the run and an evidence pack's bundle apply the same periods; a run
+  stored before has none, and matches nothing.
 - **What a run reads.** Only when `settings.rainStations` assigns a station
   to the catchment or a unit (`runs/stationInput.ts`): every station's
   record under `rain_station_mm#<series id>` and its name, MAP, source and
@@ -861,7 +878,19 @@ holds each calibration record's gauged range (highest and lowest field
 gauging with a source) and how automatic calibration treats extrapolated,
 suspect and infilled days, and from engine 1.90.0 (issue #557) its
 `lowFlowPeriods`, date ranges in which only a record's flows at or below a
-threshold are valid; still no migration (model.md §2.10h). `settings.calibrationRules` (engine ≥ 1.25.0,
+threshold are valid; still no migration (model.md §2.10h). `settings.flowMissing`
+(engine ≥ 1.102.0, issue #611) is one flow record's periods treated as
+missing, `{ <series id>: [period, …] }` in the exclusions' shape, at most 100
+a record and 50 records, replaced whole by a save; `settings.checksKept` the
+data-check items kept as recorded (`<check>:<series id>:<start>:<end>`, at
+most 300), of which a flow record's kept outliers and flat stretches are
+scored by the fit (model.md §2.10h). `settings.warningsKept` (issue #611)
+is the run warnings and problems from elsewhere kept (accepted) on the
+Warnings page, `[{ id, note }]`, the id `run:<code or text>:<hash>` or
+`problem:<source>:…` (`checkItems.ts` `WARNING_KEPT_ID`, at most 200
+characters), the note optional (at most 500), at most 300 entries, replaced
+whole by a save and read by no run. All three are absent until set, and none
+needs a migration. `settings.calibrationRules` (engine ≥ 1.25.0,
 issue #153) is automated calibration's pre-declared rule set with its
 server-kept revision and the hydrologist's sign-off; no migration either
 (model.md §2.10j). `settings.evidenceUncertaintyRule` (issue #71) is the
@@ -2152,7 +2181,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   schema owner (`pnpm import:land-cover`), readable by anyone signed in,
   written by no app role.
 - **`crop_type_dataset`** and **`crop_type_cell_reference`**
-  (`255_crop_type_reference.sql`, issue #604 R5-D,
+  (`259_crop_type_reference.sql`, issue #604 R5-D,
   [maps.md § Orchards and vines from SANLC](./maps.md#orchards-and-vines-from-sanlc)):
   the orchard and vine grid the planted-area proposals show beside the land
   cover. A dataset row: `dataset` (primary key, 1–50; `synthetic` for the
@@ -2174,7 +2203,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `(node_id, crop_id)`; `project_id`, `area_m2` (the value accepted),
   `dataset`, `source`, `version`, `method` (copied from the dataset then, so
   a reload doesn't rewrite what was cited), `basis` (`unit` or `parcel`),
-  `feature_name` (the parcel, for `parcel`), `layer` (255: `orchard` or
+  `feature_name` (the parcel, for `parcel`), `layer` (259: `orchard` or
   `vine` for an area from the crop-type grid, null for the land cover's),
   `accepted_at`. Not keyed to
   `crop_area`, which a model save rewrites whole: it is current while
@@ -4001,9 +4030,16 @@ the restored one.
 `reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
 keyed by `(kind, dataset)`: the reference-bucket object a production load
 of a map dataset read (`land-cover`, `evaporation`, `rivers`, since
-225 `gazetteer`, since 238 `map-grid`, and since 257 `waterbodies`, the
+225 `gazetteer`, since 238 `map-grid`, and since 261 `waterbodies`, the
 DE Africa Waterbodies polygons) and the
-SHA-256 it was checked against. Written in the same transaction as the
+SHA-256 it was checked against. Since 258 also `dws`: a production load of
+one river gauge's DWS flow table into the gauge record store (below, DWS
+gauge records), its `dataset` the operator's label for that file, written
+in the transaction that writes its rows; those rows aren't a dataset that
+is replaced, so nothing deletes the record but a reload under the same
+label. 258's list names `waterbodies` too, and 261 keeps `dws`, so every
+kind production allows is in the constraint
+(`referenceLoad.db.test.ts` inserts a row of every kind production allows). Written in the same transaction as the
 dataset by the replace functions (`replaceCroplandDataset`,
 `replaceEvaporationDataset`, `replaceRivers`, `replacePlaces`,
 `replaceRainMapDataset`, through
@@ -4064,7 +4100,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 
 | Column | Holds |
 | --- | --- |
-| `project_id`, `source` | The project, and `chirps`, `chirps_gefs`, `dws`, `ecmwf_ens` (253) or `agera5_et0` (256, issue #604 R5-E: daily reference ET from our copy into `evap_et0_mm`) |
+| `project_id`, `source` | The project, and `chirps`, `chirps_gefs`, `dws`, `ecmwf_ens` (253) or `agera5_et0` (260, issue #604 R5-E: daily reference ET from our copy into `evap_et0_mm`) |
 | `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ bbox: { south, west, north, east }, skipNoData? }` (at most 100 cells in 25 rows) or `{ station }`, plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981). Listed cells may carry the mark of where they came from, written only by its route: `boundary` (the catchment boundary, `fromBoundary.ts`) or `unit` (`{ nodeId, featureId, updatedAt, areaKm2 }`: a land unit's parcel, `fromUnits.ts`, issue #482; such a feed writes the unit's own rain, [§ Unit rain series](#unit-rain-series-209_unit_rain_seriessql)) |
 | `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-031_feed_dayssql)). A CHIRPS feed writes nothing into a series holding another product or version (032, [§ Series provenance](#series-provenance-032_series_provenancesql)) |
 | `enabled`, `schedule` | `schedule` is always `daily` (CHECK, 111: no source publishes more often; the migration turned `hourly` feeds daily) |
@@ -4535,10 +4571,14 @@ feed with `DWS_SOURCE=store` reads its station's days from our own store
 (`backend/src/feeds/fromGaugeRecord.ts`) instead of asking
 `HyData.aspx` per feed. Three writers fill it, each its own **source**:
 
-- `dws-request`: DWS's reply to a written data request, loaded by the
-  operator (`pnpm import:dws <file> --reference "…"`,
-  `backend/scripts/import-dws.ts`). The primary route for a station's
-  history, and the one that settles storing the data in a commercial tool.
+- `dws-request`: DWS's verified record of a station, held under DWS's
+  permission (obtained through the client's hydrologist, 2026-10-28): its
+  reply to a data request or the `HyData.aspx` pages saved from its site,
+  loaded by the operator with a reference (`pnpm import:dws <file>
+  --reference "…"`, `backend/scripts/import-dws.ts`, locally; in production
+  `load-reference.yml` kind `dws`, `backend/src/geo/referenceLoad.ts`; both
+  through `backend/src/feeds/gaugeRecordImport.ts`). The primary route for
+  a station's history.
 - `dws-web`: the weekly pass (`backend/src/ingest/dws.ts`), the newest two
   years of each station an enabled DWS feed names, handed over through the
   mirror bucket and loaded by the worker's tick
@@ -4577,7 +4617,8 @@ A gap row is a row like any other: DWS listing a day with no value (170
   values[], quality[], fetched_at, reference)`** (invoker's rights,
   `search_path` pinned, closed to `water_app` and PUBLIC, as
   `authority_confirm_by_operator`): the operator's import, as the schema
-  owner. Replaces the source's rows over `from`–`to` (a day it no longer
+  owner (`pnpm import:dws`, or the migrate Lambda's `dws` reference load).
+  Replaces the source's rows over `from`–`to` (a day it no longer
   lists goes; other sources stay) and merges the span. Bounds (else
   23514): origin, source and station known; the span 1–7330 days (DWS's 20
   years a request) ending by today in South Africa; the arrays of one
@@ -4601,7 +4642,7 @@ A gap row is a row like any other: DWS listing a day with no value (170
   the live path writes, waiting for days the store doesn't hold, the
   tick's handover); `ingest/dws.test.ts`; `scripts/import-dws.test.ts`.
 
-### Dam observations (257_dam_observation.sql)
+### Dam observations (261_dam_observation.sql)
 
 What satellites saw of each traced dam (issue #604 R5,
 [architecture.md § Dam observations](./architecture.md#dam-observations)):
@@ -4673,7 +4714,7 @@ passes leave in the mirror bucket; no route writes them.
     most 20 000 rows; each date 1984 to tomorrow (UTC), listed once; wet
     area 0 to 10¹² m², never NaN; share 0–100; each upstream key 1–200
     printable characters; `fetched_at` not in the future.
-- **reference_load** takes kind `waterbodies` (257), so a production load
+- **reference_load** takes kind `waterbodies` (named in 258, kept beside `dws` by 261), so a production load
   records its file like the other reference datasets.
 - **Tests**: `dams/observed/observations.security.db.test.ts` (RLS with
   positive controls: a viewer, a farmer's own dam, nothing across projects;

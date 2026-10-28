@@ -994,3 +994,10 @@ table.data tr.flag {
 		--header-h: 0px;
 	}
 }
+
+/* A field the Warnings page linked to (nav/fieldLanding.ts, issue #611): outlined for a few seconds. */
+[data-field-landed] {
+	outline: 3px solid var(--accent);
+	outline-offset: 4px;
+	border-radius: var(--radius);
+}

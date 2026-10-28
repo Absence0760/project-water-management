@@ -63,11 +63,11 @@ const FARMER_MAY_READ: Record<string, { reason: string; where: string }> = {
 	// Issue #604 R5-B: the dam page's "Your dam, seen from space" reads them (GET …/farm/:nodeId/dam-observed). Keyed by the
 	// dam's map feature, not a node, so the sweep needs them named here; the farmer policies are app_farm_dam_features().
 	dam_observation: {
-		reason: 'the satellite views of the dam polygons on their own farms (dam_observation_select_farmer, 257)',
+		reason: 'the satellite views of the dam polygons on their own farms (dam_observation_select_farmer, 261)',
 		where: `feature_id IN (SELECT id FROM map_feature WHERE kind = 'dam' AND node_id = ANY($3::uuid[]))`
 	},
 	dam_waterbody_match: {
-		reason: 'how the dam polygons on their own farms matched DE Africa Waterbodies (dam_waterbody_match_select_farmer, 257)',
+		reason: 'how the dam polygons on their own farms matched DE Africa Waterbodies (dam_waterbody_match_select_farmer, 261)',
 		where: `feature_id IN (SELECT id FROM map_feature WHERE kind = 'dam' AND node_id = ANY($3::uuid[]))`
 	},
 	alert_delivery: {
@@ -145,7 +145,7 @@ beforeAll(async () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		if (f.kind === 'dam' && 'geometry' in f && 'nodeId' in f && f.nodeId) damFeature.set(f.nodeId, r.body.feature.id);
 	}
-	// Each dam polygon's Waterbodies match and WOfS views, loaded as the worker loads them (257's definer functions):
+	// Each dam polygon's Waterbodies match and WOfS views, loaded as the worker loads them (261's definer functions):
 	// the neighbour's with the marker in its uid and upstream key, and an area no other row has.
 	for (const [n, uid, wet] of [
 		[home, 'homeuid001', 12_000],

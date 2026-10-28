@@ -49,6 +49,8 @@ import { doubleMass as doubleMassOf, doubleMassRunWarning, type DoubleMass } fro
 import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
+import { resolveChecksKept, resolveFlowMissing, withRecordPeriods } from './recordPeriods';
+import { resolveWarningsKept } from './checkItems';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
 import { resolveEwrSplit } from './network/ewrSplit';
 import { resolveEwrDailySource } from './reserve/dailySource';
@@ -101,6 +103,7 @@ import {
 	type StationContext
 } from './runoff/stationForcing';
 import type { StationAreaForcing } from './project';
+import { warn } from './warningCodes';
 
 /** One rain-source period's fitted factors (rainSourceFactors), keyed by the period's stable JSON. */
 export type RainSourceFactorsOf = ReturnType<typeof rainSourceFactors>[number];
@@ -186,7 +189,7 @@ export interface PreparedRun {
 	rainSource: { info: RainSourceInfo; column: Float64Array } | null;
 	/** How the daily A-pan series is used (engine ≥ 0.38.0, issue #45; null without one). */
 	apanDaily: ApanDailyInfo | null;
-	/** The daily reference ET series' use (engine ≥ 1.103.0, ./evaporation/et0Daily.ts); null without one. */
+	/** The daily reference ET series' use (engine ≥ 1.104.0, ./evaporation/et0Daily.ts); null without one. */
 	et0Daily: Et0DailyInfo | null;
 	/**
 	 * settings.gapRain as applied (engine ≥ 1.101.0, ./gapRain.ts): which
@@ -220,7 +223,9 @@ export function prepareRun(input: ModelInput, options: PrepareOptions = {}): Pre
 	const warnings: string[] = [];
 	// A resumed run's pairing factors (engine ≥ 1.91.0) stand in for a fit, as its CHIRPS factors do.
 	let settings = withPinnedStationFactors(mergeSettings(input.settings, warnings), options.pinned?.stationFactors);
-	const series = input.series ?? {};
+	// A record's own periods (engine ≥ 1.102.0, issue #611, ./recordPeriods.ts): settings.flowMissing on a flow record and
+	// settings.rainStations.unreliable on the alternative gauge are gaps from here on, for every reader of the run.
+	const series = withRecordPeriods(settings, input.series ?? {}, warnings);
 	// Rainfall stations (engine ≥ 1.91.0, issue #553, docs/model.md §2.4i): with a station for the catchment, its rule
 	// is the catchment rain. The catchment gauge's own handling (§2.4b's fit, §2.4c–§2.4e) then reads no gauge: the
 	// station's record went through its checks in ./runoff/stationRecord.ts. Without settings.rainStations: as before.
@@ -517,7 +522,7 @@ function alignToWindow(
 	);
 
 	if (!plan && !hasRainInput(series, settings.rainSource)) {
-		warnings.push('no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain');
+		warnings.push(warn('rain.none', {}, 'no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain'));
 	}
 
 	return {
@@ -568,6 +573,9 @@ export interface CheckedRain {
  * are fitted on.
  */
 export function checkedRain(settings: ProjectSettings, series: ModelInput['series'], start: number, days: number, options: PrepareOptions = {}): CheckedRain {
+	// The alternative gauge's unreliable periods (engine ≥ 1.102.0, issue #611): blank wherever its rain-source periods
+	// read it, whoever calls (prepareRun has blanked them already and warned; this repeats nothing there).
+	series = withRecordPeriods({ rainStations: settings.rainStations, flowMissing: null }, series, []);
 	const dq = settings.dataQuality;
 	const checks = { dq, chirps: series.rain_chirps_mm ?? null };
 	const replaced = rainSourceSpans(settings.rainSource);
@@ -827,6 +835,24 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	}
 	s.calibrationSiteNodeId ??= null;
 	s.calibrationExclusions = sanitizeExclusions(raw?.calibrationExclusions, warnings);
+	// One flow record's missing periods and the kept data checks (engine ≥ 1.102.0, issue #611, ./recordPeriods.ts):
+	// only when stored, so settings without them normalise as before.
+	if (raw?.flowMissing != null) {
+		const fm = resolveFlowMissing(raw.flowMissing, warnings);
+		if (fm) s.flowMissing = fm;
+		else delete s.flowMissing;
+	}
+	if (raw?.checksKept != null) {
+		const kept = resolveChecksKept(raw.checksKept, warnings);
+		if (kept) s.checksKept = kept;
+		else delete s.checksKept;
+	}
+	// The kept run warnings and problems (issue #611): the Warnings page's list, never read by the model.
+	if (raw?.warningsKept != null) {
+		const kept = resolveWarningsKept(raw.warningsKept, warnings);
+		if (kept) s.warningsKept = kept;
+		else delete s.warningsKept;
+	}
 	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): off unless a record has a spec.
 	s.flowGapFill = resolveFlowGapFill(raw?.flowGapFill, warnings);
 	// Provenance only: never read by the model.
@@ -859,7 +885,13 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		}
 	}
 	if (s.calibrationStart && s.calibrationEnd && s.calibrationStart > s.calibrationEnd) {
-		warnings.push(`calibration window ${dayText(s.calibrationStart)} … ${dayText(s.calibrationEnd)} ends before it starts; scoring the whole record`);
+		warnings.push(
+			warn(
+				'calibration.windowReversed',
+				{ start: s.calibrationStart, end: s.calibrationEnd },
+				`calibration window ${dayText(s.calibrationStart)} … ${dayText(s.calibrationEnd)} ends before it starts; scoring the whole record`
+			)
+		);
 		s.calibrationStart = null;
 		s.calibrationEnd = null;
 	}

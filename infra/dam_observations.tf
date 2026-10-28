@@ -1,7 +1,7 @@
 # Dam observations (issue #604 Round 5; docs/architecture.md § Dam
 # observations, docs/deployment.md § Dam observations): what satellites saw of
 # each traced dam, from Digital Earth Africa's Waterbodies time series and
-# WOfS, into our own store (dam_observation, migration 257).
+# WOfS, into our own store (dam_observation, migration 261).
 #
 # The out-of-VPC handover the weekly DWS pass uses (feeds.tf): the worker tick
 # writes dams/wanted.json to the mirror bucket; the fetcher Lambda (outside the

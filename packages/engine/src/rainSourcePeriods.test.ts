@@ -372,3 +372,35 @@ describe('run comparison and words', () => {
 		expect(rainSourceText([])).toBe('none (the catchment series throughout)');
 	});
 });
+
+describe('the alternative gauge’s unreliable periods (settings.rainStations.unreliable under its series id, issue #611, engine ≥ 1.102.0)', () => {
+	const ALT = '00000000-0000-4000-8000-0000000000a7';
+	const named = (r: ReturnType<typeof build>): Series => {
+		const s = toSeries(r);
+		s.rain_catchment_alt_mm = { ...s.rain_catchment_alt_mm!, seriesId: ALT };
+		return s;
+	};
+
+	it('are gaps of the period, as if blank in the stored record: the next source stands in, and the run says so', () => {
+		const r = build(0.9);
+		const listed = input(named(r), [FIXED]);
+		listed.settings.rainStations = { unreliable: { [ALT]: [['2007-06-01', '2007-06-30']] } };
+		const byHand = build(0.9);
+		for (let i = idx('2007-06-01'); i <= idx('2007-06-30'); i++) byHand.a[i] = null;
+		const a = prepareRun(listed);
+		const b = prepareRun(input(named(byHand), [FIXED]));
+		expect(a.aligned('rain_catchment_mm')).toEqual(b.aligned('rain_catchment_mm'));
+		expect(Array.from(a.rainSource!.column)).toEqual(Array.from(b.rainSource!.column));
+		expect(a.rainSource!.column[idx('2007-06-15') - (a.start - d0)]).toBe(RAIN_SOURCE_CODE.chirps);
+		expect(a.warnings).toContain('the alternative catchment gauge is treated as missing on 30 days the user marked unreliable, so the rain-source periods\' next source stands in there. The stored series is unchanged.');
+		// The run's rain agrees too.
+		expect(runModel(listed).series.find((s) => s.nodeId === null && s.key === 'rain_final')!.values).toEqual(runModel(input(named(byHand), [FIXED])).series.find((s) => s.nodeId === null && s.key === 'rain_final')!.values);
+	});
+
+	it('positive control: periods under another id leave the gauge as recorded', () => {
+		const r = build(0.9);
+		const other = input(named(r), [FIXED]);
+		other.settings.rainStations = { unreliable: { 'another-series': [['2007-06-01', '2007-06-30']] } };
+		expect(prepareRun(other).aligned('rain_catchment_mm')).toEqual(prepareRun(input(named(r), [FIXED])).aligned('rain_catchment_mm'));
+	});
+});

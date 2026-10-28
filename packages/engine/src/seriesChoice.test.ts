@@ -176,7 +176,11 @@ describe('a run with seriesChoice', () => {
 		expect(warned(plain)).toEqual([]);
 		expect(warned(told)).toHaveLength(1);
 		expect(warned(told)[0]).toContain('“CHIRPS boundary” (1 Nov 2020 to 31 Dec 2020), which spans 61 of its 366 days, but “Rainfall CHIRPS”');
-		const strip = (o: ReturnType<typeof runModel>) => ({ ...o, summary: { ...o.summary, warnings: o.summary.warnings.filter((w) => !w.startsWith('the run read the CHIRPS series')) } });
+		const isChoice = (w: string) => w.startsWith('the run read the CHIRPS series');
+		const strip = (o: ReturnType<typeof runModel>) => ({
+			...o,
+			summary: { ...o.summary, warnings: o.summary.warnings.filter((w) => !isChoice(w)), warningCodes: o.summary.warningCodes?.filter((c) => !isChoice(c.text)) }
+		});
 		expect(sameOutput(strip(plain), strip(told))).toBe(true);
 	});
 

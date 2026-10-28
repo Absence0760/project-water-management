@@ -71,6 +71,7 @@ import {
 	type ChirpsFitWindow,
 	type MonthSums
 } from './rain';
+import { warn } from './warningCodes';
 
 /** Length limit of the provenance texts (source, method). */
 export const RAIN_SOURCE_TEXT_MAX = 200;
@@ -883,7 +884,8 @@ export function rainSourcePeriodWarnings(info: RainSourceInfo | null): string[] 
 	if (!info) return [];
 	return info.periods.flatMap((p) => {
 		const intensity = rainSourceIntensityWarning(p);
-		return intensity ? [periodWarning(p), intensity] : [periodWarning(p)];
+		const text = warn('rain.sourcePeriod', { start: p.start, end: p.end, series: p.series, runDays: p.runDays }, periodWarning(p));
+		return intensity ? [text, intensity] : [text];
 	});
 }
 

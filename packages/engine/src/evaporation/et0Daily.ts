@@ -1,4 +1,4 @@
-// Daily reference evapotranspiration for GR4J (engine ≥ 1.103.0, issue #604
+// Daily reference evapotranspiration for GR4J (engine ≥ 1.104.0, issue #604
 // R5-E, docs/model.md §2.4a "Daily reference ET").
 //
 // Under `pe.kind: 'monthly'` GR4J's potential evaporation is the monthly PE

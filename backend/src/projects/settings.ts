@@ -86,7 +86,14 @@ import {
 	droughtRestrictionIssues,
 	ewrDailySourceIssues,
 	type ProjectSettings,
-	isIsoDate
+	isIsoDate,
+	CHECKS_KEPT_MAX,
+	FLOW_MISSING_RECORDS_MAX,
+	parseCheckItemId,
+	WARNING_KEPT_ID,
+	WARNING_KEPT_ID_MAX,
+	WARNING_KEPT_NOTE_MAX,
+	WARNINGS_KEPT_MAX
 } from '@water-management/engine';
 import { z } from 'zod';
 import { AutoRunPatch } from '../runs/autoRun.js';
@@ -209,9 +216,10 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * choice under `{ source: 'pragmatic' }` would be a field no choice has. So
  * is the daily outlet EWR's source (engine ≥ 1.77.0, issue #455): its tables
  * are one set, entered together. And the rainfall stations' assignments
- * (issue #553): a unit left out of a save is unassigned, not kept.
+ * (issue #553): a unit left out of a save is unassigned, not kept. And each
+ * flow record's missing periods (issue #611): a record left out has none.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -510,6 +518,64 @@ const periodList = (noun: string) =>
 		.refine((list) => new Set(list.map(exclusionKey)).size === list.length, `a ${noun} period is listed twice`);
 
 export const CalibrationExclusion = datedPeriod('calibration exclusion');
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * settings.flowMissing (engine ≥ 1.102.0, issue #611, recordPeriods.ts):
+ * series id → that flow record's periods treated as missing, each a dated
+ * period with a reason as the calibration exclusions' are. At most
+ * EXCLUSIONS_MAX a record and FLOW_MISSING_RECORDS_MAX records: a save past
+ * either is refused, never cut. Replaced whole (REPLACED_WHOLE); the route
+ * checks the ids are flow records of the project (flowMissingSettings.ts).
+ */
+export const FlowMissing = z
+	.record(
+		z.string(),
+		z
+			.array(datedPeriod('flow missing period'))
+			.max(EXCLUSIONS_MAX, `flow missing periods: at most ${EXCLUSIONS_MAX} periods a record; merge neighbouring periods into one`)
+			.refine((list) => new Set(list.map(exclusionKey)).size === list.length, 'a flow missing period is listed twice for one record')
+	)
+	.superRefine((r, ctx) => {
+		const keys = Object.keys(r);
+		if (keys.some((k) => !UUID.test(k))) ctx.addIssue({ code: 'custom', message: 'flow missing periods: a flow record is named by its series id' });
+		if (keys.length > FLOW_MISSING_RECORDS_MAX) ctx.addIssue({ code: 'custom', message: `flow missing periods: at most ${FLOW_MISSING_RECORDS_MAX} flow records` });
+	});
+
+/** A data-check item id (engine checkItems.ts): `<check>:<series id>:<start>:<end>`, two real dates in order. */
+const CheckItemId = z
+	.string()
+	.max(100)
+	.refine((id) => /^[a-z][a-z0-9]{0,31}:[0-9a-f-]{36}:/i.test(id) && UUID.test(id.split(':')[1] ?? '') && parseCheckItemId(id) !== null, 'a kept data check is named by its item id, <check>:<series id>:<start>:<end>');
+
+/**
+ * settings.checksKept (engine ≥ 1.102.0, issue #611): the data-check items
+ * kept as recorded, each once, at most CHECKS_KEPT_MAX (refused past it,
+ * never cut). Only a kept outlier or flat stretch of a flow record changes a
+ * run (its days aren't suspect).
+ */
+export const ChecksKept = z
+	.array(CheckItemId)
+	.max(CHECKS_KEPT_MAX, `kept data checks: at most ${CHECKS_KEPT_MAX}; reopen some before keeping more`)
+	.refine((list) => new Set(list).size === list.length, 'a kept data check is listed twice');
+
+/**
+ * settings.warningsKept (issue #611): the run warnings and problems from elsewhere kept (accepted) on the Warnings
+ * page, each `{ id, note }` once, at most WARNINGS_KEPT_MAX (refused past it, never cut). Ids are the page's
+ * (`run:…` or `problem:…`, engine checkItems.ts WARNING_KEPT_ID); the note is optional. No run effect.
+ */
+export const WarningsKept = z
+	.array(
+		z
+			.object({
+				id: z.string().max(WARNING_KEPT_ID_MAX).regex(WARNING_KEPT_ID, 'a kept warning is named by its id, run:… or problem:…, with no spaces'),
+				note: z.string().max(WARNING_KEPT_NOTE_MAX, `a kept warning’s note: at most ${WARNING_KEPT_NOTE_MAX} characters`)
+			})
+			.strict()
+	)
+	.max(WARNINGS_KEPT_MAX, `kept warnings: at most ${WARNINGS_KEPT_MAX}; reopen some before keeping more`)
+	.refine((list) => new Set(list.map((x) => x.id)).size === list.length, 'a kept warning is listed twice');
 
 /**
  * settings.chirpsFitPeriod (engine ≥ 0.29.0, issue #40): 'all', or water-year
@@ -894,10 +960,15 @@ export const FitRecord = z
 		flowKind,
 		// Engine ≥ 1.41.0: the gauge the fit was scored at (null = the outlet); absent on a record made before it.
 		siteNodeId: z.string().min(1).max(100).nullable().optional(),
+		// Engine ≥ 1.102.0 (issue #611): the stored series fitted to, whose kept checks are the fit's; absent when the input didn't say.
+		flowSeriesId: z.string().uuid().optional(),
 		simulatedKey: z.literal('simulated_outflow'),
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
 		exclusions: ExclusionList,
+		// Engine ≥ 1.102.0 (issue #611): each record's missing periods and the kept outliers and flat stretches at the fit; absent = none.
+		flowMissing: FlowMissing.optional(),
+		checksKept: ChecksKept.optional(),
 		// Engine ≥ 1.22.0 (CR-18/19/22): the quality-flag settings, their summary and the fit on all days. Optional: absent on a record made before them.
 		qualityFlags: QualityFlags.optional(),
 		dayQuality: DayQuality.nullable().optional(),
@@ -1003,7 +1074,7 @@ export const FitRecord = z
 					.strict()
 					.nullable()
 					.optional(),
-				// Engine ≥ 1.103.0 (issue #604 R5-E): the daily reference ET series the fit ran on, the same fingerprint over its
+				// Engine ≥ 1.104.0 (issue #604 R5-E): the daily reference ET series the fit ran on, the same fingerprint over its
 				// days through the fit's last scored day (`through`). Optional, as above.
 				et0Daily: z
 					.object({ startDate: isoDate, length: z.number().int().min(0).max(60_000), valuesSha256: z.string().regex(/^[0-9a-f]{64}$/), through: isoDate })
@@ -1175,6 +1246,12 @@ export const SettingsPatch = z
 		// Where calibration scores (engine ≥ 1.41.0): null = the outlet, else an inner gauge with a record (checked by the route).
 		calibrationSiteNodeId: z.string().uuid().nullable(),
 		calibrationExclusions: ExclusionList,
+		// One flow record's missing periods (engine ≥ 1.102.0, issue #611): replaced whole, null = none. The route checks the records.
+		flowMissing: FlowMissing.nullable(),
+		// The data-check items kept as recorded (engine ≥ 1.102.0, issue #611): the whole list, null = none.
+		checksKept: ChecksKept.nullable(),
+		// The kept run warnings and problems (issue #611): the whole list, null = none. No run effect.
+		warningsKept: WarningsKept.nullable(),
 		// Gap filling of the observed flow records (engine flowGapFill.ts, issue #66): either record's spec (replaced whole) or the switch.
 		flowGapFill: FlowGapFill,
 		// Per-day quality flags (engine calibrate/dayFlags.ts, CR-18/19): any subset of the group; `ratings` is replaced whole.

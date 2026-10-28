@@ -359,7 +359,11 @@ describe('the forcing rule (§2.4h)', () => {
 		const unitWarned = (o: ReturnType<typeof runModel>) => o.summary.warnings.filter((w) => w.startsWith('for the unit'));
 		expect(unitWarned(told)).toEqual([expect.stringMatching(/^for the unit “Unit C”, the run read the CHIRPS series “C short” \(2 Dec 2020 to 31 Dec 2020\), which spans 30 of its 2192 days, but “C long” \(1 Jan 2015 to 31 Dec 2020\) spans 2192:/)]);
 		const plain = runModel(x);
-		const strip = (o: ReturnType<typeof runModel>) => ({ ...o, summary: { ...o.summary, warnings: o.summary.warnings.filter((w) => !w.startsWith('for the unit')) } });
+		const forUnit = (w: string) => w.startsWith('for the unit');
+		const strip = (o: ReturnType<typeof runModel>) => ({
+			...o,
+			summary: { ...o.summary, warnings: o.summary.warnings.filter((w) => !forUnit(w)), warningCodes: o.summary.warningCodes?.filter((c) => !forUnit(c.text)) }
+		});
 		expect(sameOutput(strip(plain), strip(told))).toBe(true);
 		// A scenario on it reads the same series, so it warns the same; one that removes no unit keeps C's pick.
 		expect(unitWarned(runModel(applyScenario({ ...x, seriesChoice }, []).input))).toEqual(unitWarned(told));

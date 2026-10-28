@@ -255,6 +255,37 @@ describe('fit record', () => {
 		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, gap-filling product, rain-source periods, zero-rain run handling or the rain each unit runs on \(runoff from each unit’s own rain, its records, MAPs and factors\) has changed since the fit/);
 	});
 
+	it('records each record’s missing periods and the kept outliers, and says when they changed since (issue #611)', () => {
+		const s = { ...gr4jSettings(), calibrationStart: '2012-10-01', calibrationExclusions: [{ waterYear: 2015, reason: 'suspect rain' }] };
+		const fm = { 'series-1': [{ start: '2013-01-01', end: '2013-02-01', reason: 'weir silted up' }] };
+		const kept = ['outlier:series-1:2013-05-01:2013-05-01', 'zerorun:series-2:2013-06-01:2013-06-30'];
+		const settings = { ...ctx.settings, panCoefficient: s.panCoefficient, apanMm: s.apanMm };
+		const rec = fitRecordFromReport(report({ flowSeriesId: 'series-1' }), { ...ctx, settings: { ...settings, flowMissing: fm, checksKept: kept } });
+		expect(rec.flowMissing).toEqual(fm);
+		expect(rec.flowSeriesId).toBe('series-1');
+		// Only the items that change a fit's days: a flow record's kept outliers and flat stretches.
+		expect(rec.checksKept).toEqual(['outlier:series-1:2013-05-01:2013-05-01']);
+		expect(fitRecordStatus({ ...s, flowMissing: fm, checksKept: kept }, rec)).toMatchObject({ exclusionsChanged: false, qualityFlagsChanged: false });
+		// The other kept item alone isn't the fit's days: no change.
+		expect(fitRecordStatus({ ...s, flowMissing: fm, checksKept: [...kept, 'lowvschirps:series-2:2014-10-01:2015-09-30'] }, rec).qualityFlagsChanged).toBe(false);
+		// Keeping a rain outlier, or an outlier of a record the fit doesn't score, leaves the fit current; positive control: one more of its own doesn't.
+		for (const other of ['outlier:rain-1:2013-05-02:2013-05-02', 'outlier:series-2:2013-05-03:2013-05-03', 'flatline:series-3:2013-07-01:2013-07-20']) {
+			expect(fitRecordStatus({ ...s, flowMissing: fm, checksKept: [...kept, other] }, rec).qualityFlagsChanged, other).toBe(false);
+		}
+		expect(fitRecordStatus({ ...s, flowMissing: fm, checksKept: [...kept, 'flatline:series-1:2013-07-01:2013-07-20'] }, rec).qualityFlagsChanged).toBe(true);
+		// …and the record stores only its own: a fit whose input names no series keeps none.
+		const other = fitRecordFromReport(report({ flowSeriesId: 'series-2' }), { ...ctx, settings: { ...settings, checksKept: kept } });
+		expect('checksKept' in other).toBe(false);
+		expect('checksKept' in fitRecordFromReport(report(), { ...ctx, settings: { ...settings, checksKept: kept } })).toBe(false);
+		expect(fitRecordStatus({ ...s, checksKept: kept }, rec).exclusionsChanged).toBe(true);
+		expect(fitRecordStatus({ ...s, flowMissing: fm }, rec).qualityFlagsChanged).toBe(true);
+		// A record made without either, and settings with none (absent, or an empty list): no change.
+		const plain = fitRecordFromReport(report(), { ...ctx, settings });
+		expect('flowMissing' in plain || 'checksKept' in plain).toBe(false);
+		expect(fitRecordStatus({ ...s, flowMissing: { 'series-1': [] }, checksKept: [] }, plain)).toMatchObject({ exclusionsChanged: false, qualityFlagsChanged: false });
+		expect(fitRecordStatus({ ...s, flowMissing: fm }, plain).exclusionsChanged).toBe(true);
+	});
+
 	it('keeps how automated calibration chose the fit, and says when its rules are drafts or have changed since (issue #153)', () => {
 		// The settings the fit ran on, so only the rules can differ.
 		const s = { ...gr4jSettings(), ...ctx.settings } as ProjectSettings;

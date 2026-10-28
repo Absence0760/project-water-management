@@ -28,7 +28,8 @@
 		headline = null,
 		foldChecks = false,
 		calibrationHref,
-		placeHref = null
+		placeHref = null,
+		warningsHref = null
 	}: {
 		summary: RunSummary;
 		/** Days in the run (for "% of days"). */
@@ -56,6 +57,8 @@
 		 * links; null (the printable report) keeps the plain words.
 		 */
 		placeHref?: ((place: WarningPlace) => string) | null;
+		/** The Warnings page for this run (issue #611): each warning with its setting, and the data checks' periods to decide. Null (the report): no link. */
+		warningsHref?: string | null;
 	} = $props();
 
 	const CHECKS_SHOWN = 3;
@@ -79,7 +82,7 @@
 	const c = $derived(summary.catchment);
 	// The cards below in one or two plain sentences (runs/runSentence.ts).
 	const lede = $derived(runSentence(summary, headline));
-	const groups = $derived(warningGroups(summary.warnings));
+	const groups = $derived(warningGroups(summary.warnings, summary.warningCodes));
 	const checksFolded = $derived(foldChecks && groups.check.length > CHECKS_SHOWN);
 	const shownChecks = $derived(checksFolded && !checksOpen ? groups.check.slice(0, CHECKS_SHOWN) : groups.check);
 	const checkItems = $derived(credibility(summary, calibrationHref));
@@ -98,7 +101,10 @@
 				>{checksOpen ? 'Show only the first 3 things to check' : `Show all ${groups.check.length} things to check`}</button
 			>
 		{/if}
+		{#if warningsHref}<a class="to-warnings" href={warningsHref} data-testid="run-to-warnings">Each with its setting, on Warnings</a>{/if}
 	</div>
+{:else if warningsHref && groups.data.length}
+	<p class="small to-warnings-line"><a href={warningsHref} data-testid="run-to-warnings">The run’s warnings and the data checks’ periods, on Warnings</a></p>
 {/if}
 {#if groups.data.length}
 	<details class="data-notes" data-testid="warnings-data">
@@ -188,6 +194,24 @@
 
 <style>
 	/* A link-like button in the alert's own text colour (its contrast is the alert's), a 24 px target (WCAG 2.5.8). */
+	/* The way on to the Warnings page (issue #611): a 24 px target, on its own line after the list or its toggle. */
+	.to-warnings {
+		display: flex;
+		align-items: center;
+		width: fit-content;
+		min-height: 24px;
+		margin-top: 0.15rem;
+		font-weight: 600;
+		color: inherit;
+	}
+	.to-warnings-line {
+		margin: 0 0 0.5rem;
+	}
+	.to-warnings-line a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+	}
 	.checks-toggle {
 		all: unset;
 		display: inline-flex;

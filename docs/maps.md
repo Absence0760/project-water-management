@@ -1287,10 +1287,10 @@ reads it.
 
 ### Waterbodies
 
-`waterbody_reference` (257) holds Digital Earth Africa's Waterbodies
+`waterbody_reference` (261) holds Digital Earth Africa's Waterbodies
 polygons, which the dam observations match each traced dam against
 (issue #604 R5; [architecture.md § Dam observations](./architecture.md#dam-observations),
-[data-model.md § Dam observations](./data-model.md#dam-observations-257_dam_observationsql)).
+[data-model.md § Dam observations](./data-model.md#dam-observations-261_dam_observationsql)).
 Global reference data like the register of dams: the **operator** loads it
 as the schema owner, and only the worker reads it (no route, no map layer).
 
@@ -2342,7 +2342,7 @@ it does for the cultivated area.
   its 2 parcels; South African National Land Cover 2022 (…) (2022; dataset
   “SANLC-2022”). Permanent orchards (class 32). Pre-summarised at import:
   …") and a `crop_area_land_cover` row (174) citing it, with its `layer`
-  (255), so the crop's line says "from crop types (orchards; …)".
+  (259), so the crop's line says "from crop types (orchards; …)".
 - **Beside the land cover only.** The section sits under the land cover's
   table, catchment line and source, and shows only while a land-cover
   dataset is loaded: with none, the box says so and proposes nothing, as
@@ -2351,7 +2351,7 @@ it does for the cultivated area.
 
 #### The crop-type grid
 
-`crop_type_dataset` and `crop_type_cell_reference` (255) are global
+`crop_type_dataset` and `crop_type_cell_reference` (259) are global
 reference data, loaded by the operator as the schema owner and only read by
 the app, like the land-cover grid.
 
@@ -2759,7 +2759,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Quaternary catchment outlines | DWS (Department of Water and Sanitation) | open data per [§ Quaternary dataset](#quaternary-dataset); the commercial-use terms are not yet confirmed on DWS's own page | DWS | the operator's download | per DWS release | blocked: licence unconfirmed for anything but the operator's own database; the committed synthetic fixture is used everywhere else |
 | WR2012 reference values (MAP, MAR, monthly flows) | WRC | redistribution terms unpublished ([§ Quaternary dataset](#quaternary-dataset)) | WR2012 (WRC 2015) | the operator's download | none (a 2012 study) | blocked: licence unconfirmed; operator's own database only |
 | Hydrological station catalogue (station code, name, river, lat/lon, catchment area, record start/end): the nearest-gauge proposal | Department of Water and Sanitation (DWS), National Hydrological Services, `https://www.dws.gov.za/Hydrology/Verified/HyCatalogue.aspx` | **Unconfirmed.** Read 2026-10-01: the Verified data pages answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) surfaced DWS's information-page wording (NIWIS pages on `dws.gov.za`): "copyright … remains with the Department of Water and Sanitation", data "may not be sold to third parties", and "the use of information data is restricted to use for academic, research or personal purposes". If that wording covers the hydrological catalogue, it is a non-commercial restriction and fails D-B | "Department of Water and Sanitation" named as the copyright owner, if allowed | the operator's download date | DWS updates the catalogue as stations open and close | **Blocked: licence unconfirmed.** Built and tested against the synthetic fixture only. To unblock: written confirmation from DWS Hydrological Services that the station metadata may be reused in a commercial service, recorded here with the date |
-| DWS verified daily flow (the DWS feed, `feeds/sources/dws.ts`) | DWS, `HyData.aspx` | Same pages, same open question (deployment.md § Sources' terms; followups.md, Terms of use) | as above | per fetch | daily | Built before D-B; its terms are the same open decision, tracked in followups.md |
+| DWS verified daily flow (the DWS feed, `feeds/sources/dws.ts`; the gauge record store, `gauge_record`, 247) | DWS, `HyData.aspx`, or DWS's reply to a data request | Permission to store the verified daily flow and show results derived from it obtained through the client's hydrologist (recorded 2026-10-28, #618 step 6a; the written permission is kept with the client's records, [data-sources.md § dws-flow](./data-sources.md#dws-flow)); DWS publishes no terms for the pages themselves | "Department of Water and Sanitation" | per fetch or load | daily (the feed), weekly (the store's web pass) | allowed: the verified daily flow only (production loads it with `load-reference.yml` kind `dws`, [deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)); the station catalogue keeps its own row |
 | CHIRPS v3 daily rainfall (`sat`, `rnl`) and CHIRPS-GEFS v3 forecast: the rain feed, and the rain from the boundary | Climate Hazards Center, UC Santa Barbara | Public domain, registered with Creative Commons, and licensed CC BY 4.0 ("CHIRPS3 is in the public domain … licensed under a Creative Commons Attribution 4.0 International License"), [chc.ucsb.edu/data/chirps3](https://www.chc.ucsb.edu/data/chirps3), read 2026-10-01 | "Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025). Data was accessed on [date]." Or Funk, C. et al., *Sci Data* 13, 718 (2026) | v3.0 | Daily: preliminary two days after each pentad, final monthly (about three weeks after the month); GEFS one issue a day | Allowed (fetched live by the feeds; fixtures offline) |
 | ERA5-Land daily precipitation (0.1°, `era5l` in our rain data copy): fills catchment-rain gaps where Model settings → Rain gaps chooses it, and Data → Rain products side by side (issue #604 R4-E) | ECMWF for the Copernicus Climate Change Service (C3S) | **CC BY 4.0** ("CC-BY licence" on the CDS dataset page, [reanalysis-era5-land](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land), read 2026-10-27) | "Contains modified Copernicus Climate Change Service information [year]. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains." and the dataset citation (data-sources.md § ERA5-Land), wherever its values show: the Data sources and credits page, the Data tab's products and per-day preview, a run's results, report and exports, and an evidence pack's bundle | ERA5-Land hourly, daily totals | about 5 days behind, consolidated two months later | allowed (built; off in production until the operator's CDS key) |
 | IMERG Late Run V07 daily (0.1°, `imerg_late` in our copy, a version per day): fills the recent days of the catchment rain where Rain gaps chooses it (issue #604 R4-E) | NASA GES DISC (GPM) | CC0 by NASA's data use guidance; CC BY 4.0 on the AWS Open Data registry ([Earthdata data use guidance](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance), read 2026-10-27); credited as CC BY asks | the collection citation (data-sources.md § imerg), with its version, wherever its values show, as ERA5-Land's | V07 (V08 due) | about 14 h after the day; the copy keeps 30 days | allowed (built; off in production until the operator's Earthdata token) |

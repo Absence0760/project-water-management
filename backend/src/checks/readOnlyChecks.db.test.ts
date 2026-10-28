@@ -5,6 +5,7 @@
 // transaction that refuses a write. The test database is shared with other
 // files, so each assertion looks at this file's project only. Synthetic data:
 // a run's engine version, settings and allocation mode are written as owner.
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, plantCompleteOutlook, signUp } from '../__tests__/helpers.js';
@@ -215,6 +216,75 @@ describe('reference-provenance (issue #604 R3-D)', () => {
 			loaded_at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/)
 		});
 		expect(JSON.stringify(r.rows)).not.toMatch(/reference\/rivers|originals\//);
+	});
+});
+
+describe('dws-coverage (issue #618 step 6d)', () => {
+	// Invented river gauges only this describe plants: feeds in this file's project, spans with origin dws.
+	const [COVERED, HOLES, NOTHING, DISABLED] = ['X9H811', 'X9H812', 'X9H813', 'X9H814'];
+	const ours = [COVERED, HOLES, NOTHING, DISABLED];
+	let today: string;
+	let feeds = 0;
+	const day = (n: number) => fromEpochDay(toEpochDay(today) + n);
+	const feed = (station: string, o: { startDate?: string; lastDataDate?: string; enabled?: boolean } = {}) =>
+		asOwner(`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled, last_data_date) VALUES ($1, 'dws', $2, 'flow', $3, $4, $5)`, [
+			projectId,
+			JSON.stringify({ station, ...(o.startDate ? { startDate: o.startDate } : {}) }),
+			`${station}-${++feeds}`,
+			o.enabled ?? true,
+			o.lastDataDate ?? null
+		]);
+	/** A span of `source` with no rows (gauge_record_write records the span either way). */
+	const span = (station: string, source: string, from: number, to: number) =>
+		asOwner(`SELECT gauge_record_write('dws', $1, $2, $3, $4, '{}'::date[], '{}'::double precision[], '{}'::text[], now(), $5)`, [
+			station,
+			source,
+			day(from),
+			day(to),
+			source === 'dws-request' ? 'SYNTHETIC-REPLY' : null
+		]);
+	const clean = async () => {
+		await asOwner(`DELETE FROM data_feed WHERE project_id = $1 AND source = 'dws'`, [projectId]);
+		await asOwner(`DELETE FROM gauge_record_span WHERE origin = 'dws' AND station = ANY($1::text[])`, [ours]);
+	};
+
+	beforeAll(async () => {
+		await clean();
+		today = (await asOwner(`SELECT to_char((now() AT TIME ZONE 'Africa/Johannesburg')::date, 'YYYY-MM-DD') AS d`))[0]!.d as string;
+		// Covered: its feed starts 1000 days back; a reply covers that up to 700 days back, the weekly pass the last two years.
+		// A span wholly before the needed day doesn't count, or hide anything.
+		await feed(COVERED, { startDate: day(-1000) });
+		await span(COVERED, 'dws-request', -3000, -2900);
+		await span(COVERED, 'dws-request', -1000, -700);
+		await span(COVERED, 'dws-web', -729, 0);
+		// Holes: a feed backfilling from 1500 days back (and a caught-up one, which needs only the weekly pass's days).
+		// Replies cover -1499..-1300 and -1200..-800, the weekly pass -729..-2: 99 + 70 days uncovered, the newest 2 days not yet.
+		await feed(HOLES, { lastDataDate: day(-1500) });
+		await feed(HOLES, { lastDataDate: day(-10) });
+		await span(HOLES, 'dws-request', -1499, -1300);
+		await span(HOLES, 'dws-request', -1200, -800);
+		await span(HOLES, 'dws-web', -729, -2);
+		// Nothing loaded yet: its new feed starts ten years back.
+		await feed(NOTHING);
+		// Near miss: a disabled feed's station is not asked about.
+		await feed(DISABLED, { startDate: day(-100), enabled: false });
+	});
+	afterAll(clean);
+
+	it('lists each station enabled DWS feeds read, from the first day they still need, with the days no span covers', async () => {
+		const r = await runCheck(client, 'dws-coverage');
+		const rows = r.rows.filter((row) => ours.includes(row.station as string));
+		expect(rows).toEqual([
+			{ station: COVERED, needed_from: day(-1000), covered_from: day(-1000), covered_to: today, hole_days: '0', first_hole: null, days_behind: '0' },
+			{ station: HOLES, needed_from: day(-1499), covered_from: day(-1499), covered_to: day(-2), hole_days: '169', first_hole: day(-1299), days_behind: '2' },
+			{ station: NOTHING, needed_from: day(-3650), covered_from: null, covered_to: null, hole_days: null, first_hole: null, days_behind: null }
+		]);
+	});
+
+	it('a span starting after the needed day is a hole from that day', async () => {
+		await asOwner(`UPDATE data_feed SET config = config || jsonb_build_object('startDate', $2::text) WHERE project_id = $1 AND config ->> 'station' = $3`, [projectId, day(-1100), COVERED]);
+		const row = (await runCheck(client, 'dws-coverage')).rows.find((x) => x.station === COVERED);
+		expect(row).toMatchObject({ needed_from: day(-1100), covered_from: day(-1000), hole_days: '100', first_hole: day(-1100) });
 	});
 });
 

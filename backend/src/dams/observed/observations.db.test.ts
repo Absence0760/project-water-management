@@ -1,4 +1,4 @@
-// What satellites saw of each traced dam (257_dam_observation, issue #604
+// What satellites saw of each traced dam (261_dam_observation, issue #604
 // R5): the worker's functions (the outlines, the candidates, the loader's
 // bounds and targets, the match write), and a redrawn dam losing its match
 // and observations. Who may read and write the tables (RLS, grants, the

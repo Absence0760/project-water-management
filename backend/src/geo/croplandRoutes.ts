@@ -5,7 +5,7 @@
 //   GET  /projects/:id/nodes/:nodeId/cropland-proposals           a unit's parcels' cultivated area, the catchment's, their orchards and vines, and its crops (viewer)
 //   POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover    accept a cultivated area, or an orchard or vine area (`layer`), as one crop's planted area (editor)
 //
-// Orchards and vines (issue #604 R5-D, 255_crop_type_reference.sql) come from
+// Orchards and vines (issue #604 R5-D, 259_crop_type_reference.sql) come from
 // a crop-type grid (SANLC) beside the land cover, with the part of each new
 // since the earlier edition (for a licence applicant; never a value to use).
 // SANLC's terms are not yet recorded, so production holds no crop-type

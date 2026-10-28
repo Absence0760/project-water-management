@@ -3,6 +3,8 @@
 // field maps onto the b023 workbook.
 import type { ForecastSummary } from './forecast';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
+import type { FlowMissingSettings } from './recordPeriods';
+import type { WarningKept } from './checkItems';
 import type { QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
@@ -11,6 +13,7 @@ import type { PlausibilityChecks } from './plausibility';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { GapRainInfo } from './gapRain';
 import type { RainSourceInfo } from './rainSourcePeriods';
+import type { CodedWarning } from './warningCodes';
 import type { ApanDailyInfo } from './evaporation/apanDaily';
 import type { Et0DailyInfo } from './evaporation/et0Daily';
 import type { FlowFillSummary, FlowGapFillSettings } from './flowGapFill';
@@ -633,6 +636,27 @@ export interface ProjectSettings {
 	 */
 	calibrationExclusions: CalibrationExclusion[];
 	/**
+	 * Periods of one flow record treated as missing (engine ≥ 1.102.0, issue
+	 * #611, ./recordPeriods.ts, docs/model.md §2.10h): series id → periods,
+	 * each with a reason, as calibrationExclusions' entries. Where the run
+	 * reads that record it has no reading on those days, so every score, the
+	 * fit and the plausibility checks skip them and its gap fill may fill
+	 * them; the other records keep theirs. Absent or {} = none.
+	 */
+	flowMissing?: FlowMissingSettings | null;
+	/**
+	 * The data-check items the user kept as recorded (engine ≥ 1.102.0, issue
+	 * #611): item ids `<check>:<seriesId>:<start>:<end>`. No run effect, but a
+	 * kept outlier or flat stretch of a flow record isn't `suspect` there
+	 * (./calibrate/dayFlags.ts). Absent = none.
+	 */
+	checksKept?: string[] | null;
+	/**
+	 * The run warnings and problems from elsewhere the user kept (accepted) on the Warnings page, each with an
+	 * optional note (issue #611, ./checkItems.ts WarningKept). No run effect. Absent = none.
+	 */
+	warningsKept?: WarningKept[] | null;
+	/**
 	 * Gap filling of the observed flow records (engine ≥ 1.23.0, issue #66,
 	 * ./flowGapFill.ts, docs/model.md §2.10i): a spec per record, null = not
 	 * filled (the default). Filled values never change the stored series;
@@ -1152,9 +1176,13 @@ export interface RainStationSettings {
 	 */
 	sites?: Record<string, { unitId: string }> | null;
 	/**
-	 * Station id → inclusive [from, to] ISO date ranges the user marks
+	 * Rain record id → inclusive [from, to] ISO date ranges the user marks
 	 * unreliable: those days count as gaps (§2.4e's rain-source periods,
-	 * generalised to every station).
+	 * generalised to every station). Since engine 1.102.0 (issue #611) any
+	 * rain record's id, not only a station's: a unit's own gauge (after its
+	 * checks, ./runoff/unitGaugeChecks.ts) and the alternative catchment
+	 * gauge (./recordPeriods.ts) honour it too, wherever they are read. A
+	 * station's are read only while it is assigned.
 	 */
 	unreliable?: Record<string, [string, string][]> | null;
 	/**
@@ -1506,7 +1534,7 @@ export const userPriorityWord = (p: UserPriority | null | undefined): string => 
  * demand and dam evaporation; every other day falls back to the monthly
  * mean (./evaporation/apanDaily.ts, docs/model.md §2.3a).
  *
- * `evap_et0_mm` (engine ≥ 1.103.0, issue #604 R5-E) is a daily FAO-56
+ * `evap_et0_mm` (engine ≥ 1.104.0, issue #604 R5-E) is a daily FAO-56
  * reference evapotranspiration record (mm/day): an AgERA5 data feed (with
  * NASA POWER's computed ET₀ on the days AgERA5 doesn't have yet) or a
  * station's own. Only GR4J reads it, only under `pe.kind: 'monthly'`, as it
@@ -2983,6 +3011,15 @@ export interface DailySeries {
 	 * the run comparison and the fit record.
 	 */
 	origin?: SeriesOrigin | null;
+	/**
+	 * The stored series' id (time_series.id), set by the backend on every
+	 * series it reads and kept by a run's input snapshot (engine ≥ 1.102.0,
+	 * issue #611). The model reads it only to match the settings that name a
+	 * record by its id: settings.flowMissing and settings.rainStations
+	 * .unreliable on a record that isn't a station (./recordPeriods.ts), and
+	 * settings.checksKept. Absent = matches none of them.
+	 */
+	seriesId?: string | null;
 }
 
 export interface SeriesMeta {
@@ -4380,7 +4417,7 @@ export interface RunSummary {
 	 */
 	apanDaily?: ApanDailyInfo;
 	/**
-	 * How the daily reference ET series was used (engine ≥ 1.103.0, issue
+	 * How the daily reference ET series was used (engine ≥ 1.104.0, issue
 	 * #604 R5-E, ./evaporation/et0Daily.ts): whether GR4J read it (only under
 	 * a monthly PE row), the run days it covered and the days that fell back
 	 * to the row. Absent when the project has no such series, and on older runs.
@@ -4415,6 +4452,12 @@ export interface RunSummary {
 	supplyAssurance?: SupplyAssurance;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
+	/**
+	 * The warnings above that have a stable code (engine ≥ 1.102.0, ./warningCodes.ts, issue #611): each with its
+	 * code, the figures and names it reports, and its text exactly as in `warnings`, in the same order. Data checks,
+	 * the rain chain and calibration so far; any other warning is in `warnings` only. Absent on older runs.
+	 */
+	warningCodes?: CodedWarning[];
 	/**
 	 * Never written by the engine: the summary fields the API left out for a
 	 * viewer kept from each registered volume, on a cap or full-allocation run

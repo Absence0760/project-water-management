@@ -365,7 +365,7 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		premise: 'not writable'
 	},
 	'dam_observation_load_mark.feature_id': {
-		reason: 'no project_id of its own: the worker’s record of the WOfS pass file it last loaded for that dam feature (key = feature_id), owner-only, water_app has no grant; written only by app_dam_load_mark_write from the worker’s session with no user (257)',
+		reason: 'no project_id of its own: the worker’s record of the WOfS pass file it last loaded for that dam feature (key = feature_id), owner-only, water_app has no grant; written only by app_dam_load_mark_write from the worker’s session with no user (261)',
 		premise: 'no project_id'
 	}
 };
@@ -1234,6 +1234,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'projects/outcomeSettings.ts:siteNodeId': 'checkOutcomeSite: outcomeSettings.db.test.ts refuses another project’s node',
 	'projects/ewrHeadlineSettings.ts:siteNodeId': ['PATCH /projects/:id settings.ewrHeadline.siteNodeId'],
 	'projects/settings.ts:calibrationSiteNodeId': 'checkCalibrationSite: projects/calibrationSite.db.test.ts refuses another project’s node',
+	'projects/settings.ts:flowSeriesId':
+		'the fit record’s own series (engine ≥ 1.102.0): only compared with the project’s own series ids, to pick the fitted record’s kept checks (keptForFit), never used to read or write a row, so another project’s id matches nothing',
 	'projects/document.ts:siteNodeId': 'a node of the file’s own model, moved to its fresh id on import (projectFileProblems refuses any other): series/site.db.test.ts',
 	'projects/authorityDelegates.ts:userId': ['POST /projects/:id/authority-delegates userId'],
 	'projects/routes.ts:teamId': 'a team, not a project row: teams/teams.security.db.test.ts',

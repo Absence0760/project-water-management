@@ -1,4 +1,4 @@
-// Load DE Africa Waterbodies polygons into waterbody_reference (257; issue
+// Load DE Africa Waterbodies polygons into waterbody_reference (261; issue
 // #604 R5, docs/maps.md § Waterbodies). The operator's tool, run as the schema
 // owner: `pnpm import:waterbodies` locally, load-reference.yml's `waterbodies`
 // kind in production (geo/referenceLoad.ts, the migrate Lambda). The app only

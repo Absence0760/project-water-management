@@ -1,4 +1,4 @@
-// The orchard and vine grid's data, without any raster (255_crop_type_reference.sql;
+// The orchard and vine grid's data, without any raster (259_crop_type_reference.sql;
 // issue #604 R5-D, docs/maps.md § Orchards and vines from SANLC): SANLC's
 // defaults and the method text, the pre-summarised JSON form (`{ "cellDeg":
 // 0.005, "cells": [[lon, lat, orchard, vine, newOrchard, newVine], …] }`,

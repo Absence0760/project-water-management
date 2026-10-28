@@ -1896,7 +1896,7 @@ EventBridge, daily
   POWER after it, and writes `evap_et0_mm`; there is no per-feed path to the
   CDS or NASA, and the fetcher refuses one. A copy with neither product
   waits without a failure (as ECMWF's). The feeds fall due on the default
-  daily rule (256_feed_source_agera5_et0.sql). Both jobs are off in
+  daily rule (260_feed_source_agera5_et0.sql). Both jobs are off in
   production until `agera5_enabled` / `power_et0_enabled`
   ([deployment.md](./deployment.md)). Locally the committed copy holds a
   year of invented AgERA5 values and two months of POWER's over a 4 × 4
@@ -1943,11 +1943,16 @@ station's days from our own store, `gauge_record` (247,
 **behind `DWS_SOURCE`**: `store` reads it, `live` keeps the per-feed request
 to DWS's page through the fetcher. Unset follows `FEED_SOURCE` (`live` in
 production, `store` in dev, CI and e2e); production says `live` until the
-operator has DWS's written answer and has loaded its reply
+operator has loaded each station's record and the `dws-coverage` check
+says it is covered
 ([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
+The operator's load is `pnpm import:dws` locally and, in production,
+`load-reference.yml` kind `dws` (the migrate Lambda, from the reference
+bucket); both read and write through `feeds/gaugeRecordImport.ts`.
 
 ```
 operator ── pnpm import:dws <DWS's reply> ──► gauge_record (source dws-request)
+operator ── reference/dws/<file> + load-reference.yml (kind dws) ──► migrate Lambda ──► the same
 
 EventBridge, daily 04:00 UTC ──► fetcher, {"mode":"dws-weekly"} (outside the VPC)
    reads   dws/stations.json            ◄── worker tick: app_dws_feed_stations()
@@ -2005,8 +2010,8 @@ feed_fetch (DWS_SOURCE=store) ── gauge_record_current (best source per day) 
 ### Dam observations
 
 What satellites saw of each traced dam (issue #604 Round 5): the wet area on
-a date, per source, in our own store, `dam_observation` (257,
-[data-model.md § Dam observations](./data-model.md#dam-observations-257_dam_observationsql)),
+a date, per source, in our own store, `dam_observation` (261,
+[data-model.md § Dam observations](./data-model.md#dam-observations-261_dam_observationsql)),
 for the modelled-vs-observed dam area (R5-B). Two sources, both Digital
 Earth Africa, CC BY 4.0 ([data-sources.md](./data-sources.md#deafrica-waterbodies-series)):
 **Waterbodies**' per-waterbody series for a dam matched to one waterbody

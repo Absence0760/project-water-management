@@ -1,4 +1,4 @@
-// Daily reference evapotranspiration (engine ≥ 1.103.0, issue #604 R5-E,
+// Daily reference evapotranspiration (engine ≥ 1.104.0, issue #604 R5-E,
 // docs/model.md §2.4a): under a monthly PE row, the `evap_et0_mm` series is
 // GR4J's PE as it stands on the days it has a value, the row's share on the
 // others, counted and warned; under pan coefficient × A-pan it is not read

@@ -4,18 +4,22 @@
 // own MAP, where a station without coordinates reads its CHIRPS (the unit it
 // stands in), and each station's unreliable periods. A station is named by
 // its series id (a catchment rain series, `rain_catchment_mm` with no site,
-// 239_rain_stations.sql), a unit by its node id.
+// 239_rain_stations.sql), a unit by its node id. The unreliable periods
+// (engine ≥ 1.102.0, issue #611) may name any rain record of the project, not
+// only a station: a unit's own gauge (`rain_catchment_mm` sited at the unit)
+// or the alternative catchment gauge (`rain_catchment_alt_mm`), by series id.
 //
 // Two checks, as settings.unitRain and the calibration site have: the shape
 // here (zod, on every save that sends it; pinnedFactors refused, the engine's
 // own like unitRain's pinned factors), and the names against the database
 // (checkRainStations, by PATCH /projects/:id when the save sends
-// rainStations): every station a station of this project, every unit a land
-// unit of it (a farm with an area). A stored setting that later loses a
+// rainStations): every station a station of this project, every record with
+// unreliable periods a rain record of it, every unit a land unit of it (a
+// farm with an area). A stored setting that later loses a
 // station or unit doesn't block other saves: the run warns about it (engine).
 // Replaced whole on a patch (settings.ts REPLACED_WHOLE), so a unit left out
 // is unassigned.
-import { mapMmError, MAP_MM_MAX, MAP_MM_MIN, PE_SOURCE_MAX, isIsoDate, type RainStationSettings } from '@water-management/engine';
+import { mapMmError, MAP_MM_MAX, MAP_MM_MIN, PE_SOURCE_MAX, isIsoDate, RAIN_RECORD_KINDS, type RainStationSettings } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -36,10 +40,11 @@ const day = z.string().superRefine((s, ctx) => {
 	else if (!isIsoDate(s)) ctx.addIssue({ code: 'custom', message: 'not a calendar date' });
 });
 /** A record keyed by ids (zod's own key error says only "Invalid key in record"). */
-const byId = <T extends z.ZodTypeAny>(value: T, what: 'station' | 'unit', max: number, noun: string) =>
+const byId = <T extends z.ZodTypeAny>(value: T, what: 'station' | 'record' | 'unit', max: number, noun: string) =>
 	z.record(z.string(), value).superRefine((r, ctx) => {
 		const keys = Object.keys(r);
-		if (keys.some((k) => !UUID.test(k))) ctx.addIssue({ code: 'custom', message: what === 'station' ? 'a rainfall station is named by its series id' : 'a land unit is named by its node id' });
+		if (keys.some((k) => !UUID.test(k)))
+			ctx.addIssue({ code: 'custom', message: what === 'station' ? 'a rainfall station is named by its series id' : what === 'record' ? 'a rain record is named by its series id' : 'a land unit is named by its node id' });
 		if (keys.length > max) ctx.addIssue({ code: 'custom', message: `at most ${max} ${noun}` });
 	});
 
@@ -65,10 +70,10 @@ export const RainStations = z
 		catchmentMapSource: z.string().trim().max(PE_SOURCE_MAX).nullable().optional(),
 		sites: byId(z.object({ unitId }).strict(), 'station', RAIN_STATIONS_MAX, 'stations').nullable().optional(),
 		unreliable: byId(
-			z.array(z.tuple([day, day])).max(RAIN_STATION_PERIODS_MAX, `at most ${RAIN_STATION_PERIODS_MAX} unreliable periods a station`),
-			'station',
+			z.array(z.tuple([day, day])).max(RAIN_STATION_PERIODS_MAX, `at most ${RAIN_STATION_PERIODS_MAX} unreliable periods a rain record; merge neighbouring periods into one`),
+			'record',
 			RAIN_STATIONS_MAX,
-			'stations'
+			'rain records'
 		)
 			.nullable()
 			.optional(),
@@ -96,9 +101,10 @@ export const RainStations = z
 		...(v.catchmentMapSource !== undefined ? { catchmentMapSource: v.catchmentMapSource || null } : {})
 	}));
 
-/** Every station id and land unit id a setting names, with where it names it. */
-function namesOf(rs: RainStationSettings): { stations: Map<string, string>; units: Map<string, string> } {
+/** Every station id, other rain record id (only its unreliable periods name it) and land unit id a setting names, with where it names it. */
+function namesOf(rs: RainStationSettings): { stations: Map<string, string>; records: Map<string, string>; units: Map<string, string> } {
 	const stations = new Map<string, string>();
+	const records = new Map<string, string>();
 	const units = new Map<string, string>();
 	const station = (id: string | null | undefined, where: string) => {
 		if (typeof id === 'string' && !stations.has(id)) stations.set(id, where);
@@ -116,8 +122,9 @@ function namesOf(rs: RainStationSettings): { stations: Map<string, string>; unit
 		station(id, 'a station’s site');
 		if (!units.has(site.unitId)) units.set(site.unitId, 'the unit a station stands in');
 	}
-	for (const id of Object.keys(rs.unreliable ?? {})) station(id, 'a station’s unreliable periods');
-	return { stations, units };
+	// Any rain record's (engine ≥ 1.102.0, issue #611): a station's are checked as a station when it is named as one.
+	for (const id of Object.keys(rs.unreliable ?? {})) if (!stations.has(id)) records.set(id, 'a rain record’s unreliable periods');
+	return { stations, records, units };
 }
 
 /**
@@ -131,10 +138,10 @@ function namesOf(rs: RainStationSettings): { stations: Map<string, string>; unit
  */
 export async function checkRainStations(db: Db, projectId: string, rainStations: unknown, stored?: unknown): Promise<void> {
 	if (!isObj(rainStations)) return;
-	const { stations, units } = namesOf(rainStations as RainStationSettings);
+	const { stations, records, units } = namesOf(rainStations as RainStationSettings);
 	if (isObj(stored)) {
 		const kept = namesOf(stored as RainStationSettings);
-		for (const id of kept.stations.keys()) stations.delete(id);
+		for (const id of [...kept.stations.keys(), ...kept.records.keys()]) stations.delete(id), records.delete(id);
 		for (const id of kept.units.keys()) units.delete(id);
 	}
 	if (stations.size) {
@@ -145,6 +152,16 @@ export async function checkRainStations(db: Db, projectId: string, rainStations:
 		const found = new Set(rows.map((r) => r.id));
 		const missing = [...stations].find(([id]) => !found.has(id));
 		if (missing) throw new ApiError(400, `rainfall stations: ${missing[1]} is not a rainfall station of this project (a catchment rainfall series with no unit)`);
+	}
+	if (records.size) {
+		const { rows } = await db.query<{ id: string }>(`SELECT id FROM time_series WHERE project_id = $1 AND id = ANY($2::uuid[]) AND kind = ANY($3::text[])`, [
+			projectId,
+			[...records.keys()],
+			[...RAIN_RECORD_KINDS]
+		]);
+		const found = new Set(rows.map((r) => r.id));
+		const missing = [...records].find(([id]) => !found.has(id));
+		if (missing) throw new ApiError(400, `rainfall stations: ${missing[1]} is not a rain record of this project (a catchment rainfall series, a unit’s own gauge or the alternative catchment gauge)`);
 	}
 	if (units.size) {
 		const { rows } = await db.query<{ id: string }>(`SELECT id::text FROM node WHERE project_id = $1 AND id = ANY($2::uuid[]) AND kind = 'farm' AND area_km2 > 0`, [

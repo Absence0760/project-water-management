@@ -1,5 +1,5 @@
 // Orchards and vines from SANLC in the planted-areas proposals (issue #604
-// R5-D; 255_crop_type_reference.sql, geo/cropTypes.ts, geo/croplandRoutes.ts),
+// R5-D; 259_crop_type_reference.sql, geo/cropTypes.ts, geo/croplandRoutes.ts),
 // end to end against Postgres with the committed synthetic crop-type grid
 // loaded (every cell [orchard 0.2, vine 0.1, new orchard 0.05, new vine 0]
 // inside 21.30–21.35° E, 33.65–33.70° S):

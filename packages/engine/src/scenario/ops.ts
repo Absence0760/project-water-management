@@ -593,7 +593,7 @@ export function settingsValueError(path: string, value: unknown): string | null 
  * `apanMm` setting (`settings.set`); they reach only the days the daily
  * series doesn't cover, so a scenario that changes evaporation on a project
  * with a daily record scales that series too. The daily reference ET
- * (engine ≥ 1.103.0, issue #604 R5-E) the same way against the monthly PE row.
+ * (engine ≥ 1.104.0, issue #604 R5-E) the same way against the monthly PE row.
  * Observed and logger flow are measurements the run is scored against, not
  * drivers: scaling them would change calibration statistics and the EWR
  * agreement, never the simulated water, so they are not scalable. The

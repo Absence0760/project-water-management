@@ -1,6 +1,6 @@
 // The WOfS pass: Digital Earth Africa's per-scene water layer summed inside
 // each of our traced dam outlines, into the mirror bucket for the worker to
-// load into dam_observation (issue #604 R5-C; 257_dam_observation.sql,
+// load into dam_observation (issue #604 R5-C; 261_dam_observation.sql,
 // docs/architecture.md § Dam observations → WOfS). The fetcher Lambda runs it
 // in its `dams-weekly` mode (lambda-fetcher.ts), outside the VPC, after the
 // Waterbodies pass; the handover is R5-A's (../handover.ts):

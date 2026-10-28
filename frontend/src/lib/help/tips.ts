@@ -1267,6 +1267,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.calibrationExclusions', 'stats.exclusions', 'stats.excludedDays']
 	},
 	{
+		id: 'flow-missing',
+		term: 'Missing periods of one flow record',
+		short: 'Periods of one flow record read as missing: its scores, the fit and its checks skip them, and its gap fill may fill them.',
+		category: 'fit',
+		fields: ['settings.flowMissing']
+	},
+	{
 		id: 'quality-flags',
 		term: 'Quality flags (per-day)',
 		short: 'Each observed day is in the gauged range, above or below it, over a low-flow threshold, suspect, infilled or missing. Fits set flags aside.',

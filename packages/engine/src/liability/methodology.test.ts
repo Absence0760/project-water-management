@@ -32,7 +32,7 @@ const PUBLISHED: Record<string, string> = {
 	'methodology-9': 'a9fb0e5af39ae9ca02e6de2b868eaaf74e4fb37bcb03562bf9e5f1c1cd1a818e',
 	'methodology-10': 'a5aefa72de72037f3483aa631b50efd1526d3e3a51b791e7635d1463f560f021',
 	'methodology-11': '7a458617797c09d0a57da182d758714ed79d6d0626f7dbb25fe5ca08547c6351',
-	'methodology-12': '77a5f92a22ec52069b20e9304ab38e7f4566b7a8b03c04ba37fbc31202a51828'
+	'methodology-12': 'ac81926f72c3f59970c7a5e93e3e7d17e71e38e0a5b2addce621f2585827c949'
 };
 
 describe('methodology statement (generated from docs/methodology)', () => {

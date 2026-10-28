@@ -1,0 +1,4 @@
+{
+	"addKb": 19,
+	"why": "Warnings page (issue #611 slices 3 and 5): the WarningsTab chunk (~7 KB gz with its CSS), its loader and items chunk shared with the Data row's badge (~6 KB), the engine's checkPeriods and runCheckPeriods it is the first to ship, the page guide, and the run-warning links; measured 2119 -> 2138 KB"
+}

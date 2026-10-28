@@ -117,7 +117,7 @@
 	}
 </script>
 
-<div class="sub-card fit-period" data-testid="chirps-fit-period">
+<div class="sub-card fit-period" id="fld-chirps-fit" data-testid="chirps-fit-period">
 	<div class="card-head">
 		<h3 class="title">CHIRPS gap filling</h3>
 		{#if propose && !readonly}

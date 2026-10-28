@@ -56,7 +56,28 @@ describe('load: a reference load’s inputs', () => {
 		// The Southwestern Cape MAP surface: its credit is stored with the dataset and shown with the layer (docs/maps.md § MAP grid).
 		const mapGrid = { ...landCover, LOAD_KIND: 'map-grid', LOAD_KEY: 'reference/map-grid/waas-swcape.json.gz', LOAD_DATASET: 'WAAS-SWCape-2007' };
 		assert.deepEqual(loadProblems(mapGrid, lacks), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies']);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws']);
+	});
+
+	it('a DWS flow table needs its reference, takes a station only as a river gauge code, and no other kind takes one', () => {
+		const dws = { ...landCover, LOAD_KIND: 'dws', LOAD_KEY: 'reference/dws/reply-01.txt.gz', LOAD_DATASET: 'dws-reply-01', LOAD_SOURCE: 'SYNTHETIC-REPLY-0001' };
+		// DWS's permission is the operator's record (docs/data-sources.md § dws-flow): no legal-text sentence gates it.
+		assert.deepEqual(loadProblems(dws, lacks), []);
+		assert.deepEqual(loadProblems({ ...dws, LOAD_STATION: 'X0H001', LOAD_KEY: 'reference/dws/page.html' }, lacks), []);
+		assert.match(loadProblems({ ...dws, LOAD_SOURCE: ' ' }, has).join('\n'), /dws needs a source/);
+		assert.match(loadProblems({ ...dws, LOAD_SOURCE: 'x'.repeat(201) }, has).join('\n'), /dws needs a source of 1 to 200/);
+		for (const station of ['X0R001', 'x0h001', 'X0H0011', 'X0H001;']) {
+			const problems = loadProblems({ ...dws, LOAD_STATION: station }, has);
+			assert.equal(problems.length, 1, station);
+			assert.match(problems[0], /river gauge code/);
+			assert.doesNotMatch(problems[0], new RegExp(station.replace(/[;]/g, '')));
+		}
+		assert.match(loadProblems({ ...landCover, LOAD_STATION: 'X0H001' }, has).join('\n'), /station is for the dws kind only/);
+		// No station code in the public log's key or label.
+		for (const patch of [{ LOAD_KEY: 'reference/dws/X0H001-reply.txt' }, { LOAD_DATASET: 'x0h001-1990-2009' }]) {
+			assert.match(loadProblems({ ...dws, ...patch }, has).join('\n'), /without a station code/, JSON.stringify(patch));
+		}
+		assert.match(loadProblems({ ...dws, LOAD_KEY: 'reference/land-cover/reply.txt' }, has).join('\n'), /reference\/dws\/<file>/);
 	});
 
 	it('a MAP grid loads only a dataset whose licence is recorded, with no source of its own', () => {

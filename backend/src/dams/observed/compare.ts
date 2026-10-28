@@ -5,7 +5,7 @@
 // modelled side is the run's `dam_area` column for the unit the dam polygons
 // stand for (m², start of day: the survey curve, `damCurve`, or the power law
 // from `damAreaFullM2`, as the engine worked it out), the observed side the
-// `dam_observation` rows (257, R5-A: Digital Earth Africa Waterbodies and WOfS).
+// `dam_observation` rows (261, R5-A: Digital Earth Africa Waterbodies and WOfS).
 // Nothing here changes the engine or reads anything but its output.
 //
 // A unit's dam is its composite dam (all its farm dams, geo/damRoutes.ts), so

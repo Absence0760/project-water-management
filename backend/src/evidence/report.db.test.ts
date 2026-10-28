@@ -550,7 +550,7 @@ describe('§ 7 observed wet days (evidence-21, issue #604 R5-C)', () => {
 			['2019-01-13', 0, 99.5], // dry
 			['2019-01-21', 900, 100] // one pixel: inconclusive
 		];
-		// Loaded as the worker does (app_dam_observation_load, 257).
+		// Loaded as the worker does (app_dam_observation_load, 261).
 		await withoutUser((db) =>
 			db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
 				'wofs',

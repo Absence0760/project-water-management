@@ -45,6 +45,25 @@ describe('seriesExportColumns', () => {
 		]);
 	});
 
+	it('a record’s own missing periods (issue #611), by its series id: a column only when it has any; positive control: another record’s leave it out', () => {
+		const id = 'f0000000-0000-4000-8000-000000000001';
+		const st = settings({ flowMissing: { [id]: [{ start: '2024-01-02', end: '2024-01-02', reason: 'weir silted up' }] } });
+		expect(csv({ ...flow, id, siteNodeId: 'n1' }, st, null)).toEqual([
+			'date,flow_observed_m3s – Weir (m³/s),Flags,flow_observed_m3s – Weir (m³/day),Missing in this record (reason)',
+			'2024-01-01,0.5,,43200,',
+			'2024-01-02,,missing,,weir silted up',
+			'2024-01-03,2,,172800,'
+		]);
+		expect(csv({ ...flow, id: 'f0000000-0000-4000-8000-000000000002', siteNodeId: 'n1' }, st, null)[0]).not.toContain('Missing in this record');
+	});
+
+	it('a rain record’s unreliable periods (any rain record, issue #611): a column only when it has any', () => {
+		const id = 'f0000000-0000-4000-8000-000000000003';
+		const st = settings({ rainStations: { unreliable: { [id]: [['2024-01-03', '2024-01-04']] } } });
+		expect(csv({ ...rain, id }, st, null)).toEqual(['date,rain_catchment_mm (mm),Flags,Marked unreliable', '2024-01-01,12,,', '2024-01-02,0,,', '2024-01-03,,missing,unreliable', '2024-01-04,1.5,,unreliable']);
+		expect(csv(rain, st, null)[0]).toBe('date,rain_catchment_mm (mm),Flags');
+	});
+
 	it('a gauge node’s record or the reference gauge: m³/day, never the outlet’s calibration exclusions', () => {
 		const st = settings({ calibrationExclusions: [{ start: '2024-01-01', end: '2024-01-03', reason: 'x' }] });
 		expect(csv({ ...flow, siteNodeId: 'n1' }, st, null)[0]).toBe('date,flow_observed_m3s – Weir (m³/s),Flags,flow_observed_m3s – Weir (m³/day)');

@@ -422,7 +422,7 @@ export interface EvidenceInput {
 	authorisedImpact?: EvidenceAuthorisedImpact | null;
 	/** The project's map features as they are now (152 map_feature, under the reader's RLS), for § 1's locality map (evidence-12); absent or [] = none. */
 	mapFeatures?: EvidenceMapFeatureInput[] | null;
-	/** The project's traced dams with their WOfS rows in the baseline's period (257 dam_observation, under the reader's RLS), for the observed wet days (evidence-21); absent or [] = none. */
+	/** The project's traced dams with their WOfS rows in the baseline's period (261 dam_observation, under the reader's RLS), for the observed wet days (evidence-21); absent or [] = none. */
 	damObservations?: EvidenceDamObservationInput[] | null;
 }
 

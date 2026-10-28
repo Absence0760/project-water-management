@@ -395,8 +395,8 @@ function flatlineRule(
 	return { minDays: (v) => flowFlatlineMinDays(v, r, dq), zeros: true, resolution: r };
 }
 
-/** The flat stretches of a series under flatlineRule: [first index, end index (exclusive), value]. */
-function flatRuns(
+/** The flat stretches of a series under flatlineRule: [first index, end index (exclusive), value]. Exported for ./checkPeriods.ts. */
+export function flatRuns(
 	kind: SeriesKind,
 	values: readonly (number | null)[],
 	dq: DataQualitySettings

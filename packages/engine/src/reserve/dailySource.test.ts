@@ -452,7 +452,7 @@ describe('a run with each source', () => {
 		expect(pragmatic.series.find((s) => s.key === 'ewr')!.label).toBe('Pragmatic EWR');
 	});
 
-	it('a source with its kept .tab and .rul runs bit-identical to one without (issue #617: display only; engine 1.102.0 only marks the wider input contract)', () => {
+	it('a source with its kept .tab and .rul runs bit-identical to one without (issue #617: display only; engine 1.103.0 only marks the wider input contract)', () => {
 		for (const src of [tabSource(), pctSource(), pctSource({ scaling: 'area' })]) {
 			expect(JSON.stringify(run(network({ ewrDailySource: { ...src, tabFile: TAB_FILE, rulFile: RUL_FILE } })))).toBe(JSON.stringify(run(network({ ewrDailySource: src }))));
 		}

@@ -10,6 +10,7 @@
 // a note is its author's words, RLS lets a note be inserted only as
 // yourself, and re-authoring them as the importer would misattribute them
 // (docs/data-model.md § Notes).
+import { settingSeriesIds } from './flowMissingSettings.js';
 import { isUnitRainKind } from '../series/site.js';
 import { cleanModelNames, DAY_BOUNDARIES, ENGINE_VERSION, SERIES_KINDS, type DayBoundary, type ProjectModel, type RainStationMeta } from '@water-management/engine';
 import { z } from 'zod';
@@ -69,9 +70,10 @@ export const ProjectFile = z.object({
 				// A rainfall station's MAP, its source and coordinates (239_rain_stations.sql, issue #553): only on a catchment
 				// rain series with no site (projectFileProblems); absent = none.
 				station: StationField,
-				// A rainfall station's id in this document (issue #553): what the file's settings.rainStations names it by.
-				// Only a reference within the file, like a node's id: the import gives the series a fresh one and the
-				// setting follows it. Absent = nothing names it.
+				// A series' id in this document: what the file's settings name it by (a rainfall station's in
+				// settings.rainStations, issue #553; any rain record's unreliable periods, a flow record's missing periods
+				// and a kept data check's series, issue #611). Only a reference within the file, like a node's id: the
+				// import gives the series a fresh one and the settings follow it. Absent = nothing names it.
 				id: z.string().uuid().optional()
 			})
 			.superRefine(checkProvenance)
@@ -226,8 +228,11 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 	// A gauge's record then goes as the outlet's, as before; a land unit's own rain (209) is left out, since without its
 	// unit it would come back as the catchment's rain, which no run of this project reads it as.
 	const nodeIds = new Set(model.nodes.map((n) => n.id));
-	// A rainfall station carries its id when settings.rainStations names stations by it (issue #553), so an import can follow it.
-	const stationIds = p.settings !== null && typeof p.settings === 'object' && typeof (p.settings as { rainStations?: unknown }).rainStations === 'object' && (p.settings as { rainStations?: unknown }).rainStations !== null;
+	// A series carries its id when the settings name it (a rainfall station, issue #553; a record with unreliable or missing
+	// periods, or a kept data check's, issue #611), so an import can follow it. Before #611 every station carried it when
+	// settings.rainStations was set at all; that stays, so such a file reads the same.
+	const rainStations = p.settings !== null && typeof p.settings === 'object' && typeof (p.settings as { rainStations?: unknown }).rainStations === 'object' && (p.settings as { rainStations?: unknown }).rainStations !== null;
+	const named = settingSeriesIds(p.settings);
 	const series = stored.filter((s) => !(s.siteNodeId !== null && !nodeIds.has(s.siteNodeId) && isUnitRainKind(s.kind))).map(({ id, product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, handDays, station, ...s }) => ({
 		...s,
 		...(product !== null && productVersion !== null ? { product, productVersion } : {}),
@@ -237,7 +242,7 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 		...(sourceUnit !== null && sourceUnitFactor !== null ? { sourceUnit, sourceUnitFactor } : {}),
 		...(handDays !== null ? { handDays } : {}),
 		...(station !== null ? { station } : {}),
-		...(stationIds && s.kind === 'rain_catchment_mm' && siteNodeId === null ? { id } : {})
+		...((rainStations && s.kind === 'rain_catchment_mm' && siteNodeId === null) || named.has(id) ? { id } : {})
 	}));
 	return {
 		format: PROJECT_DOCUMENT_FORMAT,

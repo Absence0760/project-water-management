@@ -65,7 +65,7 @@
 				CHIRPS reports too many light-rain days. A day with no CHIRPS reading is still filled from forecast rain. Default {ZERO_RAIN_FILL_ABOVE_CHIRPS_MM} mm.</span
 			>
 		</div>
-		<PeriodList
+		<div id="fld-keep-dry"><PeriodList
 			bind:list={value.keepDry}
 			bind:error={keepDryError}
 			{readonly}
@@ -78,9 +78,9 @@
 			addRangeLabel="Keep a date range dry"
 			placeholder="e.g. confirmed drought, farm records agree"
 			noun="keep-dry period"
-		/>
+		/></div>
 	{/if}
-	<PeriodList
+	<div id="fld-zero-missing"><PeriodList
 		bind:list={value.missing}
 		bind:error={missingError}
 		{readonly}
@@ -93,7 +93,7 @@
 		addRangeLabel="Add a missing date range"
 		placeholder="e.g. logger fault; values copied from a neighbour"
 		noun="missing-rain period"
-	/>
+	/></div>
 	</div>
 
 	<div class="topic">
@@ -106,7 +106,7 @@
 		<span class="hint explain" id="st-acc-h2">{accOption?.help}</span>
 	</div>
 	{#if value.accumulationMode === 'spread'}
-		<PeriodList
+		<div id="fld-keep-readings"><PeriodList
 			bind:list={value.keepReadings}
 			bind:error={keepReadingsError}
 			{readonly}
@@ -119,7 +119,7 @@
 			addRangeLabel="Keep a date range's readings"
 			placeholder="e.g. thunderstorm, farm records agree"
 			noun="keep-reading period"
-		/>
+		/></div>
 	{/if}
 	<PeriodList
 		bind:list={value.addAccumulations}

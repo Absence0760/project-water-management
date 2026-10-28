@@ -1615,7 +1615,7 @@ def station_catchment_rule2_no_map() -> dict:
 
 def daily_et0_monthly_pe(pe_kind: str = "monthly", zero_row: bool = False) -> dict:
     """A daily reference ET record under a monthly PE row (§2.4a, engine ≥
-    1.103.0, issue #604 R5-E): on the days it has a value ≥ 0 GR4J's PE is the
+    1.104.0, issue #604 R5-E): on the days it has a value ≥ 0 GR4J's PE is the
     value as it stands; a missing day and a negative one fall back to the row's
     share of the month; the record ends before the run, so its last days are
     the row's. `pe_kind` "pan": the record is never read. `zero_row`: the row

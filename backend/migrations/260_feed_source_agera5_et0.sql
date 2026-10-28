@@ -1,4 +1,4 @@
--- 256_feed_source_agera5_et0 — a daily reference evapotranspiration feed read
+-- 260_feed_source_agera5_et0 — a daily reference evapotranspiration feed read
 -- from our copy (issue #604 R5-E; docs/architecture.md § Our copy of the rain
 -- data, docs/data-model.md § Data feeds, docs/data-sources.md agera5,
 -- docs/model.md §2.4a "Daily reference ET").

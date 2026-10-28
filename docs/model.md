@@ -713,7 +713,7 @@ setting, so run comparison reads it as legacy.
     PE row: converting between them is the pan coefficient's job (ET₀ = Kp ×
     Epan), which stays the modeller's. The engine is unchanged by this; it
     only ever sees the accepted values.
-  - **Daily reference ET** (engine ≥ 1.103.0, issue #604 R5-E,
+  - **Daily reference ET** (engine ≥ 1.104.0, issue #604 R5-E,
     `packages/engine/src/evaporation/et0Daily.ts`). A monthly PE row is a
     climatology (dPET's 1991–2020 means, say), so a dry, hot current season
     runs on an average year's evaporation. A project may also hold a daily
@@ -740,7 +740,7 @@ setting, so run comparison reads it as legacy.
       the run has a usable value.
     - **No series, no change.** Without an `evap_et0_mm` series nothing
       runs: no summary, no warning, and every result is bit-identical to
-      engine 1.102.0 (`et0Daily.test.ts`, with its positive control; the
+      engine 1.103.0 (`et0Daily.test.ts`, with its positive control; the
       client catchment regression suite and the invariant suites run
       unchanged). Under `pe.kind: 'pan'` a series changes nothing but the
       summary and the warning (tested).
@@ -2570,7 +2570,15 @@ not the run window, so the rule doesn't depend on the window):
    accumulations) and the rain-source periods (§2.4e) name days of the
    catchment gauge's record, so they don't apply to a unit's gauge
    (`runoff/unitGaugeChecks.ts`). Before 1.85.0 the record was read as
-   stored.
+   stored. The gauge's own dated list, from engine 1.102.0 (issue #611), is
+   `settings.rainStations.unreliable` under the gauge's series id (§2.4i
+   widened it from the stations to every rain record): those days are
+   blanked **after** the checks, as a station's are, so a marked period never
+   looks like a blank outage to §2.4d, and fall to the next link of the
+   chain. A day both set aside counts under the checks; the run warns with
+   the count of readings the periods blanked. The gauge is matched by
+   `DailySeries.seriesId`, which the backend sets on every series it reads
+   and a run's snapshot keeps (`recordPeriods.ts`).
 2. **The catchment gauge × clamp(unit MAP ÷ gauge MAP)**, when
    `gaugeMapMm` is set, the unit has a MAP and the project has catchment
    gauge rain. The gauge rain is the prepared catchment rain on the days it
@@ -3076,8 +3084,16 @@ the station's own 0.05° cell, when the backend has it, is
 - `sites`: station id → `{ unitId }`, the land unit a station stands in,
   whose CHIRPS (`rain_chirps_mm@<unit>`) its pairing reads when it has no
   cell series of its own;
-- `unreliable`: station id → inclusive `[from, to]` ISO date ranges the user
-  marks unreliable;
+- `unreliable`: rain record id → inclusive `[from, to]` ISO date ranges the
+  user marks unreliable. Until engine 1.102.0 only a station's; from it
+  (issue #611) any rain record's: a station's (read while it is assigned,
+  below), a unit's own gauge's (§2.4h rule 1, after its checks) and the
+  alternative catchment gauge's (`rain_catchment_alt_mm`: blanked before the
+  §2.4e rain-source periods read it, so the period's next source stands in,
+  `recordPeriods.ts withRecordPeriods`; the run warns with the count). The
+  catchment gauge's own days are `settings.zeroRainRuns.missing`'s, as
+  before. Each record is matched by `DailySeries.seriesId`; the API refuses
+  an id that isn't a rain record of the project;
 - `pinnedFactors` (engine-only, never stored by the API): station id → 12
   factors used instead of fitting the pairing (a resumed run, an outlook
   member, the ensemble's CHIRPS-only member).
@@ -3097,8 +3113,10 @@ station without coordinates, the unit it **Stands in** (`sites`). The form
 stores defaults as none (scaling on, the unit's own station), and an
 emptied setting as null, so assigning a station and taking it away again
 stores what was there. `units` stays stored under Fragmentation, unused.
-`catchment`, `catchmentMapMm` and `unreliable` have no field yet (the API
-takes them). A fit's forcing records each unit's station, so the form says
+`catchment` and `catchmentMapMm` have no field yet (the API takes them).
+`unreliable` is set under Model settings → Rain gaps → Flagged rain
+(**Unreliable periods of a rain record**, issue #611): From/To rows for every
+rain record of the project. A fit's forcing records each unit's station, so the form says
 "forcing changed since the fit" when a unit is given another station, none,
 or another correcting station (`unitRainSettingChanged`); scaling and the
 ratio are compared against a run's summary.
@@ -6796,7 +6814,56 @@ signed document matching its hashed manifest (ui-playbook § Dates, issue
 #521 round 3), the run report prints ISO (#586 D9), and the limitations are
 docs/engine-audit.md's own words, hashed into every sign-off and pack.
 
-**Flow generation renamed (engine ≥ 1.102.0, issue #614).** The panel that
+**Run warning codes (engine ≥ 1.102.0, issue #611 phase 2).** Beside
+`summary.warnings`, whose sentences don't change, `summary.warningCodes`
+lists the warnings that have a stable code, in the same order, each as
+`{ code, params, text }`: `text` is the warning exactly as in `warnings`,
+`params` the figures and names it reports (days, mm, a station or unit id, a
+date). A page groups, counts and links a warning by its code instead of
+matching its English, and can offer "go to setting". The catalogue is
+`warningCodes.ts` `WARNING_CODES` (exported on its own as
+`@water-management/engine/warnings`): for each code the settings panel that
+changes what it reports (`setting`, a panel anchor of frontend
+`settings/sections.ts`; null when the fix is on the Data page) and its group
+(`note`: how the data were handled, as set up; `check`: something to look
+at). Only the actionable warnings are coded so far:
+
+| Family | Codes | Params | Panel |
+| --- | --- | --- | --- |
+| Data checks (`seriesChecks`, §2.10a, the double-mass check §2.4b) | `data.negative`, `data.outlier`, `data.flatline`, `data.zerorun`, `data.lowvschirps`, `data.doublemass` (the check's kind) | `series`, `days` | `set-quality` (double-mass: `set-rain`) |
+| Gauge vs logger (§2.10a) | `data.flowAgreement` | `years` | `set-record` |
+| Zero runs (§2.4c) | `rain.zeroRun.missing`, `.keptDry`, `.chirpsDry`, `.asRecorded`; `rain.keepDry.doubtful` | `days`, … | `set-rain` |
+| Accumulations (§2.4d) | `rain.accumulation.spread`, `.noChirps`, `.setAside`, `.kept`, `.asRecorded`, `.noReading` | `windows` or `readings`, … | `set-rain` |
+| CHIRPS fallback (§2.4b) | `rain.chirps.corrected`, `.uncorrected`, `.quantileMapFallback`, `.doubleMassBreak` | `days`, … | `set-rain` |
+| Gap-filling product (§2.4b) | `rain.gapProduct.absent`, `.uncorrected`, `.corrected`, `.doubleMassBreak` | `product`, … | `set-rain` |
+| Rain gaps elsewhere | `rain.sourcePeriod` (§2.4e), `rain.missingDays` (W2), `rain.none`, `rain.chirpsShadowed` | dates, `days` | `set-rain`; the last two the Data page |
+| Rain stations (§2.4i) | `rain.station.noRecord`, `.unreliable`, `.unreliableInvalid`; `rain.station.zeroRun.*`, `rain.station.accumulation.*` | `station`, … | `set-share`; the checks `set-rain` |
+| A unit's own gauge (§2.4h) | `rain.unitGauge.zeroRun.*`, `rain.unitGauge.accumulation.*`, `rain.unitGauge.unreliable`; `rain.unit.catchmentFallback` | `unit`, … | `set-rain`; the fallback `set-unit-rain` |
+| Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord` | `kind`, `site`, … | `set-record` (no values in the period: `set-period`) |
+
+Not coded on purpose: the area-fragmentation, High/Low-MAP, `areaMismatches`
+and EWR-split warnings, which issues #615–#617 remove or reword, and every
+settings-validation warning. An uncoded warning is in `warnings` only.
+The texts travel through the engine as plain strings, so `warn(code,
+params, text)` returns the text for the usual `warnings.push` and records
+the code in the run's own scope (`withWarningScope`, opened by every run;
+runs are synchronous, so a run started inside another records into its
+own); the summary reads that scope back for its final warnings
+(`scope.codesOf`), each text taking the next code recorded for it once, so
+a copy pushed uncoded stays uncoded. Outside a run `warn` records nothing:
+no code or params carry over from an earlier run, and the same input gives
+the same codes whatever ran before. Two codes never build the same text. A run before
+1.102.0 has no `warningCodes`, and the frontend falls back to its text
+heuristic (`runs/credibility.ts` `warningGroups`); a code's group matches
+the group that heuristic gives its text, so a code moves no warning. No
+figure moves, but the summary has a new field, so a 1.101.0 run made again
+at 1.102.0 has another results digest. A viewer kept from the registered
+volumes reads no warnings and no codes (`verdictsSummary`). Tests:
+`warningCodes.test.ts` triggers each code and checks its text is the plain
+warning's (four beside their texts' own tests, which it names), and that
+every code in the catalogue is used by the engine.
+
+**Flow generation renamed (engine ≥ 1.103.0, issue #614).** The panel that
 chooses Fragmentation or Per unit is now **Model selection for flow
 generation**, first on Model settings, so the warnings that name it say
 "Model settings → Model selection for flow generation": the "Parameters not
@@ -6804,10 +6871,10 @@ fitted for this method" fit caveat (`calibrate/provenance.ts`) and the
 over-allocated flow shares' error (`network/shares.ts`). `places.ts` keeps
 each panel's former headings (`FORMER_PANELS`, `share: ['Flow
 generation']`), so `placesIn` still finds an older run's "Model settings →
-Flow generation" (1.98.0 to 1.101.0) and "Settings → Flow generation"
+Flow generation" (1.98.0 to 1.102.0) and "Settings → Flow generation"
 (before 1.98.0) and links them to the panel, and `warningInCurrentWords`
 reads both as the new name. Only words changed: no figure moves, but a
-1.101.0 run made again at 1.102.0 has another results digest.
+1.102.0 run made again at 1.103.0 has another results digest.
 
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`
@@ -7626,7 +7693,7 @@ no control characters, numbers finite, ≥ 0 and ≤ 10⁶, no unknown fields), 
 **No run reads them**: `resolveEwrDailySource` leaves them out, so a source
 with them resolves to the same object, and runs bit-identically, as one
 without (a test pins it), and a run comparison sees no change when only they
-differ. No result moves, as with the REC (§2.9c), but engine 1.102.0 is
+differ. No result moves, as with the REC (§2.9c), but engine 1.103.0 is
 a version bump all the same (shared with #614's rename): an earlier build refuses a source carrying either
 field as an unknown one and runs the pragmatic EWR, so the stamp says which
 inputs a run's engine accepts (an evidence pack's reproduction re-runs at the
@@ -7910,7 +7977,11 @@ excluded year has no row. `CalibrationStats.exclusions` and `excludedDays`
 record what was applied and how many observed days it removed. Automatic calibration
 (§2.10b) always applies the same list. With none, every number is unchanged.
 Invalid stored entries are dropped with a run warning; the API rejects them on
-save. `calibrate/provenance.ts` holds the helpers.
+save. `calibrate/provenance.ts` holds the helpers. To leave a period out of
+**one** record only, its own missing periods (`settings.flowMissing`, engine
+≥ 1.102.0, §2.10h) blank that record's days instead: they are then days
+without an observation, not excluded days, so `excludedDays` doesn't count
+them.
 
 `calibrationStats` (`network/stats.ts`) scores the days inside the window that
 have an observation and are not excluded, in m³/s. It scores every such day,
@@ -8810,6 +8881,39 @@ On a client catchment, which runs and years the checks flag is client data,
 so the skipped-without-`data/` suite in `quality.test.ts` tests only their
 presence.
 
+**Flagged periods (issue #611; `checkPeriods.ts`; no run output, so no
+engine version).** A `SeriesCheck` is one summary per series and check, with
+at most five examples (the outliers' five largest). The Warnings page needs
+every period, so `checkPeriods(seriesId, kind, series, dq, chirps, opts)`
+lists them, one `CheckPeriod` each, from the same sources the checks use,
+under the same `settings.dataQuality` limits. It takes `checkSeries`' inputs,
+so the browser runs it on every stored series, a unit's own gauge, an outlet
+station and an inner gauge's flow record included:
+
+| Check | One period is | Days | Default treatment |
+| --- | --- | --- | --- |
+| `negative` | consecutive negative days (`seriesRowFlags`) | each day | flow, and with `opts.negativeAsMissing` a unit's own gauge or a station (§2.4h, §2.4i): `missing`; the catchment gauge: `none` (a reading, runs as 0, §2.4b) |
+| `outlier` | consecutive outlier days (`seriesRowFlags`) | each day | flow: `fitExcluded` (suspect, left out of Fit automatically only, §2.10h); rain: `none` |
+| `flatline` | one flat stretch (`flatRuns`) | each day | non-zero flow: `fitExcluded`; zero flow (judged by the zero-flow rule instead, §2.10h) and rain: `none` |
+| `zerorun` | one zero run (`zeroRainRuns`, the `rain_catchment_mm` kind only), with its CHIRPS verdict | each day | `setAside` (§2.4c); a run CHIRPS reads as dry too (`maybeDry`) is listed with severity `info` and `none` |
+| `lowvschirps` | one flagged water year (`rainVsChirps`; with `opts.lowVsChirps`, the catchment gauge only, as a run and the Data tab do) | the shared days | `none` |
+| `doublemass` | the segment after each break of the `DoubleMass` passed in `opts.doubleMass` | the segment's judged days | `none` |
+
+Its day counts per check equal `checkSeries`' (`doublemass` aside, which
+counts every segment there). `runCheckPeriods(summary, seriesIdOf)` adds what
+only a run knows: each window of `summary.rainAccumulation` (`accumulation`,
+its treatment what the run did: `spread` for status spread or noChirps,
+`setAside`, else `none`; §2.4d), and the segment after each break of
+`summary.plausibility.flowDoubleMass` on the record it was scored on
+(`flowdoublemass`, `none`, §2.10d). `seriesIdOf` maps the run's catchment rain
+and calibration flow kind to stored series ids. Each item's id is
+`checkItemId(check, seriesId, start, end)` =
+`<check>:<seriesId>:<start>:<end>` (ISO days): a recheck that flags the same
+period gives the same id, so a decision kept against it survives; a period
+that grows (a flat stretch with new data) gets a new id and is open again.
+Items are in date order, then by check; day arithmetic is on epoch days, so
+the list is the same in any time zone.
+
 The warning is deliberately neutral: it says the two records disagree and
 asks which to calibrate against, without presuming an instrument fault. Two
 instruments on the same reach should roughly agree, and a sustained gap can
@@ -9595,10 +9699,10 @@ applies, in this order:
 
 | Flag | When | Default in the fit |
 | --- | --- | --- |
-| missing | no reading: blank, NaN or negative (as `alignFlow` reads it, §2.10) | never scored |
+| missing | no reading: blank, NaN or negative (as `alignFlow` reads it, §2.10), or inside one of the record's own missing periods (`settings.flowMissing`, engine ≥ 1.102.0, below) | never scored |
 | infilled | a gap-filled value, not a reading (`observedInfillMask`) | left out |
 | periodHigh | inside one of the record's low-flow periods, above its threshold (engine ≥ 1.90.0, below) | always left out |
-| suspect | an outlier or inside a non-zero flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, under the project's `settings.dataQuality` limits, the same as the run warnings, §2.10a), or inside a zero-flow stretch the river-stops rule doesn't trust (engine ≥ 1.81.0, below) | left out |
+| suspect | an outlier or inside a non-zero flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, under the project's `settings.dataQuality` limits, the same as the run warnings, §2.10a), or inside a zero-flow stretch the river-stops rule doesn't trust (engine ≥ 1.81.0, below); never a day the user kept as recorded (`settings.checksKept`, engine ≥ 1.102.0, below) | left out |
 | aboveRating | above the record's highest field gauging | censored |
 | belowRating | above zero but below its lowest gauging | left out |
 | humanUse | human use dominates the flow | scored |
@@ -9619,6 +9723,48 @@ applies, in this order:
   day is not a reading, so `'exclude'` (the default) leaves it out of the
   run's calibration statistics, the EWR test on the observed record and the
   plausibility checks too, and `'include'` scores it everywhere.
+- **One record's missing periods** (`settings.flowMissing`, engine ≥
+  1.102.0, issue #611, `recordPeriods.ts`): series id → periods, each a
+  water year or a date range with a reason, as a calibration exclusion
+  (at most 100 a record, 50 records; the API refuses past either, never
+  cuts). Where `settings.calibrationExclusions` leaves a period out of
+  **every** record's scores, these blank the days of **one** record, the
+  client's "treat as missing": `prepareRun` blanks them in the series it
+  hands every reader (`withRecordPeriods`, matched by
+  `DailySeries.seriesId`, which the backend sets on every stored series it
+  reads and a run's snapshot keeps), so the run's calibration statistics,
+  the EWR test on the observed record (§2.10k's per-site test too), the
+  plausibility checks, the fit's problem and these classes (missing) all see
+  a gap there, while the other records keep their days. A listed day is a
+  gap like any other, so the record's gap fill (§2.10i) may fill it; a
+  filled day is then *infilled* and follows `qualityFlags.infilled`
+  (excluded by default). The stored series never changes, the observed
+  series a run stores (`observed_flow`) is blank there, and no flow record
+  drives the simulation, so no simulated series and no water-balance figure
+  moves (`run.flowMissing.test.ts`). The run warns with each record's count
+  of readings blanked. A fit records the periods it ran on
+  (`FitRecord.flowMissing`), so a change since marks the fit record's
+  exclusions as changed.
+- **A kept outlier or flat stretch** (`settings.checksKept`, engine ≥
+  1.102.0, issue #611 open question 3): the Warnings page's data-check items
+  the user kept as recorded, by item id `<check>:<seriesId>:<start>:<end>`
+  (`checkItems.ts`; at most 300). The list changes no run but one way: a
+  day inside a kept `outlier` or `flatline` item of a flow record is never
+  *suspect*, so it takes the class it would have without the data checks
+  (in range, or the gauged-range class) and Fit automatically scores it,
+  "keep" meaning the same thing on the page and in the fit. Any other kept
+  item is a record of the decision only. A fit records the kept outliers
+  and flat stretches of the record it fitted (`FitRecord.flowSeriesId`,
+  `FitRecord.checksKept`); a change to those since is "quality flags
+  changed since the fit", while keeping an item on any other record leaves
+  the fit current.
+- **Kept run warnings and problems** (`settings.warningsKept`, issue #611):
+  the Warnings page's run warnings and problems from elsewhere that the user
+  accepted, `[{ id, note }]` (`checkItems.ts` `WarningKept`,
+  `resolveWarningsKept`; at most 300, ids `run:…` or `problem:…`). The engine
+  only normalises it (`mergeSettings`); no run reads it, so it needs no
+  `ENGINE_VERSION` bump, and comparing two runs' inputs counts it ("Kept
+  warnings: 2 warnings kept").
 - **Human use dominant** is defined and never set. Deriving it from the run
   would need the modelled abstraction, which depends on the parameters being
   fitted, so the flag would move during the fit; the durable form is a
@@ -9908,7 +10054,9 @@ changed, and turning it off undoes it. **Off by default** (every record
 Calibration → Calibration record → *Flow gaps*.
 
 Only **interior** gaps are filled: a run of missing days (blank, non-finite or
-negative, as a run reads a flow) with a reading on both sides. A record's
+negative, as a run reads a flow, or inside one of the record's own missing
+periods, `settings.flowMissing`, engine ≥ 1.102.0, §2.10h, which a run
+blanks before the fill reads the record) with a reading on both sides. A record's
 lead-in and tail are never filled; nothing bounds them. Per record:
 
 1. **Log-linear interpolation** of a gap of at most `interpolateMaxDays`
@@ -10323,7 +10471,7 @@ together.
   `A = A_full (S/C)^b` (§2.7a). A satellite pass (Landsat, about 10:30 local)
   is compared with that day's value; the day's own change is small beside
   the observation's error.
-- **Observed.** `dam_observation` (257, R5-A): per dam polygon, source
+- **Observed.** `dam_observation` (261, R5-A): per dam polygon, source
   (`waterbodies`: DE Africa Waterbodies' area series for the polygon it
   matched; `wofs`: WOfS water pixels inside the app's own outline, R5-C),
   date, wet area (m²) and the share of the outline seen clearly.

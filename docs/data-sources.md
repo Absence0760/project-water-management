@@ -73,7 +73,7 @@ Every job that fetches from an upstream:
 | --- | --- | --- | --- | --- | --- |
 | [chirps](#chirps) | CHIRPS v3 daily rainfall (`rnl`, `sat` final and preliminary) | live (feeds paused since 2026-10-25, CHC's 403s); the copy in R1–R3 | `data.chc.ucsb.edu` | `chirps` | `backend/src/feeds/sources/chirps.ts`; R2 `ingest/chirps_final.py`, `backend/src/ingest/daily.ts` |
 | [chirps-gefs](#chirps-gefs) | CHIRPS-GEFS v3 16-day forecast | live; the copy built (R3-A), read with `CHIRPS_SOURCE=mirror` | `data.chc.ucsb.edu` | `chirps_gefs` | `backend/src/ingest/gefs.ts` (the copy), `backend/src/feeds/fromMirrorGefs.ts` (feeds read it); `backend/src/feeds/sources/chirps.ts` until the cutover |
-| [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until DWS's written answer | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
+| [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until the stations' records are loaded (`load-reference.yml` kind `dws`) | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
 | [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies: v0.0.2 per-waterbody wet-area series and v0.0.3 polygons (built R5-A) | built; off in production until `dam_observations_enabled`; the public series frozen upstream since 2024-02 | `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
 | [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `cog.ts`, `sum.ts`, `utm.ts`) |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
@@ -209,16 +209,21 @@ in `infra/feeds.tf`):
   non-South-African addresses with HTTP 403; from af-south-1 it answers
   (first production fetches 2026-10-26, which got its ScriptServer error
   page for a 10-year span, followups.md).
-- **Licence:** **unconfirmed.** DWS publishes no API and no terms for these
-  pages; its NIWIS wording elsewhere says data "may not be sold to third
-  parties" and is "restricted to use for academic, research or personal
-  purposes" ([maps.md § Sources](./maps.md#sources); followups.md, Terms of
-  use). The written request below asks for permission to store the data and
-  show derived results in a commercial tool.
+- **Licence:** **permission obtained** for storing DWS verified daily flow
+  and showing results derived from it in the tool, through the client's
+  hydrologist (recorded by the operator 2026-10-28, #618 step 6a; the
+  written permission is kept with the client's records, not in this public
+  repo). It covers the verified daily flow only: the station catalogue, the
+  register of dams and the quaternary outlines below have their own terms.
+  DWS publishes no API and no terms for these pages; its NIWIS wording
+  elsewhere says data "may not be sold to third parties" and is "restricted
+  to use for academic, research or personal purposes" ([maps.md §
+  Sources](./maps.md#sources); followups.md, Terms of use), so the tool
+  never sells or redistributes the raw values.
 - **Attribution:** "Department of Water and Sanitation" as the copyright
-  owner, if allowed.
+  owner.
 - **Contact:** DWS National Hydrological Services, GeoRequests@dws.gov.za
-  (Hydstra data). Letter not yet sent (#604 operator steps).
+  (Hydstra data), for full records on request.
 - **Access pattern with `DWS_SOURCE=live` (production today):** each DWS feed asks for a 2-year window
   (`DWS_WINDOW_DAYS`, 365-day re-read) per station; the site allows 20 years
   a request.
@@ -230,7 +235,7 @@ in `infra/feeds.tf`):
   name, the newest 2-year window each, and the worker loads it as `dws-web`.
   With `DWS_SOURCE=store` a feed reads the store and never asks DWS
   ([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
-  Production stays on `live` (and the pass off) until DWS answers; after
+  Production stays on `live` (and the pass off) until the records are loaded; after
   the cutover (`dws_source = "store"`) the weekly pass and the operator's
   loads of DWS's replies are the only access, and no feed asks DWS.
 - **Limits we keep to:** 1 request a second, one User-Agent; a 403,
@@ -247,7 +252,7 @@ in `infra/feeds.tf`):
 ## Dam observations
 
 What satellites saw of each traced dam, into `dam_observation` (migration
-257; [architecture.md § Dam observations](./architecture.md#dam-observations)).
+261; [architecture.md § Dam observations](./architecture.md#dam-observations)).
 The same out-of-VPC handover as the weekly DWS pass: the worker writes the
 wanted list to the mirror bucket, the fetcher's hourly `dams-weekly` run
 reads the upstream and writes files back, and the worker loads them. Hourly

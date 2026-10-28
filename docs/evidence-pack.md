@@ -403,7 +403,7 @@ beside the model, never an input to it.
 **Where the numbers come from.** Digital Earth Africa's Water Observations
 from Space (WOfS, CC BY 4.0), one Landsat scene at a time, summed inside the
 dam's own outline on the Map by the fetcher's WOfS pass and loaded into
-`dam_observation` (migration 257, source `wofs`; [architecture.md § Dam
+`dam_observation` (migration 261, source `wofs`; [architecture.md § Dam
 observations](./architecture.md#dam-observations),
 [data-sources.md](./data-sources.md)). One row per dam and date: the wet
 area seen and the share of the outline seen clearly (`pct_observed`).
@@ -453,7 +453,7 @@ rule's three numbers (`wetMinPixels`, `dryMinClearPct`, `pixelAreaM2`), so
 the counts can be checked, and an assessor can look up the scene for a date
 (the dam's outline and the date are enough in DE Africa's STAC search;
 `dam_observation.upstream_key` holds the item id the app used). One row a
-dam and date (257's unique key): the section refuses a date given twice
+dam and date (261's unique key): the section refuses a date given twice
 rather than keep either.
 
 **Whose dams.** Only the applicant's own units' dams in an applicant's

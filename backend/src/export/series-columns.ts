@@ -46,6 +46,8 @@ export interface ExportSeries {
 	values: readonly (number | null)[];
 	/** The gauge node a flow record belongs to (084_gauge_records); null = the outlet's. */
 	siteNodeId: string | null;
+	/** Its series id: the settings that name a record by it (settings.flowMissing, a rain record's unreliable periods, issue #611). Absent = none read. */
+	id?: string;
 }
 
 /** One stored run series (run_series), as the download reads it. */
@@ -129,6 +131,19 @@ export function seriesExportColumns(s: ExportSeries, settings: ProjectSettings, 
 				text: (i) => ranges.find((r) => r.from <= d0 + i && d0 + i <= r.to)?.reason ?? ''
 			});
 		}
+		// This record's own missing periods (settings.flowMissing, engine ≥ 1.102.0, issue #611): only when it has any, so other files read as before.
+		const own = s.id ? exclusionRanges(settings.flowMissing?.[s.id] ?? []).map((r) => ({ from: toEpochDay(r.start), to: toEpochDay(r.end), reason: r.reason })) : [];
+		if (own.length) {
+			const d0 = toEpochDay(s.startDate);
+			cols.push({ header: 'Missing in this record (reason)', values: [], text: (i) => own.find((r) => r.from <= d0 + i && d0 + i <= r.to)?.reason ?? '' });
+		}
+	}
+	// A rain record's unreliable periods (settings.rainStations.unreliable, any rain record since engine 1.102.0): only when it has any.
+	const unreliable = s.id && s.kind.startsWith('rain_') ? (settings.rainStations?.unreliable?.[s.id] ?? []).filter((p) => Array.isArray(p) && p[0] <= p[1]) : [];
+	if (unreliable.length) {
+		const d0 = toEpochDay(s.startDate);
+		const on = (i: number) => unreliable.some(([a, b]) => toEpochDay(a) <= d0 + i && d0 + i <= toEpochDay(b));
+		cols.push({ header: 'Marked unreliable', values: [], text: (i) => (on(i) ? 'unreliable' : '') });
 	}
 
 	if (run) cols.push(...runColumns(s, run));

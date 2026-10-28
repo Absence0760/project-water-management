@@ -531,7 +531,7 @@ describe('the scheduler', () => {
 			expect(await next('ecmwf_ens', 1, '2026-03-01T10:00:00Z', outage)).toBe('2026-03-01T10:14:00.000Z');
 			expect(await next('ecmwf_ens', 1, '2026-03-01T10:00:00Z', refused)).toBe('2026-03-01T11:59:00.000Z');
 			expect(await next('ecmwf_ens', 3, '2026-03-01T10:00:00Z', refused)).toBe('2026-03-01T14:00:00.000Z');
-			// Reference ET (256): no slot of its own, the day's rule and the usual backoff.
+			// Reference ET (260): no slot of its own, the day's rule and the usual backoff.
 			expect(await next('agera5_et0', 0, '2026-03-01T06:00:00Z')).toBe('2026-03-02T05:59:00.000Z');
 			expect(await next('agera5_et0', 1, '2026-03-01T09:00:00Z', outage)).toBe('2026-03-01T09:14:00.000Z');
 
@@ -1624,7 +1624,9 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 			values: [1, 2, 3],
 			provenance: { product: 'CHIRPS', version: '2.0' },
 			// The upload's source and given unit (107): none said, in mm.
-			origin: { source: null, unit: 'mm', factor: 1 }
+			origin: { source: null, unit: 'mm', factor: 1 },
+			// The stored series' own id, which per-record settings name (issue #611).
+			seriesId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
 		});
 		const [stage] = await asOwner(`SELECT to_char(start_date, 'YYYY-MM-DD') AS start, cardinality("values") AS n, product, product_version FROM feed_stage WHERE feed_id = $1`, [id]);
 		expect(stage).toEqual({ start: first, n: 120, product: 'CHIRPS sat', product_version: '3.0' });
@@ -1942,7 +1944,7 @@ describe('daily only, and the "Run now" limit (111_feed_daily_only)', () => {
 		expect(sources.find((s) => s.source === 'ecmwf_ens')?.label).toBe('ECMWF ENS rainfall forecast');
 	});
 
-	it('data_feed.source takes the AgERA5 reference ET feed beside the other four, and nothing else (256)', async () => {
+	it('data_feed.source takes the AgERA5 reference ET feed beside the other four, and nothing else (260)', async () => {
 		const owner = await signUp('Et0Source');
 		const pid = await project(owner);
 		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;

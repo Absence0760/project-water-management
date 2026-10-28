@@ -51,7 +51,7 @@ function daysInMonth(day: number): number {
  * evenly over the month's days, so a month's PET totals exactly that. Under
  * `pe.kind: 'pan'`, a day the daily A-pan series covers (engine ≥ 0.38.0,
  * issue #45) is pan coefficient × that day's A-pan instead; under `pe.kind:
- * 'monthly'`, a day the daily reference ET series covers (engine ≥ 1.103.0,
+ * 'monthly'`, a day the daily reference ET series covers (engine ≥ 1.104.0,
  * issue #604 R5-E) is that day's ET₀ as it stands. Negative inputs
  * count as 0. With `settings.arealRain` (engine ≥ 1.13.0, docs/model.md
  * §2.4g) each day's rain is × its water-year month's areal factor; demand
@@ -71,7 +71,7 @@ export function runoffForcing(
 	const peMm = gr4jPeMonthlyMm(settings);
 	// A monthly PE row replaces A-pan for GR4J altogether, the daily series too.
 	const apan = settings.pe?.kind === 'monthly' ? null : apanDailyMm(ctx.aligned('evap_apan_mm'));
-	// Under a monthly PE row, a daily reference ET record replaces the row's share on the days it covers (engine ≥ 1.103.0).
+	// Under a monthly PE row, a daily reference ET record replaces the row's share on the days it covers (engine ≥ 1.104.0).
 	const et0 = readsEt0Daily(settings.pe) ? et0DailyMm(ctx.aligned('evap_et0_mm')) : null;
 	// The areal rainfall correction (engine ≥ 1.13.0, §2.4g): runoff's rain only.
 	const areal = arealRainFactors(settings.arealRain);

@@ -1758,7 +1758,7 @@ describe.skipIf(!minio)('an applicant’s application pack with observed wet day
 		const pubs = await owner.call('GET', `${at()}/publication`);
 		if (!JSON.stringify(pubs.body).includes(baseRun)) expect((await owner.call('POST', `${at()}/publication`, { runId: baseRun })).status).toBe(201);
 		damId = await addFeature({ kind: 'dam', name: 'Upper dam', nodeId: farmId, geometry: { type: 'Polygon', coordinates: [square(21.31, -33.69, 0.002)] } });
-		// Invented WOfS rows in the baseline's period, loaded as the worker does (app_dam_observation_load, 257): wet, dry, inconclusive.
+		// Invented WOfS rows in the baseline's period, loaded as the worker does (app_dam_observation_load, 261): wet, dry, inconclusive.
 		const rows: [string, number, number][] = [
 			['2019-02-03', 2700, 60],
 			['2019-02-11', 0, 100],
