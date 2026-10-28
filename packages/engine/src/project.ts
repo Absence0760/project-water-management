@@ -4491,6 +4491,13 @@ export interface RunSummary {
 	};
 	calibration: CalibrationStats | null;
 	/**
+	 * Calibration statistics at each calibration zone's gauge (issue #555, docs/model.md §2.10n), upstream first: its
+	 * record against its simulated outflow on the zone's own window and exclusions, each with `siteNodeId`,
+	 * `siteName` and `fitStatus` by the zone's own fit record, so each is in or out of sample on its own. The
+	 * calibration site's own zone is `calibration`. Absent when the run applied no zone, and on older runs.
+	 */
+	calibrationZones?: CalibrationStats[];
+	/**
 	 * Curtailment targets per farm over settings.reportStart…reportEnd. Absent
 	 * on runs stored before engine 0.3.0.
 	 */

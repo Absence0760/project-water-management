@@ -1937,3 +1937,33 @@ describe('observed wet days (evidence-21, issue #604 R5-C)', () => {
 		expect(evidenceReport(input()).damObservations).toMatchObject({ dams: [] });
 	});
 });
+
+describe('calibration zones (evidence-22, issue #555)', () => {
+	// The baseline with the weir S as a calibration zone's gauge (Farm two above it), Per unit flow generation.
+	const zin = baseInput({ midGauge: true });
+	zin.settings.unitRain = { mode: 'perUnit' } as never;
+	const zone = { nodeId: 'S', enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitRecord: null };
+	zin.settings.calibrationZones = [zone] as never;
+	const sOut = runModel(zin).series.find((s) => s.nodeId === 'S' && s.key === 'outflow')!.values;
+	zin.series['flow_observed_m3s@S'] = { startDate: START, values: sOut.map((q) => q / 86_400) };
+	const zout = runModel(zin);
+
+	it('lists every zone upstream first, the site’s own zone last, with its parameters, fit and statistics', () => {
+		const r = evidenceReport(input({ application: null, baseline: stored('zb', zin, zout) }));
+		expect(r.version).toBe('evidence-22');
+		expect(r.calibrationZones).toEqual([
+			{ nodeId: 'S', name: 'Weir', units: 1, areaKm2: 15, params: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitted: true, fit: null, stats: expect.objectContaining({ fitStatus: 'notFitted' }) },
+			expect.objectContaining({ nodeId: null, name: 'Gauge', units: 1, areaKm2: 25, fitted: true, fit: null })
+		]);
+		// The zone's gauge scored its own record (its outflow, unchanged): a perfect fit.
+		expect(r.calibrationZones![0]!.stats!.nse).toBeCloseTo(1, 9);
+		// A zone above the site with no stored fit has no validation: flagged.
+		expect(r.flags.find((f) => f.id === 'zoneNoFit')?.text).toBe('Validation not assessed for the calibration zone at Weir: its parameters don’t come from a stored automatic fit.');
+	});
+
+	it('is null, with no zone flag, when the baseline ran one parameter set', () => {
+		const r = evidenceReport(input());
+		expect(r.calibrationZones).toBeNull();
+		expect(r.flags.some((f) => f.id === 'zoneNoFit')).toBe(false);
+	});
+});

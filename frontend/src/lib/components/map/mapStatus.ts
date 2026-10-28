@@ -61,7 +61,7 @@ export interface MapStatus {
 export const BAND_WORD: Record<MapBand, string> = { ok: 'OK', watch: 'Watch', short: 'Short', none: 'No figure' };
 
 /** The supply bands (supplyColour.ts) on the map's scale: met → ok, short → watch, low → short. */
-export function fromSupplyBand(b: SupplyBand): MapBand {
+export function fromSupplyBand(b: SupplyBand | 'zone'): MapBand {
 	return b === 'met' ? 'ok' : b === 'short' ? 'watch' : b === 'low' ? 'short' : 'none';
 }
 

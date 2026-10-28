@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode } from '@water-management/engine';
 import type { DamLevel } from '#lib/components/overview/damLevels.js';
-import { damColouring, supplyColouring } from './farmColour';
+import { damColouring, supplyColouring, zoneColouring } from './farmColour';
+import { zoneGroups } from '#lib/calibration/zoneGroups.js';
+import { defaultProjectSettings, newCalibrationZone } from '@water-management/engine';
 
 const node = (id: string, kind: NetworkNode['kind'] = 'farm', damCapacityM3 = 1000) =>
 	({ id, name: id, kind, downstreamNodeId: kind === 'gauge' ? null : 'g', damCapacityM3 }) as NetworkNode;
@@ -37,5 +39,31 @@ describe('supplyColouring', () => {
 		const c = supplyColouring([node('a')], { farms: [{ nodeId: 'a', avgDemandM3Day: 10, fractionSupplied: 0.5 } as never] }, run, false);
 		expect(c.byNode.get('a')).toMatchObject({ band: 'low', text: '50% supplied' });
 		expect(c.caption).toBe('Hydrological units coloured by share of irrigation demand supplied in run “Baseline”, ran today.');
+	});
+});
+
+describe('zoneColouring (issue #555)', () => {
+	const nodes = [
+		{ id: 'G', name: 'Outlet', kind: 'gauge', downstreamNodeId: null, areaKm2: 0 },
+		{ id: 'H', name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0 },
+		{ id: 'A', name: 'Farm A', kind: 'farm', downstreamNodeId: 'H', areaKm2: 40 },
+		{ id: 'B', name: 'Farm B', kind: 'farm', downstreamNodeId: 'G', areaKm2: 60 },
+		{ id: 'U', name: 'Pump', kind: 'farm', downstreamNodeId: 'G', areaKm2: 0 }
+	] as NetworkNode[];
+	const groups = zoneGroups(nodes, { ...defaultProjectSettings(), unitRain: { mode: 'perUnit' } as never, calibrationZones: [{ ...newCalibrationZone('H'), enabled: true }] })!;
+
+	it('colours each unit by its zone, with the zone’s name as its label line, and a legend entry per zone', () => {
+		const c = zoneColouring(nodes, groups);
+		expect(c.mode).toBe('zone');
+		expect(c.unsaved).toBe(false);
+		expect(c.byNode.get('A')).toEqual({ band: 'zone', text: 'Weir zone, not fitted yet', swatch: 'var(--series-1)' });
+		expect(c.byNode.get('B')).toEqual({ band: 'zone', text: 'Outlet zone (calibration site)', swatch: 'var(--series-2)' });
+		expect(c.byNode.get('U')).toEqual({ band: 'none', text: 'no land area, in no zone' });
+		expect(c.byNode.has('G')).toBe(false);
+		expect(c.legend).toEqual([
+			{ band: 'zone', label: 'Weir zone, not fitted yet: 1 unit', swatch: 'var(--series-1)' },
+			{ band: 'zone', label: 'Outlet zone (calibration site): 1 unit', swatch: 'var(--series-2)' },
+			{ band: 'none', label: 'No land area, in no zone' }
+		]);
 	});
 });

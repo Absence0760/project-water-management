@@ -757,20 +757,33 @@ runs and accumulations are real) can't be decided without the client.
       held observed ends and multiplicative tails; 20 hindcast years per lead
       month; the nearest analogue by standardised RMS distance; the 1 mm
       zero-month rule; systems weighted equally; the skill scored from this
-      season's state, the forecast leading only above a CRPSS of 0. **Next,
-      step 7:** the backend bridge (the 1° cells averaged over the catchment
-      and summed into calendar months from `c3s/<init>` and
-      `c3s-hc/<system>/<MM>`), the outlook job running it beside the ESP,
-      the routes, the panel's chance of each restriction level with the
-      systems, the skill and the Copernicus credit, and the farm card
-      (api.md, ui.md, e2e). Step 7 also passes only forecasts *issued* on or
-      before the decision date (C3S publishes between the 6th and the 13th;
-      the engine has no issue date, model.md §2.15d), says on the panel that
-      the chance reflects storage only (not a rule's EWR trigger, the
-      filling-dam reading or the hold), and adds the methodology statement's
-      paragraph on the forecast-conditioned outlook once the chances reach a
-      report (a new methodology version if methodology-13 is published by
-      then).
+      season's state, the forecast leading only above a CRPSS of 0. **Step 7
+      is built** (`backend/src/outlooks/c3s.ts`, method `c3s`, migration 275,
+      the panel's *Chance of each restriction level*, the farm card's line;
+      model.md §2.15d § The backend bridge). Calls made in step 7, to
+      confirm: the chances at the full demand (no level's ops), on the rule's
+      review dates else the outlook's own; the newest init with any system
+      issued by the decision date, not the init with the most systems (a
+      decision on the 7th takes ECMWF's alone); "issued by" as the release
+      day on or before the decision date (the release is at 12 UTC that day);
+      the catchment boundary, else the units' polygons together, weighted by
+      share × cos(latitude); under per-unit rain each unit's forecast
+      reported but not driving the engine (it rescales units by the
+      catchment's factor); the farm card saying only which side led. Still
+      open: the methodology statement's paragraph on the forecast-conditioned
+      outlook once the chances reach a report (a new methodology version if
+      methodology-13 is published by then).
+- [ ] **C3S outlook read cost (issue #620 step 7, `outlooks/c3s.ts`).** A
+      `c3s` outlook reads one chunk (one member's whole 215-day forecast over
+      the 29 × 32 grid, ~0.4 MB gzipped) per member per hindcast year of each
+      system used: about 600 GETs per system with 25 hindcast members, 5 000
+      or more with every system, inside the job's transaction. Fine on the
+      synthetic copy; on the full copy it is tens of seconds of S3 reads per
+      outlook. The durable fix: the ingest also writes each system's monthly
+      totals per cell (`c3s-hc-monthly/<system>/<MM>`, (year, member,
+      lead_month, lat, lon), ~30× smaller and one chunk per system), which
+      the bridge reads instead. Trigger: the first live outlook with the
+      hindcasts backfilled, or a worker timeout on a `c3s` outlook.
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
@@ -2259,29 +2272,45 @@ Round 3 of the 2026-10-28 rounds (draft PR #644, engine 1.106.0) built
 only), the stepwise fit upstream first, the API's checks, the verify
 cross-check and Settings' *Calibrate at several gauges* table with the fit
 card's steps ([model.md §2.10n](./model.md), ui.md § Settings & calibration).
-Still open, for round 4 (each its own piece):
+Round 4 (`feat/r4-zonesview`) built the rest of the screens:
 
-- **Zones on the Network tab and the Map.** A zone column or colour per
-  unit, and on the Map when parcels exist, from `summary.unitRain.zones` or
-  the engine's `resolveZones`. Trigger: round 4.
-- **Calibration statistics per ticked site in a run**, each labelled in or
-  out of sample by its own fit record (`calibrationFitStatus` at the zone's
-  site and window). Today a run scores `RunSummary.calibration` at the
-  calibration site only; a zone's gauge has its out-of-sample
-  `plausibility.gauges[].fit` check. Trigger: round 4.
-- **The report and the evidence pack** list every zone's parameters and fit
-  record (today they show `gr4j` and `fitRecord`, the site's zone). The
-  evidence pack's manifest must take the zones' fit records into its hash.
-  Trigger: round 4, before a zoned project issues a pack.
-- **A per-zone run comparison**: compare.ts lists the ticked rows'
-  parameters as one *Calibration zones* line; it should diff each zone's
-  X1–X4 as the GR4J lines do. Trigger: round 4.
+- ✅ **Zones on the Network tab and the Map**: *Colour hydrological units by →
+  Calibration zone* and *Colour areas by → Calibration zone* (`measure=zone`),
+  each with a legend, from the settings by the engine's rule (ui.md §
+  Network, maps.md § Calibration zones on the map).
+- ✅ **Calibration statistics per ticked site in a run**
+  (`summary.calibrationZones`), each in or out of sample by its own zone's
+  fit, in the Calibration page's and the report's *Calibration zones* table.
+- ✅ **The report and the evidence pack** list every zone's parameters, fit
+  record and scores (report format `evidence-22`, evidence-pack.md §
+  Calibration zones; a zone above the site with no stored fit is flagged).
+- ✅ **A per-zone run comparison**: one input-diff line per zone and a
+  statistics table per zone gauge (run-comparison.md).
+
+Still open:
+
 - **Automated calibration and the uncertainty ensemble per zone.**
   `calibrate/auto.ts` and `uncertainty/ensemble.ts` still fit or perturb the
   site's zone's parameters alone (the zones above it stay at their stored
   parameters). Durable fix: run the rules' cases stepwise, and perturb each
   zone's parameters by its own fit's spread. Trigger: before a zoned project
   signs off calibration rules or cites an ensemble.
+- **Errata keyed on a zone's fit engine outside the evidence report.** The
+  evidence report (`evidence-22`) passes every zone fit's engine version to
+  `errataFor`, but the run's validation statement
+  (`liability/validation.ts`), its sign-off statements
+  (`liability/signoff.ts`) and the runs' *May be affected* status
+  (`backend/src/errata/runs.ts`, `runs/read.ts`, `evidence/packs.ts`,
+  `share/links.ts`, `signoffs/routes.ts`) read only
+  `inputs->'settings'->'fitRecord'->>'engineVersion'`, the site's fit. So an
+  erratum keyed on a zone fit's engine is in the pack's errata but not on the
+  same run's statement. Durable fix: carry `fitEngineVersions` (the site's
+  and each ticked zone's `fitRecord.engineVersion`, read from the settings
+  snapshot with a `jsonb_array_elements` over `calibrationZones`) through
+  those queries and let `errataFor` take a list. Trigger: the first erratum
+  keyed on a fit's engine (`keyedOn: fit`) published while a project has a
+  fitted zone, or with the automated-calibration-per-zone work below,
+  whichever comes first.
 - **A zone step's score and the EWR shares.** While a zone above the site is
   fitted, the units below it run on their pre-fit parameters, and the natural
   MAR shares follow every unit's runoff, so a step's score can differ from a
@@ -4755,6 +4784,8 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       client's hydrologist; issue #646 item 6, the hydrologist's F5; maps.md
       § Evaporation stations, data-sources.md § dws-evaporation). DWS's
       permission recorded 2026-10-28 covers verified daily **flow** only.
+      The request is drafted in
+      [legal/dws-evaporation-request.md](./legal/dws-evaporation-request.md).
       Ask DWS (GeoRequests@dws.gov.za, through the hydrologist, as for flow)
       to extend it to the verified daily pan evaporation of weather stations
       (`E` codes, Class-A and Symons) near the client's catchment, stored and

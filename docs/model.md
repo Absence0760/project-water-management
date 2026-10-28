@@ -10767,10 +10767,9 @@ any zone with land units, is not 0. `summary.runoff.params` stays the
 calibration site's zone's parameters (the catchment's stores are the units'
 area-weighted means, so the run's runoff self-check caps the production store
 at the units' area-weighted X1); each zone's are in `summary.unitRain.zones`.
-While the report, the evidence pack, the uncertainty ensemble and automated
-calibration don't yet read the zones, every run that applies one warns that
-they show or vary only the site's parameters (`Calibration zones: N land
-units ran on …`).
+While the uncertainty ensemble and automated calibration don't yet read the
+zones, every run that applies one warns that they vary only the site's
+parameters (`Calibration zones: N land units ran on …`).
 
 **Only under Per unit.** Under Fragmentation one GR4J runs for the whole
 catchment (§2.5), so zones can't have their own parameters: ticked rows warn
@@ -10780,9 +10779,32 @@ catchment's parameters.
 
 **The run summary.** `summary.unitRain.zones` (only when zones applied):
 each usable zone upstream first, then the site's own zone (`nodeId` null),
-each `{ nodeId, name, units, params, fitted }`. The run comparison lists a
-change of the ticked rows' parameters (*Calibration zones*; a window, a fit
-record or an unticked row is no change).
+each `{ nodeId, name, units, params, fitted }`.
+
+**Statistics at each zone's gauge** (`summary.calibrationZones`, issue #555
+round 4, `run.ts` `zoneCalibrationStats`): for each zone above the site, in
+the same order, the run's calibration statistics (§2.10k's
+`CalibrationStats`) of its gauge's record (the row's record, else the
+gauge's first) against the gauge's simulated outflow, on the row's window
+and exclusions, with `siteNodeId`, `siteName` and `fitStatus` computed on the
+zone's own settings (`zoneCalibrationSettings`: its parameters, fit record,
+window, exclusions and record), so each site is in sample only when its own
+zone's parameters were fitted on those days. The site's own zone is
+`summary.calibration`, as before. A zone whose gauge has no record is left
+out; absent when no zone applied. Statistics only: no other output changes,
+so a run without zones is unchanged to the bit. A gauge's own low-flow
+periods and quality flags are not applied here, as at a gauge site (§2.10k).
+
+**Comparison, report and evidence pack.** The run comparison words each zone
+(`calibrationZoneChanges`: added, removed, or what changed among its
+parameters, window, record, exclusions, quality flags and fit record) and sets each zone
+gauge's statistics side by side (`comparison.calibrationZones`;
+run-comparison.md). The report's and the Calibration page's **Calibration
+zones** table lists each zone's units, parameters and scores (ui.md § Runs
+& results), and the evidence report (`evidence-22`) every zone's
+parameters, fit record and scores (evidence-pack.md § Calibration zones).
+The Network and the Map colour each unit by its zone (ui.md § Network,
+maps.md § Calibration zones on the map).
 
 **The stepwise fit** (`calibrate/stepwise.ts` `calibrateStepwise`). Zones are
 fitted in network order, **upstream first**: a zone with more ticked gauges
@@ -10835,11 +10857,9 @@ Projects). Each zone warning a run gives has a stable code
 links it to the table (`?field=fld-cal-zones`), to Fit the parameters, or to
 Model selection for flow generation.
 
-**Not yet** (issue #555's next round, docs/followups.md): the zones on the
-Network tab and the Map, calibration statistics per ticked site in a run, the
-report's and evidence pack's per-zone lines, a per-zone run comparison, and
-automated calibration and the uncertainty ensemble per zone (both still fit
-or perturb the site's zone's parameters alone).
+**Not yet** (docs/followups.md § Calibration zones): automated calibration
+and the uncertainty ensemble per zone (both still fit or perturb the site's
+zone's parameters alone).
 
 ### 2.10l Modelled vs observed dam area (app, issue #604 R5-B)
 
@@ -13097,6 +13117,53 @@ changed, and members built one after another on one scratch copy equal
 members built alone; the same result under two skewed `TZ`s. The perf budget: 3 systems × 10 members under 400 ms, with the
 skill score under 3 s. `verify/` mirrors `runModel` only, and a member is an
 ordinary run: probe `forecast-member-rescaled` feeds one.
+
+**The backend bridge** (issue #620 step 7, `backend/src/outlooks/c3s.ts`,
+called by the outlook job for the method `c3s`, [api.md § Seasonal
+outlooks](./api.md#seasonal-outlooks)). The engine's input is made from the
+data mirror's 1° daily arrays (`c3s/<YYYY-MM>/tp_mm`,
+`c3s-hc/<system>/<MM>/tp_mm`, `c3s/index.json`):
+- *The area*: the project's catchment boundary on the map, else the union of
+  its units' polygons (the unit feeds' rule). Each 1° cell it touches weighs
+  share inside × cos(latitude), exact clipping as the CHIRPS boundary cells
+  (cells with under 0.1 % inside left out); no polygon at all, and the
+  outlook is off (`noArea`). Under runoff from each unit's own rain (§2.4h)
+  each unit's polygon is averaged on its own too and reported (`area.units`:
+  each system's mean raw monthly totals per unit), but the engine takes the
+  catchment's totals only and rescales every unit's rain by the catchment's
+  factor (step 2 above), so the units' own forecasts don't drive it.
+- *Only forecasts issued by the decision date* (§2.15): C3S releases
+  ECMWF's forecast from init month M on the 6th of M and the other centres'
+  on the 10th (at 12 UTC; `ingest/c3srequest.py` `release_at`, checked
+  against it by `c3s.test.ts`). The init is the newest whose month starts on
+  or before the decision date with at least one system issued on or before
+  it; only those systems are passed, and the others of that init are listed
+  as not issued. A decision on the 7th of a month thus takes ECMWF's forecast
+  of that month alone, a decision on the 1st the previous month's from every
+  system held.
+- *Monthly totals*: a member's daily catchment mean is Σ w·v ÷ Σ w (a day
+  with a NaN cell has none); lead month k is the k-th calendar month from
+  the init month's 1st (a hindcast year's own, so a leap February has 29
+  days), and a member's months run to the first that isn't whole, at most
+  7 in 215 days. A member slot the system doesn't fill isn't passed; one
+  filled but with no whole month is passed empty, so the engine counts it as
+  dropped.
+- *Hindcasts*: for each system passed, its hindcast of the init's calendar
+  month, every year held (1993–2016); the engine fits on the years whose
+  months the record holds wholly before the decision date (step 1).
+- *The run*: one call after the ESP members and the trigger table, at the
+  **full demand** (no level's ops), on the outlook's kept analogue years, on
+  the drought restriction rule's review dates, else the outlook's own review
+  date, else the engine's default. Its own ESP members run from the same
+  snapshot, so nothing stored for the ESP changes: an outlook of method `c3s`
+  stores the same `result` and triggers as an `esp` one plus
+  `result.forecast` (`outlooks.db.test.ts`). An engine refusal is stored as
+  the forecast part's message (`failed`), never the outlook's failure; a
+  copy laid out otherwise fails the job.
+- *The farm page* never gets a chance (the issue's open question 4):
+  publishing a level of such an outlook adds only which side led
+  (`FarmOutlookProjection.forecast`), and the farm's figures are the
+  analogue years' as before.
 
 ### 2.16 Starting a run from a saved state: model-state snapshots (engine ≥ 1.1.0, issue #53)
 

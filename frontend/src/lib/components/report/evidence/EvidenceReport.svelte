@@ -25,6 +25,8 @@
 	import { packVerifyLine, type VerifyRef } from '#lib/components/packs/pack.js';
 	import { evidenceBoard } from '../licenceImpact';
 	import CalibrationPanel from '#lib/components/calibration/CalibrationPanel.svelte';
+	import ZoneCalibrationTable from '#lib/components/calibration/ZoneCalibrationTable.svelte';
+	import { evidenceZoneRows } from '#lib/calibration/zoneStats.js';
 	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
 	import Disclaimer from '#lib/components/liability/Disclaimer.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -386,6 +388,8 @@
 				{#if report.credibility.regionalPrior}
 					<p class="small" data-testid="evidence-regional-prior">{report.credibility.regionalPrior.text}</p>
 				{/if}
+				<!-- evidence-22 (issue #555): every calibration zone's parameters, fit record and scores at its gauge. -->
+				<ZoneCalibrationTable rows={evidenceZoneRows(report.calibrationZones)} headingLevel={4} />
 				<h3>Validation</h3>
 				{#if fit}
 					<p class="small">Parameters from the {describeFitRecord(fit)}.</p>

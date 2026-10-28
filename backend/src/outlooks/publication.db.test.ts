@@ -73,6 +73,26 @@ describe('publishing an outlook to farmers', () => {
 		expect((await c.farmer.call('GET', `${at}/outlook-publication`)).status).toBe(403);
 	});
 
+	it('says on the farm page whether the seasonal forecasts led, never a chance (issue #620, method c3s)', async () => {
+		const led = await plantCompleteOutlook(c.owner.id, c.projectId, c.runId, [{ nodeId: c.farmId }], { forecast: { status: 'ready', leads: 'forecast' } });
+		expect((await publish(led)).status).toBe(201);
+		const page = (await farmPage()).body.outlook;
+		expect(page.forecast).toEqual({ leads: 'forecast' });
+		// The level and the analogue years' figures as ever; no chance or member reaches the farmer.
+		expect(page).toMatchObject({ level: { id: '0', label: '85 %' }, nYears: 12 });
+		expect(JSON.stringify(page)).not.toMatch(/chance|members|crpss/i);
+
+		const noBetter = await plantCompleteOutlook(c.owner.id, c.projectId, c.runId, [{ nodeId: c.farmId }], { forecast: { status: 'ready', leads: 'esp' } });
+		expect((await publish(noBetter)).status).toBe(201);
+		expect((await farmPage()).body.outlook.forecast).toEqual({ leads: 'esp' });
+
+		// Off (no forecast issued, no hindcast held): nothing about forecasts, as for any other outlook (positive control above).
+		const off = await plantCompleteOutlook(c.owner.id, c.projectId, c.runId, [{ nodeId: c.farmId }], { forecast: { status: 'off', leads: 'esp' } });
+		expect((await publish(off)).status).toBe(201);
+		expect((await farmPage()).body.outlook).not.toHaveProperty('forecast');
+		expect((await c.editor.call('DELETE', `${at}/outlook-publication`)).status).toBe(200);
+	});
+
 	it('only an editor publishes or withdraws', async () => {
 		const outlookId = await plantCompleteOutlook(c.owner.id, c.projectId, c.runId, [{ nodeId: c.farmId }]);
 		for (const u of [c.viewer, c.farmer, c.contributor]) {

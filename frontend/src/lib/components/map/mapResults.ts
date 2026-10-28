@@ -6,15 +6,24 @@
 import type { MapFeature, RunMeta } from '#lib/api/types.js';
 import { fmtDate } from '#lib/format/number.js';
 import { BAND_TOKEN, BAND_WORD, DEFAULT_MAP_MEASURE, MAP_MEASURES, MEASURE_LEGEND, type MapBand, type MapMeasure, type MapRunChoice, type MapStatus } from './mapStatus';
+import { zoneName, type ZoneGroup } from '#lib/calibration/zoneGroups.js';
 
-/** What the map's areas are coloured by: a measure, or `kind` (each feature's kind, the colours before results). */
-export type MapView = MapMeasure | 'kind';
+/**
+ * What the map's areas are coloured by: a measure (a run's), `zone` (each unit's calibration zone, the settings',
+ * issue #555), or `kind` (each feature's kind, the colours before results).
+ */
+export type MapView = MapMeasure | 'zone' | 'kind';
 
-/** The measure picker's choices, in its order: the four measures, then the kinds as the "off" state. */
-export const VIEW_OPTIONS: readonly { id: MapView; label: string }[] = [...MAP_MEASURES, { id: 'kind', label: 'Kind' }];
+/** The picker's choices, in its order: the four measures, the calibration zone, then the kinds as the "off" state. */
+export const VIEW_OPTIONS: readonly { id: MapView; label: string }[] = [...MAP_MEASURES, { id: 'zone', label: 'Calibration zone' }, { id: 'kind', label: 'Kind' }];
+
+/** The choices the picker offers: the measures only with a run to read, the zone only when one applies. */
+export function viewOptions(hasRun: boolean, hasZones: boolean): readonly { id: MapView; label: string }[] {
+	return VIEW_OPTIONS.filter((o) => (o.id === 'zone' ? hasZones : o.id === 'kind' || hasRun));
+}
 
 /** `measure=` in the URL: kebab-case words, so a shared link reads. */
-const SLUG: Record<MapView, string> = { daysShort: 'days-short', curtailment: 'curtailment', damLevel: 'dam-level', allocation: 'allocation', kind: 'kind' };
+const SLUG: Record<MapView, string> = { daysShort: 'days-short', curtailment: 'curtailment', damLevel: 'dam-level', allocation: 'allocation', zone: 'zone', kind: 'kind' };
 const FROM_SLUG = new Map(Object.entries(SLUG).map(([k, v]) => [v, k as MapView]));
 
 export const MEASURE_PARAM = 'measure';
@@ -131,4 +140,47 @@ export function featureResult(
 	if (f.kind === 'catchment_boundary' || f.kind === 'river') return null;
 	if (!f.nodeId) return { band: 'none', label: 'Not linked to a unit or gauge', measure: null };
 	return units.get(f.nodeId) ?? ewr.get(f.nodeId) ?? { band: 'none', label: 'No figure for what it stands for', measure: null };
+}
+
+// --- calibration zones on the map (issue #555, docs/maps.md § Calibration zones) ---
+
+/** One zone in the legend: its words, how many units it holds, and its colour token. */
+export interface ZoneLegendRow {
+	key: string;
+	text: string;
+	count: number;
+	token: string;
+}
+
+/** The legend's rows while the map shows calibration zones: each zone upstream first, the site's last. */
+export function zoneLegendRows(groups: readonly ZoneGroup[]): ZoneLegendRow[] {
+	return groups.map((g) => ({ key: g.nodeId ?? 'site', text: zoneName(g), count: g.units.length, token: g.token }));
+}
+
+/**
+ * The fills while the map shows calibration zones: each area linked to a land unit takes its zone's resolved colour
+ * (`colour`, by token), every other area the "no figure" colour, as for a measure (resultFills).
+ */
+export function zoneFills(
+	features: readonly Pick<MapFeature, 'id' | 'kind' | 'nodeId' | 'geometry'>[],
+	byUnit: ReadonlyMap<string, Pick<ZoneGroup, 'token'>>,
+	colour: (token: string) => string,
+	none: string
+): Record<string, string> {
+	const filled: Record<string, string> = {};
+	for (const f of features) {
+		const g = f.nodeId ? byUnit.get(f.nodeId) : undefined;
+		if (!g || !colourable(f)) continue;
+		const c = colour(g.token);
+		if (c) filled[f.id] = c;
+	}
+	return resultFills(features, filled, none);
+}
+
+/** A feature's calibration zone for its card or table row: its unit's zone in words, or why it has none (null: boundary or river). */
+export function featureZone(f: Pick<MapFeature, 'kind' | 'nodeId' | 'geometry'>, byUnit: ReadonlyMap<string, ZoneGroup>): string | null {
+	if (f.kind === 'catchment_boundary' || f.kind === 'river') return null;
+	if (!f.nodeId) return 'Not linked to a unit';
+	const g = byUnit.get(f.nodeId);
+	return g ? zoneName(g) : 'In no zone (not a land unit)';
 }

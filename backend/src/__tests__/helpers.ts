@@ -242,7 +242,8 @@ export async function plantCompleteOutlook(
 	projectId: string,
 	runId: string,
 	farms: { nodeId: string; p50?: number }[],
-	opts: { season?: [string, string]; perFarm?: boolean } = {}
+	/** forecast: a method c3s outlook's forecast part (issue #620), its status and which led. */
+	opts: { season?: [string, string]; perFarm?: boolean; forecast?: { status: 'ready' | 'off'; leads: 'forecast' | 'esp' } } = {}
 ): Promise<string> {
 	const [from, to] = opts.season ?? ['2099-10-01', '2100-04-30'];
 	const stat = (p50: number, top = 1) => ({ p10: p50 * 0.75, p50, p90: Math.min(top, p50 * 1.2) });
@@ -255,7 +256,7 @@ export async function plantCompleteOutlook(
 		// perFarm false: an outlook from before engine 1.19.0, without per-farm figures.
 		...(opts.perFarm === false ? {} : { demandMetByFarm: farms.map((f) => ({ nodeId: f.nodeId, name: 'Farm', nYears: 12, stat: stat(f.p50 ?? 0.8) })) })
 	};
-	const result = { decisionDate: from, seasonEnd: to, nYears: 12, levels: [level] };
+	const result = { decisionDate: from, seasonEnd: to, nYears: 12, levels: [level], ...(opts.forecast ? { forecast: { method: 'c3s', ...opts.forecast } } : {}) };
 	return withUser(userId, async (db) => {
 		const { rows } = await db.query<{ id: string }>(
 			`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, review_date, levels)

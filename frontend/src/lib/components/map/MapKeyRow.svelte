@@ -17,7 +17,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { KeyItem } from './mapList';
-	import { ewrLine, legendRows, MEASURE_PARAM, noRunLine, RUN_PARAM, runCaption, runOption, unlinkedAreas, VIEW_OPTIONS, viewLabel, viewParam, type MapView } from './mapResults';
+	import { ewrLine, legendRows, MEASURE_PARAM, noRunLine, RUN_PARAM, runCaption, runOption, unlinkedAreas, viewLabel, viewOptions, viewParam, type MapView } from './mapResults';
+	import Lazy from '#lib/components/common/Lazy.svelte';
 	import type { MapResults } from './mapResults.svelte';
 	import type { MapFeature } from '#lib/api/types.js';
 
@@ -37,6 +38,7 @@
 	} = $props();
 
 	const uid = $props.id();
+	const loadZoneKey = () => import('./MapZoneKey.svelte');
 	const go = (href: string) => goto(href, { reset: false });
 	function pickView(view: MapView) {
 		const v = viewParam(view);
@@ -51,7 +53,9 @@
 		void go(`?${q}`);
 	}
 
-	const measure = $derived(results.view === 'kind' ? null : results.view);
+	const measure = $derived(results.view === 'kind' || results.view === 'zone' ? null : results.view);
+	// Calibration zones (issue #555): offered whenever some apply, with or without a run.
+	const options = $derived(viewOptions(!!results.run, !!results.zones));
 	const rows = $derived(measure && results.ready ? legendRows(measure, results.units, unlinkedAreas(features)) : []);
 	const ewr = $derived(results.ready ? ewrLine(results.ewr) : null);
 	const caption = $derived(runCaption(results.choice));
@@ -76,24 +80,25 @@
 	</div>
 {/snippet}
 
-<div class="key-row" data-testid="map-results" data-view={results.on ? results.view : 'kind'} data-fill-theme={dark ? 'dark' : 'light'} data-ready={results.on ? (results.ready ? 'true' : 'false') : undefined}>
-	{#if results.run}
+<div class="key-row" data-testid="map-results" data-view={results.on || results.zoneOn ? results.view : 'kind'} data-fill-theme={dark ? 'dark' : 'light'} data-ready={results.zoneOn ? 'true' : results.on ? (results.ready ? 'true' : 'false') : undefined}>
+	{#if results.run || results.zones}
 		<div class="pickers small">
 			<!-- label for=, not a wrapping label: a tip inside one would be the label's first labelable element and take the select's name. -->
 			<div class="pick">
 				<span><label for="map-measure">Colour areas by</label> <HelpTip key="map-results" /></span>
-				<select id="map-measure" value={results.view} onchange={(e) => pickView(e.currentTarget.value as MapView)} data-testid="map-measure">
-					{#each VIEW_OPTIONS as o (o.id)}<option value={o.id}>{o.label}</option>{/each}
+				<select id="map-measure" value={options.some((o) => o.id === results.view) ? results.view : 'kind'} onchange={(e) => pickView(e.currentTarget.value as MapView)} data-testid="map-measure">
+					{#each options as o (o.id)}<option value={o.id}>{o.label}</option>{/each}
 				</select>
 			</div>
-			{#if canEdit && results.runs.length > 1}
+			{#if canEdit && results.run && results.runs.length > 1 && !results.zoneOn}
 				<label class="pick">
 					<span>Run</span>
-					<select value={results.run.id} onchange={(e) => pickRun(e.currentTarget.value)} data-testid="map-run">
+					<select value={results.run?.id} onchange={(e) => pickRun(e.currentTarget.value)} data-testid="map-run">
 						{#each results.runs as r (r.id)}<option value={r.id}>{runOption(r)}</option>{/each}
 					</select>
 				</label>
 			{/if}
+			{#if !results.run}<p class="small muted no-run" data-testid="map-no-run">{noRunLine(canEdit, results.runs.length > 0)}</p>{/if}
 			{#if results.on}
 				<span class="status" role="status">
 					{#if results.loading}
@@ -114,7 +119,13 @@
 		</div>
 	{/if}
 
-	{#if results.on}
+	{#if results.zoneOn}
+		<!-- Calibration zones (issue #555): their key is its own chunk, loaded only when the zones are shown. -->
+		<Lazy load={loadZoneKey}>
+			{#snippet children(MapZoneKey)}<MapZoneKey zones={results.zones ?? []} colours={results.zoneColours} />{/snippet}
+		</Lazy>
+		{#if otherKinds.length}{@render kindKey(otherKinds)}{/if}
+	{:else if results.on}
 		{#if caption}<p class="small muted caption" data-testid="map-run-caption">{caption}</p>{/if}
 		{#if rows.length}
 			<div class="legend small" role="group" aria-labelledby="{uid}-legend-h" data-testid="map-legend">

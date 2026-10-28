@@ -4632,11 +4632,13 @@ farmer view E3, migration 106).
   storage): an explicit review date is then `422`, an absent one is null.
   `analogueYears` (1–200 distinct water
   years): absent, every one the record holds but the season's own.
-  `method` (issue #620, migration 267): `esp` (absent: the default) uses
-  every analogue year alike; `climateState` also adds `result.climate`,
-  the same members summarised on the years nearest this season's ENSO and
-  SAM state (below). Any other value is `400`. The ESP figures are the
-  same either way.
+  `method` (issue #620, migrations 267 and 275): `esp` (absent: the
+  default) uses every analogue year alike; `climateState` also adds
+  `result.climate`, the same members summarised on the years nearest this
+  season's ENSO and SAM state; `c3s` also adds `result.forecast`, the
+  chance of each drought restriction level from the C3S seasonal forecasts
+  (below). Any other value is `400`. The ESP figures, and the trigger
+  table, are the same in every method.
 - Checked before anything is queued: the base run as for a sweep (`404`,
   `409` for a scenario or forecast run), and the season: the decision date
   must fall after the run's first day and at most the day after its last
@@ -4692,6 +4694,54 @@ farmer view E3, migration 106).
   [architecture.md § Data feeds](./architecture.md#data-feeds)) before any
   member runs: a copy whose manifest or files can't be read fails the job;
   a copy without the indices gives `indexNotHeld`.
+- `result.forecast` (method `c3s` only; [model.md
+  §2.15d](./model.md#215d-the-forecast-conditioned-outlook-the-chance-of-each-restriction-level-issue-620-engine-11060)):
+  the engine's `ForecastOutlook` with its members compact, plus what the
+  backend read. `{ method: 'c3s', status: 'ready' | 'off', reason, message,
+  decisionDate, seasonEnd, init, systems, members, chances, espChances,
+  skill, leads, warnings, source, area }`.
+  - `status: 'off'` runs nothing and the outlook is the ESP alone, with
+    `reason`: the engine's `noForecast` (no forecast *issued* by the
+    decision date in the copy), `noHindcast`, `noQualifyingSystem` (no
+    system with 20 hindcast years the record covers), `noDams`,
+    `noAnalogues`, `levelProblems`; or the backend's `noArea` (the project
+    has no catchment boundary and no unit polygon on the map, so there is
+    nowhere to average the forecasts over; `source` and `area` null) and
+    `failed` (the engine refused it: its words in `message`).
+  - `systems`: per system passed, `{ system, init, members, membersDropped,
+    months: [{ month, lead, years }], used, weight, reason }` (`years`: the
+    hindcast years each lead month was fitted on). `members` (compact):
+    `{ system, member, weight, analogueYear, analogueLabel, distance,
+    seasonEndStorageM3, reviewStorageM3, categories }`, never a member's
+    whole season.
+  - `chances` and `espChances`: per review date `{ reviewDate, basis:
+    'rule' | 'bands', categories: [{ id, label, belowPct, fromM3, toM3,
+    chance }] }`, "No restriction" (`level-0`) or the fullest band first;
+    each date's chances sum to 1. The review dates are the drought
+    restriction rule's in the season, else the outlook's own review date,
+    else the engine's default. The chances are at the **full demand** (no
+    level's ops) and of the dam storage only (model.md §2.15d, step 4).
+  - `skill`: `{ metric: 'crpssSeasonEndStorage', crpss, nYears, years,
+    reason }`; `leads` is `forecast` only with `crpss` above 0, else `esp`
+    ("no better than past weather").
+  - `source` (backend `outlooks/c3s.ts` `C3sSource`): `{ init, issued:
+    [{ system, issuedOn }], notIssued, hindcasts: [{ system, initMonth,
+    years, members }], centres, fetchedAt, notes }`: the init used, the
+    systems issued by the decision date (ECMWF on the 6th of the init month,
+    the other centres on the 10th) and those not yet, the hindcasts read,
+    the contributing centres the copy names, and when the copy fetched the
+    newest file read (the credit's year). `area`: `{ source: 'boundary' |
+    'units', cells, units, notes }`; `units` lists, under runoff from each
+    unit's own rain (§2.4h), each unit's `{ nodeId, name, cells, systems:
+    [{ system, meanMonthlyMm }] }` (its raw forecast rain, before mapping;
+    the engine rescales a unit's rain by the catchment's factor).
+  - The worker reads the forecasts from the copy (`MIRROR_URL`) before any
+    member runs: a copy laid out otherwise (an index naming an array that
+    isn't there, another shape) fails the job. Wherever these values show,
+    the Copernicus credit and the contributing centres go with them
+    (`@water-management/engine/credits` `c3sSeasonalCredit`). A farm page
+    never gets a chance: publishing a level of a `c3s` outlook adds only
+    `forecast: { leads }` to each farm's view (below).
 - `triggers` (null without a review date): `{ reviewDate, table, problem,
   excluded, failures }`. `reviewDate` is the season's: the day the WUA reads
   its dams. The outlook's season usually starts after the base run ends
@@ -4716,7 +4766,9 @@ farmer view E3, migration 106).
   project, that farm's own figures at the level (the engine's
   `farmOutlookProjection`: the level, the season and review date, `nYears`,
   `demandYears`, `demandMet` and the dam's season-end share of capacity as
-  `{ p10, p50, p90 }` or null), and the farm page reads them back
+  `{ p10, p50, p90 }` or null; from a `c3s` outlook whose forecast part
+  ran, also `forecast: { leads: 'forecast' | 'esp' }`, which side led,
+  never a chance, issue #620), and the farm page reads them back
   ([§ Farm](#farm), `FarmView.outlook`) until the season ends
   where the catchment is (project time zone). One current per project; the
   newest 12 are kept. Refused: an outlook still running (`409`), a level it

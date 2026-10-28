@@ -53,6 +53,25 @@
 		samples.a.short === samples.b.short ? samples.a.short : `calibration period (run A ${samples.a.qualifier ?? 'not recorded'}, run B ${samples.b.qualifier ?? 'not recorded'})`
 	);
 
+	// Each calibration zone's gauge (issue #555), A against B, each side in or out of sample by its own zone's fit.
+	const zoneTables = $derived(
+		(comparison.calibrationZones ?? []).map((z) => {
+			const a = calibrationSample({ fitStatus: z.fitStatus.a ?? undefined });
+			const b = calibrationSample({ fitStatus: z.fitStatus.b ?? undefined });
+			return {
+				id: z.nodeId,
+				name: z.name,
+				sample: a.short === b.short ? a.short : `calibration period (run A ${a.qualifier ?? 'not scored'}, run B ${b.qualifier ?? 'not scored'})`,
+				rows: [
+					{ label: 'Kling–Gupta (KGE)', unit: '', m: z.kge, spec: { format: 'ratio', better: 'higher' } },
+					{ label: 'Nash–Sutcliffe (NSE)', unit: '', m: z.nse, spec: { format: 'ratio', better: 'higher' } },
+					{ label: 'Percent bias', unit: '', m: z.pbias, spec: { format: 'percent', better: 'zero' } },
+					{ label: 'Overlapping days', unit: 'days', m: z.days, spec: { format: 'days', better: 'neutral' } }
+				] as Row[]
+			};
+		})
+	);
+
 	const calibration = $derived<Row[]>(
 		comparison.calibration
 			? [
@@ -112,6 +131,11 @@
 			{:else}
 				<p class="muted">Neither run has observed flow overlapping its simulation period.</p>
 			{/if}
+			{#each zoneTables as z (z.id)}
+				<h4 data-testid="compare-zone">Calibration zone at {z.name}</h4>
+				<p class="muted small">{z.sample[0]!.toUpperCase() + z.sample.slice(1)}, each run by its own zone’s fit.</p>
+				{@render table(z.rows, `Calibration statistics at ${z.name}, the calibration zone’s gauge, for both runs`)}
+			{/each}
 			{#if wr2012.length}
 				<h3>WR2012 check <span class="u">· simulated natural ÷ scaled WR2012</span></h3>
 				{@render table(wr2012, 'WR2012 check for both runs')}

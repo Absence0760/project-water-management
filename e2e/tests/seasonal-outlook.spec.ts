@@ -395,3 +395,89 @@ test('with past seasons like this one, the panel lists the years chosen by their
 	await expect(climate.getByTestId('climate-source')).toHaveText(`Indices: NOAA Climate Prediction Center, ONI to Dec 2025, AAO to Jan 2026.`);
 	await expectNoViolations(page, { include: '[data-testid="outlook-climate"]' });
 });
+
+test('with the seasonal forecasts, the panel gives the chance of each level beside past weather, the leading side first, from the committed copy', async ({ page, owner }) => {
+	void owner;
+	// 26 water years (1992/93 … 2017/18) of invented rain, and a catchment boundary inside the committed copy's C3S cells
+	// (backend/scripts/c3s-fixture.ts), so the September init's forecasts have 20 hindcast years the record covers.
+	const start = '1992-10-01';
+	const days = (Date.parse('2018-10-01T00:00:00Z') - Date.parse(`${start}T00:00:00Z`)) / DAY;
+	const project = await createProject(page.request, 'Outlook forecast');
+	await putModel(page.request, project.id, sampleModel());
+	await updateSettings(page.request, project.id, {
+		apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110],
+		ewrPragmaticM3PerDay: [400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400]
+	});
+	const rain = syntheticRain(days).map((v, t) => Math.round(v * YEAR_SCALE[Math.floor(t / 365.25) % YEAR_SCALE.length]! * 10) / 10);
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: start, values: rain });
+	const ring = [[21.2, -33.8], [21.4, -33.8], [21.4, -33.6], [21.2, -33.6], [21.2, -33.8]];
+	const made = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data: { kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [ring] } } });
+	expect(made.status(), await made.text()).toBe(201);
+	const runId = await createRun(page.request, project.id, 'Base');
+
+	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
+	const panel = page.getByTestId('seasonal-outlook');
+	await panel.getByRole('button', { name: 'Run…' }).click();
+	const climateBox = panel.getByRole('checkbox', { name: 'Also compare past seasons like this one' });
+	const box = panel.getByRole('checkbox', { name: 'Also give the chance of each restriction level from the seasonal forecasts' });
+	await expect(box).not.toBeChecked();
+	await expect(box).toHaveAccessibleDescription(/Copernicus seasonal forecasts issued by the decision date/);
+	// One method at a time: the forecasts instead of past seasons like this one.
+	await climateBox.check();
+	await box.check();
+	await expect(climateBox).not.toBeChecked();
+	await panel.getByRole('button', { name: 'Run seasonal outlook' }).click();
+	await expect(panel).toHaveAttribute('data-state', 'pending');
+	await runJobsTick({ projects: [project.id], schedule: false });
+	await expect(panel).toHaveAttribute('data-state', 'complete');
+
+	type Category = { id: string; chance: number };
+	type Forecast = {
+		status: string;
+		leads: 'forecast' | 'esp';
+		init: string;
+		systems: { system: string; used: boolean; members: number }[];
+		chances: { reviewDate: string; categories: Category[] }[];
+		espChances: { categories: Category[] }[];
+		skill: { crpss: number | null };
+	};
+	const { outlooks } = await getJson<{ outlooks: { id: string; method: string }[] }>(page.request, `/projects/${project.id}/outlooks?baseRunId=${runId}`);
+	expect(outlooks.map((o) => o.method)).toEqual(['c3s']);
+	const { outlook } = await getJson<{ outlook: { decisionDate: string; result: { forecast: Forecast } } }>(page.request, `/projects/${project.id}/outlooks/${outlooks[0]!.id}`);
+	expect(outlook.decisionDate).toBe('2018-10-01');
+	const f = outlook.result.forecast;
+	// Only forecasts issued by the decision date: the September init (ECMWF's October one came out on the 6th).
+	expect(f).toMatchObject({ status: 'ready', init: '2018-09' });
+	expect(f.systems.filter((s) => s.used).map((s) => [s.system, s.members])).toEqual([
+		['ecmwf-51', 3],
+		['ukmo-604', 2]
+	]);
+	expect(f.leads).toBe(f.skill.crpss !== null && f.skill.crpss > 0 ? 'forecast' : 'esp');
+
+	// The ESP table stays; the chances sit under it, the leading side's column first.
+	await expect(panel.getByTestId('outlook-table')).toBeVisible();
+	const section = panel.getByTestId('outlook-forecast');
+	await expect(section).toHaveAttribute('data-state', 'ready');
+	await expect(section).toHaveAttribute('data-leads', f.leads);
+	await expect(section.getByRole('heading', { name: 'Chance of each restriction level' })).toBeVisible();
+	await expect(section.getByTestId('forecast-leads')).toContainText(f.leads === 'forecast' ? 'so they lead' : 'No better than past weather');
+	const table = section.getByTestId('forecast-table');
+	await expect(table).toHaveCount(f.chances.length);
+	const first = f.leads === 'forecast' ? 'Seasonal forecasts' : 'Past weather (every year alike)';
+	await expect(table.first().locator('thead th').nth(1)).toHaveText(first);
+	const pctText = (v: number) => `${Math.round(v * 100)}%`;
+	const rows = table.first().locator('tbody tr');
+	await expect(rows).toHaveCount(f.chances[0]!.categories.length);
+	for (const [k, c] of f.chances[0]!.categories.entries()) {
+		await expect(rows.nth(k).locator('td[data-col="forecast"]')).toHaveText(pctText(c.chance));
+		await expect(rows.nth(k).locator('td[data-col="esp"]')).toHaveText(pctText(f.espChances[0]!.categories[k]!.chance));
+	}
+	await expect(section.getByTestId('forecast-storage-only')).toContainText('The chance is of the dam storage on the review date only');
+	await expect(section.getByTestId('forecast-systems').locator('li')).toHaveCount(2);
+	await expect(section.getByTestId('forecast-systems').locator('li').first()).toContainText('ecmwf-51: 3 members');
+	// The Copernicus credit and the contributing centres, wherever the values show.
+	const credit = section.getByTestId('forecast-credit');
+	await expect(credit).toContainText('Contains modified Copernicus Climate Change Service information 2026.');
+	await expect(credit).toContainText('Contributing centres: European Centre for Medium-Range Weather Forecasts (ECMWF); Met Office.');
+	await expectNoViolations(page, { include: '[data-testid="outlook-forecast"]' });
+});

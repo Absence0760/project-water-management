@@ -131,7 +131,6 @@ from c3srequest import (  # noqa: F401  (re-exported)
     release_at,
     request,
     request_key,
-    valid_key,
 )
 
 log = logging.getLogger("ingest")
