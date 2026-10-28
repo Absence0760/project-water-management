@@ -21,6 +21,7 @@ import { chcCell, seriesFromCache } from '../feeds/cellCache.js';
 import { cacheOrigin, readCellCache } from '../feeds/cellCacheStore.js';
 import { CHIRPS_PRODUCT_FIRST_DAY, type ChirpsDailyProduct } from '../feeds/config.js';
 import type { Geometry } from '../geo/geojson.js';
+import { UNIT_POLYGONS_SQL } from '../geo/unitPolygon.js';
 
 /**
  * The product a cell is read in when the series it is compared with isn't
@@ -68,9 +69,9 @@ export async function referenceCell(
 	// Whatever the flow generation method (issue #615): under Fragmentation the EWR shares run on the Per unit forcing too.
 	const ref = unitRain?.reference ?? null;
 	if (!ref || typeof ref.unitId !== 'string') return null;
-	// The unit's polygon as the unit feeds pick it (fromUnits.ts unitParcel): the parcel its area came from, else its only parcel.
+	// The unit's polygon as the unit feeds pick it (fromUnits.ts UNIT_POLYGONS_SQL, unitParcel): the area feature its area came from, of either area kind, else its only parcel.
 	const { rows } = await db.query<{ geometry: Geometry }>(
-		`SELECT f.geometry FROM node n JOIN map_feature f ON f.project_id = n.project_id AND f.node_id = n.id AND f.kind = 'farm_parcel'
+		`SELECT f.geometry FROM node n JOIN map_feature f ON ${UNIT_POLYGONS_SQL}
 		 WHERE n.project_id = $1 AND n.id::text = $2 AND n.kind = 'farm' AND n.area_km2 > 0
 		   AND (f.id = n.area_feature_id OR (SELECT count(*) FROM map_feature g WHERE g.project_id = n.project_id AND g.node_id = n.id AND g.kind = 'farm_parcel') = 1)
 		 ORDER BY (f.id = n.area_feature_id) DESC NULLS LAST LIMIT 1`,
