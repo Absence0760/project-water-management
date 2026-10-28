@@ -3277,6 +3277,22 @@ database:
   for re-running the pair from the reproduction bundle, which that viewer is
   refused). Nothing of such a run is served as a flow, so no flow
   differencing is left to accept.
+- **The assistant's tools go through the same withholding** (issue #610,
+  `backend/src/assistant/tools/`). They read a run only through the
+  routes' own readers (`runs/read.ts`: the run, a series, its bulk pages, a
+  day, the model input), never `run_series` itself, inside the
+  orchestrator's `withUser(…, { readOnly: true })` as the member asking,
+  after `requireRole(…, 'viewer')`. So a viewer kept from each registered
+  volume gets the redacted run summary, no allocation series (`get_series`
+  is refused with the route's reason, and the series aren't listed), and of
+  a cap or full-allocation run no series and no gauge fit at all. Their
+  answers also leave out every name a member or farmer gave the app:
+  `get_network` picks each node field by name (no registered volumes, no
+  borehole or demand-object labels), `get_run_summary` drops who made the
+  run and its notes, and `get_settings` drops the responsible authority. A
+  refusal is the API's own words, never database text
+  (`assistant/tools/assistant-tools.db.test.ts`, with the owner as the
+  positive control).
 
   **The canary sweep** (`allocations.db.test.ts`): every `GET /projects/:id/…`
   route in `app.routes` (and `/me/alerts/:projectId`, and two comparisons)

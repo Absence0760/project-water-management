@@ -2182,6 +2182,39 @@ recorded bytes, runs the engine's `checkPackBundle` with the re-run, and
 records the outcome through `app_record_pack_reproduction`. The pack's page
 shows it (`reproduction` on `GET …/packs/:packId`); verify doesn't.
 
+### Assistant tools
+
+The assistant (issue #610) answers from the project's own data through six
+read-only tools, `backend/src/assistant/tools/` (`READ_TOOLS` in
+`readTools.ts`; the orchestrator adds `propose_settings`). Each validates the
+model's arguments with zod (its JSON Schema is made from the same schema,
+`common.ts` `specOf`), runs on the orchestrator's read-only transaction as
+the member asking, reads the conversation's run or the project's latest
+(`runs/read.ts` `latestRunId`: the model's own runs before a scenario's or a
+forecast), and answers `{ ok: false, error }` in the API's words for a bad
+argument, a missing run or node, or a withheld series:
+
+| Tool | Reads | Kept small by |
+| --- | --- | --- |
+| `get_run_summary` | `readRun`: the catchment's figures, warnings, `summary.calibration`, plausibility, data quality (also allocations, water balance on request) | 30 warnings, short arrays, 4 significant digits |
+| `get_settings` | the run's snapshot as it ran, or the project's merged over the engine's defaults (`mergeSettings`), model inputs only | `keys` picks top-level settings |
+| `get_network` | the run's model snapshot (or the project's model): each node's kind, drainage, area, dam, crops, and the units, dams and gauges above each gauge | fields picked by name |
+| `get_series` | `readSeries`: one series of a node or the catchment | monthly means (latest 120 months), water-year means, or up to 92 days |
+| `get_gauge_fit` | the calibration site's `summary.calibration`; at another gauge, `calibrationStats` on its `outflow` and `observed_flow_check` over the run's calibration window and exclusions | the scores and a few annual volumes |
+| `search_help` | `helpIndex.json`, no database | 8 hits, 700-character snippets |
+
+The run reads the tools share with the run routes live in `runs/read.ts`
+(`readRun`, `readSeries`, `readSeriesBulk`, `readDay`, `readModelInput`),
+with the withholding inside them ([security.md](./security.md), #523 I), so
+the two paths can't drift apart. The help guides and glossary are frontend
+code, which the backend doesn't import: `pnpm gen:assistant:help`
+(`scripts/gen-assistant-help.mjs`, Node's type stripping) copies them as
+plain text into `backend/src/assistant/helpIndex.json`, one entry per guide
+section and per glossary entry, and `scripts/guards/assistant_help_index.test.mjs`
+(`pnpm test:guards`) fails until it is rerun after a help text changes.
+`search_help` ranks entries by the query's words (title and aliases over the
+summary over the text).
+
 ## Key choices
 
 | Choice | Why |
