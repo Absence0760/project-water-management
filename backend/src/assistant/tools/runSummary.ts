@@ -3,8 +3,8 @@
 // what the model needs to reason about. Read through runs/read.ts readRun,
 // so a viewer kept from each registered volume gets the redacted summary
 // (redactRunAllocations: verdicts only on a cap or full-allocation run).
-// Neither the run's notes nor who made it are sent: free text and names can
-// be personal information.
+// Neither the run's label, its notes nor who made it are sent: free text and
+// names can be personal information.
 import type { RunSummary } from '@water-management/engine';
 import { z } from 'zod';
 import { readRun } from '../../runs/read.js';
@@ -85,7 +85,6 @@ export const runSummaryTool: AssistantTool = {
 				data: {
 					run: {
 						id: run.id,
-						label: run.label,
 						startDate: run.startDate,
 						endDate: run.endDate,
 						engineVersion: run.engineVersion,

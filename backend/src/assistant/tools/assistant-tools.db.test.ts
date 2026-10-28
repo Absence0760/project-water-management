@@ -99,7 +99,10 @@ describe('the read-only tools', () => {
 		for (const r of results) expect(r.ok, JSON.stringify(r)).toBe(true);
 		// The latest run is used when the conversation names none.
 		expect((data(results[0]!).run as { id: string }).id).toBe(runId);
+		// Not the run's label (free text, 'Tools' here): only its id, dates and kind.
+		expect(data(results[0]!).run).not.toHaveProperty('label');
 	});
+
 
 	it("answers a gauge's fit with calibrationStats on its stored outflow and record; the outlet's from the summary", async () => {
 		const fit = data(await as(viewer, TOOL_NAMES.gaugeFit, { node: 'middle weir' }));
@@ -171,5 +174,28 @@ describe('the withholding (#523 I, D3)', () => {
 		const json = JSON.stringify(all);
 		for (const who of [owner, viewer, farmer]) expect(json).not.toContain(who.email);
 		expect(json).not.toMatch(/Tools(Owner|Viewer|Farmer)/);
+	});
+});
+
+// Last: it signs the rules and adds a run, which the tests above don't expect.
+describe('the sign-off', () => {
+	it('sends whether the calibration rules are signed off and when, not the name typed to sign them, from the project and from a run', async () => {
+		const at = `/projects/${projectId}`;
+		const signer = `Synthetic Signer ${crypto.randomUUID().slice(0, 6)}`;
+		const rules = (await owner.call('GET', at)).body.project.settings.calibrationRules;
+		expect((await owner.call('PATCH', at, { settings: { calibrationRules: { ...rules, signedOff: { by: signer, on: '2026-09-29' } } } })).status).toBe(200);
+		// The server stamps the day it was signed.
+		const on = (await owner.call('GET', at)).body.project.settings.calibrationRules.signedOff.on as string;
+		const signedRun = (await owner.call('POST', `${at}/runs`, { label: 'Signed' })).body.run.id as string;
+		for (const [source, runId] of [
+			['project', null],
+			['run', signedRun]
+		] as const) {
+			const view = data(await as(viewer, TOOL_NAMES.settings, { source, keys: ['calibrationRules'] }, runId ?? undefined));
+			expect(view.settings, source).toMatchObject({ calibrationRules: { signedOff: { signed: true, on } } });
+			expect(JSON.stringify(view), source).not.toContain(signer);
+		}
+		// Positive control: the stored settings do hold the name.
+		expect(JSON.stringify((await owner.call('GET', at)).body.project.settings.calibrationRules)).toContain(signer);
 	});
 });
