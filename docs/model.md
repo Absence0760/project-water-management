@@ -7039,6 +7039,7 @@ at). Only the actionable warnings are coded so far:
 | Rain stations (§2.4i) | `rain.station.noRecord`, `.unreliable`, `.unreliableInvalid`; `rain.station.zeroRun.*`, `rain.station.accumulation.*` | `station`, … | `set-share`; the checks `set-rain` |
 | A unit's own gauge (§2.4h) | `rain.unitGauge.zeroRun.*`, `rain.unitGauge.accumulation.*`, `rain.unitGauge.unreliable`; `rain.unit.catchmentFallback` | `unit`, … | `set-rain`; the fallback `set-unit-rain` |
 | Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord` | `kind`, `site`, … | `set-record` (no values in the period: `set-period`) |
+| Calibration zones (§2.10n) | `calibration.zone.notList`, `.noGauge`, `.duplicate`, `.badParams`, `.needsPerUnit`, `.unusable`, `.unfitted`; `.siteOnlyElsewhere` (a note) | `node`, `reason`, `name`, `gauges`; `units`, `zones` | `set-record` (Per unit needed: `set-share`; not fitted: `set-fit`) |
 
 Not coded on purpose: the EWR-split note and the retired flow-share method's
 note (issues #615 and #616 reworded them; the area-fragmentation, High/Low-MAP
@@ -7060,7 +7061,7 @@ figure moves, but the summary has a new field, so a 1.101.0 run made again
 at 1.102.0 has another results digest. A viewer kept from the registered
 volumes reads no warnings and no codes (`verdictsSummary`). Tests:
 `warningCodes.test.ts` triggers each code and checks its text is the plain
-warning's (four beside their texts' own tests, which it names), and that
+warning's (twelve beside their texts' own tests, which it names: the zone codes' in `calibrate/zones.test.ts`), and that
 every code in the catalogue is used by the engine.
 
 **Flow generation renamed (engine ≥ 1.103.0, issue #614).** The panel that
@@ -10769,7 +10770,10 @@ exclusions) or no dry → wet test (no dry year to fit on), the representativene
 and dry → wet notes beside it (`zoneCoverageNotes`). The API refuses a new
 row whose gauge isn't a gauge inside the network with a flow record, a
 gauge listed twice, and a ticked row that is the site or below it (api.md §
-Projects).
+Projects). Each zone warning a run gives has a stable code
+(`calibration.zone.*`, § Run warning codes in §2.8), so the Warnings page
+links it to the table (`?field=fld-cal-zones`), to Fit the parameters, or to
+Model selection for flow generation.
 
 **Not yet** (issue #555's next round, docs/followups.md): the zones on the
 Network tab and the Map, calibration statistics per ticked site in a run, the
