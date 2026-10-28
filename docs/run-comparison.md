@@ -745,9 +745,12 @@ Middle weir: added (X1 900, X2 0, X3 220, X4 3.1)"*; one ticked in A only,
 *"…: removed (was …); its units joined the next zone downstream"*; one
 ticked in both lists what changed, joined by semicolons: each parameter
 (*"X1 350 → 900"*, or *"X1 …, X4 … → the catchment’s parameters"* when one
-side has none of its own), its window, its flow series, how many
-exclusions, and its fit record as the site's is worded below (*"parameters
-now from a GR4J fit of …"*). A row unticked in both, and `[]` against none,
+side has none of its own), its window, its flow series, its exclusions
+(matched by period with their reasons, as the site's below: *"exclusion WY
+2015/16 added: “weir rebuilt”"*), its quality flags (*"quality flags the
+catchment’s → suspect days exclude, zero flow in months 7, 8"*; they move its
+in-sample status too) and its fit record as the site's is worded below
+(*"parameters now from a GR4J fit of …"*). A row unticked in both, and `[]` against none,
 are no change: no run reads them. (Round 3 wrote every ticked row in one
 line and treated a window or a fit record as no change; since a run scores
 each zone's gauge on its own window, those now matter.)

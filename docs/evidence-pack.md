@@ -525,7 +525,9 @@ own zone last (`nodeId` null), each with
 - its fit (`fit`): the fit record's description, its engine version, its
   objective, its in-sample score and its split-sample and dry → wet scores
   on that objective (null when the test wasn't run), and the parameters
-  edited since; null when the zone's parameters don't come from a stored fit,
+  edited since (judged against the parameters the units ran on, as the run's
+  `fitStatus` is, not the record's stored list); null when the zone's
+  parameters don't come from a stored fit,
 - the run's statistics at its gauge (`stats`: days, NSE, KGE, PBIAS and
   `fitStatus`, the zone's own in or out of sample; the site's are the run's
   calibration statistics), null with no scored day.
@@ -536,7 +538,10 @@ record (they were already in `appendix.baselineInputs`; the section states
 them), and reproduction re-derives them from the re-run. A zone above the
 site with no stored fit raises the caution flag `zoneNoFit` ("Validation not
 assessed for the calibration zone at …"), and each zone's fit engine
-reaches the errata (an erratum keyed on the fit's engine). The input diff
+reaches the report's errata (an erratum keyed on the fit's engine). The
+run's validation statement, its sign-off statement and its *May be
+affected* status still read only the site's fit engine
+(followups.md § Calibration zones). The input diff
 (Appendix A.2) words each zone (run-comparison.md). Null when the baseline
 ran one parameter set; absent from a pack drafted before `evidence-22`,
 which keeps its document. § 3 prints the section as a table

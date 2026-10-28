@@ -14,7 +14,7 @@
 import type { CalibrationFitStatus, CalibrationStats, RunSummary } from '../project';
 import type { RunInputsSnapshot } from '../compare';
 import { describeFitRecord } from '../compare';
-import type { FitRecord } from '../calibrate/provenance';
+import { editedParams, type FitRecord } from '../calibrate/provenance';
 import type { Gr4jParams } from '../runoff/params';
 
 /** One calibration zone in the report (EvidenceReport.calibrationZones). */
@@ -70,9 +70,12 @@ function scoreOf(p: unknown, objective: string): number | null {
 	return finite(scores?.[objective]);
 }
 
-function fitOf(v: unknown): EvidenceZoneFit | null {
+function fitOf(v: unknown, params: Gr4jParams): EvidenceZoneFit | null {
 	if (!v || typeof v !== 'object') return null;
 	const r = v as FitRecord;
+	// Edited since the fit: against the parameters the units ran on, as the run's fitStatus judges it (a stored
+	// record's own list is only as fresh as its last save).
+	const edited = Array.isArray(r.free) && r.params && typeof r.params === 'object' ? editedParams({ gr4j: { ...params, warmupDays: 0 } }, r) : Array.isArray(r.editedParams) ? r.editedParams.map(String) : [];
 	const objective = String(r.objective);
 	return {
 		description: describeFitRecord(r),
@@ -81,7 +84,7 @@ function fitOf(v: unknown): EvidenceZoneFit | null {
 		inSample: scoreOf(r.fit, objective),
 		splitSample: scoreOf(r.splitSample?.validation, objective),
 		dryToWet: scoreOf(r.differential?.validation, objective),
-		editedParams: Array.isArray(r.editedParams) ? r.editedParams.map(String) : []
+		editedParams: edited
 	};
 }
 
@@ -110,7 +113,7 @@ export function calibrationZonesSection(run: { summary: RunSummary; inputs: RunI
 			areaKm2: z.units.reduce((a, u) => a + (area.get(u) ?? 0), 0),
 			params: { x1: z.params.x1, x2: z.params.x2, x3: z.params.x3, x4: z.params.x4 },
 			fitted: z.fitted,
-			fit: fitOf(record),
+			fit: fitOf(record, z.params),
 			stats: statsOf(z.nodeId === null ? run.summary.calibration : stats.get(z.nodeId))
 		};
 	});

@@ -10797,7 +10797,7 @@ periods and quality flags are not applied here, as at a gauge site (§2.10k).
 
 **Comparison, report and evidence pack.** The run comparison words each zone
 (`calibrationZoneChanges`: added, removed, or what changed among its
-parameters, window, record, exclusions and fit record) and sets each zone
+parameters, window, record, exclusions, quality flags and fit record) and sets each zone
 gauge's statistics side by side (`comparison.calibrationZones`;
 run-comparison.md). The report's and the Calibration page's **Calibration
 zones** table lists each zone's units, parameters and scores (ui.md § Runs

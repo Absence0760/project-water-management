@@ -1293,6 +1293,14 @@ describe('diffInputs', () => {
 		expect(texts(zones([row]), zones([{ ...row, gr4j: { ...row.gr4j, x1: 950, x4: 2 } }]))).toEqual(['Calibration zone at H: X1 900 → 950; X4 3.1 → 2']);
 		expect(texts(zones([row]), zones([{ ...row, calibrationStart: '2000-10-01' }]))).toEqual(['Calibration zone at H: window start of record to end of record → 2000-10-01 to end of record']);
 		expect(texts(zones([row]), zones([{ ...row, calibrationFlowKind: 'flow_logger_m3s' }]))).toEqual([expect.stringMatching(/^Calibration zone at H: flow series its gauge record → /)]);
+		const ex = { waterYear: 2015, reason: 'weir rebuilt' };
+		expect(texts(zones([row]), zones([{ ...row, calibrationExclusions: [ex] }]))).toEqual([expect.stringMatching(/^Calibration zone at H: exclusion WY 2015\/16 added: “weir rebuilt”$/)]);
+		expect(texts(zones([{ ...row, calibrationExclusions: [ex] }]), zones([{ ...row, calibrationExclusions: [{ ...ex, reason: 'gauge moved' }] }]))).toEqual([
+			expect.stringMatching(/^Calibration zone at H: exclusion WY 2015\/16: reason “weir rebuilt” → “gauge moved”$/)
+		]);
+		expect(texts(zones([row]), zones([{ ...row, qualityFlags: { suspect: 'exclude', zeroFlowMonths: [7, 8] } }]))).toEqual([
+			'Calibration zone at H: quality flags the catchment’s → suspect days exclude, zero flow in months 7, 8'
+		]);
 		const fit = { model: 'gr4j', fittedAt: '2026-10-28T10:05:00.000Z', objective: 'kgePrime', seed: 3 };
 		expect(texts(zones([row]), zones([{ ...row, fitRecord: fit }]))).toEqual(['Calibration zone at H: parameters now from a GR4J fit of 2026-10-28 10:05 UTC (KGE′, seed 3)']);
 		expect(diffInputs(a, zones([row])).map((c) => [c.subject, c.kind])).toEqual([['Calibration zones', 'added']]);

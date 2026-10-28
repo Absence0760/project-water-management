@@ -1165,9 +1165,18 @@ type ZoneRowLike = {
 	calibrationEnd?: unknown;
 	calibrationFlowKind?: unknown;
 	calibrationExclusions?: unknown;
+	qualityFlags?: unknown;
 	gr4j?: Record<string, unknown> | null;
 	fitRecord?: unknown;
 };
+
+/** A zone's quality flags in words: the catchment's (null), else its suspect-day use and zero-flow months. */
+function zoneFlagsText(v: unknown): string {
+	if (!v || typeof v !== 'object') return 'the catchment’s';
+	const f = v as { suspect?: unknown; zeroFlowMonths?: unknown };
+	const months = Array.isArray(f.zeroFlowMonths) && f.zeroFlowMonths.length ? `, zero flow in months ${f.zeroFlowMonths.map(String).join(', ')}` : '';
+	return `suspect days ${String(f.suspect)}${months}`;
+}
 
 const ZONE_PARAMS = ['x1', 'x2', 'x3', 'x4'] as const;
 const zoneParamsText = (p: Record<string, unknown> | null | undefined) => (p ? ZONE_PARAMS.map((k) => `${k.toUpperCase()} ${fmtValue(p[k])}`).join(', ') : 'the catchment’s parameters');
@@ -1175,7 +1184,8 @@ const zoneWindowText = (z: ZoneRowLike) => `${z.calibrationStart ? String(z.cali
 
 /**
  * The calibration zones between two snapshots, one line per zone (issue #555, docs/run-comparison.md): a gauge
- * ticked or unticked, and for a gauge ticked in both, its X1–X4, window, flow record, exclusions and fit record.
+ * ticked or unticked, and for a gauge ticked in both, its X1–X4, window, flow record, exclusions, quality flags and fit
+ * record.
  * An unticked row on both sides is no change (no run reads it); [] and absent are the same.
  */
 function calibrationZoneChanges(ra: unknown, rb: unknown, name: (id: string) => string): { kind: InputChange['kind']; text: string }[] {
@@ -1207,8 +1217,10 @@ function calibrationZoneChanges(ra: unknown, rb: unknown, name: (id: string) => 
 			const kind = (v: unknown) => (v ? (SERIES_LABELS[String(v)] ?? String(v)) : 'its gauge record');
 			parts.push(`flow series ${kind(x.calibrationFlowKind)} → ${kind(y.calibrationFlowKind)}`);
 		}
-		const ex = (v: unknown) => (Array.isArray(v) ? v : []);
-		if (!same(ex(x.calibrationExclusions), ex(y.calibrationExclusions))) parts.push(`exclusions ${ex(x.calibrationExclusions).length} → ${ex(y.calibrationExclusions).length}`);
+		// Exclusions matched by period, reasons worded, as the site's are (diffExclusions).
+		for (const c of diffExclusions(x.calibrationExclusions, y.calibrationExclusions, 'exclusion')) parts.push(c.text);
+		// Its quality flags (how suspect days are scored, the months its river stops): they move its fit status too.
+		if (!same(x.qualityFlags ?? null, y.qualityFlags ?? null)) parts.push(`quality flags ${zoneFlagsText(x.qualityFlags)} → ${zoneFlagsText(y.qualityFlags)}`);
 		for (const c of diffFitRecord(x.fitRecord, y.fitRecord)) parts.push(c.text.charAt(0).toLowerCase() + c.text.slice(1));
 		if (parts.length) out.push({ kind: 'changed', text: `${at}: ${parts.join('; ')}` });
 	}

@@ -49,6 +49,12 @@ describe('calibrationZonesSection', () => {
 		expect(calibrationZoneFlags(z)).toEqual([]);
 	});
 
+	it('judges the parameters edited since the fit against those the units ran on, not the stored list', () => {
+		const record = { ...fit('1.106.0'), free: ['x1', 'x2', 'x3', 'x4'], params: { ...params }, editedParams: ['x3'] };
+		expect(calibrationZonesSection(run(record, null))![0]!.fit!.editedParams).toEqual([]);
+		expect(calibrationZonesSection(run({ ...record, params: { ...params, x1: 501 } }, null))![0]!.fit!.editedParams).toEqual(['x1']);
+	});
+
 	it('flags a zone above the site with no fit record, not the site’s own zone', () => {
 		const z = calibrationZonesSection(run(null, null));
 		expect(z![0]!.fit).toBeNull();

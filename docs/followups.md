@@ -2253,6 +2253,22 @@ Still open:
   parameters). Durable fix: run the rules' cases stepwise, and perturb each
   zone's parameters by its own fit's spread. Trigger: before a zoned project
   signs off calibration rules or cites an ensemble.
+- **Errata keyed on a zone's fit engine outside the evidence report.** The
+  evidence report (`evidence-22`) passes every zone fit's engine version to
+  `errataFor`, but the run's validation statement
+  (`liability/validation.ts`), its sign-off statements
+  (`liability/signoff.ts`) and the runs' *May be affected* status
+  (`backend/src/errata/runs.ts`, `runs/read.ts`, `evidence/packs.ts`,
+  `share/links.ts`, `signoffs/routes.ts`) read only
+  `inputs->'settings'->'fitRecord'->>'engineVersion'`, the site's fit. So an
+  erratum keyed on a zone fit's engine is in the pack's errata but not on the
+  same run's statement. Durable fix: carry `fitEngineVersions` (the site's
+  and each ticked zone's `fitRecord.engineVersion`, read from the settings
+  snapshot with a `jsonb_array_elements` over `calibrationZones`) through
+  those queries and let `errataFor` take a list. Trigger: the first erratum
+  keyed on a fit's engine (`keyedOn: fit`) published while a project has a
+  fitted zone, or with the automated-calibration-per-zone work below,
+  whichever comes first.
 - **A zone step's score and the EWR shares.** While a zone above the site is
   fitted, the units below it run on their pre-fit parameters, and the natural
   MAR shares follow every unit's runoff, so a step's score can differ from a

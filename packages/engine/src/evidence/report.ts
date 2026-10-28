@@ -507,8 +507,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 			ewrSiteNodeIds: river.flatMap((s) => (s.isOutlet ? [] : [s.key])),
 			models: [a?.inputs.model, b.inputs.model]
 		}),
-		// The applicant's own dams' observed wet days over the baseline's period (evidence-21); null unless an applicant's application.
 		calibrationZones,
+		// The applicant's own dams' observed wet days over the baseline's period (evidence-21); null unless an applicant's application.
 		damObservations: damObservationsSection(input.damObservations, {
 			applicant: !!a && a.scenario.origin === 'applicant',
 			ownNodeIds: a?.scenario.ownedNodeIds ?? [],
