@@ -44,8 +44,8 @@ const TF_RESOURCE: Record<string, Role> = { backend: 'api', worker: 'worker', fe
 const NOT_BACKEND: Record<string, string> = {
 	ingest: 'the Python mirror ingest job (ingest/, issue #604): its own settings, checked by ingest/lambda_handler.py'
 };
-/** Read by the runtime or the test runner, not by our code: classified, but no module mentions them. */
-const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'NODE_OPTIONS', 'VITEST']);
+/** Read by the runtime, the test runner or a dependency (the Anthropic SDK's base URL), not by our code: classified, but no module mentions them. */
+const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'NODE_OPTIONS', 'VITEST', 'ANTHROPIC_BASE_URL']);
 
 // Production-shaped values, as Terraform renders them (keys must match infra/*.tf exactly; checked below):
 // PROD is each environment block, PROD_SECRETS each runtime secret's JSON.
@@ -97,6 +97,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		ASSISTANT_PROVIDER: 'bedrock',
 		ASSISTANT_MODEL: MODEL,
 		ASSISTANT_TOKENS_PER_MONTH: '2000000',
+		ASSISTANT_TOKENS_PER_USER_MONTH: '1000000',
+		ASSISTANT_TOKENS_PER_MONTH_TOTAL: '25000000',
 		ASSISTANT_MESSAGES_PER_HOUR: '30'
 	},
 	worker: {
@@ -162,8 +164,15 @@ const PROD: Record<Role, Record<string, string>> = {
 		ASSISTANT_MODEL: MODEL,
 		ASSISTANT_BEDROCK_REGION: 'af-south-1',
 		ASSISTANT_TOKENS_PER_MONTH: '2000000',
+		ASSISTANT_TOKENS_PER_USER_MONTH: '1000000',
+		ASSISTANT_TOKENS_PER_MONTH_TOTAL: '25000000',
 		ASSISTANT_MESSAGES_PER_HOUR: '30',
 		ASSISTANT_MAX_HOPS: '6',
+		ASSISTANT_MAX_TURN_TOKENS: '150000',
+		ASSISTANT_MAX_TOOL_CALLS_PER_HOP: '4',
+		ASSISTANT_MAX_OUTPUT_TOKENS: '1024',
+		ASSISTANT_MAX_TOOL_RESULT_CHARS: '12000',
+		ASSISTANT_MAX_INPUT_CHARS: '40000',
 		ASSISTANT_KEEPALIVE_SECONDS: '15',
 		ASSISTANT_TURN_SECONDS: '105'
 	}
@@ -530,6 +539,28 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['assistant', 'ASSISTANT_TURN_SECONDS', 'long'],
 			['assistant', 'ANTHROPIC_API_KEY', 'sk-ant-0000'],
 			['api', 'ANTHROPIC_API_KEY', 'sk-ant-0000'],
+			// A dev provider's host, which an environment change alone must never point a Lambda at.
+			['assistant', 'ANTHROPIC_BASE_URL', 'https://proxy.example.com'],
+			['api', 'ANTHROPIC_BASE_URL', 'https://proxy.example.com'],
+			['assistant', 'OLLAMA_URL', 'https://ollama.example.com'],
+			['api', 'OLLAMA_URL', 'http://localhost:11434'],
+			// The caps: every one set on the assistant, and within the bounds infra/variables.tf validates.
+			['assistant', 'ASSISTANT_TOKENS_PER_MONTH', '20000001'],
+			['assistant', 'ASSISTANT_TOKENS_PER_USER_MONTH', undefined],
+			['assistant', 'ASSISTANT_TOKENS_PER_USER_MONTH', '0'],
+			['assistant', 'ASSISTANT_TOKENS_PER_MONTH_TOTAL', undefined],
+			['assistant', 'ASSISTANT_TOKENS_PER_MONTH_TOTAL', '200000001'],
+			['api', 'ASSISTANT_TOKENS_PER_MONTH_TOTAL', 'all'],
+			['assistant', 'ASSISTANT_MESSAGES_PER_HOUR', '121'],
+			['assistant', 'ASSISTANT_MAX_HOPS', '13'],
+			['assistant', 'ASSISTANT_MAX_TURN_TOKENS', undefined],
+			['assistant', 'ASSISTANT_MAX_TURN_TOKENS', '9999'],
+			['assistant', 'ASSISTANT_MAX_TOOL_CALLS_PER_HOP', undefined],
+			['assistant', 'ASSISTANT_MAX_TOOL_CALLS_PER_HOP', '11'],
+			['assistant', 'ASSISTANT_MAX_OUTPUT_TOKENS', undefined],
+			['assistant', 'ASSISTANT_MAX_OUTPUT_TOKENS', '100000'],
+			['assistant', 'ASSISTANT_MAX_TOOL_RESULT_CHARS', '999'],
+			['assistant', 'ASSISTANT_MAX_INPUT_CHARS', '1000000'],
 			['assistant', 'DB_POOL_MAX', undefined],
 			['assistant', 'ALLOWED_ORIGINS', 'http://localhost:7777'],
 			['assistant', 'CLOUDFRONT_SHARED_SECRET', undefined],

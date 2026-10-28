@@ -413,26 +413,57 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'The region the Bedrock client calls; unset is AWS_REGION. Terraform sets the Lambda’s own, where its bedrock-runtime endpoint is (a global inference profile still routes the request on from there: docs/deployment.md § The assistant).',
 		checks: { assistant: bedrockRegion }
 	},
-	OLLAMA_URL: { why: 'The ollama provider only (a local model), which production refuses (ASSISTANT_PROVIDER).' },
+	OLLAMA_URL: {
+		why: 'The ollama provider’s base URL (a local model), which production refuses (ASSISTANT_PROVIDER). Refused when set too, so a Lambda can never be pointed at another host’s model by an environment change alone.',
+		checks: { api: unset, assistant: unset }
+	},
+	ANTHROPIC_BASE_URL: {
+		why: 'Read by the Anthropic SDK itself (providers/anthropic.ts), so it would send a dev provider’s requests to another host. Production refuses the anthropic provider, and this with it: no Lambda may hold it.',
+		checks: { api: unset, assistant: unset }
+	},
 	ANTHROPIC_API_KEY: {
 		why: 'The anthropic provider’s key (providers/anthropic.ts). Production runs Bedrock (IAM, no key) and refuses the anthropic provider, so no Lambda may hold one: in the environment it is readable by any GetFunctionConfiguration caller, and a key belongs in a runtime secret if that route is ever built (docs/followups.md).',
 		checks: { api: unset, assistant: unset }
 	},
+	// The caps, in weighted tokens (input + 5 × output, assistant/config.ts weightedTokens). Terraform sets every one
+	// (infra/assistant.tf), validated to the same bounds (infra/variables.tf), so production refuses a value outside them.
 	ASSISTANT_TOKENS_PER_MONTH: {
-		why: 'Tokens one project may use in a calendar month. The code falls back to its default (2 M) on a value it can’t read, so production refuses one; the API reads it for the tokens left the status shows. Terraform var.assistant_tokens_per_month.',
-		checks: { api: optional(wholeNumber), assistant: wholeNumber }
+		why: 'Weighted tokens one project may use in a calendar month. The code falls back to its default (2 M) on a value it can’t read, so production refuses one; the API reads it for the budget the status shows. Terraform var.assistant_tokens_per_month.',
+		checks: { api: optional(wholeNumberIn(1, 20_000_000)), assistant: wholeNumberIn(1, 20_000_000) }
+	},
+	ASSISTANT_TOKENS_PER_USER_MONTH: {
+		why: 'Weighted tokens one person may use in a calendar month, across projects, so no one account spends the deployment’s month. Terraform var.assistant_tokens_per_user_month.',
+		checks: { api: optional(wholeNumberIn(1, 20_000_000)), assistant: wholeNumberIn(1, 20_000_000) }
+	},
+	ASSISTANT_TOKENS_PER_MONTH_TOTAL: {
+		why: 'Weighted tokens the whole deployment may use in a calendar month: the cap no number of projects or accounts gets past. Terraform derives it from var.assistant_budget_monthly_usd at the model’s input price (infra/assistant.tf).',
+		checks: { api: optional(wholeNumberIn(1, 200_000_000)), assistant: wholeNumberIn(1, 200_000_000) }
 	},
 	ASSISTANT_MESSAGES_PER_HOUR: {
 		why: 'Messages one user may send in an hour (the 429 with Retry-After). Terraform var.assistant_messages_per_hour; a value set is checked, as ASSISTANT_TOKENS_PER_MONTH.',
-		checks: { api: optional(wholeNumber), assistant: wholeNumber }
+		checks: { api: optional(wholeNumberIn(1, 120)), assistant: wholeNumberIn(1, 120) }
 	},
 	ASSISTANT_MAX_HOPS: {
 		why: 'Model calls in one turn (var.assistant_max_hops). Checked when set: the code default (6) is safe.',
-		checks: { api: optional(wholeNumber), assistant: optional(wholeNumber) }
+		checks: { api: optional(wholeNumberIn(1, 12)), assistant: optional(wholeNumberIn(1, 12)) }
 	},
-	ASSISTANT_MAX_OUTPUT_TOKENS: { why: 'Output tokens per model call. Checked when set: the code default is safe.', checks: { api: optional(wholeNumber), assistant: optional(wholeNumber) } },
-	ASSISTANT_MAX_TOOL_RESULT_CHARS: { why: 'The cap on one tool result the model sees. Checked when set: the code default is safe.', checks: { api: optional(wholeNumber), assistant: optional(wholeNumber) } },
-	ASSISTANT_MAX_INPUT_CHARS: { why: 'The cap on the conversation the page sends. Checked when set: the code default is safe.', checks: { api: optional(wholeNumber), assistant: optional(wholeNumber) } },
+	ASSISTANT_MAX_TURN_TOKENS: {
+		why: 'Weighted tokens one turn may use, every hop together; the turn ends with an error event past it. Terraform var.assistant_max_turn_tokens.',
+		checks: { api: optional(wholeNumberIn(10_000, 1_000_000)), assistant: wholeNumberIn(10_000, 1_000_000) }
+	},
+	ASSISTANT_MAX_TOOL_CALLS_PER_HOP: {
+		why: 'Tool calls run from one model call; the rest get an error result. Terraform var.assistant_max_tool_calls_per_hop.',
+		checks: { api: optional(wholeNumberIn(1, 10)), assistant: wholeNumberIn(1, 10) }
+	},
+	ASSISTANT_MAX_OUTPUT_TOKENS: { why: 'Output tokens per model call. Terraform sets it.', checks: { api: optional(wholeNumberIn(256, 8192)), assistant: wholeNumberIn(256, 8192) } },
+	ASSISTANT_MAX_TOOL_RESULT_CHARS: {
+		why: 'The cap on one tool result the model sees. Terraform sets it.',
+		checks: { api: optional(wholeNumberIn(1000, 50_000)), assistant: wholeNumberIn(1000, 50_000) }
+	},
+	ASSISTANT_MAX_INPUT_CHARS: {
+		why: 'The cap on the conversation the page sends. Terraform sets it.',
+		checks: { api: optional(wholeNumberIn(1000, 200_000)), assistant: wholeNumberIn(1000, 200_000) }
+	},
 	ASSISTANT_KEEPALIVE_SECONDS: {
 		why: 'Seconds between `: keepalive` comments on the stream. CloudFront cuts a response after its origin read timeout with nothing sent (60 s on the assistant’s origin, infra/s3_cloudfront.tf), so production keeps it from 1 to 30 s; unset is the code default (15).',
 		checks: { assistant: optional(wholeNumberIn(1, 30)) }
