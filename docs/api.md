@@ -3883,8 +3883,10 @@ summary, diff: [{ label, before, after }] }`, where the diff is the engine's
 input-diff lines. A refused patch reaches the model as `ok: false` with the
 reason and is never streamed to the page. Apply loads `patch` into the
 Settings draft; Save sends it with `reason: "Assistant suggestion:
-<summary>"` and needs editor. The fields `fitRecord`, `calibrationRules`,
-`evidenceUncertaintyRule` and `responsibleAuthority` are never proposed.
+<summary>"` and needs editor. Never proposed: `fitRecord`,
+`calibrationRules`, `evidenceUncertaintyRule` and `responsibleAuthority` (a
+person's own acts), and `autoRun`, `outcomes`, `outlook` and `ewrHeadline`
+(run policy and display, not model inputs).
 
 A turn is counted (one message, hourly and monthly) when it starts and
 charged its tokens when it ends, whatever the outcome, a client that went

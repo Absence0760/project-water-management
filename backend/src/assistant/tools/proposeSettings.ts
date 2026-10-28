@@ -36,7 +36,12 @@ export const NOT_PROPOSED: Readonly<Record<string, string>> = {
 	fitRecord: 'a fit record is written by running a calibration (the Calibration page), not proposed',
 	calibrationRules: 'the calibration rules carry a person’s sign-off, so a person edits them on the Calibration page',
 	evidenceUncertaintyRule: 'the evidence uncertainty rule is a declaration a person makes for an evidence report',
-	responsibleAuthority: 'who decides the project’s applications is the owner’s choice, not a modelling setting'
+	responsibleAuthority: 'who decides the project’s applications is the owner’s choice, not a modelling setting',
+	// Run policy and what the pages show, not model inputs: get_settings never shows them either (settings.ts NOT_MODEL_INPUT).
+	autoRun: 'when the model runs by itself is run policy, not a modelling setting',
+	outcomes: 'the outcome settings choose what the results pages show, not how the model runs',
+	outlook: 'the seasonal outlook settings choose what the outlook shows, not how the model runs',
+	ewrHeadline: 'the EWR headline chooses what the results pages lead with, not how the model runs'
 };
 
 const Change = z

@@ -4316,7 +4316,8 @@ sends project data to a model. What goes, and what keeps it bounded:
   (`assistantUsage`); an account deletion clears their name.
 - **Cost.** A token budget per project per UTC month
   (`ASSISTANT_TOKENS_PER_MONTH`, 2 M; checked before a turn, charged after,
-  so a turn can pass it by at most one turn's tokens), a message cap per
+  so it can be passed by at most one turn's tokens for each turn in flight at
+  once, which the assistant Lambda's reserved concurrency bounds), a message cap per
   person per hour across projects (`ASSISTANT_MESSAGES_PER_HOUR`, 30; 429
   with `Retry-After`), both counted in Postgres under locks so parallel
   turns count one by one; and per turn at most `ASSISTANT_MAX_HOPS` (6)

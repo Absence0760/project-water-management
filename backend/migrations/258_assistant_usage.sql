@@ -9,7 +9,8 @@
 --     per person and per calendar month (UTC). A project's budget is the sum
 --     of its month's rows (ASSISTANT_TOKENS_PER_MONTH, assistant/config.ts).
 --     A turn is checked against it before it starts and charged after it
---     ends, so a turn can pass the budget by at most one turn's tokens
+--     ends, so the budget can be passed by at most one turn's tokens for each turn
+--     in flight at once (the assistant Lambda's reserved concurrency bounds those)
 --     (bounded by the hop and output caps). Nothing else is kept: no
 --     transcript, no prompt, no answer.
 --   - assistant_rate: messages per person in a fixed one-hour window, across
@@ -111,8 +112,10 @@ CREATE FUNCTION app_assistant_begin(p_project uuid, p_tokens_per_month bigint, p
 		END IF;
 		-- The project's turns one at a time, then the person's row: always in this order.
 		PERFORM pg_advisory_xact_lock(hashtext('assistant_usage:' || p_project::text));
-		-- Housekeeping, and the end of a window: its row goes.
-		DELETE FROM assistant_rate WHERE window_start <= now() - interval '1 hour';
+		-- The end of the person's window: their row goes. Only their own, so two
+		-- begins never lock each other's rows (no deadlock); a row left by
+		-- someone who stopped asking is a few bytes and goes on their next turn.
+		DELETE FROM assistant_rate WHERE user_id = v_user AND window_start <= now() - interval '1 hour';
 		INSERT INTO assistant_rate (user_id) VALUES (v_user) ON CONFLICT (user_id) DO NOTHING;
 		SELECT * INTO v_rate FROM assistant_rate WHERE user_id = v_user FOR UPDATE;
 		SELECT coalesce(sum(u.input_tokens + u.output_tokens), 0)::bigint INTO v_used FROM assistant_usage u
