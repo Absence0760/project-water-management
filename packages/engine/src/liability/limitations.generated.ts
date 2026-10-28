@@ -154,7 +154,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"id": "CZ1",
 		"source": "finding",
 		"severity": "Low (projects that tick a gauge in Calibrate at several gauges, under Per unit)",
-		"title": "Several outputs still show or vary only the calibration site's zone",
+		"title": "Two outputs still vary only the calibration site's zone",
 		"status": "Warned"
 	},
 	{
