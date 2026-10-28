@@ -28,7 +28,7 @@
 	}: {
 		node: NetworkNode;
 		nodes: readonly NetworkNode[];
-		/** Flow share in use (0–1), farms only. */
+		/** The unit's natural MAR share in the latest run (0–1, issue #616), farms only; null before a run. */
 		share: number | null;
 		/** The farm's supply in the latest run; null when there is no run (or not loaded). */
 		supply: FarmSupply | null;
@@ -97,7 +97,7 @@
 			<div><dt>Catchment area<HelpTip key="node.areaKm2" /></dt><dd class="num">{fmtNum(node.areaKm2 || 0, 2)} km²</dd></div>
 		{/if}
 		{#if node.kind === 'farm'}
-			<div><dt>Flow share<HelpTip key="flow-share" /></dt><dd class="num">{share === null ? '–' : fmtPct(share, 1)}</dd></div>
+			<div><dt>Flow share<HelpTip key="flow-share" /></dt><dd class="num">{share === null ? 'after a run' : fmtPct(share, 1)}</dd></div>
 			<div><dt>Dam<HelpTip key="node.damCapacityM3" /></dt><dd class="num">{hasDam(node) ? `${fmtNum(node.damCapacityM3)} m³` : 'No dam'}</dd></div>
 			<div>
 				<dt>Irrigated<HelpTip key="crop-area" /></dt>

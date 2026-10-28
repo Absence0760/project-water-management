@@ -3,7 +3,7 @@ import { newNetworkNode, type NetworkNode } from '@water-management/engine';
 import { NODE_FIELDS } from './fields';
 import { fieldsLine, fieldValue, sectionSummary, type SummaryContext } from './nodeSummary';
 
-const ctx: SummaryContext = { method: 'area', share: 0.2778, demandNames: [], boreholes: 0, coverPatches: 0, efficiency: null };
+const ctx: SummaryContext = { share: 0.2778, demandNames: [], boreholes: 0, coverPatches: 0, efficiency: null };
 const field = (key: string) => NODE_FIELDS.find((f) => f.key === key)!;
 /** A unit with a dam, as the Showcase's Vleiplaas. */
 function unit(extra: Partial<NetworkNode> = {}): NetworkNode {
@@ -48,16 +48,16 @@ describe('sectionSummary', () => {
 		expect(sectionSummary('dam', unit({ damCapacityM3: 0 }), ctx)).toBe('No dam (capacity 0)');
 	});
 
-	it('says the area, with the high/low MAP split only under that method, and the unit’s MAP', () => {
+	it('says the area and the unit’s MAP', () => {
 		expect(sectionSummary('area', unit(), ctx)).toBe('25 km² · MAP not set');
-		expect(sectionSummary('area', unit({ areaHiKm2: 10, areaLoKm2: 15, mapMm: 650 }), { ...ctx, method: 'hiLo' })).toBe('25 km² · high-MAP 10 · low-MAP 15 km² · MAP 650 mm');
+		expect(sectionSummary('area', unit({ mapMm: 650 }), ctx)).toBe('25 km² · MAP 650 mm');
 		// A gauge has no MAP of its own.
 		expect(sectionSummary('area', unit({ kind: 'gauge' }), ctx)).toBe('25 km²');
 	});
 
-	it('says the share in use and the method', () => {
-		expect(sectionSummary('share', unit(), ctx)).toBe('27.78 % in use (by area)');
-		expect(sectionSummary('share', unit({ flowShareManual: 0.3 }), { ...ctx, method: 'manual', share: 0.3 })).toBe('30 % in use (manual) · manual 30 %');
+	it('says the unit’s share in the latest run, or that it comes with one (issue #616)', () => {
+		expect(sectionSummary('share', unit(), ctx)).toBe('27.78 % in the latest run');
+		expect(sectionSummary('share', unit(), { ...ctx, share: null })).toBe('After a run');
 	});
 
 	it('says how water reaches the dam', () => {

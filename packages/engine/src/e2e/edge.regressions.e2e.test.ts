@@ -9,9 +9,6 @@ const APAN = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const NODE: Omit<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId'> = {
 	sortOrder: 0,
 	areaKm2: 0,
-	areaHiKm2: 0,
-	areaLoKm2: 0,
-	flowShareManual: null,
 	pctUpstreamToDam: 1,
 	pctRunoffToDam: 1,
 	damCapacityM3: 0,

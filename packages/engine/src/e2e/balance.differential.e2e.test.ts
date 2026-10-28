@@ -99,9 +99,6 @@ function toNode(f: Farm): NetworkNode {
 		downstreamNodeId: f.down,
 		sortOrder: 0,
 		areaKm2: f.areaKm2,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: f.pu,
 		pctRunoffToDam: f.pr,
 		damCapacityM3: f.cap,
@@ -254,7 +251,7 @@ describe(`random two-unit chains against a re-implementation of model.md (${N} s
 				settings: { apanMm: APAN as never, effectiveRainFraction: 0, lakeEvapFactor: lake, ewrPragmaticM3PerDay: new Array(12).fill(0) as never },
 				model: {
 					nodes: [
-						{ id: 'OUT', name: 'OUT', kind: 'gauge', downstreamNodeId: null, sortOrder: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 1, pctRunoffToDam: 1, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 },
+						{ id: 'OUT', name: 'OUT', kind: 'gauge', downstreamNodeId: null, sortOrder: 0, areaKm2: 0, pctUpstreamToDam: 1, pctRunoffToDam: 1, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 },
 						...farms.map(toNode)
 					],
 					crops: [{ id: 'c', name: 'Crop', cropFactor: new Array(12).fill(1) }],

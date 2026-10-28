@@ -184,11 +184,30 @@ const pct = (v: unknown): unknown => (typeof v === 'number' ? Number((v * 100).t
 /** Fields converted with `pct` (the engine's own key names). */
 const PERCENT_KEYS = new Set(['flowShare', 'ewrShare', 'fractionSupplied', 'ewrFractionDaysNotMet']);
 
-const FARM_COLUMNS: [key: string, header: string][] = [
+/** The share columns of a run before engine 1.105.0 (issue #616), as it recorded them. */
+const RECORDED_SHARE_COLUMNS: [key: string, header: string][] = [
 	// Engine ≥ 0.27.0; empty on older runs. The share of the flow (I), and of the EWR (Y) unless split otherwise.
 	['flowShare', 'Flow share (%)'],
 	// Engine ≥ 1.94.0 (issue #553; the natural MAR share from 1.105.0, issue #615): the share of the EWR (Y) as applied; an older run's is its flow share.
-	['ewrShare', 'EWR share (%)'],
+	['ewrShare', 'EWR share (%)']
+];
+/**
+ * From engine 1.105.0 (issue #616) a unit has one share, its natural MAR share: it splits the flow under Fragmentation,
+ * the EWR, the land-cover threshold and the senior users' claims (FarmSummary.flowShare === ewrShare), so one column.
+ */
+const NATURAL_MAR_SHARE_COLUMNS: [key: string, header: string][] = [['ewrShare', 'Natural MAR share (%)']];
+/** The engine version from which a run's summary has one share per unit (engine compare.ts FLOW_SHARE_RETIRED_IN). */
+const ONE_SHARE_SINCE = [1, 105, 0] as const;
+
+/** Whether `version` (x.y.z, as a run records it) is `since` or later; an unreadable one reads as older. */
+export function engineAtLeast(version: string, since: readonly number[]): boolean {
+	const parts = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim())?.slice(1).map(Number);
+	if (!parts) return false;
+	for (let i = 0; i < since.length; i++) if (parts[i] !== since[i]) return parts[i]! > since[i]!;
+	return true;
+}
+
+const FARM_COLUMNS: [key: string, header: string][] = [
 	['avgCropRequirementM3Day', 'Average crop water requirement (m³/day)'],
 	['avgDemandM3Day', 'Average abstraction demand (m³/day)'],
 	['avgSuppliedM3Day', 'Average supplied (m³/day)'],
@@ -1215,7 +1234,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 			].join('; ')
 		]);
 	const farms = summary.farms as unknown as Record<string, unknown>[];
-	const known = new Set(['nodeId', 'name', ...FARM_COLUMNS.map(([k]) => k)]);
+	const farmColumns = [...(engineAtLeast(meta.engineVersion, ONE_SHARE_SINCE) ? NATURAL_MAR_SHARE_COLUMNS : RECORDED_SHARE_COLUMNS), ...FARM_COLUMNS];
+	// flowShare and ewrShare both stay known: a 1.105.0 run's flowShare is its natural MAR share, the column already written.
+	const known = new Set(['nodeId', 'name', 'flowShare', 'ewrShare', ...FARM_COLUMNS.map(([k]) => k)]);
 	const extra = [...new Set(farms.flatMap((f) => Object.keys(f)))].filter(
 		(k) => !known.has(k) && farms.some((f) => scalar(f[k]) !== undefined)
 	);
@@ -1225,7 +1246,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	const endCapacity = capacity && meta.damCapacityEndM3 && Object.keys(meta.damCapacityEndM3).length ? meta.damCapacityEndM3 : null;
 	yield csvRow([
 		'Farm',
-		...FARM_COLUMNS.map(([, h]) => h),
+		...farmColumns.map(([, h]) => h),
 		...(capacity ? ['Dam capacity (m³)'] : []),
 		...(endCapacity ? ['Dam capacity on the last day (m³)'] : []),
 		...extra.map((k) => OPTIONAL_FARM_LABELS[k] ?? k)
@@ -1234,7 +1255,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		const id = String(f.nodeId);
 		yield csvRow([
 			String(f.name ?? ''),
-			...FARM_COLUMNS.map(([k]) => {
+			...farmColumns.map(([k]) => {
 				// A run before engine 1.94.0 split the EWR by the flow share.
 				const v = k === 'ewrShare' ? (f.ewrShare ?? f.flowShare) : f[k];
 				return scalar(PERCENT_KEYS.has(k) ? pct(v) : v) ?? null;

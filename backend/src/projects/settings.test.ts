@@ -1004,6 +1004,17 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, unitRain: { ...unitRain, mapPeriod: undefined } } })).toBe(false);
 	});
 
+	it('accepts an optional shareRain fingerprint inside forcing (a Fragmentation fit, engine ≥ 1.105.0, issue #616), and refuses a malformed one', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		const unit = { nodeId: 'u1', rule: 'unitChirps', rainKey: 'rain_chirps_cell_mm@u1', factor: 1, factorSource: 'chirpsRaw', gaugeMapFactor: null, chirpsSource: 'raw', chirpsFactor: 1 };
+		const shareRain = { mode: 'perUnit', gaugeMapMm: null, mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, units: [unit] };
+		expect(ok({ ...record, forcing: { ...forcing, shareRain } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, shareRain: null } })).toBe(true); // no land unit
+		expect(ok({ ...record, forcing })).toBe(true); // a Per unit fit, or one made before
+		expect(ok({ ...record, forcing: { ...forcing, shareRain: { ...shareRain, mode: 'catchment' } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, shareRain: { ...shareRain, units: 'u1' } } })).toBe(false);
+	});
+
 	it('accepts an optional chirpsBiasCorrection inside forcing, and a forcing from before it without', () => {
 		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
 		expect(ok({ ...record, forcing })).toBe(true); // no chirpsBiasCorrection: a forcing from before it existed
@@ -1167,6 +1178,26 @@ describe('SettingsPatch.ewrChargeSource and lowFlowMeasure (engine ≥ 1.3.0, is
 
 	it('defaults to what every earlier run did for a project that never set them', () => {
 		expect(mergeSettings({})).toMatchObject({ ewrChargeSource: 'pragmatic', lowFlowMeasure: 'total' });
+	});
+});
+
+describe('the retired flowShareMethod and hiLoSplit (engine ≤ 1.104.x; retired by issue #616)', () => {
+	it('a patch with them still saves (an older web build), the keys stripped, whatever they say', () => {
+		for (const flowShareMethod of ['area', 'hiLo', 'manual', 'anything', null]) {
+			const r = SettingsPatch.safeParse({ flowShareMethod, hiLoSplit: { hi: 0.7, lo: 0.3 }, lowFlowMeasure: 'total' });
+			expect(r.success, String(flowShareMethod)).toBe(true);
+			expect(r.data).toEqual({ lowFlowMeasure: 'total' });
+		}
+		expect(SettingsPatch.safeParse({ hiLoSplit: 'not even an object' }).data).toEqual({});
+	});
+
+	it('merging drops stored values, and the defaults have none', () => {
+		for (const k of ['flowShareMethod', 'hiLoSplit']) {
+			expect(k in mergeSettings({}), k).toBe(false);
+			expect(k in mergeSettings({ flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.6, lo: 0.4 } }), k).toBe(false);
+		}
+		// The positive control: a stored setting beside them is kept.
+		expect(mergeSettings({ flowShareMethod: 'manual', lakeEvapFactor: 0.66 }).lakeEvapFactor).toBe(0.66);
 	});
 });
 

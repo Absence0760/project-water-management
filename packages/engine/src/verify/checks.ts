@@ -16,7 +16,6 @@ import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreh
 import { curveAreaAt, fixedReleaseRoom, passInflowTarget, resolveDamCurve, resolveRelease } from '../network/dam';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../network/development';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
-import { flowShares } from '../network/shares';
 import { ewrSplitDays, naturalMarShares } from '../network/ewrSplit';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
 import { canMove, externalRuleKeys, externalRules, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
@@ -2149,7 +2148,9 @@ export function checkGroundwater(input: ModelInput, out: ModelOutput): string | 
  * - a farm with land cover: runoff I + reduction = natural flow × its share,
  *   0 ≤ reduction ≤ that natural runoff, and the reduction is
  *   lowFlow × MIN(I0, q) + mar × MAX(I0 − q, 0) with q = share × the natural
- *   flow exceeded 75 % of the days;
+ *   flow exceeded 75 % of the days; the share is the one the run applied
+ *   (FarmSummary.flowShare: its natural MAR share from engine 1.105.0, which
+ *   checkEwrSplit redoes);
  * - the catchment `landcover_reduction` is the sum over the farms, and the
  *   summary's mean and class split add up to it;
  * - without land cover there is no reduction series or summary.
@@ -2162,9 +2163,8 @@ export function checkLandCover(input: ModelInput, out: ModelOutput): string | nu
 	if (!any) return total || out.summary.landCover ? 'land-cover reduction reported without land cover' : null;
 	if (!total || !out.summary.landCover) return 'land-cover reduction series or summary missing';
 	const natural = get.get('null|natural_flow')!;
-	const d = defaultProjectSettings();
-	const method = ['area', 'hiLo', 'manual'].includes(String(input.settings.flowShareMethod)) ? (input.settings.flowShareMethod as 'area' | 'hiLo' | 'manual') : d.flowShareMethod;
-	const share = flowShares(input.model.nodes, method, { ...d.hiLoSplit, ...((input.settings.hiLoSplit as object | undefined) ?? {}) }).share;
+	const applied = new Map(out.summary.farms.map((f) => [f.nodeId, f.flowShare ?? 0]));
+	const share = input.model.nodes.map((n) => (n.kind === 'farm' ? (applied.get(n.id) ?? 0) : 0));
 	const q0 = lowFlowThreshold(natural.slice(0, out.summary.historyDays ?? natural.length));
 	if (Math.abs(out.summary.landCover.lowFlowThresholdM3Day - q0) > tol(q0)) return `land-cover low-flow threshold ${out.summary.landCover.lowFlowThresholdM3Day} ≠ ${q0}`;
 	const sum = new Float64Array(out.days);
@@ -2201,16 +2201,20 @@ export function checkLandCover(input: ModelInput, out: ModelOutput): string | nu
 }
 
 /**
- * The EWR split between the units (engine ≥ 1.94.0; by each unit's natural
- * MAR under both methods from 1.105.0, ../network/ewrSplit.ts, docs/model.md
- * §2.5b), from the run's own series and inputs:
- * - every farm's EWR share series Y is the outlet EWR × its applied share
- *   (FarmSummary.ewrShare), every day, so Σ Y over the farms is the outlet
- *   EWR × Σ shares;
- * - the flow share applied only with no land unit (or a resumed run whose
- *   snapshot pinned none), each farm's EWR share its flow share;
- * - otherwise the shares add up to 1 and a farm with no area has 0; the area
- *   split (no runoff) is each land unit's area ÷ Σ;
+ * Each unit's one share (engine ≥ 1.94.0 for the EWR; from 1.105.0 the natural
+ * MAR share under both methods, ../network/ewrSplit.ts, docs/model.md §2.5b,
+ * and from issue #616 the flow's under Fragmentation too, §2.5), from the
+ * run's own series and inputs:
+ * - every farm's flow share and EWR share are the same (FarmSummary.flowShare
+ *   = ewrShare);
+ * - every farm's EWR share series Y is the outlet EWR × that share, every
+ *   day, so Σ Y over the farms is the outlet EWR × Σ shares;
+ * - under Fragmentation (no runoff from each unit's own rain) every farm's
+ *   runoff + its land-cover reduction is the natural flow × its share, every
+ *   day, so with the shares adding up to 1 the units make the natural flow;
+ * - with no land unit every share is 0; otherwise the shares add up to 1 and
+ *   a farm with no area has 0; the area split (no runoff, no units' runoff
+ *   supplied, or a resumed run that pinned none) is each land unit's area ÷ Σ;
  * - the natural MAR from Per unit's own runoff (unless pinned) is each unit's
  *   runoff_natural over the complete water years of the historical days
  *   (else all of them) ÷ the units' total, recomputed here;
@@ -2223,26 +2227,39 @@ export function checkLandCover(input: ModelInput, out: ModelOutput): string | nu
 export function checkEwrSplit(input: ModelInput, out: ModelOutput): string | null {
 	const split = out.summary.ewrSplit;
 	if (!split || split.method !== undefined) return null;
+	if (split.applied === 'flowShare') return 'a run from engine 1.105.0 split by the flow share, which it no longer has';
 	const get = seriesMap(out);
 	const ewr = get.get('null|ewr');
 	if (!ewr) return 'the outlet EWR series is missing';
+	const natural = get.get('null|natural_flow');
 	for (const f of out.summary.farms) {
 		const k = f.ewrShare;
 		if (k === undefined || !(k >= 0 && k <= 1 + 1e-12)) return `${f.nodeId}: EWR share ${String(k)} is not a share from 0 to 1`;
-		if (split.applied === 'flowShare' && k !== f.flowShare) return `${f.nodeId}: EWR share ${k} ≠ its flow share ${f.flowShare} under a flow-share split`;
+		if (f.flowShare !== k) return `${f.nodeId}: flow share ${String(f.flowShare)} ≠ its EWR share ${k}: a unit has one share`;
 		const y = get.get(`${f.nodeId}|ewr`);
 		if (!y) return `${f.nodeId}: its EWR share series is missing`;
 		for (let t = 0; t < out.days; t++) if (y[t] !== ewr[t]! * k) return `${f.nodeId} day ${t}: EWR share ${y[t]} ≠ the EWR ${ewr[t]} × ${k}`;
+		if (!out.summary.unitRain && natural) {
+			const I = get.get(`${f.nodeId}|runoff`);
+			const red = get.get(`${f.nodeId}|landcover_reduction`);
+			if (I)
+				for (let t = 0; t < out.days; t++) {
+					const i0 = natural[t]! * k;
+					const v = I[t]! + (red ? red[t]! : 0);
+					if (Math.abs(v - i0) > tol(i0)) return `${f.nodeId} day ${t}: runoff ${v} (before land cover) ≠ the natural flow × its share ${i0}`;
+				}
+		}
 	}
 	const area = new Map(input.model.nodes.filter((n) => n.kind === 'farm').map((n) => [n.id, n.areaKm2 > 0 && Number.isFinite(n.areaKm2) ? n.areaKm2 : 0]));
 	const land = [...area.values()].filter((a) => a > 0).length;
-	if (split.applied === 'flowShare') {
-		if (split.why === 'noLandUnit' && land > 0) return 'the EWR split fell back to the flow share with no land unit, but the model has one';
-		// Only natural flow supplied from outside (runModelWith) has no runoff model's balance: a GR4J run never falls back here.
-		if (split.why === 'noUnitRunoff' && (land === 0 || out.summary.unitRain || out.summary.runoff)) return 'the EWR split fell back to the flow share without the units’ runoff, but it had it or there is no land unit';
-		if (split.why !== 'noLandUnit' && split.why !== 'noUnitRunoff' && split.why !== 'resumed') return `the EWR split fell back to the flow share (${String(split.why)}) where it shouldn't`;
+	if (split.why === 'noLandUnit') {
+		if (land > 0) return 'the run found no land unit, but the model has one';
+		for (const f of out.summary.farms) if (f.ewrShare !== 0) return `${f.nodeId}: a share of ${f.ewrShare} with no land unit`;
 		return null;
 	}
+	// Only natural flow supplied from outside (runModelWith) has no runoff model's balance: a GR4J run never takes it.
+	if (split.why === 'noUnitRunoff' && (out.summary.unitRain || out.summary.runoff)) return 'the shares fell back to the area without the units’ runoff, but the run had it';
+	if (split.why !== undefined && split.why !== 'noRunoff' && split.why !== 'noUnitRunoff' && split.why !== 'resumed') return `the shares fell back (${String(split.why)}) where they shouldn't`;
 	if (!split.period) return 'an EWR split by natural MAR or area without its period';
 	let sum = 0;
 	for (const f of out.summary.farms) {

@@ -40,21 +40,20 @@ export function shortfall(a: number, b: number, scale: number): number {
 
 export interface PlanNode {
 	kind: 'farm' | 'gauge' | 'user';
-	/** Fraction of natural flow / EWR generated on this farm's land. */
+	/**
+	 * The farm's share of the catchment's natural flow and of the EWR, 0–1:
+	 * from engine 1.105.0 its natural MAR share (./ewrSplit.ts, docs/model.md
+	 * §2.5), which also sets its land-cover low-flow threshold (§2.5a) and its
+	 * part of the senior users' claims (§2.7c). 0 for gauges and users.
+	 */
 	share: number;
 	/**
 	 * The unit's own natural runoff, m³/day (engine ≥ 1.78.0, runoff from each
 	 * unit's own rain, docs/model.md §2.4h): its local inflow in place of
-	 * naturalFlow × share. The land-cover threshold still uses `share`, and
-	 * the EWR split does unless `ewrShare` is set. Absent under catchment rain.
+	 * naturalFlow × share. The land-cover threshold and the EWR still use
+	 * `share`. Absent under catchment rain.
 	 */
 	localRunoff?: Float64Array;
-	/**
-	 * The unit's share of the EWR when it isn't `share` (engine ≥ 1.94.0,
-	 * settings.ewrSplit 'naturalMar', ./ewrSplit.ts): its natural MAR ÷ Σ
-	 * the units'. Absent = `share`, so a run without it is the one before.
-	 */
-	ewrShare?: number;
 	/** Share of the upstream inflow (H) that enters the dam (K); the rest passes below it (L). Engine ≥ 0.9.0 (model.md §3 Q1). */
 	pctUpstreamToDam: number;
 	pctRunoffToDam: number;
@@ -231,7 +230,8 @@ export interface PlanNode {
 	/**
 	 * A farm's share of the senior users' demand below it, m³/day (WP-1.33):
 	 * Σ over senior users u downstream of D_u × share / Σ upstream shares of u,
-	 * the EWR's fragmentation rule. Absent = none.
+	 * the EWR's fragmentation rule (run.ts seniorClaims; the natural MAR shares
+	 * from engine 1.105.0). Absent = none.
 	 */
 	seniorClaim?: Float64Array;
 	/**
@@ -1585,7 +1585,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// (b023's stand-in for a river pump, ./supply.ts), so all three are abstraction: the farm leaves
 			// MIN(H + I, keep), cutting O first, then K and M pro rata, as the senior users' pass does.
 			// The unit's EWR share (engine ≥ 1.94.0, settings.ewrSplit): its natural MAR's, else its flow share.
-			const Y = ewrT * (node.ewrShare ?? node.share);
+			const Y = ewrT * node.share;
 			const Z = Y + sumZ;
 			const ho = node.handsOff;
 			const hk = ho ? handsOffToday(ho, month[t]!, Z) : 0;

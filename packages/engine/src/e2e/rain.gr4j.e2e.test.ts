@@ -13,9 +13,6 @@ import { runForecastChecked } from '../forecast';
 const APAN = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100]; // Oct … Sep, mm/month
 const NODE = {
 	sortOrder: 0,
-	areaHiKm2: 0,
-	areaLoKm2: 0,
-	flowShareManual: null,
 	pctUpstreamToDam: 0,
 	pctRunoffToDam: 0,
 	damCapacityM3: 0,

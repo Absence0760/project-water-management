@@ -104,7 +104,7 @@ export { curveAreaAt, resolveDamCurve, type DamCurve } from './network/dam';
 export { DAM_AGO_DAYS, DAM_YEAR_DAYS, damFigures, type DamFigures } from './network/damLevel';
 export { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, DAM_SEDIMENT_MAX_PER_YEAR, damCapacityFactor, damCapacityOn, developmentProblem, SEDIMENT_YEAR_DAYS } from './network/development';
 export { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
-export { flowShares, inputFlowShares, overAllocationError, SHARE_TOLERANCE, type FlowShares } from './network/shares';
+export { inputFlowShares, overAllocationError, SHARE_TOLERANCE, type FlowShares } from './legacy/flowShares';
 export { EWR_SPLIT_LABEL, EWR_SPLIT_METHODS, EWR_SPLIT_RETIRED_IN, ewrSplitNote, type EwrSplitInfo, type EwrSplitMethod, type EwrSplitPeriod, type EwrSplitUnit } from './network/ewrSplit';
 export { calibrationStats, type CalibrationWindow } from './network/stats';
 export { ewrCompliance, type EwrCountMethod, type EwrSite } from './network/ewr';

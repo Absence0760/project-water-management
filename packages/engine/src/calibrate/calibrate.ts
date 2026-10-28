@@ -27,7 +27,6 @@ import { simulateNetwork } from '../network/simulate';
 import { alignFlow } from '../prepare';
 import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, fillPlanOutletEwr, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
-import { fillPlanEwrShares } from '../network/ewrSplit';
 import { calibrationSiteIndex } from './site';
 import { MM_KM2_TO_M3, requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
@@ -267,6 +266,8 @@ export interface CalibrationReport {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The per-unit forcing the fit ran under (engine ≥ 1.78.0, docs/model.md §2.4h); absent under catchment rain. */
 	unitRain?: UnitRainFingerprint | null;
+	/** Under Fragmentation, the forcing its share runs ran on (engine ≥ 1.105.0, issue #616); null without a land unit, absent under Per unit. */
+	shareRain?: UnitRainFingerprint | null;
 	/** The catchment's rainfall station the fit's rain read (engine ≥ 1.91.0, docs/model.md §2.4i); absent without one. */
 	catchmentStation?: CatchmentStationFingerprint | null;
 	/**
@@ -371,6 +372,11 @@ export interface CalibrationProblem {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The per-unit forcing (engine ≥ 1.78.0, settings.unitRain `perUnit`), for fit provenance; absent under catchment rain. */
 	unitRain?: UnitRainFingerprint | null;
+	/**
+	 * Under Fragmentation, the forcing its share runs ran on (engine ≥ 1.105.0, issue #616: the units' shares split the
+	 * flow each candidate is scored on), for fit provenance; null without a land unit, absent under Per unit.
+	 */
+	shareRain?: UnitRainFingerprint | null;
 	/** The catchment's rainfall station (engine ≥ 1.91.0, §2.4i), for fit provenance; absent without one. */
 	catchmentStation?: CatchmentStationFingerprint | null;
 	/**
@@ -541,10 +547,11 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// with land cover can't stop at the last scored day.
 	// A daily outlet EWR scaled by natural MAR (engine ≥ 1.77.0, §2.9f) reads every historical day's natural flow too.
 	const wholeRun = plan.nodes.some((nd) => nd.landCover) || outletEwr?.source.scaling === 'mar';
-	// The EWR split by each unit's natural MAR (engine ≥ 1.94.0; every run with a land unit from 1.105.0, §2.5b) reads
+	// Each unit's natural MAR share (engine ≥ 1.94.0 for the EWR; from 1.105.0 every run's one share, §2.5, §2.5b) reads
 	// the units' runoff over its period, the complete water years: the runoff runs to the period's end, the network
 	// still stops at the last scored day.
 	const splitRefill = ewrSplit.refill;
+	const refillShares = ewrSplit.refillShares;
 	const areaKm2 = outletEwr?.info.modelAreaKm2 ?? 0;
 	const simulator = (scoredTo: number) => {
 		const n = wholeRun ? days : scoredTo;
@@ -554,8 +561,10 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			runoff(p, runoffTo);
 			// The daily outlet EWR from the DRM tables follows each candidate's natural flow, as a run on it would.
 			if (outletEwr) fillPlanOutletEwr(plan, topo.outflow, natural, outletEwr.source, areaKm2, historyDays, n);
-			// The EWR split by natural MAR follows each candidate's units' runoff (Per unit's, or Fragmentation's share runs), as a run on it would.
-			if (splitRefill) fillPlanEwrShares(plan.nodes, splitRefill);
+			// The unit shares follow each candidate's units' runoff (Per unit's, or Fragmentation's share runs), as a run on
+			// it would: the flow under Fragmentation, the EWR and the land-cover threshold read them as the network runs,
+			// and the senior users' claims are made again from them (engine 1.105.0, issue #616).
+			refillShares?.();
 			if (siteIndex < 0) return new Float64Array(days);
 			return simulateNetwork(shortPlan).nodes[siteIndex]!.outflow;
 		};
@@ -608,7 +617,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		),
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),
-		...(perUnit ? { unitRain: unitRainFingerprint(settings.unitRain, perUnit.recipes) } : {}),
+		...(perUnit ? { unitRain: unitRainFingerprint(settings.unitRain, perUnit.recipes) } : { shareRain: shareForcing ? unitRainFingerprint(shareForcingSettings(settings).unitRain, shareForcing.recipes) : null }),
 		...(run.stations?.catchment ? { catchmentStation: catchmentStationFingerprint(rainStationSummary(run.stations.context, run.stations.catchment, [], run.stations.plan?.map ?? null)) } : {}),
 		rain: arealRainOn(usedRain, areal, month),
 		// Up to the last observed day, flagged or not: `fitAllDays` scores those too.
@@ -1118,6 +1127,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		representativeness,
 		chirpsFactors: pb.chirpsFactors ?? null,
 		...(pb.unitRain ? { unitRain: pb.unitRain } : {}),
+		...(pb.shareRain !== undefined ? { shareRain: pb.shareRain } : {}),
 		...(pb.catchmentStation ? { catchmentStation: pb.catchmentStation } : {}),
 		dayQuality: pb.dayQuality ?? null,
 		fitAllDays,

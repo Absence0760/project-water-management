@@ -2,7 +2,7 @@
 // each section card's heading says what the section is set to, so a closed
 // one still reads ("300 000 m³ · starts 60 % · min 15 % · seepage 0 %/day"),
 // and each "More … settings" fold names its fields with their values.
-import { hasCropShares, SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, type FlowShareMethod, type NetworkNode } from '@water-management/engine';
+import { hasCropShares, SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, type NetworkNode } from '@water-management/engine';
 import { fmtNum } from '#lib/format/number.js';
 import { pctText } from '#lib/model/systems.js';
 import { fieldScale, hasDam, isPct, type NodeField } from './fields';
@@ -31,8 +31,7 @@ export const fieldsLine = (fields: readonly NodeField[], n: NetworkNode) => fiel
 
 /** What a section's summary reads beyond the node itself. */
 export interface SummaryContext {
-	method: FlowShareMethod;
-	/** The flow share in use (0–1); null for a gauge. */
+	/** The unit's natural MAR share in the latest run (0–1); null before a run, or for a node the run didn't have. */
 	share: number | null;
 	/** The unit's demand objects' names. */
 	demandNames: readonly string[];
@@ -42,22 +41,17 @@ export interface SummaryContext {
 	efficiency: number | null;
 }
 
-const METHOD_NAME: Record<FlowShareMethod, string> = { area: 'by area', hiLo: 'high/low MAP split', manual: 'manual' };
-
 /** The line in a section card's heading: what the section is set to now. */
 export function sectionSummary(sec: NodeSection, n: NetworkNode, c: SummaryContext): string {
 	switch (sec) {
 		case 'area': {
 			const parts = [`${num(n.areaKm2)} km²`];
-			if (c.method === 'hiLo') parts.push(`high-MAP ${num(n.areaHiKm2 ?? 0)} · low-MAP ${num(n.areaLoKm2 ?? 0)} km²`);
 			if (n.kind === 'farm') parts.push(n.mapMm == null ? 'MAP not set' : `MAP ${fmtNum(n.mapMm)} mm`);
 			return parts.join(' · ');
 		}
-		case 'share': {
-			const inUse = c.share === null ? 'not worked out' : `${num(c.share * 100)} % in use`;
-			const manual = c.method === 'manual' ? ` · manual ${n.flowShareManual == null ? 'not set' : pct(n.flowShareManual)}` : '';
-			return `${inUse} (${METHOD_NAME[c.method]})${manual}`;
-		}
+		case 'share':
+			// Each unit's natural MAR share, from the latest run (issue #616): it needs GR4J, so it isn't worked out while editing.
+			return c.share === null ? 'After a run' : `${num(c.share * 100)} % in the latest run`;
 		case 'dam':
 			if (!hasDam(n)) return 'No dam (capacity 0)';
 			return `${fmtNum(n.damCapacityM3)} m³ · starts ${pct(n.damInitialPct)} · min ${pct(n.damMinPct)} · seepage ${pct(n.damSeepagePerDay ?? 0)}/day`;

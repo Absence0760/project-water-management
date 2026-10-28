@@ -69,7 +69,7 @@ function twelveUnits(perUnit: boolean): ModelInput {
 	const start = '1981-01-01';
 	const days = toEpochDay('2025-03-31') - toEpochDay(start) + 1;
 	const rain = (k: number, phase: number) => Array.from({ length: days }, (_, i) => ((i + phase) % 11 === 0 ? 25 * k : (i + phase) % 3 === 0 ? 1.5 * k : 0));
-	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0.5, pctRunoffToDam: 0.5, damCapacityM3: 200_000, damInitialPct: 0.5, damMinPct: 0, divertCapacityM3Day: 2000, irrigationEfficiency: 0.8, returnFlowFraction: 0.1, damAreaFullM2: 40_000, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const node = { sortOrder: 0, pctUpstreamToDam: 0.5, pctRunoffToDam: 0.5, damCapacityM3: 200_000, damInitialPct: 0.5, damMinPct: 0, divertCapacityM3Day: 2000, irrigationEfficiency: 0.8, returnFlowFraction: 0.1, damAreaFullM2: 40_000, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const nodes = [{ ...node, id: 'g', name: 'Gauge', kind: 'gauge' as const, downstreamNodeId: null, areaKm2: 0, damCapacityM3: 0 }];
 	const series: Record<string, { startDate: string; values: number[] }> = {
 		rain_catchment_mm: { startDate: start, values: rain(1, 0) },

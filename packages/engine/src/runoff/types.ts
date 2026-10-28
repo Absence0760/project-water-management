@@ -10,6 +10,7 @@
 import type { ModelInput, ProjectSettings, RunoffBalance, SeriesKind, UnitRainSummary } from '../project';
 import type { ChirpsCorrection } from '../rain';
 import type { UnitRainRecipe } from './unitRain';
+import type { UnitRainFingerprint } from './unitRainFingerprint';
 import type { StationContext } from './stationForcing';
 import type { StationAreaForcing } from '../project';
 
@@ -125,6 +126,11 @@ export interface NaturalFlowInput {
 	shareRunoff?: { nodeId: string; runoffM3Day: Float64Array }[];
 	/** With shareRunoff: the land units on rule 4 (the catchment rain), whose share is their area's. */
 	shareCatchmentRain?: { nodeId: string; name: string }[];
+	/**
+	 * The forcing the share runs ran on (engine ≥ 1.105.0, issue #616: unitRainFingerprint of the Per unit setup), so a
+	 * Fragmentation fit can tell when it moved (RunSummary.shareRain); null when they were tried without a land unit.
+	 */
+	shareRain?: UnitRainFingerprint | null;
 }
 
 export interface RunContext {

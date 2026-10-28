@@ -440,19 +440,24 @@ def convert_upstream_pct(wb: Workbook, farms: dict[str, dict[str, Any]]) -> None
     )
 
 
-def read_farm_spec(wb: Workbook) -> tuple[dict[str, dict[str, Any]], str, dict[str, float], float]:
+# b023's fragmentation methods are retired (issue #616): under Fragmentation the app splits the flow by each unit's
+# natural MAR, so the workbook's method, its Hi/Lo split and the High-/Low-MAP area and External fragmentation
+# columns aren't read into the project (a workbook that still has them imports as before). The workbook's "Selected
+# fragmentation" still goes to expected.json, for the client regression suite. A method other than Area (Hi/Lo,
+# Specific, or one the list doesn't have) gets a note, since the app's shares differ from the workbook's.
+def flow_share_method_note(method_raw: str) -> str:
+    return (
+        f"[Farm spec] the workbook's fragmentation method {method_raw!r} is not used: the app splits the flow by "
+        "each unit's natural MAR (docs/model.md §2.5)"
+    )
+
+
+def read_farm_spec(wb: Workbook) -> tuple[dict[str, dict[str, Any]], float]:
     sheet, rows, names = table_rows(wb, "zFarmSpec_FarmNameLst")
     col = lambda n: wb.ref(n)[1]  # noqa: E731
-    c_area_total = wb.ref("rFarmSpec_AreaTotal")[1]
-    _, c_hi, _, c_lo, _ = wb.ref("rFarmSpec_DataAreas")
-    c_sel = col("zFarmSpec_PercFragmLst")
-    c_ext = c_sel - 1  # "External fragmentation copied (%)" sits just left of "Selected"
     cols = {
-        "areaKm2": c_area_total,
-        "areaHiKm2": c_hi,
-        "areaLoKm2": c_lo,
-        "flowShareManual": c_ext,
-        "selectedShare": c_sel,
+        "areaKm2": col("rFarmSpec_AreaTotal"),
+        "selectedShare": col("zFarmSpec_PercFragmLst"),
         "pctUpstreamToDam": col("zFarmSpec_PercUpstrInflowToDamLst"),
         "pctRunoffToDam": col("zFarmSpec_PercFarmRunoffToDamList"),
         "damCapacityM3": col("zFarmSpec_CompositeDamVol"),
@@ -467,15 +472,14 @@ def read_farm_spec(wb: Workbook) -> tuple[dict[str, dict[str, Any]], str, dict[s
         row = wb.block(sheet, cmin, r, cmax, r)[0]
         farms[name] = {k: num(row[c - cmin]) for k, c in cols.items()}
     convert_upstream_pct(wb, farms)
-    method_raw = clean(wb.cell("rFarmSpec_SelectedMethod"))
-    methods = [clean(v[0]) for v in wb.named("rFarmSpec_Methods")]  # Area, Hi/Lo, Specific
-    method = {0: "area", 1: "hiLo", 2: "manual"}.get(methods.index(method_raw) if method_raw in methods else 0)
-    if method_raw not in methods:
-        wb.notes.append(f"unknown fragmentation method {method_raw!r}; using area")
-    s, _, r_sel, _, _ = wb.ref("rFarmSpec_SelectedMethod")
-    hi, lo = wb.block(s, c_hi, r_sel, c_lo, r_sel)[0]
+    if "rFarmSpec_SelectedMethod" in wb.wb.defined_names:
+        method_raw = clean(wb.cell("rFarmSpec_SelectedMethod"))
+        methods = [clean(v[0]) for v in wb.named("rFarmSpec_Methods")] if "rFarmSpec_Methods" in wb.wb.defined_names else []
+        area = methods[0] if methods else "Area"  # Area, Hi/Lo, Specific
+        if method_raw and method_raw != area:
+            wb.notes.append(flow_share_method_note(method_raw))
     tol = num(wb.cell("rFarmSpec_FragmentationTolerance"), 0.0002)
-    return farms, method, {"hi": num(hi, 0.5), "lo": num(lo, 0.5)}, tol
+    return farms, tol
 
 
 def read_crops(wb: Workbook) -> tuple[list[dict[str, Any]], list[float], float]:
@@ -1303,7 +1307,7 @@ def extract(
         uid = lambda key: str(uuid.uuid5(ns, key))  # noqa: E731
 
         elements, outflow = read_network(wb)
-        spec, method, split, tol = read_farm_spec(wb)
+        spec, tol = read_farm_spec(wb)
         crops, apan, erf = read_crops(wb)
         areas, gross_sheet, gross_days = read_crop_areas(wb)
         transfers = read_transfers(wb)
@@ -1334,9 +1338,6 @@ def extract(
                     "downstreamNodeId": uid(f"node:{downstream[e['name']]}") if downstream[e["name"]] else None,
                     "sortOrder": order,
                     "areaKm2": s.get("areaKm2", 0),
-                    "areaHiKm2": s.get("areaHiKm2", 0),
-                    "areaLoKm2": s.get("areaLoKm2", 0),
-                    "flowShareManual": s.get("flowShareManual") if e["kind"] == "farm" else None,
                     "pctUpstreamToDam": s.get("pctUpstreamToDam", 1),
                     "pctRunoffToDam": s.get("pctRunoffToDam", 0),
                     "damCapacityM3": s.get("damCapacityM3", 0),
@@ -1447,8 +1448,6 @@ def extract(
             "februaryDays": month_days(wb),
             "effectiveRainFraction": erf,
             "apanMm": apan,
-            "flowShareMethod": method,
-            "hiLoSplit": split,
             "calibration": calibration,
             "ewrPragmaticM3PerDay": ewr,
             "simulationStart": None,

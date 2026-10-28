@@ -80,7 +80,14 @@ rows and columns don't break it.
 
 - **Nodes** come from [Network] and [Farm spec]. `downstreamNodeId` is the
   inverse of the "Upstream element" columns. `areaKm2` is the farm's total area
-  (hi + lo). `flowShareManual` is the "External fragmentation" column.
+  (the Total area column). The High-/Low-MAP area and "External fragmentation"
+  columns aren't read: the app has no Area, Hi/Lo MAP or Specific flow-share
+  method, and under Fragmentation it splits the flow by each unit's natural
+  MAR (issue #616, docs/model.md §2.5). A workbook that still has them imports
+  as before. The workbook's selected method gets a note saying it isn't used,
+  unless it is Area; its "Selected fragmentation" column still goes to
+  `expected.json` (`farmShares`, with `shareTolerance`) for the client
+  regression suite.
   `divertCapacityM3Day` is the m³/day column. `damMinPct` (the dam's minimum
   operating level, engine ≥ 0.16.0) is written as 0: the workbook's "min %"
   is the transfer minimum, which each transfer rule carries, and a `note:`
@@ -201,7 +208,7 @@ rows and columns don't break it.
   warning says to switch it on once the values are set, so the import runs as
   the workbook did.
 - **Settings**: A-pan evaporation, effective rainfall %, February days
-  (AppSettings), fragmentation method and hi/lo split, pragmatic EWR, and
+  (AppSettings), pragmatic EWR, and
   calibration (via `calibration.py`; engine defaults with a note if that
   module is missing). `calibrationStart/End` come from [Flow Calibration Cfg]
   `zCalibration_Date1/DateN`, and `calibrationFlowKind` from [Flow data]
@@ -379,17 +386,17 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | --- | --- |
 | [Network]: 9 farms and 2 gauges, a three-way confluence (Echo) and a two-way one (Hotel), a gauge mid-network (Midway Gauge), one outflow (Outlet Gauge) | `read_network`, `downstreamNodeId` as the inverse of the upstream columns, gauge vs farm kind, `sortOrder` |
 | "Echo&nbsp;&nbsp;Farm" (double space) and "Golf⏎Farm" (a line break typed in the cell) in [Network], "Echo Farm " and " Golf Farm" in [Farm demand], "Vines D" typed with a U+009F control character for the space in [Crop demand] | `clean()`: every run of whitespace and control characters (C0, DEL, C1) one space, so a name is one line, as the app requires (issue #385); names matched across sheets |
-| Delta Farm in [Network], not in [Farm spec] | note "missing from [Farm spec]"; zero parameters, `pctUpstreamToDam` 1, `flowShareManual` null |
+| Delta Farm in [Network], not in [Farm spec] | note "missing from [Farm spec]"; zero parameters, `pctUpstreamToDam` 1 |
 | Every [Farm spec] farm | note "Upstream inflow above dam %: … stores 100 % − the workbook's value"; the generator types b023's values (India Farm 0, Alpha 1, Hotel 0.75 …), so the stored shares are 1, 0, 0.25 … |
-| [Farm spec] method "Specific"; Charlie Farm's external fragmentation blank | `flowShareMethod: "manual"`; a blank share reads as 0 (the "Specific with no values" case) |
+| [Farm spec] method "Specific", with High-/Low-MAP area and External fragmentation columns (Charlie Farm's blank) | note "fragmentation method 'Specific' is not used"; no `flowShareMethod`, `hiLoSplit` or node `areaHiKm2`/`areaLoKm2`/`flowShareManual` written (issue #616) |
 | Min dam % on Bravo, Echo and Golf | note per farm, `damMinPct` 0 (Q5) |
 | Irrigation return flow 0.1–0.3 on most farms, 0 on Charlie and Foxtrot | `irrigationEfficiency` 1 − r with `lossReturnFraction` 1, or 1 and 0 (N1) |
 | 7 farms with a dam, Charlie without one (blank cells) | note "7 dam(s) have no surface area" (N2); blank capacity reads as 0 |
 | Delta Farm: missing from [Farm spec], so no dam but 100 % of the upstream inflow | `WARNING:` "probable run-of-river … it has no dam" (the no-dam case) |
 | India Farm (below Golf): a 20 m³ dam taking 100 % of the upstream inflow (0 % in the workbook), diversion 12,960 m³/day | `WARNING:` "probable run-of-river" (the pool test); imported unchanged. Bravo and Hotel take part of the upstream inflow and aren't flagged |
-| Golf Farm total area 8.5 km² vs hi + lo 8.0 | both kept as typed (the engine warns) |
+| Golf Farm total area 8.5 km² vs hi + lo 8.0 | the total is imported; hi and lo aren't read |
 | Foxtrot's diversion typed as the text "4320" | `num()` of a numeric string |
-| Hi/lo split 0.8/0.2, tolerance 0.0002, February 28.25 days, A-pan row, effective rain 0.7 | settings read from their named ranges |
+| Hi/lo split 0.8/0.2 (not read), tolerance 0.0002 (`expected.json` only), February 28.25 days, A-pan row, effective rain 0.7 | settings read from their named ranges |
 | [Crop demand] 6 crops; Fodder E grown nowhere, with a lone 0 in Dec and 1.2 in Mar; Pasture F a copy of Pasture C's row | crops and factors, Oct..Sep header check; the crop-table `WARNING:`s (a lone month out of the ground, a lone spike, above 1; "the same as Pasture C's"), the factors imported unchanged |
 | [Farm demand]: zero and blank areas, a blank row, Hops X (not in [Crop demand]) on Echo, Kilo Farm (not in [Network]) | zero areas omitted, blank rows skipped, notes "crop Hops X is not in [Crop demand]" and "farm Kilo Farm is not in [Network]" |
 | [Transfers] 7 draw-from-dam columns: months `"1,2,3,11,12"`; `"11,12"`; the number `7`; `" 5, 6 ,7"`; to `--`; rate 0; to "Zulu Farm" | month lists, the M1 substring note (`"11,12"`), a numeric month cell, spaces, two rules on one dam (Bravo, priorities 0 and 3 by column order), the two silent skips, note "names an unknown element; skipped" |
@@ -414,7 +421,9 @@ or would stop the project importing and running. `test_synthetic.py` (class
 `Variants`) checks each on an uncommitted variant of the generator; the
 TypeScript port needs its own tests for them:
 
-- `unknown fragmentation method` (the fixture uses "Specific");
+- the fragmentation method note for Area (none), Hi/Lo and a method not in
+  the list (the fixture uses "Specific"), and a workbook without the
+  High-/Low-MAP area columns (`rFarmSpec_DataAreas`), which imports the same;
 - several roots (`elements … have no downstream element`): the app rejects a
   network with more than one outflow;
 - `rUseFlow` 1 (the Pitman warning) and `rUseFlow` on a series with no values

@@ -47,9 +47,6 @@ const node = (over: Partial<NetworkNode> & Pick<NetworkNode, 'id' | 'name' | 'ki
 	({
 		sortOrder: 0,
 		areaKm2: 10,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 0,
 		pctRunoffToDam: 0,
 		damCapacityM3: 0,

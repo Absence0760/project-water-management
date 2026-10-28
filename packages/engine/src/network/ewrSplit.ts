@@ -1,6 +1,11 @@
-// How the EWR is split between the units (engine ≥ 1.105.0, issue #615,
-// docs/model.md §2.5b): one way only, by each unit's natural MAR share,
-// under both flow generation methods.
+// Each unit's one share (engine ≥ 1.105.0, issues #615 and #616,
+// docs/model.md §2.5 and §2.5b): its natural MAR share, under both flow
+// generation methods. It splits the EWR between the units and, from #616,
+// everything else a unit's share sets: the catchment's flow under
+// Fragmentation (I = natural × share), the land-cover low-flow threshold
+// (§2.5a) and the senior users' claims (§2.7c). The area, Hi/Lo MAP and
+// specific flow shares (settings.flowShareMethod) are retired with it;
+// ../legacy/flowShares.ts reads an older run's.
 //
 // A unit's natural MAR is its own GR4J natural runoff from its own rain
 // (before land cover and base flow), summed over the run's complete water
@@ -16,15 +21,18 @@
 // - Fragmentation: the run also runs GR4J once per land unit on the Per unit
 //   forcing (./../runoff/unitRain.ts, the same chain, stations and
 //   parameters), for the shares only (engine-audit.md FM1). The catchment's
-//   one GR4J run still makes the flow, split by the flow share (§2.5; issue
-//   #616 moves that to these shares too). A unit with no rain of its own
-//   runs on the catchment rain (rule 4), so its share is in proportion to
-//   its area; the run names those units in one note.
+//   one GR4J run makes the flow, split by these shares (§2.5), so Σ the
+//   units' runoff is the natural flow every day. A unit with no rain of its
+//   own runs on the catchment rain (rule 4), so its share is in proportion
+//   to its area; the run names those units in one note.
 //
-// Fallbacks: no runoff over the period → the area shares (why 'noRunoff');
-// no land unit at all → nothing to split by, the flow share (why
-// 'noLandUnit', a transitional fallback that #616 removes with the flow
-// share methods).
+// Fallbacks, each to the area shares (areaKm2 ÷ Σ the land units'): no
+// runoff over the period (why 'noRunoff'); natural flow supplied without the
+// units' runoff (why 'noUnitRunoff': runModelWith, the workbook regression
+// and hand networks, b023's own default method); a resumed run whose
+// snapshot pinned no shares (why 'resumed'). No land unit at all: every
+// share is 0 (why 'noLandUnit'), no unit generates flow and the EWR isn't
+// split, with a note.
 //
 // Before 1.105.0 the split was a choice, settings.ewrSplit ('flowShare', the
 // default, or 'naturalMar', engine 1.94.0): the key is retired, ignored when
@@ -61,13 +69,13 @@ export interface EwrSplitUnit {
 }
 
 /**
- * What a run reports about its EWR split (RunSummary.ewrSplit).
+ * What a run reports about its unit shares (RunSummary.ewrSplit): from 1.105.0 the one share per unit that splits
+ * the EWR and (issue #616) the flow under Fragmentation, the land-cover threshold and the senior users' claims.
  *
- * `applied`: what split the EWR. From 1.105.0 'naturalMar', else 'area' (why
- * 'noRunoff': no unit made runoff over the period) or 'flowShare' (why
- * 'noLandUnit': no unit has an area; 'noUnitRunoff': the natural flow was
- * supplied without the units' runoff, runModelWith's workbook regression and
- * hand networks; or 'resumed').
+ * `applied`: what made the shares. From 1.105.0 'naturalMar', else 'area' (why 'noRunoff': no unit made runoff over
+ * the period; 'noUnitRunoff': the natural flow was supplied without the units' runoff, runModelWith's workbook
+ * regression and hand networks; 'resumed': a snapshot that pinned none; 'noLandUnit': no unit has an area, so every
+ * share is 0). 'flowShare' only on runs from 1.94.0 – 1.104.x.
  *
  * `runoffFrom` (≥ 1.105.0): where the units' natural runoff came from,
  * 'unitRain' (Per unit's own runs) or 'shareRuns' (Fragmentation's per-unit
@@ -82,7 +90,7 @@ export interface EwrSplitInfo {
 	method?: EwrSplitMethod;
 	applied: EwrSplitMethod | 'area';
 	why?: 'catchmentRain' | 'noRunoff' | 'resumed' | 'noLandUnit' | 'noUnitRunoff';
-	/** The days the natural MAR was taken over; with `applied` 'naturalMar' or 'area' (noRunoff). */
+	/** The days the natural MAR was taken over; with `applied` 'naturalMar' or 'area' (noRunoff, noUnitRunoff, noLandUnit). */
 	period?: EwrSplitPeriod;
 	runoffFrom?: 'unitRain' | 'shareRuns';
 	catchmentRain?: EwrSplitUnit[];
@@ -91,8 +99,8 @@ export interface EwrSplitInfo {
 
 /**
  * What a snapshot pins of the split (warmstart PinnedStatistics.ewrSplit): the period and each farm's share, by
- * node id, and the run's record of it, so a resumed run (a seasonal outlook member) splits its EWR as the capture
- * run did. No shares with no land unit (the flow share split the EWR).
+ * node id, and the run's record of it, so a resumed run (a seasonal outlook member) splits its flow and EWR as the
+ * capture run did. No shares with no land unit (every share 0).
  */
 export interface PinnedEwrSplit {
 	period: EwrSplitPeriod;
@@ -161,7 +169,7 @@ export function areaShares(units: readonly { nodeId: string; areaKm2: number }[]
 }
 
 /**
- * Where a plan's split reads its runoff from: the farms (plan index, node id, area) and their natural runoff
+ * Where a plan's shares read their runoff from: the farms (plan index, node id, area) and their natural runoff
  * arrays (the plan's local runoff under Per unit, the share runs' under Fragmentation), which a calibration
  * refills for each candidate.
  */
@@ -171,10 +179,11 @@ export interface EwrSplitPlan {
 }
 
 /**
- * Set each farm's `ewrShare` from its runoff over the plan's period (the run's, and each calibration
- * candidate's), or from the units' areas when they made no runoff. Returns the shares and which split applied.
+ * Set each farm's `share` from its runoff over the plan's period (the run's, and each calibration candidate's), or
+ * from the units' areas when they made no runoff. Returns the shares and which split applied; null (every share
+ * left as it is) without a land unit.
  */
-export function fillPlanEwrShares(nodes: { ewrShare?: number }[], split: EwrSplitPlan): { shares: Map<string, number>; applied: 'naturalMar' | 'area' } | null {
+export function fillPlanShares(nodes: { share: number }[], split: EwrSplitPlan): { shares: Map<string, number>; applied: 'naturalMar' | 'area' } | null {
 	const natural = naturalMarShares(
 		split.farms.flatMap((f) => (f.runoff ? [{ nodeId: f.nodeId, runoffM3Day: f.runoff }] : [])),
 		split.days.from,
@@ -182,7 +191,7 @@ export function fillPlanEwrShares(nodes: { ewrShare?: number }[], split: EwrSpli
 	);
 	const shares = natural ?? areaShares(split.farms);
 	if (!shares) return null;
-	for (const f of split.farms) nodes[f.index]!.ewrShare = shares.get(f.nodeId) ?? 0;
+	for (const f of split.farms) nodes[f.index]!.share = shares.get(f.nodeId) ?? 0;
 	return { shares, applied: natural ? 'naturalMar' : 'area' };
 }
 
@@ -199,21 +208,22 @@ const names = (units: readonly EwrSplitUnit[]): string => {
 export function ewrSplitNote(info: EwrSplitInfo): string | null {
 	// Only runModelWith supplies natural flow without the units' runoff (a test harness, not a project's run): no note.
 	if (info.why === 'noUnitRunoff') return null;
-	if (info.why === 'noLandUnit') return 'no unit has an area, so there is no natural MAR to split the EWR by: it is split between the units by the flow share';
-	if (info.why === 'resumed') return 'this run resumes from a snapshot that pinned no EWR shares, so it splits the EWR by the flow share';
+	if (info.why === 'noLandUnit')
+		return 'no unit has an area, so no unit has a natural MAR share: no unit generates any of the natural flow, and the EWR is not split between them. Enter each unit’s area (Network)';
+	if (info.why === 'resumed') return 'this run resumes from a snapshot that pinned no unit shares, so it splits the flow and the EWR by each unit’s area';
 	const p = info.period;
 	if (!p) return null;
 	const over = p.waterYears > 0 ? `${p.waterYears === 1 ? 'the 1 complete water year' : `the ${p.waterYears} complete water years`} ${dayText(p.start)} – ${dayText(p.end)}` : `the whole run, ${dayText(p.start)} – ${dayText(p.end)}, which holds no complete water year`;
-	if (info.applied === 'area') return `no unit made natural runoff over ${over}, so the EWR is split between the units by their area`;
+	if (info.applied === 'area') return `no unit made natural runoff over ${over}, so the flow and the EWR are split between the units by their area`;
 	// The split worked as documented with every unit on its own rain: nothing to say (the summary records it).
 	if (!info.catchmentRain?.length) return null;
 	const pinned = info.pinned ? ' (the capture run’s shares)' : '';
 	const how =
 		info.runoffFrom === 'shareRuns'
-			? ': under Fragmentation GR4J also runs once on each unit’s own rain (the Per unit setup) for these shares only, and the catchment’s one run still makes the flow'
+			? ': under Fragmentation GR4J also runs once on each unit’s own rain (the Per unit setup) for these shares only, and the catchment’s one run makes the flow they split'
 			: '';
 	const fell = info.catchmentRain?.length
 		? `. ${names(info.catchmentRain)} ${info.catchmentRain.length === 1 ? 'has' : 'have'} no rain of ${info.catchmentRain.length === 1 ? 'its' : 'their'} own (no station, gauge, MAP or CHIRPS), so ${info.catchmentRain.length === 1 ? 'it runs' : 'they run'} on the catchment rain and ${info.catchmentRain.length === 1 ? 'its share follows its' : 'their shares follow their'} area: set up Per unit for ${info.catchmentRain.length === 1 ? 'it' : 'them'} (Model settings → Model selection for flow generation)`
 		: '';
-	return `the EWR is split between the units by each unit’s natural MAR over ${over}${pinned}${how}; the period is provisional (engine-audit.md ES1)${fell}`;
+	return `the flow and the EWR are split between the units by each unit’s natural MAR over ${over}${pinned}${how}; the period is provisional (engine-audit.md ES1)${fell}`;
 }

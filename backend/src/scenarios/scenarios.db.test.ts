@@ -273,7 +273,7 @@ describe('scenario ops', () => {
 		const u = await signUp('Reshaper');
 		const c = await catchment(u);
 		const base = await run(u, c.projectId, 'Baseline');
-		const weir = node('Weir dam', c.outlet.id, { damCapacityM3: 40_000, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const weir = node('Weir dam', c.outlet.id, { damCapacityM3: 40_000, areaKm2: 0 });
 		const volume = { id: crypto.randomUUID(), nodeId: c.farm.id, waterSource: 'surface' as const, volumeM3PerYear: 20_000, months: [1, 2] };
 		const ops: ScenarioOp[] = [
 			{ op: 'node.insert', node: weir as unknown as NetworkNode, upstreamNodeIds: [c.farm.id] },

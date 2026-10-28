@@ -17,11 +17,7 @@ function nodeValue(g: Rng, field: NodeSetField, n: NetworkNode): unknown {
 		case 'name':
 			return g.bool(0.1) ? g.pick(['Node 0', 'Node 1', 'node 2']) : `${n.name} (scenario ${g.int(0, 999)})`;
 		case 'areaKm2':
-		case 'areaHiKm2':
-		case 'areaLoKm2':
 			return g.bool(0.1) ? 0 : g.logFloat(0.01, 150);
-		case 'flowShareManual':
-			return g.bool(0.2) ? null : g.frac();
 		case 'damCapacityM3':
 			return g.bool(0.2) ? 0 : n.damCapacityM3 > 0 && g.bool(0.5) ? n.damCapacityM3 * 1.2 : g.logFloat(10, 3e6);
 		case 'divertCapacityM3Day':
@@ -106,8 +102,6 @@ function settingsOp(g: Rng, input: ModelInput): ScenarioOp {
 		['panCoefficient', () => monthly(g, () => g.float(0.3, 1.2))],
 		['pe', () => (g.bool(0.3) ? { kind: 'pan' } : { kind: 'monthly', mm: monthly(g, () => g.float(0, 250)), source: g.pick(['station ET₀', 'A-pan × 0.8, corrected']) })],
 		['ewrPragmaticM3PerDay', () => monthly(g, () => g.pick([0, g.float(0, 1e5)]))],
-		['flowShareMethod', () => g.pick(['area', 'hiLo', 'manual'])],
-		['hiLoSplit.hi', () => g.frac()],
 		['gr4j.x3', () => g.float(1, 1000)],
 		['gr4j.x1', () => g.float(10, 3000)],
 		['gr4j.x4', () => g.float(0.5, 10)],
@@ -167,9 +161,6 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 					downstreamNodeId: into?.id ?? missing(),
 					sortOrder: g.int(-10, 100),
 					areaKm2: kindOf === 'farm' && g.bool(0.5) ? g.logFloat(0.1, 20) : 0,
-					areaHiKm2: 0,
-					areaLoKm2: 0,
-					flowShareManual: kindOf === 'farm' && g.bool(0.2) ? g.frac() : null,
 					pctUpstreamToDam: kindOf === 'farm' ? g.frac() : 0,
 					pctRunoffToDam: kindOf === 'farm' ? g.frac() : 0,
 					damCapacityM3: kindOf === 'farm' && g.bool(0.7) ? g.logFloat(100, 1e6) : 0,
@@ -521,9 +512,6 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 						downstreamNodeId: into?.id ?? missing(),
 						sortOrder: v.int(0, 100),
 						areaKm2: kindOf === 'farm' && v.bool(0.3) ? v.logFloat(0.1, 20) : 0,
-						areaHiKm2: 0,
-						areaLoKm2: 0,
-						flowShareManual: null,
 						pctUpstreamToDam: kindOf === 'farm' ? v.frac() : 0,
 						pctRunoffToDam: kindOf === 'farm' ? v.frac() : 0,
 						damCapacityM3: kindOf === 'farm' && v.bool(0.7) ? v.logFloat(100, 1e6) : 0,

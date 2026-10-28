@@ -138,7 +138,8 @@ export function mergeSettings(stored: unknown): ProjectSettings {
  */
 function withoutLegacyRunoff(s: Json): Json {
 	s.runoffModel = 'gr4j';
-	// Retired settings (engine RETIRED_SETTINGS_KEYS: ewrSplit, issue #615; 263_retire_ewr_split.sql strips the rows).
+	// Retired settings (engine RETIRED_SETTINGS_KEYS: ewrSplit, issue #615, 263_retire_ewr_split.sql strips the rows;
+	// flowShareMethod and hiLoSplit, issue #616, 264_retire_flow_share_method.sql).
 	for (const k of RETIRED_SETTINGS_KEYS) delete s[k];
 	if (isObj(s.calibration)) s.calibration = withoutRetiredCalibration(s.calibration);
 	if (isObj(s.fitRecord) && s.fitRecord.model !== 'gr4j') s.fitRecord = null;
@@ -1100,6 +1101,15 @@ export const FitRecord = z
 						if (err) ctx.addIssue({ code: 'custom', message: `unit rain fingerprint: ${err}` });
 					})
 					.optional(),
+				// Engine ≥ 1.105.0 (issue #616): under Fragmentation, the Per unit forcing the unit shares ran on (null with no
+				// land unit). Optional, as above; absent = a Per unit fit (`unitRain` is it) or one made before.
+				shareRain: z
+					.unknown()
+					.superRefine((v, ctx) => {
+						const err = unitRainFingerprintError(v);
+						if (err) ctx.addIssue({ code: 'custom', message: `share rain fingerprint: ${err}` });
+					})
+					.optional(),
 				// Engine ≥ 1.91.0 (issue #553): the catchment's rainfall station, recorded only with one. Optional, as above.
 				catchmentStation: z
 					.unknown()
@@ -1161,10 +1171,8 @@ export const SettingsPatch = z
 		// Where the dam evaporation factors came from (engine ≥ 1.49.0): free text, e.g. a lake-factor preset's note; provenance only; '' = none.
 		lakeEvapFactorSource: z.string().trim().max(PE_SOURCE_MAX),
 		apanMm: monthlyNonNeg,
-		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
-		// ewrSplit (engine 1.94.0 – 1.104.x) is retired (issue #615): not here, so an older web build's patch with it still
-		// saves, the key stripped like any other unknown one.
-		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
+		// ewrSplit (engine 1.94.0 – 1.104.x, issue #615), flowShareMethod and hiLoSplit (issue #616) are retired: not here,
+		// so an older web build's patch with them still saves, the keys stripped like any other unknown one.
 		// GR4J is the only model since engine 1.0.0 (issue #16); the setting records it.
 		runoffModel: z.enum(RUNOFF_MODELS, { error: 'the legacy runoff model was removed in engine 1.0.0: GR4J is the only runoff model' }),
 		// GR4J parameters inside the bounds calibration searches (engine

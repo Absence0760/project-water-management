@@ -50,7 +50,6 @@ import {
 	type DemandPart,
 	type DemandScheduleWindow,
 	type DroughtRestrictionRule,
-	type FlowShareMethod,
 	type LandCoverPatch,
 	type NetworkNode,
 	type NodeKind,
@@ -206,8 +205,12 @@ const DAM_AND_IRRIGATION = [
 	'irrigationEfficiency',
 	'returnFlowFraction'
 ] as const;
-/** Land and flow share: what the catchment's natural flow is split by (baseline hydrology). */
-const LAND = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
+/**
+ * Land: the unit's area, which its natural runoff (so its share of the catchment's natural flow, engine 1.105.0) is
+ * made on (baseline hydrology). The high- and low-MAP areas and the specific share were retired in 1.105.0
+ * (RETIRED_NODE_SET_FIELDS).
+ */
+const LAND = ['areaKm2'] as const;
 /**
  * A dam's releases, where its seepage goes and its survey curve (WP-3.5; the
  * curve as a node.set from engine 1.20.0, so a scenario that raises a dam can
@@ -291,9 +294,6 @@ export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = [...LAND, 'ewrSite'
 const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	name,
 	areaKm2: nonNeg,
-	areaHiKm2: nonNeg,
-	areaLoKm2: nonNeg,
-	flowShareManual: nullable(frac),
 	pctUpstreamToDam: frac,
 	pctRunoffToDam: frac,
 	damCapacityM3: nonNeg,
@@ -354,7 +354,7 @@ const NODE_FIELD_CHECK = checksOf(NODE_FIELD_CHECKS);
 
 export function nodeFieldError(field: string, value: unknown): string | null {
 	const c = checkFor(NODE_FIELD_CHECK, field);
-	return c ? c(value) : `"${field}" is not a field a scenario can set`;
+	return c ? c(value) : (retiredNodeFieldReason(field) ?? `"${field}" is not a field a scenario can set`);
 }
 
 // ---------------------------------------------------------------------------
@@ -433,9 +433,6 @@ export interface SettingsPathValues {
 	apanMm: number[];
 	panCoefficient: number[];
 	ewrPragmaticM3PerDay: number[];
-	flowShareMethod: FlowShareMethod;
-	'hiLoSplit.hi': number;
-	'hiLoSplit.lo': number;
 	'gr4j.x1': number;
 	'gr4j.x2': number;
 	'gr4j.x3': number;
@@ -518,9 +515,6 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	apanMm: monthlyOf(range(0, 10_000)),
 	panCoefficient: monthlyOf(range(0, 2)),
 	ewrPragmaticM3PerDay: monthlyOf(nonNeg),
-	flowShareMethod: oneOf(['area', 'hiLo', 'manual']),
-	'hiLoSplit.hi': frac,
-	'hiLoSplit.lo': frac,
 	'gr4j.x1': gr4j('x1'),
 	'gr4j.x2': gr4j('x2'),
 	'gr4j.x3': gr4j('x3'),
@@ -570,15 +564,33 @@ export const RETIRED_SETTINGS_PATHS: readonly string[] = [
 	'calibration.baseFlowInitial',
 	'calibration.summerMonths',
 	// The EWR split (engine 1.94.0 – 1.104.x, issue #553): from 1.105.0 the EWR is always split by each unit's natural MAR (issue #615).
-	'ewrSplit'
+	'ewrSplit',
+	// The flow-share method and the Hi/Lo MAP split (engines up to 1.104.x): from 1.105.0 the flow is split by the same
+	// natural MAR shares (issue #616).
+	'flowShareMethod',
+	'hiLoSplit.hi',
+	'hiLoSplit.lo'
 ];
+/** node.set fields engines up to 1.104.x accepted, retired with the flow-share methods in 1.105.0 (issue #616). */
+export const RETIRED_NODE_SET_FIELDS: readonly string[] = ['areaHiKm2', 'areaLoKm2', 'flowShareManual'];
 const RETIRED_PATH_REASON = 'belonged to the legacy runoff model, removed in engine 1.0.0: delete this change';
 const RETIRED_EWR_SPLIT_REASON = `the choice of EWR split was removed in engine ${EWR_SPLIT_RETIRED_IN} (the EWR is always split by each unit's natural MAR): delete this change`;
+
+const RETIRED_FLOW_SHARE_REASON = `the flow-share method was removed in engine ${EWR_SPLIT_RETIRED_IN} (the flow is split by each unit's natural MAR, as the EWR is): delete this change`;
 
 /** Why a stored op on a retired path is refused, or null when the path isn't retired. */
 export function retiredPathReason(path: unknown): string | null {
 	if (typeof path !== 'string' || !RETIRED_SETTINGS_PATHS.includes(path)) return null;
-	return path === 'ewrSplit' ? RETIRED_EWR_SPLIT_REASON : RETIRED_PATH_REASON;
+	if (path === 'ewrSplit') return RETIRED_EWR_SPLIT_REASON;
+	if (path === 'flowShareMethod' || path.startsWith('hiLoSplit.')) return RETIRED_FLOW_SHARE_REASON;
+	return RETIRED_PATH_REASON;
+}
+
+/** Why a stored node.set on a retired field is refused, or null when the field isn't retired. */
+export function retiredNodeFieldReason(field: unknown): string | null {
+	if (typeof field !== 'string' || !RETIRED_NODE_SET_FIELDS.includes(field)) return null;
+	const what = field === 'flowShareManual' ? 'the specific flow share' : field === 'areaHiKm2' ? 'the high-MAP area' : 'the low-MAP area';
+	return `${what} was removed in engine ${EWR_SPLIT_RETIRED_IN} with the flow-share methods (the flow is split by each unit's natural MAR): delete this change`;
 }
 
 const SETTINGS_CHECK = checksOf(SETTINGS_CHECKS);
@@ -1280,7 +1292,7 @@ function validateOne(input: unknown, where: string, errors: string[]): ScenarioO
 		case 'node.set': {
 			const nodeId = need('nodeId', id);
 			const legacy = raw.field === LEGACY_LOSS_RETURN_FIELD;
-			const field = need('field', (v) => (typeof v === 'string' && (NODE_FIELD_CHECK.byName.has(v) || legacy) ? null : 'is not a hydrological unit field a scenario can set'));
+			const field = need('field', (v) => (typeof v === 'string' && (NODE_FIELD_CHECK.byName.has(v) || legacy) ? null : (retiredNodeFieldReason(v) ?? 'is not a hydrological unit field a scenario can set')));
 			if (legacy) need('value', frac);
 			else if (typeof field === 'string' && NODE_FIELD_CHECK.byName.has(field)) need('value', (v) => nodeFieldError(field, v));
 			op = { op: 'node.set', nodeId, field, value: cloneValue(raw.value) } as ScenarioOp;

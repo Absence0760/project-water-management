@@ -320,8 +320,9 @@ describe('run summary export', () => {
 		expect(rows[0]).toBe('Project,Catchment Ä / Export');
 		expect(rows.some((r) => r.startsWith('"Farm, ""upper""",'))).toBe(true);
 		expect(rows.some((r) => r.startsWith('Farm 2,'))).toBe(true);
-		// Each farm's flow share as the run applied it (engine 0.27.0), in %, right after the name; together 100 %.
-		const header = rows.find((r) => r.startsWith('Farm,Flow share (%),'));
+		// Each farm's share as the run applied it (engine 0.27.0; one natural MAR share from 1.105.0, issue #616), in %, right
+		// after the name; together 100 %.
+		const header = rows.find((r) => r.startsWith('Farm,Natural MAR share (%),'));
 		expect(header).toBeDefined();
 		const lower = Number(rows.find((r) => r.startsWith('Farm 2,'))!.split(',')[1]);
 		const upper = Number(rows.find((r) => r.startsWith('"Farm, ""upper""",'))!.split(',')[2]); // the quoted name holds a comma
@@ -361,7 +362,7 @@ describe('run summary export', () => {
 
 	it("adds each changing dam's capacity on the last day (issue #67), and no column when none changes", async () => {
 		const summary = async () => afterDisclaimer((await download(viewer, `/projects/${projectId}/runs/${runId}/export/summary.csv`)).text);
-		const headerOf = (rows: string[]) => rows.find((r) => r.startsWith('Farm,Flow share (%),'))!;
+		const headerOf = (rows: string[]) => rows.find((r) => r.startsWith('Farm,Natural MAR share (%),'))!;
 		// Positive control: this run's dams don't change, so the sheet has no such column.
 		expect(headerOf(await summary())).not.toContain('Dam capacity on the last day');
 		// Test state only: give the stored run's model a sediment rate on Farm 2 (surveyed a year after the run, so

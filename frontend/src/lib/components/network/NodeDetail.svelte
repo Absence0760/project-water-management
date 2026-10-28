@@ -4,20 +4,20 @@
 	// unit (nodeSections.ts), each a card that folds to its heading and a line
 	// of its values (nodeSummary.ts; issue #521), the one the sheet's section
 	// menu points at open. Inside a card the fields people change come first,
-	// the rarely changed ones under "More … settings", and those this node or
-	// the flow-share method doesn't use behind one "Not used …" line (fields.ts
+	// the rarely changed ones under "More … settings", and those this node
+	// doesn't use behind one "Not used …" line (fields.ts
 	// splitFields). Each field's explanation is its ⓘ tip, and under it only
 	// with "Explain each setting under its field" on (`.explain`, still its
 	// description for screen readers, as on Settings).
 	import { onMount, tick, untrack } from 'svelte';
-	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, MAP_MM_MAX, MAP_MM_MIN, onRiverDam, PE_SOURCE_MAX, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type FlowShareMethod, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, MAP_MM_MAX, MAP_MM_MIN, onRiverDam, PE_SOURCE_MAX, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import FlowUnitSelect from './FlowUnitSelect.svelte';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import { pctText } from '#lib/model/systems.js';
 	import type { FarmPlanting } from '#lib/components/crops/farmDrawer.js';
-	import { damHints, fieldScale, hasDam, hiLoHint, isPct, NODE_FIELDS, returnFlowHint, setNodeField, splitFields, unusedLine, type NodeField } from './fields';
+	import { damHints, fieldScale, hasDam, isPct, NODE_FIELDS, returnFlowHint, setNodeField, splitFields, unusedLine, type NodeField } from './fields';
 	import { fieldsLine, sectionSummary } from './nodeSummary';
 	import { sheetFolds } from './sheetFolds.svelte';
 	import { fieldShows, nodeSections, SECTION_TITLE, sectionId } from './nodeSections';
@@ -39,6 +39,7 @@
 		node,
 		nodes,
 		share,
+		shareRun = null,
 		readonly,
 		onremove,
 		onmakeoutlet,
@@ -54,7 +55,6 @@
 		farmersNote = null,
 		previewHref = null,
 		mapHref = null,
-		method = 'area',
 		planting = null,
 		plantedHref = null,
 		efficiency = null,
@@ -69,8 +69,10 @@
 		baseline?: boolean;
 		node: NetworkNode;
 		nodes: NetworkNode[];
-		/** Computed flow share (0–1) with the current method; null for gauges. */
+		/** The unit's natural MAR share in the latest run (0–1, issue #616); null before a run or for a node the run didn't have. */
 		share: number | null;
+		/** The latest run, named ("12 Oct 2026" or its label), whose share `share` is; null with no run. */
+		shareRun?: string | null;
 		readonly: boolean;
 		onremove?: () => void;
 		onmakeoutlet?: () => void;
@@ -92,8 +94,6 @@
 		previewHref?: string | null;
 		/** This node on the Map tab (issue #326 A2); null when no map feature is linked to it. */
 		mapHref?: string | null;
-		/** The project's flow-share method (Model settings): fields only another method reads show read-only. */
-		method?: FlowShareMethod;
 		/** A unit's planted areas (Crops), for the Irrigation section's pointer to them; null for other nodes. */
 		planting?: FarmPlanting | null;
 		/** The unit's efficiency as a run takes it: its crops' irrigation systems blended (engine ≥ 1.72.0); farms only. */
@@ -125,7 +125,7 @@
 	// The sheet opens on its first section unless one of this node's is already open (‹ › keeps the section).
 	sheetFolds.start(untrack(() => sections));
 	/** Each field group's fields laid out: first, under More, and not used (issue #521). */
-	const split = $derived(new Map([...groupFields].map(([g, fs]) => [g, splitFields(fs, node, method)])));
+	const split = $derived(new Map([...groupFields].map(([g, fs]) => [g, splitFields(fs, node, true)])));
 	/** Every section and fold the form has, for "Show every field" and closing one while all show. */
 	const foldKeys = $derived([
 		...sections,
@@ -137,7 +137,6 @@
 	const MORE_NAME: Partial<Record<NodeField['group'], string>> = { dam: 'dam', groundwater: 'borehole', irrigation: 'irrigation' };
 	const summaryOf = (sec: (typeof sections)[number]) =>
 		sectionSummary(sec, node, {
-			method,
 			share,
 			demandNames: demandObjects.map((o) => o.name || '(unnamed)'),
 			boreholes: boreholes.length,
@@ -168,7 +167,6 @@
 	});
 
 	const GA_RATE_TEXT = (v: number | null | undefined) => (v == null ? 'not looked up' : `${fmtNum(v)} m³/ha/a`);
-	const hiLo = $derived(method === 'hiLo' ? hiLoHint(node) : null);
 	const id = (k: string) => `nd-${k}-${node.id}`;
 	const BOREHOLE_RULE_LABEL: Record<BoreholeRule, string> = {
 		supplemental: 'Supplemental: after the dam and river',
@@ -363,6 +361,16 @@
 					<BoreholeFields {node} {boreholes} {readonly} onadd={onaddborehole} onremove={onremoveborehole} />
 				{:else if sec === 'cover'}
 					<LandCoverFields {node} patches={landCover} {readonly} onadd={onaddcover} onremove={onremovecover} />
+				{:else if sec === 'share'}
+					<!-- The unit's natural MAR share (issue #616): it needs GR4J on the units' own rain, so the latest run's, not worked out while editing. -->
+					<div class="field" data-testid="node-share">
+						<span class="label">Share in use <HelpTip key="flow-share" label="About the flow share in use" /></span>
+						<span class="computed">{share === null ? 'After a run' : fmtPct(share, 2)}</span>
+						<span class="hint">
+							{#if share !== null}The unit’s natural MAR share in the latest run{shareRun ? ` (${shareRun})` : ''}, which splits the catchment’s flow and the EWR between the hydrological units.
+							{:else}The unit’s natural MAR share splits the catchment’s flow and the EWR between the hydrological units. A run works it out from GR4J on each unit’s area and rain.{/if}
+						</span>
+					</div>
 				{:else}
 					{@const g = sec as NodeField['group']}
 					{@const sp = split.get(g) ?? { main: [], more: [], unused: [] }}
@@ -402,9 +410,6 @@
 									{#each BOREHOLE_RULES as r (r)}<option value={r}>{BOREHOLE_RULE_LABEL[r]}</option>{/each}
 								</select>
 							</div>
-						{/if}
-						{#if g === 'area' && hiLo}
-							<p class="hint dam-hint" role="note" data-testid="hilo-hint">{hiLo}</p>
 						{/if}
 						{#if g === 'area' && node.kind === 'farm'}
 							<!-- The unit's own MAP (issue #482): with rain for each unit on, it sets the level of the unit's rain (docs/model.md §2.4h). -->
@@ -462,13 +467,6 @@
 								<p class="hint dam-hint" role="note">{h}</p>
 							{/each}
 						{/if}
-						{#if g === 'share' && share !== null}
-							<div class="field">
-								<span class="label">Share in use <HelpTip key="flow-share" label="About the flow share in use" /></span>
-								<span class="computed">{fmtPct(share, 2)}</span>
-								<span class="hint">With the current flow-share method (<a href="?tab=settings#set-share">Model settings</a>). Saved settings only.</span>
-							</div>
-						{/if}
 					</div>
 					{#if sp.more.length || g === 'irrigation'}
 						{@const key = `more:${g}`}
@@ -492,9 +490,9 @@
 					{/if}
 					{#each sp.unused as u (u.reason)}
 						{@const key = `unused:${g}:${u.reason}`}
-						{@const line = unusedLine(u.reason, method)}
+						{@const line = unusedLine(u.reason)}
 						{@const lineId = `nd-unused-${g}-${u.reason}-${node.id}`}
-						<!-- Fields this node or the flow-share method doesn't use: one line, not greyed-out cells; their values stay, shown read-only when opened. -->
+						<!-- Fields this node doesn't use: one line, not greyed-out cells; their values stay, shown read-only when opened. -->
 						<Fold
 							line="{line.why}: {u.fields.map((f) => f.label).join(', ')}."
 							{lineId}

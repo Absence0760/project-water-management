@@ -40,7 +40,7 @@ function withAccumulation(gauge: (number | null)[], chirps: number[]): void {
  * B a MAP against the gauge's MAP and its own CHIRPS (rule 2), C its CHIRPS and the reference cell.
  */
 function catchment(unitRain: UnitRainSettings, opts: { unitGauge?: (number | null)[]; unitChirps?: number[]; catchmentGauge?: (number | null)[] } = {}): ModelInput {
-	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const node = { sortOrder: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const unit = (id: string, areaKm2: number, mapMm?: number) => ({ ...node, id, name: `Unit ${id}`, kind: 'farm' as const, downstreamNodeId: 'G', areaKm2, ...(mapMm ? { mapMm, mapSource: 'invented' } : {}) });
 	return {
 		settings: { runoffModel: 'gr4j', apanMm: apan as never, unitRain },

@@ -61,6 +61,7 @@ import {
 	LEGACY_UPGRADED_WARNING,
 	RETIRED_CALIBRATION_KEYS,
 	RETIRED_SETTINGS_KEYS,
+	flowShareMethodRetiredWarning,
 	panCoefficientOutOfRange,
 	resolvePe,
 	resolveArealRain,
@@ -764,7 +765,6 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	const cal = { ...((raw?.calibration as Record<string, unknown> | undefined) ?? {}) };
 	for (const k of RETIRED_CALIBRATION_KEYS) delete cal[k];
 	s.calibration = { ...d.calibration, ...cal };
-	s.hiLoSplit = { ...d.hiLoSplit, ...((raw?.hiLoSplit as object | undefined) ?? {}) };
 	s.gr4j = { ...d.gr4j, ...((raw?.gr4j as object | undefined) ?? {}) };
 	s.panCoefficient = monthly(s.panCoefficient, 'pan coefficient', warnings);
 	s.dataQuality = resolveDataQuality(raw?.dataQuality, warnings);
@@ -964,10 +964,10 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		if (s.allocationTolerance !== undefined) warnings.push(`allocation tolerance "${String(s.allocationTolerance)}" is not a fraction in [0, 1); using ${DEFAULT_ALLOCATION_TOLERANCE}`);
 		s.allocationTolerance = DEFAULT_ALLOCATION_TOLERANCE;
 	}
-	if (!['area', 'hiLo', 'manual'].includes(s.flowShareMethod)) {
-		warnings.push(`unknown flow share method "${String(s.flowShareMethod)}"; using area`);
-		s.flowShareMethod = 'area';
-	}
+	// A retired flow-share method the flow no longer follows (engine 1.105.0, issue #616): the run says so once. Area ran
+	// the same way to within rounding while every unit ran on the catchment rain, so it needs no note.
+	const method = (raw as Record<string, unknown> | undefined)?.flowShareMethod;
+	if (method === 'hiLo' || method === 'manual') warnings.push(flowShareMethodRetiredWarning(method));
 	// Retired settings (engine ≥ 1.105.0, RETIRED_SETTINGS_KEYS): ignored, as the legacy model's calibration keys are.
 	for (const k of RETIRED_SETTINGS_KEYS) delete (s as unknown as Record<string, unknown>)[k];
 	return s;

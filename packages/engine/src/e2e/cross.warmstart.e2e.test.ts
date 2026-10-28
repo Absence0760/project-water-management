@@ -61,7 +61,7 @@ function base(mode: 'none' | 'cap' | 'fullAllocation'): ModelInput {
 		note: '',
 		population: 4000
 	};
-	const canal: NetworkNode = { ...x.model.nodes[1]!, id: 'c', name: 'Canal head', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, damCapacityM3: 0, damInitialPct: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damAreaFullM2: null, sortOrder: 3, downstreamNodeId: 'g' };
+	const canal: NetworkNode = { ...x.model.nodes[1]!, id: 'c', name: 'Canal head', areaKm2: 0, damCapacityM3: 0, damInitialPct: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damAreaFullM2: null, sortOrder: 3, downstreamNodeId: 'g' };
 	const transfers: Transfer[] = [
 		{ id: 'ot', fromNodeId: 'a', toNodeId: 'c', months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], maxRateM3s: 0.01, dailyCapM3: 400, minStoragePct: 0, enabled: true, priority: 0, source: 'river', sizing: 'demand', lossPct: 0.1, lossReturnPct: 0.5, handsOffM3Day: 200, handsOffEwr: false, topUpDam: false },
 		{ id: 'tr', fromNodeId: 'a', toNodeId: 'b', months: [11, 12, 1, 2], maxRateM3s: 0.005, dailyCapM3: null, minStoragePct: 0.3, enabled: true, priority: 1 }

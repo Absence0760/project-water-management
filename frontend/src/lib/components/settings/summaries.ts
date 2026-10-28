@@ -100,12 +100,6 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 	const bias = s.chirpsBiasCorrection === 'none' ? 'Raw CHIRPS fills gaps' : 'CHIRPS bias-corrected per month fills gaps';
 	const zr = s.zeroRainRuns;
 	const restrict = s.droughtRestriction;
-	const share =
-		s.flowShareMethod === 'hiLo'
-			? `High/low MAP split, ${fmtPct(s.hiLoSplit?.hi ?? 0, 0)} / ${fmtPct(s.hiLoSplit?.lo ?? 0, 0)}`
-			: s.flowShareMethod === 'manual'
-				? 'Manual share per hydrological unit'
-				: 'By catchment area';
 	const auto = s.autoRun;
 	return {
 		'set-period': dateSpan(s.simulationStart, s.simulationEnd) ?? 'The whole rain record',
@@ -128,15 +122,16 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			s.lakeEvapFactorMonthly ? 'dam evaporation by month' : `dam evaporation ${fmtNum(s.lakeEvapFactor ?? 0, 2, true)} × A-pan`
 		].join(' · '),
 		// Model selection for flow generation (issue #553 round 3): the method, the units on a station (the Per unit setup,
-		// which Fragmentation's EWR shares read too, issue #615), what the flow share splits, and the EWR split.
+		// which Fragmentation's shares read too, issue #615), and what each unit's natural MAR share splits (one share per
+		// unit since the flow-share methods went, issue #616).
 		'set-share': [
-			s.unitRain?.mode === 'perUnit' ? 'Per unit' : `Fragmentation · flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`,
+			s.unitRain?.mode === 'perUnit' ? 'Per unit' : 'Fragmentation',
 			(() => {
 				const n = Object.keys(s.rainStations?.units ?? {}).length;
 				// Under Fragmentation said only when a unit has one: a new project has none and needs no word of it.
 				return n ? `${plural(n, 'unit')} on a rainfall station` : s.unitRain?.mode === 'perUnit' ? 'no unit on a rainfall station' : null;
 			})(),
-			'EWR by each unit’s natural MAR'
+			s.unitRain?.mode === 'perUnit' ? 'EWR by each unit’s natural MAR' : 'flow and EWR by each unit’s natural MAR'
 		]
 			.filter(Boolean)
 			.join(' · '),

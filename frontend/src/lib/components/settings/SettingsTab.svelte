@@ -41,7 +41,6 @@
 		QM_MIN_WET_DAYS,
 		QM_WET_DAY_MM_MAX,
 		QM_WET_DAY_MM_MIN,
-		type FlowShareMethod,
 		type UnitRainSettings,
 		type SeriesMeta,
 		type ModelInput,
@@ -132,7 +131,6 @@
 	let lakePresetError = $state<string | null>(null);
 
 	const cal = $derived(s.calibration);
-	const hiLoSum = $derived((s.hiLoSplit.hi || 0) + (s.hiLoSplit.lo || 0));
 	const dateError = $derived(periodError(s));
 	// Model selection for flow generation (issue #553 round 3): the radio is settings.unitRain on or off, as the checkbox it replaced was, so
 	// no stored project changes. The one switched off is kept until saved, so switching back brings it back as it was.
@@ -218,16 +216,6 @@
 	// The declared uncertainty rule as saved (issue #71): switching it off withdraws this one.
 	const savedEvidenceRule = $derived(draft.saved.evidenceUncertaintyRule);
 
-	const METHODS: { value: FlowShareMethod; label: string; help: string }[] = [
-		{ value: 'area', label: 'By catchment area', help: "Each hydrological unit's share = its area ÷ the total hydrological unit area." },
-		{
-			value: 'hiLo',
-			label: 'High/low MAP split',
-			help: 'High-MAP areas share the high part of the split and low-MAP areas the low part (WR90/WR2012 practice).'
-		},
-		{ value: 'manual', label: 'Manual share per hydrological unit', help: 'Shares typed per hydrological unit on the Network tab ("Manual flow share").' }
-	];
-	const method = $derived(METHODS.find((m) => m.value === s.flowShareMethod));
 	const chirpsOption = $derived(CHIRPS_BIAS_OPTIONS.find((o) => o.value === s.chirpsBiasCorrection));
 	// Where Demand's A-pan comes from: a daily A-pan series (issue #45) is A-pan too, on the days it covers.
 	const apanSource = $derived(apanSourceNote(seriesKinds));
@@ -378,12 +366,12 @@
 		</div>
 		<div class="sub-card" data-testid="flowgen-share-card">
 			<h3 class="sub first">Flow share and the EWR split</h3>
-			<!-- What the shares split depends on the method (issue #553, docs/model.md §2.4h, §2.5): Fragmentation, GR4J's one
-			     run's flow; Per unit, each unit makes its own runoff, so only the land-cover low-flow threshold. The EWR is split
-			     by each unit's natural MAR under both (issue #615, §2.5b). -->
+			<!-- One share per unit, its natural MAR share, under both methods (issues #615, #616; docs/model.md §2.5, §2.5b):
+			     it splits the EWR, the land-cover low-flow threshold and the priority users' demand, and under Fragmentation
+			     GR4J's one run's flow too. The area, Hi/Lo MAP and specific methods are gone (#616), so nothing here is set. -->
 			<!-- A state line, not an explanation: it stays when the explanations are off, as the areal rain note does. -->
 			<p class="hint" role="note" data-testid="ewr-split-hint">
-				The EWR is split between the units by each unit’s natural MAR: its own GR4J runoff over the run’s complete water years ÷ the units’ total{flowMethod === 'perUnit' ? '' : ', from the runs on each unit’s own rain above'}. The run’s summary lists each unit’s share.
+				Each unit’s share is its natural MAR: its own GR4J runoff over the run’s complete water years ÷ the units’ total{flowMethod === 'perUnit' ? '' : ', from the runs on each unit’s own rain above'}. It splits the EWR, the land cover’s low-flow threshold and the priority users’ demand between the units. The run’s summary lists each unit’s share, and the <a href={withParam(page.url, 'grid', 'nodes')}>hydrological unit table</a>’s In use column the latest run’s.
 			</p>
 			{#if onCatchmentRain.length}
 				<p class="hint" role="note" data-testid="ewr-split-catchment-rain">
@@ -393,44 +381,13 @@
 			{/if}
 			{#if flowMethod === 'perUnit'}
 				<p class="hint" role="note" data-testid="share-hint" data-unit-rain="on">
-					Each unit makes its own runoff; the flow share now splits only the land cover’s low-flow threshold between units, not the flow or the EWR.
+					Each unit makes its own runoff, so the shares don’t split the flow.
 				</p>
 			{:else}
 				<p class="hint explain" data-testid="share-hint" data-unit-rain="off">
-					GR4J runs once on the catchment rain; the flow share splits its flow between units. To give each unit its own runoff, choose Per unit above.
+					GR4J runs once on the catchment rain, and the units’ shares split its flow between them. To give each unit its own runoff, choose Per unit above.
 				</p>
 			{/if}
-			<div class="fields">
-				<div class="field">
-					<span class="lbl"><label for="st-method">Flow share method</label><HelpTip key="settings.flowShareMethod" /></span>
-					<select id="st-method" disabled={readonly} bind:value={s.flowShareMethod} aria-describedby="st-method-h">
-						{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
-					</select>
-					<span class="hint explain" id="st-method-h">{method?.help} Each hydrological unit's resulting share is in the <a href={withParam(page.url, 'grid', 'nodes')}>hydrological unit table</a>'s In use column.</span>
-					<FieldHistoryLine field="settings:flowShareMethod" />
-				</div>
-				<!-- Only the high/low MAP method reads the split, so it shows only then (issue #174); the saved value is kept. -->
-				{#if s.flowShareMethod === 'hiLo'}
-					<fieldset class="plain hilo" data-testid="hilo-split">
-						<legend>High/low MAP split <HelpTip key="settings.hiLoSplit" /></legend>
-						<div class="form-row">
-							<div class="field">
-								<label for="st-hi">High <span class="u">(%)</span></label>
-								<NumberInput id="st-hi" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.hi} />
-							</div>
-							<div class="field">
-								<label for="st-lo">Low <span class="u">(%)</span></label>
-								<NumberInput id="st-lo" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.lo} />
-							</div>
-							<div class="field">
-								<span class="label">Sum</span>
-								<span class="sum" class:warn={Math.abs(hiLoSum - 1) > 1e-6}>{fmtPct(hiLoSum, 1)}</span>
-							</div>
-						</div>
-						<span class="hint explain">Should add up to 100 %. Default 50 / 50; an imported workbook brings its own.</span>
-					</fieldset>
-				{/if}
-			</div>
 		</div>
 	</section>
 
@@ -1081,17 +1038,6 @@
 		color: var(--text-2);
 		margin-bottom: 0.35rem;
 		padding: 0;
-	}
-	.hilo .field {
-		width: 110px;
-	}
-	.sum {
-		padding: 0.35rem 0;
-		font-variant-numeric: tabular-nums;
-	}
-	.sum.warn {
-		color: var(--warning);
-		font-weight: 600;
 	}
 	/* The monthly row gets the full width; the annual total sits under it. */
 	.ewr {

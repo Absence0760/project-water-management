@@ -1,13 +1,11 @@
 // The numeric node fields, in the order the editor shows them, with units and
 // plain-language help. Percent fields are stored 0–1 and shown as %.
 import { pumpUnit, riverToDamUnit, type FlowUnit } from './flowUnit.svelte';
-import { areaMismatches, estimatedDamAreaM2, onRiverDam, RETURN_FLOW_SLACK, type FlowShareMethod, type NetworkNode, type NodeKind } from '@water-management/engine';
+import { estimatedDamAreaM2, onRiverDam, RETURN_FLOW_SLACK, type NetworkNode, type NodeKind } from '@water-management/engine';
 import { fmtNum } from '#lib/format/number.js';
 
 export type NodeNumberKey =
 	| 'areaKm2'
-	| 'areaHiKm2'
-	| 'areaLoKm2'
 	| 'damCapacityM3'
 	| 'damInitialPct'
 	| 'damMinPct'
@@ -21,7 +19,6 @@ export type NodeNumberKey =
 	| 'divertCapacityM3Day'
 	| 'irrigationEfficiency'
 	| 'returnFlowFraction'
-	| 'flowShareManual'
 	| 'boreholeCapacityM3Day'
 	| 'boreholeTriggerPct'
 	| 'streamDepletionFrac'
@@ -39,7 +36,7 @@ export interface NodeField {
 	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | '% of supply' | 'm³/day' | 'm³/s' | 'l/s' | '×' | 'days' | 'ha';
 	/** Shown = stored × scale, for a field entered in another unit than it is stored in (m³/s stored as m³/day). Percentages scale by 100 on their own. */
 	scale?: number;
-	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater' | 'baseflow' | 'reach';
+	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'groundwater' | 'baseflow' | 'reach';
 	/** Accessible name in the table, where each row repeats the field: "Area of Hilltop farm, km²". */
 	aria: (name: string) => string;
 	help: string;
@@ -70,7 +67,6 @@ export const GROUPS: Record<NodeField['group'], string> = {
 	dam: 'Dam',
 	routing: 'Routing',
 	irrigation: 'Irrigation',
-	share: 'Flow share',
 	groundwater: 'Combined boreholes (one capacity)',
 	baseflow: 'Base-flow loss and gain',
 	reach: 'Bed losses in the reach below'
@@ -83,23 +79,7 @@ export const NODE_FIELDS: NodeField[] = [
 		unit: 'km²',
 		group: 'area',
 		aria: (n) => `Area of ${n}, km²`,
-		help: "The hydrological unit's own runoff area, excluding the units upstream of it. Hydrological unit areas set the area-based flow shares and add up to the catchment area."
-	},
-	{
-		key: 'areaHiKm2',
-		label: 'High-MAP',
-		unit: 'km²',
-		group: 'area',
-		aria: (n) => `High-MAP area of ${n}, km²`,
-		help: 'Part of the area in the high-rainfall (high mean annual precipitation) zone. Only used by the high/low MAP flow-share method.'
-	},
-	{
-		key: 'areaLoKm2',
-		label: 'Low-MAP',
-		unit: 'km²',
-		group: 'area',
-		aria: (n) => `Low-MAP area of ${n}, km²`,
-		help: 'Part of the area in the low-rainfall zone. Only used by the high/low MAP flow-share method.'
+		help: "The hydrological unit's own runoff area, excluding the units upstream of it. Hydrological unit areas add up to the catchment area. GR4J on the unit's own rain runs on it, so it sets the unit's natural MAR share of the flow and the EWR (its area share when there is no runoff to split by)."
 	},
 	{
 		key: 'damCapacityM3',
@@ -238,16 +218,6 @@ export const NODE_FIELDS: NodeField[] = [
 		help: 'Share of the irrigation water supplied that infiltrates the soil and returns to the river below the hydrological unit the same day. It comes out of the application losses, so it is at most 100 % − the irrigation efficiency (10 % at 90 %); the rest of the losses leaves the catchment (evaporation, deep percolation).'
 	},
 	{
-		key: 'flowShareManual',
-		label: 'Manual',
-		unit: '%',
-		group: 'share',
-		farmOnly: true,
-		nullable: true,
-		aria: (n) => `Manual flow share of ${n}, %`,
-		help: "This hydrological unit's share of catchment natural flow and of the EWR. Only used when the flow-share method (Model settings) is Manual; hydrological unit shares should add up to 100 %."
-	},
-	{
 		key: 'boreholeCapacityM3Day', // gitleaks:allow (a field name, not a secret)
 		detailOnly: true,
 		notGauge: true,
@@ -364,12 +334,11 @@ export function setNodeField(node: NetworkNode, key: NodeNumberKey, v: number | 
 
 /**
  * A field's label on the node table's phone cards (≤ 640 px), where the group
- * header row ("Dam", "Flow share") is gone: "Dam capacity", "High-MAP area".
+ * header row ("Dam", "Irrigation") is gone: "Dam capacity", "Dam initial storage".
  */
 export function cardLabel(f: NodeField): string {
 	if (f.group === 'area') return f.key === 'areaKm2' ? f.label : `${f.label} area`;
 	if (f.group === 'dam') return f.key === 'damInitialPct' ? 'Dam initial storage' : `Dam ${f.label.toLowerCase()}`;
-	if (f.group === 'share') return `${f.label} flow share`;
 	return f.label;
 }
 
@@ -378,52 +347,43 @@ export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day' || f
 export const fieldScale = (f: NodeField) => (isPct(f) ? 100 : (f.scale ?? 1));
 
 /** Why a field isn't used on this node (fieldUnused): one id per reason, so the form can name each reason once. */
-export type UnusedReason = 'onRiver' | 'outlet' | 'noLoss' | 'noDam' | 'notHiLo' | 'notManual';
+export type UnusedReason = 'onRiver' | 'outlet' | 'noLoss' | 'noDam';
 
 const UNUSED_TEXT: Record<UnusedReason, string> = {
 	onRiver: 'Not available: the dam is on the river (Upstream inflow to dam is 100 %). River to dam fills an off-channel dam; set Upstream inflow to dam below 100 % to use it.',
 	outlet: 'Not used: the outlet has no reach below it in the model.',
 	noLoss: 'Not used: no bed losses (the share is 0 %). Enter a share to cap it.',
-	noDam: 'Not used: no dam (capacity 0). Enter a capacity to use it.',
-	notHiLo: 'Not used: the flow-share method isn’t the high/low MAP split (Model settings). Pick it there to use this.',
-	notManual: 'Not used: the flow-share method isn’t Manual (Model settings). Pick it there to use this.'
+	noDam: 'Not used: no dam (capacity 0). Enter a capacity to use it.'
 };
 
 type UnusedNode = Pick<NetworkNode, 'pctUpstreamToDam'> & Partial<Pick<NetworkNode, 'damCapacityM3' | 'downstreamNodeId' | 'reachLossFrac'>>;
 
 /** fieldUnused's reason, as an id. */
-export function unusedReason(f: NodeField, n: UnusedNode, method?: FlowShareMethod): UnusedReason | null {
+export function unusedReason(f: NodeField, n: UnusedNode, form = false): UnusedReason | null {
 	if (f.key === 'divertCapacityM3Day' && onRiverDam(n)) return 'onRiver'; // gitleaks:allow (a field name, not a secret)
 	// Bed losses (engine ≥ 1.75.0) are in the reach below: none below the outlet. One left there stays editable so it can be cleared.
 	if (f.group === 'reach' && n.downstreamNodeId === null && !((n.reachLossFrac ?? 0) > 0)) return 'outlet';
 	if (f.key === 'reachLossMaxM3Day' && !((n.reachLossFrac ?? 0) > 0)) return 'noLoss';
-	if (!method) return null;
+	if (!form) return null;
 	if (f.group === 'dam' && f.key !== 'damCapacityM3' && !((n.damCapacityM3 ?? 0) > 0)) return 'noDam';
-	if ((f.key === 'areaHiKm2' || f.key === 'areaLoKm2') && method !== 'hiLo') return 'notHiLo';
-	if (f.key === 'flowShareManual' && method !== 'manual') return 'notManual';
 	return null;
 }
 
 /**
  * Why a field isn't used on this node, or null; the field then shows
  * read-only with this as its hint, its stored value kept. River to dam on a
- * dam on the river (engine ≥ 1.68.0, onRiverDam). In the one-node form, which
- * passes the flow-share method: a dam's own fields on a unit with no dam
- * (capacity 0, as the engine reads it), the high/low MAP areas unless the
- * method is the high/low MAP split, and the manual share unless it is manual.
- * The node table passes no method and keeps those editable, so a block pasted
- * or typed across a row lands whole.
+ * dam on the river (engine ≥ 1.68.0, onRiverDam). In the one-node form
+ * (`form`) also a dam's own fields on a unit with no dam (capacity 0, as the
+ * engine reads it). The node table keeps those editable, so a block pasted or
+ * typed across a row lands whole.
  */
-export function fieldUnused(f: NodeField, n: UnusedNode, method?: FlowShareMethod): string | null {
-	const r = unusedReason(f, n, method);
+export function fieldUnused(f: NodeField, n: UnusedNode, form = false): string | null {
+	const r = unusedReason(f, n, form);
 	return r ? UNUSED_TEXT[r] : null;
 }
 
-/** The flow-share method in the "Not used with the … flow share" line. */
-const METHOD_WORD: Record<FlowShareMethod, string> = { area: 'area', hiLo: 'high/low MAP', manual: 'manual' };
-
 /** One reason's line in the one-node form (issue #521): what it is, then what would make the fields count. */
-export function unusedLine(r: UnusedReason, method: FlowShareMethod = 'area'): { why: string; fix: string } {
+export function unusedLine(r: UnusedReason): { why: string; fix: string } {
 	switch (r) {
 		case 'onRiver':
 			return { why: 'Not available on a dam on the river (Upstream inflow to dam is 100 %)', fix: 'River to dam fills an off-channel dam; set Upstream inflow to dam below 100 % to use it.' };
@@ -433,25 +393,21 @@ export function unusedLine(r: UnusedReason, method: FlowShareMethod = 'area'): {
 			return { why: 'Not used with no bed losses (the share is 0 %)', fix: 'Enter a share to cap it.' };
 		case 'noDam':
 			return { why: 'Not used without a dam (capacity 0)', fix: 'Enter a capacity to use these.' };
-		case 'notHiLo':
-			return { why: `Not used with the ${METHOD_WORD[method]} flow share`, fix: 'Pick the high/low MAP split in Model settings to use these.' };
-		case 'notManual':
-			return { why: `Not used with the ${METHOD_WORD[method]} flow share`, fix: 'Pick Manual in Model settings to use it.' };
 	}
 }
 
 /**
  * A section's fields as the one-node form lays them out (issue #521): the
  * ones people change first, the rarely changed ones under "More … settings"
- * (`more`), and the ones this node or method doesn't use, by reason, behind
- * one "Not used …" line each instead of drawn greyed out.
+ * (`more`), and the ones this node doesn't use, by reason, behind one
+ * "Not used …" line each instead of drawn greyed out.
  */
-export function splitFields(fields: readonly NodeField[], n: UnusedNode, method?: FlowShareMethod): { main: NodeField[]; more: NodeField[]; unused: { reason: UnusedReason; fields: NodeField[] }[] } {
+export function splitFields(fields: readonly NodeField[], n: UnusedNode, form = false): { main: NodeField[]; more: NodeField[]; unused: { reason: UnusedReason; fields: NodeField[] }[] } {
 	const main: NodeField[] = [];
 	const more: NodeField[] = [];
 	const unused: { reason: UnusedReason; fields: NodeField[] }[] = [];
 	for (const f of fields) {
-		const r = unusedReason(f, n, method);
+		const r = unusedReason(f, n, form);
 		if (r) {
 			const g = unused.find((u) => u.reason === r);
 			if (g) g.fields.push(f);
@@ -459,18 +415,6 @@ export function splitFields(fields: readonly NodeField[], n: UnusedNode, method?
 		} else (f.more ? more : main).push(f);
 	}
 	return { main, more, unused };
-}
-
-/**
- * Under the high/low MAP areas while that method is in use: their sum against
- * the unit's area, by the rule the run checks after it has run (engine
- * quality.ts areaMismatches, more than 1 % apart), so it is caught while
- * typing. Null when they agree.
- */
-export function hiLoHint(n: NetworkNode): string | null {
-	const m = areaMismatches([n], 'hiLo')[0];
-	if (!m) return null;
-	return `High-MAP + Low-MAP = ${fmtNum(m.hiLoKm2, 2)} km², but the area is ${fmtNum(m.areaKm2, 2)} km²: they should add up to it.`;
 }
 
 /** A node's kind in the workspace's words (playbook § 3: a farm is a hydrological unit here). */

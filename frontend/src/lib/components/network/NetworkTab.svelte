@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
+	import type { NodeKind, ProjectSettings, RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '#lib/api/index.js';
 	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
 	import { damChanges } from '#lib/components/dams/dams.js';
@@ -78,11 +78,6 @@
 	const farms = $derived(nodes.filter((n) => n.kind === 'farm'));
 	const users = $derived(nodes.filter((n) => n.kind === 'user'));
 	const gauges = $derived(nodes.filter((n) => n.kind === 'gauge'));
-	const method = $derived(settings?.flowShareMethod ?? 'area');
-	const shares = $derived(flowShares(nodes, method, settings?.hiLoSplit ?? { hi: 0.5, lo: 0.5 }));
-	const shareOf = (i: number) => (nodes[i]?.kind === 'farm' ? (shares.share[i] ?? 0) : null);
-	const METHOD_LABEL = { area: 'by area', hiLo: 'high/low MAP split', manual: 'manual shares' } as const;
-
 	// --- colour farms by (view option, component state): the latest run's supply, how full each dam
 	// ended it, or the irrigated area as edited (farmColour.ts). Supply by default once there's a run. ---
 	// On by default once there is a run (the map answers "who is short?" first, issue #17).
@@ -92,6 +87,32 @@
 	let supplyLoading = $state(false);
 	let supplyError = $state(false);
 	let supplyFor = '';
+
+	// --- each unit's share in use (issue #616): its natural MAR share, which needs GR4J on the units' own rain, so
+	// it isn't worked out while editing. The latest run's (FarmSummary.flowShare, or ewrShare, the same on new runs),
+	// with the run's date; a unit the run didn't have, or every unit before a run, shows "after a run". ---
+	const runShares = $derived.by(() => {
+		if (!latestRun || supplyRun?.id !== latestRun.id) return null;
+		const m = new Map<string, number>();
+		for (const f of supplyRun.summary.farms) {
+			const v = f.flowShare ?? f.ewrShare;
+			if (v !== undefined) m.set(f.nodeId, v);
+		}
+		return m;
+	});
+	const shareOf = (i: number) => {
+		const n = nodes[i];
+		return n?.kind === 'farm' ? (runShares?.get(n.id) ?? null) : null;
+	};
+	/** A row's In use cell: the share, "after a run" without one, "–" for a gauge or user (or while the run loads). */
+	const shareCell = (i: number) => {
+		const n = nodes[i];
+		if (n?.kind !== 'farm' || (latestRun && !runShares)) return '–';
+		const v = runShares?.get(n.id);
+		return v === undefined ? 'after a run' : fmtPct(v, 2);
+	};
+	const shareSum = $derived(runShares ? [...runShares.values()].reduce((a, b) => a + b, 0) : null);
+	const shareDate = $derived(latestRun ? fmtDate(latestRun.createdAt) : null);
 
 	async function loadSupply(id: string) {
 		supplyFor = id;
@@ -116,8 +137,9 @@
 	// Fetch when colouring is switched on or a newer run lands; only then, so
 	// a failed load doesn't retry itself (the status line offers a retry).
 	$effect(() => {
-		// The Map layout's node card shows a farm's supply too; dam levels need the run's series list.
-		const id = colourBy === 'supply' || colourBy === 'dam' || view === 'map' ? latestRun?.id : undefined;
+		// The Map layout's node card shows a farm's supply too; dam levels need the run's series list; the node table's
+		// In use column the run's shares.
+		const id = projectId ? latestRun?.id : undefined;
 		untrack(() => {
 			if (id && id !== supplyFor) void loadSupply(id);
 		});
@@ -634,7 +656,7 @@
 			</div>
 		{:else}
 		<p class="muted small intro">
-				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (<a href="?tab=settings#set-share">Model settings</a>){#if farms.length}; hydrological units total {fmtPct(shares.sum, 2)}{/if}.
+				Percentages are shown 0–100. In use is each hydrological unit’s natural MAR share of the flow and the EWR{#if shareDate}, from the latest run ({shareDate}){:else}, shown after a run{/if}{#if farms.length && shareSum !== null}; hydrological units total {fmtPct(shareSum, 2)}{/if}.
 				<span class="wide-only">The help buttons beside each heading and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
 			</p>
 			<!-- The grid's actions above it, not under a long table and field guide where they went unseen (issue #463, as #461 did for the EWR settings). -->
@@ -657,21 +679,22 @@
 							<th scope="col" rowspan="2">Kind <HelpTip key="node.kind" /></th>
 							<th scope="col" rowspan="2">Drains into <HelpTip key="node.downstreamNodeId" /></th>
 							{#each groupSpans as g (g.group)}
-								<th scope="colgroup" colspan={g.count + (g.group === 'share' ? 1 : 0)} class="grp">{GROUPS[g.group]}</th>
+								<th scope="colgroup" colspan={g.count} class="grp">{GROUPS[g.group]}</th>
 							{/each}
+							<th scope="col" class="grp">Flow share</th>
 							{#if !readonly}<th scope="col" rowspan="2" class="rm"><span class="visually-hidden">Remove</span></th>{/if}
 						</tr>
 						<tr>
 							{#each TABLE_FIELDS as f (f.key)}
-								<!-- Label on top (non-breaking hyphens: "High-MAP" stays whole), then the
+								<!-- Label on top (non-breaking hyphens keep a hyphenated label whole), then the
 								     unit and its ⓘ on one bottom line, the same in every column. -->
 								<th scope="col" class="num fh">
 									<span class="fh-l">{f.label.replace(/-/g, '\u2011')}</span>
 									<span class="fh-u">{#if f.flowUnit}<FlowUnitSelect unit={f.flowUnit} label="Unit of {f.label.toLowerCase()}" />{:else}<span class="u">{f.unit}</span>{/if}<HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
 								</th>
 							{/each}
-							<!-- Computed, not a field, so it isn't in TABLE_FIELDS: its ⓘ is the flow-share glossary entry. -->
-							<th scope="col" class="num fh">
+							<!-- The latest run's, not a field, so it isn't in TABLE_FIELDS: its ⓘ is the flow-share glossary entry. -->
+							<th scope="col" class="num fh" title={shareDate ? `The latest run’s, ${shareDate}` : 'After a run'}>
 								<span class="fh-l">In use</span>
 								<span class="fh-u"><span class="u">%</span><HelpTip key="flow-share" label="About the flow share in use" /></span>
 							</th>
@@ -772,7 +795,7 @@
 									</td>
 									{/if}
 								{/each}
-								<td class="num share" class:none={share === null}><span class="cell-label">Flow share in use{' '}</span>{share === null ? '–' : fmtPct(share, 2)}</td>
+								<td class="num share" class:none={share === null}><span class="cell-label">Flow share in use{' '}</span>{shareCell(i)}</td>
 								{#if !readonly}
 									<td class="rm">
 										<button type="button" class="btn-icon btn" aria-label="Remove {label}" title="Remove hydrological unit" onclick={() => remove(node.id, label)}>✕</button>
@@ -793,7 +816,7 @@
 									{#if total !== null}<span class="cell-label">{cardLabel(f)}{' '}</span>{total}<span class="cell-label">{' '}{f.unit}</span>{/if}
 								</td>
 							{/each}
-							<td class="num" class:warn={farms.length > 0 && Math.abs(shares.sum - 1) >= 0.0002} class:none={!farms.length}>{#if farms.length}<span class="cell-label">Flow share in use{' '}</span>{fmtPct(shares.sum, 2)}{/if}</td>
+							<td class="num" class:warn={farms.length > 0 && shareSum !== null && shareSum > 0 && Math.abs(shareSum - 1) >= 0.0002} class:none={!farms.length || shareSum === null}>{#if farms.length && shareSum !== null}<span class="cell-label">Flow share in use{' '}</span>{fmtPct(shareSum, 2)}{/if}</td>
 							{#if !readonly}<td class="rm none"></td>{/if}
 						</tr>
 					</tfoot>
@@ -808,7 +831,7 @@
 					{#each NODE_FIELDS as f (f.key)}
 						<div><dt>{GROUPS[f.group]}: {f.label} ({f.unit})</dt><dd>{f.help}</dd></div>
 					{/each}
-					<div><dt>{GROUPS.share}: In use (%)</dt><dd>The hydrological unit's share of catchment natural flow and of the EWR with the method chosen in <a href="?tab=settings#set-share">Model settings</a> (by area, high/low MAP split or manual), from the saved settings. Computed, not edited; the shares should add up to 100 %.</dd></div>
+					<div><dt>Flow share: In use (%)</dt><dd>The hydrological unit's natural MAR share: its natural runoff from GR4J on its own area and rain, over all the units'. It splits the catchment's natural flow and the EWR between the units, and the shares add up to 100 %. It needs a run, so the column shows the latest run's, with the run's date, and "after a run" before one (or for a unit added since). Not edited.</dd></div>
 				</dl>
 			</details>
 			{#if !readonly}
@@ -959,6 +982,7 @@
 					section={page.url.searchParams.get('section')}
 					{nodes}
 					share={shareOf(editIndex)}
+					shareRun={shareDate}
 					{readonly}
 					onremove={() => remove(editing!.id, editing!.name || 'unnamed hydrological unit')}
 					farmersNote={editing.kind === 'farm' ? linkedNote(farmerCount?.[editing.id] ?? 0) : null}
@@ -974,7 +998,6 @@
 					demandObjects={(editor.model.demandObjects ?? []).filter((o) => o.nodeId === editing.id)}
 					onadddemand={(category) => editor.addDemandObject(editing.id, category)}
 					onremovedemand={(id) => editor.removeDemandObject(id)}
-					{method}
 					planting={editing.kind === 'farm' ? farmPlanting(editor.model, editing.id) : null}
 					efficiency={editing.kind === 'farm' ? unitEfficiency(editor.model, editing.id, editor.apanMm) : null}
 					systemsLine={editing.kind === 'farm' ? plantingSystemsLine(editor.model, editing.id) : null}

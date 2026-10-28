@@ -14,7 +14,6 @@
 
 	let {
 		missing,
-		overAllocated,
 		hasForecast,
 		modelDirty,
 		problems = 0,
@@ -26,8 +25,6 @@
 	}: {
 		/** What a run still needs ('a network', 'a rainfall series'). */
 		missing: string[];
-		/** Why the flow shares stop a run, or null. */
-		overAllocated: string | null;
 		/** Forecast rain is stored, so Run forecast shows. */
 		hasForecast: boolean;
 		/** Unsaved edits: the run asks to save them first. */
@@ -55,7 +52,7 @@
 	let input: HTMLInputElement | undefined = $state();
 	let shift = $state(0);
 
-	const blocked = $derived(missing.length > 0 || !!overAllocated);
+	const blocked = $derived(missing.length > 0);
 	// Its links (the network, rainfall data, settings) go to another section, where the same button
 	// stays mounted: the form closes rather than sit over the page it opened.
 	afterNavigate(() => (open = false));
@@ -147,8 +144,6 @@
 					<span class="err">The run didn’t start: {error}</span>
 				{:else if missing.length}
 					<span class="warn">A run needs {missing.join(' and ')}. Set up the <a href="?tab=network">network</a> and upload <a href="?tab=series">rainfall data</a> first.</span>
-				{:else if overAllocated}
-					<span class="warn">The run can't start: {overAllocated}. See the <a href="?tab=network">network</a> or <a href="?tab=settings">settings</a>.</span>
 				{:else if problems}
 					<span class="warn">{problems === 1 ? 'One problem stops' : `${problems} problems stop`} your unsaved changes being saved: a run uses the saved model, so fix {problems === 1 ? 'it' : 'them'} first (the save bar lists {problems === 1 ? 'it' : 'them'}).</span>
 				{:else if modelDirty}

@@ -23,7 +23,7 @@ const START = '2020-10-01';
 const MONTHLY: PeInput = { kind: 'monthly', mm: peRow as never, source: 'invented climatology' };
 
 function catchment(settings: ModelInput['settings'] = {}, et0?: DailySeries): ModelInput {
-	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0.5, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const node = { sortOrder: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0.5, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const rain = Array.from({ length: DAYS }, (_, i) => (i % 17 === 0 ? 40 : i % 5 === 0 ? 1 : 0));
 	return {
 		settings: { runoffModel: 'gr4j', apanMm: apan as never, ...settings },

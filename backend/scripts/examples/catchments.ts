@@ -258,9 +258,6 @@ export function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			downstreamNodeId: f.into ? nodeId(f.into) : null,
 			sortOrder: i,
 			areaKm2: f.areaKm2 ?? 0,
-			areaHiKm2: 0,
-			areaLoKm2: 0,
-			flowShareManual: null,
 			// The share of upstream inflow INTO the dam (model.md §3 Q1); all of it by default.
 			pctUpstreamToDam: f.upstreamToDam ?? 1,
 			pctRunoffToDam: f.runoffToDam ?? 0.6,

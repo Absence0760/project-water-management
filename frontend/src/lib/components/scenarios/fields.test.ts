@@ -262,7 +262,7 @@ describe('formatValue', () => {
 		expect(formatValue(NODE_FIELD_SPECS.damCapacityM3.spec, 180_000)).toBe('180\u202f000 m³');
 		expect(formatValue(NODE_FIELD_SPECS.irrigationEfficiency.spec, 0.8)).toBe('80 %');
 		expect(formatValue(NODE_FIELD_SPECS.damAreaFullM2.spec, null)).toBe('estimated (7.2 × capacity^0.77)');
-		expect(formatValue(SETTINGS_SPECS.flowShareMethod.spec, 'hiLo')).toBe('High/low MAP');
+		expect(formatValue(SETTINGS_SPECS.chirpsBiasCorrection.spec, 'none')).toBe('None');
 		expect(formatValue(SETTINGS_SPECS.simulationStart.spec, null)).toBe('first day with rain');
 		expect(formatValue(SETTINGS_SPECS.apanMm.spec, new Array(12).fill(100))).toBe('100 mm every month');
 		expect(formatValue(TRANSFER_FIELD_SPECS.enabled.spec, false)).toBe('no');

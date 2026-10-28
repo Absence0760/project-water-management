@@ -21,9 +21,6 @@ function farm(over: Partial<NetworkNode> = {}): NetworkNode {
 		downstreamNodeId: null,
 		sortOrder: 0,
 		areaKm2: 0,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 0,
 		pctRunoffToDam: 0,
 		// A full dam far bigger than any demand here: every farm is fully supplied.

@@ -168,12 +168,22 @@ const plain = (list: readonly string[], labels: Record<string, string> = {}): re
 // node.set
 // ---------------------------------------------------------------------------
 
+/**
+ * The names of the fields and settings removed with the flow-share methods (engine 1.105.0, issue #616), for a stored
+ * change that still sets one: the list shows it by name, and the check refuses it with the engine's reason.
+ */
+export const RETIRED_FIELD_LABELS: Readonly<Record<string, string>> = {
+	areaHiKm2: 'High-MAP area',
+	areaLoKm2: 'Low-MAP area',
+	flowShareManual: 'Manual flow share',
+	flowShareMethod: 'Flow-share method',
+	'hiLoSplit.hi': 'High-MAP share of runoff',
+	'hiLoSplit.lo': 'Low-MAP share of runoff'
+};
+
 export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	name: { label: 'Name', spec: { t: 'text' } },
 	areaKm2: { label: 'Area', spec: num('km²') },
-	areaHiKm2: { label: 'High-MAP area', spec: num('km²') },
-	areaLoKm2: { label: 'Low-MAP area', spec: num('km²') },
-	flowShareManual: { label: 'Manual flow share', spec: pct(true, 'none') },
 	pctUpstreamToDam: { label: 'Upstream inflow to the dam', spec: pct() },
 	pctRunoffToDam: { label: 'Own runoff to the dam', spec: pct() },
 	damCapacityM3: { label: 'Dam capacity', spec: num('m³') },
@@ -364,12 +374,6 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	apanMm: { label: 'A-pan evaporation by month', spec: MONTH_MM },
 	panCoefficient: { label: 'Pan coefficient by month', spec: { t: 'monthly', unit: '', scale: 1, nullable: false } },
 	ewrPragmaticM3PerDay: { label: 'Pragmatic EWR by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: false } },
-	flowShareMethod: {
-		label: 'Flow-share method',
-		spec: { t: 'enum', options: plain(['area', 'hiLo', 'manual'], { area: 'By area', hiLo: 'High/low MAP', manual: 'Manual' }) }
-	},
-	'hiLoSplit.hi': { label: 'High-MAP share of runoff', spec: pct() },
-	'hiLoSplit.lo': { label: 'Low-MAP share of runoff', spec: pct() },
 	'gr4j.x1': { label: 'GR4J production store X1', spec: num('mm') },
 	'gr4j.x2': { label: 'GR4J groundwater exchange X2', spec: num('mm/day') },
 	'gr4j.x3': { label: 'GR4J routing store X3', spec: num('mm') },

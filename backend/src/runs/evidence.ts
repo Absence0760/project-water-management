@@ -146,8 +146,11 @@ export const evidenceRoutes = new Hono<AuthEnv>()
 			if (run[0].trigger === 'forecast') throw new ApiError(409, FORECAST_NOT_EVIDENCE);
 			if (run[0].runoffModel === 'legacy')
 				throw new ApiError(409, 'a run of the legacy runoff model is workbook comparison only and cannot be nominated as evidence');
-			// Runs before engine 0.27.1 ran with flow shares over 100 % (water from nowhere); newer ones are refused.
-			const over = run[0].model && overAllocationError(inputFlowShares({ model: run[0].model, settings: run[0].settings ?? {} }).sum);
+			// Runs before engine 0.27.1 ran with flow shares over 100 % (water from nowhere); later engines refused them, and
+			// from 1.105.0 (issue #616) every unit's share is its natural MAR share, which adds up to 1. So only a snapshot
+			// whose settings still name a flow-share method is checked (the engine's legacy reader; null otherwise).
+			const shares = run[0].model ? inputFlowShares({ model: run[0].model, settings: run[0].settings ?? {} }) : null;
+			const over = shares && overAllocationError(shares.sum);
 			if (over) throw new ApiError(409, `this run cannot be nominated as evidence: its ${over.replace(/\. Correct .*$/, '')}`);
 			const before = await listNominations(db, id);
 			if (before.at(-1)?.runId === body.runId) throw new ApiError(409, 'this run is already the nominated evidence run');

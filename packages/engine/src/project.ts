@@ -22,6 +22,7 @@ import type { RainAccumulationInfo } from './accumulation';
 import type { Wr2012FitStats } from './reference/wr2012Fit';
 import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
+import type { UnitRainFingerprint } from './runoff/unitRainFingerprint';
 import type { SeriesProvenance } from './seriesProvenance';
 import { QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN } from './quantileMap';
 import type { Wr2012Report } from './reference/wr2012';
@@ -37,7 +38,12 @@ import { defaultWr2012Settings, type Wr2012Settings } from './reference/wr2012Se
 import { defaultCalibrationRules, type CalibrationRules } from './calibrate/rulesSettings';
 import type { DeclaredUncertaintyRule } from './uncertainty/options';
 
-/** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
+/**
+ * How each farm's share of catchment natural flow was derived (b023 [Farm spec]), engines up to 1.104.x:
+ * settings.flowShareMethod. Retired in 1.105.0 (issue #616): every unit's share is its natural MAR share
+ * (./network/ewrSplit.ts, docs/model.md §2.5). Kept as a type for reading older runs' snapshots
+ * (./legacy/flowShares.ts).
+ */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
 
 /**
@@ -317,8 +323,26 @@ export const LEGACY_UPGRADED_WARNING =
  * Top-level settings an engine retired: ignored when read (prepare.ts mergeSettings, the backend's too) and stripped
  * from stored projects by a migration. `ewrSplit` (engines 1.94.0 – 1.104.x, issue #553): from 1.105.0 the EWR is
  * always split by each unit's natural MAR (issue #615, ./network/ewrSplit.ts, 263_retire_ewr_split.sql).
+ * `flowShareMethod` and `hiLoSplit` (b023's area, Hi/Lo MAP and specific fragmentation): from 1.105.0 the flow is
+ * split by the same natural MAR shares (issue #616, docs/model.md §2.5, 264_retire_flow_share_method.sql); a run
+ * whose input still names Hi/Lo MAP or specific says so once (FLOW_SHARE_METHOD_RETIRED_WARNING).
  */
-export const RETIRED_SETTINGS_KEYS = ['ewrSplit'] as const;
+export const RETIRED_SETTINGS_KEYS = ['ewrSplit', 'flowShareMethod', 'hiLoSplit'] as const;
+
+/**
+ * Node fields an engine retired: dropped when read (upgradeLegacyModel) and no longer stored. `areaHiKm2`,
+ * `areaLoKm2` and `flowShareManual` (b023's Hi/Lo MAP and specific fragmentation) went with
+ * settings.flowShareMethod in engine 1.105.0 (issue #616): a run snapshot or model revision still carries them.
+ */
+export const RETIRED_NODE_FIELDS = ['areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
+
+/**
+ * The run note for an input whose settings still name a retired flow-share method (Hi/Lo MAP or specific; engine
+ * 1.105.0, issue #616): the flow is split by each unit's natural MAR instead. Once per run.
+ */
+export function flowShareMethodRetiredWarning(method: 'hiLo' | 'manual'): string {
+	return `this project's flow-share method (${method === 'hiLo' ? 'Hi/Lo MAP' : 'specific shares'}) was removed in engine 1.105.0: the flow is now split between the units by each unit's natural MAR, as the EWR is (Model settings → Model selection for flow generation)`;
+}
 
 /** The legacy runoff model's keys under settings.calibration, dropped since engine 1.0.0 (issue #16). */
 export const RETIRED_CALIBRATION_KEYS = [
@@ -423,9 +447,6 @@ export interface ProjectSettings {
 	allocationTolerance?: number;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
-	flowShareMethod: FlowShareMethod;
-	/** Pitman high/low MAP split used by the `hiLo` flow-share method. */
-	hiLoSplit: { hi: number; lo: number };
 	/**
 	 * Rain → natural-flow model (./runoff): 'gr4j', the only one since engine
 	 * 1.0.0 removed the legacy b023 recession model (issue #16). Not a choice
@@ -963,8 +984,6 @@ export function defaultProjectSettings(): ProjectSettings {
 		lakeEvapFactorMonthly: null,
 		lakeEvapFactorSource: '',
 		apanMm: zeros,
-		flowShareMethod: 'area',
-		hiLoSplit: { hi: 0.5, lo: 0.5 },
 		runoffModel: 'gr4j',
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
@@ -1626,10 +1645,6 @@ export interface NetworkNode {
 	downstreamNodeId: string | null;
 	sortOrder: number;
 	areaKm2: number;
-	areaHiKm2: number;
-	areaLoKm2: number;
-	/** Used when settings.flowShareMethod === 'manual'. 0–1. */
-	flowShareManual: number | null;
 	/**
 	 * The land unit's mean annual precipitation, mm (issue #482): under
 	 * settings.unitRain `perUnit` it sets the level of the unit's own CHIRPS
@@ -2209,9 +2224,6 @@ export function newNetworkNode(id: string, sortOrder: number, downstreamNodeId: 
 		downstreamNodeId,
 		sortOrder,
 		areaKm2: 0,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 1,
 		pctRunoffToDam: 0,
 		damCapacityM3: 0,
@@ -2310,6 +2322,8 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 		? model.nodes.map((raw) => {
 				if (!raw || typeof raw !== 'object') return raw;
 				const { returnFlowPct, lossReturnFraction, ...n } = raw as Record<string, unknown>;
+				// The flow-share fields engines up to 1.104.x read (b023's Hi/Lo MAP and specific shares; issue #616): dropped.
+				for (const k of RETIRED_NODE_FIELDS) delete n[k];
 				if (n.irrigationEfficiency === undefined || n.returnFlowFraction === undefined) {
 					// Engine 0.16.0–1.70.0: β, a share of the losses (migration 197); before that, returnFlowPct (migration 006).
 					if (n.irrigationEfficiency !== undefined && typeof lossReturnFraction === 'number') {
@@ -3238,14 +3252,18 @@ export interface FarmSummary {
 	/**
 	 * The farm's share of the catchment flow and of the EWR, 0–1 (docs/model.md
 	 * §2.5, the workbook's [Fragmented flow] / [Fragmented EWR] factor), as the
-	 * run applied it (engine ≥ 0.27.0); absent on older runs.
+	 * run applied it (engine ≥ 0.27.0); absent on older runs. From 1.105.0
+	 * (issue #616) its natural MAR share, the same as `ewrShare`: one share per
+	 * unit for the flow, the EWR, the land-cover threshold and the senior
+	 * users' claims. Before, the area, Hi/Lo MAP or specific share.
 	 */
 	flowShare?: number;
 	/**
 	 * The farm's share of the EWR, 0–1, as the run applied it (engine ≥
 	 * 1.94.0, docs/model.md §2.5b): from 1.105.0 its natural MAR ÷ Σ the
 	 * units' under both flow generation methods (its area share with no
-	 * runoff, its flow share with no land unit); 1.94.0 – 1.104.x its flow
+	 * runoff over the period or no units' runoff supplied, 0 with no land
+	 * unit), and `flowShare` is the same; 1.94.0 – 1.104.x its flow
 	 * share unless settings.ewrSplit asked for the natural MAR under Per unit.
 	 * Absent on older runs, whose EWR the flow share split.
 	 */
@@ -4357,9 +4375,21 @@ export interface RunSummary {
 	 * taken over and (≥ 1.105.0) where the units' runoff came from and which
 	 * units ran on the catchment rain; 1.94.0 – 1.104.x also the retired
 	 * setting asked for (`method`). Each unit's share is FarmSummary.ewrShare.
-	 * Absent on older runs (the flow share).
+	 * From 1.105.0 (issue #616) the same shares split the flow under
+	 * Fragmentation, the land-cover threshold and the senior users' claims, so
+	 * this is the record of the unit shares. Absent on older runs (the flow
+	 * share).
 	 */
 	ewrSplit?: EwrSplitInfo;
+	/**
+	 * Under Fragmentation, the forcing the share runs ran on (engine ≥ 1.105.0,
+	 * issue #616): the Per unit setup's fingerprint (each unit's rule, record
+	 * and factors), as a Fragmentation fit records it (FitRecord.forcing
+	 * .shareRain), so the fit reads "Forcing changed since fit" when it moved.
+	 * null when the run had no land unit; absent under Per unit (`unitRain`
+	 * is it), on a resumed run, and before 1.105.0.
+	 */
+	shareRain?: UnitRainFingerprint | null;
 	catchment: {
 		meanNaturalFlowM3Day: number;
 		meanSimulatedOutflowM3Day: number;
@@ -4440,7 +4470,12 @@ export interface RunSummary {
 		 * ('doublemass').
 		 */
 		seriesChecks?: SeriesCheck[];
-		/** Farms whose area differs from high-MAP + low-MAP area by more than 1 %. */
+		/**
+		 * Farms whose area differs from high-MAP + low-MAP area by more than 1 %
+		 * (audit W3). Engines up to 1.104.x only: 1.105.0 retired the high- and
+		 * low-MAP areas with the Hi/Lo MAP method (issue #616), so a newer run
+		 * carries none.
+		 */
 		areaMismatches?: AreaMismatch[];
 		/**
 		 * The double-mass curve of catchment rain against CHIRPS (engine ≥

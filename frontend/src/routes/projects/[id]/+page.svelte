@@ -728,7 +728,7 @@
 		if (await saveBeforeRun()) await startRun(label, forecast);
 	}
 	// What the header's Run model needs before a run can start (runs/runReady.ts, as Runs & results' form).
-	const runReady = $derived(runBlockers(editor.model, project?.settings ?? {}, series));
+	const runReady = $derived(runBlockers(editor.model, series));
 
 	// --- the farm drawer: open while the URL names a farm ---------------------
 	// Closing it (Done, Esc, the ✕) drops `farm` from the URL in place, so Back
@@ -1070,7 +1070,6 @@
 		<!-- Not on Runs & results, even while its chunk loads: its run form is the one Run model there. -->
 		<RunButton
 			missing={runReady.missing}
-			overAllocated={runReady.overAllocated}
 			hasForecast={hasForecastRain(series)}
 			modelDirty={unsaved}
 			problems={unsaved ? saveProblems.length : 0}

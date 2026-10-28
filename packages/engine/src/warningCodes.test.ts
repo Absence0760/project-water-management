@@ -378,7 +378,7 @@ describe('rain stations and unit gauges', () => {
 describe('a run’s summary.warningCodes', () => {
 	const zeros = new Array(12).fill(0) as unknown as Monthly;
 	const node = (id: string, over: Partial<NetworkNode> = {}): NetworkNode =>
-		({ id, name: id, kind: 'farm', downstreamNodeId: null, sortOrder: 0, areaKm2: 1, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0, ...over }) as NetworkNode;
+		({ id, name: id, kind: 'farm', downstreamNodeId: null, sortOrder: 0, areaKm2: 1, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0, ...over }) as NetworkNode;
 	const DAYS = 730;
 	const START = '2018-10-01';
 	const ser = (values: (number | null)[]) => ({ startDate: START, values });

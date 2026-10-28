@@ -29,7 +29,7 @@ function base(): ModelInput {
 			transfers: [{ id: T, fromNodeId: UP, toNodeId: LO, months: [11, 12], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0.2, enabled: true, priority: 0 }],
 			landCover: [{ id: P, nodeId: LO, coverClass: 'pine', areaKm2: 1.5, densityPct: 0.5, factors: null }]
 		},
-		{ flowShareMethod: 'area', simulationStart: null, apanMm: new Array(12).fill(100) }
+		{ simulationStart: null, apanMm: new Array(12).fill(100) }
 	);
 }
 

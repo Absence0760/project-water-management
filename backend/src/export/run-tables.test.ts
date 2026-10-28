@@ -25,6 +25,7 @@ import {
 	evidenceLines,
 	nodeColumnHeader,
 	seriesKeyOrder,
+	engineAtLeast,
 	summaryCsvLines,
 	verificationLines,
 	waterBalanceLines,
@@ -138,6 +139,37 @@ describe('summary sheet', () => {
 		expect(area.lines).toContain('EWR split between units by,each unit’s area,2000-10-01 – 2001-09-30 (1 complete water year); no unit made natural runoff');
 		const bare = rowOf({ ...summary, ewrSplit: { applied: 'flowShare', why: 'noLandUnit' } });
 		expect(bare.lines).toContain('EWR split between units by,the flow share,the flow share: no unit has an area');
+	});
+
+	it('writes one Natural MAR share (%) column for a run from engine 1.105.0 (issue #616); an older run keeps its recorded two', () => {
+		const farm = { ...summary.farms[0]!, flowShare: 0.25, ewrShare: 0.25 };
+		const farmRows = (engineVersion: string) => {
+			const lines = [...summaryCsvLines({ ...meta, engineVersion }, { ...summary, farms: [farm] })];
+			const at = lines.findIndex((l) => l.startsWith('Farm,'));
+			return [lines[at]!, lines[at + 1]!];
+		};
+		for (const v of ['1.105.0', '1.105.3', '1.106.0', '2.0.0']) {
+			const [header, row] = farmRows(v);
+			expect(header, v).toMatch(/^Farm,Natural MAR share \(%\),Average crop water requirement/);
+			expect(header, v).not.toMatch(/Flow share|EWR share/);
+			expect(row, v).toBe('"Farm, upper",25,90,100,80,20,80,-5,3');
+		}
+		// The positive control: 1.104.x and an unreadable version keep "Flow share (%)" / "EWR share (%)" as recorded.
+		for (const v of ['1.104.9', '0.99.200', 'dev']) {
+			const [header, row] = farmRows(v);
+			expect(header, v).toMatch(/^Farm,Flow share \(%\),EWR share \(%\),Average crop water requirement/);
+			expect(row, v).toBe('"Farm, upper",25,25,90,100,80,20,80,-5,3');
+		}
+	});
+
+	it('engineAtLeast compares x.y.z versions number by number', () => {
+		expect(engineAtLeast('1.105.0', [1, 105, 0])).toBe(true);
+		expect(engineAtLeast('1.105.1', [1, 105, 0])).toBe(true);
+		expect(engineAtLeast('1.104.99', [1, 105, 0])).toBe(false);
+		expect(engineAtLeast('1.99.0', [1, 105, 0])).toBe(false);
+		expect(engineAtLeast('2.0.0', [1, 105, 0])).toBe(true);
+		expect(engineAtLeast('0.200.0', [1, 105, 0])).toBe(false);
+		expect(engineAtLeast('', [1, 105, 0])).toBe(false);
 	});
 
 	it('writes the rainfall stations block (engine ≥ 1.91.0, issue #553) only when the run had it: each area, then each pairing', () => {

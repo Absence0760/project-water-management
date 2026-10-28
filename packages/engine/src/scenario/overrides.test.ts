@@ -28,7 +28,6 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		areaKm2: 5,
 		areaHiKm2: 2.5,
 		areaLoKm2: 2.5,
-		flowShareManual: null,
 		pctUpstreamToDam: 0.5,
 		pctRunoffToDam: 0.8,
 		damCapacityM3: 0,
@@ -56,7 +55,7 @@ function base(): ModelInput {
 		},
 		model: {
 			nodes: [
-				node('G', { name: 'Outlet gauge', kind: 'gauge', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 }),
+				node('G', { name: 'Outlet gauge', kind: 'gauge', areaKm2: 0, divertCapacityM3Day: 0 }),
 				node('A', { downstreamNodeId: 'G', damCapacityM3: 200_000, sortOrder: 1 }),
 				node('B', { downstreamNodeId: 'G', sortOrder: 2 }),
 				node('C', { downstreamNodeId: 'A', damCapacityM3: 50_000, sortOrder: 3 })
@@ -257,7 +256,7 @@ describe('applyScenario: each op', () => {
 
 	it('node.set takes a gauge off the EWR sites (engine ≥ 1.5.0), never the outlet, always a baseline assumption', () => {
 		const b = base();
-		b.model.nodes.push(node('W', { name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 }));
+		b.model.nodes.push(node('W', { name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, divertCapacityM3Day: 0 }));
 		nodeOf(b, 'B')!.downstreamNodeId = 'W';
 		const op: ScenarioOp = { op: 'node.set', nodeId: 'W', field: 'ewrSite', value: false };
 		const r = one(op, b);
@@ -307,7 +306,7 @@ describe('applyScenario: each op', () => {
 		// Only a farm has them: the kind rule names the field.
 		expect(err({ op: 'node.set', nodeId: 'G', field: 'supplyRule', value: 'riverFirst' })[0]).toMatch(/"supplyRule" can't be set on a gauge/);
 		const withUser = base();
-		withUser.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'B', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, sortOrder: 4 }));
+		withUser.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'B', areaKm2: 0, sortOrder: 4 }));
 		expect(err({ op: 'node.set', nodeId: 'U', field: 'supplyRule', value: 'riverFirst' }, withUser)[0]).toMatch(/"supplyRule" can't be set on a user/);
 		// A user's pump capacity is its own (engine 1.58.0): a licence what-if may cap it.
 		expect(err({ op: 'node.set', nodeId: 'U', field: 'pumpCapacityM3Day', value: 500 }, withUser)).toEqual([]);
@@ -354,7 +353,7 @@ describe('applyScenario: each op', () => {
 	});
 
 	it('node.add adds a leaf with the engine defaults for fields it leaves out', () => {
-		const add = node('N', { name: 'New dam', downstreamNodeId: 'B', damCapacityM3: 30_000, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const add = node('N', { name: 'New dam', downstreamNodeId: 'B', damCapacityM3: 30_000, areaKm2: 0 });
 		const r = one({ op: 'node.add', node: add });
 		expect(r.problems).toEqual([]);
 		const n = nodeOf(r.input, 'N')!;
@@ -365,7 +364,7 @@ describe('applyScenario: each op', () => {
 
 	it('node.add takes a supply rule and river pump, and checks them (WP-3.8)', () => {
 		const add = (over: Record<string, unknown>) =>
-			one({ op: 'node.add', node: node('N', { name: 'Pump scheme', downstreamNodeId: 'B', damCapacityM3: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, ...over }) });
+			one({ op: 'node.add', node: node('N', { name: 'Pump scheme', downstreamNodeId: 'B', damCapacityM3: 0, areaKm2: 0, ...over }) });
 		const r = add({ supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200, supplyTriggerPct: 0.4, supplyStopPct: 0.6 });
 		expect(r.problems).toEqual([]);
 		expect(nodeOf(r.input, 'N')).toMatchObject({ supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200 });
@@ -376,7 +375,7 @@ describe('applyScenario: each op', () => {
 
 	it('node.add takes the GN 538 property area and rate, and checks them (engine 1.12.0)', () => {
 		const add = (over: Record<string, unknown>) =>
-			one({ op: 'node.add', node: node('N', { name: 'New farm', downstreamNodeId: 'B', damCapacityM3: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, ...over }) });
+			one({ op: 'node.add', node: node('N', { name: 'New farm', downstreamNodeId: 'B', damCapacityM3: 0, areaKm2: 0, ...over }) });
 		const r = add({ gaPropertyAreaHa: 60, gaRateM3HaYear: 45 });
 		expect(r.problems).toEqual([]);
 		expect(nodeOf(r.input, 'N')).toMatchObject({ gaPropertyAreaHa: 60, gaRateM3HaYear: 45 });
@@ -705,7 +704,7 @@ describe('hostile op names and fields (a worker message or request body is untru
 			hostile({
 				op: 'node.insert',
 				upstreamNodeIds: [name],
-				node: node('N', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 })
+				node: node('N', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, divertCapacityM3Day: 0 })
 			})
 		]);
 		expect(r.applied).toEqual([]);
@@ -732,7 +731,7 @@ describe('hostile op names and fields (a worker message or request body is untru
 		const withKey = (o: object) => JSON.parse(JSON.stringify(o).replace(/^\{/, '{"__proto__":{"polluted":true},"constructor":1,'));
 		const { ops, errors } = validateScenarioOps([
 			{ op: 'allocation.set', allocation: withKey({ id: 'al9', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1000 }) },
-			{ op: 'node.insert', upstreamNodeIds: ['A'], node: withKey(node('N', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 })) },
+			{ op: 'node.insert', upstreamNodeIds: ['A'], node: withKey(node('N', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, divertCapacityM3Day: 0 })) },
 			{ op: 'crop.set', cropId: 'c1', field: 'name', value: 'Maize' },
 			{ op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 0.25 }
 		]);
@@ -890,7 +889,7 @@ describe('applyScenario: the whole list', () => {
 
 	it('refuses to remove the last land: runModel needs a catchment area', () => {
 		const b = base();
-		for (const id of ['A', 'C']) Object.assign(nodeOf(b, id)!, { areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		for (const id of ['A', 'C']) Object.assign(nodeOf(b, id)!, { areaKm2: 0 });
 		expect(one({ op: 'node.remove', nodeId: 'B' }, b).problems[0]).toMatch(/no area left/);
 		expect(one({ op: 'node.set', nodeId: 'B', field: 'areaKm2', value: 0 }, b).problems[0]).toMatch(/no area left/);
 		// With the area set by hand the land can go.
@@ -1021,7 +1020,7 @@ describe('demand.scale (issue #53 R1)', () => {
 	/** The base with an other water user U below A taking 1,000 m³/day every month. */
 	const withUser = () => {
 		const b = base();
-		b.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, userDemandM3Day: new Array(12).fill(1000), sortOrder: 4 }));
+		b.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'G', areaKm2: 0, userDemandM3Day: new Array(12).fill(1000), sortOrder: 4 }));
 		return b;
 	};
 	const ones = new Array<number>(12).fill(1);
@@ -1106,7 +1105,7 @@ describe('demand.scale with dates (engine ≥ 1.82.0, issue #514: a dry-year str
 		Object.fromEntries(out.series.filter((s) => s.nodeId === nodeId).map((s) => [s.key, s.values]));
 	const withUser = () => {
 		const b = base();
-		b.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, userDemandM3Day: new Array(12).fill(1000), sortOrder: 4 }));
+		b.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'G', areaKm2: 0, userDemandM3Day: new Array(12).fill(1000), sortOrder: 4 }));
 		return b;
 	};
 	/** Each day's factor on A's crop requirement, `y` ÷ `x`, checked against `k(day)`; returns how many days were scaled. */
@@ -1244,7 +1243,7 @@ describe('ewrRule.set (engine ≥ 1.6.0, WP-3.7)', () => {
 	/** The base with a second gauge W (an EWR site) on B's way to the outlet, and no table at the farm A. */
 	const withWeir = () => {
 		const b = base();
-		b.model.nodes.push(node('W', { name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0, sortOrder: 4 }));
+		b.model.nodes.push(node('W', { name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, divertCapacityM3Day: 0, sortOrder: 4 }));
 		nodeOf(b, 'B')!.downstreamNodeId = 'W';
 		b.settings.ewrRules = [blankEwrRuleTable('G')];
 		return b;
@@ -1423,7 +1422,7 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 	});
 
 	it('node.insert puts a new node on a reach: the named nodes drain into it, it drains where they did', () => {
-		const weir = node('W', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 });
+		const weir = node('W', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, divertCapacityM3Day: 0 });
 		const b = deepFreeze(base());
 		const r = applyScenario(b, [{ op: 'node.insert', node: weir, upstreamNodeIds: ['A', 'B'] }]);
 		expect(r.problems).toEqual([]);
@@ -1438,14 +1437,14 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 			'EWR sites: Outlet gauge (outlet) → Outlet gauge (outlet), New weir (added New weir (new node))'
 		]);
 		// An on-channel dam below C alone: C drains into it, it into A.
-		const dam = node('D', { name: 'New dam', downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, damCapacityM3: 80_000 });
+		const dam = node('D', { name: 'New dam', downstreamNodeId: 'A', areaKm2: 0, damCapacityM3: 80_000 });
 		const d = one({ op: 'node.insert', node: dam, upstreamNodeIds: ['C'] });
 		expect(d.problems).toEqual([]);
 		expect(nodeOf(d.input, 'C')!.downstreamNodeId).toBe('D');
 	});
 
 	it('node.insert refuses a node that doesn’t drain there, an empty or repeating list, and what node.add refuses, changing nothing', () => {
-		const n = node('D', { name: 'New dam', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const n = node('D', { name: 'New dam', downstreamNodeId: 'G', areaKm2: 0 });
 		const r = one({ op: 'node.insert', node: n, upstreamNodeIds: ['A', 'C'] });
 		expect(r.problems).toEqual(['op 1 (node.insert): "Farm C" doesn\'t drain into what the new hydrological unit drains into, so the new one can\'t sit between them']);
 		expect(r.input.model).toEqual(base().model);
@@ -1459,7 +1458,7 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 
 	it('classifies a move of the own land-free leaf as the proposal, any other move as baseline; an insert as node.add', () => {
 		const b = base();
-		const pump = node('P', { name: 'Pump', downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const pump = node('P', { name: 'Pump', downstreamNodeId: 'A', areaKm2: 0 });
 		b.model.nodes.push(pump);
 		const move = (nodeId: string): ScenarioOp => ({ op: 'node.move', nodeId, downstreamNodeId: 'B' });
 		expect(classifyOp(move('P'), ['P'], b)).toBe('proposal');
@@ -1467,15 +1466,15 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 		expect(classifyOp(move('P'), ['A'], b)).toBe('baseline');
 		// A has land, and C drains into it.
 		expect(classifyOp(move('A'), ['A'], b)).toBe('baseline');
-		Object.assign(nodeOf(b, 'A')!, { areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		Object.assign(nodeOf(b, 'A')!, { areaKm2: 0 });
 		expect(classifyOp(move('A'), ['A'], b)).toBe('baseline');
 		expect(classifyOp(move('A'), ['A', 'C'], b)).toBe('baseline');
-		const dam = node('D', { name: 'New dam', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const dam = node('D', { name: 'New dam', downstreamNodeId: 'G', areaKm2: 0 });
 		expect(classifyOp({ op: 'node.insert', node: dam, upstreamNodeIds: ['B'] }, [], b)).toBe('proposal');
 		expect(classifyOp({ op: 'node.insert', node: { ...dam, kind: 'gauge' }, upstreamNodeIds: ['B'] }, [], b)).toBe('baseline');
 		expect(classifyOp({ op: 'node.insert', node: { ...dam, areaKm2: 1 }, upstreamNodeIds: ['B'] }, [], b)).toBe('baseline');
 		// A senior other water user (the default priority) curtails the farms above it (model.md §2.7c): not the proposal's to insert.
-		const user = node('U', { name: 'New town', kind: 'user', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, userDemandM3Day: new Array(12).fill(100) });
+		const user = node('U', { name: 'New town', kind: 'user', downstreamNodeId: 'G', areaKm2: 0, userDemandM3Day: new Array(12).fill(100) });
 		expect(classifyOp({ op: 'node.insert', node: user, upstreamNodeIds: ['B'] }, [], b)).toBe('baseline');
 		expect(classifyOp({ op: 'node.insert', node: { ...user, userPriority: 'junior' }, upstreamNodeIds: ['B'] }, [], b)).toBe('proposal');
 		// An inserted node is the scenario's own: moving it next is the proposal too.
@@ -1491,7 +1490,7 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 		expect(applyScenario(base(), [{ op: 'node.move', nodeId: 'A', downstreamNodeId: 'C' }], { mask }).problems).toEqual([
 			'op 1 (node.move): the network has a loop through "Farm A"; the network has a loop through "Farm 2"'
 		]);
-		const dam = node('D', { name: 'New dam', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const dam = node('D', { name: 'New dam', downstreamNodeId: 'G', areaKm2: 0 });
 		expect(applyScenario(base(), [{ op: 'node.insert', node: dam, upstreamNodeIds: ['B'] }], { mask }).applied[0]!.notes).toEqual(['"Farm 1" now drains into "New dam"']);
 	});
 });
@@ -1871,7 +1870,7 @@ describe('demand-object ops (engine ≥ 1.45.0)', () => {
 		// Without the input it can't see whose object it is: baseline.
 		expect(classifyOp(set('count', 1), ['A'])).toBe('baseline');
 		// An object added on a node the scenario added is the proposal's (classifyScenario counts the new node as owned).
-		const newFarm = node('N', { name: 'New farm', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, sortOrder: 9 });
+		const newFarm = node('N', { name: 'New farm', downstreamNodeId: 'G', areaKm2: 0, sortOrder: 9 });
 		expect(classifyScenario(base(), [{ op: 'node.add', node: newFarm }, { op: 'demandObject.add', demandObject: demandObject('do9', 'N') }], [])).toEqual(['proposal', 'proposal']);
 	});
 
@@ -1930,7 +1929,7 @@ describe('classifyOp', () => {
 	});
 
 	it('new nodes: a pump or dam without land is a proposal, a gauge or new land is baseline', () => {
-		const pump = node('N', { downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const pump = node('N', { downstreamNodeId: 'A', areaKm2: 0 });
 		expect(cls({ op: 'node.add', node: pump })).toBe('proposal');
 		expect(cls({ op: 'node.add', node: { ...pump, areaKm2: 1 } })).toBe('baseline');
 		expect(cls({ op: 'node.add', node: { ...pump, kind: 'gauge' } })).toBe('baseline');
@@ -1939,7 +1938,7 @@ describe('classifyOp', () => {
 
 	it('removing a node needs the input, and is baseline for land or a gauge', () => {
 		const noLand = base();
-		Object.assign(nodeOf(noLand, 'A')!, { areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		Object.assign(nodeOf(noLand, 'A')!, { areaKm2: 0 });
 		noLand.settings.ewrRules = [blankEwrRuleTable('G')];
 		expect(classifyOp({ op: 'node.remove', nodeId: 'A' }, owned, noLand)).toBe('proposal');
 		expect(classifyOp({ op: 'node.remove', nodeId: 'A' }, owned)).toBe('baseline');
@@ -1951,7 +1950,7 @@ describe('classifyOp', () => {
 	});
 
 	it('classifyScenario counts nodes the scenario added as owned', () => {
-		const pump = node('N', { downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, damCapacityM3: 1000 });
+		const pump = node('N', { downstreamNodeId: 'A', areaKm2: 0, damCapacityM3: 1000 });
 		const ops: ScenarioOp[] = [
 			{ op: 'node.add', node: pump },
 			{ op: 'node.set', nodeId: 'N', field: 'damCapacityM3', value: 2000 },
@@ -2206,7 +2205,7 @@ describe('mask: names (an application judged in its applicant’s namespace, WP-
 	});
 
 	it('classifies as applyScenario applies: a node added under a hidden name is still the applicant’s', () => {
-		const add: ScenarioOp = { op: 'node.add', node: { ...nodeOf(base(), 'B')!, id: 'N', name: 'Farm C', downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 } };
+		const add: ScenarioOp = { op: 'node.add', node: { ...nodeOf(base(), 'B')!, id: 'N', name: 'Farm C', downstreamNodeId: 'A', areaKm2: 0 } };
 		const set: ScenarioOp = { op: 'node.set', nodeId: 'N', field: 'damCapacityM3', value: 10 };
 		expect(classifyScenario(base(), [add, set], ['A'], { mask: masked })).toEqual(['proposal', 'proposal']);
 		// Unmasked the add collides, so N never exists and the set on it is the baseline's.
@@ -2371,7 +2370,7 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		expect(apply([shares], b).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
 		// No land left once their own farm's goes, because no hidden farm has any.
 		const dry = baseM();
-		for (const id of ['B', 'C']) Object.assign(nodeOf(dry, id)!, { areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		for (const id of ['B', 'C']) Object.assign(nodeOf(dry, id)!, { areaKm2: 0 });
 		const noLand: ScenarioOp[] = (['areaKm2', 'areaHiKm2', 'areaLoKm2'] as const).map((field) => ({ op: 'node.set', nodeId: 'A', field, value: 0 }));
 		const plain = applyScenario(dry, noLand).problems;
 		expect(plain).toEqual([expect.stringContaining('the catchment has no area left')]);
@@ -2396,7 +2395,7 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		for (const n of [FARMER_K - 1, FARMER_K]) expect(at(n).problems.join()).not.toMatch(/Farm B|Farm C|Secret/);
 		// The area rule, the same way.
 		const dry = baseM();
-		for (const id of ['B', 'C']) Object.assign(nodeOf(dry, id)!, { areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		for (const id of ['B', 'C']) Object.assign(nodeOf(dry, id)!, { areaKm2: 0 });
 		const noLand: ScenarioOp[] = (['areaKm2', 'areaHiKm2', 'areaLoKm2'] as const).map((field) => ({ op: 'node.set', nodeId: 'A', field, value: 0 }));
 		expect(applyScenario(dry, noLand, { mask: { ...mask, hiddenHolders: FARMER_K } }).problems[0]).toMatch(
 			/: the catchment would have 0\.00 km² of land; the units you can't see hold 0\.00 km² between them$/

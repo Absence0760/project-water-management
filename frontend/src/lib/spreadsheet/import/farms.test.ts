@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asRunOfRiver, farmOperatingRules, readFarmSpec, runOfRiverNote, smallPoolNote, UPSTREAM_INTO_DAM_MARKER } from './farms';
+import { asRunOfRiver, farmOperatingRules, flowShareMethodNote, readFarmSpec, runOfRiverNote, smallPoolNote, UPSTREAM_INTO_DAM_MARKER } from './farms';
 import { Report } from './report';
 import { syntheticB023 } from './testWorkbook';
 import { B023Workbook } from './workbook';
@@ -46,20 +46,49 @@ describe('farm operating rules', () => {
 });
 
 describe('readFarmSpec', () => {
-	it('reads each farm row and the method settings', () => {
+	it('reads each farm row, without the retired fragmentation columns (issue #616)', () => {
 		const t = readFarmSpec(new B023Workbook(syntheticB023().build()), new Report());
 		expect([...t.farms.keys()]).toEqual(['Farm A', 'Farm B']);
-		expect(t.farms.get('Farm A')).toMatchObject({ areaKm2: 5, areaHiKm2: 4, areaLoKm2: 1, flowShareManual: 0.5, selectedShare: 0.4, damCapacityM3: 100000, damMinPct: 0.3 });
-		expect(t.method).toBe('area');
-		expect(t.hiLoSplit).toEqual({ hi: 0.8, lo: 0.2 });
+		expect(t.farms.get('Farm A')).toEqual({
+			areaKm2: 5,
+			selectedShare: 0.4,
+			pctUpstreamToDam: 1,
+			pctRunoffToDam: 0.2,
+			damCapacityM3: 100000,
+			damInitialPct: 0.5,
+			damMinPct: 0.3,
+			divertCapacityM3Day: 1000,
+			returnFlowPct: 0.2
+		});
+		expect(t).not.toHaveProperty('method');
+		expect(t).not.toHaveProperty('hiLoSplit');
 		expect(t.tolerance).toBe(0.0002);
 	});
 
-	it('maps Hi/Lo and Specific, and notes an unknown method', () => {
-		expect(readFarmSpec(new B023Workbook(syntheticB023().set('Farm spec', 'M27', 'Hi/Lo').build()), new Report()).method).toBe('hiLo');
+	it('notes any fragmentation method but Area as not used (issue #616)', () => {
+		const notesFor = (method: string) => {
+			const report = new Report();
+			readFarmSpec(new B023Workbook(syntheticB023().set('Farm spec', 'M27', method).build()), report);
+			return report.notes.filter((n) => n.code === 'unused-flow-share-method').map((n) => n.message);
+		};
+		expect(notesFor('Area')).toEqual([]);
+		expect(notesFor('Hi/Lo')).toEqual([flowShareMethodNote('Hi/Lo')]);
+		expect(notesFor('Specific')).toEqual([flowShareMethodNote('Specific')]);
+		expect(notesFor('Pitman')).toEqual([flowShareMethodNote('Pitman')]);
+		// The Python's text (extract_project.py flow_share_method_note), which the parity test compares.
+		expect(flowShareMethodNote('Hi/Lo')).toBe(
+			"[Farm spec] the workbook's fragmentation method 'Hi/Lo' is not used: the app splits the flow by each unit's natural MAR (docs/model.md §2.5)"
+		);
+	});
+
+	it('imports a workbook without the High-/Low-MAP area columns the same', () => {
+		const base = readFarmSpec(new B023Workbook(syntheticB023().set('Farm spec', 'M27', 'Specific').build()), new Report());
 		const report = new Report();
-		expect(readFarmSpec(new B023Workbook(syntheticB023().set('Farm spec', 'M27', 'Pitman').build()), report).method).toBe('area');
-		expect(report.notes.filter((n) => n.code === 'unknown-flow-share-method').map((n) => n.message)).toEqual(["unknown fragmentation method 'Pitman'; using area"]);
+		const b = syntheticB023().set('Farm spec', 'M27', 'Specific').unname('rFarmSpec_DataAreas').set('Farm spec', 'L31', null).set('Farm spec', 'I30', 'n/a');
+		const t = readFarmSpec(new B023Workbook(b.build()), report);
+		expect(t).toEqual(base);
+		// A blank External fragmentation or text in a hi/lo cell isn't read, so it isn't listed.
+		expect(report.unmapped).toEqual([]);
 	});
 
 	it('stores 1 − b023\'s Upstream inflow above dam %, which its formula sent past the dam; a fixed workbook\'s as entered (docs/model.md §3 Q1)', () => {
@@ -74,24 +103,6 @@ describe('readFarmSpec', () => {
 		const fixed = readFarmSpec(new B023Workbook(syntheticB023().name(UPSTREAM_INTO_DAM_MARKER, "'Farm spec'!$N$30").build()), fixedReport);
 		expect([...fixed.farms.values()].map((f) => f.pctUpstreamToDam)).toEqual([0, 0.5]);
 		expect(fixedReport.notes.map((n) => n.code)).toEqual(['upstream-pct-as-entered']);
-	});
-
-	it('defaults a blank hi/lo split to 0.5 / 0.5', () => {
-		const b = syntheticB023().set('Farm spec', 'I27', null).set('Farm spec', 'J27', null);
-		expect(readFarmSpec(new B023Workbook(b.build()), new Report()).hiLoSplit).toEqual({ hi: 0.5, lo: 0.5 });
-	});
-
-	it('lists a blank share under the Specific method (the Python reads 0 without a word)', () => {
-		const report = new Report();
-		const b = syntheticB023().set('Farm spec', 'M27', 'Specific').set('Farm spec', 'L31', null);
-		const t = readFarmSpec(new B023Workbook(b.build()), report);
-		expect(t.method).toBe('manual');
-		expect(t.farms.get('Farm B')!.flowShareManual).toBe(0);
-		expect(report.unmapped).toEqual([expect.objectContaining({ code: 'flow-share-missing', element: 'Farm B', cell: 'L31', sheet: 'Farm spec' })]);
-		// Not listed under the other methods, where the share isn't used.
-		const other = new Report();
-		readFarmSpec(new B023Workbook(syntheticB023().set('Farm spec', 'L31', null).build()), other);
-		expect(other.unmapped).toEqual([]);
 	});
 
 	it('reads numeric text, and lists text that is not a number (imported as 0)', () => {

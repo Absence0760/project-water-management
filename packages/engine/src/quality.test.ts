@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
 	agreementOptions,
 	agreementWarning,
-	areaMismatches,
-	areaMismatchWarning,
 	checkSeries,
 	FLATLINE_FLOW_MAX_DAYS,
 	FLATLINE_FLOW_RECESSION_PER_DAY,
@@ -758,48 +756,6 @@ describe('data-quality limits as settings (engine 1.20.0, issue #66)', () => {
 			arid.rain_chirps_mm.values = arid.rain_chirps_mm.values.map((v) => v! / 10);
 			expect(rainVsChirps(arid, { ...dq, lowVsChirpsMinimum: 'scaled' })!.minMm).toBe(50);
 		});
-	});
-});
-
-describe('areaMismatches (engine-review F7)', () => {
-	const farm = (id: string, areaKm2: number, hi: number, lo: number, kind: NetworkNode['kind'] = 'farm'): NetworkNode => ({
-		id,
-		name: id,
-		kind,
-		downstreamNodeId: null,
-		sortOrder: 0,
-		areaKm2,
-		areaHiKm2: hi,
-		areaLoKm2: lo,
-		flowShareManual: null,
-		pctUpstreamToDam: 0,
-		pctRunoffToDam: 0,
-		damCapacityM3: 0,
-		damInitialPct: 0,
-		damMinPct: 0,
-		divertCapacityM3Day: 0,
-		irrigationEfficiency: 1,
-		returnFlowFraction: 0,
-		damAreaFullM2: 0,
-		damAreaExponent: 0.7,
-		damSeepagePerDay: 0
-	});
-
-	it('flags a difference over 1 % and passes one under it', () => {
-		// 30 vs 30.1 is 0.33 %: fine. 10 vs 10.2 is 1.96 %: flagged. Gauges are ignored.
-		const nodes = [farm('ok', 30, 20, 10.1), farm('off', 10, 8, 2.2), farm('g', 5, 0, 1, 'gauge')];
-		const m = areaMismatches(nodes, 'area');
-		expect(m.map((x) => x.nodeId)).toEqual(['off']);
-		expect(m[0]!.difference).toBeCloseTo(0.2 / 10.2, 12);
-		expect(areaMismatchWarning(m)).toMatch(/more than 1 % \(off: 10 km² vs 10.2 km²\)/);
-		expect(areaMismatchWarning([])).toBeNull();
-	});
-
-	it('skips farms without a hi/lo split unless the hi/lo method is used', () => {
-		const nodes = [farm('plain', 12, 0, 0), farm('empty', 0, 0, 0)];
-		expect(areaMismatches(nodes, 'area')).toEqual([]);
-		expect(areaMismatches(nodes, 'manual')).toEqual([]);
-		expect(areaMismatches(nodes, 'hiLo').map((x) => x.nodeId)).toEqual(['plain']);
 	});
 });
 

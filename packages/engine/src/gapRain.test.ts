@@ -98,7 +98,7 @@ describe('settings.gapRain: the setting', () => {
 
 describe('settings.gapRain: the default leaves every run as it was', () => {
 	const node = (id: string, over: Partial<NetworkNode> = {}): NetworkNode => ({
-		id, name: id, kind: 'farm', downstreamNodeId: null, sortOrder: 0, areaKm2: 20, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null,
+		id, name: id, kind: 'farm', downstreamNodeId: null, sortOrder: 0, areaKm2: 20, 
 		pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 50_000, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0,
 		irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0, ...over
 	});
@@ -275,8 +275,8 @@ describe('settings.gapRain: ERA5-Land', () => {
 			...input({ ...ERA5, simulationStart: '2000-10-01', simulationEnd: '2008-09-30' }, { [ERA5L_SERIES_KEY]: era5Drizzle }),
 			model: {
 				nodes: [
-					{ id: 'A', name: 'A', kind: 'farm', downstreamNodeId: 'G', sortOrder: 0, areaKm2: 20, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 },
-					{ id: 'G', name: 'G', kind: 'gauge', downstreamNodeId: null, sortOrder: 1, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 }
+					{ id: 'A', name: 'A', kind: 'farm', downstreamNodeId: 'G', sortOrder: 0, areaKm2: 20, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 },
+					{ id: 'G', name: 'G', kind: 'gauge', downstreamNodeId: null, sortOrder: 1, areaKm2: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 }
 				] as NetworkNode[],
 				crops: [],
 				cropAreas: [],

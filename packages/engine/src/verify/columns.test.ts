@@ -14,9 +14,6 @@ const rain = Array.from({ length: 120 }, (_, i) => (i % 13 === 0 ? 35 : i % 4 ==
 function input(settings: ModelInput['settings']): ModelInput {
 	const node = {
 		sortOrder: 0,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
 		pctUpstreamToDam: 0,
 		pctRunoffToDam: 0,
 		damCapacityM3: 0,

@@ -41,7 +41,6 @@ import { DAM_CURVE_CAPACITY_TOLERANCE } from '../network/damCurve';
 import { resizeDamCurve, resizedFullArea } from '../network/damResize';
 import { ewrRuleListIssues, type EwrRuleTable } from '../reserve/rules';
 import type { AllocationEntry } from '../allocations/compare';
-import { inputFlowShares } from '../network/shares';
 import { FARMER_K } from '../views/farmView';
 
 /** An op that was applied, with what it did besides its own edit (re-links, dropped references, days scaled). */
@@ -149,10 +148,13 @@ export interface ScenarioMask {
 /** What a masked rule reads: says nothing of the hidden data that broke it. Pending the client (issue #90). */
 export const MASKED_RULE = "doesn't apply to the catchment as modelled";
 
-/** The catchment-wide rules that may give an aggregate over the hidden units (MASKED_RULE_AGGREGATE). */
-export type AggregateRule = 'shares' | 'area';
+/**
+ * The catchment-wide rules that may give an aggregate over the hidden units (MASKED_RULE_AGGREGATE): the land left.
+ * Flow shares over 100 % ('shares') were the other until engine 1.105.0 retired the specific shares (issue #616): the
+ * natural MAR shares add up to 1 by construction.
+ */
+export type AggregateRule = 'area';
 
-const pct = (x: number) => `${(Math.round(x * 1000) / 10).toFixed(1)} %`;
 const km2 = (x: number) => `${(Math.round(x * 100) / 100).toFixed(2)} km²`;
 
 /**
@@ -161,13 +163,10 @@ const km2 = (x: number) => `${(Math.round(x * 100) / 100).toFixed(2)} km²`;
  * whose hidden units have FARMER_K or more holders: an aggregate over that
  * many holders relates to no one of them (provisional position, pre-counsel
  * research, 2026-10-01; docs/scenarios.md § Applications). `catchmentValue`:
- * the shares' sum (0–1) or the land left (km²); `hiddenValue`: the hidden
- * units' part of it.
+ * the land left (km²); `hiddenValue`: the hidden units' part of it.
  */
-export const MASKED_RULE_AGGREGATE = (ruleId: AggregateRule, catchmentValue: number, hiddenValue: number): string =>
-	ruleId === 'shares'
-		? `flow shares would total ${pct(catchmentValue)}, more than 100 %; the units you can't see hold ${pct(hiddenValue)} of them between them`
-		: `the catchment would have ${km2(catchmentValue)} of land; the units you can't see hold ${km2(hiddenValue)} between them`;
+export const MASKED_RULE_AGGREGATE = (_ruleId: AggregateRule, catchmentValue: number, hiddenValue: number): string =>
+	`the catchment would have ${km2(catchmentValue)} of land; the units you can't see hold ${km2(hiddenValue)} between them`;
 
 export interface MaskedRename {
 	kind: 'node' | 'crop';
@@ -328,13 +327,13 @@ function unmask(xs: Named[], real: Map<string, [string, string]>, kind: MaskedRe
  * Does a rule issue (structureIssues' key) turn on data the applicant can't
  * see? A hidden item (its opaque id is in the key), a hidden node's hidden
  * borehole rule or supply rule (both read its hidden dam), or the catchment-wide value rules while any node is hidden
- * (flow shares over 100 %, no area left: the op's own values are
+ * (no area left: the op's own values are
  * range-checked, so these trip only with other nodes' values in play). The
  * network's shape (outflows, loops, what drains where) and names are the
  * applicant's to see, so those rules keep their words.
  */
 function hiddenRule(key: string, masked: Masked): boolean {
-	if (key === 'area' || key === 'shares') return masked.nodes.size > 0;
+	if (key === 'area') return masked.nodes.size > 0;
 	// A hidden node's dam, and its supply rule's levels, are hidden values: the rules that read them say nothing of them.
 	for (const p of ['bhDrought:', 'supplyTrigger:', 'supplyRor:', 'supplyStop:']) if (key.startsWith(p)) return masked.nodes.has(key.slice(p.length));
 	for (const t of masked.tokens) if (key.includes(t)) return true;
@@ -349,16 +348,8 @@ const ruleId = (key: string) => {
 
 /** How a hidden rule reads to the applicant: the aggregate past FARMER_K holders for the catchment-wide rules, else MASKED_RULE. */
 function maskedText(key: string, input: ModelInput, masked: Masked): string {
-	if (!masked.aggregates || (key !== 'shares' && key !== 'area')) return MASKED_RULE;
+	if (!masked.aggregates || key !== 'area') return MASKED_RULE;
 	const nodes = input.model.nodes;
-	if (key === 'shares') {
-		const { share, sum } = inputFlowShares(input);
-		let hidden = 0;
-		nodes.forEach((n, i) => {
-			if (masked.nodes.has(n.id)) hidden += share[i]!;
-		});
-		return MASKED_RULE_AGGREGATE('shares', sum, hidden);
-	}
 	let all = 0;
 	let hidden = 0;
 	for (const n of nodes) {
@@ -1072,8 +1063,8 @@ export function scenarioSteps(base: ModelInput, ops: readonly ScenarioOp[]): { b
 
 export type OpClass = 'proposal' | 'baseline';
 
-/** A gauge (an EWR site), or a node with land or a manual flow share: part of how the catchment's runoff is split. */
-const sharesRunoff = (n: NetworkNode) => n.kind === 'gauge' || n.areaKm2 > 0 || n.areaHiKm2 > 0 || n.areaLoKm2 > 0 || n.flowShareManual != null;
+/** A gauge (an EWR site), or a node with land: part of how the catchment's runoff is split (its natural MAR share). */
+const sharesRunoff = (n: NetworkNode) => n.kind === 'gauge' || n.areaKm2 > 0;
 
 /** A senior other water user (the default priority, USER_DEFAULTS): farms upstream of it pass its demand (model.md §2.7c). */
 const seniorUser = (n: NetworkNode) => n.kind === 'user' && (n.userPriority ?? 'senior') === 'senior';

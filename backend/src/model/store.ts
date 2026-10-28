@@ -13,8 +13,7 @@ import { ApiError } from '../http/errors.js';
 const MODEL_JSON = `json_build_object(
 	'nodes', coalesce((SELECT json_agg(r ORDER BY r."sortOrder", r.name) FROM (
 		SELECT id, name, kind, downstream_node_id AS "downstreamNodeId", sort_order AS "sortOrder",
-			area_km2 AS "areaKm2", area_hi_km2 AS "areaHiKm2", area_lo_km2 AS "areaLoKm2",
-			flow_share_manual AS "flowShareManual", pct_upstream_to_dam AS "pctUpstreamToDam",
+			area_km2 AS "areaKm2", pct_upstream_to_dam AS "pctUpstreamToDam",
 			pct_runoff_to_dam AS "pctRunoffToDam", dam_capacity_m3 AS "damCapacityM3",
 			dam_initial_pct AS "damInitialPct", dam_min_pct AS "damMinPct",
 			divert_capacity_m3_day AS "divertCapacityM3Day", irrigation_efficiency AS "irrigationEfficiency",
@@ -146,9 +145,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 
 	// Nodes go in without their topology: the same-project trigger checks a
 	// row's downstream node as the row goes in, before later rows exist.
+	// area_hi_km2, area_lo_km2 and flow_share_manual are neither read nor written (retired in engine 1.105.0, issue
+	// #616): a new row takes their defaults, and a later migration drops them (data-model.md § node).
 	await upsertAll(
-		`INSERT INTO node (id, project_id, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
-			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
+		`INSERT INTO node (id, project_id, name, kind, sort_order, area_km2, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
 			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, return_flow_fraction,
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
 			user_restriction_pct,
@@ -160,8 +160,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			crop_share_dam, crop_share_river, crop_share_remote, crop_remote_cap_m3_day,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year,
 			reach_loss_frac, reach_loss_max_m3_day, baseflow_loss_m3_day, baseflow_gain_m3_day, map_mm, map_source)
-		 SELECT id, $1, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
-			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
+		 SELECT id, $1, name, kind, sort_order, area_km2, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
 			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, return_flow_fraction,
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
 			user_restriction_pct,
@@ -180,8 +179,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			area_feature_id = CASE WHEN node.area_km2 IS DISTINCT FROM EXCLUDED.area_km2 OR node.kind IS DISTINCT FROM EXCLUDED.kind THEN NULL ELSE node.area_feature_id END,
 			-- Which area it took (195), gross or effective, goes with it.
 			area_basis = CASE WHEN node.area_km2 IS DISTINCT FROM EXCLUDED.area_km2 OR node.kind IS DISTINCT FROM EXCLUDED.kind THEN NULL ELSE node.area_basis END,
-			area_km2 = EXCLUDED.area_km2, area_hi_km2 = EXCLUDED.area_hi_km2, area_lo_km2 = EXCLUDED.area_lo_km2,
-			flow_share_manual = EXCLUDED.flow_share_manual, pct_upstream_to_dam = EXCLUDED.pct_upstream_to_dam,
+			area_km2 = EXCLUDED.area_km2, pct_upstream_to_dam = EXCLUDED.pct_upstream_to_dam,
 			pct_runoff_to_dam = EXCLUDED.pct_runoff_to_dam, dam_capacity_m3 = EXCLUDED.dam_capacity_m3,
 			dam_initial_pct = EXCLUDED.dam_initial_pct, dam_min_pct = EXCLUDED.dam_min_pct,
 			divert_capacity_m3_day = EXCLUDED.divert_capacity_m3_day, irrigation_efficiency = EXCLUDED.irrigation_efficiency,
@@ -218,9 +216,6 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			kind: n.kind,
 			sort_order: n.sortOrder,
 			area_km2: n.areaKm2,
-			area_hi_km2: n.areaHiKm2,
-			area_lo_km2: n.areaLoKm2,
-			flow_share_manual: n.flowShareManual,
 			pct_upstream_to_dam: n.pctUpstreamToDam,
 			pct_runoff_to_dam: n.pctRunoffToDam,
 			dam_capacity_m3: n.damCapacityM3,

@@ -2,23 +2,23 @@ import type { NetworkNode } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { hasForecastRain, runBlockers } from './runReady';
 
-const farm = (id: string, share: number | null) => ({ id, name: id, kind: 'farm', flowShareManual: share }) as unknown as NetworkNode;
+const farm = (id: string, extra: object = {}) => ({ id, name: id, kind: 'farm', ...extra }) as unknown as NetworkNode;
 const rain = [{ kind: 'rain_catchment_mm' }];
 
 describe('runBlockers', () => {
 	it('needs a network and a rainfall series', () => {
-		expect(runBlockers({ nodes: [] }, {}, [])).toEqual({ missing: ['a network', 'a rainfall series'], overAllocated: null });
-		expect(runBlockers({ nodes: [farm('a', 1)] }, { flowShareMethod: 'manual' }, rain)).toEqual({ missing: [], overAllocated: null });
+		expect(runBlockers({ nodes: [] }, [])).toEqual({ missing: ['a network', 'a rainfall series'] });
+		expect(runBlockers({ nodes: [farm('a')] }, rain)).toEqual({ missing: [] });
 	});
 
 	it('does not count rain missing before the series list has loaded', () => {
-		expect(runBlockers({ nodes: [] }, {}, null).missing).toEqual(['a network']);
+		expect(runBlockers({ nodes: [] }, null).missing).toEqual(['a network']);
 	});
 
-	it('refuses flow shares over 100 %, which make water from nowhere', () => {
-		const r = runBlockers({ nodes: [farm('a', 0.7), farm('b', 0.6)] }, { flowShareMethod: 'manual' }, rain);
-		expect(r.missing).toEqual([]);
-		expect(r.overAllocated).toMatch(/^unit flow shares sum to 130\.00%/);
+	it('no longer refuses manual flow shares over 100 %: the method is gone and the shares add up (issue #616)', () => {
+		// A model revision from before engine 1.105.0 may still carry them; the run ignores them.
+		const r = runBlockers({ nodes: [farm('a', { flowShareManual: 0.7 }), farm('b', { flowShareManual: 0.6 })] }, rain);
+		expect(r).toEqual({ missing: [] });
 	});
 });
 
