@@ -26,13 +26,32 @@ import {
 	percentileReserveM3s,
 	resolveEwrDailySource,
 	withReserveTable,
-	type EwrDailySource
+	DRM_FILE_LINES_MAX,
+	type EwrDailySource,
+	type EwrRulFile,
+	type EwrTabFile
 } from './dailySource';
 
 const DAY = 86_400;
 const N = [10, 8, 6, 5, 4, 3, 2, 1.5, 1, 0.5];
 const R = [5, 4, 3, 2.5, 2, 1.5, 1, 0.8, 0.6, 0.4];
 const twelve = <T>(row: T[]) => Array.from({ length: 12 }, () => [...row]);
+// A kept .tab and .rul (issue #617), invented numbers.
+const TAB_FILE: EwrTabFile = {
+	name: 'synthetic.tab',
+	generated: '01/01/2026',
+	title: 'SYNTHETIC EXAMPLE',
+	runoff: 'Synthetic',
+	annual: [
+		{ label: 'MAR', value: 49.8 },
+		{ label: 'S.Dev.', value: 20 }
+	],
+	category: 'C',
+	ifr: [{ label: 'Total IFR', mcm: 11.5, pctMar: 23.09 }],
+	distributionType: 'Synthetic',
+	monthlyMcm: twelve([3.6, 2.88, 0.8, 1.26, 0.18, 0, 1.26])
+};
+const RUL_FILE: EwrRulFile = { name: 'synthetic.rul', generated: '01/01/2026', unit: 'mcm', category: 'C' };
 
 describe('percentileReserveM3s: the day’s Reserve flow from the two tables', () => {
 	it('at or above the wettest point: the wettest Reserve flow', () => {
@@ -263,6 +282,51 @@ describe('ewrDailySourceIssues and resolveEwrDailySource', () => {
 	});
 });
 
+describe('the kept DRM files (issue #617): display only', () => {
+	const base: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 100 };
+	const fields = (v: unknown) => ewrDailySourceIssues(v).map((i) => i.field);
+
+	it('accepts a .tab and a .rul header beside any method, and leaves them out of the resolved source', () => {
+		const kept = { ...base, tabFile: TAB_FILE, rulFile: RUL_FILE };
+		expect(fields(kept)).toEqual([]);
+		expect(fields({ ...blankEwrDailySource(), tabFile: TAB_FILE })).toEqual([]);
+		expect(fields({ ...kept, tabFile: { ...TAB_FILE, generated: null, title: null, runoff: null, category: null, distributionType: null, annual: [], ifr: [{ label: 'Total IFR', mcm: 1, pctMar: null }] } })).toEqual([]);
+		expect(resolveEwrDailySource(kept, [])).toEqual(resolveEwrDailySource(base, []));
+		expect(Object.keys(resolveEwrDailySource(kept, [])!)).not.toContain('tabFile');
+		expect(Object.keys(resolveEwrDailySource(kept, [])!)).not.toContain('rulFile');
+		expect(ewrDailySourceChanges(base, kept)).toEqual([]);
+		expect(ewrDailySourceChanges(kept, { ...kept, tabFile: { ...TAB_FILE, name: 'other.tab' } })).toEqual([]);
+	});
+
+	it('refuses a malformed or oversized file, naming the field', () => {
+		const bad = (tabFile: unknown) => ewrDailySourceIssues({ ...base, tabFile }).find((i) => i.field === 'tabFile')?.message;
+		expect(bad('text')).toMatch(/must be an object/);
+		expect(bad({ ...TAB_FILE, name: '' })).toMatch(/name must be 1 to 255/);
+		expect(bad({ ...TAB_FILE, name: 'x'.repeat(256) })).toMatch(/name/);
+		expect(bad({ ...TAB_FILE, title: 'a\u0000b' })).toMatch(/title/);
+		expect(bad({ ...TAB_FILE, runoff: 'x'.repeat(256) })).toMatch(/runoff/);
+		expect(bad({ ...TAB_FILE, annual: [{ label: 'x'.repeat(61), value: 1 }] })).toMatch(/annual flows line 1/);
+		expect(bad({ ...TAB_FILE, annual: [{ label: 'CV', value: -1 }] })).toMatch(/annual flows line 1/);
+		expect(bad({ ...TAB_FILE, annual: [{ label: 'CV', value: 1, extra: 2 }] })).toMatch(/annual flows line 1/);
+		expect(bad({ ...TAB_FILE, annual: Array.from({ length: DRM_FILE_LINES_MAX + 1 }, () => ({ label: 'CV', value: 1 })) })).toMatch(/at most 30 lines/);
+		expect(bad({ ...TAB_FILE, ifr: [{ label: 'Total IFR', mcm: Number.NaN, pctMar: 1 }] })).toMatch(/IFR summary line 1/);
+		expect(bad({ ...TAB_FILE, monthlyMcm: twelve([1, 2, 3, 4, 5, 6]) })).toMatch(/12 rows .* of 7 numbers/);
+		expect(bad({ ...TAB_FILE, monthlyMcm: twelve([1, 2, 3, 4, 5, 6, -7]) })).toMatch(/monthly table/);
+		expect(bad({ ...TAB_FILE, raw: 'the whole text' })).toMatch(/unknown field: raw/);
+		const { distributionType: _, ...missing } = TAB_FILE;
+		expect(bad(missing)).toMatch(/distributionType is missing/);
+		const rul = (rulFile: unknown) => ewrDailySourceIssues({ ...base, rulFile }).find((i) => i.field === 'rulFile')?.message;
+		expect(rul({ ...RUL_FILE, unit: 'cfs' })).toMatch(/unit/);
+		expect(rul({ ...RUL_FILE, name: '' })).toMatch(/name/);
+		expect(rul({ ...RUL_FILE, points: [10] })).toMatch(/unknown field: points/);
+		expect(rul({ name: 'a.rul', unit: 'm3s' })).toMatch(/date/);
+		expect(rul({ ...RUL_FILE, edited: true })).toBeUndefined();
+		expect(rul({ ...RUL_FILE, edited: false })).toMatch(/edited/);
+		// An unusable source runs the pragmatic EWR, as any other problem does.
+		expect(resolveEwrDailySource({ ...base, tabFile: { ...TAB_FILE, name: '' } }, [])).toBeNull();
+	});
+});
+
 describe('ewrDailySourceChanges (run comparison)', () => {
 	const tab: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 100 };
 	it('pragmatic in any form is one source; tables kept under it are no change', () => {
@@ -386,6 +450,12 @@ describe('a run with each source', () => {
 		}
 		expect(pragmatic.summary.catchment.outletEwr).toBeUndefined();
 		expect(pragmatic.series.find((s) => s.key === 'ewr')!.label).toBe('Pragmatic EWR');
+	});
+
+	it('a source with its kept .tab and .rul runs bit-identical to one without (issue #617: display only; engine 1.103.0 only marks the wider input contract)', () => {
+		for (const src of [tabSource(), pctSource(), pctSource({ scaling: 'area' })]) {
+			expect(JSON.stringify(run(network({ ewrDailySource: { ...src, tabFile: TAB_FILE, rulFile: RUL_FILE } })))).toBe(JSON.stringify(run(network({ ewrDailySource: src }))));
+		}
 	});
 
 	it('TAB scaled by MAR: the month’s TAB flow × s × 86 400, with s, its inputs and the method in the summary and a warning', () => {

@@ -35,7 +35,9 @@
 // stored results are checked against it. The results digest (runResultsText)
 // covers the summary and every daily output, so a re-run that matches it
 // reproduces the run exactly. checkPackBundle does all of it, and draws § 1's
-// locality map again from the manifest (evidence-12) and compares its SHA-256.
+// locality map again from the manifest (evidence-12) and compares its SHA-256,
+// and counts the observed wet days again from the clear dates the manifest
+// freezes (evidence-21).
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { diffInputs, type RunInputsSnapshot } from '../compare';
 import { canonicalJson, seriesDigest } from '../manifest';
@@ -45,6 +47,7 @@ import { ENGINE_VERSION } from '../version';
 import { ZipArchive, zip, type ZipEntry } from '../zip';
 import { forecastRainSourceOf, runRainCredits, type RainCredit } from '../liability/disclaimer';
 import { LOCALITY_MAP_VERSION, localityMapSvg } from '../geo/localityMap';
+import { checkDamObservations } from './damObservations';
 import { packManifestText, packShortCode, type PackManifest } from './pack';
 import { AUTHORISED_PAIR_VERSION, authorisedPairBoard, authorisedPairInputs, freshResultsDigest, mixFromRecord, runAuthorisedPair, type AuthorisedPairRecord } from './authorisedPair';
 import type { ScenarioOp } from '../scenario/ops';
@@ -292,6 +295,9 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 			: []),
 		...(m.report.localityMap
 			? ["It also draws § 1's locality map again from the map features in manifest.json and checks the SVG against the SHA-256 the manifest names (`figure:locality`)."]
+			: []),
+		...(m.report.damObservations
+			? ["It also classifies the observed wet days again (wet, dry, inconclusive) from the dates the manifest freezes, over the baseline run's period it records (`observations:wofs`). Those dates are Digital Earth Africa WOfS (CC BY 4.0), summed inside each dam's outline; the scenes themselves aren't in the bundle."]
 			: []),
 		'Add `--expect <manifest hash>` to also require the hash the verify lookup returned, and `--no-run` to check the files without re-running.',
 		'',
@@ -553,6 +559,24 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 			}
 		} catch (e) {
 			add('figure:locality', false, `the locality map can't be drawn from the manifest: ${message(e)}`);
+		}
+	}
+
+	// The observed wet days (evidence-21): classified again from the dates the manifest freezes, over the baseline run's period as the manifest records it.
+	const obs = manifest.report.damObservations;
+	if (obs) {
+		try {
+			const b = manifest.report.identity?.baseline;
+			const problems = checkDamObservations(obs, { period: { startDate: String(b?.startDate), endDate: String(b?.endDate) }, builtBy: manifest.report.builtBy });
+			const observed = obs.dams.reduce((n, d) => n + d.observedDates, 0);
+			add(
+				'observations:wofs',
+				problems.length === 0,
+				problems.join('; ') ||
+					`the observed wet days of ${obs.dams.length} dam${obs.dams.length === 1 ? '' : 's'} over the baseline run's period (${obs.startDate} to ${obs.endDate}) classify again from the manifest's ${observed} observed date${observed === 1 ? '' : 's'}`
+			);
+		} catch (e) {
+			add('observations:wofs', false, `the observed wet days can't be counted from the manifest: ${message(e)}`);
 		}
 	}
 

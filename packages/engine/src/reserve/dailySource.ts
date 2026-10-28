@@ -82,7 +82,71 @@ export interface EwrDailySource {
 	 * as before.
 	 */
 	reserveTable?: EwrReserveTable;
+	/**
+	 * The DRM summary (.tab) the TAB flows or the table MAR were read from,
+	 * parsed (issue #617): kept so Settings can show the whole file. Display
+	 * only: resolveEwrDailySource leaves it out, so no run reads it. Absent =
+	 * none kept (every source saved before).
+	 */
+	tabFile?: EwrTabFile;
+	/** The .rul the percentile tables were read from: its name, date, unit and REC (issue #617). Display only, like tabFile. */
+	rulFile?: EwrRulFile;
 }
+
+/** One `label = value` line of a .tab's Annual Flows block ("S.Dev. = 3.1"). */
+export interface EwrTabAnnualLine {
+	label: string;
+	value: number;
+}
+
+/** One line of a .tab's IFR summary ("Total IFR = 10.5 (21.08 %MAR)"): Mm³ a year and its share of the MAR. */
+export interface EwrTabIfrLine {
+	label: string;
+	mcm: number;
+	pctMar: number | null;
+}
+
+/**
+ * A DRM summary file (.tab) as parsed (issue #617): its header lines, the
+ * Annual Flows block, the REC, the IFR summary, the distribution type and the
+ * monthly table, 12 rows (Oct … Sep) × 7 columns, Mm³ a month: natural mean,
+ * SD and CV; low flows maintenance and drought; high flows maintenance; total
+ * flows maintenance (the TAB flows' column).
+ */
+export interface EwrTabFile {
+	/** The file's name as loaded. */
+	name: string;
+	/** "Generated on …", as written. */
+	generated: string | null;
+	/** What the estimate is for ("… Quaternary Catchment Area : …"). */
+	title: string | null;
+	/** The "Total Runoff :" line's value, as written. */
+	runoff: string | null;
+	annual: EwrTabAnnualLine[];
+	category: string | null;
+	ifr: EwrTabIfrLine[];
+	distributionType: string | null;
+	monthlyMcm: number[][];
+}
+
+/** A DRM rule-curve file's (.rul) header (issue #617): its name, date, unit (m³/s or Mm³ a month) and REC. */
+export interface EwrRulFile {
+	name: string;
+	generated: string | null;
+	unit: 'm3s' | 'mcm';
+	category: string | null;
+	/** A table was typed or pasted over since the file loaded (Settings says so); absent = as loaded. */
+	edited?: true;
+}
+
+/** The longest file name, header text and line label kept from a DRM file. */
+export const DRM_FILE_NAME_MAX = 255;
+export const DRM_FILE_TEXT_MAX = 255;
+export const DRM_FILE_LABEL_MAX = 60;
+/** The most Annual Flows or IFR lines kept from a .tab. */
+export const DRM_FILE_LINES_MAX = 30;
+/** Columns of a .tab's monthly table. */
+export const DRM_TAB_COLUMNS = 7;
 
 /** The Reserve table a source reads (absent = 'total'). */
 export const reserveTableOf = (s: Pick<EwrDailySource, 'reserveTable'>): EwrReserveTable => s.reserveTable ?? 'total';
@@ -136,6 +200,51 @@ function gridIssue(v: unknown, label: string): string | null {
 	return null;
 }
 
+const CONTROL = /[\u0000-\u001f\u007f]/;
+const textIssue = (v: unknown, max: number, nullable: boolean): boolean =>
+	!((nullable && v === null) || (typeof v === 'string' && v.length <= max && !CONTROL.test(v) && (nullable || v.trim() !== '')));
+const nonNeg = (x: unknown): boolean => isNum(x) && x >= 0 && x <= EWR_DAILY_VALUE_MAX;
+
+/** What is wrong with a stored .tab (null: nothing): its shape and bounds, never its numbers' plausibility. */
+export function tabFileIssue(v: unknown): string | null {
+	if (!isObj(v)) return 'The .tab file must be an object.';
+	const known = ['name', 'generated', 'title', 'runoff', 'annual', 'category', 'ifr', 'distributionType', 'monthlyMcm'];
+	for (const k of known) if (!(k in v)) return `The .tab file's ${k} is missing.`;
+	const extra = Object.keys(v).filter((k) => !known.includes(k));
+	if (extra.length) return `The .tab file has unknown field${extra.length === 1 ? '' : 's'}: ${extra.join(', ')}.`;
+	if (textIssue(v.name, DRM_FILE_NAME_MAX, false)) return `The .tab file's name must be 1 to ${DRM_FILE_NAME_MAX} characters.`;
+	for (const k of ['generated', 'title', 'runoff', 'distributionType', 'category'] as const) {
+		if (textIssue(v[k], DRM_FILE_TEXT_MAX, true)) return `The .tab file's ${k} must be text of at most ${DRM_FILE_TEXT_MAX} characters, or null.`;
+	}
+	const lines = (x: unknown, what: string, ok: (l: Record<string, unknown>) => boolean): string | null => {
+		if (!Array.isArray(x) || x.length > DRM_FILE_LINES_MAX) return `The .tab file's ${what} must be a list of at most ${DRM_FILE_LINES_MAX} lines.`;
+		const bad = x.findIndex((l) => !isObj(l) || textIssue(l.label, DRM_FILE_LABEL_MAX, false) || !ok(l));
+		return bad < 0 ? null : `The .tab file's ${what} line ${bad + 1} needs a label of 1 to ${DRM_FILE_LABEL_MAX} characters and numbers from 0 to ${MAX_TEXT}.`;
+	};
+	const annual = lines(v.annual, 'annual flows', (l) => nonNeg(l.value) && Object.keys(l).length === 2);
+	if (annual) return annual;
+	const ifr = lines(v.ifr, 'IFR summary', (l) => nonNeg(l.mcm) && (l.pctMar === null || nonNeg(l.pctMar)) && Object.keys(l).length === 3);
+	if (ifr) return ifr;
+	const m = v.monthlyMcm;
+	if (!Array.isArray(m) || m.length !== 12 || !m.every((r) => Array.isArray(r) && r.length === DRM_TAB_COLUMNS && r.every(nonNeg))) {
+		return `The .tab file's monthly table must be 12 rows (Oct … Sep) of ${DRM_TAB_COLUMNS} numbers from 0 to ${MAX_TEXT}.`;
+	}
+	return null;
+}
+
+/** What is wrong with a stored .rul header (null: nothing). */
+export function rulFileIssue(v: unknown): string | null {
+	if (!isObj(v)) return 'The .rul file must be an object.';
+	if (textIssue(v.name, DRM_FILE_NAME_MAX, false)) return `The .rul file's name must be 1 to ${DRM_FILE_NAME_MAX} characters.`;
+	if (textIssue(v.generated, DRM_FILE_TEXT_MAX, true) || !('generated' in v)) return `The .rul file's date must be text of at most ${DRM_FILE_TEXT_MAX} characters, or null.`;
+	if (textIssue(v.category, DRM_FILE_TEXT_MAX, true) || !('category' in v)) return `The .rul file's REC must be text of at most ${DRM_FILE_TEXT_MAX} characters, or null.`;
+	if (v.unit !== 'm3s' && v.unit !== 'mcm') return "The .rul file's unit must be m3s or mcm.";
+	if (v.edited !== undefined && v.edited !== true) return "The .rul file's edited mark must be true or absent.";
+	const extra = Object.keys(v).filter((k) => !['name', 'generated', 'unit', 'category', 'edited'].includes(k));
+	if (extra.length) return `The .rul file has unknown field${extra.length === 1 ? '' : 's'}: ${extra.join(', ')}.`;
+	return null;
+}
+
 /**
  * Problems that make a source unusable (they block Save, and the engine runs
  * the pragmatic EWR with a warning): an unknown method or scaling, a value
@@ -164,6 +273,11 @@ export function ewrDailySourceIssues(v: unknown): EwrDailySourceIssue[] {
 	const low = v.lowFlowPctM3s == null ? null : gridIssue(v.lowFlowPctM3s, 'Reserve flows without high flows table');
 	if (low) out.push({ field: 'lowFlowPctM3s', message: low });
 	if (v.reserveTable !== undefined && !(EWR_RESERVE_TABLES as readonly unknown[]).includes(v.reserveTable)) out.push({ field: 'reserveTable', message: 'Pick the Reserve table the daily EWR reads: total Reserve flows or Reserve flows without high flows.' });
+	// Display only (issue #617), but checked like the rest: bounded, finite, no unknown fields.
+	const tabFile = v.tabFile === undefined ? null : tabFileIssue(v.tabFile);
+	if (tabFile) out.push({ field: 'tabFile', message: tabFile });
+	const rulFile = v.rulFile === undefined ? null : rulFileIssue(v.rulFile);
+	if (rulFile) out.push({ field: 'rulFile', message: rulFile });
 	const withoutHigh = v.reserveTable === 'withoutHighFlows';
 	for (const k of ['tableMarMm3', 'tableAreaKm2', 'tabM3s', 'naturalPctM3s', 'reservePctM3s'] as const) {
 		if (!(k in v)) out.push({ field: k, message: `${k} is missing (null when not entered).` });
@@ -179,7 +293,7 @@ export function ewrDailySourceIssues(v: unknown): EwrDailySourceIssue[] {
 		if (v.scaling === 'mar' && v.tableMarMm3 === null) out.push({ field: 'tableMarMm3', message: 'Scaling by MAR needs the table’s MAR (Mm³ a year, the TAB header’s “MAR =”).' });
 		if (v.scaling === 'area' && v.tableAreaKm2 === null) out.push({ field: 'tableAreaKm2', message: 'Scaling by area needs the table’s catchment area (km²).' });
 	}
-	const known = new Set(['method', 'scaling', 'tableMarMm3', 'tableAreaKm2', 'tabM3s', 'naturalPctM3s', 'reservePctM3s', 'lowFlowPctM3s', 'reserveTable']);
+	const known = new Set(['method', 'scaling', 'tableMarMm3', 'tableAreaKm2', 'tabM3s', 'naturalPctM3s', 'reservePctM3s', 'lowFlowPctM3s', 'reserveTable', 'tabFile', 'rulFile']);
 	const extra = Object.keys(v).filter((k) => !known.has(k));
 	if (extra.length) out.push({ field: '', message: `Unknown field${extra.length === 1 ? '' : 's'}: ${extra.join(', ')}.` });
 	return out;
@@ -216,7 +330,9 @@ export function ewrDailySourceNotes(s: EwrDailySource): string[] {
  * The source as the run uses it: null for the pragmatic EWR (absent, null,
  * or method 'pragmatic'); an unusable one is dropped with a warning, so the
  * run says it fell back to the pragmatic EWR. Copies, so the run never
- * mutates the settings.
+ * mutates the settings. The kept DRM files (tabFile, rulFile, issue #617)
+ * are left out: they are for display, and a run reads exactly what it read
+ * before they were kept.
  */
 export function resolveEwrDailySource(raw: unknown, warnings: string[]): EwrDailySource | null {
 	if (raw === undefined || raw === null) return null;

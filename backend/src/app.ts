@@ -35,6 +35,7 @@ import { riverRoutes } from './geo/rivers.js';
 import { croplandRoutes } from './geo/croplandRoutes.js';
 import { evaporationRoutes } from './geo/evaporationRoutes.js';
 import { damRoutes } from './geo/damRoutes.js';
+import { damObservedRoutes } from './dams/observed/routes.js';
 import { delineationRoutes } from './delineation/routes.js';
 import { traceRoutes } from './delineation/traceRoutes.js';
 import { startRoutes } from './delineation/start.js';
@@ -210,6 +211,7 @@ export function createApp() {
 	projects.route('/', searchRoutes);
 	projects.route('/', riverRoutes);
 	projects.route('/', damRoutes);
+	projects.route('/', damObservedRoutes);
 	projects.route('/', delineationRoutes);
 	projects.route('/', traceRoutes);
 	projects.route('/', startRoutes);

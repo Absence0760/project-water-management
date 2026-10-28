@@ -1,14 +1,16 @@
 <!--
 	Settings → Reserve rule tables (engine ≥ 0.21.0, docs/model.md §2.9c): the
 	Ecological Reserve's assurance rules per EWR site (the outlet, or a gauge),
-	entered or pasted from a Reserve determination. Bind `value`
+	entered or pasted from a Reserve determination. The outlet's table folds its
+	grids when they repeat the daily EWR's .rul tables (`daily`, issue #617).
+	Bind `value`
 	(settings.ewrRules); `error` is set while anything would be rejected, so the
 	parent form can block saving. The tables themselves are edited in
 	EwrRuleTablesEditor.svelte, a separate chunk loaded once there is one.
 	Helpers in ./ewrRules.ts.
 -->
 <script lang="ts">
-	import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure, NetworkNode } from '@water-management/engine';
+	import type { EwrChargeSource, EwrDailySource, EwrRuleTable, LowFlowMeasure, NetworkNode } from '@water-management/engine';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
@@ -24,7 +26,8 @@
 		lowFlowMeasure = $bindable(),
 		readonly = false,
 		nodes,
-		projectId = null
+		projectId = null,
+		daily = null
 	}: {
 		summary?: string | null;
 		value: EwrRuleTable[];
@@ -38,6 +41,8 @@
 		projectId?: string | null;
 		/** The network, for the site picker (outlet and gauges). */
 		nodes: readonly NetworkNode[];
+		/** settings.ewrDailySource: the outlet's table folds its grids when they repeat its .rul tables (issue #617). */
+		daily?: EwrDailySource | null;
 	} = $props();
 
 	const uid = $props.id();
@@ -85,7 +90,7 @@
 	{:else}
 		<Lazy load={loadEditor}>
 			{#snippet children(Editor)}
-				<Editor bind:value {readonly} {options} />
+				<Editor bind:value {readonly} {options} {daily} />
 			{/snippet}
 		</Lazy>
 	{/if}

@@ -10,7 +10,7 @@ const PROVIDERS: readonly AssistantProviderName[] = ['off', 'mock', 'ollama', 'a
  * An output token counts as this many tokens against every cap (the month's
  * per project, per person and in all, and a turn's): Claude's output costs
  * five times its input on Bedrock, so a cap in weighted tokens is a cap in
- * money at the input price (258_assistant_usage.sql weighs the same).
+ * money at the input price (262_assistant_usage.sql weighs the same).
  */
 export const OUTPUT_TOKEN_WEIGHT = 5;
 

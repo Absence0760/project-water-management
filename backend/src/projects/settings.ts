@@ -1080,6 +1080,13 @@ export const FitRecord = z
 					.strict()
 					.nullable()
 					.optional(),
+				// Engine ≥ 1.104.0 (issue #604 R5-E): the daily reference ET series the fit ran on, the same fingerprint over its
+				// days through the fit's last scored day (`through`). Optional, as above.
+				et0Daily: z
+					.object({ startDate: isoDate, length: z.number().int().min(0).max(60_000), valuesSha256: z.string().regex(/^[0-9a-f]{64}$/), through: isoDate })
+					.strict()
+					.nullable()
+					.optional(),
 				// Engine ≥ 1.20.0 (issue #66): the data-quality rain-check limits the fit ran under. Optional, as above; absent = the defaults.
 				rainChecks: RainChecks.strict().optional(),
 				// Engine ≥ 1.78.0 (issue #482): runoff from each unit's own rain, recorded only when on. Optional, as above; absent = catchment rain.

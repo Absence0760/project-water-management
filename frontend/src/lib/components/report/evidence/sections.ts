@@ -5,10 +5,11 @@
 // inside it instead (rule 3). Only § 6 and Appendix C, the applicant's
 // demand objects and own words, depend on the mode: a baseline-evidence
 // report has no applicant. § 6 came with report format evidence-9: a pack
-// drafted before it has no `demandObjects` and prints as it always did.
+// drafted before it has no `demandObjects` and prints as it always did. § 7,
+// the applicant's dams' observed wet days, came with evidence-21 the same way.
 import type { EvidenceReport } from '@water-management/engine';
 
-export type EvidenceSectionId = 'summary' | 'river' | 'uncertainty' | 'credibility' | 'users' | 'allocations' | 'demandObjects' | 'appendixInputs' | 'appendixVerify' | 'applicantStatement';
+export type EvidenceSectionId = 'summary' | 'river' | 'uncertainty' | 'credibility' | 'users' | 'allocations' | 'demandObjects' | 'damObservations' | 'appendixInputs' | 'appendixVerify' | 'applicantStatement';
 
 export interface EvidenceSection {
 	id: EvidenceSectionId;
@@ -19,7 +20,7 @@ export interface EvidenceSection {
 	title: string;
 }
 
-export function evidenceSections(r: Pick<EvidenceReport, 'mode' | 'demandObjects'>): EvidenceSection[] {
+export function evidenceSections(r: Pick<EvidenceReport, 'mode' | 'demandObjects' | 'damObservations'>): EvidenceSection[] {
 	const app = r.mode === 'application';
 	const out: EvidenceSection[] = [
 		{ id: 'summary', number: '', kind: '', title: 'Summary' },
@@ -31,6 +32,8 @@ export function evidenceSections(r: Pick<EvidenceReport, 'mode' | 'demandObjects
 		{ id: 'allocations', number: '5', kind: 'Section', title: 'Registered water use' },
 		// evidence-9: the applicant's demand objects and where their numbers come from; "Not assessed" when the applicant has none.
 		...(app && r.demandObjects ? [{ id: 'demandObjects' as const, number: '6', kind: 'Section', title: 'The applicant’s demand objects' }] : []),
+		// evidence-21: the applicant's own dams as Digital Earth Africa's WOfS saw them; an applicant's application only.
+		...(app && r.damObservations ? [{ id: 'damObservations' as const, number: '7', kind: 'Section', title: 'Observed wet days' }] : []),
 		{ id: 'appendixInputs', number: 'A', kind: 'Appendix', title: 'Inputs and assumptions' },
 		{ id: 'appendixVerify', number: 'B', kind: 'Appendix', title: 'Limitations, sign-off and verification' }
 	];

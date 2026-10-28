@@ -8,6 +8,7 @@
 import {
 	DEFAULT_STARTS,
 	type ApanDailyFingerprint,
+	type DailySeries,
 	type CalibrationBounds,
 	type CalibrationFlowKind,
 	type CalibrationProgress,
@@ -27,6 +28,8 @@ export interface FitRan {
 	validationRecord: CalibrationFlowKind | null;
 	chirpsSource?: SeriesProvenance | null;
 	apanDaily?: ApanDailyFingerprint | null;
+	/** The daily reference ET series as the fit loaded it (issue #604 R5-E): fingerprinted at Apply, through the fit's last scored day. */
+	et0Series?: Pick<DailySeries, 'startDate' | 'values'> | null;
 	observedOrigin?: SeriesOrigin | null;
 }
 

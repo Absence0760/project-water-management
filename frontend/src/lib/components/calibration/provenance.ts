@@ -51,3 +51,8 @@ export function apanDailyText(f: ApanDailyFingerprint | null | undefined): strin
 	if (f === null) return 'none (monthly means only)';
 	return `from ${fmtDay(f.startDate)}, ${fmtNum(f.length, 0)} days (SHA-256 ${f.valuesSha256.slice(0, 12)})`;
 }
+
+/** The daily reference ET series a fit ran on (issue #604 R5-E), in words: as apanDailyText, its fallback the monthly PE row. */
+export function et0DailyText(f: ApanDailyFingerprint | null | undefined): string {
+	return f === null ? 'none (the monthly PE row only)' : apanDailyText(f);
+}

@@ -14,7 +14,8 @@ import { openRiver, seedRiverProject } from '../support/river.ts';
 import { openSupply, seedSupplyProject } from '../support/supply.ts';
 
 const SETTINGS_LINKS = [
-	// The panel that heads the page (issue #586 R4-B).
+	// The lead group (issue #614): the model selection, then the judge panel (issue #586 R4-B).
+	'Model selection for flow generation',
 	'EWR the results are judged by',
 	'Simulation period',
 	'Rain gaps',
@@ -23,7 +24,6 @@ const SETTINGS_LINKS = [
 	'Drought restrictions',
 	'Reporting',
 	// The fit's four panels moved to Calibration (issue #586 round 3).
-	'Flow generation',
 	'EWR',
 	'Reserve rule tables',
 	'Outcome matrix',
@@ -34,10 +34,9 @@ const SETTINGS_LINKS = [
 ];
 /** The side index's groups at 1440 px (issue #468): every panel, under its task. */
 const SETTINGS_RAIL: [string | null, string[]][] = [
-	[null, ['EWR the results are judged by']],
+	[null, ['Model selection for flow generation', 'EWR the results are judged by']],
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
 	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
-	['Runoff', ['Flow generation']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
 	['Automatic runs', ['Automatic runs']]

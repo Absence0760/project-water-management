@@ -81,30 +81,28 @@ test('at 1440×900 Flow calibration opens on its parameters, and its folds open 
 	await expect(page.locator('#set-demand').getByLabel(/^Rain threshold for demand/)).toHaveValue('2');
 });
 
-test('with the explanations on, Flow generation’s explanation sits on its own line under its two methods', async ({ page, owner }) => {
+test('with the explanations on, the model selection’s explanation sits on its own line under its two method cards', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const project = await openProject(page, 'Flow explain');
-	// Flow generation is on Model settings.
+	// The model selection for flow generation is on Model settings.
 	await openSettings(page, project.id);
 	await showExplanations(page);
 	const method = page.getByTestId('flowgen-method');
-	const first = await box(method.locator('label.check').first());
-	const second = await box(method.locator('label.check').nth(1));
-	// The two methods one under the other, each with its plain words beside its name (issue #586 R4-B;
-	// settings-model-layout.spec.ts checks the words themselves).
-	expect(second.y).toBeGreaterThanOrEqual(first.y + first.height - 1);
-	expect(Math.abs(second.x - first.x)).toBeLessThanOrEqual(1);
+	const first = await box(method.locator('.opt').first());
+	const second = await box(method.locator('.opt').nth(1));
+	// The two methods side by side as choice cards at 1440 (issue #614), each with its plain words under its name
+	// (settings-model-layout.spec.ts checks the words themselves).
+	expect(Math.abs(second.y - first.y)).toBeLessThanOrEqual(1);
+	expect(second.x).toBeGreaterThanOrEqual(first.x + first.width);
 	for (const i of [0, 1]) {
 		const name = await box(method.locator('label.check').nth(i));
 		const words = await box(method.getByTestId('flowgen-what').nth(i));
-		expect(words.x).toBeGreaterThanOrEqual(name.x + name.width);
-		expect(Math.abs(words.y + words.height / 2 - (name.y + name.height / 2))).toBeLessThan(6);
+		expect(words.y).toBeGreaterThanOrEqual(name.y + name.height - 8);
 	}
-	// The explanation on its own line under both, lined up with them.
+	// The explanation on its own line under both cards, lined up with the first.
 	const hint = await box(method.locator('.hint.explain'));
-	const lastWords = await box(method.getByTestId('flowgen-what').nth(1));
-	expect(hint.y).toBeGreaterThanOrEqual(Math.max(second.y + second.height, lastWords.y + lastWords.height) - 1);
+	expect(hint.y).toBeGreaterThanOrEqual(Math.max(first.y + first.height, second.y + second.height) - 1);
 	expect(Math.abs(hint.x - first.x)).toBeLessThanOrEqual(1);
 });
 

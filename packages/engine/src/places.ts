@@ -17,7 +17,7 @@ export const WARNING_PLACES = {
 	rain: { page: 'Model settings', panel: 'Rain gaps' },
 	quality: { page: 'Model settings', panel: 'Data quality' },
 	demand: { page: 'Model settings', panel: 'Demand' },
-	share: { page: 'Model settings', panel: 'Flow generation' },
+	share: { page: 'Model settings', panel: 'Model selection for flow generation' },
 	reserve: { page: 'Model settings', panel: 'Reserve rule tables' },
 	evidence: { page: 'Model settings', panel: 'Evidence' },
 	flow: { page: 'Calibration', panel: 'Flow calibration' },
@@ -45,11 +45,25 @@ export interface PlaceMention {
 	place: WarningPlace;
 }
 
-/** The ways a place has been named: as now, then as runs before engine 1.98.0 did ("Settings → Rain gaps", "Settings › Evidence"). */
+/**
+ * A panel's former headings, for the runs that named it by them: Flow generation became Model selection for flow
+ * generation in engine 1.103.0 (issue #614), so a warning that named it the old way, on Model settings (1.98.0 to
+ * 1.102.0) or on Settings (before 1.98.0), still finds it.
+ */
+const FORMER_PANELS: Partial<Record<WarningPlace, readonly string[]>> = {
+	share: ['Flow generation']
+};
+
+/**
+ * The ways a place has been named: as now, then as runs before engine 1.98.0 did ("Settings → Rain gaps",
+ * "Settings › Evidence"), then each by a former heading of its panel, on its page and as before 1.98.0.
+ */
 function spellings(key: WarningPlace): string[] {
-	const { panel } = WARNING_PLACES[key];
-	const old = key === 'plausibility' ? ['The Plausibility checks panel', 'the Plausibility checks panel'] : [`Settings${PLACE_STEP}${panel}`, `Settings › ${panel}`];
-	return [placeName(key), ...old];
+	const { page, panel } = WARNING_PLACES[key];
+	const settings = (name: string) => [`Settings${PLACE_STEP}${name}`, `Settings › ${name}`];
+	const old = key === 'plausibility' ? ['The Plausibility checks panel', 'the Plausibility checks panel'] : settings(panel);
+	const former = (FORMER_PANELS[key] ?? []).flatMap((name) => [[page, name].join(PLACE_STEP), ...settings(name)]);
+	return [placeName(key), ...old, ...former];
 }
 
 const SPELLINGS: readonly { text: string; place: WarningPlace }[] = (Object.keys(WARNING_PLACES) as WarningPlace[])

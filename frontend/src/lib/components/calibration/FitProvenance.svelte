@@ -14,7 +14,7 @@
 	import { describeRainChecks } from '#lib/components/settings/dataQuality.js';
 	import { peText } from '#lib/components/settings/peInput.js';
 	import { fmtDay, fmtNum } from '#lib/format/number.js';
-	import { apanDailyText, chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
+	import { apanDailyText, chirpsFactorsText, et0DailyText, fitModelLabel, monthsText, paramLabel } from './provenance';
 	import { dayQualityGist, ratingLine } from './dayQuality';
 
 	const chirpsBiasLabel = (mode: string) => CHIRPS_BIAS_OPTIONS.find((o) => o.value === mode)?.label ?? mode;
@@ -28,6 +28,7 @@
 		context = 'run',
 		chirpsSource,
 		apanDaily,
+		et0Daily,
 		chirpsFactors,
 		observedOrigin,
 		runForcing,
@@ -46,6 +47,8 @@
 		chirpsSource?: SeriesProvenance | null;
 		/** The daily A-pan series now (the run's, or the project's; issue #45); undefined when not known. */
 		apanDaily?: ApanDailyFingerprint | null;
+		/** The daily reference ET series now (issue #604 R5-E); undefined when not known. */
+		et0Daily?: ApanDailyFingerprint | null;
 		/** The CHIRPS factor sets the run applied (runChirpsFactors, issue #51); undefined when not known (the form). */
 		chirpsFactors?: ChirpsFactorSet[] | null;
 		/** The fitted record's source and given unit now (107_series_source.sql); undefined when not known. */
@@ -69,7 +72,7 @@
 
 	const uid = $props.id();
 	const hid = $derived(headingId ?? `${uid}-h`);
-	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}), ...(observedOrigin !== undefined ? { observedOrigin } : {}), ...(runForcing ?? {}) }) : null);
+	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(et0Daily !== undefined ? { et0Daily } : {}), ...(chirpsFactors !== undefined ? { chirpsFactors } : {}), ...(observedOrigin !== undefined ? { observedOrigin } : {}), ...(runForcing ?? {}) }) : null);
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
 	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.id === 'fit-all' || c.validation)) : []);
@@ -142,6 +145,13 @@
 					<dt>Daily A-pan series <HelpTip key="series.evap_apan_mm" /></dt>
 					<dd>{apanDailyText(record.forcing.apanDaily)}{#if status?.apanDailyChanged}{' '}(now {apanDailyText(apanDaily)}){/if}</dd>
 				</div>
+				<!-- Issue #604 R5-E: the daily reference ET series the fit ran on, shown once a fit records it. -->
+				{#if record.forcing.et0Daily !== undefined}
+					<div data-testid="fit-et0-daily">
+						<dt>Daily reference ET series <HelpTip key="series.evap_et0_mm" /></dt>
+						<dd>{et0DailyText(record.forcing.et0Daily)}{#if status?.et0DailyChanged}{' '}(now {et0DailyText(et0Daily)}){/if}</dd>
+					</div>
+				{/if}
 				<div>
 					<dt>CHIRPS bias correction <HelpTip key="settings.chirpsBiasCorrection" /></dt>
 					<dd>{record.forcing.chirpsBiasCorrection ? chirpsBiasLabel(record.forcing.chirpsBiasCorrection) : 'not recorded (fit made before this was tracked)'}</dd>

@@ -8,7 +8,11 @@ describe('SETTINGS_SECTIONS', () => {
 		const ids = SETTINGS_SECTIONS.map((s) => s.id);
 		expect(new Set(ids).size).toBe(ids.length);
 		expect(ids).toEqual([
-			// The panel that heads the page (issue #444), its own link since issue #586 R4-B.
+			// The model selection for flow generation leads the page (issue #614). It keeps the Flow share panel's id
+			// (issue #553 round 3), so the old links land.
+			'set-share',
+			// Then the EWR the results are judged by (issue #444; it headed the page until issue #614), its own link
+			// since issue #586 R4-B.
 			'set-judge',
 			'set-period',
 			'set-rain',
@@ -16,9 +20,6 @@ describe('SETTINGS_SECTIONS', () => {
 			'set-demand',
 			'set-restrict',
 			'set-reporting',
-			// Flow generation (issue #553 round 3) keeps the Flow share panel's id: Runoff's one panel, since the
-			// runoff parameters and their fit moved to Calibration (issue #586 round 3).
-			'set-share',
 			'set-ewr',
 			'set-reserve',
 			// The outcome matrix's reading of a sweep, the seasonal outlook's season and the declared uncertainty rule: they change no result.
@@ -31,11 +32,10 @@ describe('SETTINGS_SECTIONS', () => {
 		// Each group's panels sit together, so the menu's groups follow the page.
 		const groups = SETTINGS_SECTIONS.map((s) => s.group);
 		expect(groups.filter((g, i) => g !== groups[i - 1])).toEqual([
-			// Its own group with no name, above the first task's.
+			// The lead group with no name, above the first task's: the model selection, then the judge panel (issue #614).
 			null,
 			'Data & rain',
 			'Demand & supply',
-			'Runoff',
 			'EWR & Reserve',
 			'Reading results',
 			// Its one panel's heading, word for word (issue #586, C9).
@@ -139,10 +139,13 @@ describe('SETTINGS_ELSEWHERE (issue #521)', () => {
 describe('settingsNavGroups', () => {
 	it('lists every panel under its task, the last group Automatic runs alone, on the bar and in the rail alike', () => {
 		const groups = settingsNavGroups();
-		expect(groups.map((g) => g.label)).toEqual([null, 'Data & rain', 'Demand & supply', 'Runoff', 'EWR & Reserve', 'Reading results', 'Automatic runs']);
-		// The page's first panel leads, by its heading, in a group with no name (issue #586 R4-B: it had no link, so Find
-		// a setting couldn't find it).
-		expect(groups[0]!.sections).toEqual([{ id: 'set-judge', label: 'EWR the results are judged by' }]);
+		expect(groups.map((g) => g.label)).toEqual([null, 'Data & rain', 'Demand & supply', 'EWR & Reserve', 'Reading results', 'Automatic runs']);
+		// The lead group, with no name: the model selection for flow generation first (issue #614), then the judge panel
+		// (issue #586 R4-B: it had no link, so Find a setting couldn't find it), each by its heading.
+		expect(groups[0]!.sections).toEqual([
+			{ id: 'set-share', label: 'Model selection for flow generation' },
+			{ id: 'set-judge', label: 'EWR the results are judged by' }
+		]);
 		expect(groups[1]!.sections.map((s) => s.label)).toEqual(['Simulation period', 'Rain gaps', 'Data quality']);
 		expect(groups.at(-1)!.sections).toEqual([{ id: 'set-auto', label: 'Automatic runs' }]);
 		// Every panel has its own link, in page order, and none stands for another.

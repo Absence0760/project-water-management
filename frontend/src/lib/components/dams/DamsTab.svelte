@@ -19,6 +19,8 @@
 	// register and the map propose for the dam (issue #326 B-dams), folded to one line of what is proposed,
 	// so the panel stays the window's height; a card's Proposals opens it (until 2026-10-13 it was a panel
 	// under every card, so with nine dams it sat 1,700 px below the chart, under an empty column).
+	// Between the chart and the assurance, the dam seen from space against the run's surface area (issue #604 R5-B,
+	// DamObservedBox), folded to one line the same way.
 	// The levels come from overview/damLevels.ts, the loader the Summary's
 	// Dams today card and the Network's colour by dam level share; the series
 	// come through the Runs tab's cache.
@@ -46,6 +48,7 @@
 	import { MappedNodes } from '#lib/workspace/mappedNodes.svelte.js';
 	import { changeWords, DAM_CHANGED, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
 	import DamProposalsBox from './DamProposalsBox.svelte';
+	import DamObservedBox from './DamObservedBox.svelte';
 
 	let {
 		projectId,
@@ -230,7 +233,15 @@
 		const h = proposalsH;
 		if (!proposalsOpen) proposalsClosedH = h;
 	});
-	const plotH = $derived(side ? Math.max(240, chartH - assuranceH - proposalsClosedH) : chartH);
+	// The satellite views' fold (issue #604 R5-B) gives up its closed height the same way.
+	let observedH = $state(0);
+	let observedClosedH = $state(0);
+	let observedOpen = $state(false);
+	$effect(() => {
+		const h = observedH;
+		if (!observedOpen) observedClosedH = h;
+	});
+	const plotH = $derived(side ? Math.max(240, chartH - assuranceH - proposalsClosedH - observedClosedH) : chartH);
 	// The sticky panel's height: one taller than the window (the proposals opened) sticks by its foot, so all of it can be read.
 	let panelH = $state(0);
 	// --- the proposals box (issue #326 B-dams): every hydrological unit, the dams first in the cards' order ---
@@ -411,6 +422,12 @@
 							<p class="muted">{picked?.name ?? 'This dam'} isn't in the latest run: add it before the next run, or pick another dam.</p>
 						{/if}
 					</LoadState>
+					{#if run && picked}
+						<!-- The picked dam seen from space against the run's surface area (issue #604 R5-B), folded to one line. -->
+						<div bind:clientHeight={observedH}>
+							<DamObservedBox {projectId} runId={run.id} nodeId={picked.nodeId} name={picked.name} {readonly} bind:open={observedOpen} />
+						</div>
+					{/if}
 					{#if run && picked}
 						{@const unitId = picked.nodeId}
 						{@const unitHere = picked.farm}

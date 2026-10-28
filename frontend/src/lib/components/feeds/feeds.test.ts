@@ -28,6 +28,7 @@ import {
 	healthMessage,
 	keptNote,
 	calibrationNote,
+	et0Note,
 	gapFillNote,
 	needsAttention,
 	nextTryNote,
@@ -367,6 +368,16 @@ describe('descriptions', () => {
 		expect(calibrationNote({ source: 'ecmwf_ens', lastMeta: null })).toBe('ECMWF open data, CC BY 4.0');
 		expect(calibrationNote({ source: 'chirps_gefs', lastMeta: { calibration: 'not yet calibrated' } })).toBeNull();
 	});
+	it('credit a reference ET feed and say how many newest days came from NASA POWER (last_meta, issue #604 R5-E)', () => {
+		expect(et0Note({ source: 'agera5_et0', lastMeta: { days: 40, agera5Days: 30, powerDays: 10, agera5Through: '2026-09-30' } })).toBe(
+			'AgERA5 (Copernicus), CC BY 4.0 · AgERA5 to 2026-09-30 · 10 newer days from NASA POWER, CC BY 4.0'
+		);
+		expect(et0Note({ source: 'agera5_et0', lastMeta: { powerDays: 1 } })).toBe('AgERA5 (Copernicus), CC BY 4.0 · 1 newer day from NASA POWER, CC BY 4.0');
+		// Before its first fetch, or with no POWER day: the credit alone (and how far AgERA5 reached).
+		expect(et0Note({ source: 'agera5_et0', lastMeta: null })).toBe('AgERA5 (Copernicus), CC BY 4.0');
+		expect(et0Note({ source: 'agera5_et0', lastMeta: { powerDays: 0, agera5Through: '2026-09-30' } })).toBe('AgERA5 (Copernicus), CC BY 4.0 · AgERA5 to 2026-09-30');
+		expect(et0Note({ source: 'chirps', lastMeta: { powerDays: 3 } })).toBeNull();
+	});
 });
 
 describe('taking over an existing series (issue #30)', () => {
@@ -395,6 +406,12 @@ describe('taking over an existing series (issue #30)', () => {
 		expect(separateName({ ...chirps, source: 'chirps_gefs' }, [], [])).toBe('CHIRPS-GEFS');
 		expect(separateName({ ...chirps, source: 'ecmwf_ens', targetKind: 'rain_forecast_mm' }, [s('rain_forecast_mm', 'CHIRPS-GEFS')], [])).toBe('ECMWF ENS');
 		expect(separateName({ source: 'dws', config: { station: 'A2H012' }, targetKind: 'flow_observed_m3s' }, [], [])).toBe('DWS A2H012');
+		expect(separateName({ ...chirps, source: 'agera5_et0', targetKind: 'evap_et0_mm' }, [s('evap_et0_mm', 'AgERA5')], [])).toBe('AgERA5 2');
+	});
+
+	it('hints that a reference ET feed reaches GR4J only under a monthly PE row (issue #604 R5-E)', () => {
+		expect(targetHint('agera5_et0', 'evap_et0_mm')).toMatch(/only under a monthly PE row/);
+		expect(targetHint('chirps', 'rain_chirps_mm')).toBeNull();
 	});
 
 	it('never suggests a name that sorts ahead of the record runs read, which would take over from it (issue #561)', () => {

@@ -8,7 +8,7 @@
 // contributors); applying a proposal is the Settings page's Save, which needs
 // an editor, so `canApply` only tells the panel whether to offer it. The
 // conversation lives in the page and comes with every turn; the server keeps
-// only the usage counters (usage.ts, 258_assistant_usage.sql), never the
+// only the usage counters (usage.ts, 262_assistant_usage.sql), never the
 // text. Every refusal (off, role, the hourly cap, the month's budget, an
 // oversized message, a bad body) is a JSON ApiError before any stream byte.
 import { DISCLAIMER } from '@water-management/engine';

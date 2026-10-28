@@ -3,8 +3,10 @@ import type { Monthly } from '../calendar';
 import { defaultDataQualitySettings, defaultProjectSettings, rainCheckLimits, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { CalibrationReport, ScoredPeriod } from './calibrate';
 import type { FitScores } from './objective';
+import { et0FitWindow } from '../evaporation/et0Daily';
 import {
 	chirpsFactorsDrifted,
+	fitScoredThrough,
 	CHIRPS_FACTOR_TOLERANCE,
 	calibrationFitStatus,
 	editedParams,
@@ -231,7 +233,7 @@ describe('fit record', () => {
 		// The fit's own recorded forcing matches this settings object exactly, so forcingChanged starts false.
 		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, panCoefficient: s.panCoefficient, apanMm: s.apanMm } });
 		const ok = fitRecordStatus(s, rec);
-		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, qualityFlagsChanged: false, flowKindChanged: false, siteChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false, rulesChanged: false, draftRules: false });
+		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, qualityFlagsChanged: false, flowKindChanged: false, siteChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, et0DailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false, rulesChanged: false, draftRules: false });
 		expect(fitRecordCaveats(ok)).toEqual([]);
 		const changed = fitRecordStatus(
 			{
@@ -246,7 +248,7 @@ describe('fit record', () => {
 			},
 			rec
 		);
-		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, qualityFlagsChanged: false, flowKindChanged: true, siteChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false, rulesChanged: false, draftRules: false });
+		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, qualityFlagsChanged: false, flowKindChanged: true, siteChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, et0DailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false, rulesChanged: false, draftRules: false });
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(6);
 		expect(caveats[0]).toMatch(/^Parameters edited since the fit: X1\./);
@@ -671,6 +673,36 @@ describe('fit record', () => {
 		expect(chirpsFactorsDrifted(one([0.5]), one([0.511]))).toBe(true);
 		expect(chirpsFactorsDrifted(one([null]), one([null]))).toBe(false);
 		expect(CHIRPS_FACTOR_TOLERANCE).toBe(0.02);
+	});
+
+	it('flags a GR4J fit under a monthly PE row whose daily reference ET series has changed since (issue #604 R5-E), only when both sides know it', () => {
+		const monthly = { kind: 'monthly' as const, mm: apanMm, source: 'dPET climatology' };
+		const s = { runoffModel: 'gr4j' as const, panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const, pe: monthly };
+		const et1 = { startDate: '2012-10-01', length: 730, valuesSha256: 'a'.repeat(64), through: '2014-09-30' };
+		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, pe: monthly } as never, et0Daily: et1 });
+		expect(rec.forcing!.et0Daily).toEqual(et1);
+		// Positive control: the same series now is not a change.
+		expect(fitRecordStatus(s, rec, { et0Daily: { ...et1 } })).toMatchObject({ forcingChanged: false, et0DailyChanged: false });
+		for (const now of [{ ...et1, valuesSha256: 'b'.repeat(64) }, { ...et1, length: 731 }, null]) {
+			const st = fitRecordStatus(s, rec, { et0Daily: now });
+			expect(st, JSON.stringify(now)).toMatchObject({ forcingChanged: true, et0DailyChanged: true, apanDailyChanged: false });
+			const caveats = fitRecordCaveats(st);
+			expect(caveats.filter((c) => /daily reference evapotranspiration series has been added, replaced or removed/.test(c))).toHaveLength(1);
+			expect(caveats.some((c) => /^The potential evaporation GR4J runs on/.test(c))).toBe(false);
+		}
+		// Days a feed appended after the fit's last scored day never count: the caller fingerprints through the record's
+		// `through` (et0FitWindow), so a series grown by a week fingerprints the same.
+		const grown = { startDate: '2012-10-01', values: [...Array.from({ length: 730 }, () => 4), 5, 5, 5, 5, 5, 5, 5] };
+		expect(et0FitWindow(grown, et1.through)!.values).toHaveLength(730);
+		expect(et0FitWindow(grown, '2012-09-30')).toBeNull();
+		expect(fitScoredThrough(report())).toBe('2014-09-30');
+		// Nothing to compare: the caller doesn't know the series, or the record predates tracking it.
+		expect(fitRecordStatus(s, rec).et0DailyChanged).toBe(false);
+		expect(fitRecordStatus(s, fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, pe: monthly } as never }), { et0Daily: et1 }).et0DailyChanged).toBe(false);
+		// The series doesn't reach GR4J under pan coefficient × A-pan, then or now.
+		expect(fitRecordStatus({ ...s, pe: { kind: 'pan' as const } }, rec, { et0Daily: null }).et0DailyChanged).toBe(false);
+		const onPan = fitRecordFromReport(report(), { ...ctx, et0Daily: et1 });
+		expect(fitRecordStatus(s, onPan, { et0Daily: null }).et0DailyChanged).toBe(false);
 	});
 
 	it('flags a GR4J fit whose daily A-pan series has changed since (issue #45), only when both sides know it', () => {

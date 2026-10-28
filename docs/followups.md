@@ -332,14 +332,13 @@ provenance, `ingest/verify_copy.py`):
       shift the sample copy's days to today in fixtures mode (as the file
       fixtures re-date themselves), `rainCopy.ts` should report the shifted
       days too, so the line matches what feeds read.
-- [ ] **Loading DWS's reply in production** (R3-B). `pnpm import:dws`
-      writes `gauge_record` locally, but production's database is reachable
-      only through the migrate Lambda, whose reference load
-      (`backend/src/geo/referenceLoad.ts`, `load-reference.yml`) has no `dws`
-      kind. Add one (the reply uploaded to the reference bucket, loaded with
-      `source = 'dws-request'` through the same parser) once DWS's written
-      answer allows storing the data. Until then `dws_source` stays `live`.
-      Trigger: DWS's reply to the operator's request (#604 operator steps).
+- [x] **Loading DWS's reply in production** (R3-B). Built (#618 step 6b):
+      `load-reference.yml` kind `dws` loads one station's saved
+      `HyData.aspx` page or DWS reply from the reference bucket through
+      the migrate Lambda, as `dws-request` rows (origin `dws`) by the same
+      reader and writes as `pnpm import:dws`, recorded in `reference_load`
+      (258); the `dws-coverage` read-only check says which stations are
+      covered ([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
 - [ ] **Table datasets' originals and upstream versions** (R3-D). Migration
       248 records provenance for every `reference_load` kind, but only tile
       archives fill it: `load-reference.yml` takes no inputs for a table
@@ -412,6 +411,71 @@ provenance, `ingest/verify_copy.py`):
       members' rain source named in `run_uncertainty`. **Trigger:** the
       first client project that sets `settings.gapRain` to a product, or an
       evidence pack on one.
+- [ ] **Confirm AgERA5's and NASA POWER's live shape** (R5-E). Built on
+      synthetic fixtures only (operator decision, 2026-10-27): the AgERA5
+      request (`variable: reference_evapotranspiration`, `version: 2_0`,
+      the area subset), its file's variable name, units and grid lattice,
+      and its lag (assumed about a week), and POWER's regional JSON shape
+      and its largest tile, are checked by the readers, which refuse
+      anything else. **Trigger:** the CDS account (#618 7b–7d), then one
+      `agera5_et0` backfill month and one `power_et0` run with the
+      operator; fix what the reader refuses, then switch the schedules on.
+- [ ] **The catchment boundary's proposal for a reference ET feed.** The
+      Data feeds form proposes the boundary's cells (and each unit's) for
+      CHIRPS only, so an `agera5_et0` feed is attached by cells or a box.
+      **Durable fix:** offer the boundary's proposal for `agera5_et0` too
+      (`feeds/fromBoundary.ts` is CHIRPS-specific in its source and target).
+      **Trigger:** the first project that adds a reference ET feed.
+- [ ] **Credit AgERA5 and NASA POWER in a run's report and exports.** The
+      feed card credits them and the series is labelled by its feed, but
+      the run's data credits (`engine/liability/rainCredits.ts`) name the
+      rain products only. **Durable fix:** a credit per evaporation product
+      a run read (from the `evap_et0_mm` series' feed and its days, as
+      `forecastRainEcmwf` does for ECMWF), in the report, the workbook and
+      the data sources page. **Trigger:** before the first report or
+      evidence pack on a project with a reference ET feed.
+
+## Observing dams (issue #604 Round 5)
+
+Round 5 built the dam observations, off in production
+([architecture.md § Dam observations](./architecture.md#dam-observations),
+[deployment.md § Dam observations](./deployment.md#dam-observations)). What's
+open:
+
+- [ ] **The operator's production steps.** Broken: nothing observes a dam in
+      production until the operator runs
+      [deployment.md § Dam observations](./deployment.md#dam-observations),
+      *Turning it on*: the Waterbodies polygons loaded for the region
+      (`load-reference.yml` kind `waterbodies`), a backend release with
+      migration 261 and the `dams-weekly` mode, at least one traced dam,
+      then `dam_observations_enabled = true` (plan, then the operator's
+      go-ahead for the apply). Durable fix: those steps, then watch the
+      first day's `dams_pass` and `dams_tick` log lines and both heartbeat
+      alarms. Trigger: a client project with traced dams that wants the
+      modelled-vs-observed dam area.
+- [ ] **The frozen Waterbodies series.** Broken: DE Africa's public
+      per-waterbody CSVs (`waterbodies/v0.0.2/surface_area_change/`) were
+      last written 2024-02-26 and end 2023-09-17 (checked 2026-10-27), though
+      the product says weekly, so Waterbodies adds history only and has no
+      recency alarm. Durable fix: ask DE Africa (help desk or forum) whether
+      the public series will be updated again, or where the current ones
+      live; if they will, add a `dam-recency-waterbodies` alarm like WOfS's;
+      if they won't, keep the pass for the history (it costs a 304 a uid a
+      week) and say so in data-sources.md, or retire it if its uid matching
+      adds nothing WOfS doesn't. Trigger: DE Africa's reply (operator step),
+      or the series' `newest` moving past 2023-09-17 in the pass's status.
+- [ ] **v0.0.3 polygons against v0.0.2 series: the uids.** Broken (maybe):
+      the match reads uids from the v0.0.3 historical extent, and the pass
+      asks the v0.0.2 series by that uid. Both are DE Africa's latest of
+      each, but nothing has checked on real data that a v0.0.3 uid names
+      the same waterbody in v0.0.2 (a geohash of a changed polygon may
+      differ, or have no series: a 404, recorded as failed). Durable fix: on
+      the operator's real clip, take a sample of matched uids and check
+      each series exists and its `px_total` × 900 m² is near the v0.0.3
+      polygon's area; if they disagree, load the v0.0.2 polygons for
+      matching instead (or map v0.0.3 uids to v0.0.2 by overlap at load).
+      Trigger: the first production load of the polygons, before turning
+      the flag on.
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
@@ -548,6 +612,13 @@ runs and accumulations are real) can't be decided without the client.
       (engine-audit.md GR1–GR6). Its control is Settings → Rain gaps →
       Gap-filling product (R4-E, ui.md § Model settings), and Data draws
       the products beside CHIRPS (ui.md § Data).
+- [ ] **Daily reference ET (engine 1.104.0, issue #604 R5-E, model.md
+      §2.4a *Daily reference ET*).** Built opt-in (a project without an
+      `evap_et0_mm` series runs as before, to the bit). Calls made in the
+      build, to confirm: read only under a monthly PE row and as it
+      stands; NASA POWER's computed ET₀ on the newest days, replaced by
+      AgERA5's once its month lands, with no correction between them; sea
+      cells left out of the feed's mean (engine-audit.md ET1–ET3).
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
@@ -4599,19 +4670,26 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
       Show the WorldCover attribution with any figure served.
 - [ ] **Decision: SANLC's licence** (operator; maps.md § Sources, issue
-      #326 B-landcover, decision D-B). South African National Land Cover
-      would give crop classes WorldCover lacks (centre pivots, orchards,
-      vineyards, sugar cane), but the earlier release's GEOTERRAIMAGE licence
-      is CC BY-ND with no commercial resale and no competing products, and
-      DFFE's e-GIS pages (the 2018/2020 terms) refuse connections from
-      outside South Africa. Ask DFFE in writing whether SANLC 2020 may be
-      reused, with derivatives, in a commercial service; on a yes, record it
-      in the sources table and load it as another dataset (`--classes` with
-      its cultivated class codes; the loader takes EPSG:4326 only, so a
-      projected release is reprojected first). Until then the
-      proposals read WorldCover or the synthetic grid. Trigger: a
-      hydrologist asking which crop the land cover sees, or WorldCover's
-      cropland class proving too coarse in a client catchment.
+      #326 B-landcover, decision D-B; issue #618 step 8b). South African
+      National Land Cover gives crop classes WorldCover lacks, but the
+      earlier release's GEOTERRAIMAGE licence is CC BY-ND with no commercial
+      resale and no competing products, and DFFE's e-GIS pages (the
+      2018–2022 terms) refuse connections from outside South Africa. Its
+      orchard and vine classes are **built** (issue #604 R5-D, maps.md
+      § Orchards and vines from SANLC: migration 259, `pnpm
+      import:crop-types`, a synthetic grid in dev, CI and e2e) and refused
+      in production (`REFERENCE_KINDS['crop-types']` blocked, the release
+      gate too), so the live site shows none. Read the EGIS terms (or ask
+      DFFE in writing) whether SANLC 2018 and 2022 may be reused, with
+      derivatives, in a commercial service. On a yes: record them in the
+      Sources table and `docs/legal/map-data-licences.md`, set the kind
+      `allowed` with its file pattern and a loader branch in
+      `geo/referenceLoad.ts` (`cropTypesFromJson` into
+      `replaceCropTypeDataset`), add it to `LOADABLE` in
+      `scripts/release/map-data-gates.mjs`, and load the `--out` summary
+      through deployment.md § Reference datasets. On a no: drop the kind and
+      leave the synthetic grid as the tests' only data. Trigger: the EGIS
+      terms read (#618 8b), or a licence applicant asking for new plantings.
 - [x] **Loading the evaporation grid in production** (issue #326 B-evap,
       2026-10-02, PR feat/evaporation-production-load): `pnpm
       import:evaporation <years> --dataset <label> --out <file>.json.gz`
@@ -5150,7 +5228,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       correction by hand in the app.
 
 - [ ] **Rainfall station settings with no field yet** (issue #553 round 3,
-      2026-10-24). Settings → Flow generation sets each land unit's station,
+      2026-10-24). Settings → Model selection for flow generation sets each land unit's station,
       scaling, correcting station and a station's site
       (`settings.rainStations.units`, `.sites`), but three parts round 2's
       engine runs are API-only: `catchment` (Fragmentation's average catchment

@@ -24,6 +24,8 @@ import { FEEDS_CONTACT_RE } from '../config/production.js';
 import { FeedRefusedError, FeedThrottledError, FeedUnavailableError } from './errors.js';
 import { CHC_BASE } from './sources/chirps.js';
 import { DWS_BASE } from './sources/dws.js';
+import { DEAFRICA_SERVICES_BASE } from '../dams/observed/upstream.js';
+import { WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
 
 export interface FeedHttp {
 	/** Bytes [start, end] (inclusive) of `url`; null for HTTP 404 (not published yet). */
@@ -39,7 +41,16 @@ export interface FeedHttp {
 	rangeTagged?(url: string, start: number, end: number): Promise<{ bytes: Uint8Array; tag: string | null } | null>;
 	/** The file's tag from a HEAD request, without its body; null for HTTP 404. */
 	head?(url: string): Promise<{ tag: string | null } | null>;
+	/**
+	 * A whole text resource asked for only if its ETag is no longer `etag`
+	 * (If-None-Match): `not-modified` for HTTP 304, null for HTTP 404. The
+	 * ETag and Last-Modified are as fileTag keeps them (printable, capped), or
+	 * null. Optional: the dam observations' Waterbodies pass uses it.
+	 */
+	textConditional?(url: string, etag: string | null): Promise<ConditionalText | null>;
 }
+
+export type ConditionalText = { status: 'not-modified' } | { status: 'ok'; text: string; etag: string | null; lastModified: string | null };
 
 /** The longest file tag kept (chirps_file.tag, 210). */
 export const FILE_TAG_MAX = 200;
@@ -106,7 +117,14 @@ export function userAgent(contact: string | undefined = process.env.FEEDS_CONTAC
  * open internet egress, so this is what keeps a redirect, or a future code
  * path, from steering it at another host (docs/security.md § Data feeds).
  */
-export const FEED_HOSTS: readonly string[] = [new URL(CHC_BASE).host, new URL(DWS_BASE).host];
+export const FEED_HOSTS: readonly string[] = [
+	new URL(CHC_BASE).host,
+	new URL(DWS_BASE).host,
+	// Digital Earth Africa's public bucket: the Waterbodies series and the WOfS scenes (dams/observed, issue #604 R5).
+	new URL(DEAFRICA_SERVICES_BASE).host,
+	// Digital Earth Africa's STAC search: the WOfS scenes over a dam (dams/observed/wofs, issue #604 R5-C).
+	new URL(WOFS_STAC_SEARCH).host
+];
 /** Redirects followed per request, each checked against FEED_HOSTS. */
 const MAX_REDIRECTS = 3;
 
@@ -276,7 +294,11 @@ export function liveHttp(
 		if (left > 0) throw p.status === 403 ? new FeedRefusedError() : new FeedThrottledError(p.status, Math.ceil(left / 1000));
 		throttle.delete(host);
 	};
-	const get = async (url: string, headers: Record<string, string>, method: 'GET' | 'HEAD' = 'GET'): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null } | null> => {
+	const get = async (
+		url: string,
+		headers: Record<string, string>,
+		method: 'GET' | 'HEAD' = 'GET'
+	): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null; headers: Headers } | 'not-modified' | null> => {
 		let target = new URL(url);
 		if (!allowed(target)) throw new FeedUnavailableError('the request was refused (not a known source host)');
 		// Each hop takes its host's slot (pacer) and holds it until its response is done with, the body included.
@@ -297,7 +319,7 @@ export function liveHttp(
 		headers: Record<string, string>,
 		method: 'GET' | 'HEAD',
 		hopTo: (next: URL) => Promise<void>
-	): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null } | null> => {
+	): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null; headers: Headers } | 'not-modified' | null> => {
 		let target = first;
 		// One deadline for the whole exchange: every hop and the body (from when it holds its first slot, not while it queues).
 		const signal = AbortSignal.timeout(TIMEOUT_MS);
@@ -319,6 +341,10 @@ export function liveHttp(
 			if (!next || !allowed(next)) throw new FeedUnavailableError('the source redirected somewhere it may not');
 			await hopTo(next);
 			target = next;
+		}
+		if (res.status === 304 && headers['if-none-match']) {
+			await res.body?.cancel();
+			return 'not-modified';
 		}
 		if (res.status === 404 || res.status === 416) {
 			await res.body?.cancel();
@@ -344,7 +370,7 @@ export function liveHttp(
 		// A HEAD has no body: its content-length is the file's, not a response to read.
 		if (method === 'HEAD') {
 			await res.body?.cancel();
-			return { bytes: new Uint8Array(0), whole: true, tag };
+			return { bytes: new Uint8Array(0), whole: true, tag, headers: res.headers };
 		}
 		const declared = Number(res.headers.get('content-length'));
 		if (declared > MAX_BYTES) {
@@ -353,7 +379,7 @@ export function liveHttp(
 		}
 		// Read with a cap: a server that ignores Range would otherwise send a whole grid.
 		const reader = res.body?.getReader();
-		if (!reader) return { bytes: new Uint8Array(0), whole: res.status === 200, tag };
+		if (!reader) return { bytes: new Uint8Array(0), whole: res.status === 200, tag, headers: res.headers };
 		const parts: Uint8Array[] = [];
 		let total = 0;
 		for (;;) {
@@ -379,10 +405,20 @@ export function liveHttp(
 			out.set(p, o);
 			o += p.length;
 		}
-		return { bytes: out, whole: res.status === 200, tag };
+		return { bytes: out, whole: res.status === 200, tag, headers: res.headers };
+	};
+	/** A plain request: never conditional, so never 'not-modified'. */
+	const plain = async (url: string, headers: Record<string, string>, method: 'GET' | 'HEAD' = 'GET') => {
+		const got = await get(url, headers, method);
+		return got === 'not-modified' ? null : got;
+	};
+	/** A header kept only as fileTag keeps a tag: printable ASCII, at most FILE_TAG_MAX. */
+	const kept = (v: string | null) => {
+		const t = v?.trim();
+		return t && t.length <= FILE_TAG_MAX && FILE_TAG_RE.test(t) ? t : null;
 	};
 	const rangeTagged = async (url: string, start: number, end: number) => {
-		const got = await get(url, { range: `bytes=${start}-${end}` });
+		const got = await plain(url, { range: `bytes=${start}-${end}` });
 		// A 200 is the whole resource (a server that ignores Range, under the cap): cut the range out.
 		return got && { bytes: got.whole ? got.bytes.subarray(start, end + 1) : got.bytes, tag: got.tag };
 	};
@@ -390,12 +426,18 @@ export function liveHttp(
 		range: async (url, start, end) => (await rangeTagged(url, start, end))?.bytes ?? null,
 		rangeTagged,
 		head: async (url) => {
-			const got = await get(url, {}, 'HEAD');
+			const got = await plain(url, {}, 'HEAD');
 			return got && { tag: got.tag };
 		},
 		text: async (url) => {
-			const got = await get(url, { accept: 'text/html, text/plain;q=0.9' });
+			const got = await plain(url, { accept: 'text/html, text/plain;q=0.9' });
 			return got === null ? null : new TextDecoder().decode(got.bytes);
+		},
+		textConditional: async (url, etag) => {
+			const got = await get(url, { accept: 'text/csv, text/plain;q=0.9', ...(etag ? { 'if-none-match': etag } : {}) });
+			if (got === null) return null;
+			if (got === 'not-modified') return { status: 'not-modified' };
+			return { status: 'ok', text: new TextDecoder().decode(got.bytes), etag: kept(got.headers.get('etag')), lastModified: kept(got.headers.get('last-modified')) };
 		}
 	};
 }

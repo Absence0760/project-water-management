@@ -1053,6 +1053,7 @@ row names a source, where to read it and the series it merges into:
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Data → Data feeds → Attach a feed → Area: the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default for a catchment feed, from 1998) or `rnl` (from 1981; the feeds a project sets up for its hydrological units read `rnl`, so each unit's record covers the whole 1991–2020 MAP period its rain level is computed over, issue #500 item 3, [maps.md § Rain for each unit](./maps.md#rain-for-each-unit), [model.md §2.4h](./model.md#24h-runoff-from-each-units-own-rain-engine--1780-issue-482)) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, no preliminary product, published a month at a time with the `sat` finals (11–26 days after the month ends in 2026), so its newest day is 2–8 weeks old (on 2026-10-09 `daily/final/rnl/` ended at 2026-08-31 and `daily/prelim/sat/` at 2026-10-05). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `ecmwf_ens` | The ECMWF ENS ensemble mean, 15 days from each 00 UTC run, from **our copy only** (`ecmwf/<issue>`, 0.1°): each feed cell's centre falls in a 0.1° cell, weighted as listed (same cells or box as CHIRPS) | `rain_forecast_mm`, mm, quantile-mapped to our rain once the operator's fit is in the copy, else labelled not yet calibrated | Zarr written by the Python ingest job from ECMWF's open data GRIB2 (`ingest/ecmwf.py`, below); no feed ever asks ECMWF |
+| `agera5_et0` | Daily FAO-56 reference evapotranspiration from **our copy only** (issue #604 R5-E): AgERA5 v2.0 (`agera5_et0`, 0.1°) on the days its copy holds, else the ET₀ the ingest computes from NASA POWER's daily weather (`power_et0`, 0.1°) on the newest days; each feed cell's centre falls in a 0.1° cell, weighted as listed, cells with no value left out (same cells or box as CHIRPS) | `evap_et0_mm`, mm/day, read by GR4J only under a monthly PE row (model.md §2.4a *Daily reference ET*) | Zarr written by the Python ingest job (`ingest/agera5.py`, `ingest/nasapower.py`); the feed re-reads the last 75 days, so a day POWER filled becomes AgERA5's once its month lands |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); the site allows 20 years per request, the feed asks for two (`DWS_WINDOW_DAYS`, the window below). Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
 - **Rain for each unit** (issue #482, `feeds/fromUnits.ts`,
@@ -1882,6 +1883,26 @@ EventBridge, daily
   without a failure. The feeds fall due at 14:00 UTC
   (253_feed_source_ecmwf.sql). Locally the committed copy holds one
   invented issue over a 4 × 4 block, read as today's anywhere in the region.
+- **Reference evapotranspiration** (issue #604 R5-E): the same Python job
+  copies AgERA5 v2.0's daily FAO-56 reference ET a month at a time through
+  ERA5-Land's CDS submit-then-collect machinery (`ingest/agera5.py`,
+  `agera5_et0`, finals layout, 0.1°, from 1979), and computes FAO-56 ET₀
+  for the last 30 days from NASA POWER's daily weather (`ingest/nasapower.py`,
+  `ingest/fao56.py`: six regional requests per 10° tile, one parameter each,
+  the nearest POWER point to each 0.1° cell; `power_et0`, daily layout, a
+  rolling 120 days). Neither enters the cell cache: an `agera5_et0`
+  feed_fetch reads both in the job (`feeds/fromMirrorEt0.ts`, at most a year
+  a window, one read per year chunk), AgERA5 where its copy holds the day,
+  POWER after it, and writes `evap_et0_mm`; there is no per-feed path to the
+  CDS or NASA, and the fetcher refuses one. A copy with neither product
+  waits without a failure (as ECMWF's). The feeds fall due on the default
+  daily rule (260_feed_source_agera5_et0.sql). Both jobs are off in
+  production until `agera5_enabled` / `power_et0_enabled`
+  ([deployment.md](./deployment.md)). Locally the committed copy holds a
+  year of invented AgERA5 values and two months of POWER's over a 4 × 4
+  block (`backend/scripts/et0-fixture.ts`), read shifted to today anywhere
+  in the region, so a dev feed's newest days come from POWER as in
+  production.
 - **Revisions** reach the cache without a feed: the worker's mirror tick
   reads each manifest (`era5l` and `imerg_late` too) and applies a newer revision through
   `app_mirror_apply_revision` (above, *A revision of our copy*); the
@@ -1922,11 +1943,16 @@ station's days from our own store, `gauge_record` (247,
 **behind `DWS_SOURCE`**: `store` reads it, `live` keeps the per-feed request
 to DWS's page through the fetcher. Unset follows `FEED_SOURCE` (`live` in
 production, `store` in dev, CI and e2e); production says `live` until the
-operator has DWS's written answer and has loaded its reply
+operator has loaded each station's record and the `dws-coverage` check
+says it is covered
 ([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
+The operator's load is `pnpm import:dws` locally and, in production,
+`load-reference.yml` kind `dws` (the migrate Lambda, from the reference
+bucket); both read and write through `feeds/gaugeRecordImport.ts`.
 
 ```
 operator ── pnpm import:dws <DWS's reply> ──► gauge_record (source dws-request)
+operator ── reference/dws/<file> + load-reference.yml (kind dws) ──► migrate Lambda ──► the same
 
 EventBridge, daily 04:00 UTC ──► fetcher, {"mode":"dws-weekly"} (outside the VPC)
    reads   dws/stations.json            ◄── worker tick: app_dws_feed_stations()
@@ -1980,6 +2006,225 @@ feed_fetch (DWS_SOURCE=store) ── gauge_record_current (best source per day) 
   to seed. The worker's handover is off (`DWS_WEEKLY` unset). `pnpm
   import:dws backend/fixtures/dws/X0H001-reply.synthetic.txt --reference
   SYNTHETIC` loads the invented reply.
+
+### Dam observations
+
+What satellites saw of each traced dam (issue #604 Round 5): the wet area on
+a date, per source, in our own store, `dam_observation` (261,
+[data-model.md § Dam observations](./data-model.md#dam-observations-261_dam_observationsql)),
+for the modelled-vs-observed dam area (R5-B). Two sources, both Digital
+Earth Africa, CC BY 4.0 ([data-sources.md](./data-sources.md#deafrica-waterbodies-series)):
+**Waterbodies**' per-waterbody series for a dam matched to one waterbody
+(R5-A), and **WOfS** summed inside the dam's own outline for every traced
+dam (R5-C). Off until `dam_observations_enabled` (Terraform) and
+`DAM_OBSERVATIONS=on` (the worker); the Terraform plan refuses the first
+without the second (`infra/dam_observations.tf`'s gate).
+
+```
+operator ── pnpm import:waterbodies / load-reference.yml ──► waterbody_reference (polygons)
+
+worker tick (DAM_OBSERVATIONS=on, no user):
+   match each traced dam polygon whose match is missing or stale   (match.ts)
+      app_dam_outlines() ─► app_waterbody_candidates(box) ─► overlap in TS ─► app_dam_match_write
+   put   dams/wanted.json   { waterbodies: uids of matched dams, outlines: EVERY dam + since }
+
+EventBridge, hourly at :20 ──► fetcher, {"mode":"dams-weekly"} (outside the VPC)
+   Waterbodies pass (waterbodies.ts, ≤ 30% of the run): each wanted uid due (7 days; a failed one 1 day), conditional GET, 1 a second
+      writes dams/waterbodies/<uid>.json, dams/waterbodies-status.json
+   WOfS pass (R5-C): each dam's newest scenes once a UTC day, the rest of the run its history backward
+      writes dams/wofs/<featureId>.json, dams/wofs-status.json
+   each pass: DamPassCompleted{Source} + DamObservationAgeDays{Source} (EMF)
+
+worker tick: each status, then each key due by its load mark (≤ 200 a tick, oldest lastGood first)
+   ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs)
+   ──► app_dam_load_mark_write ──► dam_observation_load_mark (what was loaded, kept across restarts)
+```
+
+- **Why hourly.** The fetcher's 120 s limit, less Waterbodies' share (up to
+  30%), reads a year or two of one dam's WOfS scenes a run, so a daily run
+  would take about a week per dam to reach 2013 (about a year for 50 dams);
+  hourly it is about seven hours per dam (about two weeks for 50). The
+  schedule is the backfill's pace, not the upstreams' load: each Waterbodies
+  uid is still asked once a week (a uid that failed, once a day), each dam's
+  newest WOfS scenes once a UTC day, and the pacing doesn't change. A run
+  with nothing due asks DE Africa nothing and still publishes each source's
+  heartbeat and recency, so the alarms always see it (the heartbeat's
+  6-hour periods, the recency's daily ones).
+- **Why the fetcher, in Node, for both sources (the compute decision).**
+  The rule wants one scheduled job of ours per source, and the handover the
+  DWS pass already uses fits both: the worker never reaches the public
+  bucket or DE Africa's STAC (so the S3 interface endpoint's policy and the
+  VPC's lack of internet stay as they are), and the fetcher, the one Lambda
+  with internet, has no database. Waterbodies is a small CSV per waterbody.
+  WOfS is a GeoTIFF/COG per Landsat scene in UTM, 30 m, read through STAC
+  search: a tiled DEFLATE TIFF the Node fetcher decodes with `node:zlib`
+  (the CHIRPS reader's own TIFF code), reading only the tiles over a dam.
+  The Python ingest Lambda (`ingest/`) was the alternative and loses on both
+  counts: it would need GDAL/rasterio, or tifffile + imagecodecs + pyproj,
+  in its image for WOfS, and it has no database access either, so it would
+  hand over through the bucket all the same.
+- **Matching a dam to a waterbody** (`backend/src/dams/observed/match.ts`).
+  No PostGIS: the database narrows the candidates by bounding box, and the
+  overlap is measured exactly in TypeScript (geo/geojson.ts
+  `intersectionArea`, the upload checks' clip-and-sweep). With
+  `damShare` = overlap ÷ dam and `waterbodyShare` = overlap ÷ waterbody, for
+  the waterbody of the largest overlap: under 0.3 of the dam covered is
+  **none** (Waterbodies doesn't hold it: under its 0.45 ha minimum, never
+  seen wet, or traced elsewhere); at least 0.7 of the waterbody inside the
+  dam, and no other waterbody holding 0.1 of the dam, is **matched** (its
+  wet area is this dam's; the slack is the historical extent spilling past
+  a traced outline at the inflow and the wall); anything else is **merged**
+  (the waterbody also holds other water, or the dam is split over
+  several). Only matched dams are asked for Waterbodies series; WOfS runs
+  over every outline. A redrawn dam is matched again; a reload of the
+  polygons matches every dam again.
+- **The tick's bounds.** `app_dam_outlines` lists at most 5000 dams,
+  oldest traced first (`created_at`, then `id`): past the cap the most
+  recently traced wait, and the tick logs `dams_outline_cap`. It matches at
+  most `MATCHES_PER_TICK` (200) stale dams a tick, in that order, with the
+  dams whose match failed in this process after the rest (a failure is
+  logged and counted, `matchFailed`), so one project's failing dams can't
+  take every slot tick after tick (after a restart they get one tick's
+  slots again, then go last). A dam the match can't compare doesn't fail:
+  a box over 1° a side (`too_large`, past `app_waterbody_candidates`) or an
+  overlap past the sweep's work cap (`too_complex`) is recorded `none`
+  with that `reason`, leaves the stale list until the next reload of the
+  polygons, and WOfS still observes it.
+- **Loading, remembered in the database.** What the tick loaded is kept per
+  source and key in `dam_observation_load_mark` (the status's `lastGood` it
+  was checked against, the file's `fetchedAt`, and for a Waterbodies uid a
+  digest of the matched dams and their `matched_at`), not in the worker's
+  memory, so a restarted or cold worker repeats nothing. A key is due when
+  its status `lastGood` is newer than its mark's, or (a uid) its matched
+  dams changed: one matched, or rematched after a redraw or a reload,
+  gets the series. A key not due costs no GET. A due key's file is read and
+  loaded only when its `fetchedAt` is newer than the mark's or its dams
+  changed; a 304 week moves `lastGood` but not the file, so it costs one
+  GET and no load. At most `LOADS_PER_TICK` (200) files are read a tick,
+  oldest `lastGood` first, keys whose last attempt failed after the rest
+  (`failed_at`); the rest wait (`deferred` in the tick's log). Each is one
+  GET inside the VPC and one load of up to a few thousand rows, a fraction
+  of a second, so 200 is well under a minute of the worker's 300 s, which
+  the queued jobs share; a cold start with both status files full (up to
+  ~10 000 keys) takes about 50 ticks (four hours at one tick every 5
+  minutes) instead of one invocation that times out.
+- **Rows kept from a Waterbodies series**: the wet area (`area_wet_m2`) and
+  the share seen clearly (100 − `pc_invalid`), per date; a date nothing was
+  seen on is dropped (stored as 0 m² it would read as an empty dam), and a
+  partly seen one keeps its share so the reader picks the threshold. The
+  wet area counts only the part seen.
+- **Frozen upstream.** The public Waterbodies series were last written
+  2024-02-26 and end 2023-09-17 (checked 2026-10-27), so WOfS is the
+  current source. The Waterbodies pass still reads them weekly (a 304 each),
+  publishes a heartbeat (alarmed) and its recency (not alarmed).
+- **Politeness**: the feeds' User-Agent and host allowlist
+  (`FEED_HOSTS`, feeds/http.ts), one request a second, a conditional GET on
+  the ETag kept, `Retry-After` honoured, and a 403 or throttling stops the
+  pass (the other source's pass still runs; the invocation fails at the end,
+  never retried) and **pauses that source** (below).
+- **A refusal pauses the source** (issue #604's rule: a 403 stops the run
+  and alerts, never a retry). Once a pass stopped `refused` (403) or
+  `throttled` (429/503), that source alone (Waterbodies or WOfS) is left
+  alone for 24 hours from the stopped run's `ranAt` in its status file, or
+  for the `Retry-After` the source gave (`retryAfterSeconds` in the status)
+  when that is longer (`handover.ts` `pausedUntil`, `REFUSED_PAUSE_HOURS`).
+  While paused, its pass asks nothing, writes nothing (so the stopped
+  status, and with it the pause, stand), logs `stopped: paused` with
+  `pausedUntil`, and publishes **no heartbeat**: the heartbeat alarm (no
+  `DamPassCompleted` for 18 hours, three 6-hour periods) is the alert,
+  inside the pause. Daily periods couldn't see a 24-hour pause, since each
+  UTC day it spans has heartbeats before or after it. The first run after
+  the pause asks again; a source that refuses again pauses again.
+- **Locally** (`FEED_SOURCE=fixtures`) the pass reads the committed
+  synthetic series (`backend/fixtures/waterbodies/series/`), so dev, CI and
+  e2e need no network. `pnpm dev:dams:run` runs tick → pass → tick once
+  through a scratch directory ([run-locally.md § Dam observations](./run-locally.md#dam-observations)).
+- **WOfS, summed inside our own outlines** (R5-C,
+  `backend/src/dams/observed/wofs/`). The current source: DE Africa's
+  `wofs_ls` collection, one item per Landsat path/row scene, each a COG of
+  WOfS's per-pixel bit flags. The pass (`pass.ts`) takes the dams in turn
+  (never tried first, then the oldest turn) and, per dam, searches STAC
+  (`stac.ts`, `explorer.digitalearth.africa/stac/search`, the outline's
+  lon/lat box snapped outward to a 0.05° grid so the search never carries
+  a dam's exact position (a scene over the snapped box that misses the
+  outline has no pixel inside it and adds no row), a year a search, 100 items a page, following `next` only to
+  the same search) from where it left off, then reads each scene's header
+  and only the tiles under the outline (`cog.ts`) and sums them (`sum.ts`).
+  - **The scenes** (checked on a live 2026-09 Landsat 8 scene, 2026-10-27):
+    classic little-endian TIFF in GDAL's COG layout, one uint8 band, 512 ×
+    512 tiles, DEFLATE with the horizontal predictor, `GDAL_NODATA` 1,
+    30 m, GeoKeys for WGS 84 / UTM (EPSG 326xx; DE Africa writes the
+    southern hemisphere in the **north** zone codes, so northings are
+    negative). The reader takes that and its legal variants (big-endian,
+    no compression or predictor, PixelIsPoint, an empty sparse tile, the
+    south codes) and refuses anything else with a reason: BigTIFF, strips,
+    other sample types or bands, another CRS or units, a rotation matrix,
+    a GDAL scale/offset, implausible sizes; a tile never inflates past its
+    pixels. No dependency (`geotiff` would bring a decoder zoo; the CHIRPS
+    reader, `feeds/sources/tiff.ts`, refuses tiles on purpose and stays
+    so). `cog.test.ts` round-trips it through `cogWrite.ts`.
+  - **Projection** (`utm.ts`): WGS 84 → UTM by Krüger's series to n⁶
+    (Karney 2011), checked against PROJ to a millimetre, with the point
+    scale factor k. No dependency: proj4js would carry a CRS database for
+    one projection.
+  - **Summing**: a pixel counts when its centre is inside the outline
+    (projected vertex by vertex, scanline crossings, even-odd per polygon
+    so holes are out, polygons of a MultiPolygon unioned). Exactly 128 is
+    clear wet, exactly 0 clear dry, anything else (cloud, shadow, no data,
+    water under a flag) not clear; a pixel inside the outline but off the
+    scene isn't either. `wet_area_m2` = wet pixels × 900 m² ÷ k² (the grid
+    stretches ground by k; ~0.2 % at a zone's edge), `pct_observed` = clear
+    ÷ inside × 100. An outline no pixel centre falls in (smaller than a
+    pixel, or a sliver) gives no row, and so does a scene whose footprint
+    missed the dam (every inside pixel no-data); a scene that saw it under
+    cloud gives a 0 % row.
+  - **Two scenes on one date** (neighbouring Landsat rows overlap): one
+    row, from the scene that saw most of the dam clearly, then the one
+    covering most of it, then the lower item id. Not combined pixel by
+    pixel: the rows' grids needn't line up, and the better view is what a
+    reader would pick.
+  - **Newest first, then history.** `dams/wofs-state.json` (the pass's
+    own, never read by the worker) keeps per dam the SHA-256 of its
+    outline and the span read so far, `[backfilledFrom, scannedThrough]`.
+    A run first takes every due dam forward to today (a new dam starts 45
+    days back; a dam is due once a UTC day, `REFRESH_DAYS`, so most hourly
+    runs have none), then, with the time left, reads older history backward a
+    year a search, newest date first, down to 2013 (the Landsat 8 era,
+    `WOFS_BACKFILL_FROM`). So every dam is current before any time goes on
+    the past, and the recency alarm doesn't fire through a first backfill
+    (about 90 scenes a year over a dam, 2–3 requests each: several runs).
+    Either way the cursor follows each date, so a run stopped at the
+    Lambda's deadline loses nothing. A dam whose newest scenes were checked
+    today (`checkedOn` in the state: a forward turn that ended, well or on a
+    failure) waits for the next UTC day; one the deadline cut short goes on
+    in the next run. A caught-up dam searches its last 45 days again each
+    day, for scenes DE Africa publishes late, but reads only the new ones:
+    a STAC item id is one processing of one scene and never changes, so a
+    scene whose id the file's `upstream` already holds, or the state's
+    `tailItems` (every scene the tail's turns read, kept 45 days, including
+    one that lost to an overlapping scene or didn't see the dam), keeps its
+    row and costs no request. A late scene on a date that has a row is
+    compared with that date's other scenes again, so the better view still
+    wins (a row is written again only if it changed). A
+    redrawn outline (its hash changed) starts again, its file rewritten
+    empty at once so the old outline's rows can't be loaded again (249's
+    trigger deletes them from the store, and the loader refuses a file
+    fetched before the redraw). The file keeps every row read, never cut
+    back (the newest reach the worker first, so its `since` says nothing of
+    the history still to load); each row names its STAC item, and
+    `upstream` each item's URL and ETag.
+  - **Politeness**: STAC at most one request a second, the bucket at most
+    five (two or three small ranges a scene), one in flight; a 403 or
+    throttling from either stops the pass (the status says stopped and
+    why, the invocation fails) and pauses WOfS for 24 hours or a longer
+    `Retry-After` (above). A scene that can't be read is skipped and
+    counted (`sceneFailed` in the log); a failed search or a timeout ends
+    that dam's turn and the next goes on.
+  - **Locally** (`FEED_SOURCE=fixtures`) STAC and the scenes are answered
+    by `wofs/fixtures.ts` from `backend/fixtures/feeds/wofs-sample.json`:
+    invented overlapping scenes in every UTM zone, two paths, a seasonal
+    water field and cloud on some dates, written as real tiled DEFLATE
+    COGs, so the production reader runs offline.
 
 ## Server-side reports
 
@@ -2186,7 +2431,7 @@ shows it (`reproduction` on `GET …/packs/:packId`); verify doesn't.
 
 A chat about one project's model and results (issue #610,
 `backend/src/assistant/`; the API in [api.md § Assistant](./api.md#assistant),
-the counters in [data-model.md § Assistant usage](./data-model.md#assistant-usage-258_assistant_usagesql),
+the counters in [data-model.md § Assistant usage](./data-model.md#assistant-usage-262_assistant_usagesql),
 the controls in [security.md § Assistant](./security.md#assistant)). The
 model is called from the backend only, never the browser, so the site's CSP
 doesn't change. The assistant reads; it never writes the project. A
@@ -2244,7 +2489,7 @@ sequenceDiagram
   and after the newest message, so each hop re-reads the turn so far at the
   cache-read rate. Cache reads and writes are still counted as input tokens,
   so the caps are stricter than the bill.
-- **The caps** (`usage.ts`, 258): weighted tokens (input + 5 × output) per
+- **The caps** (`usage.ts`, 262): weighted tokens (input + 5 × output) per
   project, per person across projects and for the whole deployment, each
   per UTC month, and messages per person per hour. Each turn logs one
   `assistant_turn` line with its token counts (no text), which an hourly

@@ -107,7 +107,7 @@ describe('deleting a co-owner’s account', () => {
 	beforeAll(async () => {
 		// A pending invite they sent goes with them (invite.invited_by ON DELETE CASCADE).
 		expect((await coOwner.call('POST', `/projects/${projectId}/members`, { email: `pending-${crypto.randomUUID()}@example.com`, role: 'viewer' })).status).toBe(201);
-		// A turn each with the assistant (258), counted as its route counts one: the co-owner's and the owner's (the positive control).
+		// A turn each with the assistant (262), counted as its route counts one: the co-owner's and the owner's (the positive control).
 		for (const [u, tokens] of [[coOwner, 700], [owner, 50]] as const) {
 			await withUser(u.id, async (tx) => {
 				await tx.query('SELECT * FROM app_assistant_begin($1, 1000000, 30, 1000000, 100000000)', [projectId]);

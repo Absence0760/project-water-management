@@ -29,7 +29,7 @@ export interface RunWarningRow {
 }
 
 const PANEL_LABEL: Record<string, string> = Object.fromEntries([...SETTINGS_SECTIONS, ...CALIBRATION_SETTINGS_SECTIONS].map((s) => [s.id, s.label]));
-// Inside Flow generation (UnitRainFields.svelte), not a panel of its own.
+// Inside Model selection for flow generation (UnitRainFields.svelte), not a panel of its own.
 PANEL_LABEL['set-unit-rain'] = 'Unit rain';
 
 /** A code's link: its settings panel on its page, or the Data page when the catalogue names none. */

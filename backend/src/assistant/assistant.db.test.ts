@@ -1,5 +1,5 @@
 // The assistant against Postgres (routes.ts, usage.ts,
-// 258_assistant_usage.sql):
+// 262_assistant_usage.sql):
 //  - off (the default): GET says unavailable, POST is 404 assistant_off, nothing counted;
 //  - on (mock): viewers chat, editors may Apply, farmers and contributors get 403, non-members 404;
 //  - a turn streams to `usage` and `done`, and is charged to the caller's row this month;

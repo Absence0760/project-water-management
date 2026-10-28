@@ -283,7 +283,8 @@ EWR's source, whole (`method` `pragmatic` | `tab` | `percentile`, `scaling`
 `mar` | `area`, the table MAR or area, the DRM tables it reads and, from
 engine 1.90.0 (issue #552), the `.rul`'s Reserve flows without high flows
 `lowFlowPctM3s` and `reserveTable`, which Reserve table the percentile method
-reads), or
+reads, and (issue #617) the kept `.tab` and `.rul` header, `tabFile` and
+`rulFile`, display only), or
 `null` for the pragmatic EWR ([model.md §2.9f](./model.md)); a `null` over
 no source changes nothing. So "judge this application by the TAB file
 instead of the pragmatic EWR" is a scenario, not a copy of the project. The
@@ -510,7 +511,8 @@ requested volume in a full-allocation background, is one op.
 `rain_chirps_mm`, `rain_forecast_mm`, a rain-source period's
 `rain_catchment_alt_mm` and the reanalysis `rain_reanalysis_mm` (engine ≥
 1.69.0, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), and the daily A-pan evaporation
-`evap_apan_mm` (engine ≥ 0.38.0, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)). From engine 1.78.0
+`evap_apan_mm` (engine ≥ 0.38.0, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)), and the daily reference ET
+`evap_et0_mm` (engine ≥ 1.104.0, model.md §2.4a *Daily reference ET*). From engine 1.78.0
 a land unit's own rain records too, `rain_catchment_mm@<unit id>` and
 `rain_chirps_mm@<unit id>` ([model.md §2.4h](./model.md)), which the rain
 sensitivity (§2.10g) scales with the rest.

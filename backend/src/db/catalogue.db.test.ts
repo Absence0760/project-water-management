@@ -21,7 +21,9 @@ const NO_RLS = new Set(['schema_migrations']);
  */
 // A reset's cancel-link hashes and the cap on asking for one (205_mfa_recovery): only its SECURITY DEFINER functions touch them.
 // The allocation holder keys' salt and each run's frozen keys (219_allocation_holder_keys, #523 N/P): only its definer functions and trigger.
-const OWNER_ONLY = new Set(['erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder']);
+// dam_observation_load_mark (261): what the dams tick last loaded per pass file, read and written only through
+// app_dam_load_marks and app_dam_load_mark_write from the worker's session with no user.
+const OWNER_ONLY = new Set(['erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder', 'dam_observation_load_mark']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
@@ -184,7 +186,8 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * `pnpm import:quaternaries`); the app only proposes from it. So is the
  * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`),
  * the register of dams (157_dam_register.sql, `pnpm import:dam-register`),
- * the land-cover cropland grid (173_cropland_reference.sql, `pnpm import:land-cover`)
+ * the land-cover cropland grid (173_cropland_reference.sql, `pnpm import:land-cover`),
+ * the orchard and vine grid (259_crop_type_reference.sql, `pnpm import:crop-types`),
  * the evaporation grid (180_evaporation_reference.sql, `pnpm import:evaporation`)
  * and the gazetteer the Map's search reads (225_gazetteer.sql, `pnpm import:gazetteer`).
  * An applicant's "Ask the assessors why" question is filed and answered only
@@ -207,6 +210,8 @@ const READ_ONLY = new Set([
 	'river_reference',
 	'cropland_dataset',
 	'cropland_cell_reference',
+	'crop_type_dataset',
+	'crop_type_cell_reference',
 	'evaporation_dataset',
 	'evaporation_cell_reference',
 	'rain_map_dataset',
@@ -240,9 +245,15 @@ const READ_ONLY = new Set([
 	// (the operator's import, as the schema owner) and app_gauge_record_load_web (the worker, with no user).
 	'gauge_record',
 	'gauge_record_span',
-	// The assistant's usage counters (258_assistant_usage): a person reads their own rows; only app_assistant_begin
+	// The assistant's usage counters (262_assistant_usage): a person reads their own rows; only app_assistant_begin
 	// and app_assistant_charge write them, so no caller charges another's row or resets a month.
-	'assistant_usage'
+	'assistant_usage',
+	// DE Africa's Waterbodies polygons (261_dam_observation), loaded by the operator (`pnpm import:waterbodies`), and what
+	// satellites saw of each traced dam: its waterbody match and its observations, written only by app_dam_match_write and
+	// app_dam_observation_load (the worker, with no user) and dropped by map_feature_outline_changed when a dam is redrawn.
+	'waterbody_reference',
+	'dam_waterbody_match',
+	'dam_observation'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
@@ -289,7 +300,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'alert_subscription.user_id': 'cascade',
 	'allocation_source.imported_by': 'set null',
 	'api_key.created_by': 'set null',
-	// The assistant's spend stays counted against the project's month, without the name; the hourly count goes (258_assistant_usage).
+	// The assistant's spend stays counted against the project's month, without the name; the hourly count goes (262_assistant_usage).
 	'assistant_usage.user_id': 'set null',
 	'assistant_rate.user_id': 'cascade',
 	'api_key.revoked_by': 'set null',

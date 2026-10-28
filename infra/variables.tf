@@ -691,7 +691,7 @@ variable "daily_ingest_lag_alarm_days" {
 }
 
 variable "dws_source" {
-  description = "Where the worker's DWS feed fetches read (DWS_SOURCE, issue #604 R3-B): live sends each fetch to the fetcher Lambda, which reads DWS's HyData.aspx page; store reads our gauge_record table (migration 247) inside the worker's own fetch job, with no request to DWS. live until the operator has DWS's written answer and has loaded its reply (pnpm import:dws, docs/deployment.md § DWS gauge records). With chirps_source = \"mirror\" as well, per-feed fetching is off and Terraform removes the fetch queues (feeds.tf local.per_feed_fetching; docs/deployment.md § The cutover)."
+  description = "Where the worker's DWS feed fetches read (DWS_SOURCE, issue #604 R3-B): live sends each fetch to the fetcher Lambda, which reads DWS's HyData.aspx page; store reads our gauge_record table (migration 247) inside the worker's own fetch job, with no request to DWS. live until the operator has loaded each station's record (load-reference.yml kind dws) and the dws-coverage read-only check reads every station covered (docs/deployment.md § DWS gauge records). With chirps_source = \"mirror\" as well, per-feed fetching is off and Terraform removes the fetch queues (feeds.tf local.per_feed_fetching; docs/deployment.md § The cutover)."
   type        = string
   default     = "live"
   validation {
@@ -849,6 +849,12 @@ variable "assistant_enabled" {
   default     = false
 }
 
+variable "dam_observations_enabled" {
+  description = "Turn on the dam observations (dam_observations.tf, issue #604 R5): the hourly EventBridge rule that invokes the fetcher with {\"mode\":\"dams-weekly\"} (DE Africa Waterbodies, each uid re-read once a week, and WOfS, each dam's newest scenes once a day and its history with the rest of the time), the fetcher's reads and writes under dams/ in the mirror bucket, the worker's write of dams/wanted.json, and the passes' heartbeat and WOfS recency alarms. It also sets the worker's DAM_OBSERVATIONS (jobs.tf), which turns its dams tick on; the plan refuses the flag if the worker's environment ever loses it (dam_observations.tf terraform_data.dam_observations_gate). Off (the default) until a backend release with the mode is deployed and a dam is traced, or the alarms fire for passes that don't exist yet. Runbook: docs/deployment.md § Dam observations."
+  type        = bool
+  default     = false
+}
+
 variable "assistant_model_id" {
   description = "The one Bedrock model the assistant may call: a model id (anthropic.…, in-region) or a system inference profile id (global.anthropic.…, eu.anthropic.…). Its IAM policy and the endpoint policy allow this model alone. From af-south-1, Anthropic's models are reachable only through the global profile, which may run the request in any commercial AWS region (docs/deployment.md § The assistant)."
   type        = string
@@ -887,7 +893,7 @@ variable "assistant_reserved_concurrency" {
 
 # The caps below count weighted tokens: input + 5 x output, because Claude's
 # output costs five times its input on Bedrock (OUTPUT_TOKEN_WEIGHT in
-# backend/src/assistant/config.ts, and 258_assistant_usage.sql weighs the
+# backend/src/assistant/config.ts, and 262_assistant_usage.sql weighs the
 # same), so a cap in weighted tokens is a cap in dollars at the input price.
 # The bounds are the ones backend/src/config/production.ts checks: change
 # both together.
@@ -1033,5 +1039,15 @@ variable "bedrock_endpoint_az_count" {
   validation {
     condition     = var.bedrock_endpoint_az_count >= 1 && var.bedrock_endpoint_az_count <= 2
     error_message = "Must be 1 or 2."
+  }
+}
+
+variable "dam_wofs_recency_alarm_days" {
+  description = "Alarm when the newest WOfS observation any traced dam holds is more than this many days old (DamObservationAgeDays{Source=wofs}). Landsat 8 and 9 pass every 8 days together, cloud hides some passes, DE Africa publishes a scene within days, and each dam is re-read weekly: 60 days is two months with no clear pass anywhere, which means WOfS or our pass has stopped."
+  type        = number
+  default     = 60
+  validation {
+    condition     = var.dam_wofs_recency_alarm_days >= 21 && floor(var.dam_wofs_recency_alarm_days) == var.dam_wofs_recency_alarm_days
+    error_message = "A whole number of days, at least 21: a cloudy month over the region shouldn't page anyone."
   }
 }

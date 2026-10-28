@@ -20,11 +20,10 @@ import { headerControl } from '../support/sectionHeader.ts';
 /** The side index at 1440 px (issue #468): every panel's heading, under its task. */
 const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const SETTINGS_INDEX: [string | null, string[]][] = [
-	// The panel that heads the page, in a group with no name (issue #586 R4-B).
-	[null, ['EWR the results are judged by']],
+	// The two panels that head the page, in a group with no name (issue #614; issue #586 R4-B).
+	[null, ['Model selection for flow generation', 'EWR the results are judged by']],
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
 	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
-	['Runoff', ['Flow generation']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
 	['Automatic runs', ['Automatic runs']]
@@ -60,10 +59,10 @@ test('Model settings’ header points at Calibration for the fit, and its side i
 	}
 
 	// A link lands on its panel, at the top of the window beside the index, and the index marks it.
-	await menu.getByRole('link', { name: 'Flow generation' }).click();
+	await menu.getByRole('link', { name: 'Model selection for flow generation' }).click();
 	await expect(page).toHaveURL(/\?tab=settings#set-share$/);
-	await expect(page.getByRole('heading', { level: 2, name: 'Flow generation' })).toBeInViewport();
-	await expect(menu.getByRole('link', { name: 'Flow generation' })).toHaveAttribute('aria-current', 'location');
+	await expect(page.getByRole('heading', { level: 2, name: 'Model selection for flow generation' })).toBeInViewport();
+	await expect(menu.getByRole('link', { name: 'Model selection for flow generation' })).toHaveAttribute('aria-current', 'location');
 	await expect(menu).toBeInViewport();
 
 	// The last panel has its own link.
@@ -422,8 +421,8 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 
 	// Model settings' panels.
 	await openSettings(page, project.id);
-	// Flow generation (issue #553 round 3): Fragmentation by default, its one card the flow share.
-	expect(await names('set-share')).toEqual(['Flow generation', 'Flow share']);
+	// Model selection for flow generation (issue #553 round 3, issue #614): Fragmentation by default, its one card the flow share.
+	expect(await names('set-share')).toEqual(['Model selection for flow generation', 'Flow share']);
 	// Rain gaps: three cards, the gap-filling product first (issue #604: it decides what CHIRPS gap filling corrects), the last's three topics under it (h4).
 	expect(await names('set-rain')).toEqual(['Rain gaps', 'Gap-filling product', 'CHIRPS gap filling', 'Flagged rain']);
 	expect(

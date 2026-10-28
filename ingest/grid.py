@@ -8,7 +8,8 @@ matching coordinate values: CHC stores coordinates as float32 (10.024994).
 
 The module's constants are CHC's 0.05 deg grid. Each product's own grid (issue
 #604 R4-B) comes from `for_product`: the same region at 0.05 deg for the
-CHIRPS products and 0.1 deg for `era5l` and `imerg_late` (275 rows x 310
+CHIRPS products and 0.1 deg for `era5l`, `imerg_late`, `agera5_et0` and
+`power_et0` (275 rows x 310
 columns, [0, 0] centred at lat -35.45, lon 10.05), with its daily chunk (25
 chunks a day at either step) and its finals' first year. It mirrors
 backend/src/mirror/grid.ts PRODUCT_GRIDS, so the writers and the Node reader
@@ -77,9 +78,11 @@ def _grid(step: float, daily_chunks: tuple[int, int, int], first_year: int = FIR
 CHC = _grid(STEP, (1, 110, 124))
 TENTH = _grid(0.1, (1, 55, 62))
 ERA5L = dataclasses.replace(TENTH, first_year=1950)
+#: AgERA5's daily reference ET (R5-E), finals from 1979; NASA POWER's computed ET0 (`power_et0`) is daily on TENTH.
+AGERA5 = dataclasses.replace(TENTH, first_year=1979)
 
 #: Each product's grid; a forecast issue (`gefs/<issue>`, `ecmwf/<issue>`) by its prefix.
-PRODUCT_GRIDS = {"rnl": CHC, "sat": CHC, "prelim": CHC, "era5l": ERA5L, "imerg_late": TENTH}
+PRODUCT_GRIDS = {"rnl": CHC, "sat": CHC, "prelim": CHC, "era5l": ERA5L, "imerg_late": TENTH, "agera5_et0": AGERA5, "power_et0": TENTH}
 _FORECAST_GRIDS = {"gefs": CHC, "ecmwf": TENTH}
 
 

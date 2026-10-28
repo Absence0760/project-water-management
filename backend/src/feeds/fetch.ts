@@ -107,6 +107,17 @@ export function chirpsPendingFrom(finalThrough: string | null, lastDataDate: str
 	return from >= addDays(lastDataDate, -CHIRPS_FINAL_REACH_DAYS) ? from : null;
 }
 
+/**
+ * A reference ET feed (issue #604 R5-E): its first fetch reaches a year back
+ * (a longer record is the feed's startDate), each window is at most a year,
+ * and every fetch re-reads the last 75 days. AgERA5 copies a month about ten
+ * days after it ends, so a day is NASA POWER's for at most ~41 days before
+ * AgERA5 holds it; 75 leaves room for a late month.
+ */
+export const ET0_FIRST_DAYS = 365;
+export const ET0_MAX_DAYS = 366;
+export const ET0_REVISION_DAYS = 75;
+
 /** The inclusive days one fetch asks for (FetchRequest's start and end). */
 export interface FetchWindow {
 	start: string;
@@ -182,6 +193,14 @@ export function fetchWindow(
 			return { start: today, end: addDays(today, 15) };
 		case 'ecmwf_ens':
 			return { start: today, end: addDays(today, 14) };
+		case 'agera5_et0': {
+			// Up to yesterday; ET0_REVISION_DAYS re-read, so a day NASA POWER filled is replaced by AgERA5's once the copy
+			// holds its month (feeds/fromMirrorEt0.ts), and at most ET0_MAX_DAYS (a year: one read of the finals' year chunks).
+			const end = addDays(today, -1);
+			const start = from(ET0_REVISION_DAYS, ET0_FIRST_DAYS, ET0_MAX_DAYS, end);
+			const capped = toEpochDay(end) - toEpochDay(start) + 1 > ET0_MAX_DAYS ? addDays(start, ET0_MAX_DAYS - 1) : end;
+			return { start: start > end ? end : start, end: capped };
+		}
 		case 'dws': {
 			// After `mark` (the newest day, or the last day read): the day after it,
 			// or, when a window from there would reach today, up to a year before
@@ -328,7 +347,7 @@ export type FetchAnswer = FetchResult | CellsResult;
  * DWS_WINDOW_DAYS (up to 20 years) is refused here: the feed records the
  * failure and its retry asks for the shorter window.
  */
-const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: DWS_WINDOW_DAYS, ecmwf_ens: 15 };
+const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: DWS_WINDOW_DAYS, ecmwf_ens: 15, agera5_et0: ET0_MAX_DAYS };
 
 /** A fetch request as the fetcher Lambda receives it: the config is checked against its source's schema again. */
 export const FetchRequestSchema = z
@@ -470,6 +489,9 @@ export async function runFetch(req: FetchRequest, http: FeedHttp, budget: FetchB
 			case 'ecmwf_ens':
 				// Read only from our copy, in the worker's job (fromMirrorEcmwf.ts): no request ever goes to ECMWF from a feed.
 				throw new FeedFormatError('ECMWF forecasts are read only from the rain data copy, never by the fetcher');
+			case 'agera5_et0':
+				// The same for reference ET (fromMirrorEt0.ts): no request ever goes to the CDS or NASA POWER from a feed.
+				throw new FeedFormatError('reference evapotranspiration is read only from our data copy, never by the fetcher');
 			case 'dws': {
 				const page = await http.text(dwsUrl((req.config as DwsConfig).station, req.start, req.end));
 				if (page === null) throw new FeedFormatError(DWS_FORMAT_FAILURES.notFound[0]);

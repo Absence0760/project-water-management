@@ -1459,7 +1459,7 @@ same way on every screen:
   no site) with station details (`SeriesMeta.station`,
   239_rain_stations.sql). A catchment may have several, by name, and each can
   serve one or more hydrological units. The kind's hint says so, and that
-  until Settings has a Flow generation section runs read catchment rainfall
+  until Settings has a Flow generation section (now Model selection for flow generation) runs read catchment rainfall
   as today (the first catchment rain series by name, which may be a
   station); *Rainfall — catchment*'s hint points to the station kind. For a
   new station the form asks for a **Station name** (required), and in *The
@@ -1872,6 +1872,49 @@ for every workspace tab. Its own chunk.
   Summary's **30 days / 1 year / All** switch (`FLOW_WINDOWS`, opens on a
   year). A line above it: % full and the volume on the last day, the lowest
   in the last year and the days at the minimum level.
+- **Seen from space** under the storage chart (issue #604 R5-B,
+  `dams/DamObservedBox.svelte`, wording and series in `dams/observed.ts`;
+  the method and thresholds in [model.md § 2.10l](./model.md#210l-modelled-vs-observed-dam-area-app-issue-604-r5-b)):
+  the picked dam's surface area in the run (its `dam_area` column, the survey
+  curve's or the power law's) beside what Digital Earth Africa's satellites
+  saw of the unit's dam outlines on the Map (`GET …/dams/observations?run=`,
+  [api.md § Dams seen from space](./api.md#dams-seen-from-space); one request
+  for the run, every dam). One fold (`common/Fold.svelte`, `readonly`: its
+  action is **Show**) of one line, with no heading of its own (an `h3` over it
+  pushed the sticky panel past a 1280×800 window): "Seen from space: 12 clear
+  views compared · 2 disagree · 75% within ±10%" (the ±10 % is the API's
+  `thresholds.withinShare`), or why there is nothing ("no outline of this dam on the map", "no satellite
+  views yet", "none compared · latest clear view …"). **Show** opens, in order:
+  a line per outline DE Africa Waterbodies merged with a neighbouring water
+  body, has no polygon for, or hasn't been matched to yet (its Waterbodies
+  views aren't compared, only WOfS inside the outline); the full area and
+  where it comes from (survey curve's top, as entered, or estimated from the
+  capacity) with a summary in words (the span, the mean difference as a share
+  of the full area, the share within ±10 %, how often seen full or empty); the
+  chart (`LineChart`, ha: the run's area as a line, ending before a forecast
+  run's forecast, whose views aren't compared either, the compared views as
+  dots, the views not compared as fainter dots off until the legend shows
+  them, the full area dashed, 30 days / 1 year / All opening on All) with the
+  flags as lanes along its foot (**Disagree** `--lane-disagree`, **Seen full**
+  `--lane-seen-full`, **Seen empty** `--lane-seen-empty`, each named in the
+  lanes key; their own tokens, computed apart for colour-blind readers from
+  each other and from every line the chart draws,
+  `dams/observedLaneColours.test.ts`), the y axis starting under 0 ha by the
+  strips' height (`LineChart` `lanesRoom`, `charts/series.ts` `laneRoom`) so a
+  view of an empty dam sits above them, not under; **The N views, newest
+  first**, a table of the newest ten (`VIEWS_SHOWN`) with **Show all N views**
+  opening the rest in place and no scroll inside it (date, source, seen, % seen clearly,
+  modelled, and the difference and flags or why it wasn't compared; a row that
+  disagrees in `--danger` with the words "Disagree: …"), which stacks each
+  view as a block in a narrow column (36rem) rather than scrolling sideways;
+  and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0 (Waterbodies
+  and WOfS, from Landsat)". The run's area loads through the Runs cache only
+  once the fold opens. A dam with no outline says so, with **Open the Map**;
+  to an editor it says to draw the water surface as a polygon and link it, to
+  a viewer that an editor draws the outline.
+  Beside the cards the plot gives up the fold's closed height, as for the
+  proposals, and an opened fold grows the sticky panel (it sticks by its
+  foot). e2e: `dam-observed.spec.ts`.
 - **Assurance of supply: <unit>** under the chart (issue #444,
   `reliability/NodeAssurance.svelte`): a dam has no assurance of its own, so
   it is labelled as the unit's ("The hydrological unit's supply, which this
@@ -3268,7 +3311,7 @@ itself.
   unit's Catchment area section, after the areas, an optional **MAP**
   (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, once it is set,
   a required **Source of the MAP** (`node.mapMm`, `node.mapSource`). It is
-  read only under Settings' Flow generation, Per unit, where **MAP from the
+  read only under Model settings' Model selection for flow generation, Per unit, where **MAP from the
   grid** can fill it and its source from a loaded MAP grid for every unit
   at once. Clearing the MAP clears
   its source. A MAP out of range or without its source is marked
@@ -5019,6 +5062,22 @@ saves the catchment's model, and override mode there edits the scenario's
   in the parcels, no crop yet, and a "Synthetic test data" warning for the
   committed grid. On a narrow sheet the Use buttons are 44 px targets; the
   tables scroll in their own box. e2e: `cropland-proposals.spec.ts`.
+  **Orchards and vines** (issue #604 R5-D, a sub-heading in the same box,
+  `croptypes`; [maps.md § Orchards and vines from
+  SANLC](./maps.md#orchards-and-vines-from-sanlc)), only when a crop-type
+  grid is loaded (never in production until SANLC's terms are recorded):
+  its own "Synthetic test data" warning, a caution (`croptypes-caution`:
+  "This is orchard and vine land mapped from satellite, not the irrigated
+  area, and it doesn’t say which fruit or cultivar: check it before you use
+  it."), a table of the parcels in the land cover's order with
+  **Orchards**, **Vines** and, with an earlier edition, **New since
+  <edition>** (the header wraps), an **All parcels** footer, a note that the
+  new plantings are shown and never offered, and its own **Source and
+  method**. **Area to use** then splits into two groups, "Cultivated (land
+  cover)" and "Orchards and vines" ("Orchards, all 2 parcels: 25.71 ha",
+  "Vines, Top block: 1.29 ha"); a crop-type choice's confirmation says
+  "from crop types" with the crop-type caution, and so does the notice.
+  e2e: `crop-types-proposals.spec.ts`.
 - **Saving:** it edits the shared `ModelEditor`, so an edit shows on the Crops
   tab at once and the other way round. The sheet is modal, which makes the
   page's save bar unreachable, so it repeats the save row: status (unsaved,
@@ -5828,7 +5887,7 @@ which shows under the fields: *Say where the station's MAP comes from …*,
 *A station's coordinates need both a latitude and a longitude, or
 neither.*). It says *Saved the station.*, or *Not saved: &lt;reason&gt;*.
 Viewers read the MAP with its source and where it stands, or *Not
-recorded*. Settings → Flow generation, Per unit, reads the run's catchment rain
+recorded*. Settings → Model selection for flow generation, Per unit, reads the run's catchment rain
 station's MAP from here, and History says *Recorded … as a rainfall
 station: MAP 745 mm (…)*, *Changed the rainfall station details of …* or
 *Cleared …*. **Edit a day** (issue #477 (a), `series/EditDay.svelte`,
@@ -6108,7 +6167,36 @@ stored series outside it is blank (`preview.ts` `buildAreaColumns`,
 `areaCell`; help `preview.areaStationScaled`, `preview.areaChirpsCorrected`,
 `preview.areaRainUsed`, `preview.areaRainFrom`). The search's value
 comparison and *Missing only* / *Flagged only* still look only at the stored
-series. A flagged value says
+series.
+
+A **View** select above the table (issue #613, `preview.ts` `previewViews`,
+`columnsForView`, `areaViewColumns`; help `preview.view`) picks the column set,
+and the column picker then lists, and hides, only that view's columns:
+**All** (the default: every column above, unchanged); **each land unit** (listed under *Units with land*) by
+name, in the model's order, showing only what its rain is made of, side by
+side: *<station> raw*, *<station> adjusted to <unit> (× r)* with r to three
+decimals, *<unit> CHIRPS raw*, *<unit> CHIRPS bias-corrected (f(m) against
+<station>)*, *<unit> rain used* and *<unit> rain used from*, then the other
+series stored at the unit (a gauge with its m³/day; its CHIRPS series is the
+raw line already; the raw lines read their stored series, so the search, *Missing only*, *Flagged only* and the check flags work on them), with the twelve monthly factors, the station they were
+fitted against, or why the pairing was refused, listed above the table
+(`data-testid="preview-factors"`); and the groups **All rainfall stations**,
+**Average catchment rainfall** (when Settings assigns the catchment a station:
+its lines as for a unit, then the catchment's own stored rain) and **All
+flow** (every flow record with its m³/day, and Excluded from calibration),
+each offered only when it would show something. The raw station and raw
+CHIRPS lines (help `preview.areaStationRaw`, `preview.areaChirpsRaw`) are in
+an area's own view only: in All they are stored series columns already
+(issue #619's recommendation). A unit with no station a run reads has no
+derived lines yet (issue #613 slice 2), so its view says so and shows the
+series stored at it. The view is in the URL while the dialog is open
+(`preview=<all|unit:<id>|stations|catchment|flow>`, written with `replace`), so
+a reload or a link opens the dialog on it; closing drops the parameter, and
+reopening in the same visit keeps the view. A row's own **Preview** switches
+to All when the view doesn't hold that series. A view the project no longer
+offers (a deleted unit) reads as All, and the URL is rewritten to `preview=all`. `series-preview-unit.spec.ts` covers it.
+
+A flagged value says
 which check flagged it beside it (*12.4 · Outlier*), Rain used its source
 and Excluded its reason, in small text on screen, not only to a screen
 reader; the row stays 28 px. Every column header,
@@ -6229,7 +6317,7 @@ editors run one now and read the map's proposals, viewers read.
   automatically … → Data feeds** (in-page, `#data-feeds`), the Map's
   Getting started step and the Start sheet's data step
   (`?tab=series&rain=boundary#data-feeds`, and **Observed flow**
-  `?tab=series#data-feeds`), Model settings' Rain for each unit line (Flow generation)
+  `?tab=series#data-feeds`), Model settings' Rain for each unit line (Model selection for flow generation)
   (`?tab=series&rain=units#data-feeds`) and Runs & results' stub for a run
   with no forecast (`res-forecast`, `runs/missingPanel.ts`). Each lands
   through `landOnAnchor` (`help/anchor.ts`): once the lazy panel's heading
@@ -6299,7 +6387,16 @@ editors run one now and read the map's proposals, viewers read.
   "· quantile-mapped to our rain (fit of 2027-03-01)" (`calibrationNote` in
   `feeds.ts`, from the fetch's `last_meta.calibration`). It reads only our
   copy, so it never fails for ECMWF's sake: a copy with no issue of today or
-  yesterday leaves it waiting.
+  yesterday leaves it waiting. An **AgERA5 daily reference
+  evapotranspiration** feed (`agera5_et0`, issue #604 R5-E; Area: grid cells or a bounding box,
+  the boundary's proposal being CHIRPS's only; writing `evap_et0_mm`, which the form's hint says GR4J reads only
+  under a monthly PE row) adds its credit and where its days came from:
+  "AgERA5 (Copernicus), CC BY 4.0 · AgERA5 to 2026-09-30 · 10 newer days
+  from NASA POWER, CC BY 4.0" (`et0Note` in `feeds.ts`, from the fetch's
+  `last_meta`). It too reads only our copy and waits when the copy holds
+  neither product. A GR4J fit record shows the daily reference ET series it
+  ran on (Calibration → the fit record, "Daily reference ET series", once a
+  fit has recorded it), and says when it was replaced since.
 - **A version conflict** (issue #40 part c): when the feed's series holds
   another CHIRPS product or version, or an unrecorded one, the card says
   every fetch is refused and why ("The series holds CHIRPS v2.0 and this feed
@@ -6696,9 +6793,11 @@ other sections.
   `settings/EwrHeadlineField.svelte`, its heading `JUDGE_HEADING` in
   `settings/sections.ts`, helpers in `ewr/headline.ts`; issue #444: the client
   asked where to choose which EWR to use, at the top). Named **Judge results
-  by** until issue #586 R4-B (finding E14: judged by what?). The first panel
-  of the form, and the side index's first link, in a group of its own with no
-  name above Data & rain, so Find a setting finds it ("judged"; it had no
+  by** until issue #586 R4-B (finding E14: judged by what?). The second panel
+  of the form, right under **Model selection for flow generation** (it was
+  the first until issue #614, which put the model input above it: the judge
+  choice only reads results), and the side index's second link, in the lead
+  group with no name above Data & rain, so Find a setting finds it ("judged"; it had no
   link, and nothing to find it by). Its heading sits in a `.panel-head` as
   every other panel's, so the line under it keeps the same gap (it ran into
   the heading at 1440). One select,
@@ -6745,7 +6844,7 @@ other sections.
   from the Calibration page, § Calibration) land on
   that group once the tab's chunk has drawn it, held while the page settles
   (`holdAnchor`), with focus on its heading. The panels and cards that are
-  lazy chunks (`settings/lazySections.ts`: Rain gaps' cards, Flow generation's
+  lazy chunks (`settings/lazySections.ts`: Rain gaps' cards, Model selection for flow generation's
   station table, the evidence rule; on Calibration, Evaporation from the map)
   are waited for, then their heading (`landOnAnchor`, help/anchor.ts;
   a card's h4, as Units without a station's in its legend, counts), until the
@@ -6770,16 +6869,14 @@ other sections.
   wraps the whole tab. From a content width of 80rem (a 1440 px window) it is
   a **side index**: a sticky column on the left listing every panel by its
   heading, word for word, under its task, in page order (`settings/sections.ts`,
-  `settingsNavGroups`): **Data & rain** (Simulation period `#set-period`, Rain
+  `settingsNavGroups`): a lead group with no name (Model selection for flow
+  generation `#set-share`, the id it had as the Flow share panel, kept so its
+  links and notes still land, issue #553; then EWR the results are judged by
+  `#set-judge`; issue #614), **Data & rain** (Simulation period `#set-period`, Rain
   gaps `#set-rain`, Data quality `#set-quality`: its zero-rain and
   low-vs-CHIRPS limits change results, issue #173), **Demand & supply**
   (Demand `#set-demand`, Drought restrictions
-  `#set-restrict`, Reporting `#set-reporting`), **Runoff** (Flow generation
-  `#set-share`, the id it had as the Flow share panel, kept so its links and notes still land, issue #553;
-  Flow calibration, Calibration record, Fit the parameters and WR2012 check
-  moved to [Calibration](#calibration) in issue #586 round 3, sharing this
-  page's draft and save bar: `CALIBRATION_SETTINGS_SECTIONS`, whose Save
-  blockers `saveBlockers` lists after this page's), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
+  `#set-restrict`, Reporting `#set-reporting`), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
   tables `#set-reserve`), **Reading results** (Outcome matrix
   `#set-outcomes`, Seasonal outlook `#set-outlook`, Evidence
   `#set-evidence`: they change no result) and **Automatic runs**
@@ -6788,9 +6885,15 @@ other sections.
   own, moved to the Data page (`?tab=series#data-feeds`) and the Project page
   (`?tab=project#project-api-keys` and `#project-report-schedules`, [§
   Project](#project)) in issue #586 round 1; nothing follows the form now.
-  EWR the results are judged by (`#set-judge`) heads the form above them all,
-  as the client asked (issue #444), the menu's first link, in a group with no
-  name (issue #586 R4-B).
+  Model selection for flow generation (`#set-share`) heads the form above
+  them all, the client's main modelling choice (issue #614), with EWR the
+  results are judged by (`#set-judge`, issue #444) right under it, the
+  menu's first two links in a group with no name (issue #586 R4-B). The
+  **Runoff** group, the model selection's alone, went with that move. Flow
+  calibration, Calibration record, Fit the parameters and WR2012 check moved
+  to [Calibration](#calibration) in issue #586 round 3, sharing this page's
+  draft and save bar: `CALIBRATION_SETTINGS_SECTIONS`, whose Save blockers
+  `saveBlockers` lists after this page's.
   The panels sit in that order on the page, so the marked link moves down the
   column as you read. Beside the index, every 12-month row still fits (the
   month cells' padding is slim: twelve months and a year total at 1440 px,
@@ -6912,7 +7015,7 @@ other sections.
   shortened to the menu's words; the summary line under each says the rest);
   inside the long ones each sub-group is an `h3` in the order shown (in its
   fieldset's legend where it has one), so heading navigation reaches them:
-  under Flow generation its cards (Per unit: Each unit's rainfall station,
+  under Model selection for flow generation its cards (Per unit: Each unit's rainfall station,
   then the Flow share card; Units without a station an `h4` in its legend,
   issue #553); under Rain gaps its three cards, Gap-filling product (issue
   #604), CHIRPS gap filling and Flagged rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
@@ -6990,11 +7093,12 @@ two.
 - **The calibration panels are on the Calibration page** (issue #586
   round 3): Flow calibration, Calibration record, Fit the parameters and
   the WR2012 check, documented under [§ Calibration](#calibration), *Set up
-  the fit*. They sat here, after Flow generation, until then. They edit the
+  the fit*. They sat here, after Flow generation (now Model selection for
+  flow generation, at the top), until then. They edit the
   same draft as this page, so an edit here and one there are saved together
   from the one save bar, and a Save blocker on either page is listed on both,
   linked to its panel on its own page. Links on this page to them point
-  there directly: Flow generation's "Parameters not fitted for this method"
+  there directly: the model selection's "Parameters not fitted for this method"
   goes to `?tab=calibration#set-fit`, and Demand's **Evaporation from the
   map** to `?tab=calibration#set-evaporation`. Find a setting lists the four
   as "…, on Calibration" (`SETTINGS_ELSEWHERE`), by their names and their
@@ -7120,9 +7224,24 @@ two.
   have different fields, and it is the second list with water-year fields
   (the CHIRPS fit period is the first), short of the third caller that
   would justify a shared editor.
-- **Flow generation** (`#set-share`, issue #553 round 3; [model.md §2.4h,
-  §2.4i, §2.5](./model.md)): how natural flow is made, one choice, the
-  Runoff group's one panel. It replaced the Flow share panel and the
+- **Model selection for flow generation** (`#set-share`, issue #553 round 3;
+  [model.md §2.4h, §2.4i, §2.5](./model.md)): how natural flow is made, one
+  choice. Named **Flow generation** until issue #614, the Runoff group's one
+  panel, after Reporting; since then the **first panel** on the page, above
+  EWR the results are judged by, in the lead group with no name, at the
+  client's asking (the heading is their wording, in the app's sentence case;
+  their capitals were for emphasis, which the card's styling gives). It is
+  the page's **lead card** (`.panel.lead`, `data-lead`): a 2 px `--accent`
+  frame and its head tinted `--accent-soft`, both tokens with dark values,
+  and its two methods are **choice cards**, side by side where two 18rem
+  cards fit and one under the other on a phone, the picked one in the
+  accent (`:has(input:checked)`), each a radio still (`name="st-flowgen"`,
+  arrow keys move the pick) whose label covers the card, so a click anywhere
+  on it picks it. The explanations switch sits above it, since it has
+  explanations too. The engine's warnings name it "Model settings → Model
+  selection for flow generation"; an older run's "Model settings → Flow
+  generation" and "Settings → Flow generation" still link to it ([model.md §
+  Where a warning sends the reader](./model.md)). It replaced the Flow share panel and the
   "Runoff from each unit's own rain" checkbox, which the operator found read as
   two separate settings (2026-10-23). Under its line of values, a line that
   stays with the explanations off says where the runoff model's parameters
@@ -7130,9 +7249,9 @@ two.
   calibration." (`flowgen-where`, linking to `?tab=calibration#set-flow`), so
   the panel isn't taken for Calibration's Flow calibration (issue #586 E14).
   A radio pair, **How natural flow is made** ("Method" until E14), each
-  method's name followed by what it does in plain words, always shown and
-  its radio's description (`FLOW_METHODS` `short`, `flowGeneration.ts`; on a
-  phone the words sit under the name, lined up with it):
+  method's name with what it does in plain words under it, in its card,
+  always shown and its radio's description (`FLOW_METHODS` `short`,
+  `flowGeneration.ts`; the words lined up with the name, past the radio):
   **Fragmentation**, "one runoff run on the catchment rain, split between the
   units" (the default: `settings.unitRain` null, absent or `catchment`; GR4J
   once on the catchment rain, its flow split by the flow share) or **Per
@@ -7267,16 +7386,48 @@ two.
   result** and **Paste result** status lines and the **Expected format**
   under it; the source's own explanation is behind the switch too, while
   the table catchment area's hint keeps the modelled area visible. The file
-  load reads the DRM's own output: a `.tab` shows its last column, *Total Flows,
-  Maint.*, in Mm³ and converted to m³/s (÷ the month's days × 86 400 s,
-  February 28 days) in a preview with **Use these values** (which fills the TAB
-  flows and the table MAR from its `MAR =` line; under the percentile tables
-  the button is **Use its MAR only**, since a .tab and a .rul from one
-  determination go together) and Cancel; a `.rul` fills the three percentile
+  load reads the DRM's own output: a `.tab` shows **the whole file** (issue
+  #617, `settings/DrmTabFileView.svelte`, read only): its header lines
+  (generated, what the estimate is for, Total runoff, the REC, the
+  distribution type) as a list, **Annual flows** (every `label = value`
+  line, MAR, S.Dev., CV, Q75 and the rest) and the **IFR summary** (Total IFR,
+  Maint. Lowflow, Drought Lowflow, Maint. Highflow, Mm³/a and % MAR) as two
+  small tables side by side, and the **Monthly distributions** table, 12
+  months × the seven columns under the DRM's two headings (*Natural flows*:
+  Mean, SD, CV; *Modified flows (IFR)*: Low flows maint. and drought, High
+  flows maint., Total flows maint.) plus *Total flows, maint.* in m³/s (÷ the
+  month's days × 86 400 s, February 28 days). The column the TAB flows are is
+  marked in words under its heading, "used: the TAB flows" (a tint only as a
+  second cue); the eight-column table scrolls inside its own box on a phone,
+  its month column sticky. That view is the preview, with **Use these values**
+  (which fills the TAB flows and the table MAR from its `MAR =` line; under
+  the percentile tables the button is **Use its MAR only**, the MAR line marked
+  "used: the table MAR", since a .tab and a .rul from one determination go
+  together) and Cancel. The file used is kept with the source
+  (`ewrDailySource.tabFile`, parsed, display only) and shows after a reload:
+  under the TAB flows row in an open fold, **The .tab file:** "<name> · REC C ·
+  Total flows, maint. are the TAB flows"; under the percentile tables, when it
+  gave only the table MAR, folded closed after the tables as **The .tab this
+  table MAR came from:** (issue #617, open question 1). When the TAB row no
+  longer matches the file's converted column (typed or pasted since), a line
+  says "The TAB flows were changed after loading <file>; the file is shown as
+  loaded" (`drmFiles.ts tabFlowsEdited`, derived, not stored). A file kept
+  for its MAR only and then seen under the TAB method gave no TAB flow, so it
+  says "<file> gave only the table MAR", marks its MAR line, and offers **Use
+  its TAB flows**. A source saved
+  before the file was kept keeps its 12 values and says "These TAB flows were
+  saved without their .tab file. Load the .tab again to see the whole file."
+  A `.rul` fills the three percentile
   tables (the natural duration curves, the total Reserve and the Reserve flows
   without high flows, converted from Mm³ a month when its unit line says so;
   a file without the last block empties that table, and says so when it is
-  the one the daily EWR reads), asking first over tables already there. A file never changes **Daily EWR from**: a `.rul` loaded under the
+  the one the daily EWR reads), asking first over tables already there, and
+  keeps its header (`ewrDailySource.rulFile`: name, date, unit and REC), said
+  above the three tables: "From <file>, generated …, in m³/s · Recommended
+  ecological category (REC) C." The REC shows there even when the project has
+  no outlet rule table. Typing or pasting over a percentile table after that
+  marks the header `edited`, and the line ends "; the tables were changed
+  since". A file never changes **Daily EWR from**: a `.rul` loaded under the
   TAB file fills the percentile tables and says the daily EWR still comes
   from the DRM TAB file, with a **Use the percentile tables** button to switch
   on the person's say (`ewrDailySource.ts rulLoad`); a `.tab` under the
@@ -7354,7 +7505,27 @@ two.
   90, 99; changing them keeps each value under its point and leaves a new
   point blank). Then the **EWR** grid (Oct … Sep rows × one input per point,
   each labelled "EWR, Oct, 10 %, Mm³"), and the **Natural flow** grid when the
-  table is the natural source. The explanations under the fields are behind
+  table is the natural source. The outlet's table, while the daily EWR reads
+  the percentile tables (shown above it), holds its grids in a **Grids:** fold
+  (issue #617, `ewrRules.ts dailyRepeat`): when they equal the daily EWR's .rul
+  tables (the DRM's ten % points, a total-flow table, the EWR = the total
+  Reserve, the low flows = the Reserve flows without high flows and the
+  natural flows, when the table reads its own, = the natural percentiles, in
+  m³/s to a relative 1e-9 after converting a Mm³ table) the fold is closed,
+  its line "the daily EWR's .rul tables · EWR, low flows", with a line
+  linking to **The daily EWR at the outlet**;
+  when they differ it is open, its line "not the daily EWR's tables", under
+  "These grids differ from the tables of The daily EWR at the outlet above:
+  monthly compliance reads these, the daily EWR those." With the percentile
+  method picked but no Reserve table entered yet there is nothing to compare,
+  and the grids show as before. The two stay separate
+  inputs (a gazetted table beside a desktop .rul is a legitimate setup), so
+  only the display changes: the site, source, kind, REC, covers, Table
+  settings, high flows and notes stay shown, and opening the fold edits the
+  grids as before. The fold's open state is set once per table and after a
+  file load, never while a grid is typed in, so an edit that makes the grids
+  differ keeps the field in place. A gauge's table, and every table when the
+  daily EWR isn't the percentile tables, is unchanged. The explanations under the fields are behind
   the explain switch; a problem replaces its field's line and stays visible.
   **Paste…** opens the shared paste dialog (`ewrPaste.ts
   planRuleTablePaste`, the same `parseGrid` and `applyPaste` as the old paste
@@ -7725,7 +7896,7 @@ dialog (`settings/MonthlyPasteDialog.svelte`) and fills only its own row:
 Flow calibration's pan coefficients here (**Paste monthly pan
 coefficients**), Demand's A-pan on Model settings (**Paste monthly A-pan
 evaporation**). Their links to Model settings' panels say so ("Demand, on
-Model settings"; the areal rainfall note: "When Flow generation on Model
+Model settings"; the areal rainfall note: "When Model selection for flow generation on Model
 settings runs each unit on its own rain (Per unit)…", issue #586 E14), and Flow
 calibration's line points at *How the shown run fits* for NSE and PBIAS.
 
@@ -7738,7 +7909,7 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   line is one line here (cut with an ellipsis; the whole text is its link's
   name and title), so a changed field's cell is as tall as its neighbours'.
   **Rain into GR4J**: the areal rainfall correction, one switch while off
-  (rain for each unit and the MAP-grid proposal moved to Flow generation →
+  (rain for each unit and the MAP-grid proposal moved to Model selection for flow generation →
   Per unit, issue #553).
   **GR4J potential evaporation**: the choice, the annual figure and the
   monthly row; under the pan row, **Fill or edit the row: preset, FAO-56
@@ -7782,15 +7953,15 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     of range or a blank source blocks Save, with the message beside the
     source and in the save bar. The fit record lists the correction it ran
     under ("Areal rainfall correction"), and the report's inputs table
-    shows it. Under Flow generation's Per unit, a note under it (shown even with
-    the explanations off, linking to Flow generation) says it applies only to the units that fall back
+    shows it. Under Model selection for flow generation's Per unit, a note under it (shown even with
+    the explanations off, linking to Model selection for flow generation) says it applies only to the units that fall back
     to the catchment rain, and the report's inputs table adds a "Rain for
     each unit (GR4J rain)" row (`report/inputs.ts`).
     **Units without a station** (`settings.unitRain`, issue #482,
     `settings/UnitRainFields.svelte`, its own chunk, helpers in
     `settings/unitRain.ts`; [model.md §2.4h](./model.md)) was this card's
     "Rain for each unit" until issue #553 round 3 moved it, without its
-    checkbox, to Flow generation → Per unit (below): what a land unit with no
+    checkbox, to Model selection for flow generation → Per unit (below): what a land unit with no
     rainfall station runs on, the rule from before stations. A line says how many units with
     land have a MAP ("1 of 2 units with land has a MAP."), with a link that
     opens Data feeds' Rain for each unit on the Data page
@@ -7826,7 +7997,7 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     reference unit the model no longer has with land says so under the
     field (runs ignore the reference until another is picked). The Settings
     tab checks it itself (`unitRainFormError`), so Save is blocked before the
-    chunk has loaded; the problem is listed against Flow generation.
+    chunk has loaded; the problem is listed against Model selection for flow generation.
     Under Per unit, editors also get **MAP from the grid**
     (`settings/UnitMapProposal.svelte`, its own chunk, helpers in
     `settings/unitMapProposal.ts`; `GET`/`POST …/map/unit-map`, [maps.md § MAP
@@ -11655,7 +11826,7 @@ March") is kept against what it is about.
     (the run notes stay the modeller's one explanation; these are comments
     from anyone on the team, and the line under the heading says so);
   - in the head of each **Settings** group (Demand, Flow calibration, Rain
-    gaps, Calibration record, Fit the parameters, WR2012 check, Flow generation (keyed `share`, its Flow share name before issue #553), EWR, Reserve rule
+    gaps, Calibration record, Fit the parameters, WR2012 check, Model selection for flow generation (keyed `share`, its Flow share name before issue #553, Flow generation before issue #614), EWR, Reserve rule
     tables, Drought restrictions, Reporting, Simulation period, Data quality,
     Outcome matrix, Seasonal outlook, Evidence, Automatic runs), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`),
     always last in the head, after the panel's own action (**Propose from the
@@ -12887,6 +13058,23 @@ published.
   `axisPlacement`; `farm-view.spec.ts` measures the letters' gaps at 320 px).
   A farm with no dam: its dam page says "… has no dam in the model." and
   links back, with no estimate line (there is no figure for it to precede).
+  **Your dam, seen from space** (issue #604 R5-B, `farm/DamObservedCard.svelte`,
+  wording in `farm/damObserved.ts`, section `farm.damPage`) follows the dam
+  page's forecast card, just before "Where these figures come from", only when
+  the farm's dam is drawn as an outline on the Map
+  (`GET …/farm/:nodeId/dam-observed`, api.md § Farm): "On 10 Dec 2021 a
+  satellite saw water over 2.0 ha of the 5.0 ha your dam covers when full."
+  (area against area, never a percentage, since the page's big figure is the
+  dam's % full by volume; the newest view at least 90 % clear, by the comparison's
+  own rule; the full area from the farm's own node: survey curve, entered or
+  estimated; past it, "…over 4.4 ha, more than the 4.0 ha your dam covers when
+  full."; without one, the sentence stops at the area), or "No clear view of
+  your dam from space yet. …"; then "A satellite sees the water’s surface, not
+  how deep it is: a check on the model, not a measurement of the water in your
+  dam." and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0." A
+  failed load is one line asking to check the connection and reload, as the
+  map card's. Nothing of a neighbour's dam reaches it (the route names the
+  farm, and 249's farmer policies are the second layer).
 - **The estimate line** (`farm/EstimateNote.svelte`, `role="note"`): "These
   figures are worked out by a computer model of the catchment. They are
   estimates, not measurements or instructions, and they can be wrong. Only a

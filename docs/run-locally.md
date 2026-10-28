@@ -22,7 +22,7 @@ pnpm setup
 This runs `pnpm install`, then `pnpm dev:db:up` (Postgres 17 on
 **127.0.0.1:5434**, waiting until it is healthy), then `pnpm dev:db:migrate`,
 then the synthetic reference data (`pnpm import:quaternaries`,
-`import:gauge-stations`, `import:dam-register`, `import:land-cover`, `import:evaporation`,
+`import:gauge-stations`, `import:dam-register`, `import:land-cover`, `import:crop-types`, `import:evaporation`,
 `import:map-grid`, `import:rivers`, `import:gazetteer`; see
 [Map](#map)), then `pnpm dev:mail:up` (Mailpit, see [Email](#email)), then `pnpm dev:s3:up`
 (MinIO, for report PDFs and evidence packs' reproduction bundles, see
@@ -474,6 +474,45 @@ The series appears on the Data tab, and History shows the merge by
 `API key “<name>”`. Nothing sensitive is committed: the key lives only in
 your gitignored file.
 
+## Dam observations
+
+What satellites saw of each traced dam (issue #604 R5,
+[architecture.md § Dam observations](./architecture.md#dam-observations)),
+offline: the committed synthetic Waterbodies polygons and series, no
+network.
+
+```bash
+pnpm import:waterbodies   # the synthetic polygons (pnpm setup already ran it)
+pnpm seed:examples        # Sandspruit's traced dams, if not seeded yet
+pnpm dev:dams:run         # tick (match, wanted list) → Waterbodies pass → WOfS pass (both fixtures) → tick (load)
+```
+
+It prints what each step did; Sandspruit's dams match all but Grootdraai
+(merged: its waterbody runs downstream) and Klipdrift (none), and the
+matched ones get a series ending 2023-09-17, as the public series do. The
+handover goes through `MIRROR_URL` when it names a directory of its own,
+else a scratch directory under the system's temp directory, never the
+committed `backend/fixtures/mirror/`. Run it again within the week and
+every uid is fresh (asked within 7 days; a failed one waits a day): nothing
+is asked. A week on, the pass asks with each file's ETag and gets 304s.
+
+The WOfS pass reads invented scenes (`backend/fixtures/feeds/wofs-sample.json`,
+`backend/src/dams/observed/wofs/fixtures.ts`) for every traced dam: about
+the last 400 days, a scene every 8 days or so, some dates under cloud, so
+each dam gets a row per date with its wet area and the share seen. Run it
+again the same UTC day and every dam is fresh (its newest scenes checked
+today, as production's hourly runs do once a day): nothing is asked. With
+no time limit here, the first run already read each dam's history back to
+2013 (the fixture holds none that old, so those searches come back empty).
+
+The worker's tick does the same each time it runs only with
+`DAM_OBSERVATIONS=on` and a `MIRROR_URL` of its own, in a gitignored
+`backend/.env.development.local`; it is off by default. Your own clip of
+the real polygons loads with
+`pnpm import:waterbodies <file.geojson> --dataset <label> [--bbox w,s,e,n]`
+([maps.md § Waterbodies](./maps.md#waterbodies)); `FEED_SOURCE=live` in the
+same file lets `pnpm dev:dams:run` read DE Africa's real series.
+
 ## Reports
 
 The report page's **Generate PDF / Email me the PDF** and Project →
@@ -572,6 +611,7 @@ pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it
 pnpm import:rivers          # the synthetic river network (pnpm setup runs it): what Map → Layers → River network draws and proposes as rivers
 pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB download; needs ogr2ogr, sudo dnf install gdal, or docker), cut to South Africa and loaded as HydroRIVERS-v10
 pnpm import:land-cover      # the synthetic cropland grid (pnpm setup runs it): what a unit's planted-areas drawer (From land cover) sums its parcels from
+pnpm import:crop-types      # the synthetic orchard and vine grid (pnpm setup runs it): the drawer's Orchards and vines; <current.tif> --dataset <label> [--baseline <earlier.tif> --baseline-version <name>] loads your own SANLC for local evaluation (production refuses it until its terms are recorded; maps.md § Orchards and vines from SANLC)
 pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Calibration → Evaporation from the map averages over the boundary
 pnpm import:map-grid        # the synthetic MAP grid (pnpm setup runs it): what Map → Layers → MAP grid draws
                             # or a real one: <grid.asc> --dataset <label> --source "…" [--bbox w,s,e,n]; add --out <file.json.gz> to write

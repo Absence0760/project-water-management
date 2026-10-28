@@ -14,8 +14,9 @@
 //
 // Both carry attrs.region {w,s,e,n} and attrs.grid {origin {lat, lon}, step},
 // the step the product's (grid.ts PRODUCT_GRIDS): an array on another grid is
-// refused. era5l's year axis starts in 1950, and its array may carry
-// attrs.attribution, Copernicus's credit (a string); no other array may.
+// refused. era5l's year axis starts in 1950 and agera5_et0's in 1979; those
+// two and power_et0 may carry attrs.attribution, their source's credit (a
+// string); no other array may.
 import type { AbsolutePath } from '@zarrita/storage';
 import * as zarr from 'zarrita';
 import { FeedFormatError } from '../feeds/errors.js';
@@ -40,10 +41,12 @@ export const FINALS_FIRST_YEAR = 1981;
 
 /** The products each layout holds, as the store's paths name them. */
 export type ChcFinalsProduct = 'rnl' | 'sat';
-export type FinalsProduct = ChcFinalsProduct | 'era5l';
-export type DailyProduct = 'prelim' | 'imerg_late' | `gefs/${string}`;
+export type FinalsProduct = ChcFinalsProduct | 'era5l' | 'agera5_et0';
+export type DailyProduct = 'prelim' | 'imerg_late' | 'power_et0' | `gefs/${string}`;
 export type MirrorProduct = FinalsProduct | DailyProduct;
-export const PRODUCT_RE = /^(rnl|sat|prelim|era5l|imerg_late|gefs\/\d{4}-\d{2}-\d{2})$/;
+export const PRODUCT_RE = /^(rnl|sat|prelim|era5l|imerg_late|agera5_et0|power_et0|gefs\/\d{4}-\d{2}-\d{2})$/;
+/** The products whose arrays carry their source's credit as attrs.attribution (the ingest writes it beside the values). */
+export const ATTRIBUTED_PRODUCTS: readonly string[] = ['era5l', 'agera5_et0', 'power_et0'];
 
 /** The mirror's array is missing or isn't laid out as D2 says. */
 export class MirrorFormatError extends FeedFormatError {}
@@ -106,8 +109,8 @@ function checkLayout(arr: MirrorArray, product: string, kind: 'finals' | 'daily'
 	const fill = arr.fillValue;
 	if (typeof fill !== 'number' || !Number.isNaN(fill)) throw bad('fill value');
 	const a = arr.attrs as { region?: Region; grid?: MirrorGrid; attribution?: unknown };
-	// era5l's ingest keeps Copernicus's credit beside the values (ingest/era5land.py ATTRIBUTION); no other product carries one.
-	if ('attribution' in a && (product !== 'era5l' || typeof a.attribution !== 'string' || !a.attribution)) throw bad('attribution');
+	// era5l's and the ET₀ products' ingest keeps the source's credit beside the values (ingest/era5land.py ATTRIBUTION); no other product carries one.
+	if ('attribution' in a && (!ATTRIBUTED_PRODUCTS.includes(product) || typeof a.attribution !== 'string' || !a.attribution)) throw bad('attribution');
 	const r = a.region;
 	if (!r || ![r.w, r.s, r.e, r.n].every(Number.isFinite) || r.w >= r.e || r.s >= r.n) throw bad('region');
 	const g = gridOf(r, step);
@@ -129,7 +132,9 @@ export async function openFinals(store: MirrorStore, product: FinalsProduct): Pr
 	const firstYear = (arr.attrs as { firstYear?: unknown }).firstYear;
 	if (!Number.isInteger(firstYear)) throw new MirrorFormatError(`the rain data copy's ${product} array has no firstYear`);
 	// era5l's year axis starts with its record (1950); a CHIRPS finals array's start is its own attribute.
-	if (product === 'era5l' && firstYear !== PRODUCT_GRIDS.era5l.firstYear) throw new MirrorFormatError(`the rain data copy's era5l array starts in ${String(firstYear)}, not ${PRODUCT_GRIDS.era5l.firstYear}`);
+	if ((product === 'era5l' || product === 'agera5_et0') && firstYear !== PRODUCT_GRIDS[product].firstYear) {
+		throw new MirrorFormatError(`the rain data copy's ${product} array starts in ${String(firstYear)}, not ${PRODUCT_GRIDS[product].firstYear}`);
+	}
 	return { kind: 'finals', arr, firstYear: firstYear as number, region, grid };
 }
 

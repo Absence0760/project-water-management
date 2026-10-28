@@ -76,6 +76,35 @@ describe('settings.ewrDailySource', () => {
 		expect(total.body.run.summary.catchment.outletEwr.reserveTable).toBeUndefined();
 	});
 
+	it('keeps the parsed .tab and the .rul header with the source (issue #617), and refuses a malformed one', async () => {
+		const owner = await signUp('DailyEwrTabFile');
+		const id = await project(owner);
+		// Invented numbers, the shape the Settings form stores.
+		const tabFile = {
+			name: 'synthetic.tab',
+			generated: '01/01/2026',
+			title: 'SYNTHETIC',
+			runoff: null,
+			annual: [{ label: 'MAR', value: 49.8 }],
+			category: 'C',
+			ifr: [{ label: 'Total IFR', mcm: 23.49, pctMar: 47.17 }],
+			distributionType: 'Synthetic',
+			monthlyMcm: Array.from({ length: 12 }, () => [3.6, 2.88, 0.8, 1.26, 0.18, 0, 1.26])
+		};
+		const rulFile = { name: 'synthetic.rul', generated: null, unit: 'mcm', category: 'C' };
+		const set = await owner.call('PATCH', `/projects/${id}`, { settings: { ewrDailySource: { ...tab, tabFile, rulFile } } });
+		expect(set.status, JSON.stringify(set.body)).toBe(200);
+		expect((await owner.call('GET', `/projects/${id}`)).body.project.settings.ewrDailySource).toEqual({ ...tab, tabFile, rulFile });
+		const refused = await owner.call('PATCH', `/projects/${id}`, { settings: { ewrDailySource: { ...tab, tabFile: { ...tabFile, monthlyMcm: [[1]] } } } });
+		expect(refused.status).toBe(400);
+		expect(JSON.stringify(refused.body)).toContain('daily EWR source: tabFile:');
+		expect(JSON.stringify(refused.body)).not.toMatch(/violates|constraint|syntax error/i);
+		const unknown = await owner.call('PATCH', `/projects/${id}`, { settings: { ewrDailySource: { ...tab, tabFile: { ...tabFile, raw: 'text' } } } });
+		expect(unknown.status).toBe(400);
+		// The stored source is unchanged by the refusals.
+		expect((await owner.call('GET', `/projects/${id}`)).body.project.settings.ewrDailySource).toEqual({ ...tab, tabFile, rulFile });
+	});
+
 	it('refuses an unusable source with the field named, and a patch replaces the source whole', async () => {
 		const owner = await signUp('DailyEwrChecks');
 		const id = await project(owner);

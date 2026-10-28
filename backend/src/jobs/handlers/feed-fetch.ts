@@ -58,6 +58,7 @@ import { fetchFromMirror } from '../../feeds/fromMirror.js';
 import { fillGapProducts } from '../../feeds/gapRainFill.js';
 import { fetchGefsFromMirror } from '../../feeds/fromMirrorGefs.js';
 import { fetchEcmwfFromMirror } from '../../feeds/fromMirrorEcmwf.js';
+import { fetchEt0FromMirror } from '../../feeds/fromMirrorEt0.js';
 import { ingestResult } from '../../feeds/ingest.js';
 import { chirpsSource } from '../../mirror/source.js';
 import { dwsSource, fetchFromGaugeRecord } from '../../feeds/fromGaugeRecord.js';
@@ -106,6 +107,11 @@ export const feedFetchHandler = defineHandler({
 		// ECMWF ENS (issue #604 R4-C): only ever from the copy, whatever CHIRPS_SOURCE says (there is no per-feed path).
 		if (feed.source === 'ecmwf_ens') {
 			await fetchEcmwfFromMirror(db, feed, window, { jobId: job.id, today });
+			return;
+		}
+		// Daily reference ET (issue #604 R5-E): only ever from the copy (AgERA5, NASA POWER on its newest days).
+		if (feed.source === 'agera5_et0') {
+			await fetchEt0FromMirror(db, feed, window, { jobId: job.id, today });
 			return;
 		}
 		// DWS from our gauge record store (issue #604 R3-B).

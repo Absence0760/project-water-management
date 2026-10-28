@@ -8,7 +8,8 @@
 // and can't be issued. Synthetic catchment and invented rule table.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createRun, nominateRun, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { addMember, createRun, nominateRun, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { plantDamObservations } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { box } from '../support/map.ts';
@@ -267,4 +268,59 @@ test('a run that isn’t the nomination is refused; a baseline-assumption applic
 	const checks = page.getByTestId('evidence-checks');
 	await expect(checks).toContainText('Some checks stop this report being issued as a pack.');
 	await expect(checks).toContainText('No baseline assumption is changed (stops issue)');
+});
+
+test('an applicant’s application report shows § 7, the observed wet days of their dam; a team application’s and baseline evidence don’t', async ({ page, owner, signIn }) => {
+	void owner;
+	const { project, baseline, upper } = await seed(page, 'Evidence wet days');
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId: baseline } })).status()).toBe(201);
+
+	// The applicant's dam on Upper farm, with invented WOfS rows in the baseline's period, loaded as the worker does: wet, dry, inconclusive.
+	const traced = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, {
+		data: { kind: 'dam', name: 'Upper farm dam', nodeId: upper, geometry: { type: 'Polygon', coordinates: [box(21.31, -33.69, 0.002)] } }
+	});
+	expect(traced.status()).toBe(201);
+	const start = ((await (await page.request.get(`${API_URL}/projects/${project.id}/runs/${baseline}/evidence-report`)).json()) as { report: { identity: { baseline: { startDate: string } } } }).report.identity
+		.baseline.startDate;
+	const day = (n: number) => new Date(Date.parse(`${start}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+	await plantDamObservations(((await traced.json()) as { feature: { id: string } }).feature.id, { status: 'none' }, [
+		{ date: day(5), wetAreaM2: 2700, pctObserved: 70 },
+		{ date: day(13), wetAreaM2: 0, pctObserved: 100 },
+		{ date: day(21), wetAreaM2: 900, pctObserved: 100 }
+	]);
+
+	// The applicant's application on Upper farm, run and submitted.
+	const applicant = await signIn('Wet days applicant');
+	await addMember(page.request, project.id, applicant.user.email, 'contributor');
+	expect((await page.request.put(`${API_URL}/projects/${project.id}/farmers/${applicant.user.id}`, { data: { nodeIds: [upper] } })).status()).toBe(200);
+	const created = await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios`, {
+		data: { name: 'Upper dam 200 000 m³', baseRunId: baseline, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000 }] }
+	});
+	expect(created.status(), await created.text()).toBe(201);
+	const scenarioId = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+	const ran = await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/runs`, { data: {} });
+	expect(ran.status(), await ran.text()).toBe(201);
+	const app = ((await ran.json()) as { run: { id: string } }).run.id;
+	expect((await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/submit`, { data: {} })).status()).toBe(200);
+
+	await page.goto(`/projects/${project.id}/report?run=${app}&evidence`);
+	await ready(page);
+	await expect(page.getByTestId('evidence-report')).toHaveAttribute('data-evidence-mode', 'application');
+	await expect(page.getByRole('heading', { level: 2, name: '7. Observed wet days' })).toBeVisible();
+	const table = page.getByTestId('evidence-dam-observations');
+	await expect(table.getByRole('columnheader')).toHaveText(['Dam', 'Dates observed', 'Wet', 'Dry', 'Inconclusive', 'Dates span']);
+	await expect(table.getByRole('row').nth(1).getByRole('cell')).toHaveText(['3', '1', '1', '1', /to/]);
+	await expect(table.getByRole('rowheader')).toHaveText(['Upper farm dam']);
+	await expect(page.getByTestId('evidence-dam-observations-credit')).toHaveText('Source: Digital Earth Africa WOfS, CC BY 4.0, summed inside the dams’ traced outlines by this app.');
+	await expectNoViolations(page);
+
+	// A team application on the same unit, and the baseline's own evidence: no § 7.
+	const team = await scenarioRun(page, project.id, baseline, upper, 'Team dam', true);
+	for (const runId of [team.runId, baseline]) {
+		await page.goto(`/projects/${project.id}/report?run=${runId}&evidence`);
+		await ready(page);
+		await expect(page.getByTestId('evidence-report')).toBeVisible();
+		await expect(page.getByRole('heading', { level: 2, name: '7. Observed wet days' })).toHaveCount(0);
+		await expect(page.getByTestId('evidence-dam-observations')).toHaveCount(0);
+	}
 });

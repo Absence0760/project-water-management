@@ -22,7 +22,7 @@ describe('parseCheckRequest', () => {
 		for (const check of ['nope', 'UNIT-RAIN-REFERENCE-RUNS', '', 'toString', '__proto__', 'constructor', 'hasOwnProperty']) {
 			const [c, reason] = code(() => parseCheckRequest({ check }));
 			expect([check, c]).toEqual([check, 'refused']);
-			expect(reason).toBe('check must be one of unit-rain-reference-runs, pre-213-cap-runs, series-pick-moves, authority-grandfathered, reference-provenance');
+			expect(reason).toBe('check must be one of unit-rain-reference-runs, pre-213-cap-runs, series-pick-moves, authority-grandfathered, reference-provenance, dws-coverage');
 		}
 	});
 
@@ -60,9 +60,11 @@ describe('the registry', () => {
 		// project data (a gauge or feed's label), not personal data, and the
 		// operator needs them to tell an owner which series a run will read.
 		// The reference datasets' provenance: a file's hash, version and dates, no project or person in it.
+		// DWS coverage: a public river gauge code, dates and day counts, no project or person in it.
 		const names: Record<string, readonly string[]> = {
 			'series-pick-moves': ['was', 'will'],
-			'reference-provenance': ['dataset', 'source_sha256', 'upstream_version', 'upstream_etag', 'upstream_last_modified', 'originals', 'loaded_at']
+			'reference-provenance': ['dataset', 'source_sha256', 'upstream_version', 'upstream_etag', 'upstream_last_modified', 'originals', 'loaded_at'],
+			'dws-coverage': ['station', 'needed_from', 'covered_from', 'covered_to', 'hole_days', 'first_hole', 'days_behind']
 		};
 		for (const [name, c] of Object.entries(CHECKS)) {
 			const extra = names[name] ?? [];

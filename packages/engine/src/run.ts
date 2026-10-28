@@ -312,7 +312,7 @@ function runNetworkIn(
 		...(resume ? { pinned: resume.pinned.fits, resumedFill: { kinds: resume.flowFillHistory ?? [] } } : {}),
 		...(capturing ? { captureFits: true } : {})
 	});
-	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill, gapRain } = prepared;
+	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, et0Daily, flowFill, gapRain } = prepared;
 	// Every later reader of the input sees a record's own missing periods as gaps (engine ≥ 1.102.0, ./recordPeriods.ts).
 	if (series !== input.series) input = { ...input, series };
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
@@ -1306,6 +1306,7 @@ function runNetworkIn(
 			rainSource: rainSource?.info ?? null,
 			rainAccumulation: accumulation?.info ?? null,
 			...(apanDaily ? { apanDaily } : {}),
+			...(et0Daily ? { et0Daily } : {}),
 			...(assurance ? { supplyAssurance: assurance } : {}),
 			warnings,
 			// Stable codes for the warnings that have one (engine ≥ 1.102.0, ./warningCodes.ts, issue #611).

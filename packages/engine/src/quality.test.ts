@@ -603,6 +603,12 @@ describe('data-quality limits as settings (engine 1.20.0, issue #66)', () => {
 		expect(checkSeries('rain_catchment_mm', flat(5, 3), { ...dq, flatlineRainDays: 6 })).toEqual([]);
 		expect(checkSeries('evap_apan_mm', flat(6, 3), { ...dq, flatlineEvapDays: 6 }).map((c) => c.check)).toEqual(['flatline']);
 		expect(checkSeries('evap_apan_mm', flat(6, 3))).toEqual([]);
+		// The daily reference ET (issue #604 R5-E) takes the evaporation limit, and says what a negative day falls back to.
+		expect(checkSeries('evap_et0_mm', flat(7, 3)).map((c) => c.check)).toEqual(['flatline']);
+		expect(checkSeries('evap_et0_mm', flat(6, 3))).toEqual([]);
+		expect(checkSeries('evap_et0_mm', flat(6, 3), { ...dq, flatlineEvapDays: 6 }).map((c) => c.check)).toEqual(['flatline']);
+		const neg = checkSeries('evap_et0_mm', { startDate: '2020-01-01', values: [3, -1, 4] }).find((c) => c.check === 'negative')!;
+		expect(neg.text).toMatch(/^Reference evapotranspiration \(daily\): .*the run uses the monthly PE row on these days/);
 		// Flow: the floor for an unknown resolution, the cap for zero flow.
 		expect(flowFlatlineMinDays(1, null, { flatlineFlowMinDays: 10, flatlineFlowMaxDays: 40 })).toBe(10);
 		expect(flowFlatlineMinDays(0, 0.001, { flatlineFlowMinDays: 10, flatlineFlowMaxDays: 40 })).toBe(40);

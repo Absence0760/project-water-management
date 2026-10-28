@@ -282,7 +282,9 @@ export const FLATLINE_MIN_DAYS: Partial<Record<SeriesKind, number>> = {
 	flow_logger_m3s: 14,
 	flow_reference_m3s: 14,
 	// A week of one value is how a monthly mean pasted into a daily pan record shows (issue #45).
-	evap_apan_mm: 7
+	evap_apan_mm: 7,
+	// The same for a daily reference ET record (issue #604 R5-E): a gridded product never repeats a week of one value.
+	evap_et0_mm: 7
 };
 /**
  * Flow flat-lines by the record's resolution (engine ≥ 1.12.0, issue #46
@@ -306,7 +308,7 @@ export const FLATLINE_FLOW_MAX_DAYS = 90;
 /** The flat-line limit for a kind under the settings (FLATLINE_MIN_DAYS's without them); undefined for a kind not checked. */
 export function flatlineDaysOf(kind: SeriesKind, dq: DataQualitySettings = DEFAULT_DQ): number | undefined {
 	if (!FLATLINE_MIN_DAYS[kind]) return undefined;
-	return kind.startsWith('flow_') ? dq.flatlineFlowMinDays : kind === 'evap_apan_mm' ? dq.flatlineEvapDays : dq.flatlineRainDays;
+	return kind.startsWith('flow_') ? dq.flatlineFlowMinDays : kind === 'evap_apan_mm' || kind === 'evap_et0_mm' ? dq.flatlineEvapDays : dq.flatlineRainDays;
 }
 /** Differences at or below this (m³/s) are float noise, not the record's resolution. */
 const RESOLUTION_NOISE = 1e-9;
@@ -353,7 +355,8 @@ const SERIES_NAME: Record<SeriesKind, string> = {
 	flow_observed_m3s: 'Observed flow',
 	flow_logger_m3s: 'Logger flow',
 	flow_reference_m3s: 'Reference gauge (other catchment)',
-	evap_apan_mm: 'A-pan evaporation (daily)'
+	evap_apan_mm: 'A-pan evaporation (daily)',
+	evap_et0_mm: 'Reference evapotranspiration (daily)'
 };
 const unitOf = (k: SeriesKind) => (k.endsWith('_mm') ? 'mm' : 'm³/s');
 /**
@@ -488,7 +491,9 @@ export function checkSeries(kind: SeriesKind, s: DailySeries, dq: DataQualitySet
 			text:
 				kind === 'evap_apan_mm'
 					? `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Evaporation can't be negative; the run uses the monthly A-pan mean on these days`
-					: kind.startsWith('flow_')
+					: kind === 'evap_et0_mm'
+						? `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Evaporation can't be negative; the run uses the monthly PE row on these days`
+						: kind.startsWith('flow_')
 						? `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Flow can't be negative (−999 and −1 are common "no reading" placeholders); the run treats these days as missing, so the calibration statistics, the fit and the plausibility checks skip them`
 						: `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Rain and flow can't be negative; the gauge-vs-logger comparison skips these days`
 		});

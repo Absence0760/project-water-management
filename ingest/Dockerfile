@@ -10,13 +10,13 @@
 #   docker buildx imagetools inspect public.ecr.aws/lambda/python:3.14-arm64
 # and put the tag and the new digest here together. Dependabot's docker entry
 # for /ingest (.github/dependabot.yml) proposes the same move.
-FROM public.ecr.aws/lambda/python:3.14-arm64@sha256:9b353a9c5d361d322f58ce176f1322deb983ecd8da367a52256a20e1ccc7ad06
+FROM public.ecr.aws/lambda/python:3.14-arm64@sha256:3cb99eff2a8eda5b7f7a160d52e42a996ad2236c40e27243778c1c4baea9b3c6
 
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
 RUN pip install --no-cache-dir --require-hashes -r ${LAMBDA_TASK_ROOT}/requirements.txt
 
 # The job's modules only: no tests, no fixtures (production runs FEED_SOURCE=live).
-COPY chcnetcdf.py chirps_final.py cloudwatch.py ecmwf.py era5land.py era5request.py grid.py imerg.py lambda_handler.py lease.py manifest.py polite.py zarrstore.py ${LAMBDA_TASK_ROOT}/
+COPY agera5.py agera5request.py cdsjob.py chcnetcdf.py chirps_final.py cloudwatch.py ecmwf.py era5land.py era5request.py fao56.py grid.py imerg.py lambda_handler.py lease.py manifest.py nasapower.py polite.py zarrstore.py ${LAMBDA_TASK_ROOT}/
 
 # Not root (Trivy DS-0002). Lambda runs the image as its own unprivileged
 # user anyway; this covers a local `docker run`. 65534 is nobody: numeric, so

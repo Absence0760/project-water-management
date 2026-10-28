@@ -10,6 +10,10 @@
 	proposals). Use (editors) asks first, then saves that one value to the model,
 	as it stands with no discount, as a revision citing the dataset. Nothing is
 	applied by itself.
+	Beside it, when a crop-type grid is loaded (SANLC, issue #604 R5-D; docs/maps.md
+	§ Orchards and vines from SANLC; never in production until SANLC's terms are
+	recorded), each parcel's orchards and vines, offered as areas too, and what is
+	new since the earlier edition, shown for a licence applicant and never offered.
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
@@ -20,7 +24,7 @@
 	import ProposalSource from '#lib/components/proposals/ProposalSource.svelte';
 	import ProposalSynthetic from '#lib/components/proposals/ProposalSynthetic.svelte';
 	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
-	import { areaChoices, CAUTION, confirmWords, cropRows, fmtHa, type CropRow } from './croplandProposals';
+	import { areaChoices, CAUTION, confirmWords, CROP_TYPE_CAUTION, cropRows, fmtHa, newPlantingText, type CropRow } from './croplandProposals';
 
 	let {
 		projectId,
@@ -91,6 +95,12 @@
 	// Largest cultivated area first.
 	const parcels = $derived(data ? [...data.parcels].sort((a, b) => (b.cultivatedM2 ?? -1) - (a.cultivatedM2 ?? -1)) : []);
 	const choices = $derived(data ? areaChoices(data) : []);
+	const landChoices = $derived(choices.filter((c) => !c.layer));
+	const typeChoices = $derived(choices.filter((c) => c.layer));
+	// The crop-type grid's parcels in the land cover's order (largest cultivated first).
+	const typeParcels = $derived(
+		data?.cropTypes ? parcels.map((f) => data!.cropTypes!.parcels.find((t) => t.featureId === f.featureId)).filter((t) => t !== undefined) : []
+	);
 	// The first choice (the unit's sum) unless the picked one is still on offer.
 	const choice = $derived(choices.find((c) => c.key === choiceKey) ?? choices[0] ?? null);
 	// The crops planted on this unit first (largest first), then the rest by name, as the server sends them.
@@ -108,10 +118,11 @@
 		try {
 			const res = await api.cropland.cropAreaFromLandCover(projectId, d.nodeId, {
 				cropId: r.cropId,
-				dataset: d.dataset!.dataset,
-				...(c.featureId ? { featureId: c.featureId } : {})
+				dataset: c.dataset,
+				...(c.featureId ? { featureId: c.featureId } : {}),
+				...(c.layer ? { layer: c.layer } : {})
 			});
-			notice = `${r.name}’s planted area on ${d.nodeName} is now ${fmtHa(res.areaM2)}, from land cover.`;
+			notice = `${r.name}’s planted area on ${d.nodeName} is now ${fmtHa(res.areaM2)}, from ${c.layer ? 'crop types' : 'land cover'}.`;
 			noticeFailed = false;
 			// Reload the unit the drawer shows now, not d's: Back or a farm= link may have moved it on while the save was out,
 			// and loading d's would put its parcels under another unit's name.
@@ -210,12 +221,86 @@
 				<a href={mapNodeHref(data.nodeId)}>Show {data.nodeName} on map</a>
 			</p>
 
+			<ProposalSource
+				testid="cropland-source"
+				citation="{data.dataset.source} ({data.dataset.version}; dataset “{data.dataset.dataset}”). {data.dataset.attribution}"
+				method={data.dataset.method}
+			/>
+
+			{#if data.cropTypes && typeParcels.length}
+				{@const t = data.cropTypes}
+				<section class="types" data-testid="croptypes" aria-labelledby="{uid}-types">
+					<h4 id="{uid}-types" class="sub">Orchards and vines</h4>
+					{#if t.dataset.synthetic}
+						<ProposalSynthetic testid="croptypes-synthetic" subject="The crop-type grid" notWhat="SANLC" forWhat="catchment" />
+					{/if}
+					<p class="alert alert-warning slim" data-testid="croptypes-caution">{CROP_TYPE_CAUTION}</p>
+					<div class="table-wrap">
+						<table class="data compact" data-testid="croptypes-parcels">
+							<caption class="visually-hidden">Orchards and vines in {data.nodeName}’s parcels on the map</caption>
+							<thead>
+								<tr>
+									<th scope="col">Parcel</th><th scope="col" class="num">Orchards</th><th scope="col" class="num">Vines</th>
+									{#if t.dataset.baselineVersion}<th scope="col" class="num wraps">New since {t.dataset.baselineVersion}</th>{/if}
+								</tr>
+							</thead>
+							<tbody>
+								{#each typeParcels as f (f.featureId)}
+									<tr>
+										<th scope="row">{f.name || 'Unnamed parcel'}</th>
+										{#if 'problem' in f}
+											<td colspan={t.dataset.baselineVersion ? 3 : 2} class="small">Can’t be summarised: {f.problem}</td>
+										{:else}
+											<td class="num">{fmtHa(f.orchardM2)}</td>
+											<td class="num">{fmtHa(f.vineM2)}</td>
+											{#if t.dataset.baselineVersion}<td class="num">{newPlantingText(f, t.dataset.baselineVersion)}</td>{/if}
+										{/if}
+									</tr>
+								{/each}
+							</tbody>
+							{#if t.unit && typeParcels.length > 1}
+								<tfoot>
+									<tr>
+										<th scope="row">All parcels</th>
+										<td class="num">{fmtHa(t.unit.orchardM2)}</td>
+										<td class="num">{fmtHa(t.unit.vineM2)}</td>
+										{#if t.dataset.baselineVersion}<td class="num" data-testid="croptypes-new-total">{newPlantingText(t.unit, t.dataset.baselineVersion)}</td>{/if}
+									</tr>
+								</tfoot>
+							{/if}
+						</table>
+					</div>
+					{#if t.dataset.baselineVersion}
+						<p class="hint muted" data-testid="croptypes-new-note">
+							Orchard or vine land now that was neither orchard nor vine in the {t.dataset.baselineVersion} edition: the new plantings a licence application
+							records. Shown here, never offered as an area to use.
+						</p>
+					{/if}
+					<ProposalSource
+						testid="croptypes-source"
+						citation="{t.dataset.source} ({t.dataset.version}; dataset “{t.dataset.dataset}”). {t.dataset.attribution}"
+						method={t.dataset.method}
+					/>
+				</section>
+			{/if}
+
 			{#if choices.length}
 				<div class="field">
 					<label for="{uid}-area">Area to use</label>
 					<!-- Shows the choice in force (the sum, until another is picked and while it's still on offer), never a blank. -->
 					<select id="{uid}-area" value={choice?.key ?? ''} onchange={(e) => (choiceKey = e.currentTarget.value)}>
-						{#each choices as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
+						{#if typeChoices.length}
+							{#if landChoices.length}
+								<optgroup label="Cultivated (land cover)">
+									{#each landChoices as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
+								</optgroup>
+							{/if}
+							<optgroup label="Orchards and vines">
+								{#each typeChoices as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
+							</optgroup>
+						{:else}
+							{#each choices as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
+						{/if}
 					</select>
 				</div>
 				{#if rows.length === 0}
@@ -262,15 +347,11 @@
 					<p class="hint muted" id="{uid}-dirty">Save or discard your model changes first: an area used here is saved to the model straight away.</p>
 				{/if}
 				{#if readonly}<p class="hint muted">Only an editor can use a value.</p>{/if}
-			{:else if parcels.length}
+			{/if}
+			{#if !landChoices.length && parcels.length}
 				<p class="muted small" data-testid="cropland-none">The land cover shows no cropland in {data.nodeName}’s parcels.</p>
 			{/if}
 
-			<ProposalSource
-				testid="cropland-source"
-				citation="{data.dataset.source} ({data.dataset.version}; dataset “{data.dataset.dataset}”). {data.dataset.attribution}"
-				method={data.dataset.method}
-			/>
 		{/if}
 	{/if}
 </ProposalPanel>
@@ -320,6 +401,18 @@
 	}
 	.table-wrap {
 		width: 100%;
+	}
+	/* The new-plantings header names an edition, which can be long: it wraps rather than widen the drawer. */
+	.num.wraps {
+		white-space: normal;
+	}
+	.types {
+		display: grid;
+		gap: 0.5rem;
+	}
+	.sub {
+		font-size: 0.95rem;
+		margin: 0.5rem 0 0;
 	}
 	/* Phone: the row buttons are 44 px targets, as on the rest of the Crops page. */
 	@container (max-width: 30rem) {

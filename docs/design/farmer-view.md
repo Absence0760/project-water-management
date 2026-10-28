@@ -130,6 +130,7 @@ farmer meters and the one curtailment works in. The help entry says so.
 | "Same day last season 17 %" | `lastSeason.damPct` (E4) | whole % |
 | 12-month dam line, stop level dashed | `run_series` `dam_storage` ÷ capacity | – |
 | "Worked out by the model, not measured at your dam." / "If your gauge plate reads very differently, or your pump stops at another level, tell your WUA." | fixed text | Always. Farmer-entered gauge readings stay out of Step 2 (roadmap §3, "leave room for `time_series.node_id`") |
+| "Your dam, seen from space: On 10 Dec 2021 a satellite saw water over 2.0 ha of the 5.0 ha your dam covers when full." + "Satellite views: Digital Earth Africa, CC BY 4.0." | the newest view at least 90 % clear of the farm's dam outlines (`dam_observation`, 261; `GET …/farm/:nodeId/dam-observed`), against the full area from the farm's own node (model.md §2.10l) | a date and two areas in hectares, never a percentage: the page's big figure is already the dam's % full by volume, and "about 40 % of the area" beside "34 % full" read as the same thing (R5-B review). Past the full area: "…over 4.4 ha, more than the 4.0 ha your dam covers when full."; with no full area the sentence stops at the area. Only when the dam is drawn as an outline on the map; "No clear view of your dam from space yet." before the first. A check on the model, not a measurement (the card says so). Issue #604 R5-B |
 
 **No stop level set.** Every imported dam has `damMinPct = 0` (migration
 006). Then the mark, "You can still use" and the days-left line are replaced
@@ -313,8 +314,13 @@ constant that unit tests pin.
 Big %, the bar with the stop mark, a definition list (in the dam, full, can
 still use, last 30 days, same day last season, last spilled), the days-left
 line, a 12-month line with the stop level dashed and the short days
-explained against it, the next 14 days with the date of the lowest level, and
-"Where these figures come from".
+explained against it, the next 14 days with the date of the lowest level,
+"Your dam, seen from space" (the newest clear satellite view's water area
+against the area the dam covers when full, both in hectares, with its credit;
+only for a dam drawn as an outline on the map, issue #604 R5-B), and "Where
+these figures come from". The satellite card comes after the model's own
+figures and forecast: it is a check on the model, read once the figures
+are.
 
 ### 6.4 "Why about 83 %?" (board 4)
 

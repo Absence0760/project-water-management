@@ -24,10 +24,10 @@ export function drmFormat(target: DrmTarget): FileFormat {
 				(table
 					? 'They fill the EWR (total flow), the low flows and the natural flows at each point, in the file’s unit, the % points and the REC.'
 					: 'The natural duration curves, the total Reserve and the Reserve flows without high flows fill the three percentile tables, converted to m³/s when the file is in Mm³ (a month’s volume ÷ its days × 86 400 s, February 28 days). The method you picked, and which Reserve table is the EWR, stay as they are.'),
-			'**Summary (.tab)**: `MAR = …` (Mm³ a year), `Ecological Category = …` and the `Monthly Distributions (Mill. cu. m.)` table (Month, natural mean, SD, CV, then low flows maint. and drought, high flows maint., total flows maint.). ' +
+			'**Summary (.tab)**: the header lines (`Generated on …`, `… Quaternary Catchment Area : …`, `Total Runoff : …`), the `Annual Flows` block of `label = value` lines (`MAR = …` in Mm³ a year, S.Dev., CV, Q75 …), `Ecological Category = …`, the IFR summary (`Total IFR = … (… %MAR)` and its low-flow and high-flow lines), `Distribution Type : …` and the `Monthly Distributions (Mill. cu. m.)` table (Month, natural mean, SD, CV, then low flows maint. and drought, high flows maint., total flows maint.). ' +
 				(table
 					? 'It fills the determination’s natural MAR and the REC.'
-					: 'The last column, *Total Flows, Maint.*, in Mm³ a month, becomes the TAB flows in m³/s (÷ the month’s days × 86 400 s, February 28 days); the MAR fills the table MAR. You see the converted values before they are used; under the percentile tables only its MAR is offered.'),
+					: 'The last column, *Total Flows, Maint.*, in Mm³ a month, becomes the TAB flows in m³/s (÷ the month’s days × 86 400 s, February 28 days); the MAR fills the table MAR. You see the whole file, with the converted values, before they are used, and the whole file is kept with them to show again; under the percentile tables only its MAR is offered.'),
 			`**A spreadsheet paste or CSV**: 12 month rows (Oct … Sep, or month names in the first column), optionally with a heading row of % points${table ? '' : ', in m³/s'}. A comma between digits in a tab-separated paste is a decimal comma.`,
 			'Either line ending (Windows CRLF or LF) is read. A line that doesn’t fit is named in the message, with its line number.'
 		],

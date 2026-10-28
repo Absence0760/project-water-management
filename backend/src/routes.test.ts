@@ -131,6 +131,14 @@ describe('route auth inventory', () => {
 		expect(PUBLIC.has('GET /verify/:code')).toBe(true);
 	});
 
+	// Dams seen from space (issue #604 R5-B): the Dams tab's comparison and the farm dam page's latest view, auth-gated.
+	it('inventories the dam observation routes as auth-gated', () => {
+		for (const r of ['GET /projects/:id/dams/observations', 'GET /projects/:id/farm/:nodeId/dam-observed']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Reproduction (WP-3.1): auth-gated like every project route.
 	it('inventories the reproduce route as auth-gated', () => {
 		for (const r of ['GET /projects/:id/runs/:runId/reproduce']) {

@@ -60,6 +60,16 @@ const FARMER_MAY_READ: Record<string, { reason: string; where: string }> = {
 		reason: 'the catchment boundary, rivers and gauges, for orientation on their farm map (map_feature_select_farmer, 152; issue #326 A3)',
 		where: `kind IN ('catchment_boundary', 'river', 'gauge')`
 	},
+	// Issue #604 R5-B: the dam page's "Your dam, seen from space" reads them (GET …/farm/:nodeId/dam-observed). Keyed by the
+	// dam's map feature, not a node, so the sweep needs them named here; the farmer policies are app_farm_dam_features().
+	dam_observation: {
+		reason: 'the satellite views of the dam polygons on their own farms (dam_observation_select_farmer, 261)',
+		where: `feature_id IN (SELECT id FROM map_feature WHERE kind = 'dam' AND node_id = ANY($3::uuid[]))`
+	},
+	dam_waterbody_match: {
+		reason: 'how the dam polygons on their own farms matched DE Africa Waterbodies (dam_waterbody_match_select_farmer, 261)',
+		where: `feature_id IN (SELECT id FROM map_feature WHERE kind = 'dam' AND node_id = ANY($3::uuid[]))`
+	},
 	alert_delivery: {
 		reason: 'their own deliveries, of events they may read',
 		where: `event_id IN (SELECT id FROM alert_event WHERE node_id = ANY($3::uuid[]) OR (node_id IS NULL AND kind = 'restriction_published'))`
@@ -82,6 +92,10 @@ const secretCrop = { id: crypto.randomUUID(), name: `Crop ${MARKER}`, cropFactor
 const NEIGHBOUR_NOTE = `Note ${MARKER}`;
 const NEIGHBOUR_HOLDER = `Holder ${MARKER}`;
 const NEIGHBOUR_NAME = `Nbrfarmer${MARKER}`;
+/** The neighbour's dam's newest satellite view (issue #604 R5-B): a figure no other row has. */
+const NEIGHBOUR_WET_M2 = 17_345.5;
+/** Each farm's dam polygon, by node id. */
+const damFeature = new Map<string, string>();
 
 const tick = () => runTick({ feeds: false, reports: false, alerts: false });
 
@@ -122,10 +136,33 @@ beforeAll(async () => {
 		{ kind: 'farm_parcel', name: `Parcel ${MARKER}`, nodeId: theirs.id, geometry: box(21.35) },
 		{ kind: 'dam', name: `Dam ${MARKER}`, nodeId: theirs.id, lon: 21.36, lat: -33.69 },
 		{ kind: 'farm_parcel', name: `Unlinked parcel ${MARKER}`, nodeId: unlinked.id, geometry: box(21.4) },
+		// Dam outlines with satellite views (issue #604 R5-B), the neighbour's named with the marker.
+		{ kind: 'dam', name: 'Home dam', nodeId: home.id, geometry: box(21.31) },
+		{ kind: 'dam', name: `Dam pond ${MARKER}`, nodeId: theirs.id, geometry: box(21.36) },
 		{ kind: 'river', name: 'River', geometry: { type: 'LineString', coordinates: [[21.25, -33.6], [21.45, -33.65]] } }
 	]) {
 		const r = await owner.call('POST', `/projects/${projectId}/map/features`, f);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		if (f.kind === 'dam' && 'geometry' in f && 'nodeId' in f && f.nodeId) damFeature.set(f.nodeId, r.body.feature.id);
+	}
+	// Each dam polygon's Waterbodies match and WOfS views, loaded as the worker loads them (261's definer functions):
+	// the neighbour's with the marker in its uid and upstream key, and an area no other row has.
+	for (const [n, uid, wet] of [
+		[home, 'homeuid001', 12_000],
+		[theirs, MARKER, NEIGHBOUR_WET_M2]
+	] as const) {
+		const featureId = damFeature.get(n.id)!;
+		const [f] = await asOwner('SELECT updated_at FROM map_feature WHERE id = $1', [featureId]);
+		await asOwner('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6, NULL)', [featureId, 'matched', uid, 0.9, 0.8, f!.updated_at]);
+		await asOwner('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
+			'wofs',
+			featureId,
+			['2021-11-02', '2021-11-18'],
+			[wet - 1_000, wet],
+			[100, 98],
+			[`ga_ls_wofs_${uid}_a`, `ga_ls_wofs_${uid}_b`],
+			new Date()
+		]);
 	}
 	expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(3000) } })).status).toBe(200);
 	const rain = Array.from({ length: 500 }, (_, i) => (i % 23 === 0 ? 12 : 0));
@@ -186,6 +223,35 @@ beforeAll(async () => {
 		[projectId, monthly(150)]
 	);
 }, 90_000);
+
+describe('the farm dam page’s satellite views (GET …/farm/:nodeId/dam-observed, issue #604 R5-B)', () => {
+	it('gives a farmer their own dam’s newest clear view, summed over their own polygons only, with no feature, match or upstream detail', async () => {
+		const r = await farmer.call('GET', `/projects/${projectId}/farm/${home.id}/dam-observed`);
+		expect(r.status).toBe(200);
+		// Exactly these fields: the count of outlines, the newest view, the full area (estimated from the capacity) and the credit.
+		expect(r.body).toEqual({ outlines: 1, latest: { date: '2021-11-18', wetAreaM2: 12_000, source: 'wofs' }, fullAreaM2: expect.any(Number), attribution: 'Digital Earth Africa, CC BY 4.0' });
+		const text = JSON.stringify(r.body);
+		for (const trace of [damFeature.get(home.id)!, damFeature.get(theirs.id)!, MARKER, 'homeuid001', 'ga_ls_wofs', String(NEIGHBOUR_WET_M2), 'match', 'uid', 'upstream', 'featureId', 'nodeId'])
+			expect(text, `the answer carries ${trace}`).not.toContain(trace);
+	});
+
+	it('answers the neighbour’s farm 404, and the neighbour (positive control) reads their own dam’s view', async () => {
+		const other = await farmer.call('GET', `/projects/${projectId}/farm/${theirs.id}/dam-observed`);
+		expect(other.status).toBe(404);
+		expect(JSON.stringify(other.body)).not.toContain(MARKER);
+		const own = await neighbour.call('GET', `/projects/${projectId}/farm/${theirs.id}/dam-observed`);
+		expect(own.status).toBe(200);
+		expect(own.body).toMatchObject({ outlines: 1, latest: { date: '2021-11-18', wetAreaM2: NEIGHBOUR_WET_M2 } });
+	});
+
+	it('reads through RLS: a farmer sees their own dam’s rows only, a viewer every farm’s (positive control)', async () => {
+		const rows = (u: User, t: string) => withUser(u.id, async (db) => (await db.query(`SELECT feature_id FROM "${t}" WHERE project_id = $1`, [projectId])).rows.map((x) => x.feature_id as string));
+		for (const t of ['dam_observation', 'dam_waterbody_match']) {
+			expect(new Set(await rows(farmer, t)), `${t} as the farmer`).toEqual(new Set([damFeature.get(home.id)]));
+			expect(new Set(await rows(viewer, t)), `${t} as a viewer`).toEqual(new Set([damFeature.get(home.id), damFeature.get(theirs.id)]));
+		}
+	});
+});
 
 const MAP_PROVENANCE = ['delineation_proposal', 'start_proposal', 'crop_area_land_cover', 'evaporation_accepted'];
 

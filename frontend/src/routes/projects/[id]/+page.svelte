@@ -1214,6 +1214,7 @@
 								chirpsSource={chirpsSourceOf(series)}
 								observedOrigins={observedOriginsOf(series)}
 								apanSeries={series ? (firstOutletSeries(series, 'evap_apan_mm') ?? null) : undefined}
+								et0Series={series ? (firstOutletSeries(series, 'evap_et0_mm') ?? null) : undefined}
 								flowRecordId={series ? ((firstOutletSeries(series, 'flow_observed_m3s') ?? firstOutletSeries(series, 'flow_logger_m3s'))?.id ?? null) : null}
 								readonly={!canEdit}
 								{onProjectChange}

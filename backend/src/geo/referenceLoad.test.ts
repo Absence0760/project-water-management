@@ -47,14 +47,14 @@ const object =
 
 describe('which kinds load', () => {
 	it('the allowed kinds parse (positive control for the refusals)', () => {
-		expect(parseLoadRequest(ok)).toEqual({ ...ok, source: null, minOrder: 1 });
-		expect(parseLoadRequest({ ...rivers, minOrder: 3 })).toEqual({ ...rivers, minOrder: 3 });
+		expect(parseLoadRequest(ok)).toEqual({ ...ok, source: null, minOrder: 1, station: null });
+		expect(parseLoadRequest({ ...rivers, minOrder: 3 })).toEqual({ ...rivers, minOrder: 3, station: null });
 		const evaporation = { kind: 'evaporation', key: 'reference/evaporation/dpet-1991-2020.json.gz', sha256: 'c'.repeat(64), dataset: 'dPET-1991-2020' };
-		expect(parseLoadRequest(evaporation)).toEqual({ ...evaporation, source: null, minOrder: 1 });
+		expect(parseLoadRequest(evaporation)).toEqual({ ...evaporation, source: null, minOrder: 1, station: null });
 		const gazetteer = { kind: 'gazetteer', key: 'reference/gazetteer/za-2026-10.txt.gz', sha256: 'd'.repeat(64), dataset: 'GeoNames-ZA-2026-10' };
-		expect(parseLoadRequest(gazetteer)).toEqual({ ...gazetteer, source: null, minOrder: 1 });
+		expect(parseLoadRequest(gazetteer)).toEqual({ ...gazetteer, source: null, minOrder: 1, station: null });
 		const mapGrid = { kind: 'map-grid', key: 'reference/map-grid/waas-swcape.json.gz', sha256: 'e'.repeat(64), dataset: 'WAAS-SWCape-2007' };
-		expect(parseLoadRequest(mapGrid)).toEqual({ ...mapGrid, source: null, minOrder: 1 });
+		expect(parseLoadRequest(mapGrid)).toEqual({ ...mapGrid, source: null, minOrder: 1, station: null });
 	});
 
 	describe('MAP grids load dataset by dataset', () => {
@@ -114,6 +114,43 @@ describe('which kinds load', () => {
 		});
 	});
 
+	describe('DWS verified daily flow (issue #618 step 6b)', () => {
+		const dws = { kind: 'dws', key: 'reference/dws/reply-01.txt.gz', sha256: 'f'.repeat(64), dataset: 'dws-reply-01', source: 'SYNTHETIC-REPLY-0001' };
+
+		it('takes a saved HyData.aspx page or DWS’s text reply, gzipped or not, with the record’s reference as its source', () => {
+			expect(parseLoadRequest(dws)).toEqual({ ...dws, minOrder: 1, station: null });
+			for (const key of ['reference/dws/page.html', 'reference/dws/page.htm.gz', 'reference/dws/HyData.aspx', 'reference/dws/reply.txt']) {
+				expect(parseLoadRequest({ ...dws, key }).key).toBe(key);
+			}
+			expect(parseLoadRequest({ ...dws, station: 'X0H001' }).station).toBe('X0H001');
+			expect(parseLoadRequest({ ...dws, station: '' }).station).toBeNull();
+		});
+
+		it('refuses another file type, a missing or long reference, and a station that is not a river gauge code', () => {
+			for (const key of ['reference/dws/reply.json', 'reference/dws/reply.csv', 'reference/dws/reply.zip']) {
+				expect(thrown(() => parseLoadRequest({ ...dws, key })).publicReason).toMatch(/DWS daily flow table/);
+			}
+			for (const source of [undefined, null, '', ' ', 'x'.repeat(201)]) {
+				expect(thrown(() => parseLoadRequest({ ...dws, source })).publicReason).toMatch(/^dws needs a source of 1 to 200 characters/);
+			}
+			expect(parseLoadRequest({ ...dws, source: 'x'.repeat(200) }).source).toHaveLength(200);
+			for (const station of ['X0R001', 'x0h001', 'X0H0011', 7, ['X0H001']]) {
+				const e = thrown(() => parseLoadRequest({ ...dws, station }));
+				expect(e.publicReason).toMatch(/river gauge code/);
+				expect(e.publicReason).not.toContain(String(station));
+			}
+		});
+
+		it('a station is refused on any other kind', () => {
+			expect(thrown(() => parseLoadRequest({ ...ok, station: 'X0H001' })).publicReason).toBe('station is for the dws kind only');
+		});
+
+		it('is read under its own caps, far under the Lambda’s', () => {
+			expect(limitsFor('dws').object).toBeLessThan(MAX_OBJECT_BYTES);
+			expect(limitsFor('dws').object).toBeGreaterThanOrEqual(4 * 1024 * 1024);
+		});
+	});
+
 	it('the gazetteer takes a GeoNames dump (.txt) only, under its own caps', () => {
 		for (const key of ['reference/gazetteer/ZA.zip', 'reference/gazetteer/places.json']) {
 			const e = thrown(() => parseLoadRequest({ kind: 'gazetteer', key, sha256: 'd'.repeat(64), dataset: 'GeoNames' }));
@@ -137,7 +174,7 @@ describe('which kinds load', () => {
 		expect([...LOADABLE].sort()).toEqual(allowed.sort());
 	});
 
-	it.each(['quaternaries', 'dam-register', 'gauge-stations'])('%s is refused in production, naming the decision that would unblock it', (kind) => {
+	it.each(['quaternaries', 'dam-register', 'gauge-stations', 'crop-types'])('%s is refused in production, naming the decision that would unblock it', (kind) => {
 		const e = thrown(() => parseLoadRequest({ ...ok, kind, key: `reference/${kind}/x.json` }));
 		expect(e.code).toBe('refused');
 		expect(e.publicReason).toMatch(/blocked in production/);

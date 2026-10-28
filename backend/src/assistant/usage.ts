@@ -1,4 +1,4 @@
-// What the assistant may spend (issue #610; 258_assistant_usage.sql,
+// What the assistant may spend (issue #610; 262_assistant_usage.sql,
 // docs/security.md § Assistant): token budgets per UTC month, in weighted
 // tokens (input + 5 × output, config.ts weightedTokens), per project
 // (cfg.tokensPerMonth), per person across projects (cfg.tokensPerUserMonth)

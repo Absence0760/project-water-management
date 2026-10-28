@@ -34,6 +34,13 @@ sides share.
   (`playwright-core`, the browser e2e installs) and store the PDF through
   `@aws-sdk/client-s3` (MinIO locally, `STORAGE=local`; a private S3 bucket in
   production, where a container-image renderer Lambda does the printing).
+  Dam observations (`src/dams/observed/`, issue #604 R5): the tick matches
+  traced dams to DE Africa Waterbodies polygons and loads what the fetcher's
+  hourly `dams-weekly` passes wrote to the mirror bucket: the Waterbodies
+  series, and WOfS summed inside each traced outline (`src/dams/observed/wofs/`;
+  with `FEED_SOURCE=fixtures`, the synthetic series under `fixtures/waterbodies/`
+  and the synthetic WOfS scenes of `fixtures/feeds/wofs-sample.json`); off unless
+  `DAM_OBSERVATIONS=on`; architecture.md § Dam observations).
   Alert emails (`src/alerts/`) are evaluated by an `alert_eval` job and sent
   by the tick, each built as its recipient under RLS (Mailpit locally;
   `ALERTS_ENABLED=false` is the kill switch).
@@ -57,6 +64,9 @@ sides share.
   (`file://` or `s3://`, the latter through `@aws-sdk/client-s3`); the
   committed synthetic copy is `backend/fixtures/mirror/` (`pnpm
   gen:mirror-fixture`; [architecture.md § Data feeds](./architecture.md#data-feeds)).
+  Besides rain it holds daily FAO-56 reference evapotranspiration (AgERA5,
+  with NASA POWER's computed ET₀ on the newest days), which `agera5_et0`
+  data feeds read into `evap_et0_mm` (issue #604 R5-E, `feeds/fromMirrorEt0.ts`).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has four projects: `unit` (no DB),
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
@@ -139,7 +149,7 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 ## Commands (run from repo root)
 
 ```bash
-pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, evaporation, MAP grid, gazetteer), start Mailpit and MinIO (one-time)
+pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, orchards and vines, evaporation, MAP grid, gazetteer, Waterbodies polygons), start Mailpit and MinIO (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (starts Postgres first via dev:db:up; the backend applies pending migrations)
 pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only; also starts Postgres)
 pnpm dev:all                # everything: Mailpit, MinIO + the map's basemap if cached (never fetched), then dev:full
@@ -149,8 +159,9 @@ pnpm dev:run:backend
 pnpm dev:run:worker         # the job worker alone: polls every 15 s and on LISTEN job_queued
 pnpm dev:jobs:tick          # run every due job once and exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default, no network) and exit
+pnpm dev:dams:run           # dam observations once: match traced dams, both passes, Waterbodies and WOfS (fixtures by default, no network), load (run-locally.md § Dam observations)
 pnpm dev:ingest:push        # push the synthetic logger CSV to /ingest with the API key in WM_INGEST_KEY (run-locally.md § Ingest)
-pnpm dev:ingest:run [rnl|sat|era5l|imerg_late]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
+pnpm dev:ingest:run [rnl|sat|era5l|imerg_late|ecmwf|agera5_et0|power_et0]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
 
 pnpm dev:db:up              # Postgres 17 in docker on :5434
 pnpm dev:db:down
@@ -190,6 +201,9 @@ pnpm import:rivers          # load the synthetic river network the Map's River n
                              # pnpm dev:tiles:rivers fetches HydroRIVERS (GDAL's ogr2ogr) and loads it (maps.md § River network)
 pnpm import:land-cover      # load the synthetic cropland grid a unit's planted-areas drawer proposes from (pnpm setup runs it);
                              # <tile.tif> … --dataset <label> [--cell 0.0025] [--bbox w,s,e,n] loads your own ESA WorldCover tiles (maps.md § Cultivated area from land cover)
+pnpm import:crop-types      # load the synthetic orchard and vine grid the planted-areas drawer shows beside the land cover (pnpm setup runs it);
+                             # <current.tif> --dataset <label> [--baseline <earlier.tif> --baseline-version <name>] loads your own SANLC, warped to EPSG:4326
+                             # (its terms are pending: local evaluation only, production refuses it; maps.md § Orchards and vines from SANLC)
 pnpm import:evaporation     # load the synthetic evaporation grid Calibration → Evaporation from the map proposes from (pnpm setup runs it);
                              # <file> … --dataset <label> [--bbox w,s,e,n] loads dPET years (.nc, or the totals --reduce <dir> wrote) as monthly means;
                              # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)
@@ -204,6 +218,8 @@ pnpm import:gazetteer       # load the synthetic place names the Map's search fi
 pnpm import:dws <file> --reference "<reply>"   # load a DWS daily flow table (DWS's reply to a data request; --source upload for any other) into the
                              # gauge record store DWS feeds read with DWS_SOURCE=store, as the schema owner; [--station A2H012] [--from … --to …]
                              # (backend/fixtures/dws/ holds an invented reply; deployment.md § DWS gauge records)
+pnpm import:waterbodies     # load the synthetic DE Africa Waterbodies polygons the dam observations match traced dams to (pnpm setup runs it);
+                             # <file.geojson> --dataset <label> [--bbox w,s,e,n] [--source "…"] loads your clip of the v0.0.3 historical extent (CC BY 4.0; maps.md § Waterbodies)
 pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + the Showcase (every feature: runs, scenarios, map, allocations, evidence pack draft, notes, alerts; run-locally.md § The showcase; SEED_SHOWCASE=0 skips it) + the Licence comparison map (every band of the Allocations map, issue #510; skipped with the Showcase) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
@@ -243,7 +259,8 @@ pnpm test:verify            # independent cross-check: a Python model from the d
 pnpm test:ingest            # the bulk ingest job's unittest suite (ingest/, Python 3.14; seconds)
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
 pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
-pnpm gen:mirror-fixture     # rewrite the synthetic rain data copy (backend/fixtures/mirror/: Zarr arrays + manifests from the synthetic CHIRPS files; no DB; architecture.md § Data feeds)
+pnpm gen:waterbodies-fixture # rewrite the synthetic Waterbodies polygons and series round the Sandspruit dams (backend/fixtures/waterbodies/; no DB; maps.md § Waterbodies)
+pnpm gen:mirror-fixture     # rewrite the synthetic rain data copy (backend/fixtures/mirror/: Zarr arrays + manifests from the synthetic CHIRPS files, plus invented ERA5-Land, IMERG, ECMWF and reference ET products; no DB; architecture.md § Data feeds)
 pnpm gen:example            # rewrite the example catchment the empty project list starts from (Kleinberg; no DB; issue #286)
 pnpm gen:help-art           # re-render the help pictures, by day and at dusk for dark mode (optional: Blender 5 + ImageMagick 7; HELP_ART_ONLY, HELP_ART_LIGHT, HELP_ART_DEVICE; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)

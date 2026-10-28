@@ -1,7 +1,9 @@
 // The daily EWR at the outlet from Desktop Reserve Model files (engine 1.77.0,
 // issue #455, docs/ui.md § The daily EWR at the outlet): upload a .tab and a
 // .rul on Settings, see the converted values, save, run, and read which EWR
-// the run used; and fill a Reserve rule table from the same files. The file
+// the run used; and fill a Reserve rule table from the same files. The .tab is
+// kept and shown whole, the .rul's header named, and the outlet's rule table
+// folds grids that repeat the daily EWR's .rul tables (issue #617). The file
 // load sits above the tables (and at the top of each rule table), and a file
 // never changes the daily EWR's method on its own. The files are synthetic
 // (e2e/fixtures/drm-synthetic.*, the app's own example files).
@@ -10,7 +12,7 @@ import { createProject, createRun, putModel, putSeries, sampleModel, syntheticFl
 import { expectNoViolations } from '../support/a11y.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveChanges, saveSettings } from '../support/settings.ts';
+import { openFold, saveChanges, saveSettings } from '../support/settings.ts';
 import { answerConfirm } from '../support/confirm.ts';
 
 const RUL = new URL('../fixtures/drm-synthetic.rul', import.meta.url).pathname;
@@ -55,9 +57,11 @@ test('a .tab file sets the TAB flows (shown converted before use), and the run s
 	// The .tab's last column, Mm³ a month, converted to m³/s (October: 1.26 Mm³ over 31 days; February over 28).
 	await loadFile.setInputFiles(TAB);
 	const preview = daily.getByTestId('ewr-tab-preview');
-	await expect(preview.getByRole('row', { name: /^Mm³/ })).toContainText('1.26');
-	await expect(preview.getByRole('row', { name: /^m³\/s/ })).toContainText('0.4704');
-	await expect(preview.getByRole('row', { name: /^m³\/s/ })).toContainText('0.0579');
+	// The whole file shows before it is used (issue #617): the monthly table's Oct row ends in 1.260 Mm³ and its 0.4704 m³/s.
+	const previewMonths = preview.getByRole('table', { name: /^Monthly distributions/ });
+	await expect(previewMonths.getByRole('row', { name: /^Oct/ }).getByRole('cell').last()).toHaveText('0.4704');
+	await expect(previewMonths.getByRole('row', { name: /^Oct/ })).toContainText('1.260');
+	await expect(previewMonths.getByRole('row', { name: /^Feb/ }).getByRole('cell').last()).toHaveText('0.0579');
 	await expectNoViolations(page);
 	// Cancel uses nothing; load it again and use it.
 	await preview.getByRole('button', { name: 'Cancel' }).click();
@@ -79,6 +83,49 @@ test('a .tab file sets the TAB flows (shown converted before use), and the run s
 	await createRun(page.request, id, 'TAB file');
 	await page.goto(`/projects/${id}?tab=runs`);
 	await expect(page.getByTestId('outlet-ewr-source').first()).toContainText(/^EWR: the DRM TAB file × [\d.]+ \(natural MAR [\d.]+ ÷ 49\.8 Mm³\/a\)$/);
+});
+
+// Issue #617: the whole .tab (header, annual flows, IFR summary, the 12 × 7 monthly table) is kept with the source and
+// shown under the TAB flows, its Total flows, maint. column marked as the TAB flows; an edited TAB row says so.
+test('a .tab shows the whole file, its total maintenance column marked as the TAB flows, and keeps it after a reload; an edited TAB row says so', async ({ page, owner }) => {
+	void owner;
+	const id = await seed(page.request, 'Daily EWR, the whole .tab');
+	await updateSettings(page.request, id, {
+		ewrDailySource: { method: 'tab', scaling: 'area', tableMarMm3: null, tableAreaKm2: 40, tabM3s: TAB_M3S, naturalPctM3s: null, reservePctM3s: null }
+	});
+	await page.goto(`/projects/${id}?tab=settings`);
+	const daily = page.getByRole('group', { name: /^The daily EWR at the outlet/ });
+	// Saved before the file was kept: the 12 values stay, and the panel says how to see the file.
+	await expect(daily.getByTestId('ewr-tab-legacy')).toHaveText('These TAB flows were saved without their .tab file. Load the .tab again to see the whole file.');
+	await daily.getByLabel('Load a DRM file (.rul / .tab)').setInputFiles(TAB);
+	await daily.getByTestId('ewr-tab-preview').getByRole('button', { name: 'Use these values' }).click();
+	await saveSettings(page);
+	await page.reload();
+
+	const file = daily.getByTestId('ewr-tab-file');
+	await expect(file.locator(':scope > summary')).toContainText('The .tab file: drm-synthetic.tab · REC C · Total flows, maint. are the TAB flows');
+	await expect(daily.getByTestId('ewr-tab-legacy')).toBeHidden();
+	await expect(file.getByText('Estimate for')).toBeVisible();
+	await expect(file.getByRole('table', { name: /^Annual flows/ }).getByRole('row', { name: /^BFI Index/ })).toContainText('0.310');
+	await expect(file.getByRole('table', { name: /^IFR summary/ }).getByRole('row', { name: /^Total IFR/ })).toHaveText(/Total IFR\s*23\.490\s*47\.17/);
+	const monthly = file.getByRole('table', { name: /^Monthly distributions/ });
+	await expect(monthly.getByRole('columnheader', { name: 'Natural flows' })).toBeVisible();
+	await expect(monthly.getByRole('columnheader', { name: 'Modified flows (IFR)' })).toBeVisible();
+	await expect(monthly.getByRole('columnheader', { name: /^Total flows, maint\.\s*used: the TAB flows$/ })).toBeVisible();
+	await expect(monthly.getByRole('row')).toHaveCount(14);
+	await expect(monthly.getByRole('row', { name: /^Jul/ }).getByRole('cell')).toHaveText(['11.200', '8.960', '0.800', '3.920', '0.560', '1.680', '5.600', '2.0908']);
+	await expect(daily.getByTestId('ewr-tab-edited')).toBeHidden();
+	await expectNoViolations(page, { include: '[data-testid="ewr-daily-source"]' });
+
+	// A changed TAB row says so; the file is shown as it was loaded.
+	await daily.getByLabel('TAB flow, Oct, m³/s').fill('0.5');
+	await expect(daily.getByTestId('ewr-tab-edited')).toHaveText('The TAB flows were changed after loading drm-synthetic.tab; the file is shown as loaded.');
+	await expect(monthly.getByRole('row', { name: /^Oct/ }).getByRole('cell').last()).toHaveText('0.4704');
+
+	// A phone: the eight-column table scrolls inside its own box, not the page.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page, { include: '[data-testid="ewr-daily-source"]' });
 });
 
 // The scaled tables (issue #90 B1 gap a): each value × s, in Settings as soon as s is known (the area ratio needs no
@@ -261,6 +308,63 @@ test('a Reserve rule table is filled from a .rul (grids, unit, REC, source) and 
 	await load.setInputFiles(RUL);
 	await answerConfirm(page, false, 'Replace the rule table at Outlet (Outflow gauge) with drm-synthetic.rul?');
 	await expect(table.getByLabel('EWR (total flow), Oct, 10 %, m³/s')).toHaveValue('0.7');
+});
+
+// Issue #617: the outlet's Reserve rule table filled from the same .rul as the daily EWR's percentile tables doesn't
+// repeat them: its grids fold under one line, the REC and every other field stay; a different grid shows with a note.
+test('the outlet’s rule table filled from the same .rul folds its grids under one line, keeps its REC and fields, and opens them; a different grid shows them with a note', async ({ page, owner }) => {
+	void owner;
+	const id = await seed(page.request, 'Rule table repeats the daily EWR');
+	await page.goto(`/projects/${id}?tab=settings`);
+	const daily = page.getByRole('group', { name: /^The daily EWR at the outlet/ });
+	await daily.getByLabel('Daily EWR from').selectOption('percentile');
+	const loadDaily = daily.getByLabel('Load a DRM file (.rul / .tab)');
+	await loadDaily.setInputFiles(RUL);
+	// The .rul's name, date, unit and REC above its tables, so the REC shows without a rule table.
+	await expect(daily.getByTestId('ewr-rul-file')).toHaveText('From drm-synthetic.rul, generated 01/01/2026, in m³/s · Recommended ecological category (REC) C.');
+	// A .tab used for its MAR only is kept too, folded after the tables (open question 1).
+	await loadDaily.setInputFiles(TAB);
+	await daily.getByTestId('ewr-tab-preview').getByRole('button', { name: 'Use its MAR only' }).click();
+	const tabFold = daily.getByTestId('ewr-tab-file');
+	await expect(tabFold.locator(':scope > summary')).toContainText('The .tab this table MAR came from: drm-synthetic.tab · REC C');
+	await expect(tabFold).not.toHaveAttribute('open', /.*/);
+	await openFold(daily, 'ewr-tab-file');
+	await expect(tabFold.getByRole('table', { name: /^Annual flows/ }).getByRole('row', { name: /^MAR/ })).toContainText('used: the table MAR');
+	const section = page.getByRole('region', { name: /^Reserve rule tables/ });
+	await section.getByRole('button', { name: 'Add a rule table' }).click();
+	const table = section.getByRole('group', { name: 'Rule table at Outlet (Outflow gauge)' });
+	await table.getByLabel('Load file: a DRM .rul / .tab or a CSV, into the rule table at Outlet (Outflow gauge)').setInputFiles(RUL);
+
+	const repeat = table.getByTestId('rule-grids-repeat');
+	await expect(repeat.locator(':scope > summary')).toContainText('Grids: the daily EWR’s .rul tables · EWR, low flows');
+	await expect(table.getByLabel('EWR (total flow), Oct, 10 %, m³/s')).toBeHidden();
+	await expect(table.getByLabel('Recommended ecological category (REC)')).toHaveValue('C');
+	await expect(table.getByLabel('Kind of source')).toBeVisible();
+	await expect(table.getByTestId('rule-grids-repeat-link').getByRole('link', { name: 'The daily EWR at the outlet' })).toHaveAttribute('href', '#set-ewr');
+	await expect(table.getByTestId('rule-grids-differ')).toBeHidden();
+	await expectNoViolations(page, { include: '#set-reserve' });
+	// Opening it shows and edits the grids as before; an edit makes them differ, and they stay shown with the note.
+	await openFold(table, 'rule-grids-repeat');
+	await expect(table.getByLabel('EWR (total flow), Oct, 10 %, m³/s')).toHaveValue('0.6');
+	await table.getByLabel('EWR (total flow), Oct, 10 %, m³/s').fill('0.7');
+	await expect(table.getByTestId('rule-grids-differ')).toContainText('These grids differ from the tables of The daily EWR at the outlet above: monthly compliance reads these, the daily EWR those.');
+	// The fold stays open around the field being typed in; its line says the grids aren't the daily EWR's now.
+	await expect(table.getByLabel('EWR (total flow), Oct, 10 %, m³/s')).toBeFocused();
+	await expect(repeat.locator(':scope > summary')).toContainText('Grids: not the daily EWR’s tables · EWR, low flows');
+	await expect(table.getByLabel('EWR (total flow), Oct, 10 %, m³/s')).toHaveValue('0.7');
+	await expectNoViolations(page, { include: '#set-reserve' });
+
+	// A daily table typed over since the .rul loaded: its line says so, keeping the REC.
+	await daily.getByLabel('Natural flow percentile table, Oct, 10 %, m³/s').fill('1.4');
+	await expect(daily.getByTestId('ewr-rul-file')).toHaveText('From drm-synthetic.rul, generated 01/01/2026, in m³/s · Recommended ecological category (REC) C; the tables were changed since.');
+	// The .tab kept for its MAR only, under the TAB method: it says no TAB flow came from it, and offers them.
+	await daily.getByLabel('Daily EWR from').selectOption('tab');
+	await expect(daily.getByTestId('ewr-tab-mar-only')).toHaveText('drm-synthetic.tab gave only the table MAR.');
+	await expect(daily.getByTestId('ewr-tab-edited')).toBeHidden();
+	await daily.getByRole('button', { name: 'Use its TAB flows' }).click();
+	await expect(daily.getByLabel('TAB flow, Oct, m³/s')).toHaveValue(/^0\.470/);
+	await expect(daily.getByTestId('ewr-tab-mar-only')).toBeHidden();
+	await expect(daily.getByTestId('ewr-tab-file').locator(':scope > summary')).toContainText('Total flows, maint. are the TAB flows');
 });
 
 test('Compare runs names each run’s daily EWR on the water-year bars when a pragmatic baseline meets a DRM what-if', async ({ page, owner }) => {

@@ -1,4 +1,4 @@
--- 258_assistant_usage — what the assistant costs, counted (issue #610;
+-- 262_assistant_usage — what the assistant costs, counted (issue #610;
 -- docs/architecture.md § Assistant, docs/security.md § Assistant).
 --
 -- The assistant (assistant/routes.ts) calls a hosted model for each turn of a
@@ -62,7 +62,7 @@ CREATE INDEX assistant_usage_user_idx ON assistant_usage (user_id);
 -- The month caps sum a month's rows, over the project, the person or every project.
 CREATE INDEX assistant_usage_month_idx ON assistant_usage (month);
 COMMENT ON TABLE assistant_usage IS
-	'Assistant tokens and messages per project, person and UTC month (258). Written only by app_assistant_begin / app_assistant_charge, purged after 13 months by app_purge_assistant; members read their own rows.';
+	'Assistant tokens and messages per project, person and UTC month (262). Written only by app_assistant_begin / app_assistant_charge, purged after 13 months by app_purge_assistant; members read their own rows.';
 
 ALTER TABLE assistant_usage ENABLE ROW LEVEL SECURITY;
 -- A person reads their own rows (the export); the project total comes from app_assistant_used.
@@ -77,7 +77,7 @@ CREATE TABLE assistant_rate (
 -- The tick's purge deletes rows by age.
 CREATE INDEX assistant_rate_window_idx ON assistant_rate (window_start);
 COMMENT ON TABLE assistant_rate IS
-	'Assistant messages per person in a one-hour window (258). Only app_assistant_begin touches it; app_purge_assistant deletes it once its hour is over.';
+	'Assistant messages per person in a one-hour window (262). Only app_assistant_begin touches it; app_purge_assistant deletes it once its hour is over.';
 
 -- As map_compute_throttle (186): the app touches it only through the function below.
 ALTER TABLE assistant_rate ENABLE ROW LEVEL SECURITY;

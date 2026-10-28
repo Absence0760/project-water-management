@@ -74,7 +74,7 @@ describe('settingsSummaries', () => {
 		expect(s['set-auto']).toBe('On: 30 minutes after new data, never publishes');
 	});
 
-	it('names the flow generation method in the Flow generation summary, with the units on a station (issues #482, #553)', () => {
+	it('names the flow generation method in the Model selection for flow generation summary, with the units on a station (issues #482, #553)', () => {
 		expect(settingsSummaries(base())['set-share']).toBe('Fragmentation · flow share: by catchment area');
 		expect(settingsSummaries(base({ unitRain: { mode: 'catchment' } }))['set-share']).toMatch(/^Fragmentation · /);
 		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' } }))['set-share']).toBe('Per unit · no unit on a rainfall station · EWR flow share: by catchment area');

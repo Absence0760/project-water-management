@@ -1,9 +1,11 @@
-import { blankEwrRuleTable, type EwrRuleTable } from '@water-management/engine';
+import { blankEwrDailySource, blankEwrRuleTable, type EwrDailySource, type EwrRuleTable } from '@water-management/engine';
+import { exampleRulFile, parseRulFile, percentileTablesFromRul, ruleTableFromRul, type RulFile } from './drmFiles';
 import { describe, expect, it } from 'vitest';
 import {
 	ruleSettingsSummary,
 	applyPaste,
 	categoryFromText,
+	dailyRepeat,
 	EXAMPLE_HIGH_FLOWS_CSV,
 	exampleGridCsv,
 	filledCells,
@@ -14,6 +16,7 @@ import {
 	parseHighFlows,
 	parseMonths,
 	parsePoints,
+	repeatedGrids,
 	rulesError,
 	setLowFlowSplit,
 	setPoints,
@@ -269,5 +272,60 @@ describe('ruleSettingsSummary (issue #521)', () => {
 		expect(ruleSettingsSummary(t)).toBe('Mm³/month · the run’s natural flow · × 1 · 10–99 % (10 points)');
 		expect(ruleSettingsSummary({ ...t, unit: 'm3s', naturalSource: 'table', scale: 0.25, points: [50], naturalMarMcm: 12.5 })).toBe('m³/s · the table’s natural flows · × 0.25 · 50–50 % (1 point) · natural MAR 12.5 Mm³/a');
 		expect(ruleSettingsSummary({ ...t, scale: null as unknown as number, points: [] })).toBe('Mm³/month · the run’s natural flow · no scale · no % points');
+	});
+});
+
+describe('dailyRepeat: the outlet’s rule table against the daily EWR’s .rul tables (issue #617)', () => {
+	const rul = (unit: RulFile['unit']) => parseRulFile(exampleRulFile(unit)) as RulFile;
+	const daily = (unit: RulFile['unit'] = 'm3s'): EwrDailySource => ({ ...blankEwrDailySource(), method: 'percentile', tableAreaKm2: 10, ...(percentileTablesFromRul(rul(unit)) as object) });
+	const card = (unit: RulFile['unit'] = 'm3s', site: string | null = null) => ruleTableFromRul(blankEwrRuleTable(site), rul(unit), 'drm.rul');
+
+	it('the same file in m³/s, or in Mm³ a month once converted, is the same', () => {
+		expect(dailyRepeat(card('m3s'), daily('m3s'))).toBe('same');
+		expect(dailyRepeat(card('mcm'), daily('mcm'))).toBe('same');
+		// The card keeps the file’s Mm³ and the daily source its m³/s: compared after converting the card’s.
+		expect(card('mcm').unit).toBe('mcm');
+	});
+
+	it('the natural grid counts only while the table reads its own, and a table without one is still the same', () => {
+		const t = card();
+		expect(t.naturalSource).toBe('run');
+		expect(dailyRepeat({ ...t, naturalSource: 'table' }, daily())).toBe('same');
+		const bumped = t.natural!.map((r, m) => r.map((v, i) => (m === 2 && i === 3 ? v + 0.01 : v)));
+		expect(dailyRepeat({ ...t, natural: bumped }, daily())).toBe('same');
+		expect(dailyRepeat({ ...t, naturalSource: 'table', natural: bumped }, daily())).toBe('differs');
+		expect(dailyRepeat({ ...t, natural: null }, daily())).toBe('same');
+		expect(dailyRepeat({ ...t, lowFlow: null }, daily())).toBe('same');
+	});
+
+	it('one cell different, a blank cell, other % points or a low-flow-only table differ', () => {
+		const t = card();
+		const one = t.ewr.map((r, m) => r.map((v, i) => (m === 5 && i === 9 ? v * 1.001 : v)));
+		expect(dailyRepeat({ ...t, ewr: one }, daily())).toBe('differs');
+		const blank = t.ewr.map((r, m) => r.map((v, i) => (m === 0 && i === 0 ? (null as unknown as number) : v)));
+		expect(dailyRepeat({ ...t, ewr: blank }, daily())).toBe('differs');
+		const low = t.lowFlow!.map((r, m) => r.map((v, i) => (m === 7 && i === 0 ? v + 1 : v)));
+		expect(dailyRepeat({ ...t, lowFlow: low }, daily())).toBe('differs');
+		expect(dailyRepeat({ ...t, lowFlow: t.lowFlow }, { ...daily(), lowFlowPctM3s: null })).toBe('differs');
+		expect(dailyRepeat({ ...t, points: [10, 20, 30, 40, 50, 60, 70, 80, 90, 95] }, daily())).toBe('differs');
+		expect(dailyRepeat({ ...t, component: 'lowFlow' }, daily())).toBe('differs');
+		expect(dailyRepeat(t, { ...daily(), reservePctM3s: null })).toBe('differs');
+	});
+
+	it('a gauge’s table, or a daily EWR not read from the percentile tables, is neither', () => {
+		expect(dailyRepeat(card('m3s', 'gauge-1'), daily())).toBeNull();
+		expect(dailyRepeat(card(), { ...daily(), method: 'tab' })).toBeNull();
+		expect(dailyRepeat(card(), { ...daily(), method: 'pragmatic' })).toBeNull();
+		expect(dailyRepeat(card(), null)).toBeNull();
+		expect(dailyRepeat(card(), undefined)).toBeNull();
+		// The percentile method with no tables loaded yet: nothing above to compare with.
+		expect(dailyRepeat(card(), { ...daily(), naturalPctM3s: null, reservePctM3s: null, lowFlowPctM3s: null })).toBeNull();
+	});
+
+	it('names the grids it folds', () => {
+		const t = card();
+		expect(repeatedGrids(t)).toBe('EWR, low flows');
+		expect(repeatedGrids({ ...t, naturalSource: 'table' })).toBe('EWR, low flows, natural flow');
+		expect(repeatedGrids({ ...t, lowFlow: null })).toBe('EWR');
 	});
 });

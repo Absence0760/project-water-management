@@ -1,4 +1,4 @@
-import { defaultProjectSettings, SERIES_KINDS, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
+import { defaultProjectSettings, SERIES_KINDS, type NetworkNode, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { Daily } from './coverage';
 import { helpFor } from '#lib/help/content.js';
@@ -6,19 +6,25 @@ import type { AreaRainLines } from './derivedRain';
 import {
 	areaCell,
 	areaColumnId,
+	areaViewColumns,
 	buildAreaColumns,
 	buildPreviewColumns,
 	buildPreviewRows,
+	columnsForView,
 	filterPreviewRows,
 	headerUnit,
 	m3DayColumnId,
 	parseValueComparison,
 	PREVIEW_DATE_HELP_KEY,
+	previewViews,
+	resolveView,
 	seriesColumnId,
+	shownSeriesIds,
 	type PreviewRow
 } from './preview';
 
 const meta = (over: Partial<SeriesMeta>): SeriesMeta => ({
+	...(over.siteNodeId ? { siteNodeId: over.siteNodeId } : {}),
 	id: over.id ?? 'id',
 	kind: over.kind ?? 'rain_catchment_mm',
 	name: over.name ?? '',
@@ -394,5 +400,145 @@ describe('each area’s derived rain (issue #553)', () => {
 		expect(areaCell(l, 'rainUsed', '2019-12-31')).toBeNull();
 		expect(areaCell(l, 'rainUsed', '2020-01-04')).toBeNull();
 		expect(areaCell(lines({ chirpsCorrected: null }), 'chirpsCorrected', '2020-01-01')).toBeNull();
+	});
+});
+
+describe('the View select’s views and their columns (issue #613)', () => {
+	const unit = (id: string, name: string, kind = 'farm'): NetworkNode => ({ id, name, kind, areaKm2: 10 }) as unknown as NetworkNode;
+	const nodes = [unit('g', 'Outflow gauge', 'gauge'), unit('u1', 'Upper unit'), unit('u2', 'Lower unit')];
+	const list = [
+		meta({ id: 'berg', kind: 'rain_catchment_mm', name: 'Bergwater' }),
+		meta({ id: 'kloof', kind: 'rain_catchment_mm', name: 'Kloof' }),
+		meta({ id: 'chc', kind: 'rain_chirps_mm', name: 'CHIRPS catchment' }),
+		meta({ id: 'chu1', kind: 'rain_chirps_mm', name: 'CHIRPS Upper', siteNodeId: 'u1' }),
+		meta({ id: 'gu1', kind: 'flow_observed_m3s', name: 'Upper weir', unit: 'm³/s', siteNodeId: 'u1' }),
+		meta({ id: 'weir', kind: 'flow_observed_m3s', name: 'Outlet weir', unit: 'm³/s' })
+	];
+	const lines = (over: Partial<AreaRainLines> = {}): AreaRainLines =>
+		({
+			startDate: '2020-01-01',
+			rainUsed: [4, 0],
+			source: ['station', 'chirps'],
+			stationRaw: [3.45, null],
+			stationScaled: [4, null],
+			chirpsRaw: [1, 0],
+			chirpsCorrected: [1.25, 0],
+			factors: Array.from({ length: 12 }, () => 1.25),
+			refused: null,
+			correctAgainst: 'berg',
+			forcing: { stationId: 'berg', stationName: 'Bergwater', ratio: 863.1 / 745 } as AreaRainLines['forcing'],
+			warnings: [],
+			...over
+		}) as AreaRainLines;
+	const areas = [
+		{ nodeId: null, name: 'Average catchment rainfall', lines: lines() },
+		{ nodeId: 'u1', name: 'Upper unit', lines: lines() }
+	];
+	const all = [...buildPreviewColumns(list), ...buildAreaColumns(areas)];
+	const ctx = { list, areas };
+	const settings = { ...defaultProjectSettings(), rainStations: { catchment: { stationId: 'berg' } } } as ProjectSettings;
+
+	it('lists All, each land unit in the model’s order, then the groups; the catchment only when it has a station', () => {
+		expect(previewViews(nodes, settings, list).map((v) => [v.id, v.label, v.kind])).toEqual([
+			['all', 'All', 'all'],
+			['unit:u1', 'Upper unit', 'unit'],
+			['unit:u2', 'Lower unit', 'unit'],
+			['stations', 'All rainfall stations', 'group'],
+			['catchment', 'Average catchment rainfall', 'group'],
+			['flow', 'All flow', 'group']
+		]);
+		// No station assigned to the catchment, no station or flow stored: those groups aren't offered.
+		expect(previewViews(nodes, defaultProjectSettings(), [list[2]!]).map((v) => v.id)).toEqual(['all', 'unit:u1', 'unit:u2']);
+	});
+
+	it('reads a view it doesn’t offer (a deleted unit, a stale link) as All', () => {
+		const views = previewViews(nodes, settings, list);
+		expect(resolveView(views, 'unit:u2')).toBe('unit:u2');
+		expect(resolveView(views, 'unit:gone')).toBe('all');
+		expect(resolveView(views, 'unit:g')).toBe('all'); // a gauge isn't a land unit
+		expect(resolveView(views, null)).toBe('all');
+	});
+
+	it('All is today’s table: every column, in order, without the raw lines', () => {
+		expect(columnsForView('all', all, ctx)).toEqual(all);
+		expect(all.some((c) => c.area?.line === 'stationRaw' || c.area?.line === 'chirpsRaw')).toBe(false);
+	});
+
+	it('a unit: station raw and adjusted, CHIRPS raw and bias-corrected, rain used and its source, then the other series stored at it', () => {
+		const cols = columnsForView('unit:u1', all, ctx);
+		expect(cols.map((c) => c.label)).toEqual([
+			'Bergwater raw',
+			'Bergwater adjusted to Upper unit (× 1.159)',
+			'Upper unit CHIRPS raw',
+			'Upper unit CHIRPS bias-corrected (f(m) against Bergwater)',
+			'Upper unit rain used',
+			'Upper unit rain used from',
+			// The CHIRPS series is its raw line already; the gauge stored at it follows, with its m³/day.
+			'Flow — observed gauge · Upper weir',
+			'Flow — observed gauge · Upper weir (m³/day)'
+		]);
+		expect(cols.slice(0, 6).map((c) => c.id)).toEqual(['stationRaw', 'stationScaled', 'chirpsRaw', 'chirpsCorrected', 'rainUsed', 'source'].map((l) => `area:u1:${l}`));
+		for (const c of cols) expect(helpFor(c.helpKey), c.helpKey).toBeTruthy();
+	});
+
+	it('a unit corrected against another station names it; one without CHIRPS has no CHIRPS lines', () => {
+		const other = { nodeId: 'u1', name: 'Upper unit', lines: lines({ correctAgainst: 'kloof', chirpsRaw: null, chirpsCorrected: null }) };
+		expect(areaViewColumns(other, (id) => (id === 'kloof' ? 'Kloof' : null)).map((c) => c.area!.line)).toEqual(['stationRaw', 'stationScaled', 'rainUsed', 'source']);
+		const refused = { nodeId: 'u1', name: 'Upper unit', lines: lines({ correctAgainst: 'kloof', chirpsCorrected: null }) };
+		expect(areaViewColumns(refused, (id) => (id === 'kloof' ? 'Kloof' : null)).map((c) => c.label)).toEqual([
+			'Bergwater raw',
+			'Bergwater adjusted to Upper unit (× 1.159)',
+			'Upper unit CHIRPS raw',
+			'Upper unit rain used',
+			'Upper unit rain used from'
+		]);
+		const kloof = { nodeId: 'u1', name: 'Upper unit', lines: lines({ correctAgainst: 'kloof' }) };
+		expect(areaViewColumns(kloof, (id) => (id === 'kloof' ? 'Kloof' : null))[3]!.label).toBe('Upper unit CHIRPS bias-corrected (f(m) against Kloof)');
+	});
+
+	it('a unit without lines (no station, or they failed) shows only the series stored at it, its CHIRPS included', () => {
+		expect(columnsForView('unit:u2', all, ctx)).toEqual([]);
+		const failed = { list, areas: [{ nodeId: 'u1', name: 'Upper unit', lines: null, error: 'unavailable' }] };
+		expect(columnsForView('unit:u1', all, failed).map((c) => c.id)).toEqual([seriesColumnId('chu1'), seriesColumnId('gu1'), m3DayColumnId('gu1')]);
+	});
+
+	it('the groups: the stations; the average catchment rainfall’s lines and the catchment’s own rain; every flow record with its m³/day and the exclusions', () => {
+		expect(columnsForView('stations', all, ctx).map((c) => c.id)).toEqual([seriesColumnId('berg'), seriesColumnId('kloof')]);
+		expect(columnsForView('catchment', all, ctx).map((c) => c.label)).toEqual([
+			'Bergwater raw',
+			'Bergwater adjusted to the catchment (× 1.159)',
+			'Catchment CHIRPS raw',
+			'Catchment CHIRPS bias-corrected (f(m) against Bergwater)',
+			'Catchment rain used',
+			'Catchment rain used from'
+		]);
+		expect(columnsForView('flow', all, ctx).map((c) => c.id)).toEqual([seriesColumnId('gu1'), m3DayColumnId('gu1'), seriesColumnId('weir'), m3DayColumnId('weir'), 'excluded']);
+	});
+
+	it('reads the raw lines by date; the toggles look only at the series a view shows', () => {
+		const l = lines();
+		expect(areaCell(l, 'stationRaw', '2020-01-01')).toBe(3.45);
+		expect(areaCell(l, 'chirpsRaw', '2020-01-02')).toBe(0);
+		expect(areaCell(lines({ chirpsRaw: null }), 'chirpsRaw', '2020-01-01')).toBeNull();
+
+		// The raw lines read their stored series (the station, the CHIRPS a run reads), so the toggles and the search
+		// work on them; the column checkboxes hide columns inside the view, and the toggles read only what's left.
+		const unitCols = columnsForView('unit:u1', all, ctx);
+		expect(unitCols.filter((c) => c.area && c.seriesId).map((c) => [c.area!.line, c.seriesId])).toEqual([
+			['stationRaw', 'berg'],
+			['chirpsRaw', 'chu1']
+		]);
+		expect(shownSeriesIds(unitCols)).toEqual(['berg', 'chu1', 'gu1']);
+		const visibleSeriesIds = shownSeriesIds(unitCols.filter((c) => c.id !== seriesColumnId('gu1')));
+		expect(visibleSeriesIds).toEqual(['berg', 'chu1']);
+		const cell = (value: number | null) => ({ value, flags: value === null ? (['missing'] as const) : [], m3Day: null }) as PreviewRow['series'][string];
+		const rows: PreviewRow[] = [
+			{ date: '2020-01-01', series: { berg: cell(3), chu1: cell(1), gu1: cell(null), weir: cell(1) }, derived: {} as PreviewRow['derived'] },
+			{ date: '2020-01-02', series: { berg: cell(null), chu1: cell(24), gu1: cell(1), weir: cell(1) }, derived: {} as PreviewRow['derived'] }
+		];
+		expect(filterPreviewRows(rows, { query: '', missingOnly: true, flaggedOnly: false, visibleSeriesIds }).map((r) => r.date)).toEqual(['2020-01-02']);
+		expect(filterPreviewRows(rows, { query: '> 20', missingOnly: false, flaggedOnly: false, visibleSeriesIds }).map((r) => r.date)).toEqual(['2020-01-02']);
+		const flowIds = shownSeriesIds(columnsForView('flow', all, ctx));
+		expect(filterPreviewRows(rows, { query: '', missingOnly: true, flaggedOnly: false, visibleSeriesIds: flowIds }).map((r) => r.date)).toEqual(['2020-01-01']);
 	});
 });

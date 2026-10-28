@@ -3254,6 +3254,8 @@ export interface CropAreaFromLandCover {
 	version: string;
 	method: string;
 	basis: 'unit' | 'parcel';
+	/** From the crop-type grid's orchards or vines (issue #604 R5-D); null: the land cover's cultivated area. */
+	layer: CropTypeLayer | null;
 	featureName: string | null;
 	acceptedAt: string;
 	/** The saved model still holds it (not typed over since). */
@@ -3275,6 +3277,44 @@ export interface CroplandProposals {
 	catchment: ({ featureId: string; name: string } & CultivatedSummary) | null;
 	/** The project's crops: what the unit holds now (m²; 0 = none) and where an accepted area came from. */
 	crops: { cropId: string; name: string; areaM2: number; accepted: CropAreaFromLandCover | null }[];
+	/** Orchards and vines in the same parcels from the crop-type grid (SANLC, issue #604 R5-D); null with none loaded (production, until SANLC's terms are recorded). */
+	cropTypes: CropTypeProposals | null;
+}
+
+/** A loaded crop-type product (issue #604 R5-D; docs/maps.md § Orchards and vines from SANLC). */
+export interface CropTypeDataset {
+	dataset: string;
+	source: string;
+	version: string;
+	/** The earlier edition new plantings are counted against; null: none loaded, so no new plantings. */
+	baselineVersion: string | null;
+	method: string;
+	attribution: string;
+	cellDeg: number;
+	orchardClasses: number[];
+	vineClasses: number[];
+	loadedAt: string;
+	synthetic: boolean;
+}
+
+/** A polygon's crop types, m²: orchards, vines, and the part of each new since the earlier edition. */
+export interface CropTypeAreas {
+	areaM2: number;
+	orchardM2: number;
+	vineM2: number;
+	newOrchardM2: number;
+	newVineM2: number;
+}
+
+/** What a crop-type summary can use as a crop's planted area. */
+export type CropTypeLayer = 'orchard' | 'vine';
+
+export interface CropTypeProposals {
+	dataset: CropTypeDataset;
+	/** Per linked parcel, in the land cover's order. */
+	parcels: ({ featureId: string; name: string } & (CropTypeAreas | { problem: string }))[];
+	/** The parcels summed; null without parcels or when one couldn't be read. */
+	unit: CropTypeAreas | null;
 }
 
 /** What an evaporation grid's values are: FAO-56 reference ET (proposed as GR4J's PE) or Class-A pan (the A-pan row). */
@@ -3359,6 +3399,71 @@ export interface RegisterDamProposal {
 	synthetic: boolean;
 	source: string;
 	loadedAt: string;
+}
+
+/** Where a dam observation comes from (backend dams/observed/compare.ts). */
+export type ObservedSource = 'waterbodies' | 'wofs';
+/** Why an observation wasn't compared with the model (backend dams/observed/compare.ts SkipReason). */
+export type ObservedSkip = 'partly-seen' | 'not-this-dam' | 'partial-unit' | 'other-source' | 'outside-run' | 'no-run';
+/** Which side says full or empty while the other clearly doesn't. */
+export type ObservedMismatch = 'model-full' | 'model-empty' | 'seen-full' | 'seen-empty';
+
+/** One satellite view of a unit's dam, with the run's area that day. */
+export interface ObservedPoint {
+	date: string;
+	source: ObservedSource;
+	wetAreaM2: number;
+	pctObserved: number;
+	modelledAreaM2: number | null;
+	compared: boolean;
+	skip: ObservedSkip | null;
+	seenFull: boolean;
+	seenEmpty: boolean;
+	modelFull: boolean;
+	modelEmpty: boolean;
+	mismatch: ObservedMismatch | null;
+}
+
+/** One unit's dam (or a dam polygon linked to no unit) seen from space. */
+export interface ObservedDam {
+	nodeId: string | null;
+	features: {
+		id: string;
+		name: string;
+		nodeId: string | null;
+		/** How the polygon matched a DE Africa Waterbodies polygon; null before the matcher has looked. */
+		match: { status: 'matched' | 'merged' | 'none'; damShare: number | null; waterbodyShare: number | null } | null;
+	}[];
+	fullArea: { areaM2: number; from: 'survey' | 'entered' | 'estimated' } | null;
+	inRun: boolean;
+	points: ObservedPoint[];
+	summary: {
+		compared: number;
+		skipped: number;
+		biasPctOfFull: number | null;
+		withinShare: number | null;
+		seenFull: number;
+		seenEmpty: number;
+		mismatches: number;
+		latestClear: { date: string; source: ObservedSource; wetAreaM2: number; pctObserved: number } | null;
+	};
+}
+
+/** GET …/dams/observations (issue #604 R5-B): each unit's dam seen from space against the run's modelled area. */
+export interface DamObservations {
+	attribution: string;
+	thresholds: { minPctObserved: number; fullShare: number; emptyShare: number; pixelM2: number; clearlyNotFull: number; clearlyWet: number; withinShare: number };
+	run: { id: string; label: string; createdAt: string; engineVersion: string; forecastFrom: string | null } | null;
+	dams: ObservedDam[];
+}
+
+/** GET …/farm/:nodeId/dam-observed (issue #604 R5-B): the farm's dam seen from space. */
+export interface FarmDamObserved {
+	/** The farm's dams drawn on the map as an outline; 0 and the page says nothing. */
+	outlines: number;
+	latest: { date: string; wetAreaM2: number; source: ObservedSource } | null;
+	fullAreaM2: number | null;
+	attribution: string;
 }
 
 /** GET …/nodes/:nodeId/dam-proposals: what the register and the map propose for a unit's dam. */

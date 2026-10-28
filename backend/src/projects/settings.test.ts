@@ -1031,6 +1031,17 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, apanDaily: { ...pan, extra: 1 } } })).toBe(false);
 	});
 
+	it('accepts an optional et0Daily inside forcing (issue #604 R5-E): the daily reference ET fingerprint through the fit’s last day, or null', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		const et0 = { startDate: '2012-10-01', length: 730, valuesSha256: 'ab'.repeat(32), through: '2014-09-30' };
+		expect(ok({ ...record, forcing: { ...forcing, et0Daily: et0 } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, et0Daily: null } })).toBe(true);
+		const { through: _t, ...noThrough } = et0;
+		expect(ok({ ...record, forcing: { ...forcing, et0Daily: noThrough } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, et0Daily: { ...et0, valuesSha256: 'not a hash' } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, et0Daily: { ...et0, through: '2014-09' } } })).toBe(false);
+	});
+
 	it('accepts an optional, whole zeroRainRuns inside forcing (CR-20)', () => {
 		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100], chirpsBiasCorrection: 'monthly' };
 		const zr = { mode: 'missing', keepDry: [{ waterYear: 2003, reason: 'real drought' }], missing: [] };

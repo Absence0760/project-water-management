@@ -37,6 +37,7 @@ import { referenceFit, referenceGaugeRecord, unitRainRecipes } from '../runoff/u
 import { chirpsFactorOn } from '../rain';
 import { pairingFactors } from '../runoff/stationForcing';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
+import { hasDailyEt0Value } from '../evaporation/et0Daily';
 import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
 import { band, MIN_BAND_MEMBERS, quantileSorted, type Band } from './bands';
 import { defaultScale, latinHypercube, pickUnit, scaleUnit } from './sample';
@@ -299,7 +300,7 @@ export function resolveEnsembleOptions(input: ModelInput, req: EnsembleRequest =
 	const notes: string[] = [];
 	const model = req.model ?? settings.runoffModel;
 	if (!RUNOFF_MODELS.includes(model)) throw new Error(`unknown runoff model "${String(model)}"`);
-	if (!hasPotentialEvaporation(settings, hasDailyApanValue(run.aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
+	if (!hasPotentialEvaporation(settings, hasDailyApanValue(run.aligned('evap_apan_mm')), hasDailyEt0Value(run.aligned('evap_et0_mm')))) throw new Error(GR4J_NO_PET);
 	const members = req.members ?? ENSEMBLE_DEFAULTS.members;
 	if (!isInt(members, ENSEMBLE_MEMBERS_MIN, ENSEMBLE_MEMBERS_MAX)) {
 		throw new Error(`members must be a whole number from ${ENSEMBLE_MEMBERS_MIN} to ${ENSEMBLE_MEMBERS_MAX}`);
@@ -455,7 +456,7 @@ export interface EnsembleContext {
 export function ensembleContext(input: ModelInput, options: ResolvedEnsembleOptions, scoring = true): EnsembleContext {
 	const run = prepareRun(input);
 	const { settings, days, startDate } = run;
-	if (options.model === 'gr4j' && !hasPotentialEvaporation(settings, hasDailyApanValue(run.aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
+	if (options.model === 'gr4j' && !hasPotentialEvaporation(settings, hasDailyApanValue(run.aligned('evap_apan_mm')), hasDailyEt0Value(run.aligned('evap_et0_mm')))) throw new Error(GR4J_NO_PET);
 	// Pin the window, so the CHIRPS-only source (without the station series) covers the same days.
 	const pin = (i: ModelInput): ModelInput => ({ ...i, settings: { ...i.settings, simulationStart: startDate, simulationEnd: fromEpochDay(run.end) } });
 	const base = pin(input);

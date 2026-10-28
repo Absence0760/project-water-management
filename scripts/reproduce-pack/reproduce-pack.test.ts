@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildPackBundle } from '../../packages/engine/src/evidence/bundle';
 import { packManifestText } from '../../packages/engine/src/evidence/pack';
-import { headlinePackFixture, packBundleFixture } from '../../packages/engine/src/testing/packBundle';
+import { fixtureObservations, headlinePackFixture, packBundleFixture } from '../../packages/engine/src/testing/packBundle';
 import { canonicalJson } from '../../packages/engine/src/manifest';
 import { zip, ZipArchive } from '../../packages/engine/src/zip';
 import { main, parseArgs } from './reproduce-pack';
@@ -111,6 +111,21 @@ describe('reproduce:pack', () => {
 		expect(bad.out).toMatch(/FAIL\s+figure:locality\s+the locality map drawn again hashes to [0-9a-f]{64}, not the d{64}/);
 		// Positive control for an older pack: the good bundle above has no figure, and no such check.
 		expect((await run([good, '--no-run'])).out).not.toContain('figure:locality');
+	});
+
+	it('classifies an evidence-21 pack’s observed wet days again (observations:wofs): exit 0; a count the dates don’t give fails it, exit 1', async () => {
+		await writeFile(join(dir, 'wet.zip'), (await buildPackBundle(packBundleFixture(hash, { observations: true }), hash)).bytes);
+		const ok = await run(['wet.zip']);
+		expect(ok.code, ok.out).toBe(0);
+		expect(ok.out).toMatch(/ok\s+observations:wofs\s+the observed wet days of 1 dam over the baseline run's period \(2001-10-01 to 2030-01-01\) classify again from the manifest's 5 observed dates/);
+		const wrong = fixtureObservations();
+		wrong.dams[0]!.dryDates = 2;
+		await writeFile(join(dir, 'wet-bad.zip'), (await buildPackBundle(packBundleFixture(hash, { observations: wrong }), hash)).bytes);
+		const bad = await run(['wet-bad.zip', '--no-run']);
+		expect(bad.code).toBe(1);
+		expect(bad.out).toMatch(/FAIL\s+observations:wofs\s+dam 00000000-0000-4000-8000-0000000000d1: 2 dry dates named, 1 counted/);
+		// A pack without § 7 has no such check.
+		expect((await run([good, '--no-run'])).out).not.toContain('observations:wofs');
 	});
 
 	describe('the headline board’s full-allocation pair (bundle-2, issue #523 G2)', () => {
