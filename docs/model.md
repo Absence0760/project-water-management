@@ -9653,8 +9653,10 @@ applies, in this order:
   (in range, or the gauged-range class) and Fit automatically scores it,
   "keep" meaning the same thing on the page and in the fit. Any other kept
   item is a record of the decision only. A fit records the kept outliers
-  and flat stretches it ran on (`FitRecord.checksKept`); a change since is
-  "quality flags changed since the fit".
+  and flat stretches of the record it fitted (`FitRecord.flowSeriesId`,
+  `FitRecord.checksKept`); a change to those since is "quality flags
+  changed since the fit", while keeping an item on any other record leaves
+  the fit current.
 - **Human use dominant** is defined and never set. Deriving it from the run
   would need the modelled abstraction, which depends on the parameters being
   fitted, so the flag would move during the fit; the durable form is a
