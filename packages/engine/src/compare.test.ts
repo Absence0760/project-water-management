@@ -191,6 +191,21 @@ describe('compareRuns', () => {
 		expect(c.onlyInB).toEqual([]);
 	});
 
+	it('compares the statistics at each calibration zone’s gauge, matched by gauge (issue #555)', () => {
+		expect(compareRuns(run(summary([])), run(summary([]))).calibrationZones).toBeUndefined();
+		const site = (id: string, name: string, nse: number, fitStatus: 'fitted' | 'notFitted', days = 365) => ({ siteNodeId: id, siteName: name, days, nse, kge: nse, pbias: 1, fitStatus }) as never;
+		const c = compareRuns(run(summary([], { calibrationZones: [site('H', 'Weir', 0.5, 'notFitted'), site('K', 'Kloof', 0.4, 'fitted')] })), run(summary([], { calibrationZones: [site('H', 'Weir', 0.7, 'fitted'), site('M', 'Mill', 0.6, 'fitted', 0)] })));
+		expect(c.calibrationZones!.map((z) => [z.nodeId, z.name, z.fitStatus.a, z.fitStatus.b])).toEqual([
+			['H', 'Weir', 'notFitted', 'fitted'],
+			['K', 'Kloof', 'fitted', null],
+			['M', 'Mill', null, 'fitted']
+		]);
+		expect(c.calibrationZones![0]!.nse.delta).toBeCloseTo(0.2, 10);
+		expect(c.calibrationZones![1]!.nse).toEqual({ a: 0.4, b: null, delta: null });
+		// A gauge with no scored day has no score.
+		expect(c.calibrationZones![2]!.nse).toEqual({ a: null, b: null, delta: null });
+	});
+
 	it('compares the WR2012 ratios when either run has the check, else null', () => {
 		expect(compareRuns(run(summary([])), run(summary([]))).wr2012).toBeNull();
 		const w = (overlapRatio: number | null, whole: number) =>
@@ -1262,15 +1277,25 @@ describe('diffInputs', () => {
 		const beforeNote = structuredClone(a);
 		delete (beforeNote.settings as Record<string, unknown>).lakeEvapFactorSource;
 		expect(diffInputs(beforeNote, { ...a, settings: { ...a.settings, lakeEvapFactorSource: '' } })).toEqual([]);
-		// Calibration zones (engine 1.106.0, issue #555): by the ticked rows' parameters a run reads, so [] (migration 267),
-		// an unticked row or a zone's window is no change, and a ticked zone's parameters are.
+		// Calibration zones (engine 1.106.0, issue #555 round 4): one line per ticked zone, named by its gauge. [] (migration
+		// 270) and an unticked row are no change; a ticked zone's parameters, window, record, exclusions and fit record are.
 		const zones = (z: unknown) => ({ ...a, settings: { ...a.settings, calibrationZones: z } as never });
+		const withGauge = (s: RunInputsSnapshot) => ({ ...s, model: { ...s.model, nodes: [...s.model.nodes, node('H', 'Weir', { kind: 'gauge', downstreamNodeId: 'g', damCapacityM3: 0 })] } });
 		const row = { nodeId: 'H', enabled: true, calibrationStart: null, gr4j: { x1: 900, x2: 0, x3: 220, x4: 3.1 } };
 		expect(diffInputs(a, zones([]))).toEqual([]);
 		expect(diffInputs(a, zones([{ ...row, enabled: false }]))).toEqual([]);
-		expect(diffInputs(zones([row]), zones([{ ...row, calibrationStart: '2000-10-01' }]))).toEqual([]);
-		expect(texts(a, zones([row]))).toEqual(['Calibration zones: none (one parameter set) → gauge node H (X1 900, X2 0, X3 220, X4 3.1)']);
-		expect(texts(zones([row]), zones([{ ...row, gr4j: null }]))).toEqual(['Calibration zones: gauge node H (X1 900, X2 0, X3 220, X4 3.1) → gauge node H (the catchment’s parameters)']);
+		expect(diffInputs(zones([{ ...row, enabled: false }]), zones([{ ...row, enabled: false, gr4j: null }]))).toEqual([]);
+		expect(texts(withGauge(a), withGauge(zones([row])))).toEqual(['Calibration zone at Weir: added (X1 900, X2 0, X3 220, X4 3.1)']);
+		expect(texts(withGauge(zones([row])), withGauge(zones([{ ...row, enabled: false }])))).toEqual([
+			'Calibration zone at Weir: removed (was X1 900, X2 0, X3 220, X4 3.1); its units joined the next zone downstream'
+		]);
+		expect(texts(zones([row]), zones([{ ...row, gr4j: null }]))).toEqual(['Calibration zone at H: X1 900, X2 0, X3 220, X4 3.1 → the catchment’s parameters']);
+		expect(texts(zones([row]), zones([{ ...row, gr4j: { ...row.gr4j, x1: 950, x4: 2 } }]))).toEqual(['Calibration zone at H: X1 900 → 950; X4 3.1 → 2']);
+		expect(texts(zones([row]), zones([{ ...row, calibrationStart: '2000-10-01' }]))).toEqual(['Calibration zone at H: window start of record to end of record → 2000-10-01 to end of record']);
+		expect(texts(zones([row]), zones([{ ...row, calibrationFlowKind: 'flow_logger_m3s' }]))).toEqual([expect.stringMatching(/^Calibration zone at H: flow series its gauge record → /)]);
+		const fit = { model: 'gr4j', fittedAt: '2026-10-28T10:05:00.000Z', objective: 'kgePrime', seed: 3 };
+		expect(texts(zones([row]), zones([{ ...row, fitRecord: fit }]))).toEqual(['Calibration zone at H: parameters now from a GR4J fit of 2026-10-28 10:05 UTC (KGE′, seed 3)']);
+		expect(diffInputs(a, zones([row])).map((c) => [c.subject, c.kind])).toEqual([['Calibration zones', 'added']]);
 	});
 
 	it('describes a change of the CHIRPS bias correction', () => {
@@ -1981,4 +2006,3 @@ describe('diffInputs: one record’s missing periods and the kept data checks (i
 		expect(new Map(settingsChangePaths()).get('Kept warnings')).toBe('warningsKept');
 	});
 });
-

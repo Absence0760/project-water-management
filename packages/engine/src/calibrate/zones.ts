@@ -245,15 +245,15 @@ export function resolveZones(nodes: readonly ZoneNode[], settings: Pick<ProjectS
 	for (const z of zones) {
 		if (!z.fitted) warnings.push(warn('calibration.zone.unfitted', { node: z.nodeId, name: z.name }, `Calibration zone "${z.name}" has no parameters of its own yet: its units run on the catchment's GR4J parameters until it is fitted`));
 	}
-	// Until the report, the evidence pack, the uncertainty ensemble and automated calibration read the zones (issue #555's
-	// next round), the run says that they show or vary the calibration site's zone's parameters only.
+	// Until the uncertainty ensemble and automated calibration read the zones (docs/followups.md § #555), the run says
+	// that they vary the calibration site's zone's parameters only (the report and evidence pack list every zone).
 	const zoned = zones.reduce((n, z) => n + z.units.length, 0);
 	if (zoned)
 		warnings.push(
 			warn(
 				'calibration.zone.siteOnlyElsewhere',
 				{ units: zoned, zones: zones.length },
-				`Calibration zones: ${zoned} land unit${zoned === 1 ? '' : 's'} ran on ${zones.length === 1 ? 'a calibration zone’s' : 'calibration zones’'} own GR4J parameters. The report, the evidence pack, the uncertainty ensemble and automated calibration still show or vary only the calibration site’s parameters (Calibration → Flow calibration)`
+				`Calibration zones: ${zoned} land unit${zoned === 1 ? '' : 's'} ran on ${zones.length === 1 ? 'a calibration zone’s' : 'calibration zones’'} own GR4J parameters. The uncertainty ensemble and automated calibration still vary only the calibration site’s parameters (Calibration → Flow calibration)`
 			)
 		);
 	return { zones, primaryUnits: landUnits.filter((u) => unitZone.get(u) === null), unitZone };

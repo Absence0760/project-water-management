@@ -147,6 +147,17 @@ export interface FarmDelta {
 	daysEwrNotMet: MetricDelta;
 }
 
+/** One calibration zone's gauge in a comparison (RunComparison.calibrationZones). */
+export interface ZoneCalibrationDelta {
+	nodeId: string;
+	name: string;
+	fitStatus: { a: CalibrationFitStatus | null; b: CalibrationFitStatus | null };
+	days: MetricDelta;
+	nse: MetricDelta;
+	kge: MetricDelta;
+	pbias: MetricDelta;
+}
+
 export interface RunComparison {
 	/** Both runs cover the same dates; averages over different periods compare poorly. */
 	samePeriod: boolean;
@@ -197,6 +208,12 @@ export interface RunComparison {
 		meanObservedM3s: MetricDelta;
 		meanSimulatedM3s: MetricDelta;
 	} | null;
+	/**
+	 * Calibration statistics at each calibration zone's gauge (issue #555, RunSummary.calibrationZones), matched by
+	 * gauge: every gauge either run scored, A's order first, then B's. Each side's `fitStatus` is its zone's own
+	 * (null = that run didn't score the gauge). Absent when neither run has any.
+	 */
+	calibrationZones?: ZoneCalibrationDelta[];
 	/**
 	 * The CHIRPS fallback factors each run applied (model.md §2.4b); null when
 	 * neither run fitted any (no CHIRPS, mode 'none', or saved before engine
@@ -506,6 +523,7 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 						meanSimulatedM3s: metricDelta(ka?.meanSimulatedM3s, kb?.meanSimulatedM3s)
 					}
 				: null,
+		...zoneCalibrationDeltas(a.summary.calibrationZones, b.summary.calibrationZones),
 		chirpsFit,
 		rainSource,
 		plausibility: comparePlausibility(a.summary.plausibility, b.summary.plausibility),
@@ -918,13 +936,11 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	calibrationZones: { label: 'Calibration zones', fmt: calibrationZonesText }
 };
 
-/** The ticked calibration zones and their parameters, for the input diff (a per-zone diff is issue #555's next round). */
+/** The ticked calibration zones and their parameters, in one line (the label's formatter; the input diff words each zone, calibrationZoneChanges). */
 function calibrationZonesText(v: unknown): string {
 	const ticked = (Array.isArray(v) ? v : []).filter((z): z is { nodeId: string; gr4j?: Record<string, unknown> | null } => !!z && typeof z === 'object' && (z as { enabled?: unknown }).enabled === true);
 	if (!ticked.length) return 'none (one parameter set)';
-	return ticked
-		.map((z) => `gauge node ${z.nodeId} (${z.gr4j ? ['x1', 'x2', 'x3', 'x4'].map((k) => `${k.toUpperCase()} ${fmtValue(z.gr4j![k])}`).join(', ') : 'the catchment’s parameters'})`)
-		.join('; ');
+	return ticked.map((z) => `gauge node ${z.nodeId} (${zoneParamsText(z.gr4j)})`).join('; ');
 }
 /** Engine ≥ 0.31.0; a snapshot without settings.pe ran pan coefficient × A-pan. */
 const PE_LABEL = 'Potential evaporation (GR4J)';
@@ -1118,6 +1134,87 @@ function flowShareChanges(ra: RunInputsSnapshot['settings'] | undefined, rb: Run
 	return out;
 }
 
+/** Each calibration zone's gauge, A's statistics against B's (issue #555); {} when neither run scored one. */
+function zoneCalibrationDeltas(za: readonly CalibrationStats[] | undefined, zb: readonly CalibrationStats[] | undefined): { calibrationZones?: ZoneCalibrationDelta[] } {
+	const ids: string[] = [];
+	for (const s of [...(za ?? []), ...(zb ?? [])]) if (s.siteNodeId && !ids.includes(s.siteNodeId)) ids.push(s.siteNodeId);
+	if (!ids.length) return {};
+	const at = (list: readonly CalibrationStats[] | undefined, id: string) => list?.find((s) => s.siteNodeId === id) ?? null;
+	return {
+		calibrationZones: ids.map((id) => {
+			const x = at(za, id);
+			const y = at(zb, id);
+			return {
+				nodeId: id,
+				name: y?.siteName ?? x?.siteName ?? id,
+				fitStatus: { a: x?.fitStatus ?? null, b: y?.fitStatus ?? null },
+				days: metricDelta(x?.days, y?.days),
+				nse: metricDelta(x?.days ? x.nse : null, y?.days ? y.nse : null),
+				kge: metricDelta(x?.days ? x.kge : null, y?.days ? y.kge : null),
+				pbias: metricDelta(x?.days ? x.pbias : null, y?.days ? y.pbias : null)
+			};
+		})
+	};
+}
+
+/** A calibration zone's row (the fields the run comparison words). */
+type ZoneRowLike = {
+	nodeId: string;
+	enabled?: unknown;
+	calibrationStart?: unknown;
+	calibrationEnd?: unknown;
+	calibrationFlowKind?: unknown;
+	calibrationExclusions?: unknown;
+	gr4j?: Record<string, unknown> | null;
+	fitRecord?: unknown;
+};
+
+const ZONE_PARAMS = ['x1', 'x2', 'x3', 'x4'] as const;
+const zoneParamsText = (p: Record<string, unknown> | null | undefined) => (p ? ZONE_PARAMS.map((k) => `${k.toUpperCase()} ${fmtValue(p[k])}`).join(', ') : 'the catchment’s parameters');
+const zoneWindowText = (z: ZoneRowLike) => `${z.calibrationStart ? String(z.calibrationStart) : 'start of record'} to ${z.calibrationEnd ? String(z.calibrationEnd) : 'end of record'}`;
+
+/**
+ * The calibration zones between two snapshots, one line per zone (issue #555, docs/run-comparison.md): a gauge
+ * ticked or unticked, and for a gauge ticked in both, its X1–X4, window, flow record, exclusions and fit record.
+ * An unticked row on both sides is no change (no run reads it); [] and absent are the same.
+ */
+function calibrationZoneChanges(ra: unknown, rb: unknown, name: (id: string) => string): { kind: InputChange['kind']; text: string }[] {
+	const ticked = (v: unknown) =>
+		new Map((Array.isArray(v) ? v : []).filter((z): z is ZoneRowLike => !!z && typeof z === 'object' && typeof (z as ZoneRowLike).nodeId === 'string' && (z as ZoneRowLike).enabled === true).map((z) => [z.nodeId, z]));
+	const a = ticked(ra);
+	const b = ticked(rb);
+	const out: { kind: InputChange['kind']; text: string }[] = [];
+	for (const id of [...new Set([...a.keys(), ...b.keys()])].sort()) {
+		const x = a.get(id);
+		const y = b.get(id);
+		const at = `Calibration zone at ${name(id)}`;
+		if (!x) {
+			out.push({ kind: 'added', text: `${at}: added (${zoneParamsText(y!.gr4j)})` });
+			continue;
+		}
+		if (!y) {
+			out.push({ kind: 'removed', text: `${at}: removed (was ${zoneParamsText(x.gr4j)}); its units joined the next zone downstream` });
+			continue;
+		}
+		const parts: string[] = [];
+		if (!x.gr4j || !y.gr4j) {
+			if (!!x.gr4j !== !!y.gr4j) parts.push(`${zoneParamsText(x.gr4j)} → ${zoneParamsText(y.gr4j)}`);
+		} else {
+			for (const k of ZONE_PARAMS) if (!same(x.gr4j[k], y.gr4j[k])) parts.push(`${k.toUpperCase()} ${fmtValue(x.gr4j[k])} → ${fmtValue(y.gr4j[k])}`);
+		}
+		if ((x.calibrationStart ?? null) !== (y.calibrationStart ?? null) || (x.calibrationEnd ?? null) !== (y.calibrationEnd ?? null)) parts.push(`window ${zoneWindowText(x)} → ${zoneWindowText(y)}`);
+		if ((x.calibrationFlowKind ?? null) !== (y.calibrationFlowKind ?? null)) {
+			const kind = (v: unknown) => (v ? (SERIES_LABELS[String(v)] ?? String(v)) : 'its gauge record');
+			parts.push(`flow series ${kind(x.calibrationFlowKind)} → ${kind(y.calibrationFlowKind)}`);
+		}
+		const ex = (v: unknown) => (Array.isArray(v) ? v : []);
+		if (!same(ex(x.calibrationExclusions), ex(y.calibrationExclusions))) parts.push(`exclusions ${ex(x.calibrationExclusions).length} → ${ex(y.calibrationExclusions).length}`);
+		for (const c of diffFitRecord(x.fitRecord, y.fitRecord)) parts.push(c.text.charAt(0).toLowerCase() + c.text.slice(1));
+		if (parts.length) out.push({ kind: 'changed', text: `${at}: ${parts.join('; ')}` });
+	}
+	return out;
+}
+
 function diffSettings(
 	ra: RunInputsSnapshot['settings'] | undefined,
 	rb: RunInputsSnapshot['settings'] | undefined,
@@ -1132,9 +1229,11 @@ function diffSettings(
 
 	for (const [k, f] of Object.entries(SETTINGS_FIELDS)) {
 		if (k === 'ewrSplit' || k === 'flowShareMethod') continue;
-		// The zones by what a run reads of them (the ticked rows' parameters): [] and absent, a window or a fit record, are no change.
-		if (k === 'calibrationZones' ? f.fmt(a[k]) !== f.fmt(b[k]) : !same(a[k], b[k])) push(f.label, `${f.label}: ${f.fmt(a[k])} → ${f.fmt(b[k])}`);
+		// The zones, one line per zone (calibrationZoneChanges, below).
+		if (k === 'calibrationZones') continue;
+		if (!same(a[k], b[k])) push(f.label, `${f.label}: ${f.fmt(a[k])} → ${f.fmt(b[k])}`);
 	}
+	for (const c of calibrationZoneChanges(a.calibrationZones, b.calibrationZones, (id) => siteName(id))) out.push({ area: 'settings', kind: c.kind, subject: SETTINGS_FIELDS.calibrationZones!.label, text: c.text });
 	const split = ewrSplitChange(ra, rb);
 	if (split) push(EWR_SPLIT_FIELD, split);
 	for (const [k, f] of Object.entries(SETTINGS_MONTHLY)) {
