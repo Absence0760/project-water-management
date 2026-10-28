@@ -5,6 +5,7 @@
 // closeModal from ./network.ts.
 import type { Page } from '@playwright/test';
 import { showHeaderControls } from './sectionHeader.ts';
+import { urlSettled } from './urlSettled.ts';
 
 export type CropGrid = 'crop-factors' | 'planted-areas';
 const TITLE: Record<CropGrid, string> = {
@@ -17,6 +18,7 @@ const MENU: Record<CropGrid, string> = { 'crop-factors': 'Crop factors', 'plante
 export async function openCropGrid(page: Page, grid: CropGrid) {
 	const dialog = page.getByRole('dialog', { name: TITLE[grid] });
 	// The URL already names it (a reload keeps `grid=`): it opens with the page; wait for it.
+	await urlSettled(page);
 	if (new RegExp(`[?&]grid=${grid}\\b`).test(page.url())) {
 		await dialog.waitFor();
 		return dialog;
