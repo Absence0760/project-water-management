@@ -192,6 +192,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// The assistant (issue #610): auth-gated like every project route; its tools run as the caller.
+	it('inventories the assistant routes as auth-gated', () => {
+		for (const r of ['GET /projects/:id/assistant', 'POST /projects/:id/assistant/messages']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Each unit's MAP from the MAP grid (issue #482): auth-gated like every project route.
 	it('inventories the unit MAP routes as auth-gated', () => {
 		for (const r of ['GET /projects/:id/map/unit-map', 'POST /projects/:id/map/unit-map']) {

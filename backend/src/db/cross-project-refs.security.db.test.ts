@@ -1233,6 +1233,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'projects/document.ts:siteNodeId': 'a node of the file’s own model, moved to its fresh id on import (projectFileProblems refuses any other): series/site.db.test.ts',
 	'projects/authorityDelegates.ts:userId': ['POST /projects/:id/authority-delegates userId'],
 	'projects/routes.ts:teamId': 'a team, not a project row: teams/teams.security.db.test.ts',
+	'assistant/routes.ts:runId':
+		'looked up within the project (WHERE id = … AND project_id = …) before the turn is counted, so another project’s run is 404; the sweep runs with the assistant off, which answers first (assistant/assistant.db.test.ts tries it on the mock provider, with a positive control)',
 	'publish/publish.ts:runId': ['POST /projects/:id/publication runId'],
 	'reports/routes.ts:runId': ['POST /projects/:id/reports runId'],
 	'evidence/packs.ts:runId':

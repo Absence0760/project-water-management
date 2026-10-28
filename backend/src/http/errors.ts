@@ -143,6 +143,15 @@ export const ERROR_CODES = [
  *     day or file of a unit a cap or full-allocation run bound to its volume
  *     (issue #523 finding I; runs/withheldSeries.ts). The run pages are
  *     English workspace pages; they don't ask for these (`withheldSeries`).
+ *   assistant_* (issue #610, assistant/routes.ts; docs/api.md § Assistant):
+ *     the assistant panel is an English workspace page. Before a stream:
+ *     assistant_off (404, ASSISTANT_PROVIDER is off), assistant_rate_limited
+ *     (429 + Retry-After, the person's messages this hour; params.seconds),
+ *     assistant_budget_spent (429 + Retry-After, the project's tokens this
+ *     month; params.seconds), assistant_input_too_large (413, the newest
+ *     message alone passes ASSISTANT_MAX_INPUT_CHARS). As a stream's `error`
+ *     event (assistant/orchestrator.ts TURN_ERRORS): assistant_hop_limit,
+ *     assistant_output_limit, assistant_timeout, assistant_provider_error.
  */
 export const MACHINE_ERROR_CODES = [
 	'render_token_refused',
@@ -153,7 +162,15 @@ export const MACHINE_ERROR_CODES = [
 	'job_collision',
 	'pack_volumes_withheld',
 	'ewr_rule_scenario_only',
-	'allocation_series_withheld'
+	'allocation_series_withheld',
+	'assistant_off',
+	'assistant_rate_limited',
+	'assistant_budget_spent',
+	'assistant_input_too_large',
+	'assistant_hop_limit',
+	'assistant_output_limit',
+	'assistant_timeout',
+	'assistant_provider_error'
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number] | (typeof MACHINE_ERROR_CODES)[number];
 

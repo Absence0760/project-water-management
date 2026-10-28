@@ -3369,6 +3369,41 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Goes with the account (cascade) and is in the data-subject export
   (`preferences`).
 
+### Assistant usage (258_assistant_usage.sql)
+
+What the assistant costs, counted (issue #610; [api.md §
+Assistant](./api.md#assistant), [security.md §
+Assistant](./security.md#assistant)). No chat text is kept anywhere: the
+page holds the conversation and sends it with each turn.
+
+| Table | Holds |
+| --- | --- |
+| `assistant_usage` | One row per person per project per UTC month: `project_id` (cascade), `user_id` (set null), `month` (the month's first day), `input_tokens`, `output_tokens`, `messages`, `updated_at`; unique on (`project_id`, `month`, `user_id`), which covers the project key, and an index on `user_id` |
+| `assistant_rate` | The hourly message cap: `user_id` (primary key, cascade), `window_start`, `messages`, a fixed one-hour window as `map_compute_throttle` (186); rows go once their hour is over, at the next turn |
+
+- A project's budget for the month is the sum of its month's rows
+  (`ASSISTANT_TOKENS_PER_MONTH`, 2 M by default); the hourly cap is the
+  person's, across projects (`ASSISTANT_MESSAGES_PER_HOUR`, 30).
+- Written only through SECURITY DEFINER functions, each requiring the caller
+  to be at least a viewer of the project (`42501` otherwise), so no one
+  spends another project's budget: `app_assistant_begin(project,
+  tokens_per_month, messages_per_hour)` checks the cap, then the budget, and
+  counts the message only when both pass (outcome `ok`, `rate` or `budget`,
+  with the seconds to wait); it takes a transaction-level advisory lock on the
+  project, then the person's `assistant_rate` row (`FOR UPDATE`), in that
+  order everywhere, so parallel turns are counted one by one.
+  `app_assistant_charge(project, input, output)` adds a finished turn's
+  tokens in one upsert (parallel charges each count once) and returns the
+  month's total; `app_assistant_used(project)` reads it.
+- `assistant_usage` is read-only to `water_app`: one SELECT policy,
+  `assistant_usage_own` (`user_id = app_current_user_id()`), so a person
+  reads their own rows (the export's `assistantUsage`) and the project's
+  total comes only from `app_assistant_used`. `assistant_rate` has a deny-all
+  policy. Proven with positive controls in `src/assistant/assistant.db.test.ts`.
+- An account deletion clears `assistant_usage.user_id` (the spend stays
+  counted against the project's month, without the name) and removes the
+  `assistant_rate` row.
+
 ### Two-step sign-in (150_mfa.sql, 206_mfa_email_code.sql)
 
 | Table | Holds |

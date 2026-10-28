@@ -239,7 +239,10 @@ const READ_ONLY = new Set([
 	// Our store of DWS gauge flow and the days each source covered (247_gauge_record): written only by gauge_record_write
 	// (the operator's import, as the schema owner) and app_gauge_record_load_web (the worker, with no user).
 	'gauge_record',
-	'gauge_record_span'
+	'gauge_record_span',
+	// The assistant's usage counters (258_assistant_usage): a person reads their own rows; only app_assistant_begin
+	// and app_assistant_charge write them, so no caller charges another's row or resets a month.
+	'assistant_usage'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
@@ -286,6 +289,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'alert_subscription.user_id': 'cascade',
 	'allocation_source.imported_by': 'set null',
 	'api_key.created_by': 'set null',
+	// The assistant's spend stays counted against the project's month, without the name; the hourly count goes (258_assistant_usage).
+	'assistant_usage.user_id': 'set null',
+	'assistant_rate.user_id': 'cascade',
 	'api_key.revoked_by': 'set null',
 	'audit_event.actor_user_id': 'set null',
 	// Who acts for the authority (229): the delegation goes with the account; who proposed or confirmed it is cleared.

@@ -161,6 +161,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/map/rivers/add': () => ({ body: { dataset: 'synthetic', reachId: 90000005 } }),
 	'POST /projects/:id/nodes/:nodeId/dam-area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
 	// Delineation (175): the ladder turns DEM_URL on with the committed synthetic DEM, and this is its valley's outlet.
+	'POST /projects/:id/assistant/messages': () => ({ body: { messages: [{ role: 'user', content: 'What does this run show?' }] } }),
 	'POST /projects/:id/map/delineation': () => ({ body: { lon: 20.7428741, lat: -33.5396777, from: 'outlet' } }),
 	'POST /projects/:id/map/delineation/:pid/accept': () => ({ body: { as: 'other' } }),
 	// Sub-catchments from clicks: the synthetic DEM's outlet and a click just below its dam wall.

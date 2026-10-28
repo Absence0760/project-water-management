@@ -2182,6 +2182,65 @@ recorded bytes, runs the engine's `checkPackBundle` with the re-run, and
 records the outcome through `app_record_pack_reproduction`. The pack's page
 shows it (`reproduction` on `GET …/packs/:packId`); verify doesn't.
 
+## Assistant
+
+A chat about one project's model and results (issue #610,
+`backend/src/assistant/`; the API in [api.md § Assistant](./api.md#assistant),
+the counters in [data-model.md § Assistant usage](./data-model.md#assistant-usage-258_assistant_usagesql),
+the controls in [security.md § Assistant](./security.md#assistant)). The
+model is called from the backend only, never the browser, so the site's CSP
+doesn't change. The assistant reads; it never writes the project. A
+recommended settings change comes back as a proposal the person loads into
+the Settings draft and an editor saves with the normal Save.
+
+```mermaid
+sequenceDiagram
+  participant B as Browser (panel)
+  participant A as API (assistant routes)
+  participant P as Postgres (RLS)
+  participant M as Model (provider)
+  B->>A: POST /projects/:id/assistant/messages {messages, runId?}
+  A->>P: withUser: requireRole viewer, app_assistant_begin (rate, budget, count)
+  A-->>B: 200 text/event-stream (or a JSON 4xx before any byte)
+  loop each hop, at most ASSISTANT_MAX_HOPS
+    A->>M: system prompt + conversation + tool specs
+    M-->>A: text deltas, tool calls, usage
+    A-->>B: text / tool events (": keepalive" every 15 s)
+    A->>P: each tool call: withUser(…, readOnly), RLS + the routes' withholding
+  end
+  A->>P: app_assistant_charge (tokens)
+  A-->>B: usage, done
+```
+
+- **One turn** (`orchestrator.ts` `runTurn`): the fixed system prompt
+  (`prompt.ts`; nothing personal in it) and the page's conversation, cut to
+  `ASSISTANT_MAX_INPUT_CHARS` from the oldest end, go to the provider. Each
+  tool call it asks for runs in its own read-only transaction as the caller
+  (`withUser(…, { readOnly: true })`), so RLS and the run routes' withholding
+  decide what it reads, and its result is cut to
+  `ASSISTANT_MAX_TOOL_RESULT_CHARS` before the model sees it. A malformed or
+  unknown call becomes an error result the model reads, never a crash. The
+  turn ends when the model answers in text, or with an `error` event past
+  the hop cap, the output cap, the turn's `ASSISTANT_TURN_SECONDS`, or a
+  provider failure. A client that goes away aborts the provider's call.
+- **Counted, then charged**: the message is counted (the person's hour, the
+  project's month) in the transaction that checked the role, before the
+  stream starts; the turn's tokens are charged after it ends, whatever the
+  outcome (`usage.ts`). A call a provider never reported usage for is
+  charged by estimate (characters ÷ 4).
+- **Providers** (`providers/`, one interface in `types.ts`): `off` (the
+  default: no panel, no calls), `mock` (scripted answers and tool calls, for
+  the tests and e2e; production refuses it), `ollama` (a local model), and
+  `anthropic` or `bedrock` for production. ASSISTANT_PROVIDER picks one
+  (`config.ts`).
+- **The stream** (`sse.ts`) is a plain `ReadableStream` body, so it takes the
+  same path as the CSV downloads: the Node server pipes it locally, and in
+  Lambda `http/lambdaStream.ts` pipes it in `RESPONSE_STREAM` mode
+  (`assistant/routes.test.ts` drives it through the adapter). The keepalive
+  comment keeps CloudFront's 35 s gap from cutting a slow tool call off.
+- **No transcript is stored**, and no prompt or answer is logged: the server
+  keeps only the token and message counts (`assistant_usage`, `assistant_rate`).
+
 ## Key choices
 
 | Choice | Why |

@@ -4234,6 +4234,48 @@ bucket would add storage and a lifecycle to run for no question it would
 answer. If key-level audit is ever needed, CloudTrail data events on the
 prefix in question (e.g. `reference/*`) cost almost nothing at this volume.
 
+## Assistant
+
+The project assistant (issue #610; [architecture.md §
+Assistant](./architecture.md#assistant), [api.md § Assistant](./api.md#assistant))
+sends project data to a model. What goes, and what keeps it bounded:
+
+- **Who.** Viewers and above, as themselves (`requireRole(…, 'viewer')`,
+  so farmers and contributors are refused; RLS backs it in the counter
+  functions too). The assistant only reads; applying a proposal is the
+  normal settings Save, which needs an editor and validates the patch
+  again.
+- **What reaches the model.** The fixed system prompt (`assistant/prompt.ts`,
+  nothing personal), the conversation the page sends (its own text, capped
+  at `ASSISTANT_MAX_INPUT_CHARS`), and the results of the tools the model
+  calls. Each tool runs in a read-only transaction as the caller, so RLS
+  applies, and goes through the same readers and withholding as the run
+  routes (a member who can't read registered volumes gets none through the
+  assistant). Tool results leave out member and farmer names and emails;
+  farm and unit names stay, as the model's own labels. A result is cut to
+  `ASSISTANT_MAX_TOOL_RESULT_CHARS`. A tool's or provider's error text never
+  reaches the model, the client or the log: fixed words go back, and the log
+  gets only the error's name and frames (`safeError`).
+- **Prompt injection.** Text in the project (a node name, a note) can reach
+  the model through a tool result. It can't widen what the assistant does:
+  every tool reads, as the caller, under RLS, and `propose_settings` only
+  returns a patch the person still has to review and save.
+- **Nothing kept.** No transcript, prompt or answer is stored or logged; the
+  server keeps only token and message counts (`assistant_usage`,
+  `assistant_rate`, 258). The usage rows are in "Download my data"
+  (`assistantUsage`); an account deletion clears their name.
+- **Cost.** A token budget per project per UTC month
+  (`ASSISTANT_TOKENS_PER_MONTH`, 2 M; checked before a turn, charged after,
+  so a turn can pass it by at most one turn's tokens), a message cap per
+  person per hour across projects (`ASSISTANT_MESSAGES_PER_HOUR`, 30; 429
+  with `Retry-After`), both counted in Postgres under locks so parallel
+  turns count one by one; and per turn at most `ASSISTANT_MAX_HOPS` (6)
+  model calls of `ASSISTANT_MAX_OUTPUT_TOKENS` (1024) each, within
+  `ASSISTANT_TURN_SECONDS` (100). The counter functions refuse a caller who
+  isn't a viewer of the project, so no one spends another project's budget.
+- **Off by default.** `ASSISTANT_PROVIDER=off` shows no panel and calls
+  nothing; no dev server needs a key.
+
 ## Liability
 
 Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
