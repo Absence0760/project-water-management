@@ -1834,6 +1834,10 @@ describe('settings.calibrationZones (engine 1.106.0, issue #555)', () => {
 		// A zone with no parameters of its own is judged against the catchment's.
 		const bare = patchSettings({}, { gr4j: { x1: 900, x2: 0, x3: 220, x4: 3.1 }, calibrationZones: [{ ...row, gr4j: null }] });
 		expect(bare.calibrationZones![0]!.fitRecord!.editedParams).toEqual([]);
+		// [] where none is stored is no change (no zone either way), so nothing is stored; where [] is stored it stays.
+		expect('calibrationZones' in patchSettings({}, { calibrationZones: [] })).toBe(false);
+		expect(patchSettings({ calibrationZones: [] }, { calibrationZones: [] }).calibrationZones).toEqual([]);
+		expect(patchSettings({ calibrationZones: [row] }, { calibrationZones: [] }).calibrationZones).toEqual([]);
 		// Today's single site and parameters are untouched.
 		expect(out.gr4j).toEqual(defaultProjectSettings().gr4j);
 		expect(out.calibrationSiteNodeId).toBeNull();

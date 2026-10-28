@@ -21,7 +21,8 @@ let db: pg.Client;
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 // SITE: calibrated at an inner gauge with a fit. OUTLET: the defaults. ZONED: already has a zone row. EMPTY: no settings at all.
-const [SITE, OUTLET, ZONED, EMPTY] = [id(1), id(2), id(3), id(4)];
+// ODD: settings that aren't an object (never written by the API), left alone.
+const [SITE, OUTLET, ZONED, EMPTY, ODD] = [id(1), id(2), id(3), id(4), id(5)];
 const GAUGE = id(11);
 const FIT = { fittedAt: '2026-10-01T00:00:00.000Z', siteNodeId: GAUGE, params: { x1: 512, x2: 0, x3: 80, x4: 2.1 } };
 const SITE_SETTINGS = {
@@ -52,6 +53,7 @@ beforeAll(async () => {
 	await project(OUTLET, { lakeEvapFactor: 0.7 });
 	await project(ZONED, { calibrationZones: [ZONE] });
 	await project(EMPTY, {});
+	await project(ODD, []);
 	await db.query(await readFile(join(DIR, FILE), 'utf8'));
 });
 
@@ -68,6 +70,10 @@ describe('migration 267: calibration zones', () => {
 		expect(await settingsOf(SITE)).toEqual({ ...SITE_SETTINGS, calibrationZones: [] });
 		expect(await settingsOf(OUTLET)).toEqual({ lakeEvapFactor: 0.7, calibrationZones: [] });
 		expect(await settingsOf(EMPTY)).toEqual({ calibrationZones: [] });
+	});
+
+	it('leaves settings that aren’t an object alone', async () => {
+		expect(await settingsOf(ODD)).toEqual([]);
 	});
 
 	it('keeps a project’s zones as they are', async () => {

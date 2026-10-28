@@ -299,8 +299,12 @@ export function patchSettings(stored: unknown, patch: Json): ProjectSettings {
 	}
 	if ('calibrationRules' in patch) out.calibrationRules = nextCalibrationRules(current.calibrationRules, patch.calibrationRules);
 	out.fitRecord = resolveFitRecord(out as Partial<ProjectSettings> & Json);
-	// Each zone's fit record too, against the zone's own parameters (issue #555).
-	if (Array.isArray(out.calibrationZones)) out.calibrationZones = out.calibrationZones.map((z: unknown) => resolveZoneFitRecord(out.gr4j, z));
+	// Each zone's fit record too, against the zone's own parameters (issue #555). An empty list where none is stored
+	// is no change (both are no zone), so it isn't stored: a run-policy-only save then still leaves updated_at alone.
+	if (Array.isArray(out.calibrationZones)) {
+		if (!out.calibrationZones.length && current.calibrationZones === undefined) delete out.calibrationZones;
+		else out.calibrationZones = out.calibrationZones.map((z: unknown) => resolveZoneFitRecord(out.gr4j, z));
+	}
 	return out as unknown as ProjectSettings;
 }
 
