@@ -31,6 +31,11 @@
 			"rainThresholdMm": 2,
 			"catchmentAreaKm2": null
 		},
+		"unitRain": {
+			"mode": "catchment",
+			"gaugeMapMm": 1177,
+			"gaugeMapSource": "Invented for the demo: the gauge’s mean annual rain over its record"
+		},
 		"ewrPragmaticM3PerDay": [25100,7600,2300,1200,800,600,700,3600,55000,118400,130000,65300],
 		"gr4j": {
 			"x1": 426.0810500977728,
@@ -41,7 +46,7 @@
 		},
 		"fitRecord": {
 			"fittedAt": "2025-01-15T09:00:00.000Z",
-			"engineVersion": "1.89.0",
+			"engineVersion": "1.105.0",
 			"model": "gr4j",
 			"objective": "kgePrime",
 			"bounds": "wide",
@@ -117,7 +122,8 @@
 					"aboveRating": 0,
 					"suspect": 0,
 					"infilled": 0,
-					"missing": 202
+					"missing": 202,
+					"periodHigh": 0
 				},
 				"scoredDays": 4912,
 				"censoredDays": 0,
@@ -131,8 +137,8 @@
 					"zeroRunDays": 55
 				},
 				"notes": [
-					"No highest gauging is recorded for the gauge record (Settings → Calibration record → Quality flags for Fit automatically, the Highest gauging column), so no day can be flagged as extrapolated: flood days count as readings, however far the rating curve was extended beyond its gaugings.",
-					"Of the scored days, 55 days fall in zero-rain runs set aside as missing (Settings → Rain gaps → Flagged rain); their rain is filled."
+					"No highest gauging is recorded for the gauge record (Calibration → Calibration record → Quality flags for Fit automatically, the Highest gauging column), so no day can be flagged as extrapolated: flood days count as readings, however far the rating curve was extended beyond its gaugings.",
+					"Of the scored days, 55 days fall in zero-rain runs set aside as missing (Model settings → Rain gaps → Flagged rain); their rain is filled."
 				]
 			},
 			"fitAllDays": null,
@@ -147,14 +153,14 @@
 					"kgePrime": 0.927966880469341,
 					"kgeYearly": 0.9097739349247571,
 					"kgeNp": 0.9685314716206527,
-					"nse": 0.8590454430359754,
+					"nse": 0.8590454430359753,
 					"nseSqrt": 0.9431944069613357,
 					"nseLog": 0.9776031521855573,
-					"kgeLowHigh": 0.9248795130137117,
+					"kgeLowHigh": 0.9248795130137115,
 					"volumeErrorPct": 1.5135749751814274,
 					"fdcHighPct": -1.8618400537445357,
 					"fdcMidSlopePct": 0.05935112960951528,
-					"fdcLowPct": 41.61271862805511
+					"fdcLowPct": 41.612718628055134
 				},
 				"wr2012Fit": {
 					"waterYears": [2011,2012,2014,2016,2017,2018,2020,2022,2023],
@@ -179,8 +185,8 @@
 						{
 							"key": "sd",
 							"observed": 7.129015757319639,
-							"simulated": 7.349096492408682,
-							"diffPct": 3.087112479209739,
+							"simulated": 7.349096492408681,
+							"diffPct": 3.0871124792097264,
 							"bandPct": 6,
 							"withinBand": true
 						},
@@ -261,7 +267,7 @@
 				"scores": {
 					"days": 4912,
 					"kgePrime": 0.8744130904558794,
-					"kgeYearly": 0.8633763991031764,
+					"kgeYearly": 0.8633763991031763,
 					"kgeNp": 0.9114337590578397,
 					"nse": 0.8071211437844592,
 					"nseSqrt": 0.9262906246981655,
@@ -295,16 +301,16 @@
 						{
 							"key": "sd",
 							"observed": 7.129015757319639,
-							"simulated": 7.3314474729544505,
-							"diffPct": 2.839546474938944,
+							"simulated": 7.33144747295445,
+							"diffPct": 2.8395464749389316,
 							"bandPct": 6,
 							"withinBand": true
 						},
 						{
 							"key": "logSd",
 							"observed": 0.10551704211890882,
-							"simulated": 0.10112750594116598,
-							"diffPct": -4.160025802084365,
+							"simulated": 0.10112750594116597,
+							"diffPct": -4.160025802084378,
 							"bandPct": 6,
 							"withinBand": true
 						},
@@ -325,7 +331,7 @@
 					"seed": 20210101,
 					"years": 15,
 					"kgePrime": {
-						"lo": 0.8596410728802342,
+						"lo": 0.8596410728802344,
 						"hi": 0.8884746382232243
 					},
 					"nse": {
@@ -544,7 +550,7 @@
 					"waterYears": [2017,2018,2019,2020,2021,2022,2023,2024],
 					"scores": {
 						"days": 2456,
-						"kgePrime": 0.9194770571243515,
+						"kgePrime": 0.9194770571243516,
 						"kgeYearly": 0.9026141101271286,
 						"kgeNp": 0.9632606652053767,
 						"nse": 0.8426892122452299,
@@ -554,7 +560,7 @@
 						"volumeErrorPct": 2.1999234193511774,
 						"fdcHighPct": -1.914063488248874,
 						"fdcMidSlopePct": -0.08370429155110465,
-						"fdcLowPct": 38.458130277594336
+						"fdcLowPct": 38.458130277594314
 					},
 					"wr2012Fit": {
 						"waterYears": [2018,2020,2022,2023],
@@ -613,12 +619,12 @@
 							"hi": 0.928349337882149
 						},
 						"nse": {
-							"lo": 0.817624437277849,
+							"lo": 0.8176244372778491,
 							"hi": 0.8687196793285243
 						},
 						"kgeLowHigh": {
 							"lo": 0.9147315127664514,
-							"hi": 0.9334698268726543
+							"hi": 0.9334698268726545
 						}
 					},
 					"benchmarks": {
@@ -674,11 +680,11 @@
 						"nse": 0.8819537203332628,
 						"nseSqrt": 0.9529478760443072,
 						"nseLog": 0.984214610760569,
-						"kgeLowHigh": 0.9409836071402574,
+						"kgeLowHigh": 0.9409836071402575,
 						"volumeErrorPct": -0.4893298840257524,
 						"fdcHighPct": -3.6343679189986973,
 						"fdcMidSlopePct": 0.8569287960821622,
-						"fdcLowPct": 43.025312818768704
+						"fdcLowPct": 43.02531281876868
 					},
 					"wr2012Fit": {
 						"waterYears": [2012,2016,2022,2023],
@@ -734,7 +740,7 @@
 						"years": 7,
 						"kgePrime": {
 							"lo": 0.9230545218513657,
-							"hi": 0.9450377510154347
+							"hi": 0.9450377510154346
 						},
 						"nse": {
 							"lo": 0.8575416926634738,
@@ -791,10 +797,10 @@
 						"nseSqrt": 0.9473903349575726,
 						"nseLog": 0.9835385534188639,
 						"kgeLowHigh": 0.9338178527617869,
-						"volumeErrorPct": -1.0195625892130602,
+						"volumeErrorPct": -1.019562589213072,
 						"fdcHighPct": -7.439037864829504,
 						"fdcMidSlopePct": -0.48617197152351244,
-						"fdcLowPct": 33.85685998530436
+						"fdcLowPct": 33.85685998530438
 					},
 					"wr2012Fit": {
 						"waterYears": [2011,2014,2017,2018,2020],
@@ -858,7 +864,7 @@
 						},
 						"kgeLowHigh": {
 							"lo": 0.9286684287156275,
-							"hi": 0.9368541671339309
+							"hi": 0.9368541671339311
 						}
 					},
 					"benchmarks": {
@@ -1031,7 +1037,9 @@
 				"baseflowGainM3Day": 0,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
-				"gaRateM3HaYear": null
+				"gaRateM3HaYear": null,
+				"mapMm": 1177,
+				"mapSource": "Invented for the demo: the catchment’s mean annual rain, a little wetter or drier"
 			},
 			{
 				"id": "f0fccdd8-5481-5bfa-bf48-f9f0ff34ddb3",
@@ -1093,7 +1101,9 @@
 				"baseflowGainM3Day": 0,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
-				"gaRateM3HaYear": null
+				"gaRateM3HaYear": null,
+				"mapMm": 1059,
+				"mapSource": "Invented for the demo: the catchment’s mean annual rain, a little wetter or drier"
 			},
 			{
 				"id": "df715b3b-864b-544f-ad00-6af5247c77d4",
@@ -1155,7 +1165,9 @@
 				"baseflowGainM3Day": 0,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
-				"gaRateM3HaYear": null
+				"gaRateM3HaYear": null,
+				"mapMm": 1236,
+				"mapSource": "Invented for the demo: the catchment’s mean annual rain, a little wetter or drier"
 			},
 			{
 				"id": "47a6d503-82fd-5e8e-bcde-178635fc039b",
@@ -1217,7 +1229,9 @@
 				"baseflowGainM3Day": 0,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
-				"gaRateM3HaYear": null
+				"gaRateM3HaYear": null,
+				"mapMm": 1118,
+				"mapSource": "Invented for the demo: the catchment’s mean annual rain, a little wetter or drier"
 			}
 		],
 		"crops": [

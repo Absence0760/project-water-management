@@ -3513,8 +3513,7 @@ where `MAR_f` is the unit's natural runoff summed over the **MAR period**.
   fell back, the period (`{ start, end, waterYears }`, `waterYears` 0 for
   the whole run), where the runoff came from (`runoffFrom`: `unitRain` or
   `shareRuns`) and the units on the catchment rain; each
-  `FarmSummary.ewrShare` is the share applied, beside its `flowShare`. Every
-  run with a land unit notes the split (one run warning), the summary CSV's
+  `FarmSummary.ewrShare` is the share applied, beside its `flowShare`. A run notes the split (one run warning) only when there is something to say: a fallback, or units a Fragmentation run put on the catchment rain; a clean split is in the summary alone. The summary CSV's
   `EWR share (%)` column sits beside `Flow share (%)` (an older run's is its
   flow share) under an `EWR split between units by` line, and the report's
   Inputs table names the split.
