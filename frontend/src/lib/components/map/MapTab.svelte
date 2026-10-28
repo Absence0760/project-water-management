@@ -16,6 +16,8 @@
 	// Divide the model's sheet too, opened from the header on few visits (2026-10-02: the tools moving onto the map took the
 	// tab past its 60 KB, 62 KB; this brings it to 57 KB).
 	const loadDivideSheet = () => import('./DivideSheet.svelte');
+	// The click bar shows only while dividing by clicks: its own chunk keeps the tab under its budget (check:bundle).
+	const loadClickBar = () => import('./ClickBar.svelte');
 	// The sheets a tool opens once its point, shape or cut is on the map (Place, Delineate, Save a drawing, Split,
 	// Trace, Paste coordinates): one chunk for all six (sheets.ts), so they cost one request, warmed when a tool
 	// starts (the sheet opens a click or more later). 2026-10-11, issue #521: the tab was at its 60 KB ceiling;
@@ -100,7 +102,6 @@
 	import { featureResult, featureZone, viewLabel } from './mapResults';
 	import { MapResults } from './mapResults.svelte';
 	import { BAND_WORD } from './mapStatus';
-	import ClickBar from './ClickBar.svelte';
 	import { ClickDivider, clickShape } from './clickPieces.svelte';
 	import { ChannelLayer } from './channelLayer.svelte';
 	import { openProposal } from './delineation';
@@ -574,6 +575,7 @@
 		tracing = false;
 		draft.place('other');
 		draft.snapOn = false;
+		prefetch(loadClickBar);
 		dividing = true;
 		void afterStart();
 	}
@@ -1449,7 +1451,7 @@
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}
 					{#if canEdit && dividing && !wide}
-						<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />
+						<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
 					{:else if canEdit && draft.active && !dividing && !wide}
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
@@ -1606,7 +1608,7 @@
 					{#if canEdit && dividing && wide}
 						<!-- Beside the map: the clicks' key takes the column over, so the map keeps its height. -->
 						<div class="panel side-box card click-panel">
-							<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />
+							<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
 						</div>
 
 					{:else if !features.length}
