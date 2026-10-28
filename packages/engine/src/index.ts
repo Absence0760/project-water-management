@@ -137,6 +137,7 @@ export * from './views/licenceImpact';
 export * from './views/reserveYears';
 export * from './outlook';
 export * from './outlook/triggers';
+export * from './drought';
 export * from './units';
 export * from './seriesProvenance';
 export * from './liability';

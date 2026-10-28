@@ -23,6 +23,7 @@
 	import { projectHref } from '#lib/components/project/links.js';
 	import NeedsAttention from './NeedsAttention.svelte';
 	import PublishedBaseline from './PublishedBaseline.svelte';
+	import DroughtIndex from './DroughtIndex.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
 	import SetupPill from './SetupPill.svelte';
 
@@ -223,11 +224,14 @@
 		loadOnce(loadSupply).then(done, done);
 	});
 	let alertsReady = $state(false);
+	// The Drought index card reads the shown run's rain_final and pet (issue #620); settled once both have.
+	let droughtReady = $state(false);
+	const droughtRefs = $derived(shown ? (detailCache.get(shown.id)?.series ?? []) : []);
 	let baselineReady = $state(false);
 	const runReady = $derived(!pick || shown !== null || runError !== null);
 	const previousReady = $derived(!pick?.previous || previousRun?.id === pick.previous.id || previousError !== null || runError !== null);
 	const ready = $derived(
-		runReady && previousReady && !damsLoading && (!runFarms.length || supplyChunk) && alertsReady && baselineReady
+		runReady && previousReady && !damsLoading && (!runFarms.length || supplyChunk) && alertsReady && baselineReady && (!shown || droughtReady)
 	);
 	const modelFarmIds = $derived(new Set(editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id)));
 
@@ -318,6 +322,11 @@
 				<NeedsAttention items={attentionItems} />
 				<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
 				<AlertsPanel projectId={project.id} {canEdit} bind:ready={alertsReady} />
+				<!-- How dry the catchment has been: SPI and SPEI to the run's last whole month of history (issue #620),
+				     context for a restriction decision, under what to act on. -->
+				{#if shown}
+					<DroughtIndex projectId={project.id} runId={shown.id} refs={droughtRefs} lastDay={historyEnd(pick.latest)} bind:ready={droughtReady} />
+				{/if}
 			</div>
 			<div class="side">
 				{#if runFarms.length}

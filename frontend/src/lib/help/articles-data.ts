@@ -21,6 +21,12 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		related: ['rain-catchment', 'chirps', 'chirps-bias', 'rain-threshold'],
 		source: 'docs/model.md §2.4, §2.4b'
 	},
+	'drought-index': {
+		long: 'The Summary’s Drought index card says how dry or wet the catchment has been, from the latest run’s own final catchment rainfall and potential evaporation, for the last whole month of its history (never a forecast day).\n\n• **SPI** (Standardized Precipitation Index): the rain over the last 3, 6 or 12 months, set against every other year’s total over the same months. A gamma distribution is fitted to each calendar month’s totals (zero totals counted apart), and the total’s probability under it is written as a standard normal value.\n• **SPEI** (Standardized Precipitation-Evapotranspiration Index): the same for rain less potential evaporation, with a log-logistic distribution, so a hot dry spell reads drier than its rain alone.\n\nThe usual classes: 2 or more extremely wet, 1.5 to 2 very wet, 1 to 1.5 moderately wet, between −1 and 1 near normal, −1 to −1.5 moderately dry, −1.5 to −2 severely dry, −2 or less extremely dry. Values are shown between −3 and 3.\n\nThe distributions are fitted over 1991–2020 when the record has at least 25 of those 30 years in every calendar month, else over the whole record, and the card names the years. A calendar month needs at least 20 years to be fitted, so a shorter record has no index. A month with a missing day has no total, and no index covers it. SPEI needs the run’s potential evaporation, which only a GR4J run records.\n\n3 months reads the season’s soil moisture and farm dams; 12 months reads the big dams and groundwater.',
+		aliases: ['SPI', 'SPEI', 'standardized precipitation index', 'drought badge', 'drought class', 'dry spell'],
+		related: ['rain-final', 'gr4j-pe'],
+		source: 'docs/model.md §2.15b; McKee et al. 1993; Vicente-Serrano et al. 2010; WMO-No. 1090 (2012)'
+	},
 	'chirps': {
 		long: 'Useful to fill gaps or extend a short gauge record. At catchment scale CHIRPS can read well below (or above) a local gauge, so by default the model scales it by a factor per calendar month, fitted where both records have a reading, on the days it fills in (see CHIRPS bias correction).',
 		aliases: ['satellite rainfall'],
