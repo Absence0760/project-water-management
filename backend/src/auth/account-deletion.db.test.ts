@@ -107,13 +107,17 @@ describe('deleting a co-owner’s account', () => {
 	beforeAll(async () => {
 		// A pending invite they sent goes with them (invite.invited_by ON DELETE CASCADE).
 		expect((await coOwner.call('POST', `/projects/${projectId}/members`, { email: `pending-${crypto.randomUUID()}@example.com`, role: 'viewer' })).status).toBe(201);
-		// A turn each with the assistant (262), counted as its route counts one: the co-owner's and the owner's (the positive control).
+		// A turn each with the assistant (262, 264), counted as its route counts one: begun (its budget reserved), then
+		// charged (the reservation settled): the co-owner's and the owner's (the positive control).
+		const BEGIN = 'SELECT reservation_id FROM app_assistant_begin($1, 1000000, 30, 1000000, 100000000, 10000, 1000, 300)';
 		for (const [u, tokens] of [[coOwner, 700], [owner, 50]] as const) {
 			await withUser(u.id, async (tx) => {
-				await tx.query('SELECT * FROM app_assistant_begin($1, 1000000, 30, 1000000, 100000000)', [projectId]);
-				await tx.query('SELECT app_assistant_charge($1, $2, 0)', [projectId, tokens]);
+				const { rows } = await tx.query(BEGIN, [projectId]);
+				await tx.query('SELECT app_assistant_charge($1, $2, $3, 0)', [projectId, rows[0].reservation_id, tokens]);
 			});
 		}
+		// And a turn of theirs still running when the account goes: its reservation (10,000) is never settled.
+		await withUser(coOwner.id, (tx) => tx.query(BEGIN, [projectId]));
 		await asOwner('DELETE FROM app_user WHERE id = $1', [coOwner.id]);
 	});
 
@@ -133,14 +137,17 @@ describe('deleting a co-owner’s account', () => {
 		// The month still counts what they spent (assistant_usage.user_id ON DELETE SET NULL); the cap's row goes (CASCADE).
 		const usage = await asOwner('SELECT user_id, input_tokens::int AS tokens, messages FROM assistant_usage WHERE project_id = $1 ORDER BY input_tokens DESC', [projectId]);
 		expect(usage).toEqual([
-			{ user_id: null, tokens: 700, messages: 1 },
+			{ user_id: null, tokens: 700, messages: 2 },
 			// Positive control: the owner who stays keeps their row, named.
 			{ user_id: owner.id, tokens: 50, messages: 1 }
 		]);
 		expect(await asOwner('SELECT 1 FROM assistant_rate WHERE user_id = $1', [coOwner.id])).toEqual([]);
 		expect(await asOwner('SELECT messages FROM assistant_rate WHERE user_id = $1', [owner.id])).toEqual([{ messages: 1 }]);
-		// Every project member still reads the month's total, theirs included.
-		expect(await withUser(owner.id, async (tx) => (await tx.query('SELECT project_used::int AS n FROM app_assistant_used($1)', [projectId])).rows)).toEqual([{ n: 750 }]);
+		// The turn still running keeps its reservation counted, with no name (assistant_reservation.user_id ON DELETE SET NULL, 264):
+		// it is charged in full when it expires, as any unsettled one.
+		expect(await asOwner('SELECT user_id, reserved::int AS reserved FROM assistant_reservation WHERE project_id = $1', [projectId])).toEqual([{ user_id: null, reserved: 10_000 }]);
+		// Every project member still reads the month's total, theirs and the reservation included.
+		expect(await withUser(owner.id, async (tx) => (await tx.query('SELECT project_used::int AS n FROM app_assistant_used($1)', [projectId])).rows)).toEqual([{ n: 10_750 }]);
 	});
 
 	it('pseudonymises every event they made, and drops their pending invites', async () => {

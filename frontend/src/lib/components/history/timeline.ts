@@ -9,7 +9,7 @@ import { fmtDay, fmtNum, fmtPct, fmtWhen, localIsoDate } from '#lib/format/numbe
 import { kindLabel } from '#lib/series/kinds.js';
 import { KIND_NAME } from '#lib/components/alerts/alerts.js';
 
-// The flow-share methods migration 264 (issue #616) retired, as the History names them.
+// The flow-share methods migration 266 (issue #616) retired, as the History names them.
 const FLOW_SHARE_METHOD_LABEL: Record<string, string> = { area: 'By area', hiLo: 'Hi/Lo MAP', manual: 'Specific shares' };
 
 /** The filter's event kinds: '' is everything, 'revision' the model and settings, the rest an event noun. */
@@ -407,7 +407,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const words = rules.map(ewrRuleWords).filter(Boolean);
 			return `Switched off ${plural(rules.length, 'rule')} keeping water for the EWR${words.length ? ` (${words.join('; ')})` : ''}: in the baseline the EWR is assessed and reported, never applied (a scenario keeps it)`;
 		}
-		// 264 (issue #616): the area, Hi/Lo MAP and specific flow shares were removed; each unit now has one natural-MAR share.
+		// 266 (issue #616): the area, Hi/Lo MAP and specific flow shares were removed; each unit now has one natural-MAR share.
 		case 'settings.flow_share_reset': {
 			const method = FLOW_SHARE_METHOD_LABEL[str(s.method)] ?? FLOW_SHARE_METHOD_LABEL.area;
 			const split = s.hiLoSplit as { hi?: unknown; lo?: unknown } | null | undefined;

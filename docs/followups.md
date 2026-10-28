@@ -855,8 +855,8 @@ runs and accumulations are real) can't be decided without the client.
       run-from-rain check of the EWR columns under FM1 if it is to be
       pinned. Trigger: the fresh re-extract.
 - [ ] **Drop the retired flow-share node columns (issue #616, contract
-      half of [264](./data-model.md#flow-share-methods-retired-264_retire_flow_share_methodsql)).**
-      Migration 264 stripped `flowShareMethod` and `hiLoSplit` from the
+      half of [266](./data-model.md#flow-share-methods-retired-266_retire_flow_share_methodsql)).**
+      Migration 266 stripped `flowShareMethod` and `hiLoSplit` from the
       settings but kept `node.area_hi_km2`, `node.area_lo_km2` and
       `node.flow_share_manual`, which the backend from engine 1.105.0
       neither reads nor writes, so a backend still on the previous release
@@ -864,7 +864,7 @@ runs and accumulations are real) can't be decided without the client.
       migration that drops the three columns (no policy, function or view
       reads them; check `catalogue.db.test.ts` and any `SELECT *` first),
       with the `/safe-migration` checks. Trigger: once the `backend@`
-      release carrying migration 264 is in production and no older backend
+      release carrying migration 266 is in production and no older backend
       can be rolled back to.
 - [x] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
@@ -2198,6 +2198,57 @@ the suggested order (the IDs carry the detail):
       ratings, CR-25 human-use flag, CR-30 assurance-table EWR, CR-31 licence
       scenario report, CR-32 dam and abstraction assumptions, CR-33 seasonal
       reporting.
+
+## Calibration zones (issue #555)
+
+Round 3 of the 2026-10-28 rounds (draft PR #644, engine 1.106.0) built
+`settings.calibrationZones` and migration 270, the zones in the run (Per unit
+only), the stepwise fit upstream first, the API's checks, the verify
+cross-check and Settings' *Calibrate at several gauges* table with the fit
+card's steps ([model.md §2.10n](./model.md), ui.md § Settings & calibration).
+Still open, for round 4 (each its own piece):
+
+- **Zones on the Network tab and the Map.** A zone column or colour per
+  unit, and on the Map when parcels exist, from `summary.unitRain.zones` or
+  the engine's `resolveZones`. Trigger: round 4.
+- **Calibration statistics per ticked site in a run**, each labelled in or
+  out of sample by its own fit record (`calibrationFitStatus` at the zone's
+  site and window). Today a run scores `RunSummary.calibration` at the
+  calibration site only; a zone's gauge has its out-of-sample
+  `plausibility.gauges[].fit` check. Trigger: round 4.
+- **The report and the evidence pack** list every zone's parameters and fit
+  record (today they show `gr4j` and `fitRecord`, the site's zone). The
+  evidence pack's manifest must take the zones' fit records into its hash.
+  Trigger: round 4, before a zoned project issues a pack.
+- **A per-zone run comparison**: compare.ts lists the ticked rows'
+  parameters as one *Calibration zones* line; it should diff each zone's
+  X1–X4 as the GR4J lines do. Trigger: round 4.
+- **Automated calibration and the uncertainty ensemble per zone.**
+  `calibrate/auto.ts` and `uncertainty/ensemble.ts` still fit or perturb the
+  site's zone's parameters alone (the zones above it stay at their stored
+  parameters). Durable fix: run the rules' cases stepwise, and perturb each
+  zone's parameters by its own fit's spread. Trigger: before a zoned project
+  signs off calibration rules or cites an ensemble.
+- **Warning codes for the zone warnings.** The run's *Calibration zone(s):
+  …* warnings are plain text: they need codes in `packages/engine/src/
+  warningCodes.ts` and fixes in `frontend/src/lib/components/warnings/
+  fixes.ts` (files outside this round's scope) so the Warnings page links
+  them to the table. Trigger: round 4.
+- **A help article** for calibration zones (`help/articles-fit.ts` and a
+  `calibration-zones` tip in `help/tips.ts`); the table and the steps borrow
+  the *calibration window* and *automatic calibration* tips meanwhile.
+- **The verify mutation test** (`verify/test_verify.py`, `verify/README.md`):
+  a mutant that drops a zone's parameters (`zone_p.get(u["id"], g)` → `g`)
+  so the self-test proves the cross-check reaches zones (diff.py's dense
+  networks reach zoned units in about half the cases, its random ones rarely).
+- **A zone step's score and the EWR shares.** While a zone above the site is
+  fitted, the units below it run on their pre-fit parameters, and the natural
+  MAR shares follow every unit's runoff, so a step's score can differ from a
+  run on the applied result wherever something above the gauge reads the
+  shares (model.md §2.10n). Durable fix if it matters in practice: pin the
+  shares to the start parameters' for the whole stepwise fit, or iterate the
+  steps once more. Trigger: a client catchment with an EWR charge above a
+  ticked gauge.
 
 ## Verification
 
@@ -4914,7 +4965,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       stream, quoting both areas; keep "Use that channel" primary only for
       rule 4's gully. Trigger: the next placement round, with a test on the
       synthetic DEM's tributary beside the river.
-- [ ] **Start and Divide have no worker** (new in the gauge rerun). Start
+- [x] **Start and Divide have no worker** (new in the gauge rerun). Start
       places a gauge outlet as Delineate does (where both are right they
       agree within 5 % at all 301 stations), but routes at most 3 072
       cells, so it refuses `too_large` 48 of 129 gauges of 1 000–10 000 km²
@@ -4922,6 +4973,14 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       or Divide plan cut at its last window to a worker job, as Delineate
       does (delineation_request with a plan kind, the same aim). Trigger:
       a client catchment over about 1 000 km², or a Start refusal reported.
+      **Done (#646 item 3, 2026-10-28):** migration 272 gives
+      `delineation_request` a plan kind; the `delineate` job routes a plan
+      with windows up to 6 144 cells (`jobs/handlers/delineate-plan.ts`).
+      A Start too large for the request answers at once with the plan a
+      server without a DEM makes (the hydrologist's review F11), which the
+      routed one replaces while open; a Divide waits for the worker
+      (maps.md § Start from the map). Locally without a worker (`pnpm
+      dev`), a Start keeps that quick plan and a Divide waits.
 - [x] **No caveat on a gully snap with no reach within 1 km** (finding 7's
       other half, still open after the gauge rerun). **Obsolete (issue #472,
       2026-10-09):** a point now goes only on a cell with 1 km² or more

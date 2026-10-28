@@ -13,6 +13,11 @@
 // project supersedes that account's waiting one instead of queueing beside it.
 // Each request also counts for the account's hourly elevation-model cap
 // (attempt.ts), and the worker's reserved concurrency bounds the rest.
+//
+// Start and Divide hand a plan whose routing stops at the request's last
+// window to the same job (272_plan_request, planRequests.ts): a request row
+// with a plan kind instead of a click, under the same cap and dedupe key.
+// The click views here (loadRequest, waitingRequest) never show one.
 import type { Db } from '../db/tx.js';
 import { ApiError, notFound } from '../http/errors.js';
 import { enqueueJob } from '../jobs/queue.js';
@@ -91,9 +96,18 @@ export interface RequestRow {
 	project_id: string;
 	job_id: string | null;
 	status: RequestStatus;
-	click_kind: 'outlet' | 'dam_wall';
-	click_lon: number;
-	click_lat: number;
+	/** Null for a plan request (272): its plan_kind and plan_body say what to route. */
+	click_kind: 'outlet' | 'dam_wall' | null;
+	click_lon: number | null;
+	click_lat: number | null;
+	/** A Start or Divide plan handed to the worker (272), else null (a click). */
+	plan_kind: 'start' | 'divide' | null;
+	/** The plan's request body (start.ts ProposeBody, divide.ts DivideBody), as the editor sent it. */
+	plan_body: unknown;
+	/** With `proposed`, a plan's proposal (start_proposal). */
+	plan_proposal_id: string | null;
+	/** A Start's proposal without the order, made at once (F11), that the routed one replaces while it is still open. */
+	fallback_proposal_id: string | null;
 	keep_point: boolean;
 	from_window: number;
 	aim: WindowAim | null;
@@ -106,7 +120,7 @@ export interface RequestRow {
 }
 
 export const REQUEST_COLS = `r.id, r.project_id, r.job_id, r.status, r.click_kind, r.click_lon, r.click_lat, r.keep_point, r.from_window, r.aim,
-	r.proposal_id, r.refusal_code, r.refusal, r.larger, r.created_at, r.finished_at`;
+	r.proposal_id, r.refusal_code, r.refusal, r.larger, r.created_at, r.finished_at, r.plan_kind, r.plan_body, r.plan_proposal_id, r.fallback_proposal_id`;
 
 /**
  * What the Map shows of a request: its own outcome, or while it has none,
@@ -145,8 +159,8 @@ export async function requestView(db: Db, projectId: string, r: RequestRow & { j
 	return {
 		id: r.id,
 		status,
-		from: r.click_kind,
-		click: [r.click_lon, r.click_lat],
+		from: r.click_kind!,
+		click: [r.click_lon!, r.click_lat!],
 		progress: status === 'running' ? r.job_progress : null,
 		error,
 		proposal,
@@ -156,8 +170,10 @@ export async function requestView(db: Db, projectId: string, r: RequestRow & { j
 	};
 }
 
-const VIEW = `SELECT ${REQUEST_COLS}, j.status AS job_status, j.progress AS job_progress, j.last_error AS job_error
-	FROM delineation_request r LEFT JOIN job j ON j.id = r.job_id WHERE r.project_id = $1`;
+/** A request with its job's state: the clicks, or with `plans` the Start and Divide plans (272). */
+export const requestSelect = (plans: boolean) => `SELECT ${REQUEST_COLS}, j.status AS job_status, j.progress AS job_progress, j.last_error AS job_error
+	FROM delineation_request r LEFT JOIN job j ON j.id = r.job_id WHERE r.project_id = $1 AND r.plan_kind IS ${plans ? 'NOT ' : ''}NULL`;
+const VIEW = requestSelect(false);
 
 /** One request of the project (404 when there is none, or it is another project's). */
 export async function loadRequest(db: Db, projectId: string, rid: string): Promise<DelineationRequest> {
@@ -192,22 +208,24 @@ export interface QueueOptions {
  * after the commit. 429 while the account has a delineation running, or
  * waiting in another project.
  */
-export async function queueDelineation(db: Db, o: QueueOptions): Promise<{ request: DelineationRequest; jobId: string }> {
-	// Count and queue one request at a time per account, so a burst can't all pass the cap together.
+/**
+ * Take the account's one delineate job slot for a new request in `projectId` (under a per-account advisory lock, so a burst
+ * can't all pass the cap together): its waiting request of the same family there (a click, or a plan: `plans`) gives way to the
+ * new one; anything else waiting or running is 429.
+ */
+export async function takeJobSlot(db: Db, projectId: string, plans: boolean): Promise<void> {
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('delineate_job_cap:' || app_current_user_id()::text, 0))`);
-	const { rows: mine } = await db.query<{ id: string; project_id: string; status: string }>(
-		`SELECT id, project_id, status FROM job WHERE kind = 'delineate' AND acting_user_id = app_current_user_id() AND status IN ('queued', 'running', 'failed')`
+	const { rows: mine } = await db.query<{ id: string; project_id: string; status: string; plan: boolean }>(
+		`SELECT j.id, j.project_id, j.status, EXISTS (SELECT 1 FROM delineation_request r WHERE r.job_id = j.id AND r.plan_kind IS NOT NULL) AS plan
+		 FROM job j WHERE j.kind = 'delineate' AND j.acting_user_id = app_current_user_id() AND j.status IN ('queued', 'running', 'failed')`
 	);
 	let pending = 0;
 	let running = false;
 	for (const j of mine) {
-		if (j.project_id === o.projectId && j.status !== 'running') {
-			// This account's waiting click in this project gives way to the new one.
+		if (j.project_id === projectId && j.status !== 'running' && j.plan === plans) {
+			// This account's waiting click (or plan) in this project gives way to the new one.
 			const { rows } = await db.query<{ status: string | null }>('SELECT app_cancel_job($1) AS status', [j.id]);
-			await db.query(`UPDATE delineation_request SET status = 'superseded', finished_at = now() WHERE job_id = $1 AND project_id = $2 AND status = 'queued'`, [
-				j.id,
-				o.projectId
-			]);
+			await db.query(`UPDATE delineation_request SET status = 'superseded', finished_at = now() WHERE job_id = $1 AND project_id = $2 AND status = 'queued'`, [j.id, projectId]);
 			if (rows[0]?.status === 'dead') continue;
 		}
 		pending++;
@@ -218,9 +236,22 @@ export async function queueDelineation(db: Db, o: QueueOptions): Promise<{ reque
 			429,
 			running
 				? 'Your last large delineation is still being worked out; wait for it to finish (a few minutes at most).'
-				: 'You have a large delineation waiting in another catchment; wait for it to finish.'
+				: 'You have a large delineation waiting in another catchment (or a Start or Divide plan in this one); wait for it to finish.'
 		);
 	}
+}
+
+/** Keep the table bounded: a project's finished requests beyond the newest REQUESTS_KEPT go. */
+export async function pruneRequests(db: Db, projectId: string): Promise<void> {
+	await db.query(
+		`DELETE FROM delineation_request WHERE project_id = $1 AND status <> 'queued' AND id NOT IN (
+			SELECT id FROM delineation_request WHERE project_id = $1 AND status <> 'queued' ORDER BY created_at DESC, id LIMIT $2)`,
+		[projectId, REQUESTS_KEPT]
+	);
+}
+
+export async function queueDelineation(db: Db, o: QueueOptions): Promise<{ request: DelineationRequest; jobId: string }> {
+	await takeJobSlot(db, o.projectId, false);
 	const { rows } = await db.query<{ id: string }>(
 		`INSERT INTO delineation_request (project_id, click_kind, click_lon, click_lat, keep_point, from_window, aim, created_by)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, app_current_user_id()) RETURNING id`,
@@ -237,11 +268,6 @@ export async function queueDelineation(db: Db, o: QueueOptions): Promise<{ reque
 	});
 	if (!created) throw new ApiError(429, 'You have a large delineation waiting; wait for it to finish.');
 	await db.query('UPDATE delineation_request SET job_id = $2 WHERE id = $1', [requestId, job.id]);
-	// Keep the table bounded: finished requests beyond the newest REQUESTS_KEPT go.
-	await db.query(
-		`DELETE FROM delineation_request WHERE project_id = $1 AND status <> 'queued' AND id NOT IN (
-			SELECT id FROM delineation_request WHERE project_id = $1 AND status <> 'queued' ORDER BY created_at DESC, id LIMIT $2)`,
-		[o.projectId, REQUESTS_KEPT]
-	);
+	await pruneRequests(db, o.projectId);
 	return { request: await loadRequest(db, o.projectId, requestId), jobId: job.id };
 }

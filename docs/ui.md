@@ -3887,7 +3887,17 @@ map" card) stays the schematic; this is the geography.
   marker's `data-state`, `loading`, `current`, `changed`, `none`, `error`,
   says when it is in). The pill goes once both are done, and doesn't show
   while the feeds are still read or failed to load. Viewers don't get it (the
-  header's context line says "no boundary").
+  header's context line says "no boundary"). **A model started from the
+  map** (issue #646 F2, `startData.ts`) keeps its data step here once the
+  Start sheet is closed: the pill lists the same to-do items as the sheet's
+  data step (below), each with its status beside its title (Done, Started,
+  To do, Checking; `data-status` on the step), its detail line and, while
+  not done, a link to where it is accepted named by the place ("Data →
+  Data feeds", "Model settings → Demand" · "Evaporation from the map", each
+  link a 24 px target), and under the list **Review each unit’s rain and
+  MAP together** (`start=1`, the sheet's data step). The popover scrolls
+  inside the window. The pill goes once every item a run needs is done
+  (the optional ones aside).
 - **Section header** (`fillHeader`; the header's "Map" is the page's only
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
@@ -4109,8 +4119,11 @@ map" card) stays the schematic; this is the geography.
   composite dam, the default, / Another water user (no land) / Not in the
   model), other point (Its unit’s river pump, the default, / Another water
   user / Not in the model) and gauge (A gauge in the network (no land), the
-  default, / Not in the model) with a select, **Place a point** (into the
-  drawing mode, back after the save), the outlet (The boundary’s own
+  default, / Not in the model) with a select, **Draw a unit’s boundary**
+  (an *other* area), **Sub-catchments, one per click** (with a DEM; the
+  saved pieces' notice says "each is a unit’s boundary in the Start sheet")
+  and **Place a point** (each into its mode, back after the save; #646
+  F13), the outlet (The boundary’s own
   outlet, or a gauge), the count (`countText`: "2 units, plus the rest of
   the catchment; 1 dam or pump as part of the unit around it."), and
   **Propose the network**. **The proposal** (drawn on the map piece by
@@ -4143,10 +4156,37 @@ map" card) stays the schematic; this is the geography.
   which asks first ("The empty model gets 4 hydrological units, with 3 areas (a unit’s is
   its boundary on the map) and 2 drains-into from the proposal. Each unit’s
   dams and pump are linked to it, their sizes yours to enter. … It is
-  saved now as one change in History."). **Data and the first run**: links
-  to rain from the boundary, observed flow, evaporation (the A-pan the dams lose, to Settings' Demand group), each unit’s composite dam (its volume and the area draining to it yours to enter; the register a reference only), cultivated
-  area, the Network and **Run the model**. With nodes typed in, the sheet
-  says the model isn't started from the map and points to Divide the model.
+  saved now as one change in History."). **Data and the first run** (issue
+  #646 item 2; `StartDataList.svelte`, `startData.ts`): a to-do list in the
+  order a run reads it, each line numbered (a check once done), its title a
+  link to where it is accepted, its status (Done, Started, To do,
+  Checking), **Next** on the first a run still needs, "(optional)" on the
+  catchment's MAP, the WR2012 check, the cultivated area and the units'
+  areas, and a detail line with the place in words: The units’ areas and
+  order (Network), How natural flow is made (`#set-share`), Rain from the
+  boundary (`?rain=boundary`), The catchment’s MAP (`#set-share`), Rain for
+  each unit (`?rain=units`), MAP for each unit (`#set-unit-map`),
+  Evaporation (Settings' Demand group, the A-pan the dams lose, with
+  Evaporation from the map beside it), WR2012 check (`#set-wr2012`),
+  Observed flow (`?tab=series&feed=dws#data-feeds`: the attach card opens
+  on a DWS gauge with the nearest gauging stations proposed, for an
+  owner), Each unit’s composite dam (Dams: its volume and the area
+  draining to it yours to enter; the register a reference only),
+  Cultivated area (Crops) and **Run the model** (Runs & results). Each
+  status is worked out from what the project holds (the settings, the feed
+  list, the series list, the model, the runs), read when the Map opens and
+  again after an apply here. Under it, **Each unit’s rain and MAP,
+  together** (`StartUnitsData.svelte`): one row a land unit, its MAP from
+  the MAP grid ("640 mm (now 600 mm)", the grid cited above the table) and
+  its rain ("A new feed: 3 cells, 62 % of their area inside"), each with a
+  tick, unticked at first; a value already in the model, or none with the
+  reason ("None: outside the grid"); **Tick all** and **Apply the ticked
+  values** (asks first, naming the grid and the product; disabled while
+  the model has unsaved changes), then "Applied: …" and the list's
+  statuses follow. An editor sees the rain without a tick ("an owner sets
+  the feed up"). With nodes typed in, the sheet says the model isn't
+  started from the map and points to Divide the model (each unit's area
+  from its boundary, the elevation model ordering and checking them).
   With the sheet closed, a piece (or its number) under the pointer shows
   "Proposed piece 2 / <name>" over the map's corner, a click on one opens
   the sheet at its card, focused, and a line over the map ("A proposed
@@ -4168,6 +4208,16 @@ map" card) stays the schematic; this is the geography.
   so; an outlet gauge with none stops the proposal with the server's
   sentence. There is no confluence question any more (it went with issue
   #472). Divide's sheet does the same.
+- **A catchment too large to route at once** (`start-17`, issue #646;
+  [maps.md § Start from the map](./maps.md#start-from-the-map)): Start
+  answers straight away with the plan a server without a DEM would make (each
+  unit its boundary's area, no order, the first warning saying what wasn't
+  routed or checked), and the sheet says the routed plan is being worked out
+  in the background; where the worker runs it replaces the quick plan while
+  that is still open. Divide's sheet waits for its routed plan instead. The
+  rest of the catchment's card has a tick for **what it drains into**: the
+  first unit, water user or gauge its flow path meets (the outflow only when
+  nothing lies below it).
 - **Divide the model** (editors, a model with nodes, a DEM on the server;
   #326 C3's follow-up, `DivideSheet.svelte`, its own chunk, `divideFlow.ts`,
   [maps.md § Start from the map](./maps.md#start-from-the-map)). The
@@ -4815,7 +4865,9 @@ in use.
 One crop's name and 12 monthly factors in a side sheet over the page
 (`crops/CropSheet.svelte`), while the URL has `crop=<cropId>`, so it can be
 linked and Back closes it; Done, Esc or the ✕ drop `crop` in place
-(`withoutParam`). **+ Add crop** adds "Crop N", on drip (the new-unit
+(`withoutParam`). The sheet shuts at once and the URL follows when that
+navigation lands; an Edit pressed in between waits for it, so it opens its
+crop and Back still goes where the sheet was opened from. **+ Add crop** adds "Crop N", on drip (the new-unit
 default), and opens its sheet with the name focused. Under the name, its
 default **Irrigation system** (the project's table, or none: each unit's own
 efficiency), with the units that put it on another named in the hint. The sheet shows the factors four to a row (labelled "Orchard
@@ -6427,7 +6479,8 @@ editors run one now and read the map's proposals, viewers read.
   automatically … → Data feeds** (in-page, `#data-feeds`), the Map's
   Getting started step and the Start sheet's data step
   (`?tab=series&rain=boundary#data-feeds`, and **Observed flow**
-  `?tab=series#data-feeds`), Model settings' Rain for each unit line (Model selection for flow generation)
+  `?tab=series&feed=dws#data-feeds`, which opens the DWS gauge's card with
+  the nearest gauging stations for an owner), Model settings' Rain for each unit line (Model selection for flow generation)
   (`?tab=series&rain=units#data-feeds`) and Runs & results' stub for a run
   with no forecast (`res-forecast`, `runs/missingPanel.ts`). Each lands
   through `landOnAnchor` (`help/anchor.ts`): once the lazy panel's heading
@@ -8389,6 +8442,29 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   the run's statistics). Each number is held inside its
   bounds by its field, so the section never blocks Save. The fit record
   below lists the fitted record's source and its gap filling.
+    Last, when the model has a gauge above the outlet with a flow record,
+  **Calibrate at several gauges** (engine 1.106.0, issue #555,
+  `calibration/CalibrationZonesTable.svelte`, its own chunk,
+  `lib/calibration/zones.ts`, `settings.calibrationZones`, [model.md
+  §2.10n](./model.md)): a table of the calibration site (the outlet, or
+  *Scored at*'s gauge, its **Calibrate here** always ticked and disabled:
+  its window is the fields above) and every other such gauge, each with
+  **Calibrate here: <gauge>**, its **Record** coverage in complete water
+  years spanned (gaps not counted; "(too short)" under 2, from the series
+  list) and its zone's **Parameters** ("Not fitted yet: its units run on the
+  parameters above" until a fit applies some). A first tick adds the gauge's
+  row; an untick keeps it (its window and parameters stay for the next
+  tick). Under each gauge with a row, a fold (`<gauge>:` and its window,
+  exclusions and suspect-day rule) with its own **From** / **To**,
+  **Record**, **Suspect days** (*As the calibration site's quality flags*,
+  *Left out of the fit* or *Scored*), exclusions and fit record line. A
+  reversed window or a bad exclusion blocks Save, named by its gauge
+  ("Calibration zone at Middle weir: …"), through the window's own blocker.
+  Under Fragmentation the ticks are disabled and a note says calibrating at
+  several gauges needs Per unit flow generation, linking to Model selection
+  for flow generation; with a gauge ticked under Per unit, "Fit
+  automatically fits N zones, upstream first." Not yet (issue #555's next
+  round): the zones on the Network tab and the Map.
 - **Fit automatically** (`#set-fit`, `calibration/FitPanel.svelte`) fits the
   selected model's parameters in a Web Worker (`lib/calibration/`). Its card
   shows the choices that decide the fit in one row (**Objective**,
@@ -8522,6 +8598,25 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     stored until Save. The result stays shown, its button then reading
     **Apply to form again**, and the unsaved settings take over the leave
     guard from the fit.
+  - **The stepwise fit** (engine 1.106.0, issue #555, model.md §2.10n):
+    with a gauge ticked under *Calibrate at several gauges* (Per unit only),
+    **Fit automatically** fits one step per zone, upstream first, then the
+    calibration site, each in its own worker run with the choices above
+    (`lib/calibration/runner.ts` `startStepwiseFit`, the plan from the engine's
+    `zoneFitPlan`, which refuses a zone, or a site, with no land unit, shown
+    as the fit's error). The progress line starts "Step 1 of 2 (an upstream
+    zone)", and the bar spans every step. The result opens with **Steps,
+    upstream first** (`data-testid="fit-steps"`): one row per step (*1.
+    Upstream zone* / *2. Calibration site*, where it was scored, its land
+    units, its fitted parameters, and the objective's fit, split-sample and
+    dry → wet validation scores), each earlier step's notes in a closed
+    *Notes on step N* (the short-record and no-dry-year warnings among them),
+    then the calibration site's step in full under **Step N: the
+    calibration site**. **Apply to form** writes every step: the site's
+    parameters and fit record as before, and each zone's parameters and fit
+    record (`FitRecord.zone`) into its row. Not yet: automated calibration
+    and the uncertainty ensemble per zone (they fit or perturb the site's
+    zone alone).
     At the card's foot (issue #521), **Fit record of these parameters**
     (`calibration/FitProvenance.svelte`), in a fold whose line is the
     record's first ("Fit record: GR4J fit of 24 Sep 2026 10:05 UTC",

@@ -132,6 +132,14 @@ describe('units with no farm parcel', () => {
 	it('is quiet when every unit has a parcel', () => {
 		expect(mapChecks([parcel(a, 'Alpha', 0, 0, 2, 2), parcel(b, 'Bravo', 2, 0, 2, 2)], [a, b])).toEqual([]);
 	});
+	it('counts the other area a unit’s area came from as its polygon (Sub-catchments from clicks, then Start; issue #646 F1)', () => {
+		const piece = feature('other', 'Bravo piece', rect(2, 0, 2, 2), { nodeId: 'b', nodeName: 'Bravo', areaM2: 4e6 });
+		const fromPiece = unit('b', 'Bravo', 4, { areaSource: 'map', areaBasis: 'gross', areaFeatureId: piece.id });
+		expect(mapChecks([parcel(a, 'Alpha', 0, 0, 2, 2), piece], [a, fromPiece])).toEqual([]);
+		// An other feature that isn't a polygon is no unit's outline.
+		const dot = point('other', 'Bravo spot', [3, 1], { nodeId: 'b' });
+		expect(mapChecks([parcel(a, 'Alpha', 0, 0, 2, 2), dot], [a, { ...fromPiece, areaFeatureId: dot.id }]).map((c) => c.id)).toEqual(['unit-no-parcel:b']);
+	});
 });
 
 describe('features outside the boundary', () => {

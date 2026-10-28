@@ -284,9 +284,14 @@ test.describe('network layout', () => {
 		expect(overflow).toBeLessThanOrEqual(0);
 		await expect(table.getByRole('columnheader', { name: /In use/ })).toBeInViewport();
 		await expect(table.getByRole('button', { name: 'Remove Lower farm' })).toBeInViewport();
-		// The header row reads as one even band: every field's ⓘ sits on the same line (with its unit).
-		const tipTops = await table.locator('thead th.fh button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)));
-		expect(tipTops.length).toBeGreaterThan(10);
+		// The header row reads as one even band: every field's ⓘ sits on the same line (with its unit). The field
+		// columns are the nine table fields (network/fields.ts TABLE_FIELDS: area, the dam's capacity, initial and minimum level, the two to-dam
+		// percentages, divert capacity, irrigation efficiency, return flow) and In use: the High-MAP, Low-MAP and Manual
+		// share columns went in issue #616. Each one carries its own ⓘ.
+		const fieldHeads = table.locator('thead th.fh');
+		await expect(fieldHeads).toHaveCount(10);
+		const tipTops = await fieldHeads.getByRole('button', { name: /^About / }).evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)));
+		expect(tipTops).toHaveLength(10);
 		expect(new Set(tipTops).size).toBe(1);
 		// Numbers are right-aligned, and each total's digits line up with the digits above it.
 		const aligned = await table.evaluate((t) => {

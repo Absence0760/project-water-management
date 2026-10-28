@@ -116,6 +116,7 @@
 	import { frameFor } from './mapSearch';
 	import MapSetupPill from './MapSetupPill.svelte';
 	import { mapSetupSteps, type RainReads } from './mapSetup';
+	import { startDataItems, type DataFeed, type DataInput, type DataSeries } from './startData';
 	import MapToolPalette from './MapToolPalette.svelte';
 	import { toolStrip } from './mapTools';
 	import SourceList from './SourceList.svelte';
@@ -452,6 +453,48 @@
 		notice = 'Started the model from the map. Its hydrological units are on the Network now, and each unit’s point and parcel stand for it on the map.';
 		await Promise.all([load(), loadStart(), onModelChanged()]);
 	}
+
+	// --- the data step's to-do list (issue #646): what a model started from the map holds now, read when it is one ---
+	/** Started from the map and past its review: the data step's list is shown (the sheet's step 4, then the Getting started pill). */
+	const startedData = $derived(canEdit && !!startInfo?.startedFromMap && !startInfo.modelEmpty);
+	/** What MapRainLink read from the feed list about the boundary (the Getting started pill's rain step). */
+	let rainReads = $state<RainReads>(null);
+	let dataSettings = $state.raw<DataInput['settings']>(null);
+	let dataFeeds = $state.raw<DataFeed[] | null>(null);
+	let dataSeries = $state.raw<DataSeries[] | null>(null);
+	/** Read again after anything on this tab changes them; following a link to another tab remounts the Map, which reads them afresh. */
+	async function loadStartData() {
+		const [st, fd, sr] = await Promise.allSettled([
+			api.projects.get(projectId).then((p) => p.settings),
+			api.request<{ feeds: DataFeed[] }>('GET', `/projects/${encodeURIComponent(projectId)}/feeds`).then((r) => r.feeds),
+			api.series.list(projectId)
+		]);
+		// One that can't be read leaves its items Checking: no status is better than a wrong one.
+		dataSettings = st.status === 'fulfilled' ? st.value : null;
+		dataFeeds = fd.status === 'fulfilled' ? fd.value : null;
+		dataSeries = sr.status === 'fulfilled' ? sr.value : null;
+	}
+	$effect(() => {
+		if (startedData) untrack(() => void loadStartData());
+	});
+	const dataItems = $derived(
+		startedData && data
+			? startDataItems({
+					model: editor.model,
+					settings: dataSettings,
+					feeds: dataFeeds,
+					series: dataSeries,
+					features,
+					hasBoundary: !!boundary,
+					rain: boundary ? rainReads : null,
+					runs,
+					owner: role === 'owner'
+				})
+			: null
+	);
+	async function startDataApplied() {
+		await Promise.all([onModelChanged(), loadStartData()]);
+	}
 	async function startDiscarded() {
 		notice = 'Discarded the proposed model; nothing in the model changed.';
 		await loadStart();
@@ -537,6 +580,7 @@
 		divider.clear();
 		dividing = false;
 		clickLit = null;
+		backToSheet = null;
 		draft.cancel();
 		await tick();
 		document.querySelector<HTMLButtonElement>('[data-testid="map-start-delineate"]')?.focus();
@@ -566,7 +610,12 @@
 		draft.cancel();
 		await load();
 		if (r.features[0]) await pickInPlace(r.features[0].id);
-		notice = `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
+		// Opened from the Start sheet's points step (#646 F13): each saved area is a unit's boundary there, and the sheet comes back.
+		notice =
+			backToSheet === 'start'
+				? `Saved ${r.summary} on the map as areas: each is a unit’s boundary in the Start sheet.`
+				: `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
+		await returnToStart();
 	}
 	async function pickPiece(key: string) {
 		pieceFocus = key;
@@ -1051,9 +1100,8 @@
 			featureName: draft.feature ? featureName(draft.feature) : null
 		})
 	);
-	let rainReads = $state<RainReads>(null);
 	const setupSteps = $derived(
-		canEdit && data ? mapSetupSteps({ boundaryName: boundary ? featureName(boundary) : null, rain: boundary ? rainReads : null, canDelineate: !!delineation?.available }) : null
+		canEdit && data ? mapSetupSteps({ boundaryName: boundary ? featureName(boundary) : null, rain: boundary ? rainReads : null, canDelineate: !!delineation?.available, data: dataItems }) : null
 	);
 	const rainLink = $derived(
 		boundary && (rainReads === 'none' || rainReads === 'changed')
@@ -1107,6 +1155,7 @@
 			uploadHref={withParam(page.url, 'upload', '1')}
 			ondrawboundary={draft.mode !== 'draw' ? () => startDraw('catchment_boundary') : null}
 			ondelineate={delineation?.available && !delineating ? startDelineate : null}
+			startHref={dataItems ? withParam(page.url, 'start', '1') : null}
 		/>
 	{/if}
 {/snippet}
@@ -1119,7 +1168,7 @@
 		{/if}
 		{#if canDivide && !pendingDivide}
 			<!-- Divide the model (#326 C3's follow-up): a sheet over the page, as Start from the map is for an empty model. -->
-			<a class="btn" href={withParam(page.url, 'divide', '1')} title="Each unit’s own area and order, proposed from its point on the map" data-testid="map-divide-open">Divide the model</a>
+			<a class="btn" href={withParam(page.url, 'divide', '1')} title="Each unit’s area from its boundary on the map; the elevation model orders and checks them" data-testid="map-divide-open">Divide the model</a>
 		{/if}
 	{/if}
 {/snippet}
@@ -1638,6 +1687,12 @@
 					ondelineate={delineation?.available ? () => fromStart(startDelineate) : null}
 					ondraw={() => fromStart(() => startDraw('catchment_boundary'))}
 					onplace={() => fromStart(startPlace)}
+					onsubcatchments={delineation?.available ? () => fromStart(startDividing) : null}
+					ondrawunit={() => fromStart(() => startDraw('other-area'))}
+					{dataItems}
+					nodes={editor.model.nodes}
+					modelDirty={editor.dirty}
+					ondataapplied={startDataApplied}
 					onproposed={loadStart}
 					onapplied={startApplied}
 					ondiscarded={startDiscarded}

@@ -17,7 +17,9 @@ import {
 	type ObjectiveId,
 	type ProjectSettings,
 	type SeriesOrigin,
-	type SeriesProvenance
+	type SeriesProvenance,
+	type StepwiseProgress,
+	type ZoneFitStep
 } from '@water-management/engine';
 import { FitCancelled, type FitHandle } from './runner';
 
@@ -31,6 +33,8 @@ export interface FitRan {
 	/** The daily reference ET series as the fit loaded it (issue #604 R5-E): fingerprinted at Apply, through the fit's last scored day. */
 	et0Series?: Pick<DailySeries, 'startDate' | 'values'> | null;
 	observedOrigin?: SeriesOrigin | null;
+	/** Every record's source and given unit as the fit loaded them, by model-input key: a stepwise fit's zone records' (issue #555). */
+	origins?: Record<string, SeriesOrigin | null>;
 }
 
 export type FitStatus = 'idle' | 'loading' | 'running' | 'done' | 'error';
@@ -51,6 +55,13 @@ export class FitSession {
 	status = $state<FitStatus>('idle');
 	progress = $state<CalibrationProgress | null>(null);
 	report = $state.raw<CalibrationReport | null>(null);
+	/**
+	 * A stepwise fit's steps, upstream first (calibration zones, issue #555, docs/model.md §2.10n): `report` is the
+	 * last, the calibration site's own zone. null for one fit.
+	 */
+	steps = $state.raw<ZoneFitStep[] | null>(null);
+	/** Which step is running, for the progress line; null for one fit. */
+	stepProgress = $state<Pick<StepwiseProgress, 'step' | 'steps' | 'zoneNodeId'> | null>(null);
 	error = $state<string | null>(null);
 	/** The running fit's starts and validation, for its progress bar. */
 	runStarts = $state(1);
@@ -82,6 +93,8 @@ export class FitSession {
 		this.status = 'loading';
 		this.error = null;
 		this.report = null;
+		this.steps = null;
+		this.stepProgress = null;
 		this.applied = false;
 		this.progress = null;
 		this.ran = null;
@@ -90,9 +103,11 @@ export class FitSession {
 			// Cancelled, discarded or reset while the data loaded.
 			if (gen !== this.#gen) return;
 			this.status = 'running';
-			this.#handle = run();
-			const report = await this.#handle.result;
+			const handle = (this.#handle = run());
+			const report = await handle.result;
+			const steps = handle.steps ? await handle.steps : null;
 			if (gen !== this.#gen) return;
+			this.steps = steps;
 			const o = origin(report);
 			this.ran = { ...context, ...(o !== undefined ? { observedOrigin: o } : {}) };
 			this.report = report;
@@ -124,6 +139,8 @@ export class FitSession {
 	discard(): void {
 		this.cancel();
 		this.report = null;
+		this.steps = null;
+		this.stepProgress = null;
 		this.ran = null;
 		this.applied = false;
 		this.progress = null;

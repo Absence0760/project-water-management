@@ -1,12 +1,12 @@
-// Migration 264 (issue #616): engine 1.105.0 retires the flow-share methods,
+// Migration 266 (issue #616): engine 1.105.0 retires the flow-share methods,
 // so settings.flowShareMethod and settings.hiLoSplit are stripped from every
 // project's settings, and each project whose method was Hi/Lo MAP or specific,
 // or whose nodes held a High-MAP area, a Low-MAP area or a manual share, gets
 // one settings.flow_share_reset History event listing what it was. Every
 // other setting, and every other project, stays as it was; the node columns
 // stay (the contract migration drops them). This builds a throwaway database
-// at the schema before 264, stores settings and nodes the old way, applies
-// 264 and checks.
+// at the schema before 266, stores settings and nodes the old way, applies
+// 266 and checks.
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -14,8 +14,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const OWNER_URL = process.env.TEST_MIGRATION_DATABASE_URL!;
 const DIR = join(import.meta.dirname, '..', '..', 'migrations');
-const FILE = '264_retire_flow_share_method.sql';
-const dbName = `water_test_m264_${process.pid}_${Math.floor(Math.random() * 1e6)}`;
+const FILE = '266_retire_flow_share_method.sql';
+const dbName = `water_test_m266_${process.pid}_${Math.floor(Math.random() * 1e6)}`;
 const scratchUrl = OWNER_URL.replace(/\/[^/]+$/, `/${dbName}`);
 
 let admin: pg.Client;
@@ -35,7 +35,7 @@ beforeAll(async () => {
 	db = new pg.Client({ connectionString: scratchUrl });
 	await db.connect();
 	const files = (await readdir(DIR)).filter((f) => /^\d+_.+\.sql$/.test(f)).sort();
-	for (const f of files.filter((x) => x < '264')) await db.query(await readFile(join(DIR, f), 'utf8'));
+	for (const f of files.filter((x) => x < '266')) await db.query(await readFile(join(DIR, f), 'utf8'));
 
 	const user = (await db.query<{ id: string }>(`INSERT INTO app_user (email, display_name, password_hash) VALUES ('o@example.com', 'O', 'x') RETURNING id`)).rows[0]!.id;
 	const project = (pid: string, settings: unknown) =>
@@ -79,7 +79,7 @@ const eventsOf = async (pid: string) =>
 		)
 	).rows;
 
-describe('migration 264: the flow-share methods are retired', () => {
+describe('migration 266: the flow-share methods are retired', () => {
 	it('strips flowShareMethod and hiLoSplit from every project, every other setting untouched', async () => {
 		expect(await settingsOf(HILO)).toEqual(OTHER);
 		expect(await settingsOf(MANUAL)).toEqual({});

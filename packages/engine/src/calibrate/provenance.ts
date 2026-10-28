@@ -195,6 +195,12 @@ export interface FitRecord {
 	 * before it: the outlet.
 	 */
 	siteNodeId?: string | null;
+	/**
+	 * The calibration zone the fit was one step of (engine 1.106.0, issue #555,
+	 * ./zones.ts): its gauge (null = the calibration site's own zone) and the
+	 * land units its parameters are for. Absent on a fit made without zones.
+	 */
+	zone?: { nodeId: string | null; units: string[] };
 	simulatedKey: 'simulated_outflow';
 	/** The calibration window and exclusions the fit used (the form's, at the time). */
 	calibrationStart: string | null;
@@ -545,6 +551,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		startParams: { ...r.startParams },
 		flowKind: r.flowKind,
 		siteNodeId: r.siteNodeId ?? null,
+		...(r.zoneUnits ? { zone: { nodeId: r.zoneNodeId ?? null, units: [...r.zoneUnits] } } : {}),
 		simulatedKey: r.simulatedKey,
 		calibrationStart: ctx.settings.calibrationStart ?? null,
 		calibrationEnd: ctx.settings.calibrationEnd ?? null,

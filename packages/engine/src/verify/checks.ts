@@ -1409,6 +1409,21 @@ function waterYearOfDay(day: number): number {
  * - Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1;
  * - the summary's totals are the sums of the series and close the balance.
  */
+/** The area-weighted X1 of the units' zones (summary.unitRain.zones, engine 1.106.0), or null without zones. */
+function zonedX1(u: ModelOutput['summary']['unitRain']): number | null {
+	if (!u?.zones?.length) return null;
+	const area = new Map(u.units.map((x) => [x.nodeId, x.areaKm2]));
+	let a = 0;
+	let ax = 0;
+	for (const z of u.zones)
+		for (const id of z.units) {
+			const k = area.get(id) ?? 0;
+			a += k;
+			ax += k * z.params.x1;
+		}
+	return a > 0 ? ax / a : null;
+}
+
 export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string | null {
 	const b = out.summary.runoff;
 	const get = seriesMap(out);
@@ -1425,10 +1440,13 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
 	if (!ex && b.params.x2 !== 0) return 'exchange series missing with X2 ≠ 0';
 	const toMm = 1 / (b.areaKm2 * 1000);
 	const t9 = (x: number) => 1e-9 + 1e-12 * Math.abs(x);
+	// The production store's cap: X1, or under calibration zones (engine 1.106.0, issue #555) each unit's zone's X1
+	// weighted by its area, as the catchment's stores are the units' area-weighted means.
+	const x1Cap = zonedX1(out.summary.unitRain) ?? b.params.x1!;
 	// Each store's start (engine ≥ 1.20.0) sums to the total and sits in its bounds.
 	if (b.storesStartMm) {
 		const start = ['production_store', 'routing_store', 'uh_store'].map((k) => b.storesStartMm![k]);
-		if (start.some((x) => typeof x !== 'number' || !Number.isFinite(x) || x < -t9(0)) || start[0]! > b.params.x1! + t9(b.params.x1!))
+		if (start.some((x) => typeof x !== 'number' || !Number.isFinite(x) || x < -t9(0)) || start[0]! > x1Cap + t9(x1Cap))
 			return `runoff stores at the start ${JSON.stringify(b.storesStartMm)} are missing or outside their bounds`;
 		const sum = start[0]! + start[1]! + start[2]!;
 		if (Math.abs(sum - b.storageStartMm) > t9(b.storageStartMm)) return `runoff stores at the start sum to ${sum} mm, not the ${b.storageStartMm} mm storage`;
@@ -1442,7 +1460,7 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
 		const d = rain[t]! - aet[t]! - q + e - (after - before);
 		if (Math.abs(d) > t9(Math.max(before, after, rain[t]!))) return `runoff day ${t}: rain − AET − Q + exchange − Δstorage = ${d}`;
 		if (q < 0 || aet[t]! < 0 || aet[t]! > pet[t]! + t9(pet[t]!)) return `runoff day ${t}: Q ${q}, AET ${aet[t]}, PET ${pet[t]}`;
-		if (stores.some((x) => x[t]! < -t9(0)) || stores[0]![t]! > b.params.x1! + t9(b.params.x1!)) return `runoff day ${t}: a store is outside its bounds`;
+		if (stores.some((x) => x[t]! < -t9(0)) || stores[0]![t]! > x1Cap + t9(x1Cap)) return `runoff day ${t}: a store is outside its bounds`;
 		tot.rain += rain[t]!;
 		tot.pet += pet[t]!;
 		tot.aet += aet[t]!;

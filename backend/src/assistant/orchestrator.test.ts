@@ -1,11 +1,25 @@
 // One assistant turn (orchestrator.ts) against scripted providers and fake
-// tools: the hop cap, the tool calls per hop cap, the turn's token ceiling, a
+// tools: the hop cap, the tool calls per hop cap, the turn's token budget (spend never past it, the first hop checked, the last hop's output cut), a
 // malformed and an unknown tool call, the tool result cap, the conversation
 // cap, the proposal event, the output cap, the turn deadline (a hanging tool
 // included), a provider failure, and the client going away.
 import { describe, expect, it } from 'vitest';
 import { assistantConfig, weightedTokens, type AssistantConfig } from './config.js';
-import { capConversation, capToolResult, parseArguments, runTurn, toolCallLimitError, TURN_ERRORS, type TurnDeps } from './orchestrator.js';
+import {
+	capConversation,
+	capToolResult,
+	firstHopInput,
+	HOP_FRAMING_TOKENS,
+	MESSAGE_FRAMING_TOKENS,
+	messageTokens,
+	MIN_HOP_OUTPUT_TOKENS,
+	parseArguments,
+	runTurn,
+	toolCallLimitError,
+	turnFloor,
+	TURN_ERRORS,
+	type TurnDeps
+} from './orchestrator.js';
 import type { AssistantProvider, AssistantStreamEvent, AssistantTool, ProviderEvent, ProviderRequest, SettingsProposal, ToolResult } from './types.js';
 
 const cfg = (over: Partial<AssistantConfig> = {}): AssistantConfig => ({ ...assistantConfig({}), ...over });
@@ -110,15 +124,85 @@ describe('runTurn', () => {
 	});
 
 	it('ends with assistant_turn_limit before a hop that would pass maxTurnTokens, still reporting the tokens spent', async () => {
-		const big = 'x'.repeat(4000); // about 1,000 tokens of tool result
+		const big = 'x'.repeat(4000); // 4,000 bytes of tool result: up to 4,000 tokens more on hop 1
 		const p = scripted((hop) => [call('t', {}, `c${hop}`), usage(500, 100)]);
-		// Hop 0 costs 500 + 5 × 100 = 1,000; hop 1 would resend ~1,000 tokens more, so a 1,500 ceiling stops it.
-		const { d, events } = deps(p, [tool('t', () => ({ ok: true, data: big }))], { cfg: cfg({ maxTurnTokens: 1500, maxToolResultChars: 10_000 }) });
+		const tools = [tool('t', () => ({ ok: true, data: big }))];
+		// Hop 0 fits (its input estimate + 256 output × 5) with 1,000 to spare; it costs 500 + 5 × 100 = 1,000, and
+		// hop 1 would resend 4,000+ tokens more, so the ceiling stops it.
+		const maxTurnTokens = firstHopInput('SYSTEM', tools.map((t) => t.spec), ask) + 5 * 256 + 1000;
+		const { d, events } = deps(p, tools, { cfg: cfg({ maxTurnTokens, maxOutputTokens: 256, maxToolResultChars: 10_000 }) });
 		const out = await runTurn(d, ask);
 		expect(out).toEqual({ inputTokens: 500, outputTokens: 100, end: 'assistant_turn_limit' });
 		expect(weightedTokens(out.inputTokens, out.outputTokens)).toBe(1000);
 		expect(p.requests).toHaveLength(1);
 		expect(events.at(-1)).toEqual({ type: 'error', code: 'assistant_turn_limit', error: TURN_ERRORS.assistant_turn_limit });
+	});
+
+	it('takes the reserved budget over maxTurnTokens, and checks it before the first hop too: no call when even that can’t fit', async () => {
+		const p = scripted(() => [{ type: 'text', delta: 'ok' }, usage(10, 1)]);
+		const floor = turnFloor(cfg({ maxOutputTokens: 512 }), 'SYSTEM', [], ask);
+		expect(floor).toBe(firstHopInput('SYSTEM', [], ask) + 5 * 512);
+		// One token short of the first hop's input + MIN_HOP_OUTPUT_TOKENS (256) output: nothing is called, nothing spent.
+		const short = deps(p, [], { cfg: cfg({ maxOutputTokens: 512 }), budget: firstHopInput('SYSTEM', [], ask) + 5 * MIN_HOP_OUTPUT_TOKENS - 1 });
+		expect(await runTurn(short.d, ask)).toEqual({ inputTokens: 0, outputTokens: 0, end: 'assistant_turn_limit' });
+		expect(p.requests).toHaveLength(0);
+		expect(short.events).toEqual([{ type: 'error', code: 'assistant_turn_limit', error: TURN_ERRORS.assistant_turn_limit }]);
+		// Positive control: exactly that much runs the hop, its output cut to the 256 the budget leaves.
+		const just = deps(p, [], { cfg: cfg({ maxOutputTokens: 512 }), budget: firstHopInput('SYSTEM', [], ask) + 5 * MIN_HOP_OUTPUT_TOKENS });
+		expect((await runTurn(just.d, ask)).end).toBe('answered');
+		expect(p.requests[0]!.maxOutputTokens).toBe(MIN_HOP_OUTPUT_TOKENS);
+		// And the turn's floor runs it with its whole output cap.
+		const full = deps(p, [], { cfg: cfg({ maxOutputTokens: 512 }), budget: floor });
+		expect((await runTurn(full.d, ask)).end).toBe('answered');
+		expect(p.requests[1]!.maxOutputTokens).toBe(512);
+	});
+
+	it('cuts a later hop’s output cap to what the budget leaves', async () => {
+		const tools = [tool('t', () => ({ ok: true, data: 'result' }))];
+		const specs = tools.map((t) => t.spec);
+		// Hop 0 reports exactly its estimate as input, and 10 out.
+		const p = scripted((hop, req) =>
+			hop === 0 ? [call('t', {}, 'c0'), usage(firstHopInput(req.system, req.tools, req.messages), 10)] : [{ type: 'text', delta: 'ok' }, usage(1, 1)]
+		);
+		const hop0 = firstHopInput('SYSTEM', specs, ask);
+		const after = [...ask, { role: 'assistant' as const, content: '', toolCalls: [{ id: 'c0', name: 't', arguments: {} }] }, { role: 'tool' as const, toolCallId: 'c0', name: 't', content: JSON.stringify({ ok: true, data: 'result' }) }];
+		const hop1 = firstHopInput('SYSTEM', specs, after);
+		// Hop 0 spends hop0 + 5 × 10; hop 1's input is at most hop1, which leaves 400 output of the 600 cap.
+		const budget = hop0 + 5 * 10 + hop1 + 5 * 400;
+		// Room for hop 0's whole cap (600 × 5) too.
+		expect(budget).toBeGreaterThanOrEqual(hop0 + 5 * 600);
+		const { d } = deps(p, tools, { cfg: cfg({ maxOutputTokens: 600 }), budget });
+		expect((await runTurn(d, ask)).end).toBe('answered');
+		expect(p.requests.map((r) => r.maxOutputTokens)).toEqual([600, 400]);
+	});
+
+	it('never spends past its budget against a provider that counts input as high as the estimate and writes its whole output cap every hop', async () => {
+		// The worst a provider honouring the contract can do: input = firstHopInput (bytes + framing), output = the cap.
+		const worst = scripted((hop, req) => [
+			{ type: 'text', delta: 'y'.repeat(20) },
+			call('t', { hop }, `c${hop}`),
+			usage(firstHopInput(req.system, req.tools, req.messages), req.maxOutputTokens)
+		]);
+		// And one that never reports usage, streaming as much as it may: counted at the same most.
+		const silent = scripted((hop, req) => [{ type: 'text', delta: 'z'.repeat(req.maxOutputTokens * 2) }, call('t', { hop }, `c${hop}`)]);
+		const tools = [tool('t', () => ({ ok: true, data: 'é'.repeat(3000) }))];
+		const hops: number[] = [];
+		for (const provider of [worst, silent]) {
+			for (const budget of [8_000, 12_345, 20_000, 33_333, 60_000, 150_000]) {
+				provider.requests.length = 0;
+				const { d } = deps(provider, tools, { cfg: cfg({ maxHops: 8, maxToolResultChars: 12_000 }), budget });
+				const out = await runTurn(d, ask);
+				const spent = weightedTokens(out.inputTokens, out.outputTokens);
+				expect(spent, `${provider === worst ? 'worst' : 'silent'} ${budget}`).toBeLessThanOrEqual(budget);
+				// Not vacuous: the turn runs until the budget, not some other ceiling, stops it, and spends most of it.
+				expect(out.end).toBe('assistant_turn_limit');
+				expect(spent).toBeGreaterThan(budget / 2);
+				for (const r of provider.requests) expect(r.maxOutputTokens).toBeGreaterThanOrEqual(MIN_HOP_OUTPUT_TOKENS);
+				hops.push(provider.requests.length);
+			}
+		}
+		// Several hops in the larger budgets, each one checked.
+		expect(Math.max(...hops)).toBeGreaterThanOrEqual(4);
 	});
 
 	it('lets a turn under maxTurnTokens run every hop it needs', async () => {
@@ -287,12 +371,20 @@ describe('runTurn', () => {
 		expect(p.requests).toHaveLength(1);
 	});
 
-	it('estimates the tokens of a call the provider never reported usage for', async () => {
+	it('counts a call the provider never reported usage for at its most: the input estimate, and the output bytes up to the cap', async () => {
 		const p = scripted(() => [{ type: 'text', delta: 'x'.repeat(40) }]);
 		const { d } = deps(p);
 		const out = await runTurn(d, [{ role: 'user', content: 'y'.repeat(94) }]);
-		// (6 system + 94 message) / 4 = 25 in; 40 / 4 = 10 out.
-		expect(out).toEqual({ inputTokens: 25, outputTokens: 10, end: 'answered' });
+		// HOP_FRAMING_TOKENS + 6 system bytes + 2 ("[]", no tools) + MESSAGE_FRAMING_TOKENS + 94 message bytes in; 40 bytes out.
+		expect(out).toEqual({ inputTokens: HOP_FRAMING_TOKENS + 6 + 2 + MESSAGE_FRAMING_TOKENS + 94, outputTokens: 40, end: 'answered' });
+	});
+
+	it('estimates input by UTF-8 bytes, so text of many bytes a character is never undercounted', () => {
+		expect(messageTokens({ role: 'user', content: 'é' })).toBe(MESSAGE_FRAMING_TOKENS + 2);
+		expect(messageTokens({ role: 'user', content: '💧' })).toBe(MESSAGE_FRAMING_TOKENS + 4);
+		const calls = [{ id: 'c1', name: 't', arguments: { a: 1 } }];
+		expect(messageTokens({ role: 'assistant', content: 'ab', toolCalls: calls })).toBe(MESSAGE_FRAMING_TOKENS + 2 + JSON.stringify(calls).length);
+		expect(messageTokens({ role: 'tool', toolCallId: 'c1', name: 't', content: 'xyz' })).toBe(MESSAGE_FRAMING_TOKENS + 3 + 2 + 1);
 	});
 });
 

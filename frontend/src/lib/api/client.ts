@@ -186,6 +186,7 @@ import type {
 	MinOccurrence,
 	MapGeometry,
 	StartProposal,
+	PlanRequest,
 	StartRole,
 	PlacementChoice,
 	StartState,
@@ -1309,14 +1310,16 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		start: {
 			get: (id: string) => request<StartState>('GET', `${p(id)}/map/start`),
 			propose: (id: string, body: { outletFeatureId?: string | null; outletUseLarger?: boolean; points: ({ featureId: string; role: StartRole } & PlacementChoice)[] }) =>
-				request<{ proposal: StartProposal }>('POST', `${p(id)}/map/start`, body),
+				request<{ proposal: StartProposal; request?: PlanRequest | null }>('POST', `${p(id)}/map/start`, body),
+			/** A plan the background worker routes (272): waiting, running, or what came of it (viewer). */
+			request: (id: string, rid: string) => request<{ request: PlanRequest }>('GET', `${p(id)}/map/start/requests/${enc(rid)}`),
 			apply: (id: string, spid: string, ticks: StartTicks) => request<{ proposal: StartProposal; model: ProjectModel }>('POST', `${p(id)}/map/start/${enc(spid)}/apply`, ticks),
 			discard: (id: string, spid: string) => request<{ proposal: StartProposal | DivideProposal }>('POST', `${p(id)}/map/start/${enc(spid)}/discard`)
 		},
 		/** Divide a model that has nodes into sub-catchments from the map (182, docs/api.md § Start from the map); read and discarded through `start`. */
 		divide: {
 			propose: (id: string, body: { outletFeatureId?: string | null; outletUseLarger?: boolean; points: ({ featureId: string; nodeId: string | null } & PlacementChoice)[] }) =>
-				request<{ proposal: DivideProposal }>('POST', `${p(id)}/map/divide`, body),
+				request<{ proposal: DivideProposal } | { request: PlanRequest }>('POST', `${p(id)}/map/divide`, body),
 			apply: (id: string, spid: string, ticks: DivideTicks) => request<{ proposal: DivideProposal; model: ProjectModel }>('POST', `${p(id)}/map/divide/${enc(spid)}/apply`, ticks)
 		},
 		/**

@@ -4,6 +4,7 @@
 import type { ForecastSummary } from './forecast';
 import type { RunDrought } from './drought/summary';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
+import type { CalibrationZone } from './calibrate/zones';
 import type { FlowMissingSettings } from './recordPeriods';
 import type { WarningKept } from './checkItems';
 import type { QualityFlagSettings } from './calibrate/qualityFlagSettings';
@@ -323,9 +324,9 @@ export const LEGACY_UPGRADED_WARNING =
 /**
  * Top-level settings an engine retired: ignored when read (prepare.ts mergeSettings, the backend's too) and stripped
  * from stored projects by a migration. `ewrSplit` (engines 1.94.0 – 1.104.x, issue #553): from 1.105.0 the EWR is
- * always split by each unit's natural MAR (issue #615, ./network/ewrSplit.ts, 263_retire_ewr_split.sql).
+ * always split by each unit's natural MAR (issue #615, ./network/ewrSplit.ts, 265_retire_ewr_split.sql).
  * `flowShareMethod` and `hiLoSplit` (b023's area, Hi/Lo MAP and specific fragmentation): from 1.105.0 the flow is
- * split by the same natural MAR shares (issue #616, docs/model.md §2.5, 264_retire_flow_share_method.sql); a run
+ * split by the same natural MAR shares (issue #616, docs/model.md §2.5, 266_retire_flow_share_method.sql); a run
  * whose input still names Hi/Lo MAP or specific says so once (FLOW_SHARE_METHOD_RETIRED_WARNING).
  */
 export const RETIRED_SETTINGS_KEYS = ['ewrSplit', 'flowShareMethod', 'hiLoSplit'] as const;
@@ -649,6 +650,16 @@ export interface ProjectSettings {
 	 * outlet's; each gauge EWR site with a record gets its own.
 	 */
 	calibrationSiteNodeId: string | null;
+	/**
+	 * Calibration zones (engine 1.106.0, issue #555, ./calibrate/zones.ts,
+	 * docs/model.md §2.10n): gauges above the calibration site that calibrate
+	 * the land units draining to them on their own record, each with its own
+	 * GR4J X1–X4, window, exclusions, record, quality flags and fit record.
+	 * The site's own zone (the rest) keeps the settings above and `gr4j`.
+	 * Applies only under Per unit flow generation (`unitRain` perUnit).
+	 * Absent, [] or no ticked row = one parameter set, every engine before.
+	 */
+	calibrationZones?: CalibrationZone[] | null;
 	/**
 	 * Periods left out of every calibration score (automatic calibration and
 	 * the run's calibration statistics): whole water years or date ranges,
@@ -4021,6 +4032,26 @@ export interface UnitRainSummary {
 	units: UnitRainUnit[];
 	/** The reference gauge's fit (engine ≥ 1.80.0); absent when the setting has no reference. */
 	reference?: UnitRainReferenceFit;
+	/**
+	 * The calibration zones the run applied (engine 1.106.0, issue #555,
+	 * docs/model.md §2.10n), upstream first, then the calibration site's own
+	 * zone (`nodeId` null, the rest). Absent when it applied none: every unit
+	 * ran on settings.gr4j.
+	 */
+	zones?: UnitRainZoneSummary[];
+}
+
+/** One calibration zone as a run applied it (summary.unitRain.zones). */
+export interface UnitRainZoneSummary {
+	/** The zone's gauge; null = the calibration site's zone (the outlet's, or Scored at's gauge). */
+	nodeId: string | null;
+	name: string;
+	/** Its land units, node-id order. */
+	units: string[];
+	/** The GR4J parameters its units ran on. */
+	params: Gr4jParams;
+	/** False when the zone had none of its own yet and took the catchment's. */
+	fitted: boolean;
 }
 
 /** A station pairing's fit (summary.stations.pairings, issue #553): station vs the CHIRPS at it, 12 monthly factors. */

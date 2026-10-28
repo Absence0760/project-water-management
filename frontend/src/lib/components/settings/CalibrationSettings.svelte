@@ -6,6 +6,8 @@
 	// stays under its size ceiling. The quality flags' Save blocker (`error`) is set once its fields load: nothing can
 	// be edited before.
 	const loadQualityFlags = () => loadSections().then((m) => ({ default: m.QualityFlagsFields }));
+	// Calibrate at several gauges (issue #555): its own chunk, loaded only with a gauge to tick.
+	const loadZones = () => import('#lib/components/calibration/CalibrationZonesTable.svelte');
 	const loadFlowGapFill = () => loadSections().then((m) => ({ default: m.FlowGapFillFields }));
 	// Automated calibration's rules and run (issue #153): their own chunks, for the same reason.
 	const loadCalibrationRules = () => import('./CalibrationRulesFields.svelte');
@@ -45,12 +47,14 @@
 		type CalibrationFlowKind,
 		type CalibrationReport,
 		type FitRecord,
+		type Gr4jParams,
 		type PeInput,
 		type ProjectSettings,
 		type SeriesOrigin,
 		type SeriesProvenance
 	} from '@water-management/engine';
 	import { applyReport, marPenaltyOn } from '#lib/calibration/fit.js';
+	import { withZoneFields } from '#lib/calibration/zones.js';
 	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import type { RunBlocker } from '#lib/calibration/autoFit.js';
 	import CalibrationExclusions from '#lib/components/calibration/CalibrationExclusions.svelte';
@@ -199,9 +203,10 @@
 		onProjectChange(p);
 	}
 
-	/** Writes a fit's parameters, and its record, into the form (unsaved). */
-	function applyFit(report: CalibrationReport, record: FitRecord) {
-		draft.s = { ...applyReport(s, report), fitRecord: record };
+	/** Writes a fit's parameters, and its record, into the form (unsaved); a stepwise fit's zones too, as one (issue #555). */
+	function applyFit(report: CalibrationReport, record: FitRecord, zones?: { nodeId: string; params: Gr4jParams; record: FitRecord }[]) {
+		const calibrationZones = zones?.reduce((list, z) => withZoneFields(list, z.nodeId, { gr4j: z.params, fitRecord: z.record }), s.calibrationZones ?? []);
+		draft.s = { ...applyReport(s, report), fitRecord: record, ...(calibrationZones ? { calibrationZones } : {}) };
 		if (report.model === 'gr4j' && draft.s.gr4j.x2 !== 0) draft.x2Open = true;
 	}
 
@@ -214,6 +219,16 @@
 	const recordKinds = $derived(s.calibrationSiteNodeId ? (calSites.find((x) => x.nodeId === s.calibrationSiteNodeId)?.records ?? []) : seriesKinds);
 	const hasRecord = $derived(recordKinds === null || recordKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k)));
 	const nodeName = (id: string) => editor?.model.nodes.find((n) => n.id === id)?.name;
+	// The calibration site's own row of Calibrate at several gauges (issue #555): Scored at's gauge, else the outlet.
+	const siteRowName = $derived(
+		(s.calibrationSiteNodeId ? nodeName(s.calibrationSiteNodeId) : editor?.model.nodes.find((n) => n.downstreamNodeId === null)?.name) ?? 'The outlet'
+	);
+	// The window above and the zones' rows each report an error; the save bar reads one (the window's first).
+	let mainWindowError = $state<string | null>(null);
+	let zonesError = $state<string | null>(null);
+	$effect(() => {
+		draft.errors.calWindow = mainWindowError ?? zonesError;
+	});
 	const petMissing = $derived(
 		!hasPotentialEvaporation(
 			{ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined },
@@ -514,7 +529,7 @@
 		bind:end={s.calibrationEnd}
 		bind:flowKind={s.calibrationFlowKind}
 		bind:siteNodeId={s.calibrationSiteNodeId}
-		bind:error={draft.errors.calWindow}
+		bind:error={mainWindowError}
 		{readonly}
 		availableKinds={seriesKinds}
 		sites={calSites}
@@ -561,6 +576,24 @@
 			</Lazy>
 		{/if}
 	</Fold>
+	<!-- Calibrate at several gauges (issue #555, model.md §2.10n): the site and every gauge with a record, each with its tick. -->
+	{#if calSites.length}
+		<Lazy load={loadZones}>
+			{#snippet children(CalibrationZonesTable)}
+				<CalibrationZonesTable
+					bind:zones={s.calibrationZones}
+					bind:error={zonesError}
+					projectId={project.id}
+					sites={calSites}
+					siteNodeId={s.calibrationSiteNodeId}
+					siteName={siteRowName}
+					siteKind={s.calibrationFlowKind}
+					perUnit={s.unitRain?.mode === 'perUnit'}
+					{readonly}
+				/>
+			{/snippet}
+		</Lazy>
+	{/if}
 </section>
 
 <section class="panel" id="set-fit" aria-labelledby="fit-h">
