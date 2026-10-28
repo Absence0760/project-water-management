@@ -25,6 +25,7 @@ export const REFERENCE_FAMILIES: readonly ReferenceFamily[] = [
 	{ what: 'quaternaries', testIds: /['"](map-quaternar[a-z-]*|quaternary-(code|rows|synthetic|none|proposal|no-dataset))['"]/, loader: 'loadSyntheticQuaternaries' },
 	{ what: 'the river network', testIds: /['"]map-rivers[a-z-]*['"]/, loader: 'loadSyntheticRivers' },
 	{ what: 'gauging stations', testIds: /['"]nearest-gauges-table['"]/, loader: 'loadSyntheticStations' },
+	{ what: 'the regional prior’s donors and soil grid', testIds: /['"]prior-[a-z-]+['"]/, loader: 'loadSyntheticPrior' },
 	{ what: 'the MAP grid', testIds: /['"](map-mapgrid-(summary|dataset|dense|empty|source)|unit-map-(rows|coverage|synthetic|source|same|uncovered|other-grid|none-covered))['"]/, loader: 'loadSyntheticMapGrid' }
 ];
 
