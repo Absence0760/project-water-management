@@ -61,10 +61,11 @@ function assignment(input: ModelInput, settings: ProjectSettings): ZoneAssignmen
 	return resolveZones(input.model.nodes, settings, resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', []), []);
 }
 
-const gr4jOf = (p: ParamSet): Gr4jParams => Object.fromEntries(GR4J_PARAMS.map((s) => [s.key, p[s.key]!])) as unknown as Gr4jParams;
+/** A fit's parameter set as GR4J X1–X4. */
+export const gr4jOfParamSet = (p: ParamSet): Gr4jParams => Object.fromEntries(GR4J_PARAMS.map((s) => [s.key, p[s.key]!])) as unknown as Gr4jParams;
 
 /** The input with one zone's parameters replaced (a step's result, fixed for the steps below it). */
-function withZoneParams(input: ModelInput, zoneNodeId: string, params: Gr4jParams): ModelInput {
+export function withZoneParams(input: ModelInput, zoneNodeId: string, params: Gr4jParams): ModelInput {
 	const zones = ((input.settings?.calibrationZones as CalibrationZone[] | null | undefined) ?? []).map((z) => (z.nodeId === zoneNodeId ? { ...z, gr4j: { ...params } } : z));
 	return { ...input, settings: { ...input.settings, calibrationZones: zones } };
 }
@@ -95,7 +96,7 @@ export function calibrateStepwise(input: ModelInput, opts: Omit<CalibrateOptions
 			cancelled = true;
 			break;
 		}
-		if (step.zoneNodeId !== null) cur = withZoneParams(cur, step.zoneNodeId, gr4jOf(report.params));
+		if (step.zoneNodeId !== null) cur = withZoneParams(cur, step.zoneNodeId, gr4jOfParamSet(report.params));
 	}
 	return { steps, evaluations, cancelled };
 }
@@ -114,7 +115,7 @@ export function applyStepwise<S extends Pick<ProjectSettings, 'gr4j' | 'fitRecor
 	if (r.cancelled) throw new Error('a cancelled stepwise fit is not applied');
 	let out: S = { ...settings };
 	for (const step of r.steps) {
-		const p = gr4jOf(step.report.params);
+		const p = gr4jOfParamSet(step.report.params);
 		if (step.zoneNodeId === null) out = { ...out, gr4j: { ...out.gr4j, ...p }, fitRecord: recordOf(step) };
 		else out = { ...out, calibrationZones: (out.calibrationZones ?? []).map((z) => (z.nodeId === step.zoneNodeId ? { ...z, gr4j: p, fitRecord: recordOf(step) } : z)) };
 	}

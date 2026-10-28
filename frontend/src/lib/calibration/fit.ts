@@ -47,6 +47,8 @@ export interface FitRequest {
 	starts: number;
 	/** A second observed record to validate the fit against; undefined = none. */
 	validationRecord?: CalibrationFlowKind;
+	/** The calibration zone this step fits (engine CalibrateOptions.zone, issue #555); undefined = the site's own zone. */
+	zone?: string;
 }
 
 /** The "Bounds" select's label for each option (issue #4 phase 6). */

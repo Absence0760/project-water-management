@@ -58,6 +58,8 @@ self.onmessage = (e: MessageEvent<FitRequest | EnsembleJob | SensitivityJob>) =>
 			seed: req.seed,
 			starts: req.starts,
 			validationRecord: req.validationRecord,
+			// One step of the stepwise fit of calibration zones (issue #555): runner.ts startStepwiseFit sends each.
+			...(req.zone !== undefined ? { zone: req.zone } : {}),
 			onProgress: (progress) => {
 				const now = performance.now();
 				if (now - last >= 100 || progress.evaluations === progress.budget) {
