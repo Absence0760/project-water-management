@@ -511,7 +511,7 @@
 		sites={calSites}
 		dataHref={flowRecordId ? `?tab=series&series=${encodeURIComponent(flowRecordId)}#data-chart` : null}
 	/>
-	<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={draft.errors.exclusions} {readonly} />
+	<div id="fld-cal-exclusions"><CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={draft.errors.exclusions} {readonly} /></div>
 	<!-- One record's own missing periods (issue #611): the exclusions above leave days out of every record, these out of one.
 	     Emptied, the setting goes back to how it was saved (absent or null), so adding and removing a period isn't an edit. -->
 	<FlowMissingPeriods

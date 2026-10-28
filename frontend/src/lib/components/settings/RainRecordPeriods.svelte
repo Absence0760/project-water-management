@@ -63,7 +63,7 @@
 	const remove = (id: string, i: number) => write(id, listOf(id).filter((_, j) => j !== i));
 </script>
 
-<div class="rr" role="group" aria-labelledby="{uid}-l" aria-describedby="{uid}-hint" data-testid="rain-record-periods">
+<div class="rr" id="fld-rain-unreliable" role="group" aria-labelledby="{uid}-l" aria-describedby="{uid}-hint" data-testid="rain-record-periods">
 	<div class="head">
 		<span class="legend"><span id="{uid}-l">Unreliable periods of a rain record</span> <HelpTip key="settings.rainStations" label="Unreliable periods of a rain record" /></span>
 	</div>

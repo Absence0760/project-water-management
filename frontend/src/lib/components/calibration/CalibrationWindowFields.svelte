@@ -52,7 +52,8 @@
 	});
 </script>
 
-<fieldset class="plain cal-window" aria-describedby="{uid}-hint">
+<!-- id: the Warnings page lands on the field (`?field=fld-cal-window`, issue #611). -->
+<fieldset class="plain cal-window" id="fld-cal-window" aria-describedby="{uid}-hint">
 	<legend class="label">Calibration window</legend>
 	<!-- The window, where it is scored and the record, on one row (issue #521); the notes about the site under it. -->
 	<div class="form-row">

@@ -31,7 +31,7 @@
 	const option = $derived(GAP_RAIN_OPTIONS.find((o) => o.value === product) ?? GAP_RAIN_OPTIONS[0]!);
 </script>
 
-<div class="sub-card gap-rain" data-testid="gap-rain-card">
+<div class="sub-card gap-rain" id="fld-gap-rain" data-testid="gap-rain-card">
 	<h3 class="title">Gap-filling product</h3>
 	<div class="field">
 		<span class="lbl"><label for="{uid}-product">Fill blank catchment-rain days from</label><HelpTip key="settings.gapRain" /></span>
