@@ -128,7 +128,8 @@ const atlas = (v: string | undefined, scale = 1): number | null => {
  * The basins of attributes_other_grdc.csv joined with
  * attributes_hydroatlas_grdc.csv by gauge_id. HydroATLAS's scaled integers are
  * converted: ari_ix_sav ÷ 100 (P/PET), slp_dg_sav ÷ 10 (degrees), dor_pc_pva ÷
- * 10 (%) (HydroATLAS TechDoc v1.0, table 4); cly_pc_sav, snd_pc_sav,
+ * 10 (%) (the BasinATLAS Catalog v1.0: "percent values are multiplied by
+ * 10", and the same for slope; aridity × 100); cly_pc_sav, snd_pc_sav,
  * for_pc_sse (%) and pre_mm_syr (mm) as they are.
  */
 export function caravanBasins(otherCsv: string, hydroatlasCsv: string): CaravanBasin[] {
