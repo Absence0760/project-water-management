@@ -75,6 +75,18 @@ describe('a reference load (docs/deployment.md § Reference datasets)', () => {
 		expect(JSON.parse((err as Error).message)).toMatchObject({ code: 'not_found', reason: 'no object at that key in the reference bucket' });
 	});
 
+	it('a dws load takes its station from the event: a river gauge code goes on to the file read, anything else is refused without echoing it', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { loadReference } = await import('./lambda-migrate.js');
+		const dws = { kind: 'dws', key: 'reference/dws/reply-01.txt.gz', sha256: 'a'.repeat(64), dataset: 'dws-reply-01', source: 'SYNTHETIC-REPLY-0001' };
+		const ok = await loadReference({ ...dws, station: 'X0H001' }, context, async () => null).catch((e: Error) => e);
+		expect(JSON.parse((ok as Error).message)).toMatchObject({ code: 'not_found' });
+		const bad = await loadReference({ ...dws, station: 'X0H001;DROP' }, context, async () => null).catch((e: Error) => e);
+		const summary = JSON.parse((bad as Error).message);
+		expect(summary).toMatchObject({ code: 'refused', reason: 'station must be a DWS river gauge code (an H code, e.g. A2H012)' });
+		expect(JSON.stringify(summary)).not.toContain('DROP');
+	});
+
 	it('the bundle carries the reference loaders but no raster or HDF5 code (geo/loadCropland.ts, the feeds’ GeoTIFF reader, geo/loadEvaporation.ts and h5wasm)', async () => {
 		const { build } = await import('esbuild');
 		const out = await build({

@@ -2042,9 +2042,12 @@ its queue stay required).
 
 ### Turning it on
 
-1. Send DWS the written data request (#604 operator steps): verified daily
-   flow for the project's stations, and **written permission to store the
-   data and show derived results in a commercial tool**.
+1. Get each station's verified daily flow: DWS's permission to store it
+   and show derived results is held (obtained through the client's
+   hydrologist, 2026-10-28, #618 step 6a), so this is the hydrologist's
+   DWS exports, a written data request to DWS (GeoRequests@dws.gov.za), or
+   the `HyData.aspx` pages saved from the website (up to 20 years a
+   request).
 2. Deploy a backend release with migration 247 and the `dws-weekly` mode,
    then apply `dws_weekly_enabled = true` (a `terraform plan` first, and the
    operator's go-ahead for the apply). The first worker tick writes
@@ -2164,7 +2167,8 @@ to store the verified daily flow (2026-10-28, #618 step 6a;
 - **Keep station codes out of the public log.** The run's inputs and
   output are public (the repo is): name the key and the dataset label
   neutrally (`reply-01.txt.gz`, `dws-2026-10-28-01`), and leave `station`
-  empty unless the file names none. The station goes to CloudWatch only.
+  empty unless the file names none (the `check` job refuses a key or label
+  that carries a station code). The station goes to CloudWatch only.
 - **The dataset label** names this file's load in `reference_load` (the
   `reference-provenance` check lists them): one label per file, so each
   window's file stays recorded. Reloading under the same label replaces
@@ -2172,7 +2176,7 @@ to store the verified daily flow (2026-10-28, #618 step 6a;
 - **The source** is the record's reference, stored on every row (1–200
   characters): DWS's reply reference, or for saved pages the permission
   they are held under, e.g. `"DWS permission via the hydrologist,
-  2026-10-28; HyData.aspx saved 2026-10-29"`.
+  2026-10-28; HyData.aspx saved <date>"`.
 
 A worked example, from the folder holding one saved page (the page saved
 as HTML from `HyData.aspx`, or DWS's text reply), after `aws sso login
@@ -2921,7 +2925,10 @@ The answer is `{ check, count, truncated, rows }`: ids, engine versions,
 allocation modes, dates and flags only, never a person's name, an email, a
 volume or a note, so it can be pasted into an issue (`series-pick-moves`
 also answers with series names, which are project data, not personal
-data). At most 500 rows come back;
+data). The exception is `dws-coverage`, whose rows are DWS station codes:
+public codes, but they point at the client's catchment, so keep that
+answer off the (public) issues and say only whether the stations are
+covered. At most 500 rows come back;
 `count` is the total and `truncated` says whether more were held back. A
 failure is a `CheckFailed` error whose message is `{ code, reason,
 logStream, requestId }`; the detail is in the function's CloudWatch log

@@ -116,6 +116,10 @@ export function loadProblems(env, hasText = legalTextHas) {
 	if (Object.hasOwn(DATASETS, kind) && source.trim()) problems.push(`${kind} takes no source: the dataset's source and credit are the ones recorded with its licence`);
 	if (kind === 'rivers' && !source.trim()) problems.push('rivers need a source: the attribution stored on every reach');
 	if (kind === 'dws' && (!source.trim() || source.length > 200)) problems.push('dws needs a source of 1 to 200 characters: the record’s reference, stored on every row');
+	// This run's log is public and a station code points at the client's catchment: the key and label must not carry one.
+	if (kind === 'dws' && /[A-Z][0-9][A-Z][0-9]{3}/i.test(`${env.LOAD_KEY ?? ''} ${env.LOAD_DATASET ?? ''}`)) {
+		problems.push('name the dws key and dataset without a station code (this log is public): the station comes from the file, or the station input');
+	}
 	const station = env.LOAD_STATION ?? '';
 	if (station && kind !== 'dws') problems.push('station is for the dws kind only');
 	else if (station && !/^[A-Z][0-9]H[0-9]{3}$/.test(station)) problems.push('station must be a DWS river gauge code (an H code, e.g. A2H012)');

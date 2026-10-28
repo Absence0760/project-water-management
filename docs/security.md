@@ -4207,7 +4207,9 @@ key there would let any read-only principal forge any user's session.
   and no other field (refused before anything connects), the query runs in
   a `READ ONLY` transaction that is always rolled back, and the answer
   carries ids, engine versions, modes, dates and flags only (a unit test
-  holds the column allowlist; a DB test shows a write inside fails).
+  holds the column allowlist; a DB test shows a write inside fails), plus
+  the two named exceptions: `series-pick-moves`' series names and
+  `dws-coverage`'s station codes, which stay off public issues.
 - **No role can write either bucket** but the operator's own SSO session;
   the deploy role touches neither, and a guardrail test (`guardrails.tftest.hcl`) fails if any other role policy names either bucket. Uploading to the tiles bucket is itself
   publishing (the behaviour serves what is there), so the licence steps come

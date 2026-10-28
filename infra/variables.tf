@@ -691,7 +691,7 @@ variable "daily_ingest_lag_alarm_days" {
 }
 
 variable "dws_source" {
-  description = "Where the worker's DWS feed fetches read (DWS_SOURCE, issue #604 R3-B): live sends each fetch to the fetcher Lambda, which reads DWS's HyData.aspx page; store reads our gauge_record table (migration 247) inside the worker's own fetch job, with no request to DWS. live until the operator has DWS's written answer and has loaded its reply (pnpm import:dws, docs/deployment.md § DWS gauge records). With chirps_source = \"mirror\" as well, per-feed fetching is off and Terraform removes the fetch queues (feeds.tf local.per_feed_fetching; docs/deployment.md § The cutover)."
+  description = "Where the worker's DWS feed fetches read (DWS_SOURCE, issue #604 R3-B): live sends each fetch to the fetcher Lambda, which reads DWS's HyData.aspx page; store reads our gauge_record table (migration 247) inside the worker's own fetch job, with no request to DWS. live until the operator has loaded each station's record (load-reference.yml kind dws) and the dws-coverage read-only check reads every station covered (docs/deployment.md § DWS gauge records). With chirps_source = \"mirror\" as well, per-feed fetching is off and Terraform removes the fetch queues (feeds.tf local.per_feed_fetching; docs/deployment.md § The cutover)."
   type        = string
   default     = "live"
   validation {

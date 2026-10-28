@@ -73,6 +73,10 @@ describe('load: a reference load’s inputs', () => {
 			assert.doesNotMatch(problems[0], new RegExp(station.replace(/[;]/g, '')));
 		}
 		assert.match(loadProblems({ ...landCover, LOAD_STATION: 'X0H001' }, has).join('\n'), /station is for the dws kind only/);
+		// No station code in the public log's key or label.
+		for (const patch of [{ LOAD_KEY: 'reference/dws/X0H001-reply.txt' }, { LOAD_DATASET: 'x0h001-1990-2009' }]) {
+			assert.match(loadProblems({ ...dws, ...patch }, has).join('\n'), /without a station code/, JSON.stringify(patch));
+		}
 		assert.match(loadProblems({ ...dws, LOAD_KEY: 'reference/land-cover/reply.txt' }, has).join('\n'), /reference\/dws\/<file>/);
 	});
 
