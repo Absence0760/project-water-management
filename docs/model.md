@@ -12669,7 +12669,7 @@ run's stored series ([ui.md § Summary](./ui.md#summary)).
 definition, a gamma fit and three SPI values and a GLO fit and three SPEI
 values against references computed in Python with no shared code; monthly
 totals (partial months, a missing day, `lastDay`) under two skewed `TZ`s;
-the reference period chosen; over a 44-year synthetic record the SPI-3 is
+the reference period chosen; over a synthetic record of 1981–2024 the SPI-3 is
 about standard normal over 1991–2020 and never falls as the total rises;
 the badge reads the last whole month of history and ignores forecast days
 after it, a dry spell reads dry, and each kind of gap is named. The

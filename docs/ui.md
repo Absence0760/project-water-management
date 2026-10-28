@@ -10803,7 +10803,7 @@ confirmed farmers see the outlook, O5, issue #90).
   [model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620);
   `data-testid="outlook-climate"`, `data-state` `ready` or `problem`), after
   the planning figure's hint, beside the ESP rather than instead of it:
-  this season's state (*ONI JAS 2018 +0.45; AAO Jul–Sep 2018 −0.31*), a
+  this season's state (*ONI JAS 2015 +0.45; AAO Jul–Sep 2015 −0.31*), a
   headline (*In the 10 past seasons nearest this one, the dams ended at …
   at 100 %, against … in all 31 years*), and a table per demand level of the
   season-end dam storage and the years met in full, those seasons beside
