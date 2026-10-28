@@ -28,6 +28,7 @@ import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags, wi
 import { dayText, daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
 import { cropFactorAreaM2, datedDemandFactorOf, demandFactorOf, demandFactorStart, hasDatedDemandFactor, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
+import { runDrought } from './drought/summary';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
 import { attributeEwrShortfall, bindingSite, siteUnits } from './network/attribution';
@@ -252,7 +253,9 @@ const KEPT_COLUMNS = new Set<string>([FLOW_QUALITY_COLUMN.key]);
  * time budget and the tests that re-run the model don't pay for them.
  */
 export function runModelChecked(input: ModelInput): ModelOutput {
-	return withVerification(input, runModel(input));
+	const out = withVerification(input, runModel(input));
+	// The drought badge's headline (issue #620, ./drought/summary.ts): a view of the output, for the project list.
+	return { ...out, summary: { ...out.summary, drought: runDrought(out) } };
 }
 
 /**

@@ -1608,7 +1608,7 @@ put the results first; its first screen follows board A1 of the redesign
    Under the alerts, the **Drought index** card (`overview/DroughtIndex.svelte`,
    `drought.ts`; issue #620): SPI and SPEI over 3, 6 and 12 months to the
    last whole month of the latest run's history, from the run's own
-   `rain_final` and `pet` ([model.md §2.15b](./model.md#215b-drought-badge-spi-and-spei-issue-620-slice-1)).
+   `rain_final` and `pet` ([model.md §2.15b](./model.md#215b-drought-badge-spi-and-spei-issue-620)).
    A table, one row per period (its months, "Aug–Oct 2024"), each cell the
    value and its class, coloured dry or wet with the class written out; the
    headline badge is the driest index ("Severely dry · SPEI-12"), and the
@@ -1620,8 +1620,10 @@ put the results first; its first screen follows board A1 of the redesign
    restriction decision; it loads the two series through the Runs cache and
    is part of the Summary's `data-ready`. Workspace only, in English: the
    farm view shows the restriction level the WUA publishes, never a raw
-   index (#620's open question 4). The portfolio doesn't show it yet: that
-   needs the badge in the run summary, a later slice.
+   index (#620's open question 4). It counts to the same day as the run's
+   stored badge (`droughtLastDay`: an ordinary run over forecast rain stops at
+   the last recorded day), so its headline is the one the [project
+   list](#project-list) shows from `summary.drought`.
 3. **The published baseline and the links**: once there is a run, in the
    right-hand column under Supply by farm, which is usually shorter than
    Needs attention and the alerts, so a typical catchment (the example
@@ -2532,11 +2534,28 @@ pill (`portfolio.spec.ts` pins the withheld row); with the published restriction
 under it, "Restriction: Advisory · 15 %" or "Restriction: None"; nothing
 without a publication, where the dam already says *Not published*), **Data**
 (the rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in
-the figures*, the feeds' health), **Last run** (its age, then the date or
+the figures*, the drought badge below, the feeds' health), **Last run** (its age, then the date or
 when it was published) and **Alerts** (the alerts firing now, "None" or a
 "2 firing" badge, from `alertsFiring`, [§ Alerts](#alerts)). A
 project where your role is farmer or applicant has no figures ("Not shown
 to your role").
+
+**The drought badge** (`portfolio/DroughtTag.svelte`, `droughtTag`; issue
+#620): the driest SPI or SPEI for the last whole month of the source run's
+history, "Severely dry · SPEI-12", coloured dry or wet with the class written
+out, and its value and months in the tooltip ("Severely dry: SPEI-12 −1.62
+over Sep 2025 – Aug 2026, …"). It is the run summary's `summary.drought`
+([model.md §2.15b](./model.md#215b-drought-badge-spi-and-spei-issue-620),
+[api.md § Portfolio](./api.md#portfolio)), so the list loads no series for
+it; the Summary's Drought index card gives the full table. A run with no
+index (a record under 20 years a calendar month, no final rain) or from
+before the badge shows a muted *Drought –*, the tooltip saying why ("No
+drought index for this run"); a project with no run shows nothing. It sits
+in the Data column (in the lines under the name when the column folds), and
+on the team page as a fourth fact, **Drought**, beside Hydrological units
+short, Lowest dam and Alerts. Workspace pages only, in English: no farmer
+page shows it (#620's open question 4), and a farmer's or applicant's row has
+no figures at all. `projects.spec.ts` pins it.
 
 **The status is irrigation supply** (issue #558, the operator's decision:
 "take it out and show irrigation instead"): the share of all units' demand

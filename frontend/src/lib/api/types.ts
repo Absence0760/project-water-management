@@ -29,6 +29,7 @@ import type {
 	ReviewTriggers,
 	RestrictionLevel,
 	RunComparison,
+	RunDrought,
 	RunInputsSnapshot,
 	RunSeriesSnapshot,
 	SignoffStatement,
@@ -566,6 +567,11 @@ export interface PortfolioProject {
 	/** Alerts firing now (WP-2.13); 0 when none, or when the catchment has no alert switched on. */
 	alertsFiring: number;
 	restriction: { level: 'none' | 'advisory' | 'restricted'; pct: number | null } | null;
+	/**
+	 * The source run's drought badge (summary.drought, issue #620): the driest SPI or SPEI for its last whole
+	 * month of history. null without a source run, or for a run from before the badge.
+	 */
+	drought: RunDrought | null;
 }
 
 // ---- Alerts (WP-2.13, docs/api.md § Alerts) --------------------------------

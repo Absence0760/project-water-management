@@ -6,6 +6,8 @@
 import type { PortfolioEwrStatus, PortfolioProject, PortfolioThresholds } from '#lib/api/types.js';
 import { dateAge, sharedWindowText, windowText, type DataEnd } from '#lib/format/age.js';
 import { fmtNum } from '#lib/format/number.js';
+import { DROUGHT_CLASS_LABEL, DROUGHT_MIN_YEARS, type RunDrought } from '@water-management/engine';
+import { droughtTone, periodText, type DroughtTone } from '#lib/components/overview/drought.js';
 
 export const STATUS_LABEL: Record<PortfolioEwrStatus, string> = { red: 'Red', amber: 'Amber', green: 'Green', unknown: 'Unknown' };
 
@@ -171,6 +173,40 @@ export function feedsText(p: Pick<PortfolioProject, 'feeds'>): string {
 	if (f.failing) return `${f.failing} of ${plural(f.total, 'feed')} failing or stale`;
 	if (f.ok === f.total) return `${plural(f.total, 'feed')} OK`;
 	return `${f.ok} of ${plural(f.total, 'feed')} OK, the rest waiting or off`;
+}
+
+/**
+ * The source run's drought badge (issue #620, summary.drought; docs/ui.md § Project list): its words, the
+ * driest index and a tooltip with the value and the months it covers. `none` (a muted dash, the tooltip
+ * says why) when the run has no index or is from before the badge; null with no source run at all.
+ */
+export type DroughtTagView =
+	| { kind: 'index'; label: string; index: string; tone: DroughtTone; title: string }
+	| { kind: 'none'; title: string };
+
+export const NO_DROUGHT_INDEX = 'No drought index for this run';
+
+const DROUGHT_GAP_TEXT: Record<NonNullable<RunDrought['gap']>, string> = {
+	'no-rain': 'the run has no final catchment rainfall',
+	'no-month': 'the run has no whole month of rain',
+	'short-record': `a fit needs at least ${DROUGHT_MIN_YEARS} years of rain in each calendar month`,
+	'missing-month': 'a month of rain is missing in every period'
+};
+
+export function droughtTag(p: Pick<PortfolioProject, 'drought' | 'source'>): DroughtTagView | null {
+	if (p.source === null) return null;
+	const d = p.drought;
+	if (!d) return { kind: 'none', title: NO_DROUGHT_INDEX };
+	if (!d.driest || !d.month) return { kind: 'none', title: `${NO_DROUGHT_INDEX}: ${DROUGHT_GAP_TEXT[d.gap ?? 'missing-month']}` };
+	const index = `${d.driest.kind.toUpperCase()}-${d.driest.scale}`;
+	const label = DROUGHT_CLASS_LABEL[d.driest.class];
+	return {
+		kind: 'index',
+		label,
+		index,
+		tone: droughtTone(d.driest.class),
+		title: `${label}: ${index} ${fmtNum(d.driest.value, 2)} over ${periodText(d.month, d.driest.scale)}, the driest index for the run’s last whole month`
+	};
 }
 
 // ---------------------------------------------------------------------------

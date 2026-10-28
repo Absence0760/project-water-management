@@ -12245,7 +12245,7 @@ another day refused.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep terciles by calendar day (the lowest band from the lowest storage on record, the total shared pro rata to capacity) and the table drawn on the latest review date the record holds.
 
-### 2.15b Drought badge: SPI and SPEI (issue #620, slice 1)
+### 2.15b Drought badge: SPI and SPEI (issue #620)
 
 How dry the catchment has been, as the **Standardized Precipitation Index**
 (SPI; McKee, Doesken and Kleist 1993; WMO-No. 1090, 2012) and the
@@ -12254,9 +12254,10 @@ Vicente-Serrano, Beguería and López-Moreno 2010) over 3, 6 and 12 months.
 Computed from a run's own daily `rain_final` and `pet` (the GR4J forcing,
 §2.4), so it needs no new upstream and avoids SPEIbase's ODbL share-alike.
 A **derived view** of a run's record (`packages/engine/src/drought/`,
-`droughtBadge`): `runModel` doesn't change, nothing is stored, and
-`ENGINE_VERSION` doesn't move. The Summary's Drought index card shows it
-([ui.md § Summary](./ui.md#summary)).
+`droughtBadge`): `runModel`'s numbers don't change, and `ENGINE_VERSION`
+doesn't move for it (1.105.0 carries `summary.drought`, below). The
+Summary's Drought index card shows it, worked out in the browser from the
+run's stored series ([ui.md § Summary](./ui.md#summary)).
 
 - **Month.** The badge is for the last whole calendar month of the run's
   history: a forecast run's days from `forecastFrom` on are never read. A
@@ -12309,6 +12310,29 @@ the badge reads the last whole month of history and ignores forecast days
 after it, a dry spell reads dry, and each kind of gap is named. The
 Summary's e2e (`overview.spec.ts`) seeds 31 years of rain whose last
 Aug–Oct is bone dry, and checks its SPI-3 is Φ⁻¹(1/62) = −2.14.
+
+**Stored headline (`summary.drought`, engine 1.105.0).** The project list
+and the team portfolio can't load every run's daily series, so a saved run
+carries the badge's headline in its summary (`drought/summary.ts`
+`runDrought`, attached by `runModelChecked`): `month` (the last whole month
+of history, `YYYY-MM`), `driest` (the driest index with a value: `kind`
+`spi`/`spei`, `scale` 3/6/12, `value`, `class`, and `from`, the first month
+of the period it covers) or null with a `gap`: `no-rain` (no catchment
+`rain_final`), `no-month` (no whole month), `short-record` (a calendar month
+under 20 years) or `missing-month`. The same badge as the card's, so the
+two agree. It never reads a forecast day: a forecast-mode run's summary is
+its run without the tail's (§ Forecast mode), and an ordinary run whose rain
+went on past the record on forecast rain (`summary.forecastRain`) is cut at
+`forecastRain.lastRecorded` (`droughtLastDay`; the card uses the same day).
+Forecast rain filling a gap before that is history, as everywhere else.
+Output only, so `ENGINE_VERSION` stays; a run from before has no
+`summary.drought` and the list says "No drought index for this run". The
+portfolio query reads the one key from the source run's summary
+(`backend/src/portfolio/portfolio.ts`, api.md § Portfolio). Tests:
+`drought/summary.test.ts` (the driest index and its period, the
+forecast-rain cut with a positive control, each gap), `forecast.test.ts`
+(a forecast-mode run's badge is its history's), the portfolio DB test and
+`e2e/tests/projects.spec.ts`.
 
 **Later slices of #620** build on this module. The analogue outlook (ONI and
 CPC's AAO copied daily, `backend/src/ingest/indices.ts`) selects the k past

@@ -36,6 +36,7 @@
 	import EmailText from '#lib/components/common/EmailText.svelte';
 	import StatusBar from '#lib/components/portfolio/StatusBar.svelte';
 	import StatusPill from '#lib/components/portfolio/StatusPill.svelte';
+	import DroughtTag from '#lib/components/portfolio/DroughtTag.svelte';
 	import {
 		ageText,
 		alertsText,
@@ -316,6 +317,11 @@
 				<dd class:muted={!p.damsKnown || !p.lowestDamPct || p.figuresWithheld}>
 					{damText(p)}{#if withheldText(p)}{' '}<span class="sub">{withheldText(p)}</span>{/if}
 				</dd>
+			</div>
+			<div>
+				<!-- The source run's drought badge (issue #620): from its summary, a dash when it has none. -->
+				<dt>Drought</dt>
+				<dd>{#if p.source}<DroughtTag {p} />{:else}<span class="muted">No run</span>{/if}</dd>
 			</div>
 			<div>
 				<dt>Alerts</dt>
@@ -670,7 +676,8 @@
 	.p-facts {
 		margin: 0;
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		/* Four facts (the drought badge, issue #620, made the fourth): two by two. */
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 0.5rem;
 		font-size: 0.85rem;
 	}

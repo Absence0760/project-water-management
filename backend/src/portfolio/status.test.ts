@@ -156,6 +156,7 @@ const row = (over: Partial<PortfolioRow> = {}): PortfolioRow => ({
 	irr_supplied: 1800,
 	irr_below: 3,
 	figures_withheld: false,
+	drought: { month: '2026-08', driest: { kind: 'spei', scale: 12, value: -1.62, class: 'severely-dry', from: '2025-09' } },
 	alerts_firing: 0,
 	feeds: [],
 	...over
@@ -192,8 +193,17 @@ describe('toPortfolioProject', () => {
 			figuresWithheld: false,
 			feeds: { total: 0, ok: 0, failing: 0 },
 			alertsFiring: 0,
-			restriction: { level: 'advisory', pct: 12.5 }
+			restriction: { level: 'advisory', pct: 12.5 },
+			drought: { month: '2026-08', driest: { kind: 'spei', scale: 12, value: -1.62, class: 'severely-dry', from: '2025-09' } }
 		});
+	});
+
+	it('the drought badge is the source run’s; none for a run from before it, nor without a run (issue #620)', () => {
+		expect(toPortfolioProject(row({ drought: null }), today).drought).toBeNull();
+		const none = row({ published_at: null, last_run_at: null, last_run_id: null, pub_run_id: null });
+		expect(toPortfolioProject(none, today)).toMatchObject({ source: null, drought: null });
+		const short = { month: '2026-08', driest: null, gap: 'short-record' as const };
+		expect(toPortfolioProject(row({ published_at: null, drought: short }), today)).toMatchObject({ source: 'run', drought: short });
 	});
 
 	it('passes the team’s thresholds to the status (3 of 30 days: amber by default, green under 20 / 50)', () => {
