@@ -91,6 +91,12 @@ export function downsample(startDate: string, values: readonly (number | null)[]
 	};
 }
 
+/** The days before a forecast run's first forecast day (all of them for an ordinary run). Pure, for the unit tests. */
+export function beforeForecastDays<T>(startDate: string, values: readonly T[], forecastFrom: string | null | undefined): readonly T[] {
+	if (!forecastFrom) return values;
+	return values.slice(0, Math.max(0, toEpochDay(forecastFrom) - toEpochDay(startDate)));
+}
+
 export const seriesTool: AssistantTool = {
 	spec: specOf(
 		TOOL_NAMES.series,
@@ -116,7 +122,10 @@ export const seriesTool: AssistantTool = {
 				return fail(`${node ? `${node.name} has` : 'the catchment has'} no series "${key}" in this run; it has: ${keys.join(', ') || 'none'}`);
 			}
 			// A withheld one is refused here, by readSeries, with the route's reason.
-			const { startDate, values } = await readSeries(ctx.db, ctx.projectId, role, runId, key, nodeId);
+			const { startDate, values: stored } = await readSeries(ctx.db, ctx.projectId, role, runId, key, nodeId);
+			// A forecast run's days from summary.forecast.from on are forecast, not
+			// the record: cut them off, as the pages do (scripts/guards/check_forecast_cut.mjs).
+			const values = beforeForecastDays(startDate, stored, run.summary.forecast?.from);
 			return {
 				ok: true,
 				data: {
@@ -126,7 +135,8 @@ export const seriesTool: AssistantTool = {
 					label: meta?.label ?? key,
 					unit: meta?.unit ?? null,
 					resolution,
-					...downsample(startDate, values, resolution, from, to)
+					...downsample(startDate, values, resolution, from, to),
+					...(values.length < stored.length ? { forecastFrom: run.summary.forecast?.from, forecastNote: `a forecast run: its ${stored.length - values.length} forecast days from ${run.summary.forecast?.from} on are left out` } : {})
 				}
 			};
 		} catch (e) {

@@ -10,6 +10,7 @@
 import { calibrationStats, CHECK_GAUGE_FLOW_KEY, exclusionRanges, type CalibrationExclusion, type CalibrationStats, type CalibrationWindow } from '@water-management/engine';
 import { z } from 'zod';
 import { readRun, readSeries } from '../../runs/read.js';
+import { beforeForecastDays } from './series.js';
 import { TOOL_NAMES, type AssistantTool } from '../types.js';
 import { compact, fail, findNode, NO_RUN, NodeRef, parseArgs, refusal, runFor, specOf } from './common.js';
 
@@ -64,7 +65,8 @@ export const gaugeFitTool: AssistantTool = {
 			}
 			const outflow = await readSeries(ctx.db, ctx.projectId, role, runId, 'outflow', node.id);
 			const settings = (run.settings ?? {}) as { calibrationStart?: string | null; calibrationEnd?: string | null; calibrationExclusions?: CalibrationExclusion[] };
-			const stats = gaugeFitStats(outflow.values, record, {
+			// A forecast run's forecast days are no fit: only the days before them count.
+			const stats = gaugeFitStats(beforeForecastDays(outflow.startDate, outflow.values, run.summary.forecast?.from), record, {
 				startDate: outflow.startDate,
 				windowStart: settings.calibrationStart ?? null,
 				windowEnd: settings.calibrationEnd ?? null,

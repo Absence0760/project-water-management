@@ -1,7 +1,7 @@
 // get_series's downsampling (issue #610): monthly and water-year means, a
 // capped window of days, missing days, and an answer that stays small.
 import { describe, expect, it } from 'vitest';
-import { downsample, MAX_DAYS, MAX_MONTHS, seriesTool } from './series.js';
+import { beforeForecastDays, downsample, MAX_DAYS, MAX_MONTHS, seriesTool } from './series.js';
 import type { ToolContext } from '../types.js';
 
 describe('downsample', () => {
@@ -59,6 +59,16 @@ describe('downsample', () => {
 
 	it('a window outside the run says so', () => {
 		expect(downsample('2021-01-01', [1, 2], 'monthly', '2030-01-01').points).toEqual([]);
+	});
+});
+
+describe('beforeForecastDays', () => {
+	it('keeps an ordinary run whole and cuts a forecast run at its first forecast day', () => {
+		const v = [1, 2, 3, 4, 5];
+		expect(beforeForecastDays('2020-01-01', v, null)).toEqual(v);
+		expect(beforeForecastDays('2020-01-01', v, '2020-01-04')).toEqual([1, 2, 3]);
+		expect(beforeForecastDays('2020-01-01', v, '2019-12-01')).toEqual([]);
+		expect(beforeForecastDays('2020-01-01', v, '2021-01-01')).toEqual(v);
 	});
 });
 
