@@ -226,17 +226,21 @@ test('a fresh project: every fact at zero, and each fact opens the tab behind it
 	}
 });
 
-test('data added on the Project page shows in its counts straight away', async ({ page, owner }) => {
+test('data added on the Data page shows in the Project page’s counts straight away', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Project upload');
 	await openProject(page, project.id);
 	await expect(fact(page, 'Time series')).toHaveText('0');
+	// The Project page has no Add data of its own (issue #601): add it on Data, then come back.
+	await expect(page.getByRole('button', { name: 'Add data' })).toHaveCount(0);
+	await strip(page).getByRole('link', { name: /^Data/ }).click();
 	await page.getByRole('button', { name: 'Add data' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Add data' });
 	await dialog.getByLabel('Kind').selectOption({ label: 'Rainfall — catchment' });
 	await dialog.getByLabel('CSV file').setInputFiles({ name: 'rain.csv', mimeType: 'text/csv', buffer: Buffer.from('date,value\n2021-10-01,1\n2021-10-02,0\n') });
 	await dialog.getByRole('button', { name: 'Upload' }).click();
 	await expect(dialog).toBeHidden();
+	await strip(page).getByRole('link', { name: 'Project', exact: true }).click();
 	await expect(fact(page, 'Time series')).toHaveText('1');
 });
 

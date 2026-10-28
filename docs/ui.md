@@ -1259,9 +1259,10 @@ role, freshness, Add data) and each tab's own header:
   units' run menu and **Open in Runs & results**, Dams' **Open in Runs & results**, Scenarios'
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
-  longest waiting**), then for editors **Add data** and **Run model**, the
-  primary action, on every section (issue #444: the client looked for a way
-  to run the model from where they had just changed it). On every section
+  longest waiting**), then for editors **Add data** on the sections it adds
+  data to (below) and **Run model**, the primary action, on every section
+  (issue #444: the client looked for a way to run the model from where they
+  had just changed it). On every section
   but Runs & results, **Run model** (`workspace/RunButton.svelte`) doesn't
   run at once: it opens a small form under it (a non-modal `role="dialog"`,
   *Run the model*; the button has `aria-expanded` and `aria-haspopup`,
@@ -1283,7 +1284,7 @@ role, freshness, Add data) and each tab's own header:
   stays on one page (issue #586 round 3, `calibration-journey.spec.ts`);
   a run that didn't start says so in the notice line. On Runs & results the
   tab's own run form (**Run label**, Run forecast, Run model) takes its
-  place, last after Add data (`fillHeader({ main })`, the header slot's
+  place, last, with no Add data there (`fillHeader({ main })`, the header slot's
   `main` part), so a page never has two Run models; while a run the page
   started is going, that form waits for it (`busy`). Viewers get neither:
   a run needs an editor. Until issue #444 a run started from the header only
@@ -1301,8 +1302,8 @@ role, freshness, Add data) and each tab's own header:
   (Save changes, Discard, the reason), and the grid modal and sheets keep
   their own `ModelSaveRow`.
 - **The groups:** `SectionHeader` takes the pill as `status`, the tab's
-  controls as `actions` and the page's main box (Add data, then the tab's
-  `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
+  controls as `actions` and the page's main box (Add data where the tab has
+  it, then the tab's `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
   so all of it is one row beside the title (under it when it doesn't fit, as
   on Allocations at 1440); the main box is one box, so a wrap never splits it.
   The title column asks for its context's full one-line width (and no more:
@@ -1334,10 +1335,11 @@ role, freshness, Add data) and each tab's own header:
   list and leaves the focus on ⋯, so a sheet it opens hands the focus back
   there; a control inside one of the list's own menus leaves it open;
   Escape (after a menu inside it), a click elsewhere or leaving it closes
-  it. Without pills the ⋯ starts the main box's row. Add data and Run model
-  then share the last row (the main box never splits; Run model's form is
-  nudged to stay on the screen); on Runs & results the run label and its
-  field fill a row, then Add data, Run forecast and Run model share the next
+  it. Without pills the ⋯ starts the main box's row. Add data (where the tab
+  has it) and Run model then share the last row, a lone Run model filling it
+  (the main box never splits; Run model's form is nudged to stay on the
+  screen); on Runs & results the run label and its field fill a row, then
+  Run forecast and Run model share the next
   in equal parts (the form draws no box of its own there). While new data is
   waiting the header's button reads **Re-run model** and the notice line is
   words only ("New data since the last run (…)."), since the two buttons did
@@ -1410,9 +1412,31 @@ same way on every screen:
   by a day around midnight, whatever the viewer's zone (issue #137). Series
   dates are calendar days, so the UTC date would be wrong for anyone east or
   west of UTC.
-- **Add data** (editors) opens the upload form in a dialog on any tab
+- **Add data** (editors) opens the upload form in a dialog
   (`series/AddDataDialog.svelte`, the shared `common/Dialog.svelte`, wide).
-  Dropping a CSV anywhere on the page opens it with that file (a viewer's drop is taken and refused, "View only: ask an editor to add data.", so the browser doesn't open the file instead). The form's
+  It uploads a time series (rain, flow, the daily A-pan), so it shows only
+  on the sections where one is what the page asks for (issue #601,
+  `TAB_ADDS_DATA` in `lib/workspace/tabs.ts`, a `Record` so a new tab has to
+  choose): **Summary** (its checklist and stale-rain card ask for rain),
+  **Crops & demand** (demand reads the daily A-pan), **Data** (the series
+  themselves), **Model settings** (unit rain stations, PE from the A-pan)
+  and **Calibration** (observed flow). Not on the results pages, the Network,
+  Map (its own uploads are GeoJSON), Transfers, Warnings (its fixes link to
+  Data, `?tab=series&add=data`), Project, Applications or History, and not on
+  Allocations, where it read as the way to add volumes beside **+ Add
+  volume**. Run model stays on every section.
+  Dropping a CSV on one of those sections opens the dialog with that file.
+  On any other section the drop follows the button: the page still takes it,
+  so the browser doesn't open the file in place of the app, and the notice
+  line says where to drop it ("This page doesn’t take files. To add data,
+  drop the file on Summary, Crops & demand, Data, Model settings or
+  Calibration.", `REFUSED_DROP_TEXT`). A viewer's drop is taken and refused
+  on every section ("View only: ask an editor to add data.").
+  `?add=data` (the project list's **Add data** link, the Warnings page's
+  fixes) opens the dialog for an editor on the section the URL names when it
+  has the button (the Summary by default), else over **Data**
+  (`?tab=series`), so closing it leaves you beside the button; the parameter
+  goes either way (`e2e/tests/add-data-tabs.spec.ts`). The form's
   buttons sit in the dialog's action row, on the right: **Cancel** and the
   upload button (**Upload**, **Upload and merge** or **Upload and replace**;
   `UploadForm`'s `external` mode, the button submitting the form through its
@@ -8576,7 +8600,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   its engine, and the EWR it was tested against (`ewrRuleText`: "EWR:
   pragmatic, by month", plus "Reserve rules at …" with the sites of the
   project's rule tables), and its actions: the **Run** menu and **Open in
-  Runs & results**, before the page's Add data. With no run the context says
+  Runs & results**, before Run model (no Add data here, issue #601). With no run the context says
   what the page is for.
 - **Judged by** (`data-testid="river-judged-by"`, issue #444): a line at
   the top, under the section menu: "Results are judged by the Reserve rule
@@ -8981,7 +9005,7 @@ read it before.
   shown run. The section header's line counts the runs and says when the
   newest ran ("20 runs · newest ran today", "No runs yet", or "Couldn’t
   load the runs" when the list fails to load), and for an
-  editor the **run form** sits last in the header, after Add data, in place
+  editor the **run form** sits last in the header (no Add data here, issue #601), in place
   of the **Run model** button the other sections have ([§ Section
   header](#section-header)): a **Run label** field, **Run forecast** (with a forecast
   series) and **Run model**. Its status (what a run still needs, flow shares
@@ -11583,8 +11607,8 @@ the viewer's day, with a request's change set folded into one entry.
   the whole history (whatever the filters), who made it and when, and since
   when changes are recorded: "Latest change today 14:05 by Ann: Model
   changed · recorded since 3 Sep 2026"; "No changes recorded yet · recorded
-  since …" (`timeline.ts` `historyContext`). No actions of its own beside
-  Add data.
+  since …" (`timeline.ts` `historyContext`). No actions of its own, and no
+  Add data (issue #601): only Run model.
 - **The card** "Changes, newest first": a line on what it holds (and for
   editors "Restoring a version saves it as a new change: nothing is ever
   erased"), then the filters: **Hydrological unit** ("All hydrological units"), **Kind of change** and

@@ -4,8 +4,9 @@
 	// right, in this order, the page's rain-freshness pill (`status`, after the
 	// Summary's "Setup complete" pill), the
 	// tab's own actions (`actions`, headerSlot.svelte.ts) and the page's main
-	// box: Add data, then Run model (the page's RunButton, or the tab's main
-	// action in its place: `main`, Runs & results' run form).
+	// box: Add data (on the tabs it adds data to, TAB_ADDS_DATA, issue #601),
+	// then Run model (the page's RunButton, or the tab's main action in its
+	// place: `main`, Runs & results' run form).
 	// Under them, one slim line of notices (view only, new data) instead of
 	// full-width banners.
 	//
@@ -40,7 +41,7 @@
 		status?: Snippet | null;
 		/** The section's own actions (pickers, links, its buttons). */
 		actions?: Snippet | null;
-		/** The page's main box, last: Add data, then the section's main action. */
+		/** The page's main box, last: Add data (on the tabs that have it), then the section's main action. */
 		main?: Snippet | null;
 		notices?: Snippet;
 	} = $props();
@@ -405,8 +406,8 @@
 			flex: 1 1 0;
 			justify-content: center;
 		}
-		/* Runs' run form (label, name, Run forecast, Run model): its label and name take the first row, then Add
-		   data shares the next with its buttons, so the main box is two rows, not three (issue #521 round 5). The
+		/* Runs' run form (label, name, Run forecast, Run model): its label and name take the first row, then its
+		   buttons the next, so the main box is two rows, not three (issue #521 round 5; no Add data there, #601). The
 		   form draws no box of its own here (its fields and buttons are the box's items; it still submits). */
 		.main:has(> :global(form)) {
 			flex-basis: 100%;

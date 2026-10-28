@@ -124,6 +124,54 @@ export const VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT = false;
 export const DEFAULT_HIDDEN_TABS: readonly TabId[] = ['applications', 'history'];
 
 /**
+ * Whether the section header shows an editor **Add data** (the time-series
+ * upload, series/AddDataDialog.svelte), and whether a file dropped on the page
+ * opens it (issue #601). Only where a rain, flow or A-pan series is what the
+ * page asks for: the Summary (its checklist asks for rain, and the project
+ * list's `?add=data` lands there), Data (the series themselves), Model
+ * settings (unit rain stations, PE from the A-pan), Calibration (observed
+ * flow) and Crops & demand (demand reads the daily A-pan). Elsewhere it misled:
+ * on Allocations it read as the way to add volumes, beside its own + Add
+ * volume. A Record, so a new tab must choose.
+ */
+export const TAB_ADDS_DATA: Readonly<Record<TabId, boolean>> = {
+	overview: true,
+	network: false,
+	map: false,
+	crops: true,
+	transfers: false,
+	series: true,
+	// Its fixes link to the page that fixes them (Add data goes to Data, `?tab=series&add=data`).
+	warnings: false,
+	settings: true,
+	calibration: true,
+	runs: false,
+	river: false,
+	supply: false,
+	dams: false,
+	compare: false,
+	scenarios: false,
+	allocations: false,
+	project: false,
+	applications: false,
+	history: false
+};
+
+/** True when tab `id` shows Add data (TAB_ADDS_DATA); an unknown id doesn't. */
+export function addsData(id: string): boolean {
+	return Object.hasOwn(TAB_ADDS_DATA, id) && TAB_ADDS_DATA[id as TabId];
+}
+
+/** The tabs that show Add data, in workflow order: where a refused drop points. */
+export const ADD_DATA_TABS: readonly TabId[] = ALL_TABS.filter((id) => TAB_ADDS_DATA[id]);
+
+/** What a file dropped on a tab without Add data says (the notice line): which pages take it. */
+export const REFUSED_DROP_TEXT = `This page doesn’t take files. To add data, drop the file on ${(() => {
+	const names = ADD_DATA_TABS.map((id) => TAB_LABELS[id]);
+	return `${names.slice(0, -1).join(', ')} or ${names.at(-1)}`;
+})()}.`;
+
+/**
  * Each page's guide on /help (lib/help/guides.ts), linked as "How this page
  * works" from its section header. Ids only, so the workspace never loads the
  * guides' text; guides.test.ts checks each id exists and points back here.
