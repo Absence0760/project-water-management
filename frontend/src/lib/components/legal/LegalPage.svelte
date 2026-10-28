@@ -27,6 +27,12 @@
 	}: { title: string; description: string; effective: string; sections: { id: string; label: string }[]; children: Snippet } = $props();
 </script>
 
+{#snippet list()}
+	<ol>
+		{#each sections as s (s.id)}<li><a href="#{s.id}">{s.label}</a></li>{/each}
+	</ol>
+{/snippet}
+
 <svelte:head>
 	<title>{title} · {APP_SHORT_NAME}</title>
 	<meta name="description" content={description} />
@@ -45,17 +51,18 @@
 			<h1>{title}</h1>
 			<p class="effective">{effective}</p>
 		</div>
-		<!-- A disclosure on a phone; above 600 px the list shows and the toggle
-		     doesn't, where the browser can style the details' content (the
-		     @supports below); elsewhere it stays a working disclosure. From
-		     900 px it is the sticky column beside the text. -->
+		<!-- A disclosure on a phone; above 600 px the plain list (one is display:
+		     none, so the other is the only one read or tabbed to). The list
+		     isn't the closed disclosure's content shown by CSS: a collapsed
+		     details read as hidden (an a11y scan found its sticky column, once
+		     scrollable, with nothing it could focus). From 900 px it is the
+		     sticky column beside the text. -->
 		<nav class="toc" aria-label="Contents">
-			<details>
+			<details class="fold">
 				<summary>Contents <span class="count">({sections.length} sections)</span></summary>
-				<ol>
-					{#each sections as s (s.id)}<li><a href="#{s.id}">{s.label}</a></li>{/each}
-				</ol>
+				{@render list()}
 			</details>
+			<div class="shown">{@render list()}</div>
 		</nav>
 		<div class="body">
 			{@render children()}
@@ -153,14 +160,15 @@
 	.toc details[open] summary {
 		margin-bottom: 0.25rem;
 	}
+	.toc .shown {
+		display: none;
+	}
 	@media (min-width: 601px) {
-		@supports selector(::details-content) {
-			.toc summary {
-				display: none;
-			}
-			.toc details::details-content {
-				content-visibility: visible;
-			}
+		.toc .fold {
+			display: none;
+		}
+		.toc .shown {
+			display: block;
 		}
 	}
 	/* The labels carry their section numbers. */
