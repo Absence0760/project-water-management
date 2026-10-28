@@ -11110,9 +11110,11 @@ The prior must be built for the fit's target, or `calibrate()` refuses it:
 `sameTarget` compares the zone and the units. `calibrateStepwise` takes the
 prior per step (`prior(step)`), each built for its own zone, and refuses
 `bounds: 'prior'` before the first fit when a step has none. **With no
-prior, every calibration is bit-identical** to engine 1.106.0 before it
-(`prior-calibrate.test.ts` pins whole reports' hashes taken before the
-wiring). After a fit in the prior's box the uncertainty ensemble samples
+prior, every calibration is the same** as engine 1.106.0 before it:
+`prior-calibrate.test.ts` pins its fitted parameters to the bit and every
+other part of its report (`testing/golden.ts` `reportGolden`, numbers at
+1e-9 relative, `fixtures/prior-off-calibration.golden.json`), taken before
+the wiring and checked on macOS and Linux. After a fit in the prior's box the uncertainty ensemble samples
 Perrin's typical box instead, with a note (sampling the prior's box is
 followups.md's).
 

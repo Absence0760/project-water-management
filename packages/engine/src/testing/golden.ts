@@ -71,3 +71,37 @@ export function goldenDiff(got: GoldenFingerprint, want: GoldenFingerprint, rel 
 	moments('summary', got.summary, want.summary);
 	return out;
 }
+
+/**
+ * A result that isn't a run (a calibration report, issue #622), golden: its JSON with every number blanked, exact,
+ * and its numbers in order, each compared on its own. A run's moments suit long series of like values; a report's
+ * few statistics sit beside volumes and day counts, so their moments would hide a real change to one of them (a
+ * report's numbers summed to ~4e7, where 1e-9 of it is 0.04). Not-finite numbers are kept as their text.
+ */
+export interface ReportGolden {
+	shape: string;
+	numbers: (number | string)[];
+}
+
+export function reportGolden(value: unknown): ReportGolden {
+	const numbers: (number | string)[] = [];
+	const text = JSON.stringify(value, (_k, v) => {
+		if (typeof v !== 'number') return v;
+		numbers.push(Number.isFinite(v) ? v : String(v));
+		return 0;
+	});
+	return { shape: new Hasher().text(text ?? '').digest(), numbers };
+}
+
+/** Where `got` differs from `want`: the shape, the count, or a number past `rel` (relative; the first 10), as lines. */
+export function reportDiff(got: ReportGolden, want: ReportGolden, rel = 1e-9): string[] {
+	if (got.shape !== want.shape) return [`shape ${got.shape} ≠ ${want.shape} (a field, a string or the structure changed)`];
+	if (got.numbers.length !== want.numbers.length) return [`${got.numbers.length} numbers ≠ ${want.numbers.length}`];
+	const out: string[] = [];
+	got.numbers.forEach((g, i) => {
+		const w = want.numbers[i]!;
+		const same = typeof g === 'number' && typeof w === 'number' ? close(g, w, rel) : g === w;
+		if (!same && out.length < 10) out.push(`numbers[${i}] ${g} ≠ ${w}`);
+	});
+	return out;
+}

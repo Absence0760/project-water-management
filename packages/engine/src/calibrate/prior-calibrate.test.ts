@@ -1,6 +1,7 @@
 // The regional prior in calibration (issue #622 step 4, docs/model.md §2.10m):
-// with the prior off, every calibration is bit-identical to engine 1.106.0
-// before the wiring (pinned hashes of whole reports, taken before it); the
+// with the prior off, every calibration is the same as engine 1.106.0 before
+// the wiring (its fitted parameters to the bit, and every other part of its
+// report by testing/golden.ts' reportGolden, both taken before it); the
 // penalty pulls the fit toward the p50s; `bounds: 'prior'` keeps the search
 // inside the p10–p90 box; the fit record carries the prior; and under
 // calibration zones each step takes the prior built for its own zone.
@@ -11,7 +12,8 @@ import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModel } from '../run';
 import { gaugeSeriesKey } from '../project';
-import { stableStringify, hashText } from '../warmstart/plain';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { reportDiff, reportGolden, type ReportGolden } from '../testing/golden';
 import { resolveEnsembleOptions } from '../uncertainty/ensemble';
 import { calibrate } from './calibrate';
 import { fitRecordFromReport } from './provenance';
@@ -105,19 +107,51 @@ function zoned(): ModelInput {
 	return input;
 }
 
-const fingerprint = (v: unknown) => hashText(stableStringify(v), 'prior-off');
+/**
+ * Engine 1.106.0 before the prior was wired, as each report's fitted parameters (to the bit) and its reportGolden
+ * (testing/golden.ts: its structure and strings exact, each number at a relative 1e-9). Not a hash of every bit: libm
+ * leaves last-bit differences between macOS and CI's Linux in a report's statistics (a hash taken on a Mac failed on
+ * CI, run 40775756367), while the search takes the same path on both, so the parameters agree to the bit. Taken on
+ * macOS arm64 and checked on Linux arm64 and x64 (Node 24.22.1). Rewrite with `GOLDEN_WRITE=1`, only for a change
+ * that is meant to move a calibration with the prior off.
+ */
+const BEFORE_PRIOR_FILE = new URL('../../fixtures/prior-off-calibration.golden.json', import.meta.url);
+type Pinned = Record<string, { params: unknown; golden: ReportGolden }>;
+const BEFORE_PRIOR: Pinned = process.env.GOLDEN_WRITE ? {} : JSON.parse(readFileSync(BEFORE_PRIOR_FILE, 'utf8'));
+
+function expectBeforePrior(name: string, params: unknown, report: unknown) {
+	const got = { params, golden: reportGolden(report) };
+	if (process.env.GOLDEN_WRITE) {
+		BEFORE_PRIOR[name] = got;
+		writeFileSync(BEFORE_PRIOR_FILE, `${JSON.stringify(BEFORE_PRIOR, null, '\t')}\n`);
+		return;
+	}
+	expect(got.params, name).toEqual(BEFORE_PRIOR[name]!.params);
+	expect(reportDiff(got.golden, BEFORE_PRIOR[name]!.golden), name).toEqual([]);
+}
 
 describe('with the prior off', () => {
-	it('a calibration is bit-identical to engine 1.106.0 before the prior was wired', () => {
+	it('a calibration is as engine 1.106.0 made it before the prior was wired', () => {
 		const r = calibrate(lumped(), { budget: 120, seed: 7, starts: 2 });
-		expect(fingerprint(r)).toBe('5fd39c26cea801ed');
+		expectBeforePrior('lumped', r.params, r);
 		const t = calibrate(lumped(), { budget: 80, seed: 3, bounds: 'typical', validate: false });
-		expect(fingerprint(t)).toBe('eb92953561780b70');
+		expectBeforePrior('typical', t.params, t);
 	});
 
-	it('a stepwise fit of calibration zones is bit-identical too', () => {
+	it('a stepwise fit of calibration zones is as before too', () => {
 		const r = calibrateStepwise(zoned(), { budget: 80, seed: 5, validate: false });
-		expect(fingerprint(r)).toBe('c1020789c4c725e6');
+		expectBeforePrior('zoned', r.steps.map((st) => st.report.params), r);
+	});
+
+	it('tells a real change from platform noise', () => {
+		const r = calibrate(lumped(), { budget: 80, seed: 3, bounds: 'typical', validate: false });
+		const want = reportGolden(r);
+		// Positive control: one statistic moved by 1e-6 (a real change) is a difference; by 1e-13 (libm's last bits) it
+		// isn't; a changed string is one.
+		const nudge = (by: number) => reportGolden({ ...r, fit: { ...r.fit, scores: { ...r.fit.scores, nse: r.fit.scores.nse! * (1 + by) } } });
+		expect(reportDiff(nudge(1e-6), want)).toHaveLength(1);
+		expect(reportDiff(nudge(1e-13), want)).toEqual([]);
+		expect(reportDiff(reportGolden({ ...r, objective: 'nse' }), want)).toHaveLength(1);
 	});
 });
 
