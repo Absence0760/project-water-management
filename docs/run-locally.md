@@ -508,6 +508,56 @@ that hash on the pack. MinIO keeps it like any object: the production
 bucket's Object Lock retention (infra/packs.tf) has no local stand-in. Without
 the worker the pack's PDF stays "rendering"; `pnpm dev:jobs:tick` prints it.
 
+## Assistant
+
+The project assistant (issue #610) is off by default: `ASSISTANT_PROVIDER=off`
+hides the chat, and no dev server needs a key. Set it in
+`backend/.env.development.local` and restart `pnpm dev`:
+
+| `ASSISTANT_PROVIDER` | What answers | Needs |
+| --- | --- | --- |
+| `off` (default) | nothing; the chat is hidden | nothing |
+| `mock` | scripted answers and tool calls (the tests and e2e use it) | nothing |
+| `ollama` | a local model through Ollama | Ollama, a tool-capable model with a raised context (below) |
+| `anthropic`, `bedrock` | a hosted Claude model (production's providers, [deployment.md](./deployment.md)) | `anthropic`: your own `ANTHROPIC_API_KEY` in `.env.development.local` (it is billed); `bedrock`: AWS credentials and `ASSISTANT_MODEL` set to a model or inference profile id |
+
+To run a local model:
+
+1. Install [Ollama](https://ollama.com) and pull a model that can **call
+   tools**: `ollama pull qwen2.5-coder:7b` works. `deepseek-coder` has no tool
+   calling (`ollama show <model>` lists its capabilities), so it can't read the
+   project and only makes things up.
+2. **Raise its context.** Ollama gives every model a 4096-token context and
+   cuts anything longer without saying so. The assistant's system prompt and
+   tool definitions are longer than that, so a stock model reads a truncated
+   prompt and answers incoherently, which looks like a bug in the assistant.
+   The OpenAI-compatible endpoint the assistant uses ignores a per-request
+   context, so bake it into a derived model. A file named `Modelfile`:
+
+   ```
+   FROM qwen2.5-coder:7b
+   PARAMETER num_ctx 32768
+   ```
+
+   then `ollama create qwen2.5-coder-32k -f Modelfile`. At 32K the 7B model
+   needs about 8.7 GB, so on an 8 GB GPU part of it runs on the CPU (slower,
+   but it works); `num_ctx 16384` fits.
+3. In `backend/.env.development.local`:
+
+   ```bash
+   ASSISTANT_PROVIDER=ollama
+   ASSISTANT_MODEL=qwen2.5-coder-32k   # empty: qwen2.5-coder:7b, with Ollama's 4096-token context
+   # OLLAMA_URL=http://localhost:11434 # the default; plain http only to this machine, https anywhere else
+   ```
+
+The backend calls `${OLLAMA_URL}/v1/chat/completions` and refuses plain HTTP
+to any host but this one (`localhost`, `127.0.0.0/8`, `::1`). One model call
+may take up to 5 minutes before it is cut off. A 7B model is weak at choosing
+tools, so it is good for trying the panel, not for judging the assistant's
+advice. Token use is counted against the project's monthly budget as with a
+hosted model (Ollama reports it; without a count the backend estimates four
+characters a token).
+
 ## Map
 
 The **Map** tab (issue #288, [maps.md](./maps.md)) works on a fresh clone
