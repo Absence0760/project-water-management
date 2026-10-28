@@ -1241,7 +1241,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'ask-the-assistant',
 		title: 'Ask the assistant about a project',
-		summary: 'Ask questions about a project’s model and results in plain words, and review the settings changes it recommends before you save any.',
+		summary: 'Ask questions about a project’s model and results in plain words, and review the changes it recommends before you save or try any.',
 		kind: 'use',
 		sections: [
 			{
@@ -1272,19 +1272,22 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'Ask it which settings to change (“Which settings would you change to improve the fit at the outlet?”) and it may answer with a **Recommended change**: each setting it would change, its value now and the suggested one, and why.'
+						text: 'Ask it what to change (“Which settings would you change to improve the fit at the outlet?”) and it may answer with a **Recommended change**: a title naming exactly what it changes, then each change, its value now and the suggested one, with why under it. A change it couldn’t make never appears on the card.'
+					},
+					{
+						type: 'p',
+						text: 'It keeps the model of the catchment apart from how its water is managed. The calibrated parameters (GR4J’s X1–X4, the pan coefficients, the CHIRPS bias settings) are fitted to the observed flow, so it changes them only in a **Recalibration**, to improve the fit, never to make the EWR, a yield or the assurance look better. For those it recommends a **Management change**: a dam’s runoff capture or release, a hands-off flow, a transfer’s months, rates or caps, the drought restriction or demand. When no management lever would help, it says so.'
 					},
 					{
 						type: 'steps',
 						items: [
-							'Read the change. Press **Apply to the settings form** to try it (editors and owners only).',
-							'**Model settings** opens with the change in the form, not yet saved, and the **Reason for this change** filled in as “Assistant suggestion: …”.',
-							'Check the values, then press **Save changes** to keep it, or **Discard** to drop it. Run the model to see what it does.'
+							'A recalibration or a correction: press **Apply to the settings form** (editors and owners only). **Model settings** opens with the change in the form, not yet saved, and the **Reason for this change** filled in as “Assistant suggestion: …”. Check the values, then press **Save changes** to keep it, or **Discard** to drop it. Run the model to see what it does.',
+							'A management change: press **Try it as a scenario** (editors and owners only). It becomes a [[scenario]] on the run you have open, named after the card, and **Scenarios** opens on it. Run it and compare it with the run to judge the change; the project itself is unchanged.'
 						]
 					},
 					{
 						type: 'p',
-						text: 'The save is checked like any other, and the [[change-history|History]] page keeps it with its reason.'
+						text: 'Each is checked like any other save or scenario, and the [[change-history|History]] page keeps a saved change with its reason.'
 					}
 				]
 			},

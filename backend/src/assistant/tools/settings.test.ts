@@ -1,6 +1,8 @@
 // get_settings's view (issue #610): model inputs only, picked by name, and no signer's name.
 import { describe, expect, it } from 'vitest';
 import { mergeSettings } from '../../projects/settings.js';
+import { SETTING_KINDS } from '../settingKinds.js';
+import { NOT_PROPOSED } from './proposeSettings.js';
 import { MODEL_INPUT, NOT_MODEL_INPUT, settingsView } from './settings.js';
 
 describe('settingsView', () => {
@@ -15,7 +17,7 @@ describe('settingsView', () => {
 	});
 
 	it("a run's snapshot as it is, and only the keys asked for, naming the unknown ones", () => {
-		expect(settingsView(stored, ['calibrationStart', 'noSuchKey'], false)).toEqual({ settings: { calibrationStart: '2010-10-01' }, unknownKeys: ['noSuchKey'] });
+		expect(settingsView(stored, ['calibrationStart', 'noSuchKey'], false)).toEqual({ settings: { calibrationStart: '2010-10-01' }, kinds: { calibrationStart: 'input' }, unknownKeys: ['noSuchKey'] });
 		expect(settingsView({ runoffModel: 'legacy' }, undefined, false).settings).toEqual({ runoffModel: 'legacy' });
 	});
 
@@ -34,6 +36,14 @@ describe('settingsView', () => {
 		const { settings } = settingsView({ someLaterSetting: { owner: 'A Person' }, gr4j: { x1: 1 } }, undefined, false);
 		expect(settings).toEqual({ gr4j: expect.anything() });
 		expect(settingsView({ someLaterSetting: 1 }, ['someLaterSetting'], false).unknownKeys).toEqual(['someLaterSetting']);
+	});
+
+	it('sends each setting’s kind beside it, so what a goal may change is data the model reads (issue #640)', () => {
+		const { kinds } = settingsView({ droughtRestriction: null }, undefined, true);
+		expect(kinds).toMatchObject({ gr4j: 'calibrated', panCoefficient: 'calibrated', apanMm: 'input', ewrPragmaticM3PerDay: 'assessment', droughtRestriction: 'management' });
+		// Every model input has a kind, except the person's own records the assistant never proposes.
+		const unkinded = MODEL_INPUT.filter((k) => !SETTING_KINDS[k]);
+		expect(unkinded.sort()).toEqual(Object.keys(NOT_PROPOSED).filter((k) => (MODEL_INPUT as readonly string[]).includes(k)).sort());
 	});
 
 	it('lists every key of the engine’s settings as a model input or not one', () => {

@@ -20,7 +20,7 @@ import {
 	TURN_ERRORS,
 	type TurnDeps
 } from './orchestrator.js';
-import type { AssistantProvider, AssistantStreamEvent, AssistantTool, ProviderEvent, ProviderRequest, SettingsProposal, ToolResult } from './types.js';
+import type { AssistantProvider, AssistantStreamEvent, AssistantProposal, AssistantTool, ProviderEvent, ProviderRequest, ToolResult } from './types.js';
 
 const cfg = (over: Partial<AssistantConfig> = {}): AssistantConfig => ({ ...assistantConfig({}), ...over });
 
@@ -262,7 +262,7 @@ describe('runTurn', () => {
 	});
 
 	it('emits a proposal event for a tool result that carries one', async () => {
-		const proposal: SettingsProposal = { patch: { gr4j: { x4: 2 } }, reasons: { gr4j: 'why' }, summary: 'lengthen X4', diff: [{ label: 'GR4J X4', before: '1.7', after: '2' }] };
+		const proposal: AssistantProposal = { goal: 'recalibration', title: 'Recalibration: GR4J X4', changes: [{ label: 'GR4J X4', lines: ['GR4J X4: 1.7 → 2'], reason: 'why' }], apply: { kind: 'settings', patch: { gr4j: { x4: 2 } } } };
 		const p = scripted((hop) => (hop === 0 ? [call('propose_settings'), usage()] : [{ type: 'text', delta: 'see below' }, usage()]));
 		const { d, events } = deps(p, [tool('propose_settings', () => ({ ok: true, data: { accepted: true }, proposal }))]);
 		await runTurn(d, ask);

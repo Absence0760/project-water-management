@@ -9,7 +9,7 @@
 // cap, the month's budget spent, the assistant off) puts the message back and
 // says why instead.
 import { ApiError } from '#lib/api/client.js';
-import type { AssistantBudgetScope, AssistantRequest, AssistantStatus, AssistantStreamEvent, ChatMessage, SettingsProposal } from '#lib/api/types.js';
+import type { AssistantBudgetScope, AssistantRequest, AssistantStatus, AssistantStreamEvent, ChatMessage, AssistantProposal } from '#lib/api/types.js';
 import { readEvents } from './stream';
 
 /** One tool the assistant used in a turn, as its `tool` events said (the label is the server's). */
@@ -28,8 +28,11 @@ export interface AssistantTurn {
 	role: 'assistant';
 	text: string;
 	tools: ToolLine[];
-	/** Recommended settings changes, each applied to the form at most once (`applied`). */
-	proposals: { proposal: SettingsProposal; applied: boolean }[];
+	/**
+	 * Recommended changes, each applied at most once (`applied`: put in the settings form, or made a scenario).
+	 * `applying` while a scenario is being created, `failed` why it wasn't.
+	 */
+	proposals: { proposal: AssistantProposal; applied: boolean; applying?: boolean; failed?: string | null }[];
 	/** Why the turn ended early, in words (an `error` event, or the stream cut off). */
 	error: string | null;
 	/** Stop was pressed: what came before it stays. */

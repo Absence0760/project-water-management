@@ -3,10 +3,13 @@
 	opened from the section header's Assistant button. A question goes to the
 	server with the conversation so far; the answer streams in, with a line for
 	each tool the assistant reads the project with ("Reading the run summary").
-	A recommended settings change is a card with the engine's diff lines and a
-	reason for each setting, and, for an editor, Apply: that puts the change in
-	the settings form, unsaved, and opens Model settings with the save reason
-	filled in (the page's onapply). The assistant never saves anything.
+	A recommended change is a card: the server's title (built from the changes
+	it accepted, issue #640), each change's engine diff lines with its reason,
+	and, for an editor, Apply (the page's onapply). A recalibration or a
+	correction goes in the settings form, unsaved, and Model settings opens with
+	the save reason filled in; a management change (an outcome goal) becomes a
+	scenario on the run, which opens on Scenarios to run and compare. The
+	assistant never saves anything itself.
 	The conversation lives in the page (chat.svelte.ts), so closing the sheet
 	keeps it.
 -->
@@ -14,7 +17,7 @@
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import Fold from '#lib/components/common/Fold.svelte';
 	import { tick } from 'svelte';
-	import type { SettingsProposal } from '#lib/api/types.js';
+	import type { AssistantProposal } from '#lib/api/types.js';
 	import { fmtDay, fmtPct } from '#lib/format/number.js';
 	import { basePath } from '#lib/nav/base.js';
 	import { withSite } from '@water-management/engine';
@@ -25,14 +28,19 @@
 		chat,
 		/** The run the conversation is about (the page's selected run), or the project's latest. */
 		runId = null,
-		/** Apply: put the proposal in the settings form and open Model settings (the page does it). */
+		/**
+		 * Apply (the page does it): a settings change goes in the settings form and Model settings opens; a management
+		 * change becomes a scenario on its run, which opens. A rejection is shown on the card.
+		 */
 		onapply
 	}: {
 		open?: boolean;
 		chat: AssistantChat;
 		runId?: string | null;
-		onapply?: (proposal: SettingsProposal) => void;
+		onapply?: (proposal: AssistantProposal) => void | Promise<void>;
 	} = $props();
+
+	type ProposalEntry = AssistantTurn['proposals'][number];
 
 	/** This site's address, for the disclaimer's `{site}` (the Terms link), as liability/Disclaimer.svelte. */
 	const site = typeof location === 'undefined' ? basePath() : `${location.origin}${basePath()}`;
@@ -110,10 +118,25 @@
 		e.preventDefault();
 		void send();
 	}
-	function apply(p: { proposal: SettingsProposal; applied: boolean }) {
-		p.applied = true;
-		onapply?.(p.proposal);
+	async function apply(p: ProposalEntry) {
+		if (p.applying) return;
+		p.applying = true;
+		p.failed = null;
+		try {
+			await onapply?.(p.proposal);
+			p.applied = true;
+		} catch (e) {
+			p.failed = e instanceof Error ? e.message : String(e);
+		} finally {
+			p.applying = false;
+		}
 	}
+	/** What each kind of recommended change is, under its changes. */
+	const GOAL_NOTE = {
+		outcome: 'A management change, to try as a scenario on this run: run it and compare it with the run to judge it.',
+		recalibration: 'A recalibration: it changes how the model fits the observed flow. Run the model again and check the fit.',
+		correction: 'A correction of the project’s setup. Run the model again to see its effect.'
+	} as const;
 	const toolState = { start: 'running', done: 'done', error: 'failed' } as const;
 </script>
 
@@ -125,7 +148,7 @@
 			<div class="empty">
 				<p class="intro">
 					Ask about this project’s model and results. The assistant reads the project’s data, the run you have open and
-					the help guides. It never changes anything: a recommended settings change is yours to apply and save.
+					the help guides. It never changes anything: a recommended change is yours to apply, as settings to save or as a scenario to run.
 				</p>
 				<p class="label" id="assistant-examples">For example</p>
 				<ul class="suggestions" aria-labelledby="assistant-examples">
@@ -255,32 +278,31 @@
 	</li>
 {/snippet}
 
-{#snippet proposal(p: { proposal: SettingsProposal; applied: boolean })}
-	{@const reasons = Object.values(p.proposal.reasons).filter((r) => r.trim())}
-	<section class="proposal" data-testid="assistant-proposal" aria-label="Recommended change">
+<!-- The card shows only what the server accepted: its title is built from the changes (never the model's words),
+     and each change's reason sits under that change's own lines. -->
+{#snippet proposal(p: ProposalEntry)}
+	{@const scenario = p.proposal.apply.kind === 'scenario'}
+	<section class="proposal" data-testid="assistant-proposal" data-goal={p.proposal.goal} aria-label="Recommended change">
 		<h3>Recommended change</h3>
-		<p class="summary">{p.proposal.summary}</p>
-		{#if p.proposal.diff.length}
-			<table class="data compact">
-				<caption class="visually-hidden">The settings it would change</caption>
-				<thead><tr><th scope="col">Setting</th><th scope="col">Now</th><th scope="col">Suggested</th></tr></thead>
-				<tbody>
-					{#each p.proposal.diff as d, k (k)}
-						<tr data-testid="assistant-diff-line"><th scope="row">{d.label}</th><td>{d.before}</td><td>{d.after}</td></tr>
-					{/each}
-				</tbody>
-			</table>
-		{/if}
-		{#if reasons.length}
-			<p class="label">Why</p>
-			<ul class="reasons">
-				{#each reasons as r, k (k)}<li>{r}</li>{/each}
-			</ul>
-		{/if}
+		<p class="summary" data-testid="assistant-proposal-title">{p.proposal.title}</p>
+		<ul class="changes">
+			{#each p.proposal.changes as c, k (k)}
+				<li data-testid="assistant-change">
+					{#each c.lines as line, j (j)}<p class="line" data-testid="assistant-diff-line">{line}</p>{/each}
+					<p class="why"><span class="why-label">Why:</span> {c.reason}</p>
+				</li>
+			{/each}
+		</ul>
+		<p class="hint">{GOAL_NOTE[p.proposal.goal]}</p>
 		{#if p.applied}
-			<p class="note ok" role="status">Put in the settings form, not saved. Check it on Model settings, then Save.</p>
+			<p class="note ok" role="status">
+				{scenario ? 'Made a scenario on this run, not run yet. Run it on Scenarios and compare it with the run.' : 'Put in the settings form, not saved. Check it on Model settings, then Save.'}
+			</p>
 		{:else if chat.canApply}
-			<button type="button" class="btn btn-primary btn-sm" onclick={() => apply(p)}>Apply to the settings form</button>
+			{#if p.failed}<p class="note err small" role="alert">The scenario wasn’t made: {p.failed}</p>{/if}
+			<button type="button" class="btn btn-primary btn-sm" disabled={p.applying} onclick={() => apply(p)}>
+				{scenario ? 'Try it as a scenario' : 'Apply to the settings form'}
+			</button>
 		{:else}
 			<p class="muted small">An editor can apply this change.</p>
 		{/if}
@@ -316,7 +338,7 @@
 	.suggestions,
 	.log,
 	.tools,
-	.reasons {
+	.changes {
 		list-style: none;
 		margin: 0;
 		padding: 0;
@@ -420,18 +442,31 @@
 	.proposal .summary {
 		margin: 0;
 	}
-	.proposal table {
+	.changes {
 		width: 100%;
-	}
-	.reasons {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
-		font-size: var(--font-sm);
+		gap: 0.5rem;
 	}
-	.reasons li {
+	.changes li {
 		padding-left: 0.75rem;
 		border-left: 2px solid var(--border-strong);
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+	.changes p {
+		margin: 0;
+	}
+	.line {
+		font-weight: 500;
+	}
+	.why {
+		font-size: var(--font-sm);
+		color: var(--text-2);
+	}
+	.why-label {
+		font-weight: 500;
 	}
 	.note {
 		margin: 0;

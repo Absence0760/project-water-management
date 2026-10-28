@@ -3912,16 +3912,32 @@ export interface ChatMessage {
 	content: string;
 }
 
-/** A recommended settings change from propose_settings, validated and dry-run by the server before it reaches the page. */
-export interface SettingsProposal {
-	/** A settings patch the project save accepts: top-level keys replace, nested objects merge one level deep. */
-	patch: Record<string, unknown>;
-	/** Why, one per changed top-level key (key → reason). */
-	reasons: Record<string, string>;
-	/** One-line summary, prefilled as the revision reason: "Assistant suggestion: …". */
-	summary: string;
-	/** The engine's input-diff lines (compare.ts diffInputs) between the stored and the patched settings. */
-	diff: { label: string; before: string; after: string }[];
+/** What a recommended change is for (backend/src/assistant/settingKinds.ts PROPOSAL_GOALS). */
+export type ProposalGoal = 'outcome' | 'recalibration' | 'correction';
+
+/** One change of a recommended change: the engine's input-diff lines for it alone, and the model's reason. */
+export interface ProposalChange {
+	/** A short name for what it changes; the title lists these. */
+	label: string;
+	/** The engine's input-diff sentences, e.g. "Unit A: own runoff to dam 40 % → 20 %". */
+	lines: string[];
+	reason: string;
+}
+
+/**
+ * A recommended change from propose_settings (issues #610, #640), validated and dry-run by the server before it
+ * reaches the page. The title is the server's, built from the changes it accepted, never the model's words.
+ */
+export interface AssistantProposal {
+	/** outcome: management levers, tried as a scenario; recalibration: the fit; correction: a setup error. */
+	goal: ProposalGoal;
+	title: string;
+	changes: ProposalChange[];
+	/**
+	 * What Apply does: put `patch` (a settings patch the save accepts: top-level keys replace, nested objects merge
+	 * one level deep) in the settings form, or create a scenario on `baseRunId` with `ops`.
+	 */
+	apply: { kind: 'settings'; patch: Record<string, unknown> } | { kind: 'scenario'; baseRunId: string; ops: ScenarioOp[] };
 }
 
 /** Which month's cap an assistant budget is (backend/src/assistant/usage.ts BudgetScope). */
@@ -3955,7 +3971,7 @@ export interface AssistantRequest {
 export type AssistantStreamEvent =
 	| { type: 'text'; delta: string }
 	| { type: 'tool'; name: string; label: string; status: 'start' | 'done' | 'error' }
-	| { type: 'proposal'; proposal: SettingsProposal }
+	| { type: 'proposal'; proposal: AssistantProposal }
 	| { type: 'usage'; inputTokens: number; outputTokens: number; tokensUsed: number; tokensPerMonth: number; scope: AssistantBudgetScope }
 	| { type: 'error'; code: string; error: string }
 	| { type: 'done' };
