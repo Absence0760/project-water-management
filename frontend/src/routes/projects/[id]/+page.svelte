@@ -792,7 +792,7 @@
 
 	// --- the assistant (issue #610, docs/ui.md § Assistant) ---------------------
 	// One conversation per project, held here so closing the sheet or changing tab keeps it (nothing is
-	// stored on the server). Its button shows only when the server has the assistant on for this caller
+	// stored on the server; past chats stay in this browser, cleared on sign-out). Its button shows only when the server has the assistant on for this caller
 	// (GET …/assistant answers `available`); a farmer or an applicant never reaches the workspace.
 	let assistant = $state.raw<{ id: string; chat: AssistantChat } | null>(null);
 	let assistantOpen = $state(false);
@@ -804,7 +804,13 @@
 			assistant = null;
 			return;
 		}
-		const chat = new AssistantChat({ status: () => api.assistant.status(id), send: (body, signal) => api.assistant.send(id, body, signal) });
+		// Past chats are kept only in this browser, under who is signed in (assistant/history.ts, loaded with the panel).
+		const userId = untrack(() => session.user?.id ?? null);
+		const chat = new AssistantChat({
+			status: () => api.assistant.status(id),
+			send: (body, signal) => api.assistant.send(id, body, signal),
+			history: async () => (userId ? (await import('#lib/components/assistant/history.js')).openChatHistory(userId, id) : null)
+		});
 		assistant = { id, chat };
 		assistantOpen = false;
 		void chat.load();

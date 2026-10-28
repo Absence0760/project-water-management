@@ -14,6 +14,7 @@
 	import { api } from '#lib/api/index.js';
 	import { session } from '#lib/auth/session.svelte.js';
 	import { clearAllSaved } from '#lib/components/farm/savedCopy.js';
+	import { clearAllChatHistory } from '#lib/components/assistant/historyClear.js';
 	import AuthCard from '#lib/components/layout/AuthCard.svelte';
 	import TermsSummary from '#lib/components/legal/TermsSummary.svelte';
 	import { errorText } from '#lib/i18n/apiError.js';
@@ -55,6 +56,7 @@
 			// Drop the local session either way.
 		}
 		clearAllSaved();
+		clearAllChatHistory();
 		session.user = null;
 		signingOut = false;
 		await tick();
