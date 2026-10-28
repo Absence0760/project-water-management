@@ -483,6 +483,11 @@ area-weighted CHIRPS (`rain_chirps_mm`, the from-units feeds,
   every existing row, so every stored model runs as before. Besides `PUT
   /model`, `POST /map/unit-map` writes both from a MAP grid (a `model_put`
   revision; [maps.md § MAP for each unit](./maps.md#map-for-each-unit)).
+  `node.map_polygon` (273, issue #646 F7): the polygon `POST /map/unit-map`
+  took the MAP over, `{ featureId, updatedAt, areaM2 }` as it stood; the
+  model store clears it when a save changes the MAP or its source (a typed
+  MAP is over no polygon), and nothing else writes it. NULL = unknown or
+  typed.
 - Both functions are `SECURITY INVOKER` with a pinned `search_path`: they read
   `node` and `data_feed` under the writer's RLS, and whoever may write a
   project's series may read both. No new table, grant, policy or foreign key.
@@ -1992,6 +1997,13 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `created_at`, `updated_at`. At most one `catchment_boundary` per project
   (partial unique index). It is Step 2's `catchment_geometry` source for the
   feeds' polygon extraction (wiring the fetcher to it is a follow-up).
+  `link_point` (273, issue #646 F9): a gauge's geometry (a Point) when it
+  was linked to its node, owned by the `map_feature_link_point` trigger
+  (BEFORE INSERT OR UPDATE, pinned `search_path`): set on an insert with a
+  node and whenever the node changes, kept through every other update
+  (whatever the statement sends), NULL for anything but a linked gauge and
+  for a gauge linked before 273 (no backfill). The Map's Checks say how far
+  a gauge moved since.
 - **`node.area_source`** (`typed` | `map`, default `typed`) and
   **`node.area_feature_id`** (composite key `(area_feature_id, project_id)`
   → `map_feature (id, project_id)`, `ON DELETE SET NULL (area_feature_id)`):
@@ -2238,6 +2250,9 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   crop. Viewers read, editors write, same-project trigger on `node_id` and
   `crop_id`, covering indexes on `project_id` and `crop_id`. Farmers don't
   read it (the catalogue guard's `FARMERS_NEVER_READ`).
+  `polygons` (273, issue #646 F7): the polygons the area was summed over,
+  `[{ featureId, updatedAt, areaM2 }]` as they stood (1–500 of them, no
+  foreign key: a record of what was read); NULL from before 273.
 - **`evaporation_dataset`** and **`evaporation_cell_reference`**
   (`180_evaporation_reference.sql`, issue #326 B-evap,
   [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)):
@@ -2288,7 +2303,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `load-reference.yml` load (kind `soils`) writes it as the schema owner.
 - **`gr4j_donor_dataset`** and **`gr4j_donor`** (`269_gr4j_donors.sql`,
   issue #622, [model.md §2.10m](./model.md)): the calibrated donor basins the
-  regional prior is built from. A dataset row: `dataset` (primary key; 
+  regional prior is built from. A dataset row: `dataset` (primary key;
   `synthetic` for the committed donors), `source`, `version`, `method` (the
   fit and the donor criteria in words), `attribution` (GRDC-Caravan's and
   HydroATLAS's), `engine_version` (the engine that fitted them),
@@ -2325,6 +2340,9 @@ audit trail of what was flagged; the hydrologist, and later a licensing
 assessor, needs it long after the import. `POST /projects/import` stores it in
 the import's own transaction ([api.md § Import report](./api.md#import-report)).
 
+  `boundary` (273, issue #646 F8): the catchment boundary the values were
+  summarised over, `{ featureId, updatedAt, areaM2 }` as it stood; NULL from
+  before 273.
 - **Columns:** `project_id` (→ `project`, cascade), `imported_at`,
   `imported_by` (→ `app_user`, `ON DELETE SET NULL` since 138, like
   `model_run.created_by`: the record stays with who imported it cleared),

@@ -4175,7 +4175,14 @@ map" card) stays the schematic; this is the geography.
   Cultivated area (Crops) and **Run the model** (Runs & results). Each
   status is worked out from what the project holds (the settings, the feed
   list, the series list, the model, the runs), read when the Map opens and
-  again after an apply here. Under it, **Each unit’s rain and MAP,
+  again after an apply here. Evaporation is done once the monthly A-pan or
+  a daily A-pan series is set; until then it reads "A-pan not set: crop
+  demand and dam evaporation are zero" (issue #646 item 5). A unit's rain,
+  its MAP, a planted area from land cover or the evaporation from the map
+  read over an outline redrawn since turns its item back to Started with
+  "Changed since: …" (F7, F8; `stale.ts`). For an editor, the feed items
+  say "An owner of the project attaches it", and past about 2,500 km² the
+  boundary's rain item says one feed will refuse it (F14). Under it, **Each unit’s rain and MAP,
   together** (`StartUnitsData.svelte`): one row a land unit, its MAP from
   the MAP grid ("640 mm (now 600 mm)", the grid cited above the table) and
   its rain ("A new feed: 3 cells, 62 % of their area inside"), each with a
@@ -4562,7 +4569,15 @@ map" card) stays the schematic; this is the geography.
   the warnings, named "Checks 1 warning" so the name holds the tab's words): the count ("1 warning from the map’s
   checks", or "The map’s checks found no problems.") and the warnings, each
   with buttons that pick its features and show their Details ([maps.md §
-  Checks](./maps.md#checks)). Until 2026-10-02 a line in the column with
+  Checks](./maps.md#checks)). Since issue #646 item 4 they include what a
+  map edit left behind: a unit's area from an earlier outline with **Use
+  14.10 km²** for an editor (the Use confirm; a failure shows above the
+  list), and a value read over a redrawn outline, the rest of the
+  catchment's area, a dam in another unit's boundary and a moved gauge, each
+  with a link to where it is set again (MAP from the grid, Rain for each
+  unit, Crops, Evaporation from the map, Network). The grid's "Where each
+  hydrological unit’s area came from" says "’s earlier outline" beside such
+  a unit. Until 2026-10-02 a line in the column with
   **Show the checks** opening a side sheet, **Map checks** (`checks=1`); that
   link now opens the Checks tab and the parameter goes in place.
 - **Every feature** (`grid=map-features`, a full modal drawn by the tab:
