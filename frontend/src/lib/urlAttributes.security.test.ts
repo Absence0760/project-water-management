@@ -151,6 +151,9 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	resolve: { why: 'resolve() of ACCOUNT_TWO_STEP, a literal "account#two-step" constant in auth-extras/requireTwoStep.ts: an app path, never a scheme (issue #586)', in: ['lib/components/auth-extras/RequireTwoStep.svelte'] },
 	'moved.href': { why: 'SectionNav: a moved setting\'s link from the page\'s `elsewhere` list, a literal "?tab=…#…" constant (settings/sections.ts SETTINGS_ELSEWHERE, issue #521)', in: ['lib/components/common/SectionNav.svelte'] },
 	hrefOf: { why: 'SectionNav: a section\'s `href` (a literal "?tab=…" from the page that lists it) or "#" + its id', in: ['lib/components/common/SectionNav.svelte'] },
+	's.href': { why: 'MapSetupPill: a step\'s link, map/mapSetup.ts dataStep copying a map/startData.ts item\'s literal "?tab=…" constant (#646)', in: ['lib/components/map/MapSetupPill.svelte'] },
+	's.more.href': { why: 'MapSetupPill: a step\'s second link, a map/startData.ts item\'s literal "?tab=…#…" constant (#646)', in: ['lib/components/map/MapSetupPill.svelte'] },
+	startHref: { why: 'MapSetupPill prop: MapTab passes withParam(page.url, "start", "1") (#646)', in: ['lib/components/map/MapSetupPill.svelte'] },
 	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=series&rain=boundary#data-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },
 	reportHref: { why: 'report job page: `<base>/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	'register.registerUrl': {
@@ -178,7 +181,11 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'r.href': { why: 'CompareView: the `reports` list, reportHref() (`<base>/projects/<id>/report?` + URLSearchParams); projects/NeedsAttention: outcomes.ts attention() reasons, built by curtailmentHref (`<base>/projects/…`) or absent; WarningsTab: warnings/runWarnings.ts settingLink, "?tab=series" or "?tab=settings|calibration#" + a WARNING_CODES anchor (engine constants), or null', in: ['lib/components/compare/CompareView.svelte', 'lib/components/projects/NeedsAttention.svelte'] },
 	allHref: { why: 'projects/NeedsAttention prop: the list page passes hrefWith(…)', in: ['lib/components/projects/NeedsAttention.svelte'] },
 	hrefWith: { why: 'projects list page: "?" + URLSearchParams(owner, sort, q), or `<base>/`', in: ['routes/+page.svelte'] },
-	'it.href': { why: 'NeedsAttention: attention.ts items built from runHref / farmDrawerHref or "?tab=…" literals', in: ['lib/components/overview/NeedsAttention.svelte'] },
+	'it.href': {
+		why: 'NeedsAttention: attention.ts items built from runHref / farmDrawerHref or "?tab=…" literals; StartDataList: map/startData.ts items, each a literal "?tab=…" constant (#646)',
+		in: ['lib/components/overview/NeedsAttention.svelte', 'lib/components/map/StartDataList.svelte']
+	},
+	'it.more.href': { why: 'StartDataList: a map/startData.ts item\'s second link, a literal "?tab=…#…" constant (#646)', in: ['lib/components/map/StartDataList.svelte'] },
 	'c.href': {
 		why: 'RunSummaryView: credibility.ts "#res-…" anchors, or calibration/links.ts calibrationHref (BUILDER "?tab=calibration&run=" + encoded run id + "#" + a fixed res- id); FarmMapCanvas: farmMap.ts farmMapCredits, "<base>/data-sources" and its "#hydrorivers" / "#jrc-water" anchors, or null',
 		in: ['lib/components/runs/RunSummaryView.svelte', 'lib/components/farm/FarmMapCanvas.svelte']

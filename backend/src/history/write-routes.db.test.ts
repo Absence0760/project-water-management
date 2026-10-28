@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { actForAuthority, anon, app, asOwner, confirmAsOperator, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingNotices, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
+import { loadSyntheticEvaporationStations } from '../../scripts/import-evaporation-stations.js';
 import { fileURLToPath } from 'node:url';
 import { fixtureLonLat, OUTLET_CELL, valleyUnitRing } from '../delineation/fixture.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
@@ -774,6 +775,18 @@ const WRITE_ROUTES: Entry[] = [
 			const b = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
 			expect(b.status).toBe(201);
 			return c.owner.call('POST', `${at(c)}/evaporation-from-map`, { dataset: 'synthetic' });
+		}
+	},
+	{
+		// A DWS evaporation station's pan record (issue #646 item 6): a settings revision whose reason cites the station
+		// (the boundary from evaporation-from-map's entry above, or drawn here when it runs alone).
+		route: `POST ${P}/evaporation-from-station`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticEvaporationStations(process.env.TEST_MIGRATION_DATABASE_URL!);
+			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+			await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
+			return c.owner.call('POST', `${at(c)}/evaporation-from-station`, { station: 'Z1E001', daily: false });
 		}
 	},
 	{

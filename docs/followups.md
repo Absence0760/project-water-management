@@ -544,6 +544,30 @@ open:
       on the donor's own record) and the similarity method first (#622
       Blockers).
 
+## A modelled Class-A pan grid (issue #646 item 7)
+
+Round 3 of 2026-10-28 built PenPan (`ingest/penpan.py`), the operator's grid
+and validation (`ingest/apan_grid.py`) and the local load. Production refuses
+it ([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)). What's
+open:
+
+- [ ] **The validation and the hydrologist's sign-off.** Missing: `apan_grid.py
+      validate`'s report against DWS Class-A pan stations' monthly means, and
+      the client hydrologist's judgement on it: is the ratio by month close
+      enough to 1 (McMahon et al. found 1.078 over 68 Australian stations)?
+      Screened or unscreened (`--screen`)? Which ground albedo? Durable fix:
+      the report, the sign-off recorded on the data-sources row, then one
+      change that makes the row `reference load` and lets `referenceLoad.ts`
+      and `map-data-gates.mjs` take a PenPan grid, with its tests. Trigger:
+      DWS's permission covering evaporation station records (#646 item 6).
+- [ ] **PenPan-V2.** Missing: Lim, Roderick and Farquhar (2016, J. Hydrol. 540,
+      641–658) add the pan's wall heat exchange for monthly steady-state use,
+      and it fit Australian pans better than PenPan. Its equations could not
+      be confirmed from a readable copy of the paper, so they aren't guessed.
+      Durable fix: `penpan_v2` beside `penpan_day`, tested on the paper's
+      worked values, and the method text naming the version. Trigger: a copy
+      of the paper, or the validation showing PenPan's bias is too large.
+
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
 - [x] **Guard pending notices as db-setup.ts guards pending jobs.** The
@@ -2229,18 +2253,6 @@ Still open, for round 4 (each its own piece):
   parameters). Durable fix: run the rules' cases stepwise, and perturb each
   zone's parameters by its own fit's spread. Trigger: before a zoned project
   signs off calibration rules or cites an ensemble.
-- **Warning codes for the zone warnings.** The run's *Calibration zone(s):
-  …* warnings are plain text: they need codes in `packages/engine/src/
-  warningCodes.ts` and fixes in `frontend/src/lib/components/warnings/
-  fixes.ts` (files outside this round's scope) so the Warnings page links
-  them to the table. Trigger: round 4.
-- **A help article** for calibration zones (`help/articles-fit.ts` and a
-  `calibration-zones` tip in `help/tips.ts`); the table and the steps borrow
-  the *calibration window* and *automatic calibration* tips meanwhile.
-- **The verify mutation test** (`verify/test_verify.py`, `verify/README.md`):
-  a mutant that drops a zone's parameters (`zone_p.get(u["id"], g)` → `g`)
-  so the self-test proves the cross-check reaches zones (diff.py's dense
-  networks reach zoned units in about half the cases, its random ones rarely).
 - **A zone step's score and the EWR shares.** While a zone above the site is
   fitted, the units below it run on their pre-fit parameters, and the natural
   MAR shares follow every unit's runoff, so a step's score can differ from a
@@ -4710,6 +4722,27 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `gauge-stations` kind on the production path (`geo/referenceLoad.ts`,
       `scripts/release/map-data-gates.mjs`, the workflow's choices), which
       refuses it until then.
+- [ ] **Decision: DWS evaporation station records** (operator, through the
+      client's hydrologist; issue #646 item 6, the hydrologist's F5; maps.md
+      § Evaporation stations, data-sources.md § dws-evaporation). DWS's
+      permission recorded 2026-10-28 covers verified daily **flow** only.
+      Ask DWS (GeoRequests@dws.gov.za, through the hydrologist, as for flow)
+      to extend it to the verified daily pan evaporation of weather stations
+      (`E` codes, Class-A and Symons) near the client's catchment, stored and
+      shown as results in the tool, and request those stations' records and
+      the area's station list (`WMA*_Met.pdf`). Until then the Calibration
+      page's Evaporation stations reads only the synthetic stations, and
+      production refuses the `evaporation-stations` load (the gate's
+      `LOADABLE` and `REFERENCE_KINDS`, `blocked`). On a yes: record the
+      permission in data-sources.md § dws-evaporation and the maps.md
+      Sources row (allowed), add a file shape and a loader branch to
+      `geo/referenceLoad.ts` (reading `evaporationStationRecords` into
+      `replaceEvaporationStations`, `geo/loadEvaporationStations.ts`), add
+      the kind to `LOADABLE` in `scripts/release/map-data-gates.mjs` and to
+      `load-reference.yml`'s choices, and check the reader
+      (`geo/dwsEvaporation.ts`) against a real reply first: it is built on
+      the flow page's layout, since DWS's evaporation page could not be read
+      from outside South Africa.
 - [ ] **Decision: the Lynch (2004) MAP grid's licence** (operator; maps.md §
       MAP grid, § Sources, decision D-B). The Lynch (2004) national grid
       from the WRC's Atlas of Climatology and Agrohydrology: its portal

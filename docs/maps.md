@@ -2621,6 +2621,10 @@ grid's kind, and **nothing is converted between them**:
   ([model.md §2.4a](./model.md) *Daily reference ET*). Both are reference
   ET, so neither is converted; the feed changes nothing under pan
   coefficient × A-pan.
+- **A-pan where no pan station is near**: a modelled Class-A pan grid
+  (PenPan from NASA POWER's weather, [§ The evaporation grid](#the-evaporation-grid))
+  proposes the A-pan row as "Modelled Class-A pan (PenPan)", locally only
+  until it is validated against DWS pans.
 
 ### The evaporation grid
 
@@ -2656,17 +2660,144 @@ only reads them.
 - **An A-pan grid** (kind `apan`) loads from the fixture form
   (`{ "kind": "apan", "cellDeg", "firstYear", "lastYear", "cells": [[lon,
   lat, [Oct … Sep]], …] }`), for example the operator's own interpolation of
-  station pans. No open A-pan grid passes D-B today (§ Sources).
+  station pans; such a grid names its own `--source` and `--attribution`
+  (dPET's lines are never put on it). No measured A-pan grid passes D-B
+  today (§ Sources).
+- **A modelled A-pan grid: PenPan** (issue #646 item 7;
+  [data-sources.md § penpan-apan](./data-sources.md#penpan-apan), blocked in
+  production). Where no pan station is near, `ingest/apan_grid.py` models a
+  US Class-A pan from weather. This is not the conversion "Why no
+  conversion" rules out, since no pan coefficient is guessed: PenPan
+  (Rotstayn et al. 2006; `ingest/penpan.py`, after McMahon et al. 2013
+  Supplement S6, eqs. S6.1–S6.6) is Penman's equation for the pan itself.
+  It takes the shortwave the pan and its walls catch (S6.4–S6.6, pan albedo
+  0.14), the net longwave (FAO-56 eq. 39) and Thom et al.'s vapour transfer
+  for a pan (S6.2), with a = 2.4. Each month runs as a steady state, and the
+  model is checked against McMahon's Worked example 9 (3.66 mm/day at Alice
+  Springs). The weather is NASA POWER's six daily parameters, since the copy
+  holds only reference ET. `fetch` reduces them to each 0.5° point's monthly
+  means a year at a time (resumable, one request a second). `grid` averages
+  each calendar month's PenPan total over the years (a point needs every
+  month of every year) and places it on 0.1° cells centred on x.x5°, each
+  the nearest point's, so 25 cells share one point. It writes the `apan`
+  form with a `model`: `name: "penpan"`, the ground albedo (0.23 by
+  default) and the screen factor (1 for an unscreened pan, 0.93 for a
+  bird-screened one). `pnpm import:evaporation <apan.json[.gz]> --dataset
+  <label>` loads it. Its source always starts "Modelled Class-A pan
+  (PenPan)" (an operator's `--source` is put after it) and the method says
+  "Modelled, not measured: PenPan …", so the proposal, the revision's reason
+  and the provenance row never present it as a measured pan. `validate`
+  compares it with Class-A pan stations, using their 12 monthly means at
+  each station's cell, and writes a Markdown report of the ratio grid ÷
+  station, the bias and the RMSE, by month and overall. The operator runs
+  that report on DWS stations, and production waits for it and the
+  hydrologist's sign-off. Limits: POWER's 0.5° weather smooths relief and
+  coasts, and the model ignores the pan's siting (a dry fetch or an
+  irrigated one) and its heat storage, so one month can be off even when
+  the normal holds. For scale, McMahon found PenPan ÷ pan of 1.078 over 68
+  Australian stations, after their screen factor.
 - **Production loading**: `pnpm import:evaporation <dir>/*.dpet-monthly.json
   --dataset <label> --out dpet.json.gz` writes the averaged grid in the
   fixture form instead of loading it, and `load-reference.yml` (kind
   `evaporation`) loads that file through the migrate Lambda
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
   Only a reference-ET grid (`et0`) loads there; an A-pan grid is refused
-  until its source has an allowed row here. The attribution, stored on the
+  until its source has an allowed row here. The release gate also refuses a
+  PenPan or A-pan key or label before the approval. The attribution, stored on the
   dataset row, is shown under every proposal (§ Sources).
 - **WR2012's evaporation** (S-pan per quaternary, with its evaporation zones'
   monthly distribution) stays **blocked** with the rest of WR2012 (§ Sources).
+
+## Evaporation stations
+
+**Evaporation stations**, in Calibration → Flow calibration under
+"Evaporation from the map" (issue #646 item 6, the hydrologist's F5;
+`EvaporationStationProposal.svelte`), proposes the nearest DWS evaporation
+station's pan record as the **A-pan**, the input dams and crops lose water to,
+the way [§ Gauging stations](#gauging-stations) proposes a flow record: the
+map proposes, the modeller picks and accepts.
+
+- **What is listed.** The stations within 100 km of the catchment boundary
+  (0 inside it, else to its nearest edge; `?within=` up to 300 km), nearest
+  first, at most eight, each with its code, name, pan (**Class-A** or
+  **Symons**), distance, record (first and last year, years, share of days
+  read) and the 12 monthly means of its record beside the saved A-pan row
+  (`backend/src/geo/evaporationStations.ts`). A month counts with 80 % of its
+  days read, and each of the 12 needs 3 counted years, else the station
+  proposes nothing and says which months are short
+  ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45),
+  *A station's pan record*). The nearest usable station is picked first.
+- **A Class-A pan** proposes its means as the A-pan row and, ticked by
+  default, its daily record as the daily A-pan series **`DWS <code>`**
+  (kind `evap_apan_mm`, which replaces the monthly row on every day it
+  covers). A project that already holds another daily A-pan series is
+  refused that part (409; a run reads one series of a kind): delete it on
+  the Data page first, or untick it and use the means only.
+- **A Symons pan** reads S-pan, so its means become A-pan only through the
+  S→A equation the user picks, **WR90** or **Taljaard (2023)**, both the
+  published S ← A equation inverted; none is picked for them, Taljaard's
+  warning that they "cannot be inverted" is shown beside the choice, and an
+  equation that would rest on its intercept (a month under its floor) is
+  disabled with the month named (model.md §2.3a). Its daily record is never
+  written: the equations are monthly.
+- **Use** (editors; "Saves now") asks first, then
+  `POST /projects/:id/evaporation-from-station`
+  ([api.md § Catchment map](./api.md#catchment-map)): the server re-reads the
+  station and re-derives the means, writes the A-pan row as one settings
+  revision whose reason cites the station, its pan, its distance, the
+  months the means came from, any conversion (its equation by name) and the
+  dataset's source, which History, run comparison and an evidence pack's
+  revisions carry, and writes the daily series when asked (queueing a
+  re-run and automatic calibration as any new series does). While Settings
+  has unsaved changes, Use waits. A Class-A or Symons pan only: the
+  dam-evaporation preset (Settings → Demand) still converts the A-pan row to
+  S-pan for the dams where the project uses one.
+- **Who sees it.** A viewer's read; a farmer gets 403 and a non-member 404.
+
+### Evaporation-station dataset
+
+`evaporation_station_reference` (274) holds each station with its whole
+verified daily record (one array of mm a day, `NULL` for a day not read). The
+**operator** loads it as the schema owner; the app only reads it.
+
+- **Committed: synthetic only.** `backend/fixtures/evaporation-stations/`
+  holds four invented stations in drainage region **Z** (DWS has none) round
+  the Sandspruit example's boundary, each reply marked "SYNTHETIC" and
+  "INVENTED", written by
+  `pnpm -C backend exec tsx scripts/gen-evaporation-stations-fixture.ts`
+  (a fixed seed): `Z1E001`, a Class-A pan inside the boundary, 2014–2017;
+  `Z1E002`, a Symons pan nearby, 2010–2013, whose July S-pan sits between
+  the two equations' floors (Taljaard converts it, WR90 refuses); `Z1E003`,
+  a Class-A pan with under two years (too short); `Z2E001`, about 200 km off
+  (outside the default radius). `pnpm import:evaporation-stations` with no
+  argument loads them as dataset `synthetic`; the panel marks them
+  "Synthetic test data". `pnpm setup` loads them; the DB and e2e tests load
+  them themselves.
+- **Real data: the operator's own request to DWS, once the permission covers
+  it** (§ Sources: blocked). DWS publishes a weather station's verified
+  daily records (an `E` code, `A2E001`) on the same `HyData.aspx` pages as
+  river flow (`SiteType=MET`); its per-area station lists
+  (`Verified/dwafapp2_wma/WMA*_Met.pdf`) mark each evaporation record `[A]`
+  Class-A or `[S]` Symons. The reader (`geo/dwsEvaporation.ts`) takes the
+  flow page's layout with the value column named for evaporation in mm; the
+  site answers our network with HTTP 403, so it is tested only against the
+  invented replies, and refuses a page whose header or unit block says
+  anything else. Load with
+  `pnpm import:evaporation-stations stations.csv --records <dir> --dataset "DWS 2026-11" --source "<DWS reply reference, date>"`:
+  the CSV is `code,name,pan,lat,lon[,source]` (pan `A`/`S`, decimal
+  degrees), and each station's reply is a file in `<dir>` whose name starts
+  with its code. A load replaces every row of its dataset in one
+  transaction; stations it can't take are listed as skipped. Load real
+  records into your own database only, and never commit them.
+- **Production loading is refused** until DWS's permission covers
+  evaporation station records: the reference-load kind
+  `evaporation-stations` is blocked in both the release gate
+  (`scripts/release/map-data-gates.mjs`, which offers only the allowed
+  kinds) and the migrate Lambda (`backend/src/geo/referenceLoad.ts`
+  `REFERENCE_KINDS`), and the `dws` kind takes only a river gauge (`H`)
+  code and a flow table, so a pan record can't arrive as flow
+  ([deployment.md § Reference datasets](./deployment.md#reference-datasets);
+  followups.md, *Decision: DWS evaporation station records*).
 
 ## Hydrological units layer
 
@@ -2915,6 +3046,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Quaternary catchment outlines | DWS (Department of Water and Sanitation) | open data per [§ Quaternary dataset](#quaternary-dataset); the commercial-use terms are not yet confirmed on DWS's own page | DWS | the operator's download | per DWS release | blocked: licence unconfirmed for anything but the operator's own database; the committed synthetic fixture is used everywhere else |
 | WR2012 reference values (MAP, MAR, monthly flows) | WRC | redistribution terms unpublished ([§ Quaternary dataset](#quaternary-dataset)) | WR2012 (WRC 2015) | the operator's download | none (a 2012 study) | blocked: licence unconfirmed; operator's own database only |
 | Hydrological station catalogue (station code, name, river, lat/lon, catchment area, record start/end): the nearest-gauge proposal | Department of Water and Sanitation (DWS), National Hydrological Services, `https://www.dws.gov.za/Hydrology/Verified/HyCatalogue.aspx` | **Unconfirmed.** Read 2026-10-01: the Verified data pages answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) surfaced DWS's information-page wording (NIWIS pages on `dws.gov.za`): "copyright … remains with the Department of Water and Sanitation", data "may not be sold to third parties", and "the use of information data is restricted to use for academic, research or personal purposes". If that wording covers the hydrological catalogue, it is a non-commercial restriction and fails D-B | "Department of Water and Sanitation" named as the copyright owner, if allowed | the operator's download date | DWS updates the catalogue as stations open and close | **Blocked: licence unconfirmed.** Built and tested against the synthetic fixture only. To unblock: written confirmation from DWS Hydrological Services that the station metadata may be reused in a commercial service, recorded here with the date |
+| DWS evaporation station records (station code, name, pan type Class-A or Symons, lat/lon, the verified daily pan record): the A-pan proposal ([§ Evaporation stations](#evaporation-stations)) | Department of Water and Sanitation (DWS), National Hydrological Services, `https://www.dws.gov.za/Hydrology/Verified/HyData.aspx` (`SiteType=MET`) and the per-area station lists (`Verified/dwafapp2_wma/WMA*_Met.pdf`) | **Not covered.** The permission obtained through the client's hydrologist (recorded 2026-10-28, [data-sources.md § dws-flow](./data-sources.md#dws-flow)) covers verified daily **flow** only; the same NIWIS wording as the station catalogue applies otherwise | "Department of Water and Sanitation" named as the copyright owner, if allowed | the operator's load of DWS's reply | DWS updates records as they are verified | **Blocked: needs DWS's permission extended to evaporation station records** (the operator, through the client's hydrologist, GeoRequests@dws.gov.za). Built and tested against the synthetic fixture only |
 | DWS verified daily flow (the DWS feed, `feeds/sources/dws.ts`; the gauge record store, `gauge_record`, 247) | DWS, `HyData.aspx`, or DWS's reply to a data request | Permission to store the verified daily flow and show results derived from it obtained through the client's hydrologist (recorded 2026-10-28, #618 step 6a; the written permission is kept with the client's records, [data-sources.md § dws-flow](./data-sources.md#dws-flow)); DWS publishes no terms for the pages themselves | "Department of Water and Sanitation" | per fetch or load | daily (the feed), weekly (the store's web pass) | allowed: the verified daily flow only (production loads it with `load-reference.yml` kind `dws`, [deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)); the station catalogue keeps its own row |
 | CHIRPS v3 daily rainfall (`sat`, `rnl`) and CHIRPS-GEFS v3 forecast: the rain feed, and the rain from the boundary | Climate Hazards Center, UC Santa Barbara | Public domain, registered with Creative Commons, and licensed CC BY 4.0 ("CHIRPS3 is in the public domain … licensed under a Creative Commons Attribution 4.0 International License"), [chc.ucsb.edu/data/chirps3](https://www.chc.ucsb.edu/data/chirps3), read 2026-10-01 | "Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025). Data was accessed on [date]." Or Funk, C. et al., *Sci Data* 13, 718 (2026) | v3.0 | Daily: preliminary two days after each pentad, final monthly (about three weeks after the month); GEFS one issue a day | Allowed (fetched live by the feeds; fixtures offline) |
 | ERA5-Land daily precipitation (0.1°, `era5l` in our rain data copy): fills catchment-rain gaps where Model settings → Rain gaps chooses it, and Data → Rain products side by side (issue #604 R4-E) | ECMWF for the Copernicus Climate Change Service (C3S) | **CC BY 4.0** ("CC-BY licence" on the CDS dataset page, [reanalysis-era5-land](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land), read 2026-10-27) | "Contains modified Copernicus Climate Change Service information [year]. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains." and the dataset citation (data-sources.md § ERA5-Land), wherever its values show: the Data sources and credits page, the Data tab's products and per-day preview, a run's results, report and exports, and an evidence pack's bundle | ERA5-Land hourly, daily totals | about 5 days behind, consolidated two months later | allowed (built; off in production until the operator's CDS key) |
@@ -2946,6 +3078,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Synthetic soil water capacity grid (`backend/fixtures/soils/soils.synthetic.json`) | this repo (invented soil over region Z) | the repo's own | none | 1 | never | in use (tests, `pnpm setup`) |
 | Synthetic GR4J donors (`backend/fixtures/gr4j-donors/gr4j-donors.synthetic.json`) | this repo (14 invented basins) | the repo's own | none | 1 | never | in use (tests, `pnpm setup`) |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+| Modelled Class-A pan (PenPan), our own computation from NASA POWER's daily weather: the A-pan row where no pan station is near ([§ The evaporation grid](#the-evaporation-grid), issue #646 item 7) | NASA POWER (the weather); the model is ours (Rotstayn et al. 2006, after McMahon et al. 2013 Supplement S6) | **CC BY 4.0** (POWER, as [data-sources.md § nasa-power](./data-sources.md#nasa-power)); the grid is ours | "NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan (Rotstayn et al. 2006) from its daily meteorology", stored on the dataset row; its source always starts "Modelled Class-A pan (PenPan)", and the proposal and its revision call its values "modelled Class-A pan evaporation (PenPan, not a measured pan)" (`evaporation.ts` `evaporationLabel`) | the years run (e.g. 1991–2020) | per refresh of the normal | **Blocked in production** until `apan_grid.py validate`'s report against DWS Class-A pans and the hydrologist's sign-off ([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)); the release gate and the migrate Lambda refuse it. Locally it loads, built and tested against synthetic weather |
 
 **Which version is in use.** The table's Version column is the version the
 licence was read for. What a deployment actually serves is recorded with

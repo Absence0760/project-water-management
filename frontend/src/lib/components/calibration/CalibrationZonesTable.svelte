@@ -89,8 +89,9 @@
 	const ticked = $derived(rows.filter((r) => r.zone?.enabled).length);
 </script>
 
-<fieldset class="plain zones" data-testid="calibration-zones" aria-describedby="{uid}-h">
-	<legend class="label">Calibrate at several gauges <HelpTip key="calibration-window" label="About the calibration record" /></legend>
+<!-- id: the Warnings page lands on the table (`?field=fld-cal-zones`, issue #611). -->
+<fieldset class="plain zones" id="fld-cal-zones" data-testid="calibration-zones" aria-describedby="{uid}-h">
+	<legend class="label">Calibrate at several gauges <HelpTip key="calibration-zones" label="About calibration zones" /></legend>
 	<p class="hint explain" id="{uid}-h">
 		A ticked gauge gives the land units draining to it their own GR4J parameters, fitted on its record before the zones below it; the
 		calibration site fits the rest. Unticked, a gauge’s record stays a check and its units join the next ticked site downstream.

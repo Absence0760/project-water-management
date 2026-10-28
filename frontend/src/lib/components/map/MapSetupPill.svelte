@@ -252,7 +252,7 @@
 	}
 	.status {
 		margin-left: 0.45rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		color: var(--text-2);
 	}

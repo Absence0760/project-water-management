@@ -3425,6 +3425,49 @@ export interface EvaporationProposals {
 	accepted: EvaporationAccepted[];
 }
 
+/** How a DWS evaporation station's pan record becomes A-pan (issue #646 item 6): as it stands, or by an S→A equation's 12 values. */
+export type StationApan = { ok: true; apanMm: number[]; spanMm: number[] | null; conversion: SpanConversionId | null; note: string | null } | { ok: false; reason: string };
+/** The inverted S-pan ← A-pan equations a Symons station's means may be converted by (engine spanToApan.ts). */
+export type SpanConversionId = 'wr90' | 'taljaard2023';
+
+/** One DWS evaporation station near the catchment boundary (GET /projects/:id/evaporation-stations). */
+export interface EvaporationStationProposal {
+	code: string;
+	name: string;
+	pan: 'class_a' | 'symons';
+	lon: number;
+	lat: number;
+	/** From the catchment boundary, km; 0 inside it. */
+	distanceKm: number;
+	recordStart: string;
+	recordEnd: string;
+	recordYears: number;
+	/** Share of the record's days with a value, 0–1. */
+	completeness: number;
+	dataset: string;
+	source: string;
+	/** The repo's invented stations: never real values. */
+	synthetic: boolean;
+	/** The record's 12 monthly means (water-year order), as the pan read them; null where a month has too few complete years. */
+	monthly: { meansMm: (number | null)[]; years: number[]; first: string | null; last: string | null; problem: string | null };
+	/** A Class-A pan's A-pan (its means as they stand); null for a Symons pan. */
+	apan: StationApan | null;
+	/** A Symons pan's means through each S→A equation; null for a Class-A pan. */
+	conversions: { id: SpanConversionId; label: string; result: StationApan }[] | null;
+	/** The daily series a Class-A pan's record is written as. */
+	seriesName: string;
+}
+
+/** GET /projects/:id/evaporation-stations: the nearest DWS evaporation stations to the boundary, beside the saved A-pan. */
+export interface EvaporationStationProposals {
+	boundary: { featureId: string; name: string } | null;
+	withinKm: number;
+	datasets: { dataset: string; count: number }[];
+	stations: EvaporationStationProposal[];
+	/** The saved A-pan row, and the project's daily A-pan series (first by name is the one a run reads). */
+	settings: { apanMm: number[]; dailyApan: { name: string; source: string | null; from: string; to: string }[] };
+}
+
 /** A registered dam near a unit's dam on the map (issue #326 B-dams; docs/api.md § Catchment map). */
 export interface RegisterDamProposal {
 	registerNo: string;

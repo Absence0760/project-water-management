@@ -21,6 +21,7 @@
 // (`dataset: 'synthetic'`); a proposal from it says so.
 import type { Db } from '../db/tx.js';
 import type { Geometry } from './geojson.js';
+import { MODELLED_APAN_LABEL } from './evaporationGrid.js';
 import { cellAreaM2, cellSpan, gridShares, toGrid } from './gridShares.js';
 
 /** The label the committed fixture loads under; a proposal from it is marked synthetic. */
@@ -179,6 +180,13 @@ export const KIND_LABEL: Record<EvaporationKind, string> = {
 	et0: 'reference evapotranspiration (FAO-56 Penman-Monteith ET₀)',
 	apan: 'Class-A pan evaporation'
 };
+
+/**
+ * A dataset's values in words, saying "modelled" for a PenPan grid (its source starts with MODELLED_APAN_LABEL,
+ * issue #646 item 7), so no proposal or revision reads a modelled pan as a measured one.
+ */
+export const evaporationLabel = (d: Pick<EvaporationDataset, 'kind' | 'source'>): string =>
+	d.kind === 'apan' && d.source.startsWith(MODELLED_APAN_LABEL) ? 'modelled Class-A pan evaporation (PenPan, not a measured pan)' : KIND_LABEL[d.kind];
 
 /** A dataset's citation in one line, for a revision's reason, the PE row's source and the proposal's source line. */
 export const citeEvaporation = (d: Pick<EvaporationDataset, 'dataset' | 'source' | 'version' | 'firstYear' | 'lastYear'>) =>

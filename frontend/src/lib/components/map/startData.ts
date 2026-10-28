@@ -168,7 +168,7 @@ export function startDataItems(s: DataInput): DataItem[] {
 					? 'Not set: the units’ area-weighted mean MAP stands in. Needed only when a rainfall station forces the catchment.'
 					: 'Not set, and not every unit has a MAP to stand in. Needed only when a rainfall station forces the catchment.',
 		href: '?tab=settings#set-share',
-		where: 'Model settings → The catchment’s rainfall station',
+		where: 'Model settings → Model selection for flow generation → The catchment’s rainfall station',
 		optional: true
 	});
 
@@ -209,7 +209,7 @@ export function startDataItems(s: DataInput): DataItem[] {
 					? `${someOf(withMap.length, land.length)} have a MAP. The MAP grid proposes each unit’s over its boundary.`
 					: 'No unit has a MAP yet: the MAP grid proposes each unit’s over its boundary.',
 		href: '?tab=settings#set-unit-map',
-		where: 'Model settings → MAP from the grid'
+		where: 'Model settings → Model selection for flow generation → MAP from the grid'
 	});
 
 	// The A-pan (issue #646 item 5): the monthly row, or a daily A-pan series read instead. Without either, crop demand and

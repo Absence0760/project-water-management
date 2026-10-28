@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { DATASETS, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
+import { BLOCKED_EVAPORATION, DATASETS, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
 
 const has = () => true;
 const lacks = () => false;
@@ -72,7 +72,8 @@ describe('load: a reference load’s inputs', () => {
 		assert.deepEqual(loadProblems({ ...dws, LOAD_STATION: 'X0H001', LOAD_KEY: 'reference/dws/page.html' }, lacks), []);
 		assert.match(loadProblems({ ...dws, LOAD_SOURCE: ' ' }, has).join('\n'), /dws needs a source/);
 		assert.match(loadProblems({ ...dws, LOAD_SOURCE: 'x'.repeat(201) }, has).join('\n'), /dws needs a source of 1 to 200/);
-		for (const station of ['X0R001', 'x0h001', 'X0H0011', 'X0H001;']) {
+		// X0E001: an evaporation station. DWS's permission covers river flow only, so its pan record can't ride in as a dws load (issue #646 item 6).
+		for (const station of ['X0R001', 'X0E001', 'x0h001', 'X0H0011', 'X0H001;']) {
 			const problems = loadProblems({ ...dws, LOAD_STATION: station }, has);
 			assert.equal(problems.length, 1, station);
 			assert.match(problems[0], /river gauge code/);
@@ -110,8 +111,26 @@ describe('load: a reference load’s inputs', () => {
 		assert.match(loadProblems({ ...tiles, LOAD_KEY: 'originals/terrain/terrain.pmtiles' }, has).join('\n'), /reference\/tiles\/<file>/);
 	});
 
+	it('refuses a modelled Class-A pan (PenPan) or any A-pan evaporation grid by its key or label; dPET still passes', () => {
+		assert.deepEqual(loadProblems(evaporation, lacks), []);
+		for (const extra of [
+			{ LOAD_KEY: 'reference/evaporation/penpan-1991-2020.json.gz' },
+			{ LOAD_DATASET: 'PenPan-1991-2020' },
+			{ LOAD_DATASET: 'apan-power' },
+			{ LOAD_KEY: 'reference/evaporation/class-a-grid.json' }
+		]) {
+			const problems = loadProblems({ ...evaporation, ...extra }, lacks);
+			assert.equal(problems.length, 1, JSON.stringify(extra));
+			assert.match(problems[0], /blocked in production until its validation .*docs\/data-sources\.md § penpan-apan/);
+		}
+		// Only evaporation: a land-cover file that happens to say "apan" is not this gate's business.
+		assert.ok(!BLOCKED_EVAPORATION.test('reference/evaporation/dpet-1991-2020.json.gz dPET-1991-2020'));
+		// A whole word only: a label that merely contains the letters (Japan, capans) is not an A-pan grid.
+		assert.ok(!BLOCKED_EVAPORATION.test('reference/evaporation/dpet-japan.json.gz dPET-capans'));
+	});
+
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {
-		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'crop-types', 'sanlc']) {
+		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'evaporation-stations', 'crop-types', 'sanlc']) {
 			const problems = loadProblems({ ...landCover, LOAD_KIND: kind }, has);
 			assert.equal(problems.length, 1);
 			assert.match(problems[0], /blocked by their licences/);

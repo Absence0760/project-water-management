@@ -55,6 +55,7 @@ export * from './evaporation/fao56Table5';
 export * from './evaporation/apanDaily';
 export * from './evaporation/et0Daily';
 export * from './evaporation/lakeFactorPresets';
+export * from './evaporation/spanToApan';
 export * from './accumulation';
 export * from './doublemass';
 export * from './plausibility';

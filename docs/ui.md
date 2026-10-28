@@ -5198,8 +5198,10 @@ saves the catchment's model, and override mode there edits the scenario's
   unsaved changes, the drawer's own edits included (a hint says why), and a
   viewer gets no Use ("Only an editor can use a value."). **Source and
   method** (a disclosure) gives the dataset's source, version, label,
-  attribution and counting method. Other states: no parcel linked (with
-  **Open the Map**), no dataset loaded (in plain words, with what to enter by hand; the
+  attribution and counting method. Other states: no boundary or parcel
+  linked ("No boundary or farm parcel on the map is linked to …": its area
+  feature, the polygon Use its area took, or its farm parcels; issue #646
+  F1; with **Open the Map**), no dataset loaded (in plain words, with what to enter by hand; the
   loader's command is only in maps.md), no cropland
   in the parcels, no crop yet, and a "Synthetic test data" warning for the
   committed grid. On a narrow sheet the Use buttons are 44 px targets; the
@@ -8164,7 +8166,17 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   warning stays visible). **Evaporation from the map** is a card of its own,
   its **Use as …** in the heading's row beside a **Saves now** tag (the
   button's description), since it saves straight to the project while every
-  other field here waits for the save bar. The **rain threshold for demand**
+  other field here waits for the save bar. **Evaporation stations**, the
+  card under it, works the same way (issue #646 item 6, `EvaporationStationProposal.svelte`):
+  the nearest DWS evaporation stations to the boundary as radio choices
+  (code, name, pan, distance, record and share of days read), the chosen
+  station's 12 monthly means beside the saved A-pan row, a tick for a
+  Class-A pan's daily record (**Also write its daily record (…) as the daily
+  A-pan series "DWS <code>"**, on by default), and for a Symons pan a choice of the S→A equation with
+  Taljaard's "cannot be inverted" warning, an equation that can't be used
+  disabled with its reason, and no A-pan or **Use as the A-pan** until one
+  is picked ([maps.md § Evaporation stations](./maps.md#evaporation-stations)).
+  The **rain threshold for demand**
   moved to Demand (it only affects irrigation demand under GR4J). The
   explanations under the rain-for-each-unit fields, the FAO-56 helper and
   the evaporation proposal are `.explain` (behind the explain switch). Then,
@@ -8478,8 +8490,11 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   Under Fragmentation the ticks are disabled and a note says calibrating at
   several gauges needs Per unit flow generation, linking to Model selection
   for flow generation; with a gauge ticked under Per unit, "Fit
-  automatically fits N zones, upstream first." Not yet (issue #555's next
-  round): the zones on the Network tab and the Map.
+  automatically fits N zones, upstream first." The legend and the fit's
+  *Steps, upstream first* carry the *Calibration zones* help tip (help
+  article `calibration-zones`); the fieldset is `#fld-cal-zones`, where the
+  Warnings page's fix for a `calibration.zone.*` warning lands. Not yet
+  (issue #555's next round): the zones on the Network tab and the Map.
 - **Fit automatically** (`#set-fit`, `calibration/FitPanel.svelte`) fits the
   selected model's parameters in a Web Worker (`lib/calibration/`). Its card
   shows the choices that decide the fit in one row (**Objective**,
@@ -10813,7 +10828,7 @@ confirmed farmers see the outlook, O5, issue #90).
   [model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620);
   `data-testid="outlook-climate"`, `data-state` `ready` or `problem`), after
   the planning figure's hint, beside the ESP rather than instead of it:
-  this season's state (*ONI JAS 2018 +0.45; AAO Jul–Sep 2018 −0.31*), a
+  this season's state (*ONI JAS 2015 +0.45; AAO Jul–Sep 2015 −0.31*), a
   headline (*In the 10 past seasons nearest this one, the dams ended at …
   at 100 %, against … in all 31 years*), and a table per demand level of the
   season-end dam storage and the years met in full, those seasons beside

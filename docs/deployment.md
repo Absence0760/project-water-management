@@ -1246,7 +1246,10 @@ runs in production as `JOB_TRANSPORT=sqs` (infra/jobs.tf):
   the `jobs` queue and no `JOB_TRANSPORT` / `JOBS_QUEUE_URL` (the production
   settings check asks them of the API alone): a job that queues follow-up
   work leaves it to the tick. `backend/src/lambda-worker.test.ts` fails if
-  anything the worker bundles reaches `jobs/wake.ts` or a routes module, and
+  anything the worker bundles reaches `jobs/wake.ts` or a routes module (so
+  the plan code the worker shares with a route lives apart from it:
+  `delineation/start.ts` and `divide.ts` beside `startRoutes.ts` and
+  `divideRoutes.ts`), and
   `infra/tests/guardrails.tftest.hcl` if the worker's environment gets either
   setting back.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
@@ -3117,6 +3120,7 @@ Lambda's list against the Sources table):
 | `soils` | SoilGrids 2.0 and iSDAsoil, CC BY 4.0: allowed (their attribution is stored on the dataset row) | the soil water capacity grid `ingest/soils.py` writes (JSON, gzipped), never the GeoTIFFs; at most 32 MiB (64 MiB unzipped) | the GDAL steps below, then `python3 ingest/soils.py … --out soils-d1.json.gz` |
 | `gr4j-donors` | GRDC-Caravan and HydroATLAS, CC BY 4.0: allowed (only fitted parameters, scores and attributes are in the file, no flow; the recorded attribution `GR4J_DONORS` is stored whatever the file says) | the donor file `pnpm fit-donors` writes (JSON, gzipped); at most 4 MiB (8 MiB unzipped) | the donor fit below (offline, on our own forcing) |
 | `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
+| `evaporation-stations` | blocked: DWS's permission (2026-10-28, data-sources.md § dws-flow) covers verified daily flow only, not evaporation station records (data-sources.md § dws-evaporation) | the station list and the stations' DWS daily evaporation replies, once allowed | refused by the gate (not in its allowed kinds) and by the Lambda (`REFERENCE_KINDS` status `blocked`) until followups.md *Decision: DWS evaporation station records* is made and the Sources row says allowed; a pan record can't arrive as `dws` either (a river gauge's `H` code and a flow table only). Until then the live site's Calibration page lists no evaporation stations ([maps.md § Evaporation stations](./maps.md#evaporation-stations)) |
 | `crop-types` | blocked: SANLC's terms not yet recorded (issue #604 R5-D, #618 step 8b) | the orchard and vine summary `pnpm import:crop-types … --out` writes, once allowed | refused until followups.md *Decision: SANLC's licence* is made; the live site shows no orchards or vines until then |
 
 ```bash
@@ -3146,6 +3150,34 @@ capital), so after that release reload every gazetteer dataset already
 loaded: the same two runs below, same keys and the same dataset labels (a
 load replaces its own dataset in one transaction, so the search keeps
 working throughout). The steps, from an empty folder outside the repo:
+
+**A modelled Class-A pan grid (PenPan; issue #646 item 7) is blocked in
+production.** It loads locally only. Production refuses it twice: the
+release gate refuses an evaporation key or label naming PenPan or an A-pan
+grid, and the migrate Lambda refuses any grid whose kind isn't `et0`
+([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)). The
+operator's run, offline, from `ingest/` with its venv (`ingest/dev.sh test`
+makes it; `INGEST_CONTACT` is the User-Agent's contact):
+
+```bash
+ingest/.venv/bin/python ingest/apan_grid.py fetch --years 1991 2020 --dir ~/.cache/water-management-tiles/apan
+ingest/.venv/bin/python ingest/apan_grid.py grid --dir ~/.cache/water-management-tiles/apan --years 1991 2020 --out penpan-1991-2020.json.gz
+ingest/.venv/bin/python ingest/apan_grid.py validate --grid penpan-1991-2020.json.gz --stations dws-apan-stations.csv --out penpan-validation.md
+pnpm import:evaporation penpan-1991-2020.json.gz --dataset PenPan-1991-2020
+```
+
+`fetch` asks NASA POWER 24 requests a year at one a second (about 12
+minutes for 30 years) and keeps each year's monthly means, so a re-run
+resumes. `--screen 0.93` models a bird-screened pan if the stations it
+stands in for are screened. The station CSV is `station,lat,lon,jan,…,dec`,
+each the station's mean monthly Class-A pan in mm. Build it from DWS's
+evaporation station records once DWS's permission covers them (#646 item
+6). It is client-adjacent data, so keep it and the report out of the repo.
+The report gives the ratio grid ÷ station, the bias and the RMSE, by month
+and overall. To lift the block, the hydrologist signs off on that report
+(docs/followups.md, #646). Then data-sources.md's row becomes `reference
+load`, and the gate and `referenceLoad.ts` take the PenPan grid, in one
+change with its tests.
 
 ```bash
 for c in ZA BW LS MZ NA SZ ZW; do mkdir -p $c && curl -fsSL -o $c/$c.zip https://download.geonames.org/export/dump/$c.zip && unzip -o -q $c/$c.zip -d $c; done

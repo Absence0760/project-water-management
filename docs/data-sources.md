@@ -92,12 +92,14 @@ Every job that fetches from an upstream:
 | [quaternaries](#quaternaries) | Quaternary outlines and WR2012 values | blocked | `www.dws.gov.za`, WRC (the operator's download) | – | `pnpm import:quaternaries` |
 | [dam-register](#dam-register) | DWS List of Registered Dams and its overlay | blocked | `www.dws.gov.za` | – | `pnpm import:dam-register` |
 | [gauge-stations](#gauge-stations) | DWS hydrological station catalogue | blocked | `www.dws.gov.za` | – | `pnpm import:gauge-stations` |
+| [dws-evaporation](#dws-evaporation) | DWS evaporation station records (Class-A and Symons pans, verified daily) | built (#646 item 6); blocked in production until DWS's permission covers them (synthetic stations in dev, CI and e2e) | `www.dws.gov.za` (the operator's request; never fetched) | – | `backend/src/geo/dwsEvaporation.ts`, `backend/src/geo/evaporationStations.ts`, `pnpm import:evaporation-stations` |
 | [era5-land](#era5-land) | ERA5-Land daily precipitation | built R4-A; off until `era5l_enabled` (the operator's CDS key first) | `cds.climate.copernicus.eu` (backfill too) | – | `ingest/era5land.py`, `infra/era5land.tf` |
 | [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS 15-day precipitation (0.1°) | built (R4-C); the copy's job off in production until `ecmwf_enabled` | `ecmwf-forecasts.s3.eu-central-1.amazonaws.com` | `ecmwf_ens` | `ingest/ecmwf.py` (the copy), `ingest/ecmwf_qm_fit.py` (the fit), `backend/src/feeds/fromMirrorEcmwf.ts` (feeds read it) |
 | [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | the copy built (R4-D), off until `imerg_enabled` (needs the operator's Earthdata token) | `cmr.earthdata.nasa.gov`, `opendap.earthdata.nasa.gov` | – | `ingest/imerg.py`, `infra/imerg.tf` |
 | [sanlc](#sanlc) | SANLC orchard and vine classes | built R5-D; blocked in production until its terms are recorded (synthetic grid in dev, CI and e2e) | `egis.environment.gov.za` | `crop_type_dataset` | `pnpm import:crop-types` |
 | [agera5](#agera5) | AgERA5 v2.0 daily FAO-56 reference ET | built R5-E; the copy's job off in production until `agera5_enabled` (the CDS key is ERA5-Land's) | `cds.climate.copernicus.eu` | `agera5_et0` | `ingest/agera5.py` (the copy), `backend/src/feeds/fromMirrorEt0.ts` (feeds read it), `infra/agera5.tf` |
 | [nasa-power](#nasa-power) | NASA POWER daily weather, our FAO-56 ET₀ from it (AgERA5's fallback) | built R5-E; off until `power_et0_enabled` | `power.larc.nasa.gov` | – (read by `agera5_et0` feeds) | `ingest/nasapower.py`, `ingest/fao56.py`, `infra/agera5.tf` |
+| [penpan-apan](#penpan-apan) | A modelled Class-A pan grid: PenPan from NASA POWER's daily weather, monthly means at 0.1° (issue #646 item 7) | blocked (built against synthetic weather; production waits for the validation against DWS Class-A pans and the hydrologist's sign-off) | `power.larc.nasa.gov` (the operator's offline run) | – | `ingest/penpan.py`, `ingest/apan_grid.py`, `pnpm import:evaporation` (kind `apan`) |
 | [climate-indices](#climate-indices) | NOAA CPC's ONI (ENSO) and AAO (the SAM's proxy), monthly | built (#620); the fetcher's indices pass off in production until `climate_indices_enabled` | `www.cpc.ncep.noaa.gov` | – | `backend/src/feeds/sources/cpc.ts`, `backend/src/ingest/indices.ts`, `infra/climate_indices.tf` |
 | [c3s-seasonal](#c3s-seasonal) | C3S multi-system seasonal forecasts and hindcasts, daily precipitation (1°) | built (#620 step 5); the copy's job off in production until `c3s_enabled` (the CDS key is ERA5-Land's; both licences accepted first); nothing reads it yet (#620 step 6–7) | `cds.climate.copernicus.eu` | – | `ingest/c3s_seasonal.py`, `ingest/c3srequest.py`, `infra/c3s.tf` |
 
@@ -560,6 +562,7 @@ in the reference bucket.
 | <a id="quaternaries"></a>quaternaries | **blocked:** DWS outlines' commercial terms unconfirmed; WR2012 redistribution terms unpublished | DWS; WR2012 (WRC 2015) | DWS; WRC | the operator's download, loaded into the operator's own database only | – | the synthetic fixture everywhere else | – (never loaded in production) | operator; `pnpm import:quaternaries`  |
 | <a id="dam-register"></a>dam-register | **blocked:** no terms on the DSO page; DWS's general terms are non-commercial | "Department of Water and Sanitation" | DWS Dam Safety Office | the operator's XLS and KMZ download | – | the synthetic list | – (never loaded in production) | operator; `pnpm import:dam-register`  |
 | <a id="gauge-stations"></a>gauge-stations | **blocked:** unconfirmed (the Verified pages answer 403 outside South Africa) | "Department of Water and Sanitation" | GeoRequests@dws.gov.za | the operator's catalogue download | – | the synthetic stations | – (never loaded in production) | operator; `pnpm import:gauge-stations`  |
+| <a id="dws-evaporation"></a>dws-evaporation | **blocked:** DWS's permission recorded 2026-10-28 ([dws-flow](#dws-flow)) covers verified daily **flow** only; evaporation station records (a weather station's `E` code, `HyData.aspx` with `SiteType=MET`) need it extended, asked for by the operator through the client's hydrologist (followups.md, *Decision: DWS evaporation station records*) | "Department of Water and Sanitation" as the copyright owner, and the station, its pan and the reply's reference in every revision that uses one | GeoRequests@dws.gov.za | the operator's data request: the per-area station lists (`Verified/dwafapp2_wma/WMA*_Met.pdf`, `[A]`/`[S]` pan) and one daily reply per station, loaded with `pnpm import:evaporation-stations` into the operator's own database only | – (the app never asks DWS) | the synthetic stations (`backend/fixtures/evaporation-stations/`) | `evaporation_station_reference` (dataset, source); – (never loaded in production: the release gate and the migrate Lambda refuse kind `evaporation-stations`) | operator; [maps.md § Evaporation stations](./maps.md#evaporation-stations) |
 
 ### GR4J priors (issue #622)
 
@@ -722,6 +725,54 @@ as it stands ([model.md §2.4a](./model.md) *Daily reference ET*).
   then); else the monthly PE row.
 - **Owner:** the operator; code `ingest/nasapower.py`, `ingest/fao56.py`,
   `infra/agera5.tf`.
+
+### penpan-apan
+
+A **modelled** Class-A pan grid for Evaporation from the map's A-pan row
+where no pan station is near (issue #646 item 7, the hydrologist review's
+F5). Not a measured pan, and labelled so wherever it shows.
+
+- **Source:** our own computation. PenPan (Rotstayn, Roderick and Farquhar
+  2006, GRL 33, L17715), Penman's combination equation set up for a US
+  Class-A pan (Linacre's radiation on the pan and its walls, Thom et al.'s
+  vapour transfer), followed step by step as McMahon et al. (2013, HESS 17,
+  1331, Supplement S6, eqs. S6.1–S6.6) write it, from NASA POWER's daily
+  weather (the six parameters [nasa-power](#nasa-power) reads), as monthly
+  means. Why POWER and not AgERA5: the copy holds only each one's reference
+  ET, and adding AgERA5's other variables is five more CDS products, not a
+  small change (`ingest/apan_grid.py`'s docstring). PenPan-V2 (Lim et al.
+  2016) is not implemented: its equations could not be confirmed from a
+  readable copy (docs/followups.md, #646).
+- **Host:** `power.larc.nasa.gov`, the daily regional API, asked by the
+  operator's offline run (`apan_grid.py fetch`), never by the app or the
+  ingest Lambda.
+- **Licence:** POWER's CC BY 4.0 ([nasa-power](#nasa-power)); the model and
+  the grid are ours.
+- **Attribution:** "NASA Prediction of Worldwide Energy Resources (POWER)
+  Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan
+  (Rotstayn et al. 2006) from its daily meteorology", stored on the dataset
+  row. Its source always starts "Modelled Class-A pan (PenPan)", so the
+  proposal, the revision's reason and an evidence pack say modelled.
+- **Contact:** the POWER team ([nasa-power](#nasa-power)).
+- **Access pattern:** `apan_grid.py fetch --years 1991 2020`: for each year,
+  each tile of the box (South Africa's: 4) and each parameter one request,
+  24 a year, 720 for a 30-year normal, each year reduced to monthly means and
+  kept (`<year>.power-monthly.json`), so a cut-short run resumes.
+- **Limits we keep to:** as nasa-power's: one request a second through the
+  polite client, one at a time, a 403 or 401 stops the run with no retry.
+  One run per refresh of the normal.
+- **Status: blocked.** Built and tested against synthetic weather
+  (`power_fixture.FakePower`) and invented stations. Production waits for
+  two things: `apan_grid.py validate`'s report against DWS Class-A pan
+  stations (their monthly means; needs DWS's permission to cover evaporation
+  station records, #646 item 6), and the hydrologist's sign-off on it. Until
+  then the release gate (`map-data-gates.mjs`, a PenPan or A-pan key or label)
+  and the migrate Lambda (any grid not `et0`, `referenceLoad.ts`) refuse it.
+  Locally `pnpm import:evaporation` loads it (docs/maps.md § The evaporation
+  grid).
+- **Fallback:** the A-pan row typed by hand, or a daily A-pan record
+  (model.md §2.3a).
+- **Owner:** the operator; code `ingest/penpan.py`, `ingest/apan_grid.py`.
 
 ## Climate indices
 

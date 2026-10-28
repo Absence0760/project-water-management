@@ -73,10 +73,10 @@ function result(series = indices()): OutlookResult {
 
 describe('windowText and signed', () => {
 	it('names ONI by its 3-month season and AAO by its months', () => {
-		expect(windowText('oni', '2018-08', '2018-08')).toBe('JAS 2018');
-		expect(windowText('oni', '2018-01', '2018-01')).toBe('DJF 2018');
-		expect(windowText('aao', '2018-07', '2018-09')).toBe('Jul–Sep 2018');
-		expect(windowText('aao', '2018-11', '2019-01')).toBe('Nov 2018 – Jan 2019');
+		expect(windowText('oni', '2015-08', '2015-08')).toBe('JAS 2015');
+		expect(windowText('oni', '2015-01', '2015-01')).toBe('DJF 2015');
+		expect(windowText('aao', '2015-07', '2015-09')).toBe('Jul–Sep 2015');
+		expect(windowText('aao', '2015-11', '2016-01')).toBe('Nov 2015 – Jan 2016');
 		expect(signed(0.45)).toBe('+0.45');
 		expect(signed(-1.2)).toBe('−1.20');
 		expect(signed(0)).toBe('0.00');
