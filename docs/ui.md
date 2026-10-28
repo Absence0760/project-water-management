@@ -6001,6 +6001,9 @@ run reads them). These are the same checks a run reports as warnings; rules in
 What the checks look for is the ⓘ beside the heading (`data-quality-limits`), not a
 line under it (issue #464), and not inside it, so the heading, and a
 `#data-checks` landing, is named *Data checks* alone.
+The panel's head links on to [Warnings](#warnings-tabwarnings) (**Patch, exclude or
+keep on Warnings (N open)** for an editor, **Every flagged period on Warnings**
+for a viewer), where each flagged period is a row with its fix (issue #611).
 Charting that catchment rain series tints the days a run will treat as
 missing (flagged zero runs and listed periods, per Settings → *Zero-rain
 runs*; `series/zeroRain.ts` over the engine's `zeroRainMask`), with a caption
@@ -6489,6 +6492,80 @@ editors run one now and read the map's proposals, viewers read.
   window, the Area's choices by source and role, the explain switch, an
   editor's card, `?rain=boundary`, and the open cards at 390 and 320 px with
   nothing scrolling sideways).
+
+## Warnings (`?tab=warnings`)
+
+Every period a data check flags on a stored series, one row each, with its
+fix (issue #611, modelled on feohledger's exceptions queue).
+`warnings/WarningsTab.svelte`, its logic in `warnings/items.ts` (pure), its loading in
+`warnings/sources.ts`.
+
+- **A linked-only view** (`tabs.ts` `LINKED_ONLY`, `TAB_GROUP` core): no
+  sidebar row (the budget is full, `app-sidebar.spec.ts`); while open it shows
+  in the sidebar right after Data. It opens from Data's checks panel, the
+  Data row's count of open warnings (a triangle and the count, named
+  "(N open warnings)" beside "(N series behind)"), the run warnings on Runs &
+  results (**Each with its setting, on Warnings**, or a line under the
+  summary when the run has only notes) and Calibration's shown run (**N
+  warnings about the record and its data in this run…**, from its
+  `calibration.*` and `data.*` codes). It carries `run=` like the run pages
+  (`tabLinks.ts` `RUN_TABS`).
+- **The rows are derived, not stored.** `listPeriods` runs the engine's
+  `checkPeriods` on every stored series of a checked kind, as the Data tab
+  checks them (the catchment CHIRPS for a catchment rain series, the
+  low-vs-CHIRPS years and the double-mass breaks for the catchment gauge only,
+  negatives read as missing on every other rain record), plus
+  `runCheckPeriods` on the shown run (the catchment rain's accumulation windows,
+  the calibration record's flow double-mass breaks). Each row: the period
+  (day first) and its days, the record (with its unit or gauge), the check and
+  what it saw ("5.5 mm on every day"), the status and what the run does with it.
+- **Status comes from the settings** the decision writes to, so the page and
+  Settings never disagree: **Patched** (the catchment gauge's
+  `zeroRainRuns.missing`, any other rain record's `rainStations.unreliable[id]`,
+  covering every day), **Excluded** (`flowMissing[id]`), **Kept**
+  (`zeroRainRuns.keepDry` for a catchment zero run, `keepReadings` for a
+  catchment accumulation's reading day, else `checksKept` by item id),
+  **Handled by default** (a zero run set aside, an accumulation spread, a
+  negative flow read as missing, a zero run CHIRPS reads as dry too) or
+  **Open**. A decided row says where Settings lists it (**In settings**).
+- **Filters in the URL**, each with its count against the other two:
+  status chips (`status=`, default Open; a chip with nothing in it hides,
+  but Open and All always show), check chips (`check=`) and a **Record**
+  picker (`series=`, a select rather than chips, since a catchment can have
+  thirty records). A pick is a step in history. A filter with nothing in it
+  says so with **Show every period**.
+- **Decisions (editors).** Rain: **Patch** or **Keep**; flow: **Exclude from
+  calibration** or **Keep**; any other record: **Keep**; a decided row:
+  **Reopen**, which cuts its days out of the list that decided it. Ticks and
+  **Select all N matching** (every row the filters show, folded rows too)
+  feed one bulk row above the table, always drawn so ticking never moves the
+  list: the count ticked, **Clear**, and **Patch N**, **Exclude N**, **Keep N**
+  (aria-disabled at 0, never removed, so the focus stays). A bulk decision
+  joins adjacent and overlapping periods, adds only days a list doesn't
+  cover yet (a list's own periods stay as typed), and refuses past a cap
+  (100 periods a catchment list or flow record, 50 flow records, 200
+  unreliable periods a rain record, 300 kept checks) with a message, never
+  cutting. Each saves at once through the settings PATCH with a reason
+  ("Warnings: patched 3 flat stretches"), the page's settings draft rebasing
+  on it (`onProjectChange`), so Runs & results' "Inputs changed since the
+  latest run" follows. A row's decision moves the focus to the row now in
+  its place (or keeps it on the row when it stays).
+- **Viewers** read every row and status with no tick boxes, buttons or bulk row.
+- **Layout:** a reading page in the window's one scroll. The header's context
+  says "N open of M flagged periods in K records", its action **Data checks on Data**. Twenty-five rows show,
+  then **Show all N periods**; the table never scrolls in a box of its own.
+  Under a 640 px container each row is a card, its decisions 44 px side by
+  side.
+- **The Data row's badge** is counted by the page when idle
+  (`warnings/sources.ts` `openWarningCount`, a chunk of its own, from the Data
+  tab's cached values and the default run's summary), with the same helper
+  as the page's Open chip; no badge until it is counted, or when a read fails.
+- Tested by `e2e/tests/warnings.spec.ts` (chips and the record picker in the
+  URL with Back, one title, the sidebar while open, a row's Patch and Exclude
+  landing in their settings and the next run reading them as missing, Reopen,
+  thirty periods with Select all N matching and a bulk Patch, a viewer, the
+  links in, axe at 1440 and 390, 320 px reflow); `warnings/items.test.ts` for
+  the helpers.
 
 ## Model settings
 

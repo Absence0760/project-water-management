@@ -850,7 +850,7 @@
 				<section id="res-summary" aria-labelledby="summary-h">
 					<!-- Named as the side index and the bar name it (#586 D4). -->
 					<h3 id="summary-h" class="summary-h">Summary</h3>
-					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} calibrationHref={(hash) => calibrationHref(shownRunId, hash)} placeHref={(place) => warningPlaceHref(place, shownRunId)} />
+					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} calibrationHref={(hash) => calibrationHref(shownRunId, hash)} placeHref={(place) => warningPlaceHref(place, shownRunId)} warningsHref={`?tab=warnings&run=${encodeURIComponent(detail.run.id)}`} />
 					{#if summary.catchment.outletEwr && shownSettings?.ewrDailySource}
 						<Lazy load={loadRunScaledEwr}>
 							{#snippet children(RunScaledEwrTables)}

@@ -256,6 +256,14 @@
 		releaseLanding();
 	});
 
+	// The shown run's warnings about its record and calibration (coded calibration.* and data.*, engine ≥ 1.102.0):
+	// a line on to the Warnings page, where each links to its setting and the record's flagged periods can be
+	// excluded (issue #611). Each text once, as the page lists them.
+	const calWarnings = $derived(
+		detail && detail.run.id === run?.id
+			? new Set((detail.run.summary.warningCodes ?? []).filter((c) => c.code.startsWith('calibration.') || c.code.startsWith('data.')).map((c) => c.text)).size
+			: 0
+	);
 	const name = (r: Pick<RunMeta, 'label'>) => r.label || 'Untitled run';
 	const runDays = (r: { startDate: string; endDate: string }) => toEpochDay(r.endDate) - toEpochDay(r.startDate) + 1;
 </script>
@@ -313,6 +321,13 @@
 			{#if list.length > 1}<span class="whole-name">{name(run)}{' · '}</span>{/if}{fmtDay(run.startDate)} – {fmtDay(run.endDate)} ({fmtNum(runDays(run))} days) · ran {fmtWhen(run.createdAt)} by {run.createdBy ??
 				FORMER_MEMBER} · engine {run.engineVersion}
 		</p>
+		{#if calWarnings}
+			<p class="small warn-line" data-testid="calibration-to-warnings">
+				<a href="?tab=warnings&run={encodeURIComponent(run.id)}"
+					>{calWarnings === 1 ? '1 warning' : `${calWarnings} warnings`} about the record and its data in this run, each with its setting, on Warnings</a
+				>
+			</p>
+		{/if}
 	</div>
 	{#if changed.length}
 		<!-- The form's parameters aren't the ones this run used (an edit, saved or not, or a fit applied): its scores are the run's. -->
@@ -384,6 +399,14 @@
 	}
 	.run-row .open {
 		margin-left: auto;
+	}
+	.warn-line {
+		margin: 0.2rem 0 0;
+	}
+	.warn-line a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
 	}
 	.run-line {
 		margin: 0.35rem 0 0;

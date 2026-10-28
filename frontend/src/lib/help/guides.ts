@@ -32,10 +32,10 @@ export const SETUP_TABS = ['overview', 'network', 'crops', 'transfers', 'series'
 /**
  * Tabs under *Build the model* that the setup path skips: optional, not a
  * step every catchment needs (the Map, issue #288: a model builds and runs
- * without one). Calibration joined the path once its panels moved there (issue #586 round 3).
+ * without one; Warnings, issue #611, a view opened from Data's checks). Calibration joined the path once its panels moved there (issue #586 round 3).
  * "Getting around a project" still names them in place.
  */
-export const OPTIONAL_MODEL_TABS: readonly string[] = ['map'];
+export const OPTIONAL_MODEL_TABS: readonly string[] = ['map', 'warnings'];
 
 /** Project workspace tabs a guide can point at (`?tab=`): every one. */
 export type TabId = WorkspaceTabId;
@@ -154,7 +154,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project’s tabs are grouped in three sections. **Review** holds the Project page, Applications and the History of changes. **Build the model** is what the model is made of, in setup order: Network, the **Map** (the geography: boundary, parcels, dams, gauges and rivers; the Network’s header links to it too), Crops & demand, Transfers, Data, Model settings and Calibration (fitting the runoff parameters and judging the fit, together). **Outcomes** is what the model says: the Summary (where a project opens), EWR, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations.'
+						text: 'A project’s tabs are grouped in three sections. **Review** holds the Project page, Applications and the History of changes. **Build the model** is what the model is made of, in setup order: Network, the **Map** (the geography: boundary, parcels, dams, gauges and rivers; the Network’s header links to it too), Crops & demand, Transfers, Data (with **Warnings**, every period its checks flag with its fix, which shows in the sidebar while it is open), Model settings and Calibration (fitting the runoff parameters and judging the fit, together). **Outcomes** is what the model says: the Summary (where a project opens), EWR, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations.'
 					},
 					{
 						type: 'p',

@@ -10,6 +10,7 @@
 		crops: () => import('#lib/components/crops/CropsTab.svelte'),
 		transfers: () => import('#lib/components/transfers/TransfersTab.svelte'),
 		series: () => import('#lib/components/series/SeriesTab.svelte'),
+		warnings: () => import('#lib/components/warnings/WarningsTab.svelte'),
 		settings: () => import('#lib/components/settings/SettingsTab.svelte'),
 		calibration: () => import('#lib/components/calibration/CalibrationTab.svelte'),
 		runs: () => import('#lib/components/runs/RunsTab.svelte'),
@@ -24,6 +25,9 @@
 		history: () => import('#lib/components/history/HistoryTab.svelte')
 	};
 	const loadAddData = () => import('#lib/components/series/AddDataDialog.svelte');
+	// The Data row's count of open warnings (issue #611): the Warnings page's own loader and helper, its chunk
+	// fetched once the page is idle, so the badge and the page count alike.
+	const loadWarningCount = () => import('#lib/components/warnings/sources.js');
 	// The save bar's Preview of the unsaved model edits against the last run (issue #284).
 	const loadUnsavedPreview = () => import('#lib/components/preview/UnsavedPreviewDialog.svelte');
 	// One farm's planted areas over any tab (`farm=<nodeId>`, issue #17 step 4).
@@ -73,6 +77,7 @@
 	import { fetchProjectPage, takeProjectPage } from '#lib/workspace/firstLoad.js';
 	import { compareTabHref } from '#lib/components/compare/picker.js';
 	import { carriedRun, isRunTab, pickOf, tabHref as tabLinkHref } from '#lib/workspace/tabLinks.js';
+	import { defaultRunId } from '#lib/components/runs/runList.js';
 	import { focusPageStart } from '#lib/a11y/focusPage.js';
 	import { firstOutletSeries } from '#lib/series/pick.js';
 	import { withoutFarm } from '#lib/components/crops/farmDrawer.js';
@@ -427,6 +432,39 @@
 	// (headerSlot.main: Run label, Run forecast, Run model), never both.
 	// The Data badge in the sections: series a run is driven by that are behind today (freshness.ts).
 	const behindCount = $derived(fresh?.behind.length ?? 0);
+	// And the open warnings (issue #611): every flagged period nothing decided (warnings/items.ts openCount), for the
+	// run the Warnings page shows by default. Worked out when the page is idle, from the Data tab's cached values
+	// (read once if not cached yet); null, no badge, until it is or when a read failed.
+	let warningsOpen = $state<number | null>(null);
+	$effect(() => {
+		const p = project;
+		const list = series;
+		const r = runs;
+		if (!p || !list || !r || !['owner', 'editor', 'viewer'].includes(p.role ?? '')) {
+			warningsOpen = null;
+			return;
+		}
+		const id = projectId;
+		const runId = defaultRunId(r, p.role);
+		const nodeName = (n: string) => untrack(() => editor.model.nodes.find((x) => x.id === n)?.name ?? null);
+		let gone = false;
+		const go = () =>
+			loadWarningCount()
+				.then((m) => m.openWarningCount(id, list, p.settings, runId, nodeName))
+				.then(
+					(n) => {
+						if (!gone) warningsOpen = n;
+					},
+					() => {}
+				);
+		const idle = typeof requestIdleCallback === 'function' ? requestIdleCallback(go, { timeout: 4000 }) : null;
+		const timer = idle === null ? setTimeout(go, 1500) : null;
+		return () => {
+			gone = true;
+			if (idle !== null) cancelIdleCallback(idle);
+			if (timer !== null) clearTimeout(timer);
+		};
+	});
 	const contextText = $derived(
 		sectionContext(tab, { runs, seriesCount: series?.length ?? null, behind: behindCount, transfers: editor.model.transfers })
 	);
@@ -805,6 +843,14 @@
 								><span aria-hidden="true">{behindCount}</span><span class="visually-hidden">({behindCount} series behind)</span></span
 							>
 						{/if}
+						{#if id === 'series' && warningsOpen}
+							<!-- Open warnings (issue #611): a triangle beside the count, so it never reads as the "behind" count next to it. -->
+							<span class="count-badge warn-badge" class:second={behindCount > 0} title="{warningsOpen} open {warningsOpen === 1 ? 'warning' : 'warnings'}: flagged periods to patch, exclude or keep"
+								><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M6 1.2 11 10.5H1Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg><span aria-hidden="true"
+									>{warningsOpen}</span
+								><span class="visually-hidden">({warningsOpen} open {warningsOpen === 1 ? 'warning' : 'warnings'})</span></span
+							>
+						{/if}
 						{#if MODEL_TABS.includes(id) && editor.issues.some((x) => x.area === id)}
 							<span class="issue-dot" title="Has problems to fix"><span class="visually-hidden">(has problems)</span></span>
 						{/if}
@@ -1079,9 +1125,16 @@
 								timeZone={project!.timeZone}
 								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
 								nodes={editor.model.nodes}
+								{warningsOpen}
 								onSeriesChange={(l) => (series = l)}
 								onadddata={() => openAddData()}
 							/>
+						{/snippet}
+					</Lazy>
+				{:else if tab === 'warnings'}
+					<Lazy load={LOAD.warnings}>
+						{#snippet children(WarningsTab)}
+							<WarningsTab {projectId} project={project!} {series} {runs} {canEdit} nodes={editor.model.nodes} {onProjectChange} />
 						{/snippet}
 					</Lazy>
 				{:else if tab === 'runs'}
@@ -1636,6 +1689,10 @@
 	/* Data's "series behind" count (freshness.ts), as the boards' sidebar badge. */
 	.count-badge {
 		margin-left: auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.15rem;
 		min-width: 1.4rem;
 		padding: 0 0.4rem;
 		border-radius: 999px;
@@ -1646,6 +1703,9 @@
 		font-weight: 600;
 		line-height: 1.35;
 		text-align: center;
+	}
+	.count-badge.second {
+		margin-left: 0.3rem;
 	}
 	/* Read-only inputs read as plain values, not as a broken, greyed-out form. */
 	/* Not a radio: it is always :read-only, and without its circle a viewer couldn't tell which option is chosen (issue #586). */

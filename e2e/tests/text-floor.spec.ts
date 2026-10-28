@@ -9,7 +9,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll, layoutSettled, smallText } from '../support/reflow.ts';
 
 /** Every workspace tab (frontend/src/lib/workspace/tabs.ts ALL_TABS). */
-const TABS = ['overview', 'network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'applications', 'history'];
+const TABS = ['overview', 'network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'applications', 'history', 'warnings'];
 /** The exceptions uiPatterns.test.ts lists: a menu's ▾, a delta's ▲▼, a sorted column's arrow, count bubbles on icon buttons. */
 const GLYPHS = '[aria-hidden="true"]:is(.caret, .arrow, .dir, .count), .mfa-badge';
 

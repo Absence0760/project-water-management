@@ -14,6 +14,8 @@ const TABS = [
 	'overview', 'network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration', 'runs', 'river',
 	'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'applications', 'history'
 ];
+/** Views opened from links, never sidebar rows (tabs.ts LINKED_ONLY): measured too, not counted among the links. */
+const LINKED = ['warnings'];
 
 /** How far the page scrolls, and how far its content (the `.page` box less its bottom padding) reaches past the window. */
 const measure = (page: Page) =>
@@ -68,7 +70,7 @@ test('every workspace tab and app page keeps only a gutter below its content, wi
 		[390, 844]
 	] as const) {
 		await page.setViewportSize({ width, height });
-		for (const url of ['/', '/teams', '/account', '/help', ...TABS.map((t) => `/projects/${project.id}?tab=${t}`)]) {
+		for (const url of ['/', '/teams', '/account', '/help', ...[...TABS, ...LINKED].map((t) => `/projects/${project.id}?tab=${t}`)]) {
 			await page.goto(url);
 			await expectNoReservedRoom(page, `${url.replace(project.id, '<id>')} at ${width}×${height}`);
 		}

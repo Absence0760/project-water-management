@@ -119,6 +119,7 @@
 		gauges = [],
 		nodes = [],
 		timeZone = null,
+		warningsOpen = null,
 		onSeriesChange,
 		onadddata
 	}: {
@@ -136,6 +137,8 @@
 		nodes?: readonly NetworkNode[];
 		/** The project's time zone: data ages count to its calendar date, as in the header and on the project list (issue #137). */
 		timeZone?: string | null;
+		/** The open warnings the Warnings page lists (issue #611; the page's count, its Data row badge's): null until counted. */
+		warningsOpen?: number | null;
 		onSeriesChange?: (list: SeriesMeta[]) => void;
 		/** Opens the page's Add data dialog (the header's button): the empty state's action, and the retired `#upload-csv` link. */
 		onadddata?: () => void;
@@ -1288,6 +1291,10 @@
 			<!-- What the checks look for is the ⓘ's (issue #464), not a line under the heading; beside the heading, not in
 			     it, so the heading (and a #data-checks landing) is named "Data checks" alone. -->
 			<div class="chk-h"><h2 id="chk-h">Data checks</h2><HelpTip key="data-quality-limits" label="About the data checks" /></div>
+			<!-- Every flagged period, one row each, with its fix: the Warnings page (issue #611), a linked-only view. -->
+			<a class="btn btn-sm" href="?tab=warnings" data-testid="checks-to-warnings"
+				>{readonly ? 'Every flagged period' : 'Patch, exclude or keep'} on Warnings{#if warningsOpen}{' '}({warningsOpen} open){/if}</a
+			>
 		</div>
 		{#if checks.length}
 			<ul class="checks">

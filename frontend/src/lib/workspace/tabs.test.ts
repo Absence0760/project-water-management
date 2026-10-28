@@ -216,7 +216,7 @@ describe('navSections', () => {
 	it('puts review first, then the model, then the outcomes', () => {
 		expect(navSections(ALL_TABS)).toEqual([
 			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
-			{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration'] },
+			{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'warnings', 'settings', 'calibration'] },
 			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] }
 		]);
 	});
@@ -288,8 +288,8 @@ describe('canOpenTab', () => {
 });
 
 describe('the Map (issue #288; a sidebar row since #326 D3)', () => {
-	it('is listed for every member, after the Network, and nothing is linked-only now', () => {
-		expect(LINKED_ONLY).toEqual([]);
+	it('is listed for every member, after the Network, and is no longer linked-only', () => {
+		expect(LINKED_ONLY).not.toContain('map');
 		for (const role of ['owner', 'editor', 'viewer'] as const) {
 			const shown = visibleTabs(role, { hidden: [] });
 			expect(shown).toContain('map');
@@ -301,5 +301,23 @@ describe('the Map (issue #288; a sidebar row since #326 D3)', () => {
 		const viewer = navSections(visibleTabs('viewer', { hidden: [] }));
 		expect(viewer.find((s) => s.id === 'model')?.tabs).toEqual(['map', 'series', 'calibration']);
 		expect(TAB_GROUP.map).toBe('core');
+	});
+});
+
+describe('Warnings (issue #611): a linked-only view', () => {
+	it('is never in the sidebar, opens for every member from a link, and shows under Data while open', () => {
+		expect(LINKED_ONLY).toEqual(['warnings']);
+		expect(TAB_GROUP.warnings).toBe('core');
+		for (const role of ['owner', 'editor', 'viewer'] as const) {
+			const shown = visibleTabs(role, { hidden: [] });
+			expect(shown).not.toContain('warnings');
+			expect(canOpenTab(role, 'warnings')).toBe(true);
+			// Open from a link: the strip shows it in its place, right after Data.
+			const strip = stripTabs(shown, 'warnings', ALL_TABS);
+			const model = navSections(strip).find((s) => s.id === 'model')!;
+			expect(model.tabs.indexOf('warnings')).toBe(model.tabs.indexOf('series') + 1);
+		}
+		// A farmer or an applicant never gets it (the workspace shows them their own views).
+		expect(visibleTabs('contributor', { hidden: [] })).toEqual(['overview']);
 	});
 });

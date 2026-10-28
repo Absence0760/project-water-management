@@ -25,6 +25,10 @@ export const TAB_GROUP = {
 	crops: 'inputs',
 	transfers: 'inputs',
 	series: 'core',
+	// Every flagged period of the data checks and the run's warnings, each with its fix (issue #611): opened from
+	// Data's checks, its row's badge and the run warnings, so it is LINKED_ONLY (the sidebar has no free row). Core:
+	// a viewer reads the list; its decisions are an editor's.
+	warnings: 'core',
 	settings: 'inputs',
 	// Fitting the runoff parameters and judging the fit, on one page (issue #586): core, as viewers read the fit's
 	// results on Runs & results today; its fit controls are editors', as the Map's edit tools are.
@@ -65,6 +69,7 @@ export const TAB_LABELS: Record<TabId, string> = {
 	crops: 'Crops & demand',
 	transfers: 'Transfers',
 	series: 'Data',
+	warnings: 'Warnings',
 	settings: 'Model settings',
 	calibration: 'Calibration',
 	runs: 'Runs & results',
@@ -83,14 +88,15 @@ export const TAB_LABELS: Record<TabId, string> = {
 export const ALL_TABS = Object.keys(TAB_GROUP) as TabId[];
 
 /**
- * Tabs reached from a link on another page rather than listed in the sidebar.
- * None now: the Map was one (issue #288, opened from the Network's header and
- * Settings → WR2012 check) until it got a sidebar row of its own with the
- * results on the map (#326 D3), taking the row the sidebar's budget had to
- * spare (app-sidebar.spec.ts). Kept for the next linked-only view: while one
- * is open the sidebar shows it in its place (stripTabs).
+ * Tabs reached from a link on another page rather than listed in the sidebar:
+ * while one is open the sidebar shows it in its place (stripTabs), under Data
+ * (NAV_SECTIONS). Warnings (issue #611) opens from Data's checks panel, the
+ * Data row's count of open warnings and the run warnings on Runs & results
+ * and Calibration: the sidebar's budget is full since Calibration took its
+ * last row (app-sidebar.spec.ts). The Map was one too (issue #288) until it
+ * got a row of its own (#326 D3).
  */
-export const LINKED_ONLY: readonly TabId[] = [];
+export const LINKED_ONLY: readonly TabId[] = ['warnings'];
 
 /** The tab that can never be hidden: the project's landing page. */
 export const ALWAYS_SHOWN: TabId = 'overview';
@@ -125,6 +131,7 @@ export const TAB_GUIDE: Readonly<Record<TabId, string>> = {
 	crops: 'set-up-crops-and-demand',
 	transfers: 'add-a-transfer',
 	series: 'add-data',
+	warnings: 'warnings-page',
 	settings: 'model-settings-page',
 	calibration: 'calibration-page',
 	runs: 'run-and-read-results',
@@ -264,7 +271,7 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
 export const NAV_SECTIONS = [
 	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
 	// Calibration after Settings (issue #586): fitting the runoff parameters is the last step of building the model.
-	{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration'] },
+	{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'warnings', 'settings', 'calibration'] },
 	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];
 
