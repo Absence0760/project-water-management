@@ -820,6 +820,11 @@ for a human. `pnpm check:workflows` (auto-merge rule) fails if any of these
 exclusions, or the setting's read, is dropped. A
 security fix that can't wait the week goes under
 `minimumReleaseAgeExclude` with a comment, removed once the week is up.
+An advisory with no fixed release is patched locally instead
+(`pnpm patch`, listed under `patchedDependencies` in `pnpm-workspace.yaml`
+with a guard test), and `osv-scanner.toml` records it with an expiry so
+Scorecard's Vulnerabilities check reads it as handled: deepmerge 4.3.1
+(GHSA-gcqx-w48m-w2h4) is the one today.
 
 There is **no credentialed `terraform plan` in CI**. The only role CI can
 assume is the deploy role, which trusts `environment:production` only and

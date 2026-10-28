@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  deepmerge@4.3.1:
+    hash: 9861552b3da34399d013c7fbb3c726342cd57e38938832dbdfa53f5bb2be4cfb
+    path: patches/deepmerge@4.3.1.patch
+
 importers:
 
   .: {}
@@ -1943,7 +1948,7 @@ snapshots:
 
   '@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(terser@5.51.2)(tsx@4.23.15))':
     dependencies:
-      deepmerge: 4.3.1
+      deepmerge: 4.3.1(patch_hash=9861552b3da34399d013c7fbb3c726342cd57e38938832dbdfa53f5bb2be4cfb)
       magic-string: 1.4.2
       obug: 2.2.1
       svelte: 5.57.2
@@ -2114,7 +2119,7 @@ snapshots:
 
   cookie@2.0.1: {}
 
-  deepmerge@4.3.1: {}
+  deepmerge@4.3.1(patch_hash=9861552b3da34399d013c7fbb3c726342cd57e38938832dbdfa53f5bb2be4cfb): {}
 
   detect-libc@2.1.2: {}
 
