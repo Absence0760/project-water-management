@@ -3,33 +3,37 @@
 // the tests and the e2e suite. production.ts refuses it in production.
 //
 // It reads the newest user message and the tool results that followed it in
-// this turn, and takes one step per call:
+// this turn, and takes one step per call, against the real tools' arguments
+// (tools/*.ts):
 //
 // 1. "recommend" or "improve the fit" (checked first): calls propose_settings
-//    once with MOCK_PROPOSAL (a GR4J X4 tweak SettingsPatch accepts), then
-//    answers: "I have proposed one change: GR4J X4 (unit hydrograph time
-//    base) to 2 days. Review it below; nothing changes until you save it." or,
-//    when the tool refused it, "I could not make a proposal the settings would
-//    accept: <the tool's error>".
+//    once with MOCK_PROPOSAL (`{ changes: [{ key: 'gr4j.x4', value: 2,
+//    reason }], summary }`, a GR4J X4 change a save accepts), then answers:
+//    "I have proposed one change: GR4J X4 (unit hydrograph time base) to 2
+//    days. Review it below; nothing changes until you save it." or, when the
+//    tool refused it, "I could not make a proposal the settings would accept:
+//    <the tool's error>".
 //
-// 2. "gauge" with "rain" or "respon": calls get_network, then (for the first
-//    gauge node in it) get_series with that node's runoff and outflow, then
-//    get_gauge_fit, one per call, and answers in exactly these lines (the
-//    e2e asserts on them):
+// 2. "gauge" with "rain" or "respon": calls get_network {}, then, for the
+//    first gauge in it, get_series { node: <the unit above it>, key: 'runoff' }
+//    (a gauge has no runoff of its own: the unit is the first dam above it, else
+//    the first unit draining into it), get_series { node: <the gauge>, key:
+//    'outflow' } (monthly, the default) and get_gauge_fit { node: <the gauge> },
+//    one per call, and answers in exactly these lines (the e2e asserts on them):
 //
 //      Gauge <name> has <n> dam(s) upstream: <names, comma-separated, or none>.
-//      Runoff there averages <r> and outflow <o> in the series read.
+//      Runoff at <unit, or "no unit above it"> averages <r> and the gauge’s outflow <o> in the series read.
 //      The fit at the gauge: NSE <nse>, KGE <kge>, PBIAS <pbias>.
 //      <one advice line: dams hold back the response / look at GR4J X1>
 //
 //    Each number has 2 decimals, or reads "not available" when no tool
 //    result had it. Names and numbers come only from the tool results: the
-//    network's nodes ({ id, name, kind, downstreamNodeId, damCapacityM3 },
-//    the engine's node fields, found at `nodes` anywhere in the result), the
-//    mean of any numeric array under a key containing "runoff" / "outflow"
-//    in the series result (or its objects' `value` / `mean`), and the first
-//    `nse` / `kge` / `pbias` keys (any case) in the fit. With no gauge in the
-//    network it answers "I found no gauge in this project's network."
+//    network's `nodes` (the gauge is the first with kind 'gauge'; its dams are
+//    its `above.dams`, get_network's list of the dams above each gauge; a
+//    unit draining into it is a node whose `drainsInto` is the gauge), each
+//    series result's `mean` (the window's mean, in its `unit`), and the fit's
+//    `stats.nse` / `kge` / `pbias`. With no gauge in the network it answers
+//    "I found no gauge in this project's network."
 //
 // 3. Anything else: "I can answer questions about this project's model and
 //    results, and propose settings to try. Ask about a gauge, a dam or the fit."
@@ -39,129 +43,84 @@
 import type { AssistantConfig } from '../config.js';
 import { TOOL_NAMES, type AssistantProvider, type ProviderEvent, type ProviderRequest, type ToolCall, type TurnMessage } from '../types.js';
 
-/** The patch propose_settings is called with: GR4J's X4 (days, bounds 0.5–10), a valid SettingsPatch. */
+/** What propose_settings is called with: GR4J's X4 (days, bounds 0.5–10), a change a save accepts. */
 export const MOCK_PROPOSAL = {
-	patch: { gr4j: { x4: 2 } },
-	reasons: { gr4j: 'A longer unit hydrograph spreads each storm over more days, which the observed flow suggests.' },
+	changes: [{ key: 'gr4j.x4', value: 2, reason: 'A longer unit hydrograph spreads each storm over more days, which the observed flow suggests.' }],
 	summary: 'lengthen the GR4J unit hydrograph (X4 to 2 days)'
 };
 
 export const MOCK_IDLE_ANSWER = 'I can answer questions about this project’s model and results, and propose settings to try. Ask about a gauge, a dam or the fit.';
 
+type Result = { ok: boolean; data?: unknown; error?: string };
+
 interface NetNode {
 	id: string;
 	name: string;
 	kind?: unknown;
-	type?: unknown;
-	downstreamNodeId?: unknown;
-	damCapacityM3?: unknown;
+	drainsInto?: unknown;
+	above?: { dams?: { id?: unknown; name?: unknown }[] };
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-/** The tool results since the newest user message, by tool name (the first of each), parsed. */
-function resultsThisTurn(messages: TurnMessage[]): { question: string; results: Map<string, { ok: boolean; data?: unknown; error?: string }>; step: number } {
+/** The tool results since the newest user message, by tool name, in order, parsed. */
+function resultsThisTurn(messages: TurnMessage[]): { question: string; results: Map<string, Result[]>; step: number } {
 	let from = messages.length - 1;
 	while (from >= 0 && messages[from]!.role !== 'user') from--;
 	const question = from >= 0 ? messages[from]!.content.toLowerCase() : '';
-	const results = new Map<string, { ok: boolean; data?: unknown; error?: string }>();
+	const results = new Map<string, Result[]>();
 	let step = 0;
 	for (const m of messages.slice(from + 1)) {
 		if (m.role === 'assistant') step++;
-		if (m.role !== 'tool' || results.has(m.name)) continue;
+		if (m.role !== 'tool') continue;
+		let r: Result;
 		try {
 			const parsed = JSON.parse(m.content) as unknown;
-			results.set(m.name, isObj(parsed) ? { ok: parsed.ok === true, data: parsed.data, error: typeof parsed.error === 'string' ? parsed.error : undefined } : { ok: false });
+			r = isObj(parsed) ? { ok: parsed.ok === true, data: parsed.data, error: typeof parsed.error === 'string' ? parsed.error : undefined } : { ok: false };
 		} catch {
-			// A result cut at its size cap isn't JSON any more: read what can be read from it as text.
-			results.set(m.name, { ok: true, data: m.content });
+			// A result cut at its size cap isn't JSON any more.
+			r = { ok: false, error: 'the result was cut' };
 		}
+		results.set(m.name, [...(results.get(m.name) ?? []), r]);
 	}
 	return { question, results, step };
 }
 
-/** Breadth-first: the first array of objects with an id and a name under a `nodes` key. */
-function findNodes(data: unknown): NetNode[] {
-	const queue: unknown[] = [data];
-	while (queue.length) {
-		const v = queue.shift();
-		if (Array.isArray(v)) queue.push(...v);
-		else if (isObj(v)) {
-			const nodes = v.nodes;
-			if (Array.isArray(nodes) && nodes.every((n) => isObj(n) && typeof n.id === 'string' && typeof n.name === 'string')) return nodes as NetNode[];
-			queue.push(...Object.values(v));
-		}
-	}
-	return [];
+/** get_network's `nodes`. */
+function nodesOf(network: unknown): NetNode[] {
+	const nodes = isObj(network) ? network.nodes : undefined;
+	return Array.isArray(nodes) ? (nodes.filter((n) => isObj(n) && typeof n.id === 'string' && typeof n.name === 'string') as unknown as NetNode[]) : [];
+}
+const gaugeOf = (network: unknown) => nodesOf(network).find((n) => n.kind === 'gauge');
+/** The unit whose runoff the answer reads: the first dam above the gauge, else the first unit draining into it. */
+function unitAbove(network: unknown, gauge: NetNode): NetNode | undefined {
+	const nodes = nodesOf(network);
+	const dam = gauge.above?.dams?.[0];
+	return (typeof dam?.id === 'string' ? nodes.find((n) => n.id === dam.id) : undefined) ?? nodes.find((n) => n.kind === 'farm' && n.drainsInto === gauge.id);
 }
 
-/** Nodes whose downstream chain reaches `gaugeId`. */
-function upstreamOf(nodes: NetNode[], gaugeId: string): NetNode[] {
-	const byId = new Map(nodes.map((n) => [n.id, n]));
-	return nodes.filter((n) => {
-		const seen = new Set<string>();
-		let cur = n.downstreamNodeId;
-		while (typeof cur === 'string' && !seen.has(cur)) {
-			if (cur === gaugeId) return true;
-			seen.add(cur);
-			cur = byId.get(cur)?.downstreamNodeId;
-		}
-		return false;
-	});
-}
-
-const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-
-/** The mean of the numbers under the first key containing `word`, anywhere in `data`. */
-function seriesMean(data: unknown, word: string): number | null {
-	const queue: unknown[] = [data];
-	while (queue.length) {
-		const v = queue.shift();
-		if (Array.isArray(v)) queue.push(...v);
-		else if (isObj(v)) {
-			for (const [k, x] of Object.entries(v)) {
-				if (!k.toLowerCase().includes(word) || !Array.isArray(x)) continue;
-				const nums = x
-					.map((e) => (typeof e === 'number' ? e : isObj(e) ? (typeof e.value === 'number' ? e.value : typeof e.mean === 'number' ? e.mean : null) : null))
-					.filter((e): e is number => e !== null && Number.isFinite(e));
-				if (nums.length) return mean(nums);
-			}
-			queue.push(...Object.values(v));
-		}
-	}
-	return null;
-}
-
-/** The first number under `key` (any case), anywhere in `data`. */
-function findNumber(data: unknown, key: string): number | null {
-	const queue: unknown[] = [data];
-	while (queue.length) {
-		const v = queue.shift();
-		if (Array.isArray(v)) queue.push(...v);
-		else if (isObj(v)) {
-			for (const [k, x] of Object.entries(v)) if (k.toLowerCase() === key && typeof x === 'number' && Number.isFinite(x)) return x;
-			queue.push(...Object.values(v));
-		}
-	}
-	return null;
-}
-
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const fmt = (n: number | null) => (n === null ? 'not available' : n.toFixed(2));
 
-/** The answer for the gauge question, from the three results (format in the header). */
-export function gaugeAnswer(network: unknown, series: unknown, fit: unknown): string {
-	const nodes = findNodes(network);
-	const gauge = nodes.find((n) => n.kind === 'gauge' || n.type === 'gauge');
+/** The `mean` of the get_series result for `key`, from its data's own `key`. */
+function seriesMean(series: readonly Result[], key: string): number | null {
+	const r = series.find((x) => x.ok && isObj(x.data) && x.data.key === key);
+	return r && isObj(r.data) ? num(r.data.mean) : null;
+}
+
+/** The answer for the gauge question, from the tools' results (format in the header). */
+export function gaugeAnswer(network: unknown, series: readonly Result[], fit: unknown): string {
+	const gauge = gaugeOf(network);
 	if (!gauge) return 'I found no gauge in this project’s network.';
-	const dams = upstreamOf(nodes, gauge.id).filter((n) => typeof n.damCapacityM3 === 'number' && n.damCapacityM3 > 0);
-	const names = dams.map((d) => d.name).join(', ') || 'none';
+	const dams = (gauge.above?.dams ?? []).map((d) => (typeof d.name === 'string' ? d.name : '')).filter(Boolean);
+	const stats = isObj(fit) && isObj(fit.stats) ? fit.stats : {};
 	const advice = dams.length
 		? 'The dams upstream fill before they spill, so rain above them reaches the gauge only once they are full: check their capacity and starting level before changing GR4J.'
 		: 'No dam holds the flow back above it, so look at GR4J’s X1 (a large production store soaks up the rain) and the rainfall this unit reads.';
 	return [
-		`Gauge ${gauge.name} has ${dams.length} dam(s) upstream: ${names}.`,
-		`Runoff there averages ${fmt(seriesMean(series, 'runoff'))} and outflow ${fmt(seriesMean(series, 'outflow'))} in the series read.`,
-		`The fit at the gauge: NSE ${fmt(findNumber(fit, 'nse'))}, KGE ${fmt(findNumber(fit, 'kge'))}, PBIAS ${fmt(findNumber(fit, 'pbias'))}.`,
+		`Gauge ${gauge.name} has ${dams.length} dam(s) upstream: ${dams.join(', ') || 'none'}.`,
+		`Runoff at ${unitAbove(network, gauge)?.name ?? 'no unit above it'} averages ${fmt(seriesMean(series, 'runoff'))} and the gauge’s outflow ${fmt(seriesMean(series, 'outflow'))} in the series read.`,
+		`The fit at the gauge: NSE ${fmt(num(stats.nse))}, KGE ${fmt(num(stats.kge))}, PBIAS ${fmt(num(stats.pbias))}.`,
 		advice
 	].join('\n');
 }
@@ -170,9 +129,10 @@ type Step = { call: { name: string; arguments: Record<string, unknown> } } | { t
 
 function nextStep(messages: TurnMessage[]): { step: Step; index: number } {
 	const { question, results, step: index } = resultsThisTurn(messages);
+	const call = (name: string, args: Record<string, unknown>) => ({ index, step: { call: { name, arguments: args } } });
 	if (question.includes('recommend') || question.includes('improve the fit')) {
-		const r = results.get(TOOL_NAMES.proposeSettings);
-		if (!r) return { index, step: { call: { name: TOOL_NAMES.proposeSettings, arguments: MOCK_PROPOSAL } } };
+		const r = results.get(TOOL_NAMES.proposeSettings)?.[0];
+		if (!r) return call(TOOL_NAMES.proposeSettings, MOCK_PROPOSAL);
 		return {
 			index,
 			step: {
@@ -183,13 +143,16 @@ function nextStep(messages: TurnMessage[]): { step: Step; index: number } {
 		};
 	}
 	if (question.includes('gauge') && (question.includes('rain') || question.includes('respon'))) {
-		const net = results.get(TOOL_NAMES.network);
-		if (!net) return { index, step: { call: { name: TOOL_NAMES.network, arguments: {} } } };
-		const gauge = findNodes(net.data).find((n) => n.kind === 'gauge' || n.type === 'gauge');
-		if (gauge && !results.has(TOOL_NAMES.series))
-			return { index, step: { call: { name: TOOL_NAMES.series, arguments: { nodeId: gauge.id, series: ['runoff', 'outflow'], resolution: 'monthly' } } } };
-		if (gauge && !results.has(TOOL_NAMES.gaugeFit)) return { index, step: { call: { name: TOOL_NAMES.gaugeFit, arguments: { nodeId: gauge.id } } } };
-		return { index, step: { text: gaugeAnswer(net.data, results.get(TOOL_NAMES.series)?.data, results.get(TOOL_NAMES.gaugeFit)?.data) } };
+		const net = results.get(TOOL_NAMES.network)?.[0];
+		if (!net) return call(TOOL_NAMES.network, {});
+		const gauge = gaugeOf(net.data);
+		const series = results.get(TOOL_NAMES.series) ?? [];
+		const unit = gauge ? unitAbove(net.data, gauge) : undefined;
+		if (gauge && unit && series.length === 0) return call(TOOL_NAMES.series, { node: unit.id, key: 'runoff' });
+		if (gauge && series.length === (unit ? 1 : 0)) return call(TOOL_NAMES.series, { node: gauge.id, key: 'outflow' });
+		const fit = results.get(TOOL_NAMES.gaugeFit)?.[0];
+		if (gauge && !fit) return call(TOOL_NAMES.gaugeFit, { node: gauge.id });
+		return { index, step: { text: gaugeAnswer(net.data, series, fit?.ok ? fit.data : null) } };
 	}
 	return { index, step: { text: MOCK_IDLE_ANSWER } };
 }

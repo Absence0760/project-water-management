@@ -53,6 +53,12 @@ describe('AssistantPanel', () => {
 		expect(out).not.toContain('New conversation');
 	});
 
+	it('shows the disclaimer a paragraph each, with `{site}` filled in with this site’s address', () => {
+		const out = html(chat({ status: { ...STATUS, disclaimer: 'Advice, not model output.\n\nSee {site}/terms.' } }));
+		expect(out).toMatch(/data-testid="assistant-disclaimer"[^>]*>(<!--\[-->)?<p[^>]*>Advice, not model output\.<\/p><p[^>]*>See [^<]*\/terms\.<\/p>/);
+		expect(out).not.toContain('{site}');
+	});
+
 	it('shows the question, a line for each tool and the answer', () => {
 		const out = html(
 			chat({

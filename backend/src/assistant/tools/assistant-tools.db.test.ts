@@ -43,7 +43,7 @@ const markMode = (mode: string) =>
 	]);
 
 beforeAll(async () => {
-	[owner, viewer, farmer, stranger] = await Promise.all(['Owner', 'Viewer', 'Farmer', 'Stranger'].map((n) => signUp(`Tools${n}`)));
+	[owner, viewer, farmer, stranger] = (await Promise.all(['Owner', 'Viewer', 'Farmer', 'Stranger'].map((n) => signUp(`Tools${n}`)))) as [User, User, User, User];
 	projectId = (await owner.call('POST', '/projects', { name: 'Assistant tools' })).body.project.id;
 	const at = `/projects/${projectId}`;
 	const model = { nodes: [outlet, weir, upper, lower], crops: [crop], cropAreas: [{ nodeId: upper.id, cropId: crop.id, areaM2: 50_000 }], transfers: [] };

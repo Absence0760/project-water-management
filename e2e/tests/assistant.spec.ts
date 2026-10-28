@@ -23,13 +23,29 @@ test('answers why the simulated flow at a gauge doesn’t respond to rainfall, f
 
 	const answer = await ask(sheet, 'Why does the simulated flow at gauge Outflow gauge not respond to rainfall?');
 	await expect(sheet.getByTestId('assistant-question')).toHaveText(/Outflow gauge not respond to rainfall/);
-	// A line for each tool the mock reads the project with, each finished.
-	// TODO(#610 merge): pin the labels once backend/src/assistant/tools/*.ts set them.
-	for (const tool of ['get_network', 'get_series', 'get_gauge_fit']) {
-		await expect(answer.locator(`[data-testid="assistant-tool"][data-tool="${tool}"]`).first()).toHaveAttribute('data-status', 'done');
+	// A line for each tool the mock reads the project with, in order, each finished
+	// (backend/src/assistant/providers/mock.ts: the network, the runoff of the dam above
+	// the gauge, the gauge's outflow, its fit).
+	const tools = answer.getByTestId('assistant-tool');
+	await expect(tools).toHaveText([/^Reading the network/, /^Reading a series/, /^Reading a series/, /^Checking a gauge's fit/]);
+	for (const [i, tool] of ['get_network', 'get_series', 'get_series', 'get_gauge_fit'].entries()) {
+		await expect(tools.nth(i)).toHaveAttribute('data-tool', tool);
+		await expect(tools.nth(i)).toHaveAttribute('data-status', 'done');
 	}
-	// TODO(#610 merge): the mock's exact answer (backend/src/assistant/providers/mock.ts); for now it names the gauge.
-	await expect(answer.getByTestId('assistant-text')).toContainText('Outflow gauge');
+	// The mock's answer, its four lines from what the tools read: the seed's two dams drain
+	// straight into Outflow gauge (get_network lists Lower farm first), the series' means and
+	// the outlet's calibration statistics (the run's, numbers that depend on the engine).
+	const N = '-?\\d+\\.\\d{2}';
+	await expect(answer.getByTestId('assistant-text')).toHaveText(
+		new RegExp(
+			[
+				'^Gauge Outflow gauge has 2 dam\\(s\\) upstream: Lower farm, Upper farm\\.',
+				`Runoff at Lower farm averages ${N} and the gauge’s outflow ${N} in the series read\\.`,
+				`The fit at the gauge: NSE ${N}, KGE ${N}, PBIAS ${N}\\.`,
+				'The dams upstream fill before they spill, so rain above them reaches the gauge only once they are full: check their capacity and starting level before changing GR4J\\.$'
+			].join('\\s*')
+		)
+	);
 	await expect(sheet.getByRole('status')).toHaveText('The assistant answered.');
 	await expectNoViolations(page);
 

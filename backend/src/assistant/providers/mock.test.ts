@@ -1,5 +1,5 @@
 // The scripted provider (mock.ts) driven through the real orchestrator with
-// fake tools: the gauge question's three reads and its answer, the
+// fake tools: the gauge question's four reads and its answer, the
 // recommendation through propose_settings, the canned answer, determinism.
 import { describe, expect, it } from 'vitest';
 import { SettingsPatch } from '../../projects/settings.js';
@@ -8,31 +8,33 @@ import { runTurn } from '../orchestrator.js';
 import { TOOL_NAMES, type AssistantStreamEvent, type AssistantTool, type ChatMessage, type ToolResult } from '../types.js';
 import { gaugeAnswer, MOCK_IDLE_ANSWER, MOCK_PROPOSAL, mockProvider } from './mock.js';
 
-/** An invented network: two farms with dams above gauge G1, one dam below it, a farm without a dam above it. */
+/** An invented network as get_network answers it: two dams above gauge G1 Weir (its `above.dams`), one below. */
 const NETWORK = {
+	source: 'run',
 	nodes: [
-		{ id: 'f1', name: 'Kliphoek', kind: 'farm', downstreamNodeId: 'f2', damCapacityM3: 200_000 },
-		{ id: 'f2', name: 'Rietvlei', kind: 'farm', downstreamNodeId: 'g1', damCapacityM3: 50_000 },
-		{ id: 'f3', name: 'Dry Farm', kind: 'farm', downstreamNodeId: 'g1', damCapacityM3: 0 },
-		{ id: 'g1', name: 'G1 Weir', kind: 'gauge', downstreamNodeId: 'f4', damCapacityM3: 0 },
-		{ id: 'f4', name: 'Below', kind: 'farm', downstreamNodeId: null, damCapacityM3: 900_000 }
+		{ id: 'f1', name: 'Kliphoek', kind: 'farm', drainsInto: 'f2', dam: { capacityM3: 200_000 } },
+		{ id: 'f2', name: 'Rietvlei', kind: 'farm', drainsInto: 'g1', dam: { capacityM3: 50_000 } },
+		{ id: 'f3', name: 'Dry Farm', kind: 'farm', drainsInto: 'g1', dam: null },
+		{ id: 'g1', name: 'G1 Weir', kind: 'gauge', drainsInto: 'f4', above: { units: 3, dams: [{ id: 'f1', name: 'Kliphoek', capacityM3: 200_000 }, { id: 'f2', name: 'Rietvlei', capacityM3: 50_000 }], gauges: [] } },
+		{ id: 'f4', name: 'Below', kind: 'farm', outlet: true, dam: { capacityM3: 900_000 } }
 	]
 };
-const SERIES = { nodeId: 'g1', series: { runoff_mm: [1, 2, 3], outflow_m3s: [{ month: '2020-01', mean: 0.5 }, { month: '2020-02', mean: 1.5 }] } };
-const FIT = { nodeId: 'g1', stats: { NSE: 0.123, KGE: -0.4567, PBIAS: 12.5 } };
+const series = (key: string, mean: number) => ({ runId: 'r', node: { id: 'g1', name: 'G1 Weir', kind: 'gauge' }, key, unit: 'm³/day', resolution: 'monthly', mean, points: [] });
+const FIT = { runId: 'r', gauge: { id: 'g1', name: 'G1 Weir' }, source: 'computed', stats: { nse: 0.123, kge: -0.4567, pbias: 12.5, logNse: 0.9 } };
 
-function fakeTools(results: Partial<Record<string, ToolResult>>, calls: { name: string; args: unknown }[]): AssistantTool[] {
+function fakeTools(results: Partial<Record<string, ToolResult | ((args: unknown) => ToolResult)>>, calls: { name: string; args: unknown }[]): AssistantTool[] {
 	return Object.values(TOOL_NAMES).map((name) => ({
 		spec: { name, description: name, parameters: { type: 'object', properties: {} } },
 		label: name,
 		run: async (_ctx, args) => {
 			calls.push({ name, args });
-			return results[name] ?? { ok: false, error: 'not in this test' };
+			const r = results[name];
+			return typeof r === 'function' ? r(args) : (r ?? { ok: false, error: 'not in this test' });
 		}
 	}));
 }
 
-async function turn(question: string, results: Partial<Record<string, ToolResult>>) {
+async function turn(question: string, results: Partial<Record<string, ToolResult | ((args: unknown) => ToolResult)>>) {
 	const calls: { name: string; args: unknown }[] = [];
 	const events: AssistantStreamEvent[] = [];
 	const out = await runTurn(
@@ -49,7 +51,15 @@ async function turn(question: string, results: Partial<Record<string, ToolResult
 	return { out, calls, events, text };
 }
 
-const gaugeResults = { [TOOL_NAMES.network]: { ok: true, data: NETWORK }, [TOOL_NAMES.series]: { ok: true, data: SERIES }, [TOOL_NAMES.gaugeFit]: { ok: true, data: FIT } } as const;
+/** Fake tools answering by name; get_series by its `key` argument. */
+const gaugeResults: Partial<Record<string, ToolResult | ((args: unknown) => ToolResult)>> = {
+	[TOOL_NAMES.network]: { ok: true, data: NETWORK },
+	[TOOL_NAMES.series]: (args) => {
+		const key = (args as { key: string }).key;
+		return { ok: true, data: series(key, key === 'runoff' ? 2 : 1) };
+	},
+	[TOOL_NAMES.gaugeFit]: { ok: true, data: FIT }
+};
 
 describe('the mock provider', () => {
 	it('answers the gauge question by reading the network, the gauge’s runoff and outflow, and its fit, then citing them', async () => {
@@ -57,12 +67,13 @@ describe('the mock provider', () => {
 		expect(out.end).toBe('answered');
 		expect(calls).toEqual([
 			{ name: TOOL_NAMES.network, args: {} },
-			{ name: TOOL_NAMES.series, args: { nodeId: 'g1', series: ['runoff', 'outflow'], resolution: 'monthly' } },
-			{ name: TOOL_NAMES.gaugeFit, args: { nodeId: 'g1' } }
+			{ name: TOOL_NAMES.series, args: { node: 'f1', key: 'runoff' } },
+			{ name: TOOL_NAMES.series, args: { node: 'g1', key: 'outflow' } },
+			{ name: TOOL_NAMES.gaugeFit, args: { node: 'g1' } }
 		]);
 		expect(text.split('\n')).toEqual([
 			'Gauge G1 Weir has 2 dam(s) upstream: Kliphoek, Rietvlei.',
-			'Runoff there averages 2.00 and outflow 1.00 in the series read.',
+			'Runoff at Kliphoek averages 2.00 and the gauge’s outflow 1.00 in the series read.',
 			'The fit at the gauge: NSE 0.12, KGE -0.46, PBIAS 12.50.',
 			'The dams upstream fill before they spill, so rain above them reaches the gauge only once they are full: check their capacity and starting level before changing GR4J.'
 		]);
@@ -78,9 +89,11 @@ describe('the mock provider', () => {
 	});
 
 	it('says "not available" for numbers no tool gave, and finds no gauge in a network without one', () => {
-		expect(gaugeAnswer(NETWORK, { error: 'withheld' }, null)).toContain('NSE not available, KGE not available, PBIAS not available');
-		expect(gaugeAnswer({ nodes: NETWORK.nodes.filter((n) => n.kind !== 'gauge') }, null, null)).toBe('I found no gauge in this project’s network.');
-		expect(gaugeAnswer({ nodes: [{ id: 'g', name: 'Solo', kind: 'gauge', downstreamNodeId: null }] }, null, null)).toMatch(/^Gauge Solo has 0 dam\(s\) upstream: none\./);
+		expect(gaugeAnswer(NETWORK, [{ ok: false, error: 'withheld' }], null)).toContain(
+			'Runoff at Kliphoek averages not available and the gauge’s outflow not available in the series read.\nThe fit at the gauge: NSE not available, KGE not available, PBIAS not available.'
+		);
+		expect(gaugeAnswer({ nodes: NETWORK.nodes.filter((n) => n.kind !== 'gauge') }, [], null)).toBe('I found no gauge in this project’s network.');
+		expect(gaugeAnswer({ nodes: [{ id: 'g', name: 'Solo', kind: 'gauge', outlet: true, above: { units: 0, dams: [], gauges: [] } }] }, [], null)).toMatch(/^Gauge Solo has 0 dam\(s\) upstream: none\.\nRunoff at no unit above it averages/);
 	});
 
 	it('stops after the network when it has no gauge', async () => {
@@ -89,8 +102,8 @@ describe('the mock provider', () => {
 		expect(text).toBe('I found no gauge in this project’s network.');
 	});
 
-	it('recommends through propose_settings with its fixed patch, then points at the proposal', async () => {
-		const proposal = { patch: MOCK_PROPOSAL.patch, reasons: MOCK_PROPOSAL.reasons, summary: MOCK_PROPOSAL.summary, diff: [{ label: 'GR4J X4', before: '1.7', after: '2' }] };
+	it('recommends through propose_settings with its fixed change, then points at the proposal', async () => {
+		const proposal = { patch: { gr4j: { x4: 2 } }, reasons: { gr4j: MOCK_PROPOSAL.changes[0]!.reason }, summary: MOCK_PROPOSAL.summary, diff: [{ label: 'GR4J X4', before: '1.7', after: '2' }] };
 		const { calls, events, text } = await turn('Which settings would you change to improve the fit at the outlet?', {
 			[TOOL_NAMES.proposeSettings]: { ok: true, data: { valid: true }, proposal }
 		});
@@ -110,10 +123,11 @@ describe('the mock provider', () => {
 		expect(text).toBe(MOCK_IDLE_ANSWER);
 	});
 
-	it('MOCK_PROPOSAL’s patch is one SettingsPatch accepts, inside the GR4J bounds (X4 0.5–10 days)', () => {
-		expect(SettingsPatch.safeParse(MOCK_PROPOSAL.patch).success).toBe(true);
-		expect(MOCK_PROPOSAL.patch.gr4j.x4).toBeGreaterThanOrEqual(0.5);
-		expect(MOCK_PROPOSAL.patch.gr4j.x4).toBeLessThanOrEqual(10);
-		expect(Object.keys(MOCK_PROPOSAL.reasons)).toEqual(Object.keys(MOCK_PROPOSAL.patch));
+	it('MOCK_PROPOSAL’s change is one SettingsPatch accepts, inside the GR4J bounds (X4 0.5–10 days)', () => {
+		const [change] = MOCK_PROPOSAL.changes;
+		expect(change!.key).toBe('gr4j.x4');
+		expect(SettingsPatch.safeParse({ gr4j: { x4: change!.value } }).success).toBe(true);
+		expect(change!.value).toBeGreaterThanOrEqual(0.5);
+		expect(change!.value).toBeLessThanOrEqual(10);
 	});
 });

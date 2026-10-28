@@ -120,7 +120,7 @@ describe('AssistantChat', () => {
 	it('a 429 before the stream: the question isn’t taken, the wait is shown, and lifts after Retry-After', async () => {
 		const timers: { fn: () => void; ms: number }[] = [];
 		const c = chatWith(
-			async () => Promise.reject(new ApiError(429, 'Too many messages', undefined, null, { retryAfter: 120 })),
+			async () => Promise.reject(new ApiError(429, 'Too many messages', undefined, 'assistant_rate_limited', { retryAfter: 120, seconds: 120 })),
 			STATUS,
 			(fn, ms) => timers.push({ fn, ms })
 		);
@@ -133,6 +133,13 @@ describe('AssistantChat', () => {
 		expect(timers[0]!.ms).toBe(120_000);
 		timers[0]!.fn();
 		expect(c.refusal).toBeNull();
+	});
+
+	it('a 429 without the assistant’s rate code (a WAF block, say) is an error, not the hourly limit', async () => {
+		const c = chatWith(async () => Promise.reject(new ApiError(429, 'Too many requests', undefined, null, { retryAfter: 30 })), STATUS);
+		await c.load();
+		expect(await c.ask('Q')).toBe(false);
+		expect(c.refusal).toEqual({ kind: 'error', message: 'Too many requests' });
 	});
 
 	it('the month’s budget spent: refused before the stream (by code) or as the status says, and nothing is sent', async () => {

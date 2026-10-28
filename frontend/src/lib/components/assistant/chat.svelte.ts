@@ -53,10 +53,10 @@ export interface AssistantDeps {
 	later?: (fn: () => void, ms: number) => void;
 }
 
-// The server's codes for these refusals (backend/src/http/errors.ts).
-// TODO(#610 merge): confirm the names against the backend's ERROR_CODES; until then a code naming the
-// budget counts as one, and the rate limit is any 429.
-const isBudgetCode = (code: string | null | undefined) => !!code && /budget/.test(code);
+// The server's codes for these refusals (backend/src/http/errors.ts MACHINE_ERROR_CODES; docs/api.md § Assistant).
+const BUDGET_SPENT = 'assistant_budget_spent';
+const RATE_LIMITED = 'assistant_rate_limited';
+const isBudgetCode = (code: string | null | undefined) => code === BUDGET_SPENT;
 
 /** "about 3 min" / "about 40 s" for a wait in seconds. */
 export function waitText(seconds: number): string {
@@ -217,8 +217,8 @@ export class AssistantChat {
 		if (e instanceof ApiError) {
 			this.#refusals++;
 			if (isBudgetCode(e.code)) return { kind: 'budget', message: e.message };
-			if (e.status === 429) {
-				const seconds = Number(e.params.retryAfter) || 60;
+			if (e.code === RATE_LIMITED) {
+				const seconds = Number(e.params.retryAfter) || Number(e.params.seconds) || 60;
 				// Once the wait is over the box takes messages again (unless a newer refusal replaced this one).
 				const seq = ++this.#refusals;
 				(this.#deps.later ?? ((fn, ms) => setTimeout(fn, ms)))(() => {

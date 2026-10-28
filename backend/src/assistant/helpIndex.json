@@ -385,6 +385,28 @@
 		},
 		{
 			"kind": "guide",
+			"id": "ask-the-assistant#1",
+			"title": "Ask the assistant about a project: Ask a question",
+			"url": "/help/guides/ask-the-assistant",
+			"summary": "Ask questions about a project’s model and results in plain words, and review the settings changes it recommends before you save any.",
+			"text": "Open the project and press Assistant in the page’s header (on a phone, under More actions). It shows on every page of the project when your organisation has the assistant switched on. Type a question about this project, such as “Why does the simulated flow at the outlet gauge not respond to rainfall?”, and press Send (or Enter). The answer comes in as it is written. The lines above it say what the assistant read to answer: the network, a series, the run’s summary, a gauge’s fit or the help guides. Ask a follow-up in the same box: the assistant sees the whole conversation. Stop ends an answer early; New conversation starts again. It reads the run you have open (on Runs & results, EWR and the other run pages), or the project’s latest run. It reads only what your role lets you see, and it never changes anything. Its answers are advice, not model output: check them against the run’s own results before you rely on them, as the line under the box says."
+		},
+		{
+			"kind": "guide",
+			"id": "ask-the-assistant#2",
+			"title": "Ask the assistant about a project: Review a recommended change",
+			"url": "/help/guides/ask-the-assistant",
+			"text": "Ask it which settings to change (“Which settings would you change to improve the fit at the outlet?”) and it may answer with a Recommended change: each setting it would change, its value now and the suggested one, and why. Read the change. Press Apply to the settings form to try it (editors and owners only). Model settings opens with the change in the form, not yet saved, and the Reason for this change filled in as “Assistant suggestion: …”. Check the values, then press Save changes to keep it, or Discard to drop it. Run the model to see what it does. The save is checked like any other, and the History page keeps it with its reason."
+		},
+		{
+			"kind": "guide",
+			"id": "ask-the-assistant#3",
+			"title": "Ask the assistant about a project: Limits",
+			"url": "/help/guides/ask-the-assistant",
+			"text": "Each person can send a set number of messages an hour. Past it, the panel says how long to wait. Each project has a monthly budget, shown under the box. Once it is used up the assistant rests until the date shown. Nothing you type is kept: the conversation lasts while the project is open in your browser."
+		},
+		{
+			"kind": "guide",
 			"id": "two-step-sign-in#1",
 			"title": "Sign in with two steps: What it is",
 			"url": "/help/guides/two-step-sign-in",

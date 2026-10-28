@@ -14,6 +14,8 @@
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import type { SettingsProposal } from '#lib/api/types.js';
 	import { fmtDay, fmtPct } from '#lib/format/number.js';
+	import { basePath } from '#lib/nav/base.js';
+	import { withSite } from '@water-management/engine';
 	import { waitText, type AssistantChat, type AssistantTurn } from './chat.svelte';
 
 	let {
@@ -29,6 +31,9 @@
 		runId?: string | null;
 		onapply?: (proposal: SettingsProposal) => void;
 	} = $props();
+
+	/** This site's address, for the disclaimer's `{site}` (the Terms link), as liability/Disclaimer.svelte. */
+	const site = typeof location === 'undefined' ? basePath() : `${location.origin}${basePath()}`;
 
 	const EXAMPLES = ['Why does the simulated flow at the outlet not respond to rainfall?', 'Which settings would you change to improve the fit at the outlet?'];
 
@@ -157,7 +162,10 @@
 			<p class="muted budget" data-testid="assistant-budget">
 				{fmtPct(left, 0)} of this month’s budget left · starts again {fmtDay(st.budget.resetsAt)}
 			</p>
-			<p class="muted disclaimer" data-testid="assistant-disclaimer">{st.disclaimer}</p>
+			<!-- The status's disclaimer: paragraphs a blank line apart, `{site}` this site's address (as the report's, liability/Disclaimer.svelte). -->
+			<div class="muted disclaimer" data-testid="assistant-disclaimer">
+				{#each st.disclaimer.split(/\n\s*\n/) as para, i (i)}<p>{withSite(para, site)}</p>{/each}
+			</div>
 		{/if}
 	</div>
 	{#snippet actions()}
@@ -393,5 +401,8 @@
 	.disclaimer {
 		margin: 0;
 		font-size: var(--font-xs);
+	}
+	.disclaimer p {
+		margin: 0 0 0.4rem;
 	}
 </style>

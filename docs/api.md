@@ -3873,6 +3873,19 @@ trips:
   and `done` still follow.
 - `{ type: 'done' }`: the last event.
 
+**Recommendations.** `propose_settings` takes `{ changes: [{ key, value,
+reason }], summary }`. A `key` is a top-level setting or `group.field`. The
+server validates the patch with `SettingsPatch`, runs the save's own checks
+(`checkedSettingsPatch`, the same ones as `PATCH /projects/:id`) and the
+engine's settings resolver, and never writes. When it succeeds, the stream
+sends a `proposal` event: `{ patch, reasons (top-level key → reason),
+summary, diff: [{ label, before, after }] }`, where the diff is the engine's
+input-diff lines. A refused patch reaches the model as `ok: false` with the
+reason and is never streamed to the page. Apply loads `patch` into the
+Settings draft; Save sends it with `reason: "Assistant suggestion:
+<summary>"` and needs editor. The fields `fitRecord`, `calibrationRules`,
+`evidenceUncertaintyRule` and `responsibleAuthority` are never proposed.
+
 A turn is counted (one message, hourly and monthly) when it starts and
 charged its tokens when it ends, whatever the outcome, a client that went
 away included. The types are `backend/src/assistant/types.ts`, mirrored in
