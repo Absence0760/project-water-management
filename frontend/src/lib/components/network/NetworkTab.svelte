@@ -703,7 +703,6 @@
 					<tbody bind:this={reorder.body} onpaste={readonly ? undefined : onTablePaste}>
 						{#each nodes as node, i (node.id)}
 							{@const label = node.name || 'unnamed hydrological unit'}
-							{@const share = shareOf(i)}
 							{@const rs = reorder.rowState(node.id, i, nodes.length)}
 							<tr
 								id="node-row-{node.id}"
@@ -795,7 +794,7 @@
 									</td>
 									{/if}
 								{/each}
-								<td class="num share" class:none={share === null}><span class="cell-label">Flow share in use{' '}</span>{shareCell(i)}</td>
+								<td class="num share" class:none={node.kind !== 'farm'}><span class="cell-label">Flow share in use{' '}</span>{shareCell(i)}</td>
 								{#if !readonly}
 									<td class="rm">
 										<button type="button" class="btn-icon btn" aria-label="Remove {label}" title="Remove hydrological unit" onclick={() => remove(node.id, label)}>✕</button>
