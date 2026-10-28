@@ -75,9 +75,8 @@ class LoginRefused(polite.StopRun):
     """Earthdata Login refused the stored username and password (or the account cannot use Basic auth)."""
 
     def __init__(self, status: int, message: str):
-        Exception.__init__(self, message)  # not StopRun's message, which names a URL
-        self.url = EDL + "/api/users/tokens"
-        self.status = status
+        super().__init__(EDL + "/api/users/tokens", status)
+        self.args = (message,)  # not StopRun's message, which names a URL
 
 
 class EdlError(RuntimeError):
