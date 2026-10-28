@@ -107,6 +107,7 @@
 	import { flowFillShading } from './flowFill';
 	import { flowFlagLanes, lanesLooksNote } from '#lib/calibration/flowFlags.js';
 	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
+	import { viewPeriod } from './viewPeriod';
 	import { foldList } from '#lib/components/common/fold.js';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 	import { anchorHeading, focusHeading, landOnAnchor } from '#lib/help/anchor.js';
@@ -187,6 +188,10 @@
 		seriesParam && list.some((s) => s.id === seriesParam) ? seriesParam : list.length ? pickDefault(list) : null
 	);
 	const viewing = $derived(list.find((s) => s.id === selectedId) ?? null);
+	// A period to look at (`view=<start>~<end>`, from a flagged period's View on Warnings): the chart opens on it,
+	// hatched, for the series the link names (series/viewPeriod.ts).
+	const viewPeriodParam = $derived(viewPeriod(page.url.searchParams.get('view')));
+	const focusPeriod = $derived(viewPeriodParam && viewing && seriesParam === viewing.id ? viewPeriodParam : null);
 	// A `series=` link to a series no longer stored (deleted since a note or a run linked it) charted another one
 	// without a word, the URL still naming the dead id (issue #586). Once the list is in, drop the stale parameter
 	// (replace, no history entry) and say so in one line, as Runs & results does for a deleted run. A series deleted
@@ -1147,6 +1152,8 @@
 				recentDays={3 * 365}
 				recentLabel="Last 3 years"
 				shade={shading?.ranges ?? flowShading?.ranges ?? []}
+				focus={focusPeriod}
+				band={focusPeriod ? { from: focusPeriod.start, to: focusPeriod.end, label: 'Flagged', note: 'the period the warning you opened this from flags.' } : undefined}
 				lanes={flagLanes}
 				lanesNote={lanesLooksNote(flagLanes)}
 				lanesLabel="Quality flags, as Fit automatically reads this record under the current settings"
