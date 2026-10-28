@@ -79,6 +79,9 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	// A model proposed from the map (178_start_proposal): the project's record; map.start_* audit events are exported.
 	'start_proposal.created_by': { excluded: 'the project’s start-from-the-map proposal; its maker only, and map.start_proposed is in auditEvents' },
 	'start_proposal.decided_by': { excluded: 'the project’s start-from-the-map proposal; who decided it only, and map.start_applied / _discarded are in auditEvents' },
+	// The assistant (258_assistant_usage): the person's tokens and messages per project and month; the hourly count is a cap's only.
+	'assistant_usage.user_id': { section: 'assistantUsage' },
+	'assistant_rate.user_id': { excluded: 'a count of assistant messages for the hourly cap, an hour at most' },
 	'api_key.created_by': { excluded: 'the project’s key; api_key.created is in auditEvents; never key material' },
 	'api_key.revoked_by': { excluded: 'the project’s key; api_key.revoked is in auditEvents' },
 	'audit_event.actor_user_id': { section: 'auditEvents' },
@@ -307,6 +310,13 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			`SELECT preferences, updated_at AS "updatedAt" FROM user_preferences WHERE user_id = $1`,
 			[userId]
 		);
+		// The assistant's usage counters (258): own rows only under RLS. Counts only; no chat text is ever kept.
+		const { rows: assistantUsage } = await db.query(
+			`SELECT project_id AS "projectId", to_char(month, 'YYYY-MM') AS month, input_tokens::float8 AS "inputTokens",
+				output_tokens::float8 AS "outputTokens", messages, updated_at AS "updatedAt"
+			 FROM assistant_usage WHERE user_id = $1 ORDER BY month DESC, project_id`,
+			[userId]
+		);
 		// Two-step sign-in (150): own rows only under RLS. The authenticator's state, never its sealed secret or the code hashes.
 		const { rows: twoStepSignIn } = await db.query(
 			`SELECT t.created_at AS "createdAt", t.confirmed_at AS "confirmedAt",
@@ -364,6 +374,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			packNotices,
 			erratumNotices,
 			preferences: prefs,
+			assistantUsage,
 			twoStepSignIn,
 			twoStepSignInResets,
 			twoStepEmail,

@@ -28,6 +28,12 @@ export interface AssistantConfig {
 	maxInputChars: number;
 	/** Seconds between `: keepalive` comments on the stream (CloudFront's origin read timeout is 35 s). */
 	keepaliveSeconds: number;
+	/**
+	 * Seconds one turn may take, every hop and tool call included; past it the
+	 * turn ends with an `assistant_timeout` error event. Below the assistant
+	 * Lambda's timeout, so the turn ends cleanly and its tokens are charged.
+	 */
+	turnSeconds: number;
 }
 
 function int(v: string | undefined, fallback: number): number {
@@ -52,6 +58,7 @@ export function assistantConfig(env: Record<string, string | undefined> = proces
 		maxOutputTokens: int(env.ASSISTANT_MAX_OUTPUT_TOKENS, 1024),
 		maxToolResultChars: int(env.ASSISTANT_MAX_TOOL_RESULT_CHARS, 12_000),
 		maxInputChars: int(env.ASSISTANT_MAX_INPUT_CHARS, 40_000),
-		keepaliveSeconds: int(env.ASSISTANT_KEEPALIVE_SECONDS, 15)
+		keepaliveSeconds: int(env.ASSISTANT_KEEPALIVE_SECONDS, 15),
+		turnSeconds: int(env.ASSISTANT_TURN_SECONDS, 100)
 	};
 }
