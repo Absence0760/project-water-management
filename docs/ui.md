@@ -7148,9 +7148,15 @@ other sections.
   (`?tab=project#project-report-schedules`; also "schedule", "email",
   "PDF"), and the fit's panels that moved in round 3, each **…, on
   Calibration** (`?tab=calibration#set-flow`, `#set-record`, `#set-fit`,
-  `#set-wr2012` and the Evaporation from the map card's `#set-evaporation`;
-  also by the settings they hold: "X3", "pan coefficient", "exclusions",
-  "fit automatically", "quaternary", "dPET"). Their old anchors still work: `?tab=settings#set-feeds`,
+  `#set-wr2012`, the Evaporation from the map card's `#set-evaporation`,
+  the Evaporation stations card's `#set-evaporation-station` and the
+  Regional prior's `#set-prior`; also by the settings they hold: "X3", "pan
+  coefficient", "exclusions", "fit automatically", "quaternary", "dPET",
+  "Symons", "donors", "ungauged"). Every `#set-…` the Calibration page draws
+  is in `CALIBRATION_SETTINGS_ANCHORS` (settings/sections.ts), so a link to
+  it stays there; one missing reads as a Model settings anchor to
+  `nav/anchorMoves.ts`, which sends the link to Model settings
+  (`calibration/page.test.ts` walks the page's components and fails on one). Their old anchors still work: `?tab=settings#set-feeds`,
   `#set-api-keys` and `#set-report-schedules`, from an old email, a bookmark
   or a note, go on to those addresses with every other parameter kept
   (`?tab=settings&rain=boundary#set-feeds` opens

@@ -184,9 +184,12 @@ test('Calibration’s Set up the fit: the settings panels and their anchors, in 
 	await openCalibration(page, project.id);
 	for (const [id, heading] of INNER) await expect(panelHeading(page, id)).toHaveText(heading, { useInnerText: true });
 
-	// Every #set-* anchor on the page, all inside Set up the fit, with Evaporation from the map inside Flow calibration.
+	// Every #set-* anchor on the page, all inside Set up the fit: Evaporation from the map and Evaporation stations
+	// inside Flow calibration (issue #646), the Regional prior inside Fit the parameters (issue #622). Each is in
+	// CALIBRATION_SETTINGS_ANCHORS, so a link to it stays here (calibration/page.test.ts).
 	const ids = CAL_PANELS.map(([id]) => id);
-	ids.splice(ids.indexOf('set-flow') + 1, 0, 'set-evaporation');
+	ids.splice(ids.indexOf('set-flow') + 1, 0, 'set-evaporation', 'set-evaporation-station');
+	ids.splice(ids.indexOf('set-fit') + 1, 0, 'set-prior');
 	expect(await page.locator('[id^="set-"]').evaluateAll((els) => els.map((e) => e.id))).toEqual(ids);
 	expect(await page.locator('#cal-setup [id^="set-"]').count()).toBe(ids.length);
 	let above = -Infinity;

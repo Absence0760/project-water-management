@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
 import { modelQualitySections } from '#lib/components/runs/modelQuality.js';
@@ -105,9 +108,52 @@ describe('old ?tab=calibration links (nav/anchorMoves.ts)', () => {
 	it('leaves the page itself, its own parts and its settings panels alone (issue #586 round 3)', () => {
 		expect(anchorForward('calibration', at('/projects/p1?tab=calibration'))).toBeNull();
 		expect(anchorForward('calibration', at('/projects/p1?tab=calibration#cal-fit'))).toBeNull();
-		expect(CALIBRATION_SETTINGS_ANCHORS).toEqual(['set-flow', 'set-record', 'set-fit', 'set-wr2012', 'set-evaporation']);
+		expect(CALIBRATION_SETTINGS_ANCHORS).toEqual(['set-flow', 'set-record', 'set-fit', 'set-wr2012', 'set-evaporation', 'set-evaporation-station', 'set-prior']);
 		for (const id of CALIBRATION_SETTINGS_ANCHORS) expect(anchorForward('calibration', at(`/projects/p1?tab=calibration#${id}`)), id).toBeNull();
 		expect(anchorForward('calibration', at('/projects/p1?tab=calibration#%E0'))).toBeNull();
 		for (const hash of ['#res-calibration', '#res-fit-provenance']) expect(anchorForward('calibration', at(`/projects/p1?tab=calibration${hash}`)), hash).toBeNull();
+	});
+});
+
+/**
+ * Every `#set-…` id the Calibration page draws: the settings form (settings/CalibrationSettings.svelte) and what it
+ * imports, lazily or not, followed through the source. A block added under it with a `set-` id of its own and no
+ * entry in CALIBRATION_SETTINGS_ANCHORS reads as a Model settings anchor to nav/anchorMoves.ts, which sends a link to
+ * it away to Model settings (#646's Evaporation stations and #622's Regional prior, found by the e2e pins).
+ */
+function setIdsDrawnBy(entry: string): Map<string, string> {
+	const lib = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+	const ids = new Map<string, string>();
+	const seen = new Set<string>();
+	// `uses`: for a barrel of re-exports (settings/lazySections.ts, shared with Model settings), only the names the
+	// importing file reads from it; Model settings' own sections in it are not on this page.
+	const visit = (file: string, uses: string | null = null) => {
+		const src = readFileSync(file, 'utf8');
+		const reexports = [...src.matchAll(/export \{ default as (\w+) \} from '([^']+)'/g)];
+		if (reexports.length && uses !== null) {
+			for (const [, name, spec] of reexports) if (new RegExp(`\\b${name}\\b`).test(uses)) follow(file, spec!, null);
+			return;
+		}
+		if (seen.has(file)) return;
+		seen.add(file);
+		if (file.endsWith('.svelte')) for (const m of src.matchAll(/\bid="(set-[a-z0-9-]+)"/g)) ids.set(m[1]!, file.slice(lib.length + 1));
+		for (const m of src.matchAll(/(?:from |import\()'((?:#lib\/|\.{1,2}\/)[^']+)'/g)) follow(file, m[1]!, src);
+	};
+	const follow = (from: string, spec: string, uses: string | null) => {
+		const path = spec.startsWith('#lib/') ? resolve(lib, spec.slice(5)) : resolve(dirname(from), spec);
+		const f = [path, path.replace(/\.js$/, '.ts'), `${path}.ts`, `${path}.svelte.ts`].find((c) => /\.(svelte|ts)$/.test(c) && existsSync(c));
+		if (f) visit(f, uses);
+	};
+	visit(resolve(lib, entry));
+	return ids;
+}
+
+describe('the Calibration page’s settings anchors', () => {
+	it('lists every #set-… id the page draws, so a link to any of them stays on Calibration', () => {
+		const drawn = setIdsDrawnBy('components/settings/CalibrationSettings.svelte');
+		// Positive control: the walk reaches a lazy block (Evaporation from the map, through settings/lazySections.ts).
+		expect(drawn.get('set-evaporation')).toBe('components/settings/EvaporationProposal.svelte');
+		for (const [id, file] of drawn) expect(CALIBRATION_SETTINGS_ANCHORS, `${id} (${file})`).toContain(id);
+		for (const id of CALIBRATION_SETTINGS_ANCHORS) expect([...drawn.keys()], id).toContain(id);
 	});
 });

@@ -73,7 +73,9 @@ describe('settingsElsewhere (issue #586)', () => {
 			'Calibration record',
 			'Fit the parameters',
 			'WR2012 check',
-			'Evaporation from the map'
+			'Evaporation from the map',
+			'Evaporation stations',
+			'Regional prior'
 		]);
 	});
 });
@@ -122,6 +124,10 @@ describe('SETTINGS_ELSEWHERE (issue #521)', () => {
 			['X3', 'set-flow'],
 			['pan coefficient', 'set-flow'],
 			['dPET', 'set-evaporation'],
+			['Symons', 'set-evaporation-station'],
+			['evaporation station', 'set-evaporation-station'],
+			['donors', 'set-prior'],
+			['ungauged', 'set-prior'],
 			['calibration record', 'set-record'],
 			['exclusions', 'set-record'],
 			['fit automatically', 'set-fit'],
