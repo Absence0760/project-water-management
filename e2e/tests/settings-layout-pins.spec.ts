@@ -59,6 +59,16 @@ const CAL_PANELS: [id: string, heading: string][] = [
 	['set-wr2012', 'WR2012 check']
 ];
 
+/**
+ * The anchors inside a Model settings panel: the Per unit setup's Units without a station and MAP from the grid, cards
+ * of Model selection for flow generation under either method (issue #615: Fragmentation's EWR shares run on that setup
+ * too). Run warnings link to #set-unit-rain (warnings/fixes.ts), so they keep the set- prefix but aren't panels.
+ */
+const SETTINGS_INNER: [id: string, heading: string, panel: string][] = [
+	['set-unit-rain', 'Units without a station', 'set-share'],
+	['set-unit-map', 'MAP from the grid', 'set-share']
+];
+
 /** The anchors inside a Calibration panel: Evaporation from the map, a card of Flow calibration that saves on its own. */
 const INNER: [id: string, heading: string, panel: string][] = [['set-evaporation', 'Evaporation from the map', 'set-flow']];
 
@@ -125,9 +135,13 @@ test('the panels, their anchors and the side index, in page order', async ({ pag
 	const project = await createProject(page.request, 'Settings pins order');
 	await openSettings(page, project.id);
 
-	// Every #set-* anchor on the page, in order: the panels, none of Calibration's.
+	// Every #set-* anchor on the page, in order: the panels, with Model selection for flow generation's two inner
+	// anchors inside it (under Fragmentation, the default, too), none of Calibration's.
 	await expect(panelHeading(page, 'set-auto')).toHaveText('Automatic runs', { useInnerText: true });
-	expect(await page.locator('[id^="set-"]').evaluateAll((els) => els.map((e) => e.id))).toEqual(PANELS.map(([id]) => id));
+	for (const [id, heading, panel] of SETTINGS_INNER) await expect(page.locator(`#${panel} #${id}`).locator('h2, h3, h4').first()).toHaveText(heading, { useInnerText: true });
+	const ids = PANELS.map(([id]) => id);
+	ids.splice(ids.indexOf('set-share') + 1, 0, ...SETTINGS_INNER.map(([id]) => id));
+	expect(await page.locator('[id^="set-"]').evaluateAll((els) => els.map((e) => e.id))).toEqual(ids);
 
 	// Each panel's heading, word for word, each one below the last.
 	let above = -Infinity;
