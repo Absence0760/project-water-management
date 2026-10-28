@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { referenceCellSeriesKey, type DailySeries, type ModelInput } from '../project';
 import { runModel } from '../run';
-import { randomInput, withEwrSplit, withUnitRain } from '../testing/fuzz';
+import { randomInput, withUnitRain } from '../testing/fuzz';
 import { checkForecastPrefix, withForecastTail } from '../testing/forecastInvariants';
 import { checkAll } from '../testing/invariants';
 import { checkResume } from '../testing/warmstartInvariants';
@@ -21,7 +21,7 @@ describe('per-unit rain on random networks', () => {
 		const seen = new Set<string>();
 		for (let seed = 1; seed <= CASES; seed++) {
 			// The EWR split by natural MAR (engine ≥ 1.94.0) on about half the seeds.
-			const input = withEwrSplit(withUnitRain(randomInput(seed), seed), seed);
+			const input = withUnitRain(randomInput(seed), seed);
 			try {
 				for (const u of runModel(input).summary.unitRain?.units ?? []) seen.add(u.factorSource);
 			} catch {
@@ -36,7 +36,7 @@ describe('per-unit rain on random networks', () => {
 
 	it('a forecast tail changes no historical day, and a resumed run is the uninterrupted one', () => {
 		for (let seed = 1; seed <= 12; seed++) {
-			const input = withEwrSplit(withUnitRain(randomInput(seed, { maxDays: 700 }), seed), seed);
+			const input = withUnitRain(randomInput(seed, { maxDays: 700 }), seed);
 			expect(checkForecastPrefix(withForecastTail(structuredClone(input), seed)), `seed ${seed}`).toBeNull();
 			let days: number;
 			try {

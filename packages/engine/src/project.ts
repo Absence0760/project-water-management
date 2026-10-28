@@ -26,7 +26,7 @@ import type { SeriesProvenance } from './seriesProvenance';
 import { QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN } from './quantileMap';
 import type { Wr2012Report } from './reference/wr2012';
 import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/rules';
-import type { EwrSplitInfo, EwrSplitMethod } from './network/ewrSplit';
+import type { EwrSplitInfo, PinnedEwrSplit } from './network/ewrSplit';
 import type { EwrDailySource, OutletEwrInfo } from './reserve/dailySource';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import type { NoFlowSummary, ServedWhileEwrFailsSite } from './reserve/riverMeasures';
@@ -313,6 +313,13 @@ export interface CalibrationParams {
 export const LEGACY_UPGRADED_WARNING =
 	'LEGACY_UPGRADED: this project was set to the legacy runoff model (the original workbook’s), removed in engine 1.0.0; it ran GR4J. Check the GR4J parameters (Calibration → Flow calibration) or refit them.';
 
+/**
+ * Top-level settings an engine retired: ignored when read (prepare.ts mergeSettings, the backend's too) and stripped
+ * from stored projects by a migration. `ewrSplit` (engines 1.94.0 – 1.104.x, issue #553): from 1.105.0 the EWR is
+ * always split by each unit's natural MAR (issue #615, ./network/ewrSplit.ts, 263_retire_ewr_split.sql).
+ */
+export const RETIRED_SETTINGS_KEYS = ['ewrSplit'] as const;
+
 /** The legacy runoff model's keys under settings.calibration, dropped since engine 1.0.0 (issue #16). */
 export const RETIRED_CALIBRATION_KEYS = [
 	'a',
@@ -417,15 +424,6 @@ export interface ProjectSettings {
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
 	flowShareMethod: FlowShareMethod;
-	/**
-	 * How the EWR is split between the units (engine ≥ 1.94.0, issue #553,
-	 * ./network/ewrSplit.ts, docs/model.md §2.5b): 'flowShare' (the default,
-	 * the flow share of flowShareMethod) or 'naturalMar' (each unit's natural
-	 * MAR ÷ Σ the units', which differs only under runoff from each unit's own
-	 * rain). Optional so settings stored before it still type; absent =
-	 * 'flowShare'.
-	 */
-	ewrSplit?: EwrSplitMethod;
 	/** Pitman high/low MAP split used by the `hiLo` flow-share method. */
 	hiLoSplit: { hi: number; lo: number };
 	/**
@@ -966,7 +964,6 @@ export function defaultProjectSettings(): ProjectSettings {
 		lakeEvapFactorSource: '',
 		apanMm: zeros,
 		flowShareMethod: 'area',
-		ewrSplit: 'flowShare',
 		hiLoSplit: { hi: 0.5, lo: 0.5 },
 		runoffModel: 'gr4j',
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
@@ -3182,6 +3179,12 @@ export interface ModelInput {
 	seriesChoice?: SeriesChoice | null;
 	/** Every rainfall station by series id (issue #553, engine ≥ 1.91.0); read only under settings.rainStations. Its records are series[stationSeriesKey(id)]. */
 	stations?: RainStationInputs | null;
+	/**
+	 * The EWR split's period and shares to apply instead of working them out (engine ≥ 1.105.0, issue #615,
+	 * ./network/ewrSplit.ts): a seasonal outlook's re-run member takes its base run's (ewrSplitPinOf), as a member
+	 * resumed from a snapshot takes the capture run's. Never stored with a project.
+	 */
+	ewrSplitPinned?: PinnedEwrSplit | null;
 }
 
 /**
@@ -3240,9 +3243,11 @@ export interface FarmSummary {
 	flowShare?: number;
 	/**
 	 * The farm's share of the EWR, 0–1, as the run applied it (engine ≥
-	 * 1.94.0, settings.ewrSplit, docs/model.md §2.5b): its flow share, or
-	 * under 'naturalMar' with runoff from each unit's own rain its natural MAR
-	 * ÷ Σ the units'. Absent on older runs, whose EWR the flow share split.
+	 * 1.94.0, docs/model.md §2.5b): from 1.105.0 its natural MAR ÷ Σ the
+	 * units' under both flow generation methods (its area share with no
+	 * runoff, its flow share with no land unit); 1.94.0 – 1.104.x its flow
+	 * share unless settings.ewrSplit asked for the natural MAR under Per unit.
+	 * Absent on older runs, whose EWR the flow share split.
 	 */
 	ewrShare?: number;
 	/**
@@ -4348,10 +4353,11 @@ export interface RunSummary {
 	stations?: RainStationSummary;
 	/**
 	 * How the EWR was split between the units (engine ≥ 1.94.0,
-	 * settings.ewrSplit, ./network/ewrSplit.ts): the method asked for, the one
-	 * applied and, for a natural MAR split, the days it was taken over. Each
-	 * unit's share is FarmSummary.ewrShare. Absent on older runs (the flow
-	 * share).
+	 * ./network/ewrSplit.ts): the split applied, the days its natural MAR was
+	 * taken over and (≥ 1.105.0) where the units' runoff came from and which
+	 * units ran on the catchment rain; 1.94.0 – 1.104.x also the retired
+	 * setting asked for (`method`). Each unit's share is FarmSummary.ewrShare.
+	 * Absent on older runs (the flow share).
 	 */
 	ewrSplit?: EwrSplitInfo;
 	catchment: {

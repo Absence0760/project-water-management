@@ -35,16 +35,17 @@ const ENTRY: Record<Role, string> = {
 	worker: 'lambda-worker.ts',
 	fetcher: 'lambda-fetcher.ts',
 	renderer: 'lambda-renderer.ts',
-	migrate: 'lambda-migrate.ts'
+	migrate: 'lambda-migrate.ts',
+	assistant: 'lambda-assistant.ts'
 };
 /** Terraform's aws_lambda_function resource for each role. */
-const TF_RESOURCE: Record<string, Role> = { backend: 'api', worker: 'worker', fetcher: 'fetcher', renderer: 'renderer', migrate: 'migrate' };
+const TF_RESOURCE: Record<string, Role> = { backend: 'api', worker: 'worker', fetcher: 'fetcher', renderer: 'renderer', migrate: 'migrate', assistant: 'assistant' };
 /** Lambdas that run none of the backend's code, so none of SETTINGS applies (with why). */
 const NOT_BACKEND: Record<string, string> = {
 	ingest: 'the Python mirror ingest job (ingest/, issue #604): its own settings, checked by ingest/lambda_handler.py'
 };
-/** Read by the runtime or the test runner, not by our code: classified, but no module mentions them. */
-const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'NODE_OPTIONS', 'VITEST']);
+/** Read by the runtime, the test runner or a dependency (the Anthropic SDK's base URL), not by our code: classified, but no module mentions them. */
+const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'NODE_OPTIONS', 'VITEST', 'ANTHROPIC_BASE_URL']);
 
 // Production-shaped values, as Terraform renders them (keys must match infra/*.tf exactly; checked below):
 // PROD is each environment block, PROD_SECRETS each runtime secret's JSON.
@@ -63,8 +64,11 @@ const PROD_SECRETS: Record<Role, Record<string, string>> = {
 	worker: { DATABASE_URL: `${DB_URL}&application_name=worker`, AUTH_JWT_SECRET: 'f'.repeat(64), ALERTS_TOKEN_SECRET: 'a'.repeat(48) },
 	fetcher: {},
 	renderer: {},
-	migrate: { WATER_APP_PASSWORD: 'a1'.repeat(16) }
+	migrate: { WATER_APP_PASSWORD: 'a1'.repeat(16) },
+	assistant: { DATABASE_URL: `${DB_URL}&application_name=assistant`, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48) }
 };
+/** The assistant's model: Claude through Bedrock's global inference profile, the only route from af-south-1 (docs/deployment.md § The assistant). */
+const MODEL = 'global.anthropic.claude-sonnet-5-5';
 const PROD: Record<Role, Record<string, string>> = {
 	api: {
 		...runtimeSecret('api'),
@@ -88,7 +92,14 @@ const PROD: Record<Role, Record<string, string>> = {
 		CLOUDFRONT_KEY_PAIR_ID: 'K2JCJMDEHXQW5F',
 		CLOUDFRONT_PUBLIC_KEY: SIGNING.publicKey,
 		DEM_URL: 's3://water-management-tiles-000000000000/tiles/terrain.pmtiles',
-		WATER_URL: 's3://water-management-tiles-000000000000/tiles/water.pmtiles'
+		WATER_URL: 's3://water-management-tiles-000000000000/tiles/water.pmtiles',
+		// The assistant's status (GET /projects/:id/assistant) is the API's: the same values as the assistant's own.
+		ASSISTANT_PROVIDER: 'bedrock',
+		ASSISTANT_MODEL: MODEL,
+		ASSISTANT_TOKENS_PER_MONTH: '2000000',
+		ASSISTANT_TOKENS_PER_USER_MONTH: '1000000',
+		ASSISTANT_TOKENS_PER_MONTH_TOTAL: '25000000',
+		ASSISTANT_MESSAGES_PER_HOUR: '30'
 	},
 	worker: {
 		...runtimeSecret('worker'),
@@ -142,6 +153,29 @@ const PROD: Record<Role, Record<string, string>> = {
 		NODE_EXTRA_CA_CERTS: CA,
 		REFERENCE_BUCKET: 'water-management-reference-000000000000',
 		NODE_OPTIONS: '--max-old-space-size=2556'
+	},
+	assistant: {
+		...runtimeSecret('assistant'),
+		ALLOWED_ORIGINS: SITE,
+		COOKIE_SECURE: 'true',
+		NODE_EXTRA_CA_CERTS: CA,
+		DB_POOL_MAX: '1',
+		FEED_SOURCE: 'live',
+		ASSISTANT_PROVIDER: 'bedrock',
+		ASSISTANT_MODEL: MODEL,
+		ASSISTANT_BEDROCK_REGION: 'af-south-1',
+		ASSISTANT_TOKENS_PER_MONTH: '2000000',
+		ASSISTANT_TOKENS_PER_USER_MONTH: '1000000',
+		ASSISTANT_TOKENS_PER_MONTH_TOTAL: '25000000',
+		ASSISTANT_MESSAGES_PER_HOUR: '30',
+		ASSISTANT_MAX_HOPS: '6',
+		ASSISTANT_MAX_TURN_TOKENS: '150000',
+		ASSISTANT_MAX_TOOL_CALLS_PER_HOP: '4',
+		ASSISTANT_MAX_OUTPUT_TOKENS: '1024',
+		ASSISTANT_MAX_TOOL_RESULT_CHARS: '12000',
+		ASSISTANT_MAX_INPUT_CHARS: '40000',
+		ASSISTANT_KEEPALIVE_SECONDS: '15',
+		ASSISTANT_TURN_SECONDS: '105'
 	}
 };
 
@@ -395,7 +429,8 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		REPORTS_BUCKET: 'a name only: each role’s IAM policy grants Terraform’s bucket alone, so a wrong one fails every put',
 		PACKS_BUCKET: 'a name only, as REPORTS_BUCKET: the renderer’s and the API’s roles may put, and the worker’s read, only in Terraform’s packs bucket',
 		DEM_URL: 'empty in the committed file: delineation off, a valid production choice too (a local value is refused: the named local defaults below)',
-		WATER_URL: 'empty in the committed file: tracing a dam off, a valid production choice too (a local value is refused, as DEM_URL)'
+		WATER_URL: 'empty in the committed file: tracing a dam off, a valid production choice too (a local value is refused, as DEM_URL)',
+		ASSISTANT_PROVIDER: 'off in the committed file: the chat hidden, a valid choice on the API (its status says so); the assistant refuses it (the named local defaults below)'
 	};
 
 	it.each(ROLES)('%s: every committed backend/.env.development value it checks is refused', (role) => {
@@ -482,9 +517,76 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['worker', 'DEM_URL', 'fixtures/dem/synthetic-dem.pmtiles'],
 			['worker', 'DEM_URL', 'http://localhost:9002/tiles/terrain.pmtiles'],
 			['api', 'WATER_URL', 'fixtures/water/synthetic-water.pmtiles'],
-			['api', 'WATER_URL', 'http://localhost:9002/tiles/water.pmtiles']
+			['api', 'WATER_URL', 'http://localhost:9002/tiles/water.pmtiles'],
+			['assistant', 'ASSISTANT_PROVIDER', undefined],
+			['assistant', 'ASSISTANT_PROVIDER', 'off'],
+			['assistant', 'ASSISTANT_PROVIDER', 'mock'],
+			['assistant', 'ASSISTANT_PROVIDER', 'ollama'],
+			['assistant', 'ASSISTANT_PROVIDER', 'anthropic'],
+			['api', 'ASSISTANT_PROVIDER', 'mock'],
+			['api', 'ASSISTANT_PROVIDER', 'ollama'],
+			['assistant', 'ASSISTANT_MODEL', undefined],
+			['assistant', 'ASSISTANT_MODEL', 'qwen2.5-coder:7b'],
+			['assistant', 'ASSISTANT_MODEL', 'claude-sonnet-5-5'],
+			['api', 'ASSISTANT_MODEL', 'qwen2.5-coder:7b'],
+			['assistant', 'ASSISTANT_TOKENS_PER_MONTH', 'lots'],
+			['assistant', 'ASSISTANT_TOKENS_PER_MONTH', '0'],
+			['assistant', 'ASSISTANT_TOKENS_PER_MONTH', undefined],
+			['api', 'ASSISTANT_TOKENS_PER_MONTH', '2e6x'],
+			['assistant', 'ASSISTANT_MESSAGES_PER_HOUR', '-1'],
+			['assistant', 'ASSISTANT_MAX_HOPS', '1.5'],
+			['assistant', 'ASSISTANT_KEEPALIVE_SECONDS', '60'],
+			['assistant', 'ASSISTANT_KEEPALIVE_SECONDS', '0'],
+			['assistant', 'ASSISTANT_TURN_SECONDS', 'long'],
+			['assistant', 'ANTHROPIC_API_KEY', 'sk-ant-0000'],
+			['api', 'ANTHROPIC_API_KEY', 'sk-ant-0000'],
+			// A dev provider's host, which an environment change alone must never point a Lambda at.
+			['assistant', 'ANTHROPIC_BASE_URL', 'https://proxy.example.com'],
+			['api', 'ANTHROPIC_BASE_URL', 'https://proxy.example.com'],
+			['assistant', 'OLLAMA_URL', 'https://ollama.example.com'],
+			['api', 'OLLAMA_URL', 'http://localhost:11434'],
+			// The caps: every one set on the assistant, and within the bounds infra/variables.tf validates.
+			['assistant', 'ASSISTANT_TOKENS_PER_MONTH', '20000001'],
+			['assistant', 'ASSISTANT_TOKENS_PER_USER_MONTH', undefined],
+			['assistant', 'ASSISTANT_TOKENS_PER_USER_MONTH', '0'],
+			['assistant', 'ASSISTANT_TOKENS_PER_MONTH_TOTAL', undefined],
+			['assistant', 'ASSISTANT_TOKENS_PER_MONTH_TOTAL', '200000001'],
+			['api', 'ASSISTANT_TOKENS_PER_MONTH_TOTAL', 'all'],
+			['assistant', 'ASSISTANT_MESSAGES_PER_HOUR', '121'],
+			['assistant', 'ASSISTANT_MAX_HOPS', '13'],
+			['assistant', 'ASSISTANT_MAX_TURN_TOKENS', undefined],
+			['assistant', 'ASSISTANT_MAX_TURN_TOKENS', '9999'],
+			['assistant', 'ASSISTANT_MAX_TOOL_CALLS_PER_HOP', undefined],
+			['assistant', 'ASSISTANT_MAX_TOOL_CALLS_PER_HOP', '11'],
+			['assistant', 'ASSISTANT_MAX_OUTPUT_TOKENS', undefined],
+			['assistant', 'ASSISTANT_MAX_OUTPUT_TOKENS', '100000'],
+			['assistant', 'ASSISTANT_MAX_TOOL_RESULT_CHARS', '999'],
+			['assistant', 'ASSISTANT_MAX_INPUT_CHARS', '1000000'],
+			['assistant', 'DB_POOL_MAX', undefined],
+			['assistant', 'ALLOWED_ORIGINS', 'http://localhost:7777'],
+			['assistant', 'CLOUDFRONT_SHARED_SECRET', undefined],
+			['assistant', 'FEED_SOURCE', 'fixtures']
 		];
 		for (const [role, name, value] of cases) expect(problemNames(role, prod(role, { [name]: value })), `${role} ${name}=${value}`).toContain(name);
+	});
+
+	it('the assistant calls Bedrock in its own region, and the API may keep the chat off or name the model without calling it (positive controls for the assistant refusals)', () => {
+		const region = (v: string | undefined, own = 'af-south-1') => problemNames('assistant', prod('assistant', { AWS_REGION: own, ASSISTANT_BEDROCK_REGION: v }));
+		expect(region('af-south-1')).toEqual([]);
+		for (const v of [undefined, '', 'us-east-1']) expect(region(v), String(v)).toContain('ASSISTANT_BEDROCK_REGION');
+		// Every Bedrock form the policy can name: in-region, a system profile (global or geo), an inference profile ARN.
+		for (const v of ['anthropic.claude-sonnet-5-5', MODEL, 'eu.anthropic.claude-sonnet-5-5', 'arn:aws:bedrock:af-south-1:000000000000:application-inference-profile/abc123'])
+			expect(problemNames('assistant', prod('assistant', { ASSISTANT_MODEL: v })), v).toEqual([]);
+		// The API: released before the apply that sets them, it starts with the chat off.
+		expect(problemNames('api', prod('api', { ASSISTANT_PROVIDER: undefined, ASSISTANT_MODEL: undefined, ASSISTANT_TOKENS_PER_MONTH: undefined, ASSISTANT_MESSAGES_PER_HOUR: undefined }))).toEqual([]);
+		expect(problemNames('api', prod('api', { ASSISTANT_PROVIDER: 'off' }))).toEqual([]);
+		// The limits the code defaults are safe for may be left unset on the assistant.
+		expect(problemNames('assistant', prod('assistant', { ASSISTANT_MAX_HOPS: undefined, ASSISTANT_KEEPALIVE_SECONDS: undefined, ASSISTANT_TURN_SECONDS: undefined }))).toEqual([]);
+	});
+
+	it('the assistant holds only the secrets its routes need: no download-signing or TOTP key, no model key', () => {
+		expect([...RUNTIME_SECRETS.assistant].sort()).toEqual(['AUTH_JWT_SECRET', 'CLOUDFRONT_SHARED_SECRET', 'DATABASE_URL']);
+		expect(RUNTIME_SECRETS.api).toContain('CLOUDFRONT_PRIVATE_KEY'); // positive control
 	});
 
 	it('the worker and the API say which CHIRPS is read, and the worker reads our copy only from its S3 bucket', () => {

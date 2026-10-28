@@ -1324,8 +1324,17 @@ def ewr_split_station_units() -> dict:
     u1's requirement adds both shares; the period is the complete water years
     2006/07 … 2016/17 of the twelve calendar years."""
     doc = station_units()
-    doc["settings"]["ewrSplit"] = "naturalMar"
     doc["settings"]["ewrPragmaticM3PerDay"] = [4000, 4000, 5000, 6000, 6000, 5000, 4000, 3000, 2500, 2500, 3000, 3500]
+    return doc
+
+
+def ewr_split_fragmentation() -> dict:
+    """The same network under Fragmentation (engine >= 1.105.0, issue #615):
+    the flow is the catchment's one GR4J run split by the flow share, and the
+    EWR shares come from GR4J once per land unit on the Per unit forcing (the
+    stations, the gauge MAP), the same shares as under Per unit."""
+    doc = ewr_split_station_units()
+    doc["settings"]["unitRain"] = {**doc["settings"]["unitRain"], "mode": "catchment"}
     return doc
 
 
@@ -1715,6 +1724,7 @@ PROBES = {
     # The EWR split (issue #553 round 4).
     "ewr-split-station-units": ewr_split_station_units(),
     "ewr-split-short-run": ewr_split_short_run(),
+    "ewr-split-fragmentation": ewr_split_fragmentation(),
     # Daily reference ET (issue #604 R5-E).
     "daily-et0-monthly-pe": daily_et0_monthly_pe(),
     "daily-et0-pan-pe": daily_et0_monthly_pe("pan"),

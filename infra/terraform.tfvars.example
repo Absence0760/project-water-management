@@ -162,3 +162,34 @@ report_download_signing_key = "2026-09"
 # Empty: the CSP allows no WAF origin and the sign-in page says to wait
 # instead of showing the puzzle.
 # waf_captcha_integration_url = "https://<id>.edge.captcha-sdk.awswaf.com/<id>/"
+
+# The AI assistant (assistant.tf, docs/deployment.md § The assistant). Off by
+# default. Before turning it on: the privacy notice names the model's
+# provider and region (it does from LEGAL_VERSION 2026-10-27), and the model
+# is enabled in the Bedrock console with one invocation from it
+# (docs/followups.md § Blocking releases). From af-south-1 Anthropic's models
+# are reachable only through the global inference profile, which may run a
+# request in any commercial AWS region (a POPIA s72 transfer, recorded in
+# docs/security.md). With it on, raise budget_monthly_usd by
+# assistant_budget_monthly_usd (160 on the defaults): the account budget
+# counts the model spend, and the assistant's ~$11 a month of fixed cost
+# would otherwise put the idle on its ACTUAL 80% line (infra/README.md § Cost).
+# Token caps are weighted (input + 5 x output: dollars at the input price);
+# the deployment-wide one, left unset, is assistant_budget_monthly_usd /
+# assistant_input_usd_per_million (25 M at $50 and $2/M).
+# assistant_enabled                = false
+# budget_monthly_usd               = 160
+# assistant_model_id               = "global.anthropic.claude-sonnet-5-5"
+# assistant_reserved_concurrency   = 2
+# assistant_timeout_seconds        = 120
+# assistant_tokens_per_month       = 2000000
+# assistant_tokens_per_user_month  = 1000000
+# assistant_tokens_per_month_total = 25000000
+# assistant_input_usd_per_million  = 2
+# assistant_messages_per_hour      = 30
+# assistant_max_hops               = 6
+# assistant_max_turn_tokens        = 150000
+# assistant_max_tool_calls_per_hop = 4
+# assistant_tokens_alarm_per_hour  = 2000000
+# assistant_budget_monthly_usd     = 50
+# bedrock_endpoint_az_count        = 1

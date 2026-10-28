@@ -36,7 +36,7 @@ export const FLOW_METHODS: readonly { value: FlowGenerationMethod; label: string
 		value: 'fragmentation',
 		label: 'Fragmentation',
 		short: 'one runoff run on the catchment rain, split between the units',
-		help: 'GR4J runs once on the catchment rain, and the flow share splits its flow and the EWR between the units.'
+		help: 'GR4J runs once on the catchment rain, and the flow share splits its flow between the units. The EWR is split by each unit’s natural MAR, from GR4J runs on each unit’s own rain (the Per unit setup below), made for that only.'
 	},
 	{
 		value: 'perUnit',
@@ -57,6 +57,25 @@ export function stationOptions<S extends StationOption & Pick<SeriesMeta, 'kind'
 		.filter((s) => s.kind === 'rain_catchment_mm' && !s.siteNodeId)
 		.map((s) => ({ id: s.id, name: s.name, station: s.station ?? null }))
 		.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+/**
+ * The land units that run on the catchment rain (rule 4 of docs/model.md §2.4h), in the model's order: no rainfall
+ * station, no rain gauge or CHIRPS series of their own, and no MAP to scale the catchment gauge by (or no gauge MAP).
+ * Their EWR share follows their area under both methods (issue #615, §2.5b), so Run readiness and the Flow generation
+ * panel name them. Read from the setup, as the editor sees it: the run decides from the records themselves, so a
+ * series with no reading, or a CHIRPS that totals 0 mm, still falls to the catchment rain there and the run says so.
+ */
+export function unitsOnCatchmentRain<N extends UnitNode & { mapMm?: number | null }>(
+	nodes: readonly N[],
+	settings: { unitRain?: { gaugeMapMm?: number | null } | null; rainStations?: Pick<RainStationSettings, 'units'> | null } | null | undefined,
+	series: readonly (Pick<SeriesMeta, 'kind'> & { siteNodeId?: string | null; station?: { mapMm?: number | null } | null })[]
+): N[] {
+	const own = new Set(series.filter((s) => s.siteNodeId && (s.kind === 'rain_catchment_mm' || s.kind === 'rain_chirps_mm')).map((s) => s.siteNodeId!));
+	const gauge = series.find((s) => s.kind === 'rain_catchment_mm' && !s.siteNodeId);
+	const gaugeMap = !!gauge && ((settings?.unitRain?.gaugeMapMm ?? null) !== null || (gauge.station?.mapMm ?? null) !== null);
+	const stations = settings?.rainStations?.units ?? {};
+	return landUnits(nodes).filter((n) => !stations[n.id] && !own.has(n.id) && !(gaugeMap && (n.mapMm ?? 0) > 0));
 }
 
 /** The land units the table lists (a farm with an area), in the model's order. */

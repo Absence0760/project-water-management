@@ -170,7 +170,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on EWR, the hydrological units and dams on the Network, where the runoff parameters came from on Calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file, and **Run model**, which opens a small form for an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**; the run opens in **Runs & results** when it finishes. On **Runs & results** that form sits in the header itself. On a phone the page’s own actions are in one **⋯** list (**More actions**) beside **Rain up to**, **How this page works** is the **?** beside the name, and **Add data** and **Run model** (on Runs & results the run form) end the header on one row; while new data waits, the button there reads **Re-run model**.'
+						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on EWR, the hydrological units and dams on the Network, where the runoff parameters came from on Calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file, on the pages that ask for data (**Summary**, **Crops & demand**, **Data**, **Model settings** and **Calibration**), and **Run model** on every page, which opens a small form for an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**; the run opens in **Runs & results** when it finishes. On **Runs & results** that form sits in the header itself. On a phone the page’s own actions are in one **⋯** list (**More actions**) beside **Rain up to**, **How this page works** is the **?** beside the name, and **Add data** (where the page has it) and **Run model** (on Runs & results the run form) end the header on one row; while new data waits, the button there reads **Re-run model**.'
 					},
 					{
 						type: 'p',
@@ -441,7 +441,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Prepare a CSV with two columns, **date,value**, one row per day. A header row is optional. Leave a missing day blank rather than writing 0. Commas, semicolons or tabs, and decimal points or decimal commas, are worked out from the file. A daily table exported from the DWS hydrology site loads as it is: days its quality code marks as missing, and negative placeholders such as -999, become gaps.',
-							'Press **Add data** in the section header, or drop the file anywhere on the page.',
+							'Press **Add data** in the section header, or drop the file on the page. Both are on **Summary**, **Crops & demand**, **Data**, **Model settings** and **Calibration**; another page says where to drop it.',
 							'Check the series the form guessed from the file name and header, and the preview chart.',
 							'For an existing series keep **Append / update**: new days are added and overlapping days corrected. The preview counts new, changed and unchanged days. Use **Replace** only to overwrite the whole series.',
 							'Upload. If the file would change days already stored, the form asks first: it says how many days and between which dates, and **Show the changes** lists each one. Press **Overwrite** to go ahead, or **Back**. The values it replaces are kept: in the **History** tab, pick that change and press **Restore the earlier values**. **Cancel**, the close button or Esc asks before throwing away a file you have picked but not uploaded.',
@@ -1237,6 +1237,73 @@ export const GUIDES: Guide[] = [
 		],
 		terms: ['api-key', 'alert-rules', 'change-history'],
 		related: ['add-data']
+	},
+	{
+		id: 'ask-the-assistant',
+		title: 'Ask the assistant about a project',
+		summary: 'Ask questions about a project’s model and results in plain words, and review the settings changes it recommends before you save any.',
+		kind: 'use',
+		sections: [
+			{
+				heading: 'Ask a question',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Open the project and press **Assistant** in the page’s header (on a phone, under **More actions**). It shows on every page of the project when your organisation has the assistant switched on.',
+							'Type a question about this project, such as “Why does the simulated flow at the outlet gauge not respond to rainfall?”, and press **Send** (or Enter).',
+							'The answer comes in as it is written. The lines above it say what the assistant read to answer: the network, a series, the run’s summary, a gauge’s fit or the help guides.',
+							'Ask a follow-up in the same box: the assistant sees the whole conversation. **Stop** ends an answer early; **New conversation** starts again.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'It reads the run you have open (on Runs & results, EWR and the other run pages), or the project’s latest run. It reads only what your [[roles|role]] lets you see, and it never changes anything.'
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Its answers are advice, not model output: check them against the run’s own results before you rely on them, as the line under the box says.'
+					}
+				]
+			},
+			{
+				heading: 'Review a recommended change',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Ask it which settings to change (“Which settings would you change to improve the fit at the outlet?”) and it may answer with a **Recommended change**: each setting it would change, its value now and the suggested one, and why.'
+					},
+					{
+						type: 'steps',
+						items: [
+							'Read the change. Press **Apply to the settings form** to try it (editors and owners only).',
+							'**Model settings** opens with the change in the form, not yet saved, and the **Reason for this change** filled in as “Assistant suggestion: …”.',
+							'Check the values, then press **Save changes** to keep it, or **Discard** to drop it. Run the model to see what it does.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'The save is checked like any other, and the [[change-history|History]] page keeps it with its reason.'
+					}
+				]
+			},
+			{
+				heading: 'Limits',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'Each person can send a set number of messages an hour. Past it, the panel says how long to wait.',
+							'Each project has a monthly budget, shown under the box. Once it is used up the assistant rests until the date shown.',
+							'Nothing you type is kept: the conversation lasts while the project is open in your browser.'
+						]
+					}
+				]
+			}
+		],
+		terms: ['roles', 'change-history'],
+		related: ['calibrate-by-hand', 'run-and-read-results']
 	},
 	{
 		id: 'two-step-sign-in',

@@ -22,8 +22,9 @@ test('the run form sits in the section header, last, with its status one slim li
 	await expect(h.getByTestId('section-context')).toHaveText('No runs yet');
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
 
-	// The tab's own run form takes the header Run model's place here: last, after a plain Add data, one row with the title.
-	await expect(h.getByRole('button')).toHaveText(['Add data', 'Run model']);
+	// The tab's own run form takes the header Run model's place here: last, one row with the title; no Add data (issue #601).
+	// (The header's actions: the Assistant sits on the title's line, before them.)
+	await expect(h.getByTestId('header-actions').getByRole('button')).toHaveText(['Run model']);
 	const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;
 	const run = h.getByRole('button', { name: 'Run model' });
 	const box = (await run.boundingBox())!;

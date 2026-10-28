@@ -391,20 +391,26 @@ and the forecast; no rule 2 without the station's MAP).
 
 ## What the EWR split covers
 
-`settings.ewrSplit` (model.md §2.5b, engine ≥ 1.94.0, issue #553): with
-`'naturalMar'` under per-unit rain, each unit's EWR share is its own
-`runoff_natural` (days above 0) summed over the complete water years of the
-historical days, else every historical day, ÷ the units' total in node-id
-order, every farm without runoff at 0; with no runoff over the period, and
-under catchment rain, the flow shares. `add_ewr_split` (its own random
-stream, last) sets it on half the per-unit networks and a tenth of the
-others. Compared: every unit's `ewr` and everything downstream
-(`ewr_cumulative`, `ewr_shortfall`). Probes:
+The EWR split (model.md §2.5b; one way only from engine 1.105.0, issue #615):
+each unit's EWR share is its own natural runoff (days above 0) summed over
+the complete water years of the historical days, else every historical day,
+÷ the units' total in node-id order, every farm without runoff at 0; with no
+runoff over the period, each land unit's area ÷ the land units' total; with
+no land unit, the flow shares. Under Per unit the runoff is the units'
+`runoff_natural`; under Fragmentation the model runs GR4J once per land unit
+on the Per unit forcing (`settings.unitRain` with its mode set to
+`perUnit`), with the run's parameters, PE and warm-up, for the shares only,
+while the catchment's one run makes the flow. The retired
+`settings.ewrSplit` (1.94.0 – 1.104.x) is ignored, and the generator no
+longer draws it. Compared: every unit's `ewr` and everything downstream
+(`ewr_cumulative`, `ewr_shortfall`), on every network. Probes:
 `ewr-split-station-units` (station-units' network: two units on one station,
 one draining into the other, twelve calendar years whose complete water years
-leave out the first nine months) and `ewr-split-short-run` (eight months, no
-complete water year: the whole run). Mutants: the split ignored, and the MAR
-taken over every day instead of the complete water years.
+leave out the first nine months), `ewr-split-short-run` (eight months, no
+complete water year: the whole run) and `ewr-split-fragmentation` (the first
+under Fragmentation: the same shares, the catchment's flow). Mutants: the
+split ignored, Fragmentation's share runs ignored, and the MAR taken over
+every day instead of the complete water years.
 
 ## Phase 2b (not covered yet)
 

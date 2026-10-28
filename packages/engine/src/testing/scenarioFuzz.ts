@@ -119,9 +119,8 @@ function settingsOp(g: Rng, input: ModelInput): ScenarioOp {
 		['reportEnd', date],
 		['calibrationStart', date],
 		['calibrationEnd', date],
-		['calibrationFlowKind', () => g.pick([null, 'flow_observed_m3s', 'flow_logger_m3s'])],
-		// Engine ≥ 1.94.0 (issue #553). A longer list maps each seed's pick to another choice, so every seed's ops moved with it.
-		['ewrSplit', () => g.pick(['flowShare', 'naturalMar'])]
+		// ewrSplit (engine 1.94.0 – 1.104.x) left with the setting (issue #615): each seed's pick moved with the shorter list.
+		['calibrationFlowKind', () => g.pick([null, 'flow_observed_m3s', 'flow_logger_m3s'])]
 	];
 	const [path, value] = g.pick(choices);
 	return { op: 'settings.set', path, value: value() } as ScenarioOp;

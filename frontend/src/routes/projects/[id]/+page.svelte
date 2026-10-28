@@ -36,6 +36,8 @@
 	const loadGridModal = () => import('#lib/components/model/GridModal.svelte');
 	// An applicant's whole view of the project (WP-3.3): the workspace's tabs all refuse them.
 	const loadApplicantView = () => import('#lib/components/scenarios/ApplicantView.svelte');
+	// The assistant's side sheet (issue #610), from the header's Assistant button.
+	const loadAssistant = () => import('#lib/components/assistant/AssistantPanel.svelte');
 </script>
 
 <script lang="ts">
@@ -78,6 +80,8 @@
 	import { compareTabHref } from '#lib/components/compare/picker.js';
 	import { carriedRun, isRunTab, pickOf, tabHref as tabLinkHref } from '#lib/workspace/tabLinks.js';
 	import { defaultRunId } from '#lib/components/runs/runList.js';
+	import { AssistantChat } from '#lib/components/assistant/chat.svelte.js';
+	import type { SettingsProposal } from '#lib/api/types.js';
 	import { badgeCount, problems, type FeedProblem } from '#lib/components/warnings/problems.js';
 	import { landOnField } from '#lib/nav/fieldLanding.js';
 	import { focusPageStart } from '#lib/a11y/focusPage.js';
@@ -95,6 +99,8 @@
 	import { GRID_TAB, isGridId, isTabGridId, movedGridHref, withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import {
 		ALL_TABS,
+		addsData,
+		REFUSED_DROP_TEXT,
 		canOpenTab,
 		hasModelInputsToggle,
 		hiddenChoice,
@@ -270,7 +276,7 @@
 	/** The save bar's optional "Reason for this change", kept with the change in the History tab. */
 	let saveReason = $state('');
 
-	// --- data freshness, "Add data" (button or drop a CSV anywhere) ------------
+	// --- data freshness, "Add data" (button or drop a CSV on its tabs) ---------
 	// The project's calendar date (its time zone), as on the project list and the portfolio (issue #137).
 	const today = $derived(projectToday(project?.timeZone));
 	const fresh = $derived(freshness(series ?? [], today));
@@ -355,17 +361,21 @@
 	});
 	$effect(() => () => stopField());
 
-	// `?add=data` (the project list's Add data link): the dialog opens once the role is known, for an
-	// editor, and the param goes so Back or a reload doesn't reopen it.
+	// `?add=data` (the project list's Add data link, the Warnings page's fixes): the dialog opens once the
+	// role is known, for an editor, and the param goes so Back or a reload doesn't reopen it. On a tab
+	// without Add data (issue #601) it opens over Data instead, so closing it leaves you where the button is.
 	$effect(() => {
 		if (page.url.searchParams.get('add') !== 'data' || !project) return;
 		untrack(() => {
 			if (canEdit) openAddData();
-			void goto(withoutParam(page.url, 'add'), { replace: true, reset: false });
+			const to = new URL(withoutParam(page.url, 'add'), page.url.href);
+			if (canEdit && !addsData(tab)) to.searchParams.set('tab', 'series');
+			void goto(`${to.pathname}${to.search}${to.hash}`, { replace: true, reset: false });
 		});
 	});
 	const carriesFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-	const hasFiles = (e: DragEvent) => canEdit && carriesFiles(e);
+	// A file dropped on a tab without Add data (issue #601), or by a viewer, is refused: never opened in place of the page.
+	const hasFiles = (e: DragEvent) => showsAddData && carriesFiles(e);
 	function onDragEnter(e: DragEvent) {
 		if (!hasFiles(e)) return;
 		e.preventDefault();
@@ -373,8 +383,8 @@
 		dragDepth++;
 	}
 	function onDragOver(e: DragEvent) {
-		// A viewer's file is refused here too, so the browser doesn't open it in place of the page.
-		if (!canEdit && carriesFiles(e)) {
+		// A viewer's file, or one on a tab without Add data, is refused here too, so the browser doesn't open it in place of the page.
+		if (!showsAddData && carriesFiles(e)) {
 			e.preventDefault();
 			if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
 			return;
@@ -391,6 +401,11 @@
 		if (!canEdit && carriesFiles(e)) {
 			e.preventDefault();
 			banner = { text: 'View only: ask an editor to add data.', added: 0 };
+			return;
+		}
+		if (!showsAddData && carriesFiles(e)) {
+			e.preventDefault();
+			banner = { text: REFUSED_DROP_TEXT, added: 0 };
 			return;
 		}
 		if (!hasFiles(e)) return;
@@ -441,12 +456,14 @@
 	}
 
 	const canEdit = $derived(hasRole(project?.role, 'editor'));
+	// Add data (the header's button and a dropped file) only on the tabs it adds data to (TAB_ADDS_DATA, issue #601).
+	const showsAddData = $derived(canEdit && addsData(tab));
 	/** A run started on this tab opens on it (startRun): Calibration shows the new run's fit itself. */
 	const runOpensHere = $derived(tab === 'calibration');
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
 
 	// --- the section header (SectionHeader, issue #17) -------------------------
-	// For an editor every section ends on Add data, then Run model: the header's RunButton, which
+	// For an editor every section ends on Run model (after Add data, on the tabs that have it, TAB_ADDS_DATA): the header's RunButton, which
 	// opens a small form so the run can be named, or on Runs & results the tab's own run form
 	// (headerSlot.main: Run label, Run forecast, Run model), never both.
 	// The Data badge in the sections: series a run is driven by that are behind today (freshness.ts).
@@ -768,6 +785,57 @@
 		return tabLinkHref(id, page.url.pathname, carried);
 	}
 
+	// --- the assistant (issue #610, docs/ui.md § Assistant) ---------------------
+	// One conversation per project, held here so closing the sheet or changing tab keeps it (nothing is
+	// stored on the server). Its button shows only when the server has the assistant on for this caller
+	// (GET …/assistant answers `available`); a farmer or an applicant never reaches the workspace.
+	let assistant = $state.raw<{ id: string; chat: AssistantChat } | null>(null);
+	let assistantOpen = $state(false);
+	let assistantMounted = $state(false);
+	const assistantReady = $derived(!!project && !applicantProject);
+	$effect(() => {
+		const id = projectId;
+		if (!assistantReady) {
+			assistant = null;
+			return;
+		}
+		const chat = new AssistantChat({ status: () => api.assistant.status(id), send: (body, signal) => api.assistant.send(id, body, signal) });
+		assistant = { id, chat };
+		assistantOpen = false;
+		void chat.load();
+		// Leaving the project stops an answer still streaming.
+		return () => chat.stop();
+	});
+	const assistantOn = $derived(assistant?.chat.available ?? false);
+	// The run the conversation is about: the one a run tab shows, else the one carried between tabs, else the default.
+	const assistantRun = $derived(
+		(isRunTab(tab) ? page.url.searchParams.get('run') : null) ?? carried ?? (runs ? defaultRunId(runs, project?.role) : null)
+	);
+	function openAssistant() {
+		assistantMounted = true;
+		assistantOpen = true;
+	}
+	/** The save reason Apply filled in, cleared again if the change is discarded rather than saved. */
+	let appliedReason = '';
+	/**
+	 * Apply on a recommended change: it goes into the settings form, unsaved, as any edit there would, and Model
+	 * settings opens with the save bar's reason filled in. The person checks it and saves with the normal Save
+	 * (the server validates it as any save), or discards it; the assistant saves nothing.
+	 */
+	async function applyProposal(p: SettingsProposal) {
+		settings.applyPatch(p.patch);
+		appliedReason = `Assistant suggestion: ${p.summary}`;
+		saveReason = appliedReason;
+		assistantOpen = false;
+		if (tab !== 'settings') await goto('?tab=settings', { reset: false });
+	}
+	$effect(() => {
+		if (!unsaved && appliedReason && saveReason === appliedReason) {
+			saveReason = '';
+			appliedReason = '';
+		}
+	});
+
 	// Following a sidebar link puts the focus on the new page's title (its h1, focusPageStart), so Tab
 	// carries on in the page, not from the top of the sidebar (issue #586; ui-playbook.md § 4). The arrow
 	// keys between the links keep it on the link instead (tabKeydown).
@@ -960,9 +1028,31 @@
 		<span class="fresh-none muted">No data yet</span>
 	{/if}
 {/snippet}
-<!-- Add data, then Run model (the tab's main action on Runs & results, its run form): what every section ends on. -->
+<!-- The Assistant (issue #610), on the title's line after How this page works: the same place on every section,
+     for anyone the server lets use it here (docs/ui.md § Assistant). A sparkle in a chat bubble, then its name. -->
+{#snippet assistButton()}
+	<button
+		type="button"
+		class="btn btn-sm assist-btn"
+		aria-haspopup="dialog"
+		aria-expanded={assistantOpen}
+		data-testid="assistant-open"
+		onclick={openAssistant}
+		onpointerenter={() => prefetch(loadAssistant)}
+		onfocus={() => prefetch(loadAssistant)}
+	>
+		<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"
+			><path d="M2.5 2.5h11a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H8.2l-3.4 2.6v-2.6H2.5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><path
+				d="M8 4.2l.75 1.85L10.6 6.8l-1.85.75L8 9.4l-.75-1.85L5.4 6.8l1.85-.75z"
+				fill="currentColor"
+			/></svg
+		><span class="assist-text">Assistant</span>
+	</button>
+{/snippet}
+<!-- Add data (on the tabs it adds data to, TAB_ADDS_DATA), then Run model (the tab's main action on Runs & results,
+     its run form): what every section ends on. -->
 {#snippet headerMain()}
-	{#if canEdit}
+	{#if showsAddData}
 		<button
 			type="button"
 			class="btn add"
@@ -1079,6 +1169,7 @@
 				badge={unsavedBadge}
 				context={headerSlot.context ?? (contextText ? pageContext : null)}
 				status={fresh || series || headerSlot.status ? headerStatus : null}
+				assist={assistantOn ? assistButton : null}
 				actions={headerSlot.actions}
 				main={canEdit || headerSlot.main ? headerMain : null}
 				notices={headerNotices}
@@ -1294,6 +1385,13 @@
 					{/snippet}
 				</Lazy>
 			{/if}
+			{#if assistantMounted && assistant}
+				<Lazy load={loadAssistant}>
+					{#snippet children(AssistantPanel)}
+						<AssistantPanel bind:open={assistantOpen} chat={assistant!.chat} runId={assistantRun} onapply={applyProposal} />
+					{/snippet}
+				</Lazy>
+			{/if}
 			{#if canEdit}
 				{#if addMounted}
 					<Lazy load={loadAddData}>
@@ -1321,11 +1419,7 @@
 	.page {
 		padding-bottom: calc(var(--dock-h, 0px) + 1rem);
 	}
-	.add {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-	}
+	.add,
 	.fresh {
 		position: relative;
 		font-size: 0.85rem;

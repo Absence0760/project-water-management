@@ -52,7 +52,6 @@ import { sanitizeExclusions } from './calibrate/provenance';
 import { resolveChecksKept, resolveFlowMissing, withRecordPeriods } from './recordPeriods';
 import { resolveWarningsKept } from './checkItems';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
-import { resolveEwrSplit } from './network/ewrSplit';
 import { resolveEwrDailySource } from './reserve/dailySource';
 import { RUNOFF_MODELS } from './runoff/types';
 import {
@@ -61,6 +60,7 @@ import {
 	defaultProjectSettings,
 	LEGACY_UPGRADED_WARNING,
 	RETIRED_CALIBRATION_KEYS,
+	RETIRED_SETTINGS_KEYS,
 	panCoefficientOutOfRange,
 	resolvePe,
 	resolveArealRain,
@@ -968,7 +968,7 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		warnings.push(`unknown flow share method "${String(s.flowShareMethod)}"; using area`);
 		s.flowShareMethod = 'area';
 	}
-	// How the EWR is split between the units (engine ≥ 1.94.0, issue #553): an unknown value splits by the flow share.
-	s.ewrSplit = resolveEwrSplit(s.ewrSplit, warnings);
+	// Retired settings (engine ≥ 1.105.0, RETIRED_SETTINGS_KEYS): ignored, as the legacy model's calibration keys are.
+	for (const k of RETIRED_SETTINGS_KEYS) delete (s as unknown as Record<string, unknown>)[k];
 	return s;
 }

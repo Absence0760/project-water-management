@@ -14,8 +14,6 @@
 	const loadUnitRain = () => loadSections().then((m) => ({ default: m.UnitRainFields }));
 	// Model selection for flow generation → Per unit's station table (issue #553 round 3): in the same chunk, drawn whenever Per unit is chosen.
 	const loadFlowGenUnits = () => loadSections().then((m) => ({ default: m.FlowGenerationUnits }));
-	// Split the EWR between units by (settings.ewrSplit, issue #553): out of the tab's chunk, for the same reason.
-	const loadEwrSplit = () => loadSections().then((m) => ({ default: m.EwrSplitFields }));
 	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
 	// Rain gaps' three cards, Gap-filling product (issue #604), CHIRPS gap filling and Flagged rain (issue #521), inside the fold that is one closed
@@ -81,7 +79,7 @@
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { apanSourceNote, withLakeMonthly } from './peInput';
 	import { withUnitRain } from './unitRain';
-	import { FLOW_METHODS, flowMethodOf, methodLabel, stationOptions, type FlowGenerationMethod } from './flowGeneration';
+	import { FLOW_METHODS, flowMethodOf, methodLabel, stationOptions, unitsOnCatchmentRain, type FlowGenerationMethod } from './flowGeneration';
 	import { calibrationHref } from '#lib/components/calibration/links.js';
 	// These panels render on every visit of the tab (the pan-coefficient helper aside, above), so they are in its chunk rather than chunks of
 	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
@@ -140,11 +138,17 @@
 	// no stored project changes. The one switched off is kept until saved, so switching back brings it back as it was.
 	const flowMethod = $derived(flowMethodOf(s.unitRain));
 	const stations = $derived(rainSeries ? stationOptions(rainSeries) : undefined);
+	// The land units on the catchment rain (issue #615): their EWR share follows their area, under both methods.
+	const onCatchmentRain = $derived(rainSeries ? unitsOnCatchmentRain(editor?.model.nodes ?? [], s, rainSeries) : []);
+	const NAMES_SHOWN = 6;
+	const namesOf = (units: readonly { name: string }[]) =>
+		units.length > NAMES_SHOWN ? `${units.slice(0, NAMES_SHOWN).map((u) => u.name || 'unnamed').join(', ')} and ${units.length - NAMES_SHOWN} more` : units.map((u) => u.name || 'unnamed').join(', ');
 	function setFlowMethod(m: FlowGenerationMethod) {
 		if (m === flowMethod) return;
 		if (m === 'fragmentation') {
+			// The Per unit setup stays (issue #615): Fragmentation's EWR shares run on it, so only the mode changes.
 			if (s.unitRain) draft.kept.unitRain = $state.snapshot(s.unitRain);
-			s.unitRain = withUnitRain(false);
+			s.unitRain = withUnitRain(false, s.unitRain);
 		} else {
 			// A stored `catchment` setting (its gauge MAP, its period) comes back on too.
 			const last = (draft.kept.unitRain as UnitRainSettings | null | undefined) ?? s.unitRain ?? null;
@@ -343,47 +347,57 @@
 				again on Calibration before relying on the results.
 			</p>
 		{/if}
-		{#if flowMethod === 'perUnit'}
-			<div class="sub-card" data-testid="flowgen-stations-card">
-				<h3 class="sub first">Each unit’s rainfall station <HelpTip key="settings.rainStations" /></h3>
-				<Lazy load={loadFlowGenUnits}>
-					{#snippet children(FlowGenerationUnits)}
-						<FlowGenerationUnits bind:value={s.rainStations} {readonly} nodes={editor?.model.nodes ?? []} {stations} projectId={project.id} />
-					{/snippet}
-				</Lazy>
-			</div>
-			<div class="sub-card" data-testid="flowgen-chain-card">
-				<!-- What a unit without a station runs on (settings.unitRain, issue #482): the rule from before stations. -->
-				<Lazy load={loadUnitRain}>
-					{#snippet children(UnitRainFields)}
-						<UnitRainFields bind:value={s.unitRain} {readonly} nodes={editor?.model.nodes ?? []} {catchmentRain} />
-					{/snippet}
-				</Lazy>
-				{#if !readonly && editor}
-					<!-- Each unit's MAP from the MAP grid: saves straight to the model, then the workspace reloads it. -->
-					<Lazy load={loadUnitMap}>
-						{#snippet children(UnitMapProposal)}<UnitMapProposal projectId={project.id} modelDirty={editor.dirty} {onModelChanged} />{/snippet}
-					</Lazy>
-				{/if}
-			</div>
+		<!-- The Per unit setup (issue #615): under Per unit it makes each unit's runoff; under Fragmentation it makes only each
+		     unit's natural MAR share of the EWR (docs/model.md §2.5b), so it shows under both. -->
+		{#if flowMethod === 'fragmentation'}
+			<p class="hint" role="note" data-testid="flowgen-share-setup">
+				Under Fragmentation the setup below sets only how the EWR is split: GR4J also runs once on each unit’s own rain, for each unit’s natural MAR share, and the catchment’s one run still makes the flow.
+			</p>
 		{/if}
+		<div class="sub-card" data-testid="flowgen-stations-card">
+			<h3 class="sub first">Each unit’s rainfall station <HelpTip key="settings.rainStations" /></h3>
+			<Lazy load={loadFlowGenUnits}>
+				{#snippet children(FlowGenerationUnits)}
+					<FlowGenerationUnits bind:value={s.rainStations} {readonly} nodes={editor?.model.nodes ?? []} {stations} projectId={project.id} />
+				{/snippet}
+			</Lazy>
+		</div>
+		<div class="sub-card" data-testid="flowgen-chain-card">
+			<!-- What a unit without a station runs on (settings.unitRain, issue #482): the rule from before stations. -->
+			<Lazy load={loadUnitRain}>
+				{#snippet children(UnitRainFields)}
+					<UnitRainFields bind:value={s.unitRain} {readonly} nodes={editor?.model.nodes ?? []} {catchmentRain} />
+				{/snippet}
+			</Lazy>
+			{#if !readonly && editor}
+				<!-- Each unit's MAP from the MAP grid: saves straight to the model, then the workspace reloads it. -->
+				<Lazy load={loadUnitMap}>
+					{#snippet children(UnitMapProposal)}<UnitMapProposal projectId={project.id} modelDirty={editor.dirty} {onModelChanged} />{/snippet}
+				</Lazy>
+			{/if}
+		</div>
 		<div class="sub-card" data-testid="flowgen-share-card">
-			<h3 class="sub first">{flowMethod === 'perUnit' ? 'Flow share: the EWR between units' : 'Flow share'}</h3>
+			<h3 class="sub first">Flow share and the EWR split</h3>
 			<!-- What the shares split depends on the method (issue #553, docs/model.md §2.4h, §2.5): Fragmentation, GR4J's one
-			     run's flow and the EWR; Per unit, each unit makes its own runoff, so they split the EWR and the land-cover low-flow threshold. -->
+			     run's flow; Per unit, each unit makes its own runoff, so only the land-cover low-flow threshold. The EWR is split
+			     by each unit's natural MAR under both (issue #615, §2.5b). -->
+			<!-- A state line, not an explanation: it stays when the explanations are off, as the areal rain note does. -->
+			<p class="hint" role="note" data-testid="ewr-split-hint">
+				The EWR is split between the units by each unit’s natural MAR: its own GR4J runoff over the run’s complete water years ÷ the units’ total{flowMethod === 'perUnit' ? '' : ', from the runs on each unit’s own rain above'}. The run’s summary lists each unit’s share.
+			</p>
+			{#if onCatchmentRain.length}
+				<p class="hint" role="note" data-testid="ewr-split-catchment-rain">
+					{onCatchmentRain.length === 1 ? 'One unit has' : `${onCatchmentRain.length} units have`} no rain of {onCatchmentRain.length === 1 ? 'its' : 'their'} own (no station, rain gauge, CHIRPS, or MAP with a gauge MAP), so {onCatchmentRain.length === 1 ? 'it runs' : 'they run'} on the catchment rain and {onCatchmentRain.length === 1 ? 'its' : 'their'} EWR share follows {onCatchmentRain.length === 1 ? 'its' : 'their'} area:
+					{namesOf(onCatchmentRain)}.
+				</p>
+			{/if}
 			{#if flowMethod === 'perUnit'}
-				<!-- A state line, not an explanation: it stays when the explanations are off, as the areal rain note does. -->
 				<p class="hint" role="note" data-testid="share-hint" data-unit-rain="on">
-					{#if s.ewrSplit === 'naturalMar'}
-						<!-- The EWR split by each unit's natural MAR (issue #553 round 4): the share then splits neither the flow nor the EWR. -->
-						Each unit makes its own runoff and the EWR is split by each unit’s natural MAR (below); the flow share now splits only the land cover’s low-flow threshold between units.
-					{:else}
-						Each unit makes its own runoff; the flow share now splits only the EWR and the land cover’s low-flow threshold between units, not the flow.
-					{/if}
+					Each unit makes its own runoff; the flow share now splits only the land cover’s low-flow threshold between units, not the flow or the EWR.
 				</p>
 			{:else}
 				<p class="hint explain" data-testid="share-hint" data-unit-rain="off">
-					GR4J runs once on the catchment rain; the flow share splits its flow and the EWR between units. To give each unit its own runoff, choose Per unit above.
+					GR4J runs once on the catchment rain; the flow share splits its flow between units. To give each unit its own runoff, choose Per unit above.
 				</p>
 			{/if}
 			<div class="fields">
@@ -417,13 +431,6 @@
 					</fieldset>
 				{/if}
 			</div>
-			<!-- Split the EWR between units by (settings.ewrSplit, engine ≥ 1.94.0, issue #553 round 4): the flow share above or each unit's natural MAR. -->
-			<Lazy load={loadEwrSplit}>
-				{#snippet children(EwrSplitFields)}
-					<EwrSplitFields value={s.ewrSplit} perUnit={flowMethod === 'perUnit'} {readonly} onchange={(v) => (s.ewrSplit = v)} />
-				{/snippet}
-			</Lazy>
-			<FieldHistoryLine field="settings:ewrSplit" />
 		</div>
 	</section>
 

@@ -33,6 +33,7 @@ export {
 	type CatchmentStationFingerprint
 } from './stationFingerprint';
 export { stationAreaRain, stationPatchChoices, type StationAreaRain, type StationRainDaySource } from './stationAreaRain';
+export { unitAreaRain, type UnitAreaRain, type UnitRainDaySource } from './unitAreaRain';
 export {
 	catchmentMapOf,
 	resolvePatch,

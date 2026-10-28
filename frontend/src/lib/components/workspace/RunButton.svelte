@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The section header's Run model on every section but Runs & results (docs/ui.md
-	// § Section header), for editors: last, after Add data. A run is named, so the
+	// § Section header), for editors: last (after Add data on the tabs that have it). A run is named, so the
 	// button doesn't run at once; it opens a small form under it with the Run label,
 	// Run forecast (with forecast rain) and Run model, and says why a run can't start
 	// yet (runs/runReady.ts, the same reasons Runs & results' run form gives). The

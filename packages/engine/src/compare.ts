@@ -15,7 +15,7 @@ import { dayText, fromEpochDay, toEpochDay } from './calendar';
 import { ewrSourceConfidence, type EwrRuleTable, type EwrRuleSourceKind } from './reserve/rules';
 import { EWR_DAILY_SOURCE_LABEL, ewrDailySourceChanges } from './reserve/dailySource';
 import { isEwrSite } from './network/topology';
-import { EWR_SPLIT_LABEL } from './network/ewrSplit';
+import { EWR_SPLIT_LABEL, EWR_SPLIT_RETIRED_IN } from './network/ewrSplit';
 import { hasMonthlyRates, transferRatesM3s } from './network/transferRates';
 import { isRiverOfftake } from './network/offtake';
 import { droughtRestrictionChanges } from './network/restriction';
@@ -833,6 +833,9 @@ interface ScalarField {
 	fmt: Fmt;
 }
 
+const EWR_SPLIT_FIELD = 'EWR split between units by';
+const ewrSplitText: Fmt = (v) => (v === 'naturalMar' ? EWR_SPLIT_LABEL.naturalMar : v === 'flowShare' || v === undefined ? EWR_SPLIT_LABEL.flowShare : String(v));
+
 const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	februaryDays: { label: 'Days in February', fmt: plain },
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
@@ -846,8 +849,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	// Issue #71 (ER3): the rule an evidence report's cited ensemble must follow; never changes a result. Absent = not declared.
 	evidenceUncertaintyRule: { label: 'Declared uncertainty rule (evidence)', fmt: declaredRuleText },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
-	// Engine ≥ 1.94.0 (issue #553); a snapshot without it split the EWR by the flow share, which is what older runs did.
-	ewrSplit: { label: 'EWR split between units by', fmt: (v) => (v === 'naturalMar' ? EWR_SPLIT_LABEL.naturalMar : v === 'flowShare' || v === undefined ? EWR_SPLIT_LABEL.flowShare : String(v)) },
+	// Engines 1.94.0 – 1.104.x (issue #553), retired in 1.105.0 (issue #615): compared by ewrSplitChange, not the loop.
+	ewrSplit: { label: EWR_SPLIT_FIELD, fmt: ewrSplitText },
 	// Engine ≥ 1.3.0 (issue #64); a snapshot without them ran the defaults, which is what older runs did.
 	ewrChargeSource: {
 		label: 'EWR charge follows',
@@ -1047,6 +1050,24 @@ function gapRainText(v: unknown): string {
 	return g.imergLate === true ? `${product}, and IMERG Late for the recent days` : product;
 }
 
+/**
+ * The retired settings.ewrSplit between two snapshots (engines 1.94.0 – 1.104.x; issue #615 retired it in
+ * EWR_SPLIT_RETIRED_IN, from which the EWR is always split by each unit's natural MAR). Both recorded it: a change
+ * of value, as before. Only A did: B is the later one, which no longer has it (263_retire_ewr_split.sql strips it).
+ * Only B did: A is from before 1.94.0, the flow share. Neither: nothing (the engine version line says which engines).
+ */
+function ewrSplitChange(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInputsSnapshot['settings'] | undefined): string | null {
+	const has = (s: unknown) => !!s && typeof s === 'object' && Object.hasOwn(s, 'ewrSplit');
+	const va = has(ra) ? (ra as Record<string, unknown>).ewrSplit : undefined;
+	const vb = has(rb) ? (rb as Record<string, unknown>).ewrSplit : undefined;
+	const gone = `removed in engine ${EWR_SPLIT_RETIRED_IN} (the EWR is split by ${EWR_SPLIT_LABEL.naturalMar})`;
+	if (has(ra) && has(rb)) return same(va, vb) ? null : `${EWR_SPLIT_FIELD}: ${ewrSplitText(va)} → ${ewrSplitText(vb)}`;
+	if (has(ra)) return `${EWR_SPLIT_FIELD}: ${ewrSplitText(va)} → ${gone}`;
+	// Only B recorded it: A is from before 1.94.0, which split by the flow share (the setting's default).
+	if (has(rb)) return vb === 'flowShare' ? null : `${EWR_SPLIT_FIELD}: ${ewrSplitText(undefined)} → ${ewrSplitText(vb)}`;
+	return null;
+}
+
 function diffSettings(
 	ra: RunInputsSnapshot['settings'] | undefined,
 	rb: RunInputsSnapshot['settings'] | undefined,
@@ -1060,8 +1081,11 @@ function diffSettings(
 	const push = (subject: string, text: string) => out.push({ area: 'settings', kind: 'changed', subject, text });
 
 	for (const [k, f] of Object.entries(SETTINGS_FIELDS)) {
+		if (k === 'ewrSplit') continue;
 		if (!same(a[k], b[k])) push(f.label, `${f.label}: ${f.fmt(a[k])} → ${f.fmt(b[k])}`);
 	}
+	const split = ewrSplitChange(ra, rb);
+	if (split) push(EWR_SPLIT_FIELD, split);
 	for (const [k, f] of Object.entries(SETTINGS_MONTHLY)) {
 		const c = monthlyChange(a[k], b[k], f.unit);
 		if (c) push(f.label, `${f.label}: ${c}`);

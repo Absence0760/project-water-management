@@ -112,14 +112,16 @@ function fingerprint(out: ModelOutput) {
  * 195e66c86 (issue #553 round 1, pushed), which gives the same values on macOS and Linux; the shapes re-pinned at
  * engine 1.98.0, whose warnings name Model settings and Calibration (issue #586 round 3: text only, every series'
  * sums unchanged), and unitGauge's and reference's at 1.100.0, whose warnings write their days day first (#586 R4-O:
- * text only, every series' and the summary's sums unchanged). Print them with
+ * text only, every series' and the summary's sums unchanged), and fragmentation's at 1.105.0, whose run notes the
+ * units its EWR shares put on the catchment rain (issue #615: a note's text only; the forcing, every series' and the
+ * summary's sums unchanged). Print them with
  * `GOLDEN_PRINT=1 pnpm -C packages/engine exec vitest run src/runoff/unitRain.golden.test.ts`.
  */
 const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 	fragmentation: {
 		units: null,
 		golden: {
-			shape: "92bd1ca403d76ee9",
+			shape: "ad7590d5bbce8db0",
 			series: {
 				"natural_flow@": {
 					sum: 31197362.536312077,

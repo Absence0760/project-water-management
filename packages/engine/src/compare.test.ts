@@ -634,6 +634,18 @@ describe('diffInputs', () => {
 		expect(texts(a, d)).toEqual(['EWR split between units by: the flow share → each unit’s natural MAR']);
 	});
 
+	it('lists the retired EWR split (engine 1.105.0) as removed when only the earlier snapshot had it', () => {
+		const a = snapshot();
+		const d = copyWithFreshIds(a);
+		a.settings = { ...a.settings, ewrSplit: 'naturalMar' } as never;
+		expect(texts(a, d)).toEqual(['EWR split between units by: each unit’s natural MAR → removed in engine 1.105.0 (the EWR is split by each unit’s natural MAR)']);
+		a.settings = { ...a.settings, ewrSplit: 'flowShare' } as never;
+		expect(texts(a, d)).toEqual(['EWR split between units by: the flow share → removed in engine 1.105.0 (the EWR is split by each unit’s natural MAR)']);
+		// Neither has it (before 1.94.0, or from 1.105.0 on): nothing; the engine version line says which engines.
+		delete (a.settings as Record<string, unknown>).ewrSplit;
+		expect(texts(a, d)).toEqual([]);
+	});
+
 	it('lists demand objects added, changed and removed, matched across a copy by unit and object name (engine 1.7.0)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

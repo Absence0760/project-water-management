@@ -22,13 +22,17 @@ async function put(request: APIRequestContext, projectId: string, s: Record<stri
 	return id;
 }
 
-/** Two land units under per-unit rain, both on Bergwater (MAP 745 mm), each with its own CHIRPS; a flow record at the outlet. */
-async function seed(request: APIRequestContext) {
+/**
+ * Two land units under per-unit rain, both on Bergwater (MAP 745 mm), each with its own CHIRPS; a flow record at the
+ * outlet. `chain`: a third unit with no station, only its own CHIRPS and a MAP (§2.4h rule 3, issue #613 slice 2).
+ */
+async function seed(request: APIRequestContext, chain = false) {
 	const project = await createProject(request, 'Unit view');
 	const gauge = node('Outflow gauge', 'gauge', null, 1, { areaKm2: 0, pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
 	const a = node('Upper unit', 'farm', gauge.id, 2, { mapMm: 863.1, mapSource: 'invented' });
 	const b = node('Lower unit', 'farm', gauge.id, 3, { mapMm: 600, mapSource: 'invented' });
-	await putModel(request, project.id, { nodes: [gauge, a, b], crops: [], cropAreas: [], transfers: [] });
+	const m = node('Middle unit', 'farm', gauge.id, 4, { mapMm: 700, mapSource: 'invented' });
+	await putModel(request, project.id, { nodes: chain ? [gauge, a, b, m] : [gauge, a, b], crops: [], cropAreas: [], transfers: [] });
 	// Bergwater misses ten days in 2015, which Upper unit fills from its CHIRPS corrected against it.
 	const bergId = await put(request, project.id, {
 		kind: 'rain_catchment_mm',
@@ -38,14 +42,16 @@ async function seed(request: APIRequestContext) {
 	});
 	await put(request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS Upper unit', values: rain(0.8, 1) }, a.id);
 	await put(request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS Lower unit', values: rain(0.5, 3) }, b.id);
+	if (chain) await put(request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS Middle unit', values: rain(0.6, 2) }, m.id);
 	await put(request, project.id, { kind: 'flow_observed_m3s', name: 'Outlet weir', unit: 'm³/s', values: Array.from({ length: DAYS }, (_, i) => 0.1 + (i % 11) / 50) });
 	await updateSettings(request, project.id, {
 		apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110],
 		unitRain: { mode: 'perUnit' },
-		// Bergwater stands in Upper unit, so its CHIRPS pairing is fitted against that unit's CHIRPS.
+		// Each unit's CHIRPS is corrected against Bergwater's rain at that unit's MAP (engine 1.105.0, issue #612); the site
+		// only places Bergwater's own checks.
 		rainStations: { units: { [a.id]: { stationId: bergId }, [b.id]: { stationId: bergId } }, sites: { [bergId]: { unitId: a.id } } }
 	});
-	return { project, a };
+	return { project, a, m };
 }
 
 test('Preview all data’s View picks one unit: its station raw and adjusted, its CHIRPS raw and corrected with the factors, kept in the URL', async ({ page, owner }) => {
@@ -80,16 +86,17 @@ test('Preview all data’s View picks one unit: its station raw and adjusted, it
 	const factors = dialog.getByTestId('preview-factors');
 	await expect(factors).toContainText('CHIRPS bias factors f(m) against Bergwater, January to December');
 	await expect(factors.getByRole('listitem')).toHaveCount(12);
-	await expect(factors.getByRole('listitem').first()).toHaveText('Jan 2.00');
+	// Bergwater is twice Upper unit's CHIRPS, taken to the unit's MAP: 2 × 863.1 ÷ 745 = 2.32 (issue #612).
+	await expect(factors.getByRole('listitem').first()).toHaveText('Jan 2.32');
 
-	// A Bergwater gap day: no raw station, so the rain used is the corrected CHIRPS (raw × January's 2.00).
+	// A Bergwater gap day: no raw station, so the rain used is the corrected CHIRPS (raw × January's 2.32).
 	await dialog.getByLabel('Search by date or value').fill('2015-02-13');
 	const cells = dialog.getByRole('table').getByRole('row').filter({ has: page.getByRole('cell', { name: '13 Feb 2015', exact: true }) }).getByRole('cell');
 	await expect(cells).toHaveCount(7);
 	await expect(cells.nth(1)).toHaveText('–');
 	const raw = Number((await cells.nth(3).innerText()).trim());
 	const corrected = (await cells.nth(4).innerText()).trim();
-	expect(Number(corrected)).toBeCloseTo(raw * 2, 1);
+	expect(Number(corrected)).toBeCloseTo((raw * 2 * 863.1) / 745, 1);
 	await expect(cells.nth(5)).toHaveText(corrected);
 	await expect(cells.nth(6)).toHaveText('corrected CHIRPS');
 	await expectNoViolations(page);
@@ -150,4 +157,60 @@ test('a link to a view the project doesn’t offer opens on All; a row’s own P
 	await expect(dialog.getByTestId('preview-factors').getByRole('listitem')).toHaveCount(12);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 	await expectNoViolations(page);
+});
+
+test('a unit without a station shows its own chain: its CHIRPS raw and levelled to its MAP, the rain used and the link of each day', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const { project, m } = await seed(page.request, true);
+	await openData(page, project.id);
+	await page.getByRole('button', { name: 'Preview all data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	const headers = dialog.locator('thead th');
+	const view = dialog.getByLabel('View', { exact: true });
+	await expect(view.locator('option')).toHaveText(['All', 'Upper unit', 'Lower unit', 'Middle unit', 'All rainfall stations', 'All flow']);
+
+	await view.selectOption({ label: 'Middle unit' });
+	await expect(page).toHaveURL(new RegExp(`[?&]preview=unit%3A${m.id}(&|$)`));
+	// Bergwater is the catchment gauge too, so Middle unit (MAP 700 mm) reads it × 700 ÷ 745 first (rule 2), its own
+	// CHIRPS levelled to its MAP on Bergwater's gaps.
+	await expect(headers).toHaveText([
+		/^Date/,
+		/^Catchment gauge adjusted to Middle unit \(× 0\.940\)/,
+		/^Middle unit CHIRPS raw/,
+		/^Middle unit CHIRPS levelled \(× \d\.\d{3} to its MAP\)/,
+		/^Middle unit rain used/,
+		/^Middle unit rain used from/
+	]);
+	const k = Number((await headers.nth(3).innerText()).match(/× (\d\.\d{3})/)![1]);
+	const panel = dialog.getByTestId('preview-factors');
+	await expect(panel.getByTestId('preview-chain-rule')).toHaveText(
+		'Middle unit has no rainfall station: under per-unit rain a run reads the catchment gauge × its MAP ratio, its gaps from its own CHIRPS, then the catchment rain (§2.4h).'
+	);
+	await expect(panel).toContainText('MAP ratio × 0.940');
+	await expect(panel).toContainText(`Its CHIRPS is levelled × ${k.toFixed(3)} to its MAP.`);
+
+	const search = dialog.getByLabel('Search by date or value');
+	const row = (day: string) => dialog.getByRole('table').getByRole('row').filter({ has: page.getByRole('cell', { name: day, exact: true }) }).getByRole('cell');
+	// A Bergwater gap day: the rain used is the unit's CHIRPS × k.
+	await search.fill('2015-02-12');
+	const gap = row('12 Feb 2015');
+	await expect(gap).toHaveCount(6);
+	await expect(gap.nth(1)).toHaveText('–');
+	expect(Number((await gap.nth(2).innerText()).trim())).toBe(14.4);
+	const levelled = (await gap.nth(3).innerText()).trim();
+	expect(Number(levelled)).toBeCloseTo(14.4 * k, 1);
+	await expect(gap.nth(4)).toHaveText(levelled);
+	await expect(gap.nth(5)).toHaveText('own CHIRPS (levelled)');
+	// A Bergwater day: the rain used is the gauge × 0.940.
+	await search.fill('2015-01-10');
+	const wet = row('10 Jan 2015');
+	await expect(wet.nth(5)).toHaveText('catchment gauge × MAP ratio');
+	await expect(wet.nth(4)).toHaveText((await wet.nth(1).innerText()).trim());
+	await expectNoViolations(page);
+
+	// All gains its derived links too, beside the station units' lines.
+	await view.selectOption({ label: 'All' });
+	await expect(headers.filter({ hasText: /^Middle unit: CHIRPS levelled/ })).toHaveCount(1);
+	await expect(headers.filter({ hasText: /^Middle unit: rain used from/ })).toHaveCount(1);
 });

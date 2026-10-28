@@ -12,7 +12,8 @@ export { chirpsChoiceWarnings } from './seriesChoice';
 export * from './manifest';
 export * from './run';
 export * from './warmstart/snapshot';
-export { prepareRun, type PreparedRun } from './prepare';
+// mergeSettings is the settings resolver every run goes through: the assistant's propose_settings dry run (issue #610) checks a patch against its warnings.
+export { prepareRun, mergeSettings as resolveRunSettings, type PreparedRun } from './prepare';
 export * from './version';
 export * from './warningCodes';
 export * from './places';
@@ -104,7 +105,7 @@ export { DAM_AGO_DAYS, DAM_YEAR_DAYS, damFigures, type DamFigures } from './netw
 export { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, DAM_SEDIMENT_MAX_PER_YEAR, damCapacityFactor, damCapacityOn, developmentProblem, SEDIMENT_YEAR_DAYS } from './network/development';
 export { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 export { flowShares, inputFlowShares, overAllocationError, SHARE_TOLERANCE, type FlowShares } from './network/shares';
-export { EWR_SPLIT_LABEL, EWR_SPLIT_METHODS, ewrSplitNote, resolveEwrSplit, type EwrSplitInfo, type EwrSplitMethod, type EwrSplitPeriod } from './network/ewrSplit';
+export { EWR_SPLIT_LABEL, EWR_SPLIT_METHODS, EWR_SPLIT_RETIRED_IN, ewrSplitNote, type EwrSplitInfo, type EwrSplitMethod, type EwrSplitPeriod, type EwrSplitUnit } from './network/ewrSplit';
 export { calibrationStats, type CalibrationWindow } from './network/stats';
 export { ewrCompliance, type EwrCountMethod, type EwrSite } from './network/ewr';
 export { belowEwr, ewrAgreement, scoreContingency, type EwrAgreementExclusion, type EwrAgreementOptions } from './network/ewrAgreement';
@@ -137,6 +138,7 @@ export * from './views/licenceImpact';
 export * from './views/reserveYears';
 export * from './outlook';
 export * from './outlook/triggers';
+export * from './drought';
 export * from './units';
 export * from './seriesProvenance';
 export * from './liability';

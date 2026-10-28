@@ -1235,6 +1235,9 @@ role, freshness, Add data) and each tab's own header:
   (`TAB_GUIDE` in `lib/workspace/tabs.ts`, ids only so the workspace never
   loads the guides; `guides.test.ts` checks every tab has one, about that
   tab). The Applicant view's header links to the Applications guide.
+  After the guide, where the server has it on, the page's **Assistant**
+  ([§ Assistant](#assistant)): on the title's line, so it is in the same
+  place on every section and never among the actions.
 - **A one-line context** under it. A tab gives its own through
   `fillHeader({ context, actions })` (`workspace/headerSlot.svelte.ts`,
   called from an `$effect`, like the sidebar's slot): the Summary names the
@@ -1259,9 +1262,10 @@ role, freshness, Add data) and each tab's own header:
   units' run menu and **Open in Runs & results**, Dams' **Open in Runs & results**, Scenarios'
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
-  longest waiting**), then for editors **Add data** and **Run model**, the
-  primary action, on every section (issue #444: the client looked for a way
-  to run the model from where they had just changed it). On every section
+  longest waiting**), then for editors **Add data** on the sections it adds
+  data to (below) and **Run model**, the primary action, on every section
+  (issue #444: the client looked for a way to run the model from where they
+  had just changed it). On every section
   but Runs & results, **Run model** (`workspace/RunButton.svelte`) doesn't
   run at once: it opens a small form under it (a non-modal `role="dialog"`,
   *Run the model*; the button has `aria-expanded` and `aria-haspopup`,
@@ -1283,7 +1287,7 @@ role, freshness, Add data) and each tab's own header:
   stays on one page (issue #586 round 3, `calibration-journey.spec.ts`);
   a run that didn't start says so in the notice line. On Runs & results the
   tab's own run form (**Run label**, Run forecast, Run model) takes its
-  place, last after Add data (`fillHeader({ main })`, the header slot's
+  place, last, with no Add data there (`fillHeader({ main })`, the header slot's
   `main` part), so a page never has two Run models; while a run the page
   started is going, that form waits for it (`busy`). Viewers get neither:
   a run needs an editor. Until issue #444 a run started from the header only
@@ -1301,8 +1305,8 @@ role, freshness, Add data) and each tab's own header:
   (Save changes, Discard, the reason), and the grid modal and sheets keep
   their own `ModelSaveRow`.
 - **The groups:** `SectionHeader` takes the pill as `status`, the tab's
-  controls as `actions` and the page's main box (Add data, then the tab's
-  `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
+  controls as `actions` and the page's main box (Add data where the tab has
+  it, then the tab's `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
   so all of it is one row beside the title (under it when it doesn't fit, as
   on Allocations at 1440); the main box is one box, so a wrap never splits it.
   The title column asks for its context's full one-line width (and no more:
@@ -1334,10 +1338,11 @@ role, freshness, Add data) and each tab's own header:
   list and leaves the focus on ⋯, so a sheet it opens hands the focus back
   there; a control inside one of the list's own menus leaves it open;
   Escape (after a menu inside it), a click elsewhere or leaving it closes
-  it. Without pills the ⋯ starts the main box's row. Add data and Run model
-  then share the last row (the main box never splits; Run model's form is
-  nudged to stay on the screen); on Runs & results the run label and its
-  field fill a row, then Add data, Run forecast and Run model share the next
+  it. Without pills the ⋯ starts the main box's row. Add data (where the tab
+  has it) and Run model then share the last row, a lone Run model filling it
+  (the main box never splits; Run model's form is nudged to stay on the
+  screen); on Runs & results the run label and its field fill a row, then
+  Run forecast and Run model share the next
   in equal parts (the form draws no box of its own there). While new data is
   waiting the header's button reads **Re-run model** and the notice line is
   words only ("New data since the last run (…)."), since the two buttons did
@@ -1410,9 +1415,31 @@ same way on every screen:
   by a day around midnight, whatever the viewer's zone (issue #137). Series
   dates are calendar days, so the UTC date would be wrong for anyone east or
   west of UTC.
-- **Add data** (editors) opens the upload form in a dialog on any tab
+- **Add data** (editors) opens the upload form in a dialog
   (`series/AddDataDialog.svelte`, the shared `common/Dialog.svelte`, wide).
-  Dropping a CSV anywhere on the page opens it with that file (a viewer's drop is taken and refused, "View only: ask an editor to add data.", so the browser doesn't open the file instead). The form's
+  It uploads a time series (rain, flow, the daily A-pan), so it shows only
+  on the sections where one is what the page asks for (issue #601,
+  `TAB_ADDS_DATA` in `lib/workspace/tabs.ts`, a `Record` so a new tab has to
+  choose): **Summary** (its checklist and stale-rain card ask for rain),
+  **Crops & demand** (demand reads the daily A-pan), **Data** (the series
+  themselves), **Model settings** (unit rain stations, PE from the A-pan)
+  and **Calibration** (observed flow). Not on the results pages, the Network,
+  Map (its own uploads are GeoJSON), Transfers, Warnings (its fixes link to
+  Data, `?tab=series&add=data`), Project, Applications or History, and not on
+  Allocations, where it read as the way to add volumes beside **+ Add
+  volume**. Run model stays on every section.
+  Dropping a CSV on one of those sections opens the dialog with that file.
+  On any other section the drop follows the button: the page still takes it,
+  so the browser doesn't open the file in place of the app, and the notice
+  line says where to drop it ("This page doesn’t take files. To add data,
+  drop the file on Summary, Crops & demand, Data, Model settings or
+  Calibration.", `REFUSED_DROP_TEXT`). A viewer's drop is taken and refused
+  on every section ("View only: ask an editor to add data.").
+  `?add=data` (the project list's **Add data** link, the Warnings page's
+  fixes) opens the dialog for an editor on the section the URL names when it
+  has the button (the Summary by default), else over **Data**
+  (`?tab=series`), so closing it leaves you beside the button; the parameter
+  goes either way (`e2e/tests/add-data-tabs.spec.ts`). The form's
   buttons sit in the dialog's action row, on the right: **Cancel** and the
   upload button (**Upload**, **Upload and merge** or **Upload and replace**;
   `UploadForm`'s `external` mode, the button submitting the form through its
@@ -1578,6 +1605,23 @@ put the results first; its first screen follows board A1 of the redesign
    [EWR](#ewr) page, one link away (below). The flow chart is drawn once,
    there. Needs attention never raised an EWR card (`attention.ts`; a test
    holds it to that).
+   Under the alerts, the **Drought index** card (`overview/DroughtIndex.svelte`,
+   `drought.ts`; issue #620): SPI and SPEI over 3, 6 and 12 months to the
+   last whole month of the latest run's history, from the run's own
+   `rain_final` and `pet` ([model.md §2.15b](./model.md#215b-drought-badge-spi-and-spei-issue-620-slice-1)).
+   A table, one row per period (its months, "Aug–Oct 2024"), each cell the
+   value and its class, coloured dry or wet with the class written out; the
+   headline badge is the driest index ("Severely dry · SPEI-12"), and the
+   foot names the years the fits used. A cell without a value says why: no
+   evaporation in this run, a month missing, or the record too short. When no
+   index has a value (under 20 years of rain, as in a fresh project) the card
+   is one line instead of a table of dashes, so it costs the first screen
+   little. It is in the left column, under what to act on, as context for a
+   restriction decision; it loads the two series through the Runs cache and
+   is part of the Summary's `data-ready`. Workspace only, in English: the
+   farm view shows the restriction level the WUA publishes, never a raw
+   index (#620's open question 4). The portfolio doesn't show it yet: that
+   needs the badge in the run summary, a later slice.
 3. **The published baseline and the links**: once there is a run, in the
    right-hand column under Supply by farm, which is usually shorter than
    Needs attention and the alerts, so a typical catchment (the example
@@ -6184,9 +6228,30 @@ flow** (every flow record with its m³/day, and Excluded from calibration),
 each offered only when it would show something. The raw station and raw
 CHIRPS lines (help `preview.areaStationRaw`, `preview.areaChirpsRaw`) are in
 an area's own view only: in All they are stored series columns already
-(issue #619's recommendation). A unit with no station a run reads has no
-derived lines yet (issue #613 slice 2), so its view says so and shows the
-series stored at it. The view is in the URL while the dialog is open
+(issue #619's recommendation). A unit with no station, under per-unit rain
+(issue #613 slice 2), shows its own §2.4h chain instead (the engine's
+`unitAreaRain`, the run's `rain_unit` to the bit; `derivedRain.ts`
+`unitChainLines`): *<unit> own gauge (checked)* (its gauge after the
+catchment's checks and its unreliable periods), *Catchment gauge adjusted to
+<unit> (× k)* (the catchment rain × unit MAP ÷ gauge MAP, three decimals),
+*<unit> CHIRPS raw*, *<unit> CHIRPS levelled (…)* (the header says how: × its
+MAP factor, the §2.4b factors, the reference gauge's f(m) × k_unit, or raw),
+*<unit> rain used* and *<unit> rain used from* (own gauge, catchment gauge ×
+MAP ratio, own CHIRPS (levelled), catchment rain, forecast or no source),
+each only where its rule reads that link, then the series stored at it (its
+gauge as recorded). Above the table it says the rule in words, the MAP ratio
+with both MAPs, and how its CHIRPS is levelled (with the reference gauge's
+twelve factors when it reads them; `data-testid="preview-chain-rule"`). In
+All the same unit adds its derived links (all but the CHIRPS raw), as the
+Full CSV does (*own gauge, checked*, *catchment gauge × MAP ratio*, *CHIRPS
+levelled*, rain used and the day's link as the engine's code: unitGauge,
+gaugeMap, unitChirps, catchment, forecast or none; Compact its rain used),
+with a `#` line naming its rule and ratio (help `preview.areaOwnGauge`,
+`preview.areaGaugeScaled`, `preview.areaChirpsLevelled`). A unit whose lines
+couldn't be computed says why above the table in place of its derived
+columns (`data-testid="preview-area-error"`), and with per-unit rain off a
+unit without a station has no derived lines, so its view says so and shows
+the series stored at it. The view is in the URL while the dialog is open
 (`preview=<all|unit:<id>|stations|catchment|flow>`, written with `replace`), so
 a reload or a link opens the dialog on it; closing drops the parameter, and
 reopening in the same visit keeps the view. A row's own **Preview** switches
@@ -7257,8 +7322,9 @@ two.
   record and the engine's "fitted under …" message use them. The radio writes the same `settings.unitRain` the checkbox did, so no
   stored project changes and no migration was needed; switching to
   Fragmentation keeps the Per unit setting (`draft.kept.unitRain`) until the
-  form is saved, and the stations assigned stay stored, unused, so Per unit
-  brings them back. When the form's parameters come from a fit made under
+  form is saved, and the stations assigned stay stored, so Per unit brings
+  them back; from issue #615 Fragmentation keeps the rest of the Per unit
+  setting too (`{ …, mode: 'catchment' }`) and reads it for the EWR shares. When the form's parameters come from a fit made under
   the other method (`fitMethodMismatch`, the engine's `fitFlowMethod`: a fit
   whose forcing records per-unit rain ran Per unit), an alert under the radio
   says "Parameters not fitted for this method: the GR4J parameters were
@@ -7266,7 +7332,8 @@ two.
   `#set-fit`, and the fit record lists the same caveat (`methodChanged`,
   `fitRecordCaveats`); choosing the fit's method again clears it. The
   summary line names the method ("Fragmentation · flow share: by catchment
-  area", "Per unit · 2 units on a rainfall station · EWR flow share: …").
+  area · EWR by each unit's natural MAR", "Per unit · 2 units on a rainfall
+  station · EWR by each unit's natural MAR").
   - **Per unit** shows two cards. **Each unit's rainfall station**
     (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
     helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
@@ -7308,32 +7375,41 @@ two.
     stacks into a block with its fields labelled, so nothing scrolls sideways
     (`flow-generation.spec.ts` at 390 px). Then **Units without a station**
     ([§ Calibration](#calibration), in Flow calibration's description) and, for editors, MAP from the grid.
-  - **Flow share** (Fragmentation) or **Flow share: the EWR between units**
-    (Per unit), a card: the **Flow share method** and the **High/low MAP
-    split** (High, Low, their Sum, amber unless 100 %) only while the method
-    is *High/low MAP split*, the one method that reads it (issue #174); under
-    *by area* or *manual* it is hidden and its saved value kept. The line
-    under its heading follows the method: Fragmentation, "GR4J runs once on
-    the catchment rain; the flow share splits its flow and the EWR between
-    units. To give each unit its own runoff, choose Per unit above." (an
-    explanation); Per unit, "Each unit makes its own runoff; the flow share
-    now splits only the EWR and the land cover's low-flow threshold between
-    units, not the flow." (a state line, shown with the explanations off;
-    `e2e/tests/flow-share-hint.spec.ts`); with the EWR split by natural MAR
-    (below) the Per unit line says the flow share now splits only the land
-    cover's low-flow threshold. At the card's foot, **Split the EWR between
-    units by** (`settings.ewrSplit`, engine ≥ 1.94.0, issue #553 round 4,
-    model.md §2.5b; `EwrSplitFields.svelte`, in the lazy sections chunk):
-    *The flow share* (the default, what every earlier run did) or *Each
-    unit's natural MAR* (its own natural runoff over the run's complete water
-    years ÷ the units' total; the period is provisional). Its explanation
-    says what follows the split (the charge, curtailment, hands-off EWR
-    flows, the drought restriction's EWR trigger); its state line, shown with
-    the explanations off, follows the method: under Fragmentation both give
-    the flow share and the choice matters only under Per unit; under Per
-    unit, which share splits the EWR. A split other than the flow share
-    joins the panel's summary line, and the field has its change history
-    (`e2e/tests/ewr-split.spec.ts`).
+  - **Under Fragmentation too** (issue #615, model.md §2.5b), both cards
+    above show, under a line saying the setup there sets only how the EWR
+    is split ("GR4J also runs once on each unit's own rain, for each unit's
+    natural MAR share, and the catchment's one run still makes the flow.",
+    `flowgen-share-setup`). Switching to Fragmentation keeps the Per unit
+    setup (`settings.unitRain` becomes `{ …, mode: 'catchment' }`, not
+    null), so a unit's station, the MAP period and the reference gauge carry
+    over both ways; a project that never set one shows the defaults.
+  - **Flow share and the EWR split**, a card. First a state line (shown with
+    the explanations off, `ewr-split-hint`): "The EWR is split between the
+    units by each unit's natural MAR: its own GR4J runoff over the run's
+    complete water years ÷ the units' total[, from the runs on each unit's
+    own rain above]. The run's summary lists each unit's share." There is no
+    choice: the split is the same under both methods (`settings.ewrSplit`,
+    1.94.0 – 1.104.x, is retired). Then, when some land unit has no rain of
+    its own (no station, rain gauge or CHIRPS series of its own, and no MAP
+    with a gauge MAP; `unitsOnCatchmentRain`, an estimate from the setup, as
+    the run decides from the records), a line naming them, up to six and a
+    count: they run on the catchment rain, so their EWR share follows their
+    area (`ewr-split-catchment-rain`). Then the **Flow share method** and
+    the **High/low MAP split** (High, Low, their Sum, amber unless 100 %)
+    only while the method is *High/low MAP split*, the one method that
+    reads it (issue #174); under *by area* or *manual* it is hidden and its
+    saved value kept. The line under them follows the method: Fragmentation,
+    "GR4J runs once on the catchment rain; the flow share splits its flow
+    between units. To give each unit its own runoff, choose Per unit above."
+    (an explanation); Per unit, "Each unit makes its own runoff; the flow
+    share now splits only the land cover's low-flow threshold between units,
+    not the flow or the EWR." (a state line;
+    `e2e/tests/flow-share-hint.spec.ts`). The panel's summary line ends
+    "EWR by each unit's natural MAR", after the units on a rainfall station
+    (under Fragmentation only when there are some; `e2e/tests/ewr-split.spec.ts`).
+    The hydrological unit table's *In use* column still shows the flow
+    share from the saved settings; issue #616 turns it into the latest
+    run's natural MAR share with the run's date.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,
@@ -8591,7 +8667,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   its engine, and the EWR it was tested against (`ewrRuleText`: "EWR:
   pragmatic, by month", plus "Reserve rules at …" with the sites of the
   project's rule tables), and its actions: the **Run** menu and **Open in
-  Runs & results**, before the page's Add data. With no run the context says
+  Runs & results**, before Run model (no Add data here, issue #601). With no run the context says
   what the page is for.
 - **Judged by** (`data-testid="river-judged-by"`, issue #444): a line at
   the top, under the section menu: "Results are judged by the Reserve rule
@@ -8996,7 +9072,7 @@ read it before.
   shown run. The section header's line counts the runs and says when the
   newest ran ("20 runs · newest ran today", "No runs yet", or "Couldn’t
   load the runs" when the list fails to load), and for an
-  editor the **run form** sits last in the header, after Add data, in place
+  editor the **run form** sits last in the header (no Add data here, issue #601), in place
   of the **Run model** button the other sections have ([§ Section
   header](#section-header)): a **Run label** field, **Run forecast** (with a forecast
   series) and **Run model**. Its status (what a run still needs, flow shares
@@ -9006,7 +9082,11 @@ read it before.
   use the saved network…", with a sentence on what Run forecast does when it
   is offered, in words rather than the button's hover title, #586 D18) is one
   slim line under the header (`#run-note`, the buttons' accessible
-  description), with the progress bar under it. A run the header started on
+  description), with the progress bar under it. Under it, Run readiness
+  names the land units with no rain of their own (no station, rain gauge or
+  CHIRPS of their own, no MAP with a gauge MAP; issue #615): they run on the
+  catchment rain, so their EWR share follows their area, with a link to
+  Model settings (`run-catchment-rain`, a note, never a blocker). A run the header started on
   another section and still going when the page opens shows here the same
   way, the form waiting for it. A viewer gets no form, and
   the inputs-changed note as before.
@@ -11598,8 +11678,8 @@ the viewer's day, with a request's change set folded into one entry.
   the whole history (whatever the filters), who made it and when, and since
   when changes are recorded: "Latest change today 14:05 by Ann: Model
   changed · recorded since 3 Sep 2026"; "No changes recorded yet · recorded
-  since …" (`timeline.ts` `historyContext`). No actions of its own beside
-  Add data.
+  since …" (`timeline.ts` `historyContext`). No actions of its own, and no
+  Add data (issue #601): only Run model.
 - **The card** "Changes, newest first": a line on what it holds (and for
   editors "Restoring a version saves it as a new change: nothing is ever
   erased"), then the filters: **Hydrological unit** ("All hydrological units"), **Kind of change** and
@@ -11713,6 +11793,103 @@ after two saves and its link) and `e2e/tests/history-page.spec.ts` (the page: he
 deep link, the filters' URL and Back, pagination, a restore picking itself,
 empty states, a viewer, the phone layout, `?tab=changes`, axe at desktop
 light and dark and phone).
+
+## Assistant
+
+Issue #610 (`lib/components/assistant/`; [api.md § Assistant](./api.md#assistant)).
+A chat about one project's model and results ("Why does the simulated flow
+at gauge X not respond to rainfall?", "Which settings would you change to
+improve the fit at the outlet?"), answered by a model the backend calls
+with read-only tools over the project's data. It never changes anything.
+
+- **Where.** **Assistant** on the section header's title line, right after
+  **How this page works**, on every section: one place that doesn't move
+  with each tab's actions, never in More actions. A chat bubble with a
+  sparkle, then its word, tinted in the accent so it reads apart from the
+  tab's buttons while staying smaller than **Run model**; on a phone the
+  icon alone in the same 36 px circle as the guide's "?" (its target 44 px),
+  still named Assistant. Not among the actions: those end on Add data and
+  Run model, and one more control there made the header taller than the
+  first half of a 360 px phone on the Summary and pushed Model settings'
+  controls under its title at 1440 (`workspace-phone.spec.ts`). Not a
+  sidebar row either (the sidebar's row budget is full,
+  `app-sidebar.spec.ts`). `assistant.spec.ts` pins the place on four
+  sections at 1440 and 360.
+  The page asks `GET …/assistant` once per project, and the button shows only
+  when that says `available`. It doesn't show when the server has
+  `ASSISTANT_PROVIDER=off`, the default, which keeps the dev server
+  key-free, or when the caller can't use it (a farmer or an applicant
+  never reaches the workspace). Any member from viewer up can ask.
+- **The sheet** (`AssistantPanel.svelte`, a side sheet like Notes', fetched
+  the first time it opens) scrolls the conversation in its body and pins a
+  foot under it, so the box never moves however long the conversation gets.
+  While the conversation is empty the body holds a short line on what the
+  assistant reads and two example questions, full-width buttons that ask
+  them, settled at its foot right above the box (no gap between them); a
+  conversation settles there too, newest nearest the box, and follows the
+  answer while it streams unless you scrolled up (measured before each
+  update, so a proposal card taller than the slack doesn't leave it behind).
+  Opened again, it shows the newest words. The foot is one block: the box
+  (it has the focus when the sheet opens; **Enter** sends, **Shift+Enter** is
+  a new line), with the hint and **Send** (or **Stop** while an answer
+  streams) inside its border; under it one quiet line with the share of the
+  project's monthly budget left, when it starts again, and **New
+  conversation** once there is one; then the disclaimer the server sends.
+  Its first paragraph ("The assistant's answers are advice, not model
+  output, and they can be wrong.") is the line of a `common/Fold.svelte`,
+  always in view; the reports' `DISCLAIMER` paragraphs fold under it
+  (**Read the full disclaimer**) in a box that scrolls on its own (at most a
+  quarter of the window), so opening it never pushes the box off a phone.
+  The ✕ is the one way out (no Close button in the foot as well); Escape
+  closes it too. `assistant.spec.ts` pins the layout at 1440×960 and
+  390×844.
+- **An answer streams in** (`stream.ts`: `fetch` and a `ReadableStream` on
+  the POST, not `EventSource`, so the request goes through the same
+  credentials and CSRF handling as every other POST; keepalive comments are
+  ignored, and a chunk may end anywhere). Each tool the assistant reads the
+  project with shows as a line ("Reading the run summary"): a ring while it
+  runs, filled when it's done, red if it failed (named so for a screen
+  reader too). The text follows as it comes, as plain text with line breaks
+  kept, never `{@html}` or markdown. A polite status line says when the
+  answer is finished, without reading the words out as they arrive.
+  **Stop** aborts the fetch and keeps what came so far. An answer that ends
+  early says so.
+- **The conversation lives in the page** (`chat.svelte.ts` `AssistantChat`,
+  held by `routes/projects/[id]/+page.svelte`). Closing the sheet or changing
+  tab keeps it, and opening another project starts a new one. Nothing is
+  stored on the server, so the whole conversation goes with each turn,
+  along with the run the page shows (a run tab's `run=`, the run carried
+  between tabs, else the default). A question that got no answer is left
+  out of what is sent.
+- **Refusals before an answer** put the question back in the box and say
+  why above it. A 429 is the hourly limit: "limit of 30 messages an hour.
+  Try again in about 4 min", from `Retry-After`, after which the box takes
+  questions again. When the month's budget is used up (from the status, or
+  a refusal or stream error whose code names the budget), the sheet says
+  whose (the project's, yours across your projects, or the server's: three
+  monthly caps, docs/api.md § Assistant) and when it starts again, and the
+  box takes nothing. The share left under the box is of the cap nearest its
+  end. Any other refusal shows
+  its message.
+- **A recommended change** (the `propose_settings` tool) is a card in the
+  answer, **Recommended change**: its one-line summary, a table of the
+  engine's input-diff lines (Setting, Now, Suggested; `compare.ts`
+  `diffInputs`, run on the server against the stored settings) and why each
+  setting changes. For an editor (`canApply` in the status) it has **Apply to
+  the settings form**. A viewer sees the same card with "An editor can
+  apply this change."
+- **Apply** (`applyProposal` on the page) puts the patch into the settings
+  draft (`settingsDraft.svelte.ts` `applyPatch`). It merges as the save
+  does: a top-level setting replaces, and a nested one merges one level
+  deep, except those the server replaces whole (`PATCH_REPLACED_WHOLE`,
+  checked against `projects/settings.ts` `REPLACED_WHOLE`). The patch's
+  settings win over an edit typed to them, and every other edit stays. Then
+  the sheet closes, Model settings opens, and the save bar's **Reason for
+  this change** says "Assistant suggestion: <summary>". Nothing is saved:
+  the person checks the change and saves with the normal **Save changes**,
+  which the server validates as any save, and History keeps the reason.
+  Discarding the change clears the reason again. The card then says the
+  change is in the form, not saved.
 
 ## Notes
 

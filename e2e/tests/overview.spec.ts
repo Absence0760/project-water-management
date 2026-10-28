@@ -2,7 +2,7 @@
 // page loads (series, runs) and the model being edited. The headline facts, details and who has access moved to
 // the Project page (project-page.spec.ts).
 import type { Page } from '@playwright/test';
-import { createProject, createRun, putModel, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, putModel, putSeries, sampleModel, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { seedSupplyProject } from '../support/supply.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { pinClockToProject } from '../support/clock.ts';
@@ -453,4 +453,54 @@ test('data added from the Summary shows up in its checklist straight away', asyn
 	await expect(dialog).toBeHidden();
 
 	await expect(setup(page)).toContainText('Rainfall loaded. No observed flow yet');
+});
+
+// The Drought index card (issue #620, docs/model.md §2.15b): SPI and SPEI to the latest run's last whole month.
+// 31 years of summer rain from 1991, the last Aug–Oct bone dry. That dry spell lies in the dry half of the
+// year, so the zero-run check keeps it, and no earlier Aug–Oct was dry: the zero total sits at the centre of
+// the zeros' mass, (0 + 1) / 2(30 + 1), whatever the gamma, so its SPI-3 is Φ⁻¹(1/62) = −2.14.
+test('the drought index: SPI and SPEI to the last whole month, fitted on 1991–2020, a short record in one line', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Summary drought index');
+	await putModel(page.request, project.id, sampleModel());
+	await updateSettings(page.request, project.id, {
+		apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110],
+		ewrPragmaticM3PerDay: [2000, 1500, 1000, 1000, 1000, 1500, 2500, 4000, 5000, 5000, 4000, 3000]
+	});
+	const start = Date.UTC(1991, 0, 1);
+	const days = (Date.UTC(2021, 9, 31) - start) / 86_400_000 + 1;
+	const values = Array.from({ length: days }, (_, i) => {
+		const d = new Date(start + i * 86_400_000);
+		const y = d.getUTCFullYear();
+		const m = d.getUTCMonth() + 1;
+		if (y === 2021 && m >= 8) return 0;
+		const wetness = 0.5 + ((y * 7 + m * 13) % 11) / 10;
+		return i % 3 === 0 ? Math.round(wetness * (m >= 11 || m <= 4 ? 9 : 2) * 10) / 10 : 0;
+	});
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '1991-01-01', values });
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}`);
+	await summaryReady(page);
+
+	const card = page.getByRole('region', { name: 'Drought index' });
+	await expect(card.locator('caption')).toHaveText('To the end of Oct 2021, the latest run’s last whole month');
+	const row = (scale: number) => card.locator(`tr[data-scale="${scale}"]`);
+	await expect(row(3).getByRole('rowheader')).toHaveText('3 Aug–Oct 2021');
+	await expect(row(12).getByRole('rowheader')).toHaveText('12 Nov 2020 – Oct 2021');
+	await expect(row(3).locator('td[data-kind="spi"]')).toHaveText('−2.14 Extremely dry');
+	await expect(row(3).locator('td[data-kind="spi"]')).toHaveAttribute('data-tone', 'dry');
+	// The SPEI from the same rain less the run's GR4J evaporation: a value with its class in every row.
+	for (const scale of [3, 6, 12]) await expect(row(scale).locator('td[data-kind="spei"] .num')).toHaveText(/^−?\d\.\d\d$/);
+	// The headline is the driest index, here the SPI-6 (at or below the SPI-3's −2.14, so extremely dry).
+	await expect(card.getByTestId('drought-headline')).toHaveText('Extremely dry · SPI-6');
+	await expect(card).toContainText('Fitted on 1991–2020. Below −1 is drier than usual, above 1 wetter.');
+	await expectNoViolations(page, { include: '[data-testid="drought-index"]' });
+
+	// Four months of rain: one line in place of the table.
+	const short = await seedRunnableProject(page.request, 'Summary drought short');
+	await createRun(page.request, short.id, 'Baseline');
+	await page.goto(`/projects/${short.id}`);
+	await summaryReady(page);
+	await expect(page.getByTestId('drought-none')).toHaveText('Needs at least 20 years of rain in each calendar month; this run has 3 months.');
+	await expect(page.getByRole('region', { name: 'Drought index' }).locator('table')).toHaveCount(0);
 });

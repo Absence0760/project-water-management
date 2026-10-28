@@ -48,11 +48,13 @@ export { UNIT_MAP_MIN_YEARS };
 /**
  * Switch rain for each unit on (from `previous`, the setting the form had
  * before it was switched off, else per unit with no gauge MAP and the default
- * period) or off (null: the catchment rain, as before; absent, null and
+ * period) or off: `catchment`, keeping `previous`'s Per unit setup (its MAP
+ * period and reference gauge), which Fragmentation's EWR shares run on (issue
+ * #615, docs/model.md §2.5b); null without one (absent, null and a bare
  * `catchment` run the same).
  */
 export function withUnitRain(on: boolean, previous?: UnitRainSettings | null): UnitRainSettings | null {
-	if (!on) return null;
+	if (!on) return previous ? { ...previous, mode: 'catchment', ...(previous.mapPeriod ? { mapPeriod: { ...previous.mapPeriod } } : {}) } : null;
 	if (previous) return { ...previous, mode: 'perUnit', ...(previous.mapPeriod ? { mapPeriod: { ...previous.mapPeriod } } : {}) };
 	return { mode: 'perUnit' };
 }
@@ -103,7 +105,9 @@ export const stationHref = (series: Pick<SeriesMeta, 'id'>) => `?tab=series&seri
 
 /** The first problem, as the form shows it (and blocks Save on), and the field it is in; null when it can be saved. */
 export function unitRainProblem(v: UnitRainSettings | null | undefined): { field: 'gaugeMap' | 'gaugeSource' | 'period' | 'reference'; message: string } | null {
-	if (!unitRainOn(v)) {
+	// Checked under both methods (issue #615): Fragmentation's EWR shares run on the Per unit setup too.
+	if (!v) return null;
+	if (v.mode !== 'perUnit' && v.mode !== 'catchment') {
 		const e = unitRainError(v);
 		return e ? { field: 'period', message: `Rain for each unit can’t be saved: ${e}.` } : null;
 	}
@@ -126,7 +130,7 @@ export const unitRainFormError = (v: UnitRainSettings | null | undefined): strin
 
 /** A note (not a blocker) when the MAP period is shorter than the factor wants, or starts before CHIRPS. */
 export function mapPeriodNote(v: UnitRainSettings | null | undefined): string | null {
-	if (!unitRainOn(v)) return null;
+	if (!v) return null;
 	const { from, to } = mapPeriodYears(v);
 	if (from > to) return null;
 	if (from < UNIT_MAP_FIRST_YEAR) return `CHIRPS begins in ${UNIT_MAP_FIRST_YEAR}: the years before it add nothing to the MAP factor.`;

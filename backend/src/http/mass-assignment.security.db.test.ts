@@ -590,6 +590,7 @@ const NOT_REACHED = new Map<string, { why: string; legit: number }>([
 		'POST /projects/:id/map/divide/:spid/apply',
 		{ why: 'a strict body; the planted proposal starts a model, which a division’s apply refuses, so a legit call is 409 (delineation/divide.db.test.ts applies one)', legit: 409 }
 	],
+	['POST /projects/:id/assistant/messages', { why: 'a strict body; the sweep runs with ASSISTANT_PROVIDER off, so a legit call is 404 assistant_off (assistant/assistant.db.test.ts sends one on the mock provider)', legit: 404 }],
 	['POST /share/series', { why: 'a read (app_share_series); the ladder catchment has 2 farms, under the 5 holders a link needs to show a series', legit: 404 }],
 	[
 		'POST /projects/:id/auto-calibrations/:cid/apply',

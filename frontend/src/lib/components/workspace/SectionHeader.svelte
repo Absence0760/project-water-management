@@ -4,8 +4,9 @@
 	// right, in this order, the page's rain-freshness pill (`status`, after the
 	// Summary's "Setup complete" pill), the
 	// tab's own actions (`actions`, headerSlot.svelte.ts) and the page's main
-	// box: Add data, then Run model (the page's RunButton, or the tab's main
-	// action in its place: `main`, Runs & results' run form).
+	// box: Add data (on the tabs it adds data to, TAB_ADDS_DATA, issue #601),
+	// then Run model (the page's RunButton, or the tab's main action in its
+	// place: `main`, Runs & results' run form).
 	// Under them, one slim line of notices (view only, new data) instead of
 	// full-width banners.
 	//
@@ -28,19 +29,26 @@
 		actions,
 		main,
 		notices,
-		guide
+		guide,
+		assist
 	}: {
 		title: string;
 		/** The page's help guide (/help/guides/<id>, TAB_GUIDE), linked as "How this page works" beside the title. */
 		guide?: string | null;
 		/** Beside the title (the "Unsaved changes" badge). */
 		badge?: Snippet;
+		/**
+		 * After the guide, on the title's line: the page's Assistant (issue #610). Not among the actions, which
+		 * end on Add data and Run model and whose row has no room for another control at 360 px or beside a
+		 * short title at 1440 (workspace-phone.spec.ts).
+		 */
+		assist?: Snippet | null;
 		context?: Snippet | null;
 		/** The page's status before the actions (the rain-freshness pill). */
 		status?: Snippet | null;
 		/** The section's own actions (pickers, links, its buttons). */
 		actions?: Snippet | null;
-		/** The page's main box, last: Add data, then the section's main action. */
+		/** The page's main box, last: Add data (on the tabs that have it), then the section's main action. */
 		main?: Snippet | null;
 		notices?: Snippet;
 	} = $props();
@@ -114,11 +122,12 @@
 				{#if guide}<a class="guide" href={guide} data-testid="section-guide" title={narrow ? 'How this page works' : undefined}
 						><span class="guide-q" aria-hidden="true">?</span><span class="guide-text">How this page works</span></a
 					>{/if}
+				{#if assist}<span class="assist" data-testid="header-assist">{@render assist()}</span>{/if}
 			</div>
 			{#if context}<div class="context muted" data-testid="section-context">{@render context()}</div>{/if}
 		</div>
 		{#if status || actions || main}
-			<div class="actions">
+			<div class="actions" data-testid="header-actions">
 				{#if status}<div class="group status" data-testid="header-status">{@render status()}</div>{/if}
 				{#if actions}
 					<!-- On a phone the tab's controls sit in a list under More actions (one row with the pills, not a row each). -->
@@ -208,6 +217,23 @@
 	}
 	.guide-q {
 		display: none;
+	}
+	/* The Assistant, after the guide: one place on every section, told apart from the tab's buttons by its
+	   accent tint and icon, smaller than Run model so it never competes with the primary action. */
+	.assist {
+		display: inline-flex;
+	}
+	.assist :global(.assist-btn) {
+		min-height: 32px;
+		gap: 0.4rem;
+		color: var(--accent);
+		background: var(--accent-soft);
+		border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.assist :global(.assist-btn:hover) {
+		border-color: var(--accent);
 	}
 	.context {
 		display: flex;
@@ -385,6 +411,30 @@
 		.guide-q {
 			display: inline;
 		}
+		/* The Assistant beside it: the same 36 px circle with its target at 44 px, its icon only (named by its
+		   hidden word), so the title's line keeps its height and the pills' row has no extra control. */
+		.assist :global(.assist-btn) {
+			position: relative;
+			justify-content: center;
+			width: 2.6rem;
+			height: 2.6rem;
+			min-height: 0;
+			padding: 0;
+			border-radius: 50%;
+		}
+		.assist :global(.assist-btn::after) {
+			content: '';
+			position: absolute;
+			inset: -0.25rem;
+		}
+		.assist :global(.assist-text) {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
 		.guide-text {
 			position: absolute;
 			width: 1px;
@@ -405,8 +455,8 @@
 			flex: 1 1 0;
 			justify-content: center;
 		}
-		/* Runs' run form (label, name, Run forecast, Run model): its label and name take the first row, then Add
-		   data shares the next with its buttons, so the main box is two rows, not three (issue #521 round 5). The
+		/* Runs' run form (label, name, Run forecast, Run model): its label and name take the first row, then its
+		   buttons the next, so the main box is two rows, not three (issue #521 round 5; no Add data there, #601). The
 		   form draws no box of its own here (its fields and buttons are the box's items; it still submits). */
 		.main:has(> :global(form)) {
 			flex-basis: 100%;

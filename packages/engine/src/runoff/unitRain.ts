@@ -177,6 +177,15 @@ function stationsOf(ctx: Omit<UnitRainContext, 'aligned' | 'days' | 'startDate'>
 	return (ctx.stations = stationContext({ settings: ctx.settings, series: ctx.series, stations: ctx.stationInputs, nodes: ctx.nodes }, warnings));
 }
 
+/**
+ * The settings with Per unit on, keeping the rest of settings.unitRain (its MAP period, reference gauge and
+ * pinned recipes): the forcing Fragmentation's EWR shares are made on (engine ≥ 1.105.0, issue #615, §2.5b), so a
+ * unit's share is the same under both methods for the same inputs.
+ */
+export function shareForcingSettings(s: ProjectSettings): ProjectSettings {
+	return { ...s, unitRain: { ...(s.unitRain ?? {}), mode: 'perUnit' } };
+}
+
 /** settings.unitRain is on: mode `perUnit`. */
 export const unitRainOn = (s: { unitRain?: UnitRainSettings | null } | null | undefined): boolean => s?.unitRain?.mode === 'perUnit';
 

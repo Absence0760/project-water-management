@@ -21,6 +21,12 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		related: ['rain-catchment', 'chirps', 'chirps-bias', 'rain-threshold'],
 		source: 'docs/model.md §2.4, §2.4b'
 	},
+	'drought-index': {
+		long: 'The Summary’s Drought index card says how dry or wet the catchment has been, from the latest run’s own final catchment rainfall and potential evaporation, for the last whole month of its history (never a forecast day).\n\n• **SPI** (Standardized Precipitation Index): the rain over the last 3, 6 or 12 months, set against every other year’s total over the same months. A gamma distribution is fitted to each calendar month’s totals (zero totals counted apart), and the total’s probability under it is written as a standard normal value.\n• **SPEI** (Standardized Precipitation-Evapotranspiration Index): the same for rain less potential evaporation, with a log-logistic distribution, so a hot dry spell reads drier than its rain alone.\n\nThe usual classes: 2 or more extremely wet, 1.5 to 2 very wet, 1 to 1.5 moderately wet, between −1 and 1 near normal, −1 to −1.5 moderately dry, −1.5 to −2 severely dry, −2 or less extremely dry. Values are shown between −3 and 3.\n\nThe distributions are fitted over 1991–2020 when the record has at least 25 of those 30 years in every calendar month, else over the whole record, and the card names the years. A calendar month needs at least 20 years to be fitted, so a shorter record has no index. A month with a missing day has no total, and no index covers it. SPEI needs the run’s potential evaporation, which only a GR4J run records.\n\n3 months reads the season’s soil moisture and farm dams; 12 months reads the big dams and groundwater.',
+		aliases: ['SPI', 'SPEI', 'standardized precipitation index', 'drought badge', 'drought class', 'dry spell'],
+		related: ['rain-final', 'gr4j-pe'],
+		source: 'docs/model.md §2.15b; McKee et al. 1993; Vicente-Serrano et al. 2010; WMO-No. 1090 (2012)'
+	},
 	'chirps': {
 		long: 'Useful to fill gaps or extend a short gauge record. At catchment scale CHIRPS can read well below (or above) a local gauge, so by default the model scales it by a factor per calendar month, fitted where both records have a reading, on the days it fills in (see CHIRPS bias correction).',
 		aliases: ['satellite rainfall'],
@@ -163,9 +169,9 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'Not in the workbook; docs/model.md §2.10'
 	},
 	'preview-view': {
-		long: 'All shows every column, as the preview always has. A hydrological unit shows only what that unit’s rain is made of, side by side: its station as recorded, the station adjusted to the unit (× the ratio of the unit’s MAP to the station’s, three decimals in the header), the unit’s own CHIRPS as stored and bias-corrected, the rain a run reads and where each day came from, then any other series stored at the unit. Above the table it lists the twelve monthly CHIRPS factors, the station they were fitted against, or why that pairing was refused. A unit without a rainfall station shows only the series stored at it for now.\n\nThe groups gather the rainfall stations, the average catchment rainfall (when Settings assigns the catchment a station) and every flow record with its m³/day and the calibration exclusions. The Columns checkboxes hide columns inside the view, and Missing only and Flagged only read only the stored series shown. The view is kept in the address while the preview is open, so a reload or a shared link opens the same view.',
+		long: 'All shows every column, as the preview always has. A hydrological unit shows only what that unit’s rain is made of, side by side: its station as recorded, the station adjusted to the unit (× the ratio of the unit’s MAP to the station’s, three decimals in the header), the unit’s own CHIRPS as stored and bias-corrected, the rain a run reads and where each day came from, then any other series stored at the unit. Above the table it lists the twelve monthly CHIRPS factors, the station they were fitted against, or why that pairing was refused. A unit without a rainfall station, under per-unit rain, shows the links of its own chain instead: its own gauge after the checks, the catchment gauge adjusted to it (× its MAP ratio), its CHIRPS as stored and levelled as a run levels it, the rain used and which link each day came from, with the rule and its factors above the table. With per-unit rain off it shows only the series stored at it.\n\nThe groups gather the rainfall stations, the average catchment rainfall (when Settings assigns the catchment a station) and every flow record with its m³/day and the calibration exclusions. The Columns checkboxes hide columns inside the view, and Missing only and Flagged only read only the stored series shown. The view is kept in the address while the preview is open, so a reload or a shared link opens the same view.',
 		aliases: ['preview view', 'unit view', 'filter by unit'],
-		related: ['preview-area-station-raw', 'preview-area-chirps-corrected', 'rain-stations'],
+		related: ['preview-area-station-raw', 'preview-area-chirps-corrected', 'preview-area-chirps-levelled', 'rain-stations', 'unit-rain'],
 		source: 'Not in the workbook; docs/ui.md § Data'
 	},
 	'preview-area-station-raw': {
@@ -190,15 +196,30 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'Not in the workbook; docs/model.md §2.4i'
 	},
 	'preview-area-rain-used': {
-		long: 'The rain a run reads for this area, to the bit: the station × ratio where the station has a reading, else the first source of its patching priority with one (another station × its ratio, or the corrected CHIRPS), else the next fallback, else nothing (read as dry, 0). For the average catchment rainfall it is Fragmentation’s rain; for a land unit, its per-unit rain. It covers the run window only.\n\nIt is computed when the preview opens with the engine’s own code over the inputs a run would read, not stored, so it is never older than the series and settings. The Rain used from column says, day by day, which source it came from.',
+		long: 'The rain a run reads for this area, to the bit: the station × ratio where the station has a reading, else the first source of its patching priority with one (another station × its ratio, or the corrected CHIRPS), else the next fallback, else nothing (read as dry, 0). For a unit without a station, the first link of its per-unit chain that has a value: its own gauge, the catchment gauge × its MAP ratio, its levelled CHIRPS, then the catchment rain. For the average catchment rainfall it is Fragmentation’s rain; for a land unit, its per-unit rain. It covers the run window only.\n\nIt is computed when the preview opens with the engine’s own code over the inputs a run would read, not stored, so it is never older than the series and settings. The Rain used from column says, day by day, which source it came from.',
 		aliases: ['unit rain used', 'area rain'],
 		related: ['rain-stations', 'unit-rain', 'preview-area-rain-from'],
 		source: 'Not in the workbook; docs/model.md §2.4i'
 	},
 	'preview-area-rain-from': {
-		long: 'Each day of the area’s rain used names its source: station (the station × ratio), patch 1: and the station’s name (a patch station × its ratio, numbered by its place in the patching priority), corrected CHIRPS (the station had no reading, or the day was set aside), next fallback (nothing in the patching priority had a value that day either) or no source, which a run reads as dry. The Full CSV writes the same as station, patch 1: <station>, chirps, fallback or none.\n\nRead down it to see where a long record leans on CHIRPS, or where an area had no rain at all.',
+		long: 'Each day of the area’s rain used names its source: station (the station × ratio), patch 1: and the station’s name (a patch station × its ratio, numbered by its place in the patching priority), corrected CHIRPS (the station had no reading, or the day was set aside), next fallback (nothing in the patching priority had a value that day either) or no source, which a run reads as dry. The Full CSV writes the same as station, patch 1: <station>, chirps, fallback or none. For a unit without a station the sources are the links of its chain: own gauge, catchment gauge × MAP ratio, own CHIRPS (levelled), catchment rain, forecast or no source (unitGauge, gaugeMap, unitChirps, catchment, forecast, none in the CSV).\n\nRead down it to see where a long record leans on CHIRPS, or where an area had no rain at all.',
 		related: ['preview-area-rain-used', 'rain-stations'],
 		source: 'Not in the workbook; docs/model.md §2.4i'
+	},
+	'preview-area-own-gauge': {
+		long: 'A unit’s own rain gauge (the rain series sited at the unit) after the same checks the catchment rain gets, zero runs and accumulations, and with its unreliable periods blanked, cut to the run window. It is what a unit without a rainfall station reads first, so a day blank here and recorded in the stored gauge column was set aside by a check. Blank where the gauge has no usable reading.\n\nDerived when the preview opens, never stored: the Full CSV’s “own gauge, checked” column.',
+		related: ['unit-rain', 'preview-area-rain-used'],
+		source: 'Not in the workbook; docs/model.md §2.4h'
+	},
+	'preview-area-gauge-scaled': {
+		long: 'The catchment rain × the unit’s MAP ÷ the catchment gauge’s MAP (Settings → Model selection for flow generation → Units without a station), the ratio three decimals in the header and kept between 0.25 and 4. A unit with no gauge of its own reads it first; one with its own gauge reads it after its own CHIRPS. Shown only when the ratio applies: the unit has a MAP, the gauge MAP is set and there is catchment rain.\n\nDerived when the preview opens, never stored: the Full CSV’s “catchment gauge × MAP ratio” column.',
+		related: ['unit-rain', 'preview-area-rain-used'],
+		source: 'Not in the workbook; docs/model.md §2.4h'
+	},
+	'preview-area-chirps-levelled': {
+		long: 'A unit’s own CHIRPS multiplied as a run multiplies it: by its MAP ÷ its CHIRPS mean annual rain, or by the catchment’s monthly bias factors, or by the reference gauge’s monthly factors and k_unit; the header says which. Raw CHIRPS runs as stored when nothing can level it, and a CHIRPS that totals 0 mm every year is not read at all, so the column is missing.\n\nDerived when the preview opens, never stored: the Full CSV’s “CHIRPS levelled” column. The CHIRPS raw column beside it is the series as stored.',
+		related: ['unit-rain', 'chirps-bias', 'preview-area-rain-used'],
+		source: 'Not in the workbook; docs/model.md §2.4h'
 	},
 	'wr90': {
 		long: 'The standard national source for the monthly evaporation and naturalised-flow inputs.',

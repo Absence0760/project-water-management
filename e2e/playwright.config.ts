@@ -104,7 +104,10 @@ export default defineConfig({
 				// Delineation on, against the committed synthetic DEM (invented terrain; map-delineate.spec.ts).
 				DEM_URL: DEM_FIXTURE,
 				// Tracing a dam on, against the committed synthetic water occurrence raster (invented water; map-assisted.spec.ts).
-				WATER_URL: WATER_FIXTURE
+				WATER_URL: WATER_FIXTURE,
+				// The assistant on, with the scripted mock model (no key, no network; backend/src/assistant/providers/mock.ts;
+				// assistant.spec.ts, assistant-recommend.spec.ts). Lambda refuses mock.
+				ASSISTANT_PROVIDER: 'mock'
 			}
 		},
 		// The same API with the second-factor requirement on (MFA_REQUIRED unset, production's default), on the
@@ -119,6 +122,8 @@ export default defineConfig({
 			stdout: 'pipe',
 			env: {
 				PORT: String(MFA_API_PORT),
+				// The assistant off, the default: assistant.spec.ts sends a page here to see the workspace without it.
+				ASSISTANT_PROVIDER: 'off',
 				DATABASE_URL: APP_E2E_URL,
 				ALLOWED_ORIGINS: WEB_URL,
 				SITE_URL: WEB_URL,

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Role } from '#lib/api/types.js';
 import {
+	ADD_DATA_TABS,
+	addsData,
 	ALL_TABS,
+	REFUSED_DROP_TEXT,
+	TAB_ADDS_DATA,
+	TAB_LABELS,
 	canOpenTab,
 	NAV_SECTIONS,
 	navSections,
@@ -325,5 +330,35 @@ describe('Warnings has a row; Compare runs is linked-only (issue #611)', () => {
 		expect(hiddenTabs(roleTabs, ['compare', 'history'])).toEqual(['history']);
 		expect(visibleTabs('owner', { hidden: ['compare'] })).toEqual(visibleTabs('owner', { hidden: [] }));
 		expect(visibleTabs('owner', { hidden: ['warnings'] })).not.toContain('warnings');
+	});
+});
+
+// Issue #601: Add data (the time-series upload) only where a series is what the page asks for.
+describe('TAB_ADDS_DATA', () => {
+	it('names every tab, and only known ones, so a new tab has to choose', () => {
+		expect(Object.keys(TAB_ADDS_DATA).sort()).toEqual([...ALL_TABS].sort());
+	});
+
+	it('shows Add data on Summary, Crops & demand, Data, Model settings and Calibration only, in workflow order', () => {
+		expect(ADD_DATA_TABS).toEqual(['overview', 'crops', 'series', 'settings', 'calibration']);
+		// Allocations has its own + Add volume, which a header Add data beside it read as.
+		for (const id of ['allocations', 'runs', 'network', 'map', 'river', 'supply', 'dams', 'compare', 'scenarios', 'project', 'warnings'])
+			expect(addsData(id), id).toBe(false);
+	});
+
+	it('keeps Add data on the Summary, where the project list’s ?add=data lands', () => {
+		expect(addsData('overview')).toBe(true);
+	});
+
+	it('says no for an id no tab has', () => {
+		expect(addsData('nope')).toBe(false);
+		expect(addsData('toString')).toBe(false);
+	});
+
+	it('names each Add data page, by its label, in a refused drop’s notice', () => {
+		expect(REFUSED_DROP_TEXT).toBe(
+			'This page doesn’t take files. To add data, drop the file on Summary, Crops & demand, Data, Model settings or Calibration.'
+		);
+		for (const id of ADD_DATA_TABS) expect(REFUSED_DROP_TEXT).toContain(TAB_LABELS[id]);
 	});
 });

@@ -3319,6 +3319,22 @@ database:
   for re-running the pair from the reproduction bundle, which that viewer is
   refused). Nothing of such a run is served as a flow, so no flow
   differencing is left to accept.
+- **The assistant's tools go through the same withholding** (issue #610,
+  `backend/src/assistant/tools/`). They read a run only through the
+  routes' own readers (`runs/read.ts`: the run, a series, its bulk pages, a
+  day, the model input), never `run_series` itself, inside the
+  orchestrator's `withUser(…, { readOnly: true })` as the member asking,
+  after `requireRole(…, 'viewer')`. So a viewer kept from each registered
+  volume gets the redacted run summary, no allocation series (`get_series`
+  is refused with the route's reason, and the series aren't listed), and of
+  a cap or full-allocation run no series and no gauge fit at all. Their
+  answers also leave out every name a member or farmer gave the app:
+  `get_network` picks each node field by name (no registered volumes, no
+  borehole or demand-object labels), `get_run_summary` drops who made the
+  run and its notes, and `get_settings` drops the responsible authority. A
+  refusal is the API's own words, never database text
+  (`assistant/tools/assistant-tools.db.test.ts`, with the owner as the
+  positive control).
 
   **The canary sweep** (`allocations.db.test.ts`): every `GET /projects/:id/…`
   route in `app.routes` (and `/me/alerts/:projectId`, and two comparisons)
@@ -3705,10 +3721,44 @@ built in. None rests on consent.
   [§ Two-step sign-in](#two-step-sign-in)), all strictly necessary. No
   analytics, no third-party scripts or fonts (the CSP allows none), so no
   cookie banner.
-- Sub-processors: AWS only (hosting, RDS, S3, SES mail, CloudWatch logs),
-  in the region chosen at deploy (`af-south-1` recommended; any other region
-  is a cross-border transfer under s72 *(confirm)*). The data-feed hosts
-  (CHIRPS, DWS) receive no personal data ([§ Input handling](#input-handling)).
+- Sub-processors: AWS only (hosting, RDS, S3, SES mail, CloudWatch logs,
+  and, for the assistant, Amazon Bedrock running Anthropic's Claude), in
+  the region chosen at deploy (`af-south-1` recommended; any other region
+  is a cross-border transfer under s72 *(confirm)*). Anthropic is not a
+  sub-processor: Bedrock runs the model in AWS's own accounts, and the model
+  provider has no access to prompts, completions or Bedrock's logs (AWS,
+  [Bedrock data protection](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html)).
+  The data-feed hosts (CHIRPS, DWS) receive no personal data
+  ([§ Input handling](#input-handling)).
+- **The assistant's transfer (s72), recorded 2026-10-27** (issue #610;
+  [deployment.md § The assistant](./deployment.md#the-assistant)). From
+  `af-south-1`, Anthropic's models on Bedrock are reachable only through a
+  *global* cross-Region inference profile (`global.anthropic.…`): the call
+  enters Bedrock in `af-south-1` through the VPC endpoint, and Bedrock runs
+  it in any supported commercial AWS region worldwide, over AWS's network,
+  encrypted in transit; CloudTrail records each call in `af-south-1` with
+  the region that ran it (`additionalEventData.inferenceRegion`). AWS also
+  says prompts and outputs "may be stored in the opt-in Regions for abuse
+  detection purposes". So a turn is a transfer outside South Africa.
+  *What crosses:* the person's message, the conversation the page sends
+  back, and the tools' results (the project's settings, network, run
+  summaries and series, gauge fits, help text), after the routes' own
+  withholding, with member, farmer and registered-user names dropped and no
+  email or display name (§ Assistant). A message or a project's free text
+  (a unit named after its owner, a note quoted back) can still carry
+  personal information: Privacy §4 asks people not to type any. *Not
+  crossing:* the usage counters (`assistant_usage`, `assistant_rate`, in
+  RDS in `af-south-1`); no transcript is kept anywhere. *Basis (provisional,
+  pre-counsel, as the operator's own access from the United States):*
+  s72(1)(c)/(d), the transfer is needed to perform the agreement the person
+  asked for when they choose to use the assistant, and s72(1)(a), AWS's
+  binding data processing addendum (the AWS DPA, which covers Bedrock).
+  Disclosed in Privacy §5–§6 (`LEGAL_VERSION` 2026-10-27). *Avoiding it:*
+  only a model Bedrock serves in-region in `af-south-1`, none of
+  Anthropic's today; a geographic profile (`eu.`, `us.`) would bound the
+  regions but none is offered from `af-south-1` either. The operator
+  agreement's § 11 and clause 6.1 name it for each client
+  ([legal/operator-agreement.md](./legal/operator-agreement.md)).
 
 **What is kept, and what deletion does.** Every foreign key to `app_user` is
 classified (cascade, set null, or restrict) in `catalogue.db.test.ts`
@@ -3740,6 +3790,8 @@ PDF someone else asked for kept the person as a recipient
 | Resets of a lost second factor (205): when asked for, confirmed and ended, and how; the confirm and cancel links' hashes (SHA-256); requests counted for the daily cap | `mfa_reset`, `mfa_reset_cancel`, `mfa_reset_quota` | An ended reset 90 days (the tick, `app_mfa_reset_purge`); a link's hash until used or the reset ends; counts 24 hours | Deleted | – |
 | Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
 | Dam traces, counted for the hourly cap: the user's id and the project's (186) | `map_compute_throttle` | One hour from the window's first attempt | Lapses with its window | Lapses with its window |
+| The assistant's use (262): the person's tokens (input and output) and messages per project and UTC month, as counts only (never the conversation); own rows only under RLS; in "Download my data" (`assistantUsage`) | `assistant_usage` | The month it counts and the 12 after it (`ASSISTANT_USAGE_RETENTION_MONTHS`, 13), then deleted by the job tick (`app_purge_assistant`) | Kept without the name (`user_id` set null), so the month still counts what was spent, until its retention ends | Deleted |
+| The assistant's messages per person in the current hour, for the hourly cap (262); no one reads it but the cap's own function | `assistant_rate` | Until its hour is over: the person's next message or the job tick deletes it | Deleted | – |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
@@ -4305,6 +4357,70 @@ packs buckets are read through signed URLs the API mints and logs. A log
 bucket would add storage and a lifecycle to run for no question it would
 answer. If key-level audit is ever needed, CloudTrail data events on the
 prefix in question (e.g. `reference/*`) cost almost nothing at this volume.
+
+## Assistant
+
+The project assistant (issue #610; [architecture.md §
+Assistant](./architecture.md#assistant), [api.md § Assistant](./api.md#assistant))
+sends project data to a model. What goes, and what keeps it bounded:
+
+- **Who.** Viewers and above, as themselves (`requireRole(…, 'viewer')`,
+  so farmers and contributors are refused; RLS backs it in the counter
+  functions too). The assistant only reads; applying a proposal is the
+  normal settings Save, which needs an editor and validates the patch
+  again.
+- **What reaches the model.** The fixed system prompt (`assistant/prompt.ts`,
+  nothing personal), the conversation the page sends (its own text, capped
+  at `ASSISTANT_MAX_INPUT_CHARS`), and the results of the tools the model
+  calls. Each tool runs in a read-only transaction as the caller, so RLS
+  applies, and goes through the same readers and withholding as the run
+  routes (a member who can't read registered volumes gets none through the
+  assistant). Tool results leave out member and farmer accounts, names and
+  emails, registered users' names, the run's label and notes and who made it,
+  and the calibration rules' signer (`get_settings` sends model inputs picked
+  by name, `MODEL_INPUT`, and the sign-off only as signed and its date);
+  farm, unit, dam, gauge and crop names stay as written, as the model's own
+  labels (a unit named after its owner goes too, which the privacy notice
+  says). A result is cut to
+  `ASSISTANT_MAX_TOOL_RESULT_CHARS`. A tool's or provider's error text never
+  reaches the model, the client or the log: fixed words go back, and the log
+  gets only the error's name and frames (`safeError`).
+- **Prompt injection.** Text in the project (a node name, a note) can reach
+  the model through a tool result. It can't widen what the assistant does:
+  every tool reads, as the caller, under RLS, and `propose_settings` only
+  returns a patch the person still has to review and save.
+- **Nothing kept.** No transcript, prompt or answer is stored or logged; the
+  server keeps only token and message counts (`assistant_usage`,
+  `assistant_rate`, 262). The usage rows are in "Download my data"
+  (`assistantUsage`) and kept 13 months; an account deletion clears their
+  name. The rate rows go once their hour is over. Bedrock's model invocation
+  logging (an account setting Terraform can't pin off) would write every
+  prompt and answer to CloudWatch or S3; the post-apply check fails if it is
+  on (`infra/scripts/postapply-check.sh`, docs/deployment.md § The
+  assistant).
+- **Cost.** Tokens count weighted, input + 5 × output (output costs five
+  times input on Bedrock, so each cap is money at the input price). Three
+  token budgets per UTC month: the project's (`ASSISTANT_TOKENS_PER_MONTH`,
+  2 M), the person's across projects (`ASSISTANT_TOKENS_PER_USER_MONTH`,
+  1 M) and the deployment's in all (`ASSISTANT_TOKENS_PER_MONTH_TOTAL`,
+  derived in Terraform from `assistant_budget_monthly_usd`), so neither more
+  projects nor more accounts get past the last. Each is checked before a turn
+  and charged after, so it can be passed by at most one turn's tokens
+  (`ASSISTANT_MAX_TURN_TOKENS`, 150 K) for each turn in flight at once, which
+  the assistant Lambda's reserved concurrency bounds. A message cap per
+  person per hour across projects (`ASSISTANT_MESSAGES_PER_HOUR`, 30; 429
+  with `Retry-After`). All counted in Postgres under advisory locks taken in
+  one order (the deployment's, the project's, then the person's row), so
+  parallel turns count one by one. Per turn at most `ASSISTANT_MAX_HOPS` (6)
+  model calls of `ASSISTANT_MAX_OUTPUT_TOKENS` (1024) each, at most
+  `ASSISTANT_MAX_TOOL_CALLS_PER_HOP` (4) tool calls a call, within
+  `ASSISTANT_TURN_SECONDS` (100); a tool's statements stop at 10 s. Each turn
+  logs one `assistant_turn` line with its token counts (no text), which an
+  hourly spend alarm sums, and a failed charge logs `assistant_charge_failed`,
+  which alarms on one. The counter functions refuse a caller who isn't a
+  viewer of the project, so no one spends another project's budget.
+- **Off by default.** `ASSISTANT_PROVIDER=off` shows no panel and calls
+  nothing; no dev server needs a key.
 
 ## Liability
 

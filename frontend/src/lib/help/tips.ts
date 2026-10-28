@@ -1370,7 +1370,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'ewr-share',
 		term: 'Hydrological unit EWR share',
-		short: 'The hydrological unit’s part of the pragmatic EWR (EWR × its flow share), added up down the river to give the EWR each point must pass.',
+		short: 'The unit’s part of the pragmatic EWR (EWR × its natural MAR share), added up down the river to give the EWR each point must pass.',
 		units: 'm³/day',
 		category: 'ewr',
 		fields: ['run.ewr_cumulative']
@@ -1489,11 +1489,11 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'ewr-split',
-		term: 'Split the EWR between units by',
-		short: 'Each unit’s EWR share: its flow share (default) or its natural MAR ÷ the units’ total, which differs only with rain for each unit.',
+		term: 'How the EWR is split between units',
+		short: 'Each unit’s EWR share is its natural MAR ÷ the units’ total, from its own GR4J runoff under both Per unit and Fragmentation.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'ewr',
-		fields: ['settings.ewrSplit', 'summary.ewrShare']
+		fields: ['summary.ewrShare']
 	},
 	{
 		id: 'ewr-daily-source',
@@ -1594,6 +1594,12 @@ export const TIPS: HelpTipText[] = [
 		units: 'mm/day',
 		category: 'data',
 		fields: ['run.rain_final', 'run.rain_used']
+	},
+	{
+		id: 'drought-index',
+		term: 'Drought index (SPI, SPEI)',
+		short: 'How unusual the last 3, 6 or 12 months were, in standard deviations from the median: SPI from the rain, SPEI from rain less evaporation.',
+		category: 'data'
 	},
 	{
 		id: 'chirps',
@@ -1828,6 +1834,30 @@ export const TIPS: HelpTipText[] = [
 		short: 'Where each day of an area’s rain used came from: the station, corrected CHIRPS, the next fallback or no source.',
 		category: 'data',
 		fields: ['preview.areaRainFrom']
+	},
+	{
+		id: 'preview-area-own-gauge',
+		term: 'Own gauge, checked (daily preview)',
+		short: 'A unit’s own rain gauge after the catchment’s checks and its unreliable periods, as a unit without a station reads it: derived when viewed.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaOwnGauge']
+	},
+	{
+		id: 'preview-area-gauge-scaled',
+		term: 'Catchment gauge × MAP ratio (daily preview)',
+		short: 'The catchment rain × the unit’s MAP ÷ the gauge’s MAP, as a unit without a station reads it: derived when viewed, not stored.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaGaugeScaled']
+	},
+	{
+		id: 'preview-area-chirps-levelled',
+		term: 'Unit CHIRPS levelled (daily preview)',
+		short: 'A unit’s own CHIRPS levelled as a run levels it (to its MAP, or by the bias or reference factors), for a unit without a station.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaChirpsLevelled']
 	},
 	{
 		id: 'wr90',
