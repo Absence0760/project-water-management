@@ -799,9 +799,22 @@ run "on" {
       aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_KEEPALIVE_SECONDS == "15" &&
       aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_TURN_SECONDS == "105" &&
       aws_lambda_function.assistant[0].environment[0].variables.DB_POOL_MAX == "1" &&
+      aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_TOKENS_PER_USER_MONTH == "1000000" &&
+      aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_MAX_TURN_TOKENS == "150000" &&
+      aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_MAX_TOOL_CALLS_PER_HOP == "4" &&
+      aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_MAX_OUTPUT_TOKENS == "1024" &&
+      aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_MAX_TOOL_RESULT_CHARS == "12000" &&
+      aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_MAX_INPUT_CHARS == "40000" &&
       aws_lambda_function.assistant[0].environment[0].variables.FEED_SOURCE == "live"
     )
-    error_message = "The assistant calls Bedrock in its own region with the issue's limits (2 M tokens a project a month, 30 messages a user an hour, 6 hops), a keepalive under the origin's read timeout, a turn 15 s inside the timeout and a pool of 1."
+    error_message = "The assistant calls Bedrock in its own region with the issue's limits (2 M weighted tokens a project a month, 1 M a person, 30 messages a user an hour, 6 hops, 150 K tokens and 4 tool calls a hop per turn, and the per-call caps pinned), a keepalive under the origin's read timeout, a turn 15 s inside the timeout and a pool of 1."
+  }
+
+  # The deployment-wide cap: the assistant's $50 budget at $2 per million
+  # input tokens (weighted tokens are dollars at the input price).
+  assert {
+    condition     = aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_TOKENS_PER_MONTH_TOTAL == "25000000"
+    error_message = "Unset, the deployment-wide cap is assistant_budget_monthly_usd / assistant_input_usd_per_million x 1e6: 25 M weighted tokens for $50 at $2/M."
   }
 
   assert {
@@ -827,6 +840,8 @@ run "on" {
       aws_lambda_function.backend.environment[0].variables.ASSISTANT_PROVIDER == "bedrock" &&
       aws_lambda_function.backend.environment[0].variables.ASSISTANT_MODEL == aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_MODEL &&
       aws_lambda_function.backend.environment[0].variables.ASSISTANT_TOKENS_PER_MONTH == aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_TOKENS_PER_MONTH &&
+      aws_lambda_function.backend.environment[0].variables.ASSISTANT_TOKENS_PER_USER_MONTH == aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_TOKENS_PER_USER_MONTH &&
+      aws_lambda_function.backend.environment[0].variables.ASSISTANT_TOKENS_PER_MONTH_TOTAL == aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_TOKENS_PER_MONTH_TOTAL &&
       aws_lambda_function.backend.environment[0].variables.ASSISTANT_MESSAGES_PER_HOUR == aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_MESSAGES_PER_HOUR
     )
     error_message = "The API, which answers the status, has the assistant's provider, model and limits, so the page shows what the assistant enforces."
@@ -868,7 +883,7 @@ run "on" {
   # IAM: the one model, through the global profile (AWS's documented shape).
   assert {
     condition = (
-      length(data.aws_iam_policy_document.assistant_bedrock[0].statement) == 2 &&
+      length(data.aws_iam_policy_document.assistant_bedrock[0].statement) == 3 &&
       alltrue([for s in data.aws_iam_policy_document.assistant_bedrock[0].statement : toset(s.actions) == toset(["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]) && !contains(s.resources, "*")])
     )
     error_message = "The assistant may invoke (and stream) one model and nothing else: no wildcard resource."
@@ -884,14 +899,31 @@ run "on" {
     error_message = "The global inference profile, in this region only."
   }
 
+  # AWS's three-part global example: the model here with aws:RequestedRegion
+  # = this region, the region-less model with "unspecified", each only
+  # through the profile.
   assert {
     condition = length([
       for s in data.aws_iam_policy_document.assistant_bedrock[0].statement : s
-      if s.sid == "InvokeTheModelThroughTheProfile" &&
-      toset(s.resources) == toset(["arn:aws:bedrock:af-south-1::foundation-model/anthropic.claude-sonnet-5-5", "arn:aws:bedrock:::foundation-model/anthropic.claude-sonnet-5-5"]) &&
-      length([for c in s.condition : c if c.variable == "bedrock:InferenceProfileArn" && toset(c.values) == toset(["arn:aws:bedrock:af-south-1:000000000000:inference-profile/global.anthropic.claude-sonnet-5-5"])]) == 1
+      if s.sid == "InvokeTheModelInRegionThroughTheProfile" &&
+      toset(s.resources) == toset(["arn:aws:bedrock:af-south-1::foundation-model/anthropic.claude-sonnet-5-5"]) &&
+      length(s.condition) == 2 &&
+      length([for c in s.condition : c if c.test == "StringEquals" && c.variable == "aws:RequestedRegion" && toset(c.values) == toset(["af-south-1"])]) == 1 &&
+      length([for c in s.condition : c if c.test == "StringEquals" && c.variable == "bedrock:InferenceProfileArn" && toset(c.values) == toset(["arn:aws:bedrock:af-south-1:000000000000:inference-profile/global.anthropic.claude-sonnet-5-5"])]) == 1
     ]) == 1
-    error_message = "The model it routes to (here and region-less, for global routing), only through that profile."
+    error_message = "The model in this region, requested in this region, only through that profile."
+  }
+
+  assert {
+    condition = length([
+      for s in data.aws_iam_policy_document.assistant_bedrock[0].statement : s
+      if s.sid == "InvokeTheGlobalModelThroughTheProfile" &&
+      toset(s.resources) == toset(["arn:aws:bedrock:::foundation-model/anthropic.claude-sonnet-5-5"]) &&
+      length(s.condition) == 2 &&
+      length([for c in s.condition : c if c.test == "StringEquals" && c.variable == "aws:RequestedRegion" && toset(c.values) == toset(["unspecified"])]) == 1 &&
+      length([for c in s.condition : c if c.test == "StringEquals" && c.variable == "bedrock:InferenceProfileArn" && toset(c.values) == toset(["arn:aws:bedrock:af-south-1:000000000000:inference-profile/global.anthropic.claude-sonnet-5-5"])]) == 1
+    ]) == 1
+    error_message = "The region-less model (global routing), with aws:RequestedRegion unspecified as Bedrock evaluates it, only through that profile."
   }
 
   assert {
@@ -970,12 +1002,52 @@ run "on" {
   assert {
     condition = (
       aws_cloudwatch_metric_alarm.assistant_errors[0].dimensions.FunctionName == "water-management-assistant" &&
+      aws_cloudwatch_metric_alarm.assistant_errors[0].threshold == 0 &&
       aws_cloudwatch_metric_alarm.assistant_throttles[0].dimensions.FunctionName == "water-management-assistant" &&
       aws_cloudwatch_metric_alarm.assistant_throttles[0].threshold == 0 &&
       aws_cloudwatch_metric_alarm.assistant_duration[0].threshold == 96000 &&
       aws_cloudwatch_log_metric_filter.origin_secret_rejected_assistant[0].metric_transformation[0].name == aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].metric_transformation[0].name
     )
-    error_message = "The assistant has its errors, throttles and p95 duration alarms, and its direct-traffic refusals count toward the origin-secret alarm."
+    error_message = "The assistant has its errors (any one), throttles and p95 duration alarms, and its direct-traffic refusals count toward the origin-secret alarm."
+  }
+
+  # Its unhandled 500s feed the API's metric, so the one alarm sees both.
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.unhandled_error_assistant[0].log_group_name == "/aws/lambda/water-management-assistant" &&
+      aws_cloudwatch_log_metric_filter.unhandled_error_assistant[0].pattern == aws_cloudwatch_log_metric_filter.unhandled_error[0].pattern &&
+      aws_cloudwatch_log_metric_filter.unhandled_error_assistant[0].metric_transformation[0].name == aws_cloudwatch_metric_alarm.unhandled_error[0].metric_name &&
+      aws_cloudwatch_log_metric_filter.unhandled_error_assistant[0].metric_transformation[0].namespace == aws_cloudwatch_metric_alarm.unhandled_error[0].namespace
+    )
+    error_message = "The assistant's log group feeds unhandled_error's metric: its 500s page like the API's."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.assistant_charge_failed[0].log_group_name == "/aws/lambda/water-management-assistant" &&
+      aws_cloudwatch_log_metric_filter.assistant_charge_failed[0].pattern == "{ $.message.event = \"assistant_charge_failed\" }" &&
+      aws_cloudwatch_metric_alarm.assistant_charge_failed[0].metric_name == aws_cloudwatch_log_metric_filter.assistant_charge_failed[0].metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.assistant_charge_failed[0].threshold == 0 &&
+      aws_cloudwatch_log_metric_filter.assistant_provider_failed[0].pattern == "{ $.message.event = \"assistant_provider_failed\" }" &&
+      aws_cloudwatch_metric_alarm.assistant_provider_failed[0].metric_name == aws_cloudwatch_log_metric_filter.assistant_provider_failed[0].metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.assistant_provider_failed[0].threshold == 3 &&
+      aws_cloudwatch_metric_alarm.assistant_provider_failed[0].period == 900
+    )
+    error_message = "A failed charge (any one) and failed model calls (more than 3 in 15 minutes) page: both leave the invocation a 200."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.assistant_tokens[0].log_group_name == "/aws/lambda/water-management-assistant" &&
+      aws_cloudwatch_log_metric_filter.assistant_tokens[0].pattern == "{ $.message.event = \"assistant_turn\" }" &&
+      aws_cloudwatch_log_metric_filter.assistant_tokens[0].metric_transformation[0].value == "$.message.weightedTokens" &&
+      aws_cloudwatch_metric_alarm.assistant_tokens_hourly[0].metric_name == aws_cloudwatch_log_metric_filter.assistant_tokens[0].metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.assistant_tokens_hourly[0].namespace == aws_cloudwatch_log_metric_filter.assistant_tokens[0].metric_transformation[0].namespace &&
+      aws_cloudwatch_metric_alarm.assistant_tokens_hourly[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.assistant_tokens_hourly[0].period == 3600 &&
+      aws_cloudwatch_metric_alarm.assistant_tokens_hourly[0].threshold == 2000000
+    )
+    error_message = "The hourly spend alarm sums the assistant_turn lines' weighted tokens over an hour, above 2 M by default."
   }
 
   assert {
@@ -994,6 +1066,142 @@ run "on" {
   }
 }
 
+# The essential tier keeps every assistant alarm but duration's: 5 on top of
+# the 13 (alarms.tf's tier comment counts them).
+run "essential_tier_keeps_the_assistant_alarms" {
+  command = plan
+
+  variables {
+    assistant_enabled = true
+    alarm_tier        = "essential"
+  }
+
+  assert {
+    condition = (
+      length(aws_cloudwatch_metric_alarm.assistant_errors) == 1 &&
+      length(aws_cloudwatch_metric_alarm.assistant_throttles) == 1 &&
+      length(aws_cloudwatch_metric_alarm.assistant_charge_failed) == 1 &&
+      length(aws_cloudwatch_metric_alarm.assistant_provider_failed) == 1 &&
+      length(aws_cloudwatch_metric_alarm.assistant_tokens_hourly) == 1 &&
+      length(aws_cloudwatch_log_metric_filter.unhandled_error_assistant) == 1 &&
+      length(aws_cloudwatch_metric_alarm.assistant_duration) == 0
+    )
+    error_message = "Essential keeps the assistant's errors, throttles, failed-charge, failed-model-call and hourly-token alarms and its unhandled-500 filter."
+  }
+}
+
+run "the_deployment_wide_cap_can_be_set_or_follows_the_budget" {
+  command = plan
+
+  variables {
+    assistant_enabled               = true
+    assistant_budget_monthly_usd    = 30
+    assistant_input_usd_per_million = 3
+    assistant_tokens_per_user_month = 500000
+    assistant_tokens_alarm_per_hour = 500000
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_TOKENS_PER_MONTH_TOTAL == "10000000" &&
+      aws_lambda_function.backend.environment[0].variables.ASSISTANT_TOKENS_PER_MONTH_TOTAL == "10000000" &&
+      aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_TOKENS_PER_USER_MONTH == "500000" &&
+      aws_cloudwatch_metric_alarm.assistant_tokens_hourly[0].threshold == 500000
+    )
+    error_message = "The deployment-wide cap follows the budget at the input price ($30 at $3/M is 10 M weighted tokens), on the assistant and the API alike."
+  }
+}
+
+run "an_explicit_deployment_wide_cap_needs_no_budget" {
+  command = plan
+
+  variables {
+    assistant_enabled                = true
+    assistant_budget_monthly_usd     = 0
+    assistant_tokens_per_month_total = 5000000
+  }
+
+  assert {
+    condition     = aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_TOKENS_PER_MONTH_TOTAL == "5000000" && length(aws_budgets_budget.assistant) == 0
+    error_message = "Set, the deployment-wide cap is that value, with or without an assistant budget."
+  }
+}
+
+run "refuses_no_budget_and_no_deployment_wide_cap" {
+  command = plan
+
+  variables {
+    assistant_enabled            = true
+    assistant_budget_monthly_usd = 0
+  }
+
+  expect_failures = [var.assistant_tokens_per_month_total]
+}
+
+run "refuses_a_derived_cap_past_its_bound" {
+  command = plan
+
+  variables {
+    assistant_budget_monthly_usd    = 1000
+    assistant_input_usd_per_million = 2
+  }
+
+  expect_failures = [var.assistant_tokens_per_month_total]
+}
+
+# The bounds production.ts checks too: one past each refuses the plan.
+run "refuses_caps_past_their_bounds" {
+  command = plan
+
+  variables {
+    assistant_tokens_per_month       = 20000001
+    assistant_tokens_per_user_month  = 0
+    assistant_tokens_per_month_total = 200000001
+    assistant_messages_per_hour      = 121
+    assistant_max_output_tokens      = 255
+    assistant_max_tool_result_chars  = 50001
+    assistant_max_input_chars        = 999
+    assistant_max_tool_calls_per_hop = 11
+    assistant_max_turn_tokens        = 9999
+    assistant_tokens_alarm_per_hour  = 9999
+  }
+
+  expect_failures = [
+    var.assistant_tokens_per_month,
+    var.assistant_tokens_per_user_month,
+    var.assistant_tokens_per_month_total,
+    var.assistant_messages_per_hour,
+    var.assistant_max_output_tokens,
+    var.assistant_max_tool_result_chars,
+    var.assistant_max_input_chars,
+    var.assistant_max_tool_calls_per_hop,
+    var.assistant_max_turn_tokens,
+    var.assistant_tokens_alarm_per_hour,
+  ]
+}
+
+run "accepts_caps_at_their_bounds" {
+  command = plan
+
+  variables {
+    assistant_enabled                = true
+    assistant_tokens_per_month       = 20000000
+    assistant_tokens_per_user_month  = 1
+    assistant_tokens_per_month_total = 200000000
+    assistant_messages_per_hour      = 120
+    assistant_max_output_tokens      = 8192
+    assistant_max_tool_result_chars  = 1000
+    assistant_max_input_chars        = 200000
+    assistant_max_tool_calls_per_hop = 10
+    assistant_max_turn_tokens        = 1000000
+  }
+
+  assert {
+    condition     = aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_MAX_OUTPUT_TOKENS == "8192" && aws_lambda_function.assistant[0].environment[0].variables.ASSISTANT_TOKENS_PER_MONTH_TOTAL == "200000000"
+    error_message = "Each cap at its bound is accepted, and reaches the environment as a whole number."
+  }
+}
+
 run "geo_profile_routes_within_its_geography" {
   command = plan
 
@@ -1006,7 +1214,7 @@ run "geo_profile_routes_within_its_geography" {
     condition = length([
       for s in data.aws_iam_policy_document.assistant_bedrock[0].statement : s
       if s.sid == "InvokeTheModelThroughTheProfile" && toset(s.resources) == toset(["arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-5-5"])
-    ]) == 1
+    ]) == 1 && length(data.aws_iam_policy_document.assistant_bedrock[0].statement) == 2
     error_message = "A geographic profile may route to its geography's regions, so the model in any region, still only through that profile."
   }
 }

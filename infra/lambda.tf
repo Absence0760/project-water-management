@@ -226,15 +226,18 @@ resource "aws_lambda_function" "backend" {
       WATER_URL = var.dam_trace_water ? "s3://${aws_s3_bucket.tiles.bucket}/${local.water_key}" : ""
 
       # The assistant (assistant.tf, issue #610): the API answers its status
-      # (GET /projects/:id/assistant: whether the chat is on, the project's
-      # tokens left) and never calls a model, which only the assistant's own
-      # Lambda can (its role, the Bedrock endpoint). The same values as that
-      # Lambda's, so the status shows what it enforces. off while
-      # assistant_enabled is false: the page shows no chat.
-      ASSISTANT_PROVIDER          = local.assistant_enabled ? "bedrock" : "off"
-      ASSISTANT_MODEL             = var.assistant_model_id
-      ASSISTANT_TOKENS_PER_MONTH  = tostring(var.assistant_tokens_per_month)
-      ASSISTANT_MESSAGES_PER_HOUR = tostring(var.assistant_messages_per_hour)
+      # (GET /projects/:id/assistant: whether the chat is on, the tokens left
+      # under the project's, the person's and the deployment's monthly caps)
+      # and never calls a model, which only the assistant's own Lambda can
+      # (its role, the Bedrock endpoint). The same values as that Lambda's,
+      # so the status shows what it enforces. off while assistant_enabled is
+      # false: the page shows no chat.
+      ASSISTANT_PROVIDER               = local.assistant_enabled ? "bedrock" : "off"
+      ASSISTANT_MODEL                  = var.assistant_model_id
+      ASSISTANT_TOKENS_PER_MONTH       = tostring(var.assistant_tokens_per_month)
+      ASSISTANT_TOKENS_PER_USER_MONTH  = tostring(var.assistant_tokens_per_user_month)
+      ASSISTANT_TOKENS_PER_MONTH_TOTAL = tostring(local.assistant_tokens_per_month_total)
+      ASSISTANT_MESSAGES_PER_HOUR      = tostring(var.assistant_messages_per_hour)
     }
   }
 

@@ -76,6 +76,15 @@ locals {
     [local.assistant_model_arn_any]
   )
 
+  # The deployment-wide monthly cap in weighted tokens (input + 5 x output):
+  # the assistant's budget at the input price, unless set
+  # (var.assistant_tokens_per_month_total, whose validation bounds both).
+  assistant_tokens_per_month_total = (
+    var.assistant_tokens_per_month_total != null
+    ? var.assistant_tokens_per_month_total
+    : floor(var.assistant_budget_monthly_usd / var.assistant_input_usd_per_million * 1000000)
+  )
+
   # InvokeModel and its streaming form: ConverseStream and InvokeModelWithResponseStream
   # are authorized as the latter, Converse as the former.
   assistant_bedrock_actions = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
@@ -111,8 +120,54 @@ data "aws_iam_policy_document" "assistant_bedrock" {
     }
   }
 
+  # A global profile: AWS's three-part example ("Global cross-Region
+  # inference", IAM policy requirements). Bedrock authorizes the model here
+  # with aws:RequestedRegion = this region, and the region-less model ARN that
+  # the global routing is checked against with aws:RequestedRegion =
+  # "unspecified"; each is pinned to its own value.
   dynamic "statement" {
-    for_each = local.assistant_via_profile ? [1] : []
+    for_each = local.assistant_global ? [1] : []
+    content {
+      sid       = "InvokeTheModelInRegionThroughTheProfile"
+      actions   = local.assistant_bedrock_actions
+      resources = [local.assistant_model_arn_here]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:RequestedRegion"
+        values   = [var.aws_region]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "bedrock:InferenceProfileArn"
+        values   = [local.assistant_profile_arn]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.assistant_global ? [1] : []
+    content {
+      sid       = "InvokeTheGlobalModelThroughTheProfile"
+      actions   = local.assistant_bedrock_actions
+      resources = [local.assistant_model_arn_global]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:RequestedRegion"
+        values   = ["unspecified"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "bedrock:InferenceProfileArn"
+        values   = [local.assistant_profile_arn]
+      }
+    }
+  }
+
+  # A geographic profile routes to its geography's regions, which differ by
+  # source region (GetInferenceProfile lists them), so the model in any region,
+  # still only through that profile.
+  dynamic "statement" {
+    for_each = local.assistant_via_profile && !local.assistant_global ? [1] : []
     content {
       sid       = "InvokeTheModelThroughTheProfile"
       actions   = local.assistant_bedrock_actions
@@ -235,7 +290,8 @@ resource "aws_vpc_security_group_ingress_rule" "bedrock_vpce_from_assistant" {
 
 # Private DNS: the SDK's default bedrock-runtime.<region>.amazonaws.com
 # resolves to this endpoint inside the VPC, so the client needs no endpoint
-# URL. ~$7.30 a month per AZ (var.bedrock_endpoint_az_count).
+# URL. ~$9.56 a month per AZ in af-south-1 ($0.01309 an hour; ~$7.30 in
+# us-east-1), var.bedrock_endpoint_az_count.
 resource "aws_vpc_endpoint" "bedrock_runtime" {
   count               = local.assistant_count
   vpc_id              = aws_vpc.main.id
@@ -306,8 +362,9 @@ resource "aws_lambda_function" "assistant" {
   reserved_concurrent_executions = var.assistant_reserved_concurrency
 
   # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
-  # local.lambda_logging). Prompts and answers are never logged (the
-  # assistant logs token counts and error codes only).
+  # local.lambda_logging). Prompts and answers are never logged: one
+  # assistant_turn line per turn carries its token counts and how it ended
+  # (alarms.tf sums them for the hourly spend alarm), the rest are error codes.
   logging_config {
     log_format            = local.lambda_logging.log_format
     system_log_level      = local.lambda_logging.system_log_level
@@ -337,10 +394,20 @@ resource "aws_lambda_function" "assistant" {
       ASSISTANT_PROVIDER       = "bedrock"
       ASSISTANT_MODEL          = var.assistant_model_id
       ASSISTANT_BEDROCK_REGION = var.aws_region
-      # The same limits as the API's (lambda.tf), so its status shows what is enforced here.
-      ASSISTANT_TOKENS_PER_MONTH  = tostring(var.assistant_tokens_per_month)
-      ASSISTANT_MESSAGES_PER_HOUR = tostring(var.assistant_messages_per_hour)
-      ASSISTANT_MAX_HOPS          = tostring(var.assistant_max_hops)
+      # The same limits as the API's (lambda.tf), so its status shows what
+      # is enforced here. Token caps are weighted: input + 5 x output.
+      ASSISTANT_TOKENS_PER_MONTH       = tostring(var.assistant_tokens_per_month)
+      ASSISTANT_TOKENS_PER_USER_MONTH  = tostring(var.assistant_tokens_per_user_month)
+      ASSISTANT_TOKENS_PER_MONTH_TOTAL = tostring(local.assistant_tokens_per_month_total)
+      ASSISTANT_MESSAGES_PER_HOUR      = tostring(var.assistant_messages_per_hour)
+      # A turn's own bounds, pinned here rather than left to the code's
+      # defaults, so the plan shows them.
+      ASSISTANT_MAX_HOPS               = tostring(var.assistant_max_hops)
+      ASSISTANT_MAX_TURN_TOKENS        = tostring(var.assistant_max_turn_tokens)
+      ASSISTANT_MAX_TOOL_CALLS_PER_HOP = tostring(var.assistant_max_tool_calls_per_hop)
+      ASSISTANT_MAX_OUTPUT_TOKENS      = tostring(var.assistant_max_output_tokens)
+      ASSISTANT_MAX_TOOL_RESULT_CHARS  = tostring(var.assistant_max_tool_result_chars)
+      ASSISTANT_MAX_INPUT_CHARS        = tostring(var.assistant_max_input_chars)
       # Under the 60 s origin read timeout of its CloudFront origin (s3_cloudfront.tf).
       ASSISTANT_KEEPALIVE_SECONDS = "15"
       ASSISTANT_TURN_SECONDS      = tostring(var.assistant_timeout_seconds - 15)
