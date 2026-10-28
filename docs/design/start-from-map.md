@@ -96,6 +96,20 @@ reload) lands on the same step.
    nothing is filled in silently, and the A-pan, the WR2012 values and the
    flow feed are accepted where they live, as before.
 
+   **Stale values and the A-pan** (issue #646 items 4 and 5, the
+   hydrologist's review F6–F9 and F14). Evaporation is Done only once the
+   monthly A-pan or a daily A-pan series is set ("A-pan not set: crop demand
+   and dam evaporation are zero" until then). A per-unit value, a planted
+   area from land cover or the evaporation from the map read over an outline
+   redrawn since turns its item back to Started ("Changed since: …"), so
+   the Getting started pill comes back until it is proposed again; the
+   Map's Checks list the same, with a unit's area from an earlier outline
+   (and **Use** for the area now), the rest of the catchment's area after a
+   boundary edit, a dam inside another unit's boundary and a gauge moved
+   since it became its node ([maps.md § Checks](../maps.md#checks)). An
+   editor's feed items say an owner attaches them, and a boundary past
+   about 2,500 km² is said up front to be too large for one rain feed.
+
 **Typing stays.** The Network's *Add outflow gauge* is untouched, a GeoJSON
 upload works at every step (step 1 and 2 link it), and any applied value can
 be typed over afterwards (an area typed over goes back to *typed*, as now).
@@ -489,6 +503,9 @@ API: `POST /projects/:id/map/divide` and `…/map/divide/:spid/apply`
   locally without a worker it waits. A Divide that proposes only the
   boundaries' areas beside the values now, with no order, would serve a
   server without a DEM too (the hydrologist's review F9); trigger: a client
-  dividing without a DEM, or past the worker's window.
+  dividing without a DEM, or past the worker's window. Meanwhile, without a
+  DEM, the Map's Checks give each unit whose boundary was redrawn its
+  boundary's area beside the model's, with **Use** (issue #646 F6), one
+  unit at a time ([followups.md](../followups.md)).
 - **Dividing without an elevation model**: there is nothing to divide by;
   the sheet says so, and the Network and the per-feature tools stay.

@@ -170,7 +170,11 @@ export const CODE_FIXES: Record<WarningCode, Fix> = {
 	'calibration.zone.needsPerUnit': { how: 'Gauges are ticked to calibrate at, but zones need Per unit flow generation. Switch to Per unit, or untick the gauges.', action: FLOW_GENERATION },
 	'calibration.zone.unusable': { how: 'A ticked gauge can’t hold a zone (gone, not a gauge, or at or below the site), so its units joined the zone below. Untick it.', action: CAL_ZONES },
 	'calibration.zone.unfitted': { how: 'A calibration zone has no parameters of its own yet, so its units ran on the catchment’s. Fit the parameters.', action: FIT },
-	'calibration.zone.siteOnlyElsewhere': { how: 'Some units ran on their zone’s parameters, but the report, evidence pack, uncertainty ensemble and automated calibration use only the site’s. Keep it in mind.', action: CAL_ZONES }
+	'calibration.zone.siteOnlyElsewhere': { how: 'Some units ran on their zone’s parameters, but the report, evidence pack, uncertainty ensemble and automated calibration use only the site’s. Keep it in mind.', action: CAL_ZONES },
+	'map.areaFromEarlierOutline': {
+		how: 'The unit’s polygon on the map was redrawn after its area was taken from it. Use the new area from the Map’s Checks, or keep the old one if the redraw was a mistake.',
+		action: { kind: 'link', label: 'Go to the Map’s Checks', href: '?tab=map&checks=1' }
+	}
 };
 
 /** The fix of a coded warning; null for a code this client doesn't know (a newer engine). */

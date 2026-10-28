@@ -208,7 +208,9 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			ga_property_area_ha = EXCLUDED.ga_property_area_ha, ga_rate_m3_ha_year = EXCLUDED.ga_rate_m3_ha_year,
 			reach_loss_frac = EXCLUDED.reach_loss_frac, reach_loss_max_m3_day = EXCLUDED.reach_loss_max_m3_day,
 			baseflow_loss_m3_day = EXCLUDED.baseflow_loss_m3_day, baseflow_gain_m3_day = EXCLUDED.baseflow_gain_m3_day,
-			map_mm = EXCLUDED.map_mm, map_source = EXCLUDED.map_source
+			map_mm = EXCLUDED.map_mm, map_source = EXCLUDED.map_source,
+			-- The polygon a MAP from the grid was taken over (273, geo/unitMapRoutes.ts) goes once the MAP is changed here: a typed MAP is over no polygon.
+			map_polygon = CASE WHEN node.map_mm IS DISTINCT FROM EXCLUDED.map_mm OR node.map_source IS DISTINCT FROM EXCLUDED.map_source THEN NULL ELSE node.map_polygon END
 		 WHERE node.project_id = EXCLUDED.project_id`,
 		m.nodes.map((n) => ({
 			id: n.id,

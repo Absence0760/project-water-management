@@ -95,8 +95,8 @@ describe('startDataItems', () => {
 
 	it('names what an owner does for an editor, the units with no area, and the dams with no volume', () => {
 		const input = fresh({ owner: false, model: { nodes: [outlet, unit('a', 'Upper'), unit('r', 'Rest', { areaKm2: 0 })], cropAreas: [] }, features: [{ kind: 'dam', nodeId: 'a' }] });
-		expect(item(input, 'unit-rain').detail).toMatch(/An owner of the project sets up the feeds\.$/);
-		expect(item(input, 'flow').detail).toMatch(/An owner of the project sets up the feeds\.$/);
+		expect(item(input, 'unit-rain').detail).toMatch(/An owner of the project attaches it\.$/);
+		expect(item(input, 'flow').detail).toMatch(/An owner of the project attaches it\.$/);
 		expect(item(input, 'network')).toMatchObject({ status: 'partial', optional: true });
 		expect(item(input, 'network').detail).toMatch(/^1 unit has no area yet \(Rest\)/);
 		expect(item(input, 'dams')).toMatchObject({ status: 'todo' });
@@ -107,5 +107,59 @@ describe('startDataItems', () => {
 		const rain = item(fresh({ hasBoundary: false, rain: null }), 'rain');
 		expect(rain).toMatchObject({ status: 'todo', optional: true });
 		expect(rain.detail).toMatch(/each unit’s own rain stands in/);
+	});
+
+	it('says the A-pan isn’t set until the monthly row or a daily A-pan series is (issue #646 item 5)', () => {
+		const none = item(fresh(), 'evaporation');
+		expect(none.status).toBe('todo');
+		expect(none.optional).toBeFalsy();
+		expect(none.detail).toMatch(/^A-pan not set: crop demand and dam evaporation are zero\./);
+		const daily = item(fresh({ series: [{ kind: 'evap_apan_mm', length: 365 }] }), 'evaporation');
+		expect(daily.status).toBe('done');
+		expect(daily.detail).toMatch(/^A daily A-pan series is read/);
+		// An empty daily series is no A-pan; while the series load, a row with no monthly A-pan is still being checked.
+		expect(item(fresh({ series: [{ kind: 'evap_apan_mm', length: 0 }] }), 'evaporation').status).toBe('todo');
+		expect(item(fresh({ series: null }), 'evaporation').status).toBe('unknown');
+		const settings = defaultProjectSettings();
+		settings.apanMm = APAN;
+		expect(item(fresh({ settings, series: null }), 'evaporation').status).toBe('done');
+	});
+
+	it('flags a value read over an outline redrawn since as Started, naming the unit (issue #646 F7, F8)', () => {
+		const settings = defaultProjectSettings();
+		settings.apanMm = APAN;
+		const input = fresh({
+			settings,
+			model: { nodes: [outlet, unit('a', 'Upper', { mapMm: 600 }), unit('b', 'Lower', { mapMm: 650 })], cropAreas: [{ nodeId: 'a', cropId: 'c', areaM2: 1e5 }, { nodeId: 'b', cropId: 'c', areaM2: 1e5 }] },
+			feeds: [
+				{ source: 'chirps', config: { unit: { nodeId: 'a' } } },
+				{ source: 'chirps', config: { unit: { nodeId: 'b' } } }
+			]
+		});
+		expect(status(input)).toMatchObject({ 'unit-rain': 'done', 'unit-map': 'done', crops: 'done', evaporation: 'done' });
+		const stale = fresh({
+			...input,
+			stale: [
+				{ kind: 'unit-rain', nodeId: 'a', featureId: 'p1' },
+				{ kind: 'unit-map', nodeId: 'b', featureId: 'p2' },
+				{ kind: 'land-cover', nodeId: 'a', featureId: 'p1', what: 'Citrus' },
+				{ kind: 'evaporation', nodeId: null, featureId: 'bd', what: 'GR4J’s PE' }
+			]
+		});
+		expect(status(stale)).toMatchObject({ 'unit-rain': 'partial', 'unit-map': 'partial', crops: 'partial', evaporation: 'partial' });
+		expect(item(stale, 'unit-rain').detail).toMatch(/^Changed since: Upper reads the cells of an earlier outline/);
+		expect(item(stale, 'unit-map').detail).toMatch(/^Changed since: the MAP of Lower is from an earlier outline/);
+		expect(item(stale, 'crops').detail).toMatch(/^Changed since: the planted area from land cover of Upper/);
+		expect(item(stale, 'evaporation').detail).toContain('Changed since: the evaporation from the map (GR4J’s PE) was summarised over an earlier boundary.');
+		expect(dataDone(startDataItems(stale))).toBe(false);
+	});
+
+	it('says up front that a boundary past ~2 500 km² is too large for rain from the boundary (F14)', () => {
+		const big = item(fresh({ boundaryAreaM2: 3_100e6 }), 'rain');
+		expect(big.detail).toContain('The boundary is 3');
+		expect(big.detail).toContain('km², more than the about 2');
+		expect(item(fresh({ boundaryAreaM2: 2_000e6 }), 'rain').detail).not.toContain('more than the about');
+		// A feed that reads it already is past the question.
+		expect(item(fresh({ boundaryAreaM2: 3_100e6, rain: 'current' }), 'rain').detail).not.toContain('more than the about');
 	});
 });

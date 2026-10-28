@@ -114,6 +114,7 @@ import { pairingFactors, rainStationSummary } from './runoff/stationForcing';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn, entersServiceAfter } from './network/development';
 import { forecastTail } from './forecastTail';
 import { chirpsChoiceWarnings } from './seriesChoice';
+import { mapAreaWarnings } from './mapAreas';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
 
@@ -957,6 +958,8 @@ function runNetworkIn(
 	missingRainWarning(input, settings.rainSource, aligned, start, days, window, warnings);
 	// Another CHIRPS series spans more of the run than the one it read, at the outlet or a unit (engine ≥ 1.90.0, issue #561).
 	warnings.push(...chirpsChoiceWarnings(input, start, days));
+	// A unit's area is from an earlier outline of its polygon on the map (issue #646 F6, ModelInput.mapAreas).
+	warnings.push(...mapAreaWarnings(input));
 	const posOf = (node: number) => posInOrder[node]!;
 	const curtailment = computeCurtailment(
 		nodes.flatMap((node, i) => {

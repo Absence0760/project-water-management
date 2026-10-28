@@ -2873,6 +2873,8 @@ export interface MapFeature {
 	createdBy: string | null;
 	createdAt: string;
 	updatedAt: string;
+	/** A gauge linked to its node: where it stood when linked (273, issue #646 F9); null or absent otherwise, or linked before 273. */
+	linkPoint?: MapPosition | null;
 }
 
 /** One feature on a farm's map (GET /projects/:id/farm/:nodeId/map, issue #326 A3): the farm's own parcels and dams, the boundary, rivers and gauges. No node, no properties, no author. */
@@ -2926,6 +2928,24 @@ export interface MapFeatureList {
 	nodes: MapNodeArea[];
 	/** The quaternary datasets loaded (empty: the lookup has nothing to propose from). */
 	quaternaryDatasets: { dataset: string; count: number }[];
+	/** What each value accepted from the map was taken over (273, issue #646 F7/F8; backend geo/acceptances.ts). */
+	accepted?: MapAcceptances;
+}
+
+/** A polygon as it stood when a value was read over it (273). */
+export interface PolygonStamp {
+	featureId: string;
+	updatedAt: string;
+	areaM2: number;
+}
+
+/** GET …/map/features `accepted`: the polygon each value from the map was read over (map/stale.ts compares them with the map now). */
+export interface MapAcceptances {
+	unitMap: { nodeId: string; polygon: PolygonStamp }[];
+	/** A unit's own CHIRPS feed's `unit` mark (its area rounded to 0.001 km²). */
+	unitRain: { nodeId: string; featureId: string; updatedAt: string; areaKm2: number }[];
+	landCover: { nodeId: string; cropId: string; cropName: string; polygons: PolygonStamp[] }[];
+	evaporation: { target: 'pe' | 'apan'; boundary: PolygonStamp | null }[];
 }
 
 /** GET …/map/linked-nodes: the nodes at least one feature is linked to, each once (no geometry). */

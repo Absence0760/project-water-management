@@ -802,6 +802,61 @@ thresholds named constants there:
   sourced network feeds this check (the layer's own reaches, not added, are
   not measured: the check reads the project's features only).
 
+**What a map edit left behind** (issue #646 item 4, the hydrologist's
+review F6–F9). A value taken from the map is copied into the model, so
+redrawing or moving what it came from changes nothing in the model until
+someone takes it again. These checks say so:
+
+- **A unit's area from an earlier outline** (F6): a unit whose area came
+  from a polygon (Use, Start or Divide) that has another area now ("Upper's
+  area is from an earlier outline of Upper parcel: 12.00 km² in the model,
+  14.10 km² now"), with **Use 14.10 km²**: the Map's Use (POST
+  …/area-from-map, a confirm, one History entry) on the basis the unit took
+  (195). The area-sources grid says "’s earlier outline" beside such a unit.
+  A run warns too (`map.areaFromEarlierOutline`, [model.md § Run warning
+  codes](./model.md)): the backend names each such unit and its outline's
+  area now in the run's input (`ModelInput.mapAreas`, `runs/execute.ts`
+  `staleMapAreas`), which the stored input keeps, so a reproduction says the
+  same.
+- **A value read over an outline redrawn since** (F7, F8): a unit's MAP from
+  the grid, its rain feed's cells, a planted area from land cover, and an
+  evaporation row from the map, each linking where it is proposed again (MAP
+  from the grid, Rain for each unit, Crops, Evaporation from the map). What
+  each was read over is recorded with it as `{ featureId, updatedAt, areaM2 }`
+  (`273_acceptance_polygons`: `node.map_polygon`,
+  `crop_area_land_cover.polygons`, `evaporation_accepted.boundary`; a unit
+  feed's `unit` mark already had it), and GET …/map/features returns them as
+  `accepted` (`geo/acceptances.ts`). The polygon now is the unit's polygon
+  (`geo/unitPolygon.ts`'s rule), the boundary the oldest one. It is another
+  outline when it is gone, another feature, or edited since with another
+  area (`OUTLINE_SLACK_M2`, 0.5 m²; a unit feed's mark keeps its area to
+  0.001 km²): a rename or a relink, which also moves `updatedAt`, keeps it
+  (`map/stale.ts`, the backend's `acceptances.ts outlineChanged`). A value
+  from before 273 records nothing, so it is never flagged. The boundary's
+  rain feed keeps its own flag (the Getting started pill, MapRainLink).
+- **The rest of the catchment's area** (F8): the unit Start made beside
+  units' boundaries has no outline; its area is the boundary less the units
+  as the boundary stood. After the boundary's area changes, while the rest
+  still has the area Start gave it, the check gives the figure now (the
+  boundary less the other units' areas) and links the Network to type it.
+  Read from the applied Start proposal (`stale.ts restOfCatchment`; an
+  effective area, or a rest with an outline, is skipped).
+- **A dam inside another unit's boundary** (F9): a dam linked to unit A
+  whose point (a polygon's centre) is outside A's polygon and inside unit
+  B's. Links never move with the map (Start links a dam once).
+- **A gauge moved since it became its node** (F9): from 273 the database
+  records where a gauge stood when it was linked to its node
+  (`map_feature.link_point`, set only by the `map_feature_link_point`
+  trigger: on a link or a relink; cleared on unlinking). Moved more than
+  `GAUGE_MOVED_M` (50 m) since, the check says how far and points at the
+  Network, where what drains into it is set. A gauge linked before 273 has
+  no point recorded and is never flagged.
+
+Not built here: re-proposing every unit's area at once without an
+elevation model (Divide's area half), and a flag for a WR2012 quaternary
+the moved boundary no longer sits in ([followups.md](./followups.md), issue
+#646 F9 and F14).
+
 Geometry is in metres on a local equirectangular projection around the
 features (well under 1 % off over a catchment); people read haversine
 distances and the server's areas.
@@ -2330,7 +2385,9 @@ it.
   revisions list carry, and keeps a `crop_area_land_cover` row (174) with the
   same citation. The box shows that provenance beside each crop, and says
   "Typed over since" once the area no longer matches it. While the model has
-  unsaved changes, Use waits. Viewers see the summary but not Use.
+  unsaved changes, Use waits. Viewers see the summary but not Use. The row records the polygons the area was summed over
+  (`polygons`, 273), so the Map's [Checks](#checks) and the Start data list
+  flag an area summed over an outline redrawn since (issue #646 F7).
 - **Datasets.** The default is a real dataset before the synthetic one, then
   the newest load; the API takes `?dataset=`.
 
@@ -2543,7 +2600,10 @@ grid's kind, and **nothing is converted between them**:
   values); dPET, … (hPET v3 …, 1991–2020 monthly means; dataset
   “dPET-1991-2020”). Pre-summarised at import: …"), which History, the run
   comparison and an evidence pack's revisions list carry, and keeps an
-  `evaporation_accepted` row (181) with the same citation. A monthly PE's own
+  `evaporation_accepted` row (181) with the same citation. The row records the boundary it was summarised over
+  (`boundary`, 273): after the boundary is redrawn, the Map's
+  [Checks](#checks) and the Start data list say to propose it again (issue
+  #646 F8). A monthly PE's own
   `source` names the dataset too, so a fit record and a run's settings carry
   it. The panel says when the saved row no longer holds the accepted values
   ("Typed over since"). While Settings has unsaved changes, Use waits; after
@@ -2894,6 +2954,11 @@ units' `mapMm` / `mapSource` only when an editor uses it.
   line) is refused (`grid_mixed`): use the grid that covers every unit, or
   clear that unit's MAP on its form first. A MAP typed in by hand is no
   grid's and is never touched by an apply that leaves its unit out.
+  Each unit's polygon as it stood is recorded with its MAP
+  (`node.map_polygon`, 273); a model save that changes the MAP clears it.
+  A unit whose polygon has another outline since is not "the same" any more
+  (applying again records the new outline), and the Map's
+  [Checks](#checks) and the Start data list flag it (issue #646 F7).
 - **Coverage shown below 100 %** (issue #500 item 8). A unit covered over
   90–100 % of its parcel gets a MAP from the part the grid has values on, so
   the panel shows its coverage under the proposed MAP ("93.3 % covered",

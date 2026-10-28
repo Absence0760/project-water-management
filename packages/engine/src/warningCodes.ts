@@ -7,7 +7,8 @@
 //
 // Only the actionable warnings carry a code so far: the data checks, the rain
 // chain (zero runs, accumulations, the CHIRPS and gap-product fallbacks, rain
-// stations and unit gauges) and calibration, its zones included. The unit-share notes (the EWR
+// stations and unit gauges), calibration, its zones included, and a unit area
+// from an earlier map outline (issue #646 F6). The unit-share notes (the EWR
 // split and the retired flow-share method, issues #615 and #616) stay uncoded
 // for now; the area-fragmentation, High/Low-MAP and areaMismatches warnings
 // went with the flow-share methods in engine 1.105.0. An uncoded warning is in
@@ -29,7 +30,7 @@ export interface WarningCodeInfo {
 	/**
 	 * The settings panel that changes what the warning reports, by its anchor id (frontend settings/sections.ts:
 	 * `set-…` on Model settings or Calibration, `set-unit-rain` inside Model selection for flow generation); null when the fix is on the
-	 * Data page (load or rename a series), not a setting.
+	 * Data page (load or rename a series), or for a `map.` code on the Map, not a setting.
 	 */
 	setting: string | null;
 	group: WarningGroup;
@@ -98,6 +99,10 @@ export const WARNING_CODES = {
 	'rain.unitGauge.unreliable': { setting: 'set-rain', group: 'check' },
 	// A unit's rain rule fell back to the catchment's rain (runoff/unitRain.ts).
 	'rain.unit.catchmentFallback': { setting: 'set-unit-rain', group: 'check' },
+
+	// The map (mapAreas.ts): a unit's area is from an earlier outline of its polygon (issue #646 F6): params { unit, modelKm2, mapKm2 }.
+	// The fix is on the Map (warnings/fixes.ts), not a setting.
+	'map.areaFromEarlierOutline': { setting: null, group: 'check' },
 
 	// Calibration (run.ts): the record scored, its site and its window.
 	'calibration.noObserved': { setting: 'set-record', group: 'check' },

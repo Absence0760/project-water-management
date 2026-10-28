@@ -35,6 +35,8 @@ PANEL_LABEL['set-unit-rain'] = 'Unit rain';
 /** A code's link: its settings panel on its page, or the Data page when the catalogue names none. */
 export function settingLink(code: WarningCode): { href: string; label: string } {
 	const anchor = WARNING_CODES[code].setting;
+	// The map's warnings are fixed on the Map (issue #646 F6), not on Data.
+	if (!anchor && code.startsWith('map.')) return { href: '?tab=map&checks=1', label: 'Go to the Map' };
 	if (!anchor) return { href: '?tab=series', label: 'Go to Data' };
 	return { href: `?tab=${settingsPageOf(anchor === 'set-unit-rain' ? 'set-share' : anchor)}#${anchor}`, label: `Go to ${PANEL_LABEL[anchor] ?? 'the setting'}` };
 }
@@ -54,7 +56,7 @@ const areaOf = (code: string | null, fix: Fix): Area => {
 	if (code?.startsWith('calibration.')) return 'calibration';
 	if (code?.startsWith('data.')) return 'data';
 	const href = 'href' in fix.action ? fix.action.href : '';
-	return /tab=calibration/.test(href) ? 'calibration' : /tab=settings/.test(href) ? 'rain' : /tab=(network|crops|transfers)/.test(href) ? 'model' : 'runs';
+	return /tab=calibration/.test(href) ? 'calibration' : /tab=settings/.test(href) ? 'rain' : /tab=(network|crops|transfers|map)/.test(href) ? 'model' : 'runs';
 };
 
 /**

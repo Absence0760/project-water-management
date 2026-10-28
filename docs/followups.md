@@ -7170,3 +7170,54 @@ events after a decision, append-only (228_decision_events). Left open:
       a `varied` appeal event. Trigger: a pilot assessor's report showing the
       line, or a second report-request feature that needs a scenario run off
       the request path.
+
+## Map edits and the values taken from the map (issue #646 items 4 and 5, 2026-10-28)
+
+Built: a unit's area from an earlier outline (Checks with Use, the area
+grid, a coded run warning), MAP, rain, land cover and evaporation read over
+a redrawn outline (273's stamps, Checks and the Start data list), the rest
+of the catchment's area after a boundary edit, a dam inside another unit's
+boundary, a gauge moved since it became its node, the A-pan row, and an
+editor's and a large boundary's notes in step 4
+([maps.md § Checks](./maps.md#checks)). Left:
+
+- [ ] **Divide's area half without an elevation model** (F9). Divide needs
+      a DEM (`divide.ts` `no_dem`), so a server without one has no batch
+      re-proposal of the units' areas beside "Now:". Not built here: a
+      plan without routing is Start's (`planWithoutDem`), and Divide's
+      apply and review assume a routed plan (drains-into, gauges, the
+      rest's piece). The Checks' **Use** on each unit whose boundary was
+      redrawn is the stand-in, one unit at a time. Durable fix: a
+      `planWithoutDem` for Divide (the units' boundary areas beside the
+      model's, no order), reviewed and applied as a division with every
+      drains-into unticked. Trigger: a client dividing without a DEM, or
+      more than a handful of units redrawn at once (start-from-map.md § Not
+      built).
+- [ ] **The WR2012 quaternary isn't re-checked after a boundary edit** (F8,
+      F14). The reference stores the quaternary's values, not the point or
+      feature it was looked up at (it may have been a gauge, or typed), so
+      nothing can tell that the moved boundary now lies in another
+      quaternary without guessing. Durable fix: record the lookup's point
+      and feature with `settings.wr2012.reference` (from QuaternaryProposal),
+      and flag it in the Checks when that feature's outline changed or its
+      point's quaternary differs. Trigger: the next WR2012 change, or a
+      client catchment redrawn across a quaternary line.
+- [ ] **WR2012 uses one quaternary** (F14). A catchment across two
+      quaternaries gets the first one's MAR × the area ratio. Durable fix:
+      area-weight every quaternary the boundary covers (the quaternary
+      layer's polygons are loaded; the reference would become a list with
+      shares, an engine and settings change with its own ENGINE_VERSION).
+      Trigger: a client catchment that crosses a quaternary line by more
+      than ~10 % of its area.
+- [ ] **The rest of the catchment beside units' boundaries has no outline**
+      (F14), so rain and MAP for each unit can't read it. Durable fix: with a
+      DEM, save the outlet's piece less the units' boundaries as the rest's
+      parcel on apply (the routed plan has its cells; Start's apply would
+      polygonise them as it does a routed unit's piece). Trigger: a rest
+      over ~20 % of the catchment in a client model, or the next Start
+      change.
+- [ ] **Changed since is told by area** (F7). A redraw that keeps the area
+      to 0.5 m² (a unit feed's mark: 0.001 km²) reads as the same outline,
+      so a rename or relink (which bump `updated_at`) isn't flagged. Durable
+      fix: a geometry hash in the stamp (and in the feed marks). Trigger: a
+      client report of a reshaped boundary not flagged.

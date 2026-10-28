@@ -3,22 +3,35 @@
 	// consistency warnings for the hydrologist, from mapChecks.ts. Warnings
 	// only: nothing here blocks a save or a run. Each warning names the
 	// features it is about as buttons that pick them on the map and in the
-	// list (`onpick`); without `onpick` the names are plain text.
+	// list (`onpick`); without `onpick` the names are plain text. A unit's area
+	// from an earlier outline offers Use (`onuse`, the Map's Use path; issue
+	// #646 F6), and a value read over a redrawn outline links to where it is
+	// proposed again (F7, F8).
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { MapFeature, MapNodeArea } from '#lib/api/types.js';
 	import { KIND_LABEL } from './mapData';
-	import { mapChecks } from './mapChecks';
+	import { mapChecks, type MapCheck, type MapCheckInputs } from './mapChecks';
+	import { fmtNum } from '#lib/format/number.js';
 
 	let {
 		features,
 		nodes,
+		inputs = {},
 		onpick,
+		onuse,
+		busy = null,
 		cap = Infinity,
 		heading = true
 	}: {
 		features: MapFeature[];
 		nodes: MapNodeArea[];
+		/** What the checks of a map edit's leftovers read (mapChecks.ts MapCheckInputs). */
+		inputs?: MapCheckInputs;
 		onpick?: (featureId: string) => void;
+		/** Use a polygon's area now for its unit (an editor's; without it the check only says so). */
+		onuse?: (use: NonNullable<MapCheck['use']>) => void;
+		/** The feature a Use is saving for (its button is disabled meanwhile). */
+		busy?: string | null;
 		/** Show this many warnings until "Show all" (ui-playbook: fold every long list); every one by default. */
 		cap?: number;
 		/** Draw the panel's own "Checks" heading (off inside a sheet that has its title). */
@@ -26,7 +39,7 @@
 	} = $props();
 
 	const uid = $props.id();
-	const checks = $derived(mapChecks(features, nodes));
+	const checks = $derived(mapChecks(features, nodes, {}, inputs));
 	let all = $state(false);
 	const shown = $derived(all ? checks : checks.slice(0, cap));
 	const byId = $derived(new Map(features.map((f) => [f.id, f])));
@@ -60,6 +73,15 @@
 							{:else}
 								{c.featureIds.map(nameOf).join(', ')}
 							{/if}
+						</span>
+					{/if}
+					{#if (c.use && onuse) || c.link}
+						<span class="acts small">
+							{#if c.use && onuse}
+								{@const use = c.use}
+								<button type="button" class="btn btn-sm" disabled={busy === use.featureId} onclick={() => onuse(use)} data-testid="map-check-use">Use {fmtNum(use.km2, 2)} km²</button>
+							{/if}
+							{#if c.link}<a href={c.link.href} data-testid="map-check-link">{c.link.text}</a>{/if}
 						</span>
 					{/if}
 				</li>
@@ -101,6 +123,12 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.2rem 0.75rem;
+	}
+	.acts {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem 0.75rem;
 	}
 	.link {
 		background: none;

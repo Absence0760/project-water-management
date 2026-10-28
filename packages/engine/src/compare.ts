@@ -61,6 +61,7 @@ import {
 	type ProjectModel,
 	type ProjectSettings,
 	type SeriesChoice,
+	type MapAreaEntry,
 	type RainStationInputs,
 	type RunSummary,
 	type Transfer
@@ -90,6 +91,8 @@ export interface RunInputsSnapshot {
 	forecastRainEcmwf?: boolean;
 	/** The rainfall stations' names and details (ModelInput.stations, engine ≥ 1.91.0, issue #553); absent unless settings.rainStations assigns a station. */
 	stations?: RainStationInputs | null;
+	/** Units whose area is from an earlier outline of their polygon (ModelInput.mapAreas, issue #646 F6); absent when none. */
+	mapAreas?: readonly MapAreaEntry[] | null;
 }
 
 export interface RunSeriesSnapshot {

@@ -64,7 +64,7 @@ describe('the catalogue', () => {
 		for (const [code, info] of Object.entries(WARNING_CODES)) {
 			expect(info.setting === null || panels.has(info.setting), code).toBe(true);
 			expect(['note', 'check'], code).toContain(info.group);
-			expect(code).toMatch(/^(data|rain|calibration)\.[a-zA-Z.]+$/);
+			expect(code).toMatch(/^(data|rain|calibration|map)\.[a-zA-Z.]+$/);
 		}
 		expect(isWarningCode('rain.none')).toBe(true);
 		expect(isWarningCode('toString')).toBe(false);
@@ -468,7 +468,8 @@ const ELSEWHERE: Partial<Record<WarningCode, string>> = {
 	'calibration.zone.needsPerUnit': 'calibrate/zones.test.ts',
 	'calibration.zone.unusable': 'calibrate/zones.test.ts',
 	'calibration.zone.unfitted': 'calibrate/zones.test.ts',
-	'calibration.zone.siteOnlyElsewhere': 'calibrate/zones.test.ts'
+	'calibration.zone.siteOnlyElsewhere': 'calibrate/zones.test.ts',
+	'map.areaFromEarlierOutline': 'mapAreas.test.ts'
 };
 
 describe('coverage', () => {
