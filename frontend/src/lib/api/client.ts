@@ -42,6 +42,8 @@ import type {
 	Allocation,
 	AllocationCapYears,
 	AllocationComparisonTotals,
+	AssistantRequest,
+	AssistantStatus,
 	AllocationImportRequest,
 	AllocationInput,
 	AllocationList,
@@ -359,14 +361,58 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			if (!isLambdaThrottle(res.status, data) || attempt >= THROTTLE_RETRIES) break;
 			await sleep(throttleDelayMs(attempt));
 		}
-		if (!res.ok) {
-			const obj = (data && typeof data === 'object' ? data : {}) as { error?: unknown; details?: unknown; code?: unknown; params?: unknown };
-			const msg = typeof obj.error === 'string' && obj.error ? obj.error : statusText(res.status);
-			const code = typeof obj.code === 'string' && obj.code ? obj.code : null;
-			const params = obj.params && typeof obj.params === 'object' && !Array.isArray(obj.params) ? (obj.params as Record<string, string | number>) : {};
-			throw failed(new ApiError(res.status, msg + describeDetails(obj.details), obj.details, code, params));
-		}
+		if (!res.ok) throw failed(errorOf(res, data));
 		return data as T;
+	}
+
+	/** The ApiError for a non-2xx answer and its parsed JSON body; a Retry-After header becomes `params.retryAfter` (seconds). */
+	function errorOf(res: Response, data: unknown): ApiError {
+		const obj = (data && typeof data === 'object' ? data : {}) as { error?: unknown; details?: unknown; code?: unknown; params?: unknown };
+		const msg = typeof obj.error === 'string' && obj.error ? obj.error : statusText(res.status);
+		const code = typeof obj.code === 'string' && obj.code ? obj.code : null;
+		const params = obj.params && typeof obj.params === 'object' && !Array.isArray(obj.params) ? { ...(obj.params as Record<string, string | number>) } : {};
+		const wait = Number(res.headers?.get?.('retry-after'));
+		if (params.retryAfter === undefined && Number.isFinite(wait) && wait > 0) params.retryAfter = Math.ceil(wait);
+		return new ApiError(res.status, msg + describeDetails(obj.details), obj.details, code, params);
+	}
+
+	/**
+	 * A POST answered with a `text/event-stream` (the assistant, issue #610): the same credentials, headers and
+	 * error handling as `request`, but the 2xx body is handed back unread for the caller to parse
+	 * (components/assistant/stream.ts). A refusal before the stream starts is an ApiError as usual. `signal`
+	 * aborts the request and the stream; an abort rejects with the fetch's own AbortError, not an ApiError.
+	 */
+	async function postStream(path: string, body: unknown, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>> {
+		for (let attempt = 0; ; attempt++) {
+			let res: Response;
+			try {
+				res = await fetchFn(`${base}${path}`, {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+					body: JSON.stringify(body),
+					signal
+				});
+			} catch (e) {
+				if (signal?.aborted) throw e;
+				throw new ApiError(0, statusText(0), e);
+			}
+			if (res.ok && res.body) return res.body;
+			if (isWafCaptcha(res)) throw new ApiError(405, 'solve the puzzle to continue', undefined, CAPTCHA_REQUIRED);
+			const text = await res.text();
+			let data: unknown;
+			try {
+				data = text ? JSON.parse(text) : undefined;
+			} catch {
+				data = undefined;
+			}
+			if (isLambdaThrottle(res.status, data) && attempt < THROTTLE_RETRIES) {
+				await sleep(throttleDelayMs(attempt));
+				continue;
+			}
+			if (res.ok) throw failed(new ApiError(res.status, 'The server sent no answer'));
+			throw failed(errorOf(res, data));
+		}
 	}
 
 	const enc = encodeURIComponent;
@@ -1397,6 +1443,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			publication: (id: string) => request<{ publication: OutlookPublication | null }>('GET', `${p(id)}/outlook-publication`).then((r) => r.publication),
 			/** Withdraw it: the farm pages stop showing it. */
 			withdraw: (id: string) => request<{ publication: OutlookPublication }>('DELETE', `${p(id)}/outlook-publication`).then((r) => r.publication)
+		},
+		/** The project's assistant (issue #610, docs/api.md § Assistant): read-only answers from the project's data, and settings it recommends. */
+		assistant: {
+			/** Whether it is on here, and the caller's budget and role (viewer or above; `{ available: false }` when the server has it off). */
+			status: (id: string) => request<AssistantStatus>('GET', `${p(id)}/assistant`),
+			/** One turn: the whole conversation, the user's new message last. The answer streams (AssistantStreamEvent, components/assistant/stream.ts). */
+			send: (id: string, body: AssistantRequest, signal?: AbortSignal) => postStream(`${p(id)}/assistant/messages`, body, signal)
 		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */

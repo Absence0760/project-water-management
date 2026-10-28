@@ -19,15 +19,13 @@ import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { requireOwnSecondFactor, requireProjectStepUp } from '../auth/stepUp.js';
-import { checkCalibrationSite } from './calibrationSite.js';
-import { baselineSettingsEwrRefusal, normaliseBaselineEwrRules } from './ewrRules.js';
-import { checkRainStations } from './rainStationSettings.js';
-import { checkFlowMissing, remapSettingSeriesIds, settingSeriesIds } from './flowMissingSettings.js';
-import { autoFitRecordError, baselineAllocationModeError, dataQualityPatchError, ewrOutletTableError, mergeSettings, normaliseBaselineAllocationMode, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
+import { normaliseBaselineEwrRules } from './ewrRules.js';
+import { checkedSettingsPatch, mergeSettings, normaliseBaselineAllocationMode, remapSettingNodeIds, SettingsPatch } from './settings.js';
+import { remapSettingSeriesIds, settingSeriesIds } from './flowMissingSettings.js';
 import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
-import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
-import { checkEwrHeadline, resolveEwrHeadline } from './ewrHeadlineSettings.js';
+import { resolveOutcomes } from './outcomeSettings.js';
+import { resolveEwrHeadline } from './ewrHeadlineSettings.js';
 import { resolveOutlook } from './outlookSettings.js';
 import { resolveResponsibleAuthority } from './authoritySettings.js';
 import { readJson } from '../http/body.js';
@@ -361,49 +359,10 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// Turning it on: only someone signed in with a second factor, so it can't lock everyone out at once.
 			const mfaChange = body.requireMfa !== undefined && body.requireMfa !== current.require_mfa;
 			if (mfaChange && body.requireMfa) await requireOwnSecondFactor(db);
-			// Licence data never drives the baseline (issue #507): a cap or a full allocation is a scenario's.
-			const allocError = baselineAllocationModeError(body.settings);
-			if (allocError) throw new ApiError(400, allocError);
-			// Nor does the baseline keep water for the EWR (issue #523 B4): the restriction's EWR trigger is a scenario's.
-			const ewrError = baselineSettingsEwrRefusal(body.settings);
-			if (ewrError) throw ewrError;
-			const settings = body.settings ? patchSettings(current.settings, body.settings) : undefined;
-			const dqError = settings && body.settings?.dataQuality ? dataQualityPatchError(settings) : null;
-			if (dqError) throw new ApiError(400, dqError);
-			// An automated fit is the server's to write (issue #153): a save only carries the stored one back.
-			const autoError = settings && body.settings?.fitRecord !== undefined ? autoFitRecordError(mergeSettings(current.settings), settings) : null;
-			if (autoError) throw new ApiError(409, autoError);
-			// A new sign-off of the calibration rules is dated by the server, and it and a withdrawal are audited with the account (issue #153).
-			// Dated on the project's calendar (its time zone), as `today` is: UTC's date is a day behind around local midnight.
-			const signOff = settings && body.settings?.calibrationRules !== undefined ? signOffChange(current.settings, settings) : null;
-			if (signOff === 'signed') {
-				const on = localDate(new Date(), body.timeZone ?? current.time_zone);
-				settings!.calibrationRules = { ...settings!.calibrationRules, signedOff: { by: settings!.calibrationRules.signedOff!.by, on } };
-			}
-			// The matrix's Reserve site: a change to a gauge is checked against the network and the rule tables being saved.
-			const site = (body.settings as { outcomes?: { siteNodeId?: string | null } } | undefined)?.outcomes?.siteNodeId;
-			if (settings && typeof site === 'string' && site !== resolveOutcomes(current.settings).siteNodeId) {
-				await checkOutcomeSite(db, id, site, (settings as { ewrRules?: unknown }).ewrRules);
-			}
-			// The EWR the results are judged by: a change to a rule-table site is checked the same way (ewrHeadlineSettings.ts).
-			if (settings && body.settings?.ewrHeadline !== undefined) {
-				await checkEwrHeadline(db, id, body.settings.ewrHeadline, current.settings, (settings as { ewrRules?: unknown }).ewrRules);
-			}
-			// The outlet's Reserve rule table once: by null or by the outlet's id, never both (engine ≥ 1.69.0, §2.9c).
-			if (settings && body.settings?.ewrRules !== undefined) {
-				const { rows: outlets } = await db.query<{ id: string }>('SELECT id FROM node WHERE project_id = $1 AND downstream_node_id IS NULL', [id]);
-				const outletError = ewrOutletTableError((settings as { ewrRules?: unknown }).ewrRules, outlets.map((r) => r.id));
-				if (outletError) throw new ApiError(400, outletError);
-			}
-			// The rainfall stations (engine ≥ 1.91.0, issue #553): each named station a station of this project, each unit a land unit.
-			if (settings && body.settings?.rainStations) await checkRainStations(db, id, body.settings.rainStations, (current.settings as { rainStations?: unknown }).rainStations);
-			// One flow record's missing periods (engine ≥ 1.102.0, issue #611): each named record a flow record of this project.
-			if (settings && body.settings?.flowMissing) await checkFlowMissing(db, id, body.settings.flowMissing, (current.settings as { flowMissing?: unknown }).flowMissing);
-			// The calibration site (engine ≥ 1.41.0): a change to a gauge is checked against the network and its records.
-			const calSite = (body.settings as { calibrationSiteNodeId?: string | null } | undefined)?.calibrationSiteNodeId;
-			if (settings && typeof calSite === 'string' && calSite !== (current.settings as { calibrationSiteNodeId?: unknown }).calibrationSiteNodeId) {
-				await checkCalibrationSite(db, id, calSite);
-			}
+			// The settings are checked as one patch (settings.ts checkedSettingsPatch, which the assistant's dry run shares).
+			const checked = body.settings ? await checkedSettingsPatch(db, id, current.settings, body.settings, body.timeZone ?? current.time_zone) : null;
+			const settings = checked?.settings;
+			const signOff = checked?.signOff ?? null;
 			// A public-records team's project stays in the team (161, project_public_records_guard).
 			if (body.teamId !== undefined && body.teamId !== current.team_id) {
 				const { rows: pr } = await db.query<{ kept: boolean }>('SELECT app_project_public_records($1) AS kept', [id]);

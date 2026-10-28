@@ -396,6 +396,11 @@ the frontend catalogue (same contract: add, never rename):
   kind they can queue is (`backend/src/jobs/contributorKinds.ts`, which a
   catalogue test holds to the job table's insert policies). Try again once
   the pending job has run.
+- `assistant_off`, `assistant_rate_limited`, `assistant_budget_spent`,
+  `assistant_input_too_large` (before a stream), and `assistant_hop_limit`,
+  `assistant_output_limit`, `assistant_timeout`, `assistant_provider_error`
+  (a stream's `error` event): the assistant ([§ Assistant](#assistant)). The
+  panel is an English workspace page.
 
 | Code | Status | When |
 | --- | --- | --- |
@@ -3903,6 +3908,73 @@ before `start-16` (a unit at a dam or an abstraction point, `role` `dam` or
   `map.start_discarded`, `map.divide_proposed`, `map.divide_applied`,
   `map.divide_discarded`: ids and counts; never a polygon). A stranger gets
   `404`.
+
+## Assistant
+
+A chat about one project's model and results, answered by a model from the
+project's own data (issue #610, `backend/src/assistant/`,
+[architecture.md § Assistant](./architecture.md#assistant)). Off unless the
+server's `ASSISTANT_PROVIDER` names one (`mock`, `ollama`, `anthropic`,
+`bedrock`; `off` is the default). Viewers and above chat; farmers and
+contributors get `403`, a stranger `404`. The assistant only reads: a
+recommendation comes back as a `proposal` event, which the Settings page
+loads into its draft and an editor saves with the normal `PATCH
+/projects/:id`. No conversation is stored: the page keeps it and sends it
+with every turn.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/assistant` | – | `AssistantStatus`: `{ available: false }` when the provider is `off`, else `{ available: true, provider, canApply, budget: { tokensPerMonth, tokensUsed, resetsAt, scope }, rate: { messagesPerHour }, disclaimer }`. `canApply` is true for an editor or owner (the Save that applies a proposal needs one). `budget` is this calendar month's (UTC) cap with the fewest tokens left, in weighted tokens (input + 5 × output): `scope` `project` (`ASSISTANT_TOKENS_PER_MONTH`), `user` (the caller's across projects, `ASSISTANT_TOKENS_PER_USER_MONTH`) or `total` (the server's, `ASSISTANT_TOKENS_PER_MONTH_TOTAL`); `resetsAt` the first instant of the next month (ISO). `disclaimer` is one line saying the answers are advice, not model output, then the report disclaimer's paragraphs (`liability/disclaimer.ts`), blank-line separated, with `{site}` for the page to fill (`withSite`) | viewer |
+| POST | `/projects/:id/assistant/messages` | `{ messages: { role: 'user' \| 'assistant', content }[], runId? }` (strict, 1–200 messages, each at most 100 000 characters; the last is the user's new one and not empty; `runId` a run of this project, the one the page shows) | `200 text/event-stream` of `AssistantStreamEvent`s (below). Refused before any stream, as JSON: `404 assistant_off`; `404` for a `runId` of another project; `413 assistant_input_too_large` when the newest message alone passes `ASSISTANT_MAX_INPUT_CHARS` (older messages past it are dropped, oldest first, not refused); `429 assistant_rate_limited` past the caller's `ASSISTANT_MESSAGES_PER_HOUR` across projects, and, once a month is spent, `429 assistant_total_budget_spent` (the server's, checked first), `429 assistant_user_budget_spent` (the caller's across projects) or `429 assistant_budget_spent` (the project's), each with `Retry-After` and `params.seconds` (to the end of the hour's window, or of the month), and the budget ones with `params.scope`. A refused message isn't counted | viewer |
+
+The stream is `text/event-stream; charset=utf-8`, read with `fetch` on the
+POST (not `EventSource`, so the CSRF and session checks apply). Each event
+is `event: <type>\ndata: <json>\n\n`, the json being the whole event, on one
+line; a `: keepalive` comment comes every `ASSISTANT_KEEPALIVE_SECONDS` (15)
+while the turn is quiet, so CloudFront's 35 s origin read timeout never
+trips:
+
+- `{ type: 'text', delta }`: the next piece of the answer.
+- `{ type: 'tool', name, label, status: 'start' | 'done' | 'error' }`: a read
+  the model asked for (`label` for the panel, e.g. "Reading the run
+  summary"); `error` when it was refused, failed, or names no tool.
+- `{ type: 'proposal', proposal: { patch, reasons, summary, diff } }`: a
+  settings change from `propose_settings`, already validated against
+  `SettingsPatch` and dry-run, with the engine's input-diff lines
+  (`diff: { label, before, after }[]`), and `summary` for the revision
+  reason ("Assistant suggestion: …").
+- `{ type: 'usage', inputTokens, outputTokens, tokensUsed, tokensPerMonth, scope }`:
+  the turn's tokens, and the month's cap nearest its end after it, as the
+  status's `budget`.
+- `{ type: 'error', code, error }`: the turn ended early, `code` one of
+  `assistant_hop_limit` (more than `ASSISTANT_MAX_HOPS` model calls),
+  `assistant_output_limit`, `assistant_turn_limit` (the turn's weighted
+  tokens would pass `ASSISTANT_MAX_TURN_TOKENS`, 150 000: ask a narrower
+  question), `assistant_timeout` (past
+  `ASSISTANT_TURN_SECONDS`, 100) or `assistant_provider_error` (the model
+  failed or couldn't be reached; fixed words, never the provider's). `usage`
+  and `done` still follow.
+- `{ type: 'done' }`: the last event.
+
+**Recommendations.** `propose_settings` takes `{ changes: [{ key, value,
+reason }], summary }`. A `key` is a top-level setting or `group.field`. The
+server validates the patch with `SettingsPatch`, runs the save's own checks
+(`checkedSettingsPatch`, the same ones as `PATCH /projects/:id`) and the
+engine's settings resolver, and never writes. When it succeeds, the stream
+sends a `proposal` event: `{ patch, reasons (top-level key → reason),
+summary, diff: [{ label, before, after }] }`, where the diff is the engine's
+input-diff lines. A refused patch reaches the model as `ok: false` with the
+reason and is never streamed to the page. Apply loads `patch` into the
+Settings draft; Save sends it with `reason: "Assistant suggestion:
+<summary>"` and needs editor. Never proposed: `fitRecord`,
+`calibrationRules`, `evidenceUncertaintyRule` and `responsibleAuthority` (a
+person's own acts), and `autoRun`, `outcomes`, `outlook` and `ewrHeadline`
+(run policy and display, not model inputs).
+
+A turn is counted (one message, hourly and monthly) when it starts and
+charged its tokens when it ends, whatever the outcome, a client that went
+away included. The types are `backend/src/assistant/types.ts`, mirrored in
+`frontend/src/lib/api/types.ts`.
 
 ## Notes
 

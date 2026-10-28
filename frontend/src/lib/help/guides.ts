@@ -1239,6 +1239,73 @@ export const GUIDES: Guide[] = [
 		related: ['add-data']
 	},
 	{
+		id: 'ask-the-assistant',
+		title: 'Ask the assistant about a project',
+		summary: 'Ask questions about a project’s model and results in plain words, and review the settings changes it recommends before you save any.',
+		kind: 'use',
+		sections: [
+			{
+				heading: 'Ask a question',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Open the project and press **Assistant** in the page’s header (on a phone, under **More actions**). It shows on every page of the project when your organisation has the assistant switched on.',
+							'Type a question about this project, such as “Why does the simulated flow at the outlet gauge not respond to rainfall?”, and press **Send** (or Enter).',
+							'The answer comes in as it is written. The lines above it say what the assistant read to answer: the network, a series, the run’s summary, a gauge’s fit or the help guides.',
+							'Ask a follow-up in the same box: the assistant sees the whole conversation. **Stop** ends an answer early; **New conversation** starts again.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'It reads the run you have open (on Runs & results, EWR and the other run pages), or the project’s latest run. It reads only what your [[roles|role]] lets you see, and it never changes anything.'
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Its answers are advice, not model output: check them against the run’s own results before you rely on them, as the line under the box says.'
+					}
+				]
+			},
+			{
+				heading: 'Review a recommended change',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Ask it which settings to change (“Which settings would you change to improve the fit at the outlet?”) and it may answer with a **Recommended change**: each setting it would change, its value now and the suggested one, and why.'
+					},
+					{
+						type: 'steps',
+						items: [
+							'Read the change. Press **Apply to the settings form** to try it (editors and owners only).',
+							'**Model settings** opens with the change in the form, not yet saved, and the **Reason for this change** filled in as “Assistant suggestion: …”.',
+							'Check the values, then press **Save changes** to keep it, or **Discard** to drop it. Run the model to see what it does.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'The save is checked like any other, and the [[change-history|History]] page keeps it with its reason.'
+					}
+				]
+			},
+			{
+				heading: 'Limits',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'Each person can send a set number of messages an hour. Past it, the panel says how long to wait.',
+							'Each project has a monthly budget, shown under the box. Once it is used up the assistant rests until the date shown.',
+							'Nothing you type is kept: the conversation lasts while the project is open in your browser.'
+						]
+					}
+				]
+			}
+		],
+		terms: ['roles', 'change-history'],
+		related: ['calibrate-by-hand', 'run-and-read-results']
+	},
+	{
 		id: 'two-step-sign-in',
 		title: 'Sign in with two steps',
 		summary: 'Add a code from an authenticator app or by email to your password, keep your recovery codes, and get back in after losing your phone.',

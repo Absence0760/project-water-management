@@ -39,6 +39,12 @@ export const RUNTIME_SECRETS: Record<Role, readonly string[]> = {
 	// The password it sets on water_app. Its owner login is the RDS-managed
 	// master secret, read per run (lambda-migrate.ts).
 	migrate: ['WATER_APP_PASSWORD'],
+	// The assistant (infra/assistant.tf): the session key (it checks each
+	// message's session), its RLS-bound connection, and the CloudFront header
+	// (its own Function URL is public by AWS design, like the API's). Not the
+	// download-signing or TOTP keys: it serves no report or sign-in route. No
+	// model key either: it calls Bedrock with its role's IAM permission.
+	assistant: ['AUTH_JWT_SECRET', 'DATABASE_URL', 'CLOUDFRONT_SHARED_SECRET'],
 	// No secrets: no database, no session (feeds.tf, reports.tf).
 	fetcher: [],
 	renderer: []

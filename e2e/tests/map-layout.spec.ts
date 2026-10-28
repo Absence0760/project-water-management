@@ -48,11 +48,11 @@ test('the tools are on the map, in order, pressed while on, with a strip naming 
 		expect(Math.min(r.width, r.height)).toBeGreaterThanOrEqual(24);
 	}
 
-	// The header: no tools, only the page's actions, on one row.
+	// The header: no tools, only the page's actions, on one row (its actions box: the title line's Assistant button sits apart, docs/ui.md § Section header).
 	for (const name of ['Measure', 'Draw a shape', 'Place a point', 'Delineate', 'Trace a dam']) await expect(header(page).getByRole('button', { name, exact: true })).toHaveCount(0);
 	await expect(header(page).getByRole('link', { name: 'Upload GeoJSON' })).toBeVisible();
 	await expect(header(page).getByRole('link', { name: 'Divide the model' })).toBeVisible();
-	const tops = await header(page).locator('button:visible, a.btn:visible').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+	const tops = await header(page).getByTestId('header-actions').locator('button:visible, a.btn:visible').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
 	expect(new Set(tops).size).toBe(1);
 
 	// Tab goes through the tools in order, after the header and before the map.

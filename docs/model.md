@@ -3530,7 +3530,7 @@ where `MAR_f` is the unit's natural runoff summed over the **MAR period**.
   (`'flowShare'`, the default, or `'naturalMar'`, which applied only under
   Per unit). From 1.105.0 a stored or patched value is ignored (engine and
   API `mergeSettings`, `RETIRED_SETTINGS_KEYS`), the API drops it from a
-  patch, migration 262 strips it from stored projects, a scenario's
+  patch, migration 263 strips it from stored projects, a scenario's
   `settings.set ewrSplit` is refused with a reason to delete it
   ([scenarios.md](./scenarios.md)), and the run comparison lists it as
   removed ([run-comparison.md](./run-comparison.md)). An older run's summary

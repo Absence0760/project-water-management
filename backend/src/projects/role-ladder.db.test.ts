@@ -95,7 +95,9 @@ const LOWER_ROLE_WRITES = new Map<string, { why: string; viewer: number }>([
 	['DELETE /projects/:id/scenarios/:sid/members/:userId', { why: 'an applicant unshares their own application; only they remove someone else', viewer: 403 }],
 	['DELETE /projects/:id/share-links/:linkId', { why: 'RLS: a baseline link is the owner’s to revoke; an assessor revokes a scenario link, an applicant their own (WP-3.15)', viewer: 403 }],
 	// The applicant's appointed specialist signs their party's application's draft pack (167_signers); a viewer still can't.
-	['POST /projects/:id/packs/:packId/signoffs', { why: 'an editor, or the application’s appointed specialist (app_pack_specialist, 167); a viewer signs nothing', viewer: 403 }]
+	['POST /projects/:id/packs/:packId/signoffs', { why: 'an editor, or the application’s appointed specialist (app_pack_specialist, 167); a viewer signs nothing', viewer: 403 }],
+	// The assistant (262, issue #610): a viewer chats read-only (its tools run read-only as them); the sweep runs with ASSISTANT_PROVIDER off, so 404 assistant_off.
+	['POST /projects/:id/assistant/messages', { why: 'a viewer asks the assistant; it only reads, as them, and writes only their usage counters', viewer: 404 }]
 ]);
 
 /** Routes only an owner may call, and why. */

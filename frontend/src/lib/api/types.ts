@@ -3874,3 +3874,63 @@ export interface UnitRainApplyResult {
 	/** The units left out (refused, or with no parcel), and why. */
 	skipped?: { nodeId: string; name: string; reason: string }[];
 }
+
+// ---- The assistant (issue #610, docs/api.md § Assistant) ------------------
+// Mirrors backend/src/assistant/types.ts's wire format (no codegen: change both).
+
+/** Which model the assistant talks to (the server's ASSISTANT_PROVIDER). */
+export type AssistantProviderName = 'mock' | 'ollama' | 'anthropic' | 'bedrock';
+
+/** One turn of the conversation the page keeps and sends back each time (no transcript is stored). */
+export interface ChatMessage {
+	role: 'user' | 'assistant';
+	content: string;
+}
+
+/** A recommended settings change from propose_settings, validated and dry-run by the server before it reaches the page. */
+export interface SettingsProposal {
+	/** A settings patch the project save accepts: top-level keys replace, nested objects merge one level deep. */
+	patch: Record<string, unknown>;
+	/** Why, one per changed top-level key (key → reason). */
+	reasons: Record<string, string>;
+	/** One-line summary, prefilled as the revision reason: "Assistant suggestion: …". */
+	summary: string;
+	/** The engine's input-diff lines (compare.ts diffInputs) between the stored and the patched settings. */
+	diff: { label: string; before: string; after: string }[];
+}
+
+/** Which month's cap an assistant budget is (backend/src/assistant/usage.ts BudgetScope). */
+export type AssistantBudgetScope = 'project' | 'user' | 'total';
+
+/** GET /projects/:id/assistant */
+export type AssistantStatus =
+	| { available: false }
+	| {
+			available: true;
+			provider: AssistantProviderName;
+			/** The caller's role allows Apply (editor or above). */
+			canApply: boolean;
+			/**
+			 * The month's cap nearest its end, in weighted tokens (input + 5 × output): the project's, the
+			 * caller's across projects (`user`) or the server's in all (`total`).
+			 */
+			budget: { tokensPerMonth: number; tokensUsed: number; resetsAt: string; scope: AssistantBudgetScope };
+			rate: { messagesPerHour: number };
+			/** The report disclaimer, shown under the panel. */
+			disclaimer: string;
+	  };
+
+/** POST /projects/:id/assistant/messages body. The last message is the user's new one. */
+export interface AssistantRequest {
+	messages: ChatMessage[];
+	runId?: string;
+}
+
+/** One event of the POST's `text/event-stream` answer (`event: <type>\ndata: <json>`). */
+export type AssistantStreamEvent =
+	| { type: 'text'; delta: string }
+	| { type: 'tool'; name: string; label: string; status: 'start' | 'done' | 'error' }
+	| { type: 'proposal'; proposal: SettingsProposal }
+	| { type: 'usage'; inputTokens: number; outputTokens: number; tokensUsed: number; tokensPerMonth: number; scope: AssistantBudgetScope }
+	| { type: 'error'; code: string; error: string }
+	| { type: 'done' };

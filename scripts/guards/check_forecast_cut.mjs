@@ -114,7 +114,7 @@ export const INVENTORY = [
 	{ path: 'backend/src/portfolio/portfolio.ts', reads: 1, how: 'never', evidence: ["r.trigger <> 'forecast'"] },
 	{ path: 'backend/src/publish/publish.ts', reads: 1, how: 'cut', evidence: ["(summary->'forecast'->>'from')::date - 1"], note: 'the projection stops at observed_until; the forecast is its own part' },
 	{ path: 'backend/src/runs/reproduce.ts', reads: 1, how: 'whole', evidence: ['FROM run_series WHERE run_id = $1'], note: 'reproducing a run compares every stored day' },
-	{ path: 'backend/src/runs/routes.ts', reads: 4, how: 'passes-on', evidence: ['.get(\'/:id/runs/:runId/series\'', '.get(\'/:id/runs/:runId/day\''], note: 'the series route (the client cuts or bands), the series list (no values), and the day trace (one picked day)' },
+	{ path: 'backend/src/runs/read.ts', reads: 4, how: 'passes-on', evidence: ['.get(\'/:id/runs/:runId/series\'', '.get(\'/:id/runs/:runId/day\''], in: ['backend/src/runs/routes.ts', 'backend/src/runs/routes.ts'], note: 'the run routes\' readers, shared with the assistant\'s tools (issue #610): the series route (the client cuts or bands), the series list (no values), the day trace (one picked day); the assistant\'s get_series and get_gauge_fit cut a forecast run\'s forecast days off (tools/series.ts beforeForecastDays)' },
 	{
 		path: 'backend/src/scenarios/results.ts',
 		reads: 2,

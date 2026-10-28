@@ -60,6 +60,20 @@ Keep one incident record (in the operator log, never in this public repo):
   it ages out), CloudTrail for AWS actions;
 - what was done, when, and every notification sent (to whom, when, what).
 
+**The assistant (issue #610).** What a member asks it, and the project data
+it reads to answer, go to Amazon Bedrock and may be processed in any
+commercial AWS region (docs/security.md § Assistant). Nothing of it is kept
+in this system, so an incident there is learnt of from AWS (its notice to
+the account, the AWS Health dashboard), not from our logs. The evidence is
+CloudTrail in af-south-1: each model call is an `InvokeModelWithResponseStream`
+event by the assistant's role, with the region that answered in
+`additionalEventData.inferenceRegion`; the assistant's own log has only one
+`assistant_turn` line per turn (token counts, no text). If Bedrock model
+invocation logging was ever turned on (the post-apply check refuses it), the
+prompts and answers are in its CloudWatch or S3 destination, which is then
+part of the incident. Turning `assistant_enabled` off stops every further
+transfer at the next apply.
+
 ## 3. Tell the Information Regulator (where the operator is the responsible party)
 
 - **How:** the Regulator's eServices portal, **Security Compromises**

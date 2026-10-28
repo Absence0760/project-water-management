@@ -351,7 +351,7 @@ variable "login_failed_alarm_per_15min" {
 }
 
 variable "budget_monthly_usd" {
-  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 110 sits above af-south-1's ~$77 idle (infra/README.md § Cost), so ACTUAL 80% ($88) doesn't fire at idle; ~85 fits us-east-1 (~$63 idle), ~220 the full tier in af-south-1 and ~180 in us-east-1 (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
+  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 110 sits above af-south-1's ~$77 idle (infra/README.md § Cost), so ACTUAL 80% ($88) doesn't fire at idle; ~85 fits us-east-1 (~$63 idle), ~220 the full tier in af-south-1 and ~180 in us-east-1 (docs/deployment-tiers.md). With assistant_enabled, add assistant_budget_monthly_usd to it (~$160 on the defaults): the account total includes the model spend and the assistant's ~$11 of fixed cost, which would otherwise put af-south-1's idle (~$88) on the ACTUAL 80% line every month. Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
   type        = number
   default     = 110
 
@@ -461,7 +461,7 @@ variable "lambda_reserved_concurrency" {
     about 10 panels at once, so the old cap of 10 throttled a single cold
     load (issue #541). AWS keeps >= 10 executions unreserved, so the
     account's Lambda concurrent-executions quota must cover the sum of every
-    reservation + 10 (48 at the defaults) before the apply: infra/README.md
+    reservation + 10 (52 at the defaults, the assistant's 2 included) before the apply: infra/README.md
     § Operator steps. Never -1 (unreserved): that removes the cap on spend
     and on DB connections.
   EOT
@@ -841,10 +841,205 @@ variable "cloudfront_price_class" {
   }
 }
 
+# --- The assistant (assistant.tf, issue #610) --------------------------------
+
+variable "assistant_enabled" {
+  description = "The AI assistant in production (assistant.tf, docs/deployment.md § The assistant): true creates its Lambda, Function URL, CloudFront behaviour, the bedrock-runtime VPC endpoint, its alarms and its budget, and sets ASSISTANT_PROVIDER=bedrock on it and on the API (whose status turns the chat on). false (the default): none of it exists and the API answers { available: false }. Turn it on only once the privacy notice names the model provider (LEGAL_VERSION) and the operator has enabled the model in the Bedrock console and run its first invocation (docs/followups.md § Blocking releases)."
+  type        = bool
+  default     = false
+}
+
 variable "dam_observations_enabled" {
   description = "Turn on the dam observations (dam_observations.tf, issue #604 R5): the hourly EventBridge rule that invokes the fetcher with {\"mode\":\"dams-weekly\"} (DE Africa Waterbodies, each uid re-read once a week, and WOfS, each dam's newest scenes once a day and its history with the rest of the time), the fetcher's reads and writes under dams/ in the mirror bucket, the worker's write of dams/wanted.json, and the passes' heartbeat and WOfS recency alarms. It also sets the worker's DAM_OBSERVATIONS (jobs.tf), which turns its dams tick on; the plan refuses the flag if the worker's environment ever loses it (dam_observations.tf terraform_data.dam_observations_gate). Off (the default) until a backend release with the mode is deployed and a dam is traced, or the alarms fire for passes that don't exist yet. Runbook: docs/deployment.md § Dam observations."
   type        = bool
   default     = false
+}
+
+variable "assistant_model_id" {
+  description = "The one Bedrock model the assistant may call: a model id (anthropic.…, in-region) or a system inference profile id (global.anthropic.…, eu.anthropic.…). Its IAM policy and the endpoint policy allow this model alone. From af-south-1, Anthropic's models are reachable only through the global profile, which may run the request in any commercial AWS region (docs/deployment.md § The assistant)."
+  type        = string
+  default     = "global.anthropic.claude-sonnet-5-5"
+  validation {
+    condition     = can(regex("^((global|us|eu|apac|au|jp|ca)\\.)?anthropic\\.[A-Za-z0-9.:_-]+$", var.assistant_model_id))
+    error_message = "assistant_model_id must be an Anthropic model on Bedrock: anthropic.<model> or <profile>.anthropic.<model> (global, us, eu, apac, au, jp, ca), as backend/src/config/production.ts accepts."
+  }
+}
+
+variable "assistant_memory_mb" {
+  description = "Assistant Lambda memory. Its tools read a run's series and compute a gauge's fit (monthly means, calibrationStats), the same work the API does for a page, so the API's 1024 MB."
+  type        = number
+  default     = 1024
+}
+
+variable "assistant_timeout_seconds" {
+  description = "Assistant Lambda timeout. A turn is up to assistant_max_hops model calls with tool reads between them. CloudFront's origin read timeout on its behaviour (60 s) limits the gap between two packets, not the response, and the stream sends a keepalive every 15 s. ASSISTANT_TURN_SECONDS is set 15 s below it, so a long turn ends with an error event (and is charged) before the runtime cuts it off."
+  type        = number
+  default     = 120
+  validation {
+    condition     = var.assistant_timeout_seconds >= 60 && var.assistant_timeout_seconds <= 300
+    error_message = "Between 60 s (a turn of several model calls) and 300 s (each running container is a database connection and a reserved slot)."
+  }
+}
+
+variable "assistant_reserved_concurrency" {
+  description = "Max concurrent assistant Lambda executions: how many turns run at once across every user. Bounds the model spend per minute and the database connections (x a pool of 1: infra/README.md § Connections, which the precondition in lambda.tf sums). A turn holds its container for tens of seconds, so a third user sending at once gets a 429 they can resend. Never -1: raise the account quota instead (lambda_reserved_concurrency)."
+  type        = number
+  default     = 2
+  validation {
+    condition     = var.assistant_reserved_concurrency >= 1 && var.assistant_reserved_concurrency <= 10
+    error_message = "Between 1 and 10: -1 (unreserved) removes the spend and connection cap, and more than 10 needs infra/README.md § Connections redone."
+  }
+}
+
+# The caps below count weighted tokens: input + 5 x output, because Claude's
+# output costs five times its input on Bedrock (OUTPUT_TOKEN_WEIGHT in
+# backend/src/assistant/config.ts, and 262_assistant_usage.sql weighs the
+# same), so a cap in weighted tokens is a cap in dollars at the input price.
+# The bounds are the ones backend/src/config/production.ts checks: change
+# both together.
+
+variable "assistant_tokens_per_month" {
+  description = "Weighted tokens (input + 5 x output) one project may use in a calendar month (UTC), counted in Postgres and checked before each turn (ASSISTANT_TOKENS_PER_MONTH, set on the assistant and the API alike so the status shows what is enforced). 2 M is issue #610's starting point: about $4 at the input price (assistant_input_usd_per_million)."
+  type        = number
+  default     = 2000000
+  validation {
+    condition     = var.assistant_tokens_per_month >= 1 && var.assistant_tokens_per_month <= 20000000 && floor(var.assistant_tokens_per_month) == var.assistant_tokens_per_month
+    error_message = "A whole number of weighted tokens from 1 to 20,000,000 (production.ts checks the same bounds)."
+  }
+}
+
+variable "assistant_tokens_per_user_month" {
+  description = "Weighted tokens (input + 5 x output) one person may use in a calendar month (UTC), across every project (ASSISTANT_TOKENS_PER_USER_MONTH, on the assistant and the API): the cap a person can't get past by creating projects. 1 M is about $2 at the input price."
+  type        = number
+  default     = 1000000
+  validation {
+    condition     = var.assistant_tokens_per_user_month >= 1 && var.assistant_tokens_per_user_month <= 20000000 && floor(var.assistant_tokens_per_user_month) == var.assistant_tokens_per_user_month
+    error_message = "A whole number of weighted tokens from 1 to 20,000,000 (production.ts checks the same bounds)."
+  }
+}
+
+variable "assistant_input_usd_per_million" {
+  description = "The model's price in USD per million input tokens, from which the deployment-wide cap is derived (assistant_tokens_per_month_total). Output is 5x input, which the weighted count already carries, so weighted tokens x this price is dollars. Claude Sonnet 5.5 through the global profile from af-south-1: $2.00 input, $10.00 output per million (AWS Price List API, AmazonBedrockFoundationModels af-south-1, usage types AFS1-MP:AFS1_input_tokens_global_standard and _output_tokens_global_standard, publication 2026-10-12, read 2026-10-27; billed as AWS Marketplace software usage). The app counts cache reads ($0.10/M) and writes ($2.50/M, 1.25x) as input tokens (providers/bedrock.ts), so the cap overstates cached reads and understates writes by a quarter. Re-check it when assistant_model_id changes."
+  type        = number
+  default     = 2
+  validation {
+    condition     = var.assistant_input_usd_per_million > 0
+    error_message = "A positive USD price per million input tokens."
+  }
+}
+
+variable "assistant_tokens_per_month_total" {
+  description = "Weighted tokens (input + 5 x output) the whole deployment may use in a calendar month (UTC), every project and person together (ASSISTANT_TOKENS_PER_MONTH_TOTAL, on the assistant and the API): the cap no number of projects or accounts gets past. null (the default) derives it from the assistant's budget: floor(assistant_budget_monthly_usd / assistant_input_usd_per_million x 1e6), 25 M at $50 and $2/M, so the app stops at about the budget plus the turns in flight, days before the budget's billing data would say so. Set it when assistant_budget_monthly_usd is 0 (nothing to derive from)."
+  type        = number
+  default     = null
+  validation {
+    condition = (
+      var.assistant_tokens_per_month_total == null
+      ? var.assistant_budget_monthly_usd > 0 && floor(var.assistant_budget_monthly_usd / var.assistant_input_usd_per_million * 1000000) >= 1 && floor(var.assistant_budget_monthly_usd / var.assistant_input_usd_per_million * 1000000) <= 200000000
+      : var.assistant_tokens_per_month_total >= 1 && var.assistant_tokens_per_month_total <= 200000000 && floor(var.assistant_tokens_per_month_total) == var.assistant_tokens_per_month_total
+    )
+    error_message = "A whole number of weighted tokens from 1 to 200,000,000 (production.ts checks the same bounds). Left null, it is derived from assistant_budget_monthly_usd / assistant_input_usd_per_million, which must then be a positive budget that comes to at most 200 M (at $2/M, a budget up to $400): set it explicitly otherwise."
+  }
+}
+
+variable "assistant_messages_per_hour" {
+  description = "Messages one user may send in an hour across projects (ASSISTANT_MESSAGES_PER_HOUR; a 429 with Retry-After past it)."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.assistant_messages_per_hour >= 1 && var.assistant_messages_per_hour <= 120 && floor(var.assistant_messages_per_hour) == var.assistant_messages_per_hour
+    error_message = "A whole number of messages from 1 to 120 (production.ts checks the same bounds)."
+  }
+}
+
+variable "assistant_max_hops" {
+  description = "Model calls in one turn (ASSISTANT_MAX_HOPS); the turn ends with an error event past it."
+  type        = number
+  default     = 6
+  validation {
+    condition     = var.assistant_max_hops >= 1 && var.assistant_max_hops <= 12 && floor(var.assistant_max_hops) == var.assistant_max_hops
+    error_message = "A whole number from 1 to 12."
+  }
+}
+
+variable "assistant_max_turn_tokens" {
+  description = "Weighted tokens (input + 5 x output) one turn may use, every hop together (ASSISTANT_MAX_TURN_TOKENS); the turn ends with an assistant_turn_limit error event before a hop that would pass it. Each hop resends the whole transcript, so without it one message could reach ~1.2 M input tokens (~$2.50). 150,000 is about $0.30."
+  type        = number
+  default     = 150000
+  validation {
+    condition     = var.assistant_max_turn_tokens >= 10000 && var.assistant_max_turn_tokens <= 1000000 && floor(var.assistant_max_turn_tokens) == var.assistant_max_turn_tokens
+    error_message = "A whole number of weighted tokens from 10,000 to 1,000,000 (production.ts checks the same bounds)."
+  }
+}
+
+variable "assistant_max_tool_calls_per_hop" {
+  description = "Tool calls run from one model call (ASSISTANT_MAX_TOOL_CALLS_PER_HOP); the calls past it get an error result that says so."
+  type        = number
+  default     = 4
+  validation {
+    condition     = var.assistant_max_tool_calls_per_hop >= 1 && var.assistant_max_tool_calls_per_hop <= 10 && floor(var.assistant_max_tool_calls_per_hop) == var.assistant_max_tool_calls_per_hop
+    error_message = "A whole number from 1 to 10 (production.ts checks the same bounds)."
+  }
+}
+
+variable "assistant_max_output_tokens" {
+  description = "Output tokens one model call may use (ASSISTANT_MAX_OUTPUT_TOKENS; Bedrock's maxTokens). Each counts 5x against the weighted caps."
+  type        = number
+  default     = 1024
+  validation {
+    condition     = var.assistant_max_output_tokens >= 256 && var.assistant_max_output_tokens <= 8192 && floor(var.assistant_max_output_tokens) == var.assistant_max_output_tokens
+    error_message = "A whole number of tokens from 256 to 8192 (production.ts checks the same bounds)."
+  }
+}
+
+variable "assistant_max_tool_result_chars" {
+  description = "Characters of one tool result the model sees (ASSISTANT_MAX_TOOL_RESULT_CHARS); longer results are cut with a note."
+  type        = number
+  default     = 12000
+  validation {
+    condition     = var.assistant_max_tool_result_chars >= 1000 && var.assistant_max_tool_result_chars <= 50000 && floor(var.assistant_max_tool_result_chars) == var.assistant_max_tool_result_chars
+    error_message = "A whole number of characters from 1000 to 50000 (production.ts checks the same bounds)."
+  }
+}
+
+variable "assistant_max_input_chars" {
+  description = "Characters of conversation the page may send (ASSISTANT_MAX_INPUT_CHARS); older turns are dropped first, a newest message past it is refused."
+  type        = number
+  default     = 40000
+  validation {
+    condition     = var.assistant_max_input_chars >= 1000 && var.assistant_max_input_chars <= 200000 && floor(var.assistant_max_input_chars) == var.assistant_max_input_chars
+    error_message = "A whole number of characters from 1000 to 200000 (production.ts checks the same bounds)."
+  }
+}
+
+variable "assistant_tokens_alarm_per_hour" {
+  description = "The assistant's real-time spend alarm (alarms.tf assistant_tokens_hourly, essential tier): weighted tokens (input + 5 x output) summed from its assistant_turn log lines over one hour. The budgets read billing data a day or two late; this pages within the hour. 2 M (~$4 an hour at $2/M) is about 10x the expected use."
+  type        = number
+  default     = 2000000
+  validation {
+    condition     = var.assistant_tokens_alarm_per_hour >= 10000 && var.assistant_tokens_alarm_per_hour <= 200000000 && floor(var.assistant_tokens_alarm_per_hour) == var.assistant_tokens_alarm_per_hour
+    error_message = "A whole number of weighted tokens from 10,000 to 200,000,000."
+  }
+}
+
+variable "assistant_budget_monthly_usd" {
+  description = "The assistant's own AWS budget in USD a month (alarms.tf aws_budgets_budget.assistant), on the account's AWS Marketplace charges: Anthropic's models on Bedrock are billed through AWS Marketplace, and nothing else in this account is. 0 skips it; with budget_monthly_usd = 0 there are no budgets at all. It is a third budget, so it costs about $0.62 a month (AWS gives two free). It also sets the deployment-wide token cap unless assistant_tokens_per_month_total does (budget / assistant_input_usd_per_million). With the assistant on, raise budget_monthly_usd by this amount (the account total includes the model spend): ~$160 on the defaults."
+  type        = number
+  default     = 50
+  validation {
+    condition     = var.assistant_budget_monthly_usd >= 0
+    error_message = "assistant_budget_monthly_usd must be 0 (no assistant budget) or a positive USD amount."
+  }
+}
+
+variable "bedrock_endpoint_az_count" {
+  description = "How many AZs get an ENI for the bedrock-runtime interface endpoint (assistant.tf). 1 halves the cost (~$9.56 a month per AZ in af-south-1, ~$7.30 in us-east-1); if its AZ is down the assistant answers with an error and the rest of the app carries on."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.bedrock_endpoint_az_count >= 1 && var.bedrock_endpoint_az_count <= 2
+    error_message = "Must be 1 or 2."
+  }
 }
 
 variable "dam_wofs_recency_alarm_days" {

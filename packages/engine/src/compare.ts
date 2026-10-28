@@ -1049,7 +1049,7 @@ function gapRainText(v: unknown): string {
 /**
  * The retired settings.ewrSplit between two snapshots (engines 1.94.0 – 1.104.x; issue #615 retired it in
  * EWR_SPLIT_RETIRED_IN, from which the EWR is always split by each unit's natural MAR). Both recorded it: a change
- * of value, as before. Only A did: B is the later one, which no longer has it (262_retire_ewr_split.sql strips it).
+ * of value, as before. Only A did: B is the later one, which no longer has it (263_retire_ewr_split.sql strips it).
  * Only B did: A is from before 1.94.0, the flow share. Neither: nothing (the engine version line says which engines).
  */
 function ewrSplitChange(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInputsSnapshot['settings'] | undefined): string | null {
