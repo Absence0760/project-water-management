@@ -12237,12 +12237,31 @@ with read-only tools over the project's data. It never changes anything.
   end. Any other refusal shows
   its message.
 - **A recommended change** (the `propose_settings` tool) is a card in the
-  answer, **Recommended change**: its one-line summary, a table of the
-  engine's input-diff lines (Setting, Now, Suggested; `compare.ts`
-  `diffInputs`, run on the server against the stored settings) and why each
-  setting changes. For an editor (`canApply` in the status) it has **Apply to
-  the settings form**. A viewer sees the same card with "An editor can
-  apply this change."
+  answer, **Recommended change**. Its title is the server's, never the
+  model's words (issue #640): what kind of change it is (**Management
+  change**, **Recalibration** or **Correction**) and the name of each change
+  it accepted, so the card can't claim a change it doesn't make. Then each
+  change: the engine's input-diff sentences for it alone (`compare.ts`
+  `diffInputs`, run on the server: "Upper farm: own runoff to dam 50% → 25%")
+  with **Why:** and its reason under them, in a list that reads at a phone's
+  width; and one line on what the kind means (a management change is tried as
+  a scenario on the run; a recalibration changes how the model fits the
+  observed flow). A management change answers an outcome question (the EWR,
+  yield, assurance) and only ever changes management levers: the calibrated
+  parameters (GR4J X1–X4, the pan coefficients) are a recalibration's only
+  (architecture.md § Assistant tools). For an editor (`canApply` in the
+  status) the card has **Apply to the settings form** (a recalibration or a
+  correction) or **Try it as a scenario** (a management change). A viewer
+  sees the same card with "An editor can apply this change."
+- **Try it as a scenario** (`applyProposal` on the page,
+  `proposalScenario.ts`) makes a scenario on the run the conversation is
+  about, named "Assistant: <title>" (" (2)", " (3)" … when the project has
+  that name already), its description each change's lines and reason, its
+  ops the server's. The sheet closes and Scenarios opens on it, to run and
+  compare with its base; the project itself is unchanged. If the scenario
+  route refuses it (the run gone, a forecast run), the card says why and
+  keeps the button. Once made, the card says it is a scenario on the run,
+  not run yet.
 - **Apply** (`applyProposal` on the page) puts the patch into the settings
   draft (`settingsDraft.svelte.ts` `applyPatch`). It merges as the save
   does: a top-level setting replaces, and a nested one merges one level
@@ -12250,7 +12269,7 @@ with read-only tools over the project's data. It never changes anything.
   checked against `projects/settings.ts` `REPLACED_WHOLE`). The patch's
   settings win over an edit typed to them, and every other edit stays. Then
   the sheet closes, Model settings opens, and the save bar's **Reason for
-  this change** says "Assistant suggestion: <summary>". Nothing is saved:
+  this change** says "Assistant suggestion: <title>". Nothing is saved:
   the person checks the change and saves with the normal **Save changes**,
   which the server validates as any save, and History keeps the reason.
   Discarding the change clears the reason again. The card then says the

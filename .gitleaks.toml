@@ -47,4 +47,7 @@ regexes = [
   '''^consumptiveIrrigationM3$''',
   '''^damEvaporationM3$''',
   '''^s\.avgRiverAbstractionM3Day$''',
+  # A model setting's name after "key:" (issue #640, the assistant's propose_settings test), reviewed 2026-10-28:
+  # generic-api-key matched it in backend/src/assistant/tools/proposeSettings.test.ts.
+  '''^ewrPragmaticM3PerDay$''',
 ]

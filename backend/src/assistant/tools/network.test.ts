@@ -34,9 +34,19 @@ describe('networkView', () => {
 		const by = Object.fromEntries(view.nodes.map((n) => [n.name, n]));
 		expect(by.Outlet).toMatchObject({ kind: 'gauge', outlet: true });
 		expect(by.Upper).toMatchObject({ kind: 'farm', drainsInto: weir.id, dam: { capacityM3: 50_000, pctRunoffToDam: 0.5 }, cropHa: { Citrus: 25 } });
-		expect(by.Dry!.dam).toBeNull();
+		expect(by.Dry).toMatchObject({ dam: null });
 		expect(by.Lower).toMatchObject({ boreholes: 1, otherDemands: 1 });
-		expect(view.transfers).toEqual([{ from: 'Upper', to: 'outside the catchment', months: [1, 2], maxRateM3s: 0.1, dailyCapM3: null, minStoragePct: 0.2, enabled: true }]);
+		expect(view.transfers).toEqual([{ id: 't', from: 'Upper', to: 'outside the catchment', months: [1, 2], maxRateM3s: 0.1, dailyCapM3: null, minStoragePct: 0.2, enabled: true, priority: 0 }]);
+	});
+
+	it('shows a unit’s operating rules, the levers propose_settings may change, only where they are set (issue #640)', () => {
+		const ruled = node('Ruled', outlet.id, { handsOffM3Day: new Array(12).fill(300), handsOffEwr: true, supplyRule: 'riverFirst', pumpCapacityM3Day: 1200, damReleaseRule: 'passInflow' });
+		const v = networkView({ nodes: [outlet, ruled, upper] } as unknown as ProjectModel);
+		const by = Object.fromEntries(v.nodes.map((n) => [n.name, n]));
+		expect(by.Ruled).toMatchObject({ dam: { releaseRule: 'passInflow' }, rules: { handsOffM3Day: new Array(12).fill(300), handsOffEwr: true, supplyRule: 'riverFirst', pumpCapacityM3Day: 1200 } });
+		// Positive control's counterpart: a unit with none has no rules block.
+		expect(by.Upper).not.toHaveProperty('rules');
+		expect(by.Upper).toMatchObject({ dam: { releaseRule: 'none' } });
 	});
 
 	it('lists the units, dams and gauges above each gauge', () => {

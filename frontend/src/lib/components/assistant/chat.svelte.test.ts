@@ -4,7 +4,7 @@
 // back; Stop keeps what came. Runs with the client runtime (a .svelte.test.ts).
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '#lib/api/client.js';
-import type { AssistantRequest, AssistantStatus, AssistantStreamEvent } from '#lib/api/types.js';
+import type { AssistantProposal, AssistantRequest, AssistantStatus, AssistantStreamEvent } from '#lib/api/types.js';
 import { AssistantChat, waitText, type AssistantTurn } from './chat.svelte';
 
 const STATUS: AssistantStatus = {
@@ -33,11 +33,11 @@ function chatWith(send: (body: AssistantRequest, signal: AbortSignal) => Promise
 	return c;
 }
 
-const PROPOSAL = {
-	patch: { gr4j: { x1: 420 } },
-	reasons: { gr4j: 'A larger store damps the response.' },
-	summary: 'raise GR4J X1 to 420',
-	diff: [{ label: 'GR4J X1', before: '350', after: '420' }]
+const PROPOSAL: AssistantProposal = {
+	goal: 'recalibration',
+	title: 'Recalibration: GR4J X1',
+	changes: [{ label: 'GR4J X1', lines: ['GR4J X1: 350 → 420'], reason: 'A larger store damps the response.' }],
+	apply: { kind: 'settings', patch: { gr4j: { x1: 420 } } }
 };
 
 describe('AssistantChat', () => {

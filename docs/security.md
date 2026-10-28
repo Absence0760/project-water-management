@@ -4392,7 +4392,11 @@ sends project data to a model. What goes, and what keeps it bounded:
 - **Prompt injection.** Text in the project (a node name, a note) can reach
   the model through a tool result. It can't widen what the assistant does:
   every tool reads, as the caller, under RLS, and `propose_settings` only
-  returns a patch the person still has to review and save.
+  returns a patch the person still has to review and save, or scenario ops an
+  editor still has to make a scenario of and run (issue #640). Its card's
+  title is built by the server from the changes it accepted, never the
+  model's words, so injected text can't make the card claim a change it
+  doesn't make.
 - **Nothing kept.** No transcript, prompt or answer is stored or logged; the
   server keeps only token and message counts (`assistant_usage`,
   `assistant_rate`, 262), and a running turn's reservation

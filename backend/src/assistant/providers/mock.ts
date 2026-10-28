@@ -7,12 +7,21 @@
 // (tools/*.ts):
 //
 // 1. "recommend" or "improve the fit" (checked first): calls propose_settings
-//    once with MOCK_PROPOSAL (`{ changes: [{ key: 'gr4j.x4', value: 2,
-//    reason }], summary }`, a GR4J X4 change a save accepts), then answers:
-//    "I have proposed one change: GR4J X4 (unit hydrograph time base) to 2
-//    days. Review it below; nothing changes until you save it." or, when the
-//    tool refused it, "I could not make a proposal the settings would accept:
-//    <the tool's error>".
+//    once with MOCK_PROPOSAL (`{ goal: 'recalibration', changes: [{ key:
+//    'gr4j.x4', value: 2, reason }] }`, a GR4J X4 change a save accepts), then
+//    answers: "I have proposed one change: GR4J X4 (unit hydrograph time base)
+//    to 2 days. Review it below; nothing changes until you save it." or, when
+//    the tool refused it, "I could not make a proposal the settings would
+//    accept: <the tool's error>".
+//
+// 1b. "ewr" (issue #640, the production incident's shape): calls get_network
+//    {}, then propose_settings with MOCK_EWR_X1 (the incident's mistake: GR4J
+//    X1 lowered, goal 'outcome'), which the tool refuses, then with the
+//    management levers instead (mockEwrProposal: the first unit with a dam
+//    keeps half its own runoff out of the dam, and the first transfer from it
+//    moves only when the dam is fuller), then answers "I have proposed a
+//    management change to try as a scenario: <the tool's title>. …", or,
+//    with no unit with a dam, that no management lever exists.
 //
 // 2. "gauge" with "rain" or "respon": calls get_network {}, then, for the
 //    first gauge in it, get_series { node: <the unit above it>, key: 'runoff' }
@@ -45,9 +54,38 @@ import { TOOL_NAMES, type AssistantProvider, type ProviderEvent, type ProviderRe
 
 /** What propose_settings is called with: GR4J's X4 (days, bounds 0.5–10), a change a save accepts. */
 export const MOCK_PROPOSAL = {
-	changes: [{ key: 'gr4j.x4', value: 2, reason: 'A longer unit hydrograph spreads each storm over more days, which the observed flow suggests.' }],
-	summary: 'lengthen the GR4J unit hydrograph (X4 to 2 days)'
+	goal: 'recalibration',
+	changes: [{ key: 'gr4j.x4', value: 2, reason: 'A longer unit hydrograph spreads each storm over more days, which the observed flow suggests.' }]
 };
+
+/** The incident's mistake (issue #640): a calibrated parameter changed to improve the EWR. The tool refuses it. */
+export const MOCK_EWR_X1 = {
+	goal: 'outcome',
+	changes: [{ key: 'gr4j.x1', value: 1200, reason: 'A smaller production store would let more of the rain run off in dry years.' }]
+};
+
+/** The management levers for the EWR question, from get_network's answer, or null when no unit has a dam. */
+export function mockEwrProposal(network: unknown): { goal: 'outcome'; changes: Record<string, unknown>[] } | null {
+	const unit = nodesOf(network).find((n) => n.kind === 'farm' && isObj((n as { dam?: unknown }).dam));
+	if (!unit) return null;
+	const dam = (unit as unknown as { dam: { pctRunoffToDam?: unknown } }).dam;
+	const share = num(dam.pctRunoffToDam) ?? 1;
+	const changes: Record<string, unknown>[] = [
+		{ node: unit.id, field: 'pctRunoffToDam', value: Math.round(share * 50) / 100, reason: `The dam on ${unit.name} captures its runoff before it reaches the river in dry years.` }
+	];
+	const transfers = isObj(network) && Array.isArray(network.transfers) ? (network.transfers as Record<string, unknown>[]) : [];
+	const t = transfers.find((x) => x.from === unit.name && typeof x.id === 'string');
+	if (t) {
+		const floor = num(t.minStoragePct) ?? 0;
+		changes.push({
+			transfer: t.id,
+			field: 'minStoragePct',
+			value: floor < 0.5 ? 0.5 : Math.min(0.9, Math.round((floor + 0.2) * 100) / 100),
+			reason: 'The transfer keeps drawing the dam down in dry years; moving water only when the dam is fuller leaves more for the river.'
+		});
+	}
+	return { goal: 'outcome', changes };
+}
 
 export const MOCK_IDLE_ANSWER = 'I can answer questions about this project’s model and results, and propose settings to try. Ask about a gauge, a dam or the fit.';
 
@@ -139,6 +177,25 @@ function nextStep(messages: TurnMessage[]): { step: Step; index: number } {
 				text: r.ok
 					? 'I have proposed one change: GR4J X4 (unit hydrograph time base) to 2 days. Review it below; nothing changes until you save it.'
 					: `I could not make a proposal the settings would accept: ${r.error ?? 'the tool refused it'}`
+			}
+		};
+	}
+	if (question.includes('ewr')) {
+		const net = results.get(TOOL_NAMES.network)?.[0];
+		if (!net) return call(TOOL_NAMES.network, {});
+		const tries = results.get(TOOL_NAMES.proposeSettings) ?? [];
+		if (tries.length === 0) return call(TOOL_NAMES.proposeSettings, MOCK_EWR_X1);
+		const levers = mockEwrProposal(net.data);
+		if (!levers) return { index, step: { text: 'No unit in this network has a dam, so there is no management lever I can change for the EWR; GR4J’s parameters are calibrated to the observed flow, so I have not changed them.' } };
+		if (tries.length === 1) return call(TOOL_NAMES.proposeSettings, levers);
+		const r = tries[1]!;
+		const title = isObj(r.data) && typeof r.data.title === 'string' ? r.data.title : '';
+		return {
+			index,
+			step: {
+				text: r.ok
+					? `I have proposed a management change to try as a scenario: ${title}. GR4J X1 is calibrated to the observed flow, so I have not changed it to improve the EWR.`
+					: `I could not make a proposal the app would accept: ${r.error ?? 'the tool refused it'}`
 			}
 		};
 	}

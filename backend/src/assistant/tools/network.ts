@@ -36,8 +36,25 @@ function damOf(n: NetworkNode) {
 		pctUpstreamToDam: r4(n.pctUpstreamToDam),
 		pctRunoffToDam: r4(n.pctRunoffToDam),
 		divertCapacityM3Day: r4(n.divertCapacityM3Day),
-		areaFullM2: r4(n.damAreaFullM2)
+		areaFullM2: r4(n.damAreaFullM2),
+		releaseRule: n.damReleaseRule ?? 'none',
+		...(n.damReleaseM3Day ? { releaseM3Day: r4(n.damReleaseM3Day) } : {})
 	};
+}
+
+/**
+ * A unit's operating rules, the management levers propose_settings may change for an outcome (issue #640), where
+ * they differ from none: the hands-off flow, the supply rule and river pump, the borehole rule. Left out when unset.
+ */
+function rulesOf(n: NetworkNode) {
+	const rules = {
+		...(n.handsOffM3Day ? { handsOffM3Day: r4(n.handsOffM3Day) } : {}),
+		...(n.handsOffEwr ? { handsOffEwr: true } : {}),
+		...(n.supplyRule && n.supplyRule !== 'damFirst' ? { supplyRule: n.supplyRule } : {}),
+		...(typeof n.pumpCapacityM3Day === 'number' ? { pumpCapacityM3Day: r4(n.pumpCapacityM3Day) } : {}),
+		...(n.boreholeRule && (n.boreholeCapacityM3Day ?? 0) > 0 ? { boreholeRule: n.boreholeRule } : {})
+	};
+	return Object.keys(rules).length ? { rules } : {};
 }
 
 /** The network as the tool answers it. Pure, for the unit tests. */
@@ -80,7 +97,7 @@ export function networkView(model: ModelLike) {
 				...(n.downstreamNodeId === null ? { outlet: true } : { drainsInto: n.downstreamNodeId }),
 				areaKm2: r4(n.areaKm2),
 				...(n.mapMm ? { mapMm: r4(n.mapMm) } : {}),
-				...(n.kind === 'farm' ? { dam: damOf(n), irrigationEfficiency: r4(n.irrigationEfficiency), returnFlowFraction: r4(n.returnFlowFraction) } : {}),
+				...(n.kind === 'farm' ? { dam: damOf(n), irrigationEfficiency: r4(n.irrigationEfficiency), returnFlowFraction: r4(n.returnFlowFraction), ...rulesOf(n) } : {}),
 				...(crops ? { cropHa: Object.fromEntries(Object.entries(crops).map(([k, v]) => [k, r4(v)])) } : {}),
 				...(count(model.boreholes, n.id) ? { boreholes: count(model.boreholes, n.id) } : {}),
 				...(count(model.demandObjects, n.id) ? { otherDemands: count(model.demandObjects, n.id) } : {}),
@@ -97,13 +114,20 @@ export function networkView(model: ModelLike) {
 			};
 		}),
 		transfers: (model.transfers ?? []).map((t) => ({
+			// The id propose_settings names a transfer by (or "From → To").
+			id: t.id,
 			from: byId.get(t.fromNodeId)?.name ?? t.fromNodeId,
 			to: t.toNodeId === null ? 'outside the catchment' : (byId.get(t.toNodeId)?.name ?? t.toNodeId),
 			months: t.months,
 			maxRateM3s: r4(t.maxRateM3s),
 			dailyCapM3: r4(t.dailyCapM3),
 			minStoragePct: r4(t.minStoragePct),
-			enabled: t.enabled
+			enabled: t.enabled,
+			priority: t.priority,
+			...(t.monthlyRateM3s ? { monthlyRateM3s: r4(t.monthlyRateM3s) } : {}),
+			...(t.source ? { source: t.source } : {}),
+			...(typeof t.handsOffM3Day === 'number' ? { handsOffM3Day: r4(t.handsOffM3Day) } : {}),
+			...(t.handsOffEwr ? { handsOffEwr: true } : {})
 		}))
 	};
 }

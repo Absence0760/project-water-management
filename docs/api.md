@@ -4028,11 +4028,9 @@ trips:
 - `{ type: 'tool', name, label, status: 'start' | 'done' | 'error' }`: a read
   the model asked for (`label` for the panel, e.g. "Reading the run
   summary"); `error` when it was refused, failed, or names no tool.
-- `{ type: 'proposal', proposal: { patch, reasons, summary, diff } }`: a
-  settings change from `propose_settings`, already validated against
-  `SettingsPatch` and dry-run, with the engine's input-diff lines
-  (`diff: { label, before, after }[]`), and `summary` for the revision
-  reason ("Assistant suggestion: …").
+- `{ type: 'proposal', proposal: { goal, title, changes, apply } }`: a
+  recommended change from `propose_settings`, already validated and dry-run
+  (below).
 - `{ type: 'usage', inputTokens, outputTokens, tokensUsed, tokensPerMonth, scope }`:
   the turn's tokens, and the month's cap nearest its end after it, as the
   status's `budget`.
@@ -4047,20 +4045,42 @@ trips:
   and `done` still follow.
 - `{ type: 'done' }`: the last event.
 
-**Recommendations.** `propose_settings` takes `{ changes: [{ key, value,
-reason }], summary }`. A `key` is a top-level setting or `group.field`. The
-server validates the patch with `SettingsPatch`, runs the save's own checks
-(`checkedSettingsPatch`, the same ones as `PATCH /projects/:id`) and the
-engine's settings resolver, and never writes. When it succeeds, the stream
-sends a `proposal` event: `{ patch, reasons (top-level key → reason),
-summary, diff: [{ label, before, after }] }`, where the diff is the engine's
-input-diff lines. A refused patch reaches the model as `ok: false` with the
-reason and is never streamed to the page. Apply loads `patch` into the
-Settings draft; Save sends it with `reason: "Assistant suggestion:
-<summary>"` and needs editor. Never proposed: `fitRecord`,
-`calibrationRules`, `evidenceUncertaintyRule` and `responsibleAuthority` (a
-person's own acts), and `autoRun`, `outcomes`, `outlook` and `ewrHeadline`
-(run policy and display, not model inputs).
+**Recommendations.** `propose_settings` takes `{ goal, changes: [...] }`
+(issue #640). `goal` is `outcome` (the EWR, yield, assurance or supply),
+`recalibration` (the fit to observed flow) or `correction` (a setup error).
+Each change has a `reason` and one target: `key` (a top-level setting or
+`group.field`) with `value`; `node` (an id or name) with `field` and `value`;
+`transfer` (an id, or "From → To") with `field` and `value`; or `demand: {
+factor, nodes?, months?, category? }`. The goal decides what may change, by
+each setting's kind (`backend/src/assistant/settingKinds.ts`, which
+`get_settings` sends as `kinds`): an outcome only management settings and the
+network's operating levers, a recalibration the calibrated and input
+settings, a correction the input and assessment settings; a calibrated
+parameter (GR4J X1–X4, the pan coefficients, PE, the CHIRPS bias settings) is
+refused for any goal but a recalibration ([architecture.md § Assistant
+tools](./architecture.md#assistant-tools) lists the levers). There is no
+title argument, and a `summary` is refused: the server builds the title.
+
+A recalibration or correction is checked as a save (`SettingsPatch`,
+`checkedSettingsPatch`, the same checks as `PATCH /projects/:id`, and the
+engine's settings resolver). An outcome becomes scenario ops on the
+conversation's run (`node.set`, `transfer.set`, `demand.scale`,
+`settings.set`), checked as `POST /projects/:id/scenarios` checks them and
+applied to that run's input with no problem. Nothing is written either way.
+When it succeeds, the stream sends a `proposal` event: `{ goal, title,
+changes: [{ label, lines, reason }], apply }`, where `title` is "<Management
+change | Recalibration | Correction>: <each change's label>", `lines` the
+engine's input-diff sentences for that change alone, and `apply` either `{
+kind: 'settings', patch }` or `{ kind: 'scenario', baseRunId, ops }`. A
+refused change reaches the model as `ok: false` with the reason and is never
+streamed to the page. Apply loads a `patch` into the Settings draft, and Save
+sends it with `reason: "Assistant suggestion: <title>"`; or it sends `POST
+/projects/:id/scenarios` with the ops on `baseRunId`, named "Assistant:
+<title>" (a number added on a name clash). Both need editor. Never proposed:
+`fitRecord`, `calibrationRules`, `evidenceUncertaintyRule` and
+`responsibleAuthority` (a person's own acts), `checksKept` and `warningsKept`
+(a person's judgement on the Warnings page), and `autoRun`, `outcomes`,
+`outlook` and `ewrHeadline` (run policy and display, not model inputs).
 
 A turn is counted (one message, hourly and monthly) when it starts and
 charged its tokens when it ends, whatever the outcome, a client that went

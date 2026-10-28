@@ -82,7 +82,8 @@
 	import { carriedRun, isRunTab, pickOf, tabHref as tabLinkHref } from '#lib/workspace/tabLinks.js';
 	import { defaultRunId } from '#lib/components/runs/runList.js';
 	import { AssistantChat } from '#lib/components/assistant/chat.svelte.js';
-	import type { SettingsProposal } from '#lib/api/types.js';
+	import type { AssistantProposal } from '#lib/api/types.js';
+	import { createProposalScenario } from '#lib/components/assistant/proposalScenario.js';
 	import { badgeCount, problems, type FeedProblem } from '#lib/components/warnings/problems.js';
 	import { landOnField } from '#lib/nav/fieldLanding.js';
 	import { focusPageStart } from '#lib/a11y/focusPage.js';
@@ -822,17 +823,28 @@
 	/** The save reason Apply filled in, cleared again if the change is discarded rather than saved. */
 	let appliedReason = '';
 	/**
-	 * Apply on a recommended change: it goes into the settings form, unsaved, as any edit there would, and Model
-	 * settings opens with the save bar's reason filled in. The person checks it and saves with the normal Save
-	 * (the server validates it as any save), or discards it; the assistant saves nothing.
+	 * Apply on a recommended change. A recalibration or correction goes into the settings form, unsaved, as any
+	 * edit there would, and Model settings opens with the save bar's reason filled in: the person checks it and saves
+	 * with the normal Save (the server validates it as any save), or discards it. A management change (issue #640)
+	 * becomes a scenario on its run (POST …/scenarios checks it again), which opens on Scenarios to run and compare;
+	 * a refusal is thrown back to the card. The assistant saves nothing itself.
 	 */
-	async function applyProposal(p: SettingsProposal) {
-		settings.applyPatch(p.patch);
-		appliedReason = `Assistant suggestion: ${p.summary}`;
+	async function applyProposal(p: AssistantProposal) {
+		if (p.apply.kind === 'scenario') {
+			const id = await createProposalScenario(projectId, p, p.apply, (pid, body) => api.scenarios.create(pid, body));
+			assistantOpen = false;
+			scenariosKey++;
+			await goto(`?tab=scenarios&scenario=${encodeURIComponent(id)}`, { reset: false });
+			return;
+		}
+		settings.applyPatch(p.apply.patch);
+		appliedReason = `Assistant suggestion: ${p.title}`;
 		saveReason = appliedReason;
 		assistantOpen = false;
 		if (tab !== 'settings') await goto('?tab=settings', { reset: false });
 	}
+	/** Bumped when a scenario is made from here, so a Scenarios tab already open lists it. */
+	let scenariosKey = $state(0);
 	$effect(() => {
 		if (!unsaved && appliedReason && saveReason === appliedReason) {
 			saveReason = '';
@@ -1308,9 +1320,11 @@
 						{/snippet}
 					</Lazy>
 				{:else if tab === 'scenarios'}
-					<Lazy load={LOAD.scenarios}>
-						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} actsForAuthority={project?.actsForAuthority ?? false} onRunsChange={setRuns} reloadRuns={loadRuns} />{/snippet}
-					</Lazy>
+					{#key scenariosKey}
+						<Lazy load={LOAD.scenarios}>
+							{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} actsForAuthority={project?.actsForAuthority ?? false} onRunsChange={setRuns} reloadRuns={loadRuns} />{/snippet}
+						</Lazy>
+					{/key}
 				{:else if tab === 'allocations'}
 					<Lazy load={LOAD.allocations}>
 						{#snippet children(AllocationsTab)}<AllocationsTab {projectId} {runs} {canEdit} {isOwner} settings={project?.settings ?? null} {onProjectChange} />{/snippet}

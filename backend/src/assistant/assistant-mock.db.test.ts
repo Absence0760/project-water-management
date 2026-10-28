@@ -133,10 +133,33 @@ describe('a mock turn through the real tools', () => {
 		const { events, text } = await turn(owner, 'What would you recommend to improve the fit?');
 		const proposal = events.find((e) => e.type === 'proposal');
 		if (proposal?.type !== 'proposal') throw new Error(`no proposal: ${text}`);
-		expect(proposal.proposal.patch).toEqual({ gr4j: { x4: 2 } });
-		expect(proposal.proposal.diff.length).toBeGreaterThanOrEqual(1);
-		expect(proposal.proposal.diff.some((d) => d.after.includes('2'))).toBe(true);
+		expect(proposal.proposal.apply).toEqual({ kind: 'settings', patch: { gr4j: { x4: 2 } } });
+		expect(proposal.proposal.changes).toHaveLength(1);
+		expect(proposal.proposal.changes[0]!.lines.some((l) => /X4.*→ 2/.test(l))).toBe(true);
+		expect(proposal.proposal.title).toMatch(/^Recalibration: .*X4/);
 		expect(text).toMatch(/^I have proposed one change: GR4J X4/);
+	});
+
+	it('answers the EWR question with management levers only, as a scenario the scenario route accepts as made (issue #640)', async () => {
+		const { events, text } = await turn(owner, 'Which unit has the worst EWR performance in dry years, and what would you change to improve it?');
+		const refusals = events.filter((e) => e.type === 'tool' && e.name === TOOL_NAMES.proposeSettings && e.status === 'error');
+		// The mock first tries the incident's X1 change, which the real tool refuses.
+		expect(refusals).toHaveLength(1);
+		const proposal = events.find((e) => e.type === 'proposal');
+		if (proposal?.type !== 'proposal') throw new Error(`no proposal: ${text}`);
+		const p = proposal.proposal;
+		expect(p.goal).toBe('outcome');
+		expect(p.apply).toEqual({ kind: 'scenario', baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper.id, field: 'pctRunoffToDam', value: 0.25 }] });
+		expect(p.title).toBe('Management change: Upper dam farm: own runoff to dam');
+		expect(p.changes).toEqual([{ label: 'Upper dam farm: own runoff to dam', lines: ['Upper dam farm: own runoff to dam 50% → 25%'], reason: expect.any(String) }]);
+		expect(text).toBe(`I have proposed a management change to try as a scenario: ${p.title}. GR4J X1 is calibrated to the observed flow, so I have not changed it to improve the EWR.`);
+
+		// Apply's request, as the page sends it: the scenario route takes it, and its own check finds every op applied.
+		if (p.apply.kind !== 'scenario') throw new Error('not a scenario');
+		const made = await owner.call('POST', `/projects/${projectId}/scenarios`, { name: `Assistant: ${p.title}`, baseRunId: p.apply.baseRunId, ops: p.apply.ops });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		expect(made.body.check.problems).toEqual([]);
+		expect(made.body.check.applied).toHaveLength(1);
 	});
 
 	it('gives a viewer kept from the volumes none of a cap run’s series or fit, and no volume in anything sent; the owner gets the numbers', async () => {

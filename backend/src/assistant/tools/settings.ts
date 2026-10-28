@@ -11,6 +11,7 @@
 // rules' sign-off keeps its date but not the name typed to sign it.
 import { z } from 'zod';
 import { mergeSettings } from '../../projects/settings.js';
+import { SETTING_KINDS, type SettingKind } from '../settingKinds.js';
 import { readRun } from '../../runs/read.js';
 import { TOOL_NAMES, type AssistantTool } from '../types.js';
 import { compact, fail, parseArgs, refusal, runFor, specOf } from './common.js';
@@ -65,7 +66,12 @@ export const MODEL_INPUT = [
 	'calibrationRules',
 	'fitRecord',
 	'dataQuality',
-	'wr2012'
+	'wr2012',
+	// Optional in the stored settings (absent = off or none), so mergeSettings doesn't add them: sent when set.
+	'droughtRestriction',
+	'unitRain',
+	'rainStations',
+	'flowMissing'
 ] as const;
 
 /** Stored settings that are no model input (projects/routes.ts withoutRunPolicy): never sent. */
@@ -95,20 +101,26 @@ const Args = z
 	.strict();
 
 /** The settings as the tool answers them. Pure, for the unit tests. */
-export function settingsView(stored: unknown, keys: readonly string[] | undefined, merge: boolean): { settings: Record<string, unknown>; unknownKeys?: string[] } {
+export function settingsView(
+	stored: unknown,
+	keys: readonly string[] | undefined,
+	merge: boolean
+): { settings: Record<string, unknown>; kinds: Record<string, SettingKind>; unknownKeys?: string[] } {
 	const all = merge ? (mergeSettings(stored) as unknown as Record<string, unknown>) : stored && typeof stored === 'object' ? (stored as Record<string, unknown>) : {};
 	const merged = Object.fromEntries(Object.entries(all).filter(([k]) => SENT.has(k)));
 	if ('calibrationRules' in merged) merged.calibrationRules = rulesView(merged.calibrationRules);
 	const pickKeys = keys?.length ? keys : Object.keys(merged);
 	const settings = Object.fromEntries(pickKeys.filter((k) => k in merged).map((k) => [k, compact(merged[k], { digits: 0, maxItems: 40, maxDepth: 5 })]));
 	const unknownKeys = pickKeys.filter((k) => !(k in merged));
-	return { settings, ...(unknownKeys.length ? { unknownKeys } : {}) };
+	// Each setting's kind (settingKinds.ts), so what a goal may change is data the model reads beside the values.
+	const kinds = Object.fromEntries(Object.keys(settings).flatMap((k) => (SETTING_KINDS[k] ? [[k, SETTING_KINDS[k]]] : []))) as Record<string, SettingKind>;
+	return { settings, kinds, ...(unknownKeys.length ? { unknownKeys } : {}) };
 }
 
 export const settingsTool: AssistantTool = {
 	spec: specOf(
 		TOOL_NAMES.settings,
-		"The model settings: the runoff model and its parameters (gr4j), the simulation, report and calibration windows, the calibration site and record, rain gap filling, evaporation and the EWR. The run's own by default (as it ran), or the project's as saved now (merged over the engine's defaults).",
+		"The model settings: the runoff model and its parameters (gr4j), the simulation, report and calibration windows, the calibration site and record, rain gap filling, evaporation, the EWR and the drought restriction. The run's own by default (as it ran), or the project's as saved now (merged over the engine's defaults). `kinds` says what each setting is: 'calibrated' (fitted to observed flow, or forcing that trades off against the fit: changed only to improve the fit, never an outcome), 'input' (the catchment and its data), 'assessment' (what results are judged against) or 'management' (how water is managed). The network's operating rules (get_network) are management too.",
 		Args
 	),
 	label: 'Reading the settings',

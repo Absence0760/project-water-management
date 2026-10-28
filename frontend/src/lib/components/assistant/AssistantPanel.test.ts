@@ -1,12 +1,12 @@
 // The assistant's side sheet (issue #610), rendered to HTML with Svelte's
 // server renderer from a conversation in each state: the disclaimer and the
-// budget left; tool lines and the streamed text; a proposal's diff and
+// budget left; tool lines and the streamed text; a proposal's title, changes and
 // reasons, with Apply only for an editor; the hourly limit's wait; the month's
 // budget spent; Stop while a turn streams. The streaming itself is
 // chat.svelte.test.ts's; the panel in the browser is e2e/tests/assistant.spec.ts's.
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { AssistantStatus, SettingsProposal } from '#lib/api/types.js';
+import type { AssistantProposal, AssistantStatus } from '#lib/api/types.js';
 import AssistantPanel from './AssistantPanel.svelte';
 import { AssistantChat, type AssistantTurn } from './chat.svelte';
 
@@ -21,11 +21,22 @@ const STATUS: Extract<AssistantStatus, { available: true }> = {
 	disclaimer: 'The assistant’s answers are advice, not model output.'
 };
 
-const PROPOSAL: SettingsProposal = {
-	patch: { gr4j: { x1: 420 } },
-	reasons: { gr4j: 'A larger production store damps the response to rain.' },
-	summary: 'raise GR4J X1 to 420 mm',
-	diff: [{ label: 'GR4J X1 (production store)', before: '350 mm', after: '420 mm' }]
+const PROPOSAL: AssistantProposal = {
+	goal: 'recalibration',
+	title: 'Recalibration: GR4J X1 (production store)',
+	changes: [{ label: 'GR4J X1 (production store)', lines: ['GR4J X1 (production store): 350 mm → 420 mm'], reason: 'A larger production store damps the response to rain.' }],
+	apply: { kind: 'settings', patch: { gr4j: { x1: 420 } } }
+};
+
+/** A management change (issue #640): two levers, tried as a scenario on the run. Invented names. */
+const MANAGEMENT: AssistantProposal = {
+	goal: 'outcome',
+	title: 'Management change: Hill Dam: own runoff to dam; transfer Hill Dam → Valley: months',
+	changes: [
+		{ label: 'Hill Dam: own runoff to dam', lines: ['Hill Dam: own runoff to dam 40% → 20%'], reason: 'The dam holds back dry-year runoff.' },
+		{ label: 'transfer Hill Dam → Valley: months', lines: ['Transfer Hill Dam → Valley: months Oct–Sep → Jan–Jun'], reason: 'Not in the dry season.' }
+	],
+	apply: { kind: 'scenario', baseRunId: 'r1', ops: [] }
 };
 
 function chat(over: Partial<{ status: AssistantStatus; turns: AssistantChat['turns']; busy: boolean; refusal: AssistantChat['refusal'] }> = {}) {
@@ -93,18 +104,41 @@ describe('AssistantPanel', () => {
 		expect(out).not.toContain('For example');
 	});
 
-	it('shows a proposal’s diff and reasons, with Apply for an editor', () => {
+	it('shows a proposal’s server-built title, each change’s lines with its own reason, and Apply for an editor', () => {
 		const out = html(chat({ turns: [{ role: 'user', text: 'Recommend' }, answer({ proposals: [{ proposal: PROPOSAL, applied: false }] })] }));
 		expect(out).toContain('Recommended change');
-		expect(out).toContain(esc(PROPOSAL.summary));
-		expect(out).toMatch(/<th scope="row">GR4J X1 \(production store\)<\/th><td>350 mm<\/td><td>420 mm<\/td>/);
-		expect(out).toContain(esc(PROPOSAL.reasons.gr4j!));
+		expect(out).toMatch(/data-testid="assistant-proposal-title"[^>]*>Recalibration: GR4J X1 \(production store\)</);
+		expect(out).toMatch(/data-testid="assistant-change"[^>]*>.*data-testid="assistant-diff-line"[^>]*>GR4J X1 \(production store\): 350 mm → 420 mm<.*Why:<\/span> A larger production store damps the response to rain\./s);
+		expect(out).toContain('A recalibration');
 		expect(out).toContain('Apply to the settings form');
+	});
+
+	it('shows a management change as a scenario to try, its title listing exactly its changes, each beside its reason (issue #640)', () => {
+		const out = html(chat({ turns: [{ role: 'user', text: 'EWR?' }, answer({ proposals: [{ proposal: MANAGEMENT, applied: false }] })] }));
+		expect(out).toContain('data-goal="outcome"');
+		expect(out).toContain(esc(MANAGEMENT.title));
+		// Every change the card names is a change it shows, in order, its reason under it.
+		const changes = [...out.matchAll(/data-testid="assistant-change"[^>]*>(.*?)<\/li>/gs)].map((m) => m[1]!);
+		expect(changes).toHaveLength(2);
+		MANAGEMENT.changes.forEach((c, i) => {
+			expect(changes[i]).toContain(esc(c.lines[0]!));
+			expect(changes[i]).toContain(esc(c.reason));
+		});
+		expect(out).toContain('Try it as a scenario');
+		expect(out).not.toContain('Apply to the settings form');
+		expect(out).toContain('A management change, to try as a scenario on this run');
+	});
+
+	it('says a management change was made a scenario, and why when it wasn’t', () => {
+		expect(html(chat({ turns: [{ role: 'user', text: 'Q' }, answer({ proposals: [{ proposal: MANAGEMENT, applied: true }] })] }))).toContain('Made a scenario on this run, not run yet.');
+		const failed = html(chat({ turns: [{ role: 'user', text: 'Q' }, answer({ proposals: [{ proposal: MANAGEMENT, applied: false, failed: 'base run not found' }] })] }));
+		expect(failed).toContain('The scenario wasn’t made: base run not found');
+		expect(failed).toContain('Try it as a scenario');
 	});
 
 	it('gives a viewer the diff but no Apply', () => {
 		const out = html(chat({ status: { ...STATUS, canApply: false }, turns: [{ role: 'user', text: 'Recommend' }, answer({ proposals: [{ proposal: PROPOSAL, applied: false }] })] }));
-		expect(out).toContain('420 mm');
+		expect(out).toContain('350 mm → 420 mm');
 		expect(out).not.toContain('Apply to the settings form');
 		expect(out).toContain('An editor can apply this change.');
 	});
