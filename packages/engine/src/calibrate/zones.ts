@@ -245,7 +245,7 @@ export function resolveZones(nodes: readonly ZoneNode[], settings: Pick<ProjectS
 	const zoned = zones.reduce((n, z) => n + z.units.length, 0);
 	if (zoned)
 		warnings.push(
-			`Calibration zones: ${zoned} land unit${zoned === 1 ? '' : 's'} ran on ${zones.length === 1 ? 'a calibration zone’s' : 'calibration zones’'} own GR4J parameters. The report, the evidence pack, the uncertainty ensemble and automated calibration still show or vary only the calibration site’s parameters (Model settings → Flow calibration)`
+			`Calibration zones: ${zoned} land unit${zoned === 1 ? '' : 's'} ran on ${zones.length === 1 ? 'a calibration zone’s' : 'calibration zones’'} own GR4J parameters. The report, the evidence pack, the uncertainty ensemble and automated calibration still show or vary only the calibration site’s parameters (Calibration → Flow calibration)`
 		);
 	return { zones, primaryUnits: landUnits.filter((u) => unitZone.get(u) === null), unitZone };
 }
