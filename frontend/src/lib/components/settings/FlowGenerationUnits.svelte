@@ -67,7 +67,7 @@
 	}
 </script>
 
-<div class="flowgen-units" data-testid="flowgen-units">
+<div class="flowgen-units" id="fld-stations" data-testid="flowgen-units">
 	<p class="hint state" data-testid="flowgen-assigned">{assignmentLine(rows)}</p>
 	{#if stations !== undefined && !list.length}
 		<p class="hint" role="note" data-testid="flowgen-no-stations">

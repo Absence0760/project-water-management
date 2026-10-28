@@ -10,6 +10,7 @@
 		crops: () => import('#lib/components/crops/CropsTab.svelte'),
 		transfers: () => import('#lib/components/transfers/TransfersTab.svelte'),
 		series: () => import('#lib/components/series/SeriesTab.svelte'),
+		warnings: () => import('#lib/components/warnings/WarningsTab.svelte'),
 		settings: () => import('#lib/components/settings/SettingsTab.svelte'),
 		calibration: () => import('#lib/components/calibration/CalibrationTab.svelte'),
 		runs: () => import('#lib/components/runs/RunsTab.svelte'),
@@ -24,6 +25,9 @@
 		history: () => import('#lib/components/history/HistoryTab.svelte')
 	};
 	const loadAddData = () => import('#lib/components/series/AddDataDialog.svelte');
+	// The Data row's count of open warnings (issue #611): the Warnings page's own loader and helper, its chunk
+	// fetched once the page is idle, so the badge and the page count alike.
+	const loadWarningCount = () => import('#lib/components/warnings/sources.js');
 	// The save bar's Preview of the unsaved model edits against the last run (issue #284).
 	const loadUnsavedPreview = () => import('#lib/components/preview/UnsavedPreviewDialog.svelte');
 	// One farm's planted areas over any tab (`farm=<nodeId>`, issue #17 step 4).
@@ -58,6 +62,7 @@
 	import { ProjectDetailsDraft } from '#lib/components/project/detailsDraft.svelte.js';
 	import { SettingsDraft } from '#lib/components/settings/settingsDraft.svelte.js';
 	import { blockerHref } from '#lib/components/settings/blockers.js';
+	import { rainRecordOptions } from '#lib/components/settings/recordPeriods.js';
 	import { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import type { UnsavedEdits } from '#lib/preview/overlay.js';
 	import IssueList from '#lib/components/model/IssueList.svelte';
@@ -77,6 +82,8 @@
 	import { defaultRunId } from '#lib/components/runs/runList.js';
 	import { AssistantChat } from '#lib/components/assistant/chat.svelte.js';
 	import type { SettingsProposal } from '#lib/api/types.js';
+	import { badgeCount, problems, type FeedProblem } from '#lib/components/warnings/problems.js';
+	import { landOnField } from '#lib/nav/fieldLanding.js';
 	import { focusPageStart } from '#lib/a11y/focusPage.js';
 	import { firstOutletSeries } from '#lib/series/pick.js';
 	import { withoutFarm } from '#lib/components/crops/farmDrawer.js';
@@ -338,6 +345,20 @@
 		addMounted = true;
 		addOpen = true;
 	}
+	// `?field=<id>` (the Warnings page's fixes, issue #611): land on that one field once its tab draws it, then drop
+	// the parameter (a replace, so Back and a reload don't land again). A new field or leaving the project stops it.
+	let stopField = () => {};
+	$effect(() => {
+		const f = page.url.searchParams.get('field');
+		if (!f || !project) return;
+		untrack(() => {
+			stopField();
+			stopField = landOnField(f);
+			void goto(withoutParam(page.url, 'field'), { replace: true, reset: false });
+		});
+	});
+	$effect(() => () => stopField());
+
 	// `?add=data` (the project list's Add data link): the dialog opens once the role is known, for an
 	// editor, and the param goes so Back or a reload doesn't reopen it.
 	$effect(() => {
@@ -405,12 +426,15 @@
 		// Started on Calibration, the run opens there, on How the shown run fits, so the calibration loop (fit, run,
 		// read the fit) stays on one page (issue #586 round 3); from anywhere else, in Runs & results.
 		const here = runOpensHere;
+		// Started on Warnings (its Run now, issue #611), the run opens back there, on the new run's warnings.
+		const onWarnings = tab === 'warnings';
 		try {
 			const { run: r, removedRunIds } = await api.runs.create(projectId, label, { forecast });
 			const { summary: _s, ...meta } = r;
 			setRuns([meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
 			banner = null;
-			await goto(here ? `?tab=calibration&run=${r.id}#cal-fit` : `?tab=runs&run=${r.id}`, { reset: false });
+			await goto(here ? `?tab=calibration&run=${r.id}#cal-fit` : onWarnings ? `?tab=warnings&run=${r.id}#warn-run` : `?tab=runs&run=${r.id}`, { reset: false });
+			if (onWarnings) landOnAnchor('warn-run');
 			// A goto the page makes itself lands nowhere (nav/anchorLandingEnv.svelte.ts), so land on the part, focused.
 			if (here && tab === 'calibration') landOnAnchor('cal-fit');
 		} catch (e) {
@@ -431,6 +455,53 @@
 	// (headerSlot.main: Run label, Run forecast, Run model), never both.
 	// The Data badge in the sections: series a run is driven by that are behind today (freshness.ts).
 	const behindCount = $derived(fresh?.behind.length ?? 0);
+	// The Warnings row's count (issue #611): the page's Open chip with no filter, by the same helpers, so the two
+	// never disagree. The data checks' open periods (warnings/items.ts openCount) and the open run warnings (not kept,
+	// not fixed since) of the run the page shows by default, and the failing or stale feeds, are read when the page is
+	// idle, from the Data tab's cached values (read once if not cached yet); the
+	// model's and the unsaved settings' problems, the series behind and the runs an erratum may affect are the
+	// page's own (warnings/problems.ts), less those kept. Null, no badge, until the checks are counted or a read failed.
+	let warningsOpen = $state<number | null>(null);
+	let feedProblems = $state.raw<FeedProblem[]>([]);
+	const otherProblems = $derived(
+		problems({ issues: editor.issues, blockers: settings.blockers, feeds: feedProblems, behind: fresh?.behind, runs, role: project?.role })
+	);
+	const warningsBadge = $derived(badgeCount(warningsOpen, otherProblems, new Set((project?.settings?.warningsKept ?? []).map((k) => k.id))));
+	$effect(() => {
+		const p = project;
+		const list = series;
+		const r = runs;
+		if (!p || !list || !r || !['owner', 'editor', 'viewer'].includes(p.role ?? '')) {
+			warningsOpen = null;
+			return;
+		}
+		const id = projectId;
+		const runId = defaultRunId(r, p.role);
+		const nodeName = (n: string) => untrack(() => editor.model.nodes.find((x) => x.id === n)?.name ?? null);
+		let gone = false;
+		const go = () =>
+			loadWarningCount().then((m) => {
+				m.openWarningCount(id, list, p.settings, runId, nodeName).then(
+					(n) => {
+						if (!gone) warningsOpen = n;
+					},
+					() => {}
+				);
+				m.loadFeedProblems(id).then(
+					(f) => {
+						if (!gone) feedProblems = f;
+					},
+					() => {}
+				);
+			});
+		const idle = typeof requestIdleCallback === 'function' ? requestIdleCallback(go, { timeout: 4000 }) : null;
+		const timer = idle === null ? setTimeout(go, 1500) : null;
+		return () => {
+			gone = true;
+			if (idle !== null) cancelIdleCallback(idle);
+			if (timer !== null) clearTimeout(timer);
+		};
+	});
 	const contextText = $derived(
 		sectionContext(tab, { runs, seriesCount: series?.length ?? null, behind: behindCount, transfers: editor.model.transfers })
 	);
@@ -860,6 +931,14 @@
 								><span aria-hidden="true">{behindCount}</span><span class="visually-hidden">({behindCount} series behind)</span></span
 							>
 						{/if}
+						{#if id === 'warnings' && warningsBadge}
+							<!-- Every open item the Warnings page lists (issue #611), with a triangle so it never reads as Data's "behind" count. -->
+							<span class="count-badge warn-badge" title="{warningsBadge} open {warningsBadge === 1 ? 'item' : 'items'}: flagged periods, problems elsewhere and run warnings, as the page’s Open chip counts them"
+								><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M6 1.2 11 10.5H1Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg><span aria-hidden="true"
+									>{warningsBadge}</span
+								><span class="visually-hidden">({warningsBadge} open)</span></span
+							>
+						{/if}
 						{#if MODEL_TABS.includes(id) && editor.issues.some((x) => x.area === id)}
 							<span class="issue-dot" title="Has problems to fix"><span class="visually-hidden">(has problems)</span></span>
 						{/if}
@@ -1114,6 +1193,7 @@
 								{seriesKinds}
 								catchmentRain={series ? (firstOutletSeries(series, 'rain_catchment_mm') ?? null) : undefined}
 								rainSeries={series?.filter((x) => x.kind === 'rain_catchment_mm' && !x.siteNodeId)}
+								rainRecords={series ? rainRecordOptions(series, (id) => editor.model.nodes.find((n) => n.id === id)?.name) : null}
 								readonly={!canEdit}
 								onModelChanged={reloadInputs}
 							/>
@@ -1155,9 +1235,16 @@
 								timeZone={project!.timeZone}
 								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
 								nodes={editor.model.nodes}
+								warningsOpen={warningsBadge}
 								onSeriesChange={(l) => (series = l)}
 								onadddata={() => openAddData()}
 							/>
+						{/snippet}
+					</Lazy>
+				{:else if tab === 'warnings'}
+					<Lazy load={LOAD.warnings}>
+						{#snippet children(WarningsTab)}
+							<WarningsTab {projectId} project={project!} {series} {runs} {canEdit} nodes={editor.model.nodes} issues={editor.issues} blockers={settings.blockers} behind={fresh?.behind ?? []} running={rerunning} onRun={() => void runModel('After fixing warnings')} {onProjectChange} />
 						{/snippet}
 					</Lazy>
 				{:else if tab === 'runs'}
@@ -1715,6 +1802,10 @@
 	/* Data's "series behind" count (freshness.ts), as the boards' sidebar badge. */
 	.count-badge {
 		margin-left: auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.15rem;
 		min-width: 1.4rem;
 		padding: 0 0.4rem;
 		border-radius: 999px;

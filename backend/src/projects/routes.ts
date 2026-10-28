@@ -22,6 +22,7 @@ import { requireOwnSecondFactor, requireProjectStepUp } from '../auth/stepUp.js'
 import { normaliseBaselineEwrRules } from './ewrRules.js';
 import { remapRainStations } from './rainStationSettings.js';
 import { checkedSettingsPatch, mergeSettings, normaliseBaselineAllocationMode, remapSettingNodeIds, SettingsPatch } from './settings.js';
+import { remapSettingSeriesIds, settingSeriesIds } from './flowMissingSettings.js';
 import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { resolveOutcomes } from './outcomeSettings.js';
@@ -488,17 +489,18 @@ export const projectRoutes = new Hono<AuthEnv>()
 				 WHERE t.project_id = $1 AND NOT (t.site_node_id IS NOT NULL AND m.new_id IS NULL AND t.kind = ANY($5::text[]))`,
 				[srcId, newId, from, to, [...UNIT_RAIN_KINDS]]
 			);
-			// The rainfall stations settings.rainStations names (issue #553) follow their series to the copy's ids, by name (one
-			// series per kind and name in a project). Stored after the series, since only now do they have ids.
-			const rs = copiedSettings.rainStations;
-			if (rs !== null && typeof rs === 'object') {
+			// The series the settings name by id (the rainfall stations, issue #553; each flow record's missing periods and the
+			// kept data checks, issue #611) follow them to the copy's ids, by kind and name (one series per kind and name in a
+			// project, whatever its site). Stored after the series, since only now do they have ids.
+			const named = settingSeriesIds(copiedSettings);
+			if (named.size) {
 				const { rows: pairs } = await db.query<{ old: string; new: string }>(
 					`SELECT o.id AS old, n.id AS new FROM time_series o
-					 JOIN time_series n ON n.project_id = $2 AND n.kind = o.kind AND n.name = o.name AND n.site_node_id IS NULL
-					 WHERE o.project_id = $1 AND o.kind = 'rain_catchment_mm' AND o.site_node_id IS NULL`,
-					[srcId, newId]
+					 JOIN time_series n ON n.project_id = $2 AND n.kind = o.kind AND n.name = o.name
+					 WHERE o.project_id = $1 AND o.id = ANY($3::uuid[])`,
+					[srcId, newId, [...named]]
 				);
-				copiedSettings.rainStations = remapRainStations(rs, new Map(), new Map(pairs.map((r) => [r.old, r.new])));
+				Object.assign(copiedSettings, remapSettingSeriesIds(copiedSettings, new Map(pairs.map((r) => [r.old, r.new]))));
 				await db.query('UPDATE project SET settings = $2 WHERE id = $1', [newId, JSON.stringify(copiedSettings)]);
 			}
 			// Notes don't copy (docs/data-model.md § Notes): a copy diverges, and a

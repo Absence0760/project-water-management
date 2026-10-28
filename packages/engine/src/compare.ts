@@ -6,6 +6,7 @@
 // then modified). Copies get fresh node/crop/transfer ids, so everything is
 // matched by id first (same project, catches renames) and then by name
 // (across copies). See docs/run-comparison.md.
+import { cmpStr } from './order';
 import { DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
 import { ALLOCATION_MODE_LABEL, type AllocationMode } from './allocations/mode';
 import { regroup } from './format';
@@ -106,6 +107,8 @@ export interface RunSeriesSnapshot {
 	 * before it was recorded.
 	 */
 	origin?: SeriesOrigin | null;
+	/** The stored series it was read from (DailySeries.seriesId, engine ≥ 1.102.0): names a record in settings.flowMissing and the like. Absent before it. */
+	seriesId?: string | null;
 }
 
 /** The parts of a run compareRuns needs. */
@@ -764,10 +767,18 @@ const rangesText = (v: unknown) => (Array.isArray(v) && v.length ? v.map((r) => 
  * A run without it ran the rain as before (§2.4, §2.4h). The engine-only
  * pinned factors are not a setting, so not compared.
  */
-function rainStationChanges(ra: unknown, rb: unknown, siteName: (id: string) => string, stationsA?: RunInputsSnapshot['stations'], stationsB?: RunInputsSnapshot['stations']): string[] {
+function rainStationChanges(
+	ra: unknown,
+	rb: unknown,
+	siteName: (id: string) => string,
+	stationsA?: RunInputsSnapshot['stations'],
+	stationsB?: RunInputsSnapshot['stations'],
+	recordName: (id: string) => string = (id) => id
+): string[] {
 	const a = (ra ?? {}) as Record<string, unknown>;
 	const b = (rb ?? {}) as Record<string, unknown>;
-	const stationName: StationName = (id) => stationsB?.[id]?.name ?? stationsA?.[id]?.name ?? id;
+	// A station by its name; another rain record's unreliable periods (engine ≥ 1.102.0) by its series' label.
+	const stationName: StationName = (id) => stationsB?.[id]?.name ?? stationsA?.[id]?.name ?? recordName(id);
 	const out: string[] = [];
 	const ca = stationAssignmentText(a.catchment, stationName);
 	const cb = stationAssignmentText(b.catchment, stationName);
@@ -1036,7 +1047,8 @@ function diffSettings(
 	ra: RunInputsSnapshot['settings'] | undefined,
 	rb: RunInputsSnapshot['settings'] | undefined,
 	siteName: (id: string | null) => string = (id) => (id === null ? 'the outlet' : id),
-	stations: { a?: RunInputsSnapshot['stations']; b?: RunInputsSnapshot['stations'] } = {}
+	stations: { a?: RunInputsSnapshot['stations']; b?: RunInputsSnapshot['stations'] } = {},
+	recordName: (id: string) => string = (id) => id
 ): InputChange[] {
 	const a = effectiveSettings(ra);
 	const b = effectiveSettings(rb);
@@ -1062,7 +1074,7 @@ function diffSettings(
 	if (areal) push(AREAL_RAIN_LABEL, `${AREAL_RAIN_LABEL}: ${areal}`);
 	const unitRain = unitRainChange(a.unitRain, b.unitRain);
 	if (unitRain) push(UNIT_RAIN_LABEL, `${UNIT_RAIN_LABEL}: ${unitRain}`);
-	for (const t of rainStationChanges(a.rainStations, b.rainStations, (id) => siteName(id), stations.a, stations.b)) push(RAIN_STATIONS_LABEL, `${RAIN_STATIONS_LABEL}: ${t}`);
+	for (const t of rainStationChanges(a.rainStations, b.rainStations, (id) => siteName(id), stations.a, stations.b, recordName)) push(RAIN_STATIONS_LABEL, `${RAIN_STATIONS_LABEL}: ${t}`);
 	const ha = a.hiLoSplit as Record<string, unknown>;
 	const hb = b.hiLoSplit as Record<string, unknown>;
 	if (!same(ha, hb)) push('Hi/lo MAP split', `Hi/lo MAP split: ${fmtValue(ha.hi)}/${fmtValue(ha.lo)} → ${fmtValue(hb.hi)}/${fmtValue(hb.lo)}`);
@@ -1104,6 +1116,31 @@ function diffSettings(
 	// The daily outlet EWR's source (engine ≥ 1.77.0): a snapshot without it ran the pragmatic EWR.
 	for (const t of ewrDailySourceChanges(a.ewrDailySource, b.ewrDailySource)) push(EWR_DAILY_SOURCE_LABEL, `${EWR_DAILY_SOURCE_LABEL}: ${t}`);
 	out.push(...diffExclusions(a.calibrationExclusions, b.calibrationExclusions));
+	// One flow record's missing periods (engine ≥ 1.102.0, issue #611): absent = none.
+	const fma = (a.flowMissing ?? {}) as Record<string, unknown>;
+	const fmb = (b.flowMissing ?? {}) as Record<string, unknown>;
+	for (const id of [...new Set([...Object.keys(fma), ...Object.keys(fmb)])].sort((x, y) => cmpStr(recordName(x), recordName(y)) || cmpStr(x, y))) {
+		out.push(...diffExclusions(fma[id], fmb[id], `Missing period of ${recordName(id)}`));
+	}
+	// The kept data checks (engine ≥ 1.102.0): a count, since an item id says little; only a kept outlier or flat stretch of a flow record changes a score.
+	const keptA = new Set(Array.isArray(a.checksKept) ? (a.checksKept as unknown[]).filter((x): x is string => typeof x === 'string') : []);
+	const keptB = new Set(Array.isArray(b.checksKept) ? (b.checksKept as unknown[]).filter((x): x is string => typeof x === 'string') : []);
+	const keptAdded = [...keptB].filter((x) => !keptA.has(x)).length;
+	const keptRemoved = [...keptA].filter((x) => !keptB.has(x)).length;
+	if (keptAdded || keptRemoved) {
+		const n = (k: number, verb: string) => `${k} ${k === 1 ? 'check' : 'checks'} ${verb}`;
+		push('Kept data checks', `Kept data checks: ${[keptAdded ? n(keptAdded, 'kept') : '', keptRemoved ? n(keptRemoved, 'no longer kept') : ''].filter(Boolean).join(', ')}`);
+	}
+	// The kept run warnings and problems (issue #611): no run effect, a count, as the kept checks.
+	const wkIds = (v: unknown) => new Set(Array.isArray(v) ? (v as { id?: unknown }[]).flatMap((x) => (x && typeof x.id === 'string' ? [x.id] : [])) : []);
+	const wkA = wkIds(a.warningsKept);
+	const wkB = wkIds(b.warningsKept);
+	const wkAdded = [...wkB].filter((x) => !wkA.has(x)).length;
+	const wkRemoved = [...wkA].filter((x) => !wkB.has(x)).length;
+	if (wkAdded || wkRemoved) {
+		const n = (k: number, verb: string) => `${k} ${k === 1 ? 'warning' : 'warnings'} ${verb}`;
+		push('Kept warnings', `Kept warnings: ${[wkAdded ? n(wkAdded, 'kept') : '', wkRemoved ? n(wkRemoved, 'no longer kept') : ''].filter(Boolean).join(', ')}`);
+	}
 	const za = a.zeroRainRuns as Record<string, unknown>;
 	const zb = b.zeroRainRuns as Record<string, unknown>;
 	const zeroMode = (v: unknown) => (v === 'missing' ? 'treated as missing (CHIRPS fills them)' : v === 'asRecorded' ? 'run as recorded (dry)' : String(v));
@@ -1146,7 +1183,11 @@ function diffSettings(
 		'ewrDailySource',
 		// Said in words above (unitRainText, rainStationChanges), so not again as a bare "Setting changed".
 		'unitRain',
-		'rainStations'
+		'rainStations',
+		// Engine ≥ 1.102.0 (issue #611): said above.
+		'flowMissing',
+		'checksKept',
+		'warningsKept'
 	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);
@@ -1994,9 +2035,14 @@ export function diffInputs(
 	// A rainfall station's series is keyed by its series id (issue #553): show its name (run B's, else A's).
 	const stationNames = new Map<string, string>();
 	for (const st of [a?.stations, b?.stations]) for (const [id, x] of Object.entries(st ?? {})) stationNames.set(id, x.name);
+	// A record a setting names by its series id (settings.flowMissing, engine ≥ 1.102.0): its label, from the series the runs read.
+	const recordNames = new Map<string, string>();
+	for (const sn of [a?.series, b?.series])
+		for (const [key, x] of Object.entries(sn ?? {})) if (x?.seriesId) recordNames.set(x.seriesId, seriesLabel(key, (id) => names.get(id) ?? id, (id) => stationNames.get(id) ?? id));
+	const recordName = (id: string) => recordNames.get(id) ?? stationNames.get(id) ?? id;
 	return [
 		...diffModel(a?.model, b?.model),
-		...diffSettings(a?.settings, b?.settings, siteName, { a: a?.stations, b: b?.stations }),
+		...diffSettings(a?.settings, b?.settings, siteName, { a: a?.stations, b: b?.stations }, recordName),
 		...diffStations(a?.stations, b?.stations),
 		...diffSeries(a?.series, b?.series, values, (id) => names.get(id) ?? id, (id) => stationNames.get(id) ?? id)
 	];
@@ -2044,7 +2090,9 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 		[PE_LABEL, 'pe'],
 		['Hi/lo MAP split', 'hiLoSplit'],
 		[EWR_DAILY_SOURCE_LABEL, 'ewrDailySource'],
-		[RAIN_STATIONS_LABEL, 'rainStations']
+		[RAIN_STATIONS_LABEL, 'rainStations'],
+		['Kept data checks', 'checksKept'],
+		['Kept warnings', 'warningsKept']
 	);
 	for (const [k, f] of Object.entries(DATA_QUALITY_FIELDS)) out.push([`Data quality ${f.label}`, `dataQuality.${k}`]);
 	for (const [k, f] of Object.entries(GR4J_FIELDS)) out.push([`GR4J ${f.label}`, `gr4j.${k}`]);

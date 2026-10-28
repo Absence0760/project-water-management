@@ -1,0 +1,4 @@
+{
+	"addKb": 9,
+	"why": "Warnings rows made solvable (issue #611): the fix catalogue for every run warning code with its how-to text, the filters across every row, keep with a note, bulk keep and reopen, the field landing in the workspace page; measured 2142 -> 2151 KB"
+}

@@ -96,7 +96,8 @@ export const PATCH_REPLACED_WHOLE: ReadonlySet<string> = new Set([
 	'ewrHeadline',
 	'ewrDailySource',
 	'unitRain',
-	'rainStations'
+	'rainStations',
+	'flowMissing'
 ]);
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -119,12 +120,14 @@ export function withPatch(settings: EditableSettings, patch: Record<string, unkn
 export const CHILD_ERRORS = [
 	'calWindow',
 	'exclusions',
+	'flowMissing',
 	'lowFlow',
 	'qualityFlags',
 	'rules',
 	'zeroRain',
 	'fitPeriod',
 	'rainSource',
+	'rainUnreliable',
 	'wr2012',
 	'reserve',
 	'evidence',

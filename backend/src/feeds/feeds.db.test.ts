@@ -1621,7 +1621,9 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 			values: [1, 2, 3],
 			provenance: { product: 'CHIRPS', version: '2.0' },
 			// The upload's source and given unit (107): none said, in mm.
-			origin: { source: null, unit: 'mm', factor: 1 }
+			origin: { source: null, unit: 'mm', factor: 1 },
+			// The stored series' own id, which per-record settings name (issue #611).
+			seriesId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
 		});
 		const [stage] = await asOwner(`SELECT to_char(start_date, 'YYYY-MM-DD') AS start, cardinality("values") AS n, product, product_version FROM feed_stage WHERE feed_id = $1`, [id]);
 		expect(stage).toEqual({ start: first, n: 120, product: 'CHIRPS sat', product_version: '3.0' });

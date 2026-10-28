@@ -62,6 +62,7 @@ export const MODEL_INPUT = [
 	'calibrationFlowKind',
 	'calibrationSiteNodeId',
 	'calibrationExclusions',
+	'flowMissing',
 	'flowGapFill',
 	'qualityFlags',
 	'calibrationRules',

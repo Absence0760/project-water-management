@@ -6004,6 +6004,9 @@ run reads them). These are the same checks a run reports as warnings; rules in
 What the checks look for is the ⓘ beside the heading (`data-quality-limits`), not a
 line under it (issue #464), and not inside it, so the heading, and a
 `#data-checks` landing, is named *Data checks* alone.
+The panel's head links on to [Warnings](#warnings-tabwarnings) (**Patch, exclude or
+keep on Warnings (N open)** for an editor, **Every flagged period on Warnings**
+for a viewer), where each flagged period is a row with its fix (issue #611).
 Charting that catchment rain series tints the days a run will treat as
 missing (flagged zero runs and listed periods, per Settings → *Zero-rain
 runs*; `series/zeroRain.ts` over the engine's `zeroRainMask`), with a caption
@@ -6337,6 +6340,14 @@ editors run one now and read the map's proposals, viewers read.
   minutes and a reminder that the feed also runs daily.
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
+- **One action at a time.** While one card's action saves (Run now, Switch
+  off / on, Remove, Replace the series, Withdraw the replacement, or the
+  form's Attach feed), every card's buttons, the form's and Refresh status
+  are `aria-disabled` (dimmed, still focusable, their press ignored) until
+  it is back, so no press is silently dropped on a button that looks live
+  (before, switching on 11 feeds in a row lost 5 clicks). Each action ends
+  by re-reading the list, and two at once could lay an older list over a
+  newer one, so they never overlap.
 - **Area: The catchment boundary, from the map** (editors and owners; issue
   #326 B-rain, `feeds/BoundaryRain.svelte`, [maps.md § Rain from the
   boundary](./maps.md#rain-from-the-boundary)). Until issue #521 this and
@@ -6492,6 +6503,179 @@ editors run one now and read the map's proposals, viewers read.
   window, the Area's choices by source and role, the explain switch, an
   editor's card, `?rain=boundary`, and the open cards at 390 and 320 px with
   nothing scrolling sideways).
+
+## Warnings (`?tab=warnings`)
+
+The project's one place for warnings and problems (issue #611, modelled on
+feohledger's exceptions queue): every period a data check flags on a stored
+series, one row each with its fix; the problems other pages show, each a row
+linking to where it is fixed; and the shown run's warnings.
+`warnings/WarningsTab.svelte`, its logic in `warnings/items.ts`,
+`warnings/problems.ts` and `warnings/runWarnings.ts` (pure), its loading in
+`warnings/sources.ts`.
+
+- **A sidebar row of its own, right after Data** (`TAB_GROUP` core, every
+  member). To keep the sidebar's budget (`app-sidebar.spec.ts`: every row
+  fits 1440×960, none spare), Compare runs became `LINKED_ONLY` in its place
+  (§ Compare runs). Its count of open items sits beside it (a triangle and
+  the number, named "(N open)"): the page's Open chip with no filter, so the
+  two never disagree (the open data-check periods, the problems from
+  elsewhere and the open run warnings, less those kept or fixed since the
+  run), by the same helpers as the page; Data's row
+  keeps only its "(N series behind)". It also opens from Data's checks panel, the run warnings on Runs &
+  results (**Each with its setting, on Warnings**, or a line under the
+  summary when the run has only notes) and Calibration's shown run (**N
+  warnings about the record and its data in this run…**, from its
+  `calibration.*` and `data.*` codes). It carries `run=` like the run pages
+  (`tabLinks.ts` `RUN_TABS`).
+- **Every row is solvable** (operator, issue #611): each says **How to fix:**
+  in plain words and carries one primary action, and every row an editor
+  can't fix can be kept. A run warning's fix is its `WARNING_CODES` code's
+  entry in `warnings/fixes.ts` `CODE_FIXES` (`fixes.test.ts` fails for a
+  code without one, and checks each field id is drawn by a component):
+  - **a one-value setting saved here** with a reason, where the change can't
+    lose anything: **Set flagged zero runs aside** (a zero run as recorded,
+    the catchment's, a station's or a unit gauge's), **Spread
+    accumulations** (one as recorded), **Remove the broken periods** (a
+    station's malformed unreliable periods). Once saved the row reads
+    **Fixed: rerun to confirm** (under Fixed or handled) until a run no
+    longer warns, and a line offers **Run now**, which opens the new run's
+    warnings here;
+  - **the exact field**, `?tab=settings|calibration&field=<id>` (the zero-run
+    mode, the CHIRPS threshold, Keep dry, the accumulation mode, Keep as
+    recorded, the CHIRPS correction and fit period, the gap-filling product,
+    rain source periods, unreliable periods, the stations, unit rain, the
+    simulation period, the calibration window and record, excluded periods):
+    the workspace page lands on it (`nav/fieldLanding.ts`: opens the fold
+    around it, scrolls it to the middle, focuses its first control, outlines
+    it for 4 s, `data-field-landed`) and drops the parameter;
+  - **a page**: Data feeds, Add data (`?add=data`), the Data page;
+  - **this page's data checks**: a data-check warning (`data.flatline` …) is
+    solved period by period, so its **Show the periods** filters to them.
+  An uncoded warning (an older run, or one not coded yet) takes an action by
+  its words (`uncodedFix`: dam areas → the Network, signatures → Plausibility
+  checks, EWR, evaporation, transfers, crops), else **How to read run
+  warnings** (the guide). Problems: **Fetch now** for a failing or stale feed
+  (`POST /projects/:id/feeds/:id/run-now`, an editor's, an existing route),
+  **Add newer data** for a series behind, **Run the model** for a run an
+  erratum may affect, the item itself (the save bar's link) for a model
+  problem, the panel for an unsaved setting. A viewer gets the links, never
+  the buttons.
+- **Keep (accept)** any run warning or problem, with an optional note (a
+  dialog, *Why (optional)*): stored in `settings.warningsKept` (`{ id, note }`,
+  the id stable across runs: `run:<code>:<hash of its names>` or
+  `run:text:<hash of its words, numbers taken out>`, `problem:<source>:…`;
+  `warnings/ids.ts`), shown under **Kept** with its note and a **Reopen**.
+  Data checks keep as before (their own lists, no note).
+- **Filters across every row**, in the URL, each chip with the count it would
+  show under the others (`warnings/filters.ts`): **Source** (`source=`: Data
+  checks, Model, Unsaved settings, Data feeds, Data behind, Runs, Run
+  warnings), **Status** (`status=`: Open, Fixed or handled, Kept, All; a data
+  check's Patched, Excluded and Handled by default are Fixed or handled),
+  **Severity** (`sev=`: To check, Notes), **Area** (`area=`: Data, Rain,
+  Calibration, Model, Feeds, Runs, from the record's kind or the code), the
+  **Record** picker (`series=`) and **Find** (`q=`, every word, one step in
+  history as typed). The data checks keep their kind of check (`check=`).
+  The data checks always come first.
+- **One bulk row** for every part: ticks on any row, **Select all N
+  matching** (every row the filters show, folded ones too), then **Patch N**
+  and **Exclude N** (data checks), **Keep N** (all; a note when it includes a
+  run warning or problem) and **Reopen N** (kept rows, and patched or
+  excluded periods).
+- **Problems elsewhere** (`#warn-other`, `warnings/problems.ts`): grouped by
+  source, each with what it is about, what is wrong, how to fix it and its
+  action (above): the model editor's
+  problems (`editor.issues`, the sidebar's "Has problems to fix", linked as the
+  save bar links them); an editor's unsaved settings that block Save (the
+  settings draft's blockers); data feeds failing or stale (the Data feeds
+  list's health, `GET /projects/:id/feeds`, no new route); the series behind
+  today (the Data row's count); the newest and the published runs a known
+  engine bug may affect (`RunMeta.errata`, the run's "May be affected" tag).
+  Left out: alert email bounces and paused alerts (an account's, not the
+  project's: the account page shows them), evidence packs with an erratum
+  found since their draft (only each pack's own detail has it: one request a
+  pack), and the gauge-vs-logger disagreement (its run warning,
+  `data.flowAgreement`, is listed under Run warnings).
+- **The rows are derived, not stored.** `listPeriods` runs the engine's
+  `checkPeriods` on every stored series of a checked kind, as the Data tab
+  checks them (the catchment CHIRPS for a catchment rain series, the
+  low-vs-CHIRPS years and the double-mass breaks for the catchment gauge only,
+  negatives read as missing on every other rain record), plus
+  `runCheckPeriods` on the shown run (the catchment rain's accumulation windows,
+  the calibration record's flow double-mass breaks). Each row: the period
+  (day first) and its days, the record (with its unit or gauge), the check and
+  what it saw ("5.5 mm on every day"), the status and what the run does with it.
+- **Status comes from the settings** the decision writes to, so the page and
+  Settings never disagree: **Patched** (the catchment gauge's
+  `zeroRainRuns.missing`, any other rain record's `rainStations.unreliable[id]`,
+  covering every day), **Excluded** (`flowMissing[id]`), **Kept**
+  (`zeroRainRuns.keepDry` for a catchment zero run, `keepReadings` for a
+  catchment accumulation's reading day, else `checksKept` by item id),
+  **Handled by default** (a zero run set aside, an accumulation spread, a
+  negative flow read as missing, a zero run CHIRPS reads as dry too) or
+  **Open**. A decided row says where Settings lists it (**In settings**).
+- **Filters in the URL**, each with its count against the other two:
+  status chips (`status=`, default Open; a chip with nothing in it hides,
+  but Open and All always show), check chips (`check=`) and a **Record**
+  picker (`series=`, a select rather than chips, since a catchment can have
+  thirty records). A pick is a step in history. A filter with nothing in it
+  says so with **Show every period**.
+- **Decisions (editors).** Rain: **Patch** or **Keep**; flow: **Exclude from
+  calibration** or **Keep**; any other record, and a rain record the run
+  doesn't read under the project's rain stations (a station no area is
+  assigned to, a unit's own gauge whose unit has a station, the catchment
+  gauge while another station stands in for the catchment; the row says "Not
+  read by the run"): **Keep** only. When the catchment gauge is itself the
+  catchment station, its patches go to its unreliable periods, as any
+  station's; a decided row:
+  **Reopen**, which cuts its days out of the list that decided it. Ticks and
+  **Select all N matching** (every row the filters show, folded rows too)
+  feed one bulk row above the table, always drawn so ticking never moves the
+  list: the count ticked, **Clear**, and **Patch N**, **Exclude N**, **Keep N**
+  (aria-disabled at 0, never removed, so the focus stays). A bulk decision
+  joins adjacent and overlapping periods, adds only days a list doesn't
+  cover yet (a list's own periods stay as typed), and refuses past a cap
+  (100 periods a catchment list or flow record, 50 flow records, 200
+  unreliable periods a rain record, 300 kept checks) with a message, never
+  cutting. A decision is built on the settings read from the server just
+  before it saves, not the page's copy, so a save made elsewhere since the
+  page loaded stays. Each saves at once through the settings PATCH with a reason
+  ("Warnings: patched 3 flat stretches"), the page's settings draft rebasing
+  on it (`onProjectChange`), so Runs & results' "Inputs changed since the
+  latest run" follows. A row's decision moves the focus to the row now in
+  its place (or keeps it on the row when it stays).
+- **Viewers** read every row and status with no tick boxes, buttons or bulk row.
+- **Run warnings** (`#warn-run`): the shown run's warnings, things to check
+  first, then notes, each text once. A coded one (`summary.warningCodes`,
+  engine ≥ 1.102.0) links to its `WARNING_CODES` setting (**Go to Rain gaps**,
+  **Go to Calibration record**, `settings/sections.ts` `settingsPageOf` for
+  the page; **Go to Data** when the catalogue names none); an uncoded one is
+  grouped by its text as Runs & results groups it and says **No setting linked
+  yet**. Places a warning names link as on Runs & results. Eight show, then
+  **Show all N run warnings**.
+- **Layout:** a reading page in the window's one scroll. The header's context
+  says "N open of M flagged periods in K records", its actions **Run warnings
+  (N)** (to `#warn-run`) and **Data checks on Data**. Twenty-five rows show,
+  then **Show all N periods**; the table never scrolls in a box of its own.
+  Under a 640 px container each row is a card, its decisions 44 px side by
+  side.
+- **The Warnings row's badge** is counted by the page: the data checks' open
+  periods when idle (`warnings/sources.ts` `openWarningCount`, a chunk of its
+  own, from the Data tab's cached values and the default run's summary, the
+  same helper as the page's Open chip) with the failing and stale feeds read
+  then too, with the run's open warnings (`runWarnings.ts` `runWarningState`,
+  as the page reads them), plus the problems the page holds itself, less the
+  kept ones (`problems.ts` `badgeCount`). No badge until the checks are
+  counted, or when a read fails.
+- Tested by `e2e/tests/warnings.spec.ts` (chips and the record picker in the
+  URL with Back, one title, the sidebar row and its count, the source chips
+  and the problems elsewhere, a row's Patch and Exclude
+  landing in their settings and the next run reading them as missing, Reopen,
+  thirty periods with Select all N matching and a bulk Patch, a viewer, the
+  links in, axe at 1440 and 390, 320 px reflow) and
+  `e2e/tests/warnings-run.spec.ts` (each coded warning's Go to link landing on
+  its panel, Calibration's line, the empty states); `warnings/items.test.ts`,
+  `warnings/problems.test.ts` and `warnings/runWarnings.test.ts` for the helpers.
 
 ## Model settings
 
@@ -6840,7 +7024,15 @@ two.
   name: *Keep a water year dry* / *Keep a date range dry*, *Add a missing
   water year* / *Add a missing date range* (Also treat as missing), *Keep a
   water year's readings* / *… date range's readings*, *Spread a water year* /
-  *Spread a date range* (Also spread), *Add a rain-source period*. While
+  *Spread a date range* (Also spread), *Add a rain-source period*. Last on
+  the Flagged rain card, **Unreliable periods of a rain record**
+  (`settings/RainRecordPeriods.svelte`; engine ≥ 1.102.0, issue #611,
+  `settings.rainStations.unreliable`, model.md §2.4i): every rain record of
+  the project (each catchment rain series, a unit's own gauge with its
+  unit, the alternative gauge), each with *Mark a period unreliable* and
+  From/To rows (no reason: the setting keeps none). A reversed or blank date
+  blocks Save. Each period counts in the fold's line ("2 unreliable
+  periods"). While
   every choice is its default (`rain.ts` `rainGapsAtDefaults`), both cards
   fold into one line, "All defaults: bias-corrected per month, whole record,
   zero runs missing, accumulations spread" with **Change** (`rainGapsLine`;
@@ -7790,7 +7982,17 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   2015-10-01 – 2016-09-30"). A blank reason, a reversed range or a period
   listed twice shows an alert and blocks Save (the save bar links here).
   Excluded days are left out of Fit automatically and the run's calibration
-  statistics (model.md §2.10). Under them, **Low flows only**
+  statistics (model.md §2.10). Under them, each flow record's **Missing
+  periods of <record>** (`calibration/FlowMissingPeriods.svelte`; engine ≥
+  1.102.0, issue #611, `settings.flowMissing`, model.md §2.10h): one period
+  list a flow record of the project (the gauge, logger and reference
+  records, named by series name and gauge; one the setting names that the
+  project has since deleted shows as *A deleted series*), each with "A water
+  year missing" and "A date range missing" and a required reason. Those
+  days of that record only are read as missing; the calibration exclusions
+  above leave days out of every record. A problem in any list blocks Save,
+  named by its record. Emptied, the setting goes back to how it was saved.
+  Then **Low flows only**
   (`calibration/LowFlowPeriods.svelte`; engine ≥ 1.90.0, issue #557,
   `settings.qualityFlags.lowFlowPeriods`, model.md §2.10h): "Use only low
   flows in a date range" adds a row with the **Record** (the project's
@@ -8768,7 +8970,10 @@ read it before.
      #586 round 2), then, collapsed,
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
-     stretches). Each place a warning names ("Model settings → Rain gaps →
+     stretches). A warning with a stable code (`summary.warningCodes`, engine
+     ≥ 1.102.0, [model.md § Run warning codes](./model.md#28-outputs)) is
+     grouped by its code's group in the engine's catalogue; one without (an
+     older run, a warning not coded yet) by its text, as before. Each place a warning names ("Model settings → Rain gaps →
      Flagged rain", "Calibration → Plausibility checks": the engine writes
      them as page → panel heading, `packages/engine/src/places.ts`, engine
      ≥ 1.98.0, issue #586 D19) is a link to that panel, on Calibration for the
@@ -10291,9 +10496,13 @@ sideways scroll).
 
 ## Compare runs (`?tab=compare`)
 
-Board A4 of issue #17: a baseline and up to two what-ifs on one page
-(`compare/CompareView.svelte`; also the standalone `/compare` page, which
-gives it an `h1` and **Back to runs**). The full reference is
+Board A4 of issue #17: a baseline and up to two what-ifs on one page. A
+linked-only view since issue #611 gave its sidebar row to Warnings
+(`tabs.ts` `LINKED_ONLY`): it opens from Runs & results' **Compare runs** and
+**Compare with published** and from Scenarios, and shows in the sidebar under
+Runs & results while open; a saved hidden-sections list naming it is ignored.
+The view is `compare/CompareView.svelte` (also the standalone `/compare` page,
+which gives it an `h1` and **Back to runs**). The full reference is
 [run-comparison.md](./run-comparison.md); the layout, top to bottom:
 
 - **Header:** in the workspace, the section header (the page's only title)

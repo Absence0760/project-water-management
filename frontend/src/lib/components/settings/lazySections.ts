@@ -9,6 +9,7 @@
 export { default as GapRainFields } from './GapRainFields.svelte';
 export { default as ChirpsFitPeriodSection } from './ChirpsFitPeriodSection.svelte';
 export { default as RainSourceSection } from './RainSourceSection.svelte';
+export { default as RainRecordPeriods } from './RainRecordPeriods.svelte';
 export { default as ZeroRainSection } from './ZeroRainSection.svelte';
 export { default as QualityFlagsFields } from './QualityFlagsFields.svelte';
 export { default as FlowGapFillFields } from './FlowGapFillFields.svelte';

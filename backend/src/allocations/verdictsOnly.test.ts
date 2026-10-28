@@ -126,9 +126,11 @@ describe('a run summary as that viewer reads it', () => {
 		it(`${mode}: counts and verdicts only; no flow, volume, unit or use total; the rest named withheld`, () => {
 			const { out } = catchment(mode, true);
 			const s = verdictsSummary(structuredClone(out.summary)) as unknown as Record<string, unknown> & { withheld: string[]; catchment: Record<string, unknown>; allocations: Record<string, unknown> };
-			expect(Object.keys(s).every((k) => ['historyDays', 'catchment', 'ewrCompliance', 'ewrAssurance', 'servedWhileEwrFails', 'forecast', 'farms', 'users', 'warnings', 'calibration', 'allocations', 'withheld'].includes(k))).toBe(true);
+			expect(Object.keys(s).every((k) => ['historyDays', 'catchment', 'ewrCompliance', 'ewrAssurance', 'servedWhileEwrFails', 'forecast', 'farms', 'users', 'warnings', 'warningCodes', 'calibration', 'allocations', 'withheld'].includes(k))).toBe(true);
 			expect(s.catchment.meanSimulatedOutflowM3Day).toBeNull();
 			expect(s.allocations.verdictsOnly).toBe(true);
+			// The coded warnings go with the warnings: their texts and figures could name a volume.
+			expect([s.warnings, s.warningCodes, s.withheld.includes('warningCodes')]).toEqual([[], [], false]);
 			expect(s.withheld).toEqual(expect.arrayContaining(['waterBalance', 'supplyAssurance', 'runoff']));
 			// No figure, nor any difference of two, is the volume (the derived canary).
 			const n = numbers(s);

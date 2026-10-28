@@ -40,6 +40,7 @@
 	import { apanFingerprint } from './apanFingerprint';
 	import { gr4jChanges, statusLine, type CalState } from './status';
 	import { hasRole } from '#lib/api/index.js';
+	import { flowRecordOptions } from '#lib/components/settings/recordPeriods.js';
 
 	let {
 		runs,
@@ -67,7 +68,7 @@
 		/** The model's nodes (the editor's), for How the shown run fits' names and order. */
 		nodes?: readonly { id: string; name: string }[];
 		/** The project's input series: a checks-only gauge links to its record on Data. */
-		series?: readonly { id: string; kind: string; siteNodeId?: string | null }[] | null;
+		series?: readonly { id: string; kind: string; name?: string; siteNodeId?: string | null }[] | null;
 		/** The project's settings: a run that kept no snapshot of its own is scored on their calibration window. */
 		projectSettings?: { calibrationStart?: string | null; calibrationEnd?: string | null } | null;
 		project: Project;
@@ -98,6 +99,8 @@
 	let shown = $state.raw<{ summary: RunSummary; subs: CalShown } | null>(null);
 	const navGroups = $derived(calibrationNavGroups(shown?.summary ?? null, shown?.subs ?? {}));
 	/** An observed or logger flow record a run can be scored against (null while the series list loads), for the empty state. */
+	// The flow records Calibration record lists missing periods for (settings.flowMissing, issue #611), by name and gauge.
+	const flowRecords = $derived(series ? flowRecordOptions(series.map((x) => ({ ...x, name: x.name ?? '' })), (id) => nodes.find((n) => n.id === id)?.name) : null);
 	const hasRecord = $derived(series ? series.some((x) => x.kind === 'flow_observed_m3s' || x.kind === 'flow_logger_m3s') : null);
 	// The page's first line (status.ts): how the shown run fits, or why there's nothing to read yet, on the first
 	// screen; the panels are long, so the scores were ~3,800 px down at 1440 × 960 (issue #586 R4-A).
@@ -192,6 +195,7 @@
 						{observedOrigins}
 						apanDaily={apanNow}
 						{flowRecordId}
+						{flowRecords}
 						{readonly}
 						{onProjectChange}
 					/>

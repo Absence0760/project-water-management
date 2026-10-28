@@ -27,6 +27,7 @@ import type { DayQuality } from './dayFlags';
 import { resolveQualityFlags, type QualityFlagSettings } from './qualityFlagSettings';
 import type { ObjectiveId } from './objectives';
 import { resolveCalibrationRules, sameRules, type CalibrationRules } from './rulesSettings';
+import { KEPT_SUSPECT_CHECKS, parseCheckItemId } from '../checkItems';
 
 /** A period left out of calibration scores: a whole water year (Oct–Sep), or a date range. Always with a reason. */
 export type CalibrationExclusion = { waterYear: number; reason: string } | { start: string; end: string; reason: string };
@@ -119,6 +120,27 @@ export function sanitizeExclusions(raw: unknown, warnings: string[], what = 'cal
 	return out;
 }
 
+/**
+ * The kept items of settings.checksKept that change a fit's days: the fitted record's (`seriesId`) outliers and flat
+ * stretches, sorted, as keptSuspectRanges reads them. None without the record's id: no kept item reaches a record
+ * the input doesn't name.
+ */
+const keptForFit = (kept: readonly string[] | null | undefined, seriesId: string | null | undefined): string[] => {
+	if (!seriesId) return [];
+	return [
+		...new Set(
+			(kept ?? []).filter((id) => {
+				const r = parseCheckItemId(id);
+				return !!r && r.seriesId === seriesId && KEPT_SUSPECT_CHECKS.has(r.check);
+			})
+		)
+	].sort();
+};
+
+/** settings.flowMissing without its empty lists, {} for none: two that leave out the same days compare equal. */
+const nonEmpty = (fm: Record<string, CalibrationExclusion[]> | null | undefined): Record<string, CalibrationExclusion[]> =>
+	Object.fromEntries(Object.entries(fm ?? {}).filter(([, l]) => Array.isArray(l) && l.length > 0).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+
 /** Day flags (1 = excluded) for a run of `days` days from `startDate`. */
 export function excludedDayMask(ranges: readonly { start: string; end: string }[], startDate: string, days: number): Uint8Array {
 	const d0 = toEpochDay(startDate);
@@ -178,6 +200,21 @@ export interface FitRecord {
 	calibrationStart: string | null;
 	calibrationEnd: string | null;
 	exclusions: CalibrationExclusion[];
+	/**
+	 * settings.flowMissing at the time (engine ≥ 1.102.0, issue #611): each
+	 * record's own missing periods, which leave days out of the fit as the
+	 * exclusions do. Absent = none (and on a record made before it).
+	 */
+	flowMissing?: Record<string, CalibrationExclusion[]>;
+	/** The stored series fitted to (engine ≥ 1.102.0, CalibrationReport.flowSeriesId): whose kept checks are the fit's. Absent when the input didn't say. */
+	flowSeriesId?: string;
+	/**
+	 * The kept outlier and flat-stretch items of the fitted record
+	 * (`flowSeriesId`) in settings.checksKept at the time (engine ≥ 1.102.0,
+	 * issue #611), sorted: their days weren't suspect, so they decide the days
+	 * fitted as settings.qualityFlags do. Absent = none.
+	 */
+	checksKept?: string[];
 	/**
 	 * settings.qualityFlags at the time (engine ≥ 1.22.0, CR-18/19): the gauged
 	 * ranges and how flagged days were scored, which decide the days fitted as
@@ -391,6 +428,10 @@ export interface FitContext {
 	/** The Settings form the fit ran on. */
 	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection'> & {
 		calibrationExclusions?: CalibrationExclusion[] | null;
+		/** Each record's own missing periods (engine ≥ 1.102.0); absent = none. */
+		flowMissing?: Record<string, CalibrationExclusion[]> | null;
+		/** The kept data checks (engine ≥ 1.102.0); absent = none. */
+		checksKept?: string[] | null;
 		/** Engine ≥ 1.22.0; absent = the defaults. */
 		qualityFlags?: QualityFlagSettings | null;
 		zeroRainRuns?: ZeroRainSettings;
@@ -462,6 +503,9 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		calibrationStart: ctx.settings.calibrationStart ?? null,
 		calibrationEnd: ctx.settings.calibrationEnd ?? null,
 		exclusions: (ctx.settings.calibrationExclusions ?? []).map((x) => ({ ...x })),
+		...(ctx.settings.flowMissing && Object.keys(ctx.settings.flowMissing).length ? { flowMissing: structuredClone(ctx.settings.flowMissing) } : {}),
+		...(r.flowSeriesId ? { flowSeriesId: r.flowSeriesId } : {}),
+		...(keptForFit(ctx.settings.checksKept, r.flowSeriesId).length ? { checksKept: keptForFit(ctx.settings.checksKept, r.flowSeriesId) } : {}),
 		qualityFlags: resolveQualityFlags(ctx.settings.qualityFlags, []),
 		...(r.dayQuality !== undefined ? { dayQuality: structuredClone(r.dayQuality) } : {}),
 		...(r.fitAllDays !== undefined ? { fitAllDays: r.fitAllDays } : {}),
@@ -990,11 +1034,15 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		otherModel: (record.model as string) !== 'gr4j',
 		windowChanged: (settings.calibrationStart ?? null) !== record.calibrationStart || (settings.calibrationEnd ?? null) !== record.calibrationEnd,
 		// Settings that exclude the fit's exclusions and the years its rule left out (§2.10j) are the fit's own days too.
-		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []) && !withRuleYears(settings, record),
+		// A record's own missing periods (engine ≥ 1.102.0) are the fit's days too: absent on either side is none.
+		exclusionsChanged: (!sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []) && !withRuleYears(settings, record)) || !sameJson(nonEmpty(settings.flowMissing), nonEmpty(record.flowMissing)),
 		...(!withRuleYears(settings, record) && ruleYearsScored(settings.calibrationExclusions ?? [], record.auto?.ruleExclusions ?? []) ? { ruleYearsScored: true } : {}),
 		// Compared resolved on both sides, so a stored field left at its default is no change.
 		// A fit at a gauge (engine ≥ 1.41.0) read no gauged range, so a change of the outlet records' ratings is none to it.
-		qualityFlagsChanged: record.qualityFlags !== undefined && !sameJson(flagsAsScored(settings.qualityFlags, record), flagsAsScored(record.qualityFlags, record)),
+		// The kept outliers and flat stretches (engine ≥ 1.102.0) decide the suspect days as the flags' treatments do.
+		qualityFlagsChanged:
+			(record.qualityFlags !== undefined && !sameJson(flagsAsScored(settings.qualityFlags, record), flagsAsScored(record.qualityFlags, record))) ||
+			!sameJson(keptForFit(settings.checksKept, record.flowSeriesId), record.checksKept ?? []),
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
 		flowKindChanged: kind !== null && kind !== record.flowKind,
 		siteChanged: (settings.calibrationSiteNodeId ?? null) !== (record.siteNodeId ?? null),

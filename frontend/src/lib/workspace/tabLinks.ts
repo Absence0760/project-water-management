@@ -13,7 +13,7 @@ import type { TabId } from './tabs';
  * The tabs that show one run, picked with `?run=`. Calibration reads the fit of the run picked on Runs &
  * results (issue #586), so its link carries the pick too, and its own links to Runs & results pass it on.
  */
-export const RUN_TABS: readonly TabId[] = ['runs', 'river', 'supply', 'allocations', 'calibration'];
+export const RUN_TABS: readonly TabId[] = ['runs', 'river', 'supply', 'allocations', 'calibration', 'warnings'];
 
 export const isRunTab = (id: string): boolean => (RUN_TABS as readonly string[]).includes(id);
 

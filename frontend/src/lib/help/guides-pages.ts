@@ -507,6 +507,80 @@ export const PAGE_GUIDES: Guide[] = [
 		related: ['fit-automatically', 'calibrate-by-hand', 'how-calibration-works']
 	},
 	{
+		id: 'warnings-page',
+		title: 'Warnings: every flagged period and run warning, with its fix',
+		summary: 'Patch suspicious rain, leave bad flow out of calibration, or keep the values as recorded, one period at a time or many at once.',
+		kind: 'page',
+		tab: 'warnings',
+		sections: [
+			{
+				heading: 'What the page lists',
+				blocks: [
+					{
+						type: 'p',
+						text: 'The **Data checks** list one row per period a [[data-quality-limits|data check]] flagged on a stored series: a flat stretch, outliers, negative values, a zero rain run, an accumulation, a water year far below CHIRPS, or a break in a double-mass curve. Each row names the record, the days, what the check saw and what the next run does with it. It has its own row in the sidebar, after **Data**, with the number of open items beside it; the **Data checks** panel on **Data** and the run warnings on **Runs & results** and **Calibration** link here too.'
+					},
+					{
+						type: 'p',
+						text: 'Filter by **Status** (Open, Patched, Excluded, Kept, Handled by default, All), by **Check** and by **Record**; each chip says how many rows it would show, and the filters stay in the address, so a link or Back keeps them. **Handled by default** rows are periods the run already deals with: a flagged zero run set aside and filled, an accumulation spread over its days, a negative flow read as missing.'
+					}
+				]
+			},
+			{
+				heading: 'Solving a warning',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Every row says **How to fix** in plain words, with the action that does it. Some fixes are one setting the page can change for you: **Spread accumulations**, **Set flagged zero runs aside**, **Remove the broken periods**. The row then reads **Fixed: rerun to confirm** until you press **Run now**, and the new run’s warnings show here. Others take you to the exact field, opened and outlined (**Go to Keep dry**, **Go to the calibration window**), or to the page where it is fixed (**Add data**, **Go to Data feeds**). A failing feed has **Fetch now**; a run a known engine bug may affect has **Run the model**.'
+					},
+					{
+						type: 'p',
+						text: 'Anything you accept as it is, **Keep**, with a note saying why if you like: it moves under **Kept** with the note, and **Reopen** brings it back. The filters at the top (**Source**, **Status**, **Severity**, **Area**, **Record** and **Find**) work on every row and stay in the address; tick rows, or **Select all N matching**, to keep or reopen many at once.'
+					}
+				]
+			},
+			{
+				heading: 'Problems elsewhere',
+				blocks: [
+					{
+						type: 'p',
+						text: '**Problems elsewhere** gathers what other pages show as needing attention, each with **Go to …** where it is fixed: problems in the model (the dot beside Network, Crops & demand or Transfers), unsaved settings that stop **Save changes**, data feeds that are failing or behind, series whose last day is old, and the newest or published run a known engine bug may affect. These have no tick box: their fix is on their own page. The **Source** chips at the top show one kind at a time (Data checks, Model, Unsaved settings, Data feeds, Data behind, Runs, Run warnings), each with its count, and the number beside **Warnings** in the sidebar is the page’s **Open** count: the open data-check periods, these problems and the run’s open warnings, less those kept.'
+					}
+				]
+			},
+			{
+				heading: 'Deciding a period',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'**Rain: Patch or Keep.** **Patch** treats the days as missing, so the run fills them as it fills any gap in the rain (the catchment gauge’s periods go to **Model settings → Rain gaps** as rain treated as missing; any other rain record’s to its unreliable periods there). **Keep** keeps the values as recorded: a zero run as dry days, an accumulation as one day’s reading.',
+							'**Flow: Exclude from calibration or Keep.** **Exclude** reads the days of that one record as missing, so the calibration scores, the fit and the plausibility checks leave them out; the other records keep theirs. The periods are listed under **Calibration → Calibration record**. **Keep** scores a flagged outlier or flat stretch as read, Fit automatically included.',
+							'**Many at once.** Tick rows, or **Select all N matching** for every row the filters show (folded rows too), then **Patch**, **Exclude** or **Keep**. Neighbouring and overlapping periods are joined into one; a list that would pass its limit (100 periods a list, 200 unreliable periods a rain record, 300 kept checks) is refused with a message, never cut.',
+							'**Run the model.** Each decision saves at once, with a reason in the History (“Warnings: patched 3 flat stretches”), and the usual note says the inputs changed since the latest run. **Reopen** on a decided row takes it back out of its list.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'A viewer reads the list and its statuses without the tick boxes and buttons. A flat stretch that grows with new data is a new period, so it comes back as open.'
+					}
+				]
+			},
+			{
+				heading: 'Run warnings',
+				blocks: [
+					{
+						type: 'p',
+						text: '**Run warnings** lists what the shown run warned about (the latest run, or the one picked on Runs & results), things to check first, then notes on how the data were handled. Each warning the engine gives a code links to the setting that changes it (**Go to Rain gaps**, **Go to Calibration record**) or to **Data** when the fix is to load or rename a series; the rest are listed as they are.'
+					}
+				]
+			}
+		],
+		terms: ['data-quality-limits', 'flow-missing', 'calibration-exclusions'],
+		related: ['add-data', 'calibration-page', 'rain-gap-filling']
+	},
+	{
 		id: 'history-page',
 		title: 'History: every change, who made it and when',
 		summary: 'The model’s change log: read any earlier version, see how it differs from now, and restore it as a new change.',

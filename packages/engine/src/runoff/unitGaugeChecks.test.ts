@@ -287,3 +287,58 @@ describe('the reference fit reads the checked gauge rain (decision 1c)', () => {
 		expect(checkedReferenceGauge(s, { ...x.series, rain_catchment_mm: undefined as unknown as DailySeries }, 'rain_catchment_mm')).toBeNull();
 	});
 });
+
+describe('a unit’s own gauge honours settings.rainStations.unreliable under its series id (issue #611, engine ≥ 1.102.0)', () => {
+	const GAUGE_ID = '00000000-0000-4000-8000-0000000000a1';
+	/** The catchment with unit A's gauge named by its series id, and `periods` marked unreliable under `id`. */
+	function marked(periods: [string, string][], id = GAUGE_ID, gauge?: (number | null)[]): ModelInput {
+		const x = catchment({ mode: 'perUnit' }, gauge ? { unitGauge: gauge } : {});
+		const key = 'rain_catchment_mm@A' as never;
+		(x.series as Record<string, DailySeries>)[key] = { ...(x.series as Record<string, DailySeries>)[key]!, seriesId: GAUGE_ID };
+		x.settings.rainStations = { unreliable: { [id]: periods } };
+		return x;
+	}
+	const FROM = at('2016-01-01');
+	const TO = at('2016-01-31');
+
+	it('the period’s days fall to the unit’s own CHIRPS (levelled); the days around it stay the gauge’s, and the warning counts the readings', () => {
+		const stored = rainOf(1, 1);
+		const f = forcing(marked([['2016-01-01', '2016-01-31']]));
+		const a = f.unit('A');
+		for (let t = FROM; t <= TO; t++) expect(a.source[t]).toBe(UNIT_RAIN_SOURCE.unitChirps);
+		expect(a.source[FROM - 1]).toBe(UNIT_RAIN_SOURCE.unitGauge);
+		expect(a.rainMm[FROM - 1]).toBe(stored[FROM - 1]);
+		expect(a.source[TO + 1]).toBe(UNIT_RAIN_SOURCE.unitGauge);
+		expect(f.warnings).toContain(
+			'unit rain: "Unit A"’s own gauge is treated as missing on 31 days the user marked unreliable: its CHIRPS (levelled), then the next link of its rule, stands in. The stored series is unchanged.'
+		);
+	});
+
+	it('positive control: periods under another id, or a gauge without a series id, leave the gauge as recorded', () => {
+		const other = forcing(marked([['2016-01-01', '2016-01-31']], '00000000-0000-4000-8000-0000000000ff')).unit('A');
+		for (let t = FROM; t <= TO; t++) expect(other.source[t]).toBe(UNIT_RAIN_SOURCE.unitGauge);
+		const x = marked([['2016-01-01', '2016-01-31']]);
+		delete (x.series as Record<string, DailySeries>)['rain_catchment_mm@A']!.seriesId;
+		const bare = forcing(x);
+		for (let t = FROM; t <= TO; t++) expect(bare.unit('A').source[t]).toBe(UNIT_RAIN_SOURCE.unitGauge);
+		expect(bare.warnings.some((w) => w.includes('marked unreliable'))).toBe(false);
+	});
+
+	it('is blanked after the checks: a period over an accumulation’s blank outage doesn’t make the outage longer, so the reading is still spread', () => {
+		const gauge = rainOf(1, 1);
+		const chirps = rainOf(0.7, 1);
+		withAccumulation(gauge, chirps);
+		const plain = checkedUnitGauge(prepareRun(catchment({ mode: 'perUnit' }, { unitGauge: gauge, unitChirps: chirps })).settings, catchment({ mode: 'perUnit' }, { unitGauge: gauge, unitChirps: chirps }).series, 'A', D0, DAYS)!;
+		// A period ending the day before the blank outage: as stored, it would extend the outage the reading closes.
+		const x = marked([['2017-05-01', '2017-05-09']], GAUGE_ID, gauge);
+		(x.series as Record<string, DailySeries>)['rain_chirps_mm@A'] = { startDate: START, values: chirps };
+		const s = prepareRun(x).settings;
+		const got = checkedUnitGauge(s, x.series, 'A', D0, DAYS)!;
+		expect(plain.spreadWindows).toBeGreaterThan(0);
+		expect(got.spreadWindows).toBe(plain.spreadWindows);
+		expect(got.spreadDays).toBe(plain.spreadDays);
+		expect(got.values.slice(ACC_BLANK[0], ACC_READ + 1)).toEqual(plain.values.slice(ACC_BLANK[0], ACC_READ + 1));
+		for (let t = at('2017-05-01'); t <= at('2017-05-09'); t++) expect(got.values[t]).toBeNull();
+		expect(got.unreliableDays).toBe(9);
+	});
+});

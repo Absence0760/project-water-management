@@ -103,9 +103,16 @@ describe('rainGapsAtDefaults and rainGapsLine (the Rain gaps fold)', () => {
 			{ zeroRainRuns: { ...z, fillAboveChirpsMm: 5 } },
 			{ zeroRainRuns: { ...z, accumulationMode: 'asRecorded' as const } },
 			{ zeroRainRuns: { ...z, missing: [{ waterYear: 2001, reason: 'synthetic' }] } },
-			{ rainSource: [{} as never] }
+			{ rainSource: [{} as never] },
+			// A rain record's unreliable periods (issue #611) are listed on the Flagged rain card.
+			{ rainStations: { unreliable: { 'series-1': [['2020-01-01', '2020-01-31']] } } }
 		];
 		for (const c of changed) expect(rainGapsAtDefaults({ ...d, ...c })).toBe(false);
+		// A station setting without unreliable periods is Flow generation's, not a Rain gaps change.
+		expect(rainGapsAtDefaults({ ...d, rainStations: { unreliable: {} } })).toBe(true);
+		expect(rainGapsLine({ ...d, rainStations: { unreliable: { a: [['2020-01-01', '2020-01-31']], b: [['2021-01-01', '2021-01-02']] } } })).toBe(
+			'bias-corrected per month, whole record, zero runs missing, accumulations spread, 2 unreliable periods'
+		);
 		expect(rainGapsLine({ ...d, chirpsBiasCorrection: 'none' })).toBe('raw CHIRPS, zero runs missing, accumulations spread');
 		expect(
 			rainGapsLine({

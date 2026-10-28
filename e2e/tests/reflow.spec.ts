@@ -76,7 +76,7 @@ test('every tab fits a 1024 px window with a five-year run', async ({ page, owne
 	await page.setViewportSize({ width: 1024, height: 768 });
 	const id = await seedRiverProject(page.request, 'Reflow 1024', 1827);
 	await createRun(page.request, id, 'Five years');
-	for (const tab of ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'calibration', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'history']) {
+	for (const tab of ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'calibration', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'history', 'warnings']) {
 		await page.goto(`/projects/${id}?tab=${tab}`);
 		await expect(page.locator(`#tab-${tab}`)).toHaveAttribute('aria-current', 'page');
 		// Model quality, the runoff panel with it, is on Calibration (issue #586 Round 3); Runs keeps the water balance.
