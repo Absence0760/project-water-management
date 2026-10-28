@@ -1596,6 +1596,12 @@ export const TIPS: HelpTipText[] = [
 		fields: ['run.rain_final', 'run.rain_used']
 	},
 	{
+		id: 'drought-index',
+		term: 'Drought index (SPI, SPEI)',
+		short: 'How unusual the last 3, 6 or 12 months were, in standard deviations from the median: SPI from the rain, SPEI from rain less evaporation.',
+		category: 'data'
+	},
+	{
 		id: 'chirps',
 		term: 'CHIRPS rainfall',
 		short: 'Satellite-and-station daily rainfall (Climate Hazards Group). Used on days without catchment rainfall.',

@@ -12115,6 +12115,79 @@ another day refused.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep terciles by calendar day (the lowest band from the lowest storage on record, the total shared pro rata to capacity) and the table drawn on the latest review date the record holds.
 
+### 2.15b Drought badge: SPI and SPEI (issue #620, slice 1)
+
+How dry the catchment has been, as the **Standardized Precipitation Index**
+(SPI; McKee, Doesken and Kleist 1993; WMO-No. 1090, 2012) and the
+**Standardized Precipitation-Evapotranspiration Index** (SPEI;
+Vicente-Serrano, Beguería and López-Moreno 2010) over 3, 6 and 12 months.
+Computed from a run's own daily `rain_final` and `pet` (the GR4J forcing,
+§2.4), so it needs no new upstream and avoids SPEIbase's ODbL share-alike.
+A **derived view** of a run's record (`packages/engine/src/drought/`,
+`droughtBadge`): `runModel` doesn't change, nothing is stored, and
+`ENGINE_VERSION` doesn't move. The Summary's Drought index card shows it
+([ui.md § Summary](./ui.md#summary)).
+
+- **Month.** The badge is for the last whole calendar month of the run's
+  history: a forecast run's days from `forecastFrom` on are never read. A
+  partial first or last month is left out; a month with a missing day (null
+  or NaN in `rain_final`, which is already the gap-filled series) has no
+  total, and no accumulation over it has a value. No infilling here.
+- **SPI.** Monthly rain summed over k = 3, 6, 12 months. For each calendar
+  month of the accumulation's last month, a two-parameter gamma is fitted to
+  the non-zero totals by Thom's (1958) approximation to the
+  maximum-likelihood shape, α = (1 + √(1 + 4A/3)) / 4A with
+  A = ln x̄ − mean(ln x), and β = x̄ / α (the WMO user guide's method). Zero
+  totals are mixed in, H(x) = q + (1 − q) G(x) with q = zeros / (n + 1), and
+  a zero total sits at the centre of the zeros' mass,
+  (zeros + 1) / 2(n + 1) (Stagge et al. 2015), so a dry season with
+  many zero totals doesn't pile its index on one value. SPI = Φ⁻¹(H). A fit
+  needs ≥ 20 totals and ≥ 10 non-zero ones.
+- **SPEI.** The monthly climatic water balance D = P − PET, accumulated the
+  same way, and per calendar month a three-parameter log-logistic (Hosking's
+  generalised logistic, GLO) fitted by L-moments from unbiased
+  probability-weighted moments (Beguería et al. 2014, the SPEI R package's
+  default since 1.7): k = −τ3, α = λ2 sin(kπ) / kπ,
+  ξ = λ1 − α(1/k − π / sin(kπ)), F(x) = 1 / (1 + e^−y),
+  y = −k⁻¹ ln(1 − k(x − ξ)/α). SPEI = Φ⁻¹(F). Without a `pet` series (a run
+  whose natural flow isn't GR4J's) the SPEI has no value.
+- **Reference period.** 1991–2020, the WMO climatological standard normal,
+  when every calendar month has at least 25 of those 30 years; otherwise
+  the whole record. The card names the years, and the fewest a month's fit
+  had when that is under 30. WMO-No. 1090 asks for 20–30 years at the
+  least, so a calendar month with fewer than 20 values in its reference has
+  no fit and no index ("Record too short").
+- **Clamp and classes.** Values are held to ±3 (probability 0.00135 /
+  0.99865): further out, a fit to 20–40 values says nothing, and the GLO's
+  bounded tail would give ±∞. Classes as McKee et al. and WMO-No. 1090
+  Table 1: ≥ 2 extremely wet, 1.5 to 2 very wet, 1 to 1.5 moderately wet,
+  −1 to 1 near normal, −1 to −1.5 moderately dry, −1.5 to −2 severely dry,
+  ≤ −2 extremely dry. The card's headline is the driest index with a value.
+- **Numerics.** ln Γ by Lanczos (g = 7), the regularised incomplete gamma
+  P(a, x) by its series below a + 1 and the continued fraction above
+  (Numerical Recipes §6.2), Φ⁻¹ by Wichura's AS 241 (PPND16). No dependency.
+
+**Tests** (`drought/spi.test.ts`, synthetic): P(a, x) against closed forms
+(a = 1, ½, 5/2, 7) and Simpson's rule, Φ⁻¹ against Python's
+`statistics.NormalDist`, the L-moments against their order-statistic
+definition, a gamma fit and three SPI values and a GLO fit and three SPEI
+values against references computed in Python with no shared code; monthly
+totals (partial months, a missing day, `lastDay`) under two skewed `TZ`s;
+the reference period chosen; over a 44-year synthetic record the SPI-3 is
+about standard normal over 1991–2020 and never falls as the total rises;
+the badge reads the last whole month of history and ignores forecast days
+after it, a dry spell reads dry, and each kind of gap is named. The
+Summary's e2e (`overview.spec.ts`) seeds 31 years of rain whose last
+Aug–Oct is bone dry, and checks its SPI-3 is Φ⁻¹(1/62) = −2.14.
+
+**Later slices of #620** build on this module. The analogue outlook (ONI and
+CPC's AAO copied daily, `backend/src/ingest/indices.ts`) selects the k past
+seasons nearest this one's climate state in `outlookAnalogues`, and may add
+the SPI-3 at the decision date as a further distance term (`standardizedIndex`
+gives every month's value, not only the last). The C3S outlook can report
+its members' season totals against the same per-calendar-month fits
+(`fitIndex`, `indexValue`). Neither needs a change here.
+
 ### 2.16 Starting a run from a saved state: model-state snapshots (engine ≥ 1.1.0, issue #53)
 
 A run can stop at the start of any day and a later run carry on from

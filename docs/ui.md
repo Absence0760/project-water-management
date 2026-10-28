@@ -1578,6 +1578,23 @@ put the results first; its first screen follows board A1 of the redesign
    [EWR](#ewr) page, one link away (below). The flow chart is drawn once,
    there. Needs attention never raised an EWR card (`attention.ts`; a test
    holds it to that).
+   Under the alerts, the **Drought index** card (`overview/DroughtIndex.svelte`,
+   `drought.ts`; issue #620): SPI and SPEI over 3, 6 and 12 months to the
+   last whole month of the latest run's history, from the run's own
+   `rain_final` and `pet` ([model.md §2.15b](./model.md#215b-drought-badge-spi-and-spei-issue-620-slice-1)).
+   A table, one row per period (its months, "Aug–Oct 2024"), each cell the
+   value and its class, coloured dry or wet with the class written out; the
+   headline badge is the driest index ("Severely dry · SPEI-12"), and the
+   foot names the years the fits used. A cell without a value says why: no
+   evaporation in this run, a month missing, or the record too short. When no
+   index has a value (under 20 years of rain, as in a fresh project) the card
+   is one line instead of a table of dashes, so it costs the first screen
+   little. It is in the left column, under what to act on, as context for a
+   restriction decision; it loads the two series through the Runs cache and
+   is part of the Summary's `data-ready`. Workspace only, in English: the
+   farm view shows the restriction level the WUA publishes, never a raw
+   index (#620's open question 4). The portfolio doesn't show it yet: that
+   needs the badge in the run summary, a later slice.
 3. **The published baseline and the links**: once there is a run, in the
    right-hand column under Supply by farm, which is usually shorter than
    Needs attention and the alerts, so a typical catchment (the example
