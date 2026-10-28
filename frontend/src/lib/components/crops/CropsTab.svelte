@@ -23,7 +23,7 @@
 	// inline the same way.
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { closeSettled, trackClose } from '#lib/nav/closeNav.js';
+	import { closeSettled, openAfterClose, trackClose } from '#lib/nav/closeNav.js';
 	import { page } from '$app/state';
 	import type { ProjectSettings } from '@water-management/engine';
 	import Sparkline from '#lib/components/charts/Sparkline.svelte';
@@ -263,7 +263,7 @@
 	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
 		<summary class="btn">Tables <span aria-hidden="true">▾</span></summary>
 		<div class="grids-pop" role="group" aria-label="Open as a table">
-			{#each TABLES_MENU as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
+			{#each TABLES_MENU as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={openAfterClose(closeGrids)}>{label}</a>{/each}
 		</div>
 	</details>
 	{#if !readonly}
@@ -396,7 +396,7 @@
 				<section class="panel area-card" aria-labelledby="crop-area-h">
 					<div class="panel-head">
 						<h2 id="crop-area-h">Planted area by hydrological unit</h2>
-						<a class="btn btn-sm" href={withParam(page.url, 'grid', 'planted-areas')}>{readonly ? 'Areas table' : 'Edit areas'}</a>
+						<a class="btn btn-sm" href={withParam(page.url, 'grid', 'planted-areas')} onclick={openAfterClose()}>{readonly ? 'Areas table' : 'Edit areas'}</a>
 					</div>
 					{#if farms.length === 0 || crops.length === 0}
 						<p class="muted">Add at least one hydrological unit (<a href="?tab=network">Network</a>) and one crop to enter planted areas.</p>

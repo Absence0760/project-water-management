@@ -11,7 +11,7 @@
 	import { untrack } from 'svelte';
 	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { goto } from '$app/navigation';
-	import { trackClose } from '#lib/nav/closeNav.js';
+	import { openAfterClose, trackClose } from '#lib/nav/closeNav.js';
 	import { resolve } from '$app/paths';
 	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
@@ -349,7 +349,7 @@
 				<div class="head-actions">
 					<a class="btn" href={resolve('help/guides/share-with-a-team')}>How teams work</a>
 					<a class="btn" href={resolve(`?owner=team:${team.id}&sort=status`)}>Project list</a>
-					<a class="btn" href={settingsHref} data-sveltekit-noscroll bind:this={settingsLink}>Team settings</a>
+					<a class="btn" href={settingsHref} data-sveltekit-noscroll bind:this={settingsLink} onclick={openAfterClose()}>Team settings</a>
 					{#if isAdmin}<button type="button" class="btn" onclick={focusAddMember}>Add member</button>{/if}
 					{#if canAddProjects}<a class="btn btn-primary" href={resolve(`?owner=team:${team.id}&new=1`)}>New project</a>{/if}
 				</div>
@@ -396,7 +396,7 @@
 							</ul>
 							<p class="rule muted small">
 								Traffic lights: {thresholdsRule(team.portfolioThresholds)}.
-								<a href={settingsHref} data-sveltekit-noscroll>{isAdmin ? 'Change them' : 'Which apply'}</a> in the team settings.
+								<a href={settingsHref} data-sveltekit-noscroll onclick={openAfterClose()}>{isAdmin ? 'Change them' : 'Which apply'}</a> in the team settings.
 							</p>
 						{:else if totals}
 							<p class="muted">

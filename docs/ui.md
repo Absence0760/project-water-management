@@ -5220,7 +5220,8 @@ outflow gauge**), `crop-factors` and `planted-areas` (the
 `transfers` (the Transfers tab) and `demands` (the [Demands
 grid](#demands-grid)). Done, Esc, the ✕ or Back close it; closing drops `grid` from
 the URL in place (`withoutParam`). It shuts at once and the URL follows when that
-navigation lands; a link clicked in between is held until then (`nav/closeNav.ts`,
+navigation lands; a plain click on a Tables menu link (or Crops' Edit areas) in
+between waits for that, 2 s at most (the links' `openAfterClose`, `nav/closeNav.ts`,
 as for the crop sheet, the node sheet and Team settings), so it opens its grid and
 Back still closes it. It isn't opened over the grid's own tab
 (`GRID_TAB`), where the grid is already on the page: the parameter is dropped.

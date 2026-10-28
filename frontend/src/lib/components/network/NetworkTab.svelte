@@ -2,7 +2,7 @@
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import { onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { closeSettled, trackClose } from '#lib/nav/closeNav.js';
+	import { closeSettled, openAfterClose, trackClose } from '#lib/nav/closeNav.js';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
@@ -557,7 +557,7 @@
 	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
 		<summary class="btn">Tables <span aria-hidden="true">▾</span></summary>
 		<div class="grids-pop" role="group" aria-label="Open as a table">
-			{#each TABLES_MENU as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
+			{#each TABLES_MENU as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={openAfterClose(closeGrids)}>{label}</a>{/each}
 		</div>
 	</details>
 	{#if !readonly}

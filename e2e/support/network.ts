@@ -86,6 +86,9 @@ export async function doneThenClick(page: Page, opener: Locator) {
 	await page.evaluate(
 		([d, n]) => {
 			(d as HTMLElement).click();
+			// Deliberately the very next task: the race trigger, not a wait. Done's click shuts the
+			// sheet and starts the URL drop in this task; the opener's click must land before that
+			// navigation does, which a second Playwright action (a round trip) can't promise.
 			setTimeout(() => (n as HTMLElement).click(), 0);
 		},
 		[done, next] as const
