@@ -13009,6 +13009,53 @@ members built alone; the same result under two skewed `TZ`s. The perf budget: 3 
 skill score under 3 s. `verify/` mirrors `runModel` only, and a member is an
 ordinary run: probe `forecast-member-rescaled` feeds one.
 
+**The backend bridge** (issue #620 step 7, `backend/src/outlooks/c3s.ts`,
+called by the outlook job for the method `c3s`, [api.md § Seasonal
+outlooks](./api.md#seasonal-outlooks)). The engine's input is made from the
+data mirror's 1° daily arrays (`c3s/<YYYY-MM>/tp_mm`,
+`c3s-hc/<system>/<MM>/tp_mm`, `c3s/index.json`):
+- *The area*: the project's catchment boundary on the map, else the union of
+  its units' polygons (the unit feeds' rule). Each 1° cell it touches weighs
+  share inside × cos(latitude), exact clipping as the CHIRPS boundary cells
+  (cells with under 0.1 % inside left out); no polygon at all, and the
+  outlook is off (`noArea`). Under runoff from each unit's own rain (§2.4h)
+  each unit's polygon is averaged on its own too and reported (`area.units`:
+  each system's mean raw monthly totals per unit), but the engine takes the
+  catchment's totals only and rescales every unit's rain by the catchment's
+  factor (step 2 above), so the units' own forecasts don't drive it.
+- *Only forecasts issued by the decision date* (§2.15): C3S releases
+  ECMWF's forecast from init month M on the 6th of M and the other centres'
+  on the 10th (at 12 UTC; `ingest/c3srequest.py` `release_at`, checked
+  against it by `c3s.test.ts`). The init is the newest whose month starts on
+  or before the decision date with at least one system issued on or before
+  it; only those systems are passed, and the others of that init are listed
+  as not issued. A decision on the 7th of a month thus takes ECMWF's forecast
+  of that month alone, a decision on the 1st the previous month's from every
+  system held.
+- *Monthly totals*: a member's daily catchment mean is Σ w·v ÷ Σ w (a day
+  with a NaN cell has none); lead month k is the k-th calendar month from
+  the init month's 1st (a hindcast year's own, so a leap February has 29
+  days), and a member's months run to the first that isn't whole, at most
+  7 in 215 days. A member slot the system doesn't fill isn't passed; one
+  filled but with no whole month is passed empty, so the engine counts it as
+  dropped.
+- *Hindcasts*: for each system passed, its hindcast of the init's calendar
+  month, every year held (1993–2016); the engine fits on the years whose
+  months the record holds wholly before the decision date (step 1).
+- *The run*: one call after the ESP members and the trigger table, at the
+  **full demand** (no level's ops), on the outlook's kept analogue years, on
+  the drought restriction rule's review dates, else the outlook's own review
+  date, else the engine's default. Its own ESP members run from the same
+  snapshot, so nothing stored for the ESP changes: an outlook of method `c3s`
+  stores the same `result` and triggers as an `esp` one plus
+  `result.forecast` (`outlooks.db.test.ts`). An engine refusal is stored as
+  the forecast part's message (`failed`), never the outlook's failure; a
+  copy laid out otherwise fails the job.
+- *The farm page* never gets a chance (the issue's open question 4):
+  publishing a level of such an outlook adds only which side led
+  (`FarmOutlookProjection.forecast`), and the farm's figures are the
+  analogue years' as before.
+
 ### 2.16 Starting a run from a saved state: model-state snapshots (engine ≥ 1.1.0, issue #53)
 
 A run can stop at the start of any day and a later run carry on from

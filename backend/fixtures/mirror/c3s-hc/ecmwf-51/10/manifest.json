@@ -1,0 +1,35 @@
+{
+  "product": "c3s-hc/ecmwf-51/10",
+  "revision": 1,
+  "region": {
+    "w": 9.5,
+    "s": -36.5,
+    "e": 41.5,
+    "n": -7.5
+  },
+  "grid": {
+    "origin": {
+      "lat": -36,
+      "lon": 10
+    },
+    "step": 1
+  },
+  "years": {
+    "first": 1993,
+    "last": 2016
+  },
+  "finalThrough": null,
+  "prelimThrough": null,
+  "files": [
+    {
+      "url": "cds://seasonal-original-single-levels/total_precipitation/ecmwf-51/hindcast/10",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "27e161e1a482d5ce123f6c81414f9dce56dc7952c8dc5e01fdc1e4a2b481c48a",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    }
+  ],
+  "changes": []
+}

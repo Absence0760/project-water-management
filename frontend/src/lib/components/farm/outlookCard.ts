@@ -20,6 +20,12 @@ export interface OutlookVm {
 	dam: string | null;
 	/** "Your WUA reviews the level on 1 Jan.", or null. */
 	review: string | null;
+	/**
+	 * Whether the WUA's outlook also weighed the seasonal rain forecasts (issue
+	 * #620, method c3s): which led, in words, never a chance (the issue's open
+	 * question 4); null for an outlook without them.
+	 */
+	forecast: string | null;
 	fine: string;
 }
 
@@ -43,6 +49,11 @@ export function outlookCard(view: Pick<FarmView, 'outlook'>, today: string): Out
 		got,
 		dam: o.dam?.seasonEndShare ? t('Your dam ended the season about {mid} full, and between {low} and {high} in most of those years.', range(o.dam.seasonEndShare)) : null,
 		review: o.reviewDate ? t('Your WUA reviews the level on {date}.', { date: fmtDayMonth(o.reviewDate) }) : null,
+		forecast: !o.forecast
+			? null
+			: o.forecast.leads === 'forecast'
+				? t('Your WUA also looked at the seasonal rain forecasts of the Copernicus Climate Change Service. The figures above are still from past years’ weather.')
+				: t('Your WUA also checked the seasonal rain forecasts of the Copernicus Climate Change Service, but this season they did no better than past weather.'),
 		fine: outlookFine()
 	};
 }

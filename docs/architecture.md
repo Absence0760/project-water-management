@@ -1828,6 +1828,19 @@ EventBridge, daily
   (`backend/fixtures/mirror/indices/`) holds invented values, and
   `FEED_SOURCE=fixtures` answers CPC's two URLs with them
   ([data-sources.md § climate-indices](./data-sources.md#climate-indices)).
+- **C3S seasonal forecasts in an outlook (issue #620 step 7).** The
+  `mirror-ingest` Lambda copies them (`c3s/`, `c3s-hc/`, 1°,
+  [deployment.md § C3S seasonal forecasts](./deployment.md#c3s-seasonal-forecasts)).
+  The **worker** reads them only for an outlook with the method `c3s`
+  (`outlooks/c3s.ts`, called from `outlooks/store.ts` before any member
+  runs): `c3s/index.json`, the newest init with a system issued by the
+  decision date, each member's slab of the cells under the catchment
+  boundary (else the units' polygons), and that init month's hindcasts,
+  summed into the engine's catchment monthly totals; then one engine call
+  (`runForecastOutlook`) after the ESP members. A copy laid out otherwise
+  fails the job; no forecast or no hindcast in the copy leaves the outlook
+  the ESP alone with the reason. Locally the committed copy holds invented
+  members (`backend/fixtures/mirror/c3s/`, `backend/scripts/c3s-fixture.ts`).
 - **ERA5-Land (issue #604 R4-A).** The Python ingest Lambda copies
   Copernicus's ERA5-Land daily total precipitation, about 5 days behind,
   into `era5l/`, the finals layout on the 0.1° grid (275 × 310, from 1950).

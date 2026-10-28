@@ -4000,7 +4000,7 @@ series, and there are years × levels of them (up to 240), not 12.
 | `result`, `engine_version`, `completed_at` | Set on completion (CHECK: all three exactly when `complete`). `result` is the engine's `SeasonalOutlook` with the backend's `excluded` (plus `overLimit`, `memberFailed`) and `failures`, ≤ 8 MB |
 | `review_date` | The season's review date for the review triggers (migration 106, issue #53 R6): after `decision_date`, on or before `season_end` (CHECK), or NULL = no trigger table. Fixed at insert |
 | `triggers` | Set on completion when there is a review date (CHECK: then never NULL on a complete outlook; NULL without a review date): the backend's `StoredTriggers` (the engine's `ReviewTriggers` table without each band's whole outlook, or why it couldn't be drawn), ≤ 8 MB |
-| `method` | How the analogue years are used (migration 267, issue #620): `esp` (the default, every existing row) every year alike, or `climateState`, which adds `result.climate`: the same members summarised on the years nearest this season's ENSO and SAM state ([model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620)), with the selection and the data mirror's manifest entry of each index it read. CHECK on the two values; fixed at insert (no UPDATE grant names it) |
+| `method` | How the analogue years are used (migrations 267 and 275, issue #620): `esp` (the default, every existing row) every year alike, `climateState`, which adds `result.climate`: the same members summarised on the years nearest this season's ENSO and SAM state ([model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620)), with the selection and the data mirror's manifest entry of each index it read, or `c3s` (migration 275), which adds `result.forecast`: the chance of each restriction level from the C3S seasonal forecasts ([model.md §2.15d](./model.md#215d-the-forecast-conditioned-outlook-the-chance-of-each-restriction-level-issue-620-engine-11060)). CHECK on the three values; fixed at insert (no UPDATE grant names it) |
 | `created_by`, `created_at` | Stamped by the insert trigger; `created_by` `ON DELETE SET NULL` (derived, like a sweep) |
 
 `seasonal_outlook_member`:
@@ -4216,8 +4216,22 @@ A column with a CHECK on an existing table: no policy, index or trigger
 changes. The guard (`seasonal_outlook_guard`, latest definition 106) reads
 no column of it. `water_app` writes it through 063's table-wide INSERT and
 no UPDATE grant names it, so a completed outlook's method can't change
-under its result. A forecast-conditioned method (C3S, #620's later slices)
-would widen the CHECK.
+under its result.
+
+### Outlook method c3s (275_outlook_method_c3s.sql)
+
+Widens 267's CHECK by `c3s` (issue #620 step 7): the outlook also stores the
+chance of each drought restriction level from the C3S seasonal forecasts in
+`result.forecast` ([api.md § Seasonal
+outlooks](./api.md#seasonal-outlooks), [model.md
+§2.15d](./model.md#215d-the-forecast-conditioned-outlook-the-chance-of-each-restriction-level-issue-620-engine-11060)).
+The constraint is dropped by its exact name and added again with the three
+values; every existing row is `esp` or `climateState`, so it validates
+without a rewrite. No table, policy, grant, trigger, function or index
+changes, and the method stays fixed at insert. The forecast members aren't
+stored as `seasonal_outlook_member` rows (they run inside the one engine
+call); a publication of a `c3s` outlook adds `forecast: { leads }` to each
+farm's `outlook_publication_farm.view`, never a chance.
 
 ### Calibration zones (270_calibration_sites.sql)
 

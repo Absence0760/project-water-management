@@ -7,7 +7,13 @@
 // and the job failing closed when its user lost the editor role. The
 // climate-state method (267_outlook_method, issue #620): the ESP part the
 // same to the bit, the years chosen from the committed synthetic copy of the
-// ONI and AAO, why none are chosen on a short record, and RLS on it.
+// ONI and AAO, why none are chosen on a short record, and RLS on it. The
+// forecast-conditioned method (275_outlook_method_c3s, issue #620 step 7): the
+// ESP part the same to the bit, the chance of each restriction level from the
+// committed synthetic copy's C3S forecasts over the catchment boundary, only
+// forecasts issued by the decision date, off (with the reason) with no
+// forecast issued or no polygon, and the units' polygons when there is no
+// boundary.
 //
 // Synthetic catchment: a farm dam draining to an outlet gauge, 13 water
 // years (2000/01 … 2012/13) of invented winter rain, each year scaled
@@ -17,6 +23,7 @@ import { OUTLOOK_MIN_YEARS } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { forecastArea } from './c3s.js';
 import { runTick } from '../jobs/runner.js';
 import { OUTLOOK_LEVELS_MAX, OUTLOOKS_KEPT } from './schema.js';
 
@@ -644,11 +651,12 @@ describe('the climate-state analogues (issue #620, method climateState)', () => 
 		const o = (await owner.call('GET', `/projects/${c.projectId}/outlooks/${res.body.outlook.id}`)).body.outlook;
 		expect(o.result.nYears).toBe(13);
 		expect(o.result.climate).toMatchObject({ outlook: null, selection: { nCandidates: 13, k: 0, problem: { reason: 'tooFewYears' } } });
-		const bad = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { method: 'c3s' }));
+		const bad = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { method: 'analogue' }));
 		expect(bad.status).toBe(400);
-		// The column refuses one too, below the API.
+		// The column refuses one too, below the API (275 widened 267's CHECK by c3s, issue #620 step 7).
 		const check = (await asOwner(`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'seasonal_outlook_method'`)) as { def: string }[];
-		expect(check[0]!.def).toBe("CHECK ((method = ANY (ARRAY['esp'::text, 'climateState'::text])))");
+		expect(check[0]!.def).toBe("CHECK ((method = ANY (ARRAY['esp'::text, 'climateState'::text, 'c3s'::text])))");
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE seasonal_outlook SET method = 'analogue' WHERE project_id = $1`, [c.projectId]))).rejects.toMatchObject({ code: '42501' });
 	});
 
 	it('a viewer reads the method and the climate result, an outsider nothing, and no one changes the method', async () => {
@@ -675,5 +683,143 @@ describe('the climate-state analogues (issue #620, method climateState)', () => 
 		expect((await outsider.call('GET', `/projects/${c.projectId}/outlooks/${outlook.id}`)).status).toBe(404);
 		expect(await rowsAs(outsider)).toEqual([]);
 		await expect(withUser(owner.id, (db) => db.query(`UPDATE seasonal_outlook SET method = 'esp' WHERE id = $1`, [outlook.id]))).rejects.toMatchObject({ code: '42501' });
+	});
+});
+
+describe('the forecast-conditioned outlook (issue #620 step 7, method c3s)', () => {
+	/** 26 water years, 1992/93 … 2017/18, one saved run (to 30 September 2018), the boundary round 33.7° S, 21.3° E (the fixture copy's cells). Invented values. */
+	async function forecastCatchment(owner: User, boundary = true) {
+		const projectId = (await owner.call('POST', '/projects', { name: 'Outlook forecast' })).body.project.id as string;
+		const outlet = node('Outlet', null);
+		const farm = node('Farm', outlet.id, { pctRunoffToDam: 1, damCapacityM3: 80_000, damInitialPct: 0.5, damMinPct: 0 });
+		const crop = { id: randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 150_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110], ewrPragmaticM3PerDay: monthly(800) } })).status).toBe(200);
+		const start = '1992-10-01';
+		const days = (Date.parse('2018-10-01T00:00:00Z') - Date.parse(`${start}T00:00:00Z`)) / DAY;
+		const rain = Array.from({ length: days }, (_, t) => {
+			const d = new Date(Date.parse(`${start}T00:00:00Z`) + t * DAY);
+			const wy = d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+			return t % 3 === 0 ? Math.round(MONTH_MM[d.getUTCMonth()]! * (0.3 + ((wy * 5) % 13) / 10) * 10) / 10 : 0;
+		});
+		expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: start, values: rain })).status).toBe(200);
+		const sq = (lon: number, lat: number, h: number) => [[[lon - h, lat - h], [lon + h, lat - h], [lon + h, lat + h], [lon - h, lat + h], [lon - h, lat - h]]];
+		if (boundary) {
+			const b = await owner.call('POST', `/projects/${projectId}/map/features`, { kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: sq(21.3, -33.7, 0.1) } });
+			expect(b.status, JSON.stringify(b.body)).toBe(201);
+		}
+		const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'base' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		return { projectId, farm, runId: run.body.run.id as string, sq };
+	}
+
+	it('keeps the ESP figures to the bit and adds the chance of each restriction level from the forecasts issued by the decision date', async () => {
+		const owner = await signUp('OutlookC3sOwner');
+		const viewer = await signUp('OutlookC3sViewer');
+		const c = await forecastCatchment(owner);
+		await member(owner, c.projectId, viewer, 'viewer');
+		const levels = [{ label: '100 %', ops: scale(1) }, { label: '85 %', ops: scale(0.85) }];
+		const esp = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, {}, levels));
+		const fc = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { method: 'c3s' }, levels));
+		expect(fc.status, JSON.stringify(fc.body)).toBe(202);
+		expect(fc.body.outlook.method).toBe('c3s');
+		await tick();
+		const get = async (id: string, as = owner) => (await as.call('GET', `/projects/${c.projectId}/outlooks/${id}`)).body.outlook;
+		const a = await get(esp.body.outlook.id);
+		const b = await get(fc.body.outlook.id);
+		expect([a.status, b.status]).toEqual(['complete', 'complete']);
+		expect(a.decisionDate).toBe('2018-10-01');
+		expect(a.result).not.toHaveProperty('forecast');
+		const { forecast, ...espPart } = b.result;
+		// The ESP figures, and the trigger table, are the same whichever the method.
+		expect(espPart).toEqual(a.result);
+		expect(b.triggers).toEqual(a.triggers);
+		// Only the ESP members are stored: the forecast's run inside the engine call.
+		const stored = (await asOwner('SELECT count(*)::int AS n FROM seasonal_outlook_member WHERE outlook_id = $1', [fc.body.outlook.id])) as { n: number }[];
+		expect(stored[0]!.n).toBe(2 * a.result.nYears);
+
+		// The committed synthetic copy: the 2018-09 init (both systems issued in September; ECMWF's 2018-10 init came out on the 6th, after the decision).
+		expect(forecast).toMatchObject({ method: 'c3s', status: 'ready', reason: null, init: '2018-09', decisionDate: '2018-10-01' });
+		expect(forecast.source).toMatchObject({
+			init: '2018-09',
+			issued: [
+				{ system: 'ecmwf-51', issuedOn: '2018-09-06' },
+				{ system: 'ukmo-604', issuedOn: '2018-09-10' }
+			],
+			notIssued: [],
+			fetchedAt: '2026-02-09T00:00:00Z'
+		});
+		expect(forecast.area).toEqual({ source: 'boundary', cells: 1, units: [], notes: [] });
+		expect(forecast.systems.map((s: { system: string; used: boolean; members: number; weight: number }) => [s.system, s.used, s.members, s.weight])).toEqual([
+			['ecmwf-51', true, 3, 0.5],
+			['ukmo-604', true, 2, 0.5]
+		]);
+		// Each used system's months were fitted on the 20 or more hindcast years the record holds before the decision date.
+		for (const s of forecast.systems) for (const m of s.months) expect(m.years.length).toBeGreaterThanOrEqual(20);
+		// Compact members: no whole season stored with them.
+		expect(forecast.members).toHaveLength(5);
+		for (const m of forecast.members) {
+			expect(m).not.toHaveProperty('outcome');
+			expect(m).not.toHaveProperty('months');
+		}
+		const weights = forecast.members.reduce((x: number, m: { weight: number }) => x + m.weight, 0);
+		expect(weights).toBeCloseTo(1, 12);
+		// No drought restriction rule: the review triggers' storage bands on the outlook's own review date; each date's chances sum to 1.
+		expect(forecast.chances.map((r: { reviewDate: string; basis: string }) => [r.reviewDate, r.basis])).toEqual([[a.reviewDate, 'bands']]);
+		for (const set of [forecast.chances, forecast.espChances]) {
+			for (const r of set) expect(r.categories.reduce((x: number, k: { chance: number }) => x + k.chance, 0)).toBeCloseTo(1, 12);
+		}
+		// The skill gate: the forecast leads only above zero.
+		expect(forecast.skill.metric).toBe('crpssSeasonEndStorage');
+		expect(forecast.leads).toBe(forecast.skill.crpss !== null && forecast.skill.crpss > 0 ? 'forecast' : 'esp');
+
+		// A viewer reads it (positive control); the method is fixed at insert.
+		expect((await get(fc.body.outlook.id, viewer)).result.forecast.status).toBe('ready');
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE seasonal_outlook SET method = 'esp' WHERE id = $1`, [fc.body.outlook.id]))).rejects.toMatchObject({ code: '42501' });
+	});
+
+	it('is off with the reason, the ESP beside it unchanged: no forecast issued by the decision date, or no polygon to average over', async () => {
+		const owner = await signUp('OutlookC3sOff');
+		const c = await forecastCatchment(owner);
+		const one = [{ label: '100 %', ops: scale(1) }];
+		// 5 September 2018: no init is out yet (ECMWF's 2018-09 forecast comes on the 6th).
+		const early = { decisionDate: '2018-09-05', seasonEnd: '2019-03-31', reviewDate: null };
+		const esp = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, early, one));
+		const fc = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { ...early, method: 'c3s' }, one));
+		await tick();
+		const a = (await owner.call('GET', `/projects/${c.projectId}/outlooks/${esp.body.outlook.id}`)).body.outlook;
+		const b = (await owner.call('GET', `/projects/${c.projectId}/outlooks/${fc.body.outlook.id}`)).body.outlook;
+		const { forecast, ...espPart } = b.result;
+		expect(espPart).toEqual(a.result);
+		expect(forecast).toMatchObject({ status: 'off', reason: 'noForecast', leads: 'esp', members: [], chances: [], source: { init: null } });
+
+		// A project with no boundary and no unit polygon: off, saying why, before anything is read.
+		const bare = await forecastCatchment(owner, false);
+		const res = await owner.call('POST', `/projects/${bare.projectId}/outlooks`, outlookOf(bare.runId, { method: 'c3s', reviewDate: null }, one));
+		await tick();
+		const o = (await owner.call('GET', `/projects/${bare.projectId}/outlooks/${res.body.outlook.id}`)).body.outlook;
+		expect(o.status).toBe('complete');
+		expect(o.result.forecast).toMatchObject({ status: 'off', reason: 'noArea', source: null });
+		expect(o.result.forecast.message).toMatch(/no boundary on the map and no unit has a polygon/);
+	});
+
+	it('averages over the units’ polygons when there is no boundary, and lists each unit’s own cells under per-unit rain', async () => {
+		const owner = await signUp('OutlookC3sUnits');
+		const c = await forecastCatchment(owner, false);
+		const p = await owner.call('POST', `/projects/${c.projectId}/map/features`, { kind: 'farm_parcel', name: 'Upper block', nodeId: c.farm.id, geometry: { type: 'Polygon', coordinates: c.sq(21.31, -33.69, 0.03) } });
+		expect(p.status, JSON.stringify(p.body)).toBe(201);
+		const area = await withUser(owner.id, (db) => forecastArea(db, c.projectId, true));
+		expect(area).toMatchObject({ source: 'units', units: [{ nodeId: c.farm.id, name: 'Farm' }], notes: [] });
+		if ('problem' in area) throw new Error(area.problem);
+		expect(area.cells.map((x) => [x.lat, x.lon])).toEqual([[-34, 21]]);
+		// Without per-unit rain the union is the area all the same, and no unit is listed on its own.
+		expect(await withUser(owner.id, (db) => forecastArea(db, c.projectId, false))).toMatchObject({ source: 'units', units: [] });
+		// A boundary wins over the units.
+		expect((await owner.call('POST', `/projects/${c.projectId}/map/features`, { kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: c.sq(21.3, -33.7, 0.1) } })).status).toBe(201);
+		expect(await withUser(owner.id, (db) => forecastArea(db, c.projectId, true))).toMatchObject({ source: 'boundary', units: [{ nodeId: c.farm.id }] });
+		// Under RLS: someone with no role in the project reads no polygon (positive control above).
+		const outsider = await signUp('OutlookC3sUnitsOut');
+		expect(await withUser(outsider.id, (db) => forecastArea(db, c.projectId, true))).toMatchObject({ problem: expect.stringContaining('no boundary') });
 	});
 });
