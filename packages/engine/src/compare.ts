@@ -1131,6 +1131,16 @@ function diffSettings(
 		const n = (k: number, verb: string) => `${k} ${k === 1 ? 'check' : 'checks'} ${verb}`;
 		push('Kept data checks', `Kept data checks: ${[keptAdded ? n(keptAdded, 'kept') : '', keptRemoved ? n(keptRemoved, 'no longer kept') : ''].filter(Boolean).join(', ')}`);
 	}
+	// The kept run warnings and problems (issue #611): no run effect, a count, as the kept checks.
+	const wkIds = (v: unknown) => new Set(Array.isArray(v) ? (v as { id?: unknown }[]).flatMap((x) => (x && typeof x.id === 'string' ? [x.id] : [])) : []);
+	const wkA = wkIds(a.warningsKept);
+	const wkB = wkIds(b.warningsKept);
+	const wkAdded = [...wkB].filter((x) => !wkA.has(x)).length;
+	const wkRemoved = [...wkA].filter((x) => !wkB.has(x)).length;
+	if (wkAdded || wkRemoved) {
+		const n = (k: number, verb: string) => `${k} ${k === 1 ? 'warning' : 'warnings'} ${verb}`;
+		push('Kept warnings', `Kept warnings: ${[wkAdded ? n(wkAdded, 'kept') : '', wkRemoved ? n(wkRemoved, 'no longer kept') : ''].filter(Boolean).join(', ')}`);
+	}
 	const za = a.zeroRainRuns as Record<string, unknown>;
 	const zb = b.zeroRainRuns as Record<string, unknown>;
 	const zeroMode = (v: unknown) => (v === 'missing' ? 'treated as missing (CHIRPS fills them)' : v === 'asRecorded' ? 'run as recorded (dry)' : String(v));
@@ -1176,7 +1186,8 @@ function diffSettings(
 		'rainStations',
 		// Engine ≥ 1.102.0 (issue #611): said above.
 		'flowMissing',
-		'checksKept'
+		'checksKept',
+		'warningsKept'
 	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);
@@ -2080,7 +2091,8 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 		['Hi/lo MAP split', 'hiLoSplit'],
 		[EWR_DAILY_SOURCE_LABEL, 'ewrDailySource'],
 		[RAIN_STATIONS_LABEL, 'rainStations'],
-		['Kept data checks', 'checksKept']
+		['Kept data checks', 'checksKept'],
+		['Kept warnings', 'warningsKept']
 	);
 	for (const [k, f] of Object.entries(DATA_QUALITY_FIELDS)) out.push([`Data quality ${f.label}`, `dataQuality.${k}`]);
 	for (const [k, f] of Object.entries(GR4J_FIELDS)) out.push([`GR4J ${f.label}`, `gr4j.${k}`]);

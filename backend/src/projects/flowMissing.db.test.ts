@@ -134,3 +134,33 @@ describe('settings.rainStations.unreliable on every rain record (issue #611)', (
 		expect((input.series as Record<string, { seriesId?: string }>)[`rain_catchment_mm@${p.farm}`]!.seriesId).toBe(p.unitGauge);
 	});
 });
+
+describe('settings.warningsKept (issue #611)', () => {
+	it('an editor keeps run warnings and problems with a note; a bad entry is refused and nothing stored; a viewer can’t', async () => {
+		const owner = await signUp('WarningsKeptOwner');
+		const viewer = await signUp('WarningsKeptViewer');
+		const p = await project(owner, 'Kept warnings');
+		expect((await owner.call('POST', `/projects/${p.id}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+		const kept = [
+			{ id: 'run:calibration.noObserved:0f3a', note: 'No gauge in this catchment yet' },
+			{ id: `problem:data:${p.rain}`, note: '' }
+		];
+		// Refused: a malformed id; nothing is stored.
+		const bad = await owner.call('PATCH', `/projects/${p.id}`, { settings: { warningsKept: [{ id: 'not an id', note: '' }] } });
+		expect(bad.status).toBe(400);
+		expect((await settingsOf(owner, p.id)).warningsKept ?? null).toBeNull();
+		// A viewer can't.
+		expect((await viewer.call('PATCH', `/projects/${p.id}`, { settings: { warningsKept: kept } })).status).toBe(403);
+		expect((await settingsOf(owner, p.id)).warningsKept ?? null).toBeNull();
+		// Positive control: the owner's save is stored as sent, read back by the viewer, and changes no run.
+		const before = await withUser(owner.id, (db) => loadModelInput(db, p.id));
+		const ok = await owner.call('PATCH', `/projects/${p.id}`, { settings: { warningsKept: kept }, reason: 'Warnings: kept 2' });
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		expect((await settingsOf(viewer, p.id)).warningsKept).toEqual(kept);
+		const after = await withUser(owner.id, (db) => loadModelInput(db, p.id));
+		expect(runModel(after).summary.calibration).toEqual(runModel(before).summary.calibration);
+		// Null clears it.
+		expect((await owner.call('PATCH', `/projects/${p.id}`, { settings: { warningsKept: null } })).status).toBe(200);
+		expect((await settingsOf(owner, p.id)).warningsKept ?? null).toBeNull();
+	});
+});

@@ -39,3 +39,42 @@ export function keptSuspectRanges(checksKept: readonly string[] | null | undefin
 	}
 	return out;
 }
+
+/**
+ * A run warning or a problem from elsewhere the user kept (accepted) on the Warnings page (issue #611):
+ * settings.warningsKept. `id` names it stably across runs, `run:<code or text>:<hash>` for a run warning (the code
+ * and its names, not its counts) and `problem:<source>:…` for a problem; `note` is why, optional (''). No run
+ * effect: the page shows the item as kept, with its note and a Reopen.
+ */
+export interface WarningKept {
+	id: string;
+	note: string;
+}
+
+/** Most items settings.warningsKept may list (refused past it, never cut). */
+export const WARNINGS_KEPT_MAX = 300;
+/** Longest item id. */
+export const WARNING_KEPT_ID_MAX = 200;
+/** Longest note. */
+export const WARNING_KEPT_NOTE_MAX = 500;
+/** An item id: what the page writes (`run:` or `problem:`), printable, no spaces. */
+export const WARNING_KEPT_ID = /^(run|problem):[\x21-\x7e]{1,193}$/;
+
+/** settings.warningsKept as the engine reads it: well-formed entries, each id once; null when absent. */
+export function resolveWarningsKept(raw: unknown, warnings: string[]): WarningKept[] | null {
+	if (raw == null) return null;
+	if (!Array.isArray(raw)) {
+		warnings.push('kept warnings are not a list; ignored');
+		return null;
+	}
+	const seen = new Set<string>();
+	const out: WarningKept[] = [];
+	for (const x of raw) {
+		const o = x as Partial<WarningKept> | null;
+		if (!o || typeof o.id !== 'string' || !WARNING_KEPT_ID.test(o.id) || seen.has(o.id)) continue;
+		seen.add(o.id);
+		out.push({ id: o.id, note: typeof o.note === 'string' ? o.note.slice(0, WARNING_KEPT_NOTE_MAX) : '' });
+	}
+	if (out.length !== raw.length) warnings.push('kept warnings: an entry that isn’t one, or one listed twice, is ignored');
+	return out;
+}

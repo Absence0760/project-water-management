@@ -884,7 +884,12 @@ missing, `{ <series id>: [period, …] }` in the exclusions' shape, at most 100
 a record and 50 records, replaced whole by a save; `settings.checksKept` the
 data-check items kept as recorded (`<check>:<series id>:<start>:<end>`, at
 most 300), of which a flow record's kept outliers and flat stretches are
-scored by the fit (model.md §2.10h). Both are absent until set, and neither
+scored by the fit (model.md §2.10h). `settings.warningsKept` (issue #611)
+is the run warnings and problems from elsewhere kept (accepted) on the
+Warnings page, `[{ id, note }]`, the id `run:<code or text>:<hash>` or
+`problem:<source>:…` (`checkItems.ts` `WARNING_KEPT_ID`, at most 200
+characters), the note optional (at most 500), at most 300 entries, replaced
+whole by a save and read by no run. All three are absent until set, and none
 needs a migration. `settings.calibrationRules` (engine ≥ 1.25.0,
 issue #153) is automated calibration's pre-declared rule set with its
 server-kept revision and the hydrologist's sign-off; no migration either

@@ -89,7 +89,11 @@ import {
 	isIsoDate,
 	CHECKS_KEPT_MAX,
 	FLOW_MISSING_RECORDS_MAX,
-	parseCheckItemId
+	parseCheckItemId,
+	WARNING_KEPT_ID,
+	WARNING_KEPT_ID_MAX,
+	WARNING_KEPT_NOTE_MAX,
+	WARNINGS_KEPT_MAX
 } from '@water-management/engine';
 import { z } from 'zod';
 import { AutoRunPatch } from '../runs/autoRun.js';
@@ -555,6 +559,23 @@ export const ChecksKept = z
 	.array(CheckItemId)
 	.max(CHECKS_KEPT_MAX, `kept data checks: at most ${CHECKS_KEPT_MAX}; reopen some before keeping more`)
 	.refine((list) => new Set(list).size === list.length, 'a kept data check is listed twice');
+
+/**
+ * settings.warningsKept (issue #611): the run warnings and problems from elsewhere kept (accepted) on the Warnings
+ * page, each `{ id, note }` once, at most WARNINGS_KEPT_MAX (refused past it, never cut). Ids are the page's
+ * (`run:…` or `problem:…`, engine checkItems.ts WARNING_KEPT_ID); the note is optional. No run effect.
+ */
+export const WarningsKept = z
+	.array(
+		z
+			.object({
+				id: z.string().max(WARNING_KEPT_ID_MAX).regex(WARNING_KEPT_ID, 'a kept warning is named by its id, run:… or problem:…, with no spaces'),
+				note: z.string().max(WARNING_KEPT_NOTE_MAX, `a kept warning’s note: at most ${WARNING_KEPT_NOTE_MAX} characters`)
+			})
+			.strict()
+	)
+	.max(WARNINGS_KEPT_MAX, `kept warnings: at most ${WARNINGS_KEPT_MAX}; reopen some before keeping more`)
+	.refine((list) => new Set(list.map((x) => x.id)).size === list.length, 'a kept warning is listed twice');
 
 /**
  * settings.chirpsFitPeriod (engine ≥ 0.29.0, issue #40): 'all', or water-year
@@ -1222,6 +1243,8 @@ export const SettingsPatch = z
 		flowMissing: FlowMissing.nullable(),
 		// The data-check items kept as recorded (engine ≥ 1.102.0, issue #611): the whole list, null = none.
 		checksKept: ChecksKept.nullable(),
+		// The kept run warnings and problems (issue #611): the whole list, null = none. No run effect.
+		warningsKept: WarningsKept.nullable(),
 		// Gap filling of the observed flow records (engine flowGapFill.ts, issue #66): either record's spec (replaced whole) or the switch.
 		flowGapFill: FlowGapFill,
 		// Per-day quality flags (engine calibrate/dayFlags.ts, CR-18/19): any subset of the group; `ratings` is replaced whole.

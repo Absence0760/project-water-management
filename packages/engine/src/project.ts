@@ -4,6 +4,7 @@
 import type { ForecastSummary } from './forecast';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { FlowMissingSettings } from './recordPeriods';
+import type { WarningKept } from './checkItems';
 import type { QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
@@ -649,6 +650,11 @@ export interface ProjectSettings {
 	 * (./calibrate/dayFlags.ts). Absent = none.
 	 */
 	checksKept?: string[] | null;
+	/**
+	 * The run warnings and problems from elsewhere the user kept (accepted) on the Warnings page, each with an
+	 * optional note (issue #611, ./checkItems.ts WarningKept). No run effect. Absent = none.
+	 */
+	warningsKept?: WarningKept[] | null;
 	/**
 	 * Gap filling of the observed flow records (engine ≥ 1.23.0, issue #66,
 	 * ./flowGapFill.ts, docs/model.md §2.10i): a spec per record, null = not

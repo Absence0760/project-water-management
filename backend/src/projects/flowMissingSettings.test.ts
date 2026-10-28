@@ -1,6 +1,6 @@
 // settings.flowMissing and settings.checksKept (engine ≥ 1.102.0, issue #611): what a save may send, the plain
 // refusals (a cap is refused, never cut), and how a copy's or import's fresh series ids follow.
-import { CHECKS_KEPT_MAX, EXCLUSIONS_MAX, FLOW_MISSING_RECORDS_MAX } from '@water-management/engine';
+import { CHECKS_KEPT_MAX, EXCLUSIONS_MAX, FLOW_MISSING_RECORDS_MAX, WARNING_KEPT_NOTE_MAX, WARNINGS_KEPT_MAX } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { remapSettingSeriesIds, settingSeriesIds } from './flowMissingSettings.js';
 import { FitRecord, patchSettings, SettingsPatch } from './settings.js';
@@ -119,5 +119,28 @@ describe('the series ids settings name, and a copy’s or import’s fresh ones'
 		expect(remapSettingSeriesIds(withFit, new Map([[OBS, N]])).fitRecord).toEqual({ flowSeriesId: N, checksKept: [`outlier:${N}:2001-01-05:2001-01-05`], flowMissing: { [N]: [period(1)] } });
 		expect(FitRecord.shape.flowSeriesId.safeParse(OBS).success).toBe(true);
 		expect(FitRecord.shape.flowSeriesId.safeParse('not a series').success).toBe(false);
+	});
+});
+
+describe('SettingsPatch.warningsKept (issue #611)', () => {
+	const kept = (i: number) => ({ id: `run:rain.zeroRun.missing:${i.toString(16).padStart(8, '0')}`, note: i % 2 ? 'Checked with the observer' : '' });
+	it('takes ids with a note (empty allowed), each once, and null for none; a later save replaces the list', () => {
+		expect(SettingsPatch.parse({ warningsKept: [kept(1), { id: 'problem:data:s1', note: '' }] })).toEqual({ warningsKept: [kept(1), { id: 'problem:data:s1', note: '' }] });
+		expect(SettingsPatch.parse({ warningsKept: null })).toEqual({ warningsKept: null });
+		const after = patchSettings({ warningsKept: [kept(1), kept(2)] }, { warningsKept: [kept(2)] }) as { warningsKept: unknown };
+		expect(after.warningsKept).toEqual([kept(2)]);
+	});
+	it('refuses a malformed id, a note too long, a missing note, an id twice and anything extra', () => {
+		expect(messages({ warningsKept: [{ id: 'run:has space', note: '' }] })).toEqual(['a kept warning is named by its id, run:… or problem:…, with no spaces']);
+		expect(messages({ warningsKept: [{ id: 'other:x', note: '' }] })).toEqual(['a kept warning is named by its id, run:… or problem:…, with no spaces']);
+		expect(messages({ warningsKept: [{ id: 'run:x', note: 'n'.repeat(WARNING_KEPT_NOTE_MAX + 1) }] })).toEqual([`a kept warning’s note: at most ${WARNING_KEPT_NOTE_MAX} characters`]);
+		expect(messages({ warningsKept: [{ id: 'run:x' }] }).length).toBe(1);
+		expect(messages({ warningsKept: [kept(1), kept(1)] })).toEqual(['a kept warning is listed twice']);
+		expect(messages({ warningsKept: [{ ...kept(1), extra: 1 }] }).length).toBe(1);
+	});
+	it('refuses, never cuts, past WARNINGS_KEPT_MAX; positive control: at the cap it takes them', () => {
+		const full = Array.from({ length: WARNINGS_KEPT_MAX }, (_, i) => kept(i));
+		expect(SettingsPatch.parse({ warningsKept: full }).warningsKept).toHaveLength(WARNINGS_KEPT_MAX);
+		expect(messages({ warningsKept: [...full, kept(WARNINGS_KEPT_MAX)] })).toEqual([`kept warnings: at most ${WARNINGS_KEPT_MAX}; reopen some before keeping more`]);
 	});
 });

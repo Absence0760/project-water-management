@@ -49,6 +49,7 @@ import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
 import { resolveChecksKept, resolveFlowMissing, withRecordPeriods } from './recordPeriods';
+import { resolveWarningsKept } from './checkItems';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
 import { resolveEwrSplit } from './network/ewrSplit';
 import { resolveEwrDailySource } from './reserve/dailySource';
@@ -831,6 +832,12 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		const kept = resolveChecksKept(raw.checksKept, warnings);
 		if (kept) s.checksKept = kept;
 		else delete s.checksKept;
+	}
+	// The kept run warnings and problems (issue #611): the Warnings page's list, never read by the model.
+	if (raw?.warningsKept != null) {
+		const kept = resolveWarningsKept(raw.warningsKept, warnings);
+		if (kept) s.warningsKept = kept;
+		else delete s.warningsKept;
 	}
 	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): off unless a record has a spec.
 	s.flowGapFill = resolveFlowGapFill(raw?.flowGapFill, warnings);

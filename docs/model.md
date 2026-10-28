@@ -9657,6 +9657,13 @@ applies, in this order:
   `FitRecord.checksKept`); a change to those since is "quality flags
   changed since the fit", while keeping an item on any other record leaves
   the fit current.
+- **Kept run warnings and problems** (`settings.warningsKept`, issue #611):
+  the Warnings page's run warnings and problems from elsewhere that the user
+  accepted, `[{ id, note }]` (`checkItems.ts` `WarningKept`,
+  `resolveWarningsKept`; at most 300, ids `run:…` or `problem:…`). The engine
+  only normalises it (`mergeSettings`); no run reads it, so it needs no
+  `ENGINE_VERSION` bump, and comparing two runs' inputs counts it ("Kept
+  warnings: 2 warnings kept").
 - **Human use dominant** is defined and never set. Deriving it from the run
   would need the modelled abstraction, which depends on the parameters being
   fitted, so the flag would move during the fit; the durable form is a

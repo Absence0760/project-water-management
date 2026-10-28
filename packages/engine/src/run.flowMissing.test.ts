@@ -266,3 +266,13 @@ describe('resolveFlowMissing', () => {
 		expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
 	});
 });
+
+describe('settings.warningsKept (the Warnings page’s kept run warnings and problems): no run effect', () => {
+	it('changes nothing a run reports', () => {
+		const a = runModelChecked(input());
+		const b = runModelChecked(input({ warningsKept: [{ id: 'run:calibration.noObserved:0', note: 'No gauge yet' }] }));
+		expect(b.summary.catchment).toEqual(a.summary.catchment);
+		expect(b.summary.calibration).toEqual(a.summary.calibration);
+		expect(b.summary.warnings).toEqual(a.summary.warnings);
+	});
+});

@@ -1889,5 +1889,19 @@ describe('diffInputs: one record’s missing periods and the kept data checks (i
 		expect(texts(b, c)).toEqual(['Kept data checks: 1 check kept, 1 check no longer kept']);
 		expect(new Map(settingsChangePaths()).get('Kept data checks')).toBe('checksKept');
 	});
+
+	it('counts the kept run warnings and problems (issue #611), never a bare "Setting changed"', () => {
+		const a = withIds();
+		const b = withIds();
+		b.settings.warningsKept = [
+			{ id: 'run:rain.chirps.corrected:abc123', note: 'Expected: the gauge has gaps' },
+			{ id: 'problem:data:s1', note: '' }
+		];
+		expect(texts(a, b)).toEqual(['Kept warnings: 2 warnings kept']);
+		const c = structuredClone(b);
+		c.settings.warningsKept = [{ id: 'run:rain.chirps.corrected:abc123', note: 'Edited note' }];
+		expect(texts(b, c)).toEqual(['Kept warnings: 1 warning no longer kept']);
+		expect(new Map(settingsChangePaths()).get('Kept warnings')).toBe('warningsKept');
+	});
 });
 
