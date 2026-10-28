@@ -158,7 +158,11 @@ export const CODE_FIXES: Record<WarningCode, Fix> = {
 	'calibration.flowKindMissing': { how: 'The record the calibration compares with isn’t loaded. Choose another, or load it.', action: CAL_WINDOW },
 	'calibration.defaultGaugePick': { how: 'No record was chosen, so the run picked one. Choose the record to compare with.', action: CAL_WINDOW },
 	'calibration.site.unusable': { how: 'The gauge calibration is scored at can’t be used. Choose another site or the outlet.', action: CAL_WINDOW },
-	'calibration.site.noRecord': { how: 'The gauge calibration is scored at has no flow record. Attach one on Data, or choose the outlet.', action: CAL_WINDOW }
+	'calibration.site.noRecord': { how: 'The gauge calibration is scored at has no flow record. Attach one on Data, or choose the outlet.', action: CAL_WINDOW },
+	'map.areaFromEarlierOutline': {
+		how: 'The unit’s polygon on the map was redrawn after its area was taken from it. Use the new area from the Map’s Checks, or keep the old one if the redraw was a mistake.',
+		action: { kind: 'link', label: 'Go to the Map’s Checks', href: '?tab=map&checks=1' }
+	}
 };
 
 /** The fix of a coded warning; null for a code this client doesn't know (a newer engine). */

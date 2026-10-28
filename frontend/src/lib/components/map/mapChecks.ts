@@ -2,6 +2,11 @@
 // docs/maps.md § Checks): units with no parcel, features outside the
 // boundary, overlapping parcels, the units' total area against the
 // boundary's, a typed area far from its parcel's, and gauges off every river.
+// Since issue #646 item 4 (the hydrologist's review F6–F9), also what a map
+// edit left behind: a unit's area from an earlier outline (with Use), values
+// read over an outline redrawn since (stale.ts), the rest of the catchment's
+// area from the boundary as it was, a dam inside another unit's boundary
+// than its own, and a gauge moved since it became its node.
 // Warnings only: nothing here blocks a save or a run. Pure (no DOM, no
 // MapLibre) and dependency-free, so vitest covers every check
 // (mapChecks.test.ts) and it ships in the tab's chunk.
@@ -10,9 +15,11 @@
 // the features' mean latitude (accurate to well under 1 % over a catchment),
 // and the distances people read are haversine. Areas come from the
 // features' `areaM2` (the server's geodesic area) and the units' areaKm2.
-import type { MapFeature, MapGeometry, MapNodeArea, MapPosition } from '#lib/api/types.js';
+import type { MapAcceptances, MapFeature, MapGeometry, MapNodeArea, MapPosition } from '#lib/api/types.js';
 import { fmtNum } from '#lib/format/number.js';
-import { isPolygon, KIND_LABEL } from './mapData';
+import { alreadyAccepted, isPolygon, KIND_LABEL } from './mapData';
+import { takenAreaM2 } from './areaBasis';
+import { STALE_LINK, staleValues, unitPolygonOf, type RestOfCatchment } from './stale';
 
 /** One warning: what it says, and the features and nodes it is about. */
 export interface MapCheck {
@@ -21,6 +28,18 @@ export interface MapCheck {
 	text: string;
 	featureIds: string[];
 	nodeIds: string[];
+	/** Use the polygon's area now for the unit (the Map's Use, POST …/area-from-map): an earlier outline's check. */
+	use?: { nodeId: string; featureId: string; km2: number };
+	/** Where the value is proposed again (a `?tab=` link), and the link's words. */
+	link?: { href: string; text: string };
+}
+
+/** What the checks of a map edit's leftovers read beside the features and nodes (all optional: without them those checks are skipped). */
+export interface MapCheckInputs {
+	/** GET …/map/features' `accepted` (273): what each value from the map was read over. */
+	accepted?: MapAcceptances | null;
+	/** The rest of the catchment Start made beside units' boundaries (stale.ts restOfCatchment). */
+	rest?: RestOfCatchment | null;
 }
 
 /** The units' total area may differ from the boundary's by this fraction before it's flagged. */
@@ -29,6 +48,10 @@ export const UNITS_VS_BOUNDARY_TOLERANCE = 0.1;
 export const TYPED_VS_PARCEL_TOLERANCE = 0.1;
 /** A gauge further than this from every river line is flagged (m). */
 export const GAUGE_RIVER_DISTANCE_M = 100;
+/** A gauge moved further than this since it was linked to its node is flagged (m): a nudge onto the river line isn't. */
+export const GAUGE_MOVED_M = 50;
+/** The rest of the catchment's area and the boundary less the units' may differ by this (km²) before it's flagged. */
+export const REST_SLACK_KM2 = 0.001;
 /** A vertex this close to the boundary's edge counts as on it, not outside (m). */
 export const OUTSIDE_TOLERANCE_M = 10;
 /** Parcels that cross or reach into each other by no more than this don't overlap (m): shared edges, rounding. */
@@ -38,6 +61,7 @@ export interface MapCheckOptions {
 	unitsVsBoundaryTolerance?: number;
 	typedVsParcelTolerance?: number;
 	gaugeRiverDistanceM?: number;
+	gaugeMovedM?: number;
 	outsideToleranceM?: number;
 	overlapToleranceM?: number;
 }
@@ -230,6 +254,8 @@ function overlaps(a: Poly[], b: Poly[], tol: number): boolean {
 
 const nameOf = (f: MapFeature) => f.name || KIND_LABEL[f.kind];
 const km2 = (x: number) => `${fmtNum(x, 1)} km²`;
+/** Two decimals, where the difference is a unit's own area (12.00 km² against 14.10 km²). */
+const km2x = (x: number) => `${fmtNum(x, 2)} km²`;
 const pct = (fraction: number) => `${fmtNum(Math.abs(fraction) * 100, 0)} %`;
 /** "12 % less than" / "8 % more than" for a / b − 1. */
 const relative = (a: number, b: number) => `${pct(a / b - 1)} ${a < b ? 'less' : 'more'} than`;
@@ -239,10 +265,11 @@ const distanceText = (m: number) => (m < 999.5 ? `${fmtNum(m, 0)} m` : `${fmtNum
  * Every consistency warning for a project's map, in the order of the checks
  * (docs/maps.md § Checks). An empty list means nothing to look at.
  */
-export function mapChecks(features: readonly MapFeature[], nodes: readonly MapNodeArea[], opts: MapCheckOptions = {}): MapCheck[] {
+export function mapChecks(features: readonly MapFeature[], nodes: readonly MapNodeArea[], opts: MapCheckOptions = {}, inputs: MapCheckInputs = {}): MapCheck[] {
 	const unitsTol = opts.unitsVsBoundaryTolerance ?? UNITS_VS_BOUNDARY_TOLERANCE;
 	const typedTol = opts.typedVsParcelTolerance ?? TYPED_VS_PARCEL_TOLERANCE;
 	const gaugeM = opts.gaugeRiverDistanceM ?? GAUGE_RIVER_DISTANCE_M;
+	const movedM = opts.gaugeMovedM ?? GAUGE_MOVED_M;
 	const outsideTol = opts.outsideToleranceM ?? OUTSIDE_TOLERANCE_M;
 	const overlapTol = opts.overlapToleranceM ?? OVERLAP_TOLERANCE_M;
 
@@ -351,6 +378,94 @@ export function mapChecks(features: readonly MapFeature[], nodes: readonly MapNo
 				nodeIds: g.nodeId ? [g.nodeId] : []
 			});
 		}
+	}
+
+	// 7. A unit's area from an earlier outline of its polygon (F6): the model still runs the area it took, with Use for the one now.
+	for (const n of units) {
+		if (n.areaSource !== 'map' || !n.areaFeatureId) continue;
+		const f = features.find((x) => x.id === n.areaFeatureId);
+		if (!f || f.areaM2 === null || f.areaM2 <= 0 || alreadyAccepted(n, f)) continue;
+		const now = takenAreaM2(f.areaM2, f.nonContributingM2, n.areaBasis === 'effective' && f.nonContributingM2 !== null ? 'effective' : 'gross') / 1e6;
+		if (!(now > 0)) continue;
+		checks.push({
+			id: `earlier-outline:${n.id}`,
+			text: `${n.name}'s area is from an earlier outline of ${nameOf(f)}: ${km2x(n.areaKm2)} in the model, ${km2x(now)} now.`,
+			featureIds: [f.id],
+			nodeIds: [n.id],
+			use: { nodeId: n.id, featureId: f.id, km2: now }
+		});
+	}
+
+	// 8. Values read over an outline redrawn since (F7, F8): a unit's MAP, rain and land cover, and the evaporation.
+	const unitName = new Map(units.map((n) => [n.id, n.name]));
+	for (const v of staleValues(features, nodes, inputs.accepted)) {
+		const who = v.nodeId ? (unitName.get(v.nodeId) ?? 'A unit') : '';
+		const text =
+			v.kind === 'unit-map'
+				? `${who}'s MAP is from an earlier outline of its polygon: propose it again.`
+				: v.kind === 'unit-rain'
+					? `${who}'s rain feed reads the cells of an earlier outline of its polygon: propose its cells again.`
+					: v.kind === 'land-cover'
+						? `${who}'s planted area of ${v.what} is from land cover over an earlier outline of its polygon: propose it again.`
+						: `The evaporation from the map (${v.what}) was summarised over an earlier catchment boundary: propose it again.`;
+		checks.push({
+			id: `stale-${v.kind}:${v.nodeId ?? 'catchment'}${v.what && v.kind === 'land-cover' ? `:${v.what}` : v.kind === 'evaporation' ? `:${v.what}` : ''}`,
+			text,
+			featureIds: v.featureId ? [v.featureId] : [],
+			nodeIds: v.nodeId ? [v.nodeId] : [],
+			link: STALE_LINK[v.kind]
+		});
+	}
+
+	// 9. The rest of the catchment's area, the boundary less the units as the boundary was (F8): after a boundary edit, the figure now.
+	const rest = inputs.rest ? units.find((n) => n.id === inputs.rest!.nodeId) : undefined;
+	if (inputs.rest && rest && boundaryKm2 > 0 && Math.abs(rest.areaKm2 - inputs.rest.takenKm2) <= REST_SLACK_KM2 && Math.abs(boundaryKm2 - inputs.rest.boundaryKm2Then) > REST_SLACK_KM2) {
+		const nowKm2 = boundaryKm2 - units.filter((n) => n.id !== rest.id).reduce((s, n) => s + n.areaKm2, 0);
+		if (nowKm2 > 0 && Math.abs(nowKm2 - rest.areaKm2) > REST_SLACK_KM2) {
+			checks.push({
+				id: `rest-area:${rest.id}`,
+				text: `${rest.name}'s area, ${km2x(rest.areaKm2)}, is the catchment less the units from the boundary as it was (${km2x(inputs.rest.boundaryKm2Then)}). With the boundary now (${km2x(boundaryKm2)}) it is ${km2x(nowKm2)}: type it on the Network if that is still the rest.`,
+				featureIds: boundaries.map((f) => f.id),
+				nodeIds: [rest.id],
+				link: { href: '?tab=network', text: 'Network' }
+			});
+		}
+	}
+
+	// 10. A dam linked to one unit that lies inside another's boundary (F9): links never move with the map.
+	const outlines = units.flatMap((n) => {
+		const f = unitPolygonOf(n, features);
+		return f ? [{ n, parts: polysOf(f) }] : [];
+	});
+	for (const d of features) {
+		if (d.kind !== 'dam' || !d.nodeId) continue;
+		const at = proj.to(d.geometry.type === 'Point' ? d.geometry.coordinates : d.center);
+		const own = outlines.find((o) => o.n.id === d.nodeId);
+		if (own && own.parts.some((poly) => inPoly(at, poly))) continue;
+		const inside = outlines.find((o) => o.n.id !== d.nodeId && o.parts.some((poly) => strictlyIn(at, poly, outsideTol)));
+		if (!inside) continue;
+		const linked = nodes.find((n) => n.id === d.nodeId)?.name ?? 'another unit';
+		checks.push({
+			id: `dam-in-other-unit:${d.id}`,
+			text: `Dam ${nameOf(d)} is linked to ${linked} but lies inside ${inside.n.name}'s boundary.`,
+			featureIds: [d.id],
+			nodeIds: [d.nodeId, inside.n.id]
+		});
+	}
+
+	// 11. A gauge moved since it became its node (F9): where it stood then is recorded from 273 on.
+	for (const g of features) {
+		if (g.kind !== 'gauge' || !g.nodeId || !g.linkPoint || g.geometry.type !== 'Point') continue;
+		const moved = haversineM(g.linkPoint, g.geometry.coordinates);
+		if (moved <= movedM + EPS) continue;
+		const node = nodes.find((n) => n.id === g.nodeId)?.name ?? g.nodeName ?? 'its node';
+		checks.push({
+			id: `gauge-moved:${g.id}`,
+			text: `Gauge ${nameOf(g)} moved ${distanceText(moved)} since it became node ${node}: check what drains into ${node} on the Network.`,
+			featureIds: [g.id],
+			nodeIds: [g.nodeId],
+			link: { href: '?tab=network', text: 'Network' }
+		});
 	}
 
 	return checks;

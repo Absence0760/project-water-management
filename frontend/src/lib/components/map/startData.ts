@@ -11,6 +11,13 @@ import type { ProjectModel, ProjectSettings } from '@water-management/engine';
 import type { MapFeature } from '#lib/api/types.js';
 import { fmtNum } from '#lib/format/number.js';
 import type { RainReads } from './mapSetup';
+import type { StaleValue } from './stale';
+
+/**
+ * Rain from the boundary reads at most 100 CHIRPS cells in 25 rows (backend feeds/config.ts BBOX_MAX_CELLS,
+ * BBOX_MAX_ROWS), about this many km² at South African latitudes (docs/maps.md § Rain from the boundary, Limits).
+ */
+export const BOUNDARY_RAIN_MAX_KM2 = 2500;
 
 export type DataItemId = 'network' | 'method' | 'rain' | 'catchment-map' | 'unit-rain' | 'unit-map' | 'evaporation' | 'wr2012' | 'flow' | 'dams' | 'crops' | 'run';
 /** `done`; `partial` = started, or done for some units; `todo`; `unknown` = still loading. */
@@ -58,9 +65,15 @@ export interface DataInput {
 	runs: readonly { createdAt: string }[] | null;
 	/** Feeds are set up by owners (data_feed's RLS): an editor's lines say so. */
 	owner: boolean;
+	/** The boundary's area, m² (null without one): past BOUNDARY_RAIN_MAX_KM2 the rain item says it is too large for one feed. */
+	boundaryAreaM2?: number | null;
+	/** Values read over an outline redrawn since (stale.ts staleValues, issue #646 F7/F8): their items read Started until proposed again. */
+	stale?: readonly StaleValue[];
 }
 
 const OBSERVED = ['flow_observed_m3s', 'flow_logger_m3s'];
+/** The daily A-pan series (an A-pan record read instead of the monthly row). */
+const DAILY_APAN = 'evap_apan_mm';
 const plural = (n: number, one: string, many = `${one}s`) => `${fmtNum(n)} ${n === 1 ? one : many}`;
 /** "2 of 3 units": done for some. */
 const someOf = (k: number, m: number) => `${fmtNum(k)} of ${plural(m, 'unit')}`;
@@ -80,7 +93,11 @@ function perUnit(k: number, m: number): DataStatus {
 export function startDataItems(s: DataInput): DataItem[] {
 	const units = s.model.nodes.filter((n) => n.kind === 'farm');
 	const land = units.filter((n) => n.areaKm2 > 0);
-	const ownerNote = s.owner ? '' : ' An owner of the project sets up the feeds.';
+	// Feeds are an owner's to attach (issue #646 F14): an editor who started the model is told so up front.
+	const ownerNote = s.owner ? '' : ' An owner of the project attaches it.';
+	const stale = s.stale ?? [];
+	const staleOf = (kind: StaleValue['kind']) => stale.filter((v) => v.kind === kind);
+	const unitNames = (vs: readonly StaleValue[]) => [...new Set(vs.map((v) => s.model.nodes.find((n) => n.id === v.nodeId)?.name ?? 'a unit'))].join(', ');
 	const items: DataItem[] = [];
 
 	// The units' areas: anything Apply left unticked is 0 until typed on the Network.
@@ -113,6 +130,12 @@ export function startDataItems(s: DataInput): DataItem[] {
 	});
 
 	const rainStatus: DataStatus = !s.hasBoundary ? 'todo' : s.rain === 'current' ? 'done' : s.rain === 'changed' ? 'partial' : s.rain === 'none' ? 'todo' : 'unknown';
+	// Past what one feed reads, say so before the editor goes to propose it (F14): Start takes catchments ~100 km across.
+	const boundaryKm2 = (s.boundaryAreaM2 ?? 0) / 1e6;
+	const tooLarge =
+		s.hasBoundary && boundaryKm2 > BOUNDARY_RAIN_MAX_KM2 && s.rain !== 'current'
+			? ` The boundary is ${fmtNum(boundaryKm2, 0)} km², more than the about ${fmtNum(BOUNDARY_RAIN_MAX_KM2, 0)} km² one rain feed reads (100 cells), so it will be refused: attach rain for each unit, or feeds for parts of the catchment.`
+			: '';
 	items.push({
 		id: 'rain',
 		title: 'Rain from the boundary',
@@ -122,9 +145,9 @@ export function startDataItems(s: DataInput): DataItem[] {
 			: s.rain === 'current'
 				? 'A CHIRPS feed reads the cells inside the boundary.'
 				: s.rain === 'changed'
-					? 'The boundary changed since the rain feed took its cells: propose them again.'
+					? `The boundary changed since the rain feed took its cells: propose them again.${tooLarge}${ownerNote}`
 					: s.rain === 'none'
-						? `No rain feed reads the boundary yet: the CHIRPS feed over its cells is proposed.${ownerNote}`
+						? `No rain feed reads the boundary yet: the CHIRPS feed over its cells is proposed.${tooLarge}${ownerNote}`
 						: 'Reading the feeds…',
 		href: '?tab=series&rain=boundary#data-feeds',
 		where: 'Data → Data feeds',
@@ -151,15 +174,18 @@ export function startDataItems(s: DataInput): DataItem[] {
 
 	const fed = s.feeds ? new Set(s.feeds.filter((f) => f.source === 'chirps' && f.config.unit).map((f) => f.config.unit!.nodeId)) : null;
 	const withRain = fed ? land.filter((n) => fed.has(n.id)).length : 0;
+	const staleRain = staleOf('unit-rain');
 	items.push({
 		id: 'unit-rain',
 		title: 'Rain for each unit',
-		status: fed ? perUnit(withRain, land.length) : 'unknown',
+		status: !fed ? 'unknown' : staleRain.length && perUnit(withRain, land.length) === 'done' ? 'partial' : perUnit(withRain, land.length),
 		detail: !fed
 			? 'Reading the feeds…'
 			: !land.length
 				? 'No unit has an area yet, so none has rain of its own to read.'
-				: withRain === land.length
+				: staleRain.length
+					? `Changed since: ${unitNames(staleRain)} ${staleRain.length === 1 ? 'reads' : 'read'} the cells of an earlier outline of its boundary. Propose the cells again.${ownerNote}`
+					: withRain === land.length
 					? 'Every unit has its own CHIRPS feed, over its boundary’s cells.'
 					: withRain
 						? `${someOf(withRain, land.length)} have their own CHIRPS feed.${ownerNote}`
@@ -168,13 +194,16 @@ export function startDataItems(s: DataInput): DataItem[] {
 		where: 'Data → Data feeds'
 	});
 
+	const staleMap = staleOf('unit-map');
 	items.push({
 		id: 'unit-map',
 		title: 'MAP for each unit',
-		status: perUnit(withMap.length, land.length),
+		status: staleMap.length && perUnit(withMap.length, land.length) === 'done' ? 'partial' : perUnit(withMap.length, land.length),
 		detail: !land.length
 			? 'No unit has an area yet.'
-			: withMap.length === land.length
+			: staleMap.length
+				? `Changed since: the MAP of ${unitNames(staleMap)} is from an earlier outline of ${staleMap.length === 1 ? 'its' : 'their'} boundary. Propose it again.`
+				: withMap.length === land.length
 				? 'Every unit has its MAP, which sets its rain level and its share of the EWR.'
 				: withMap.length
 					? `${someOf(withMap.length, land.length)} have a MAP. The MAP grid proposes each unit’s over its boundary.`
@@ -183,16 +212,22 @@ export function startDataItems(s: DataInput): DataItem[] {
 		where: 'Model settings → MAP from the grid'
 	});
 
-	const apan = !!set && set.apanMm.some((v) => v > 0);
+	// The A-pan (issue #646 item 5): the monthly row, or a daily A-pan series read instead. Without either, crop demand and
+	// dam evaporation are zero, and the run says nothing more about it.
+	const monthlyApan = !!set && set.apanMm.some((v) => v > 0);
+	const dailyApan = s.series ? s.series.some((x) => x.kind === DAILY_APAN && x.length > 0) : null;
+	const apan = monthlyApan || dailyApan === true;
+	const staleEvap = staleOf('evaporation');
+	const evapNote = staleEvap.length ? ` Changed since: the evaporation from the map (${staleEvap.map((v) => v.what).join(', ')}) was summarised over an earlier boundary. Propose it again.` : '';
 	items.push({
 		id: 'evaporation',
 		title: 'Evaporation',
-		status: !set ? 'unknown' : apan ? 'done' : 'todo',
-		detail: !set
+		status: !set || (!monthlyApan && dailyApan === null) ? 'unknown' : apan ? (staleEvap.length ? 'partial' : 'done') : 'todo',
+		detail: !set || (!monthlyApan && dailyApan === null)
 			? 'Reading the settings…'
 			: apan
-				? `The monthly A-pan is set${set.pe.kind === 'monthly' ? ', and an ET₀ row feeds the runoff model' : ''}.`
-				: 'No A-pan yet: the dams and crops lose nothing. Evaporation from the map proposes it; an ET₀ row from the map feeds the runoff model only.',
+				? `${monthlyApan ? 'The monthly A-pan is set' : 'A daily A-pan series is read'}${set.pe.kind === 'monthly' ? ', and an ET₀ row feeds the runoff model' : ''}.${evapNote}`
+				: `A-pan not set: crop demand and dam evaporation are zero. Type the monthly A-pan on Demand, or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only.${evapNote}`,
 		href: '?tab=settings#set-demand',
 		where: 'Model settings → Demand',
 		more: { href: '?tab=calibration#set-evaporation', text: 'Evaporation from the map' }
@@ -245,13 +280,16 @@ export function startDataItems(s: DataInput): DataItem[] {
 
 	const planted = new Set(s.model.cropAreas.filter((c) => c.areaM2 > 0).map((c) => c.nodeId));
 	const withCrops = land.filter((n) => planted.has(n.id)).length;
+	const staleCrops = staleOf('land-cover');
 	items.push({
 		id: 'crops',
 		title: 'Cultivated area',
-		status: perUnit(withCrops, land.length),
+		status: staleCrops.length && perUnit(withCrops, land.length) === 'done' ? 'partial' : perUnit(withCrops, land.length),
 		detail: !land.length
 			? 'No unit has an area yet.'
-			: withCrops === land.length
+			: staleCrops.length
+				? `Changed since: the planted area from land cover of ${unitNames(staleCrops)} was summed over an earlier outline. Propose it again in the unit’s drawer.`
+				: withCrops === land.length
 				? 'Every unit has a planted area.'
 				: `${withCrops ? `${someOf(withCrops, land.length)} have a planted area` : 'No unit has a planted area yet'}: land cover proposes each unit’s, in its drawer on Crops. Skip it if nothing is irrigated.`,
 		href: '?tab=crops',

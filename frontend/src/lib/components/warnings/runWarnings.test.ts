@@ -7,6 +7,8 @@ describe('settingLink', () => {
 		expect(settingLink('rain.zeroRun.missing')).toEqual({ href: '?tab=settings#set-rain', label: 'Go to Rain gaps' });
 		expect(settingLink('calibration.noObserved')).toEqual({ href: '?tab=calibration#set-record', label: 'Go to Calibration record' });
 		expect(settingLink('rain.unit.catchmentFallback')).toEqual({ href: '?tab=settings#set-unit-rain', label: 'Go to Unit rain' });
+		// A map warning is fixed on the Map (issue #646 F6), not on Data.
+		expect(settingLink('map.areaFromEarlierOutline')).toEqual({ href: '?tab=map&checks=1', label: 'Go to the Map' });
 		expect(settingLink('rain.none')).toEqual({ href: '?tab=series', label: 'Go to Data' });
 	});
 	it('names a real panel for every code in the catalogue', () => {

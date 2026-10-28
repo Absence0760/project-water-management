@@ -80,7 +80,8 @@
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import FeatureList from './FeatureList.svelte';
 	import MapChecks from './MapChecks.svelte';
-	import { mapChecks } from './mapChecks';
+	import { mapChecks, type MapCheck, type MapCheckInputs } from './mapChecks';
+	import { restOfCatchment, staleValues } from './stale';
 	import { alreadyAccepted, areaTargets, areaText, DAM_POSITION_LABEL, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea, takesDamPosition } from './mapData';
 	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
@@ -251,10 +252,23 @@
 	// Divide a model that has nodes (#326 C3's follow-up): the same state, its own sheet.
 	const divideSheet = overlay('divide', '1', () => canEdit && (!startLoaded || !!startInfo));
 	// The consistency checks (#326 A4): the side column's Checks tab. `checks=1` (the sheet they were in until 2026-10-02) opens the tab.
-	const checks = $derived(mapChecks(features, nodes));
+	// The checks are worked out below, beside the Start state they read (`checks`).
 	async function pickFromCheck(id: string) {
 		await select(id);
 		sideTab = 'details';
+	}
+	/** A Use that failed, said in the Checks tab (acceptArea says it on the feature's row). */
+	let checkError = $state<string | null>(null);
+	/** A unit's area from an earlier outline (F6): Use the polygon's area now, on the basis the unit took, through the Map's Use. */
+	async function useFromCheck(u: NonNullable<MapCheck['use']>) {
+		const f = features.find((x) => x.id === u.featureId);
+		const n = farms.find((x) => x.id === u.nodeId);
+		if (!f || !n) return;
+		areaTarget[f.id] = n.id;
+		areaBasis[f.id] = n.areaBasis === 'effective' && offersEffective(f.areaM2, f.nonContributingM2) ? 'effective' : 'gross';
+		checkError = null;
+		await acceptArea(f);
+		if (rowError?.id === f.id) checkError = rowError.text;
 	}
 
 	// --- the side column: one thing at a time (Details · Features · Checks, and on a wide page Layers · Key), the Sub-catchments panel taking it over ---
@@ -411,6 +425,10 @@
 	// --- start the model from the map (#326 C3): editors, while the model is empty (or just started from it) ---
 	let startInfo = $state<StartState | null>(null);
 	let startLoaded = $state(false);
+	// The consistency checks (#326 A4). Since issue #646 item 4, also what a map edit left behind (F6–F9): the
+	// acceptances' polygons (GET …/map/features `accepted`) and Start's rest of the catchment.
+	const checkInputs = $derived<MapCheckInputs>({ accepted: data?.accepted ?? null, rest: restOfCatchment(startInfo?.proposals) });
+	const checks = $derived(mapChecks(features, nodes, {}, checkInputs));
 	async function loadStart() {
 		if (!canEdit) return;
 		try {
@@ -488,7 +506,10 @@
 					hasBoundary: !!boundary,
 					rain: boundary ? rainReads : null,
 					runs,
-					owner: role === 'owner'
+					owner: role === 'owner',
+					boundaryAreaM2: boundary?.areaM2 ?? null,
+					// Values read over an outline redrawn since (issue #646 F7/F8): their items read Started until proposed again.
+					stale: staleValues(features, nodes, data?.accepted)
 				})
 			: null
 	);
@@ -1631,7 +1652,8 @@
 										<span class="muted">The map’s checks found no problems.</span>
 									{/if}
 								</p>
-								{#if checks.length}<MapChecks {features} {nodes} onpick={pickFromCheck} heading={false} />{/if}
+								{#if checkError}<p class="err small" role="alert" data-testid="map-check-error">{checkError}</p>{/if}
+								{#if checks.length}<MapChecks {features} {nodes} inputs={checkInputs} onpick={pickFromCheck} onuse={canEdit ? useFromCheck : undefined} {busy} heading={false} />{/if}
 							</div>
 							{#if panelsInSide}
 								<!-- Layers and Key (until 2026-10-03 boxes over the map); the map's buttons pick these tabs, Escape gives the tab back. -->
@@ -1833,7 +1855,7 @@
 											<strong>{n.name}</strong>: {fmtNum(n.areaKm2, 3)} km² ·
 											{#if n.areaSource === 'map'}
 												<span class="badge">From the map</span>
-												{src ? `“${featureName(src)}”` : 'a feature since deleted'}
+												{src ? `“${featureName(src)}”` : 'a feature since deleted'}{#if src && !alreadyAccepted(n, src)}<span data-testid="map-area-earlier">’s earlier outline (the Checks offer its area now)</span>{/if}
 											{:else}
 												typed
 											{/if}

@@ -291,3 +291,94 @@ describe('gauges not on a river line', () => {
 		expect(GAUGE_RIVER_DISTANCE_M).toBe(100);
 	});
 });
+
+describe('what a map edit left behind (issue #646 F6–F9)', () => {
+	it("flags a unit's area from an earlier outline, with Use for the area now (F6)", () => {
+		const n = unit('a', 'Upper', 12, { areaSource: 'map', areaBasis: 'gross' });
+		const p = parcel(n, 'Upper parcel', 0, 0, 3, 4.7);
+		n.areaFeatureId = p.id;
+		const checks = mapChecks([p], [n]).filter((c) => c.id.startsWith('earlier-outline'));
+		expect(checks).toEqual([
+			{
+				id: 'earlier-outline:a',
+				text: "Upper's area is from an earlier outline of Upper parcel: 12.00 km² in the model, 14.10 km² now.",
+				featureIds: [p.id],
+				nodeIds: ['a'],
+				use: { nodeId: 'a', featureId: p.id, km2: expect.closeTo(14.1, 9) }
+			}
+		]);
+		// Used: the model holds the outline's area.
+		expect(kinds(mapChecks([p], [{ ...n, areaKm2: 14.1 }]))).not.toContain('earlier-outline');
+		// A typed area is the typed check's (5), never this one.
+		expect(kinds(mapChecks([p], [{ ...n, areaSource: 'typed' }]))).not.toContain('earlier-outline');
+	});
+
+	it('takes the effective area for a unit that took it', () => {
+		const n = unit('a', 'Upper', 10, { areaSource: 'map', areaBasis: 'effective' });
+		const p = parcel(n, 'Upper parcel', 0, 0, 3, 4, { nonContributingM2: 1e6 });
+		n.areaFeatureId = p.id;
+		const c = mapChecks([p], [n]).find((x) => x.id === 'earlier-outline:a')!;
+		expect(c.use!.km2).toBeCloseTo(11, 9);
+	});
+
+	it('lists values read over an outline redrawn since, each linking where it is proposed again (F7, F8)', () => {
+		const n = unit('a', 'Upper', 4, { areaSource: 'map' });
+		const p = parcel(n, 'Upper parcel', 0, 0, 2, 2, { updatedAt: '2026-10-09T00:00:00.000Z' });
+		n.areaFeatureId = p.id;
+		const b = boundary(-1, 1, 6, 6);
+		const was = { featureId: p.id, updatedAt: '2026-10-01T00:00:00Z', areaM2: 3e6 };
+		const accepted = {
+			unitMap: [{ nodeId: 'a', polygon: was }],
+			unitRain: [{ nodeId: 'a', featureId: p.id, updatedAt: was.updatedAt, areaKm2: 3 }],
+			landCover: [{ nodeId: 'a', cropId: 'c', cropName: 'Citrus', polygons: [was] }],
+			evaporation: [{ target: 'pe' as const, boundary: { featureId: b.id, updatedAt: '2026-09-01T00:00:00Z', areaM2: 30e6 } }]
+		};
+		const checks = mapChecks([p, b], [n], {}, { accepted }).filter((c) => c.id.startsWith('stale-'));
+		expect(checks.map((c) => [c.id, c.text, c.link?.href])).toEqual([
+			['stale-unit-map:a', "Upper's MAP is from an earlier outline of its polygon: propose it again.", '?tab=settings#set-unit-map'],
+			['stale-unit-rain:a', "Upper's rain feed reads the cells of an earlier outline of its polygon: propose its cells again.", '?tab=series&rain=units#data-feeds'],
+			['stale-land-cover:a:Citrus', "Upper's planted area of Citrus is from land cover over an earlier outline of its polygon: propose it again.", '?tab=crops'],
+			['stale-evaporation:catchment:GR4J’s PE', 'The evaporation from the map (GR4J’s PE) was summarised over an earlier catchment boundary: propose it again.', '?tab=calibration#set-evaporation']
+		]);
+		expect(checks[0]!.featureIds).toEqual([p.id]);
+		expect(mapChecks([p, b], [n]).some((c) => c.id.startsWith('stale-'))).toBe(false);
+	});
+
+	it("flags the rest of the catchment's area from the boundary as it was, with the figure now (F8)", () => {
+		const a = unit('a', 'Upper', 20);
+		const r = unit('r', 'Rest of the catchment', 16);
+		// The boundary was 36 km² at the start (36 − 20 = 16); redrawn to 42.
+		const b = boundary(0, 0, 6, 7);
+		const rest = { nodeId: 'r', takenKm2: 16, boundaryKm2Then: 36 };
+		const c = mapChecks([b], [a, r], {}, { rest }).find((x) => x.id === 'rest-area:r')!;
+		expect(c.text).toBe("Rest of the catchment's area, 16.00 km², is the catchment less the units from the boundary as it was (36.00 km²). With the boundary now (42.00 km²) it is 22.00 km²: type it on the Network if that is still the rest.");
+		expect(c.link).toEqual({ href: '?tab=network', text: 'Network' });
+		// Retyped since, or the boundary as it was: nothing to say.
+		expect(kinds(mapChecks([b], [a, { ...r, areaKm2: 22 }], {}, { rest }))).not.toContain('rest-area');
+		expect(kinds(mapChecks([boundary(0, 0, 6, 6)], [a, r], {}, { rest }))).not.toContain('rest-area');
+	});
+
+	it('flags a dam linked to one unit that lies inside another unit’s boundary (F9)', () => {
+		const a = unit('a', 'Upper', 4);
+		const b2 = unit('b', 'Lower', 4);
+		const pa = parcel(a, 'Upper parcel', 0, 0, 2, 2);
+		const pb = parcel(b2, 'Lower parcel', 3, 0, 2, 2);
+		const dam = point('dam', 'Klein dam', [4, -1], { nodeId: 'a' });
+		const checks = mapChecks([pa, pb, dam], [a, b2]).filter((c) => c.id.startsWith('dam-in-other-unit'));
+		expect(checks).toEqual([{ id: `dam-in-other-unit:${dam.id}`, text: 'Dam Klein dam is linked to Upper but lies inside Lower’s boundary.'.replace('’', "'"), featureIds: [dam.id], nodeIds: ['a', 'b'] }]);
+		// In its own unit's boundary, or in nobody's: quiet.
+		expect(kinds(mapChecks([pa, pb, point('dam', 'Ok dam', [1, -1], { nodeId: 'a' })], [a, b2]))).not.toContain('dam-in-other-unit');
+		expect(kinds(mapChecks([pa, pb, point('dam', 'Far dam', [9, -1], { nodeId: 'a' })], [a, b2]))).not.toContain('dam-in-other-unit');
+	});
+
+	it('flags a gauge moved more than 50 m since it became its node (F9)', () => {
+		const g: MapNodeArea = { id: 'g', name: 'Outflow', kind: 'gauge', areaKm2: 0, areaSource: 'typed', areaBasis: null, areaFeatureId: null };
+		const moved = point('gauge', 'Upper weir', [0.2, 0], { nodeId: 'g', linkPoint: place([0, 0]) });
+		const c = mapChecks([moved], [g]).find((x) => x.id.startsWith('gauge-moved'))!;
+		expect(c.text).toMatch(/^Gauge Upper weir moved 2\d\d m since it became node Outflow: check what drains into Outflow on the Network\.$/);
+		expect(c.nodeIds).toEqual(['g']);
+		expect(kinds(mapChecks([point('gauge', 'Nudged weir', [0.03, 0], { nodeId: 'g', linkPoint: place([0, 0]) })], [g]))).not.toContain('gauge-moved');
+		// Linked before 273 (no point recorded), or not linked: nothing to compare.
+		expect(kinds(mapChecks([point('gauge', 'Old weir', [0.2, 0], { nodeId: 'g', linkPoint: null })], [g]))).not.toContain('gauge-moved');
+	});
+});
