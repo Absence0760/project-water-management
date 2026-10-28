@@ -4076,7 +4076,9 @@ map" card) stays the schematic; this is the geography.
   offers only it and Kind, and the no-run line stays). Each area linked to a
   land unit takes its zone's colour (the Network's, read from the theme), every
   other area "No figure"'s; the Run picker hides, since no run is read. A line
-  says where the zones come from, the legend (**Calibration zone**) lists each
+  says where the zones come from, the legend (**Calibration zone**,
+  `MapZoneKey.svelte`, its own chunk, loaded only while zones show, which keeps
+  the Map tab's chunk under its 60 KB ceiling) lists each
   zone in words with its unit count, the picked feature's card adds
   **Calibration zone** ("Middle weir zone"; "Not linked to a unit"; "In no
   zone (not a land unit)") and Every feature a **Calibration zone** column.

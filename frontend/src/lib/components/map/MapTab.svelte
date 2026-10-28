@@ -1808,7 +1808,7 @@
 							<p class="muted small grid-note">
 									Areas are computed on the server from each polygon (geodesic, WGS84).
 									{#if results.ready}Result and Band: {viewLabel(results.view).toLowerCase()} for what each area stands for, and the EWR at gauges, from the run the map shows.{/if}
-									{#if results.zoneOn}Calibration zone: the zone of the unit each area stands for, from the saved settings.{/if}
+									{#if results.zoneOn}Calibration zone: its unit’s, from the saved settings.{/if}
 								</p>
 							<div class="table-wrap">
 								<table class="data map-table" data-testid="map-feature-table">

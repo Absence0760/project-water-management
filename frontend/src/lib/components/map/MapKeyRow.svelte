@@ -17,8 +17,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { KeyItem } from './mapList';
-	import { ewrLine, legendRows, MEASURE_PARAM, noRunLine, RUN_PARAM, runCaption, runOption, unlinkedAreas, viewLabel, viewOptions, viewParam, zoneLegendRows, type MapView } from './mapResults';
-	import { unitCount } from '#lib/calibration/zoneGroups.js';
+	import { ewrLine, legendRows, MEASURE_PARAM, noRunLine, RUN_PARAM, runCaption, runOption, unlinkedAreas, viewLabel, viewOptions, viewParam, type MapView } from './mapResults';
+	import Lazy from '#lib/components/common/Lazy.svelte';
 	import type { MapResults } from './mapResults.svelte';
 	import type { MapFeature } from '#lib/api/types.js';
 
@@ -38,6 +38,7 @@
 	} = $props();
 
 	const uid = $props.id();
+	const loadZoneKey = () => import('./MapZoneKey.svelte');
 	const go = (href: string) => goto(href, { reset: false });
 	function pickView(view: MapView) {
 		const v = viewParam(view);
@@ -55,7 +56,6 @@
 	const measure = $derived(results.view === 'kind' || results.view === 'zone' ? null : results.view);
 	// Calibration zones (issue #555): offered whenever some apply, with or without a run.
 	const options = $derived(viewOptions(!!results.run, !!results.zones));
-	const zoneRows = $derived(results.zoneOn && results.zones ? zoneLegendRows(results.zones) : []);
 	const rows = $derived(measure && results.ready ? legendRows(measure, results.units, unlinkedAreas(features)) : []);
 	const ewr = $derived(results.ready ? ewrLine(results.ewr) : null);
 	const caption = $derived(runCaption(results.choice));
@@ -120,18 +120,10 @@
 	{/if}
 
 	{#if results.zoneOn}
-		<p class="small muted caption" data-testid="map-zone-caption">Each unit’s area in the colour of its calibration zone: the units each ticked gauge calibrates, upstream first, then the calibration site’s. From the saved settings (Calibration → Calibration record, Calibrate at several gauges), not a run.</p>
-		<div class="legend small" role="group" aria-labelledby="{uid}-zone-h" data-testid="map-zone-legend">
-			<span class="key-h" id="{uid}-zone-h">Calibration zone</span>
-			<ul class="legend-items">
-				{#each zoneRows as r (r.key)}
-					<li class="legend-item zone-item" data-zone={r.key} data-token={r.token} data-colour={results.zoneColours[r.token]}>
-						<span class="sw sw-band" style:--c={results.zoneColours[r.token]} aria-hidden="true"></span>
-						<span>{r.text}{' '}<span class="muted">({unitCount(r.count)})</span></span>
-					</li>
-				{/each}
-			</ul>
-		</div>
+		<!-- Calibration zones (issue #555): their key is its own chunk, loaded only when the zones are shown. -->
+		<Lazy load={loadZoneKey}>
+			{#snippet children(MapZoneKey)}<MapZoneKey zones={results.zones ?? []} colours={results.zoneColours} />{/snippet}
+		</Lazy>
 		{#if otherKinds.length}{@render kindKey(otherKinds)}{/if}
 	{:else if results.on}
 		{#if caption}<p class="small muted caption" data-testid="map-run-caption">{caption}</p>{/if}
@@ -204,9 +196,6 @@
 		grid-template-columns: auto auto minmax(0, 1fr);
 		align-items: baseline;
 		gap: 0.35rem;
-	}
-	.zone-item {
-		grid-template-columns: auto minmax(0, 1fr);
 	}
 	.key {
 		display: grid;
