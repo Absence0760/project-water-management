@@ -141,13 +141,18 @@ export const unitOffers = (u: StartUnit) => ({
 });
 /** The rest's area: with an outline (saved as its parcel) or, beside units' boundaries, the catchment less them (start-16). */
 export const restOffersArea = (p: StartPlan) => p.rest.areaM2 !== null;
+/** The rest's drains-into, to tick: proposed from the routing beside units' boundaries (start-17), never the outflow gauge's default. */
+export const restOffersDrainsInto = (p: StartPlan) => !!p.rest.drainsIntoProposed && !!p.rest.drainsInto;
+/** The name of the unit the rest drains into, by the names as typed. */
+export const restDrainsIntoName = (p: StartPlan, t: StartTicks): string =>
+	t.units.find((x) => x.key === p.rest.drainsInto)?.name || p.units.find((x) => x.key === p.rest.drainsInto)?.name || 'a unit';
 
 /** The ticks a proposal opens with: the proposed names, every value unticked (each is accepted explicitly). */
 export function initialTicks(p: StartPlan): StartTicks {
 	return {
 		outletName: p.outlet.name,
 		units: p.units.map((u) => ({ key: u.key, name: u.name, area: false, drainsInto: false, runoffToDam: false })),
-		rest: { include: false, name: p.rest.name, area: false }
+		rest: { include: false, name: p.rest.name, area: false, drainsInto: false }
 	};
 }
 
@@ -160,7 +165,7 @@ export function tickAll(p: StartPlan, t: StartTicks): StartTicks {
 			const o = unitOffers(by.get(x.key)!);
 			return { ...x, area: o.area, drainsInto: o.drainsInto, runoffToDam: false };
 		}),
-		rest: { ...t.rest, include: true, area: restOffersArea(p) }
+		rest: { ...t.rest, include: true, area: restOffersArea(p), drainsInto: restOffersDrainsInto(p) }
 	};
 }
 
@@ -191,7 +196,7 @@ export const km2Text = (m2: number | null): string => (m2 === null ? '–' : `${
 export function applySummary(t: StartTicks): string {
 	const nodes = 1 + t.units.length + (t.rest.include ? 1 : 0);
 	const areas = t.units.filter((u) => u.area).length + (t.rest.include && t.rest.area ? 1 : 0);
-	const orders = t.units.filter((u) => u.drainsInto).length;
+	const orders = t.units.filter((u) => u.drainsInto).length + (t.rest.include && t.rest.drainsInto ? 1 : 0);
 	const effective = [...t.units.filter((u) => u.area && u.areaBasis === 'effective').map((u) => u.name.trim()), ...(t.rest.include && t.rest.area && t.rest.areaBasis === 'effective' ? [t.rest.name.trim()] : [])];
 	const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 	return `The empty model gets ${s(nodes, 'hydrological unit')}, with ${s(areas, 'area')} (a unit’s is its boundary on the map${effective.length ? `; ${effective.join(', ')} without what drains into pans` : ''}) and ${s(orders, 'drains-into', 'drains-into')} from the proposal. Each unit’s dams and pump are linked to it, their sizes yours to enter. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.`;
@@ -203,6 +208,6 @@ export function applyTicks(t: StartTicks): StartTicks {
 	return {
 		outletName: t.outletName,
 		units: t.units.map(({ areaBasis, ...u }) => ({ ...u, ...basis(u.area, areaBasis) })),
-		rest: (({ areaBasis, ...r }) => ({ ...r, ...basis(r.include && r.area, areaBasis) }))(t.rest)
+		rest: (({ areaBasis, drainsInto, ...r }) => ({ ...r, ...basis(r.include && r.area, areaBasis), ...(r.include && drainsInto ? { drainsInto } : {}) }))(t.rest)
 	};
 }

@@ -4825,7 +4825,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       stream, quoting both areas; keep "Use that channel" primary only for
       rule 4's gully. Trigger: the next placement round, with a test on the
       synthetic DEM's tributary beside the river.
-- [ ] **Start and Divide have no worker** (new in the gauge rerun). Start
+- [x] **Start and Divide have no worker** (new in the gauge rerun). Start
       places a gauge outlet as Delineate does (where both are right they
       agree within 5 % at all 301 stations), but routes at most 3 072
       cells, so it refuses `too_large` 48 of 129 gauges of 1 000–10 000 km²
@@ -4833,6 +4833,14 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       or Divide plan cut at its last window to a worker job, as Delineate
       does (delineation_request with a plan kind, the same aim). Trigger:
       a client catchment over about 1 000 km², or a Start refusal reported.
+      **Done (#646 item 3, 2026-10-28):** migration 272 gives
+      `delineation_request` a plan kind; the `delineate` job routes a plan
+      with windows up to 6 144 cells (`jobs/handlers/delineate-plan.ts`).
+      A Start too large for the request answers at once with the plan a
+      server without a DEM makes (the hydrologist's review F11), which the
+      routed one replaces while open; a Divide waits for the worker
+      (maps.md § Start from the map). Locally without a worker (`pnpm
+      dev`), a Start keeps that quick plan and a Divide waits.
 - [x] **No caveat on a gully snap with no reach within 1 km** (finding 7's
       other half, still open after the gauge rerun). **Obsolete (issue #472,
       2026-10-09):** a point now goes only on a cell with 1 km² or more

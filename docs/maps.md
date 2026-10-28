@@ -1413,7 +1413,9 @@ to a point on a river. The design, the method and its accuracy are in
   running, or waiting in another catchment, is refused (429). Locally the
   worker runs only with `pnpm dev:full` (or `pnpm dev:jobs:tick` once);
   under plain `pnpm dev` the sheet waits. Still at the edge at 6 144 cells
-  is refused, never cut off.
+  is refused, never cut off. Start from the map and Divide hand a plan too
+  large for the request to the same job and share the one-per-editor slot
+  ([§ Start from the map](#start-from-the-map), #646 item 3).
 - **The proposal** is drawn dashed in teal over the features, with its
   outlet, until it is decided; the sheet lists its area, the snap distance,
   the cells, what drains into pans and the effective area (below), the
@@ -1805,7 +1807,19 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   catchment. Beside the units' boundaries the rest of the catchment is the
   catchment (the boundary's area, else the elevation model's) less theirs,
   never below 0, with no outline of its own: its area goes in typed, with
-  no parcel. A gauge on a unit's outflow cell is put one cell further down,
+  no parcel. **Where the rest drains** (`start-17`, #646 item 3, the
+  hydrologist's review F10): it is the catchment's cells that no unit's
+  boundary holds (an undrawn headwater, typically), and it drains into the
+  first unit, water user or gauge its flow path meets, from where most of
+  its area drains, proposed as a tick on its card ("Drains into Middle");
+  the outflow gauge only when nothing lies below it. Before `start-17` it
+  always drained straight into the outflow, which bypassed the units below
+  an undrawn headwater: their upstream inflow missed its runoff (in the
+  review's illustration, 80 km² of headwater above a 40 km² unit and an
+  80 km² unit at the outlet left the lower unit's river pump a third of
+  its inflow), while the catchment's total at the outflow, unchanged, hid
+  it. When under 90 % of a rest larger than 1 % of the catchment drains
+  that way, a warning says the rest of it reaches other units first. A gauge on a unit's outflow cell is put one cell further down,
   so the unit drains into it. With no unit boundary at all the rest is the
   outlet's own piece, as before; the rest of this bullet is how every area
   was made before `start-16`, and how that rest's still is. **Every area comes from the cells** (`start-6`): each cell's own
@@ -1902,7 +1916,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   the method counts them ("1 point at a dam polygon’s outflow (1 marked
   off-channel)", with the rule) only when one is marked; an unmarked dam is
   placed exactly as before, so marking dams didn't bump the method
-  version (it was `start-14` then; `start-16` today). A
+  version (it was `start-14` then; `start-17` today). A
   delineated outlet (a boundary from Delineate) stays on its own cell, where
   Delineate put it. Each card says where its point went ("On the nearest
   terrain channel, 42 m from the point."), and the method names only the
@@ -1914,7 +1928,34 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Without a DEM** (`DEM_URL` empty): each unit has its boundary's area
   and drains into the outflow gauge (the order is set on the Network); the
   rest of the catchment is the boundary less the units' boundaries (the
-  whole boundary, saved as its parcel, with none).
+  whole boundary, saved as its parcel, with none), and drains into the
+  outflow gauge too, a warning saying so ("… until you set the order on the
+  Network: without routing, nothing says where it lies.").
+- **Too large to route within the request** (#646 item 3, the
+  hydrologist's review F11; `272_plan_request`, `delineation/planRequests.ts`,
+  `jobs/handlers/delineate-plan.ts`): routing that still reaches the edge
+  of the request's 3 072-cell window (about 100 km at zoom 11), or would
+  pass its 20 s, no longer refuses the Start. Since `start-16` each unit's
+  area is its own boundary's and the elevation model only orders and checks
+  them, so the server answers at once with the plan a server without a DEM
+  makes from the same map (each unit its boundary's area, no order, the rest
+  the boundary less the units), its first warning saying what wasn't
+  checked ("The catchment is too large to route on the elevation model
+  within a request, so the order wasn’t proposed and no unit’s area was
+  checked against it. …"). It also hands the plan to the background
+  worker, the same `delineate` job as a large click
+  ([§ Delineation](#delineation)), which routes it with windows up to
+  6 144 cells (about 200 km) and proposes the routed plan, with the order
+  and the checks, in place of the quick one while it is still open; the
+  sheet says so while it waits. Applied or discarded first, the quick one
+  stands and the routed one is never stored. **Locally with `pnpm dev`**
+  (no worker running; `JOB_TRANSPORT` defaults to `inprocess`, whose worker
+  starts only with `pnpm dev:full`) the quick plan is what you get; with
+  `pnpm dev:full`, and in production, the routed one follows a minute or
+  two later. A catchment past the worker's 6 144 cells too is refused
+  there, the quick plan standing. **Divide** has no plan without a DEM, so
+  a division too large for the request goes to the worker the same way
+  (`202`), and its sheet waits for it; locally without a worker it waits.
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes; each ticked unit's
   area its own boundary, linked to it as **Use this area** links one
@@ -1955,13 +1996,16 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   against the elevation model) and what it drains into, **beside the node's
   value now**, each taken only when ticked, and the rest of the catchment
   (beside the boundaries, the catchment less them, typed) to a unit, a new
-  unit or nobody. A ticked value that changed since the proposal, or a
+  unit (draining, when ticked, into the point its flow path meets first,
+  `start-17`) or nobody. A ticked value that changed since the proposal, or a
   boundary redrawn since, is refused (409), never overwritten unseen;
   dividing again redraws in place the rest's parcel an earlier division made
   ([design/start-from-map.md § Dividing a model that has
   nodes](./design/start-from-map.md#dividing-a-model-that-has-nodes)).
-- **Limits.** The same as Delineation's: about 100 km across, 30 proposals a
-  project an hour (starts and divisions together), the 20 s budget.
+- **Limits.** The same as Delineation's: about 100 km across in the
+  request, about 200 km on the worker (above), 30 proposals a project an
+  hour (starts and divisions together), the 20 s budget, one waiting or
+  running background delineation or plan per account.
 
 ## Sub-catchments from clicks
 

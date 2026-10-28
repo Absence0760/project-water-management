@@ -157,6 +157,30 @@ polygon).
   failure; only a DEM read that fails twice kills the job.
   No method version changes: the job proposes what a request with those
   windows would.
+- **Start and Divide on the worker** (#646 item 3, `272_plan_request`,
+  `backend/src/delineation/planRequests.ts`,
+  `jobs/handlers/delineate-plan.ts`): a Start or Divide plan whose routing
+  stops at the request's last window (or its 20 s) is handed to the same
+  `delineate` job, as a request row with a plan kind (`start`, `divide`)
+  and the editor's request body instead of a click, the same `aim`, and
+  the worker's windows (up to 6 144 cells) from the next one. The job reads
+  the map again as that editor (a unit's boundary deleted since is refused
+  `map_changed`, never routed from the stored body alone), runs the same
+  `delineateUnits`, and stores the plan as the route would. The cap and
+  the dedupe key are the clicks' (one waiting or running job per account,
+  a click or a plan; a new plan in the project supersedes the account's
+  waiting one). **A Start answers at once** (201) with the plan a server
+  without a DEM makes from the same map (the hydrologist's review F11:
+  since start-16 each unit's area is its boundary's, so only the order and
+  the checks wait), and the routed plan replaces it while it is still
+  open; the job stores nothing, and the request is `superseded`, once that
+  quick plan was applied or discarded, or a newer proposal was made. **A
+  Divide** has no plan without a DEM, so it answers 202 with the request
+  and the Map waits for the division. **Locally** with `pnpm dev` (no
+  worker; `JOB_TRANSPORT` defaults to `inprocess`, whose worker runs only
+  with `pnpm dev:full`), a Start keeps its quick plan, which is what the
+  user gets, and a Divide waits; in production, and with `pnpm dev:full`,
+  the routed plan follows a minute or two later.
 
 ## Method
 

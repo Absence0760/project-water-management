@@ -100,7 +100,7 @@ describe('without an elevation model', () => {
 			{ featureId: away, name: 'Far weir', reason: 'is outside the catchment boundary' },
 			{ featureId: farDam, name: 'Far dam', reason: 'is outside the catchment boundary' }
 		]);
-		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-16' });
+		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-17' });
 		const areas = new Map((await asOwner('SELECT id, area_m2 FROM map_feature WHERE id = ANY($1::uuid[])', [[boundary, upper, lower]])).map((f) => [f.id, f.area_m2 as number]));
 		expect(plan.units.map((u: { name: string; role: string; areaM2: number; drainsInto: null; drainsIntoProposed: boolean }) => [u.name, u.role, u.areaM2, u.drainsInto, u.drainsIntoProposed])).toEqual([
 			['Upper unit', 'unit', areas.get(upper), null, false],
@@ -261,7 +261,7 @@ describe('with the synthetic DEM', () => {
 		const r = await owner.call('POST', p.at('/map/start'), body());
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const { plan } = r.body.proposal;
-		expect(r.body.proposal).toMatchObject({ fromDem: true, methodVersion: 'start-16', dataset: expect.stringMatching(/Synthetic DEM/), datasetFingerprint: expect.stringMatching(/^[0-9a-f]{16}$/) });
+		expect(r.body.proposal).toMatchObject({ fromDem: true, methodVersion: 'start-17', dataset: expect.stringMatching(/Synthetic DEM/), datasetFingerprint: expect.stringMatching(/^[0-9a-f]{16}$/) });
 		expect(r.body.proposal.method).toMatch(/2 points at a unit boundary’s outflow/);
 		expect(plan.outlet).toMatchObject({ featureId: gauge, name: 'Valley weir', foundIn: 'gauge' });
 		// Only the boundaries are units; the dams and the pump are not.
@@ -594,7 +594,7 @@ describe('each point on the terrain channel nearest it (start-15, issue #472)', 
 		await clear();
 		const plain = await owner.call('POST', q.at('/map/start'), body);
 		expect(plain.status, JSON.stringify(plain.body)).toBe(201);
-		expect(plain.body.proposal.methodVersion).toBe('start-16');
+		expect(plain.body.proposal.methodVersion).toBe('start-17');
 		expect(plain.body.proposal.method).toMatch(/the nearest terrain channel: the nearest cell within 150 m with at least 1 km² draining through it, the mapped river network not used/);
 		await plant(99100001, riverKm2, LINE);
 		await plant(99100002, 0.85 * riverKm2, [pos(DAM_CELL.x + 3, DAM_CELL.y - 30), LINE[0]!]);

@@ -18,7 +18,7 @@ describe('delineateUnits: the windows (start-12)', () => {
 		const r = await delineateUnits(dem, { outlet: at(0, 0), boundary: null, points: [] }, { windows: [128, 256] });
 		expect(r.windowCells).toBe(256);
 		expect(Math.abs(r.catchment.areaM2 / whole.areaM2 - 1)).toBeLessThan(0.02);
-		expect(START_METHOD_VERSION).toBe('start-16');
+		expect(START_METHOD_VERSION).toBe('start-17');
 	});
 
 	it('grows for the lowest click on a river the first window cuts', async () => {

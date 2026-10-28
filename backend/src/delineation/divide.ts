@@ -2,7 +2,7 @@
 // (#326 C3's follow-up; 182_divide_proposal.sql, docs/design/start-from-map.md
 // § Dividing a model that has nodes, docs/api.md § Start from the map).
 //
-//   POST /projects/:id/map/divide                   propose each linked unit's own area and drains-into, against its current values (editor)
+//   POST /projects/:id/map/divide                   propose each linked unit's area (its boundary's) and drains-into (the DEM's), against its current values (editor)
 //   POST /projects/:id/map/divide/:spid/apply       take the ticked values (editor)
 //
 // The GET and discard are start.ts's (one table, one open proposal a project).
@@ -37,6 +37,9 @@ import { ModelBody, modelProblems, nameText } from '../model/validate.js';
 import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
+import { wakeWorker } from '../jobs/wake.js';
+import { queuePlan } from './planRequests.js';
+import { delineationLimits, jobWindowsFrom, nextJobWindow } from './requests.js';
 import { PlacementChoice, placementOf, placementWarnings, type PointPlacement } from './pointPlacement.js';
 import {
 	BEFORE_BOUNDARIES,
@@ -47,12 +50,15 @@ import {
 	linkMembers,
 	madeBeforeBoundaries,
 	restBesideBoundaries,
+	REST_SHARE_WARN,
+	restDrainsMatters,
 	loadProposal,
 	nodeCount,
 	outletHints,
 	pointOf,
 	NO_CHOICES,
 	readPlacement,
+	type PointChoices,
 	START_POINTS_MAX,
 	START_PROPOSALS_KEPT,
 	START_PROPOSALS_PER_HOUR,
@@ -63,7 +69,7 @@ import {
 } from './start.js';
 import { panWarning, type PanReport } from './pans.js';
 import { AreaBasis, areaBasisNote, takenAreaM2 } from './areaBasis.js';
-import { delineateUnits, type DamPosition, type UnitRole } from './subcatchments.js';
+import { delineateUnits, type DamPosition, type SubcatchmentRequest, type Subcatchments, type UnitRole } from './subcatchments.js';
 
 export const DivideBody = z
 	.object({
@@ -123,7 +129,15 @@ export const DivideApplyBody = z
 		rest: z.discriminatedUnion('to', [
 			z.object({ to: z.literal('none') }).strict(),
 			z.object({ to: z.literal('node'), nodeId: z.string().uuid(), areaBasis: AreaBasis.optional() }).strict(),
-			z.object({ to: z.literal('new'), name: Name, areaBasis: AreaBasis.optional() }).strict()
+			z
+				.object({
+					to: z.literal('new'),
+					name: Name,
+					areaBasis: AreaBasis.optional(),
+					/** Take the proposed drains-into (start-17, F10); absent or unticked, the new unit drains into the outflow. */
+					drainsInto: z.boolean().optional()
+				})
+				.strict()
 		])
 	})
 	.strict();
@@ -180,7 +194,15 @@ export interface DividePlan {
 	catchment: { areaM2: number; boundaryAreaM2: number | null };
 	units: DivideUnit[];
 	/** What drains to the outflow through no point; beside units' boundaries (start-16), the catchment less them, with no outline. */
-	rest: { areaM2: number; geometry: Polygonal | null; nonContributingM2?: number };
+	rest: {
+		areaM2: number;
+		geometry: Polygonal | null;
+		nonContributingM2?: number;
+		/** Beside units' boundaries (start-17, F10): the point (its key) the rest drains into, the first its flow path meets, or null for the outflow. */
+		drainsInto?: string | null;
+		/** Whether drainsInto is proposed (a point's key), to tick for a new unit; absent, the outflow. */
+		drainsIntoProposed?: boolean;
+	};
 	/** The catchment's pans (pans.ts, start-11): what of it drains into one, the largest, the method. Absent without a DEM or before start-11. */
 	pans?: PanReport;
 	/**
@@ -201,7 +223,7 @@ export interface DivideDecision {
 	/** `areaBasis`: which area was taken (195), with `area`; absent on a decision before 195 (gross, the only choice then). */
 	/** `boundaryId`: a unit's own boundary, linked to it as its area (start-16; never a parcel a later division may redraw). */
 	units: { key: string; nodeId: string | null; area: boolean; areaBasis?: AreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean; add: boolean; parcelId: string | null; boundaryId?: string | null }[];
-	rest: { to: 'none' | 'node' | 'new'; areaBasis?: AreaBasis; nodeId: string | null; parcelId: string | null };
+	rest: { to: 'none' | 'node' | 'new'; areaBasis?: AreaBasis; drainsInto?: boolean; nodeId: string | null; parcelId: string | null };
 	revisionId: string | null;
 }
 
@@ -238,7 +260,7 @@ export function loopIn(nodes: readonly Pick<NetworkNode, 'id' | 'name' | 'downst
 	return null;
 }
 
-interface DivideInputs {
+export interface DivideInputs {
 	boundary: { id: string; geometry: Polygonal; areaM2: number } | null;
 	outlet: { featureId: string | null; point: Position | null; foundIn: DividePlan['outlet']['foundIn'] };
 	outflow: NetworkNode;
@@ -249,7 +271,7 @@ interface DivideInputs {
 	members: { featureId: string; name: string; role: 'dam' | 'abstraction'; geometry: Geometry }[];
 }
 
-async function readInputs(db: Db, projectId: string, body: z.infer<typeof DivideBody>): Promise<DivideInputs> {
+export async function readDivideInputs(db: Db, projectId: string, body: z.infer<typeof DivideBody>): Promise<DivideInputs> {
 	const model = await loadModel(db, projectId);
 	if (!model.nodes.length) throw new ApiError(409, NOT_EMPTY_NEEDED);
 	const outflow = outflowOf(model);
@@ -319,6 +341,145 @@ async function readInputs(db: Db, projectId: string, body: z.infer<typeof Divide
 	return { boundary, outlet, outflow, model, areaSource: new Map(src.map((r) => [r.id, r.area_source])), points: ordered, members };
 }
 
+/**
+ * The division from the routing (the route's, and the worker's plan job's, jobs/handlers/delineate-plan.ts): each unit's area its
+ * boundary's beside its node's current values, the order and the checks from the DEM, the unlinked dams and abstraction points
+ * to the units holding them, and the rest of the catchment, drained where its flow path meets a unit first (start-17, F10). Pure.
+ */
+export function dividePlanFrom(inputs: DivideInputs, r: Subcatchments): DividePlan {
+	const named = new Map(inputs.points.map((p) => [p.featureId, p]));
+	const nodes = new Map(inputs.model.nodes.map((n) => [n.id, n]));
+	const warnings: string[] = [];
+	const outletPlacement = placementOf(r.outlet);
+	// The outlet's placement first: every point is placed against it.
+	if (inputs.outlet.point) warnings.push(...placementWarnings(inputs.outflow.name, inputs.outlet.point, outletPlacement, true));
+	if (inputs.boundary && Math.abs(r.catchment.areaM2 / inputs.boundary.areaM2 - 1) > BOUNDARY_MISMATCH) {
+		warnings.push(
+			`The catchment above the outlet is ${km2(r.catchment.areaM2)} on the elevation model, but the boundary on the map is ${km2(inputs.boundary.areaM2)}. Each unit’s area is its own boundary’s, and the elevation model orders and checks them: check the outlet and the boundary.`
+		);
+	}
+	const units: DivideUnit[] = r.units.map((u) => {
+		const p = named.get(u.id)!;
+		const n = p.node;
+		// A unit's area and outline are its boundary's (start-16); the DEM's piece only checks it.
+		const bounded = u.role === 'unit' && (p.geometry.type === 'Polygon' || p.geometry.type === 'MultiPolygon');
+		return {
+			key: u.id,
+			featureName: p.name,
+			nodeId: n?.id ?? null,
+			name: n?.name ?? p.name,
+			role: u.role,
+			point: u.point,
+			snapDistanceM: u.snapDistanceM,
+			areaM2: bounded ? p.areaM2 : null,
+			totalAreaM2: u.role === 'user' ? null : u.totalAreaM2,
+			geometry: bounded ? (p.geometry as Polygonal) : null,
+			...(u.role === 'unit' ? { demAreaM2: u.areaM2 } : {}),
+			drainsInto: u.drainsInto,
+			current: n
+				? {
+						areaKm2: n.areaKm2,
+						areaSource: inputs.areaSource.get(n.id) ?? 'typed',
+						downstreamNodeId: n.downstreamNodeId,
+						downstreamName: n.downstreamNodeId ? (nodes.get(n.downstreamNodeId)?.name ?? null) : null,
+						pctRunoffToDam: n.pctRunoffToDam,
+						pctUpstreamToDam: n.pctUpstreamToDam
+					}
+				: null,
+			placement: placementOf(u),
+			totalNonContributingM2: u.totalNonContributingM2
+		};
+	});
+	// The unlinked dams and abstraction points to the units whose boundaries hold them (start-16); others stay as they are.
+	const bounded = units.filter((u) => u.role === 'unit');
+	const assigned = assignMembers(bounded, inputs.members, null);
+	for (const u of bounded) u.members = assigned.byUnit.get(u.key)!;
+	const dropped = r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason, ...(d.placedBy ? { placement: placementOf(d) } : {}) }));
+	// A dropped point snapped beside its river: the larger channel is how to bring it in.
+	for (const d of dropped) if (d.placement?.larger) warnings.push(...placementWarnings(d.name || 'A point', pointOf(named.get(d.featureId)!.geometry), d.placement));
+	for (const u of units) {
+		if (u.role !== 'unit') warnings.push(...placementWarnings(u.name, pointOf(named.get(u.key)!.geometry), u.placement));
+		const check = u.role === 'unit' ? boundaryCheck(u.name, u.areaM2, u.demAreaM2) : null;
+		if (check) warnings.push(check);
+	}
+	const restBeside = bounded.length ? restBesideBoundaries(inputs.boundary?.areaM2 ?? r.catchment.areaM2, bounded.map((u) => u.areaM2 ?? 0)) : null;
+	if (restBeside?.warning) warnings.push(restBeside.warning);
+	if (restBeside && r.restDrains && r.restDrains.share < REST_SHARE_WARN && restDrainsMatters(r.restDrains, r.catchment.areaM2)) {
+		const to = r.restDrains.into ? (units.find((u) => u.key === r.restDrains!.into)?.name ?? 'a unit') : inputs.outflow.name;
+		warnings.push(
+			`Of the rest of the catchment (${km2(r.restDrains.areaM2)} on the elevation model), ${Math.round(r.restDrains.share * 100)} % drains into ${to}, as proposed; the rest of it reaches other units first. Check where it drains on the Network, or draw its parts as units’ boundaries.`
+		);
+	}
+	const inDivision = new Set(units.flatMap((u) => (u.nodeId ? [u.nodeId] : [])));
+	const untouched = inputs.model.nodes.filter((n) => n.kind === 'farm' && !inDivision.has(n.id)).map((n) => ({ nodeId: n.id, name: n.name, areaKm2: n.areaKm2 }));
+	const panSentence = panWarning(r.pans, r.catchment.areaM2, [
+		...r.units.map((u) => ({ name: named.get(u.id)!.node?.name ?? named.get(u.id)!.name, ncM2: u.nonContributingM2 ?? 0 })),
+		{ name: 'the rest of the catchment', ncM2: r.rest.nonContributingM2 }
+	], !bounded.length);
+	if (panSentence) warnings.push(panSentence);
+	const plan: DividePlan = {
+		mode: 'divide',
+		outlet: { featureId: inputs.outlet.featureId, nodeId: inputs.outflow.id, name: inputs.outflow.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn, placement: outletPlacement },
+		catchment: { areaM2: r.catchment.areaM2, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
+		units: upstreamFirst(units),
+		rest: restBeside ? { areaM2: restBeside.areaM2 ?? 0, geometry: null, drainsInto: r.restDrains?.into ?? null, drainsIntoProposed: !!r.restDrains?.into } : { areaM2: r.rest.areaM2, geometry: r.rest.geometry, nonContributingM2: r.rest.nonContributingM2 },
+		pans: r.pans,
+		untouched,
+		dropped,
+		warnings,
+		cellSizeM: r.cellSizeM,
+		zoom: r.zoom,
+		windowCells: r.windowCells
+	};
+	return plan;
+}
+
+/** The routing request for a division (the route's and the plan job's). */
+export function divideRouting(inputs: DivideInputs, placing: PointChoices): SubcatchmentRequest {
+	return {
+		outlet: inputs.outlet.point,
+		outletHints: outletHints(inputs.outlet.foundIn, placing),
+		outletMappedKm2: placing.outletMappedKm2,
+		boundary: inputs.boundary?.geometry ?? null,
+		points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node), geometry: p.geometry, damPosition: p.damPosition, ...placing.hints.get(p.featureId) }))
+	};
+}
+
+/**
+ * Store a division (the open proposal superseded), prune the old ones and audit it, as the transaction's user (an editor).
+ * `background`: the worker's plan job made it.
+ */
+export async function storeDivideProposal(db: Db, projectId: string, plan: DividePlan, r: Pick<Subcatchments, 'dataset' | 'method' | 'methodVersion'>, background = false) {
+	await db.query(`UPDATE start_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [projectId]);
+	const { rows } = await db
+		.query<{ id: string }>(
+			`INSERT INTO start_proposal (project_id, mode, plan, from_dem, dataset, dataset_fingerprint, method, method_version, created_by)
+			 VALUES ($1, 'divide', $2, true, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
+			[projectId, JSON.stringify(plan), r.dataset.label, r.dataset.fingerprint, r.method, r.methodVersion]
+		)
+		.catch((err: unknown) => {
+			if ((err as { constraint?: string }).constraint === 'start_proposal_one_open_idx') {
+				throw new ApiError(409, 'Another proposal for this catchment finished at the same moment; look at it, or propose again.');
+			}
+			throw err;
+		});
+	await db.query(
+		`DELETE FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') AND id NOT IN (
+			SELECT id FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') ORDER BY created_at DESC, id LIMIT $2)`,
+		[projectId, START_PROPOSALS_KEPT]
+	);
+	const proposal = toProposal(await loadProposal<DividePlan, DivideDecision>(db, projectId, rows[0]!.id));
+	await recordAudit(db, projectId, 'map.divide_proposed', {
+		proposalId: proposal.id,
+		units: plan.units.length,
+		dropped: plan.dropped.length,
+		dataset: r.dataset.label,
+		methodVersion: r.methodVersion,
+		...(background ? { background: true } : {})
+	});
+	return proposal;
+}
+
 export const divideRoutes = new Hono<AuthEnv>()
 	.post('/:id/map/divide', async (c) => {
 		const body = DivideBody.parse(await readJson(c));
@@ -331,7 +492,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 			if (rows[0]!.n >= START_PROPOSALS_PER_HOUR) throw new ApiError(429, `This catchment has asked for ${START_PROPOSALS_PER_HOUR} proposals in the last hour; try again later.`);
 			// Counted before any work, refused and failed attempts too (184_dem_attempt).
 			const attempt = await beginDemAttempt(db, 'divide');
-			const inputs = await readInputs(db, id, body);
+			const inputs = await readDivideInputs(db, id, body);
 			// Each point's river reach, with a DEM to place it on (without one the division is refused below).
 			const placing = configuredDem() ? await readPlacement(db, { point: inputs.outlet.point, foundIn: inputs.outlet.foundIn }, body) : NO_CHOICES;
 			return { inputs, placing, attempt };
@@ -341,119 +502,32 @@ export const divideRoutes = new Hono<AuthEnv>()
 			if (!dem) throw new ApiError(422, NO_DEM, { reason: 'no_dem' });
 			let r;
 			try {
-				r = await delineateUnits(dem, {
-					outlet: inputs.outlet.point,
-					outletHints: outletHints(inputs.outlet.foundIn, placing),
-					outletMappedKm2: placing.outletMappedKm2,
-					boundary: inputs.boundary?.geometry ?? null,
-					points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node), geometry: p.geometry, damPosition: p.damPosition, ...placing.hints.get(p.featureId) }))
-				}, { panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), id) });
+				r = await delineateUnits(dem, divideRouting(inputs, placing), {
+					windows: delineationLimits.requestWindows,
+					panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), id)
+				});
 			} catch (err) {
-				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
+				if (err instanceof DelineationRefused) {
+					// Still at the edge of the request's last window (or out of its time): the worker goes on from the next (#646 item 3).
+					const next = err.code === 'too_large' ? nextJobWindow(err.windowCells) : null;
+					if (next !== null && jobWindowsFrom(next).length > 0) {
+						const queued = await withUser(userId, async (db) => {
+							await requireRole(db, id, 'editor');
+							return queuePlan(db, { projectId: id, userId, kind: 'divide', body, fromWindow: next, aim: err.aim ?? null, fallbackId: null });
+						});
+						await wakeWorker(queued.jobId);
+						return c.json({ request: queued.request }, 202);
+					}
+					throw new ApiError(422, err.message, { reason: err.code });
+				}
 				logEvent('error', { event: 'divide_proposal_failed', ...safeError(err) });
 				throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
 			}
-			const named = new Map(inputs.points.map((p) => [p.featureId, p]));
-			const nodes = new Map(inputs.model.nodes.map((n) => [n.id, n]));
-			const warnings: string[] = [];
-			const outletPlacement = placementOf(r.outlet);
-			// The outlet's placement first: every point is placed against it.
-			if (inputs.outlet.point) warnings.push(...placementWarnings(inputs.outflow.name, inputs.outlet.point, outletPlacement, true));
-			if (inputs.boundary && Math.abs(r.catchment.areaM2 / inputs.boundary.areaM2 - 1) > BOUNDARY_MISMATCH) {
-				warnings.push(
-					`The catchment above the outlet is ${km2(r.catchment.areaM2)} on the elevation model, but the boundary on the map is ${km2(inputs.boundary.areaM2)}. The areas follow the elevation model; check the outlet and the boundary.`
-				);
-			}
-			const units: DivideUnit[] = r.units.map((u) => {
-				const p = named.get(u.id)!;
-				const n = p.node;
-				// A unit's area and outline are its boundary's (start-16); the DEM's piece only checks it.
-				const bounded = u.role === 'unit' && (p.geometry.type === 'Polygon' || p.geometry.type === 'MultiPolygon');
-				return {
-					key: u.id,
-					featureName: p.name,
-					nodeId: n?.id ?? null,
-					name: n?.name ?? p.name,
-					role: u.role,
-					point: u.point,
-					snapDistanceM: u.snapDistanceM,
-					areaM2: bounded ? p.areaM2 : null,
-					totalAreaM2: u.role === 'user' ? null : u.totalAreaM2,
-					geometry: bounded ? (p.geometry as Polygonal) : null,
-					...(u.role === 'unit' ? { demAreaM2: u.areaM2 } : {}),
-					drainsInto: u.drainsInto,
-					current: n
-						? {
-								areaKm2: n.areaKm2,
-								areaSource: inputs.areaSource.get(n.id) ?? 'typed',
-								downstreamNodeId: n.downstreamNodeId,
-								downstreamName: n.downstreamNodeId ? (nodes.get(n.downstreamNodeId)?.name ?? null) : null,
-								pctRunoffToDam: n.pctRunoffToDam,
-								pctUpstreamToDam: n.pctUpstreamToDam
-							}
-						: null,
-					placement: placementOf(u),
-					totalNonContributingM2: u.totalNonContributingM2
-				};
-			});
-			// The unlinked dams and abstraction points to the units whose boundaries hold them (start-16); others stay as they are.
-			const bounded = units.filter((u) => u.role === 'unit');
-			const assigned = assignMembers(bounded, inputs.members, null);
-			for (const u of bounded) u.members = assigned.byUnit.get(u.key)!;
-			const dropped = r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason, ...(d.placedBy ? { placement: placementOf(d) } : {}) }));
-			// A dropped point snapped beside its river: the larger channel is how to bring it in.
-			for (const d of dropped) if (d.placement?.larger) warnings.push(...placementWarnings(d.name || 'A point', pointOf(named.get(d.featureId)!.geometry), d.placement));
-			for (const u of units) {
-				if (u.role !== 'unit') warnings.push(...placementWarnings(u.name, pointOf(named.get(u.key)!.geometry), u.placement));
-				const check = u.role === 'unit' ? boundaryCheck(u.name, u.areaM2, u.demAreaM2) : null;
-				if (check) warnings.push(check);
-			}
-			const restBeside = bounded.length ? restBesideBoundaries(inputs.boundary?.areaM2 ?? r.catchment.areaM2, bounded.map((u) => u.areaM2 ?? 0)) : null;
-			if (restBeside?.warning) warnings.push(restBeside.warning);
-			const inDivision = new Set(units.flatMap((u) => (u.nodeId ? [u.nodeId] : [])));
-			const untouched = inputs.model.nodes.filter((n) => n.kind === 'farm' && !inDivision.has(n.id)).map((n) => ({ nodeId: n.id, name: n.name, areaKm2: n.areaKm2 }));
-			const panSentence = panWarning(r.pans, r.catchment.areaM2, [
-				...r.units.map((u) => ({ name: named.get(u.id)!.node?.name ?? named.get(u.id)!.name, ncM2: u.nonContributingM2 ?? 0 })),
-				{ name: 'the rest of the catchment', ncM2: r.rest.nonContributingM2 }
-			], !bounded.length);
-			if (panSentence) warnings.push(panSentence);
-			const plan: DividePlan = {
-				mode: 'divide',
-				outlet: { featureId: inputs.outlet.featureId, nodeId: inputs.outflow.id, name: inputs.outflow.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn, placement: outletPlacement },
-				catchment: { areaM2: r.catchment.areaM2, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
-				units: upstreamFirst(units),
-				rest: restBeside ? { areaM2: restBeside.areaM2 ?? 0, geometry: null } : { areaM2: r.rest.areaM2, geometry: r.rest.geometry, nonContributingM2: r.rest.nonContributingM2 },
-				pans: r.pans,
-				untouched,
-				dropped,
-				warnings,
-				cellSizeM: r.cellSizeM,
-				zoom: r.zoom,
-				windowCells: r.windowCells
-			};
+			const plan = dividePlanFrom(inputs, r);
+			const done = r;
 			return await withUser(userId, async (db) => {
 				await requireRole(db, id, 'editor');
-				await db.query(`UPDATE start_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [id]);
-				const { rows } = await db
-					.query<{ id: string }>(
-						`INSERT INTO start_proposal (project_id, mode, plan, from_dem, dataset, dataset_fingerprint, method, method_version, created_by)
-						 VALUES ($1, 'divide', $2, true, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
-						[id, JSON.stringify(plan), r.dataset.label, r.dataset.fingerprint, r.method, r.methodVersion]
-					)
-					.catch((err: unknown) => {
-						if ((err as { constraint?: string }).constraint === 'start_proposal_one_open_idx') {
-							throw new ApiError(409, 'Another proposal for this catchment finished at the same moment; look at it, or propose again.');
-						}
-						throw err;
-					});
-				await db.query(
-					`DELETE FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') AND id NOT IN (
-						SELECT id FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') ORDER BY created_at DESC, id LIMIT $2)`,
-					[id, START_PROPOSALS_KEPT]
-				);
-				const proposal = toProposal(await loadProposal<DividePlan, DivideDecision>(db, id, rows[0]!.id));
-				await recordAudit(db, id, 'map.divide_proposed', { proposalId: proposal.id, units: plan.units.length, dropped: plan.dropped.length, dataset: r.dataset.label, methodVersion: r.methodVersion });
-				return c.json({ proposal }, 201);
+				return c.json({ proposal: await storeDivideProposal(db, id, plan, done) }, 201);
 			});
 		} finally {
 			await finishDemAttempt(userId, attempt);
@@ -556,7 +630,16 @@ export const divideRoutes = new Hono<AuthEnv>()
 					if (Math.abs(n.areaKm2 - was.areaKm2) > EPS_KM2) throw changed(`${n.name}’s area`);
 					restNode = n;
 				} else {
-					restNode = { ...newNetworkNode(crypto.randomUUID(), ++sort, outflow.id), name: fresh(body.rest.name) };
+					// Into the point its flow path meets first when that is ticked (start-17, F10); else the outflow, as before.
+					let down = outflow.id;
+					if (body.rest.drainsInto) {
+						const key = plan.rest.drainsIntoProposed ? plan.rest.drainsInto : null;
+						if (!key) throw new ApiError(400, 'The rest of the catchment has no proposed order to take.');
+						const target = nodeOf.get(key);
+						if (!target) throw new ApiError(400, `The rest of the catchment would drain into the new gauge ${plan.units.find((x) => x.key === key)?.name ?? ''}, which isn’t being added: tick Add it too.`);
+						down = target;
+					}
+					restNode = { ...newNetworkNode(crypto.randomUUID(), ++sort, down), name: fresh(body.rest.name) };
 					added.push(restNode);
 					nodes.set(restNode.id, restNode);
 				}
@@ -641,7 +724,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 			});
 			const decision: DivideDecision = {
 				units: decisionUnits,
-				rest: { to: body.rest.to, ...(restNode ? { areaBasis: restBasis } : {}), nodeId: restNode?.id ?? null, parcelId: restParcel },
+				rest: { to: body.rest.to, ...(restNode ? { areaBasis: restBasis } : {}), ...(body.rest.to === 'new' && body.rest.drainsInto ? { drainsInto: true } : {}), nodeId: restNode?.id ?? null, parcelId: restParcel },
 				revisionId: revision?.id ?? null
 			};
 			await db.query(`UPDATE start_proposal SET status = 'applied', decision = $3, decided_by = app_current_user_id(), decided_at = now() WHERE id = $1 AND project_id = $2`, [
