@@ -10719,6 +10719,141 @@ together.
   area, the curve, what flows in, the demand), never at a correction: the
   hydrologist decides.
 
+### 2.10m Regional GR4J prior (engine 1.106.0, issue #622; pure part only)
+
+Most catchments have no flow gauge, or a short one. Uncalibrated, GR4J runs
+on Perrin's defaults (§2.4a), checked only against the WR2012 MAR band
+(§2.10c). The regional prior gives such a project the parameter ranges of
+calibrated, similar, nearby gauged basins ("donors"), and a soil-water
+prior for x1. It only chooses parameters: `runModel` never reads it, so
+`verify/` needs nothing.
+
+**Donors** (`backend/scripts/fit-donors.ts`, offline, operator-run;
+[deployment.md § Reference datasets](./deployment.md#reference-datasets),
+*Soils and GR4J donors*). A donor is a GRDC-Caravan basin
+([data-sources.md § GR4J priors](./data-sources.md#gr4j-priors-issue-622))
+whose outlet is in region D1, with:
+
+- at least 8 years of observed flow in the fit window;
+- under 5 % upstream regulation (HydroATLAS `dor_pc_pva`, stored × 10);
+- at most 10 000 km² by default (`--max-area`; a lumped GR4J over a larger
+  basin says little about a catchment the app models).
+
+Each donor is **recalibrated on the app's own forcing**, never on Caravan's
+ERA5-Land, because parameters absorb forcing bias (x1 above all). The
+forcing:
+
+- Rain: the area-weighted CHIRPS v3 over the basin polygon, from our copy,
+  final days only.
+- PE: the evaporation grid's dPET monthly means over the polygon, as
+  `settings.pe`.
+
+The fit is the engine's own `calibrate()`: KGE′, the typical bounds, x2
+fixed at 0, five starts, and the split-sample test for a validation score.
+Stored per donor (`gr4j_donor`, migration 269): x1–x4, KGE′ over the fit
+and the validation half, the years of flow, the outlet, the area, the
+HydroATLAS attributes and the soil grid's PAWC.
+
+**The attributes** (`PRIOR_ATTRIBUTES`, converted from HydroATLAS's scaled
+integers):
+
+| Attribute | HydroATLAS | Unit |
+| --- | --- | --- |
+| aridity, P/PET | `ari_ix_sav` ÷ 100 | – |
+| MAP | `pre_mm_syr` | mm |
+| slope | `slp_dg_sav` ÷ 10 | ° |
+| clay | `cly_pc_sav` | % |
+| sand | `snd_pc_sav` | % |
+| forest | `for_pc_sse` | % |
+| area | – | km², compared in log space |
+
+**The prior** (`packages/engine/src/calibrate/prior.ts` `regionalPrior(target,
+donors, opts)`). It combines physical similarity with spatial proximity, as
+Oudin et al. (2008, *Water Resour. Res.* 44, W03413) did:
+
+1. Standardise each attribute over the donors: z = (a − mean) / sd, the
+   population sd. An attribute with no spread, or one the target lacks, is
+   left out.
+2. Similarity distance: d_s = √(mean over the shared attributes of
+   (z_target − z_donor)²). Geographic distance: d_g, the great-circle km
+   between the outlets.
+3. Mixed dissimilarity: D = w × d_s / median(d_s) + (1 − w) × d_g /
+   median(d_g), with w = `similarityWeight`, 0.5 by default. A donor with no
+   shared attribute is ranked on d_g alone.
+4. Keep the k donors with the smallest D (k = 7 by default, the upper end
+   of the 4–7 Oudin found best; all of them when fewer). Weight each by
+   1 / max(D, 10⁻⁹), normalised.
+5. Each parameter's p10, p50 and p90 are the weighted quantiles of the kept
+   donors' values, at Hazen positions with weights: the sorted donor i sits
+   at W_i − w_i / 2, where W_i is the cumulative weight. Between donors the
+   quantile is interpolated linearly, in log space for x1, x3 and x4. Past
+   the end positions it is the end donor's value.
+
+The prior carries the donors it used (weight, D, d_s, d_g), k, w, the
+number offered and the donor set's fingerprint (`donorSetHash`: a 64-bit
+hash of `donorSetCanonical`, the donors sorted by id; the backend stores the
+SHA-256 of the same text). An empty donor set, or one with no valid donor,
+gives `ok: false` with the reason.
+
+**How good the prior is: leave-one-out** (`priorLeaveOneOut`). Each donor
+in turn is the target of a prior built from the others, with the same k and
+w. For each parameter that varies among the donors:
+
+- the error is ln(p50 ÷ the donor's value) (x2: p50 − value);
+- the null prior is the plain median of the others;
+- skill = 1 − Σ err² / Σ err_null²;
+- coverage is the share of held-out donors inside their p10–p90.
+
+The overall skill pools x1, x3 and x4. It needs at least 3 donors. This
+score is in parameter space. A flow-space score (KGE′ of the prior's p50 on
+each held-out donor) needs the donors' forcing, so it belongs to the
+offline fit; that is to come.
+
+**The soil x1 prior** (`soilX1Relation`). Fitted on the donors, not
+asserted: ln x1 = a + b ln PAWC by least squares over the donors with a
+PAWC value. PAWC comes from the soil grid, [maps.md § Soil water
+capacity](./maps.md#soil-water-capacity). The residual sd is s =
+√(SSE / (n − 2)). The skill test is a PRESS leave-one-out R²: each donor is
+predicted by the line fitted on the others, against the others' mean. The
+relation is **dropped, with its reason**, when:
+
+- fewer than 4 donors have a PAWC;
+- PAWC doesn't vary;
+- the LOO R² is under 0.2.
+
+At a target's PAWC, `soilX1At` gives p50 = e^(a + b ln PAWC) and p10, p90
+= e^(… ∓ 1.2816 s), leaving out the coefficients' own uncertainty.
+
+**What calibration will read** (built, not yet called):
+
+- `priorPenalty(priors, params)` = ½ Σ z², with z = (ln x − ln p50) / σ and
+  σ = (ln p90 − ln p10) / (2 × 1.2816). x2 is taken linearly. A parameter
+  with no spread adds nothing. The penalty is 0 at the p50s and ½ × 1.2816²
+  ≈ 0.82 per parameter at a p10 or p90.
+- `priorBox(priors)`: each parameter's p10–p90 inside GR4J's hard bounds.
+
+**Built vs to come.** Built (engine 1.106.0):
+
+- the pure prior, its LOO score, the soil relation and the two helpers;
+- the soil grid (migration 268, `ingest/soils.py`, `pnpm import:soils`);
+- the donor table (migration 269, `pnpm import:gr4j-donors`) and the
+  offline fit.
+
+Synthetic grid and donors stand in for dev and CI. Not yet wired (#622,
+the next steps, [followups.md](./followups.md)):
+
+- `calibrate()`'s optional `prior` (the penalty beside the WR2012 MAR
+  penalty) and `bounds: 'prior'` (the box). Both are off by default; until
+  then every calibration is bit-identical to before.
+- The fit record naming the prior, the donor set's SHA-256 and its
+  `reference_load`.
+- A target's own attributes from BasinATLAS, and its PAWC from the soil
+  grid.
+- The Settings & calibration panel, and the evidence pack's § 3 line.
+- Per-unit x1 scaled by PAWC (step 6), which would change `runModel` and
+  needs its own `ENGINE_VERSION`, the `verify/` mirror and an
+  engine-audit.md entry.
+
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
 The `[Shortfalls]` sheet answers *how much must each farm cut (or may it

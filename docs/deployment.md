@@ -3037,6 +3037,8 @@ Lambda's list against the Sources table):
 | `gazetteer` | GeoNames, CC BY 4.0: allowed (its attribution, "GeoNames (geonames.org), CC BY 4.0", is stored on every place and shown under every Map search that lists one) | GeoNames' South Africa dump, `ZA.txt`, and its six neighbours' (`BW`, `LS`, `MZ`, `NA`, `SZ`, `ZW`) concatenated into a second file (gzip each); the kinds the search doesn't keep (roads, schools, …), a neighbour's places outside the basemap, and any other country's are left out at load | download the seven zips from download.geonames.org/export/dump/, unzip each in its own folder, `gzip -k ZA.txt`, and `cat` the six neighbours into one file, gzipped (steps below; maps.md § Gazetteer) |
 | `map-grid` | allowed dataset by dataset: the Southwestern Cape surface (WAAS, 2007) only, by the operator's decision of 2026-10-23 (terms not stated; legal/map-data-licences.md § 3.3b), as dataset `WAAS-SWCape-2007`, stored with its recorded source, version and credit line whatever the file says; `Lynch-2004` and any other label refused (the gate and the Lambda), and so is a `source` | the grid cut to the client's area, in the JSON form `--out` writes (gzipped), never the ASCII grid itself | `pnpm import:map-grid waas.asc --dataset WAAS-SWCape-2007 --source "…" --bbox <w,s,e,n> --out waas-swcape.json.gz` (steps below) |
 | `dws` | DWS verified daily flow: allowed, by DWS's permission obtained through the client's hydrologist (2026-10-28; data-sources.md § dws-flow). Not map data: one river gauge's flow, written into the gauge record store as `dws-request` rows (origin `dws`), merged with the station's other windows rather than replacing a dataset; `source` (the record's reference, 1–200 characters) is required, `station` optional | one station's DWS daily table: a `HyData.aspx` page saved as HTML (up to 20 years a request) or DWS's text reply, `.txt`, `.html`, `.htm` or `.aspx`, gzipped or not; at most 8 MiB (16 MiB unzipped) | save the page or keep the reply, `gzip -c` it to a neutral name ([§ DWS gauge records](#dws-gauge-records), Loading DWS's reply) |
+| `soils` | SoilGrids 2.0 and iSDAsoil, CC BY 4.0: allowed (their attribution is stored on the dataset row) | the soil water capacity grid `ingest/soils.py` writes (JSON, gzipped), never the GeoTIFFs; at most 32 MiB (64 MiB unzipped) | the GDAL steps below, then `python3 ingest/soils.py … --out soils-d1.json.gz` |
+| `gr4j-donors` | GRDC-Caravan and HydroATLAS, CC BY 4.0: allowed (only fitted parameters, scores and attributes are in the file, no flow; the recorded attribution `GR4J_DONORS` is stored whatever the file says) | the donor file `pnpm fit-donors` writes (JSON, gzipped); at most 4 MiB (8 MiB unzipped) | the donor fit below (offline, on our own forcing) |
 | `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 | `crop-types` | blocked: SANLC's terms not yet recorded (issue #604 R5-D, #618 step 8b) | the orchard and vine summary `pnpm import:crop-types … --out` writes, once allowed | refused until followups.md *Decision: SANLC's licence* is made; the live site shows no orchards or vines until then |
 
@@ -3135,6 +3137,81 @@ unit, **MAP from the grid** proposes each unit's MAP from it, beside the typed v
 to check them. A wider box later is a reload under the same label (a load
 replaces its dataset).
 
+**Soils and GR4J donors** (issue #622; [model.md §2.10m](./model.md),
+[maps.md § Soil water capacity](./maps.md#soil-water-capacity),
+[data-sources.md § GR4J priors](./data-sources.md#gr4j-priors-issue-622)).
+Both are the regional prior's reference data. Both are operator-run and
+offline, and the app never fetches either. Each needs the first backend
+release that carries migrations 268 (soils) and 269 (donors) deployed
+first. Until both are loaded, nothing uses a prior and GR4J keeps Perrin's
+defaults. No screen reads them yet: wiring the prior in is #622 step 5.
+Work in a folder outside the repo, and never commit a download or a file
+made from one.
+
+*The soil grid.* GDAL reads each source for region D1 only, averages it
+onto one 0.05° WGS 84 grid, and writes the ASCII form `ingest/soils.py`
+reads. SoilGrids' water retention sits in Google Cloud Storage (not on
+`files.isric.org`), one 2.2 GB GeoTIFF per depth. iSDAsoil's bedrock depth
+is one 23.6 GB cloud-optimised GeoTIFF; GDAL reads only the overview
+blocks it needs.
+
+```bash
+for p in wv0033 wv1500; do mkdir -p $p; for d in 0-5 5-15 15-30 30-60 60-100 100-200; do gdalwarp -q -t_srs EPSG:4326 -te 10 -35.5 41 -8 -tr 0.05 0.05 -r average -ot Float32 /vsicurl/https://storage.googleapis.com/isric-share-soilgrids/pre-release/$p/${p}_${d}cm_mean.tif $p/${p}_${d}cm_mean.tif && gdal_translate -q -of AAIGrid $p/${p}_${d}cm_mean.tif $p/${p}_${d}cm_mean.asc; done; done
+AWS_NO_SIGN_REQUEST=YES AWS_REGION=us-west-2 gdalwarp -q -b 1 -t_srs EPSG:4326 -te 10 -35.5 41 -8 -tr 0.05 0.05 -r average -ot Float32 /vsis3/isdasoil/soil_data/bedrock_depth/bedrock_depth.tif bedrock.tif && gdal_translate -q -of AAIGrid bedrock.tif bedrock.asc
+python3 <repo>/ingest/soils.py --wv0033 wv0033 --wv1500 wv1500 --bedrock bedrock.asc --out soils-d1.json.gz
+```
+
+The last line prints how many cells it wrote and how many it left out. Check it locally first:
+`pnpm import:soils <folder>/soils-d1.json.gz --dataset SoilGrids2-iSDA-D1`.
+Region D1 at 0.05° is at most 341 000 cells, about 12 MB of JSON. Keep the
+twelve SoilGrids GeoTIFFs and the bedrock GeoTIFF clip under
+`originals/soils/` in the reference bucket. Then upload and load:
+
+```bash
+sha256sum soils-d1.json.gz
+aws s3 cp soils-d1.json.gz s3://<reference_bucket>/reference/soils/soils-d1-2026.json.gz --profile water-management
+gh workflow run load-reference.yml -f kind=soils -f key=reference/soils/soils-d1-2026.json.gz -f sha256=<hex> -f dataset=SoilGrids2-iSDA-D1
+```
+
+*The donors.* Load the soil grid first, locally and in production, so
+each donor carries its PAWC for the soil x1 relation. The donor fit reads
+this checkout's database for the evaporation and soil grids, so load the
+real dPET grid (`pnpm import:evaporation …`) and the soil grid locally
+first. It reads our rain data copy through `MIRROR_URL`, the production
+copy's S3 URL with your SSO profile, or a local copy of it. The steps:
+
+1. Download GRDC-Caravan's CSV archive, `GRDC_Caravan_extension_csv.zip`
+   (8.8 GB, from the Zenodo record 10.5281/zenodo.15349031; no account),
+   and unzip it. Read `licenses/grdc/LicensesCaravan.xlsx` again for a new
+   version: a D1 country whose terms fail D-B is a decision before loading.
+2. Turn the basin polygons into GeoJSON:
+   `ogr2ogr -f GeoJSON basins.geojson GRDC_Caravan_extension_csv/shapefiles/grdc/<the .shp>`
+   (each feature has `gauge_id`).
+3. Fit: `pnpm fit-donors --caravan GRDC_Caravan_extension_csv --basins basins.geojson --out donors-d1.json.gz`
+   (paths resolve from the folder the command is typed in). Optional:
+   `--from` (default 1981-01-01, CHIRPS v3's start), `--to`, `--product
+   sat|rnl`, `--evaporation <dataset>` and `--soils <dataset>` (default the
+   newest real one of each), `--max-area` (default 10 000 km²), `--only
+   <id,…>` to try a few, and `--budget`, `--starts` and `--seed`. A donor
+   is a basin in region D1 with at least 8 years of flow in the window and
+   under 5 % regulation. Each is calibrated with the engine's own
+   `calibrate()` (KGE′, the typical bounds, x2 fixed, the split-sample
+   test). Every basin it refuses is printed with its reason. Expect a few
+   hundred basins, each a few seconds to a minute.
+4. Look at it locally: `pnpm import:gr4j-donors donors-d1.json.gz --dataset Caravan-D1-2026`.
+5. Keep the zip under `originals/gr4j-donors/`, then upload and load:
+
+```bash
+sha256sum donors-d1.json.gz
+aws s3 cp donors-d1.json.gz s3://<reference_bucket>/reference/gr4j-donors/caravan-d1-2026.json.gz --profile water-management
+gh workflow run load-reference.yml -f kind=gr4j-donors -f key=reference/gr4j-donors/caravan-d1-2026.json.gz -f sha256=<hex> -f dataset=Caravan-D1-2026
+```
+
+Approve each in the `production` environment. The dataset row records the
+set's SHA-256 (of the engine's `donorSetCanonical`) and the engine that
+fitted it. Refit, under a new label, when the engine's GR4J or calibration
+changes the parameters it would find, or when the copy gains years.
+
 Limits: the file at most 200 MiB as uploaded and 200 MiB of text unzipped
 (a gzip bomb is cut off, not unpacked), refused with a reason beyond that;
 the migrate Lambda has `migrate_memory_mb` (3 008 MB, the least Terraform
@@ -3185,6 +3262,8 @@ production checks](#read-only-production-checks)), or the archive's
 | `evaporation` | dPET on data.bris (DOI-versioned; new years appended) | the dataset page lists its years; refresh when the years you average over change | `pnpm import:evaporation:fetch <first> <last>` (the yearly files are 2.4 GB each and deleted once reduced: keep the reduced totals, not the NetCDF, under `originals/evaporation/`), then `--out` and load | Settings → Evaporation from the map shows the new dataset |
 | `gazetteer` | GeoNames country dumps, `download.geonames.org/export/dump/<CC>.zip` | `curl -sI -z <last load's date> https://download.geonames.org/export/dump/ZA.zip`: 304 is unchanged; refresh a few times a year at most | the gazetteer steps above; keep the seven zips under `originals/gazetteer/` | the Map's search finds the places listed above |
 | `map-grid` | a file from the client (WAAS, 2007): no upstream | never, unless the client sends a new surface | the MAP grid steps above; keep the surface as received under `originals/map-grid/` | the MAP grid layer and its credit line |
+| `soils` | SoilGrids 2.0 water retention (`storage.googleapis.com/isric-share-soilgrids/pre-release/`) and iSDAsoil's bedrock depth (`s3://isdasoil`) | `curl -sI` one SoilGrids file and compare its ETag and Last-Modified (2021-10-27 today); iSDAsoil v1 is final | the soil grid steps above; keep the GeoTIFF clips under `originals/soils/` | the load's counts |
+| `gr4j-donors` | GRDC-Caravan on Zenodo (versioned records) | the record's version list (0.6 today); and whenever the engine's fit or the copy's years change | the donor steps above, under a new label; keep the zip under `originals/gr4j-donors/` | the load's counts; the donor set's SHA-256 on its row |
 
 A large load squeezes the database's memory. The first production loads
 (2026-10-05: HydroRIVERS, 89 454 reaches, then WorldCover, 5.4 million cells,

@@ -477,6 +477,59 @@ open:
       Trigger: the first production load of the polygons, before turning
       the flag on.
 
+## Regional GR4J prior (issue #622)
+
+Round 3 of 2026-10-28 built steps 1–3 and the pure part of step 4
+([model.md §2.10m](./model.md)). These are the data-source rows, the soil
+water capacity grid (migration 268), the `gr4j-donors` reference kind
+(migration 269) with its offline fit, and `regionalPrior` with its
+leave-one-out score and soil x1 relation. Nothing reads a prior yet. What's
+open:
+
+- [ ] **Step 4's wiring: the prior in `calibrate()`.** Missing: the optional
+      `prior` (the log-normal penalty `priorPenalty`, weighted like the
+      WR2012 MAR penalty) and `bounds: 'prior'` (the `priorBox`). Both are
+      off by default, and calibration stays bit-identical with them off. The
+      fit record (`provenance.ts`) names the prior, `k`, the weight, the
+      donor set's SHA-256 and its `reference_load`. Durable fix: those
+      options, a bit-identity test with the prior off, `ENGINE_VERSION`, and
+      an engine-reviewer pass. Trigger: round 4, after #555's calibration
+      changes land (they touched the same files this round).
+- [ ] **A flow-space leave-one-out score.** Missing: the LOO score is in
+      parameter space (log error of the p50 against the plain median).
+      Flow space is what the hydrologist judges: KGE′ of the prior's p50 run
+      on each held-out donor, against its own fit. Durable fix:
+      `fit-donors.ts` runs it after the fits, with the forcing it already
+      holds, and stores it on `gr4j_donor_dataset` (a new column, a forward
+      migration). Trigger: with step 4's wiring, before the UI shows a skill
+      score.
+- [ ] **A target's own attributes.** Missing: `regionalPrior` needs the
+      target's HydroATLAS attributes. The donors carry theirs, from
+      GRDC-Caravan; a project's catchment or unit has none. Durable fix:
+      load BasinATLAS level-12 sub-basins (CC BY 4.0, figshare; read its
+      record's licence field first, data-sources.md § GR4J priors) as a
+      reference kind, and area-weight them over the boundary, as the soil
+      grid is. Trigger: step 5.
+- [ ] **Step 5: show and apply the prior.** Missing: the Settings &
+      calibration panel (the donors on the Map, the ranges, the LOO skill,
+      "Start from the prior", and a soil prior without skill labelled so),
+      the evidence pack's § 3 line (a report format bump), the credits for
+      the four sources on `/data-sources`, and api.md, ui.md,
+      evidence-pack.md and e2e. Trigger: after step 4's wiring.
+- [ ] **Step 6 (optional): x1 per unit by PAWC.** Changes `runModel`, so it
+      needs its own `ENGINE_VERSION`, the `verify/` mirror, an invariant
+      (equal PAWC across units reproduces the shared parameters bit for
+      bit) and an engine-audit.md entry. Trigger: only after step 5 is in
+      use and the hydrologist asks for it (#622 open question 4).
+- [ ] **The operator's loads.** Nothing uses the prior in production until
+      the operator builds the soil grid, fits the donors and loads both
+      ([deployment.md § Reference datasets](./deployment.md#reference-datasets),
+      *Soils and GR4J donors*). Fitting needs the copy's CHIRPS v3 finals
+      back to 1981 and a real dPET grid in the checkout's database. Trigger:
+      step 5 shipping. The hydrologist accepts the donor criteria (≥ 8
+      years, < 5 % regulation, ≤ 10 000 km²) and the similarity method
+      first (#622 Blockers).
+
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
 - [x] **Guard pending notices as db-setup.ts guards pending jobs.** The
