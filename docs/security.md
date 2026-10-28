@@ -3724,6 +3724,8 @@ PDF someone else asked for kept the person as a recipient
 | Resets of a lost second factor (205): when asked for, confirmed and ended, and how; the confirm and cancel links' hashes (SHA-256); requests counted for the daily cap | `mfa_reset`, `mfa_reset_cancel`, `mfa_reset_quota` | An ended reset 90 days (the tick, `app_mfa_reset_purge`); a link's hash until used or the reset ends; counts 24 hours | Deleted | – |
 | Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
 | Dam traces, counted for the hourly cap: the user's id and the project's (186) | `map_compute_throttle` | One hour from the window's first attempt | Lapses with its window | Lapses with its window |
+| The assistant's use (258): the person's tokens (input and output) and messages per project and UTC month, as counts only (never the conversation); own rows only under RLS; in "Download my data" (`assistantUsage`) | `assistant_usage` | The month it counts and the 12 after it (`ASSISTANT_USAGE_RETENTION_MONTHS`, 13), then deleted by the job tick (`app_purge_assistant`) | Kept without the name (`user_id` set null), so the month still counts what was spent, until its retention ends | Deleted |
+| The assistant's messages per person in the current hour, for the hourly cap (258); no one reads it but the cap's own function | `assistant_rate` | Until its hour is over: the person's next message or the job tick deletes it | Deleted | – |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
@@ -4301,8 +4303,13 @@ sends project data to a model. What goes, and what keeps it bounded:
   calls. Each tool runs in a read-only transaction as the caller, so RLS
   applies, and goes through the same readers and withholding as the run
   routes (a member who can't read registered volumes gets none through the
-  assistant). Tool results leave out member and farmer names and emails;
-  farm and unit names stay, as the model's own labels. A result is cut to
+  assistant). Tool results leave out member and farmer accounts, names and
+  emails, registered users' names, the run's label and notes and who made it,
+  and the calibration rules' signer (`get_settings` sends model inputs picked
+  by name, `MODEL_INPUT`, and the sign-off only as signed and its date);
+  farm, unit, dam, gauge and crop names stay as written, as the model's own
+  labels (a unit named after its owner goes too, which the privacy notice
+  says). A result is cut to
   `ASSISTANT_MAX_TOOL_RESULT_CHARS`. A tool's or provider's error text never
   reaches the model, the client or the log: fixed words go back, and the log
   gets only the error's name and frames (`safeError`).
@@ -4313,17 +4320,33 @@ sends project data to a model. What goes, and what keeps it bounded:
 - **Nothing kept.** No transcript, prompt or answer is stored or logged; the
   server keeps only token and message counts (`assistant_usage`,
   `assistant_rate`, 258). The usage rows are in "Download my data"
-  (`assistantUsage`); an account deletion clears their name.
-- **Cost.** A token budget per project per UTC month
-  (`ASSISTANT_TOKENS_PER_MONTH`, 2 M; checked before a turn, charged after,
-  so it can be passed by at most one turn's tokens for each turn in flight at
-  once, which the assistant Lambda's reserved concurrency bounds), a message cap per
+  (`assistantUsage`) and kept 13 months; an account deletion clears their
+  name. The rate rows go once their hour is over. Bedrock's model invocation
+  logging (an account setting Terraform can't pin off) would write every
+  prompt and answer to CloudWatch or S3; the post-apply check fails if it is
+  on (`infra/scripts/postapply-check.sh`, docs/deployment.md § The
+  assistant).
+- **Cost.** Tokens count weighted, input + 5 × output (output costs five
+  times input on Bedrock, so each cap is money at the input price). Three
+  token budgets per UTC month: the project's (`ASSISTANT_TOKENS_PER_MONTH`,
+  2 M), the person's across projects (`ASSISTANT_TOKENS_PER_USER_MONTH`,
+  1 M) and the deployment's in all (`ASSISTANT_TOKENS_PER_MONTH_TOTAL`,
+  derived in Terraform from `assistant_budget_monthly_usd`), so neither more
+  projects nor more accounts get past the last. Each is checked before a turn
+  and charged after, so it can be passed by at most one turn's tokens
+  (`ASSISTANT_MAX_TURN_TOKENS`, 150 K) for each turn in flight at once, which
+  the assistant Lambda's reserved concurrency bounds. A message cap per
   person per hour across projects (`ASSISTANT_MESSAGES_PER_HOUR`, 30; 429
-  with `Retry-After`), both counted in Postgres under locks so parallel
-  turns count one by one; and per turn at most `ASSISTANT_MAX_HOPS` (6)
-  model calls of `ASSISTANT_MAX_OUTPUT_TOKENS` (1024) each, within
-  `ASSISTANT_TURN_SECONDS` (100). The counter functions refuse a caller who
-  isn't a viewer of the project, so no one spends another project's budget.
+  with `Retry-After`). All counted in Postgres under advisory locks taken in
+  one order (the deployment's, the project's, then the person's row), so
+  parallel turns count one by one. Per turn at most `ASSISTANT_MAX_HOPS` (6)
+  model calls of `ASSISTANT_MAX_OUTPUT_TOKENS` (1024) each, at most
+  `ASSISTANT_MAX_TOOL_CALLS_PER_HOP` (4) tool calls a call, within
+  `ASSISTANT_TURN_SECONDS` (100); a tool's statements stop at 10 s. Each turn
+  logs one `assistant_turn` line with its token counts (no text), which an
+  hourly spend alarm sums, and a failed charge logs `assistant_charge_failed`,
+  which alarms on one. The counter functions refuse a caller who isn't a
+  viewer of the project, so no one spends another project's budget.
 - **Off by default.** `ASSISTANT_PROVIDER=off` shows no panel and calls
   nothing; no dev server needs a key.
 

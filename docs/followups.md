@@ -91,6 +91,16 @@ The checklist for these is issue #62; the history scrub is #63.
          `additionalEventData.inferenceRegion` on the `InvokeModelWithResponseStream`
          event (where it ran) and that the `assistant-*` alarms are OK.
       Trigger: the release that turns the chat on.
+- [ ] **The assistant's legal decisions (issue #610, counsel and the
+      operator; docs/legal-status.md § Other open items).** Before
+      `assistant_enabled = true`: (1) the transfer's s72 basis, AWS's DPA
+      and s72(1)(c)–(d) or consent at first use (s72(1)(b)), which would
+      need a first-use consent step in the panel; (2) operator agreement
+      clause 11.4 promises a Client its projects can be kept off, but the
+      switch is deployment-wide: confirm, narrow 11.4, or build a
+      per-project switch first; (3) the Terms don't mention the assistant
+      while the notice rests it on the agreement; (4) move `LEGAL_VERSION`
+      to the release that turns it on. Trigger: before step 1 above.
 - [ ] **If Bedrock's Claude ever stops being reachable from af-south-1
       (issue #610, open decision).** On 2026-10-27 af-south-1 offers
       Anthropic's models through the global inference profile only
@@ -5745,6 +5755,26 @@ assume, the questions for counsel); these are the actions, with triggers.
       unsubscribe POST (RFC 8058, sent by mail clients that can't add that
       header) moves to a signed GET. Reasoning in docs/security.md
       § Infrastructure.
+- [ ] **Move the assistant's origin to CloudFront OAC for Lambda (issue
+      #610, the infra review of 2026-10-27).** Its Function URL is
+      `authorization_type = "NONE"` like the API's, so a direct call skips
+      the WAF and takes one of the assistant's **2** reserved slots while
+      the app answers 403: anyone who learns the URL id can throttle every
+      chat with ~5 concurrent requests (the API's lever is 20× dearer at 40
+      slots). Not switched: CloudFront OAC is documented for Function URLs
+      and response streaming behind CloudFront separately, and nothing says
+      OAC signs a `RESPONSE_STREAM` URL, so it needs proving first.
+      **Trigger:** the `assistant-throttles` alarm firing outside a known
+      burst, or before the assistant is turned on for a second client.
+      **Durable fix:** for this origin only, `authorization_type = "AWS_IAM"`,
+      an `aws_cloudfront_origin_access_control` of type `lambda` with
+      `signing_behavior = "always"`, and `lambda:InvokeFunctionUrl` +
+      `lambda:InvokeFunction` granted to the distribution (`AWS:SourceArn`);
+      the panel's POST then sends `x-amz-content-sha256` (WebCrypto SHA-256
+      of the body, `lib/components/assistant/stream.ts`); keep the shared
+      secret as a second layer. Prove it with one streamed request after a
+      staging apply before switching. (No messages POST is one-click from a
+      mail client, so the API's unsubscribe reason doesn't apply here.)
 - [ ] **Check the 404s on the live site after the first apply (issue #126).**
       `curl -sI https://<domain>/missing.pdf` should answer `404` with
       `content-type: text/html` (spa_rewrite's page, not S3 XML), and

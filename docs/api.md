@@ -3844,8 +3844,8 @@ with every turn.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/assistant` | – | `AssistantStatus`: `{ available: false }` when the provider is `off`, else `{ available: true, provider, canApply, budget: { tokensPerMonth, tokensUsed, resetsAt }, rate: { messagesPerHour }, disclaimer }`. `canApply` is true for an editor or owner (the Save that applies a proposal needs one). `budget` is the project's tokens this calendar month (UTC), `resetsAt` the first instant of the next (ISO). `disclaimer` is one line saying the answers are advice, not model output, then the report disclaimer's paragraphs (`liability/disclaimer.ts`), blank-line separated, with `{site}` for the page to fill (`withSite`) | viewer |
-| POST | `/projects/:id/assistant/messages` | `{ messages: { role: 'user' \| 'assistant', content }[], runId? }` (strict, 1–200 messages, each at most 100 000 characters; the last is the user's new one and not empty; `runId` a run of this project, the one the page shows) | `200 text/event-stream` of `AssistantStreamEvent`s (below). Refused before any stream, as JSON: `404 assistant_off`; `404` for a `runId` of another project; `413 assistant_input_too_large` when the newest message alone passes `ASSISTANT_MAX_INPUT_CHARS` (older messages past it are dropped, oldest first, not refused); `429 assistant_rate_limited` past the caller's `ASSISTANT_MESSAGES_PER_HOUR` across projects, and `429 assistant_budget_spent` once the project's month has used `ASSISTANT_TOKENS_PER_MONTH`, each with `Retry-After` and `params.seconds` (to the end of the hour's window, or of the month). A refused message isn't counted | viewer |
+| GET | `/projects/:id/assistant` | – | `AssistantStatus`: `{ available: false }` when the provider is `off`, else `{ available: true, provider, canApply, budget: { tokensPerMonth, tokensUsed, resetsAt, scope }, rate: { messagesPerHour }, disclaimer }`. `canApply` is true for an editor or owner (the Save that applies a proposal needs one). `budget` is this calendar month's (UTC) cap with the fewest tokens left, in weighted tokens (input + 5 × output): `scope` `project` (`ASSISTANT_TOKENS_PER_MONTH`), `user` (the caller's across projects, `ASSISTANT_TOKENS_PER_USER_MONTH`) or `total` (the server's, `ASSISTANT_TOKENS_PER_MONTH_TOTAL`); `resetsAt` the first instant of the next month (ISO). `disclaimer` is one line saying the answers are advice, not model output, then the report disclaimer's paragraphs (`liability/disclaimer.ts`), blank-line separated, with `{site}` for the page to fill (`withSite`) | viewer |
+| POST | `/projects/:id/assistant/messages` | `{ messages: { role: 'user' \| 'assistant', content }[], runId? }` (strict, 1–200 messages, each at most 100 000 characters; the last is the user's new one and not empty; `runId` a run of this project, the one the page shows) | `200 text/event-stream` of `AssistantStreamEvent`s (below). Refused before any stream, as JSON: `404 assistant_off`; `404` for a `runId` of another project; `413 assistant_input_too_large` when the newest message alone passes `ASSISTANT_MAX_INPUT_CHARS` (older messages past it are dropped, oldest first, not refused); `429 assistant_rate_limited` past the caller's `ASSISTANT_MESSAGES_PER_HOUR` across projects, and, once a month is spent, `429 assistant_total_budget_spent` (the server's, checked first), `429 assistant_user_budget_spent` (the caller's across projects) or `429 assistant_budget_spent` (the project's), each with `Retry-After` and `params.seconds` (to the end of the hour's window, or of the month), and the budget ones with `params.scope`. A refused message isn't counted | viewer |
 
 The stream is `text/event-stream; charset=utf-8`, read with `fetch` on the
 POST (not `EventSource`, so the CSRF and session checks apply). Each event
@@ -3863,11 +3863,14 @@ trips:
   `SettingsPatch` and dry-run, with the engine's input-diff lines
   (`diff: { label, before, after }[]`), and `summary` for the revision
   reason ("Assistant suggestion: …").
-- `{ type: 'usage', inputTokens, outputTokens, tokensUsed, tokensPerMonth }`:
-  the turn's tokens and the project's month after it.
+- `{ type: 'usage', inputTokens, outputTokens, tokensUsed, tokensPerMonth, scope }`:
+  the turn's tokens, and the month's cap nearest its end after it, as the
+  status's `budget`.
 - `{ type: 'error', code, error }`: the turn ended early, `code` one of
   `assistant_hop_limit` (more than `ASSISTANT_MAX_HOPS` model calls),
-  `assistant_output_limit`, `assistant_timeout` (past
+  `assistant_output_limit`, `assistant_turn_limit` (the turn's weighted
+  tokens would pass `ASSISTANT_MAX_TURN_TOKENS`, 150 000: ask a narrower
+  question), `assistant_timeout` (past
   `ASSISTANT_TURN_SECONDS`, 100) or `assistant_provider_error` (the model
   failed or couldn't be reached; fixed words, never the provider's). `usage`
   and `done` still follow.
