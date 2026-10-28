@@ -106,10 +106,9 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	scenarioHref: { why: 'ApplicationsTab: local "?tab=scenarios&scenario=" + encoded id', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	warningsHref: { why: 'RunSummaryView prop: RunsTab passes "?tab=warnings&run=" + encodeURIComponent(the run id from the API) + "#warn-run"; the report passes none', in: ['lib/components/runs/RunSummaryView.svelte'] },
 	runWarningsHref: { why: 'WarningsTab: "#warn-run", or sourceHref("run") (withParam of the current page) + "#warn-run"', in: ['lib/components/warnings/WarningsTab.svelte'] },
-	sourceHref: { why: 'WarningsTab: withoutParam(page.url, "source") or withParam(page.url, "source", a SOURCE_FILTERS constant)', in: ['lib/components/warnings/WarningsTab.svelte'] },
-	statusHref: { why: 'WarningsTab: withoutParam(page.url, "status") or withParam(page.url, "status", a STATUS_FILTERS constant)', in: ['lib/components/warnings/WarningsTab.svelte'] },
-	checkHref: { why: 'WarningsTab: withoutParam(page.url, "check") or withParam(page.url, "check", a CHECK_LABEL key)', in: ['lib/components/warnings/WarningsTab.svelte'] },
-	everyHref: { why: 'WarningsTab: "?" + URLSearchParams of the current page with status=all and no check or series', in: ['lib/components/warnings/WarningsTab.svelte'] },
+	'a.href': { why: 'WarningsTab: a fix\'s link (warnings/fixes.ts, a "?tab=…" literal or "?tab=settings|calibration&field=" + a literal id; resolve("help/guides/…") for the guide) or a problem\'s (warnings/problems.ts: issueHref, blockerHref, "?tab=series…", "?tab=runs&run=" + an encoded id)', in: ['lib/components/warnings/WarningsTab.svelte'] },
+	'r.action.href': { why: 'WarningsTab: a setting fix\'s field (warnings/fixes.ts, "?tab=settings&field=" + a literal id)', in: ['lib/components/warnings/WarningsTab.svelte'] },
+	everyHref: { why: 'WarningsTab: "?tab=warnings&status=all" and the page’s run= encoded', in: ['lib/components/warnings/WarningsTab.svelte'] },
 	filterHref: { why: 'ApplicationsTab: withoutParam(page.url, "status") or withParam(page.url, "status", f)', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	assessHref: { why: 'ApplicationsTab: withParam(page.url, "view", "assess")', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	listHref: { why: 'ApplicationsTab: withoutParam(page.url, "view")', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
@@ -131,8 +130,8 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
 	issueHref: { why: 'BUILDER: "?tab=<area>" with the item id encodeURIComponent-ed (model/validate.ts issueHref)', in: ['lib/components/model/IssueList.svelte'] },
 	'p.href': {
-		why: 'ProblemLinks: issueHref(…), "#" + a NumberInput id, or a draft adapter\'s "?tab=project" / "?tab=settings#<group id>" (SaveBar, ModelSaveRow, the page); WarningText: runs/warningText.ts warningParts, each href warningPlaceHref (BUILDER "?tab=settings#" + a fixed set- id, or calibrationHref with the encoded run id and a fixed anchor), never text from the warning; WarningsTab: warnings/problems.ts problems(), issueHref, blockerHref ("?tab=settings|calibration#" + a fixed set- id), "?tab=series#data-feeds", "?tab=series&series=" or "?tab=runs&run=" + an encoded id',
-		in: ['lib/components/model/ProblemLinks.svelte', 'lib/components/runs/WarningText.svelte', 'lib/components/warnings/WarningsTab.svelte']
+		why: 'ProblemLinks: issueHref(…), "#" + a NumberInput id, or a draft adapter\'s "?tab=project" / "?tab=settings#<group id>" (SaveBar, ModelSaveRow, the page); WarningText: runs/warningText.ts warningParts, each href warningPlaceHref (BUILDER "?tab=settings#" + a fixed set- id, or calibrationHref with the encoded run id and a fixed anchor), never text from the warning',
+		in: ['lib/components/model/ProblemLinks.svelte', 'lib/components/runs/WarningText.svelte']
 	},
 	plantedHref: { why: 'NodeDetail: NetworkTab builds "?" + URLSearchParams of the current page with farm=<node id>, or leaves it null', in: ['lib/components/network/NodeDetail.svelte'] },
 	transfersHref: { why: 'NodeDetail: NetworkTab passes the literal "?tab=transfers" or null', in: ['lib/components/network/NodeDetail.svelte'] },
@@ -175,7 +174,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'preview.href': { why: 'FarmShell prop: FarmPage builds `<base>/projects/<encoded id>?tab=network`', in: ['lib/components/farm/FarmShell.svelte'] },
 	'more.href': { why: 'SupplyByFarm prop: OverviewTab passes supplyHref', in: ['lib/components/overview/SupplyByFarm.svelte'] },
 	'h.href': { why: 'LatestRun: latestRun.ts rows with DAMS_HREF and the builders', in: ['lib/components/overview/LatestRun.svelte'] },
-	'r.href': { why: 'CompareView: the `reports` list, reportHref() (`<base>/projects/<id>/report?` + URLSearchParams); projects/NeedsAttention: outcomes.ts attention() reasons, built by curtailmentHref (`<base>/projects/…`) or absent; WarningsTab: warnings/runWarnings.ts settingLink, "?tab=series" or "?tab=settings|calibration#" + a WARNING_CODES anchor (engine constants), or null', in: ['lib/components/compare/CompareView.svelte', 'lib/components/projects/NeedsAttention.svelte', 'lib/components/warnings/WarningsTab.svelte'] },
+	'r.href': { why: 'CompareView: the `reports` list, reportHref() (`<base>/projects/<id>/report?` + URLSearchParams); projects/NeedsAttention: outcomes.ts attention() reasons, built by curtailmentHref (`<base>/projects/…`) or absent; WarningsTab: warnings/runWarnings.ts settingLink, "?tab=series" or "?tab=settings|calibration#" + a WARNING_CODES anchor (engine constants), or null', in: ['lib/components/compare/CompareView.svelte', 'lib/components/projects/NeedsAttention.svelte'] },
 	allHref: { why: 'projects/NeedsAttention prop: the list page passes hrefWith(…)', in: ['lib/components/projects/NeedsAttention.svelte'] },
 	hrefWith: { why: 'projects list page: "?" + URLSearchParams(owner, sort, q), or `<base>/`', in: ['routes/+page.svelte'] },
 	'it.href': { why: 'NeedsAttention: attention.ts items built from runHref / farmDrawerHref or "?tab=…" literals', in: ['lib/components/overview/NeedsAttention.svelte'] },

@@ -67,5 +67,5 @@ export async function loadFeedProblems(projectId: string): Promise<FeedProblem[]
 	const label = new Map(list.sources.map((o) => [o.source, o.label]));
 	return list.feeds
 		.filter((f) => f.health.state === 'failing' || f.health.state === 'stale')
-		.map((f) => ({ id: f.id, name: `${label.get(f.source) ?? f.source} into ${f.targetName || kindLabel(f.targetKind)}`, message: healthMessage(f.health) }));
+		.map((f) => ({ id: f.id, name: `${label.get(f.source) ?? f.source} into ${f.targetName || kindLabel(f.targetKind)}`, message: healthMessage(f.health), enabled: f.enabled }));
 }

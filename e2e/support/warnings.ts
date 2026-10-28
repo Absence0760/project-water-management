@@ -40,16 +40,16 @@ export async function seedWarnings(request: APIRequestContext, name: string, { d
 export async function openWarnings(page: Page, projectId: string, query = '') {
 	await page.goto(`/projects/${projectId}?tab=warnings${query}`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Warnings' })).toBeVisible();
-	await expect(warningsTable(page).or(page.getByTestId('warnings-empty')).or(page.getByTestId('warnings-none')).or(page.getByTestId('warn-other')).first()).toBeVisible();
+	await expect(warningsTable(page).or(page.getByTestId('warnings-empty')).or(page.getByTestId('warnings-none')).or(page.getByTestId('warn-other')).or(page.locator('#warn-run')).first()).toBeVisible();
 }
 
 export const checksPanel = (page: Page) => page.getByRole('region', { name: 'Data checks' });
 export const warningsTable = (page: Page) => page.getByTestId('warnings-table');
 export const warningRows = (page: Page) => warningsTable(page).locator('tbody tr[data-item]');
 export const warningRow = (page: Page, text: string | RegExp) => warningRows(page).filter({ hasText: text });
-export const statusChips = (page: Page) => checksPanel(page).getByRole('group', { name: 'Status' });
+export const statusChips = (page: Page) => page.getByTestId('warnings-status');
 export const checkChips = (page: Page) => checksPanel(page).getByRole('group', { name: 'Check' });
-export const bulkBar = (page: Page) => page.getByRole('toolbar', { name: 'Decide the ticked periods' });
+export const bulkBar = (page: Page) => page.getByRole('toolbar', { name: 'Decide the ticked rows' });
 export const runWarnings = (page: Page) => page.getByRole('region', { name: 'Run warnings' });
 
 /** The project's saved settings, as the API answers them. */
@@ -65,3 +65,34 @@ export async function runSummary<T = Record<string, unknown>>(request: APIReques
 	expect(res.status()).toBe(200);
 	return ((await res.json()) as { run: { summary: T } }).run.summary;
 }
+
+/**
+ * A runnable project whose catchment rain holds one multi-day accumulation (rain-accumulations.spec.ts's synthetic
+ * record: the gauge unread for the 7 days before 2012-06-21, which holds the lot), with CHIRPS to judge it by.
+ */
+export async function seedAccumulation(request: APIRequestContext, name: string): Promise<{ id: string }> {
+	const project = await createProject(request, name);
+	await putModel(request, project.id, sampleModel());
+	await updateSettings(request, project.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110] });
+	const start = Date.UTC(2010, 9, 1);
+	const days = (Date.UTC(2016, 9, 1) - start) / 86_400_000;
+	const monthOf = (i: number) => new Date(start + i * 86_400_000).getUTCMonth() + 1;
+	const reading = (Date.parse('2012-06-21') - start) / 86_400_000;
+	const chirps = Array.from({ length: days }, (_, i) => (monthOf(i) >= 4 && monthOf(i) <= 9 ? (i % 3 === 0 ? 4 : 0) : i % 9 === 0 ? 1 : 0));
+	for (let i = reading - 7; i < reading - 1; i++) chirps[i] = 4;
+	for (const i of [reading - 1, reading, reading + 1]) chirps[i] = 0;
+	const catchment: (number | null)[] = chirps.map((v) => v * 2);
+	let total = 0;
+	for (let i = reading - 7; i < reading; i++) {
+		total += catchment[i]!;
+		catchment[i] = null;
+	}
+	catchment[reading] = total;
+	await putSeries(request, project.id, { kind: 'rain_catchment_mm', name: 'Catchment rain', unit: 'mm', startDate: '2010-10-01', values: catchment });
+	await putSeries(request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS', unit: 'mm', startDate: '2010-10-01', values: chirps });
+	return project;
+}
+
+/** The run warnings' rows, and one by its words. */
+export const runWarningRows = (page: Page) => page.getByTestId('warn-run-list').locator(':scope > li');
+export const runWarningRow = (page: Page, text: string | RegExp) => runWarningRows(page).filter({ hasText: text });

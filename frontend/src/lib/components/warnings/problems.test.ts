@@ -35,7 +35,22 @@ describe('problems', () => {
 		expect(new Set(p.map((x) => x.id)).size).toBe(p.length);
 	});
 
-	it('gives a viewer no unsaved-settings problems (an edit is an editor’s)', () => {
+	it('gives each a how-to line, an action an editor can take, and an area', () => {
+		const p = problems({ ...inputs, feeds: [{ ...inputs.feeds[0]!, enabled: true }] });
+		const by = (source: string) => p.find((x) => x.source === source)!;
+		expect(by('feeds').fix).toEqual({ kind: 'fetch', label: 'Fetch now', feedId: 'f1' });
+		expect(by('runs').fix).toEqual({ kind: 'run', label: 'Run the model' });
+		expect(by('data').fix).toEqual({ kind: 'link', label: 'Add newer data', href: '?tab=series&add=data' });
+		expect(by('model').fix).toEqual({ kind: 'link', label: 'Go to Network', href: '?tab=network&edit=n1' });
+		expect(p.map((x) => x.area)).toEqual(['model', 'model', 'model', 'feeds', 'data', 'runs', 'runs']);
+		for (const x of p) expect(x.how).toMatch(/\.$/);
+		// A viewer gets the way there, not the action.
+		const v = problems({ ...inputs, role: 'viewer', feeds: [{ ...inputs.feeds[0]!, enabled: true }] });
+		expect(v.find((x) => x.source === 'feeds')!.fix.kind).toBe('link');
+		expect(v.find((x) => x.source === 'runs')!.fix.kind).toBe('link');
+	});
+
+		it('gives a viewer no unsaved-settings problems (an edit is an editor’s)', () => {
 		expect(problems({ ...inputs, role: 'viewer' }).some((x) => x.source === 'settings')).toBe(false);
 	});
 

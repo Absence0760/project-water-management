@@ -79,6 +79,7 @@
 	import { carriedRun, isRunTab, pickOf, tabHref as tabLinkHref } from '#lib/workspace/tabLinks.js';
 	import { defaultRunId } from '#lib/components/runs/runList.js';
 	import { badgeCount, problems, type FeedProblem } from '#lib/components/warnings/problems.js';
+	import { landOnField } from '#lib/nav/fieldLanding.js';
 	import { focusPageStart } from '#lib/a11y/focusPage.js';
 	import { firstOutletSeries } from '#lib/series/pick.js';
 	import { withoutFarm } from '#lib/components/crops/farmDrawer.js';
@@ -340,6 +341,20 @@
 		addMounted = true;
 		addOpen = true;
 	}
+	// `?field=<id>` (the Warnings page's fixes, issue #611): land on that one field once its tab draws it, then drop
+	// the parameter (a replace, so Back and a reload don't land again). A new field or leaving the project stops it.
+	let stopField = () => {};
+	$effect(() => {
+		const f = page.url.searchParams.get('field');
+		if (!f || !project) return;
+		untrack(() => {
+			stopField();
+			stopField = landOnField(f);
+			void goto(withoutParam(page.url, 'field'), { replace: true, reset: false });
+		});
+	});
+	$effect(() => () => stopField());
+
 	// `?add=data` (the project list's Add data link): the dialog opens once the role is known, for an
 	// editor, and the param goes so Back or a reload doesn't reopen it.
 	$effect(() => {
@@ -407,12 +422,15 @@
 		// Started on Calibration, the run opens there, on How the shown run fits, so the calibration loop (fit, run,
 		// read the fit) stays on one page (issue #586 round 3); from anywhere else, in Runs & results.
 		const here = runOpensHere;
+		// Started on Warnings (its Run now, issue #611), the run opens back there, on the new run's warnings.
+		const onWarnings = tab === 'warnings';
 		try {
 			const { run: r, removedRunIds } = await api.runs.create(projectId, label, { forecast });
 			const { summary: _s, ...meta } = r;
 			setRuns([meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
 			banner = null;
-			await goto(here ? `?tab=calibration&run=${r.id}#cal-fit` : `?tab=runs&run=${r.id}`, { reset: false });
+			await goto(here ? `?tab=calibration&run=${r.id}#cal-fit` : onWarnings ? `?tab=warnings&run=${r.id}#warn-run` : `?tab=runs&run=${r.id}`, { reset: false });
+			if (onWarnings) landOnAnchor('warn-run');
 			// A goto the page makes itself lands nowhere (nav/anchorLandingEnv.svelte.ts), so land on the part, focused.
 			if (here && tab === 'calibration') landOnAnchor('cal-fit');
 		} catch (e) {
@@ -1148,7 +1166,7 @@
 				{:else if tab === 'warnings'}
 					<Lazy load={LOAD.warnings}>
 						{#snippet children(WarningsTab)}
-							<WarningsTab {projectId} project={project!} {series} {runs} {canEdit} nodes={editor.model.nodes} issues={editor.issues} blockers={settings.blockers} behind={fresh?.behind ?? []} {onProjectChange} />
+							<WarningsTab {projectId} project={project!} {series} {runs} {canEdit} nodes={editor.model.nodes} issues={editor.issues} blockers={settings.blockers} behind={fresh?.behind ?? []} running={rerunning} onRun={() => void runModel('After fixing warnings')} {onProjectChange} />
 						{/snippet}
 					</Lazy>
 				{:else if tab === 'runs'}

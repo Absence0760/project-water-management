@@ -6515,13 +6515,63 @@ linking to where it is fixed; and the shown run's warnings.
   warnings about the record and its data in this run…**, from its
   `calibration.*` and `data.*` codes). It carries `run=` like the run pages
   (`tabLinks.ts` `RUN_TABS`).
-- **Source chips** (`source=`, a step in history): **All**, then **Data
-  checks**, **Model**, **Unsaved settings**, **Data feeds**, **Data behind**,
-  **Runs** and **Run warnings**, each with its count (a source with nothing
-  hides). One source shows only its part. The data checks always come first.
-- **Problems elsewhere** (`#warn-other`, `warnings/problems.ts`): read-only
-  rows, no tick (their fix is on their own page), grouped by source, each with
-  what it is about, what is wrong and a **Go to …** link: the model editor's
+- **Every row is solvable** (operator, issue #611): each says **How to fix:**
+  in plain words and carries one primary action, and every row an editor
+  can't fix can be kept. A run warning's fix is its `WARNING_CODES` code's
+  entry in `warnings/fixes.ts` `CODE_FIXES` (`fixes.test.ts` fails for a
+  code without one, and checks each field id is drawn by a component):
+  - **a one-value setting saved here** with a reason, where the change can't
+    lose anything: **Set flagged zero runs aside** (a zero run as recorded,
+    the catchment's, a station's or a unit gauge's), **Spread
+    accumulations** (one as recorded), **Remove the broken periods** (a
+    station's malformed unreliable periods). Once saved the row reads
+    **Fixed: rerun to confirm** (under Fixed or handled) until a run no
+    longer warns, and a line offers **Run now**, which opens the new run's
+    warnings here;
+  - **the exact field**, `?tab=settings|calibration&field=<id>` (the zero-run
+    mode, the CHIRPS threshold, Keep dry, the accumulation mode, Keep as
+    recorded, the CHIRPS correction and fit period, the gap-filling product,
+    rain source periods, unreliable periods, the stations, unit rain, the
+    simulation period, the calibration window and record, excluded periods):
+    the workspace page lands on it (`nav/fieldLanding.ts`: opens the fold
+    around it, scrolls it to the middle, focuses its first control, outlines
+    it for 4 s, `data-field-landed`) and drops the parameter;
+  - **a page**: Data feeds, Add data (`?add=data`), the Data page;
+  - **this page's data checks**: a data-check warning (`data.flatline` …) is
+    solved period by period, so its **Show the periods** filters to them.
+  An uncoded warning (an older run, or one not coded yet) takes an action by
+  its words (`uncodedFix`: dam areas → the Network, signatures → Plausibility
+  checks, EWR, evaporation, transfers, crops), else **How to read run
+  warnings** (the guide). Problems: **Fetch now** for a failing or stale feed
+  (`POST /projects/:id/feeds/:id/run-now`, an editor's, an existing route),
+  **Add newer data** for a series behind, **Run the model** for a run an
+  erratum may affect, the item itself (the save bar's link) for a model
+  problem, the panel for an unsaved setting. A viewer gets the links, never
+  the buttons.
+- **Keep (accept)** any run warning or problem, with an optional note (a
+  dialog, *Why (optional)*): stored in `settings.warningsKept` (`{ id, note }`,
+  the id stable across runs: `run:<code>:<hash of its names>` or
+  `run:text:<hash of its words, numbers taken out>`, `problem:<source>:…`;
+  `warnings/ids.ts`), shown under **Kept** with its note and a **Reopen**.
+  Data checks keep as before (their own lists, no note).
+- **Filters across every row**, in the URL, each chip with the count it would
+  show under the others (`warnings/filters.ts`): **Source** (`source=`: Data
+  checks, Model, Unsaved settings, Data feeds, Data behind, Runs, Run
+  warnings), **Status** (`status=`: Open, Fixed or handled, Kept, All; a data
+  check's Patched, Excluded and Handled by default are Fixed or handled),
+  **Severity** (`sev=`: To check, Notes), **Area** (`area=`: Data, Rain,
+  Calibration, Model, Feeds, Runs, from the record's kind or the code), the
+  **Record** picker (`series=`) and **Find** (`q=`, every word, one step in
+  history as typed). The data checks keep their kind of check (`check=`).
+  The data checks always come first.
+- **One bulk row** for every part: ticks on any row, **Select all N
+  matching** (every row the filters show, folded ones too), then **Patch N**
+  and **Exclude N** (data checks), **Keep N** (all; a note when it includes a
+  run warning or problem) and **Reopen N** (kept rows, and patched or
+  excluded periods).
+- **Problems elsewhere** (`#warn-other`, `warnings/problems.ts`): grouped by
+  source, each with what it is about, what is wrong, how to fix it and its
+  action (above): the model editor's
   problems (`editor.issues`, the sidebar's "Has problems to fix", linked as the
   save bar links them); an editor's unsaved settings that block Save (the
   settings draft's blockers); data feeds failing or stale (the Data feeds

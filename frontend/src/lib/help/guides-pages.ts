@@ -527,6 +527,19 @@ export const PAGE_GUIDES: Guide[] = [
 				]
 			},
 			{
+				heading: 'Solving a warning',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Every row says **How to fix** in plain words, with the action that does it. Some fixes are one setting the page can change for you: **Spread accumulations**, **Set flagged zero runs aside**, **Remove the broken periods**. The row then reads **Fixed: rerun to confirm** until you press **Run now**, and the new run’s warnings show here. Others take you to the exact field, opened and outlined (**Go to Keep dry**, **Go to the calibration window**), or to the page where it is fixed (**Add data**, **Go to Data feeds**). A failing feed has **Fetch now**; a run a known engine bug may affect has **Run the model**.'
+					},
+					{
+						type: 'p',
+						text: 'Anything you accept as it is, **Keep**, with a note saying why if you like: it moves under **Kept** with the note, and **Reopen** brings it back. The filters at the top (**Source**, **Status**, **Severity**, **Area**, **Record** and **Find**) work on every row and stay in the address; tick rows, or **Select all N matching**, to keep or reopen many at once.'
+					}
+				]
+			},
+			{
 				heading: 'Problems elsewhere',
 				blocks: [
 					{
