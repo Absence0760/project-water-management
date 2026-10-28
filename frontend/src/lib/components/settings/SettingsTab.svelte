@@ -136,7 +136,7 @@
 	// no stored project changes. The one switched off is kept until saved, so switching back brings it back as it was.
 	const flowMethod = $derived(flowMethodOf(s.unitRain));
 	const stations = $derived(rainSeries ? stationOptions(rainSeries) : undefined);
-	// The land units on the catchment rain (issue #615): their EWR share follows their area, under both methods.
+	// The land units on the catchment rain (issue #615): their share follows their area, under both methods.
 	const onCatchmentRain = $derived(rainSeries ? unitsOnCatchmentRain(editor?.model.nodes ?? [], s, rainSeries) : []);
 	const NAMES_SHOWN = 6;
 	const namesOf = (units: readonly { name: string }[]) =>
@@ -375,7 +375,7 @@
 			</p>
 			{#if onCatchmentRain.length}
 				<p class="hint" role="note" data-testid="ewr-split-catchment-rain">
-					{onCatchmentRain.length === 1 ? 'One unit has' : `${onCatchmentRain.length} units have`} no rain of {onCatchmentRain.length === 1 ? 'its' : 'their'} own (no station, rain gauge, CHIRPS, or MAP with a gauge MAP), so {onCatchmentRain.length === 1 ? 'it runs' : 'they run'} on the catchment rain and {onCatchmentRain.length === 1 ? 'its' : 'their'} EWR share follows {onCatchmentRain.length === 1 ? 'its' : 'their'} area:
+					{onCatchmentRain.length === 1 ? 'One unit has' : `${onCatchmentRain.length} units have`} no rain of {onCatchmentRain.length === 1 ? 'its' : 'their'} own (no station, rain gauge, CHIRPS, or MAP with a gauge MAP), so {onCatchmentRain.length === 1 ? 'it runs' : 'they run'} on the catchment rain and {onCatchmentRain.length === 1 ? 'its' : 'their'} share follows {onCatchmentRain.length === 1 ? 'its' : 'their'} area:
 					{namesOf(onCatchmentRain)}.
 				</p>
 			{/if}

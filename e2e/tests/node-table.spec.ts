@@ -4,7 +4,7 @@
 // scrolls sideways. The desktop test pins the table's editing as it was
 // before the phone cards came in.
 import type { Locator, Page } from '@playwright/test';
-import { addMember, createProject, putModel, sampleModel } from '../support/api.ts';
+import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
@@ -34,12 +34,11 @@ async function editAndSave(page: Page, projectId: string, model: Model) {
 	await grid.getByLabel('Area of Lower block, km²', { exact: true }).fill('9.5');
 	await grid.getByLabel('Dam capacity of Lower block, m³').fill('95000');
 	await grid.getByLabel('Upstream inflow entering the dam at Upper farm, %').fill('40');
-	await grid.getByLabel('Manual flow share of Upper farm, %').fill('60');
 	await expect(totals).toContainText('33.50');
 	await expect(totals).toContainText('245\u202f000');
-	await expect(totals).toContainText('100.00%');
-	// Upper 12 km² of 21.5 km² of units, by area.
-	await expect(nodeRow(grid, model, 'Upper farm')).toContainText('55.81%');
+	// In use is each unit's natural MAR share from the latest run (engine 1.105.0, issue #616): none yet, so no total.
+	await expect(nodeRow(grid, model, 'Upper farm')).toContainText('after a run');
+	await expect(totals).not.toContainText('%');
 
 	// Out of range: shown, marked invalid, not taken, and the field says the range it takes.
 	// The text and the message stay after the field loses focus (not put back to the old value).
@@ -87,7 +86,6 @@ async function editAndSave(page: Page, projectId: string, model: Model) {
 	await expect(again.getByLabel('Dam capacity of Lower block, m³')).toHaveValue('95000');
 	await expect(again.getByLabel('Dam initial storage of Upper farm, %')).toHaveValue('70');
 	await expect(again.getByLabel('Upstream inflow entering the dam at Upper farm, %')).toHaveValue('40');
-	await expect(again.getByLabel('Manual flow share of Upper farm, %')).toHaveValue('60');
 	return again;
 }
 
@@ -102,9 +100,11 @@ test('desktop: the node table edits, validates and saves every kind of cell', as
 	// Still a table: the column headers show, the fields sit side by side in one row.
 	await expect(grid.getByRole('columnheader', { name: /In use/ })).toBeVisible();
 	await expect(grid.getByRole('columnheader', { name: /^Kind/ })).toBeVisible();
-	// The computed In use column has its ⓘ like the field columns, and the intro links to the method's setting.
+	// The In use column has its ⓘ like the field columns, and the intro says it is the latest run's natural MAR share.
 	await expect(grid.getByRole('columnheader', { name: /In use/ }).getByRole('button', { name: 'About the flow share in use' })).toBeVisible();
-	await expect(grid.getByRole('link', { name: 'Model settings' })).toHaveAttribute('href', '?tab=settings#set-share');
+	await expect(grid).toContainText('In use is each hydrological unit’s natural MAR share of the flow and the EWR, shown after a run');
+	// No High-MAP, Low-MAP or Manual share columns (retired with the flow-share methods, issue #616).
+	for (const name of [/High.MAP/, /Low.MAP/, /Manual/]) await expect(grid.getByRole('columnheader', { name })).toHaveCount(0);
 	const row = nodeRow(grid, model, 'Upper farm');
 	const [a, b] = await Promise.all([
 		row.getByLabel('Area of Upper farm, km²', { exact: true }).boundingBox(),
@@ -114,6 +114,21 @@ test('desktop: the node table edits, validates and saves every kind of cell', as
 	// A gauge's unused cells say so.
 	await expect(nodeRow(grid, model, 'Outflow gauge').getByRole('cell', { name: 'not used for a gauge' }).first()).toBeAttached();
 	await expectNoViolations(page);
+});
+
+test('the In use column is the latest run’s natural MAR share, dated, adding up to 100 % (issue #616)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'Node table shares');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
+	const grid = page.getByRole('dialog', { name: 'Hydrological unit table' });
+	// Every unit on the catchment rain: each share follows its area, Upper 12 km² of 20 km².
+	await expect(nodeRow(grid, project.model, 'Upper farm')).toContainText('60.00%');
+	await expect(nodeRow(grid, project.model, 'Lower farm')).toContainText('40.00%');
+	await expect(grid.locator('tfoot tr')).toContainText('100.00%');
+	await expect(grid).toContainText(/In use is each hydrological unit’s natural MAR share of the flow and the EWR, from the latest run \(\d{1,2} \w+ \d{4}\)/);
+	await expect(grid.getByRole('columnheader', { name: /In use/ })).toHaveAttribute('title', /^The latest run’s, \d{1,2} \w+ \d{4}$/);
 });
 
 test.describe('phone', () => {
@@ -152,15 +167,15 @@ test.describe('phone', () => {
 		await expect(grid.getByText('The field guide below explains', { exact: true })).toBeVisible();
 		await expect(grid.getByText('The help buttons beside each heading and the field guide below explain', { exact: true })).toBeHidden();
 		const upper = nodeRow(grid, model, 'Upper farm');
-		for (const label of ['Kind', 'Drains into', 'Area km²', 'Dam capacity m³', 'Dam initial storage %', 'Upstream inflow to dam %', 'Manual flow share %'])
+		for (const label of ['Kind', 'Drains into', 'Area km²', 'Dam capacity m³', 'Dam initial storage %', 'Upstream inflow to dam %'])
 			await expect(upper.getByText(label, { exact: true })).toBeVisible();
-		await expect(upper.getByText('Flow share in use 55.81%')).toBeVisible();
-		const [area, hi] = await Promise.all([
+		await expect(upper.getByText('Flow share in use after a run')).toBeVisible();
+		const [area, cap] = await Promise.all([
 			upper.getByLabel('Area of Upper farm, km²', { exact: true }).boundingBox(),
-			upper.getByLabel('High-MAP area of Upper farm, km²').boundingBox()
+			upper.getByLabel('Dam capacity of Upper farm, m³').boundingBox()
 		]);
-		expect(Math.abs(area!.y - hi!.y)).toBeLessThanOrEqual(1);
-		expect(hi!.x).toBeGreaterThan(area!.x + area!.width);
+		expect(Math.abs(area!.y - cap!.y)).toBeLessThanOrEqual(1);
+		expect(cap!.x).toBeGreaterThan(area!.x + area!.width);
 		// The name takes the card's width, under its controls, Remove at the top right.
 		const name = (await upper.getByRole('textbox', { name: 'Name' }).boundingBox())!;
 		expect(name.width).toBeGreaterThan(280);
@@ -181,7 +196,8 @@ test.describe('phone', () => {
 		const totals = grid.locator('tfoot tr');
 		await expect(totals.getByText('Area 33.50 km²')).toBeVisible();
 		await expect(totals.getByText('Dam capacity 245\u202f000 m³')).toBeVisible();
-		await expect(totals.getByText('Flow share in use 100.00%')).toBeVisible();
+		// No run, so no share total.
+		await expect(totals.getByText(/Flow share in use/)).toHaveCount(0);
 
 		await expectNoTableScroll(grid);
 		await expectNoSidewaysScroll(page);

@@ -28,7 +28,7 @@ test('the EWR is split by each unit’s natural MAR under both methods, and the 
 	// The sample model's units have no rain of their own: they run on the catchment rain, so their share follows their area.
 	const rule4 = share.getByTestId('ewr-split-catchment-rain');
 	await expect(rule4).toContainText('no rain of');
-	await expect(rule4).toContainText('EWR share follows');
+	await expect(rule4).toContainText('share follows');
 	await expect(share.getByTestId('summary-share')).toContainText('EWR by each unit’s natural MAR');
 	await expectNoViolations(page, { include: '#set-share' });
 
@@ -43,5 +43,5 @@ test('the EWR is split by each unit’s natural MAR under both methods, and the 
 
 	// Run readiness names the same units.
 	await page.goto(`/projects/${project.id}?tab=runs`);
-	await expect(page.getByTestId('run-catchment-rain')).toContainText('EWR share follows');
+	await expect(page.getByTestId('run-catchment-rain')).toContainText('share follows');
 });

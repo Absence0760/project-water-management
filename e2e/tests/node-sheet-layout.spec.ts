@@ -49,14 +49,13 @@ test('a unit’s sheet folds to its sections, opens the one the menu points at, 
 	// Was 5,768 px of form: now about two windows, with the dam, supply and every other section reachable from it.
 	expect(folded.height).toBeLessThan(1_600);
 
-	// The fields the area flow share doesn't use: one line, not greyed-out cells; opened, they show read-only.
+	// The Catchment area section holds the area alone: the High-MAP and Low-MAP areas went with the flow-share methods
+	// (engine 1.105.0, issue #616), so nothing there is "Not used" (a unit without a dam's dam fields still are).
 	const area = card(sheet, 'Catchment area');
-	await expect(area.getByText('Not used with the area flow share: High-MAP, Low-MAP.', { exact: true })).toBeVisible();
-	const high = area.getByLabel('High-MAP (km²)');
-	await expect(high).toBeHidden();
-	await area.locator('details.unused > summary').click();
-	await expect(high).not.toBeEditable();
-	await expect(high).toHaveAccessibleDescription(/^Not used with the area flow share: High-MAP, Low-MAP\. Part of the area in the high-rainfall/);
+	await expect(area.getByLabel('Area (km²)')).toBeVisible();
+	await expect(area.getByLabel('High-MAP (km²)')).toHaveCount(0);
+	await expect(area.getByLabel('Low-MAP (km²)')).toHaveCount(0);
+	await expect(area.locator('details.unused')).toHaveCount(0);
 
 	// The section menu opens the Dam and folds the others, its heading focused and its first fields in the window.
 	await sheet.getByRole('navigation', { name: 'Sections of the form' }).getByRole('link', { name: 'Dam', exact: true }).click();

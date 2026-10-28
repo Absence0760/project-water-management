@@ -635,7 +635,7 @@
 		{#if runBusy}<div class="progress" aria-hidden="true"><span></span></div>{/if}
 		{#if !runBusy && onCatchmentRain.length}
 			<p class="note" data-testid="run-catchment-rain">
-				{onCatchmentRain.length === 1 ? '1 unit has' : `${onCatchmentRain.length} units have`} no rain of {onCatchmentRain.length === 1 ? 'its' : 'their'} own, so {onCatchmentRain.length === 1 ? 'its' : 'their'} EWR share follows {onCatchmentRain.length === 1 ? 'its' : 'their'} area:
+				{onCatchmentRain.length === 1 ? '1 unit has' : `${onCatchmentRain.length} units have`} no rain of {onCatchmentRain.length === 1 ? 'its' : 'their'} own, so {onCatchmentRain.length === 1 ? 'its' : 'their'} share follows {onCatchmentRain.length === 1 ? 'its' : 'their'} area:
 				{onCatchmentRain.slice(0, 6).map((n) => n.name || 'unnamed').join(', ')}{onCatchmentRain.length > 6 ? ` and ${onCatchmentRain.length - 6} more` : ''}. Set up their rain in
 				<a href="?tab=settings#set-share">Model settings</a>.
 			</p>

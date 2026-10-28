@@ -66,7 +66,8 @@ test('node table: a pasted block is previewed, applied and saved', async ({ page
 	await expect(dlg.getByText("Left out a column the table doesn't have: Total.")).toBeVisible();
 	await expect(dlg.getByText('Decimal commas were read as decimal points (1,207 = 1.207).')).toBeVisible();
 	// The table as a CSV, to fill in.
-	expect(await templateCsv(dlg)).toMatch(/^﻿Name,Area \(km²\),High-MAP area \(km²\),Low-MAP area \(km²\),Dam capacity \(m³\),/);
+	// No High-MAP or Low-MAP area columns (retired with the flow-share methods, engine 1.105.0, issue #616).
+	expect(await templateCsv(dlg)).toMatch(/^﻿Name,Area \(km²\),Dam capacity \(m³\),/);
 	await expectNoViolations(page);
 	await dlg.getByRole('button', { name: 'Apply 2 changes' }).click();
 	await expect(dlg).toBeHidden();
@@ -74,11 +75,11 @@ test('node table: a pasted block is previewed, applied and saved', async ({ page
 	await expect(grid.getByLabel('Irrigation return flow at Lower farm, % of the water supplied')).toHaveValue('15');
 
 	// A bare block of numbers fills from the cell it was pasted into.
-	await pasteInto(grid.getByLabel('Area of Upper farm, km²', { exact: true }), '20\t2\t3\n');
+	await pasteInto(grid.getByLabel('Area of Upper farm, km²', { exact: true }), '20\t50000\t40\n');
 	await expect(dlg.getByTestId('paste-where')).toContainText('Upper farm, Area');
 	await expect(dlg.getByTestId('paste-summary')).toHaveText('3 values change.');
 	await dlg.getByRole('button', { name: 'Apply 3 changes' }).click();
-	await expect(grid.getByLabel('High-MAP area of Upper farm, km²')).toHaveValue('2');
+	await expect(grid.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('50000');
 
 	// A single value is the input's own paste: no preview.
 	await pasteInto(grid.getByLabel('Area of Lower farm, km²', { exact: true }), '7\r\n');
@@ -90,7 +91,7 @@ test('node table: a pasted block is previewed, applied and saved', async ({ page
 	await expect(again.getByLabel('Area of Lower farm, km²', { exact: true })).toHaveValue('9.5');
 	await expect(again.getByLabel('Irrigation return flow at Lower farm, % of the water supplied')).toHaveValue('15');
 	await expect(again.getByLabel('Area of Upper farm, km²', { exact: true })).toHaveValue('20');
-	await expect(again.getByLabel('Low-MAP area of Upper farm, km²')).toHaveValue('3');
+	await expect(again.getByLabel('Dam initial storage of Upper farm, %')).toHaveValue('40');
 });
 
 test('planted areas: the toolbar paste reads hectares by farm and crop, refuses a bad cell, and saves', async ({ page, owner }) => {
