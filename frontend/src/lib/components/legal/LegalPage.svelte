@@ -17,6 +17,7 @@
 	import { APP_NAME, APP_SHORT_NAME } from '#lib/brand.js';
 	import { resolve } from '$app/paths';
 	import BrandMark from '#lib/components/layout/BrandMark.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
 
 	let {
 		title,
@@ -56,12 +57,12 @@
 		     isn't the closed disclosure's content shown by CSS: a collapsed
 		     details read as hidden (an a11y scan found its sticky column, once
 		     scrollable, with nothing it could focus). From 900 px it is the
-		     sticky column beside the text. -->
+		     sticky column beside the text. The disclosure is the app's one fold
+		     (common/Fold.svelte, issue #521): "Contents: 13 sections Show". -->
 		<nav class="toc" aria-label="Contents">
-			<details class="fold">
-				<summary>Contents <span class="count">({sections.length} sections)</span></summary>
+			<Fold class="toc-fold" name="Contents:" line="{sections.length} sections" readonly problem={false} body="none">
 				{@render list()}
-			</details>
+			</Fold>
 			<div class="shown">{@render list()}</div>
 		</nav>
 		<div class="body">
@@ -144,27 +145,23 @@
 		border-radius: var(--radius);
 		background: var(--surface);
 	}
-	.toc summary {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
+	/* The fold's look is app.css's; the card around it already draws the lines,
+	   and the line is a full tap target on the phone it shows on. */
+	.toc :global(.toc-fold) {
+		border-block: none;
+	}
+	.toc :global(.toc-fold > summary) {
 		min-height: var(--tap);
 		margin: -0.5rem 0;
-		font-weight: 600;
-		cursor: pointer;
 	}
-	.toc summary .count {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
-	.toc details[open] summary {
+	.toc :global(.toc-fold[open] > summary) {
 		margin-bottom: 0.25rem;
 	}
 	.toc .shown {
 		display: none;
 	}
 	@media (min-width: 601px) {
-		.toc .fold {
+		.toc :global(.toc-fold) {
 			display: none;
 		}
 		.toc .shown {
