@@ -1724,14 +1724,16 @@ EventBridge, daily
   │     or rewritten month downloaded whole, subset to the region, hashed (D8)
   ├─► daily ingest (the fetcher Lambda's new mode, Node, outside the VPC)
   │     preliminary sat: only new daily TIFFs, the region's rows; drops days whose finals landed
-  └─► GEFS pass (the same mode, "pass":"gefs", 08:38 UTC and hourly to 11:38)
-        the newest complete CHIRPS-GEFS issue, its 16 TIFFs' region rows; keeps 7 issues
+  ├─► GEFS pass (the same mode, "pass":"gefs", 08:38 UTC and hourly to 11:38)
+  │     the newest complete CHIRPS-GEFS issue, its 16 TIFFs' region rows; keeps 7 issues
+  └─► indices pass (the same mode, "pass":"indices", 05:50 UTC; issue #620)
+        NOAA CPC's ONI and AAO files whole, two requests; a new revision only on a change
   (once) backfill: Step Functions over the byMonth list from 1981, 2 at a time
                 │  polite client: one User-Agent, conditional GETs, ~1 request/s, 403 = stop
                 ▼
   s3://<project>-mirror-<account> (private, versioned)
         rnl/, sat/  (year, doy, lat, lon) Zarr v3 · prelim/, gefs/<issue>/ (day, lat, lon) · manifest.json each
-        gefs/index.json (the issues held, newest first)
+        gefs/index.json (the issues held, newest first) · indices/{oni,aao}.json + manifest.json
                 │
   worker (in the VPC, S3 interface endpoint)
         feed_fetch for a CHIRPS feed reads its cells' days from the copy in-process
@@ -1779,6 +1781,25 @@ EventBridge, daily
   nothing and records only that it looked, and the forecast series keeps
   the issue it has. Locally the committed copy holds two synthetic issues,
   re-dated to today the way the synthetic files are.
+- **The climate indices (issue #620).** The fetcher's indices pass
+  (`ingest/indices.ts`, its own invocation
+  `{"mode":"daily-ingest","pass":"indices"}`, `infra/climate_indices.tf`,
+  off until `climate_indices_enabled`) fetches NOAA CPC's ONI and AAO files
+  whole (`feeds/sources/cpc.ts`, parsed strictly), and writes each as the
+  engine's `MonthlyIndexSeries` (`indices/oni.json`, `indices/aao.json`)
+  only when its values changed, then `indices/manifest.json` last (URL,
+  SHA-256, months held, revision, when fetched and changed), so a reader
+  that follows the manifest never meets a file it doesn't describe. A 403
+  or throttle ends the run; a file shorter than the copy's is refused. It
+  publishes MirrorLagDays{Product=indices}. The **worker** reads the copy
+  only for an outlook with the method `climateState`
+  (`outlooks/store.ts`, `readClimateIndices`: each file checked against its
+  manifest hash) before any member runs, and stores the manifest entries it
+  read with the result ([api.md § Seasonal
+  outlooks](./api.md#seasonal-outlooks)). Locally the committed copy
+  (`backend/fixtures/mirror/indices/`) holds invented values, and
+  `FEED_SOURCE=fixtures` answers CPC's two URLs with them
+  ([data-sources.md § climate-indices](./data-sources.md#climate-indices)).
 - **ERA5-Land (issue #604 R4-A).** The Python ingest Lambda copies
   Copernicus's ERA5-Land daily total precipitation, about 5 days behind,
   into `era5l/`, the finals layout on the 0.1° grid (275 × 310, from 1950).

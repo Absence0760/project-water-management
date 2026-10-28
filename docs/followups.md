@@ -619,6 +619,16 @@ runs and accumulations are real) can't be decided without the client.
       stands; NASA POWER's computed ET₀ on the newest days, replaced by
       AgERA5's once its month lands, with no correction between them; sea
       cells left out of the feed's mean (engine-audit.md ET1–ET3).
+- [ ] **Past seasons like this one (issue #620, model.md §2.15c).** Built
+      opt-in (an outlook's method `climateState`; the default `esp` is
+      unchanged, and the ESP part of a `climateState` outlook is the same
+      to the bit). Calls made in the build, to confirm: the ONI as one
+      3-month value and the AAO as a 3-month mean, both wholly before the
+      decision date; the two indices weighted equally, each standardised
+      by its spread over the candidate years; k a third of the candidates,
+      at least 10, and none drawn under 20 candidates; the SPI-3 at the
+      decision date not a term. The issue asks for the hydrologist's
+      sign-off on the analogue count; no skill score until the C3S slice.
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent

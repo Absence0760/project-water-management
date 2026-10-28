@@ -4,7 +4,10 @@
 // the tick itself), each member stored once and the engine's summary as the
 // result, a level whose ops don't apply, RLS (with a positive control),
 // write-once members and outcomes, the per-user limit, the project's cap,
-// and the job failing closed when its user lost the editor role.
+// and the job failing closed when its user lost the editor role. The
+// climate-state method (265_outlook_method, issue #620): the ESP part the
+// same to the bit, the years chosen from the committed synthetic copy of the
+// ONI and AAO, why none are chosen on a short record, and RLS on it.
 //
 // Synthetic catchment: a farm dam draining to an outlet gauge, 13 water
 // years (2000/01 … 2012/13) of invented winter rain, each year scaled
@@ -646,5 +649,31 @@ describe('the climate-state analogues (issue #620, method climateState)', () => 
 		// The column refuses one too, below the API.
 		const check = (await asOwner(`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'seasonal_outlook_method'`)) as { def: string }[];
 		expect(check[0]!.def).toBe("CHECK ((method = ANY (ARRAY['esp'::text, 'climateState'::text])))");
+	});
+
+	it('a viewer reads the method and the climate result, an outsider nothing, and no one changes the method', async () => {
+		const owner = await signUp('OutlookClimateRlsOwner');
+		const viewer = await signUp('OutlookClimateRlsViewer');
+		const outsider = await signUp('OutlookClimateRlsOutsider');
+		const c = await catchment(owner);
+		await member(owner, c.projectId, viewer, 'viewer');
+		const { outlook } = (await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { method: 'climateState' }, [{ label: '100 %', ops: scale(1) }]))).body;
+		// Not in the column grant: the method is fixed at insert, pending or complete.
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE seasonal_outlook SET method = 'esp' WHERE id = $1`, [outlook.id]))).rejects.toMatchObject({ code: '42501' });
+		await tick();
+
+		// Positive control: the viewer sees the method and the climate part of the result.
+		const seen = await viewer.call('GET', `/projects/${c.projectId}/outlooks/${outlook.id}`);
+		expect(seen.status).toBe(200);
+		expect(seen.body.outlook.method).toBe('climateState');
+		expect(seen.body.outlook.result.climate.selection.problem.reason).toBe('tooFewYears');
+		expect((await viewer.call('GET', `/projects/${c.projectId}/outlooks`)).body.outlooks.map((o: { method: string }) => o.method)).toEqual(['climateState']);
+		const rowsAs = (u: User) =>
+			withUser(u.id, async (db) => (await db.query(`SELECT method, result ? 'climate' AS climate FROM seasonal_outlook WHERE project_id = $1`, [c.projectId])).rows);
+		expect(await rowsAs(viewer)).toEqual([{ method: 'climateState', climate: true }]);
+
+		expect((await outsider.call('GET', `/projects/${c.projectId}/outlooks/${outlook.id}`)).status).toBe(404);
+		expect(await rowsAs(outsider)).toEqual([]);
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE seasonal_outlook SET method = 'esp' WHERE id = $1`, [outlook.id]))).rejects.toMatchObject({ code: '42501' });
 	});
 });

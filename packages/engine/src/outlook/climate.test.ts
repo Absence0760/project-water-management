@@ -144,6 +144,32 @@ describe('climateConditionedOutlook', () => {
 		expect(climate?.method).toBe('climateState');
 	});
 
+	it('leaves the ESP outlook as it is with no indices held, or too few years to choose from', () => {
+		// The copy holds nothing (an empty indices directory): the selection says so, the ESP is the same.
+		const none = runSeasonalOutlook(input, { ...SEASON, baseRun: base, levels, climateIndices: [] });
+		const { climate: c0, ...esp0 } = none;
+		expect(esp0).toEqual(plain);
+		expect(c0).toMatchObject({ outlook: null, selection: { k: 0, years: [], problem: { reason: 'indexNotHeld' } } });
+		// Fewer analogue years than CLIMATE_ANALOGUE_MIN_CANDIDATES: no conditioning, the ESP of those years unchanged.
+		const analogueYears = plain.analogues.slice(0, CLIMATE_ANALOGUE_MIN_CANDIDATES - 1).map((a) => a.waterYear);
+		const fewPlain = runSeasonalOutlook(input, { ...SEASON, baseRun: base, levels, analogueYears });
+		const { climate: c1, ...esp1 } = runSeasonalOutlook(input, { ...SEASON, baseRun: base, levels, analogueYears, climateIndices: INDICES });
+		expect(esp1).toEqual(fewPlain);
+		expect(c1).toMatchObject({ outlook: null, selection: { nCandidates: CLIMATE_ANALOGUE_MIN_CANDIDATES - 1, k: 0, problem: { reason: 'tooFewYears' } } });
+	});
+
+	it('chooses the same years under a skewed TZ', () => {
+		const tz = process.env.TZ;
+		try {
+			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+				process.env.TZ = zone;
+				expect(selectClimateAnalogues(SEASON, plain.analogues, INDICES)).toEqual(withClimate.climate!.selection);
+			}
+		} finally {
+			process.env.TZ = tz;
+		}
+	});
+
 	it('summarises the ESP members of the chosen years alone, in the analogues’ order', () => {
 		const c = withClimate.climate!;
 		expect(c.selection.problem).toBeNull();

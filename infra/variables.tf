@@ -739,7 +739,7 @@ variable "jobs_backlog_alarm_seconds" {
 # --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
 
 variable "alarm_tier" {
-  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; two fewer after the cutover (chirps_source = \"mirror\" and dws_source = \"store\" remove the fetch-requests and ingest-results queues and their DLQ alarms, feeds.tf), 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), two more with daily_ingest_enabled (the preliminary and GEFS copies'), one more with era5l_enabled (ERA5-Land's lag, era5land.tf) and one more with imerg_enabled (IMERG Late's lag, imerg.tf). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
+  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; two fewer after the cutover (chirps_source = \"mirror\" and dws_source = \"store\" remove the fetch-requests and ingest-results queues and their DLQ alarms, feeds.tf), 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), two more with daily_ingest_enabled (the preliminary and GEFS copies'), one more with era5l_enabled (ERA5-Land's lag, era5land.tf), one more with imerg_enabled (IMERG Late's lag, imerg.tf) and one more with climate_indices_enabled (the ONI and AAO copy's lag, climate_indices.tf). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
   type        = string
   default     = "full"
 
@@ -851,6 +851,12 @@ variable "assistant_enabled" {
 
 variable "dam_observations_enabled" {
   description = "Turn on the dam observations (dam_observations.tf, issue #604 R5): the hourly EventBridge rule that invokes the fetcher with {\"mode\":\"dams-weekly\"} (DE Africa Waterbodies, each uid re-read once a week, and WOfS, each dam's newest scenes once a day and its history with the rest of the time), the fetcher's reads and writes under dams/ in the mirror bucket, the worker's write of dams/wanted.json, and the passes' heartbeat and WOfS recency alarms. It also sets the worker's DAM_OBSERVATIONS (jobs.tf), which turns its dams tick on; the plan refuses the flag if the worker's environment ever loses it (dam_observations.tf terraform_data.dam_observations_gate). Off (the default) until a backend release with the mode is deployed and a dam is traced, or the alarms fire for passes that don't exist yet. Runbook: docs/deployment.md § Dam observations."
+  type        = bool
+  default     = false
+}
+
+variable "climate_indices_enabled" {
+  description = "Turn on the climate indices copy (climate_indices.tf, issue #620): the daily EventBridge rule that invokes the fetcher with {\"mode\":\"daily-ingest\",\"pass\":\"indices\"} (NOAA CPC's ONI and AAO, two requests a day), the fetcher's reads and writes under indices/ in the mirror bucket, and the copy's freshness alarm (MirrorLagDays{Product=indices}, breaching on missing data). Until it is on, an outlook asking for the climate-state analogues says the indices aren't held and shows the ESP alone. Off (the default) until a backend release with the pass is deployed, or the alarm fires for a pass that doesn't exist yet. Runbook: docs/deployment.md § Climate indices."
   type        = bool
   default     = false
 }

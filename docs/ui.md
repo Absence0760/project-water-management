@@ -10571,7 +10571,11 @@ confirmed farmers see the outlook, O5, issue #90).
   monthly plan** adds one more level: a name (default *Monthly plan*) and
   a % per month of the project's season (Oct … Apr by default), sent as
   R1's `months` form, one `demand.scale` per distinct % (so the plan and
-  the levels together are at most 6). **Run seasonal outlook**, in the
+  the levels together are at most 6). **Also compare past seasons like
+  this one** (off by default; issue #620) runs the outlook with the method
+  `climateState`: the same members, also summarised on the past seasons
+  nearest this one's ENSO and SAM state (below); its description for a
+  screen reader says how they are chosen. **Run seasonal outlook**, in the
   action row under the levels, hint and plan, queues an
   [outlook](./api.md#seasonal-outlooks) of the shown run; the season and
   the planning share are the project's settings (Settings → Seasonal
@@ -10605,6 +10609,25 @@ confirmed farmers see the outlook, O5, issue #90).
   them"), and that the WUA decides the level and publishes it as the
   restriction notice. **Too few years** (fewer than 10): a warning, no
   ranges and no planning figure; each year's values are still shown.
+- **Past seasons like this one** (method `climateState` only, issue #620,
+  `outlook/ClimateAnalogues.svelte`, view model `outlook/climate.ts`,
+  [model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620);
+  `data-testid="outlook-climate"`, `data-state` `ready` or `problem`), after
+  the planning figure's hint, beside the ESP rather than instead of it:
+  this season's state (*ONI JAS 2018 +0.45; AAO Jul–Sep 2018 −0.31*), a
+  headline (*In the 10 past seasons nearest this one, the dams ended at …
+  at 100 %, against … in all 31 years*), and a table per demand level of the
+  season-end dam storage and the years met in full, those seasons beside
+  every year. Then the planning figure counted on those seasons, how they
+  were chosen, the seasons chosen nearest first with their ONI, AAO and
+  distance (in standard deviations), the other seasons collapsed, any read
+  a month or two earlier because the copy didn't hold the newest month,
+  those an index doesn't reach, and that it is not a forecast (ENSO and the
+  SAM explain only part of a season's rain). Under it the source: *Indices:
+  NOAA Climate Prediction Center, ONI to …, AAO to …*. When no seasons
+  could be chosen (the copy doesn't hold the indices, or fewer than 20
+  candidate years) it says why in the engine's words, and the ESP above
+  stands as it is.
 - **Every analogue year** (collapsed): per year and level, the days below
   the EWR (or months met) and the season-end storage. Then the years not
   used and why (outside the record, a rainless day, the season itself,

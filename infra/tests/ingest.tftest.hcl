@@ -745,6 +745,14 @@ override_resource {
 }
 
 override_resource {
+  target          = aws_cloudwatch_event_rule.indices_ingest
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-indices-ingest"
+  }
+}
+
+override_resource {
   target          = aws_iam_role.ingest_backfill
   override_during = plan
   values = {
@@ -1198,6 +1206,72 @@ run "daily_ingest_on" {
   assert {
     condition     = length(aws_lambda_function.ingest) == 0 && length(aws_cloudwatch_metric_alarm.mirror_lag) == 0
     error_message = "The daily ingest is the Node fetcher's: turning it on doesn't need (or create) the Python ingest function or its alarms."
+  }
+}
+
+# --- The climate indices pass (climate_indices.tf, issue #620) -------------------------
+
+run "climate_indices_off_by_default" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_rule.indices_ingest.state == "DISABLED" &&
+      length(aws_cloudwatch_event_target.indices_ingest) == 0 &&
+      length(aws_lambda_permission.fetcher_indices_ingest) == 0 &&
+      length(aws_iam_role_policy.fetcher_indices) == 0 &&
+      length(aws_cloudwatch_metric_alarm.mirror_lag_indices) == 0
+    )
+    error_message = "Until climate_indices_enabled is set the indices rule is disabled, targets nothing, may invoke nothing, the fetcher can't write indices/, and its breaching freshness alarm doesn't exist."
+  }
+}
+
+run "climate_indices_on" {
+  command = plan
+
+  variables {
+    climate_indices_enabled = true
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_rule.indices_ingest.state == "ENABLED" &&
+      aws_cloudwatch_event_target.indices_ingest[0].arn == aws_lambda_function.fetcher.arn &&
+      jsondecode(aws_cloudwatch_event_target.indices_ingest[0].input) == { mode = "daily-ingest", pass = "indices" } &&
+      one(aws_cloudwatch_event_target.indices_ingest[0].retry_policy).maximum_retry_attempts == 0 &&
+      aws_cloudwatch_event_rule.indices_ingest.schedule_expression == "cron(50 5 * * ? *)" &&
+      aws_lambda_permission.fetcher_indices_ingest[0].principal == "events.amazonaws.com" &&
+      aws_lambda_permission.fetcher_indices_ingest[0].source_arn == aws_cloudwatch_event_rule.indices_ingest.arn &&
+      aws_lambda_permission.fetcher_indices_ingest[0].function_name == aws_lambda_function.fetcher.function_name
+    )
+    error_message = "With climate_indices_enabled the indices rule sends {\"mode\":\"daily-ingest\",\"pass\":\"indices\"} to the fetcher once a day at 05:50 UTC, never retried, and only it may invoke for that."
+  }
+  assert {
+    condition = (
+      aws_iam_role_policy.fetcher_indices[0].role == aws_iam_role.fetcher_lambda.id &&
+      toset(flatten([for s in data.aws_iam_policy_document.fetcher_indices.statement : s.actions])) == toset(["s3:GetObject", "s3:PutObject", "s3:ListBucket"]) &&
+      toset(flatten([for s in data.aws_iam_policy_document.fetcher_indices.statement : s.resources])) == toset([aws_s3_bucket.mirror.arn, "${aws_s3_bucket.mirror.arn}/indices/*"]) &&
+      length(aws_iam_role_policy.fetcher_mirror) == 0
+    )
+    error_message = "The indices pass reads and writes indices/ in the mirror bucket only (no delete), without turning on the daily ingest's whole-bucket write."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.mirror_lag_indices[0].treat_missing_data == "breaching" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_indices[0].namespace == "water-management/Mirror" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_indices[0].metric_name == "MirrorLagDays" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_indices[0].dimensions["Product"] == "indices" &&
+      aws_cloudwatch_metric_alarm.mirror_lag_indices[0].threshold == 75 &&
+      aws_cloudwatch_metric_alarm.mirror_lag_indices[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
+    )
+    error_message = "The indices copy's freshness alarm reads MirrorLagDays{Product=indices}, fires at 75 days, pages through the alerts topic, and treats missing data as breaching."
+  }
+  assert {
+    condition = alltrue([
+      for r in [aws_cloudwatch_event_rule.daily_ingest, aws_cloudwatch_event_rule.gefs_ingest, aws_cloudwatch_event_rule.dws_weekly, aws_cloudwatch_event_rule.dams_weekly] :
+      r.schedule_expression != aws_cloudwatch_event_rule.indices_ingest.schedule_expression
+    ])
+    error_message = "The indices pass runs at its own time, not on another fetcher pass's schedule."
   }
 }
 

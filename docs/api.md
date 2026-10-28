@@ -4470,7 +4470,7 @@ farmer view E3, migration 106).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, reviewDate?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued. `409` for a base run that caps use at, or scales demand to, the registered volumes (only one from before 213 can be; issue #523 finding I); publishing an older outlook on such a base is `409` too | editor |
+| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, reviewDate?, planningShare?, analogueYears?, method? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued. `409` for a base run that caps use at, or scales demand to, the registered volumes (only one from before 213 can be; issue #523 finding I); publishing an older outlook on such a base is `409` too | editor |
 | GET | `/projects/:id/outlooks?baseRunId=` | – | `{ outlooks: Outlook[] }`, newest first, optionally of one base run, **without** `result` or `triggers` | viewer |
 | GET | `/projects/:id/outlooks/:outlookId` | – | `{ outlook: Outlook }` with its `result` and `triggers` (null while pending). `404` for one that isn't this project's | viewer |
 | POST | `/projects/:id/outlooks/:outlookId/publish` | `{ levelId }` | `201 { publication: OutlookPublication }`: that level published to farmers, ending the current publication. Audit `outlook.published` | editor |
@@ -4501,6 +4501,11 @@ farmer view E3, migration 106).
   storage): an explicit review date is then `422`, an absent one is null.
   `analogueYears` (1–200 distinct water
   years): absent, every one the record holds but the season's own.
+  `method` (issue #620, migration 265): `esp` (absent: the default) uses
+  every analogue year alike; `climateState` also adds `result.climate`,
+  the same members summarised on the years nearest this season's ENSO and
+  SAM state (below). Any other value is `400`. The ESP figures are the
+  same either way.
 - Checked before anything is queued: the base run as for a sweep (`404`,
   `409` for a scenario or forecast run), and the season: the decision date
   must fall after the run's first day and at most the day after its last
@@ -4516,7 +4521,7 @@ farmer view E3, migration 106).
   the worker Lambda's 300 s. No cancel.
 - `Outlook = { id, name, baseRunId, baseRun: { id, label, createdAt },
   decisionDate, seasonEnd, reviewDate, planningShare, levels: [{ id, label, ops }],
-  analogueYears, status, engineVersion, job, createdBy, createdAt,
+  analogueYears, method, status, engineVersion, job, createdBy, createdAt,
   completedAt, result?, triggers? }`. `levels[].id` is its place, `"0"` …; `status`
   `pending` until the job stores the result, then `complete`; `job` as a
   sweep's (a `pending` outlook behind a `dead` job says why in `job.error`).
@@ -4538,6 +4543,24 @@ farmer view E3, migration 106).
   `problems` and no years; a level refused in every year likewise; a year
   a running level was refused in is left out of every level (`memberFailed`)
   so the levels compare the same years. One member never fails the outlook.
+- `result.climate` (method `climateState` only; [model.md
+  §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620)):
+  `{ method: 'climateState', selection, outlook, source }`. `selection`:
+  `indices` (per index `{ id, label, from, to, lagMonths, value, scale,
+  weight }`: the months read, `"YYYY-MM"`, how many months they stepped
+  back, this season's value and the candidates' standard deviation),
+  `nCandidates`, `k`, `years` (every candidate with both indices, nearest
+  first: `{ waterYear, label, values: { oni, aao }, distance, chosen }`),
+  `missing` (analogue years an index doesn't reach) and `problem` (null, or
+  `{ reason: 'indexNotHeld' | 'tooFewYears', message }`). `outlook`: the
+  engine's `summariseOutlook` on the chosen years' members alone (the
+  `result` shape above, without `excluded`'s backend reasons), or null with
+  a problem. `source`: per index the data mirror's manifest entry it read,
+  `{ url, through, revision, fetchedAt }`, so the outlook says which copy it
+  used. The worker reads the indices from the copy (`MIRROR_URL`,
+  [architecture.md § Data feeds](./architecture.md#data-feeds)) before any
+  member runs: a copy whose manifest or files can't be read fails the job;
+  a copy without the indices gives `indexNotHeld`.
 - `triggers` (null without a review date): `{ reviewDate, table, problem,
   excluded, failures }`. `reviewDate` is the season's: the day the WUA reads
   its dams. The outlook's season usually starts after the base run ends

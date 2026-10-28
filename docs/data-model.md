@@ -3899,6 +3899,7 @@ series, and there are years × levels of them (up to 240), not 12.
 | `result`, `engine_version`, `completed_at` | Set on completion (CHECK: all three exactly when `complete`). `result` is the engine's `SeasonalOutlook` with the backend's `excluded` (plus `overLimit`, `memberFailed`) and `failures`, ≤ 8 MB |
 | `review_date` | The season's review date for the review triggers (migration 106, issue #53 R6): after `decision_date`, on or before `season_end` (CHECK), or NULL = no trigger table. Fixed at insert |
 | `triggers` | Set on completion when there is a review date (CHECK: then never NULL on a complete outlook; NULL without a review date): the backend's `StoredTriggers` (the engine's `ReviewTriggers` table without each band's whole outlook, or why it couldn't be drawn), ≤ 8 MB |
+| `method` | How the analogue years are used (migration 265, issue #620): `esp` (the default, every existing row) every year alike, or `climateState`, which adds `result.climate`: the same members summarised on the years nearest this season's ENSO and SAM state ([model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620)), with the selection and the data mirror's manifest entry of each index it read. CHECK on the two values; fixed at insert (no UPDATE grant names it) |
 | `created_by`, `created_at` | Stamped by the insert trigger; `created_by` `ON DELETE SET NULL` (derived, like a sweep) |
 
 `seasonal_outlook_member`:
@@ -4066,6 +4067,20 @@ are left alone, as in 064, and the engine refuses a `settings.set` on it
 with a reason to delete the change. The engine's and the API's
 `mergeSettings` drop the key too (`RETIRED_SETTINGS_KEYS`), so a row the
 migration hasn't reached reads the same.
+### Outlook method (265_outlook_method.sql)
+
+`seasonal_outlook.method` (issue #620): `esp` (the default, so every row
+before it keeps its meaning) or `climateState`, which also stores the
+climate-state analogues in `result.climate` ([Seasonal
+outlooks](#seasonal-outlooks-063_seasonal_outlooksql), [model.md
+§2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620)).
+A column with a CHECK on an existing table: no policy, index or trigger
+changes. The guard (`seasonal_outlook_guard`, latest definition 106) reads
+no column of it. `water_app` writes it through 063's table-wide INSERT and
+no UPDATE grant names it, so a completed outlook's method can't change
+under its result. A forecast-conditioned method (C3S, #620's later slices)
+would widen the CHECK.
+
 ### Account deletion reaches every key (066_account_fk_clears.sql)
 
 Deleting an account ([security.md § Personal information](./security.md#personal-information-popia))

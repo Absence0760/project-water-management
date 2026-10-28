@@ -12310,13 +12310,90 @@ after it, a dry spell reads dry, and each kind of gap is named. The
 Summary's e2e (`overview.spec.ts`) seeds 31 years of rain whose last
 Aug–Oct is bone dry, and checks its SPI-3 is Φ⁻¹(1/62) = −2.14.
 
-**Later slices of #620** build on this module. The analogue outlook (ONI and
-CPC's AAO copied daily, `backend/src/ingest/indices.ts`) selects the k past
-seasons nearest this one's climate state in `outlookAnalogues`, and may add
-the SPI-3 at the decision date as a further distance term (`standardizedIndex`
-gives every month's value, not only the last). The C3S outlook can report
+**Later slices of #620** build on this module. The analogue outlook
+(§2.15c) chooses past seasons by their ENSO and SAM state alone, not the
+SPI-3 at the decision date (§2.15c says why). The C3S outlook can report
 its members' season totals against the same per-calendar-month fits
 (`fitIndex`, `indexValue`). Neither needs a change here.
+
+### 2.15c Past seasons like this one: the climate-state analogues (issue #620)
+
+"In past seasons that started like this one, how did the dams end?" The ESP
+(§2.15) weighs every analogue year alike. With the outlook's method
+`climateState` the result also carries the same members **summarised on the
+k analogue years whose ENSO and SAM state before their season was nearest
+this season's**: a conditioned ESP in the manner of Hamlet and Lettenmaier
+(1999), who subset the ESP traces by ENSO phase, with the phase replaced by
+a nearest-neighbour distance (Lall and Sharma 1996) so the SAM can count
+too. Pure, in `packages/engine/src/outlook/climate.ts`
+(`selectClimateAnalogues`, `climateConditionedOutlook`, and
+`runSeasonalOutlook`'s `climateIndices` option). A **derived view** of the
+ESP members: no member is run again, the ESP result is unchanged to the bit
+(`climate.test.ts`), the outlook's default method stays `esp`, and
+`ENGINE_VERSION` doesn't move.
+
+- **The indices.** Two monthly NOAA CPC series from the data mirror's copy
+  (`indices/{oni,aao}.json`, [data-sources.md §
+  climate-indices](./data-sources.md#climate-indices)): the **ONI**, a
+  3-month running mean of the Niño 3.4 anomaly kept under its centre month,
+  and CPC's **AAO**, the SAM's usual proxy. The ONI is already a 3-month
+  mean, so it is read as one value: the newest season wholly before the
+  decision date (1 October reads JAS, centred on August). The AAO is noisy
+  month to month, so it is the mean of the 3 months before the decision date
+  (July to September for 1 October).
+- **No look-ahead.** A value is used only when every month it averages lies
+  before the decision date (the ONI's season reaches a month past its
+  centre), so no year's state reads the season it is meant to stand for.
+  When the copy doesn't hold this season's newest month yet (CPC publishes
+  early in the following month), the window steps back a month, at most
+  `CLIMATE_INDEX_MAX_LAG_MONTHS` = 2, and **every** year is read over the
+  same calendar months; the panel says so. Each analogue year W is read over
+  those months counted back from its own season start (`analogueStart`).
+- **The distance.** Each index is standardised by its sample standard
+  deviation across the candidate years (the ESP's analogue years, after
+  any the backend left out, that have both indices), then the distance is
+  the weighted root mean square of the standardised differences from this
+  season's state: 0.5 is half a standard deviation apart on average. Equal
+  weights: ENSO is the stronger driver of summer rain in the north-east of
+  the country and the SAM of winter rain in the south-western Cape (Reason
+  and Rouault 2005), and the app serves both. An index that is the same in
+  every candidate separates nothing and adds 0. Ties go to the newer year,
+  so the choice is deterministic.
+- **k.** A third of the candidates (`CLIMATE_ANALOGUE_SHARE`; the ENSO-phase
+  subsets of conditioned ESP are about a tercile), never fewer than
+  `OUTLOOK_MIN_YEARS` = 10, so the subset has percentiles and a planning
+  figure. With fewer than `CLIMATE_ANALOGUE_MIN_CANDIDATES` = 20 candidates,
+  10 would be half the record or more, which is no conditioning to speak
+  of: none is drawn and the result says why (`tooFewYears`). An index the
+  copy doesn't hold for the window says so too (`indexNotHeld`). Either
+  way the ESP stands as it is.
+- **The summary.** `summariseOutlook` (§2.15) on the chosen years' members
+  alone, in the analogues' order: each level's season-end storage, years
+  met and planning figure, beside the same figures over every year.
+- **Not a term: the antecedent wetness.** The SPI-3 at the decision date
+  (§2.15b) is left out of the distance: every member already starts from
+  this season's own state (its dams, soils and groundwater, §2.16), so the
+  antecedent conditions are in the outlook once, and rain anomalies persist
+  too little month to month to say much about the season's weather.
+
+**What it can't say.** It is a choice among past seasons, not a forecast:
+ENSO and the SAM explain only part of a South African season's rain, and
+with 30-odd years of record a third is about ten seasons, so a percentile
+moves with one year in or out. The panel says both ([ui.md § Seasonal
+outlook](./ui.md#seasonal-outlook)). There is no skill score yet; the C3S
+slice of #620 adds a hindcast score for the forecast-conditioned outlook.
+
+**Tests** (`outlook/climate.test.ts`, invented index values): the months
+read for the ONI and the AAO, the step back when the copy is a month short
+(every year alike, at most 2), no month of the season itself read; the
+ranking against a hand-computed distance, ties to the newer year; k at a
+third with the floor and the minimum; years an index doesn't reach (the AAO
+from 1979) listed and left out; the conditioned summary equal to
+`summariseOutlook` on the chosen members; and the ESP part of an outlook
+equal to the plain ESP **to the bit** with the indices, with none held and
+with too few years, and the same choice under two skewed `TZ`s. The backend
+(`outlooks.db.test.ts`) checks the same against the committed synthetic
+copy.
 
 ### 2.16 Starting a run from a saved state: model-state snapshots (engine ≥ 1.1.0, issue #53)
 

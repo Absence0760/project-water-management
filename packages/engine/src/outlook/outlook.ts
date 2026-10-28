@@ -585,6 +585,9 @@ export interface SeasonalOutlook {
 	climate?: ClimateOutlook;
 }
 
+/** The ESP summary alone (summariseOutlook): a SeasonalOutlook without `climate`, which only runSeasonalOutlook adds. */
+export type EspOutlook = Omit<SeasonalOutlook, 'climate'>;
+
 export interface SeasonalOutlookOptions extends OutlookSeason {
 	levels: readonly OutlookLevel[];
 	/** Analogue water years; default every one the record holds but the season's own (outlookAnalogues). */
@@ -691,7 +694,7 @@ export interface OutlookSummaryInput {
 }
 
 /** Choose the metric, work out every level's statistics and the planning figure. */
-export function summariseOutlook(x: OutlookSummaryInput): SeasonalOutlook {
+export function summariseOutlook(x: OutlookSummaryInput): EspOutlook {
 	const s = resolveSeason(x.season);
 	const share = x.planningShare ?? DEFAULT_PLANNING_SHARE;
 	if (!(Number.isFinite(share) && share > 0 && share <= 1)) throw new RangeError(`planning share ${String(share)} must be in (0, 1]`);

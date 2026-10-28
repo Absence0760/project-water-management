@@ -44,7 +44,7 @@
 //
 // Pure: no I/O. A derived view of the ESP members: no member is run again,
 // and the ESP result is unchanged.
-import { OUTLOOK_MIN_YEARS, summariseOutlook, type OutlookSummaryInput, type SeasonalOutlook } from './outlook';
+import { OUTLOOK_MIN_YEARS, summariseOutlook, type EspOutlook, type OutlookSummaryInput } from './outlook';
 import { analogueStart, resolveSeason, type OutlookAnalogue, type OutlookSeason } from './season';
 import { fromEpochDay } from '../calendar';
 
@@ -253,7 +253,7 @@ export function selectClimateAnalogues(season: OutlookSeason, analogues: readonl
 export interface ClimateOutlook {
 	method: 'climateState';
 	selection: ClimateSelection;
-	outlook: SeasonalOutlook | null;
+	outlook: EspOutlook | null;
 }
 
 /**

@@ -418,8 +418,8 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 		startStorageM3: startStorage(base, baseRun, season.decisionDate),
 		...(o.planningShare !== null ? { planningShare: o.planningShare } : {})
 	};
-	// summariseOutlook never sets `climate` (runSeasonalOutlook does); the stored one is added below.
-	const { climate: _none, ...summary } = summariseOutlook(summaryInput);
+	// The ESP summary (no `climate`: only runSeasonalOutlook adds one); the stored one is added below.
+	const summary = summariseOutlook(summaryInput);
 	const result: OutlookResult = { ...summary, excluded, failures };
 	if (indices) {
 		// The same members summarised on the years nearest this season's ENSO and SAM state: nothing more is run.

@@ -1,7 +1,8 @@
 // The climate-state outlook in words (issue #620, ./climate.ts): built with
 // the engine's own selectClimateAnalogues and climateConditionedOutlook from
 // invented members and invented ONI and AAO series, as the backend's job
-// stores them.
+// stores them. The panel's markup is rendered with Svelte's server renderer;
+// the browser flow is e2e/tests/seasonal-outlook.spec.ts.
 import {
 	climateConditionedOutlook,
 	selectClimateAnalogues,
@@ -11,7 +12,9 @@ import {
 	type OutlookSummaryInput,
 	type ProjectModel
 } from '@water-management/engine';
+import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
+import ClimateAnalogues from './ClimateAnalogues.svelte';
 import type { OutlookClimate, OutlookResult } from '#lib/api/types.js';
 import { fmtNum } from '#lib/format/number.js';
 import { buildClimateView, signed, windowText } from './climate';
@@ -125,5 +128,46 @@ describe('outlookRequest', () => {
 	it('sends the method only when it isn’t the default ESP', () => {
 		expect(outlookRequest('run', [100])).not.toHaveProperty('method');
 		expect(outlookRequest('run', [100], null, 'climateState')).toMatchObject({ method: 'climateState' });
+	});
+});
+
+describe('ClimateAnalogues markup', () => {
+	const html = (r: OutlookResult) => render(ClimateAnalogues, { props: { view: buildClimateView(r)! } }).body;
+	// Tags and comments out, every run of white space (the numbers' no-break spaces too) one space.
+	const sp = (s: string) => s.replace(/\s+/g, ' ');
+	const text = (h: string) => sp(h.replace(/<!--[^]*?-->/g, '').replace(/<[^>]+>/g, ' '));
+
+	it('shows the state, the table beside every year, the years chosen with their ONI and AAO, and the source', () => {
+		const r = result();
+		const v = buildClimateView(r)!;
+		if (v.kind !== 'ready') throw new Error('expected a ready view');
+		const h = html(r);
+		expect(h).toContain('data-testid="outlook-climate"');
+		expect(h).toContain('data-state="ready"');
+		expect(h).toContain('aria-labelledby="outlook-climate-h"');
+		const t = text(h);
+		expect(t).toContain(sp(`This season: ${v.state}`));
+		expect(t).toContain(sp(v.headline!));
+		// One row per level, the chosen seasons' storage beside every year's.
+		expect(h.match(/<tr data-level="0"/g)).toHaveLength(1);
+		expect(t).toContain(sp(`${v.rows[0]!.storage.median} 10–90 %: ${v.rows[0]!.storage.band} ${v.rows[0]!.storageAll.median}`));
+		// The years chosen, nearest first, each with its ONI, AAO and distance; the others collapsed.
+		const years = h.slice(h.indexOf('data-testid="climate-years"'));
+		const rows = [...years.slice(0, years.indexOf('</table>')).matchAll(/<th scope="row"[^>]*>([^]*?)<\/th>/g)].map((m) => text(m[1]!).trim());
+		expect(rows).toEqual(v.chosen.map((y) => y.label));
+		expect(t).toContain(sp(`${v.chosen[0]!.label} ${v.chosen[0]!.oni} ${v.chosen[0]!.aao} ${v.chosen[0]!.distance}`));
+		expect(t).toContain(sp(`The other past seasons (${v.others.length})`));
+		expect(t).toContain('not a forecast');
+		expect(t).toContain(sp(v.source!));
+		expect(h).not.toContain('data-testid="climate-problem"');
+	});
+
+	it('says why no seasons were chosen, with no tables', () => {
+		const h = html(result(indices('2019-01')));
+		expect(h).toContain('data-state="problem"');
+		expect(text(h)).toMatch(/The ONI isn’t held for the months before 2020-10-01/);
+		expect(h).not.toContain('data-testid="climate-table"');
+		expect(h).not.toContain('data-testid="climate-years"');
+		expect(h).not.toContain('data-testid="climate-state"');
 	});
 });
