@@ -212,7 +212,7 @@ export function resolveZones(nodes: readonly ZoneNode[], settings: Pick<ProjectS
 			warn(
 				'calibration.zone.needsPerUnit',
 				{ gauges: ticked.length },
-				`Calibration zones: ${ticked.length} gauge${ticked.length === 1 ? ' is' : 's are'} ticked to calibrate here, but calibration zones need Per unit flow generation (Settings → Model selection for flow generation): under Fragmentation one GR4J runs for the whole catchment, on the catchment's parameters`
+				`Calibration zones: ${ticked.length} gauge${ticked.length === 1 ? ' is' : 's are'} ticked to calibrate here, but calibration zones need Per unit flow generation (Model settings → Model selection for flow generation): under Fragmentation one GR4J runs for the whole catchment, on the catchment's parameters`
 			)
 		);
 		return null;
