@@ -6334,6 +6334,14 @@ editors run one now and read the map's proposals, viewers read.
   minutes and a reminder that the feed also runs daily.
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
+- **One action at a time.** While one card's action saves (Run now, Switch
+  off / on, Remove, Replace the series, Withdraw the replacement, or the
+  form's Attach feed), every card's buttons, the form's and Refresh status
+  are `aria-disabled` (dimmed, still focusable, their press ignored) until
+  it is back, so no press is silently dropped on a button that looks live
+  (before, switching on 11 feeds in a row lost 5 clicks). Each action ends
+  by re-reading the list, and two at once could lay an older list over a
+  newer one, so they never overlap.
 - **Area: The catchment boundary, from the map** (editors and owners; issue
   #326 B-rain, `feeds/BoundaryRain.svelte`, [maps.md § Rain from the
   boundary](./maps.md#rain-from-the-boundary)). Until issue #521 this and
