@@ -1230,6 +1230,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'projects/outcomeSettings.ts:siteNodeId': 'checkOutcomeSite: outcomeSettings.db.test.ts refuses another project’s node',
 	'projects/ewrHeadlineSettings.ts:siteNodeId': ['PATCH /projects/:id settings.ewrHeadline.siteNodeId'],
 	'projects/settings.ts:calibrationSiteNodeId': 'checkCalibrationSite: projects/calibrationSite.db.test.ts refuses another project’s node',
+	'projects/settings.ts:flowSeriesId':
+		'the fit record’s own series (engine ≥ 1.102.0): only compared with the project’s own series ids, to pick the fitted record’s kept checks (keptForFit), never used to read or write a row, so another project’s id matches nothing',
 	'projects/document.ts:siteNodeId': 'a node of the file’s own model, moved to its fresh id on import (projectFileProblems refuses any other): series/site.db.test.ts',
 	'projects/authorityDelegates.ts:userId': ['POST /projects/:id/authority-delegates userId'],
 	'projects/routes.ts:teamId': 'a team, not a project row: teams/teams.security.db.test.ts',
