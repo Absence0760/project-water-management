@@ -36,6 +36,8 @@ evaporation). Issue #620 added C3S's seasonal forecasts and hindcasts
 | `nasapower.py` | The fallback, `power_et0` (§ Reference evaporation): NASA POWER's daily regional API, one parameter a request over 12 tiles, FAO-56 ET₀ per POWER point, the nearest point for each 0.1° cell, the last N days re-read each run, 120 days kept. |
 | `fao56.py` | FAO-56 Penman-Monteith ET₀, daily (eq. 6 with eqs. 7–40), from Tmax, Tmin, Tdew, u2, Rs and P. Tested against FAO-56's worked examples. |
 | `power_fixture.py` | Fixtures mode's fake NASA POWER: regional JSON answers in POWER's shape with synthetic meteorology. Not in the image. |
+| `penpan.py` | PenPan, a modelled US Class-A pan (Rotstayn et al. 2006; McMahon et al. 2013 S6, eqs. S6.1–S6.6), monthly steady state, stdlib only (§ A modelled Class-A pan). Not in the image. |
+| `apan_grid.py` | The operator's modelled Class-A pan grid: `fetch` (POWER's daily weather to monthly means, a year a file), `grid` (PenPan's normal on 0.1° cells, the `apan` form) and `validate` (against station pans, a Markdown report). Not in the image. |
 | `requirements.a.in` | R4-A's direct dependency (`ecmwf-datastores-client`, the CDS client), to be hash-pinned into `requirements.txt` at the round's merge. |
 | `cloudwatch.py` | The freshness metric `MirrorLagDays` (CloudWatch live, a local sink in fixtures mode). |
 | `lease.py` | One writer per product: a lease object taken with S3 conditional writes. Also CHC's one request slot, shared with the fetcher Lambda (`hold_host`). |
@@ -364,6 +366,40 @@ the CDS key, and we make no live request from a session):
 Operator steps (turning the schedules on, the CDS licence for AgERA5 on the
 existing account): docs/deployment.md § AgERA5.
 
+## A modelled Class-A pan
+
+Issue #646 item 7: a Class-A pan grid where no pan station is near, for
+Evaporation from the map's A-pan row (docs/maps.md § The evaporation grid).
+**Offline and operator-run**: `penpan.py` and `apan_grid.py` aren't in the
+image, and nothing here writes the copy.
+
+- **`penpan.py`** (stdlib only; its docstring cites each equation): PenPan,
+  S6.1 with the pan's shortwave (S6.4–S6.6), FAO-56's net longwave and
+  Thom's pan vapour transfer (S6.2). `monthly_mm` takes a month's mean daily
+  weather and returns its total (steady state). Our choices: f_dir kept
+  within 0–1, unscreened output (`screen` 0.93 for a bird screen), ground
+  albedo 0.23, never negative. PenPan-V2 is not implemented
+  (docs/followups.md).
+- **`apan_grid.py fetch`**: NASA POWER's daily regional API, the six
+  parameters `nasapower.py` reads, one year at a time over the box's tiles
+  (4 for South Africa, so 24 requests a year at one a second, a 403/401
+  stopping the run). Each year is reduced to each point's monthly means
+  (a month with a missing day is null) in `<dir>/<year>.power-monthly.json`,
+  and a year already there is skipped. The copy can't supply this: it holds
+  only AgERA5's and POWER's reference ET. `--fixtures` answers from
+  `power_fixture.FakePower`.
+- **`apan_grid.py grid`**: PenPan per point and month, averaged over the
+  years (a point needs every month of every year), on 0.1° cells centred on
+  x.x5° (the nearest point's), refusing a month over 1 000 mm. The output is
+  the `apan` form `pnpm import:evaporation` reads, with `model`, source,
+  version and POWER's attribution.
+- **`apan_grid.py validate`**: the grid against a CSV of Class-A pan
+  stations (`station,lat,lon,jan,…,dec`, mean monthly mm). It writes a
+  Markdown report of the ratio, bias and RMSE by month and overall.
+
+The operator's run and the production block: docs/deployment.md §
+Reference datasets.
+
 ## The C3S seasonal job
 
 Issue #620 step 5: the multi-system seasonal forecasts the outlook will be
@@ -648,6 +684,8 @@ They cover:
 - **AgERA5** (`test_agera5.py`): a zip of daily files and one NetCDF, x.x5 cells taken as they are and x.x0 points remapped, cells placed by coordinate (north-first files), the month's own days (a missing day refused), units (another unit refused), the 30 mm bound, packing noise and a real negative; the request's shape and recognising it; the events and the backfill's bounds; submit then collect into the finals (year from 1979, the cell, the credit); a re-check with the same values (no bump) and changed values (a bump with its `changes`), the recheck's cap; a 403/401 silencing the day; the metric on every exit; the manifest's URL and coverage rules. The CDS is `fakecds.FakeAgera5Cds`.
 - **C3S seasonal** (`test_c3s_seasonal.py`): the 1° grid (D1 snapped outward, whole-degree centres) and the manifest's step; a request names its key back, someone else's doesn't; the release days (the 6th for ECMWF, the 10th for the rest, after 12 UTC plus the margin); the GRIB reader (de-accumulation to mm/day against the fixture's days, south-up, any lead count padded with NaN, a missing field leaving the two days it bounds NaN, packing noise clamped, a real drop or a flood refused, another request's file and a field twice refused, a hindcast's years); submit on one run and collect on a later one (four queued, nothing downloaded on the first run, a slow request, done means asked for nothing), the array (systems, members padded to the largest, the credit, the licence and the centres), the manifests and index, a re-collected forecast with other values (one revision), the catch-up bound; a failed request's backoff and the loud stop, a 403 silencing the day, a lost state adopting the queued request; the events; a hindcast backfill for one system and for all; the manifest's URL rules; the handler's routing, the lag on a failure, and the credit matching the engine's. The CDS is `fakecds.FakeC3sCds`.
 - **FAO-56** (`test_fao56.py`): Example 8's Ra, Example 18's Ra, Rn and ET₀ (3.9 mm/day, from ea and from a dew point), eq. 7 both ways, e°, and NaN and no negative through the arrays.
+- **PenPan** (`test_penpan.py`): McMahon et al. (2013) Worked examples 1, 2 and 9 (Alice Springs, 20 July 1980: the intermediate values, P_rad, f_dir, Rs,pan, f_pan, Rnl and 2.2570 + 1.4027 = 3.6597 mm/day, which S19.90 misprints as 3.6587; S6.1 also worked by hand from the printed intermediates), Thom's function in SI units, FAO-56 eq. 47, f_dir's bounds, NaN in NaN out, no negative, a month as its steady-state day × its days, the screen factor, and wind, dry air and sun each raising it.
+- **The modelled pan grid** (`test_apan_grid.py`, against `power_fixture.FakePower`): one request per parameter, tile and year, the monthly means at a known point (a leap February), a reduced year not asked again, a missing day nulling the month, a 403 stopping the fetch; the `apan` form labelled modelled, every 0.1° centre in the box, a cell as its nearest point's PenPan averaged over the years in water-year order, screen and albedo recorded, a point missing a month left out, a gap or a repeated year refused, an implausible month refused; validation at a known ratio (bias and RMSE by month), a station outside the grid listed, the report from `fixtures/apan/stations.synthetic.csv` (invented stations); the commands end to end; and the committed `fixtures/apan/penpan.synthetic.json` (which `backend/src/geo/penpanGrid.test.ts` reads) against its generator (`test_apan_grid.py --write-fixture`).
 - **NASA POWER** (`test_nasapower.py`): the tiles, one parameter a request in AG/JSON/LST, the JSON parser (fill and days not yet published NaN, units checked, other shapes refused), nearest-point placement and cells beyond the points NaN, a non-lattice refused, a run end to end (72 requests, ET₀ at a known cell equal to `fao56` of its point), a day POWER lacks skipped, the revision rule (25 cells changed for one point), the 120-day window, an implausible ET₀ and a deadline writing nothing, a 403/401 silencing the day, the metric on every exit, and the handler's routing.
 - **The round trip** (`test_roundtrip.py`): Python writes the copy from the synthetic NetCDF, and Node's `backend/src/mirror/` reads it through `tests/roundtrip.ts`, bit for bit, with the same hash and manifest; `agera5_et0` and `power_et0` are read back whole the same way (the `blocks` mode). It needs the pnpm install (`backend/node_modules/.bin/tsx`) and skips without it, except in CI, where `INGEST_REQUIRE_NODE=1` makes it fail.
 - **The ECMWF job** (`test_ecmwf.py`): the index filter (only the members' `tp`, sorted, the ranges being the messages), refusals (another run or step, a member twice, the wrong field), the corner mean at 0.1° on a structured field (and one wet point shared by its four cells), longitudes that wrap, de-accumulation to daily mm (round-off, a drop, over 2000 mm, a gap), the statistics, a fixtures run end to end (the array, its metadata, the manifest, the index, the request count), the time budget and the resumed run, keeping 7 and archiving the rest as their mean, a 403 that stops with no retry, writes the marker and silences the day, the lease, the metric on every exit, a partial issue never listed, the sweep, the S3 path, the handler's routing, the image's COPY lines and the committed fixture against its generator.
@@ -670,6 +708,14 @@ file) and `changed/` (two cells changed). Each listing's sizes are the files'
 real sizes. Regenerate them with
 `ingest/.venv/bin/python ingest/fixtures/chirps/make_chirps_fixtures.py` and
 commit the result; a test fails if they drift from the generator.
+
+`fixtures/apan/` holds the modelled pan grid's synthetic files:
+`penpan.synthetic.json`, `apan_grid.py`'s output for 2020 from
+`power_fixture.FakePower`'s invented weather (regenerate with
+`ingest/.venv/bin/python ingest/test_apan_grid.py --write-fixture`; a test
+fails if it drifts, and the backend's `penpanGrid.test.ts` reads it), and
+`stations.synthetic.csv`, three invented Class-A pan "stations" (`SYN-PAN-n`,
+made-up values, the third outside the tests' box on purpose).
 
 `fixtures/imerg/make_imerg_fixture.py` writes IMERG Late daily files in
 GPM_3IMERGDL V07's layout for any day, from an invented field that differs

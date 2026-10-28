@@ -207,6 +207,8 @@ pnpm import:crop-types      # load the synthetic orchard and vine grid the plant
 pnpm import:evaporation     # load the synthetic evaporation grid Calibration → Evaporation from the map proposes from (pnpm setup runs it);
                              # <file> … --dataset <label> [--bbox w,s,e,n] loads dPET years (.nc, or the totals --reduce <dir> wrote) as monthly means;
                              # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)
+                             # <apan.json[.gz]> --dataset <label> loads ingest/apan_grid.py's modelled Class-A pan grid (PenPan; local only,
+                             # production blocked until the hydrologist signs off its validation; data-sources.md § penpan-apan)
 pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 GB a year, deleted once reduced) and load it (maps.md § Evaporation from the map)
 pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid layer draws (pnpm setup runs it);
                              # <grid.asc> --dataset <label> --source "<product, author, year>" [--bbox w,s,e,n] loads your own ESRI ASCII grid

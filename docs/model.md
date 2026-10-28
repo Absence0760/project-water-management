@@ -578,6 +578,22 @@ GR4J fit made under pan coefficient × A-pan marks the fit stale
 The run's `fitStatus` (in-sample or not, §2.10) is unaffected: the scored days
 are still the fitted ones.
 
+**Where a modelled A-pan comes from, and its limits** (issue #646 item 7).
+With no pan station near, the A-pan row can be proposed from a **modelled**
+Class-A pan grid: PenPan (Rotstayn et al. 2006, as McMahon et al. 2013
+Supplement S6 set it out), Penman's equation for the pan itself, run each
+month as a steady state on NASA POWER's monthly mean weather
+([maps.md § The evaporation grid](./maps.md#the-evaporation-grid)). The
+engine doesn't change: the 12 values go into `settings.apanMm` like typed
+ones, with the dataset cited ("Modelled Class-A pan (PenPan)"). Unlike ET₀,
+they are A-pan values, so the crop and lake factors apply to them as they
+stand. The limits: the values are a normal (each month's mean over the
+years), not the season; POWER's 0.5° weather averages out relief and coasts;
+the model ignores a pan's siting and heat storage; and a measured record
+wins wherever there is one (the daily series above, or a nearby station's
+monthly means). Production refuses the grid until it is validated against
+DWS Class-A pans and the hydrologist signs off.
+
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
 **Retired in engine 1.0.0 (issue #16, 2026-09-26).** The engine's runoff

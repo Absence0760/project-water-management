@@ -21,7 +21,11 @@
 //  * the fixture form: `{ "kind": "et0", "cellDeg": 0.1, "firstYear": …,
 //    "lastYear": …, "cells": [[lon, lat, [Oct … Sep]], …] }`, each cell by
 //    its centre, its values already the monthly means (the committed
-//    synthetic grid).
+//    synthetic grid). A modelled Class-A pan grid from ingest/apan_grid.py
+//    (PenPan, issue #646 item 7) is this form with kind "apan" and a
+//    "model" (evaporationGrid.ts): local only, since production loads
+//    reference ET alone (referenceLoad.ts; docs/data-sources.md §
+//    penpan-apan).
 // The monthly means are the mean of each calendar month's total over the
 // years, kept only for a cell with every year (so no cell's mean leans on a
 // different set of years than its neighbour's), in water-year order. A load

@@ -3150,6 +3150,34 @@ loaded: the same two runs below, same keys and the same dataset labels (a
 load replaces its own dataset in one transaction, so the search keeps
 working throughout). The steps, from an empty folder outside the repo:
 
+**A modelled Class-A pan grid (PenPan; issue #646 item 7) is blocked in
+production.** It loads locally only. Production refuses it twice: the
+release gate refuses an evaporation key or label naming PenPan or an A-pan
+grid, and the migrate Lambda refuses any grid whose kind isn't `et0`
+([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)). The
+operator's run, offline, from `ingest/` with its venv (`ingest/dev.sh test`
+makes it; `INGEST_CONTACT` is the User-Agent's contact):
+
+```bash
+ingest/.venv/bin/python ingest/apan_grid.py fetch --years 1991 2020 --dir ~/.cache/water-management-tiles/apan
+ingest/.venv/bin/python ingest/apan_grid.py grid --dir ~/.cache/water-management-tiles/apan --years 1991 2020 --out penpan-1991-2020.json.gz
+ingest/.venv/bin/python ingest/apan_grid.py validate --grid penpan-1991-2020.json.gz --stations dws-apan-stations.csv --out penpan-validation.md
+pnpm import:evaporation penpan-1991-2020.json.gz --dataset PenPan-1991-2020
+```
+
+`fetch` asks NASA POWER 24 requests a year at one a second (about 12
+minutes for 30 years) and keeps each year's monthly means, so a re-run
+resumes. `--screen 0.93` models a bird-screened pan if the stations it
+stands in for are screened. The station CSV is `station,lat,lon,jan,…,dec`,
+each the station's mean monthly Class-A pan in mm. Build it from DWS's
+evaporation station records once DWS's permission covers them (#646 item
+6). It is client-adjacent data, so keep it and the report out of the repo.
+The report gives the ratio grid ÷ station, the bias and the RMSE, by month
+and overall. To lift the block, the hydrologist signs off on that report
+(docs/followups.md, #646). Then data-sources.md's row becomes `reference
+load`, and the gate and `referenceLoad.ts` take the PenPan grid, in one
+change with its tests.
+
 ```bash
 for c in ZA BW LS MZ NA SZ ZW; do mkdir -p $c && curl -fsSL -o $c/$c.zip https://download.geonames.org/export/dump/$c.zip && unzip -o -q $c/$c.zip -d $c; done
 gzip -c ZA/ZA.txt > za-2026-10-13.txt.gz
