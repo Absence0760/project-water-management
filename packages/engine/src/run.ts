@@ -109,7 +109,7 @@ import {
 } from './project';
 import type { AllocationLimitBound, DemandPart } from './project';
 import { ENGINE_VERSION } from './version';
-import { warn, warningCodesOf } from './warningCodes';
+import { warn, withWarningScope, type WarningScope } from './warningCodes';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
 import { pairingFactors, rainStationSummary } from './runoff/stationForcing';
@@ -293,6 +293,18 @@ function runNetwork(
 	plausibility: typeof runPlausibility | null,
 	assuranceOf: typeof supplyAssurance | null,
 	warm: WarmRun = {}
+): ModelOutput {
+	// The warnings' codes this run records, read back for its summary (./warningCodes.ts): its own, never another run's.
+	return withWarningScope((scope) => runNetworkIn(scope, input, naturalFlow, plausibility, assuranceOf, warm));
+}
+
+function runNetworkIn(
+	scope: WarningScope,
+	input: ModelInput,
+	naturalFlow: (ctx: RunContext) => NaturalFlowInput,
+	plausibility: typeof runPlausibility | null,
+	assuranceOf: typeof supplyAssurance | null,
+	warm: WarmRun
 ): ModelOutput {
 	const capturing = warm.captureDay !== undefined;
 	const resume = warm.resume;
@@ -1297,7 +1309,7 @@ function runNetwork(
 			...(assurance ? { supplyAssurance: assurance } : {}),
 			warnings,
 			// Stable codes for the warnings that have one (engine ≥ 1.102.0, ./warningCodes.ts, issue #611).
-			warningCodes: warningCodesOf(warnings)
+			warningCodes: scope.codesOf(warnings)
 		}
 	};
 }

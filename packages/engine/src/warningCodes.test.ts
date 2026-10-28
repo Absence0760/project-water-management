@@ -17,14 +17,29 @@ import { catchmentStationPlan, unitStationRecipe, type StationContext } from './
 import { checkedStationRecord } from './runoff/stationRecord';
 import { unitGaugeCheckWarnings } from './runoff/unitGaugeChecks';
 import { chirpsChoiceWarnings } from './seriesChoice';
-import { isWarningCode, warn, WARNING_CODES, warningCodesOf, type CodedWarning, type WarningCode } from './warningCodes';
+import { isWarningCode, warn, WARNING_CODES, withWarningScope, type CodedWarning, type WarningCode, type WarningScope } from './warningCodes';
 
 /** Every code a test below saw, checked against the catalogue at the end. */
 const seen = new Set<string>();
 
-/** The coded warnings among `warnings`, after checking each one's text is a warning, in order. */
-function coded(warnings: readonly string[]): CodedWarning[] {
-	const c = warningCodesOf(warnings);
+/**
+ * The scope of the test running (`scoped`): the codes its helper calls record, as a run's would. A helper called
+ * outside any scope records nothing, so each test reads only its own.
+ */
+let current: WarningScope | null = null;
+const scoped = (body: () => void) => () =>
+	withWarningScope((s) => {
+		current = s;
+		try {
+			body();
+		} finally {
+			current = null;
+		}
+	});
+
+/** The coded warnings among `warnings` (the test's scope's, or `codes`), after checking each one's text is a warning, in order. */
+function coded(warnings: readonly string[], codes?: readonly CodedWarning[]): CodedWarning[] {
+	const c = codes ? [...codes] : current!.codesOf(warnings);
 	let at = 0;
 	for (const w of c) {
 		at = warnings.indexOf(w.text, at);
@@ -80,139 +95,185 @@ describe('the catalogue', () => {
 	});
 });
 
-describe('warn and warningCodesOf', () => {
+describe('warn and the run’s scope', () => {
 	it('returns the text unchanged and reads back the code, in the warnings’ order; an uncoded text is left out', () => {
-		const a = warn('rain.none', {}, 'synthetic warning A');
-		const b = warn('calibration.noObserved', { n: 1 }, 'synthetic warning B');
-		expect(a).toBe('synthetic warning A');
-		expect(warningCodesOf([b, 'not coded', a, b])).toEqual([
-			{ code: 'calibration.noObserved', params: { n: 1 }, text: b },
-			{ code: 'rain.none', params: {}, text: a },
-			{ code: 'calibration.noObserved', params: { n: 1 }, text: b }
+		const out = withWarningScope((scope) => {
+			const a = warn('rain.none', {}, 'synthetic warning A');
+			const b = warn('calibration.noObserved', { n: 1 }, 'synthetic warning B');
+			const b2 = warn('calibration.noObserved', { n: 1 }, 'synthetic warning B');
+			expect([a, b2]).toEqual(['synthetic warning A', 'synthetic warning B']);
+			return scope.codesOf([b, 'not coded', a, b, b]);
+		});
+		// B was coded twice, so two of its three copies are; the third is a copy pushed uncoded.
+		expect(out).toEqual([
+			{ code: 'calibration.noObserved', params: { n: 1 }, text: 'synthetic warning B' },
+			{ code: 'rain.none', params: {}, text: 'synthetic warning A' },
+			{ code: 'calibration.noObserved', params: { n: 1 }, text: 'synthetic warning B' }
 		]);
-		expect(warningCodesOf([])).toEqual([]);
 	});
 
-	it('stays bounded, and keeps a text it saw again among the newest', () => {
-		const keep = warn('rain.none', {}, 'synthetic: kept');
-		for (let i = 0; i < 5000; i++) {
-			warn('rain.missingDays', { i }, `synthetic filler ${i}`);
-			if (i % 1000 === 0) warn('rain.none', {}, keep);
-		}
-		expect(warningCodesOf(['synthetic filler 0'])).toEqual([]); // evicted
-		expect(warningCodesOf(['synthetic filler 4999', keep]).map((c) => c.code)).toEqual(['rain.missingDays', 'rain.none']);
+	it('is run-scoped: a later run’s uncoded copy stays uncoded, params are each run’s own, and nested runs keep theirs', () => {
+		const text = 'synthetic warning shared';
+		const first = withWarningScope((scope) => scope.codesOf([warn('rain.missingDays', { days: 1 }, text)]));
+		expect(first).toEqual([{ code: 'rain.missingDays', params: { days: 1 }, text }]);
+		// The same text pushed uncoded in a later run is not coded by the earlier run's record.
+		expect(withWarningScope((scope) => scope.codesOf([text]))).toEqual([]);
+		// Outside any scope warn records nothing, so no later scope sees it.
+		warn('rain.missingDays', { days: 9 }, text);
+		expect(withWarningScope((scope) => scope.codesOf([text]))).toEqual([]);
+		// A run nested in another records into its own scope; the outer one's params stay its own.
+		const outer = withWarningScope((scope) => {
+			const w = warn('rain.missingDays', { days: 2 }, text);
+			const inner = withWarningScope((s2) => s2.codesOf([warn('rain.missingDays', { days: 3 }, text)]));
+			expect(inner).toEqual([{ code: 'rain.missingDays', params: { days: 3 }, text }]);
+			return scope.codesOf([w]);
+		});
+		expect(outer).toEqual([{ code: 'rain.missingDays', params: { days: 2 }, text }]);
+		// A scope closes when its body throws, too.
+		expect(() => withWarningScope(() => { throw new Error('boom'); })).toThrow('boom');
+		expect(withWarningScope((scope) => scope.codesOf([text]))).toEqual([]);
+	});
+
+	it('two runs of one input give the same codes, whatever ran before', () => {
+		const input = { settings: { simulationStart: '2020-01-01', simulationEnd: '2020-01-10' }, model: { nodes: [], crops: [], cropAreas: [], transfers: [] }, series: {} } as unknown as ModelInput;
+		const a = runModelWith(input, () => ({ naturalFlowM3Day: new Array(10).fill(0) })).summary.warningCodes;
+		withWarningScope(() => warn('rain.none', { stale: 1 }, 'no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain'));
+		const b = runModelWith(input, () => ({ naturalFlowM3Day: new Array(10).fill(0) })).summary.warningCodes;
+		expect(b).toEqual(a);
+		expect(a!.find((c) => c.code === 'rain.none')!.params).toEqual({});
 	});
 });
 
 describe('catchment rain: zero runs, kept-dry doubts and accumulations', () => {
-	it('codes each zero-run warning with its figures', () => {
-		const z = {
-			mode: 'missing',
-			periods: [{ start: '2019-06-01', end: '2019-08-15', source: 'flagged', reason: null, days: 76, recordedMm: 0, filledMm: 40 }],
-			keptDry: [{ start: '2018-06-01', end: '2018-06-30', days: 30, reason: 'invented' }],
-			asRecordedDays: 12,
-			fillAboveChirpsMm: 2,
-			chirpsDryDays: 5,
-			days: 76,
-			recordedMm: 0,
-			filledMm: 40.4,
-			unfilledDays: 3
-		} as unknown as ZeroRainInfill;
-		const w = zeroRainWarnings(z);
-		expect(w).toHaveLength(4);
-		expect(one(w, 'rain.zeroRun.missing').params).toEqual({ days: 76, periods: 1, filledMm: 40, recordedMm: 0, unfilledDays: 3 });
-		expect(one(w, 'rain.zeroRun.keptDry').params).toEqual({ days: 30, periods: 1 });
-		expect(one(w, 'rain.zeroRun.chirpsDry').params).toEqual({ days: 5, fillAboveChirpsMm: 2 });
-		expect(one(w, 'rain.zeroRun.asRecorded').params).toEqual({ days: 12 });
-		expect(coded(w).map((c) => c.text)).toEqual(w);
-	});
+	it(
+		'codes each zero-run warning with its figures',
+		scoped(() => {
+			const z = {
+				mode: 'missing',
+				periods: [{ start: '2019-06-01', end: '2019-08-15', source: 'flagged', reason: null, days: 76, recordedMm: 0, filledMm: 40 }],
+				keptDry: [{ start: '2018-06-01', end: '2018-06-30', days: 30, reason: 'invented' }],
+				asRecordedDays: 12,
+				fillAboveChirpsMm: 2,
+				chirpsDryDays: 5,
+				days: 76,
+				recordedMm: 0,
+				filledMm: 40.4,
+				unfilledDays: 3
+			} as unknown as ZeroRainInfill;
+			const w = zeroRainWarnings(z);
+			expect(w).toHaveLength(4);
+			expect(one(w, 'rain.zeroRun.missing').params).toEqual({ days: 76, periods: 1, filledMm: 40, recordedMm: 0, unfilledDays: 3 });
+			expect(one(w, 'rain.zeroRun.keptDry').params).toEqual({ days: 30, periods: 1 });
+			expect(one(w, 'rain.zeroRun.chirpsDry').params).toEqual({ days: 5, fillAboveChirpsMm: 2 });
+			expect(one(w, 'rain.zeroRun.asRecorded').params).toEqual({ days: 12 });
+			expect(coded(w).map((c) => c.text)).toEqual(w);
+		})
+	);
 
-	it('codes a doubtful kept-dry stretch', () => {
-		const c = { mode: 'monthly', doubtfulKeepDry: [{ start: '2018-06-01', end: '2018-06-30', days: 30, chirpsMm: 88.4, limitMm: 50, waterYears: [2017] }] } as unknown as ChirpsCorrection;
-		const w = keepDryDoubtWarnings(c);
-		expect(one(w, 'rain.keepDry.doubtful').params).toEqual({ start: '2018-06-01', end: '2018-06-30', days: 30, chirpsMm: 88, limitMm: 50 });
-	});
+	it(
+		'codes a doubtful kept-dry stretch',
+		scoped(() => {
+			const c = { mode: 'monthly', doubtfulKeepDry: [{ start: '2018-06-01', end: '2018-06-30', days: 30, chirpsMm: 88.4, limitMm: 50, waterYears: [2017] }] } as unknown as ChirpsCorrection;
+			const w = keepDryDoubtWarnings(c);
+			expect(one(w, 'rain.keepDry.doubtful').params).toEqual({ start: '2018-06-01', end: '2018-06-30', days: 30, chirpsMm: 88, limitMm: 50 });
+		})
+	);
 
-	it('codes each accumulation status', () => {
-		const win = (status: AccumulationWindowInfo['status'], over: Partial<AccumulationWindowInfo> = {}) =>
-			({ start: '2017-06-05', end: '2017-06-26', source: 'detected', status, daysInRun: 21, totalMm: 60, readingMm: 60, usedMm: 60, outageDays: null, keptReason: 'invented', reason: 'invented', ...over }) as unknown as AccumulationWindowInfo;
-		const info = {
-			windows: [win('spread'), win('noChirps'), win('setAside', { outageDays: 9 }), win('kept'), win('asRecorded'), win('noReading', { source: 'listed' })],
-			skipped: ['a listed window skipped (uncoded)'],
-			spreadWindows: 1,
-			spreadDays: 21,
-			spreadMm: 60
-		} as unknown as RainAccumulationInfo;
-		const w = accumulationWarnings(info, [info.windows[4]!]);
-		expect(one(w, 'rain.accumulation.spread').params).toEqual({ windows: 1, days: 21 });
-		expect(one(w, 'rain.accumulation.noChirps').params).toEqual({ windows: 1 });
-		expect(one(w, 'rain.accumulation.setAside').params).toEqual({ readings: 1 });
-		expect(one(w, 'rain.accumulation.kept').params).toEqual({ windows: 1 });
-		expect(one(w, 'rain.accumulation.asRecorded').params).toEqual({ windows: 1, doubleCounted: 1 });
-		expect(one(w, 'rain.accumulation.noReading').params).toEqual({ windows: 1 });
-		// The skipped line stays uncoded: it is a settings problem, not a rain check.
-		expect(coded(w)).toHaveLength(6);
-		expect(w).toHaveLength(7);
-	});
+	it(
+		'codes each accumulation status',
+		scoped(() => {
+			const win = (status: AccumulationWindowInfo['status'], over: Partial<AccumulationWindowInfo> = {}) =>
+				({ start: '2017-06-05', end: '2017-06-26', source: 'detected', status, daysInRun: 21, totalMm: 60, readingMm: 60, usedMm: 60, outageDays: null, keptReason: 'invented', reason: 'invented', ...over }) as unknown as AccumulationWindowInfo;
+			const info = {
+				windows: [win('spread'), win('noChirps'), win('setAside', { outageDays: 9 }), win('kept'), win('asRecorded'), win('noReading', { source: 'listed' })],
+				skipped: ['a listed window skipped (uncoded)'],
+				spreadWindows: 1,
+				spreadDays: 21,
+				spreadMm: 60
+			} as unknown as RainAccumulationInfo;
+			const w = accumulationWarnings(info, [info.windows[4]!]);
+			expect(one(w, 'rain.accumulation.spread').params).toEqual({ windows: 1, days: 21 });
+			expect(one(w, 'rain.accumulation.noChirps').params).toEqual({ windows: 1 });
+			expect(one(w, 'rain.accumulation.setAside').params).toEqual({ readings: 1 });
+			expect(one(w, 'rain.accumulation.kept').params).toEqual({ windows: 1 });
+			expect(one(w, 'rain.accumulation.asRecorded').params).toEqual({ windows: 1, doubleCounted: 1 });
+			expect(one(w, 'rain.accumulation.noReading').params).toEqual({ windows: 1 });
+			// The skipped line stays uncoded: it is a settings problem, not a rain check.
+			expect(coded(w)).toHaveLength(6);
+			expect(w).toHaveLength(7);
+		})
+	);
 });
 
 describe('CHIRPS and the gap-filling products', () => {
-	it('codes CHIRPS standing in raw (no factor fitted)', () => {
-		const c = { mode: 'monthly', fallbackDays: 40, correctedDays: 0, minDays: 90, minMm: 50, months: [], fitPeriod: null, doubtfulKeepDry: [], excludedWaterYears: [] } as unknown as ChirpsCorrection;
-		const w = chirpsCorrectionWarning(c)!;
-		expect(w).toMatch(/^CHIRPS rain stands in for blank catchment rain on 40 days and is not bias-corrected/);
-		expect(one([w], 'rain.chirps.uncorrected').params).toEqual({ days: 40 });
-	});
+	it(
+		'codes CHIRPS standing in raw (no factor fitted)',
+		scoped(() => {
+			const c = { mode: 'monthly', fallbackDays: 40, correctedDays: 0, minDays: 90, minMm: 50, months: [], fitPeriod: null, doubtfulKeepDry: [], excludedWaterYears: [] } as unknown as ChirpsCorrection;
+			const w = chirpsCorrectionWarning(c)!;
+			expect(w).toMatch(/^CHIRPS rain stands in for blank catchment rain on 40 days and is not bias-corrected/);
+			expect(one([w], 'rain.chirps.uncorrected').params).toEqual({ days: 40 });
+		})
+	);
 
-	it('codes each gap-product warning with its product', () => {
-		const product = (over: Partial<GapProductInfo>): GapProductInfo =>
-			({ key: 'k', product: 'era5l', version: null, label: 'ERA5-Land', present: true, correction: null, doubleMass: null, days: 20, rawMm: 30, mm: 33, ...over }) as GapProductInfo;
-		const corrected = { correctedDays: 20, fitWindow: { from: '2010-10-01', to: '2020-09-30' }, months: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, factor: 1.1, source: 'own', clamped: false })), quantileMap: null } as unknown as ChirpsCorrection;
-		const dm = { breaks: [{ afterWaterYear: 2012 }], segments: [{ fromWaterYear: 2005, toWaterYear: 2012, slope: 1.1 }, { fromWaterYear: 2013, toWaterYear: 2020, slope: 0.8 }] };
-		const info = {
-			product: 'era5l',
-			imergLate: true,
-			chirpsDays: 0,
-			tailFrom: null,
-			segments: [],
-			products: [product({ present: false, days: 0 }), product({ product: 'imerg_late', label: 'IMERG Late V07', present: false, days: 0 }), product({}), product({ correction: corrected, doubleMass: dm as never })]
-		} as unknown as GapRainInfo;
-		const w = gapRainWarnings(info);
-		const absent = coded(w).filter((c) => c.code === 'rain.gapProduct.absent');
-		expect(absent.map((c) => c.params)).toEqual([{ product: 'era5l' }, { product: 'imerg_late' }]);
-		expect(one(w, 'rain.gapProduct.doubleMassBreak').params).toEqual({ product: 'era5l', breaks: 1 });
-		expect(one(w, 'rain.gapProduct.uncorrected').params).toEqual({ product: 'era5l', days: 20 });
-		expect(one(w, 'rain.gapProduct.corrected').params).toEqual({ product: 'era5l', days: 20 });
-		expect(coded(w).map((c) => c.text)).toEqual(w);
-	});
+	it(
+		'codes each gap-product warning with its product',
+		scoped(() => {
+			const product = (over: Partial<GapProductInfo>): GapProductInfo =>
+				({ key: 'k', product: 'era5l', version: null, label: 'ERA5-Land', present: true, correction: null, doubleMass: null, days: 20, rawMm: 30, mm: 33, ...over }) as GapProductInfo;
+			const corrected = { correctedDays: 20, fitWindow: { from: '2010-10-01', to: '2020-09-30' }, months: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, factor: 1.1, source: 'own', clamped: false })), quantileMap: null } as unknown as ChirpsCorrection;
+			const dm = { breaks: [{ afterWaterYear: 2012 }], segments: [{ fromWaterYear: 2005, toWaterYear: 2012, slope: 1.1 }, { fromWaterYear: 2013, toWaterYear: 2020, slope: 0.8 }] };
+			const info = {
+				product: 'era5l',
+				imergLate: true,
+				chirpsDays: 0,
+				tailFrom: null,
+				segments: [],
+				products: [product({ present: false, days: 0 }), product({ product: 'imerg_late', label: 'IMERG Late V07', present: false, days: 0 }), product({}), product({ correction: corrected, doubleMass: dm as never })]
+			} as unknown as GapRainInfo;
+			const w = gapRainWarnings(info);
+			const absent = coded(w).filter((c) => c.code === 'rain.gapProduct.absent');
+			expect(absent.map((c) => c.params)).toEqual([{ product: 'era5l' }, { product: 'imerg_late' }]);
+			expect(one(w, 'rain.gapProduct.doubleMassBreak').params).toEqual({ product: 'era5l', breaks: 1 });
+			expect(one(w, 'rain.gapProduct.uncorrected').params).toEqual({ product: 'era5l', days: 20 });
+			expect(one(w, 'rain.gapProduct.corrected').params).toEqual({ product: 'era5l', days: 20 });
+			expect(coded(w).map((c) => c.text)).toEqual(w);
+		})
+	);
 
-	it('codes a rain-source period, leaving its intensity check uncoded', () => {
-		const p = { start: '2010-10-01', end: '2012-09-30', series: 'rain_catchment_alt_mm', reason: 'invented', seriesPresent: false, runDays: 731, fallback: 'chirps', factors: [] } as unknown as RainSourcePeriodInfo;
-		const w = rainSourcePeriodWarnings({ periods: [p] } as RainSourceInfo);
-		expect(one(w, 'rain.sourcePeriod').params).toEqual({ start: '2010-10-01', end: '2012-09-30', series: 'rain_catchment_alt_mm', runDays: 731 });
-	});
+	it(
+		'codes a rain-source period, leaving its intensity check uncoded',
+		scoped(() => {
+			const p = { start: '2010-10-01', end: '2012-09-30', series: 'rain_catchment_alt_mm', reason: 'invented', seriesPresent: false, runDays: 731, fallback: 'chirps', factors: [] } as unknown as RainSourcePeriodInfo;
+			const w = rainSourcePeriodWarnings({ periods: [p] } as RainSourceInfo);
+			expect(one(w, 'rain.sourcePeriod').params).toEqual({ start: '2010-10-01', end: '2012-09-30', series: 'rain_catchment_alt_mm', runDays: 731 });
+		})
+	);
 
-	it('codes a shadowed CHIRPS series, at the outlet and at a unit', () => {
-		const chirps = (startDate: string, n: number) => ({ startDate, values: Array.from({ length: n }, (_, i) => 1 + (i % 5)) });
-		const start = Date.UTC(2020, 0, 1) / 86_400_000;
-		const w = chirpsChoiceWarnings(
-			{
-				model: { nodes: [{ id: 'u1', name: 'Lower' }] } as never,
-				settings: { unitRain: { mode: 'perUnit' } } as never,
-				series: { rain_chirps_mm: chirps('2020-11-01', 61), 'rain_chirps_mm@u1': chirps('2020-12-02', 30) },
-				seriesChoice: {
-					rain_chirps_mm: { name: 'A', others: [{ name: 'B', firstDay: '2009-01-01', lastDay: '2025-06-30' }] },
-					unitChirps: { u1: { name: 'C', others: [{ name: 'D', firstDay: '2020-01-01', lastDay: '2020-12-31' }] } }
-				}
-			},
-			start,
-			366
-		);
-		expect(coded(w).map((c) => [c.code, c.params])).toEqual([
-			['rain.chirpsShadowed', { where: 'catchment' }],
-			['rain.chirpsShadowed', { where: 'unit', unit: 'u1', name: 'Lower' }]
-		]);
-	});
+	it(
+		'codes a shadowed CHIRPS series, at the outlet and at a unit',
+		scoped(() => {
+			const chirps = (startDate: string, n: number) => ({ startDate, values: Array.from({ length: n }, (_, i) => 1 + (i % 5)) });
+			const start = Date.UTC(2020, 0, 1) / 86_400_000;
+			const w = chirpsChoiceWarnings(
+				{
+					model: { nodes: [{ id: 'u1', name: 'Lower' }] } as never,
+					settings: { unitRain: { mode: 'perUnit' } } as never,
+					series: { rain_chirps_mm: chirps('2020-11-01', 61), 'rain_chirps_mm@u1': chirps('2020-12-02', 30) },
+					seriesChoice: {
+						rain_chirps_mm: { name: 'A', others: [{ name: 'B', firstDay: '2009-01-01', lastDay: '2025-06-30' }] },
+						unitChirps: { u1: { name: 'C', others: [{ name: 'D', firstDay: '2020-01-01', lastDay: '2020-12-31' }] } }
+					}
+				},
+				start,
+				366
+			);
+			expect(coded(w).map((c) => [c.code, c.params])).toEqual([
+				['rain.chirpsShadowed', { where: 'catchment' }],
+				['rain.chirpsShadowed', { where: 'unit', unit: 'u1', name: 'Lower' }]
+			]);
+		})
+	);
 });
 
 describe('rain stations and unit gauges', () => {
@@ -226,74 +287,92 @@ describe('rain stations and unit gauges', () => {
 	const settingsWith = (raw: Record<string, unknown>, rainStations: ProjectSettings['rainStations'] = null): ProjectSettings => ({ ...mergeSettings(raw, []), rainStations });
 	const seriesOf = (values: (number | null)[]) => ({ [stationSeriesKey('S1')]: { startDate: START, values } }) as unknown as ModelInput['series'];
 
-	it('codes a station’s zero runs, set aside or run as recorded', () => {
-		const set = checkedStationRecord(settingsWith({}), seriesOf(withZeroRun(rainOf())), 'S1', { name: 'Hill' })!;
-		expect(one(set.warnings, 'rain.station.zeroRun.missing').params).toEqual({ station: 'S1', days: expect.any(Number) });
-		const zr = mergeSettings({}, []).zeroRainRuns;
-		const kept = checkedStationRecord(settingsWith({ zeroRainRuns: { ...zr, mode: 'asRecorded' } }), seriesOf(withZeroRun(rainOf())), 'S1', { name: 'Hill' })!;
-		expect(one(kept.warnings, 'rain.station.zeroRun.asRecorded').params.station).toBe('S1');
-	});
+	it(
+		'codes a station’s zero runs, set aside or run as recorded',
+		scoped(() => {
+			const set = checkedStationRecord(settingsWith({}), seriesOf(withZeroRun(rainOf())), 'S1', { name: 'Hill' })!;
+			expect(one(set.warnings, 'rain.station.zeroRun.missing').params).toEqual({ station: 'S1', days: expect.any(Number) });
+			const zr = mergeSettings({}, []).zeroRainRuns;
+			const kept = checkedStationRecord(settingsWith({ zeroRainRuns: { ...zr, mode: 'asRecorded' } }), seriesOf(withZeroRun(rainOf())), 'S1', { name: 'Hill' })!;
+			expect(one(kept.warnings, 'rain.station.zeroRun.asRecorded').params.station).toBe('S1');
+		})
+	);
 
-	it('codes a station’s accumulations, spread or run as recorded', () => {
-		const gauge = rainOf();
-		const cell = rainOf().map((v) => (v === null ? null : v * 0.7));
-		const b0 = at('2017-05-10');
-		for (let i = b0; i <= at('2017-05-14'); i++) gauge[i] = null;
-		gauge[at('2017-05-15')] = 60;
-		gauge[b0 - 1] = 0;
-		for (let i = b0 - 1; i <= at('2017-05-16'); i++) cell[i] = i >= b0 && i <= b0 + 3 ? 15 : 0;
-		const series = { [stationSeriesKey('S1')]: { startDate: START, values: gauge }, [stationChirpsSeriesKey('S1')]: { startDate: START, values: cell }, rain_chirps_mm: { startDate: START, values: cell } } as unknown as ModelInput['series'];
-		const spread = checkedStationRecord(settingsWith({}), series, 'S1')!;
-		expect(one(spread.warnings, 'rain.station.accumulation.spread').params).toEqual({ station: 'S1', windows: 1, days: 6, mm: 60 });
-		const zr = mergeSettings({}, []).zeroRainRuns;
-		const asRec = checkedStationRecord(settingsWith({ zeroRainRuns: { ...zr, accumulationMode: 'asRecorded' } }), series, 'S1')!;
-		expect(one(asRec.warnings, 'rain.station.accumulation.asRecorded').params).toEqual({ station: 'S1', windows: 1 });
-	});
+	it(
+		'codes a station’s accumulations, spread or run as recorded',
+		scoped(() => {
+			const gauge = rainOf();
+			const cell = rainOf().map((v) => (v === null ? null : v * 0.7));
+			const b0 = at('2017-05-10');
+			for (let i = b0; i <= at('2017-05-14'); i++) gauge[i] = null;
+			gauge[at('2017-05-15')] = 60;
+			gauge[b0 - 1] = 0;
+			for (let i = b0 - 1; i <= at('2017-05-16'); i++) cell[i] = i >= b0 && i <= b0 + 3 ? 15 : 0;
+			const series = { [stationSeriesKey('S1')]: { startDate: START, values: gauge }, [stationChirpsSeriesKey('S1')]: { startDate: START, values: cell }, rain_chirps_mm: { startDate: START, values: cell } } as unknown as ModelInput['series'];
+			const spread = checkedStationRecord(settingsWith({}), series, 'S1')!;
+			expect(one(spread.warnings, 'rain.station.accumulation.spread').params).toEqual({ station: 'S1', windows: 1, days: 6, mm: 60 });
+			const zr = mergeSettings({}, []).zeroRainRuns;
+			const asRec = checkedStationRecord(settingsWith({ zeroRainRuns: { ...zr, accumulationMode: 'asRecorded' } }), series, 'S1')!;
+			expect(one(asRec.warnings, 'rain.station.accumulation.asRecorded').params).toEqual({ station: 'S1', windows: 1 });
+		})
+	);
 
-	it('codes a station’s reading after a blank outage, set aside', () => {
-		const gauge = rainOf();
-		const cell = rainOf().map((v) => (v === null ? null : v * 0.7));
-		const b0 = at('2018-01-05');
-		const read = b0 + 10;
-		gauge[b0 - 1] = 5;
-		for (let i = b0; i < read; i++) [gauge[i], cell[i]] = [null, i === read - 1 ? 0 : 4];
-		[gauge[read], cell[read], gauge[read + 1], cell[read + 1]] = [60, 0, 5, 0];
-		const series = { [stationSeriesKey('S1')]: { startDate: START, values: gauge }, [stationChirpsSeriesKey('S1')]: { startDate: START, values: cell }, rain_chirps_mm: { startDate: START, values: cell } } as unknown as ModelInput['series'];
-		const r = checkedStationRecord(settingsWith({}), series, 'S1')!;
-		expect(one(r.warnings, 'rain.station.accumulation.setAside').params).toEqual({ station: 'S1', readings: 1 });
-	});
+	it(
+		'codes a station’s reading after a blank outage, set aside',
+		scoped(() => {
+			const gauge = rainOf();
+			const cell = rainOf().map((v) => (v === null ? null : v * 0.7));
+			const b0 = at('2018-01-05');
+			const read = b0 + 10;
+			gauge[b0 - 1] = 5;
+			for (let i = b0; i < read; i++) [gauge[i], cell[i]] = [null, i === read - 1 ? 0 : 4];
+			[gauge[read], cell[read], gauge[read + 1], cell[read + 1]] = [60, 0, 5, 0];
+			const series = { [stationSeriesKey('S1')]: { startDate: START, values: gauge }, [stationChirpsSeriesKey('S1')]: { startDate: START, values: cell }, rain_chirps_mm: { startDate: START, values: cell } } as unknown as ModelInput['series'];
+			const r = checkedStationRecord(settingsWith({}), series, 'S1')!;
+			expect(one(r.warnings, 'rain.station.accumulation.setAside').params).toEqual({ station: 'S1', readings: 1 });
+		})
+	);
 
-	it('codes a station’s unreliable periods, and one that isn’t two dates', () => {
-		const stored = rainOf().map((v) => v! + 1);
-		const s = settingsWith({}, { unreliable: { S1: [['2018-03-01', '2018-03-10'], ['2018-03-10', '2018-03-01']] } } as never);
-		const r = checkedStationRecord(s, seriesOf(stored), 'S1', { name: 'Hill' })!;
-		expect(one(r.warnings, 'rain.station.unreliable').params).toEqual({ station: 'S1', days: 10 });
-		expect(one(r.warnings, 'rain.station.unreliableInvalid').params).toEqual({ station: 'S1' });
-	});
+	it(
+		'codes a station’s unreliable periods, and one that isn’t two dates',
+		scoped(() => {
+			const stored = rainOf().map((v) => v! + 1);
+			const s = settingsWith({}, { unreliable: { S1: [['2018-03-01', '2018-03-10'], ['2018-03-10', '2018-03-01']] } } as never);
+			const r = checkedStationRecord(s, seriesOf(stored), 'S1', { name: 'Hill' })!;
+			expect(one(r.warnings, 'rain.station.unreliable').params).toEqual({ station: 'S1', days: 10 });
+			expect(one(r.warnings, 'rain.station.unreliableInvalid').params).toEqual({ station: 'S1' });
+		})
+	);
 
-	it('codes a station with no record, for the catchment and for a unit', () => {
-		const ctx = { settings: { rainStations: { catchment: { stationId: 'S9' } } }, record: () => null, name: (id: string) => id } as unknown as StationContext;
-		const warnings: string[] = [];
-		expect(catchmentStationPlan(ctx, warnings)).toBeNull();
-		expect(unitStationRecipe(ctx, { id: 'u1', name: 'Upper' } as NetworkNode, { stationId: 'S9' } as never, warnings)).toBeNull();
-		expect(coded(warnings).map((c) => c.params)).toEqual([
-			{ station: 'S9', where: 'catchment' },
-			{ station: 'S9', where: 'unit', unit: 'u1' }
-		]);
-		expect(coded(warnings).every((c) => c.code === 'rain.station.noRecord')).toBe(true);
-	});
+	it(
+		'codes a station with no record, for the catchment and for a unit',
+		scoped(() => {
+			const ctx = { settings: { rainStations: { catchment: { stationId: 'S9' } } }, record: () => null, name: (id: string) => id } as unknown as StationContext;
+			const warnings: string[] = [];
+			expect(catchmentStationPlan(ctx, warnings)).toBeNull();
+			expect(unitStationRecipe(ctx, { id: 'u1', name: 'Upper' } as NetworkNode, { stationId: 'S9' } as never, warnings)).toBeNull();
+			expect(coded(warnings).map((c) => c.params)).toEqual([
+				{ station: 'S9', where: 'catchment' },
+				{ station: 'S9', where: 'unit', unit: 'u1' }
+			]);
+			expect(coded(warnings).every((c) => c.code === 'rain.station.noRecord')).toBe(true);
+		})
+	);
 
-	it('codes each of a unit gauge’s checks, naming the unit', () => {
-		const w = unitGaugeCheckWarnings('Upper', { values: [], zeroRunDays: 30, zeroRunAsRecordedDays: 4, spreadWindows: 1, spreadDays: 6, spreadMm: 60.2, setAside: 2, asRecorded: 1, unreliableDays: 3 });
-		expect(coded(w).map((c) => [c.code, c.params])).toEqual([
-			['rain.unitGauge.zeroRun.missing', { unit: 'Upper', days: 30 }],
-			['rain.unitGauge.zeroRun.asRecorded', { unit: 'Upper', days: 4 }],
-			['rain.unitGauge.accumulation.spread', { unit: 'Upper', windows: 1, days: 6, mm: 60 }],
-			['rain.unitGauge.accumulation.setAside', { unit: 'Upper', readings: 2 }],
-			['rain.unitGauge.accumulation.asRecorded', { unit: 'Upper', windows: 1 }],
-			['rain.unitGauge.unreliable', { unit: 'Upper', days: 3 }]
-		]);
-	});
+	it(
+		'codes each of a unit gauge’s checks, naming the unit',
+		scoped(() => {
+			const w = unitGaugeCheckWarnings('Upper', { values: [], zeroRunDays: 30, zeroRunAsRecordedDays: 4, spreadWindows: 1, spreadDays: 6, spreadMm: 60.2, setAside: 2, asRecorded: 1, unreliableDays: 3 });
+			expect(coded(w).map((c) => [c.code, c.params])).toEqual([
+				['rain.unitGauge.zeroRun.missing', { unit: 'Upper', days: 30 }],
+				['rain.unitGauge.zeroRun.asRecorded', { unit: 'Upper', days: 4 }],
+				['rain.unitGauge.accumulation.spread', { unit: 'Upper', windows: 1, days: 6, mm: 60 }],
+				['rain.unitGauge.accumulation.setAside', { unit: 'Upper', readings: 2 }],
+				['rain.unitGauge.accumulation.asRecorded', { unit: 'Upper', windows: 1 }],
+				['rain.unitGauge.unreliable', { unit: 'Upper', days: 3 }]
+			]);
+		})
+	);
 });
 
 describe('a run’s summary.warningCodes', () => {
@@ -311,9 +390,7 @@ describe('a run’s summary.warningCodes', () => {
 	/** Every coded warning is a warning, in order, and its code is in the catalogue. */
 	const codesOf = (s: RunSummary) => {
 		expect(s.warningCodes).toBeDefined();
-		const c = coded(s.warnings);
-		expect(s.warningCodes).toEqual(c);
-		return c;
+		return coded(s.warnings, s.warningCodes);
 	};
 
 	it('codes missing rain days and a run with no observed flow', () => {
@@ -363,7 +440,9 @@ describe('a run’s summary.warningCodes', () => {
 		expect(bare!.params).toEqual({ site: 'g', name: 'Bare gauge' });
 	});
 
-	it('pickObservedKind codes its two warnings', () => {
+	it(
+		'pickObservedKind codes its two warnings',
+		scoped(() => {
 		const series = { flow_observed_m3s: ser([1]), flow_logger_m3s: ser([1]) } as ModelInput['series'];
 		const w: string[] = [];
 		pickObservedKind(null, series, w);
@@ -372,7 +451,8 @@ describe('a run’s summary.warningCodes', () => {
 			['calibration.defaultGaugePick', {}],
 			['calibration.flowKindMissing', { kind: 'flow_logger_m3s' }]
 		]);
-	});
+		})
+	);
 });
 
 /** Codes asserted in the test file named, each beside the test of its warning's text, where the fixture already is. Every other code must be seen above. */

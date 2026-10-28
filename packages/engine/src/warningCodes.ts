@@ -122,33 +122,59 @@ export interface CodedWarning {
 export const isWarningCode = (c: unknown): c is WarningCode => typeof c === 'string' && Object.hasOwn(WARNING_CODES, c);
 
 /**
- * The codes the engine gave its warning texts. Warnings travel as plain strings: ~40 helpers return string[] that
- * their callers merge with push(...), so a code can't ride along on the array. `warn` keys it on the text instead,
- * and warningCodesOf reads it back for the summary's final warnings. Bounded: the oldest entries go past
- * REGISTRY_MAX, and `warn` moves a text it sees again to the newest end, so every text of the run being summarised is
- * still held (a run gives a few hundred at most). Two codes never build the same text (each template differs), so a
- * text maps to one code whichever run registered it, nested runs included.
+ * The codes the engine gave its warning texts during one run. Warnings travel as plain strings: ~40 helpers return
+ * string[] that their callers merge with push(...), so a code can't ride along on the array. `warn` records it in the
+ * innermost open scope instead (runs are synchronous, so a stack nests: a run started inside another, a forecast's
+ * history run or a calibration's, records into its own), and the run reads its scope back for its summary's final
+ * warnings. Outside any scope `warn` records nothing, so no code outlives its run or leaks into another.
  */
-const registry = new Map<string, { code: WarningCode; params: WarningParams }>();
-const REGISTRY_MAX = 4096;
+export interface WarningScope {
+	/**
+	 * The coded warnings among `warnings`, in their order: each text takes the next code recorded for that text in this
+	 * scope, once (a warning pushed twice, coded twice, repeats; a copy pushed uncoded beyond what was recorded stays
+	 * uncoded). Params are this scope's own.
+	 */
+	codesOf(warnings: readonly string[]): CodedWarning[];
+}
+
+type Recorded = Map<string, { code: WarningCode; params: WarningParams }[]>;
+const scopes: Recorded[] = [];
+
+/** Run `body` with a scope of its own for the codes `warn` records; the scope closes when it returns or throws. */
+export function withWarningScope<T>(body: (scope: WarningScope) => T): T {
+	const recorded: Recorded = new Map();
+	scopes.push(recorded);
+	const scope: WarningScope = {
+		codesOf(warnings) {
+			const used = new Map<string, number>();
+			const out: CodedWarning[] = [];
+			for (const text of warnings) {
+				const k = used.get(text) ?? 0;
+				const hit = recorded.get(text)?.[k];
+				if (!hit) continue;
+				used.set(text, k + 1);
+				out.push({ code: hit.code, params: hit.params, text });
+			}
+			return out;
+		}
+	};
+	try {
+		return body(scope);
+	} finally {
+		scopes.splice(scopes.lastIndexOf(recorded), 1);
+	}
+}
 
 /**
  * A run warning with its code: returns `text` (push it onto the warnings as before), and records the code and params
- * for summary.warningCodes. Use at the push site: `warnings.push(warn('rain.none', {}, '…'))`.
+ * in the run's scope for summary.warningCodes. Use at the push site: `warnings.push(warn('rain.none', {}, '…'))`.
  */
 export function warn(code: WarningCode, params: WarningParams, text: string): string {
-	registry.delete(text);
-	registry.set(text, { code, params });
-	if (registry.size > REGISTRY_MAX) registry.delete(registry.keys().next().value!);
-	return text;
-}
-
-/** The coded warnings among `warnings`, in their order (a repeated text repeats): summary.warningCodes. */
-export function warningCodesOf(warnings: readonly string[]): CodedWarning[] {
-	const out: CodedWarning[] = [];
-	for (const text of warnings) {
-		const hit = registry.get(text);
-		if (hit) out.push({ code: hit.code, params: hit.params, text });
+	const recorded = scopes.at(-1);
+	if (recorded) {
+		const list = recorded.get(text);
+		if (list) list.push({ code, params });
+		else recorded.set(text, [{ code, params }]);
 	}
-	return out;
+	return text;
 }

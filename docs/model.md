@@ -6782,9 +6782,14 @@ Not coded on purpose: the area-fragmentation, High/Low-MAP, `areaMismatches`
 and EWR-split warnings, which issues #615–#617 remove or reword, and every
 settings-validation warning. An uncoded warning is in `warnings` only.
 The texts travel through the engine as plain strings, so `warn(code,
-params, text)` returns the text for the usual `warnings.push` and keeps the
-code keyed on it; the summary reads the codes back for its final warnings
-(`warningCodesOf`). Two codes never build the same text. A run before
+params, text)` returns the text for the usual `warnings.push` and records
+the code in the run's own scope (`withWarningScope`, opened by every run;
+runs are synchronous, so a run started inside another records into its
+own); the summary reads that scope back for its final warnings
+(`scope.codesOf`), each text taking the next code recorded for it once, so
+a copy pushed uncoded stays uncoded. Outside a run `warn` records nothing:
+no code or params carry over from an earlier run, and the same input gives
+the same codes whatever ran before. Two codes never build the same text. A run before
 1.102.0 has no `warningCodes`, and the frontend falls back to its text
 heuristic (`runs/credibility.ts` `warningGroups`); a code's group matches
 the group that heuristic gives its text, so a code moves no warning. No
