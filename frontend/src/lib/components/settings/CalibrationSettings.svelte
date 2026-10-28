@@ -498,6 +498,7 @@
 		<Lazy load={loadEvaporationProposal}>
 			{#snippet children(EvaporationProposal)}<EvaporationProposal projectId={project.id} {readonly} formDirty={dirty} onApplied={reloadAfterApply} />{/snippet}
 		</Lazy>
+		<Lazy load={() => import('#lib/components/evaporation/EvaporationStationProposal.svelte')}>{#snippet children(EvaporationStationProposal)}<EvaporationStationProposal projectId={project.id} {readonly} formDirty={dirty} onApplied={reloadAfterApply} />{/snippet}</Lazy>
 	</div>
 </section>
 

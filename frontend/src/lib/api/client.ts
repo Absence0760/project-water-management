@@ -195,6 +195,8 @@ import type {
 	CroplandProposals,
 	CropTypeLayer,
 	EvaporationProposals,
+	EvaporationStationProposals,
+	SpanConversionId,
 	EvaporationTarget
 } from './types';
 
@@ -1359,6 +1361,17 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			get: (id: string, dataset?: string) => request<EvaporationProposals>('GET', `${p(id)}/evaporation-proposals${dataset ? `?${new URLSearchParams({ dataset })}` : ''}`),
 			fromMap: (id: string, dataset: string) =>
 				request<{ target: EvaporationTarget; monthlyMm: number[]; dataset: string; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-map`, { dataset })
+		},
+		/**
+		 * The nearest DWS evaporation stations to the boundary (issue #646 item 6, docs/api.md § Catchment map): a station's
+		 * monthly means proposed as the A-pan row (a Symons pan's only through the S→A equation picked), and a Class-A pan's
+		 * daily record as the daily A-pan series. An accept is one settings revision citing the station.
+		 */
+		evaporationStations: {
+			get: (id: string, withinKm?: number) =>
+				request<EvaporationStationProposals>('GET', `${p(id)}/evaporation-stations${withinKm ? `?${new URLSearchParams({ within: String(withinKm) })}` : ''}`),
+			fromStation: (id: string, body: { station: string; conversion?: SpanConversionId; daily?: boolean }) =>
+				request<{ station: string; apanMm: number[]; conversion: SpanConversionId | null; series: string | null; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-station`, body)
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {

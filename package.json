@@ -61,6 +61,7 @@
 		"reproduce:pack": "pnpm -C backend reproduce:pack",
 		"import:quaternaries": "pnpm -C backend import:quaternaries",
 		"import:gauge-stations": "pnpm -C backend import:gauge-stations",
+		"import:evaporation-stations": "pnpm -C backend import:evaporation-stations",
 		"import:dam-register": "pnpm -C backend import:dam-register",
 		"import:rivers": "pnpm -C backend import:rivers",
 		"import:land-cover": "pnpm -C backend import:land-cover",
