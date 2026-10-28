@@ -584,3 +584,31 @@ export async function plantRunEngine(runId: string, engineVersion: string): Prom
 export async function confirmAuthorityDelegate(projectId: string, userId: string, reference = 'Synthetic authority letter 1'): Promise<void> {
 	await withDb((db) => db.query('SELECT authority_confirm_by_operator($1, $2, $3)', [projectId, userId, reference]));
 }
+
+/**
+ * Satellite views of a dam polygon (261_dam_observation, issue #604 R5-B), as
+ * the worker's weekly pass loads them: its Waterbodies match recorded with
+ * app_dam_match_write, then its WOfS rows with app_dam_observation_load. As
+ * the schema owner with no user, so both run as the worker does. Invented
+ * values only.
+ */
+export async function plantDamObservations(
+	featureId: string,
+	match: { status: 'matched' | 'merged' | 'none'; uid?: string },
+	rows: { date: string; wetAreaM2: number; pctObserved: number }[]
+): Promise<void> {
+	await withDb(async (db) => {
+		const { rows: f } = await db.query<{ updated_at: Date }>('SELECT updated_at FROM map_feature WHERE id = $1', [featureId]);
+		const uid = match.status === 'none' ? null : (match.uid ?? 'zzzze2e001');
+		await db.query('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6, $7)', [featureId, match.status, uid, uid ? 0.9 : null, uid ? 0.5 : null, f[0]!.updated_at, null]);
+		await db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
+			'wofs',
+			featureId,
+			rows.map((r) => r.date),
+			rows.map((r) => r.wetAreaM2),
+			rows.map((r) => r.pctObserved),
+			rows.map(() => 'ga_ls_wofs_e2e_synthetic'),
+			new Date()
+		]);
+	});
+}

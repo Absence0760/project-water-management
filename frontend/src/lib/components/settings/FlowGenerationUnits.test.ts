@@ -1,4 +1,4 @@
-// Settings → Flow generation → Per unit's station table (FlowGenerationUnits.svelte, issue #553 round 3), rendered
+// Settings → Model selection for flow generation → Per unit's station table (FlowGenerationUnits.svelte, issue #553 round 3), rendered
 // with Svelte's server renderer: a row per land unit with its station select (stations only: no satellite option),
 // the scaling and its ratio, the correcting station, and each station in use once with its MAP; a viewer's fields
 // are disabled with no select-several action. The browser flow is pinned by e2e/tests/flow-generation.spec.ts.

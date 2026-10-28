@@ -5,9 +5,9 @@
 // the session: changing tab and back, or the header and the panels both
 // asking, never fetch it again (issue #586 round 3; Settings fetched it on
 // every visit before the panels moved here).
-import type { ApanDailyFingerprint, SeriesMeta } from '@water-management/engine';
+import type { ApanDailyFingerprint, Et0DailyFingerprint, SeriesMeta } from '@water-management/engine';
 import { api } from '#lib/api/index.js';
-import { apanDailyOfValues } from '#lib/series/provenance.js';
+import { apanDailyOfValues, et0DailyOfValues } from '#lib/series/provenance.js';
 
 /** null: the series has no values to fingerprint. */
 type Fingerprint = ApanDailyFingerprint | null;
@@ -24,6 +24,22 @@ const cache = new Map<string, Promise<Fingerprint>>();
  */
 export function apanFingerprint(projectId: string, meta: Pick<SeriesMeta, 'id' | 'updatedAt'>, fetch: Fetch = fromApi): Promise<Fingerprint> {
 	const key = `${projectId}\u0000${meta.id}\u0000${meta.updatedAt}`;
+	let got = cache.get(key);
+	if (!got) {
+		got = fetch(projectId, meta.id);
+		cache.set(key, got);
+		got.catch(() => cache.delete(key));
+	}
+	return got;
+}
+
+/**
+ * The daily reference ET series' fingerprint through `through` (issue #604
+ * R5-E; a fit record's `forcing.et0Daily.through`), fetched at most once per
+ * version of the series and that day: a feed's days after the fit never count.
+ */
+export function et0Fingerprint(projectId: string, meta: Pick<SeriesMeta, 'id' | 'updatedAt'>, through: string, fetch: (projectId: string, seriesId: string) => Promise<Et0DailyFingerprint | null> = (p, id) => api.series.get(p, id).then((s) => et0DailyOfValues(s, through))): Promise<Fingerprint> {
+	const key = `${projectId}\u0000${meta.id}\u0000${meta.updatedAt}\u0000et0\u0000${through}`;
 	let got = cache.get(key);
 	if (!got) {
 		got = fetch(projectId, meta.id);

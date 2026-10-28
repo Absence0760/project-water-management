@@ -12,6 +12,11 @@ copies, and Node validates each manifest (readManifest) and reads known
 cells on known days through readCells, which must give the stored float32's
 bits, the days held and no others, and imerg_late's per-day versions.
 
+The reference evaporation products (issue #604 R5-E) are read whole:
+agera5.py (fake CDS) and nasapower.py (fake POWER) write `agera5_et0` and
+`power_et0`, and Node validates each manifest and reads every cell of every
+held day back bit for bit, its hash agreeing with the manifest's.
+
 Needs the pnpm install (backend/node_modules/.bin/tsx). Without it the test
 skips, unless INGEST_REQUIRE_NODE=1 (CI's ingest job sets it), when it fails.
 """
@@ -39,6 +44,7 @@ import numpy as np  # noqa: E402
 import chcnetcdf  # noqa: E402
 import chirps_final  # noqa: E402
 import cloudwatch  # noqa: E402
+import agera5  # noqa: E402
 import era5land  # noqa: E402
 import fakecds  # noqa: E402
 import grid  # noqa: E402
@@ -47,6 +53,8 @@ import imerg_fixture  # noqa: E402
 import lambda_handler  # noqa: E402
 import make_chirps_fixtures as fx  # noqa: E402
 import manifest  # noqa: E402
+import nasapower  # noqa: E402
+import power_fixture  # noqa: E402
 import zarrstore  # noqa: E402
 
 TSX = ROOT / "backend" / "node_modules" / ".bin" / "tsx"
@@ -196,6 +204,56 @@ class RoundTrip(unittest.TestCase):
         node = self.node_cells(url, "imerg_late", (first, last), cells)
         self.assertEqual(node["manifest"]["prelimThrough"], last.isoformat())
         self.check_cells(node, stored, cells, "".join("-" if d == gap else "f" for d in window))
+
+    def node_blocks(self, mirror_url: str, product: str, files: list[tuple[str, dt.date, np.ndarray]]) -> dict:
+        entries = []
+        for n, (file_url, start, values) in enumerate(files):
+            path = self.dir / f"{product}-{n}.f32"
+            path.write_bytes(np.ascontiguousarray(values, dtype="<f4").tobytes(order="C"))
+            entries.append({"url": file_url, "start": start.isoformat(), "days": int(values.shape[0]), "values": str(path)})
+        spec = self.dir / f"blocks-{product}.json"
+        spec.write_text(json.dumps({"mode": "blocks", "product": product, "files": entries}))
+        p = subprocess.run([str(TSX), str(SCRIPT), mirror_url, str(spec)], cwd=ROOT / "backend", capture_output=True, text=True, timeout=300)
+        self.assertIn(p.returncode, (0, 1), p.stderr)
+        out = json.loads(p.stdout)
+        for f in out["files"]:
+            self.assertEqual(f["mismatches"], 0, f"{f['url']}: Node read {f['mismatches']} values that differ from Python's, the first at flat index {f['firstMismatch']}")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return out
+
+    def check_blocks(self, out: dict, py: dict) -> None:
+        self.assertEqual(out["manifest"]["files"], [{"url": f["url"], "valuesSha256": f["valuesSha256"]} for f in py["files"]])
+        self.assertEqual((out["manifest"]["revision"], out["manifest"]["finalThrough"], out["manifest"]["prelimThrough"], out["manifest"]["years"]), (py["revision"], py["finalThrough"], py["prelimThrough"], py["years"]))
+        by_url = {f["url"]: f["valuesSha256"] for f in py["files"]}
+        for f in out["files"]:
+            self.assertEqual(f["nodeSha256"], by_url[f["url"]], f["url"])
+
+    def test_agera5_et0_python_writes_node_validates_and_reads_it_bit_for_bit(self):
+        url = f"file://{self.dir / 'mirror'}"
+        today = dt.date(2024, 4, 20)  # 2024-03 is the newest complete month
+        cds = fakecds.FakeAgera5Cds(today=today)
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": url, "FEED_SOURCE": "fixtures"}):
+            for _ in range(2):  # submit, then collect
+                out = agera5.handler({"product": "agera5_et0", "mode": "monthly"}, cds=cds, metrics=cloudwatch.LocalSink(), clock=lambda: 1_800_000_000.0, today=lambda: today)
+        self.assertEqual(out["finalThrough"], "2024-03-31")
+        py = manifest.read(zarrstore.Mirror.from_url(url), "agera5_et0")
+        first = dt.date(2024, 3, 1)
+        stored = zarrstore.read_finals(Path(url[len("file://") :]), "agera5_et0", first, 31)
+        self.assertTrue(np.isnan(stored).any() and not np.isnan(stored).all(), "sea and land both cross")
+        self.check_blocks(self.node_blocks(url, "agera5_et0", [(agera5.file_url((2024, 3)), first, stored)]), py)
+
+    def test_power_et0_python_writes_node_validates_and_reads_it_bit_for_bit(self):
+        url = f"file://{self.dir / 'mirror'}"
+        today = dt.date(2024, 3, 20)
+        newest = today - dt.timedelta(days=nasapower.LAG_DAYS)
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": url, "FEED_SOURCE": "fixtures"}):
+            lambda_handler.handler({"product": "power_et0", "mode": "recent", "days": 3}, opener=power_fixture.FakePower(latest=newest), metrics=cloudwatch.LocalSink(), today=lambda: today)
+        py = manifest.read(zarrstore.Mirror.from_url(url), "power_et0")
+        self.assertEqual(py["prelimThrough"], newest.isoformat())
+        root = Path(url[len("file://") :])
+        days = [newest - dt.timedelta(days=k) for k in (2, 1, 0)]
+        files = [(nasapower.day_url(d), d, zarrstore.read_daily_day(root, "power_et0", d)[None]) for d in days]
+        self.check_blocks(self.node_blocks(url, "power_et0", files), py)
 
     def test_the_s3_staging_path_writes_the_same_objects(self):
         """zarrstore.S3Mirror stages through a temporary directory: its objects, laid out as files, read the same."""

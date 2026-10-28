@@ -13,6 +13,8 @@ import {
 	provenanceLabel,
 	seriesDigest,
 	type ApanDailyFingerprint,
+	type Et0DailyFingerprint,
+	et0FitWindow,
 	type ChirpsFactorSet,
 	type RunSummary,
 	type DailySeries,
@@ -153,6 +155,18 @@ export async function apanDailyOfValues(s: Pick<DailySeries, 'startDate' | 'valu
 }
 
 /**
+ * The daily reference ET series' fit fingerprint (issue #604 R5-E): its days
+ * through `through` (engine et0FitWindow, the fit's last scored day), hashed
+ * as apanDailyOfValues does. null with no series or no day by then. A run's
+ * snapshot hashes the whole series, so this is always from the values.
+ */
+export async function et0DailyOfValues(s: Pick<DailySeries, 'startDate' | 'values'> | null | undefined, through: string): Promise<Et0DailyFingerprint | null> {
+	const w = s ? et0FitWindow(s, through) : null;
+	const f = w ? await apanDailyOfValues(w) : null;
+	return f ? { ...f, through } : null;
+}
+
+/**
  * The note a page shows while a data feed backfills a confirmed replacement
  * of any of these series (issue #40c), or null: runs keep using the series as
  * it is until the new record swaps in whole.
@@ -174,7 +188,8 @@ const FEED_LABELS: Record<string, string> = {
 	chirps: 'CHIRPS daily rainfall',
 	chirps_gefs: 'CHIRPS-GEFS rainfall forecast',
 	dws: 'DWS gauge flow',
-	ecmwf_ens: 'ECMWF ENS rainfall forecast'
+	ecmwf_ens: 'ECMWF ENS rainfall forecast',
+	agera5_et0: 'AgERA5 daily reference evapotranspiration'
 };
 
 /**

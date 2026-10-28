@@ -1,0 +1,638 @@
+{
+  "product": "power_et0",
+  "revision": 1,
+  "region": {
+    "w": 10,
+    "s": -35.5,
+    "e": 41,
+    "n": -8
+  },
+  "grid": {
+    "origin": {
+      "lat": -35.45,
+      "lon": 10.05
+    },
+    "step": 0.1
+  },
+  "years": {
+    "first": 2025,
+    "last": 2026
+  },
+  "finalThrough": null,
+  "prelimThrough": "2026-02-06",
+  "files": [
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-01",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "84b6d9a3134965b5c6b50bb57ed36e2575a265e5a6b0a7dd854e3f8d0b7b2227",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-02",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "de4d397bb8a4f71f4f239c50ceac1a9e215324bfebd6f0d786635db277c93764",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-03",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "80453acc0798ff22f44ab6b4e084abd89d022363a4d73dc5c135e9b7a8efa33e",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-04",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "be08f9842dd12820fe8a254efa9e5e56a9066f72d802d61d1427ee405a0a584d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-05",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f6fe4369f609c8cf3244658abc2d490e75c3912bfa81a89636566386227e605e",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-06",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "90f81e60741af82361a869c8d2827ec45180673f7c648cca561364e72c534f35",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-07",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "4cf1c6c68dd5e03e1335bcce382e2cfb546a4de075bdafc64b2a75710b381c37",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-08",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "3f6fd38c17126a87e5acd0b3ce38a8c17661241bc74df4302f945e92e0fc415b",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-09",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "248ce03b2cd4c55daaccdbd36743f7545ff86870813656988684dbbab8c20d9a",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-10",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "421a567a0a1e501b0020423a82ab06e8fa28b544369e084fd0768f06f2d9f588",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-11",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "dc7cbeeb947b4b921a621813959bbf3c1d77cba52ef8b6676187a74e0cd949f4",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-12",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "8f2d4740d6c3f26b9ec9de5b1e997d7d3573c13fcf635fb8c32c1e89c6ee2e7e",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-13",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "a0c464ca67d6e00bfca0c9ef7056f3a804ee1457f29f7c174a7a5a17b82027c9",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-14",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d1fa8294efcc77e9eb612404ea44fe5c72a5a4ea089a0a87976d17127f3b85dc",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-15",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "7bc53665108f940e6a7b9b1e73c06678def441c00e4167a270364733fc6cbb56",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-16",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "64a16b1dd9540acaa8bddd10b6762a292ee08eace21ed6fb1faa467ba6af8df1",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-17",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "88fa7c0e231a196ae6cc16bac42217ac9cb5bc25f88823d129956a037f34e2e5",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-18",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "dd4db4924a140b2bfd44133e9748391ec08040315ccd51b2db913a03109ad6c4",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-19",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "b31fe9de2f680dfee12ccd99dbfc24b11cba677fb1cae7bed54bb63461d12728",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-20",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d24d9163d946602591daf35c8b14fee0bd1105bb8d96d96ab8db74c65d14451b",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-21",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "496d85b8dfbb25d5ce6f432152ab506d0a311c455c9279e50dfaa7b7bff169c9",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-22",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "51f9022c235d3f92c04b0af2ae633ee5507b44898bf530f44256698e748fa4dd",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-23",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "a3fb304fa56aeb2eb003b75bf96403fed2c4fca118474604001572cd51d30714",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-24",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f0c3681051b59892c6b8eee38c21aaa5ab930a5d35bb151dc1f93dc96bb10af1",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-25",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "a15f78a47309d6e381823f6cb56d7a7277ec4ce8261f0e669def4b927022202f",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-26",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "739d0a42050227f3c7b251ca02a9e8cdf0044e6ac590c46ff185a4f769bd22a7",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-27",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "675b5988e48d058592340d46c97f105efa11ccc338a915576dd4ff13e7428c1a",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-28",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f81f20fb36ae37dc72adceaf637ec6942e8143ab8f14bfc924760b666c2a0510",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-29",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9d19d449607ad33adcca3d68001d99914855c0fc243f99d4f9e417dd0e4c3143",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-30",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "986e9c3927e278f23d7dd4c8e8075abdc324bf4bbfc707b9d6e9299e84ff7c67",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2025-12-31",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "0604cb65e74252038b82cb2d41a6ffb6b8bf9caef09b08e774fe0dd06289b344",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-01",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "33cd30df693a74c5631f5f3d6eb571453506cb31511ff5a01cc9068316b42968",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-02",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "a198d437e5c9818321e943595fafb3f3c99d8abedf4802ad459a5d4850b1cec6",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-03",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "b489e73f45cb049114ae50e5de741cb4bb5471f2079d5fbcb1e3007a3cd61e9d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-04",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d9317e582658f729ab47b4065c55452cd463ed5a5bfed995c85a6d14e10cb642",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-05",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "183be17d8ea5c8a24f898e33e1317e4a6381873f0f789e78c2bff7d3750db2bd",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-06",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "3ee4c165844b7f2a620d297990b97180569d731e5be9702f66f57aff9163099d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-07",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d6f8799c2dc2c8589b9c9da94c1522fcf773ed0f2f800ab56271416ccb083218",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-08",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "dfb6afbeee7583883b0ac37549db89e02569de2963a6e39ec26d8c692e416825",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-09",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "4968b50da557e582e49098c40c861f8ed0ed982195d84fd8fdf934759fa812da",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-10",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9bbd5e88c04bec566a4d4fd1c25314f5196d18d4aae189640816120e1f51cbbe",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-11",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "663b115d4356a187ab19dd3b87be376de1ba6451c5b729ce03e09afbffcf5a4d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-12",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "c920b00feb3866a39c2f6984733f044b85476f22346a2a8628327c0bb59995e1",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-13",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "7d0b13e3f95eb50349dab27b10a7217cc740ff77d6c4f9554adb828dad0d4c28",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-14",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "87f24f9122f0d3fa65e02cccadaa20b4c20f812ad345951d35e97975fb84b319",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-15",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "b96d1df9f0626a15459eaf6391f66d18d01e93ebb7dab035a10392dba0719eac",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-16",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "949cabfeff086c7f086324e4ca8cf806ca82160dbb7915e7e58efab5cc114e4c",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-17",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "b96d1df9f0626a15459eaf6391f66d18d01e93ebb7dab035a10392dba0719eac",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-18",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "87f24f9122f0d3fa65e02cccadaa20b4c20f812ad345951d35e97975fb84b319",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-19",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "7d0b13e3f95eb50349dab27b10a7217cc740ff77d6c4f9554adb828dad0d4c28",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-20",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "c920b00feb3866a39c2f6984733f044b85476f22346a2a8628327c0bb59995e1",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-21",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "663b115d4356a187ab19dd3b87be376de1ba6451c5b729ce03e09afbffcf5a4d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-22",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9bbd5e88c04bec566a4d4fd1c25314f5196d18d4aae189640816120e1f51cbbe",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-23",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "4968b50da557e582e49098c40c861f8ed0ed982195d84fd8fdf934759fa812da",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-24",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "dfb6afbeee7583883b0ac37549db89e02569de2963a6e39ec26d8c692e416825",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-25",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d6f8799c2dc2c8589b9c9da94c1522fcf773ed0f2f800ab56271416ccb083218",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-26",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "3ee4c165844b7f2a620d297990b97180569d731e5be9702f66f57aff9163099d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-27",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "183be17d8ea5c8a24f898e33e1317e4a6381873f0f789e78c2bff7d3750db2bd",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-28",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "d9317e582658f729ab47b4065c55452cd463ed5a5bfed995c85a6d14e10cb642",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-29",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "b489e73f45cb049114ae50e5de741cb4bb5471f2079d5fbcb1e3007a3cd61e9d",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-30",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "a198d437e5c9818321e943595fafb3f3c99d8abedf4802ad459a5d4850b1cec6",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-01-31",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "33cd30df693a74c5631f5f3d6eb571453506cb31511ff5a01cc9068316b42968",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-02-01",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "0604cb65e74252038b82cb2d41a6ffb6b8bf9caef09b08e774fe0dd06289b344",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-02-02",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "986e9c3927e278f23d7dd4c8e8075abdc324bf4bbfc707b9d6e9299e84ff7c67",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-02-03",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "9d19d449607ad33adcca3d68001d99914855c0fc243f99d4f9e417dd0e4c3143",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-02-04",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "f81f20fb36ae37dc72adceaf637ec6942e8143ab8f14bfc924760b666c2a0510",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-02-05",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "675b5988e48d058592340d46c97f105efa11ccc338a915576dd4ff13e7428c1a",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    },
+    {
+      "url": "power://temporal/daily/regional/fao56-et0/2026-02-06",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "739d0a42050227f3c7b251ca02a9e8cdf0044e6ac590c46ff185a4f769bd22a7",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z"
+    }
+  ],
+  "changes": []
+}

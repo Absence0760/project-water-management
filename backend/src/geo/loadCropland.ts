@@ -168,6 +168,48 @@ export interface Bbox {
 	north: number;
 }
 
+/** The no-data value as a pixel value, or -1 when there is none an 8-bit pixel can hold. */
+export const noDataOf = (info: Pick<TiffInfo, 'noData'>): number => (info.noData !== null && info.noData >= 0 && info.noData < 256 ? info.noData : -1);
+
+/** One tile or strip, decoded: its corner pixel, its stored size, the columns inside the image, and its pixels row by row (`w` a row). */
+export interface TiffBlock {
+	bx: number;
+	by: number;
+	w: number;
+	h: number;
+	wIn: number;
+	data: Uint8Array;
+}
+
+/** The raster's tiles or strips in file order, each decoded (Deflate, predictor 2); a string, once, for one that can't be. */
+export function* eachBlock(buf: Buffer, info: TiffInfo): Generator<TiffBlock | string> {
+	const across = Math.ceil(info.width / info.blockW);
+	for (let b = 0; b < info.offsets.length; b++) {
+		const bx = (b % across) * info.blockW;
+		const by = Math.floor(b / across) * info.blockH;
+		const raw = buf.subarray(info.offsets[b]!, info.offsets[b]! + info.counts[b]!);
+		let data: Uint8Array;
+		try {
+			// A block never inflates past its pixels: a deflate bomb stops there.
+			data = info.compression === 1 ? raw : inflateSync(raw, { maxOutputLength: info.blockW * info.blockH });
+		} catch {
+			yield `tile or strip ${b + 1} doesn't decompress`;
+			return;
+		}
+		const w = info.blockW;
+		const h = Math.min(info.blockH, info.height - by);
+		if (data.length < w * h) {
+			yield `tile or strip ${b + 1} is cut short`;
+			return;
+		}
+		if (info.predictor === 2) {
+			data = Uint8Array.from(data);
+			for (let y = 0; y < h; y++) for (let x = 1; x < w; x++) data[y * w + x] = (data[y * w + x]! + data[y * w + x - 1]!) & 255;
+		}
+		yield { bx, by, w, h, wIn: Math.min(w, info.width - bx), data };
+	}
+}
+
 /**
  * Count one GeoTIFF into cropland cells: per cell, pixels in `classes` over
  * pixels with data. Cells with no cropland are left out, and with `bbox`,
@@ -187,28 +229,11 @@ export function croplandCellsFromTiff(buf: Buffer, cellDeg: number, classes: Rea
 	const valid = new Uint32Array(nCols * nRows);
 	const isCrop = new Uint8Array(256);
 	for (const c of classes) if (c >= 0 && c < 256) isCrop[c] = 1;
-	const noData = info.noData !== null && info.noData >= 0 && info.noData < 256 ? info.noData : -1;
-	const across = Math.ceil(info.width / info.blockW);
+	const noData = noDataOf(info);
 	let pixels = 0;
-	for (let b = 0; b < info.offsets.length; b++) {
-		const bx = (b % across) * info.blockW;
-		const by = Math.floor(b / across) * info.blockH;
-		const raw = buf.subarray(info.offsets[b]!, info.offsets[b]! + info.counts[b]!);
-		let data: Uint8Array;
-		try {
-			// A block never inflates past its pixels: a deflate bomb stops there.
-			data = info.compression === 1 ? raw : inflateSync(raw, { maxOutputLength: info.blockW * info.blockH });
-		} catch {
-			return `tile or strip ${b + 1} doesn't decompress`;
-		}
-		const w = info.blockW;
-		const h = Math.min(info.blockH, info.height - by);
-		if (data.length < w * h) return `tile or strip ${b + 1} is cut short`;
-		if (info.predictor === 2) {
-			data = Uint8Array.from(data);
-			for (let y = 0; y < h; y++) for (let x = 1; x < w; x++) data[y * w + x] = (data[y * w + x]! + data[y * w + x - 1]!) & 255;
-		}
-		const wIn = Math.min(w, info.width - bx);
+	for (const block of eachBlock(buf, info)) {
+		if (typeof block === 'string') return block;
+		const { bx, by, w, h, wIn, data } = block;
 		for (let y = 0; y < h; y++) {
 			const rowBase = Math.floor((by + y) / per) * nCols;
 			const line = y * w;

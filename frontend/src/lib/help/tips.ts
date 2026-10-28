@@ -1154,7 +1154,7 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'unit-rain',
-		term: 'Flow generation: fragmentation or per unit',
+		term: 'Model selection for flow generation: fragmentation or per unit',
 		short: 'Fragmentation runs GR4J once on the catchment rain; Per unit runs it on each unit’s rain (its station × MAP ratio) and sums the flow.',
 		units: 'mm/day',
 		category: 'flow',
@@ -1696,6 +1696,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['series.evap_apan_mm']
 	},
 	{
+		id: 'evap-et0-daily',
+		term: 'Daily reference evapotranspiration',
+		short: 'A daily FAO-56 reference ET record (mm/day): GR4J’s PE, as it stands, under a monthly PE row on the days it has a value.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['series.evap_et0_mm']
+	},
+	{
 		id: 'rain-forecast',
 		term: 'Forecast rainfall',
 		short: 'Forecast daily rain in mm: fills gaps in the record, and runs past its end only in a forecast run, to look ahead a few days.',
@@ -1768,12 +1776,35 @@ export const TIPS: HelpTipText[] = [
 		fields: ['preview.excluded']
 	},
 	{
+		id: 'preview-view',
+		term: 'View (daily preview)',
+		short: 'Which columns the daily preview shows: All, one hydrological unit’s rain side by side, or a group (stations, catchment rain, flow).',
+		category: 'data',
+		fields: ['preview.view']
+	},
+	{
+		id: 'preview-area-station-raw',
+		term: 'Station raw (daily preview)',
+		short: 'An area’s rainfall station as recorded, over the run window, beside the same rain adjusted to the area’s MAP.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaStationRaw']
+	},
+	{
 		id: 'preview-area-station-scaled',
 		term: 'Station × ratio (daily preview)',
 		short: 'An area’s rainfall station as recorded × the ratio of the area’s MAP to the station’s: derived when viewed, not stored.',
 		units: 'mm/day',
 		category: 'data',
 		fields: ['preview.areaStationScaled']
+	},
+	{
+		id: 'preview-area-chirps-raw',
+		term: 'Area CHIRPS raw (daily preview)',
+		short: 'The area’s own CHIRPS as stored, over the run window, beside the same CHIRPS bias-corrected against its station.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.areaChirpsRaw']
 	},
 	{
 		id: 'preview-area-chirps-corrected',

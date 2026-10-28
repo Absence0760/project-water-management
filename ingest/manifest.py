@@ -48,6 +48,18 @@ second-last day of M (`era5l_written_days`; the 1950-01 request starts at the
 record, 1950-01-01). `finalThrough` may not run past the end of the
 contiguous run of those days from the earliest month (`era5l_coverage`), as
 for the CHIRPS finals.
+
+Reference evaporation (R5-E): `agera5_et0`'s files are its CDS month
+requests (agera5.py), each URL exactly
+`cds://sis-agrometeorological-indicators/reference_evapotranspiration/YYYY-MM`
+with no ETag or Last-Modified; month M's request holds exactly M's calendar
+days, and `finalThrough` (never `prelimThrough`) may not run past the
+contiguous run of months from the earliest (`agera5_coverage`).
+`power_et0` (nasapower.py) is like `imerg_late`: no final days, one file a
+day, each URL exactly `power://temporal/daily/regional/fao56-et0/YYYY-MM-DD`
+with no ETag or Last-Modified (a day is computed from many responses), held
+days exactly the days a file names (`power_held_days`), `prelimThrough` the
+newest of them.
 """
 
 from __future__ import annotations
@@ -75,12 +87,16 @@ IMERG_VERSION = re.compile(r"^V\d{2}$")
 _ERA5L_URL = re.compile(r"^cds://reanalysis-era5-land/total_precipitation/(\d{4})-(0[1-9]|1[0-2])$")
 #: ERA5-Land's record starts here: the 1950-01 request's first step is the record's start.
 ERA5L_FIRST_DAY = dt.date(1950, 1, 1)
+_AGERA5_URL = re.compile(r"^cds://sis-agrometeorological-indicators/reference_evapotranspiration/(\d{4})-(0[1-9]|1[0-2])$")
+#: AgERA5's record starts here.
+AGERA5_FIRST_DAY = dt.date(1979, 1, 1)
+_POWER_URL = re.compile(r"^power://temporal/daily/regional/fao56-et0/(\d{4}-\d{2}-\d{2})$")
 
 FINALS_PRODUCTS = ("rnl", "sat")
 # The step of each product's grid; a forecast issue (`gefs/<issue>`, `ecmwf/<issue>`) by its prefix.
-PRODUCT_STEPS = {"rnl": 0.05, "sat": 0.05, "prelim": 0.05, "era5l": 0.1, "imerg_late": 0.1}
+PRODUCT_STEPS = {"rnl": 0.05, "sat": 0.05, "prelim": 0.05, "era5l": 0.1, "imerg_late": 0.1, "agera5_et0": 0.1, "power_et0": 0.1}
 _FORECAST_STEPS = {"gefs": 0.05, "ecmwf": 0.1}
-_NO_PRELIM = ("rnl", "era5l")
+_NO_PRELIM = ("rnl", "era5l", "agera5_et0")
 
 
 def product_step(product: str) -> float | None:
@@ -164,6 +180,42 @@ def era5l_coverage(files: list[dict]) -> tuple[str, str] | None:
     while _next_month(last) in months:
         last = _next_month(last)
     return era5l_written_days(first)[0].isoformat(), era5l_written_days(last)[1].isoformat()
+
+
+def agera5_file_month(url: str) -> tuple[int, int] | None:
+    """The (year, month) an agera5_et0 file's URL (its CDS request) names, or None."""
+    m = _AGERA5_URL.match(url)
+    return (int(m[1]), int(m[2])) if m else None
+
+
+def agera5_coverage(files: list[dict]) -> tuple[str, str] | None:
+    """(first day, last day) of the contiguous run of months agera5_et0's files
+    hold, from the earliest; None when none names a month. Month M's request
+    holds exactly M's calendar days."""
+    months = {ym for f in files if (ym := agera5_file_month(f["url"])) is not None}
+    if not months:
+        return None
+    first = min(months)
+    last = first
+    while _next_month(last) in months:
+        last = _next_month(last)
+    return dt.date(*first, 1).isoformat(), (dt.date(*_next_month(last), 1) - dt.timedelta(days=1)).isoformat()
+
+
+def power_file_day(url: str) -> str | None:
+    """The ISO day a power_et0 file's URL names, or None."""
+    m = _POWER_URL.match(url)
+    if not m:
+        return None
+    try:
+        return dt.date.fromisoformat(m[1]).isoformat()
+    except ValueError:
+        return None
+
+
+def power_held_days(files: list[dict]) -> set[str]:
+    """The ISO days power_et0's files name: exactly its held days, each on its own (as imerg_late's)."""
+    return {d for f in files if (d := power_file_day(f["url"])) is not None}
 
 
 def values_sha256(values: np.ndarray) -> str:
@@ -290,6 +342,26 @@ def validate(m: dict) -> dict:
         days = era5l_coverage(m["files"])
         if m["finalThrough"] is not None and (days is None or m["finalThrough"] > days[1]):
             _fail(f"finalThrough {m['finalThrough']} runs past the days the files hold contiguously (through {days[1] if days else 'none'})")
+    if m["product"] == "agera5_et0":
+        for i, f in enumerate(m["files"]):
+            if agera5_file_month(f["url"]) is None:
+                _fail(f"files[{i}].url is not an agera5_et0 month request (cds://sis-agrometeorological-indicators/reference_evapotranspiration/YYYY-MM), got {f['url']!r}")
+            if f["etag"] is not None or f["lastModified"] is not None:
+                _fail(f"files[{i}] of agera5_et0 has an etag or lastModified: the CDS gives neither")
+        days = agera5_coverage(m["files"])
+        if m["finalThrough"] is not None and (days is None or m["finalThrough"] > days[1]):
+            _fail(f"finalThrough {m['finalThrough']} runs past the days the files hold contiguously (through {days[1] if days else 'none'})")
+    if m["product"] == "power_et0":
+        for i, f in enumerate(m["files"]):
+            if power_file_day(f["url"]) is None:
+                _fail(f"files[{i}].url is not a power_et0 day (power://temporal/daily/regional/fao56-et0/YYYY-MM-DD), got {f['url']!r}")
+            if f["etag"] is not None or f["lastModified"] is not None:
+                _fail(f"files[{i}] of power_et0 has an etag or lastModified: each day is computed from many responses")
+        if m["finalThrough"] is not None:
+            _fail("power_et0 holds no final days")
+        held = power_held_days(m["files"])
+        if m["prelimThrough"] is not None and (not held or m["prelimThrough"] > max(held)):
+            _fail(f"prelimThrough {m['prelimThrough']} runs past the newest day the files hold ({max(held) if held else 'none'})")
     if m["product"] in FINALS_PRODUCTS:
         for i, f in enumerate(m["files"]):
             if file_month(f["url"]) is None:

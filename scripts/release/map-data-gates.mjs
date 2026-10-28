@@ -49,7 +49,7 @@ export const REQUIRED_TEXT = {
 };
 
 /** The kinds a production load may name (backend/src/geo/referenceLoad.ts REFERENCE_KINDS, the allowed ones; referenceLoad.test.ts keeps the two in step). */
-export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'dws'];
+export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws'];
 
 /**
  * The kinds allowed dataset by dataset, and the labels each may load as

@@ -102,17 +102,13 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import logging
-import os
-import re
-import tempfile
-import time
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
 
+import cdsjob
 import chirps_final
-import cloudwatch
 import grid
 from era5request import (  # noqa: F401  (re-exported: era5land.DATASET, era5land.month_request, … stay its names)
     CDS_URL,
@@ -126,14 +122,13 @@ from era5request import (  # noqa: F401  (re-exported: era5land.DATASET, era5lan
     next_month,
     request_month,
 )
-import lease
 import manifest
-import polite
 import zarrstore
 
 log = logging.getLogger("ingest")
 
 PRODUCT = "era5l"
+RUNBOOK = "docs/deployment.md § ERA5-Land"
 
 #: The product's 0.1 deg grid on region D1, from 1950 (grid.py; backend/src/mirror/grid.ts PRODUCT_GRIDS).
 GRID = grid.for_product(PRODUCT)
@@ -178,34 +173,26 @@ ATTRIBUTION = (
     "DOI: 10.24381/cds.e2161bac"
 )
 
-_MONTH = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
+_MONTH = cdsjob.MONTH_RE
 
 
-class BadEvent(ValueError):
-    pass
+BadEvent = cdsjob.BadEvent
+RequestsFailed = cdsjob.RequestsFailed
+CdsError = cdsjob.CdsError
 
 
 class ImplausibleValueError(ValueError):
     """A value outside 0-2000 mm after the remap: stop before writing."""
 
 
-class RequestsFailed(RuntimeError):
-    """A month's request failed MAX_ATTEMPTS times: the operator looks (ingest/README.md)."""
-
-
 # --- months and days ----------------------------------------------------------
 
 
-def parse_month(s: str) -> tuple[int, int]:
-    m = _MONTH.match(s)
-    if not m:
-        raise ValueError(f'month must be "YYYY-MM", got {s!r}')
-    return int(m[1]), int(m[2])
-
-
-def prev_month(ym):
-    y, m = ym
-    return (y - 1, 12) if m == 1 else (y, m - 1)
+month_str = cdsjob.month_str
+parse_month = cdsjob.parse_month
+next_month = cdsjob.next_month
+prev_month = cdsjob.prev_month
+month_end = cdsjob.month_end
 
 
 def written_days(ym) -> tuple[dt.date, dt.date]:
@@ -390,54 +377,35 @@ def ingest_month(mirror: zarrstore.Mirror, ym, path: Path, now: Callable[[], str
     return {"month": month_str(ym), "outcome": outcome, "days": [mv.first_day.isoformat(), mv.last_day.isoformat()], "revision": m["revision"], "preliminary": mv.preliminary}
 
 
-# --- the request state ------------------------------------------------------------
+# --- the request state and the run: cdsjob.py, shared with agera5.py ---------------
 
 
 def state_key() -> str:
-    return f"ingest-state/{PRODUCT}/requests.json"
+    return cdsjob.state_key(PRODUCT)
 
 
 def refused_key() -> str:
-    return f"ingest-state/{PRODUCT}/refused.json"
+    return cdsjob.refused_key(PRODUCT)
 
 
-_ENTRY = {
-    "requestId": None,  # the CDS job in flight, or None
-    "submittedAt": None,  # set before the submit: an id-less entry with it is an intent a crash interrupted
-    "purpose": None,  # new | recheck | backfill
-    "wanted": False,  # a backfill asked for it and it waits for a slot
-    "attempts": 0,  # failures since the last success
-    "retryAt": None,  # no resubmit before this (ISO UTC)
-    "lastError": None,
-    "collectedAt": None,
-    "preliminary": None,  # the held file's phase: True (ERA5-Land-T), False, or None (unknown)
-    "recheckAt": None,  # re-request on or after this day (YYYY-MM-DD)
-}
+_ENTRY = cdsjob.ENTRY
 
 
 def read_state(mirror) -> tuple[dict, bool]:
     """(the state, whether it existed)."""
-    doc = mirror.read_json(state_key())
-    if doc is None:
-        return {"months": {}}, False
-    months = {k: {**_ENTRY, **v} for k, v in (doc.get("months") or {}).items() if _MONTH.match(k)}
-    return {"months": months}, True
+    return cdsjob.read_state(mirror, PRODUCT)
 
 
 def write_state(mirror, st: dict) -> None:
-    mirror.write_json(state_key(), {"months": {k: st["months"][k] for k in sorted(st["months"])}})
+    cdsjob.write_state(mirror, PRODUCT, st)
 
 
-def _iso(t: float) -> str:
-    return dt.datetime.fromtimestamp(t, dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _epoch(s: str | None) -> float | None:
-    return None if not s else dt.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.UTC).timestamp()
+_iso = cdsjob._iso
+_epoch = cdsjob._epoch
 
 
 def backoff_seconds(attempts: int) -> float:
-    return min(BACKOFF_BASE_DAYS * 2 ** max(0, attempts - 1), BACKOFF_MAX_DAYS) * 86400.0
+    return cdsjob.backoff_seconds(attempts, BACKOFF_BASE_DAYS, BACKOFF_MAX_DAYS)
 
 
 def recheck_at(ym, preliminary: bool | None, today: dt.date) -> str | None:
@@ -445,281 +413,61 @@ def recheck_at(ym, preliminary: bool | None, today: dt.date) -> str | None:
     A preliminary month: from RECHECK_AFTER_DAYS after its end, then every
     RECHECK_EVERY_DAYS. A month of unknown phase (no `expver`): the same, but
     not past RECHECK_UNKNOWN_CAP_DAYS after its end, when it counts as final."""
-    due = month_end(ym) + dt.timedelta(days=RECHECK_AFTER_DAYS)
-    if preliminary is False:
-        return None
-    nxt = max(due, today + dt.timedelta(days=RECHECK_EVERY_DAYS))
-    if preliminary is True:
-        return nxt.isoformat()
-    cap = month_end(ym) + dt.timedelta(days=RECHECK_UNKNOWN_CAP_DAYS)
-    if today >= cap:
-        return None
-    return min(nxt, cap).isoformat()
+    return cdsjob.recheck_at(ym, preliminary, today, RECHECK_AFTER_DAYS, RECHECK_EVERY_DAYS, RECHECK_UNKNOWN_CAP_DAYS)
 
 
 # --- the CDS clients ------------------------------------------------------------------
 
-
-class LiveCds:
-    """The CDS through ecmwf-datastores-client, with our User-Agent, no
-    client-side retry loop, at most one call a second, and a 401/403 raised as
-    polite.StopRun. The result is downloaded through polite.PoliteClient."""
-
-    def __init__(self, key: str, contact: str | None = None, url: str = CDS_URL, http: polite.PoliteClient | None = None, sleep=time.sleep, clock=time.monotonic):
-        import requests
-        from ecmwf.datastores import Client
-
-        ua = polite.user_agent(contact)
-
-        class _Session(requests.Session):
-            def request(self, method, url, **kw):
-                kw["headers"] = {**(kw.get("headers") or {}), "User-Agent": ua}
-                return super().request(method, url, **kw)
-
-        self.client = Client(url=url, key=key, progress=False, maximum_tries=1, retry_after=1, sleep_max=1, timeout=60, session=_Session())
-        self.http = http or polite.PoliteClient(contact=contact)
-        self.sleep = sleep
-        self.clock = clock
-        self._last = None
-
-    def _call(self, what: str, fn):
-        import requests
-
-        if self._last is not None and (wait := self._last + 1.0 - self.clock()) > 0:
-            self.sleep(wait)
-        self._last = self.clock()
-        try:
-            return fn()
-        except requests.HTTPError as e:
-            status = getattr(e.response, "status_code", None)
-            if status in (401, 403):
-                raise polite.StopRun(f"{CDS_URL} ({what})", status) from None
-            if status == 404:
-                return KeyError(what)
-            raise CdsError(f"the CDS answered HTTP {status} to {what}") from None
-
-    def submit(self, dataset: str, request: dict) -> str:
-        out = self._call("submit", lambda: self.client.submit(dataset, request).request_id)
-        if isinstance(out, KeyError):
-            raise CdsError(f"the CDS has no dataset {dataset} (404)")
-        return out
-
-    def status(self, request_id: str) -> str:
-        """accepted | running | successful | failed | rejected | dismissed | deleted | missing (404)."""
-        out = self._call("status", lambda: self.client.get_remote(request_id).status)
-        return "missing" if isinstance(out, KeyError) else str(out)
-
-    def find(self, dataset: str, ym) -> str | None:
-        """Our own request for `ym` still queued or done among the account's recent jobs (state lost)."""
-        jobs = self._call("jobs", lambda: self.client.get_jobs(limit=10, sortby="-created", status=["accepted", "running", "successful"]).request_ids)
-        if isinstance(jobs, KeyError):
-            return None
-        for rid in jobs:
-            remote = self._call("job", lambda rid=rid: self.client.get_remote(rid))
-            if isinstance(remote, KeyError):
-                continue
-            meta = self._call("job", lambda: (remote.collection_id, remote.request))
-            if not isinstance(meta, KeyError) and meta[0] == dataset and request_month(meta[1]) == tuple(ym):
-                return rid
-        return None
-
-    def download(self, request_id: str, dest: str) -> int:
-        results = self._call("results", lambda: self.client.get_results(request_id))
-        if isinstance(results, KeyError):
-            raise CdsError(f"request {request_id} has no results (404)")
-        res = self.http.get(results.location, dest=dest)
-        if res.size is not None and res.size != results.content_length:
-            raise CdsError(f"request {request_id}: downloaded {res.size} bytes of {results.content_length}")
-        return Path(dest).stat().st_size
+LiveCds = cdsjob.LiveCds
+_LazyLiveCds = cdsjob.LazyLiveCds
+Run = cdsjob.Run
 
 
 def read_cds_key(arn: str, client=None) -> str:
     """The CDS API key from Secrets Manager (live mode only). Never logged."""
-    if not arn:
-        raise RuntimeError("CDS_KEY_SECRET_ARN is not set: live era5l needs the CDS key's secret (docs/deployment.md § ERA5-Land)")
-    if client is None:
-        import boto3
-
-        client = boto3.client("secretsmanager")
-    value = client.get_secret_value(SecretId=arn).get("SecretString") or ""
-    value = value.strip()
-    if not value:
-        raise RuntimeError("the CDS key's secret has no value yet: the operator puts it in (docs/deployment.md § ERA5-Land)")
-    return value
+    return cdsjob.read_cds_key(arn, client, PRODUCT, RUNBOOK)
 
 
 # --- one run --------------------------------------------------------------------------
 
 
-@dataclasses.dataclass
-class Run:
-    cds: object
-    budget: chirps_final.Budget
-    today: dt.date
-    clock: Callable[[], float] = time.time
-    now: Callable[[], str] = manifest.utc_now
-    workdir: str | None = None
+def _fake(variant, today):
+    import fakecds
+
+    return fakecds.FakeCds(variant=variant, today=today)
 
 
-def _refused_today(mirror, today: dt.date) -> dict | None:
-    doc = mirror.read_json(refused_key())
-    return doc if doc and doc.get("date") == today.isoformat() else None
-
-
-def _held_months(m: dict | None) -> dict[tuple[int, int], dict]:
-    return {ym: f for f in (m or {}).get("files", []) if (ym := url_month(f["url"]))}
+# Every callable goes through this module's globals at call time, so a test that patches one sees it.
+SPEC = cdsjob.CdsProduct(
+    product=PRODUCT,
+    dataset=DATASET,
+    runbook=RUNBOOK,
+    newest_complete_month=lambda today: newest_complete_month(today),
+    month_request=lambda ym: month_request(ym),
+    request_month=lambda req: request_month(req),
+    url_month=lambda url: url_month(url),
+    ingest_month=lambda *a, **kw: ingest_month(*a, **kw),
+    recheck_at=lambda ym, p, today: recheck_at(ym, p, today),
+    backoff_seconds=lambda attempts: backoff_seconds(attempts),
+    validate_event=lambda event, today: validate_event(event, today),
+    lag_days=lambda m, today: lag_days(m, today),
+    fake=lambda variant, today: _fake(variant, today),
+    max_in_flight=MAX_IN_FLIGHT,
+    max_attempts=MAX_ATTEMPTS,
+    catch_up_months=CATCH_UP_MONTHS,
+    collect_reserve_s=COLLECT_RESERVE_S,
+)
 
 
 def run(mirror: zarrstore.Mirror, mode: str, month: str | None, r: Run) -> dict:
-    with lease.hold(mirror, PRODUCT, r.clock):
-        refused = _refused_today(mirror, r.today)
-        if refused:
-            raise polite.StopRun(f"{CDS_URL} (refused earlier today, {refused.get('status')})", refused.get("status") or 403)
-        try:
-            return _run(mirror, mode, month, r)
-        except polite.StopRun as e:
-            mirror.write_json(refused_key(), {"date": r.today.isoformat(), "status": e.status, "at": _iso(r.clock())})
-            raise
-
-
-def _run(mirror, mode, month, r: Run) -> dict:
-    st, existed = read_state(mirror)
-    months = st["months"]
-    held = _held_months(manifest.read(mirror, PRODUCT))
-    now = r.clock()
-    out = {"collected": [], "submitted": [], "failed": [], "inFlight": 0, "gaveUp": []}
-
-    # A held month the state has no entry for (state lost, or a copy written
-    # elsewhere): rebuild its recheck from the manifest.
-    for ym, f in held.items():
-        e = months.setdefault(month_str(ym), dict(_ENTRY))
-        if e["collectedAt"] is None and e["requestId"] is None and e["submittedAt"] is None:
-            e["collectedAt"] = f["fetchedAt"]
-            e["recheckAt"] = recheck_at(ym, None, dt.datetime.strptime(f["fetchedAt"][:10], "%Y-%m-%d").date())
-
-    # 1. Collect: every request in flight, oldest month first.
-    for key in sorted(k for k, e in months.items() if e["requestId"]):
-        e = months[key]
-        ym = parse_month(key)
-        status = r.cds.status(e["requestId"])
-        if status in ("accepted", "running"):
-            continue
-        if status == "successful":
-            if not r.budget.allows(0):
-                log.info("%s: %s is ready, but too little time is left; the next run collects it", PRODUCT, key)
-                continue
-            with tempfile.TemporaryDirectory(prefix="era5l-", dir=r.workdir) as tmp:
-                path = Path(tmp) / f"era5l-{key}.nc"
-                r.cds.download(e["requestId"], str(path))
-                res = ingest_month(mirror, ym, path, r.now)
-            log.info("%s: %s %s (%s), revision %s", PRODUCT, res["outcome"], key, e["purpose"], res["revision"])
-            res["purpose"] = e["purpose"]
-            out["collected"].append(res)
-            e.update(requestId=None, submittedAt=None, wanted=False, attempts=0, retryAt=None, lastError=None, collectedAt=r.now(), preliminary=res["preliminary"], recheckAt=recheck_at(ym, res["preliminary"], r.today), purpose=None)
-            held[ym] = {}
-        else:
-            e["attempts"] += 1
-            e.update(requestId=None, submittedAt=None, lastError=f"the request ended {status}", retryAt=_iso(now + backoff_seconds(e["attempts"])))
-            log.warning("%s: the %s request ended %s (attempt %d); resubmitting after %s", PRODUCT, key, status, e["attempts"], e["retryAt"])
-            out["failed"].append({"month": key, "status": status, "attempts": e["attempts"], "retryAt": e["retryAt"]})
-        write_state(mirror, st)
-
-    # 2. What this run wants, in priority order.
-    wanted: list[tuple[tuple[int, int], str]] = []
-    if mode == "monthly":
-        newest = newest_complete_month(r.today)
-        # Catch up at most CATCH_UP_MONTHS after a gap: older months are the backfill's.
-        floor = newest
-        for _ in range(CATCH_UP_MONTHS - 1):
-            floor = prev_month(floor)
-        start = max(next_month(max(held)), floor) if held else newest
-        ym = start
-        while ym <= newest:
-            if ym not in held:
-                wanted.append((ym, "new"))
-            ym = next_month(ym)
-        for key in sorted(months):
-            e = months[key]
-            if parse_month(key) in held and e["recheckAt"] and e["recheckAt"] <= r.today.isoformat():
-                wanted.append((parse_month(key), "recheck"))
-    else:
-        ym = parse_month(month)
-        e = months.setdefault(month, dict(_ENTRY))
-        if ym not in held:
-            e["wanted"] = True
-    for key in sorted((k for k, e in months.items() if e["wanted"]), reverse=True):
-        if parse_month(key) not in held and (parse_month(key), "new") not in wanted:
-            wanted.append((parse_month(key), "backfill"))
-
-    # 3. Submit while slots are free: at most one request per month in flight.
-    in_flight = sum(1 for e in months.values() if e["requestId"])
-    for ym, purpose in wanted:
-        key = month_str(ym)
-        e = months.setdefault(key, dict(_ENTRY))
-        if e["requestId"]:
-            continue
-        if e["attempts"] >= MAX_ATTEMPTS:
-            out["gaveUp"].append(key)
-            continue
-        if e["retryAt"] and _epoch(e["retryAt"]) > now:
-            continue
-        if in_flight >= MAX_IN_FLIGHT:
-            break
-        rid = None
-        if e["submittedAt"] or not existed:
-            # An intent a crash interrupted, or the state was lost: is our request already queued?
-            rid = r.cds.find(DATASET, ym)
-            if rid:
-                log.info("%s: adopting the CDS request %s already queued for %s", PRODUCT, rid, key)
-        if rid is None:
-            e.update(submittedAt=_iso(now), purpose=purpose)
-            write_state(mirror, st)  # the intent, before the submit
-            try:
-                rid = r.cds.submit(DATASET, month_request(ym))
-            except CdsError as err:
-                e["attempts"] += 1
-                e.update(submittedAt=None, lastError=str(err), retryAt=_iso(now + backoff_seconds(e["attempts"])))
-                write_state(mirror, st)
-                out["failed"].append({"month": key, "status": "submit-error", "attempts": e["attempts"], "retryAt": e["retryAt"]})
-                continue
-            log.info("%s: submitted %s (%s) as %s", PRODUCT, key, purpose, rid)
-        e.update(requestId=rid, submittedAt=e["submittedAt"] or _iso(now), purpose=purpose)
-        out["submitted"].append({"month": key, "purpose": purpose, "requestId": rid})
-        in_flight += 1
-        write_state(mirror, st)
-
-    out["inFlight"] = in_flight
-    write_state(mirror, st)
-    if out["gaveUp"]:
-        raise RequestsFailed(f"{PRODUCT}: the requests for {', '.join(out['gaveUp'])} failed {MAX_ATTEMPTS} times; clear their entries in {state_key()} to try again (ingest/README.md)")
-    return out
+    return cdsjob.run(SPEC, mirror, mode, month, r)
 
 
 # --- the handler (lambda_handler.py hands era5l events here) ----------------------------
 
 
 def validate_event(event, today: dt.date) -> dict:
-    if not isinstance(event, dict):
-        raise BadEvent("the event must be a JSON object")
-    extra = set(event) - {"product", "mode", "month"}
-    if extra:
-        raise BadEvent(f"unknown event keys: {sorted(extra)}")
-    if event.get("product") != PRODUCT:
-        raise BadEvent(f"product must be {PRODUCT!r}")
-    mode, month = event.get("mode"), event.get("month")
-    if mode not in ("monthly", "backfill"):
-        raise BadEvent(f"mode must be monthly or backfill, got {mode!r}")
-    if mode == "monthly" and month is not None:
-        raise BadEvent("a monthly run takes no month")
-    if mode == "backfill":
-        if not (isinstance(month, str) and _MONTH.match(month)):
-            raise BadEvent(f'a backfill names its month ("month": "YYYY-MM"), got {month!r}')
-        ym = parse_month(month)
-        if ym < FIRST_MONTH:
-            raise BadEvent(f"ERA5-Land starts at {month_str(FIRST_MONTH)}, not {month}")
-        if ym > newest_complete_month(today):
-            raise BadEvent(f"{month} is not complete on the CDS yet (newest {month_str(newest_complete_month(today))})")
-    return {"product": PRODUCT, "mode": mode, "month": month}
+    return cdsjob.validate_month_event(event, today, PRODUCT, FIRST_MONTH, newest_complete_month, "ERA5-Land")
 
 
 def lag_days(m: dict | None, today: dt.date) -> int:
@@ -727,67 +475,7 @@ def lag_days(m: dict | None, today: dt.date) -> int:
     return (today - through).days
 
 
-def _publish_lag(mirror, metrics, today) -> int:
-    value = lag_days(manifest.read(mirror, PRODUCT), today)
-    metrics.publish(PRODUCT, value)
-    return value
-
-
 def handler(event, context=None, s3_client=None, metrics=None, cds=None, clock=None, today=None, secrets_client=None):
     """Run one era5l event. `s3_client`, `metrics`, `cds` (a CDS client),
     `clock`, `today` and `secrets_client` are for tests."""
-    today_d = (today or (lambda: dt.datetime.now(dt.UTC).date()))()
-    ev = validate_event(event, today_d)
-    source = os.environ.get("FEED_SOURCE", "fixtures")
-    if source not in ("fixtures", "live"):
-        raise RuntimeError(f"FEED_SOURCE must be fixtures or live, got {source!r}")
-    mirror_url = os.environ.get("MIRROR_URL")
-    if not mirror_url:
-        raise RuntimeError("MIRROR_URL is not set (file:///abs/path or s3://bucket)")
-    mirror = zarrstore.Mirror.from_url(mirror_url, s3_client=s3_client)
-    live = source == "live"
-    if metrics is None:
-        metrics = cloudwatch.CloudWatchSink() if live else cloudwatch.LocalSink()
-
-    try:
-        if cds is None:
-            if live:
-                cds = _LazyLiveCds(lambda: LiveCds(read_cds_key(os.environ.get("CDS_KEY_SECRET_ARN", ""), secrets_client), contact=os.environ.get("INGEST_CONTACT")))
-            else:
-                import fakecds
-
-                cds = fakecds.FakeCds(variant=os.environ.get("INGEST_FIXTURE_VARIANT") or None, today=today_d)
-        r = Run(cds=cds, budget=chirps_final.Budget(context, COLLECT_RESERVE_S), today=today_d, **({"clock": clock} if clock else {}))
-        out = run(mirror, ev["mode"], ev["month"], r)
-    except lease.MirrorBusy as e:
-        lag = _publish_lag(mirror, metrics, today_d)
-        if ev["mode"] == "backfill":
-            raise
-        log.info("%s: %s; the run holding it does this work", PRODUCT, e)
-        return _result(ev, source, mirror, {"busy": str(e)}, lag)
-    except BaseException:
-        try:
-            _publish_lag(mirror, metrics, today_d)
-        except Exception:
-            log.exception("%s: could not publish %s while failing", PRODUCT, cloudwatch.METRIC)
-        raise
-    lag = _publish_lag(mirror, metrics, today_d)
-    return _result(ev, source, mirror, out, lag)
-
-
-class _LazyLiveCds:
-    """Reads the key (and builds the client) only when the run first needs the CDS."""
-
-    def __init__(self, make):
-        self._make = make
-        self._cds = None
-
-    def __getattr__(self, name):
-        if self._cds is None:
-            self._cds = self._make()
-        return getattr(self._cds, name)
-
-
-def _result(ev, source, mirror, out, lag) -> dict:
-    m = manifest.read(mirror, PRODUCT)
-    return {"product": PRODUCT, "mode": ev["mode"], "source": source, "revision": m["revision"] if m else None, "finalThrough": m["finalThrough"] if m else None, "lagDays": lag, **out}
+    return cdsjob.handle(SPEC, event, context, s3_client=s3_client, metrics=metrics, cds=cds, clock=clock, today=today, secrets_client=secrets_client)

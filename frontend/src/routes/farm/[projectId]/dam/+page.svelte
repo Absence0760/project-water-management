@@ -7,6 +7,7 @@
 	import { api } from '#lib/api/index.js';
 	import { session } from '#lib/auth/session.svelte.js';
 	import DamChart from '#lib/components/farm/DamChart.svelte';
+	import DamObservedCard from '#lib/components/farm/DamObservedCard.svelte';
 	import DatesLine from '#lib/components/farm/DatesLine.svelte';
 	import { farmToday } from '#lib/components/farm/numbers.js';
 	import EstimateNote from '#lib/components/farm/EstimateNote.svelte';
@@ -70,6 +71,9 @@
 			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
 			{@const forecast = forecastCard(view.farm, farmToday(view))}
 			{#if forecast}<ForecastCard vm={forecast} />{/if}
+			<!-- "Your dam, seen from space" (issue #604 R5-B): only when the dam is drawn as an outline on the map; a check on
+			     the model, so after the model's own figures and forecast, just before where they come from. -->
+			<DamObservedCard {projectId} nodeId={view.farm.nodeId} />
 
 			<section class="card" aria-labelledby="about-h">
 				<h2 id="about-h">{t('Where these figures come from')}</h2>

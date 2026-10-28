@@ -37,6 +37,15 @@ describe('evidenceSections', () => {
 		]);
 	});
 
+	it('adds § 7, the observed wet days, to an applicant’s application from evidence-21', () => {
+		const obs = { version: 'dam-obs-1' as const, source: 'wofs' as const, citation: 'Digital Earth Africa WOfS, CC BY 4.0' as const, startDate: '2001-10-01', endDate: '2020-09-30', wetMinPixels: 2, dryMinClearPct: 99, pixelAreaM2: 900, dams: [] };
+		const got = evidenceSections({ mode: 'application', demandObjects: none, damObservations: obs });
+		expect(got.map((s) => s.id)).toEqual(['summary', 'river', 'uncertainty', 'credibility', 'users', 'allocations', 'demandObjects', 'damObservations', 'appendixInputs', 'appendixVerify', 'applicantStatement']);
+		expect(sectionHeading(got.find((s) => s.id === 'damObservations')!)).toBe('7. Observed wet days');
+		// A team scenario's report has none (null), and lists no § 7.
+		expect(evidenceSections({ mode: 'application', demandObjects: none, damObservations: null }).some((s) => s.id === 'damObservations')).toBe(false);
+	});
+
 	it('leaves out § 6 and the applicant’s statement for baseline evidence', () => {
 		expect(evidenceSections({ mode: 'baseline', demandObjects: null }).map((s) => s.id)).toEqual(['summary', 'river', 'uncertainty', 'credibility', 'users', 'allocations', 'appendixInputs', 'appendixVerify']);
 	});

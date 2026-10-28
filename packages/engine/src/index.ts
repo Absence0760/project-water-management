@@ -51,6 +51,7 @@ export * from './gapRain';
 export * from './rainThreshold';
 export * from './evaporation/fao56Table5';
 export * from './evaporation/apanDaily';
+export * from './evaporation/et0Daily';
 export * from './evaporation/lakeFactorPresets';
 export * from './accumulation';
 export * from './doublemass';

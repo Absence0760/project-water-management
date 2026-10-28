@@ -108,6 +108,15 @@ Not part of the question above, recorded here so this page covers every licensor
 - **If the owner objects.** Remove the label from `REFERENCE_KINDS` and the release gate's `DATASETS` (no new load), and delete the loaded dataset with a forward migration (`DELETE FROM rain_map_dataset WHERE dataset = 'WAAS-SWCape-2007'`; its cells go with it). Unit MAPs already accepted are copies in the projects and stay, citing the grid.
 - **Confidence:** none to state on the licence itself: there are no terms to read. Written terms or permission from DWS (or the client's written basis for use) would settle it; record them here with the date if they arrive.
 
+### 3.3c South African National Land Cover (SANLC): terms pending, not served (added 2026-10-27)
+
+Recorded so this page lists every licensor whose data the app is built to read (issue #604 R5-D).
+
+- **What would be used.** SANLC 2018 and 2022 (DFFE; produced by GEOTERRAIMAGE): its permanent orchard (class 32) and vine (class 33) classes, summarised per parcel in the planted-areas drawer and offered as one crop's planted area, and the orchard and vine land new since 2018, shown for licence applicants (`docs/maps.md` § Orchards and vines from SANLC). Both are derivatives of the raster.
+- **The terms: not yet read.** DFFE's e-GIS pages, where the 2018–2022 terms sit, refuse connections from outside South Africa; catalogues say only "an open licence agreement". The earlier SANLC (2013/14) came under a GEOTERRAIMAGE licence: CC BY-ND with no commercial resale, and no products that compete with GEOTERRAIMAGE's own (`docs/maps.md` § Sources). Reading the e-GIS terms is the operator's step (issue #618 step 8b).
+- **What is built, and the gate.** The code, a synthetic grid and the local loader are in the repo; the production load is refused by name (`REFERENCE_KINDS['crop-types']`, `blocked`, and the release gate), so no SANLC figure reaches the live site or a client. A local load of the operator's own download is evaluation only; nothing derived from it is committed.
+- **To serve it.** Terms that allow derivatives in a commercial service, recorded here and in `docs/maps.md` § Sources with the date and the attribution they ask for (followups.md, *Decision: SANLC's licence*). If they forbid derivatives or competing products, the kind stays blocked.
+
 ### 3.4 South African law (enforceability of the end-user terms)
 
 - The licence needs a "written license agreement" with End Users. Click-wrap acceptance at sign-up or invitation is a contract concluded by data message. ECTA (Act 25 of 2002) s22(1) gives such agreements force, and s12 treats a data message as satisfying "writing". These are cited from memory and weren't re-read this session.

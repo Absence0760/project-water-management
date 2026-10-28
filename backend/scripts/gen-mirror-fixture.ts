@@ -17,7 +17,7 @@
 // 2023-12-31 and finalThrough is the second-last day of 2025-12) and `imerg_late`
 // (daily layout, 2026-01-25 to 2026-02-08 through prelimThrough, a file a
 // day, each V07 but the last two V08), each over the 0.1° cells holding the fixture grid and its
-// band, every other chunk unwritten; and one ECMWF ENS issue (scripts/ecmwf-fixture.ts, `ecmwf/<issue>`, `ecmwf/index.json`). Only the chunks holding the fixture's 8 × 6 grid and the band
+// band, every other chunk unwritten; and one ECMWF ENS issue (scripts/ecmwf-fixture.ts, `ecmwf/<issue>`, `ecmwf/index.json`), and the two reference ET products (scripts/et0-fixture.ts, `agera5_et0`, `power_et0`). Only the chunks holding the fixture's 8 × 6 grid and the band
 // of the same size just south of it are written, each with the cells the
 // files cover; every other chunk is unwritten (NaN), which costs nothing. The
 // band holds one land copy of every cell of the grid's repeating pattern
@@ -38,6 +38,7 @@ import { FIXTURE_DIR, fixtureHttp, fixtureTag } from '../src/feeds/fixtures.js';
 import { CHC_BASE, chirpsFinalFileUrl, chirpsPrelimUrl, GEFS_DAYS, gefsUrl, gridValues } from '../src/feeds/sources/chirps.js';
 import { gefsProduct, writeGefsIndex } from '../src/ingest/gefs.js';
 import { writeEcmwfFixture } from './ecmwf-fixture.js';
+import { writeEt0Fixture } from './et0-fixture.js';
 import { type Block, DAILY_CHUNK, ensureDaily, ensureFinals, FINALS_CHUNK, writeDailyDays, writeFinalsYear } from '../src/mirror/arrays.js';
 import { chcCellOf, dateOfDoy, gridOf, isLeapYear, MIRROR_REGION, mirrorCell, PRODUCT_GRIDS, regionSize } from '../src/mirror/grid.js';
 import { type Manifest, manifestHash, writeManifest } from '../src/mirror/manifest.js';
@@ -224,6 +225,8 @@ export async function buildMirrorFixture(dir: string): Promise<void> {
 	await buildTenthProducts(store, sample);
 	// ECMWF ENS (issue #604 R4-C): one invented issue, scripts/ecmwf-fixture.ts.
 	await writeEcmwfFixture(store);
+	// The reference evapotranspiration products (issue #604 R5-E, scripts/et0-fixture.ts).
+	await writeEt0Fixture(store);
 }
 
 /**

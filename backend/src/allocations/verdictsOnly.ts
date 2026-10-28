@@ -187,7 +187,7 @@ export const reportVerdictsOnly = (r: Pick<ReportLike, 'summaries'>): boolean =>
 /**
  * The report's top-level sections such a viewer reads, and how: the
  * identity, checks, ops, rules, credibility, locality map, verification and
- * the applicant's statement as they are; page 1's count rows and flags; the
+ * the applicant's statement and the observed wet days as they are; page 1's count rows and flags; the
  * EWR sites as verdicts; the month changes (counts); the boards' verdicts;
  * the ensembles' counts; the cumulative counts; § 5 and served-while-failing
  * without units; the appendix without its warnings; the summaries as
@@ -206,6 +206,8 @@ const REPORT_VERDICTS: Record<string, (v: unknown) => unknown> = {
 	rules: (v) => v,
 	credibility: (v) => v,
 	localityMap: (v) => v,
+	// Satellite observations of the applicant's own dams: nothing from the registered volumes (evidence-21).
+	damObservations: (v) => v,
 	verification: (v) => v,
 	applicantStatement: (v) => v,
 	byMonth: (v) => v,

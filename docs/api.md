@@ -641,10 +641,21 @@ alongside teams, e.g. to give an outside client `viewer` access.
   tableAreaKm2: number > 0 | null, tabM3s: number[12] | null,
   naturalPctM3s: number[12][10] | null, reservePctM3s: number[12][10] | null,
   lowFlowPctM3s?: number[12][10] | null, reserveTable?: 'total' |
-  'withoutHighFlows' }`
+  'withoutHighFlows', tabFile?: { name, generated, title, runoff, annual:
+  { label, value }[], category, ifr: { label, mcm, pctMar }[],
+  distributionType, monthlyMcm: number[12][7] }, rulFile?: { name, generated,
+  unit: 'm3s' | 'mcm', category, edited?: true } }`
   (m³/s, water-year months Oct … Sep, the ten DRM points 0.1 … 0.99; every
   value 0 … 10⁶), or `null` (the default) for the pragmatic EWR. Every key but
-  the last two is required (`null` when not entered) and no other is accepted.
+  the last four is required (`null` when not entered) and no other is accepted.
+  `tabFile` (the .tab the TAB flows or the table MAR came from, parsed; its
+  monthly table in Mm³ a month) and `rulFile` (the .rul's header) are optional
+  and **display only** (issue #617): no run reads them, and a run comparison
+  ignores them. Every key of each but `rulFile.edited` (true once a table was typed or pasted over) is required (text `null` when the file has
+  no such line); names and header text are at most 255 characters, labels 60,
+  `annual` and `ifr` at most 30 lines each, no control characters, numbers
+  0 … 10⁶ (`pctMar` may be `null`), and no other key is accepted
+  (`400 daily EWR source: tabFile: …`).
   `lowFlowPctM3s` (the `.rul`'s Reserve Flows without High Flows) and
   `reserveTable` (which Reserve table `percentile` reads; absent = `'total'`)
   are optional, engine ≥ 1.90.0, issue #552. `tab` needs `tabM3s`,
@@ -1987,7 +1998,7 @@ counts the blank days a merge stores (the Data page's freshness, "Data now runs 
 `siteNodeId` is the gauge a flow record was measured at (`null` = the outlet; only the plausibility checks read a gauge's record), or the land unit a rain series is the own rain of (`null` = the catchment's; a run reads it under `<kind>@<unit id>`, and only `settings.unitRain` `perUnit` uses it);
 `rebuilding` is true while a data feed backfills a confirmed replacement of the
 series (its values stay as they are until the swap);
-`feed` is the data feed that wrote days of the series, `{ source, days }` (`source` the feed's `chirps`, `chirps_gefs`, `dws` or `ecmwf_ens`;
+`feed` is the data feed that wrote days of the series, `{ source, days }` (`source` the feed's `chirps`, `chirps_gefs`, `dws`, `ecmwf_ens` or `agera5_et0`;
 `days` how many of the series' days are still the feed's, `time_series.feed_days`, 031, [data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)),
 or `null` when no day is a feed's, and always `null` to an API key (below viewer, it can't read `data_feed`; the Data tab's mark);
 `handDays` is the days a person typed in by hand, `[from, to][]` inclusive dates in date order (`time_series.hand_days`, 212), or `null` for none;
@@ -3571,8 +3582,8 @@ is its composite dam, its volume the user's), and is `404` now.
 | POST | `/projects/:id/map/unit-map` | `{ dataset, nodeIds?: uuid[] }`, strict | `200 { dataset, units: { nodeId, mapMm, mapSource }[], changed, revisionId }`: re-derived on the server from the grid and the parcels as they are, each chosen unit's (every unit `dataset` covers, or the `nodeIds`) `mapMm` and `mapSource` (`<label> <version>, area-weighted mean over the unit’s parcel, <n> cells`) written as one model revision (`model_put`, its reason citing the grid; `revisionId` null when nothing changed). `400` codes in `details.code`: `dataset_unknown`, `unit_unknown` (a node that isn't a land unit), `nothing_covered`; `409`: `unit_uncovered` (a named unit the grid doesn't cover, has no parcel or is refused; `details.units` says why), `grid_mixed` (a unit would keep a MAP from another grid; `details.units`) | editor |
 | GET | `/projects/:id/nodes/:nodeId/dam-proposals` | – | `200 { nodeId, nodeName, current: { damCapacityM3, damAreaFullM2 }, dam: { id, name, geometryType, point: [lon, lat], areaM2 } \| null, radiusM: 1000, register: RegisterDamProposal[], area: { featureId, featureName, areaM2, method } \| null, datasets: { dataset, count }[] }` (issue #326 B-dams, `geo/damRoutes.ts`, [maps.md § Dams from the register and the map](./maps.md#dams-from-the-register-and-the-map)): the hydrological unit's dam on the map (a linked `dam` feature, a polygon first, then the earliest), the registered dams within 1 km of its centroid or point, nearest first, at most 5, and the polygon's area as the full-supply area (`null` for a point). `dam: null` when no dam feature is linked. `current` is the saved model's. Writes nothing. `400` for a node that isn't a farm; `404` for another project's node | viewer |
 | POST | `/projects/:id/nodes/:nodeId/dam-area-from-map` | `{ featureId }` | `200 { nodeId, damAreaFullM2, areaFeatureId, revisionId }`: the unit's `damAreaFullM2` set to the dam polygon's geodesic area, recorded as a model revision whose reason names the feature. `400` for a node that isn't a farm, a feature that isn't a `dam`, a dam point (no area), a dam linked to another unit, or a unit with no dam capacity; `404` for another project's feature or node | editor |
-| GET | `/projects/:id/nodes/:nodeId/cropland-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { nodeId, nodeName, dataset: CroplandDataset \| null, datasets: { dataset, version, synthetic }[], parcels: { featureId, name, areaM2, cultivatedM2 }[], unit: { areaM2, cultivatedM2 } \| null, catchment: { featureId, name, areaM2, cultivatedM2 } \| null, crops: { cropId, name, areaM2, accepted: CropAreaFromLandCover \| null }[] }` (issue #326 B-landcover, `geo/croplandRoutes.ts`, [maps.md § Cultivated area from land cover](./maps.md#cultivated-area-from-land-cover)): each `farm_parcel` linked to the unit (oldest first) with its area and the area the land cover maps as cropland in it (m², rounded), their sum (`unit`, null without parcels), the catchment boundary's for reference, and the project's crops with the unit's planted area now (0 = none) and where an accepted area came from. A polygon that can't be summarised (too big) has `problem` in place of the figures. No dataset loaded: `dataset: null` and no figures. Writes nothing. `400` for a node that isn't a farm or an unknown dataset; `404` for another project's node | viewer |
-| POST | `/projects/:id/nodes/:nodeId/crop-area-from-land-cover` | `{ cropId, dataset, featureId? }` | `200 { nodeId, cropId, areaM2, dataset, revisionId }`: the crop's planted area on the unit set to the cultivated area of the unit's parcels (or the one parcel `featureId`), re-derived on the server, recorded as a model revision whose reason cites the dataset, its version and the method, and as a `crop_area_land_cover` row (174). The client names the crop; the land cover never does. `400` for a node that isn't a farm, an unknown dataset, a unit with no parcel, a feature that isn't a parcel linked to it, parcels the land cover can't summarise or with no cropland; `404` for another project's node, crop or feature | editor |
+| GET | `/projects/:id/nodes/:nodeId/cropland-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { nodeId, nodeName, dataset: CroplandDataset \| null, datasets: { dataset, version, synthetic }[], parcels: { featureId, name, areaM2, cultivatedM2 }[], unit: { areaM2, cultivatedM2 } \| null, catchment: { featureId, name, areaM2, cultivatedM2 } \| null, crops: { cropId, name, areaM2, accepted: CropAreaFromLandCover \| null }[], cropTypes: { dataset: CropTypeDataset, parcels: { featureId, name, areaM2, orchardM2, vineM2, newOrchardM2, newVineM2 }[], unit: { areaM2, orchardM2, vineM2, newOrchardM2, newVineM2 } \| null } \| null }` (issue #326 B-landcover, `geo/croplandRoutes.ts`, [maps.md § Cultivated area from land cover](./maps.md#cultivated-area-from-land-cover)): each `farm_parcel` linked to the unit (oldest first) with its area and the area the land cover maps as cropland in it (m², rounded), their sum (`unit`, null without parcels), the catchment boundary's for reference, and the project's crops with the unit's planted area now (0 = none) and where an accepted area came from. A polygon that can't be summarised (too big) has `problem` in place of the figures. No dataset loaded: `dataset: null` and no figures. `cropTypes` (issue #604 R5-D, [maps.md § Orchards and vines from SANLC](./maps.md#orchards-and-vines-from-sanlc)): the same parcels' permanent orchards and vines from the default crop-type dataset, and the part of each new since its `baselineVersion` (0 without one), m² rounded, the unit's sums adding the rounded parcels; `null` with no crop-type dataset loaded, as in production until SANLC's terms are recorded. Writes nothing. `400` for a node that isn't a farm or an unknown dataset; `404` for another project's node | viewer |
+| POST | `/projects/:id/nodes/:nodeId/crop-area-from-land-cover` | `{ cropId, dataset, featureId?, layer? }` | `200 { nodeId, cropId, areaM2, dataset, layer?, revisionId }`: the crop's planted area on the unit set to the cultivated area of the unit's parcels (or the one parcel `featureId`), each parcel rounded to the m² before the sum, re-derived on the server; with `layer` (`orchard` or `vine`), their permanent orchards or vines from the crop-type dataset `dataset` names instead (the revision says "from crop types" and the method names the class), recorded as a model revision whose reason cites the dataset, its version and the method, and as a `crop_area_land_cover` row (174). The client names the crop; the land cover never does. `400` for a node that isn't a farm, an unknown dataset (or crop-type dataset, with `layer`), an unknown `layer`, a unit with no parcel, a feature that isn't a parcel linked to it, parcels the land cover can't summarise or with no cropland (or no orchard, no vine); `404` for another project's node, crop or feature | editor |
 | GET | `/projects/:id/evaporation-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { dataset: EvaporationDataset \| null, datasets: { dataset, kind, version, synthetic }[], boundary: { featureId, name } \| null, target: 'pe' \| 'apan' \| null, proposal: { monthlyMm, annualMm, coverage, cells } \| { problem } \| null, settings: { apanMm, peKind, peMm, dailyApan }, accepted: EvaporationAccepted[] }` (issue #326 B-evap, `geo/evaporationRoutes.ts`, [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)): the catchment boundary's 12 monthly means (Oct … Sep, mm, to 0.1) from the grid, area-weighted over the cells it covers, with the share of the boundary that has values; `target` is where the dataset's kind goes (`et0` → `pe`, GR4J's monthly PE; `apan` → `apan`, the A-pan row), never converted. `settings` is the saved settings' A-pan row, PE kind and monthly PE row (null under `pan`), and `dailyApan`, the days a daily A-pan record (`evap_apan_mm`) covers, `{ from, to }` to its last value, or null without one: it replaces the monthly A-pan row on those days, and the panel's confirmation says so. `proposal: null` without a dataset or a boundary; `{ problem }` when the grid can't stand for it (no value inside, under 50 % covered, too big). Writes nothing. `400` for an unknown dataset | viewer |
 | POST | `/projects/:id/evaporation-from-map` | `{ dataset }` | `200 { target, monthlyMm, dataset, revisionId }`: the 12 values, re-derived on the server from the boundary as it is, written into `settings.pe` (`{ kind: 'monthly', mm, source }`, the source naming the dataset; for a reference-ET grid) or `settings.apanMm` (for an A-pan grid), recorded as one settings revision whose reason cites the dataset, its version, period and method, and as an `evaporation_accepted` row (181). `400` for an unknown dataset, no catchment boundary, a boundary the grid can't summarise, or no evaporation in it | editor |
 
@@ -3620,7 +3631,8 @@ is its composite dam, its volume the user's), and is `404` now.
   cellDeg, classes, loadedAt, synthetic }`, from `cropland_dataset` (173);
   `method` is the counting in words, cited with every accepted value.
   `CropAreaFromLandCover = { areaM2, dataset, source, version, method,
-  basis: 'unit' | 'parcel', featureName, acceptedAt, current }`: `current`
+  basis: 'unit' | 'parcel', layer: 'orchard' | 'vine' | null, featureName, acceptedAt, current }`
+  (`layer`: the crop-type layer it came from, null for the land cover's cultivated area; issue #604 R5-D): `current`
   while the unit's planted area for that crop still equals `areaM2` (a typed
   change replaces it; History keeps both).
 - `EvaporationDataset = { dataset, kind: 'et0' | 'apan', source, version,
@@ -3738,6 +3750,52 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   how many, the inflow points left out, their area, the dataset; never a
   polygon). The preview is not
   (it changes nothing). A stranger gets `404`.
+
+## Dams seen from space
+
+Each unit's dam outlines against what Digital Earth Africa's satellites saw
+of them (issue #604 R5-B; the observations are 261's `dam_observation`,
+loaded weekly by the worker, R5-A; the method and thresholds in
+[model.md § 2.10l](./model.md#210l-modelled-vs-observed-dam-area-app-issue-604-r5-b);
+the screen in [ui.md § Dams](./ui.md#dams)). Read only, under the caller's
+RLS (`backend/src/dams/observed/routes.ts`, `read.ts`, `compare.ts`).
+
+| Method | Path | Response | Min role |
+| --- | --- | --- | --- |
+| GET | `/projects/:id/dams/observations?run=&node=` | `DamObservations` (below). `run`: the run to compare with, else the project's newest by `created_at` (the run the Dams tab shows, `overview/latestRun.ts` `pickRuns`); another project's run or a malformed id is `404`. `node`: only that unit's dam (a malformed id `404`, a unit with no outline an empty `dams`). `Cache-Control: no-store` | viewer |
+
+`DamObservations = { attribution, thresholds, run, dams }`:
+
+- `attribution`: `"Digital Earth Africa, CC BY 4.0"`, shown wherever the
+  values are.
+- `thresholds`: the comparison's constants (`compare.ts` `OBSERVED`):
+  `minPctObserved` 90, `fullShare` 0.95, `emptyShare` 0.05, `pixelM2` 900,
+  `clearlyNotFull` 0.8, `clearlyWet` 0.2, `withinShare` 0.1.
+- `run`: `{ id, label, createdAt, engineVersion, forecastFrom } | null` (no run yet).
+- `dams`: one per unit with a dam polygon (points have no outline), plus one
+  per polygon linked to no unit (`nodeId: null`, listed, never compared):
+  `{ nodeId, features: { id, name, nodeId, match: { status: 'matched' | 'merged' | 'none', damShare, waterbodyShare } | null }[], fullArea: { areaM2, from: 'survey' | 'entered' | 'estimated' } | null, inRun, points, summary }`.
+  `match` is R5-A's `dam_waterbody_match` (`null` until the matcher has
+  looked); a `merged` or `none` polygon's Waterbodies views aren't compared,
+  so the UI says it is merged with a neighbouring water body. `fullArea` is
+  the run's own (its model node: the survey curve's top area, else
+  `damAreaFullM2`, else the estimate its engine version used); `inRun` is
+  whether the run stored a `dam_area` for the unit.
+- `points`, oldest first, one per (date, source) the unit's polygons were
+  seen: `{ date, source: 'waterbodies' | 'wofs', wetAreaM2, pctObserved, modelledAreaM2, compared, skip, seenFull, seenEmpty, modelFull, modelEmpty, mismatch }`.
+  Several polygons of one unit (its composite dam) are summed, and the least
+  share seen clearly kept. `modelledAreaM2` is the run's `dam_area` that day
+  (`null` outside the run). `skip` says why a point wasn't compared:
+  `partly-seen`, `not-this-dam`, `partial-unit`, `other-source`,
+  `outside-run` (or a forecast day), `no-run`. The flags are set on compared
+  points only; `mismatch` is `model-full`, `model-empty`, `seen-full` or
+  `seen-empty`.
+- `summary`: `{ compared, skipped, biasPctOfFull, withinShare, seenFull, seenEmpty, mismatches, latestClear }`;
+  `biasPctOfFull` is the mean of (modelled − observed) as % of the full area
+  (+: the model holds more), `withinShare` the share of compared points
+  within 10 % of the full area (0–1), `latestClear` the newest view at least
+  90 % clear that wasn't left out for its source or a missing polygon
+  (`{ date, source, wetAreaM2, pctObserved } | null`).
 
 ## Start from the map
 
@@ -3996,6 +4054,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
 | GET | `/projects/:id/farm/:nodeId/map` | `FarmMap = { features: { id, kind, name, geometry, areaM2, center, credit? }[] }`: the farm's map (issue #326 A3): the parcels and dams linked to **this** farm, then the gauges, rivers and catchment boundary for orientation, never another farm's feature or an `other` one, and no node id, properties or author; `credit: 'hydrorivers'` (2026-10-02) on a river added from a HydroRIVERS reach and `credit: 'jrc-water'` (issue #523 C6) on an outline (a dam) traced from JRC Global Surface Water (its description names the source; the description itself never leaves), so the map shows that licence's credit (maps.md § Credits on the map), absent otherwise. The query names the farm, so a viewer previewing it gets what its farmer gets. `{ features: [] }` when the farm has no parcel or dam on the map (the page shows no map). No status: the page colours the land from the farm view's own band. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
+| GET | `/projects/:id/farm/:nodeId/dam-observed` | `FarmDamObserved = { outlines, latest: { date, wetAreaM2, source } \| null, fullAreaM2, attribution }`: the farm's dam seen from space (issue #604 R5-B, [Dams seen from space](#dams-seen-from-space)): how many of **this** farm's dams are drawn as an outline (`0`: the page shows nothing), the newest view at least 90 % clear of all of them together (summed for a composite dam; a Waterbodies polygon merged with a neighbour never counts; the comparison's own `latestClear`), `fullAreaM2` from the farm's own node (survey curve's top, `damAreaFullM2`, else the estimate from the capacity; `null` with no dam capacity) and the credit `"Digital Earth Africa, CC BY 4.0"`. No upstream id, match detail or feature id. Not tied to a publication. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/privacy-contact` | `{ wuaName, contact: { organisation, name, email, postal } \| null }`: "Who decides about your farm's information" (POPIA s18(1)(b), 168): the project's team's name and its privacy contact ([Teams](#teams)), for every member, farmers included, through `app_project_privacy_contact` (a farmer can't read the team row); nothing else about the team. `contact` is `null` for a project without a team or a team without a contact; `wuaName` as in `FarmIndex`. `404` for a non-member | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my hydrological unit", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
 
@@ -4455,8 +4514,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 
 - `FeedInput = { source, config, targetKind?, targetName?, schedule?, enabled?, replaceSeries? }`,
   strict (unknown fields are `400`):
-  - `source` ∈ `chirps`, `chirps_gefs`, `dws`, `ecmwf_ens` (the ECMWF ENS mean, read only from the rain data copy);
-  - `config` for `chirps` / `chirps_gefs` / `ecmwf_ens`: exactly one of `{ cells: { lat, lon, weight? }[] }`,
+  - `source` ∈ `chirps`, `chirps_gefs`, `dws`, `ecmwf_ens` (the ECMWF ENS mean, read only from the rain data copy),
+    `agera5_et0` (daily FAO-56 reference ET, AgERA5 with NASA POWER on the newest days, read only from our copy; issue #604 R5-E);
+  - `config` for `chirps` / `chirps_gefs` / `ecmwf_ens` / `agera5_et0`: exactly one of `{ cells: { lat, lon, weight? }[] }`,
     1–100 cells in at most 25 grid rows (issue #326 B-rain raised it from 25, the box's limit), lat −60…60, lon −180…180, weight > 0 (default 1), or
     `{ bbox: { south, west, north, east } }` in degrees (south < north, west <
     east, no crossing of 180°, the same ranges), read as the area-weighted mean
@@ -4475,7 +4535,7 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
     `chirps` also takes `product`: `sat` (the default) or `rnl`, CHIRPS v3's
     two daily products, read end to end, never one spliced onto the other;
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
-    `rain_catchment_mm`; `chirps_gefs` and `ecmwf_ens`: `rain_forecast_mm`; `dws`:
+    `rain_catchment_mm`; `chirps_gefs` and `ecmwf_ens`: `rain_forecast_mm`; `agera5_et0`: `evap_et0_mm`; `dws`:
     `flow_observed_m3s`, `flow_reference_m3s`, `flow_logger_m3s`), default the
     first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (the default and
     the only value: no source publishes more often, 111_feed_daily_only;

@@ -1,5 +1,5 @@
 // Which e2e tests need reference data loaded (the operator-loaded tables the
-// proposal panels and map layers read: land cover, the register of dams,
+// proposal panels and map layers read: land cover, the orchard and vine grid, the register of dams,
 // evaporation, quaternaries, the river network, gauging stations, the MAP
 // grid), and the
 // check that each one loads it itself (referenceData.test.ts, run by `pnpm
@@ -19,6 +19,7 @@ export interface ReferenceFamily {
 
 export const REFERENCE_FAMILIES: readonly ReferenceFamily[] = [
 	{ what: 'land cover', testIds: /['"]cropland-[a-z-]+['"]/, loader: 'loadSyntheticLandCover' },
+	{ what: 'the orchard and vine grid', testIds: /['"]croptypes(-[a-z-]+)?['"]/, loader: 'loadSyntheticCropTypes' },
 	{ what: 'the register of dams', testIds: /['"]dam-proposals?-[a-z-]+['"]/, loader: 'loadSyntheticDamRegister' },
 	{ what: 'evaporation', testIds: /['"]evaporation-(rows|accepted|implied|same|problem)['"]/, loader: 'loadSyntheticEvaporation' },
 	{ what: 'quaternaries', testIds: /['"](map-quaternar[a-z-]*|quaternary-(code|rows|synthetic|none|proposal|no-dataset))['"]/, loader: 'loadSyntheticQuaternaries' },

@@ -86,7 +86,7 @@ export function overAllocationError(sum: number): string | null {
 	if (sum - 1 < SHARE_TOLERANCE) return null;
 	return (
 		`unit flow shares sum to ${(sum * 100).toFixed(2)}%, more than 100%: the units would generate more water than the catchment's natural flow. ` +
-		'Correct the manual flow shares (Network) or the high/low MAP split (Model settings → Flow generation) so they add up to 100%'
+		'Correct the manual flow shares (Network) or the high/low MAP split (Model settings → Model selection for flow generation) so they add up to 100%'
 	);
 }
 

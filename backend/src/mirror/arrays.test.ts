@@ -206,6 +206,26 @@ describe('the 0.1° products’ layouts (issue #604 R4-B)', () => {
 		await expect(openFinals(store, 'rnl')).rejects.toThrow(/attribution/);
 	});
 
+	it('takes the reference ET products’ attribution, agera5_et0 on a 1979 year axis, both on the 0.1° grid (issue #604 R5-E)', async () => {
+		const { dir, store } = fresh();
+		await ensureFinals(store, 'agera5_et0', 2025);
+		await ensureDaily(store, 'power_et0', '1981-01-01', 2);
+		const meta = (p: string) => JSON.parse(readFileSync(join(dir, `${p}/zarr.json`), 'utf8'));
+		const put = (p: string, m: unknown) => store.set(`/${p}/zarr.json`, new TextEncoder().encode(JSON.stringify(m)));
+		const a = meta('agera5_et0');
+		expect(a.shape).toEqual([2025 - 1979 + 1, 366, 275, 310]);
+		await put('agera5_et0', { ...a, attributes: { ...a.attributes, attribution: 'Contains modified Copernicus Climate Change Service information [year].' } });
+		expect((await openFinals(store, 'agera5_et0'))!.firstYear).toBe(1979);
+		await put('agera5_et0', { ...a, attributes: { ...a.attributes, firstYear: 1981 } });
+		await expect(openFinals(store, 'agera5_et0')).rejects.toThrow(/starts in 1981, not 1979/);
+		const p = meta('power_et0');
+		expect(p.chunk_grid.configuration.chunk_shape).toEqual([1, 55, 62]);
+		await put('power_et0', { ...p, attributes: { ...p.attributes, attribution: 'NASA POWER, CC BY 4.0' } });
+		expect((await openDaily(store, 'power_et0'))!.grid.step).toBe(0.1);
+		await put('power_et0', { ...p, attributes: { ...p.attributes, attribution: '' } });
+		await expect(openDaily(store, 'power_et0')).rejects.toThrow(/attribution/);
+	});
+
 	it('refuses an array of one product laid out on another’s grid', async () => {
 		const { dir, store } = fresh();
 		// A 0.05° daily array where imerg_late's should be: its grid, chunks and shape are CHC's.

@@ -9,11 +9,14 @@
 	it covers; the rarely changed unit, natural source, scale, natural MAR and
 	% points folded into one line of their values ("Table settings: …"); the
 	EWR, low-flow and natural grids, the high flows and the plausibility
-	notes. Helpers in ./ewrRules.ts and ./ewrPaste.ts.
+	notes. At the outlet, grids equal to the daily EWR's .rul tables shown
+	above (dailyRepeat, issue #617) fold under one line saying so; grids that
+	differ say that monthly compliance reads these and the daily EWR those.
+	Helpers in ./ewrRules.ts and ./ewrPaste.ts.
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { EWR_ASSURANCE_MIN_YEARS, EWR_NATURAL_MAR_TOLERANCE, type EwrRuleTable } from '@water-management/engine';
+	import { EWR_ASSURANCE_MIN_YEARS, EWR_NATURAL_MAR_TOLERANCE, type EwrDailySource, type EwrRuleTable } from '@water-management/engine';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import Fold from '#lib/components/common/Fold.svelte';
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
@@ -26,9 +29,11 @@
 	import { parseDrmFile, ruleTableFromRul, ruleTableFromTab } from './drmFiles';
 	import {
 		categoryFromText,
+		dailyRepeat,
 		filledCells,
 		naturalComplete,
 		parsePoints,
+		repeatedGrids,
 		ruleSettingsSummary,
 		setLowFlowSplit,
 		setPoints,
@@ -41,12 +46,15 @@
 	let {
 		value = $bindable(),
 		readonly = false,
-		options
+		options,
+		daily = null
 	}: {
 		value: EwrRuleTable[];
 		readonly?: boolean;
 		/** The EWR sites a table can be at (siteOptions). */
 		options: readonly SiteOption[];
+		/** The daily EWR's source, to tell when the outlet's grids repeat its .rul tables (dailyRepeat). */
+		daily?: EwrDailySource | null;
 	} = $props();
 
 	const uid = $props.id();
@@ -57,6 +65,15 @@
 	let pointsBad = $state<boolean[]>([]);
 	// Each table's "Table settings" fold, open or closed.
 	let foldOpen = $state<boolean[]>([]);
+	// The outlet table's grids fold (issue #617), open or closed: set once per table (closed when its grids repeat the
+	// daily EWR's .rul tables, open otherwise) and after a file load, never while a grid is edited, so a keystroke that
+	// makes the grids differ (or the same again) can't move or shut the field under the cursor.
+	let gridsOpen = $state<boolean[]>([]);
+	$effect(() => {
+		value.forEach((t, i) => {
+			if (untrack(() => gridsOpen[i]) === undefined) gridsOpen[i] = untrack(() => dailyRepeat(t, daily)) !== 'same';
+		});
+	});
 	// The paste dialog: which table it is open for, its text and which grid it fills.
 	let pasteOpen = $state(false);
 	let pasteFor = $state(0);
@@ -91,7 +108,7 @@
 		value.splice(i, 1);
 		if (pasteOpen && pasteFor === i) pasteOpen = false;
 		else if (pasteFor > i) pasteFor--;
-		for (const list of [pointsText, pointsBad, foldOpen, pasteNote, fileNote, readers] as unknown[][]) list.splice(i, 1);
+		for (const list of [pointsText, pointsBad, foldOpen, gridsOpen, pasteNote, fileNote, readers] as unknown[][]) list.splice(i, 1);
 	}
 
 	function onPoints(i: number, text: string) {
@@ -162,6 +179,8 @@
 			return;
 		const next = ruleTableFromRul(t, drm, f.name);
 		value[at] = next;
+		// The same file as the daily EWR's folds its grids away; another shows them.
+		gridsOpen[at] = dailyRepeat(next, daily) !== 'same';
 		pointsText[at] = next.points.join(', ');
 		pointsBad[at] = false;
 		fileNote[at] = {
@@ -212,6 +231,7 @@
 	{@const notes = Object.keys(errs).length ? [] : tableNotes(t)}
 	{@const u = UNIT[t.unit] ?? t.unit}
 	{@const site = siteLabel(t.siteNodeId)}
+	{@const repeat = dailyRepeat(t, daily)}
 	<!-- One card per table (issue #521): the head names the site and holds the table's actions. -->
 	<div class="rule" role="group" aria-labelledby="{uid}-{i}-h" aria-describedby="{uid}-{i}-file {uid}-{i}-status" data-testid="rule-table">
 		<div class="head">
@@ -408,16 +428,41 @@
 				</table>
 			</div>
 		{/snippet}
+		{#snippet grids()}
+			{@render grid('ewr', t.component === 'lowFlow' ? 'EWR (low flows)' : t.lowFlow ? 'EWR (total flow)' : 'EWR')}
+			{#if errs.ewr}<p class="err" role="alert">{errs.ewr}</p>{/if}
+			{#if t.component === 'total' && t.lowFlow}
+				{@render grid('lowFlow', 'Low flows (maintenance to drought)')}
+				{#if errs.lowFlow}<p class="err" role="alert">{errs.lowFlow}</p>{/if}
+			{/if}
+			{#if t.naturalSource === 'table' && t.natural}
+				{@render grid('natural', 'Natural flow')}
+				{#if errs.natural}<p class="err" role="alert">{errs.natural}</p>{/if}
+			{/if}
+		{/snippet}
 		<p id="{uid}-{i}-status" class="small status" class:err={pasteNote[i] && !pasteNote[i].ok} role="status" aria-label="Paste result">{pasteNote[i]?.text ?? ''}</p>
-		{@render grid('ewr', t.component === 'lowFlow' ? 'EWR (low flows)' : t.lowFlow ? 'EWR (total flow)' : 'EWR')}
-		{#if errs.ewr}<p class="err" role="alert">{errs.ewr}</p>{/if}
-		{#if t.component === 'total' && t.lowFlow}
-			{@render grid('lowFlow', 'Low flows (maintenance to drought)')}
-			{#if errs.lowFlow}<p class="err" role="alert">{errs.lowFlow}</p>{/if}
-		{/if}
-		{#if t.naturalSource === 'table' && t.natural}
-			{@render grid('natural', 'Natural flow')}
-			{#if errs.natural}<p class="err" role="alert">{errs.natural}</p>{/if}
+		{#if repeat}
+			<!-- The outlet's grids against the daily EWR's .rul tables shown above (issue #617): the same fold closed under
+			     its line, still here to open and edit; different ones open, with a note. One fold for both, so an edit that
+			     flips same ↔ differs never re-creates the field being typed in. -->
+			{#if repeat === 'same'}
+				<p class="small state" data-testid="rule-grids-repeat-link">Monthly compliance reads these grids; they are the tables in <a href="#set-ewr">The daily EWR at the outlet</a>.</p>
+			{:else}
+				<p class="small state" data-testid="rule-grids-differ">These grids differ from the tables of <a href="#set-ewr">The daily EWR at the outlet</a> above: monthly compliance reads these, the daily EWR those.</p>
+			{/if}
+			<Fold
+				{readonly}
+				name="Grids:"
+				line="{repeat === 'same' ? 'the daily EWR’s .rul tables' : 'not the daily EWR’s tables'} · {repeatedGrids(t)}"
+				body="none"
+				bind:open={() => gridsOpen[i] ?? repeat !== 'same', (v) => (gridsOpen[i] = v)}
+				spaced
+				testid="rule-grids-repeat"
+			>
+				{@render grids()}
+			</Fold>
+		{:else}
+			{@render grids()}
 		{/if}
 
 		<EwrHighFlowsEditor bind:value={() => t.highFlows ?? [], (v) => (t.highFlows = v)} {readonly} siteLabel={site} />
@@ -571,6 +616,10 @@
 	}
 	.check input {
 		width: auto;
+	}
+	.state {
+		margin: 0.25rem 0 0;
+		max-width: 75ch;
 	}
 	.notes {
 		color: var(--warning);

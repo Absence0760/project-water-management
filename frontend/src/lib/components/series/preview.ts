@@ -13,7 +13,9 @@
 // settings unrelated to this table, the other is model-private and applies a
 // threshold that is a natural-flow detail, not part of gap-fill itself).
 import {
+	compareSeriesNames,
 	hasRainInput,
+	isLandUnit,
 	chirpsFactorOn,
 	exclusionRanges,
 	fromEpochDay,
@@ -25,17 +27,19 @@ import {
 	toEpochDay,
 	type DailySeries,
 	type ModelInput,
+	type NetworkNode,
 	type ProjectModel,
 	type ProjectSettings,
 	type SeriesKind,
 	type SeriesMeta,
 	type StationRainDaySource
 } from '@water-management/engine';
-import { dayPrefix } from '#lib/format/number.js';
+import { dayPrefix, fmtNum } from '#lib/format/number.js';
 import { seriesKindLabel } from '#lib/series/kinds.js';
 import { firstOutletSeries } from '#lib/series/pick.js';
 import type { Daily } from './coverage';
 import type { AreaRainLines } from './derivedRain';
+import { asksStation } from './station';
 
 export type PreviewFlag = 'missing' | 'negative' | 'outlier' | 'flatline';
 
@@ -83,7 +87,10 @@ export interface PreviewColumn {
 	unit: string;
 	/** `area`: an area's rain under its station (issue #553), derived when viewed and never stored. */
 	group: 'series' | 'derived' | 'area';
-	/** Set for a `series` column and its `m3day:` companion — which series row it highlights. */
+	/**
+	 * Set for a `series` column and its `m3day:` companion — which series row it highlights — and for an area's raw
+	 * lines in its own view (the station, the area's CHIRPS), so the row filters and the flags read that series there.
+	 */
 	seriesId?: string;
 	/** Set for an `area` column: whose rain (null: the average catchment rainfall) and which line. */
 	area?: { nodeId: string | null; line: AreaLine };
@@ -320,6 +327,11 @@ export function parseValueComparison(query: string): ((v: number) => boolean) | 
 	}
 }
 
+/** The stored series whose values a set of columns shows: its series columns, and an area's raw lines in its own view. */
+export const shownSeriesIds = (cols: readonly PreviewColumn[]): string[] => [
+	...new Set(cols.filter((c) => c.seriesId && (c.group === 'series' || c.area)).map((c) => c.seriesId!))
+];
+
 /**
  * Filters `rows` for the Preview dialog's search box + toggles. A query
  * starting with a comparison operator ("> 20", "= 0") tests the visible
@@ -347,7 +359,7 @@ export function filterPreviewRows(rows: readonly PreviewRow[], { query, missingO
 // and where each day's rain used came from. The lines are computed by SeriesTab (derivedRain.ts, the engine's
 // stationAreaRain over the model input a run reads) and handed in; nothing here runs the engine.
 
-export type AreaLine = 'stationScaled' | 'chirpsCorrected' | 'rainUsed' | 'source';
+export type AreaLine = 'stationRaw' | 'stationScaled' | 'chirpsRaw' | 'chirpsCorrected' | 'rainUsed' | 'source';
 
 /** One area as the dialog gets it: the catchment (nodeId null) or a land unit, its lines, or why they couldn't be computed. */
 export interface PreviewArea {
@@ -360,24 +372,146 @@ export interface PreviewArea {
 export const areaColumnId = (nodeId: string | null, line: AreaLine): string => `area:${nodeId ?? 'catchment'}:${line}`;
 export const areaTitle = (a: Pick<PreviewArea, 'nodeId' | 'name'>): string => (a.nodeId === null ? 'Average catchment rainfall' : a.name);
 
-const AREA_LINES: readonly { line: AreaLine; what: string; unit: string; helpKey: string }[] = [
-	{ line: 'stationScaled', what: 'station × ratio', unit: 'mm', helpKey: 'preview.areaStationScaled' },
-	{ line: 'chirpsCorrected', what: 'CHIRPS corrected', unit: 'mm', helpKey: 'preview.areaChirpsCorrected' },
-	{ line: 'rainUsed', what: 'rain used', unit: 'mm', helpKey: 'preview.areaRainUsed' },
-	{ line: 'source', what: 'rain used from', unit: '', helpKey: 'preview.areaRainFrom' }
+/**
+ * Every line an area has, in the order a view shows them (issue #613). `inAll`: the line is one of the "All" view's
+ * columns (the Full CSV's four); the station as recorded and the area's CHIRPS as stored are columns of their own
+ * there already (stored series), so they sit beside their adjusted lines only in an area's own view.
+ */
+const AREA_LINES: readonly { line: AreaLine; what: string; unit: string; helpKey: string; inAll: boolean }[] = [
+	{ line: 'stationRaw', what: 'station raw', unit: 'mm', helpKey: 'preview.areaStationRaw', inAll: false },
+	{ line: 'stationScaled', what: 'station × ratio', unit: 'mm', helpKey: 'preview.areaStationScaled', inAll: true },
+	{ line: 'chirpsRaw', what: 'CHIRPS raw', unit: 'mm', helpKey: 'preview.areaChirpsRaw', inAll: false },
+	{ line: 'chirpsCorrected', what: 'CHIRPS corrected', unit: 'mm', helpKey: 'preview.areaChirpsCorrected', inAll: true },
+	{ line: 'rainUsed', what: 'rain used', unit: 'mm', helpKey: 'preview.areaRainUsed', inAll: true },
+	{ line: 'source', what: 'rain used from', unit: '', helpKey: 'preview.areaRainFrom', inAll: true }
 ];
 
-/** Each area's columns, in the Full CSV's order and words; an area without lines adds none, and one without CHIRPS no corrected column. */
+/** Whether an area has a line: the CHIRPS lines only with CHIRPS of its own (the corrected one also needs a pairing that isn't refused). */
+const hasLine = (lines: AreaRainLines, line: AreaLine) => (line === 'chirpsRaw' ? !!lines.chirpsRaw : line === 'chirpsCorrected' ? !!lines.chirpsCorrected : true);
+
+/** Each area's columns for the "All" view, in the Full CSV's order and words; an area without lines adds none, and one without CHIRPS no corrected column. */
 export function buildAreaColumns(areas: readonly PreviewArea[]): PreviewColumn[] {
 	const out: PreviewColumn[] = [];
 	for (const a of areas) {
 		if (!a.lines) continue;
 		for (const l of AREA_LINES) {
-			if (l.line === 'chirpsCorrected' && !a.lines.chirpsCorrected) continue;
+			if (!l.inAll || !hasLine(a.lines, l.line)) continue;
 			out.push({ id: areaColumnId(a.nodeId, l.line), label: `${areaTitle(a)}: ${l.what}`, unit: l.unit, group: 'area', area: { nodeId: a.nodeId, line: l.line }, helpKey: l.helpKey });
 		}
 	}
 	return out;
+}
+
+/**
+ * One area's own view of its lines (issue #613): every line, the station raw and adjusted, the CHIRPS raw and
+ * bias-corrected, the rain used and its source, each labelled with what it is made of. The ids are the "All"
+ * view's, so a column hidden there is hidden here too.
+ */
+export function areaViewColumns(a: PreviewArea, stationName: (id: string) => string | null = () => null, chirpsSeriesId?: string): PreviewColumn[] {
+	const lines = a.lines;
+	if (!lines) return [];
+	const f = lines.forcing;
+	const station = f.stationName || stationName(f.stationId) || 'Station';
+	const against = lines.correctAgainst === f.stationId ? station : (stationName(lines.correctAgainst) ?? 'a station no longer in the project');
+	const name = a.nodeId === null ? 'Catchment' : a.name;
+	const to = a.nodeId === null ? 'the catchment' : a.name;
+	const label: Record<AreaLine, string> = {
+		stationRaw: `${station} raw`,
+		stationScaled: `${station} adjusted to ${to} (× ${fmtNum(f.ratio, 3)})`,
+		chirpsRaw: `${name} CHIRPS raw`,
+		chirpsCorrected: `${name} CHIRPS bias-corrected (f(m) against ${against})`,
+		rainUsed: `${name} rain used`,
+		source: `${name} rain used from`
+	};
+	return AREA_LINES.filter((l) => hasLine(lines, l.line)).map((l) => ({
+		id: areaColumnId(a.nodeId, l.line),
+		label: label[l.line],
+		unit: l.unit,
+		group: 'area' as const,
+		area: { nodeId: a.nodeId, line: l.line },
+		helpKey: l.helpKey,
+		...(l.line === 'stationRaw' ? { seriesId: f.stationId } : l.line === 'chirpsRaw' && chirpsSeriesId ? { seriesId: chirpsSeriesId } : {})
+	}));
+}
+
+// --- Views: which columns Preview all data shows (issue #613, docs/ui.md § Data) ---
+
+/** A view's id, as the URL's `preview=` parameter carries it: all, unit:<node id>, stations, catchment or flow. */
+export type PreviewViewId = string;
+
+export interface PreviewView {
+	id: PreviewViewId;
+	label: string;
+	/** Where the View select lists it: All first, then the land units, then the groups. */
+	kind: 'all' | 'unit' | 'group';
+}
+
+export const PREVIEW_ALL: PreviewViewId = 'all';
+export const unitViewId = (nodeId: string): PreviewViewId => `unit:${nodeId}`;
+
+/**
+ * The views the View select offers: All, each land unit by name in the model's order, then "All rainfall stations",
+ * "Average catchment rainfall" (when Settings assigns the catchment a station) and "All flow", each only when it
+ * would show something.
+ */
+export function previewViews(
+	nodes: readonly NetworkNode[],
+	settings: ProjectSettings | null | undefined,
+	list: readonly Pick<SeriesMeta, 'kind' | 'siteNodeId'>[]
+): PreviewView[] {
+	const views: PreviewView[] = [{ id: PREVIEW_ALL, label: 'All', kind: 'all' }];
+	for (const n of nodes) if (isLandUnit(n)) views.push({ id: unitViewId(n.id), label: n.name, kind: 'unit' });
+	if (list.some(asksStation)) views.push({ id: 'stations', label: 'All rainfall stations', kind: 'group' });
+	if (settings?.rainStations?.catchment?.stationId) views.push({ id: 'catchment', label: 'Average catchment rainfall', kind: 'group' });
+	if (list.some((s) => s.kind.startsWith('flow_'))) views.push({ id: 'flow', label: 'All flow', kind: 'group' });
+	return views;
+}
+
+/** The view `id` names when it is one of `views`, else All (a stale link: the unit was deleted, the station unassigned). */
+export const resolveView = (views: readonly PreviewView[], id: string | null | undefined): PreviewViewId => (id && views.some((v) => v.id === id) ? id : PREVIEW_ALL);
+
+/** What a view's columns are picked from, beside the "All" columns. */
+export interface ViewContext {
+	list: readonly SeriesMeta[];
+	areas: readonly PreviewArea[];
+}
+
+/** The first of `list` by the run's own pick (byte order of the name), or undefined. */
+const firstByName = <T extends Pick<SeriesMeta, 'name'>>(list: readonly T[]): T | undefined => [...list].sort((a, b) => compareSeriesNames(a.name, b.name))[0];
+
+/**
+ * The columns of a view, in its order. All: `columns` as they are (today's table). A land unit or the average
+ * catchment rainfall: its own lines (areaViewColumns), then the series stored for it (sited at the unit, or the
+ * catchment's own rain), each flow record with its m³/day beside it, less the CHIRPS series its CHIRPS raw line
+ * already shows. All rainfall stations: the stations. All flow: every flow record with its m³/day, and the
+ * calibration exclusions. `columns` is buildPreviewColumns + buildAreaColumns; a series column is taken from it, so
+ * its label and help stay the All view's.
+ */
+export function columnsForView(view: PreviewViewId, columns: readonly PreviewColumn[], ctx: ViewContext): PreviewColumn[] {
+	if (view === PREVIEW_ALL) return [...columns];
+	const bySeries = (ids: readonly string[]) => {
+		const out: PreviewColumn[] = [];
+		for (const id of ids)
+			for (const c of columns) if (c.seriesId === id && (c.group === 'series' || c.id === m3DayColumnId(id))) out.push(c);
+		return out;
+	};
+	const names = new Map(ctx.list.filter(asksStation).map((s) => [s.id, s.name || 'Unnamed station']));
+	const stationName = (id: string) => names.get(id) ?? null;
+	const areaView = (nodeId: string | null, stored: readonly SeriesMeta[]) => {
+		const area = ctx.areas.find((a) => a.nodeId === nodeId);
+		// The CHIRPS series a run reads for the area is the CHIRPS raw line already.
+		const shown = area?.lines?.chirpsRaw ? firstByName(stored.filter((s) => s.kind === 'rain_chirps_mm')) : undefined;
+		const lines = area ? areaViewColumns(area, stationName, shown?.id) : [];
+		return [...lines, ...bySeries(stored.filter((s) => s !== shown).map((s) => s.id))];
+	};
+	if (view === 'stations') return bySeries(ctx.list.filter(asksStation).map((s) => s.id));
+	if (view === 'flow') return [...bySeries(ctx.list.filter((s) => s.kind.startsWith('flow_')).map((s) => s.id)), ...columns.filter((c) => c.id === 'excluded')];
+	if (view === 'catchment') return areaView(null, ctx.list.filter((s) => !s.siteNodeId && s.kind.startsWith('rain_') && !asksStation(s)));
+	if (view.startsWith('unit:')) {
+		const nodeId = view.slice('unit:'.length);
+		return areaView(nodeId, ctx.list.filter((s) => s.siteNodeId === nodeId));
+	}
+	return [...columns];
 }
 
 /** The source of a day's rain used, in words (the CSV writes the engine's codes: station, chirps, fallback, none). */
@@ -393,6 +527,15 @@ export function areaCell(lines: AreaRainLines, line: AreaLine, date: string): nu
 	const i = toEpochDay(date) - toEpochDay(lines.startDate);
 	if (i < 0 || i >= lines.rainUsed.length) return null;
 	if (line === 'source') return RAIN_FROM_LABEL[lines.source[i]!];
-	const v = line === 'rainUsed' ? lines.rainUsed[i] : line === 'stationScaled' ? lines.stationScaled[i] : lines.chirpsCorrected?.[i];
+	const v =
+		line === 'rainUsed'
+			? lines.rainUsed[i]
+			: line === 'stationScaled'
+				? lines.stationScaled[i]
+				: line === 'stationRaw'
+					? lines.stationRaw[i]
+					: line === 'chirpsRaw'
+						? lines.chirpsRaw?.[i]
+						: lines.chirpsCorrected?.[i];
 	return v == null || !Number.isFinite(v) ? null : v;
 }

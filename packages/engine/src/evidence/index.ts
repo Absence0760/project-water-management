@@ -10,4 +10,5 @@ export * from './bundle';
 export * from './prompts';
 export * from './riverWorks';
 export * from './locality';
+export * from './damObservations';
 export * from '../geo/localityMap';

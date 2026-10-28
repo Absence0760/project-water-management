@@ -1,10 +1,22 @@
         Desktop Version 2, Generated on 01/01/2026
         Summary of Desktop (Version 2) estimate for Quaternary Catchment Area : SYNTHETIC EXAMPLE
+        Total Runoff : Synthetic incremental
 
         Annual Flows (Mill. cu. m or index values):
         MAR               =   49.800
+        S.Dev.            =   21.300
+        CV                =    0.428
+        Q75               =    0.290
+        Q75/MMF           =    0.070
+        BFI Index         =    0.310
+        CV(JJA+JFM) Index =    1.900
 
         Ecological Category = C
+
+        Total IFR         =   23.490 (47.17 %MAR)
+        Maint. Lowflow    =   17.430 (35.00 %MAR)
+        Drought Lowflow   =    2.490 ( 5.00 %MAR)
+        Maint. Highflow   =    6.060 (12.17 %MAR)
 
         Monthly Distributions (Mill. cu. m.)
         Distribution Type : Synthetic

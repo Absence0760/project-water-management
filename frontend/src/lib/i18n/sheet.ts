@@ -100,6 +100,11 @@ export const SECTIONS: Record<string, string> = {
  * edited message can't leave its note behind.
  */
 export const NOTES: Record<string, string> = {
+	'Satellite views: {credit}.': '{credit} is “Digital Earth Africa, CC BY 4.0”, the data’s owner and licence: it stays as it is, untranslated.',
+	'On {date} a satellite saw water over {area} of the {full} your dam covers when full.':
+		'{date} is a day like “10 Dec 2021”, {area} and {full} areas like “2.0 ha” and “5.0 ha”. The satellite measures the water’s surface (its area), not how much water there is; no percentage on purpose, since the page already gives how full the dam is by volume.',
+	'On {date} a satellite saw water over {area}, more than the {full} your dam covers when full.':
+		'{date} is a day like “10 Dec 2021”, {area} and {full} areas like “4.4 ha” and “4.0 ha”: the water spread past the dam’s full area (it is likely spilling).',
 	'Reserve not met on {pct} % of days': '{pct} is a number like “58.5”. The ecological reserve is the flow the river must keep for its ecosystem (“ekologiese reserwe”).',
 	'It costs the river {days} more days a year below the reserve': 'First half of one sentence; the second half is one of the three “and the hydrological unit gets …” rows, joined with a comma.',
 	'It gives the river {days} fewer days a year below the reserve': 'First half of one sentence; the second half is one of the three “and the hydrological unit gets …” rows, joined with a comma.',

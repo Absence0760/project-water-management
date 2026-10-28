@@ -2766,6 +2766,17 @@ In short:
     only those two hosts over HTTPS (`FEED_HOSTS`, `feeds/http.ts`) and
     follows redirects itself, at most 3, each re-checked, so a redirect
     can't send the fetcher (open egress) to another host or plain HTTP.
+    The WOfS pass (issue #604 R5-C, `backend/src/dams/observed/wofs/`)
+    adds Digital Earth Africa's STAC search (`explorer.digitalearth.africa`)
+    and its public bucket (`deafrica-services.s3.af-south-1.amazonaws.com`)
+    to `FEED_HOSTS`. What a STAC answer may point the fetcher at is
+    checked too (`stac.ts`): an item's water asset only as a `wofs_ls/…tif`
+    key in that bucket (no `..`, no other bucket or host), and a `next`
+    page only to the same search endpoint, at most 20 pages. A request
+    carries a traced dam's lon/lat box and dates, never its name, project
+    or owner; the scenes are public and read anonymously, and the COG
+    reader refuses anything but the expected format, with every tile's
+    inflated size bounded (`cog.ts`).
     `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
     On Lambda only the fetcher may build a live client at all
@@ -2879,6 +2890,37 @@ In short:
     feeds, `app_dws_feed_stations` (worker only), never a project or a
     user. The fetcher's role reaches `dws/` only (get and put, no delete),
     and its log lines carry counts and a reason, never a station.
+  - **Dam observations** (issue #604 R5, architecture.md § Dam
+    observations) follow the same pattern. The worker writes
+    `dams/wanted.json` to the private mirror bucket: the uids of matched
+    waterbodies (public DE Africa ids) and **every traced dam's outline**
+    with its map feature id, from all projects (`app_dam_outlines`, worker
+    only). An outline is a project's drawing, so it leaves the VPC only to
+    our own bucket, for our own fetcher; what DE Africa receives is a
+    waterbody uid in a public file path (Waterbodies), or for WOfS a STAC
+    search over the dam's box **snapped outward to a 0.05° grid** (about
+    5.5 km; `stac.ts` `snapSearchBox`), never the outline or its exact box,
+    and then HTTP range reads of the scenes' COGs, which reveal only which
+    512 × 512-pixel tiles (about 15 km at 30 m) of a scene are read. The
+    sum over the exact outline runs in our fetcher. Never a project, a name
+    or a user. On that basis DE Africa is not treated as a sub-processor
+    (to be confirmed by the CISO / Security Analyst). The fetcher's role reaches `dams/` only (get and put, no
+    delete); the files coming back are schema-checked (`handover.ts`) and
+    bounded again by `app_dam_observation_load`, and land only on dams the
+    file's uid is matched to, or the dam its feature id names. The live
+    client's `FEED_HOSTS` gained `deafrica-services.s3.af-south-1.amazonaws.com`
+    only; the log lines carry counts and a reason, never a uid or dam.
+  - **Reference evaporation in the copy** (issue #604 R5-E). The
+    mirror-ingest Lambda (outside the VPC) also calls the Copernicus CDS for
+    AgERA5, with ERA5-Land's CDS key read from Secrets Manager at run time
+    (never logged; Terraform creates the secret empty), and NASA POWER's
+    public API (no key), at most a request a second, region-wide, never for a
+    project or a person. The worker reads the two products from the private
+    bucket as untrusted input: each manifest is schema-checked
+    (`mirror/manifest.ts`, the URLs and coverage per product) and each value
+    is refused outside 0–30 mm a day (`feeds/fromMirrorEt0.ts`) before a feed
+    writes it. The fetcher refuses an `agera5_et0` request: no per-feed path
+    reaches either upstream.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no
@@ -3425,7 +3467,30 @@ placed points. The server never trusts the browser with geometry:
   `farms/farm-map.db.test.ts` (neighbour as the negative, each farmer's own
   as the positive control) and the farmer-privacy sweep, which now seeds a
   neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
-  orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207), `river_reference` (171) and the gazetteer (`gazetteer_reference`, 225) are public reference data, readable by any
+  orientation kinds only). The farm dam page's satellite views,
+  `GET /projects/:id/farm/:nodeId/dam-observed` (issue #604 R5-B), work the
+  same way: `requireFarm` first (another farm answers 404, a viewer kept from
+  the volumes the same 403 as the rest of the farm view), then queries that
+  name the farm (`observedFeatures(…, nodeId)`: only this farm's own `dam`
+  polygons, and `dam_observation` only for those feature ids), summed over
+  them as the comparison does; the answer is the count of outlines, the
+  newest clear view (date, area, source), the full area from the farm's own
+  node, and the credit, with no feature id, node id, Waterbodies uid,
+  upstream key, match status or per-polygon figure. 249's farmer policies
+  (`dam_observation_select_farmer`, `dam_waterbody_match_select_farmer`,
+  through `app_farm_dam_features()`) are the second layer. The credit,
+  "Digital Earth Africa, CC BY 4.0", is shown on the card wherever the
+  figure is (the licence asks for it). Guarded by
+  `farms/farmer-privacy.security.db.test.ts` (two farms' dam polygons with
+  views and matches; the exact answer for the farmer's own, none of the
+  neighbour's ids, uid, upstream key or area; the neighbour's farm 404; the
+  neighbour reading their own as the positive control; RLS rows per table)
+  and `dams/observed/observed.db.test.ts`. The sweep's `FARMER_MAY_READ`
+  did need `dam_observation` and `dam_waterbody_match`: they are keyed by
+  the map feature, not a node, so the sweep can't tie a row to a farm
+  without them, and once it seeds views it sees each farmer read their own
+  dam's rows (the entries allow exactly the `dam` features on the farmer's
+  own farms). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the orchard and vine grid (`crop_type_dataset`, `crop_type_cell_reference`, 259, empty in production until SANLC's terms are recorded), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207), `river_reference` (171) and the gazetteer (`gazetteer_reference`, 225) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
   schema owner). The gazetteer's read policy is `FOR SELECT USING (true)`
   with `SELECT` granted to `water_app` and no write policy or grant; it is

@@ -380,6 +380,7 @@ describe('applyReport', () => {
 			forcingChanged: false,
 			chirpsSourceChanged: false,
 			apanDailyChanged: false,
+			et0DailyChanged: false,
 			chirpsFactorsChanged: false,
 			observedOriginChanged: false,
 			flowFillChanged: false,

@@ -15,3 +15,13 @@ reason = "Prototype pollution fixed in xlsx 0.19.3; the repo pins 0.20.3 by CDN 
 id = "GHSA-5pgg-2g8v-p4x9"
 ignoreUntil = 2027-03-31
 reason = "ReDoS fixed in xlsx 0.20.2; the repo pins 0.20.3 by CDN URL, which OSV can't read as a version."
+
+# deepmerge 4.3.1 (a build-time dependency of @sveltejs/vite-plugin-svelte) is
+# the last release, and GHSA-gcqx-w48m-w2h4 has no fixed version. The repo
+# patches it (patches/deepmerge@4.3.1.patch, pnpm-workspace.yaml) and
+# frontend/src/lib/deepmergePatch.security.test.ts fails if the patch stops
+# applying. Remove this entry when upstream ships a fix.
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-03-31
+reason = "No fixed deepmerge release; the repo patches 4.3.1 to refuse a __proto__ key, guarded by deepmergePatch.security.test.ts."

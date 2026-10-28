@@ -840,3 +840,19 @@ variable "cloudfront_price_class" {
     error_message = "Must be PriceClass_100, PriceClass_200 or PriceClass_All."
   }
 }
+
+variable "dam_observations_enabled" {
+  description = "Turn on the dam observations (dam_observations.tf, issue #604 R5): the hourly EventBridge rule that invokes the fetcher with {\"mode\":\"dams-weekly\"} (DE Africa Waterbodies, each uid re-read once a week, and WOfS, each dam's newest scenes once a day and its history with the rest of the time), the fetcher's reads and writes under dams/ in the mirror bucket, the worker's write of dams/wanted.json, and the passes' heartbeat and WOfS recency alarms. It also sets the worker's DAM_OBSERVATIONS (jobs.tf), which turns its dams tick on; the plan refuses the flag if the worker's environment ever loses it (dam_observations.tf terraform_data.dam_observations_gate). Off (the default) until a backend release with the mode is deployed and a dam is traced, or the alarms fire for passes that don't exist yet. Runbook: docs/deployment.md § Dam observations."
+  type        = bool
+  default     = false
+}
+
+variable "dam_wofs_recency_alarm_days" {
+  description = "Alarm when the newest WOfS observation any traced dam holds is more than this many days old (DamObservationAgeDays{Source=wofs}). Landsat 8 and 9 pass every 8 days together, cloud hides some passes, DE Africa publishes a scene within days, and each dam is re-read weekly: 60 days is two months with no clear pass anywhere, which means WOfS or our pass has stopped."
+  type        = number
+  default     = 60
+  validation {
+    condition     = var.dam_wofs_recency_alarm_days >= 21 && floor(var.dam_wofs_recency_alarm_days) == var.dam_wofs_recency_alarm_days
+    error_message = "A whole number of days, at least 21: a cloudy month over the region shouldn't page anyone."
+  }
+}

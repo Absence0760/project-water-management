@@ -12,13 +12,32 @@
 // total Reserve (unlabelled, right after the points), "Reserve Flows without
 // High Flows" and "Natural Duration curves".
 //
-// .tab: "MAR = 92.4"-style and the other annual lines, "Ecological Category = B",
-// and the "Monthly Distributions (Mill. cu. m.)" table: per month the natural
-// mean, SD and CV, then the modified flows: low flows (maintenance,
-// drought), high flows (maintenance) and the total flows (maintenance), the
-// last column, in Mm³ a month.
+// .tab: header lines ("Desktop Version 2, Generated on …", "Summary of
+// Desktop (Version 2) estimate for Quaternary Catchment Area : …", "Total
+// Runoff : …"), the "Annual Flows" block of `label = value` lines (MAR,
+// S.Dev., CV, Q75, …), "Ecological Category = B", the IFR summary (Total IFR,
+// Maint. Lowflow, Drought Lowflow, Maint. Highflow, each "= Mm³ (% MAR)"),
+// "Distribution Type : …" and the "Monthly Distributions (Mill. cu. m.)"
+// table: per month the natural mean, SD and CV, then the modified flows: low
+// flows (maintenance, drought), high flows (maintenance) and the total flows
+// (maintenance), the last column, in Mm³ a month. Every part is kept (issue
+// #617), so Settings can show the whole file; the TAB flows are the last
+// column.
 import type { ExampleFile } from '#lib/components/common/formatHelp.js';
-import { DEFAULT_ASSURANCE_POINTS, EWR_PERCENTILE_POINTS, type EwrDailySource, type EwrRuleTable } from '@water-management/engine';
+import {
+	DEFAULT_ASSURANCE_POINTS,
+	DRM_FILE_LABEL_MAX,
+	DRM_FILE_LINES_MAX,
+	DRM_FILE_NAME_MAX,
+	DRM_FILE_TEXT_MAX,
+	EWR_PERCENTILE_POINTS,
+	type EwrDailySource,
+	type EwrRuleTable,
+	type EwrRulFile,
+	type EwrTabAnnualLine,
+	type EwrTabFile,
+	type EwrTabIfrLine
+} from '@water-management/engine';
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 /** Water-year row (Oct = 0) of a three-letter month name, or null. */
@@ -55,6 +74,17 @@ export interface TabFile {
 	marMm3: number | null;
 	category: string | null;
 	generated: string | null;
+	/** What the estimate is for (the "Summary of … :" line's value), or null. */
+	title: string | null;
+	/** The "Total Runoff :" line's value, as written, or null. */
+	runoff: string | null;
+	/** The Annual Flows block, every `label = value` line in order (MAR among them). */
+	annual: EwrTabAnnualLine[];
+	/** The IFR summary: Total IFR, Maint. Lowflow, Drought Lowflow, Maint. Highflow, each Mm³ a year and % MAR. */
+	ifr: EwrTabIfrLine[];
+	distributionType: string | null;
+	/** The monthly table, 12 rows (Oct … Sep) × 7 columns, Mm³ a month (TAB_COLUMNS). */
+	monthlyMcm: number[][];
 	/** The monthly table's last column, "Total Flows, Maint.", Mm³ a month, Oct … Sep. */
 	totalMaintMcm: number[];
 	/** The same, converted to each month's mean flow, m³/s (February 28 days). */
@@ -147,7 +177,80 @@ export function parseRulFile(text: string): DrmParse<RulFile> {
 	return { kind: 'rul', unit, category: first(lines, CATEGORY), generated: generatedOf(lines), points, total: total.rows, lowFlow: lowFlow as number[][] | null, natural: natural as number[][] | null };
 }
 
-/** Read a DRM summary file (.tab). Errors name the line that didn't parse. */
+/** Header text as kept: control characters and runs of white space to one space, trimmed, bounded. */
+const cleanText = (v: string, max = DRM_FILE_TEXT_MAX): string | null => {
+	const t = v
+		.replace(/[\u0000-\u001f\u007f]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.slice(0, max);
+	return t || null;
+};
+/** The value after "<label> :" on the first line that has it. */
+const colonValue = (lines: string[], re: RegExp): string | null => {
+	for (const l of lines) {
+		const m = re.exec(l);
+		if (m) return cleanText(m[1]!);
+	}
+	return null;
+};
+const LABEL_LINE = /^\s*([^=:]+?)\s*=\s*(.*?)\s*$/;
+const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
+const labelOf = (raw: string, i: number): DrmParse<string> => {
+	const label = cleanText(raw, Infinity) ?? '';
+	return label.length > DRM_FILE_LABEL_MAX ? { error: `${lineOf(i)}: the label “${label.slice(0, 30)}…” is longer than ${DRM_FILE_LABEL_MAX} characters.` } : label;
+};
+
+/**
+ * The .tab's Annual Flows block: every `label = value` line after its
+ * heading, up to the first blank line (any DRM version's lines are kept).
+ * Empty when the file has no such heading. Errors name the line.
+ */
+function annualBlock(lines: string[], before: number): DrmParse<{ annual: EwrTabAnnualLine[]; end: number }> {
+	const at = lines.findIndex((l, i) => i < before && /^\s*Annual\s+Flows/i.test(l));
+	if (at < 0) return { annual: [], end: -1 };
+	const annual: EwrTabAnnualLine[] = [];
+	let i = at + 1;
+	while (i < before && !lines[i]!.trim()) i++;
+	for (; i < before; i++) {
+		const m = LABEL_LINE.exec(lines[i]!);
+		if (!lines[i]!.trim() || !m) break;
+		const label = labelOf(m[1]!, i);
+		if (typeof label !== 'string') return label;
+		const value = Number(m[2]);
+		if (!NUMBER.test(m[2]!) || !(value >= 0)) return { error: `${lineOf(i)}: the annual flows line “${lines[i]!.trim().slice(0, 60)}” needs a number of 0 or more after the =.` };
+		annual.push({ label, value });
+	}
+	if (annual.length > DRM_FILE_LINES_MAX) return { error: `${lineOf(at)}: the Annual Flows block has more than ${DRM_FILE_LINES_MAX} lines.` };
+	return { annual, end: i };
+}
+
+/**
+ * The .tab's IFR summary: the `label = Mm³ (… % MAR)` lines between the
+ * annual block and the monthly table, but for the REC's line. Errors name
+ * the line.
+ */
+function ifrLines(lines: string[], from: number, before: number): DrmParse<EwrTabIfrLine[]> {
+	const out: EwrTabIfrLine[] = [];
+	for (let i = from; i < before; i++) {
+		const m = LABEL_LINE.exec(lines[i]!);
+		if (!m || CATEGORY.test(lines[i]!) || /^\s*MAR\s*=/i.test(lines[i]!)) continue;
+		const label = labelOf(m[1]!, i);
+		if (typeof label !== 'string') return label;
+		const mcmText = /^\S+/.exec(m[2]!)?.[0] ?? '';
+		const mcm = Number(mcmText);
+		const pct = /([+-]?[\d.]+)\s*%\s*MAR/i.exec(m[2]!);
+		const pctMar = pct ? Number(pct[1]) : null;
+		if (!NUMBER.test(mcmText) || !(mcm >= 0) || (pctMar !== null && !(pctMar >= 0))) {
+			return { error: `${lineOf(i)}: the IFR summary line “${lines[i]!.trim().slice(0, 60)}” needs a volume of 0 or more (Mm³) and its % MAR.` };
+		}
+		out.push({ label, mcm, pctMar });
+	}
+	if (out.length > DRM_FILE_LINES_MAX) return { error: `The IFR summary has more than ${DRM_FILE_LINES_MAX} lines.` };
+	return out;
+}
+
+/** Read a DRM summary file (.tab), every part of it. Errors name the line that didn't parse. */
 export function parseTabFile(text: string): DrmParse<TabFile> {
 	const lines = split(text);
 	const marAt = lines.findIndex((l) => /^\s*MAR\s*=/i.test(l));
@@ -165,17 +268,76 @@ export function parseTabFile(text: string): DrmParse<TabFile> {
 	while (at < lines.length && !/^\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+[-\d.]/i.test(lines[at]!)) at++;
 	if (at >= lines.length) return { error: `The monthly table (${lineOf(tableAt)}) has no month rows.` };
 	// Natural mean, SD, CV; low flows maint., drought; high flows maint.; total flows maint.
-	const b = monthBlock(lines, at, 7, 'monthly distributions');
+	const b = monthBlock(lines, at, TAB_COLUMNS.length, 'monthly distributions');
 	if ('error' in b) return b;
-	const totalMaintMcm = b.rows.map((r) => r[6]!);
+	const annual = annualBlock(lines, tableAt);
+	if ('error' in annual) return annual;
+	const ifr = ifrLines(lines, annual.end < 0 ? 0 : annual.end, tableAt);
+	if ('error' in ifr) return ifr;
+	const totalMaintMcm = b.rows.map((r) => r[TAB_TOTAL_COLUMN]!);
+	const generated = generatedOf(lines);
 	return {
 		kind: 'tab',
 		marMm3,
 		category: first(lines, CATEGORY),
-		generated: generatedOf(lines),
+		generated: generated ? cleanText(generated) : null,
+		title: colonValue(lines, /^\s*Summary\s+of\b.*?:\s*(.*)$/i),
+		runoff: colonValue(lines, /^\s*Total\s+Runoff\s*:\s*(.*)$/i),
+		annual: annual.annual,
+		ifr,
+		distributionType: colonValue(lines, /^\s*Distribution\s+Type\s*:\s*(.*)$/i),
+		monthlyMcm: b.rows,
 		totalMaintMcm,
 		totalMaintM3s: totalMaintMcm.map((v, wy) => mcmMonthToM3s(v, wy))
 	};
+}
+
+/**
+ * The .tab's monthly table columns, under the DRM's two-level headings
+ * (Natural flows; Modified flows (IFR)): `group`, then the column's own name.
+ */
+export const TAB_COLUMNS: readonly { group: 'natural' | 'modified'; label: string }[] = [
+	{ group: 'natural', label: 'Mean' },
+	{ group: 'natural', label: 'SD' },
+	{ group: 'natural', label: 'CV' },
+	{ group: 'modified', label: 'Low flows, maint.' },
+	{ group: 'modified', label: 'Low flows, drought' },
+	{ group: 'modified', label: 'High flows, maint.' },
+	{ group: 'modified', label: 'Total flows, maint.' }
+];
+/** The column the TAB flows are: Total flows, maint. */
+export const TAB_TOTAL_COLUMN = 6;
+
+/** What is kept of a parsed .tab with the daily EWR's source (issue #617): the whole file, parsed, under its name. */
+export function tabFileRecord(tab: TabFile, fileName: string): EwrTabFile {
+	return {
+		name: cleanText(fileName, DRM_FILE_NAME_MAX) ?? 'file.tab',
+		generated: tab.generated,
+		title: tab.title,
+		runoff: tab.runoff,
+		annual: tab.annual.map((l) => ({ ...l })),
+		category: tab.category,
+		ifr: tab.ifr.map((l) => ({ ...l })),
+		distributionType: tab.distributionType,
+		monthlyMcm: tab.monthlyMcm.map((r) => [...r])
+	};
+}
+
+/** What is kept of a parsed .rul's header with the daily EWR's source (issue #617): name, date, unit and REC. */
+export function rulFileRecord(rul: RulFile, fileName: string): EwrRulFile {
+	return { name: cleanText(fileName, DRM_FILE_NAME_MAX) ?? 'file.rul', generated: rul.generated ? cleanText(rul.generated) : null, unit: rul.unit, category: rul.category ? cleanText(rul.category) : null };
+}
+
+/** The kept .tab's TAB flows column converted to m³/s (each month's mean flow, February 28 days). */
+export const tabFileM3s = (f: Pick<EwrTabFile, 'monthlyMcm'>): number[] => f.monthlyMcm.map((r, wy) => mcmMonthToM3s(r[TAB_TOTAL_COLUMN]!, wy));
+
+/** The TAB flows were changed after the kept .tab was loaded (typed, pasted): any month off its converted column (relative 1e-9). */
+export function tabFlowsEdited(tabM3s: readonly (number | null)[] | null, f: Pick<EwrTabFile, 'monthlyMcm'>): boolean {
+	const fromFile = tabFileM3s(f);
+	return !tabM3s || fromFile.some((v, m) => {
+		const x = tabM3s[m];
+		return x === null || x === undefined || Math.abs(x - v) > 1e-9 * Math.max(Math.abs(v), 1e-12);
+	});
 }
 
 /** A DRM file of either kind, by its content; null when the text is neither (a CSV or a paste). */
@@ -266,22 +428,37 @@ export function exampleRulFile(unit: RulFile['unit'] = 'm3s'): string {
 	].join('\r\n');
 }
 
-/** A synthetic .tab file, CRLF line ends. */
+/** A synthetic .tab file in the DRM's whole layout, CRLF line ends (invented numbers). */
 export function exampleTabFile(): string {
 	const mean = SEASON.map((s) => s * 4);
 	const lowM = mean.map((v) => v * 0.35);
 	const drought = mean.map((v) => v * 0.05);
 	const high = mean.map((v, i) => (SEASON[i]! > 1 ? v * 0.15 : 0));
 	const total = lowM.map((v, i) => v + high[i]!);
-	const mar = mean.reduce((a, b) => a + b, 0);
+	const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+	const mar = sum(mean);
+	const line = (label: string, v: number) => `        ${label.padEnd(18)}= ${f3(v)}`;
+	const ifr = (label: string, v: number) => `${line(label, v)} (${((100 * v) / mar).toFixed(2).padStart(5)} %MAR)`;
 	return [
 		'        Desktop Version 2, Generated on 01/01/2026',
 		'        Summary of Desktop (Version 2) estimate for Quaternary Catchment Area : SYNTHETIC EXAMPLE',
+		'        Total Runoff : Synthetic incremental',
 		'',
 		'        Annual Flows (Mill. cu. m or index values):',
-		`        MAR               = ${f3(mar)}`,
+		line('MAR', mar),
+		line('S.Dev.', 21.3),
+		line('CV', 0.428),
+		line('Q75', 0.29),
+		line('Q75/MMF', 0.07),
+		line('BFI Index', 0.31),
+		line('CV(JJA+JFM) Index', 1.9),
 		'',
 		'        Ecological Category = C',
+		'',
+		ifr('Total IFR', sum(total)),
+		ifr('Maint. Lowflow', sum(lowM)),
+		ifr('Drought Lowflow', sum(drought)),
+		ifr('Maint. Highflow', sum(high)),
 		'',
 		'        Monthly Distributions (Mill. cu. m.)',
 		'        Distribution Type : Synthetic',

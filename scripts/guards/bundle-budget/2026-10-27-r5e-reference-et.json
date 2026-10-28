@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "PR #606: R5-E's daily reference evaporation UI (Settings evaporation option, the feed) merged into the combined branch; measured 2133 KB against 2130 KB after build:frontend"
+}

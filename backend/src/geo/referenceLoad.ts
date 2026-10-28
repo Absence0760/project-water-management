@@ -42,6 +42,7 @@ import { GEONAMES_SOURCE } from './gazetteer.js';
 import { placeRecords, placesSummary, replacePlaces } from './loadGazetteer.js';
 import { rainMapFromJson, replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
 import { parseTileProvenance, recordReferenceOrigin, recordTileProvenance, referenceLoadOf, TILE_ARCHIVES, type ReferenceLoadRecord } from './referenceOrigin.js';
+import { replaceWaterbodies, WATERBODIES_SOURCE, waterbodyRecords } from '../dams/observed/loadWaterbodies.js';
 
 /** One dataset of a kind allowed dataset by dataset: its own Sources row, and what a load stores with it. */
 export type ReferenceDataset = {
@@ -113,6 +114,14 @@ export const REFERENCE_KINDS = {
 		sourcesRows: ['Hydrological station catalogue'],
 		why: "the DWS station catalogue's licence is unconfirmed (followups.md, Decision: the DWS station catalogue's licence)"
 	},
+	// SANLC's orchard and vine grid (259, issue #604 R5-D): built and loaded locally (`pnpm import:crop-types`), refused
+	// here until its terms are recorded. To unblock: the Sources row, then status 'allowed' with a file and a loader
+	// branch below reading cropTypesFromJson into replaceCropTypeDataset (geo/cropTypeGrid.ts), from the file `--out` writes.
+	'crop-types': {
+		status: 'blocked',
+		sourcesRows: ['South African National Land Cover (SANLC)'],
+		why: "SANLC's terms are not yet recorded (followups.md, Decision: SANLC's licence)"
+	},
 	// The tile archives' provenance (248): not data, a record of where the archive
 	// the tiles bucket serves came from, which tiles-upload.ts --production writes
 	// beside the originals it keeps. One label per archive, each decided by its
@@ -126,6 +135,15 @@ export const REFERENCE_KINDS = {
 		datasets: Object.fromEntries(
 			Object.entries(TILE_ARCHIVES).map(([archive, a]) => [archive, { status: 'allowed', sourcesRow: a.sourcesRow, source: a.what, version: 'the provenance file’s', attribution: a.licence }])
 		) as Record<keyof typeof TILE_ARCHIVES, ReferenceDataset>
+	},
+	// DE Africa Waterbodies polygons, for matching traced dams to their time series (261, issue #604 R5).
+	waterbodies: {
+		status: 'allowed',
+		sourcesRows: ['Digital Earth Africa Waterbodies'],
+		file: /\.(geo)?json(\.gz)?$/,
+		what: 'a GeoJSON FeatureCollection of waterbody polygons with a `uid` each (the v0.0.3 historical extent clipped to your region with ogr2ogr, docs/maps.md § Waterbodies)',
+		// A province's clip is a few MB; the continent's ~700 000 polygons about 900 MB as gpkg. Past this it is not one region's.
+		limits: { object: 64 * 1024 * 1024, text: 128 * 1024 * 1024 }
 	},
 	'map-grid': {
 		status: 'allowed',
@@ -417,6 +435,23 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 			throw new LoadError(`${req.key}: no place to load`, 'empty', 'the file has no place the load can take (a GeoNames dump of South Africa and its neighbours: 19 tab-separated columns)');
 		try {
 			const written = await replacePlaces(client, req.dataset, got.records, origin);
+			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
+		} catch (e) {
+			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
+		}
+	}
+	if (req.kind === 'waterbodies') {
+		try {
+			doc = JSON.parse(text);
+		} catch {
+			throw new LoadError(`${req.key} is not JSON`, 'unreadable', 'the file is not JSON');
+		}
+		const got = waterbodyRecords(doc);
+		for (const p of got.problems.slice(0, 50)) log(`skipped: ${p}`);
+		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more skipped`);
+		if (!got.records.length) throw new LoadError(`${req.key}: no waterbody to load`, 'empty', 'the file has no waterbody polygon with a uid');
+		try {
+			const written = await replaceWaterbodies(client, req.dataset, got.records, req.source ?? WATERBODIES_SOURCE, origin);
 			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
 		} catch (e) {
 			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');

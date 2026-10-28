@@ -9,7 +9,7 @@
 //   is left to change. An editor opens it from the head's Rain from the map
 //   and sees the proposal with no button. The panel passes axe.
 // - A unit's form takes its MAP and asks for its source before Save.
-// - Settings → Flow generation's Per unit switches it on (issue #553 round 3), its Units without a station reads the
+// - Settings → Model selection for flow generation's Per unit switches it on (issue #553 round 3), its Units without a station reads the
 //   gauge's MAP from the catchment rain station (issue #553; set in Series details,
 //   flow-share-hint.spec.ts), and keeps it after a reload; its link opens
 //   the Data feeds panel (?rain=units). A viewer reads it, read-only.

@@ -56,7 +56,7 @@ describe('load: a reference load’s inputs', () => {
 		// The Southwestern Cape MAP surface: its credit is stored with the dataset and shown with the layer (docs/maps.md § MAP grid).
 		const mapGrid = { ...landCover, LOAD_KIND: 'map-grid', LOAD_KEY: 'reference/map-grid/waas-swcape.json.gz', LOAD_DATASET: 'WAAS-SWCape-2007' };
 		assert.deepEqual(loadProblems(mapGrid, lacks), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'dws']);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws']);
 	});
 
 	it('a DWS flow table needs its reference, takes a station only as a river gauge code, and no other kind takes one', () => {
@@ -105,7 +105,7 @@ describe('load: a reference load’s inputs', () => {
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {
-		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'sanlc']) {
+		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'crop-types', 'sanlc']) {
 			const problems = loadProblems({ ...landCover, LOAD_KIND: kind }, has);
 			assert.equal(problems.length, 1);
 			assert.match(problems[0], /blocked by their licences/);

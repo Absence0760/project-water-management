@@ -33,6 +33,13 @@
 // (ingest/dws.ts), for the worker to load into the gauge record store,
 // publishing MirrorLagDays for Product=dws.
 //
+// A fourth (issue #604 R5): an hourly schedule invokes it with
+// `{"mode":"dams-weekly"}` (DAMS_WEEKLY_EVENT, infra/dam_observations.tf), and
+// it runs the dam observation passes (dams/observed/): each reads the wanted
+// list the worker wrote (dams/wanted.json) and writes its files and status
+// into the mirror bucket, for the worker to load into dam_observation, and
+// publishes its heartbeat and recency metrics (DamObservations namespace).
+//
 // Like lambda.ts, this must never import a module that loads dotenv
 // (lambda-fetcher.test.ts bundles it to check).
 import type { Context, SQSBatchResponse, SQSEvent } from 'aws-lambda';
@@ -350,19 +357,169 @@ async function dwsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): P
 	return { fetched: r.fetched.length, failed: r.failed.length, fresh: r.fresh, lagDays: r.lagDays, stopped: r.stopped };
 }
 
+// --- The dam observation passes (issue #604 R5) -------------------------------------------
+
+/** The scheduled event that runs the dam observation passes (infra/dam_observations.tf, the dams-weekly rule's input). */
+export const DAMS_WEEKLY_EVENT = { mode: 'dams-weekly' } as const;
+export type DamsWeeklyEvent = typeof DAMS_WEEKLY_EVENT;
+
+/** Whether `event` is the dam passes' scheduled event. */
+export function isDamsWeeklyEvent(event: unknown): event is DamsWeeklyEvent {
+	return typeof event === 'object' && event !== null && !Array.isArray(event) && !('Records' in event) && (event as { mode?: unknown }).mode === DAMS_WEEKLY_EVENT.mode;
+}
+
+/**
+ * The share of the run's budget the Waterbodies pass may use: its files are
+ * few and frozen upstream (a 304 each, once a week), and the rest is the
+ * WOfS pass's, which reads scenes.
+ */
+export const WATERBODIES_BUDGET_SHARE = 0.3;
+
+/** What one source's pass answers (counts only, never a dam or uid). */
+export interface DamPassAnswer {
+	fetched: number;
+	unchanged: number;
+	failed: number;
+	fresh: number;
+	recencyDays: number | null;
+	stopped: string;
+}
+/** What a dams-weekly invocation answers: each source's pass that ran. */
+export type DamsWeeklyAnswer = Partial<Record<'waterbodies' | 'wofs', DamPassAnswer>>;
+
+/**
+ * A source paused after its pass stopped on a 403 or throttling (handover.ts
+ * pausedUntil): nothing asked, and no heartbeat, so the heartbeat alarm fires
+ * (that is the alert, issue #604's rule: a refusal stops and alerts, never a
+ * retry). Logged, and not an error: the stopping run already failed.
+ */
+function pausedAnswer(source: 'waterbodies' | 'wofs', pausedUntil: string | undefined, ms: number): { answer: DamPassAnswer; error: null } {
+	logEvent('warn', { event: 'dams_pass', source, stopped: 'paused', pausedUntil: pausedUntil ?? null, ms });
+	return { answer: { fetched: 0, unchanged: 0, failed: 0, fresh: 0, recencyDays: null, stopped: 'paused' }, error: null };
+}
+
+/** The Waterbodies pass (dams/observed/waterbodies.ts): its metrics whatever happened, then its stop (an HTTP 403, 429/503) as the error. */
+async function waterbodiesPass(deadline: number): Promise<{ answer: DamPassAnswer; error: unknown }> {
+	const { runWaterbodiesPass, waterbodiesHttp, REQUEST_INTERVAL_MS } = await import('./dams/observed/waterbodies.js');
+	const { damPassMetricLine, damsStore } = await import('./dams/observed/handover.js');
+	const started = Date.now();
+	const mode = feedSourceMode();
+	const r = await runWaterbodiesPass({
+		store: damsStore(),
+		http: await waterbodiesHttp(mode),
+		today: utcToday(),
+		deadline,
+		intervalMs: mode === 'live' ? REQUEST_INTERVAL_MS : 0
+	});
+	if (r.stopped === 'paused') return pausedAnswer('waterbodies', r.pausedUntil, Date.now() - started);
+	// The heartbeat goes out for every completed pass: a stop by the upstream is reported by the error below, not by silence.
+	emitMetricLine(damPassMetricLine('waterbodies', r.recencyDays));
+	const message = r.error !== null ? feedErrorMessage(r.error) : null;
+	// Counts and a reason code, never a uid or an upstream body.
+	logEvent(message !== null ? 'error' : r.failed.length ? 'warn' : 'info', {
+		event: 'dams_pass',
+		source: 'waterbodies',
+		fetched: r.fetched.length,
+		unchanged: r.unchanged.length,
+		failed: r.failed.length,
+		fresh: r.fresh,
+		recencyDays: r.recencyDays,
+		stopped: r.stopped,
+		requests: r.requests,
+		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
+		ms: Date.now() - started
+	});
+	return { answer: { fetched: r.fetched.length, unchanged: r.unchanged.length, failed: r.failed.length, fresh: r.fresh, recencyDays: r.recencyDays, stopped: r.stopped }, error: r.error };
+}
+
+/**
+ * The WOfS pass (dams/observed/wofs/pass.ts): DE Africa's per-scene water
+ * layer summed inside every traced dam's outline. Its metrics whatever
+ * happened, then its stop (an HTTP 403, 429/503) as the error. A scene it
+ * couldn't read is counted (`sceneFailed`), never named.
+ */
+async function wofsPass(deadline: number): Promise<{ answer: DamPassAnswer; error: unknown }> {
+	const { runWofsPass, STAC_INTERVAL_MS, SCENE_INTERVAL_MS } = await import('./dams/observed/wofs/pass.js');
+	const { damPassMetricLine, damsStore } = await import('./dams/observed/handover.js');
+	const started = Date.now();
+	const mode = feedSourceMode();
+	const live = mode === 'live';
+	const r = await runWofsPass({
+		store: damsStore(),
+		http: await feedHttp(mode),
+		today: utcToday(),
+		deadline,
+		stacIntervalMs: live ? STAC_INTERVAL_MS : 0,
+		sceneIntervalMs: live ? SCENE_INTERVAL_MS : 0
+	});
+	if (r.stopped === 'paused') return pausedAnswer('wofs', r.pausedUntil, Date.now() - started);
+	emitMetricLine(damPassMetricLine('wofs', r.recencyDays));
+	const message = r.error !== null ? feedErrorMessage(r.error) : null;
+	const unchanged = Math.max(0, r.turns - r.written.length - r.failures.length);
+	// Counts and reason codes, never a dam, an item or an upstream body.
+	logEvent(message !== null ? 'error' : r.failures.length || r.sceneFailures.length ? 'warn' : 'info', {
+		event: 'dams_pass',
+		source: 'wofs',
+		fetched: r.written.length,
+		unchanged,
+		failed: r.failures.length,
+		failedCodes: [...new Set(r.failures.map((f) => f.code))],
+		sceneFailed: r.sceneFailures.length,
+		fresh: r.fresh,
+		recencyDays: r.recencyDays,
+		stopped: r.stopped,
+		stacRequests: r.stacRequests,
+		sceneRequests: r.sceneRequests,
+		scenesRead: r.scenesRead,
+		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
+		ms: Date.now() - started
+	});
+	return { answer: { fetched: r.written.length, unchanged, failed: r.failures.length, fresh: r.fresh, recencyDays: r.recencyDays, stopped: r.stopped }, error: r.error };
+}
+
+/**
+ * One run of the dam observation passes: Waterbodies first (at most
+ * WATERBODIES_BUDGET_SHARE of the time), then WOfS. A pass stopped by its
+ * upstream doesn't keep the other from running; the invocation fails at the
+ * end if either was stopped, and is not retried (dam_observations.tf: the
+ * next hour's run tries again). Hourly for the WOfS backfill's sake; each
+ * pass keeps its own per-key cadence (a Waterbodies uid weekly, a dam's
+ * newest WOfS scenes daily), and a run with nothing due still publishes
+ * both heartbeats and recencies. A source whose pass stopped on a 403 or
+ * throttling is paused for a day (or a longer Retry-After): its pass asks
+ * nothing and publishes no heartbeat, so its heartbeat alarm fires.
+ */
+async function damsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DamsWeeklyAnswer> {
+	const started = Date.now();
+	const budget = context ? context.getRemainingTimeInMillis() - DAILY_SAVE_MARGIN_MS : DEFAULT_BUDGET_MS;
+	const answer: DamsWeeklyAnswer = {};
+	const errors: unknown[] = [];
+	const wb = await waterbodiesPass(started + budget * WATERBODIES_BUDGET_SHARE);
+	answer.waterbodies = wb.answer;
+	if (wb.error !== null) errors.push(wb.error);
+	// WOfS with the rest of the budget.
+	const wofs = await wofsPass(started + budget);
+	answer.wofs = wofs.answer;
+	if (wofs.error !== null) errors.push(wofs.error);
+	if (errors.length) throw errors[0];
+	return answer;
+}
+
 export async function handler(event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse>;
 export async function handler(event: DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DailyIngestAnswer | GefsIngestAnswer>;
 export async function handler(event: DwsWeeklyEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DwsWeeklyAnswer>;
+export async function handler(event: DamsWeeklyEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DamsWeeklyAnswer>;
 export async function handler(
-	event: SQSEvent | DailyIngestEvent | DwsWeeklyEvent,
+	event: SQSEvent | DailyIngestEvent | DwsWeeklyEvent | DamsWeeklyEvent,
 	context?: Pick<Context, 'getRemainingTimeInMillis'>
-): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer | DwsWeeklyAnswer> {
+): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer | DwsWeeklyAnswer | DamsWeeklyAnswer> {
 	if (isDailyIngestEvent(event)) return isGefsPass(event) ? gefsIngest(context) : dailyIngest(context);
 	if (isDwsWeeklyEvent(event)) return dwsWeekly(context);
+	if (isDamsWeeklyEvent(event)) return damsWeekly(context);
 	if (!Array.isArray((event as SQSEvent | undefined)?.Records)) {
 		// No mode: nothing to answer, and a retry can't help. Fail loudly (the Errors alarm), naming no payload.
 		logEvent('error', { event: 'fetcher_event_unknown' });
-		throw new Error('the fetcher was invoked with an event it does not know (expected an SQS batch, {"mode":"daily-ingest"} or {"mode":"dws-weekly"})');
+		throw new Error('the fetcher was invoked with an event it does not know (expected an SQS batch, {"mode":"daily-ingest"}, {"mode":"dws-weekly"} or {"mode":"dams-weekly"})');
 	}
 	return fetchBatch(event as SQSEvent, context);
 }

@@ -8,10 +8,13 @@ import {
 	ewrRuleListIssues,
 	ewrRuleTableIssues,
 	ewrRuleTableNotes,
+	EWR_PERCENTILE_POINTS,
+	type EwrDailySource,
 	type EwrHighFlowEvent,
 	type EwrRuleTable,
 	type NetworkNode
 } from '@water-management/engine';
+import { gridToM3s } from './drmFiles';
 import { DECIMAL_COMMA_NOTE, numberReader, readPastedBlock, splitCsvRow } from '#lib/spreadsheet/paste/read.js';
 
 /** An EWR site a table can be at: the outlet (id null) or a gauge. */
@@ -340,4 +343,42 @@ export function ruleSettingsSummary(t: Pick<EwrRuleTable, 'unit' | 'naturalSourc
 	]
 		.filter(Boolean)
 		.join(' · ');
+}
+
+/** Two grids equal cell by cell to a relative 1e-9 (a Mm³ grid converted to m³/s moves in the last bits). */
+function sameGrid(a: readonly (readonly (number | null)[])[], b: readonly (readonly number[])[] | null | undefined): boolean {
+	if (!b || a.length !== b.length) return false;
+	return a.every((row, m) => {
+		const other = b[m]!;
+		return row.length === other.length && row.every((v, i) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v - other[i]!) <= 1e-9 * Math.max(Math.abs(v), Math.abs(other[i]!)));
+	});
+}
+
+/**
+ * Does the outlet's rule table repeat the daily EWR's .rul tables (issue
+ * #617)? null unless the table is the outlet's and the daily EWR reads its
+ * percentile tables (which are shown above it then) with a Reserve table entered; 'same' when the table
+ * covers the total flow at the DRM's ten % points and its grids, in m³/s,
+ * equal the daily source's: the EWR the total Reserve, the low flows (when
+ * entered) the Reserve flows without high flows, and the natural flows (when
+ * the table reads its own) the natural percentiles; otherwise 'differs'.
+ * Display only: the two stay separate inputs (monthly compliance reads the
+ * table, the daily EWR the source), so nothing a run reads changes.
+ */
+export function dailyRepeat(t: EwrRuleTable, daily: EwrDailySource | null | undefined): 'same' | 'differs' | null {
+	// No tables loaded above yet: nothing to repeat or differ from.
+	if (t.siteNodeId !== null || daily?.method !== 'percentile' || (!daily.reservePctM3s && !daily.lowFlowPctM3s)) return null;
+	const ten = EWR_PERCENTILE_POINTS.map((p) => Math.round(p * 100));
+	if (t.component !== 'total' || t.points.length !== ten.length || t.points.some((p, i) => p !== ten[i])) return 'differs';
+	// A blank cell is never the same (converted, it would read as 0).
+	const m3s = (g: readonly (readonly (number | null)[])[]) => (naturalComplete(g) ? gridToM3s(g as number[][], t.unit) : [[NaN]]);
+	if (!sameGrid(m3s(t.ewr), daily.reservePctM3s)) return 'differs';
+	if (t.lowFlow && !sameGrid(m3s(t.lowFlow), daily.lowFlowPctM3s)) return 'differs';
+	if (t.naturalSource === 'table' && t.natural && !sameGrid(m3s(t.natural), daily.naturalPctM3s)) return 'differs';
+	return 'same';
+}
+
+/** The grids a 'same' outlet table folds away, as its fold's line names them ("EWR, low flows, natural flow"). */
+export function repeatedGrids(t: Pick<EwrRuleTable, 'lowFlow' | 'natural' | 'naturalSource'>): string {
+	return ['EWR', ...(t.lowFlow ? ['low flows'] : []), ...(t.naturalSource === 'table' && t.natural ? ['natural flow'] : [])].join(', ');
 }

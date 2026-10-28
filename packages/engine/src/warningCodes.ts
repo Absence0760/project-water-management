@@ -27,7 +27,7 @@ export type WarningGroup = 'note' | 'check';
 export interface WarningCodeInfo {
 	/**
 	 * The settings panel that changes what the warning reports, by its anchor id (frontend settings/sections.ts:
-	 * `set-…` on Model settings or Calibration, `set-unit-rain` inside Flow generation); null when the fix is on the
+	 * `set-…` on Model settings or Calibration, `set-unit-rain` inside Model selection for flow generation); null when the fix is on the
 	 * Data page (load or rename a series), not a setting.
 	 */
 	setting: string | null;
@@ -79,7 +79,7 @@ export const WARNING_CODES = {
 	'rain.chirpsShadowed': { setting: null, group: 'check' },
 
 	// Rain stations (runoff/stationForcing.ts, runoff/stationRecord.ts): params { station, … }. The station's own
-	// lists are under Flow generation; its zero-run and accumulation handling follows the catchment's Rain gaps.
+	// lists are under Model selection for flow generation; its zero-run and accumulation handling follows the catchment's Rain gaps.
 	'rain.station.noRecord': { setting: 'set-share', group: 'check' },
 	'rain.station.unreliableInvalid': { setting: 'set-share', group: 'check' },
 	'rain.station.unreliable': { setting: 'set-share', group: 'check' },

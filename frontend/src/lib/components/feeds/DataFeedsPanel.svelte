@@ -24,6 +24,7 @@
 	import UnitRain from './UnitRain.svelte';
 	import {
 		calibrationNote,
+		et0Note,
 		gapFillNote,
 		cellsUsedNote,
 		conflictMessage,
@@ -637,7 +638,7 @@
 						{#if conflictMessage(f)}
 							<p class="alert alert-warning version" data-testid="feed-version-conflict">{conflictMessage(f)}</p>
 						{/if}
-						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}{#if keptNote(f.lastMeta)}{' '}· {keptNote(f.lastMeta)}{/if}{#if cellsUsedNote(f)}{' '}· {cellsUsedNote(f)} with data{/if}{#if calibrationNote(f)}{' '}· {calibrationNote(f)}{/if}{#if gapFillNote(f.lastMeta)}{' '}· {gapFillNote(f.lastMeta)}{/if}</p>
+						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}{#if keptNote(f.lastMeta)}{' '}· {keptNote(f.lastMeta)}{/if}{#if cellsUsedNote(f)}{' '}· {cellsUsedNote(f)} with data{/if}{#if calibrationNote(f)}{' '}· {calibrationNote(f)}{/if}{#if et0Note(f)}{' '}· {et0Note(f)}{/if}{#if gapFillNote(f.lastMeta)}{' '}· {gapFillNote(f.lastMeta)}{/if}</p>
 						{#if data.canRun || data.canEdit}
 							<div class="act">
 								{#if data.canRun && f.enabled}

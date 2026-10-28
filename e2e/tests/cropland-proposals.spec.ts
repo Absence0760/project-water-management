@@ -168,7 +168,8 @@ test('an editor uses the parcels’ cultivated area as a crop’s planted area; 
 	await expect(parcels.locator('tbody tr').first().getByRole('cell').last()).toHaveText('50 %');
 	await expect(parcels.locator('tfoot')).toContainText('All parcels');
 	await expect(panel(page).getByLabel('Area to use')).toHaveValue('unit');
-	await panel(page).getByText('Source and method').click();
+	// The land cover's own disclosure: the crop-type grid's section has one too, once its grid is loaded.
+	await panel(page).locator('details').filter({ has: page.getByTestId('cropland-source') }).locator('summary').click();
 	await expect(panel(page).getByTestId('cropland-source')).toContainText('SYNTHETIC test data, invented for this repository (not ESA WorldCover) (synthetic 1; dataset “synthetic”)');
 
 	const row = cropRow(page, 'Orchard');

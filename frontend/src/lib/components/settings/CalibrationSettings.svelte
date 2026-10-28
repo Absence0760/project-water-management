@@ -90,6 +90,7 @@
 		chirpsSource,
 		observedOrigins,
 		apanDaily,
+		et0Daily,
 		flowRecordId = null,
 		flowRecords = null,
 		readonly,
@@ -116,6 +117,8 @@
 		 * whole series), once for both its header and these panels.
 		 */
 		apanDaily?: ApanDailyFingerprint | null;
+		/** The daily reference ET series now (issue #604 R5-E), the same way; undefined while not known. */
+		et0Daily?: ApanDailyFingerprint | null;
 		/** A flow record the calibration can score against, for the link to where its site is set (the Data tab). */
 		flowRecordId?: string | null;
 		/** The project's flow records, for each one's missing periods (settings.flowMissing, issue #611); null = not loaded. */
@@ -212,7 +215,12 @@
 	const hasRecord = $derived(recordKinds === null || recordKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k)));
 	const nodeName = (id: string) => editor?.model.nodes.find((n) => n.id === id)?.name;
 	const petMissing = $derived(
-		!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }, apanSource?.daily ?? false)
+		!hasPotentialEvaporation(
+			{ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined },
+			apanSource?.daily ?? false,
+			// A daily reference ET series (issue #604 R5-E) is PE under a monthly row, on the days it covers.
+			seriesKinds?.includes('evap_et0_mm') ?? false
+		)
 	);
 	// Each panel's line of what it is set to now (summaries.ts).
 	const summaries = $derived(
@@ -325,7 +333,7 @@
 			</span>
 			{#if s.unitRain?.mode === 'perUnit'}
 				<!-- A state line, not an explanation: it stays when the explanations are off. -->
-				<span class="hint" role="note" data-testid="areal-rain-unit-note">When <a href="?tab=settings#set-share">Flow generation</a> on Model settings runs each unit on its own rain (Per unit), it applies only to the units that fall back to the catchment rain.</span>
+				<span class="hint" role="note" data-testid="areal-rain-unit-note">When <a href="?tab=settings#set-share">Model selection for flow generation</a> on Model settings runs each unit on its own rain (Per unit), it applies only to the units that fall back to the catchment rain.</span>
 			{/if}
 			{#if areal}
 				<!-- Its own chunk (issue #521): most projects leave the correction off. -->
@@ -592,6 +600,7 @@
 			context="form"
 			{chirpsSource}
 			{apanDaily}
+			{et0Daily}
 			observedOrigin={observedOrigins ? (observedOrigins[calibrationSeriesKey(s.fitRecord.flowKind as CalibrationFlowKind, s.fitRecord.siteNodeId)] ?? null) : undefined}
 			{nodeName}
 		/>

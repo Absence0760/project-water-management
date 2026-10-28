@@ -1117,7 +1117,17 @@ section it belongs to, with the example that taught it.
   a pixel on a decade's view, where hatching can't show and the strip would
   no longer match its key. `calibration/flowFlagColours.test.ts` computes
   every lane pair and each lane's contrast from `app.css`, so a token change
-  that brings two together fails.
+  that brings two together fails. The Dams tab's Seen from space strips
+  (issue #604 R5-B) first borrowed `--danger`, `--accent` and `--warning`:
+  a deuteranope saw the light danger and warning as one colour (ΔE00 0.7),
+  and the dark danger sat 9.8 from the chart's `--series-2` points for a
+  tritanope. They have their own `--lane-*` tokens now, held for every
+  reader, not only normal vision (each pair ≥ 12, each strip ≥ 13 from every
+  line and point the chart draws; `dams/observedLaneColours.test.ts`; the
+  maths in `lib/a11y/colourVision.ts`, which both tests share). **A strip
+  must not hide a reading of 0:** where 0 is a value worth seeing (a dam seen
+  empty), pass `lanesRoom` to `LineChart`, which starts the y axis under 0
+  by the strips' height.
 - **A disabled main button is plainly off.** `.btn:disabled`'s fade turned
   the dark theme's accent into a mid teal that read as a live secondary
   button; `.btn-primary:disabled` is the plain surface, the strong border and
@@ -1611,6 +1621,26 @@ Interaction details that bit:
   check a change to it in CI's Linux Chromium, not only on a Mac (e2e
   against the `mcr.microsoft.com/playwright` image's `run-server`, through
   `PW_TEST_CONNECT_WS_ENDPOINT` and `PW_TEST_CONNECT_EXPOSE_NETWORK='<loopback>'`).
+- **A choice between methods is choice cards; a page's main decision is its
+  lead card** (issue #614, Model settings' Model selection for flow
+  generation). Each option is a `<span class="opt">` card holding the radio's
+  `<label class="check">` (radio and name) and, outside the label, what the
+  option does (`aria-describedby`), so the radio's name stays the option's
+  name alone. The label stretches over the card (`::after`, `inset: 0`), the
+  radio lifted above it (`position: relative; z-index: 1`, the card
+  `isolation: isolate`), so a click anywhere picks it and Playwright's
+  `check()` still reaches the radio; the cost is that the words can't be
+  selected. The picked card takes the accent (`:has(input:checked)`), the
+  card draws the one focus ring (`:has(input:focus-visible)`, the radio's own
+  off), and an editor's card shows the pointer and a hover border
+  (`:has(input:enabled)`), a viewer's neither. Cards sit side by side where
+  two fit (`repeat(auto-fit, minmax(min(100%, 18rem), 1fr))`) and stack on a
+  phone. The lead panel is `.panel.lead` with `data-lead`: a 2 px `--accent`
+  frame and its head tinted `--accent-soft`, the head's negative margin
+  matching `.panel`'s padding, and the summary line under it without the
+  usual pull toward the heading (it touched the band's rule). One per page.
+  Click a card's words in a test with `page.mouse.click` at their box: the
+  label lies over them, so a locator click on them reports it intercepted.
 - **A sticky element sticks only inside its parent.** Settings' "On this
   page" menu sat inside the form, so it scrolled away at Data feeds, the
   first panel after the form; the Data page's `.data-page` wrapper ends

@@ -165,7 +165,13 @@ describe('the real tree', () => {
 		assert.deepEqual(problems, []);
 		// Whole hostnames, compared exactly: a host that only contains one of these is a different host.
 		const listed = new Set(hosts);
-		for (const host of ['data.chc.ucsb.edu', 'www.dws.gov.za']) assert.ok(listed.has(host), `${host} not in ${hosts.join(', ')}`);
+		for (const host of [
+			'data.chc.ucsb.edu',
+			'www.dws.gov.za',
+			// Digital Earth Africa's bucket (Waterbodies, WOfS scenes) and its STAC search (WOfS, issue #604 R5).
+			'deafrica-services.s3.af-south-1.amazonaws.com',
+			'explorer.digitalearth.africa'
+		]) assert.ok(listed.has(host), `${host} not in ${hosts.join(', ')}`);
 	});
 
 	it('has a register row for every live host and every data_feed.source', () => {

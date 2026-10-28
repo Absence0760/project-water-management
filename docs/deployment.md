@@ -820,6 +820,11 @@ for a human. `pnpm check:workflows` (auto-merge rule) fails if any of these
 exclusions, or the setting's read, is dropped. A
 security fix that can't wait the week goes under
 `minimumReleaseAgeExclude` with a comment, removed once the week is up.
+An advisory with no fixed release is patched locally instead
+(`pnpm patch`, listed under `patchedDependencies` in `pnpm-workspace.yaml`
+with a guard test), and `osv-scanner.toml` records it with an expiry so
+Scorecard's Vulnerabilities check reads it as handled: deepmerge 4.3.1
+(GHSA-gcqx-w48m-w2h4) is the one today.
 
 There is **no credentialed `terraform plan` in CI**. The only role CI can
 assume is the deploy role, which trusts `environment:production` only and
@@ -2011,6 +2016,110 @@ show wherever its values do (docs/data-sources.md § era5-land has the text).
 **Cost:** cents a month: the secret (~$0.40), a few seconds of Lambda a day,
 a month's download of a few MB, and the array's chunks (about 1–2 GB in S3 from 1981, under $0.05).
 
+### AgERA5 reference evaporation
+
+Daily FAO-56 reference evapotranspiration (issue #604 R5-E): AgERA5 v2.0's
+Penman-Monteith ET₀ from the Copernicus Climate Data Store, copied as product
+`agera5_et0` (finals layout, 0.1° grid, from 1979) by the same
+`mirror-ingest` function (`ingest/agera5.py`; how it works:
+ingest/README.md). It is the current-season evaporation option beside dPET's
+climatology: projects read it through a data feed of source `agera5_et0`
+(Settings → Data feeds), which writes the daily reference ET series GR4J uses
+under a monthly PE (model.md §2.4a), with [NASA POWER](#nasa-power-reference-evaporation-fallback)
+for the newest days AgERA5 doesn't hold yet. Like ERA5-Land, a month's request
+is submitted on one run and collected on a later one.
+
+**No new secret.** AgERA5 is on the same Copernicus account as ERA5-Land, so
+its runs read the key from ERA5-Land's `water-management/ingest/cds-key`
+(`infra/era5land.tf`; the read grant and `CDS_KEY_SECRET_ARN` are there
+whether or not `era5l_enabled` is on). The daily rule (05:00 UTC,
+`{"product":"agera5_et0","mode":"monthly"}`) and the `mirror-lag-agera5-et0`
+alarm exist only with `agera5_enabled = true` (default false,
+`infra/agera5.tf`), which needs `ingest_image_tag` set to a release that has
+`agera5.py`.
+
+The operator, once (issue #618 steps 7b–7d):
+
+1. **The CDS account and key**: [§ ERA5-Land](#era5-land) steps 1, 3 and 4.
+   Done once for both products; skip what is already done.
+2. **Accept AgERA5's licence.** Signed in, open the dataset
+   "Agrometeorological indicators from 1979 to present derived from
+   reanalysis" (`sis-agrometeorological-indicators`), go to its Download tab,
+   and accept the licence under "Terms of use". Each dataset has its own
+   acceptance: ERA5-Land's doesn't cover it, and until this one is accepted
+   every AgERA5 request answers 403, which stops the run on purpose.
+3. **Turn it on:** `agera5_enabled = true` in the prod tfvars, then `plan`
+   and, with the operator's go-ahead, `apply`. The next 05:00 UTC run
+   submits the newest complete month; the one after collects it.
+4. **Check the first live collection** against what the job expects (it has
+   only met the synthetic fixture): the run's log line names the month, its
+   days and the revision. A failure that names the file's variable, units or
+   grid means the CDS's layout differs from the fixture's; record what the
+   file holds in issue #604 before changing `agera5.py`.
+
+**Backfill**, by month events, as ERA5-Land's: one synchronous invocation per
+month marks it wanted, and the daily run drains about four months a day.
+AgERA5 starts in 1979-01, but copy only as far back as projects need: a
+current-season option needs the run's own years, so from 1991 (dPET's normal)
+is plenty:
+`for y in $(seq 1991 2025); do for m in 01 02 03 04 05 06 07 08 09 10 11 12; do aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload "{\"product\":\"agera5_et0\",\"mode\":\"backfill\",\"month\":\"$y-$m\"}" --cli-read-timeout 900 --region af-south-1 --profile water-management /dev/null >/dev/null || echo "$y-$m failed"; done; done`
+
+**When it alarms** (`mirror-lag-agera5-et0`, past `agera5_lag_alarm_days`,
+default 50; a healthy copy runs up to about 43 days behind, since a month is
+requested about 10 days after it ends and collected a day or two later): read
+the `mirror-ingest` log group's `agera5_et0:` lines and
+`ingest-state/agera5_et0/requests.json` in the mirror bucket. A **401/403**
+is refused on purpose: 401 a wrong or expired key (ERA5-Land's step 4 again,
+which fixes both products), 403 the AgERA5 licence not accepted (step 2); the
+run writes `ingest-state/agera5_et0/refused.json` and no run calls the CDS
+again that UTC day. **`RequestsFailed`**: a month failed five times; fix the
+cause, then delete that month's entry from `requests.json`, as for
+ERA5-Land. Meanwhile feeds keep taking the newest days from NASA POWER, so a
+late AgERA5 month shows as more POWER days on the feed, not as a gap.
+
+**Attribution:** CC BY (Copernicus); its credit shows wherever its values do
+(docs/data-sources.md § agera5).
+
+**Cost:** cents a month: a few seconds of Lambda a day, a month's download of
+a few MB, the array's chunks (under 1 GB in S3 from 1991), and no new secret.
+
+### NASA POWER reference evaporation (fallback)
+
+The fallback for the days AgERA5 doesn't hold yet (issue #604 R5-E): NASA
+POWER's daily weather for the region (T2M_MAX, T2M_MIN, T2MDEW, WS2M,
+ALLSKY_SFC_SW_DWN, PS, one regional request per parameter and tile), with
+FAO-56 Penman-Monteith ET₀ computed from it in the job, copied as product
+`power_et0` (daily layout, 0.1° grid, each cell its 0.5° POWER cell's value)
+by `ingest/nasapower.py`. POWER publishes 2–7 days behind, so it covers the
+recent weeks a monthly AgERA5 request can't; feeds read it only for days
+AgERA5 doesn't have. **No key**: the POWER API takes none, so there is no
+secret. The daily rule (05:20 UTC,
+`{"product":"power_et0","mode":"recent","days":30}`) and the
+`mirror-lag-power-et0` alarm exist only with `power_et0_enabled = true`
+(default false, `infra/agera5.tf`), which needs `ingest_image_tag` set.
+
+Turn it on with `power_et0_enabled = true`, `plan`, and with the operator's
+go-ahead `apply`, together with `agera5_enabled` (on its own it gives feeds
+only the last days). Each run re-reads the last 30 days (POWER revises its
+newest days), a few dozen requests one second apart; a day whose values
+didn't change moves no revision.
+
+**When it alarms** (`mirror-lag-power-et0`, past `power_et0_lag_alarm_days`,
+default 10; a healthy copy runs 3–8 days behind, since the job asks for days
+up to today − 3): read the `mirror-ingest` log group's `power_et0:` lines. A
+**403** (or 429) stops the run on purpose and is never retried: POWER says it
+monitors usage and limits clients for equitable access, so don't invoke it
+again by hand; check the job's request count against
+docs/data-sources.md § agera5's limits and write to the POWER team
+(power.larc.nasa.gov) before turning it back on. Days AgERA5 already holds are
+unaffected; only the newest days of each feed wait.
+
+**Attribution:** CC BY 4.0; cite the NASA POWER Project wherever its values
+show (docs/data-sources.md § agera5).
+
+**Cost:** cents a month: under a minute of Lambda a day and the array's
+chunks (a few MB).
+
 ## DWS gauge records
 
 DWS feeds move onto a store of ours too (issue #604 R3-B, design D14; the
@@ -2200,6 +2309,111 @@ station named; `refused`: the station given disagrees with the file's;
 nothing. Locally the same load is `pnpm import:dws <file> --reference
 "…"`, into the dev database.
 
+
+## Dam observations
+
+What satellites saw of each traced dam, into `dam_observation` (issue #604
+R5; the flow: [architecture.md § Dam observations](./architecture.md#dam-observations);
+the tables: [data-model.md § Dam observations](./data-model.md#dam-observations-261_dam_observationsql);
+the source: [data-sources.md](./data-sources.md#deafrica-waterbodies-series)).
+One Terraform variable, off by default:
+
+- **`dam_observations_enabled`** (default `false`, `infra/dam_observations.tf`)
+  turns on the `water-management-dams-weekly` EventBridge rule (hourly at
+  :20, `{"mode":"dams-weekly"}` to the fetcher, never retried; each
+  Waterbodies uid re-read once a week, a failed one once a day, each dam's
+  newest WOfS scenes once a UTC day, and the rest of every run on the WOfS
+  history, so a dam reaches 2013 in about seven hours of runs rather than a
+  week of daily ones; a run with nothing due still publishes the heartbeats
+  and recency; a source DE Africa refused or throttled is paused for a day,
+  below), the fetcher's get and put on `dams/` in the
+  mirror bucket (`dams-handover`), the worker's put of `dams/wanted.json`
+  (`dams-wanted-list`), and the alarms (essential tier):
+  - `water-management-dam-pass-waterbodies` and `…-dam-pass-wofs`:
+    `DamPassCompleted{Source}` (namespace `water-management/DamObservations`)
+    under 1 for 18 hours (three 6-hour periods), or missing (breaching):
+    that source's pass stopped running, fails before it ends, or is paused
+    after a refusal (below).
+  - `water-management-dam-recency-wofs`: `DamObservationAgeDays{Source=wofs}`
+    above `dam_wofs_recency_alarm_days` (default 60) for two days, or
+    missing: no traced dam has a WOfS observation that recent.
+  - **No recency alarm for Waterbodies**: its public series have been
+    frozen upstream since 2024-02 (data-sources.md), so it would fire from
+    the first day.
+- **`dam_wofs_recency_alarm_days`** (default 60, at least 21).
+
+The flag also turns on the worker's side (`DAM_OBSERVATIONS`, `infra/jobs.tf`).
+The plan refuses the flag (a precondition on
+`terraform_data.dam_observations_gate`) if the worker Lambda's environment
+ever lacks `DAM_OBSERVATIONS = "on"`, since without it the worker never
+writes the wanted list nor loads what the passes fetch, while the
+heartbeats stay green.
+
+### Turning it on
+
+1. Nothing to change in the worker: `infra/jobs.tf` sets its
+   `DAM_OBSERVATIONS` from the same flag, and the plan refuses the flag if
+   that line is ever lost (`terraform_data.dam_observations_gate`). The S3
+   interface endpoint's policy already lets the worker put
+   `dams/wanted.json` (`infra/packs.tf`, `WorkerWritesDamWantedList`); its
+   reads under `dams/` are `WorkerReadsMirror`'s, and the fetcher is outside
+   the VPC.
+2. Load the Waterbodies polygons (below).
+3. Deploy a backend release with migration 261 and the `dams-weekly` mode,
+   then apply `dam_observations_enabled = true` (a `terraform plan` first,
+   and the operator's go-ahead for the apply), once at least one dam is
+   traced on a project's map: with none, the WOfS pass has nothing to hold
+   and its recency alarm fires. The first worker tick matches the traced
+   dams and writes `dams/wanted.json`; the next hourly run (at :20) fetches
+   the matched dams' series (a few, at 1 a second) and each dam's newest
+   WOfS scenes, the runs after it the WOfS history, and each tick after
+   loads what came in. Check: Logs Insights on the fetcher log group,
+   `filter message.event = "dams_pass"`, then `filter message.event =
+   "dams_tick"` on the worker's.
+
+**When a dam-pass heartbeat alarm fires.** Logs Insights on the fetcher
+log group: `filter message.event = "dams_pass" and message.source =
+"<source>"`, newest first.
+
+- `message.stopped` is `paused` (with `message.pausedUntil`): an earlier
+  run of that source met HTTP 403 (`refused`) or throttling (`throttled`,
+  429/503) and stopped on purpose; the run before the pauses shows which
+  (`message.reason`, `message.detail`), and the source's status file
+  (`dams/<source>-status.json` in the mirror bucket) says `"stopped": true`
+  with its `ranAt`. Issue #604's rule is that a refusal stops and alerts,
+  never a retry, so that source (only that one; the other goes on) asks
+  nothing and publishes no heartbeat for 24 hours from the stop, or for a
+  longer `Retry-After` it gave, then asks again by itself. Nothing to
+  restart. Find out why before the pause ends: a 403 from DE Africa's
+  bucket or STAC is a block on the fetcher's address or a policy change,
+  so ask DE Africa (data-sources.md has the contact) and, until they
+  answer, set `dam_observations_enabled = false` so the next run doesn't
+  meet it again; throttling that recurs means our pace is too fast for
+  them (`REQUEST_INTERVAL_MS`, `STAC_INTERVAL_MS`, `SCENE_INTERVAL_MS`).
+  The alarm clears with the first heartbeat after the pause.
+- No `dams_pass` line at all: the runs stopped (the EventBridge rule, the
+  fetcher's Errors alarm) or fail before the pass completes
+  (`message.event = "fetcher_event_unknown"`, a mirror error).
+
+The app keeps the observations it holds throughout.
+
+### Loading the Waterbodies polygons
+
+Clip the v0.0.3 historical extent to the region with ogr2ogr
+([maps.md § Waterbodies](./maps.md#waterbodies)), gzip it, and load it as a
+reference dataset: upload it to the reference bucket under
+`reference/waterbodies/`, then
+
+```bash
+gh workflow run load-reference.yml -f kind=waterbodies -f key=reference/waterbodies/waterbodies-v0.0.3-d1.geojson.gz \
+  -f sha256=<sha256sum of the file> -f dataset=waterbodies-v0.0.3
+```
+
+(`source` is optional; it defaults to "Digital Earth Africa Waterbodies
+v0.0.3, historical extent (CC BY 4.0)"). The file is capped at 64 MB
+(128 MB unzipped): a province or D1's box, not the continent. A reload
+replaces the dataset and makes the worker match every dam again on its
+next ticks (200 a tick).
 
 ## The cutover
 
@@ -2748,6 +2962,7 @@ Lambda's list against the Sources table):
 | `map-grid` | allowed dataset by dataset: the Southwestern Cape surface (WAAS, 2007) only, by the operator's decision of 2026-10-23 (terms not stated; legal/map-data-licences.md § 3.3b), as dataset `WAAS-SWCape-2007`, stored with its recorded source, version and credit line whatever the file says; `Lynch-2004` and any other label refused (the gate and the Lambda), and so is a `source` | the grid cut to the client's area, in the JSON form `--out` writes (gzipped), never the ASCII grid itself | `pnpm import:map-grid waas.asc --dataset WAAS-SWCape-2007 --source "…" --bbox <w,s,e,n> --out waas-swcape.json.gz` (steps below) |
 | `dws` | DWS verified daily flow: allowed, by DWS's permission obtained through the client's hydrologist (2026-10-28; data-sources.md § dws-flow). Not map data: one river gauge's flow, written into the gauge record store as `dws-request` rows (origin `dws`), merged with the station's other windows rather than replacing a dataset; `source` (the record's reference, 1–200 characters) is required, `station` optional | one station's DWS daily table: a `HyData.aspx` page saved as HTML (up to 20 years a request) or DWS's text reply, `.txt`, `.html`, `.htm` or `.aspx`, gzipped or not; at most 8 MiB (16 MiB unzipped) | save the page or keep the reply, `gzip -c` it to a neutral name ([§ DWS gauge records](#dws-gauge-records), Loading DWS's reply) |
 | `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
+| `crop-types` | blocked: SANLC's terms not yet recorded (issue #604 R5-D, #618 step 8b) | the orchard and vine summary `pnpm import:crop-types … --out` writes, once allowed | refused until followups.md *Decision: SANLC's licence* is made; the live site shows no orchards or vines until then |
 
 ```bash
 sha256sum worldcover.json.gz
@@ -2839,7 +3054,7 @@ Approve it in the `production` environment. Check on the Map tab of the
 client's project: **MAP grid** on lists "WAAS-SWCape-2007" with its source
 line (the authors' credit line whole), and the map's credits show "MAP
 grid: WAAS (2007), Beuster Clarke & Associates", linking to
-`/data-sources#waas-map`. Then Settings → Flow generation, under Per
+`/data-sources#waas-map`. Then Settings → Model selection for flow generation, under Per
 unit, **MAP from the grid** proposes each unit's MAP from it, beside the typed values,
 to check them. A wider box later is a reload under the same label (a load
 replaces its dataset).

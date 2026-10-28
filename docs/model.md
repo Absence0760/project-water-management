@@ -713,6 +713,67 @@ setting, so run comparison reads it as legacy.
     PE row: converting between them is the pan coefficient's job (ET₀ = Kp ×
     Epan), which stays the modeller's. The engine is unchanged by this; it
     only ever sees the accepted values.
+  - **Daily reference ET** (engine ≥ 1.104.0, issue #604 R5-E,
+    `packages/engine/src/evaporation/et0Daily.ts`). A monthly PE row is a
+    climatology (dPET's 1991–2020 means, say), so a dry, hot current season
+    runs on an average year's evaporation. A project may also hold a daily
+    FAO-56 reference ET record, the series `evap_et0_mm` (mm/day): an
+    AgERA5 data feed (`agera5_et0`, AgERA5 v2.0 from our copy, with ET₀ we
+    compute from NASA POWER's daily weather on the newest days AgERA5
+    doesn't have yet; [architecture.md § Our copy of the rain
+    data](./architecture.md), [data-sources.md](./data-sources.md) `agera5`,
+    `nasa-power`), or a station's own record uploaded on the Data tab.
+    **Under `pe.kind: 'monthly'` only**, on each run day the series has a
+    value ≥ 0 GR4J's PE is that day's ET₀ **as it stands** (factor 1, the
+    convention of a reference-ET row from the map); every other day (no
+    value, a negative value, a day outside the record) is
+    the row's share of the month, exactly as without the series. Under
+    `pe.kind: 'pan'` the series is **not read**: reference ET is never
+    multiplied by a pan coefficient nor stands in for A-pan, and the run
+    warns that it isn't read. Crop demand (§2.3) and dam evaporation
+    (§2.7a) never read it under either kind.
+    - **Counted and reported**, as the daily A-pan is (§2.3a):
+      `summary.et0Daily = { used, dailyDays, fallbackDays, invalidDays,
+      first, last }`, and a warning when any day falls back ("daily
+      reference evapotranspiration covers 98 of 730 run days (…); the other
+      632 use the monthly PE row spread over the month"), or when no day in
+      the run has a usable value.
+    - **No series, no change.** Without an `evap_et0_mm` series nothing
+      runs: no summary, no warning, and every result is bit-identical to
+      engine 1.103.0 (`et0Daily.test.ts`, with its positive control; the
+      client catchment regression suite and the invariant suites run
+      unchanged). Under `pe.kind: 'pan'` a series changes nothing but the
+      summary and the warning (tested).
+    - **Every path sees the same input**: runs, calibration (browser and
+      server), the uncertainty ensemble, forecast mode, scenarios
+      (`series.scale` scales it: it is in `SCALABLE_SERIES_KINDS`; a
+      `settings.set` on `pe.mm` reaches only the days it doesn't cover),
+      firm yield and the seasonal outlook (an analogue season takes the
+      analogue year's ET₀, as it takes its A-pan). "No evaporation, no run"
+      (`GR4J_NO_PET`) counts a value above 0 under a monthly row as
+      evaporation, so an all-zero row with a daily record runs.
+    - **Fit provenance**: a fit records the series it ran on as
+      `forcing.et0Daily`: start, length and SHA-256 of its values **through
+      the last day the fit scored** (`through`, `fitScoredThrough`: the fit's
+      and its validation tests' last day; `et0FitWindow`), not the whole
+      series. A feed appends a day most days and re-reads its newest weeks,
+      so a whole-series fingerprint would mark every fit stale the next day
+      though no day it read changed. Changing, adding or removing the days
+      up to `through` after a GR4J fit made under a monthly row marks the fit
+      "Forcing changed since fit" (`et0DailyChanged`). The Calibration page
+      compares the series now through the record's `through`; a stored
+      run's views don't (its input snapshot hashes the whole series), so
+      they never flag it.
+    - **Why as it stands, and only for GR4J.** FAO-56 ET₀ is a grass
+      reference surface's loss, the same quantity a reference-ET monthly row
+      holds, so a day's ET₀ replaces that row's share without conversion.
+      AgERA5 computes it from ERA5's 2 m weather (Boogaard et al. 2020), and
+      our POWER fallback computes it with FAO-56 eq. 6 from MERRA-2-based
+      daily weather (`ingest/fao56.py`), so the two differ by their inputs:
+      on the days POWER fills, the PE is a second product's until AgERA5's
+      month lands and the feed replaces those days. The `verify/` mirror
+      implements the same rule (`verify/model.py`, probes
+      `daily-et0-monthly-pe`, `daily-et0-pan-pe`, `daily-et0-zero-row`).
 
   Irrigation demand (§2.3) and dam evaporation (§2.7a) always read A-pan
   (`apanMm`, and the daily A-pan series where it has a value, §2.3a),
@@ -2448,7 +2509,9 @@ input or not, and compares the output to the bit. An unusable setting
 (`unitRainError`) runs the catchment rain with a warning.
 
 **In Settings** (issue #553 round 3, [ui.md § Settings &
-calibration](./ui.md)) this is the **Flow generation** method:
+calibration](./ui.md)) this is the **Model selection for flow generation** method (the
+panel was named Flow generation until issue #614, which put it first on
+Model settings):
 **Fragmentation** is `unitRain` absent, null or `catchment`; **Per unit** is
 `perUnit`. The radio writes the same setting the earlier "Runoff from each
 unit's own rain" checkbox did, so the move changed no stored project and no
@@ -3040,7 +3103,7 @@ An assignment without a station id is dropped with a warning
 `MAP_MM_MIN`–`MAP_MM_MAX`), which falls back to the units' mean.
 
 **Where it is set** (issue #553 round 3, [ui.md § Settings &
-calibration](./ui.md)): Settings → Flow generation, with Per unit chosen,
+calibration](./ui.md)): Settings → Model selection for flow generation, with Per unit chosen,
 lists every land unit with its **Station** (the project's stations, or *No
 station*, which keeps the unit on §2.4h's chain; satellite rain is never an
 option, CHIRPS only fills gaps), **Scale to unit MAP** (`scaleToMap`) with
@@ -3256,7 +3319,7 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`); under
   runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0) a land unit's runoff
   is its own GR4J runoff instead, and the share still splits the EWR (and
-  the land cover's low-flow threshold, §2.5a): Settings → Flow generation
+  the land cover's low-flow threshold, §2.5a): Settings → Model selection for flow generation
   says which, by the method chosen (Fragmentation or Per unit, issue #553)
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`);
   from engine 1.94.0 `frag[f]` here is the unit's EWR share, which is its flow
@@ -6800,6 +6863,19 @@ volumes reads no warnings and no codes (`verdictsSummary`). Tests:
 warning's (four beside their texts' own tests, which it names), and that
 every code in the catalogue is used by the engine.
 
+**Flow generation renamed (engine ≥ 1.103.0, issue #614).** The panel that
+chooses Fragmentation or Per unit is now **Model selection for flow
+generation**, first on Model settings, so the warnings that name it say
+"Model settings → Model selection for flow generation": the "Parameters not
+fitted for this method" fit caveat (`calibrate/provenance.ts`) and the
+over-allocated flow shares' error (`network/shares.ts`). `places.ts` keeps
+each panel's former headings (`FORMER_PANELS`, `share: ['Flow
+generation']`), so `placesIn` still finds an older run's "Model settings →
+Flow generation" (1.98.0 to 1.102.0) and "Settings → Flow generation"
+(before 1.98.0) and links them to the panel, and `warningInCurrentWords`
+reads both as the new name. Only words changed: no figure moves, but a
+1.102.0 run made again at 1.103.0 has another results digest.
+
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`
 (`network/damLevel.ts` `damFigures`), so the Summary's Dams today card
@@ -7596,9 +7672,34 @@ settings.ewrDailySource = null (absent: the pragmatic EWR, every run before 1.77
   naturalPctM3s: number[12][10] | null,      // RUL "Natural Duration curves", m³/s
   reservePctM3s: number[12][10] | null,      // RUL total Reserve flows (the first, unheaded table, with high flows), m³/s
   lowFlowPctM3s?: number[12][10] | null,     // RUL "Reserve Flows without High Flows", m³/s (engine ≥ 1.90.0; absent = null)
-  reserveTable?: 'total' | 'withoutHighFlows' // the Reserve table 'percentile' reads (engine ≥ 1.90.0; absent = 'total')
+  reserveTable?: 'total' | 'withoutHighFlows', // the Reserve table 'percentile' reads (engine ≥ 1.90.0; absent = 'total')
+  tabFile?: { name, generated, title, runoff, annual: { label, value }[], category,
+              ifr: { label, mcm, pctMar }[], distributionType, monthlyMcm: number[12][7] }, // the .tab, parsed (issue #617; display only)
+  rulFile?: { name, generated, unit: 'm3s' | 'mcm', category, edited?: true }          // the .rul's header (issue #617; display only)
 }
 ```
+
+**The kept DRM files (issue #617).** `tabFile` is the DRM summary (.tab) the
+TAB flows or the table MAR were read from, parsed, so Settings can show the
+whole file: its header lines, every Annual Flows `label = value` line, the
+REC, the IFR summary (Mm³/a and % MAR), the distribution type and the 12 × 7
+monthly table in Mm³ a month (natural mean, SD, CV; low flows maintenance and
+drought; high flows maintenance; total flows maintenance, the TAB flows'
+column). `rulFile` is the .rul's name, date, unit and REC. Both are stored as
+parsed data, never raw text, and bounded (`tabFileIssue`, `rulFileIssue`:
+names ≤ 255 characters, header text ≤ 255, labels ≤ 60, ≤ 30 lines a block,
+no control characters, numbers finite, ≥ 0 and ≤ 10⁶, no unknown fields), so
+`ewrDailySourceIssues` refuses a malformed one as it does any other field.
+**No run reads them**: `resolveEwrDailySource` leaves them out, so a source
+with them resolves to the same object, and runs bit-identically, as one
+without (a test pins it), and a run comparison sees no change when only they
+differ. No result moves, as with the REC (§2.9c), but engine 1.103.0 is
+a version bump all the same (shared with #614's rename): an earlier build refuses a source carrying either
+field as an unknown one and runs the pragmatic EWR, so the stamp says which
+inputs a run's engine accepts (an evidence pack's reproduction re-runs at the
+pack's own version, evidence-pack.md). The
+TAB row stays editable, so the stored file can drift from `tabM3s`; Settings
+says so rather than either following the other.
 
 **The Reserve table (engine ≥ 1.90.0, issue #552).** A DRM `.rul` holds three
 percentile tables: the total Reserve flows (its first table, with high flows),
@@ -10353,6 +10454,62 @@ outside the calibration exclusions, whatever the calibration site. A rule
 table's monthly requirement is not used here, as at the outlet. A project
 without such a site has no key. The summary CSV writes each site's table
 after the outlet's.
+
+### 2.10l Modelled vs observed dam area (app, issue #604 R5-B)
+
+A check of a run against satellites, not part of the engine: nothing here
+changes `runModel` or its output (`backend/src/dams/observed/compare.ts`,
+pure, unit-tested; screens in [ui.md § Dams](./ui.md#dams) and the farm dam
+page; API in [api.md § Dams seen from space](./api.md#dams-seen-from-space)).
+The thresholds are provisional, chosen from the sources' own resolution and
+guidance, and live in one place (`OBSERVED`); change them there and here
+together.
+
+- **Modelled.** The run's `dam_area` column for the unit the dam polygons
+  stand for (`map_feature.node_id`): m², at the start of each day, from the
+  survey curve (`damCurve`, linear between rows) or the power law
+  `A = A_full (S/C)^b` (§2.7a). A satellite pass (Landsat, about 10:30 local)
+  is compared with that day's value; the day's own change is small beside
+  the observation's error.
+- **Observed.** `dam_observation` (261, R5-A): per dam polygon, source
+  (`waterbodies`: DE Africa Waterbodies' area series for the polygon it
+  matched; `wofs`: WOfS water pixels inside the app's own outline, R5-C),
+  date, wet area (m²) and the share of the outline seen clearly.
+- **Clear views only.** A view is compared when at least **90 %** of the dam
+  was seen clearly (`minPctObserved`): the wet area counts the part seen, so
+  a partly clouded view understates the water. DE Africa's Waterbodies
+  guidance filters its series on the share observed the same way.
+- **The composite dam.** A unit's dam is all its farm dams (geo/damRoutes.ts),
+  so with several polygons linked to one unit a day's observed area is their
+  sum, compared only when every polygon was seen clearly by the same source
+  that day (else `partial-unit`).
+- **Which source.** A Waterbodies view counts only for a polygon matched to
+  that waterbody alone (`matched`); `merged` (the waterbody also holds other
+  water) or `none` leaves only WOfS (`not-this-dam`). When both saw the dam
+  on one day, WOfS inside the dam's own outline wins (`other-source`).
+- **Full area F.** The run's own: the survey curve's top area when the curve
+  is usable, else `damAreaFullM2`, else the estimate from the capacity that
+  run's engine used (`estimatedDamAreaForEngine`). Sedimentation's loss of
+  capacity (§2.7g) isn't applied to F.
+- **Flags** (on compared views; O observed, M modelled):
+  - **seen full** (likely spilling): O ≥ 0.95 F; **model full**: M ≥ 0.95 F;
+  - **seen empty**: O ≤ max(0.05 F, 900 m²) (one 30 m pixel: less water than
+    that can't be told from none); **model empty**: M ≤ 0.05 F;
+  - **mismatch**, the first that holds: the model full while O < 0.8 F
+    (`model-full`); the model empty while O > 0.2 F (`model-empty`); seen
+    full while M < 0.8 F (`seen-full`); seen empty while M > 0.2 F
+    (`seen-empty`). The gap between 0.95 and 0.8 (and 0.05 and 0.2) keeps a
+    day at the edge of full or empty from being called a disagreement.
+- **Summary.** Over the compared views: the bias, mean(M − O) ÷ F × 100
+  (+: the model holds more water surface than seen; as a share of F so an
+  empty dam's view doesn't divide by zero), and the share within
+  ±10 % of F (|M − O| ≤ 0.1 F), with the counts of each flag.
+- **What it can't say.** A satellite sees surface, not volume: through the
+  curve or the power law, a surface error at a shallow edge is a small volume
+  error, and a dam whose area hardly changes as it fills (steep sides) shows
+  little either way. A disagreement points at the inputs (capacity, full
+  area, the curve, what flows in, the demand), never at a correction: the
+  hydrologist decides.
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 

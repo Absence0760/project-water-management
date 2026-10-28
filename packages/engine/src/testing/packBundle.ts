@@ -25,6 +25,7 @@ import { applyScenario } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import { localityMapSvg } from '../geo/localityMap';
 import type { EvidenceReport } from '../evidence/types';
+import { damObservationsSection, type EvidenceDamObservations } from '../evidence/damObservations';
 import { canonicalJson, seriesDigest } from '../manifest';
 import type { ModelInput, ModelOutput, NetworkNode } from '../project';
 import { Rng } from '../random';
@@ -36,6 +37,8 @@ export type SyncHash = (data: string | Uint8Array) => string;
 
 export const PACK_FIXTURE_ID = '00000000-0000-4000-8000-00000000b001';
 const START = '2001-10-01';
+/** The fixture baseline's last day as the manifest records it (identity.baseline.endDate). */
+const END = '2030-01-01';
 const OPS = [{ op: 'crop_area', nodeId: 'F1', cropId: 'c', areaM2: 600_000 }];
 
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
@@ -138,7 +141,10 @@ function fixtureLocality(hash: SyncHash, applicant: boolean, svgSha256?: string)
  * `locality`, the report carries § 1's locality map (evidence-12) and its
  * SVG's SHA-256, or `locality.svgSha256` in its place (a wrong one).
  */
-export function packBundleFixture(hash: SyncHash, opts: { application?: boolean; locality?: boolean | { svgSha256: string }; seriesChoice?: boolean } = {}): PackBundleInput {
+export function packBundleFixture(
+	hash: SyncHash,
+	opts: { application?: boolean; locality?: boolean | { svgSha256: string }; seriesChoice?: boolean; observations?: boolean | EvidenceDamObservations } = {}
+): PackBundleInput {
 	const base = packFixtureInput();
 	// Two CHIRPS series, the one read the shorter (engine ≥ 1.90.0, issue #561): its runs warn, and the warning reads input.seriesChoice.
 	if (opts.seriesChoice) {
@@ -166,7 +172,7 @@ export function packBundleFixture(hash: SyncHash, opts: { application?: boolean;
 		identity: {
 			title: 'Catchment',
 			project,
-			baseline: { runId: baseline.runId, engineVersion: baseline.engineVersion },
+			baseline: { runId: baseline.runId, engineVersion: baseline.engineVersion, startDate: START, endDate: END },
 			application: application
 				? { runId: application.runId, engineVersion: application.engineVersion, scenarioId: '00000000-0000-4000-8000-0000000000c1', opsSha256: hash(canonicalJson(OPS)) }
 				: null
@@ -179,11 +185,33 @@ export function packBundleFixture(hash: SyncHash, opts: { application?: boolean;
 			series: [...listed(baseline, 'baseline'), ...(application ? listed(application, 'application') : [])]
 		},
 		summaries: { baseline: baseline.summary, application: application?.summary ?? null },
-		...(opts.locality ? { builtBy: ENGINE_VERSION, localityMap: fixtureLocality(hash, !!application, typeof opts.locality === 'object' ? opts.locality.svgSha256 : undefined) } : {})
+		...(opts.locality ? { builtBy: ENGINE_VERSION, localityMap: fixtureLocality(hash, !!application, typeof opts.locality === 'object' ? opts.locality.svgSha256 : undefined) } : {}),
+		...(opts.observations ? { builtBy: ENGINE_VERSION, damObservations: opts.observations === true ? fixtureObservations() : opts.observations } : {})
 	} as unknown as EvidenceReport;
 	const manifest = buildPackManifest({ pack: { id: PACK_FIXTURE_ID, version: 1, supersedes: null }, project, report, engine: { version: ENGINE_VERSION, build: null } });
 	// As the backend reads it back from jsonb.
 	return { manifest: JSON.parse(JSON.stringify(manifest)), baseline, application };
+}
+
+/** Observed wet days (evidence-21) of one invented dam on Farm one, as the report freezes them: 5 dates, 2 wet, 1 dry, 2 inconclusive. */
+export function fixtureObservations(): EvidenceDamObservations {
+	return damObservationsSection(
+		[
+			{
+				featureId: '00000000-0000-4000-8000-0000000000d1',
+				name: 'Farm one dam',
+				nodeId: 'F1',
+				rows: [
+					{ date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 }, // wet
+					{ date: '2020-01-13', wetAreaM2: 900, pctObserved: 40 }, // one wet pixel: inconclusive
+					{ date: '2020-01-21', wetAreaM2: 0, pctObserved: 99.5 }, // dry
+					{ date: '2020-01-29', wetAreaM2: 2700, pctObserved: 30 }, // wet at any clear share
+					{ date: '2020-02-06', wetAreaM2: 0, pctObserved: 95 } // no water on a 95 % view: inconclusive
+				]
+			}
+		],
+		{ applicant: true, ownNodeIds: ['F1'], startDate: START, endDate: END, models: [] }
+	)!;
 }
 
 /** The headline fixture's registered volumes (synthetic): two takes on Farm one, one storage-only row (s21b, not a take). */
@@ -251,7 +279,7 @@ export async function headlinePackFixture(hash: SyncHash, opts: { legacy?: boole
 		identity: {
 			title: 'Catchment',
 			project,
-			baseline: { runId: baseline.runId, engineVersion: baseline.engineVersion },
+			baseline: { runId: baseline.runId, engineVersion: baseline.engineVersion, startDate: START, endDate: END },
 			application: { runId: application.runId, engineVersion: application.engineVersion, scenarioId, opsSha256 }
 		},
 		issuable: true,

@@ -74,6 +74,8 @@ Every job that fetches from an upstream:
 | [chirps](#chirps) | CHIRPS v3 daily rainfall (`rnl`, `sat` final and preliminary) | live (feeds paused since 2026-10-25, CHC's 403s); the copy in R1–R3 | `data.chc.ucsb.edu` | `chirps` | `backend/src/feeds/sources/chirps.ts`; R2 `ingest/chirps_final.py`, `backend/src/ingest/daily.ts` |
 | [chirps-gefs](#chirps-gefs) | CHIRPS-GEFS v3 16-day forecast | live; the copy built (R3-A), read with `CHIRPS_SOURCE=mirror` | `data.chc.ucsb.edu` | `chirps_gefs` | `backend/src/ingest/gefs.ts` (the copy), `backend/src/feeds/fromMirrorGefs.ts` (feeds read it); `backend/src/feeds/sources/chirps.ts` until the cutover |
 | [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until the stations' records are loaded (`load-reference.yml` kind `dws`) | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
+| [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies: v0.0.2 per-waterbody wet-area series and v0.0.3 polygons (built R5-A) | built; off in production until `dam_observations_enabled`; the public series frozen upstream since 2024-02 | `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
+| [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `cog.ts`, `sum.ts`, `utm.ts`) |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
 | [dpet](#dpet) | dPET daily potential evapotranspiration | reference load | `data.bris.ac.uk` | – | `bin/evaporation-fetch.sh`, `pnpm import:evaporation` |
 | [worldcover](#worldcover) | ESA WorldCover 10 m 2021 v200 (cropland) | reference load | `esa-worldcover.org` (the operator's download) | – | `pnpm import:land-cover` |
@@ -89,10 +91,9 @@ Every job that fetches from an upstream:
 | [era5-land](#era5-land) | ERA5-Land daily precipitation | built R4-A; off until `era5l_enabled` (the operator's CDS key first) | `cds.climate.copernicus.eu` (backfill too) | – | `ingest/era5land.py`, `infra/era5land.tf` |
 | [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS 15-day precipitation (0.1°) | built (R4-C); the copy's job off in production until `ecmwf_enabled` | `ecmwf-forecasts.s3.eu-central-1.amazonaws.com` | `ecmwf_ens` | `ingest/ecmwf.py` (the copy), `ingest/ecmwf_qm_fit.py` (the fit), `backend/src/feeds/fromMirrorEcmwf.ts` (feeds read it) |
 | [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | the copy built (R4-D), off until `imerg_enabled` (needs the operator's Earthdata token) | `cmr.earthdata.nasa.gov`, `opendap.earthdata.nasa.gov` | – | `ingest/imerg.py`, `infra/imerg.tf` |
-| [deafrica-waterbodies](#deafrica-waterbodies) | DE Africa Waterbodies area series | planned R5-A | `s3://deafrica-services` (af-south-1) | – | R5 |
-| [deafrica-wofs](#deafrica-wofs) | DE Africa WOfS inside our own outlines | planned R5-C | `s3://deafrica-services`, `explorer.digitalearth.africa` | – | R5 |
-| [sanlc](#sanlc) | SANLC orchard and vine classes | planned R5-D (gated on its terms; blocked today) | `egis.environment.gov.za` | – | R5 |
-| [agera5](#agera5) | AgERA5 daily reference ET (NASA POWER fallback) | planned R5-E | `cds.climate.copernicus.eu`; `power.larc.nasa.gov` | – | R5 |
+| [sanlc](#sanlc) | SANLC orchard and vine classes | built R5-D; blocked in production until its terms are recorded (synthetic grid in dev, CI and e2e) | `egis.environment.gov.za` | `crop_type_dataset` | `pnpm import:crop-types` |
+| [agera5](#agera5) | AgERA5 v2.0 daily FAO-56 reference ET | built R5-E; the copy's job off in production until `agera5_enabled` (the CDS key is ERA5-Land's) | `cds.climate.copernicus.eu` | `agera5_et0` | `ingest/agera5.py` (the copy), `backend/src/feeds/fromMirrorEt0.ts` (feeds read it), `infra/agera5.tf` |
+| [nasa-power](#nasa-power) | NASA POWER daily weather, our FAO-56 ET₀ from it (AgERA5's fallback) | built R5-E; off until `power_et0_enabled` | `power.larc.nasa.gov` | – (read by `agera5_et0` feeds) | `ingest/nasapower.py`, `ingest/fao56.py`, `infra/agera5.tf` |
 
 ## Live feeds
 
@@ -248,6 +249,144 @@ in `infra/feeds.tf`):
   `backend/src/ingest/dws.ts`, `backend/src/feeds/fromGaugeRecord.ts`,
   `backend/scripts/import-dws.ts`.
 
+## Dam observations
+
+What satellites saw of each traced dam, into `dam_observation` (migration
+261; [architecture.md § Dam observations](./architecture.md#dam-observations)).
+The same out-of-VPC handover as the weekly DWS pass: the worker writes the
+wanted list to the mirror bucket, the fetcher's hourly `dams-weekly` run
+reads the upstream and writes files back, and the worker loads them. Hourly
+for the WOfS backfill's pace only: each key keeps its own cadence below.
+
+### deafrica-waterbodies-series
+
+- **Source:** Digital Earth Africa Waterbodies. The per-waterbody surface
+  area series, `waterbodies/v0.0.2/surface_area_change/<uid[0..4]>/<uid>.csv`
+  (header `date,px_total,px_wet,area_wet_m2,px_dry,area_dry_m2,px_invalid,area_invalid_m2,pc_wet,pc_dry,pc_invalid`),
+  for each dam matched to a waterbody; and the waterbody polygons,
+  `waterbodies/v0.0.3/historical_extent/waterbodies.gpkg` (about 900 MB, the
+  continent), which the operator clips and loads as a reference dataset
+  ([maps.md § Waterbodies](./maps.md#waterbodies)).
+- **Host:** `deafrica-services.s3.af-south-1.amazonaws.com` (the
+  `deafrica-services` bucket over HTTPS, anonymous; the same region as the
+  app). `FEED_HOSTS` holds it for the fetcher's live client.
+- **Licence:** CC BY 4.0 (Digital Earth Africa, read by the lead
+  2026-10-27; [maps.md § Sources](./maps.md#sources)).
+- **Attribution:** "Digital Earth Africa, CC BY 4.0"
+  (`dams/observed/upstream.ts` `DEAFRICA_ATTRIBUTION`) wherever an observed
+  value shows (R5-B's chart and farmer view), and on `/data-sources`.
+- **Contact:** Digital Earth Africa's help desk and community forum
+  (digitalearthafrica.org; docs.digitalearthafrica.org).
+- **Access pattern:** the fetcher's `dams-weekly` mode (run hourly at
+  :20, `infra/dam_observations.tf`) reads `dams/wanted.json` and asks
+  for each matched dam's uid whose last good fetch is 7 days old or more
+  (and that wasn't asked within the last day, so a failing uid is asked
+  once a day, not hourly), oldest first, with `If-None-Match` on the ETag the last fetch kept: an
+  unchanged file costs a 304 and no body. It writes `dams/waterbodies/<uid>.json`
+  and `dams/waterbodies-status.json`; the worker loads them into
+  `dam_observation` for every dam matched to that uid
+  (`backend/src/dams/observed/`). Only uids our dams overlap are ever asked,
+  and the polygons are a reference load, never fetched by the app.
+- **Limits we keep to:** one request a second; at most 30 % of the run's
+  time (the rest is WOfS's); feeds/http.ts's User-Agent, host allowlist,
+  20 s timeout and 4 MB cap; a 429/503 pauses the host for its
+  `Retry-After` and stops the run, as does a 403, never retried: the status
+  says `stopped` and why, the invocation fails (the fetcher's Errors alarm),
+  and the heartbeat still goes out. Then the source is **paused** for 24
+  hours from that run (or the `Retry-After`, if longer): the hourly runs ask
+  it nothing and publish no heartbeat for it, so its heartbeat alarm fires
+  ([architecture.md § Dam observations](./architecture.md#dam-observations)). A 404 (a uid with no
+  series) or a changed layout is recorded for that uid, which waits a day,
+  and the run goes on.
+- **Rows kept:** `wet_area_m2` = `area_wet_m2`, `pct_observed` =
+  100 − `pc_invalid`; a date with nothing seen clearly (`pc_invalid` 100 or
+  an empty `pc_wet`) is dropped, since 0 m² wet on a date nobody saw reads
+  as an empty dam ([architecture.md § Dam observations](./architecture.md#dam-observations)).
+- **Freshness:** the pass's heartbeat (`DamPassCompleted{Source=waterbodies}`)
+  alarms when missing for 18 hours (a refusal's pause included). **No recency alarm, on purpose.**
+  Checked 2026-10-27: the public series objects were last written
+  2024-02-26 and a sampled series ends 2023-09-17, though the product says
+  it updates weekly. A recency alarm would fire from day one; the metric
+  (`DamObservationAgeDays{Source=waterbodies}`) is still published, so a
+  restart upstream shows. Ask DE Africa whether the public series will be
+  updated again (operator step).
+- **Fallback:** [deafrica-wofs-scenes](#deafrica-wofs-scenes) (R5-C): WOfS summed inside
+  the dam's own outline, current (the newest Western Cape scene 2026-10-20
+  when checked), and the only source for a dam Waterbodies merges or misses.
+- **Owner:** the operator; code `backend/src/dams/observed/` (`match.ts`,
+  `waterbodies.ts`, `tick.ts`, `handover.ts`), `backend/scripts/import-waterbodies.ts`,
+  `infra/dam_observations.tf`.
+
+### deafrica-wofs-scenes
+
+- **Source:** Digital Earth Africa Water Observations from Space, Landsat
+  collection `wofs_ls` (1-0-0): one item per Landsat 5/7/8/9 path/row scene,
+  its `water` asset a cloud-optimised GeoTIFF of WOfS's per-pixel bit flags
+  (128 clear water, 0 clear dry, anything else not a clear observation),
+  30 m, in UTM. Found through DE Africa's STAC search; summed inside each of
+  our traced dam outlines by us, for every dam, matched to a waterbody or
+  not. The newest Western Cape scene was 2026-10-20 when checked
+  (2026-10-27): current, unlike the Waterbodies series.
+- **Hosts:** `explorer.digitalearth.africa` (`/stac/search`; its
+  `/stac/collections/wofs_ls` answered 500 that day, the search works) and
+  `deafrica-services.s3.af-south-1.amazonaws.com` (the scenes, anonymous
+  range reads, same region as the app). Both are in `FEED_HOSTS`; a STAC
+  answer may only point at a `wofs_ls/…tif` key in that bucket and at its
+  own next page ([security.md § Data feeds](./security.md)).
+- **Licence:** CC BY 4.0 (Digital Earth Africa, read by the lead
+  2026-10-27).
+- **Attribution:** "Digital Earth Africa WOfS, CC BY 4.0" wherever the
+  values show: the evidence report's § 7
+  ([evidence-pack.md § Observed wet days](./evidence-pack.md#observed-wet-days)),
+  R5-B's chart and farmer view, and `/data-sources`.
+- **Contact:** Digital Earth Africa's help desk and community forum
+  (digitalearthafrica.org; docs.digitalearthafrica.org).
+- **Access pattern:** the fetcher's hourly `dams-weekly` run, after the
+  Waterbodies pass, with the rest of the run's time
+  ([architecture.md § Dam observations](./architecture.md#dam-observations)).
+  Each dam's newest scenes are checked at most once a UTC day (`REFRESH_DAYS`;
+  a turn that failed waits for the next day too); every other run's time
+  goes to the history. For each dam in turn: one STAC search per
+  year window over the outline's box (100 items a page), then per scene its
+  header (16 KB) and the tiles under the outline, as one range where they
+  sit together: about 2–3 requests a scene, a few KB to tens of KB each,
+  never a whole scene. It writes `dams/wofs/<featureId>.json` (each row's
+  STAC item id, each item's URL and ETag), `dams/wofs-status.json`, and its
+  own `dams/wofs-state.json` (how far each dam is scanned, and its
+  outline's hash); the worker loads the rows into `dam_observation`
+  (source `wofs`). Every dam's newest scenes come first; the history goes
+  back to 2013 (the Landsat 8 era, `WOFS_BACKFILL_FROM`) with the time
+  left, newest first, and resumes across runs (about seven hours of hourly
+  runs per dam); after it, a dam searches only its last 45 days, once a
+  day, for scenes published late, and reads only scenes whose STAC item id
+  it hasn't read (an item id is one processing of one scene and never
+  changes), so a day with nothing new published costs one search.
+- **Limits we keep to:** STAC at most one request a second, the bucket at
+  most five a second, one request in flight; feeds/http.ts's User-Agent,
+  host allowlist, 20 s timeout and 4 MB cap; a 403 or 429/503 from either
+  host stops the pass, never retried (the status says `stopped` and why,
+  the invocation fails, the heartbeat still goes out), and pauses the WOfS
+  pass for 24 hours from that run (or the `Retry-After`, if longer): no
+  request and no heartbeat, so its heartbeat alarm fires. A scene
+  that can't be read is skipped and counted; a failed search or a timeout
+  ends that dam's turn.
+- **Freshness:** the pass's heartbeat (`DamPassCompleted{Source=wofs}`,
+  missing for 18 hours) and its recency, the days since the newest observation any dam holds
+  (`DamObservationAgeDays{Source=wofs}`), both alarmed
+  (`infra/dam_observations.tf`, `treat_missing_data = "breaching"`, off
+  until `dam_observations_enabled`).
+- **Rows kept:** per dam and date, the wet area (wet pixels × the pixel's
+  ground area) and the share of the outline seen clearly; two scenes on one
+  date give the one that saw more. No row for a date the dam's outline
+  holds no pixel centre or the scene's footprint missed it.
+- **Fallback:** none current: Waterbodies' public series are frozen
+  ([deafrica-waterbodies-series](#deafrica-waterbodies-series)), and
+  Sentinel-1/2 water masks are a Round 6 candidate. The values already
+  loaded stay in `dam_observation`.
+- **Offline:** `FEED_SOURCE=fixtures` answers STAC and the scenes from
+  invented ones (`backend/fixtures/feeds/wofs-sample.json`,
+  `wofs/fixtures.ts`), so dev, CI and e2e never reach either host.
+- **Owner:** the operator; code `backend/src/dams/observed/wofs/`.
 ## The copy's recent days
 
 ### imerg
@@ -408,6 +547,107 @@ in the reference bucket.
 | <a id="dam-register"></a>dam-register | **blocked:** no terms on the DSO page; DWS's general terms are non-commercial | "Department of Water and Sanitation" | DWS Dam Safety Office | the operator's XLS and KMZ download | – | the synthetic list | – (never loaded in production) | operator; `pnpm import:dam-register`  |
 | <a id="gauge-stations"></a>gauge-stations | **blocked:** unconfirmed (the Verified pages answer 403 outside South Africa) | "Department of Water and Sanitation" | GeoRequests@dws.gov.za | the operator's catalogue download | – | the synthetic stations | – (never loaded in production) | operator; `pnpm import:gauge-stations`  |
 
+## The copy's reference evaporation
+
+Issue #604 R5-E: a current-season evaporation option beside dPET's
+climatology (§ dpet below). GR4J reads it only under a monthly PE row,
+as it stands ([model.md §2.4a](./model.md) *Daily reference ET*).
+
+### agera5
+
+- **Source:** AgERA5 v2.0, *Agrometeorological indicators from 1979 to
+  present derived from reanalysis* (Copernicus C3S, CDS dataset
+  `sis-agrometeorological-indicators`, DOI 10.24381/cds.6c68c9bb),
+  variable `reference_evapotranspiration`: daily FAO-56 Penman-Monteith
+  reference ET in mm/day on a 0.1° grid from 1979, computed from ERA5's
+  2 m weather. v2.0 was published on the CDS on 2025-05-15 and added the
+  reference ET layer; v1.1 is being deprecated
+  ([forum](https://forum.ecmwf.int/t/new-agera5-version-2-now-available-on-the-cds/13088),
+  read 2026-10-27). The dataset page gives a daily update, no latency; we
+  assume about a week, **unverified until the first live run** (the
+  request's exact form, the file's variable name and units are checked by
+  the reader, which refuses anything else; `ingest/README.md`).
+- **Host:** `cds.climate.copernicus.eu` (the CDS API).
+- **Licence:** CC BY 4.0 ("CC-BY licence" on the dataset page, read
+  2026-10-27). The dataset's licence is accepted once on the CDS account
+  (operator step, #618 7b–7d), the same account and key as ERA5-Land's.
+- **Attribution:** "Contains modified Copernicus Climate Change Service
+  information [year]. Neither the European Commission nor ECMWF is
+  responsible for any use that may be made of the Copernicus information or
+  data it contains." and "Boogaard, H., Schubert, J., De Wit, A.,
+  Lazebnik, J., Hutjes, R., Van der Grijn, G. (2020): Agrometeorological
+  indicators from 1979 to present derived from reanalysis. Copernicus
+  Climate Change Service (C3S) Climate Data Store (CDS). DOI:
+  10.24381/cds.6c68c9bb". The array carries it (`attrs.attribution`); the
+  feed card shows the credit (`et0Note`), and the series is labelled
+  "AgERA5 daily reference evapotranspiration data feed".
+- **Contact:** ECMWF support (CDS).
+- **Access pattern:** the mirror-ingest Lambda once a day
+  (`{"product":"agera5_et0","mode":"monthly"}`), ERA5-Land's
+  submit-then-collect machinery: one CDS request per month for region D1,
+  submitted on one run and collected on a later one, into Zarr
+  `agera5_et0` (finals layout, 0.1°). A backfill names its month (from
+  1979-01). Projects read it through `agera5_et0` data feeds in the
+  worker's own job (`feeds/fromMirrorEt0.ts`), never from the CDS.
+- **Limits we keep to:** as ERA5-Land's: at most one request per month and
+  4 queued in all; one API call a second; a failed request backs off 1–8
+  days and stops after 5; a 401/403 stops the run for the UTC day; never
+  waits inside a Lambda.
+- **Fallback:** [nasa-power](#nasa-power) for the newest days, and for any
+  day AgERA5's copy doesn't hold; dPET's monthly climatology (the PE row)
+  for every other day.
+- **Owner:** the operator; code `ingest/agera5.py`, `infra/agera5.tf`.
+
+### nasa-power
+
+- **Source:** NASA Prediction of Worldwide Energy Resources (POWER),
+  daily, Agroclimatology community: `T2M_MAX`, `T2M_MIN`, `T2MDEW`,
+  `WS2M`, `ALLSKY_SFC_SW_DWN` (MJ/m²/day) and `PS`, on POWER's 0.5° grid
+  (MERRA-2-based meteorology), 2 to 7 days behind ("Latency: 2 to 7 days
+  depending on source provider",
+  [power.larc.nasa.gov/llms.txt](https://power.larc.nasa.gov/llms.txt),
+  read 2026-10-27). POWER publishes **no FAO-56 reference ET**: its
+  parameter list (AG, daily) has only `EVLAND` and `EVPTRNS`, actual
+  evaporation, so we compute ET₀ ourselves with FAO-56 eq. 6
+  (`ingest/fao56.py`, tested against FAO-56 Examples 8 and 18).
+- **Host:** `power.larc.nasa.gov` (the REST API's regional daily
+  endpoint, no sign-in). The same data is on AWS
+  (`registry.opendata.aws/nasa-power`, us-west-2), which we don't use yet.
+- **Licence:** CC BY 4.0 (POWER's own summary,
+  [llms.txt](https://power.larc.nasa.gov/llms.txt), read 2026-10-27). The
+  AWS registry says "There are no restrictions on the use, access, and/or
+  download of data from the NASA POWER Project. We request that you cite
+  the NASA POWER Project when using the data"
+  ([registry](https://registry.opendata.aws/nasa-power/), read
+  2026-10-27). Commercial use allowed either way; we credit as CC BY asks,
+  without implying NASA's endorsement.
+- **Attribution:** "NASA Prediction of Worldwide Energy Resources (POWER)
+  Project, CC BY 4.0; FAO-56 Penman-Monteith reference evapotranspiration
+  computed by us from its daily meteorology", on the array and on the feed
+  card when a fetch took days from it ("N newer days from NASA POWER").
+  POWER's referencing guide is
+  [power.larc.nasa.gov/docs/referencing](https://power.larc.nasa.gov/docs/referencing/).
+- **Contact:** the POWER team, through the contact link on
+  power.larc.nasa.gov and the Earthdata forum.
+- **Access pattern:** the mirror-ingest Lambda once a day
+  (`{"product":"power_et0","mode":"recent","days":30}`): the last 30 days
+  ending three days ago, region D1 cut into tiles of at most 10° × 10°,
+  **one parameter per request** (POWER's rule for regional requests), JSON.
+  Each 0.1° cell takes the ET₀ of the POWER point nearest its centre. Into
+  Zarr `power_et0` (daily layout, 0.1°), a rolling 120 days in the
+  manifest.
+- **Limits we keep to:** at most 1 request a second, one at a time, about
+  70 requests a run (12 tiles × 6 parameters), one run a day; POWER sets no
+  rate limit but monitors use and may restrict it (POWER team on the
+  Earthdata forum), and warns that repeating requests for one place can get
+  an application blocked, which one region-wide daily run avoids.
+  `Retry-After` honoured; a 403 stops the run with no retry and a same-day
+  marker.
+- **Fallback:** AgERA5 once its month lands (the feed replaces POWER's days
+  then); else the monthly PE row.
+- **Owner:** the operator; code `ingest/nasapower.py`, `ingest/fao56.py`,
+  `infra/agera5.tf`.
+
 ## Planned sources
 
 From #604's Rounds 4 and 5. Each gets its full section here when its round
@@ -416,10 +656,7 @@ starts.
 | Id | Licence | Attribution | Contact | Access pattern | Limits we keep to | Fallback | Owner |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | <a id="era5-land"></a>era5-land | CC BY 4.0 ("CC-BY licence" on the dataset page, read 2026-10-27; Copernicus, since 2025-07-02); the licence is accepted once on the account (operator step) | wherever its values show (UI, reports, exports): "Contains modified Copernicus Climate Change Service information [year]. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains." and the dataset citation, [below](#era5-land-r4-a) | ECMWF support (CDS); a CDS account and API key in `water-management/ingest/cds-key` (operator step) | CDS API (`reanalysis-era5-land`, `total_precipitation` at 00 UTC, area D1), one request a month into Zarr `era5l` (finals, 0.1°); submitted on one run, collected on a later one | at most one request per month and 4 queued in all; one API call a second; a failed request backs off 1–8 days and stops after 5; a 401/403 stops the run for the UTC day; never waits inside a Lambda | the CDS for the backfill too (`nsf-ncar-era5` holds ERA5, not ERA5-Land, checked 2026-10-27); NCAR GDEX d633008 has ERA5-Land (not used) | operator; `ingest/era5land.py`, `infra/era5land.tf` |
-| <a id="deafrica-waterbodies"></a>deafrica-waterbodies | CC BY 4.0 | Digital Earth Africa | Digital Earth Africa | weekly read of the Waterbodies area series for our traced dams into `dam_observation`; same region as the app, unsigned | weekly; only the waterbodies our dams overlap | [deafrica-wofs](#deafrica-wofs) | operator; R5-A |
-| <a id="deafrica-wofs"></a>deafrica-wofs | CC BY 4.0 | Digital Earth Africa | Digital Earth Africa | WOfS scenes from the STAC catalogue, summed inside our own dam outlines | only scenes over our dams | none (Sentinel-1/2 masks are a Round 6 candidate) | operator; R5-C |
-| <a id="sanlc"></a>sanlc | **gated:** fails D-B on the terms we could read (2013/14: no derivatives, no competing products); the 2018–2022 terms on EGIS still to be read (operator step) | "© GEOTERRAIMAGE" with the year, if allowed | DFFE (EGIS) | the operator's download, once allowed | – | WorldCover | operator; R5-D |
-| <a id="agera5"></a>agera5 | CC BY (Copernicus); NASA POWER: no restrictions, CC BY 4.0 on AWS | Copernicus; NASA POWER | ECMWF support; NASA POWER | CDS API, daily FAO-56 reference ET for the region | as era5-land | NASA POWER (REST, usage monitored, or S3) | operator; R5-E |
+| <a id="sanlc"></a>sanlc | **gated:** fails D-B on the terms we could read (2013/14: no derivatives, no competing products); the 2018–2022 terms on EGIS still to be read (operator step) | "© GEOTERRAIMAGE" with the year, if allowed | DFFE (EGIS) | the operator's download, warped to EPSG:4326 and pre-summarised by `pnpm import:crop-types` into orchard, vine and new-planting shares per cell (maps.md § Orchards and vines from SANLC); local evaluation only, the production load (kind `crop-types`) refused until allowed | – | WorldCover | operator; R5-D |
 
 ### ERA5-Land (R4-A)
 

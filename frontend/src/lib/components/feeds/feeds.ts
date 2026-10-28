@@ -9,7 +9,7 @@ import { ApiError } from '#lib/api/client.js';
 import { fmtDay, fmtNum, fmtStamp, fmtWhen, localIsoDate } from '#lib/format/number.js';
 import { kindLabel } from '#lib/series/kinds.js';
 
-export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws' | 'ecmwf_ens';
+export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws' | 'ecmwf_ens' | 'agera5_et0';
 /** CHIRPS v3's two daily products (backend/src/feeds/config.ts CHIRPS_DAILY_PRODUCTS). */
 export type ChirpsProduct = 'sat' | 'rnl';
 export type FeedState = 'ok' | 'stale' | 'failing' | 'pending' | 'disabled' | 'copy-behind';
@@ -461,6 +461,8 @@ export function describePlace(f: Pick<FeedMeta, 'source' | 'config'>): string {
 export function targetHint(source: FeedSource, kind: string): string | null {
 	if (source === 'chirps' && kind === 'rain_catchment_mm')
 		return 'CHIRPS becomes the catchment rain itself: used as published, with no bias correction, and the checks against CHIRPS lose their reference. Pick it only for a catchment with no rain gauge.';
+	if (source === 'agera5_et0')
+		return 'GR4J runs on it, as it stands, only under a monthly PE row (Calibration → Flow calibration), on the days it has a value; the other days use the row. Crop demand and the dams keep A-pan.';
 	return null;
 }
 
@@ -570,6 +572,22 @@ export function calibrationNote(f: Pick<FeedMeta, 'source' | 'lastMeta'>): strin
 }
 
 /**
+ * A reference ET feed's credit and where its days came from (issue #604
+ * R5-E, backend feeds/fromMirrorEt0.ts last_meta): Copernicus's AgERA5
+ * licence, NASA POWER's when the last fetch took days from it, and how far
+ * AgERA5 reached. Null for every other source.
+ */
+export function et0Note(f: Pick<FeedMeta, 'source' | 'lastMeta'>): string | null {
+	if (f.source !== 'agera5_et0') return null;
+	const power = f.lastMeta?.powerDays;
+	const through = f.lastMeta?.agera5Through;
+	const parts = ['AgERA5 (Copernicus), CC BY 4.0'];
+	if (typeof through === 'string') parts.push(`AgERA5 to ${through}`);
+	if (typeof power === 'number' && power > 0) parts.push(`${power === 1 ? '1 newer day' : `${power} newer days`} from NASA POWER, CC BY 4.0`);
+	return parts.join(' · ');
+}
+
+/**
  * A CHIRPS feed's latest fill of the gap-filling products that failed
  * (last_meta.gapEra5l / gapImergLate, backend feeds/gapRainFill.ts):
  * "couldn't fill ERA5-Land", or null when every fill went through (or none
@@ -621,7 +639,15 @@ export function separateName(
 	feeds: readonly Pick<FeedMeta, 'targetKind' | 'targetName'>[]
 ): string {
 	const base =
-		'station' in body.config ? `DWS ${body.config.station}` : body.source === 'chirps_gefs' ? 'CHIRPS-GEFS' : body.source === 'ecmwf_ens' ? 'ECMWF ENS' : 'CHIRPS';
+		'station' in body.config
+			? `DWS ${body.config.station}`
+			: body.source === 'chirps_gefs'
+				? 'CHIRPS-GEFS'
+				: body.source === 'ecmwf_ens'
+					? 'ECMWF ENS'
+					: body.source === 'agera5_et0'
+						? 'AgERA5'
+						: 'CHIRPS';
 	const taken = new Set([...series.filter((s) => s.kind === body.targetKind).map((s) => s.name), ...feeds.filter((f) => f.targetKind === body.targetKind).map((f) => f.targetName)]);
 	const pick = series
 		.filter((s) => s.kind === body.targetKind && !s.siteNodeId)
