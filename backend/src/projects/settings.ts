@@ -138,8 +138,8 @@ export function mergeSettings(stored: unknown): ProjectSettings {
  */
 function withoutLegacyRunoff(s: Json): Json {
 	s.runoffModel = 'gr4j';
-	// Retired settings (engine RETIRED_SETTINGS_KEYS: ewrSplit, issue #615, 263_retire_ewr_split.sql strips the rows;
-	// flowShareMethod and hiLoSplit, issue #616, 264_retire_flow_share_method.sql).
+	// Retired settings (engine RETIRED_SETTINGS_KEYS: ewrSplit, issue #615, 265_retire_ewr_split.sql strips the rows;
+	// flowShareMethod and hiLoSplit, issue #616, 266_retire_flow_share_method.sql).
 	for (const k of RETIRED_SETTINGS_KEYS) delete s[k];
 	if (isObj(s.calibration)) s.calibration = withoutRetiredCalibration(s.calibration);
 	if (isObj(s.fitRecord) && s.fitRecord.model !== 'gr4j') s.fitRecord = null;

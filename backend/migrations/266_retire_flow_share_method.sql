@@ -1,4 +1,4 @@
--- 264_retire_flow_share_method — engine 1.105.0 retires the flow-share methods
+-- 266_retire_flow_share_method — engine 1.105.0 retires the flow-share methods
 -- (issue #616; docs/model.md §2.5, docs/engine-audit.md FM1). Every unit has
 -- one share, its natural MAR share: it splits the flow under Fragmentation,
 -- the EWR, the land-cover low-flow threshold and the senior users' claims.

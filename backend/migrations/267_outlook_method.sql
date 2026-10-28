@@ -1,4 +1,4 @@
--- 265_outlook_method — how a seasonal outlook uses its analogue years (issue
+-- 267_outlook_method — how a seasonal outlook uses its analogue years (issue
 -- #620 step 4; docs/model.md §2.15c, docs/api.md § Seasonal outlooks).
 --
 --   esp           every analogue year alike (063's outlook, the default, so
@@ -20,4 +20,4 @@ ALTER TABLE seasonal_outlook
 		CONSTRAINT seasonal_outlook_method CHECK (method IN ('esp', 'climateState'));
 
 COMMENT ON COLUMN seasonal_outlook.method IS
-	'How the analogue years are used: esp (every year alike) or climateState (also the years nearest this season''s ENSO and SAM state, result.climate). 265_outlook_method, issue #620.';
+	'How the analogue years are used: esp (every year alike) or climateState (also the years nearest this season''s ENSO and SAM state, result.climate). 267_outlook_method, issue #620.';

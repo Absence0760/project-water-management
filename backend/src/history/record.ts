@@ -243,7 +243,7 @@ export type AuditKind =
 	| 'settings.allocation_mode_reset'
 	// 220 (issue #523 B4): the stored rules that kept water for the EWR were switched off (a scenario's), { rules: [...] }; no actor.
 	| 'model.ewr_rules_reset'
-	// 264 (issue #616): the retired flow-share method and the nodes' High-MAP, Low-MAP and manual shares, as they were,
+	// 266 (issue #616): the retired flow-share method and the nodes' High-MAP, Low-MAP and manual shares, as they were,
 	// { method, hiLoSplit, units: [{ id, name, areaHiKm2, areaLoKm2, flowShareManual }] }; no actor.
 	| 'settings.flow_share_reset'
 	| 'allocation.created'

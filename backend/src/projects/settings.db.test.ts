@@ -2,7 +2,7 @@
 // and settings.hiLoSplit. Every unit's share is its natural MAR share, so an older web
 // build's patch that still carries them saves, stored without them; a row an older
 // backend stored with them reads without them, and the next save drops them
-// (migration 264 strips the stored rows; projects/settings.ts mergeSettings).
+// (migration 266 strips the stored rows; projects/settings.ts mergeSettings).
 import { describe, expect, it } from 'vitest';
 import { asOwner, monthly, signUp } from '../__tests__/helpers.js';
 

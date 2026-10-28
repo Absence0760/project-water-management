@@ -3451,7 +3451,7 @@ farm whose area differed from its high + low MAP areas by more than 1 % was
 warned about once (audit W3, review F7, `areaMismatches`, §2.10a). Engine
 1.105.0 retired the methods, `settings.hiLoSplit` and the node fields
 `areaHiKm2`, `areaLoKm2` and `flowShareManual` (`RETIRED_SETTINGS_KEYS`,
-`RETIRED_NODE_FIELDS`; ignored when read). Migration 264 strips the method
+`RETIRED_NODE_FIELDS`; ignored when read). Migration 266 strips the method
 and split from stored projects and writes one History event
 (`settings.flow_share_reset`) per project that had a Hi/Lo or Specific
 method or any high-, low-MAP or specific value, listing what it held; the
@@ -3673,7 +3673,7 @@ where `MAR_f` is the unit's natural runoff summed over the **MAR period**.
   (`'flowShare'`, the default, or `'naturalMar'`, which applied only under
   Per unit). From 1.105.0 a stored or patched value is ignored (engine and
   API `mergeSettings`, `RETIRED_SETTINGS_KEYS`), the API drops it from a
-  patch, migration 263 strips it from stored projects, a scenario's
+  patch, migration 265 strips it from stored projects, a scenario's
   `settings.set ewrSplit` is refused with a reason to delete it
   ([scenarios.md](./scenarios.md)), and the run comparison lists it as
   removed ([run-comparison.md](./run-comparison.md)). An older run's summary
