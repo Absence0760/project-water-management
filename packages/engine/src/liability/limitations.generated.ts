@@ -60,6 +60,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Fixed, engine 0.20.0 (issue #2)"
 	},
 	{
+		"id": "B5",
+		"source": "finding",
+		"severity": "Medium (projects that switch on ERA5-Land or IMERG gap filling)",
+		"title": "Gap filling from ERA5-Land and IMERG Late runs on method calls the hydrologist hasn't confirmed",
+		"status": "Built, off by default (gapRain unset fills from CHIRPS alone, as B1); provisional, pending the hydrologist"
+	},
+	{
 		"id": "S1",
 		"source": "finding",
 		"severity": "Medium (dams with a sediment rate over a long record; units coming in part-way through one)",
