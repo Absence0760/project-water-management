@@ -4339,7 +4339,9 @@ key there would let any read-only principal forge any user's session.
 CI's Trivy config scan (`terraform.yml`, Terraform and
 `backend/renderer.Dockerfile`, HIGH/CRITICAL to the Security tab) flags these
 on purpose-built resources. Each carries a `#trivy:ignore:<ID>` with its reason
-beside the resource; a new ignore needs a line here too.
+beside the resource; a new ignore needs a line here too. The Trivy version
+is pinned in the workflow (`version:`), not left to the action's default:
+an older Trivy silently skips any check whose minimum version it is below.
 
 | Finding | Resources | Why it stays |
 | --- | --- | --- |
