@@ -600,7 +600,7 @@ export async function plantDamObservations(
 	await withDb(async (db) => {
 		const { rows: f } = await db.query<{ updated_at: Date }>('SELECT updated_at FROM map_feature WHERE id = $1', [featureId]);
 		const uid = match.status === 'none' ? null : (match.uid ?? 'zzzze2e001');
-		await db.query('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6)', [featureId, match.status, uid, uid ? 0.9 : null, uid ? 0.5 : null, f[0]!.updated_at]);
+		await db.query('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6, $7)', [featureId, match.status, uid, uid ? 0.9 : null, uid ? 0.5 : null, f[0]!.updated_at, null]);
 		await db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
 			'wofs',
 			featureId,
