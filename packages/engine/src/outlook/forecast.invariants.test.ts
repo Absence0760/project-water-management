@@ -14,7 +14,7 @@ import { toEpochDay } from '../calendar';
 import type { DroughtRestrictionRule, ModelInput, ModelOutput } from '../project';
 import { Rng } from '../random';
 import { runModelWithoutChecks } from '../run';
-import { analogueMonthlyTotals, forecastMemberBaseRun, rankAnalogues, runForecastOutlook, seasonMonths } from './forecast';
+import { analogueMonthlyTotals, forecastMemberBaseRun, forecastMemberScratch, rankAnalogues, runForecastOutlook, seasonMonths } from './forecast';
 import { syntheticSystem } from './forecastFixture';
 import { outlookAnalogues, outlookBaseAndSnapshot, outlookMemberInput, outlookSeasonInput, runOutlookMember, runOutlookMemberRun, type OutlookBaseRun } from './outlook';
 import type { OutlookSeason } from './season';
@@ -145,4 +145,23 @@ it('building a member leaves the base run as it was', () => {
 	const c = analogues.map((a) => ({ analogue: a, totals: analogueMonthlyTotals(base, SEASON, a) }));
 	forecastMemberBaseRun(base, SEASON, rankAnalogues([50, 50, 50, 50, 50, 50, 50], c), [50, 50, 50, 50, 50, 50, 50]);
 	expect(base.series.map((x) => x.values)).toEqual(before);
+});
+
+// Members built one after another on one scratch copy are the members built alone.
+it('a scratch copy reused across members gives each the member built alone', () => {
+	const input = testCatchment();
+	const base: OutlookBaseRun = runModelWithoutChecks(input);
+	const { analogues } = outlookAnalogues(base, SEASON);
+	const c = analogues.map((a) => ({ analogue: a, totals: analogueMonthlyTotals(base, SEASON, a) }));
+	const rng = new Rng(9);
+	const scratch = forecastMemberScratch(base);
+	for (let k = 0; k < 8; k++) {
+		const mapped = seasonMonths(SEASON).map(() => (rng.bool(0.2) ? 0.4 : rng.float(0, 150)));
+		const ranked = rankAnalogues(mapped, c);
+		const alone = forecastMemberBaseRun(base, SEASON, ranked, mapped);
+		const reused = forecastMemberBaseRun(base, SEASON, ranked, mapped, scratch);
+		expect(reused.months).toEqual(alone.months);
+		sameSeries(reused.baseRun, alone.baseRun);
+	}
+	expect(() => forecastMemberBaseRun(runModelWithoutChecks(input), SEASON, rankAnalogues([1], c), [1], scratch)).toThrow(/another base run/);
 });

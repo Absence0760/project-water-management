@@ -212,6 +212,28 @@ export interface ForecastMemberMonth {
 }
 
 /**
+ * A reusable copy of a base run's rain series for building members one after
+ * another (forecastMemberBaseRun's `scratch`): each call first puts back the
+ * days the previous one rescaled, so a member costs its season's days, not a
+ * copy of the whole record per series. A view built on it is valid until the
+ * next call.
+ */
+export interface ForecastMemberScratch {
+	base: OutlookBaseRun;
+	sources: OutlookBaseRun['series'];
+	copies: number[][];
+	written: [number, number][];
+}
+
+const rainSources = (baseRun: OutlookBaseRun) => baseRun.series.filter((x) => (x.nodeId === null && x.key === 'rain_final') || (x.nodeId !== null && x.key === UNIT_RAIN_SERIES.rain.key));
+
+export function forecastMemberScratch(baseRun: OutlookBaseRun): ForecastMemberScratch {
+	const sources = rainSources(baseRun);
+	if (!sources.some((x) => x.nodeId === null)) rainOf(baseRun);
+	return { base: baseRun, sources, copies: sources.map((x) => x.values.slice()), written: [] };
+}
+
+/**
  * The base run as a member sees it: rain_final and each unit's rain_unit with
  * the analogue's season days rescaled month by month to `mapped` (module
  * header, step 2), every other day as recorded; only those series, which is
@@ -224,16 +246,20 @@ export function forecastMemberBaseRun(
 	baseRun: OutlookBaseRun,
 	season: OutlookSeason,
 	ranked: readonly RankedAnalogue[],
-	mapped: readonly (number | null)[]
+	mapped: readonly (number | null)[],
+	scratch?: ForecastMemberScratch
 ): { baseRun: OutlookBaseRun; analogue: OutlookAnalogue; months: ForecastMemberMonth[]; warnings: string[] } {
 	resolveSeason(season);
 	const chosen = ranked[0];
 	if (!chosen) throw new RangeError('no analogue year to build a forecast member on');
 	const r0 = toEpochDay(baseRun.startDate);
 	const from = (a: OutlookAnalogue) => toEpochDay(a.from) - r0;
-	const sources = baseRun.series.filter((x) => (x.nodeId === null && x.key === 'rain_final') || (x.nodeId !== null && x.key === UNIT_RAIN_SERIES.rain.key));
-	if (!sources.some((x) => x.nodeId === null)) rainOf(baseRun);
-	const copies = sources.map((x) => x.values.slice());
+	if (scratch && scratch.base !== baseRun) throw new Error('the scratch copy is of another base run');
+	const work = scratch ?? forecastMemberScratch(baseRun);
+	const { sources, copies } = work;
+	// Put back what the previous member rescaled.
+	for (const [lo, hi] of work.written) for (let j = 0; j < sources.length; j++) for (let d = lo; d <= hi; d++) copies[j]![d] = sources[j]!.values[d]!;
+	work.written = [];
 	const warnings: string[] = [];
 	const months: ForecastMemberMonth[] = seasonMonths(season).map((m, k) => {
 		const M = mapped[k] ?? null;
@@ -249,11 +275,12 @@ export function forecastMemberBaseRun(
 			}
 		}
 		const PT = pattern.totals[k]!;
-		// 0 ÷ 0: a dry month asked to stay dry has nothing to scale. Under the pattern minimum with M also under it: the
-		// analogue's few millimetres scaled as they are (M − T is under 1 mm either way).
+		// 0 ÷ 0: a dry month asked to stay dry has nothing to scale. A month under the pattern minimum with M also under
+		// it, or with no donor: the analogue's few millimetres rescaled to M, so the month still totals what was asked.
 		const factor = PT > 0 ? M / PT : 1;
 		const a = from(chosen.analogue);
 		const p = from(pattern.analogue);
+		work.written.push([a + m.firstDay, a + m.lastDay]);
 		for (let j = 0; j < sources.length; j++) {
 			const src = sources[j]!.values;
 			const dst = copies[j]!;
@@ -335,7 +362,9 @@ function prepareSystems(forecasts: readonly SeasonalForecastSystem[], hindcasts:
 	const rain = rainOf(baseRun);
 	const r0 = toEpochDay(baseRun.startDate);
 	const months = seasonMonths(season);
-	const init0 = forecasts.map((f) => parseMonth(f.init)).find((x) => x !== null) ?? null;
+	// The newest init whose month starts on or before the decision date: a forecast that starts later knows days after it.
+	const inits = forecasts.map((f) => parseMonth(f.init)).filter((x): x is number => x !== null && monthFirstDay(x) <= season.from);
+	const init0 = inits.length ? Math.max(...inits) : null;
 	const seen = new Set<string>();
 	const out: PreparedSystem[] = [];
 	for (const f of forecasts) {
@@ -357,6 +386,10 @@ function prepareSystems(forecasts: readonly SeasonalForecastSystem[], hindcasts:
 			continue;
 		}
 		seen.add(report.system);
+		if (monthFirstDay(init) > season.from) {
+			fail(`its init ${f.init} starts after the decision date ${season.decisionDate}: nothing after the decision date is known`);
+			continue;
+		}
 		if (init !== init0) {
 			fail(`its init ${f.init} differs from the other systems' ${monthText(init0!)}: one outlook takes one init`);
 			continue;
@@ -394,8 +427,6 @@ function prepareSystems(forecasts: readonly SeasonalForecastSystem[], hindcasts:
 		}
 		report.used = true;
 	}
-	const used = out.filter((p) => p.report.used);
-	for (const p of used) p.report.weight = 1 / used.length;
 	return out;
 }
 
@@ -640,8 +671,8 @@ export function runForecastOutlook(raw: ModelInput, options: ForecastOutlookOpti
 		espChances: [],
 		skill: null,
 		leads: 'esp',
-		warnings,
-		...x
+		...x,
+		warnings: [...new Set(warnings)]
 	});
 	const off = (reason: ForecastOffReason, message: string, x: Partial<ForecastOutlook> = {}) => result({ reason, message, ...x });
 	if (!options.forecasts?.length) return off('noForecast', 'No seasonal forecast is held for this season: the outlook is the ESP alone.');
@@ -683,19 +714,30 @@ export function runForecastOutlook(raw: ModelInput, options: ForecastOutlookOpti
 
 	const nMonths = seasonMonths(season).length;
 	/** One system's members mapped, matched to an analogue, rescaled and run. */
+	const scratch = forecastMemberScratch(baseRun);
 	const runSystem = (p: PreparedSystem, members: readonly number[][], cells: readonly Cell[], pool: typeof candidates) =>
 		members.flatMap((monthly, j) => {
 			const mapped = mapMember(monthly, cells, nMonths);
 			const ranked = mapped ? rankAnalogues(mapped, pool) : [];
 			if (!mapped || !ranked.length) return [];
-			const view = forecastMemberBaseRun(baseRun, season, ranked, mapped);
+			const view = forecastMemberBaseRun(baseRun, season, ranked, mapped, scratch);
 			return [{ j, ranked, view, ...run(view.baseRun, view.analogue) }];
 		});
 
-	const members: ForecastMemberResult[] = [];
-	for (const p of used) {
+	// Weights from the systems that gave a member (one that gave none is reported as not used).
+	const ran = used.map((p) => {
 		const got = runSystem(p, p.members, p.cells, candidates);
 		if (got.length < p.members.length) warnings.push(`${p.report.system}: ${p.members.length - got.length} member(s) not run (no analogue year has every month they give)`);
+		if (!got.length) {
+			p.report.used = false;
+			p.report.reason = 'no member could be matched to an analogue year with a whole month of record in every month it gives';
+		}
+		return { p, got };
+	}).filter((x) => x.got.length);
+	for (const { p } of ran) p.report.weight = 1 / ran.length;
+	if (!ran.length) return off('noAnalogues', 'No forecast member could be matched to an analogue year the record holds whole months of: the outlook is the ESP alone.', { systems: reports, init });
+	const members: ForecastMemberResult[] = [];
+	for (const { p, got } of ran) {
 		for (const m of got) {
 			warnings.push(...m.view.warnings.map((w) => `${p.report.system} member ${m.j + 1}: ${w}`));
 			members.push({
@@ -724,7 +766,8 @@ export function runForecastOutlook(raw: ModelInput, options: ForecastOutlookOpti
 		// Hindcast year y ↔ the analogue whose init month (its first month shifted as the season's is to the init) is in y.
 		const yearOf = (a: OutlookAnalogue) => Math.floor((monthOfDay(toEpochDay(a.from)) + shiftToInit) / 12);
 		const years: ForecastSkillYear[] = [];
-		const allYears = [...new Set(used.flatMap((p) => [...p.hindcast.keys()]))].sort((a, b) => a - b);
+		const scored = ran.map((x) => x.p);
+		const allYears = [...new Set(scored.flatMap((p) => [...p.hindcast.keys()]))].sort((a, b) => a - b);
 		for (const y of allYears) {
 			const k = analogues.findIndex((a) => yearOf(a) === y);
 			if (k < 0) continue;
@@ -733,7 +776,7 @@ export function runForecastOutlook(raw: ModelInput, options: ForecastOutlookOpti
 			const pool = candidates.filter((_, i) => i !== k);
 			const fc: { v: number; w: number }[] = [];
 			const names: string[] = [];
-			const present = used.filter((p) => p.hindcast.has(y));
+			const present = scored.filter((p) => p.hindcast.has(y));
 			const rows: { name: string; values: number[] }[] = [];
 			for (const p of present) {
 				// Leave-one-out: the map without year y, and the analogue pool without its own year.

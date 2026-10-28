@@ -179,6 +179,13 @@ describe('members: the nearest analogue and the rescaling', () => {
 		const none = forecastMemberBaseRun(base, season, only, [20, 58]);
 		expect(none.months[0]).toMatchObject({ factor: 1, patternYear: null });
 		expect(none.warnings[0]).toMatch(/stays dry/);
+		// An analogue month under the minimum with a few millimetres, asked for under the minimum: rescaled to what was asked.
+		const drizzle = handRun(1461, (date) => (date === '2000-01-10' ? 0.2 : date.startsWith('2000-01') ? 0 : 1));
+		const d0 = { analogue: A(1999), totals: analogueMonthlyTotals(drizzle, season, A(1999)), distance: 0 };
+		expect(d0.totals[0]).toBeCloseTo(0.2, 12);
+		const dz = forecastMemberBaseRun(drizzle, season, [d0], [0.9, d0.totals[1]!]);
+		expect(dz.months[0]!.factor).toBeCloseTo(4.5, 12);
+		expect(dz.baseRun.series[0]!.values[9]).toBeCloseTo(0.9, 12);
 		// Asked for nothing: every day dry.
 		const dry = forecastMemberBaseRun(base, season, [{ ...cand[1]!, distance: 0 }], [0, 28]);
 		expect(dry.months[0]!.factor).toBe(0);
@@ -216,6 +223,39 @@ describe('runForecastOutlook: off until the copy has a hindcast', () => {
 		expect(r.systems[0]!.reason).toMatch(/19 hindcast years .* at least 20/);
 		// A hindcast for another init month doesn't count.
 		expect(runForecastOutlook(input, { ...SEASON, baseRun, forecasts, hindcasts: [{ ...hindcasts[0]!, initMonth: 11 }] }).systems[0]!.reason).toMatch(/no hindcast for its 10 init/);
+	});
+
+	it('leaves out a forecast that starts after the decision date, and takes the newest init on or before it', () => {
+		const { input, baseRun, forecasts, hindcasts } = setup([{ id: 'a-1', kind: 'skilful', members: 2 }]);
+		const late = { ...forecasts[0]!, init: '2012-12' };
+		const r = runForecastOutlook(input, { ...SEASON, baseRun, forecasts: [late], hindcasts: [{ ...hindcasts[0]!, initMonth: 12 }], skill: false });
+		expect(r).toMatchObject({ status: 'off', reason: 'noQualifyingSystem' });
+		expect(r.systems[0]!.reason).toMatch(/starts after the decision date/);
+		// A stale first system doesn't push out the current one: the newest init on or before the decision date is used.
+		const stale = { ...forecasts[0]!, system: 'old-1', init: '2012-09' };
+		const both = runForecastOutlook(input, { ...SEASON, baseRun, forecasts: [stale, forecasts[0]!], hindcasts, skill: false });
+		expect(both.init).toBe('2012-10');
+		expect(both.systems.map((x) => [x.system, x.used])).toEqual([
+			['old-1', false],
+			['a-1', true]
+		]);
+		expect(both.systems[0]!.reason).toMatch(/differs from the other systems' 2012-10/);
+	});
+
+	it('gives the same result under a skewed TZ', () => {
+		const { input, baseRun, forecasts, hindcasts } = setup([{ id: 'a-1', kind: 'skilful', members: 2 }]);
+		const opts = { ...SEASON, baseRun, forecasts, hindcasts, skill: false };
+		const ref = runForecastOutlook(input, opts);
+		const tz = process.env.TZ;
+		try {
+			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+				process.env.TZ = zone;
+				expect(seasonMonths(SEASON).map((m) => m.month)).toEqual(['2012-10', '2012-11', '2012-12', '2013-01', '2013-02', '2013-03', '2013-04']);
+				expect(runForecastOutlook(input, opts)).toStrictEqual(ref);
+			}
+		} finally {
+			process.env.TZ = tz;
+		}
 	});
 
 	it('leaves the ESP outlook as it was, to the bit', () => {

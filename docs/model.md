@@ -12550,8 +12550,14 @@ without the run.
      `FORECAST_MIN_HINDCAST_YEARS` = 20 years fails its system, which is then
      left out with the reason ("lead month 3 (01) has 19 hindcast years …").
      So only systems with at least 20 hindcast years the record covers take
-     part (the issue's open question 2). One outlook takes one init month:
-     a system with another init is left out.
+     part (the issue's open question 2). One outlook takes one init month,
+     the newest whose month starts on or before the decision date: a system
+     with another init, or one starting after the decision date (its months
+     would know days after it, §2.15), is left out. C3S issues a month's
+     forecasts on the 6th to the 13th, so a decision on the 1st with that
+     month's init would know a week or so of issue-day weather; the engine
+     has no issue date, and the backend (step 7) passes only forecasts issued
+     on or before the decision date.
    - A member's complete months are its values up to the first that isn't a
      number ≥ 0 (the mirror pads short systems with NaN); a member with none
      is left out and counted. A system reaches the season months whose lead
@@ -12585,19 +12591,26 @@ without the run.
      that month, × M_k ÷ its total (its unit rain alike; the evaporation stays
      the member's own analogue's). With no such analogue the month keeps its
      analogue's days: rescaled when they hold any rain, else dry, with a
-     warning. A member asking for under 1 mm in such a month keeps the
-     analogue's days as they are (factor 1, the difference under 1 mm), and
-     one asking for 0 mm in a month with rain gets f = 0, every day dry.
+     warning. A member asking for under 1 mm in such a month takes the
+     analogue's days rescaled to it (M_k ÷ T_k; factor 1 when the analogue's
+     month is dry, the difference then under 1 mm), and one asking for 0 mm in
+     a month with rain gets f = 0, every day dry. The factor has no ceiling:
+     with no donor, 40 mm on an analogue month of 0.1 mm lands on its one
+     drizzle day (a question for the hydrologist, FC1).
    - Where only one of the season and the analogue spans a 29 February, the
      stretch's days drift a day from the analogue's calendar months (§2.15),
      so a full month's rescaled total can miss M_k by that day's rain.
-3. **Weights.** Each qualifying system weighs 1 ÷ (systems used) and each of
-   its members an equal share of that (`ForecastMemberResult.weight`), so a
+3. **Weights.** Each qualifying system that gave at least one member weighs
+   1 ÷ (such systems) and each of its members an equal share of that (a
+   system none of whose members matches an analogue with whole months of
+   record is reported as not used, and with none left the outlook is off,
+   `noAnalogues`) (`ForecastMemberResult.weight`), so a
    51-member system doesn't outweigh a 7-member one (the issue's open
    question 2).
 4. **The chance of each restriction level.** On each review date (the
-   options' dates; else the drought restriction rule's review dates in the
-   season, §2.7i; else the review triggers' default, `defaultReviewDate`,
+   options' dates; else, with a rule, the rule's review dates in the season
+   (none in the season: no chances, with a warning), §2.7i; without one, the
+   review triggers' default, `defaultReviewDate`,
    §2.15a) each member's farm dam storage at the start of the day (the end
    of the day before; on the decision date the base run's) is read as the
    rule reads it: Σ storage ÷ Σ capacity that day over every farm dam
@@ -12653,14 +12666,15 @@ year; the rescaling (factors, every unit alike, the other days untouched)
 and the zero-month rule's three cases; off without a forecast or a
 hindcast with nothing run, a 19-year hindcast and another init month left
 out, and the ESP outlook to the bit; the weights per system; the bias mapped
-out; the chances summing to 1, equal to the members' weights, under a rule
+out; a forecast starting after the decision date left out; the chances summing to 1, equal to the members' weights, under a rule
 (each level from the storage share) and by the bands; the skill score over
 24 years, a skilful system leading and a confidently wrong one not. The
 invariants: a factor-1 member equals the ESP member to the bit (catchment
 rain and per-unit rain); members re-run in full share the history to the bit
 and from the snapshot differ only in their season's rain; the chances sum to
 1 on random rules (each basis) and without one; the base run is never
-changed. The perf budget: 3 systems × 10 members under 400 ms, with the
+changed, and members built one after another on one scratch copy equal
+members built alone; the same result under two skewed `TZ`s. The perf budget: 3 systems × 10 members under 400 ms, with the
 skill score under 3 s. `verify/` mirrors `runModel` only, and a member is an
 ordinary run: probe `forecast-member-rescaled` feeds one.
 
