@@ -8373,6 +8373,29 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   the run's statistics). Each number is held inside its
   bounds by its field, so the section never blocks Save. The fit record
   below lists the fitted record's source and its gap filling.
+    Last, when the model has a gauge above the outlet with a flow record,
+  **Calibrate at several gauges** (engine 1.106.0, issue #555,
+  `calibration/CalibrationZonesTable.svelte`, its own chunk,
+  `lib/calibration/zones.ts`, `settings.calibrationZones`, [model.md
+  §2.10n](./model.md)): a table of the calibration site (the outlet, or
+  *Scored at*'s gauge, its **Calibrate here** always ticked and disabled:
+  its window is the fields above) and every other such gauge, each with
+  **Calibrate here: <gauge>**, its **Record** coverage in complete water
+  years spanned (gaps not counted; "(too short)" under 2, from the series
+  list) and its zone's **Parameters** ("Not fitted yet: its units run on the
+  parameters above" until a fit applies some). A first tick adds the gauge's
+  row; an untick keeps it (its window and parameters stay for the next
+  tick). Under each gauge with a row, a fold (`<gauge>:` and its window,
+  exclusions and suspect-day rule) with its own **From** / **To**,
+  **Record**, **Suspect days** (*As the calibration site's quality flags*,
+  *Left out of the fit* or *Scored*), exclusions and fit record line. A
+  reversed window or a bad exclusion blocks Save, named by its gauge
+  ("Calibration zone at Middle weir: …"), through the window's own blocker.
+  Under Fragmentation the ticks are disabled and a note says calibrating at
+  several gauges needs Per unit flow generation, linking to Model selection
+  for flow generation; with a gauge ticked under Per unit, "Fit
+  automatically fits N zones, upstream first." Not yet (issue #555's next
+  round): the zones on the Network tab and the Map.
 - **Fit automatically** (`#set-fit`, `calibration/FitPanel.svelte`) fits the
   selected model's parameters in a Web Worker (`lib/calibration/`). Its card
   shows the choices that decide the fit in one row (**Objective**,
@@ -8506,6 +8529,25 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     stored until Save. The result stays shown, its button then reading
     **Apply to form again**, and the unsaved settings take over the leave
     guard from the fit.
+  - **The stepwise fit** (engine 1.106.0, issue #555, model.md §2.10n):
+    with a gauge ticked under *Calibrate at several gauges* (Per unit only),
+    **Fit automatically** fits one step per zone, upstream first, then the
+    calibration site, each in its own worker run with the choices above
+    (`lib/calibration/runner.ts` `startStepwiseFit`, the plan from the engine's
+    `zoneFitPlan`, which refuses a zone, or a site, with no land unit, shown
+    as the fit's error). The progress line starts "Step 1 of 2 (an upstream
+    zone)", and the bar spans every step. The result opens with **Steps,
+    upstream first** (`data-testid="fit-steps"`): one row per step (*1.
+    Upstream zone* / *2. Calibration site*, where it was scored, its land
+    units, its fitted parameters, and the objective's fit, split-sample and
+    dry → wet validation scores), each earlier step's notes in a closed
+    *Notes on step N* (the short-record and no-dry-year warnings among them),
+    then the calibration site's step in full under **Step N: the
+    calibration site**. **Apply to form** writes every step: the site's
+    parameters and fit record as before, and each zone's parameters and fit
+    record (`FitRecord.zone`) into its row. Not yet: automated calibration
+    and the uncertainty ensemble per zone (they fit or perturb the site's
+    zone alone).
     At the card's foot (issue #521), **Fit record of these parameters**
     (`calibration/FitProvenance.svelte`), in a fold whose line is the
     record's first ("Fit record: GR4J fit of 24 Sep 2026 10:05 UTC",

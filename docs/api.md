@@ -705,7 +705,27 @@ alongside teams, e.g. to give an outside client `viewer` access.
   the copy's gauge. A run reads it too: its calibration statistics are
   scored at the site (`RunSummary.calibration.siteNodeId`, below), and a
   stored site the run can't use (its gauge gone, or no record attached any
-  more) warns (`Calibration site: …`) while the run scores the outlet. `dataQuality` (the data-check limits) takes
+  more) warns (`Calibration site: …`) while the run scores the outlet.
+  `calibrationZones` (engine 1.106.0, issue #555, [model.md §2.10n](./model.md))
+  is the whole list of the gauges that calibrate their own zone, replaced on a
+  save (`[]` = none, which migration 267 stored in every project): each row
+  `{ nodeId (UUID), enabled, calibrationStart, calibrationEnd
+  (YYYY-MM-DD | null), calibrationFlowKind, calibrationExclusions (as the
+  site's), qualityFlags ({ suspect: exclude | include, zeroFlowMonths? } |
+  null), gr4j ({ x1, x2, x3, x4 } inside the bounds calibration searches |
+  null), fitRecord (a fit record, never an automated one, | null) }`, a
+  gauge at most once. Each row new to the list is checked as a new site is
+  (`400 calibrationZones: no such hydrological unit in this project` / `the
+  site is the outlet (null) or a gauge above it` / `that gauge has no
+  observed flow record attached`), and whenever the list or
+  `calibrationSiteNodeId` changes, no ticked row may be the calibration site
+  or below it (`400 calibrationZones: calibration zone: "<gauge>" is the
+  calibration site (Scored at), …` / `… is below the calibration site, …`);
+  a stored row whose gauge has gone blocks no save (the run warns and leaves
+  it out). Each row's fit record has its `editedParams` recomputed against
+  the row's own parameters. A copy or an imported project document moves
+  each row, and its fit record's site and zone (`FitRecord.zone` `{ nodeId,
+  units }`), to the copy's nodes. `dataQuality` (the data-check limits) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
   `agreementMinDays` (whole days, 1–366), and (engine ≥ 1.20.0, issue #66)
   `outlierFactorRain` / `outlierFactorFlow` (above 1, at most 1000),
