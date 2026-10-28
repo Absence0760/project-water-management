@@ -229,7 +229,7 @@ test('one parcel’s area, a unit with no parcel, and Use waiting for unsaved ch
 
 	// Lower farm has no parcel on the map: the box says so and offers nothing to use.
 	await openBox(page, project.id, lower.id, 'Lower farm', false);
-	await expect(panel(page).getByTestId('cropland-no-parcels')).toContainText('No farm parcel on the map is linked to Lower farm.');
+	await expect(panel(page).getByTestId('cropland-no-parcels')).toContainText('No boundary or farm parcel on the map is linked to Lower farm.');
 	await expect(panel(page).getByRole('button', { name: /^Use / })).toHaveCount(0);
 
 	await openBox(page, project.id, upper.id, 'Upper farm');

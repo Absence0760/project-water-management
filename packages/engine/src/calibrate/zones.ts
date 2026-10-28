@@ -21,6 +21,7 @@ import { exclusionsError, sanitizeExclusions, type CalibrationExclusion, type Fi
 import { FLAG_USES, zeroFlowMonthsError, type FlagUse } from './qualityFlagSettings';
 import { isLandUnit } from '../runoff/area';
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
+import { warn } from '../warningCodes';
 
 /** The record settings a zone's fit treats flagged days by (a gauge has no gauged range or gap fill, §2.10k). */
 export interface ZoneQualityFlags {
@@ -80,25 +81,25 @@ export function zoneParamsError(v: unknown): string | null {
 export function sanitizeCalibrationZones(raw: unknown, warnings: string[]): CalibrationZone[] {
 	if (raw == null) return [];
 	if (!Array.isArray(raw)) {
-		warnings.push('the calibration zones are not a list; calibrating at one site');
+		warnings.push(warn('calibration.zone.notList', {}, 'the calibration zones are not a list; calibrating at one site'));
 		return [];
 	}
 	const out: CalibrationZone[] = [];
 	const seen = new Set<string>();
 	for (const z of raw.slice(0, CALIBRATION_ZONES_MAX)) {
 		if (!isObj(z) || typeof z.nodeId !== 'string' || !z.nodeId) {
-			warnings.push('a calibration zone without a gauge is ignored');
+			warnings.push(warn('calibration.zone.noGauge', {}, 'a calibration zone without a gauge is ignored'));
 			continue;
 		}
 		if (seen.has(z.nodeId)) {
-			warnings.push(`the calibration zone at gauge node ${z.nodeId} is listed twice; the first is used`);
+			warnings.push(warn('calibration.zone.duplicate', { node: z.nodeId }, `the calibration zone at gauge node ${z.nodeId} is listed twice; the first is used`));
 			continue;
 		}
 		seen.add(z.nodeId);
 		const e = zoneParamsError(z.gr4j ?? null);
 		const ticked = z.enabled === true;
 		// Only a ticked row's problems warn: an unticked row changes nothing a run does, its warnings included.
-		if (e && ticked) warnings.push(`calibration zone at gauge node ${z.nodeId}: ${e}; its units take the catchment's parameters`);
+		if (e && ticked) warnings.push(warn('calibration.zone.badParams', { node: z.nodeId, reason: e }, `calibration zone at gauge node ${z.nodeId}: ${e}; its units take the catchment's parameters`));
 		const qf = isObj(z.qualityFlags) && (FLAG_USES as readonly unknown[]).includes(z.qualityFlags.suspect) && !zeroFlowMonthsError(z.qualityFlags.zeroFlowMonths ?? []) ? z.qualityFlags : null;
 		const kind = z.calibrationFlowKind === 'flow_observed_m3s' || z.calibrationFlowKind === 'flow_logger_m3s' ? z.calibrationFlowKind : null;
 		out.push({
@@ -208,7 +209,11 @@ export function resolveZones(nodes: readonly ZoneNode[], settings: Pick<ProjectS
 	if (!ticked.length) return null;
 	if (!perUnit(settings)) {
 		warnings.push(
-			`Calibration zones: ${ticked.length} gauge${ticked.length === 1 ? ' is' : 's are'} ticked to calibrate here, but calibration zones need Per unit flow generation (Settings → Model selection for flow generation): under Fragmentation one GR4J runs for the whole catchment, on the catchment's parameters`
+			warn(
+				'calibration.zone.needsPerUnit',
+				{ gauges: ticked.length },
+				`Calibration zones: ${ticked.length} gauge${ticked.length === 1 ? ' is' : 's are'} ticked to calibrate here, but calibration zones need Per unit flow generation (Settings → Model selection for flow generation): under Fragmentation one GR4J runs for the whole catchment, on the catchment's parameters`
+			)
 		);
 		return null;
 	}
@@ -216,7 +221,7 @@ export function resolveZones(nodes: readonly ZoneNode[], settings: Pick<ProjectS
 	const site = settings.calibrationSiteNodeId ?? null;
 	const usable = ticked.filter((z) => {
 		const e = calibrationZoneError(nodes, site, z.nodeId);
-		if (e) warnings.push(`Calibration zone: ${e}; its units are in the next zone downstream`);
+		if (e) warnings.push(warn('calibration.zone.unusable', { node: z.nodeId, reason: e }, `Calibration zone: ${e}; its units are in the next zone downstream`));
 		return !e;
 	});
 	if (!usable.length) return null;
@@ -238,14 +243,18 @@ export function resolveZones(nodes: readonly ZoneNode[], settings: Pick<ProjectS
 		}))
 		.sort((a, b) => below(b.nodeId) - below(a.nodeId) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || (a.nodeId < b.nodeId ? -1 : 1));
 	for (const z of zones) {
-		if (!z.fitted) warnings.push(`Calibration zone "${z.name}" has no parameters of its own yet: its units run on the catchment's GR4J parameters until it is fitted`);
+		if (!z.fitted) warnings.push(warn('calibration.zone.unfitted', { node: z.nodeId, name: z.name }, `Calibration zone "${z.name}" has no parameters of its own yet: its units run on the catchment's GR4J parameters until it is fitted`));
 	}
 	// Until the report, the evidence pack, the uncertainty ensemble and automated calibration read the zones (issue #555's
 	// next round), the run says that they show or vary the calibration site's zone's parameters only.
 	const zoned = zones.reduce((n, z) => n + z.units.length, 0);
 	if (zoned)
 		warnings.push(
-			`Calibration zones: ${zoned} land unit${zoned === 1 ? '' : 's'} ran on ${zones.length === 1 ? 'a calibration zone’s' : 'calibration zones’'} own GR4J parameters. The report, the evidence pack, the uncertainty ensemble and automated calibration still show or vary only the calibration site’s parameters (Calibration → Flow calibration)`
+			warn(
+				'calibration.zone.siteOnlyElsewhere',
+				{ units: zoned, zones: zones.length },
+				`Calibration zones: ${zoned} land unit${zoned === 1 ? '' : 's'} ran on ${zones.length === 1 ? 'a calibration zone’s' : 'calibration zones’'} own GR4J parameters. The report, the evidence pack, the uncertainty ensemble and automated calibration still show or vary only the calibration site’s parameters (Calibration → Flow calibration)`
+			)
 		);
 	return { zones, primaryUnits: landUnits.filter((u) => unitZone.get(u) === null), unitZone };
 }

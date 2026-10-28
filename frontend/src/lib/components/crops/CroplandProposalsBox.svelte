@@ -175,7 +175,7 @@
 			{/if}
 			{#if parcels.length === 0}
 				<p class="alert alert-info slim" data-testid="cropland-no-parcels">
-					No farm parcel on the map is linked to {data.nodeName}. Draw or import its parcel on the Map and link it to {data.nodeName}; its cultivated area is summed from there.
+					No boundary or farm parcel on the map is linked to {data.nodeName}. On the Map, draw or import its boundary and choose Use this area for {data.nodeName}, or draw its farm parcels and link them to it; its cultivated area is summed from there.
 					<a href="?tab=map">Open the Map</a>
 				</p>
 			{:else}

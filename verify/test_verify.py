@@ -435,6 +435,11 @@ MUTANTS = [
     ("the EWR is split by area, the flow by the natural MAR share", 'ewr_share = {x["id"]: shares.get(x["id"], 0.0) for x in farms}', 'ewr_share = dict(area_share)'),
     ("the senior users' claims are split by area, not the natural MAR share", ("            tot += shares.get(fid, 0.0)\n", "            tot += area_share.get(fid, 0.0)\n"), ('v = Dn[u["id"]][i] * shares.get(fid, 0.0) / tot', 'v = Dn[u["id"]][i] * area_share.get(fid, 0.0) / tot')),
     ("the natural MAR is taken over every day, not the complete water years", "period = full if full else list(range(hist))", "period = list(range(hist))"),
+    # Calibration zones (§2.10n, engine 1.106.0, issue #555).
+    ("a unit in a calibration zone runs on the site's parameters, not its zone's", 'zp = zone_p.get(u["id"], g)', "zp = g"),
+    ("an unticked zone row still gives its units their own parameters", 'if z.get("enabled") is not True or not n or', "if not n or"),
+    ("a zone's parameters outside the bounds are used as they are", 'if ok else settings["gr4j"]', 'if ok else ({k: p[k] for k in GR4J_BOUNDS} if isinstance(p, dict) else settings["gr4j"])'),
+    ("a unit takes the ticked gauge nearest the outlet, not the first on its way down", 'for i in down(u["id"])[1:]:\n            if i in usable:', 'for i in reversed(down(u["id"])[1:]):\n            if i in usable:'),
 ]
 
 
@@ -490,6 +495,8 @@ class CrossCheck(unittest.TestCase):
             "unit_gauge_windows", "unit_ref_days_checked_out", "unit_ref_window_days_out",
             # Rainfall stations (§2.4i).
             *model.STATION_DIAG,
+            # Calibration zones (§2.10n).
+            "zone_units",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 
