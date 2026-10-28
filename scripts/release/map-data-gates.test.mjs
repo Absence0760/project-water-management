@@ -124,6 +124,8 @@ describe('load: a reference load’s inputs', () => {
 		}
 		// Only evaporation: a land-cover file that happens to say "apan" is not this gate's business.
 		assert.ok(!BLOCKED_EVAPORATION.test('reference/evaporation/dpet-1991-2020.json.gz dPET-1991-2020'));
+		// A whole word only: a label that merely contains the letters (Japan, capans) is not an A-pan grid.
+		assert.ok(!BLOCKED_EVAPORATION.test('reference/evaporation/dpet-japan.json.gz dPET-capans'));
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {

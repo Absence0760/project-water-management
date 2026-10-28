@@ -15,7 +15,8 @@ Srikanthan, R., McVicar, T.R. (2013), *Estimating actual, potential,
 reference crop and pan evaporation using standard meteorological data: a
 pragmatic synthesis*, HESS 17, 1331-1363, Supplement S6 (equations S6.1 to
 S6.6, the net longwave by S3.3 to S3.8) write it, and check against its
-Worked example 9 (Alice Springs, 20 July 1980: 3.6587 mm/day, test_penpan.py):
+Worked example 9 (Alice Springs, 20 July 1980: 2.2570 + 1.4027 = 3.6597 mm/day,
+which S19.90 misprints as 3.6587; test_penpan.py):
 
     E = Δ/(Δ + a γ) × Rn,pan/λ + a γ/(Δ + a γ) × f_pan(u2) × (es - ea)        (S6.1)
     f_pan(u2) = 1.201 + 1.621 u2   (mm day-1 kPa-1)                              (S6.2)

@@ -47,10 +47,29 @@ class WorkedExample(unittest.TestCase):
         self.assertAlmostEqual(rso, 17.9716, places=4)  # S19.29
         self.assertAlmostEqual(penpan.net_longwave(21.0, 2.0, EA, RS, rso), 7.1784, delta=0.005)
 
+    def test_s6_1_by_hand_from_the_printed_intermediates(self):
+        # S19.86 and S19.89 worked by hand from the supplement's own rounded values, so S6.1's combination is
+        # checked apart from the pieces above: Rn,pan = 0.86 x 25.6375 - 7.1784 = 14.8699; then
+        # 0.0898 / (0.0898 + 2.4 x 0.0632) x 14.8699 / 2.45 = 0.37186 x 6.06935 = 2.2570 (radiative) and
+        # 2.4 x 0.0632 / (0.0898 + 0.15168) x 2.1578 x (1.5963 - 0.5614) = 0.62813 x 2.23310 = 1.4027 (aerodynamic).
+        rn = (1 - penpan.ALBEDO_PAN) * 25.6375 - 7.1784
+        self.assertAlmostEqual(rn, 14.8699, places=4)
+        d, g, a = 0.0898, 0.0632, penpan.A_P
+        radiative = d / (d + a * g) * rn / penpan.LAMBDA
+        aerodynamic = a * g / (d + a * g) * penpan.f_pan(U2) * (1.5963 - EA)
+        self.assertAlmostEqual(radiative, 2.2570, places=3)
+        self.assertAlmostEqual(aerodynamic, 1.4027, places=3)
+        # 2.2570 + 1.4027 is 3.6597: S19.90 prints the sum as 3.6587, a slip, and the screened line after it
+        # (0.93 x 3.6597 = 3.4035) uses the right one.
+        self.assertAlmostEqual(radiative + aerodynamic, 3.6597, places=3)
+        self.assertAlmostEqual(penpan.SCREEN_FACTOR * 3.6597, 3.4035, places=4)
+
     def test_penpan_day(self):
-        # S19.90: 2.2570 + 1.4027 = 3.6587 mm/day, unscreened (short grass round the pan, albedo 0.26).
+        # S19.89: 2.2570 + 1.4027 = 3.6597 mm/day, unscreened (short grass round the pan, albedo 0.26; S19.90
+        # misprints the sum as 3.6587, test above). Ours is 3.6606: Rnl with FAO-56's 273.16 K is 0.0044 below
+        # S19.33's (273.2 K), worth +0.0007 mm, and the rest is the supplement's four-decimal rounding.
         e = penpan.penpan_day(tmax_c=21.0, tmin_c=2.0, ea_kpa=EA, u2_ms=U2, rs=RS, ra=RA, p_kpa=penpan.pressure_from_elevation(Z), lat_deg=LAT, z_m=Z, ground_albedo=0.26)
-        self.assertAlmostEqual(e, 3.6587, delta=0.005)
+        self.assertAlmostEqual(e, 3.6597, delta=0.0015)
         # The elevation from the pressure, when not given, is the same 546 m.
         e2 = penpan.penpan_day(tmax_c=21.0, tmin_c=2.0, ea_kpa=EA, u2_ms=U2, rs=RS, ra=RA, p_kpa=penpan.pressure_from_elevation(Z), lat_deg=LAT, ground_albedo=0.26)
         self.assertAlmostEqual(e, e2, places=9)

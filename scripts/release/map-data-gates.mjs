@@ -66,7 +66,7 @@ export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'ma
 export const DATASETS = { tiles: ['basemap', 'fonts', 'terrain', 'water'], 'map-grid': ['WAAS-SWCape-2007'] };
 
 /** An evaporation key or dataset that names an A-pan grid (PenPan's, or any other): blocked (docs/data-sources.md § penpan-apan). */
-export const BLOCKED_EVAPORATION = /pen-?pan|a-?pan|class-?a/i;
+export const BLOCKED_EVAPORATION = /(^|[^a-z])(pen-?pan|a-?pan|class-?a)([^a-z]|$)/i;
 
 const ARCHIVE = /^\/tiles\/[a-z0-9-]+\.pmtiles$/;
 const GLYPHS = '/tiles/fonts/{fontstack}/{range}.pbf';
