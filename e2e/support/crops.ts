@@ -29,13 +29,13 @@ export async function openCropGrid(page: Page, grid: CropGrid) {
 	return dialog;
 }
 
-/** Opens a crop's sheet from its row in the crop list (Edit, or View for a viewer) and returns the sheet's dialog. */
+/**
+ * Opens a crop's sheet from its row in the crop list (Edit, or View for a viewer) and returns the sheet's dialog.
+ * Always by the click: the URL is no guide to whether a sheet is open, since a sheet just closed leaves `crop=`
+ * in it until the page's navigation drops it, and a click in that gap is one a person can make too.
+ */
 export async function openCropSheet(page: Page, name: string) {
 	const sheet = page.getByRole('dialog', { name: new RegExp(`^(Edit ${name}|${name}: crop factors)$`) });
-	if (/[?&]crop=/.test(page.url())) {
-		await sheet.waitFor();
-		return sheet;
-	}
 	await page.getByRole('button', { name: new RegExp(`^(Edit|View) ${name}$`) }).click();
 	await sheet.waitFor();
 	return sheet;

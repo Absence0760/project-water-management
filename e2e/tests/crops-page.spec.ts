@@ -114,6 +114,36 @@ test('the header, crop list, demand chart and hydrological unit bars; Edit opens
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
+test('Edit pressed as a sheet closes, before the URL drops its crop, opens that crop, and Back closes it', async ({ page, owner }) => {
+	// The sheet shuts at once but the URL drops `crop` only when the navigation lands. An Edit in that gap
+	// overtook the drop: the same crop's Edit did nothing, and another crop's left Back reopening the closed one.
+	void owner;
+	const project = await seed(page, 'Crops page quick reopen');
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	/** Done on the open sheet, then the crop's Edit on the very next task, ahead of the URL drop. */
+	const doneThenEdit = (crop: string) =>
+		page.evaluate((crop) => {
+			const done = [...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent?.trim() === 'Done') as HTMLButtonElement;
+			const edit = document.querySelector(`button[data-crop-edit][aria-label="Edit ${crop}"]`) as HTMLButtonElement;
+			done.click();
+			setTimeout(() => edit.click(), 0);
+		}, crop);
+
+	await openCropSheet(page, 'Orchard');
+	await doneThenEdit('Orchard');
+	await expect(page.getByRole('dialog', { name: 'Edit Orchard' })).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page).toHaveURL(/\?tab=crops$/);
+
+	await openCropSheet(page, 'Orchard');
+	await doneThenEdit('Vines');
+	await expect(page.getByRole('dialog', { name: 'Edit Vines' })).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page).toHaveURL(/\?tab=crops$/);
+});
+
 test('Add crop opens the new crop’s sheet; Remove takes it and its areas away', async ({ page, owner }) => {
 	void owner;
 	const project = await seed(page, 'Crops page add');
