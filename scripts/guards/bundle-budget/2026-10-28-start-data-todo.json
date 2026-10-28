@@ -1,0 +1,4 @@
+{
+	"addKb": 8,
+	"why": "Start sheet data to-do list, the units' rain/MAP review and startData in the Map tab chunk (issue #646; 2203→2211 KB on its own branch; the plan-wait polling, ~1 KB, fits within it)"
+}

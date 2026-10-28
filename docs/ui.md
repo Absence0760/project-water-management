@@ -4208,6 +4208,16 @@ map" card) stays the schematic; this is the geography.
   so; an outlet gauge with none stops the proposal with the server's
   sentence. There is no confluence question any more (it went with issue
   #472). Divide's sheet does the same.
+- **A catchment too large to route at once** (`start-17`, issue #646;
+  [maps.md § Start from the map](./maps.md#start-from-the-map)): Start
+  answers straight away with the plan a server without a DEM would make (each
+  unit its boundary's area, no order, the first warning saying what wasn't
+  routed or checked), and the sheet says the routed plan is being worked out
+  in the background; where the worker runs it replaces the quick plan while
+  that is still open. Divide's sheet waits for its routed plan instead. The
+  rest of the catchment's card has a tick for **what it drains into**: the
+  first unit, water user or gauge its flow path meets (the outflow only when
+  nothing lies below it).
 - **Divide the model** (editors, a model with nodes, a DEM on the server;
   #326 C3's follow-up, `DivideSheet.svelte`, its own chunk, `divideFlow.ts`,
   [maps.md § Start from the map](./maps.md#start-from-the-map)). The
@@ -6469,7 +6479,8 @@ editors run one now and read the map's proposals, viewers read.
   automatically … → Data feeds** (in-page, `#data-feeds`), the Map's
   Getting started step and the Start sheet's data step
   (`?tab=series&rain=boundary#data-feeds`, and **Observed flow**
-  `?tab=series#data-feeds`), Model settings' Rain for each unit line (Model selection for flow generation)
+  `?tab=series&feed=dws#data-feeds`, which opens the DWS gauge's card with
+  the nearest gauging stations for an owner), Model settings' Rain for each unit line (Model selection for flow generation)
   (`?tab=series&rain=units#data-feeds`) and Runs & results' stub for a run
   with no forecast (`res-forecast`, `runs/missingPanel.ts`). Each lands
   through `landOnAnchor` (`help/anchor.ts`): once the lazy panel's heading
