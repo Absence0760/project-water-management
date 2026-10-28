@@ -42,7 +42,15 @@ describe('EwrDailySourceFields: the scaling default', () => {
 	});
 });
 
-const text = (html: string) => html.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+// Strip to a fixpoint (as EwrSplitFields.test.ts does): one pass can leave a marker a removal joined up.
+const text = (html: string) => {
+	let s = html;
+	for (let prev = ''; prev !== s; ) {
+		prev = s;
+		s = s.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ');
+	}
+	return s.replace(/\s+/g, ' ');
+};
 
 // The kept DRM files (issue #617): the whole .tab under the TAB flows, its total column marked; a changed row says so;
 // a source saved before keeps its flows and says to load the file again; the .rul's name, date and REC above its tables.

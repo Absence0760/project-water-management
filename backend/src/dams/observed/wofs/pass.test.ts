@@ -133,7 +133,7 @@ describe('runWofsPass', () => {
 	it('writes one row for a date two overlapping scenes both saw', async () => {
 		// Move the dam east until the fixture puts it on two neighbouring scenes.
 		const fx = wofsFixture(() => TODAY, SPEC);
-		let dam = DAM_A;
+		let dam: typeof DAM_A;
 		for (let lon = 22.31; ; lon += 0.002) {
 			dam = { ...DAM_A, geometry: { type: 'Polygon', coordinates: [ring(lon, -32.12)] } };
 			const bbox = outlineBbox(dam).join(',');
