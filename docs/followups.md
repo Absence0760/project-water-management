@@ -4739,6 +4739,8 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       client's hydrologist; issue #646 item 6, the hydrologist's F5; maps.md
       § Evaporation stations, data-sources.md § dws-evaporation). DWS's
       permission recorded 2026-10-28 covers verified daily **flow** only.
+      The request is drafted in
+      [legal/dws-evaporation-request.md](./legal/dws-evaporation-request.md).
       Ask DWS (GeoRequests@dws.gov.za, through the hydrologist, as for flow)
       to extend it to the verified daily pan evaporation of weather stations
       (`E` codes, Class-A and Symons) near the client's catchment, stored and
