@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parseDwsRows } from '../feeds/sources/dws.js';
 import { parseArgs, SYNTHETIC_EVAPORATION_STATIONS_DIR, SYNTHETIC_EVAPORATION_STATIONS_LIST } from '../../scripts/import-evaporation-stations.js';
 import { EVAP_MAX_MM, parseDwsEvaporation } from './dwsEvaporation.js';
 import {
@@ -57,6 +58,12 @@ describe('parseDwsEvaporation', () => {
 			expect(r.station).toBe(f.name.slice(0, 6));
 			expect(r.daysWithValue).toBeGreaterThan(0.9 * r.values.length);
 		}
+	});
+
+	it('is never read as flow: the DWS flow reader (production\'s `dws` load) refuses an evaporation reply', () => {
+		// The production gate: DWS's permission covers verified daily flow only, so a pan record must not ride in as a
+		// `dws` reference load (referenceLoad.ts loadDws, scripts/release/map-data-gates.mjs). Control: the evaporation reader reads it above.
+		for (const f of replies) expect(() => parseDwsRows(f.text), f.name).toThrow(/expected DATE D AVG F\/R QUAL/);
 	});
 });
 
@@ -206,7 +213,7 @@ describe('ranking from the boundary', () => {
 		}));
 		const r = rankEvaporationStations(box, rows, 100);
 		expect(r.map((s) => s.code)).toEqual(['Z1E001', 'Z1E002', 'Z1E003']);
-		expect(r[0]).toMatchObject({ distanceKm: 0, recordStart: '2014-01-01', recordEnd: '2019-12-31', recordYears: 6, synthetic: true });
+		expect(r[0]).toMatchObject({ distanceKm: 0, recordStart: '2014-01-01', recordEnd: '2017-12-31', recordYears: 4, synthetic: true });
 		expect(r[0]!.completeness).toBeGreaterThan(0.95);
 		expect(r[0]!.completeness).toBeLessThan(1);
 		expect(rankEvaporationStations(box, rows, 300).map((s) => s.code)).toContain('Z2E001');

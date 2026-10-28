@@ -77,7 +77,7 @@ describe('the nearest evaporation stations', () => {
 			conversions: { id: string; result: { ok: boolean } }[] | null;
 		}[];
 		expect(s.map((x) => x.code)).toEqual(['Z1E001', 'Z1E002', 'Z1E003']);
-		expect(s[0]).toMatchObject({ pan: 'class_a', distanceKm: 0, recordStart: '2014-01-01', recordEnd: '2019-12-31', synthetic: true, apan: { ok: true }, conversions: null });
+		expect(s[0]).toMatchObject({ pan: 'class_a', distanceKm: 0, recordStart: '2014-01-01', recordEnd: '2017-12-31', synthetic: true, apan: { ok: true }, conversions: null });
 		expect(s[0]!.completeness).toBeGreaterThan(0.95);
 		expect(s[1]).toMatchObject({ pan: 'symons', apan: null });
 		expect(s[1]!.conversions!.map((c) => [c.id, c.result.ok])).toEqual([
@@ -141,12 +141,12 @@ describe('accepting a station', () => {
 		expect((await settingsOf(projectId)).apanMm).toEqual(listed.monthly.meansMm);
 		const [reason] = await reasons(projectId);
 		expect(reason).toMatch(/^A-pan evaporation from DWS evaporation station Z1E001 “Testpan Dam \(invented\)” \(Class-A pan, inside the catchment boundary “Test catchment”\)/);
-		expect(reason).toMatch(/monthly means of 2014-01–2019-12/);
-		expect(reason).toMatch(/daily series “DWS Z1E001” written \(2014-01-01 to 2019-12-31\)/);
+		expect(reason).toMatch(/monthly means of 2014-01–2017-12/);
+		expect(reason).toMatch(/daily series “DWS Z1E001” written \(2014-01-01 to 2017-12-31\)/);
 		expect(reason).toMatch(/dataset “synthetic”/);
-		expect(await apanSeries(projectId)).toEqual([{ name: 'DWS Z1E001', source: 'DWS evaporation station Z1E001 (Class-A pan), dataset synthetic', start: '2014-01-01', n: 2191 }]);
+		expect(await apanSeries(projectId)).toEqual([{ name: 'DWS Z1E001', source: 'DWS evaporation station Z1E001 (Class-A pan), dataset synthetic', start: '2014-01-01', n: 1461 }]);
 		const after = (await owner.call('GET', at('/evaporation-stations'))).body.settings.dailyApan;
-		expect(after).toEqual([{ name: 'DWS Z1E001', source: expect.stringMatching(/Z1E001/), from: '2014-01-01', to: '2019-12-31' }]);
+		expect(after).toEqual([{ name: 'DWS Z1E001', source: expect.stringMatching(/Z1E001/), from: '2014-01-01', to: '2017-12-31' }]);
 	});
 
 	it('a Symons station writes only the 12 means converted by the equation picked, cited, and leaves the daily series alone', async () => {

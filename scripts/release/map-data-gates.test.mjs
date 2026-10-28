@@ -72,7 +72,8 @@ describe('load: a reference load’s inputs', () => {
 		assert.deepEqual(loadProblems({ ...dws, LOAD_STATION: 'X0H001', LOAD_KEY: 'reference/dws/page.html' }, lacks), []);
 		assert.match(loadProblems({ ...dws, LOAD_SOURCE: ' ' }, has).join('\n'), /dws needs a source/);
 		assert.match(loadProblems({ ...dws, LOAD_SOURCE: 'x'.repeat(201) }, has).join('\n'), /dws needs a source of 1 to 200/);
-		for (const station of ['X0R001', 'x0h001', 'X0H0011', 'X0H001;']) {
+		// X0E001: an evaporation station. DWS's permission covers river flow only, so its pan record can't ride in as a dws load (issue #646 item 6).
+		for (const station of ['X0R001', 'X0E001', 'x0h001', 'X0H0011', 'X0H001;']) {
 			const problems = loadProblems({ ...dws, LOAD_STATION: station }, has);
 			assert.equal(problems.length, 1, station);
 			assert.match(problems[0], /river gauge code/);
@@ -111,7 +112,7 @@ describe('load: a reference load’s inputs', () => {
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {
-		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'crop-types', 'sanlc']) {
+		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'evaporation-stations', 'crop-types', 'sanlc']) {
 			const problems = loadProblems({ ...landCover, LOAD_KIND: kind }, has);
 			assert.equal(problems.length, 1);
 			assert.match(problems[0], /blocked by their licences/);

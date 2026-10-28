@@ -11,11 +11,11 @@
 // with noise and a few missing days, never a real station's record. The
 // stations sit round the Sandspruit example's catchment (21.31° E, 33.79° S;
 // backend/scripts/examples/map.ts), so its boundary proposes them:
-//  * Z1E001 a Class-A pan inside the catchment, 2014–2019: the one to use;
-//  * Z1E002 a Symons pan nearby, 2010–2015: its July S-pan mean is between
+//  * Z1E001 a Class-A pan inside the catchment, 2014–2017: the one to use;
+//  * Z1E002 a Symons pan nearby, 2010–2013: its July S-pan mean is between
 //    the two equations' floors, so Taljaard (2023) converts it and WR90 refuses;
 //  * Z1E003 a Class-A pan with under two years: too short for monthly means;
-//  * Z2E001 a Class-A pan 200 km away: outside the default search radius.
+//  * Z2E001 a Class-A pan 200 km away, one year: outside the default search radius.
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
@@ -37,10 +37,10 @@ interface Spec {
 }
 
 const STATIONS: Spec[] = [
-	{ code: 'Z1E001', name: 'Testpan Dam (invented)', pan: 'A', lat: -33.765, lon: 21.335, from: '2014-01-01', to: '2019-12-31', mean: 6, swing: 4, seed: 1 },
-	{ code: 'Z1E002', name: 'Symons Testpan (invented)', pan: 'S', lat: -33.9, lon: 21.55, from: '2010-01-01', to: '2015-12-31', mean: 5.5, swing: 4, seed: 2 },
+	{ code: 'Z1E001', name: 'Testpan Dam (invented)', pan: 'A', lat: -33.765, lon: 21.335, from: '2014-01-01', to: '2017-12-31', mean: 6, swing: 4, seed: 1 },
+	{ code: 'Z1E002', name: 'Symons Testpan (invented)', pan: 'S', lat: -33.9, lon: 21.55, from: '2010-01-01', to: '2013-12-31', mean: 5.5, swing: 4, seed: 2 },
 	{ code: 'Z1E003', name: 'Short Record (invented)', pan: 'A', lat: -33.55, lon: 21.05, from: '2017-03-01', to: '2018-12-31', mean: 6.5, swing: 4.5, seed: 3 },
-	{ code: 'Z2E001', name: 'Far Station (invented)', pan: 'A', lat: -33.0, lon: 23.4, from: '2012-01-01', to: '2016-12-31', mean: 7, swing: 4, seed: 4 }
+	{ code: 'Z2E001', name: 'Far Station (invented)', pan: 'A', lat: -33.0, lon: 23.4, from: '2012-01-01', to: '2012-12-31', mean: 7, swing: 4, seed: 4 }
 ];
 
 /** A small fixed-seed generator (mulberry32): the same numbers on every run. */

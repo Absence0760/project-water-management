@@ -58,9 +58,9 @@ test('an editor uses the nearest Class-A station’s record as the A-pan and its
 
 	await expect(panel(page).getByTestId('evaporation-station-synthetic')).toContainText('Synthetic test data.');
 	await expect(panel(page).getByTestId('evaporation-station-option')).toHaveCount(3);
-	await expect(option(page, 'Z1E001')).toContainText('Z1E001 Testpan Dam (invented) · Class-A pan · inside the boundary · 2014–2019 (6 years), 98 % of days read');
+	await expect(option(page, 'Z1E001')).toContainText('Z1E001 Testpan Dam (invented) · Class-A pan · inside the boundary · 2014–2017 (4 years), 98 % of days read');
 	await expect(option(page, 'Z1E001').getByRole('radio')).toBeChecked();
-	await expect(row(page, 'proposed').getByRole('cell').first()).toHaveText('184.5');
+	await expect(row(page, 'proposed').getByRole('cell').first()).toHaveText('183.6');
 	await expect(row(page, 'span')).toHaveCount(0);
 	await expect(panel(page).getByTestId('evaporation-station-daily')).toBeChecked();
 
@@ -74,13 +74,13 @@ test('an editor uses the nearest Class-A station’s record as the A-pan and its
 	await expect(panel(page).getByTestId('evaporation-station-notice')).toContainText(/The A-pan row is now Z1E001’s .* mm a year, and its daily record the series “DWS Z1E001”, saved as a settings revision citing the station\./);
 	await expect(panel(page).getByTestId('evaporation-station-notice')).toBeFocused();
 	await expect(panel(page).getByTestId('evaporation-station-same')).toBeVisible();
-	await expect(row(page, 'saved').getByRole('cell').first()).toHaveText('184.5');
-	await expect(panel(page).getByTestId('evaporation-station-daily-now')).toContainText('“DWS Z1E001” (2014-01-01 to 2019-12-31)');
+	await expect(row(page, 'saved').getByRole('cell').first()).toHaveText('183.6');
+	await expect(panel(page).getByTestId('evaporation-station-daily-now')).toContainText('“DWS Z1E001” (2014-01-01 to 2017-12-31)');
 	await expectNoViolations(page, { include: '[data-testid="evaporation-station-proposal"]' });
 
 	await page.goto(`/projects/${project.id}?tab=history`);
 	await expect(page.getByTestId('history-entry').filter({ hasText: 'A-pan evaporation from DWS evaporation station Z1E001' }).first()).toContainText(
-		/Class-A pan, inside the catchment boundary “Catchment”.*daily series “DWS Z1E001” written \(2014-01-01 to 2019-12-31\)/
+		/Class-A pan, inside the catchment boundary “Catchment”.*daily series “DWS Z1E001” written \(2014-01-01 to 2017-12-31\)/
 	);
 });
 
@@ -95,13 +95,13 @@ test('a Symons station converts only with the equation picked, refuses WR90’s 
 	await expect(conv).toContainText('cannot be inverted');
 	await expect(conv.getByRole('radio', { name: /WR90/ })).toBeDisabled();
 	await expect(conv).toContainText('can’t be used here: the S-pan in Jul is below 32.5 mm');
-	await expect(row(page, 'span').getByRole('cell').first()).toHaveText('136.1');
+	await expect(row(page, 'span').getByRole('cell').first()).toHaveText('135.1');
 	await expect(row(page, 'proposed')).toContainText('Pick an equation above');
 	await expect(panel(page).getByRole('button', { name: 'Use as the A-pan' })).toHaveCount(0);
 	await expect(panel(page).getByTestId('evaporation-station-daily')).toHaveCount(0);
 
 	await conv.getByRole('radio', { name: /Taljaard/ }).check();
-	await expect(row(page, 'proposed').getByRole('cell').first()).toHaveText('169.2');
+	await expect(row(page, 'proposed').getByRole('cell').first()).toHaveText('168');
 	await panel(page).getByRole('button', { name: 'Use as the A-pan' }).click();
 	await answerConfirm(page, true, /Z1E002 \(Symons Testpan \(invented\)\), a Symons pan .* km from the boundary, converted by the Taljaard \(2023\) general monthly equation, inverted\./);
 	await expect(panel(page).getByTestId('evaporation-station-notice')).toHaveText(/^The A-pan row is now Z1E002’s .* mm a year, saved as a settings revision citing the station\. Run the model to see its effect\.$/);
