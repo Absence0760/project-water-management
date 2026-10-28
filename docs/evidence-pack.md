@@ -68,7 +68,10 @@ terms each listed run applied (report format `evidence-20`, issue #523
 G3/G4, 2026-10-12; [§ The responsible authority](#the-responsible-authority)); and § 7's
 observed wet days of the applicant's own dams from Digital Earth Africa's
 WOfS (report format `evidence-21`, issue #604 R5-C, 2026-10-27;
-[§ Observed wet days](#observed-wet-days)). What is left is
+[§ Observed wet days](#observed-wet-days)); and § 3 naming the regional
+GR4J prior when the baseline's parameters came from it (report format
+`evidence-22`, issue #622, 2026-10-28; [§ The regional prior in
+§ 3](#the-regional-prior-in--3)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -144,6 +147,34 @@ classifies them again ([§ Observed wet days](#observed-wet-days)). No manifest
 version changed, as for `evidence-8`. A pack drafted before has no
 `damObservations`: its stored manifest still hashes to its recorded hash,
 and its report prints without § 7.
+
+### The regional prior in § 3
+
+§ 3 (*Model and data*) names the regional GR4J prior (report format
+`evidence-22`, issue #622, [model.md §2.10m](./model.md)) as
+`report.credibility.regionalPrior`, built from the baseline run's input
+snapshot only (`evidence/regionalPrior.ts`), so it says what that run ran
+on:
+
+- when its fit record used the prior (a penalty, its p10–p90 box or both)
+  and its fitted parameters weren't edited since: "Parameters calibrated
+  with the regional prior, n donors; penalty weight w, search held to its
+  p10–p90 box.";
+- else, when the parameters are still the medians a "Start from the prior"
+  wrote for the target they are now (the catchment, or under calibration
+  zones the site's own zone and its units) and no fit was applied after it:
+  "Parameters from the regional prior, n donors (the donors' medians, not
+  calibrated).";
+- else nothing (`null`).
+
+Either line goes on with the donor set's label (and "invented donors" for
+the synthetic set), how many were offered, the first 12 hex digits of its
+SHA-256 and the leave-one-out skill, ending "the prior has no skill" at 0
+or below, or saying its skill is unknown when there were too few donors to
+score it. The report shows the line above *Validation*. The manifest's
+hash covers it; no manifest version changed, as for `evidence-8`. A pack
+drafted before has no `regionalPrior`: its stored manifest still hashes to
+its recorded hash, and its § 3 prints without the line.
 
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, the reproduction bundle's key and

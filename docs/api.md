@@ -1036,7 +1036,11 @@ alongside teams, e.g. to give an outside client `viewer` access.
   never holds the low-flow periods) and `fitAllDays` (a scored
   period, or `null`), from engine 1.25.0 the optional `auto` (issue #153:
   `{ rules, ruleExclusions, chosen, cases }`, how automated calibration chose
-  the fit), and no others. `auto` is the server's to write
+  the fit), from engine 1.106.0 the optional `prior` (issue #622: `{ weight
+  (0–10), bounded, ranges, provenance, penaltyAtFit, penaltyAtStart }`, the
+  regional GR4J prior the fit used, checked by the engine's
+  `calibrationPriorError`, a `400` otherwise; `bounds` is then `wide`,
+  `typical` or `prior`, the prior's box), and no others. `auto` is the server's to write
   ([§ Automated calibration](#automated-calibration) `…/apply`): a save whose
   `fitRecord` carries a new or changed `auto` is a `409`; one carrying the
   stored record back unchanged is fine. `POST /projects/import` checks a
@@ -4426,6 +4430,51 @@ outcome series, or the problems that kept it from running.
   missing value as `null`. Not every node's series: a sweep is not a run.
 - Progress: the job reports 0–100 after each member (`job.progress`, and
   `GET /jobs`). A sweep can't be cancelled; it is at most 12 runs.
+
+## Regional GR4J prior
+
+GR4J's parameter ranges for the catchment, or one calibration zone, from
+calibrated, similar, nearby gauged donor basins (issue #622,
+`backend/src/calibration/prior.ts`, [model.md §2.10m](./model.md)): what the
+Calibration page's Regional prior panel shows and Fit automatically uses,
+and "Start from the prior".
+
+| Method | Path | Body / query | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/gr4j-prior` | `?zone=<gauge node id>` (optional: a ticked calibration zone; absent = the calibration site's own zone, or with no zone the catchment), `?dataset=<label>` (optional; default a real donor set before the synthetic one, then the newest load) | `200 { dataset, datasets, soil, target, prior, problem, donors, ranges, provenance, started }` | viewer |
+| POST | `/projects/:id/gr4j-prior/start` | `{ zone?: <gauge node id> \| null, dataset?: <label> }` | `200 { params: { x1, x2, x3, x4 }, record: PriorStartRecord, revisionId }` | editor |
+
+- `dataset`: the donor set read (`{ dataset, version, source, method,
+  attribution, synthetic, donorSetSha256, donors }`), `null` with none
+  loaded; `datasets` every loaded set; `soil` the soil grid read (`{
+  dataset, version, attribution, synthetic }`) or `null`.
+- `target`: `{ zoneNodeId, units (sorted, null = every unit), lon, lat,
+  positionFrom ('gauge' | 'boundary' | null), attributes (the engine's
+  CatchmentAttributes: area, MAP and aridity from the project, the
+  HydroATLAS-only ones null), pawcMm, soilProblem, climateYears, rainFrom
+  ('catchment' | 'units') }`. The position is the zone's gauge on the map,
+  else the catchment boundary's centroid; PAWC is the soil grid over the
+  boundary.
+- `prior` is the engine's `RegionalPrior` (or `null` with no donors or no
+  position); `ranges` the ranges a fit or a start uses (x1 from the soil
+  relation when it has skill and the target has a PAWC); `provenance` the
+  engine's `PriorProvenance` (the donor set and its SHA-256, the donors kept
+  with their weights, the LOO skill, the reference load, the target), which
+  a fit passes to `calibrate()` with the ranges. `donors` the kept donors
+  with their position, area, weight, distance, similarity, own KGE′ and
+  parameters. `problem` says why there is no prior to use (no donors loaded,
+  no boundary, the engine's reason), else `null`. `started` the target's
+  start record while its parameters still hold what it wrote, else `null`.
+- `400` for an unknown dataset or a gauge that isn't a calibration zone;
+  `404` for a non-member.
+- `POST …/start` re-derives the prior on the server (the client only names
+  the target and dataset) and writes the p50s into the target's GR4J
+  parameters (`gr4j`, or the zone's row), with a `PriorStartRecord` in
+  `settings.gr4jPrior` replacing that target's (one per zone), as one
+  settings revision whose reason names the donors. `settings.gr4jPrior` is
+  never written by a settings save (`PATCH /projects/:id` drops it). `400`
+  when there is no prior (the `problem`); `409` when the donor set changed
+  while it was read.
 
 ## Automated calibration
 
