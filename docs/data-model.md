@@ -548,6 +548,23 @@ mapMm, mapSource, lat, lon }`):
   setting doesn't (`checkRainStations`'s `stored`), since the Settings form
   sends the whole setting with every save (issue #553 round 3). A save that
   names it anew (one where the stored setting didn't) is refused.
+- **Every setting that names a series by id** (issue #611, engine ≥
+  1.102.0) is carried along the same way: `settings.rainStations.unreliable`
+  (any rain record's, not only a station's), `settings.flowMissing` (a flow
+  record's missing periods) and the series in each `settings.checksKept`
+  item id. A copy maps every series the settings name to the copy's of the
+  same kind and name (`projects/flowMissingSettings.ts`
+  `remapSettingSeriesIds`, after the series are copied); the project
+  document gives every such series its `id` (and every station, as before),
+  and an import follows the fresh ids. A save is refused when it names anew
+  a series that isn't a flow record of the project (`flowMissing`,
+  `checkFlowMissing`) or a rain record of it (`unreliable`: a catchment rain
+  series at any site or the alternative gauge, `checkRainStations`). A run
+  matches the ids through `DailySeries.seriesId`: `loadLiveInput` sets it on
+  every series it reads and the run's snapshot keeps it
+  (`model_run.inputs.series[key].seriesId`), so `loadRunInput`, a scenario
+  on the run and an evidence pack's bundle apply the same periods; a run
+  stored before has none, and matches nothing.
 - **What a run reads.** Only when `settings.rainStations` assigns a station
   to the catchment or a unit (`runs/stationInput.ts`): every station's
   record under `rain_station_mm#<series id>` and its name, MAP, source and
@@ -861,7 +878,14 @@ holds each calibration record's gauged range (highest and lowest field
 gauging with a source) and how automatic calibration treats extrapolated,
 suspect and infilled days, and from engine 1.90.0 (issue #557) its
 `lowFlowPeriods`, date ranges in which only a record's flows at or below a
-threshold are valid; still no migration (model.md §2.10h). `settings.calibrationRules` (engine ≥ 1.25.0,
+threshold are valid; still no migration (model.md §2.10h). `settings.flowMissing`
+(engine ≥ 1.102.0, issue #611) is one flow record's periods treated as
+missing, `{ <series id>: [period, …] }` in the exclusions' shape, at most 100
+a record and 50 records, replaced whole by a save; `settings.checksKept` the
+data-check items kept as recorded (`<check>:<series id>:<start>:<end>`, at
+most 300), of which a flow record's kept outliers and flat stretches are
+scored by the fit (model.md §2.10h). Both are absent until set, and neither
+needs a migration. `settings.calibrationRules` (engine ≥ 1.25.0,
 issue #153) is automated calibration's pre-declared rule set with its
 server-kept revision and the hydrologist's sign-off; no migration either
 (model.md §2.10j). `settings.evidenceUncertaintyRule` (issue #71) is the

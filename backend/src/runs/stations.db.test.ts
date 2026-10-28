@@ -108,7 +108,9 @@ describe('rainfall stations in a run’s input', () => {
 		// The outlet has no land; an unknown node isn't one at all.
 		await refused({ units: { [outlet]: { stationId: ridge } } }, /a unit given a station is not a land unit of this project/);
 		await refused({ sites: { [vlei]: { unitId: crypto.randomUUID() } } }, /the unit a station stands in is not a land unit/);
-		await refused({ unreliable: { [crypto.randomUUID()]: [] } }, /a station’s unreliable periods is not a rainfall station/);
+		// Any rain record's unreliable periods (engine ≥ 1.102.0, issue #611), but no other series' and nothing unknown.
+		await refused({ unreliable: { [crypto.randomUUID()]: [] } }, /a rain record’s unreliable periods is not a rain record of this project/);
+		await refused({ unreliable: { [flow]: [] } }, /a rain record’s unreliable periods is not a rain record of this project/);
 		await refused({ unreliable: { [ridge]: [['2012-03-01', '2012-02-01']] } }, /ends before it starts/);
 		await refused({ catchmentMapMm: 700 }, /the catchment’s a MAP needs its source/);
 		await refused({ catchmentMapMm: 50_000, catchmentMapSource: 'x' }, /./);
@@ -229,9 +231,13 @@ describe('rainfall stations in a run’s input', () => {
 		expect((doc.series as { kind: string; id?: string }[]).filter((s) => s.id).map((s) => s.kind)).toEqual(['rain_catchment_mm', 'rain_catchment_mm', 'rain_catchment_mm']);
 		const imported = (await call(owner, 'POST', '/projects/import', doc, 201)).project.id as string;
 		await check(imported);
-		// An id on a series that is no station is refused.
+		// Any series may carry an id since the settings name more than stations by it (issue #611); one id twice is refused.
+		const flowId = structuredClone(doc);
+		(flowId.series as { kind: string; id?: string }[]).find((s) => s.kind === 'flow_observed_m3s')!.id = crypto.randomUUID();
+		expect((await owner.call('POST', '/projects/import', flowId)).status).toBe(201);
 		const bad = structuredClone(doc);
-		(bad.series as { kind: string; id?: string }[]).find((s) => s.kind === 'flow_observed_m3s')!.id = crypto.randomUUID();
+		const list = bad.series as { kind: string; id?: string }[];
+		list.find((s) => s.kind === 'flow_observed_m3s')!.id = list.find((s) => s.id)!.id;
 		expect((await owner.call('POST', '/projects/import', bad)).status).toBe(400);
 	});
 

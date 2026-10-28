@@ -120,7 +120,9 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		const provenance = r.product !== null && r.product_version !== null ? { product: r.product, version: r.product_version } : null;
 		// So do where the values came from and the unit they were given in (107_series_source.sql).
 		const origin = seriesOrigin({ source: r.source, sourceUnit: r.source_unit, sourceUnitFactor: r.source_unit_factor });
-		series[key] = { startDate: r.start_date, values: r.values, provenance, origin };
+		// And its id (engine ≥ 1.102.0, issue #611): the settings that name a record by it (settings.flowMissing, a rain
+		// record's unreliable periods, settings.checksKept) match it there.
+		series[key] = { startDate: r.start_date, values: r.values, provenance, origin, seriesId: r.id };
 	}
 	// settings.autoRun (runs/autoRun.ts) says when the project runs, not how, settings.outcomes
 	// (projects/outcomeSettings.ts) how its results are read, and settings.outlook
@@ -414,6 +416,8 @@ interface SnapshotSeries {
 	provenance?: SeriesProvenance | null;
 	/** Where the values came from and the unit they were given in (107_series_source.sql), null = not recorded; absent on runs saved before it. */
 	origin?: SeriesOrigin | null;
+	/** The stored series it was read from (engine ≥ 1.102.0, issue #611): the settings that name a record by its id match it. Absent on runs saved before it, and on a series that isn't stored. */
+	seriesId?: string;
 }
 
 /**
@@ -675,7 +679,8 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 					valuesSha256: hashes[k]!,
 					// Absent when the input didn't know it (a scenario rerun of a run from before 032).
 					...(v.provenance !== undefined ? { provenance: v.provenance } : {}),
-					...(v.origin !== undefined ? { origin: v.origin } : {})
+					...(v.origin !== undefined ? { origin: v.origin } : {}),
+					...(typeof v.seriesId === 'string' ? { seriesId: v.seriesId } : {})
 				} satisfies SnapshotSeries
 			])
 		),
@@ -892,7 +897,9 @@ function rebuildRunInput(r: StoredRun, refs: StoredRef[]): ModelInput {
 			startDate: got.start_date,
 			values: got.values,
 			...(want.provenance !== undefined ? { provenance: want.provenance } : {}),
-			...(want.origin !== undefined ? { origin: want.origin } : {})
+			...(want.origin !== undefined ? { origin: want.origin } : {}),
+			// The series it was read from (engine ≥ 1.102.0): settings.flowMissing and the like name it, so a re-run applies them as the run did.
+			...(typeof want.seriesId === 'string' ? { seriesId: want.seriesId } : {})
 		};
 	}
 	const extra = refs.find((x) => !(x.kind in snap));

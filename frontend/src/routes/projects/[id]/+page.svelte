@@ -56,6 +56,7 @@
 	import { ProjectDetailsDraft } from '#lib/components/project/detailsDraft.svelte.js';
 	import { SettingsDraft } from '#lib/components/settings/settingsDraft.svelte.js';
 	import { blockerHref } from '#lib/components/settings/blockers.js';
+	import { rainRecordOptions } from '#lib/components/settings/recordPeriods.js';
 	import { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import type { UnsavedEdits } from '#lib/preview/overlay.js';
 	import IssueList from '#lib/components/model/IssueList.svelte';
@@ -1036,6 +1037,7 @@
 								{seriesKinds}
 								catchmentRain={series ? (firstOutletSeries(series, 'rain_catchment_mm') ?? null) : undefined}
 								rainSeries={series?.filter((x) => x.kind === 'rain_catchment_mm' && !x.siteNodeId)}
+								rainRecords={series ? rainRecordOptions(series, (id) => editor.model.nodes.find((n) => n.id === id)?.name) : null}
 								readonly={!canEdit}
 								onModelChanged={reloadInputs}
 							/>

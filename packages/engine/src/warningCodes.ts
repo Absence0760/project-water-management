@@ -94,6 +94,7 @@ export const WARNING_CODES = {
 	'rain.unitGauge.accumulation.spread': { setting: 'set-rain', group: 'check' },
 	'rain.unitGauge.accumulation.setAside': { setting: 'set-rain', group: 'check' },
 	'rain.unitGauge.accumulation.asRecorded': { setting: 'set-rain', group: 'check' },
+	'rain.unitGauge.unreliable': { setting: 'set-rain', group: 'check' },
 	// A unit's rain rule fell back to the catchment's rain (runoff/unitRain.ts).
 	'rain.unit.catchmentFallback': { setting: 'set-unit-rain', group: 'check' },
 

@@ -284,13 +284,14 @@ describe('rain stations and unit gauges', () => {
 	});
 
 	it('codes each of a unit gauge’s checks, naming the unit', () => {
-		const w = unitGaugeCheckWarnings('Upper', { values: [], zeroRunDays: 30, zeroRunAsRecordedDays: 4, spreadWindows: 1, spreadDays: 6, spreadMm: 60.2, setAside: 2, asRecorded: 1 });
+		const w = unitGaugeCheckWarnings('Upper', { values: [], zeroRunDays: 30, zeroRunAsRecordedDays: 4, spreadWindows: 1, spreadDays: 6, spreadMm: 60.2, setAside: 2, asRecorded: 1, unreliableDays: 3 });
 		expect(coded(w).map((c) => [c.code, c.params])).toEqual([
 			['rain.unitGauge.zeroRun.missing', { unit: 'Upper', days: 30 }],
 			['rain.unitGauge.zeroRun.asRecorded', { unit: 'Upper', days: 4 }],
 			['rain.unitGauge.accumulation.spread', { unit: 'Upper', windows: 1, days: 6, mm: 60 }],
 			['rain.unitGauge.accumulation.setAside', { unit: 'Upper', readings: 2 }],
-			['rain.unitGauge.accumulation.asRecorded', { unit: 'Upper', windows: 1 }]
+			['rain.unitGauge.accumulation.asRecorded', { unit: 'Upper', windows: 1 }],
+			['rain.unitGauge.unreliable', { unit: 'Upper', days: 3 }]
 		]);
 	});
 });

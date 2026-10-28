@@ -401,6 +401,8 @@ export interface RecordProblem {
 /** Build the calibration problem for a project. Throws when there is nothing to calibrate against. */
 export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = [], model?: RunoffModelId): CalibrationProblem {
 	const run = prepareRun(input);
+	// The fit reads a record's own missing periods as gaps, as the run does (engine ≥ 1.102.0, ../recordPeriods.ts).
+	if (run.series !== input.series) input = { ...input, series: run.series };
 	const { settings, days, startDate, aligned, month, warnings, start } = run;
 	const modelId = model ?? settings.runoffModel;
 	// Refused as runModel refuses it (runoff/simulate.ts).
