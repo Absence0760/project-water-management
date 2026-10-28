@@ -42,6 +42,9 @@ import type {
 	SeasonalOutlook,
 	ClimateIndexId,
 	ClimateOutlook,
+	ForecastMemberResult,
+	ForecastOffReason,
+	ForecastOutlook,
 	SeriesMeta,
 	StoredRunoffModelId,
 	YearClassMethod,
@@ -2710,16 +2713,47 @@ export type OutlookClimate = ClimateOutlook & {
 	source: Partial<Record<ClimateIndexId, { url: string; through: string; revision: number; fetchedAt: string }>>;
 };
 
+/** What the forecast-conditioned outlook read from the data mirror (issue #620, backend outlooks/c3s.ts C3sSource). */
+export interface OutlookForecastSource {
+	init: string | null;
+	issued: { system: string; issuedOn: string }[];
+	notIssued: { system: string; issuedOn: string }[];
+	hindcasts: { system: string; initMonth: number; years: number[]; members: number }[];
+	centres: string[];
+	fetchedAt: string | null;
+	notes: string[];
+}
+
+/**
+ * The forecast-conditioned outlook as stored (issue #620, method c3s, backend
+ * StoredForecastOutlook): the engine's ForecastOutlook with compact members,
+ * what was read (`source`) and over what (`area`). Off with the engine's
+ * reason, or the backend's: noArea (no polygon) or failed (the engine's words in `message`).
+ */
+export type OutlookForecast = Omit<ForecastOutlook, 'members' | 'reason'> & {
+	reason: ForecastOffReason | 'noArea' | 'failed' | null;
+	members: Omit<ForecastMemberResult, 'outcome' | 'months'>[];
+	source: OutlookForecastSource | null;
+	area: {
+		source: 'boundary' | 'units';
+		cells: number;
+		units: { nodeId: string; name: string; cells: number; systems: { system: string; meanMonthlyMm: number[] }[] }[];
+		notes: string[];
+	} | null;
+};
+
 /** An outlook's result: the engine's SeasonalOutlook, with the backend's exclusions and the members the engine refused. */
 export type OutlookResult = Omit<SeasonalOutlook, 'excluded' | 'climate'> & {
 	excluded: OutlookExcludedYear[];
 	failures: { levelId: string; label: string; waterYear: number; message: string }[];
 	/** Method climateState only (issue #620): the years nearest this season's ENSO and SAM state. */
 	climate?: OutlookClimate;
+	/** Method c3s only (issue #620): the chance of each restriction level from the C3S seasonal forecasts. */
+	forecast?: OutlookForecast;
 };
 
 /** How an outlook uses its analogue years (backend outlooks/schema.ts OUTLOOK_METHODS). */
-export type OutlookMethod = 'esp' | 'climateState';
+export type OutlookMethod = 'esp' | 'climateState' | 'c3s';
 
 /** A trigger table as stored (backend outlooks/store.ts StoredTriggerTable): the engine's ReviewTriggers without each band's whole outlook. */
 export type OutlookTriggerTable = Omit<ReviewTriggers, 'rows'> & { rows: Omit<ReviewTriggerRow, 'outlook'>[] };

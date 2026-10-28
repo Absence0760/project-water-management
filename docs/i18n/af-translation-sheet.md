@@ -18,4 +18,15 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-0 strings: 0 on the site, 0 in emails, 0 in the glossary.
+2 strings: 2 on the site, 0 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### farm.outlook
+
+Farm view: “This season”, shown only when the WUA published a seasonal outlook. The level is the WUA’s decision; the figures are what that level gave this farm in past years’ weather, never a forecast or a promise.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `937ad93d` | Your WUA also looked at the seasonal rain forecasts of the Copernicus Climate Change Service. The figures above are still from past years’ weather. |  |  |
+| `14c08a70` | Your WUA also checked the seasonal rain forecasts of the Copernicus Climate Change Service, but this season they did no better than past weather. |  |  |

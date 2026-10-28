@@ -48,8 +48,20 @@ describe('outlookCard (This season, issue #53 R5, E3)', () => {
 		expect(outlookCard(outlook({ dam: { capacityM3: 1, seasonEndShare: null } }), '2025-11-01')!.dam).toBeNull();
 	});
 
+	it('says whether the WUA also weighed the seasonal forecasts, never a chance (issue #620, method c3s)', () => {
+		expect(outlookCard(outlook(), '2025-11-01')!.forecast).toBeNull();
+		expect(outlookCard(outlook({ forecast: null }), '2025-11-01')!.forecast).toBeNull();
+		const led = outlookCard(outlook({ forecast: { leads: 'forecast' } }), '2025-11-01')!;
+		expect(led.forecast).toBe('Your WUA also looked at the seasonal rain forecasts of the Copernicus Climate Change Service. The figures above are still from past years’ weather.');
+		const notBetter = outlookCard(outlook({ forecast: { leads: 'esp' } }), '2025-11-01')!;
+		expect(notBetter.forecast).toBe('Your WUA also checked the seasonal rain forecasts of the Copernicus Climate Change Service, but this season they did no better than past weather.');
+		for (const vm of [led, notBetter]) expect(Object.values(vm).join(' ')).not.toMatch(/%\s*chance|chance of|probab/i);
+	});
+
 	it('never words the season as certain, or the level as the app’s', () => {
-		const vm = outlookCard(outlook(), '2025-11-01')!;
-		expect(Object.values(vm).join(' ')).not.toMatch(/\bwill\b|guarantee|certain|recommend|should/i);
+		for (const forecast of [undefined, { leads: 'forecast' as const }, { leads: 'esp' as const }]) {
+			const vm = outlookCard(outlook({ forecast }), '2025-11-01')!;
+			expect(Object.values(vm).join(' ')).not.toMatch(/\bwill\b|guarantee|certain|recommend|should/i);
+		}
 	});
 });
