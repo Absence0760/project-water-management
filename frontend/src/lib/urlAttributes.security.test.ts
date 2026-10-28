@@ -105,6 +105,8 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	},
 	scenarioHref: { why: 'ApplicationsTab: local "?tab=scenarios&scenario=" + encoded id', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	warningsHref: { why: 'RunSummaryView prop: RunsTab passes "?tab=warnings&run=" + encodeURIComponent(the run id from the API) + "#warn-run"; the report passes none', in: ['lib/components/runs/RunSummaryView.svelte'] },
+	runWarningsHref: { why: 'WarningsTab: "#warn-run", or sourceHref("run") (withParam of the current page) + "#warn-run"', in: ['lib/components/warnings/WarningsTab.svelte'] },
+	sourceHref: { why: 'WarningsTab: withoutParam(page.url, "source") or withParam(page.url, "source", a SOURCE_FILTERS constant)', in: ['lib/components/warnings/WarningsTab.svelte'] },
 	statusHref: { why: 'WarningsTab: withoutParam(page.url, "status") or withParam(page.url, "status", a STATUS_FILTERS constant)', in: ['lib/components/warnings/WarningsTab.svelte'] },
 	checkHref: { why: 'WarningsTab: withoutParam(page.url, "check") or withParam(page.url, "check", a CHECK_LABEL key)', in: ['lib/components/warnings/WarningsTab.svelte'] },
 	everyHref: { why: 'WarningsTab: "?" + URLSearchParams of the current page with status=all and no check or series', in: ['lib/components/warnings/WarningsTab.svelte'] },
@@ -129,8 +131,8 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
 	issueHref: { why: 'BUILDER: "?tab=<area>" with the item id encodeURIComponent-ed (model/validate.ts issueHref)', in: ['lib/components/model/IssueList.svelte'] },
 	'p.href': {
-		why: 'ProblemLinks: issueHref(…), "#" + a NumberInput id, or a draft adapter\'s "?tab=project" / "?tab=settings#<group id>" (SaveBar, ModelSaveRow, the page); WarningText: runs/warningText.ts warningParts, each href warningPlaceHref (BUILDER "?tab=settings#" + a fixed set- id, or calibrationHref with the encoded run id and a fixed anchor), never text from the warning',
-		in: ['lib/components/model/ProblemLinks.svelte', 'lib/components/runs/WarningText.svelte']
+		why: 'ProblemLinks: issueHref(…), "#" + a NumberInput id, or a draft adapter\'s "?tab=project" / "?tab=settings#<group id>" (SaveBar, ModelSaveRow, the page); WarningText: runs/warningText.ts warningParts, each href warningPlaceHref (BUILDER "?tab=settings#" + a fixed set- id, or calibrationHref with the encoded run id and a fixed anchor), never text from the warning; WarningsTab: warnings/problems.ts problems(), issueHref, blockerHref ("?tab=settings|calibration#" + a fixed set- id), "?tab=series#data-feeds", "?tab=series&series=" or "?tab=runs&run=" + an encoded id',
+		in: ['lib/components/model/ProblemLinks.svelte', 'lib/components/runs/WarningText.svelte', 'lib/components/warnings/WarningsTab.svelte']
 	},
 	plantedHref: { why: 'NodeDetail: NetworkTab builds "?" + URLSearchParams of the current page with farm=<node id>, or leaves it null', in: ['lib/components/network/NodeDetail.svelte'] },
 	transfersHref: { why: 'NodeDetail: NetworkTab passes the literal "?tab=transfers" or null', in: ['lib/components/network/NodeDetail.svelte'] },

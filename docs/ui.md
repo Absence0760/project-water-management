@@ -6495,22 +6495,44 @@ editors run one now and read the map's proposals, viewers read.
 
 ## Warnings (`?tab=warnings`)
 
-Every period a data check flags on a stored series, one row each, and the
-shown run's warnings, each with its fix (issue #611, modelled on feohledger's
-exceptions queue). `warnings/WarningsTab.svelte`, its logic in
-`warnings/items.ts` (pure) and `warnings/runWarnings.ts`, its loading in
+The project's one place for warnings and problems (issue #611, modelled on
+feohledger's exceptions queue): every period a data check flags on a stored
+series, one row each with its fix; the problems other pages show, each a row
+linking to where it is fixed; and the shown run's warnings.
+`warnings/WarningsTab.svelte`, its logic in `warnings/items.ts`,
+`warnings/problems.ts` and `warnings/runWarnings.ts` (pure), its loading in
 `warnings/sources.ts`.
 
-- **A linked-only view** (`tabs.ts` `LINKED_ONLY`, `TAB_GROUP` core): no
-  sidebar row (the budget is full, `app-sidebar.spec.ts`); while open it shows
-  in the sidebar right after Data. It opens from Data's checks panel, the
-  Data row's count of open warnings (a triangle and the count, named
-  "(N open warnings)" beside "(N series behind)"), the run warnings on Runs &
+- **A sidebar row of its own, right after Data** (`TAB_GROUP` core, every
+  member). To keep the sidebar's budget (`app-sidebar.spec.ts`: every row
+  fits 1440×960, none spare), Compare runs became `LINKED_ONLY` in its place
+  (§ Compare runs). Its count of open items sits beside it (a triangle and
+  the number, named "(N open)"): the data checks' open periods plus every
+  problem from elsewhere (below), the same helpers as the page; Data's row
+  keeps only its "(N series behind)". It also opens from Data's checks panel, the run warnings on Runs &
   results (**Each with its setting, on Warnings**, or a line under the
   summary when the run has only notes) and Calibration's shown run (**N
   warnings about the record and its data in this run…**, from its
   `calibration.*` and `data.*` codes). It carries `run=` like the run pages
   (`tabLinks.ts` `RUN_TABS`).
+- **Source chips** (`source=`, a step in history): **All**, then **Data
+  checks**, **Model**, **Unsaved settings**, **Data feeds**, **Data behind**,
+  **Runs** and **Run warnings**, each with its count (a source with nothing
+  hides). One source shows only its part. The data checks always come first.
+- **Problems elsewhere** (`#warn-other`, `warnings/problems.ts`): read-only
+  rows, no tick (their fix is on their own page), grouped by source, each with
+  what it is about, what is wrong and a **Go to …** link: the model editor's
+  problems (`editor.issues`, the sidebar's "Has problems to fix", linked as the
+  save bar links them); an editor's unsaved settings that block Save (the
+  settings draft's blockers); data feeds failing or stale (the Data feeds
+  list's health, `GET /projects/:id/feeds`, no new route); the series behind
+  today (the Data row's count); the newest and the published runs a known
+  engine bug may affect (`RunMeta.errata`, the run's "May be affected" tag).
+  Left out: alert email bounces and paused alerts (an account's, not the
+  project's: the account page shows them), evidence packs with an erratum
+  found since their draft (only each pack's own detail has it: one request a
+  pack), and the gauge-vs-logger disagreement (its run warning,
+  `data.flowAgreement`, is listed under Run warnings).
 - **The rows are derived, not stored.** `listPeriods` runs the engine's
   `checkPeriods` on every stored series of a checked kind, as the Data tab
   checks them (the catchment CHIRPS for a catchment rain series, the
@@ -6574,18 +6596,23 @@ exceptions queue). `warnings/WarningsTab.svelte`, its logic in
   then **Show all N periods**; the table never scrolls in a box of its own.
   Under a 640 px container each row is a card, its decisions 44 px side by
   side.
-- **The Data row's badge** is counted by the page when idle
-  (`warnings/sources.ts` `openWarningCount`, a chunk of its own, from the Data
-  tab's cached values and the default run's summary), with the same helper
-  as the page's Open chip; no badge until it is counted, or when a read fails.
+- **The Warnings row's badge** is counted by the page: the data checks' open
+  periods when idle (`warnings/sources.ts` `openWarningCount`, a chunk of its
+  own, from the Data tab's cached values and the default run's summary, the
+  same helper as the page's Open chip) with the failing and stale feeds read
+  then too, plus the problems the page holds itself (`problems.ts`
+  `badgeCount`). Run warnings aren't counted: they repeat inputs listed above
+  and clear only with a new run. No badge until the checks are counted, or
+  when a read fails.
 - Tested by `e2e/tests/warnings.spec.ts` (chips and the record picker in the
-  URL with Back, one title, the sidebar while open, a row's Patch and Exclude
+  URL with Back, one title, the sidebar row and its count, the source chips
+  and the problems elsewhere, a row's Patch and Exclude
   landing in their settings and the next run reading them as missing, Reopen,
   thirty periods with Select all N matching and a bulk Patch, a viewer, the
   links in, axe at 1440 and 390, 320 px reflow) and
   `e2e/tests/warnings-run.spec.ts` (each coded warning's Go to link landing on
-  its panel, Calibration's line, the empty states); `warnings/items.test.ts`
-  and `warnings/runWarnings.test.ts` for the helpers.
+  its panel, Calibration's line, the empty states); `warnings/items.test.ts`,
+  `warnings/problems.test.ts` and `warnings/runWarnings.test.ts` for the helpers.
 
 ## Model settings
 
@@ -10406,9 +10433,13 @@ sideways scroll).
 
 ## Compare runs (`?tab=compare`)
 
-Board A4 of issue #17: a baseline and up to two what-ifs on one page
-(`compare/CompareView.svelte`; also the standalone `/compare` page, which
-gives it an `h1` and **Back to runs**). The full reference is
+Board A4 of issue #17: a baseline and up to two what-ifs on one page. A
+linked-only view since issue #611 gave its sidebar row to Warnings
+(`tabs.ts` `LINKED_ONLY`): it opens from Runs & results' **Compare runs** and
+**Compare with published** and from Scenarios, and shows in the sidebar under
+Runs & results while open; a saved hidden-sections list naming it is ignored.
+The view is `compare/CompareView.svelte` (also the standalone `/compare` page,
+which gives it an `h1` and **Back to runs**). The full reference is
 [run-comparison.md](./run-comparison.md); the layout, top to bottom:
 
 - **Header:** in the workspace, the section header (the page's only title)

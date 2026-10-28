@@ -518,11 +518,20 @@ export const PAGE_GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'The **Data checks** list one row per period a [[data-quality-limits|data check]] flagged on a stored series: a flat stretch, outliers, negative values, a zero rain run, an accumulation, a water year far below CHIRPS, or a break in a double-mass curve. Each row names the record, the days, what the check saw and what the next run does with it. It opens from the **Data checks** panel on **Data**, from the count of open warnings beside **Data** in the sidebar, and from the run warnings on **Runs & results** and **Calibration**; it shows in the sidebar, under Data, while it is open.'
+						text: 'The **Data checks** list one row per period a [[data-quality-limits|data check]] flagged on a stored series: a flat stretch, outliers, negative values, a zero rain run, an accumulation, a water year far below CHIRPS, or a break in a double-mass curve. Each row names the record, the days, what the check saw and what the next run does with it. It has its own row in the sidebar, after **Data**, with the number of open items beside it; the **Data checks** panel on **Data** and the run warnings on **Runs & results** and **Calibration** link here too.'
 					},
 					{
 						type: 'p',
 						text: 'Filter by **Status** (Open, Patched, Excluded, Kept, Handled by default, All), by **Check** and by **Record**; each chip says how many rows it would show, and the filters stay in the address, so a link or Back keeps them. **Handled by default** rows are periods the run already deals with: a flagged zero run set aside and filled, an accumulation spread over its days, a negative flow read as missing.'
+					}
+				]
+			},
+			{
+				heading: 'Problems elsewhere',
+				blocks: [
+					{
+						type: 'p',
+						text: '**Problems elsewhere** gathers what other pages show as needing attention, each with **Go to …** where it is fixed: problems in the model (the dot beside Network, Crops & demand or Transfers), unsaved settings that stop **Save changes**, data feeds that are failing or behind, series whose last day is old, and the newest or published run a known engine bug may affect. These have no tick box: their fix is on their own page. The **Source** chips at the top show one kind at a time (Data checks, Model, Unsaved settings, Data feeds, Data behind, Runs, Run warnings), each with its count, and the number beside **Warnings** in the sidebar counts the open data-check periods and these problems together.'
 					}
 				]
 			},

@@ -61,7 +61,10 @@
 	import { runWarningRows } from './runWarnings';
 	import WarningText from '#lib/components/runs/WarningText.svelte';
 	import { warningPlaceHref } from '#lib/components/runs/warningText.js';
-	import { loadRunSummary, loadValues } from './sources';
+	import { loadFeedProblems, loadRunSummary, loadValues } from './sources';
+	import { parseSource, problems, PROBLEM_SOURCES, SOURCE_FILTERS, SOURCE_LABEL, type BehindSeries, type FeedProblem, type SourceFilter } from './problems';
+	import type { ModelIssue } from '#lib/model/validate.js';
+	import type { SaveBlocker } from '#lib/components/settings/sections.js';
 
 	let {
 		projectId,
@@ -70,6 +73,9 @@
 		runs,
 		canEdit,
 		nodes = [],
+		issues = [],
+		blockers = [],
+		behind = [],
 		onProjectChange
 	}: {
 		projectId: string;
@@ -81,6 +87,12 @@
 		canEdit: boolean;
 		/** The model's nodes: a unit's own gauge and an inner gauge's record are named with theirs. */
 		nodes?: readonly { id: string; name: string }[];
+		/** The model editor's problems (the sidebar's "Has problems to fix"). */
+		issues?: readonly ModelIssue[];
+		/** The unsaved settings' problems that block Save (the page's settings draft). */
+		blockers?: readonly SaveBlocker[];
+		/** The series behind today (the Data row's count). */
+		behind?: readonly BehindSeries[];
 		onProjectChange: (p: Project) => void;
 	} = $props();
 
@@ -275,11 +287,37 @@
 		void goto(id ? withParam(page.url, 'series', id) : withoutParam(page.url, 'series'), { reset: false });
 	}
 
-	// A link to a panel (`#warn-checks`, `#warn-run`): the tab is a lazy chunk, so land once drawn (help/anchor.ts).
+	// --- problems from elsewhere (warnings/problems.ts), read-only: each links to where it is fixed ---
+	let feeds = $state.raw<FeedProblem[] | null>(null);
+	let feedsError = $state<string | null>(null);
+	async function loadFeeds() {
+		feedsError = null;
+		try {
+			feeds = await loadFeedProblems(projectId);
+		} catch (e) {
+			feedsError = e instanceof Error ? e.message : String(e);
+		}
+	}
+	onMount(() => void loadFeeds());
+	const elsewhere = $derived(problems({ issues, blockers, feeds, behind, runs, role: project.role }));
+	const bySource = $derived(PROBLEM_SOURCES.map((s) => ({ source: s, list: elsewhere.filter((p) => p.source === s) })).filter((g) => g.list.length));
+
+	// The source filter (`source=`, a step in history like the others): which parts the page shows.
+	const source = $derived(parseSource(page.url.searchParams.get('source')));
+	const sourceCount = (s: SourceFilter): number | null =>
+		s === 'all' ? null : s === 'checks' ? open : s === 'run' ? runRows.length : elsewhere.filter((p) => p.source === s).length;
+	const sourceHref = (s: SourceFilter) => (s === 'all' ? withoutParam(page.url, 'source') : withParam(page.url, 'source', s));
+	const showChecks = $derived(source === 'all' || source === 'checks');
+	const showRun = $derived(source === 'all' || source === 'run');
+	const runWarningsHref = $derived(showRun ? '#warn-run' : `${sourceHref('run')}#warn-run`);
+	const showOther = $derived(source === 'all' || (PROBLEM_SOURCES as readonly string[]).includes(source));
+	const shownGroups = $derived(source === 'all' ? bySource : bySource.filter((g) => g.source === source));
+
+	// A link to a panel (`#warn-checks`, `#warn-other`, `#warn-run`): the tab is a lazy chunk, so land once drawn (help/anchor.ts).
 	onMount(() =>
 		followAnchors({
 			page: 'warnings',
-			land: (hash) => (hash === 'warn-checks' || hash === 'warn-run' ? landOnAnchor(hash) : undefined),
+			land: (hash) => (hash === 'warn-checks' || hash === 'warn-other' || hash === 'warn-run' ? landOnAnchor(hash) : undefined),
 			forward: (to) => void goto(to, { replace: true, reset: false })
 		})
 	);
@@ -290,15 +328,30 @@
 {#snippet headerContext()}
 	<span data-testid="warnings-context">
 		{#if !values}Checking the series…{:else if !items.length}No flagged periods in {fmtNum(series?.length ?? 0)} series{:else}{fmtNum(open)} open of {fmtNum(items.length)} flagged
-			{items.length === 1 ? 'period' : 'periods'} in {fmtNum(recordsWithItems)} {recordsWithItems === 1 ? 'record' : 'records'}{/if}
+			{items.length === 1 ? 'period' : 'periods'} in {fmtNum(recordsWithItems)} {recordsWithItems === 1 ? 'record' : 'records'}{/if}{#if elsewhere.length}{' '}·
+			{fmtNum(elsewhere.length)} {elsewhere.length === 1 ? 'problem' : 'problems'} elsewhere{/if}
 	</span>
 {/snippet}
 {#snippet headerActions()}
-	<a class="btn" href="#warn-run" data-testid="to-run-warnings">Run warnings{runRows.length ? ` (${runRows.length})` : ''}</a>
+	<!-- To the run's warnings: in place when they show, else the Run warnings source. -->
+	<a class="btn" href={runWarningsHref} data-testid="to-run-warnings">Run warnings{runRows.length ? ` (${runRows.length})` : ''}</a>
 	<a class="btn" href="?tab=series#data-checks">Data checks on Data</a>
 {/snippet}
 
 <div class="warnings" data-testid="warnings">
+	<!-- Which parts show: every source, or one (`source=`); each chip with its count (All has none: it is the parts below). -->
+	<div class="chips sources" role="group" aria-labelledby="warn-sources-l" data-testid="warnings-sources">
+		<span class="sources-l muted small" id="warn-sources-l">Source</span>
+		{#each SOURCE_FILTERS as s (s)}
+			{@const n = sourceCount(s)}
+			{#if s === 'all' || s === 'checks' || n || source === s}
+				<a class="chip" href={sourceHref(s)} aria-current={source === s ? 'true' : undefined} data-sveltekit-noscroll data-sveltekit-keepfocus
+					>{SOURCE_LABEL[s]}{#if n !== null}{' '}<span class="n">{n}</span>{/if}</a
+				>
+			{/if}
+		{/each}
+	</div>
+	{#if showChecks}
 	<section class="panel" id="warn-checks" aria-labelledby="warn-checks-h" aria-busy={saving || undefined}>
 		<div class="panel-head">
 			<div class="head-text">
@@ -470,6 +523,45 @@
 		</LoadState>
 	</section>
 
+	{/if}
+
+	{#if showOther}
+		<section class="panel" id="warn-other" aria-labelledby="warn-other-h" data-testid="warn-other">
+			<div class="panel-head">
+				<div class="head-text">
+					<h2 id="warn-other-h" tabindex="-1">Problems elsewhere</h2>
+					<p class="muted small intro">What other pages show as needing attention, each with a link to where it is fixed.</p>
+				</div>
+			</div>
+			{#if feedsError}
+				<p class="alert alert-warning small" role="status">
+					Couldn’t read the data feeds: {feedsError}
+					<button type="button" class="btn btn-sm" onclick={() => void loadFeeds()}>Try again</button>
+				</p>
+			{:else if feeds === null}
+				<p class="muted small" role="status">Reading the data feeds…</p>
+			{/if}
+			{#if !shownGroups.length}
+				<p class="empty" data-testid="warn-other-none">
+					{source === 'all' ? 'Nothing elsewhere needs attention: the model, the unsaved settings, the data feeds, the data’s dates and the runs are clear.' : `Nothing under ${SOURCE_LABEL[source]}.`}
+				</p>
+			{:else}
+				{#each shownGroups as g (g.source)}
+					<h3 class="group-h">{SOURCE_LABEL[g.source]} <span class="n">{g.list.length}</span></h3>
+					<ul class="run-list other-list" data-source={g.source}>
+						{#each g.list as p (p.id)}
+							<li>
+								<span class="text"><strong>{p.title}</strong>{' '}{p.detail}</span>
+								<a class="go" href={p.href}>{p.action}</a>
+							</li>
+						{/each}
+					</ul>
+				{/each}
+			{/if}
+		</section>
+	{/if}
+
+	{#if showRun}
 	<section class="panel" id="warn-run" aria-labelledby="warn-run-h">
 		<div class="panel-head">
 			<div class="head-text">
@@ -506,6 +598,7 @@
 			{/if}
 		{/if}
 	</section>
+	{/if}
 </div>
 
 <style>
@@ -711,6 +804,25 @@
 		border-left: 3px solid var(--warning);
 		border-radius: var(--radius);
 		background: var(--surface);
+	}
+	.sources {
+		margin: 0;
+		align-items: center;
+	}
+	.sources-l {
+		margin-right: 0.15rem;
+		font-weight: 600;
+	}
+	.group-h {
+		margin: 0.6rem 0 0.3rem;
+		font-size: 0.95rem;
+	}
+	.group-h .n {
+		font-weight: 400;
+		color: var(--text-2);
+	}
+	.other-list li {
+		border-left-color: var(--accent);
 	}
 	.run-list li.note {
 		border-left-color: var(--border-strong);

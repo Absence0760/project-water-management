@@ -40,7 +40,7 @@ export async function seedWarnings(request: APIRequestContext, name: string, { d
 export async function openWarnings(page: Page, projectId: string, query = '') {
 	await page.goto(`/projects/${projectId}?tab=warnings${query}`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Warnings' })).toBeVisible();
-	await expect(warningsTable(page).or(page.getByTestId('warnings-empty')).or(page.getByTestId('warnings-none'))).toBeVisible();
+	await expect(warningsTable(page).or(page.getByTestId('warnings-empty')).or(page.getByTestId('warnings-none')).or(page.getByTestId('warn-other')).first()).toBeVisible();
 }
 
 export const checksPanel = (page: Page) => page.getByRole('region', { name: 'Data checks' });

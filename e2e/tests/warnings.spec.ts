@@ -4,8 +4,10 @@
 // Keep) and in bulk ("Select all N matching"), each saved at once into the
 // setting it belongs to, so the next run reads the patched rain as missing and
 // leaves the excluded flow out of its calibration statistics. A viewer reads
-// it without the ticks and buttons. A linked-only view: it shows in the
-// sidebar, under Data, only while open. Synthetic series only.
+// it without the ticks and buttons. A sidebar row of its own after Data, with
+// its count of open items; problems from elsewhere (the model, unsaved
+// settings, data feeds, data behind, runs an erratum may affect) are rows
+// linking to their fix, filtered by a source chip. Synthetic series only.
 import type { Page } from '@playwright/test';
 import { addMember, createRun, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -45,11 +47,12 @@ test.describe('1440×960', () => {
 		await pinClockToProject(page, project.id, 'lastRunAt');
 		await openWarnings(page, project.id);
 
-		// One page title; the section shows in the sidebar while open, right after Data.
+		// One page title; its sidebar row, right after Data, current.
 		await expect(page.getByRole('heading', { name: 'Warnings', exact: true })).toHaveCount(1);
 		const nav = sections(page);
-		await expect(nav.getByRole('link', { name: 'Warnings', exact: true })).toHaveAttribute('aria-current', 'page');
-		await expect(page.getByTestId('warnings-context')).toHaveText('3 open of 3 flagged periods in 2 records');
+		await expect(nav.getByRole('link', { name: /^Warnings/ })).toHaveAttribute('aria-current', 'page');
+		// The seed's rain ends in 2022: behind today, a problem elsewhere.
+		await expect(page.getByTestId('warnings-context')).toHaveText('3 open of 3 flagged periods in 2 records · 1 problem elsewhere');
 		await expect(warningRows(page)).toHaveCount(3);
 		await expect(warningRow(page, '11 Oct 2021 – 16 Oct 2021')).toContainText('Valley gauge');
 		await expect(warningRow(page, '11 Oct 2021 – 16 Oct 2021')).toContainText('5.5 mm on every day');
@@ -80,10 +83,10 @@ test.describe('1440×960', () => {
 		await expect(page.getByTestId('warnings-none')).toContainText('Nothing matches these filters.');
 		await expectNoViolations(page);
 
-		// Leaving it, the sidebar no longer lists it.
+		// Leaving it, the row stays.
 		await nav.getByRole('link', { name: /^Data/ }).click();
 		await expect(page.getByRole('heading', { level: 1, name: 'Data' })).toBeVisible();
-		await expect(nav.getByRole('link', { name: 'Warnings', exact: true })).toHaveCount(0);
+		await expect(nav.getByRole('link', { name: /^Warnings/ })).toBeVisible();
 	});
 
 	test('a tick patches rain and excludes flow; the run reads both as missing; Reopen takes one back', async ({ page, owner }) => {
@@ -203,8 +206,9 @@ test.describe('1440×960', () => {
 		const run = await createRun(page.request, project.id, 'Baseline');
 		await pinClockToProject(page, project.id, 'lastRunAt');
 		await page.goto(`/projects/${project.id}?tab=series`);
-		// The Data row's count of open warnings, named apart from the "behind" count.
-		await expect(sections(page).getByRole('link', { name: /^Data/ })).toHaveAccessibleName(/\(3 open warnings\)$/);
+		// The Warnings row's count: the 3 open periods and the rain behind; Data's name keeps only its own count.
+		await expect(sections(page).getByRole('link', { name: /^Warnings/ })).toHaveAccessibleName('Warnings (4 open)');
+		await expect(sections(page).getByRole('link', { name: /^Data/ })).toHaveAccessibleName('Data (1 series behind)');
 		const toWarnings = page.getByTestId('checks-to-warnings');
 		await expect(toWarnings).toHaveText('Patch, exclude or keep on Warnings (3 open)');
 		await toWarnings.click();
@@ -216,6 +220,43 @@ test.describe('1440×960', () => {
 		await page.getByTestId('run-to-warnings').click();
 		await expect(page.getByRole('heading', { name: 'Run warnings' })).toBeFocused();
 		await expect(page).toHaveURL(new RegExp(`[?&]run=${run}`));
+	});
+});
+
+test.describe('problems from elsewhere', () => {
+	test.use({ viewport: { width: 1440, height: 960 } });
+
+	test('each is a row linking to its fix, the source chips are in the URL, and the data checks come first', async ({ page, owner }) => {
+		void owner;
+		const project = await seedWarnings(page.request, 'Warnings elsewhere');
+		await openWarnings(page, project.id);
+		const sources = page.getByTestId('warnings-sources');
+		await expect(sources.getByRole('link', { name: 'All' })).toHaveAttribute('aria-current', 'true');
+		await expect(sources.getByRole('link', { name: 'Data checks 3' })).toBeVisible();
+		await expect(sources.getByRole('link', { name: 'Data behind 1' })).toBeVisible();
+		// The data checks first, then the problems elsewhere.
+		const checksTop = (await page.locator('#warn-checks').boundingBox())!.y;
+		const otherTop = (await page.locator('#warn-other').boundingBox())!.y;
+		expect(checksTop).toBeLessThan(otherTop);
+
+		const other = page.getByTestId('warn-other');
+		const behind = other.locator('ul[data-source="data"] li');
+		await expect(behind).toHaveCount(1);
+		await expect(behind.filter({ hasText: 'Valley gauge' })).toContainText(/Its last day is \d+ days old/);
+		await expect(behind.filter({ hasText: 'Valley gauge' }).getByRole('link', { name: 'Go to Data' })).toHaveAttribute('href', /^\?tab=series&series=[0-9a-f-]{36}$/);
+		// No tick boxes: their fix is elsewhere.
+		await expect(other.getByRole('checkbox')).toHaveCount(0);
+
+		// One source: only that part shows; Back returns to all.
+		await sources.getByRole('link', { name: 'Data behind 1' }).click();
+		await expect(page).toHaveURL(/[?&]source=data/);
+		await expect(page.locator('#warn-checks')).toHaveCount(0);
+		await expect(page.locator('#warn-run')).toHaveCount(0);
+		await expect(other.locator('li')).toHaveCount(1);
+		await page.goBack();
+		await expect(page.locator('#warn-checks')).toBeVisible();
+
+		await expectNoViolations(page);
 	});
 });
 
