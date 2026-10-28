@@ -3211,6 +3211,19 @@ export interface ModelInput {
 	 * resumed from a snapshot takes the capture run's. Never stored with a project.
 	 */
 	ewrSplitPinned?: PinnedEwrSplit | null;
+	/**
+	 * Land units whose area was taken from a polygon on the map that has been redrawn since (issue #646 F6, set by the
+	 * backend, runs/execute.ts): the area the model held (`modelKm2`) and the area the polygon's outline gives now
+	 * (`outlineKm2`, on the basis the unit took). Only a warning reads it (./mapAreas.ts); absent or null: none.
+	 */
+	mapAreas?: readonly MapAreaEntry[] | null;
+}
+
+/** ModelInput.mapAreas: a land unit whose area is from an earlier outline of its polygon. */
+export interface MapAreaEntry {
+	nodeId: string;
+	modelKm2: number;
+	outlineKm2: number;
 }
 
 /**

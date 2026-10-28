@@ -20,6 +20,7 @@
 import { MAP_MM_MAX, MAP_MM_MIN } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { loadUnits, unitParcel } from '../feeds/fromUnits.js';
+import { outlineChanged, type PolygonStamp } from './acceptances.js';
 import type { Geometry } from './geojson.js';
 import { cellAreaM2, gridShares, toGrid } from './gridShares.js';
 import { rainMapDatasets, type RainMapDataset } from './rainMap.js';
@@ -142,12 +143,6 @@ interface Named {
 	name: string;
 }
 
-/** The polygon a value was taken over, as it stood then (273, issue #646 F7): what "changed since" compares with the map now. */
-export interface PolygonStamp {
-	featureId: string;
-	updatedAt: string;
-	areaM2: number;
-}
 
 export interface UnitMapUnit extends Named {
 	featureId: string;
@@ -196,8 +191,8 @@ interface UnitWithParcel extends Named {
 	current: { mapMm: number | null; mapSource: string | null };
 }
 
-/** Whether a recorded polygon is the one read now (unknown counts as the same): the same feature, not edited since. */
-export const samePolygon = (then: PolygonStamp | null, now: PolygonStamp): boolean => then === null || (then.featureId === now.featureId && then.updatedAt === now.updatedAt);
+/** Whether a recorded polygon is the one read now (unknown counts as the same): the same outline (acceptances.ts outlineChanged). */
+export const samePolygon = (then: PolygonStamp | null, now: PolygonStamp): boolean => then === null || !outlineChanged(then, now);
 
 /**
  * The proposal: every land unit over every loaded grid, the grid chosen

@@ -253,6 +253,49 @@ describe('POST /projects/:id/map/unit-map', () => {
 		expect((await revisions(pid)).length).toBe(before + 1);
 	});
 
+	it('records the polygon each MAP was taken over: a redrawn parcel shows as changed since, and a typed MAP clears it (273, issue #646 F7)', async () => {
+		const { pid, id } = await project('Unit MAP polygon', { 'Unit A': PARCEL_A, 'Unit B': PARCEL_B });
+		expect((await editor.call('POST', at(pid), { dataset: COARSE })).status).toBe(200);
+		const stamps = await asOwner(
+			'SELECT name, map_polygon FROM node WHERE project_id = $1 AND kind = $2 ORDER BY name',
+			[pid, 'farm']
+		);
+		const features = (await editor.call('GET', `/projects/${pid}/map/features`)).body;
+		const parcelA = features.features.find((f: { nodeId: string | null; name: string }) => f.nodeId === id['Unit A'] && f.name === 'P0');
+		expect(stamps[0]).toEqual({ name: 'Unit A', map_polygon: { featureId: parcelA.id, updatedAt: parcelA.updatedAt, areaM2: parcelA.areaM2 } });
+		// The map's list says what each was taken over (a viewer reads it too).
+		const listed = (await viewer.call('GET', `/projects/${pid}/map/features`)).body.accepted;
+		expect(listed.unitMap).toEqual(
+			expect.arrayContaining([{ nodeId: id['Unit A'], polygon: stamps[0]!.map_polygon }, { nodeId: id['Unit B'], polygon: stamps[1]!.map_polygon }])
+		);
+
+		// A rename keeps the outline: still the same. Redrawn (A takes A2's square too): no longer the same, though the coarse cell's MAP is.
+		expect((await editor.call('PATCH', `/projects/${pid}/map/features/${parcelA.id}`, { name: 'P0 renamed' })).status).toBe(200);
+		expect((await editor.call('GET', at(pid, COARSE))).body.units.find((u: { nodeId: string }) => u.nodeId === id['Unit A']).same).toBe(true);
+		const wider = { type: 'Polygon', coordinates: [ring(25.02, -30.1, 25.1, -30.06)] };
+		expect((await editor.call('PATCH', `/projects/${pid}/map/features/${parcelA.id}`, { geometry: wider })).status).toBe(200);
+		const redrawn = (await editor.call('GET', at(pid, COARSE))).body.units.find((u: { nodeId: string }) => u.nodeId === id['Unit A']);
+		expect(redrawn).toMatchObject({ mapMm: 700, same: false });
+		// Applying again records the new outline.
+		expect((await editor.call('POST', at(pid), { dataset: COARSE, nodeIds: [id['Unit A']] })).status).toBe(200);
+		const [restamped] = await asOwner('SELECT map_polygon FROM node WHERE id = $1', [id['Unit A']]);
+		expect(restamped!.map_polygon.areaM2).toBeGreaterThan(stamps[0]!.map_polygon!.areaM2 * 1.9);
+
+		// A model save that types another MAP clears the record; one that keeps the MAP keeps it.
+		const model = (await owner.call('GET', `/projects/${pid}/model`)).body;
+		const keep = await owner.call('PUT', `/projects/${pid}/model`, model);
+		expect(keep.status).toBe(200);
+		expect((await asOwner('SELECT map_polygon FROM node WHERE id = $1', [id['Unit A']]))[0]).toMatchObject({ map_polygon: expect.any(Object) });
+		const typed = { ...model, nodes: model.nodes.map((n: { id: string }) => (n.id === id['Unit A'] ? { ...n, mapMm: 640, mapSource: 'typed' } : n)) };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, typed)).status).toBe(200);
+		expect((await asOwner('SELECT map_polygon FROM node WHERE id = $1', [id['Unit A']]))[0]).toEqual({ map_polygon: null });
+		// A client can't set it through the model: the field isn't the model's (mass assignment), so it is refused or dropped.
+		const sneaky = { ...model, nodes: model.nodes.map((n: { id: string }) => (n.id === id['Unit B'] ? { ...n, mapPolygon: { featureId: crypto.randomUUID(), updatedAt: 'x', areaM2: 1 } } : n)) };
+		const put = await owner.call('PUT', `/projects/${pid}/model`, sneaky);
+		const [b] = await asOwner('SELECT map_polygon FROM node WHERE id = $1', [id['Unit B']]);
+		expect(put.status === 400 || b!.map_polygon?.featureId === stamps[1]!.map_polygon!.featureId).toBe(true);
+	});
+
 	it('refuses a named unit without a parcel or with several, and a grid that covers none of the units', async () => {
 		const { pid, id } = await project('Unit MAP blocked', { 'Unit A': PARCEL_A, 'Unit N': null, 'Unit T': PARCEL_B });
 		// Unit T gets a second parcel, and neither is its area: refused.

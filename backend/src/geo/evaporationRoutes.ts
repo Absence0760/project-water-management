@@ -46,12 +46,16 @@ interface Boundary {
 	id: string;
 	name: string;
 	geometry: Geometry;
+	/** As it stood when read: recorded with an acceptance (273, issue #646 F8), so a redrawn boundary shows as changed since. */
+	updatedAt: string;
+	areaM2: number | null;
 }
 
 /** The catchment boundary, if drawn. */
 async function boundaryOf(db: Db, projectId: string): Promise<Boundary | null> {
 	const { rows } = await db.query<Boundary>(
-		`SELECT id, name, geometry FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary' ORDER BY created_at, id LIMIT 1`,
+		`SELECT id, name, geometry, area_m2 AS "areaM2", to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "updatedAt"
+		 FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary' ORDER BY created_at, id LIMIT 1`,
 		[projectId]
 	);
 	return rows[0] ?? null;
@@ -167,11 +171,12 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 			const settings = patchSettings(stored, patch);
 			await db.query('UPDATE project SET settings = $2::jsonb, updated_at = now() WHERE id = $1', [id, JSON.stringify(settings)]);
 			await db.query(
-				`INSERT INTO evaporation_accepted (project_id, target, monthly_mm, dataset, kind, source, version, method, coverage)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				`INSERT INTO evaporation_accepted (project_id, target, monthly_mm, dataset, kind, source, version, method, coverage, boundary)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
 				 ON CONFLICT (project_id, target) DO UPDATE SET monthly_mm = EXCLUDED.monthly_mm, dataset = EXCLUDED.dataset, kind = EXCLUDED.kind,
-					source = EXCLUDED.source, version = EXCLUDED.version, method = EXCLUDED.method, coverage = EXCLUDED.coverage, accepted_at = now()`,
-				[id, target, summary.monthlyMm, d.dataset, d.kind, d.source, d.version, d.method, summary.coverage]
+					source = EXCLUDED.source, version = EXCLUDED.version, method = EXCLUDED.method, coverage = EXCLUDED.coverage, boundary = EXCLUDED.boundary, accepted_at = now()`,
+				// The boundary as it was summarised (273, issue #646 F8): the Map's Checks flag a redraw since.
+				[id, target, summary.monthlyMm, d.dataset, d.kind, d.source, d.version, d.method, summary.coverage, JSON.stringify({ featureId: boundary.id, updatedAt: boundary.updatedAt, areaM2: boundary.areaM2 ?? 0 })]
 			);
 			const what = target === 'pe' ? 'GR4J’s monthly PE' : 'A-pan evaporation';
 			const revision = await recordModelRevision(db, id, {

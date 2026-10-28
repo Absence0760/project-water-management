@@ -164,6 +164,17 @@ describe('accepting a cultivated area as a crop’s planted area', () => {
 			featureName: null,
 			current: true
 		});
+		// The polygons it was summed over, as they stood (273, issue #646 F7): the map's list carries them for the Checks.
+		const map = (await viewer.call('GET', at('/map/features'))).body;
+		const parcels = map.features.filter((f: { nodeId: string | null; kind: string }) => f.nodeId === farmA.id && f.kind === 'farm_parcel');
+		const lc = map.accepted.landCover.find((x: { nodeId: string; cropId: string }) => x.nodeId === farmA.id && x.cropId === lucerne.id);
+		expect(lc).toEqual({
+			nodeId: farmA.id,
+			cropId: lucerne.id,
+			cropName: 'Lucerne',
+			polygons: expect.arrayContaining(parcels.map((f: { id: string; updatedAt: string; areaM2: number }) => ({ featureId: f.id, updatedAt: f.updatedAt, areaM2: f.areaM2 })))
+		});
+		expect(lc.polygons).toHaveLength(parcels.length);
 	});
 
 	it('takes one parcel’s area as another crop’s, and the provenance stops being current once the area is typed over', async () => {

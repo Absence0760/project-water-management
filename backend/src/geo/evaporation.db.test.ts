@@ -127,6 +127,10 @@ describe('accepting the proposal', () => {
 			expect.objectContaining({ target: 'pe', kind: 'et0', monthlyMm: BASE, dataset: 'synthetic', version: 'synthetic 1', coverage: 1, current: true })
 		]);
 		expect((await proposals(viewer)).body.settings).toMatchObject({ peKind: 'monthly', peMm: BASE });
+		// The boundary it was summarised over, as it stood (273, issue #646 F8): the map's list carries it for the Checks.
+		const map = (await viewer.call('GET', at('/map/features'))).body;
+		const b = map.features.find((f: { kind: string }) => f.kind === 'catchment_boundary');
+		expect(map.accepted.evaporation).toEqual([{ target: 'pe', boundary: { featureId: b.id, updatedAt: b.updatedAt, areaM2: b.areaM2 } }]);
 	});
 
 	it('the provenance stops being current once the row is typed over', async () => {

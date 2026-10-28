@@ -14,6 +14,7 @@ import {
 	type ModelInput,
 	type ModelOutput,
 	type OpClass,
+	type MapAreaEntry,
 	type RainStationInputs,
 	stationSeriesKey,
 	type RunVerification,
@@ -165,8 +166,17 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// A save refuses them and 220 switched the stored ones off, so this normally changes nothing.
 	const baseline = withoutEwrKeepingRules({ settings: settings as unknown as ModelInput['settings'], model: allocations.length ? { ...model, allocations } : model }).project;
 	const seriesChoice = await chirpsSeriesChoice(db, projectId);
+	// Units whose area is from an earlier outline of their polygon (issue #646 F6): the run warns. Only when there are any.
+	const mapAreas = await staleMapAreas(db, projectId);
 	return {
-		input: { settings: baseline.settings, model: baseline.model, series, ...(seriesChoice ? { seriesChoice } : {}), ...(stationed ? { stations: stationed.stations } : {}) },
+		input: {
+			settings: baseline.settings,
+			model: baseline.model,
+			series,
+			...(seriesChoice ? { seriesChoice } : {}),
+			...(stationed ? { stations: stationed.stations } : {}),
+			...(mapAreas.length ? { mapAreas } : {})
+		},
 		seriesIds,
 		publishedRecords
 	};
@@ -214,6 +224,30 @@ export async function chirpsSeriesChoice(db: Db, projectId: string): Promise<Ser
 	const units = [...bySite].filter((e): e is [string, SeriesSpan[]] => e[0] !== null && e[1].length > 1);
 	if (units.length) choice.unitChirps = Object.fromEntries(units.map(([id, spans]) => [id, pick(spans)]));
 	return choice.rain_chirps_mm || choice.unitChirps ? choice : null;
+}
+
+/**
+ * The land units whose area was taken from a polygon on the map (Use, or Start/Divide) that has been redrawn since
+ * (engine ModelInput.mapAreas, issue #646 F6): the area the model holds and the one the outline gives now, on the
+ * basis the unit took (195; the gross area when the effective one has no pans figure any more). The Map's Checks
+ * list the same units (frontend map/mapChecks.ts). Empty when there are none, so another project's input is as before.
+ */
+export async function staleMapAreas(db: Db, projectId: string): Promise<MapAreaEntry[]> {
+	const { rows } = await db.query<{ nodeId: string; modelKm2: number; areaM2: number; ncM2: number | null; basis: 'gross' | 'effective' | null }>(
+		`SELECT n.id AS "nodeId", n.area_km2 AS "modelKm2", f.area_m2 AS "areaM2", f.non_contributing_m2 AS "ncM2", n.area_basis AS basis
+		 FROM node n JOIN map_feature f ON f.id = n.area_feature_id AND f.project_id = n.project_id
+		 WHERE n.project_id = $1 AND n.kind = 'farm' AND n.area_source = 'map' AND f.area_m2 > 0
+		 ORDER BY n.sort_order, n.id`,
+		[projectId]
+	);
+	const out: MapAreaEntry[] = [];
+	for (const r of rows) {
+		const effective = r.basis === 'effective' && r.ncM2 !== null && r.areaM2 - Math.min(r.ncM2, r.areaM2) > 0;
+		const outlineKm2 = (effective ? r.areaM2 - Math.min(r.ncM2!, r.areaM2) : r.areaM2) / 1e6;
+		// The frontend's alreadyAccepted tolerance: a Use copies the figure exactly, so anything more is another outline.
+		if (Math.abs(outlineKm2 - r.modelKm2) > 1e-9) out.push({ nodeId: r.nodeId, modelKm2: r.modelKm2, outlineKm2 });
+	}
+	return out;
 }
 
 /**
@@ -692,7 +726,9 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		// The CHIRPS series the run read and the others (engine ≥ 1.90.0, issue #561): its warning reads them, so a reproduction needs them.
 		...(input.seriesChoice ? { seriesChoice: input.seriesChoice } : {}),
 		// The rainfall stations' names and details (engine ≥ 1.91.0, issue #553): the forcing reads their MAPs, so a reproduction needs them.
-		...(input.stations ? { stations: input.stations } : {})
+		...(input.stations ? { stations: input.stations } : {}),
+		// The units whose area is from an earlier map outline (issue #646 F6): its warning reads them, so a reproduction needs them.
+		...(input.mapAreas?.length ? { mapAreas: input.mapAreas } : {})
 	};
 	// The id is made here, not RETURNING'd: RETURNING needs the new row to pass
 	// a SELECT policy, and a contributor running their application reads no
@@ -864,6 +900,7 @@ interface StoredRun {
 		forecastRainSource?: ForecastRainSource;
 		seriesChoice?: SeriesChoice | null;
 		stations?: RainStationInputs | null;
+		mapAreas?: MapAreaEntry[] | null;
 	};
 }
 interface StoredRef {
@@ -916,6 +953,8 @@ function rebuildRunInput(r: StoredRun, refs: StoredRef[]): ModelInput {
 		series,
 		...(forecastRainSourceOf(source) ? { forecastRainSource: forecastRainSourceOf(source)! } : {}),
 		...(choice ? { seriesChoice: choice } : {}),
-		...(stations ? { stations } : {})
+		...(stations ? { stations } : {}),
+		// The units whose area is from an earlier map outline (issue #646 F6), which its warning reads.
+		...(Array.isArray(r.inputs.mapAreas) ? { mapAreas: r.inputs.mapAreas } : {})
 	};
 }

@@ -49,6 +49,7 @@ import {
 	type Position
 } from './geojson.js';
 import { quaternaryAt, quaternaryDatasets } from './quaternary.js';
+import { mapAcceptances } from './acceptances.js';
 import { configuredWater, traceDam, TraceRefused, type MinOccurrence } from '../delineation/damTrace.js';
 import { countMapCompute } from '../delineation/throttle.js';
 import { DAM_POSITIONS, type DamPosition } from '../delineation/subcatchments.js';
@@ -232,6 +233,7 @@ export interface FeatureRow {
 	created_by_name: string | null;
 	created_at: Date;
 	updated_at: Date;
+	link_point: { type: 'Point'; coordinates: Position } | null;
 }
 
 export interface MapFeature {
@@ -254,6 +256,8 @@ export interface MapFeature {
 	createdBy: string | null;
 	createdAt: string;
 	updatedAt: string;
+	/** A gauge linked to its node: where it stood when linked (273, issue #646 F9); null otherwise, or linked before 273. */
+	linkPoint: Position | null;
 }
 
 export const toFeature = (r: FeatureRow): MapFeature => ({
@@ -271,12 +275,13 @@ export const toFeature = (r: FeatureRow): MapFeature => ({
 	sourceId: r.source_id,
 	createdBy: r.created_by_name,
 	createdAt: r.created_at.toISOString(),
-	updatedAt: r.updated_at.toISOString()
+	updatedAt: r.updated_at.toISOString(),
+	linkPoint: r.link_point?.coordinates ?? null
 });
 
 const SELECT_FEATURES = `
 	SELECT f.id, f.kind, f.name, f.node_id, n.name AS node_name, f.geometry, f.properties, f.area_m2, f.non_contributing_m2, f.dam_position, f.source_id,
-		u.display_name AS created_by_name, f.created_at, f.updated_at
+		u.display_name AS created_by_name, f.created_at, f.updated_at, f.link_point
 	FROM map_feature f
 	LEFT JOIN node n ON n.id = f.node_id
 	LEFT JOIN app_user u ON u.id = f.created_by
@@ -516,7 +521,9 @@ export const mapRoutes = new Hono<AuthEnv>()
 				features: rows.map(toFeature),
 				sources: sources.map((s) => ({ id: s.id, fileName: s.file_name, sha256: s.sha256, crs: s.crs, importedAt: s.imported_at.toISOString(), importedBy: s.imported_by, features: s.features })),
 				nodes: nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, areaKm2: n.area_km2, areaSource: n.area_source, areaBasis: n.area_basis, areaFeatureId: n.area_feature_id })),
-				quaternaryDatasets: await quaternaryDatasets(db)
+				quaternaryDatasets: await quaternaryDatasets(db),
+				// What each value accepted from the map was taken over (273, issue #646 F7/F8): the Checks flag a redraw since.
+				accepted: await mapAcceptances(db, id)
 			});
 		})
 	)

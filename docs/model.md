@@ -7039,6 +7039,7 @@ at). Only the actionable warnings are coded so far:
 | Rain stations (§2.4i) | `rain.station.noRecord`, `.unreliable`, `.unreliableInvalid`; `rain.station.zeroRun.*`, `rain.station.accumulation.*` | `station`, … | `set-share`; the checks `set-rain` |
 | A unit's own gauge (§2.4h) | `rain.unitGauge.zeroRun.*`, `rain.unitGauge.accumulation.*`, `rain.unitGauge.unreliable`; `rain.unit.catchmentFallback` | `unit`, … | `set-rain`; the fallback `set-unit-rain` |
 | Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord` | `kind`, `site`, … | `set-record` (no values in the period: `set-period`) |
+| The map (issue #646 F6, `mapAreas.ts`) | `map.areaFromEarlierOutline`: a unit's area is from an earlier outline of its polygon on the map (`ModelInput.mapAreas`, set by the backend's `runs/execute.ts` `staleMapAreas`; only this warning reads it, and the run's stored input keeps it for a reproduction). Not for a unit whose area in the run isn't the model's (a scenario set it) | `unit`, `modelKm2`, `mapKm2` | none: the Map's Checks (the Warnings page links there) |
 
 Not coded on purpose: the EWR-split note and the retired flow-share method's
 note (issues #615 and #616 reworded them; the area-fragmentation, High/Low-MAP
