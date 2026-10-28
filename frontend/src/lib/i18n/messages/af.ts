@@ -343,6 +343,8 @@ export const af: Catalogue = {
 	'329d64e6': 'Stuur e-pos weer',
 	// Dismiss
 	'265915f3': 'Maak toe',
+	// Where a project has the assistant, you can ask an AI model about the project’s model and results. What you type and the project data it reads are sent to the model, which may answer from an AWS region outside South Africa. It never sees names or email addresses, and we keep only counts of how much it is used, never the conversation.
+	'9f9ceb0f': "Waar 'n projek die assistent het, kan jy 'n KI-model vrae vra oor die projek se model en resultate. Wat jy tik en die projekdata wat dit lees, word na die model gestuur, wat moontlik uit 'n AWS-streek buite Suid-Afrika antwoord. Dit sien nooit name of e-posadresse nie, en ons hou net tellings van hoeveel dit gebruik word, nooit die gesprek nie.",
 	// Two-step sign-in is now needed only to publish to farmers, for licence decisions and evidence packs, and in a project or team that turns it on.
 	'2ecf63e3': 'Tweestap-intekening is nou net nodig om aan boere te publiseer, vir lisensiebesluite en bewyspakkette, en in ’n projek of span wat dit aanskakel.',
 	// If you can’t get a code, you can remove two-step sign-in yourself after a 3-day wait, or ask a team admin. We keep a record of the request for 90 days.
