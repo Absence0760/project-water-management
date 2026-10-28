@@ -3420,7 +3420,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 
 ### Assistant usage (262_assistant_usage.sql)
 
-What the assistant costs, counted (issue #610; [api.md §
+What the assistant costs, counted, and each running turn's reserved budget (issue #610; 264 added the reservations, issues #640 and #641; [api.md §
 Assistant](./api.md#assistant), [security.md §
 Assistant](./security.md#assistant)). No chat text is kept anywhere: the
 page holds the conversation and sends it with each turn.
@@ -3429,6 +3429,7 @@ page holds the conversation and sends it with each turn.
 | --- | --- |
 | `assistant_usage` | One row per person per project per UTC month: `project_id` (cascade), `user_id` (set null), `month` (the month's first day), `input_tokens`, `output_tokens`, `messages`, `updated_at`; unique on (`project_id`, `month`, `user_id`), which covers the project key, and indexes on `user_id` and `month` |
 | `assistant_rate` | The hourly message cap: `user_id` (primary key, cascade), `window_start`, `messages`, a fixed one-hour window as `map_compute_throttle` (186); a row goes once its hour is over, at the person's next turn or the job tick |
+| `assistant_reservation` | A running turn's reserved budget (264): `id`, `project_id` (cascade), `user_id` (set null), `month` (the UTC month it began in, which it counts against and is charged to), `reserved` (weighted tokens), `created_at`, `expires_at`; indexes on `project_id`, `user_id`, `month` and `expires_at`. Deleted when the turn is charged; converted into the usage row in full once expired. Owner-only: RLS on, no policy, no grant |
 
 - Every cap counts weighted tokens, `input + 5 × output`
   (`assistant_weighted`; assistant/config.ts `OUTPUT_TOKEN_WEIGHT`: output
@@ -3442,31 +3443,46 @@ page holds the conversation and sends it with each turn.
   to be at least a viewer of the project (`42501` otherwise), so no one
   spends another project's budget: `app_assistant_begin(project,
   tokens_per_month, messages_per_hour, tokens_per_user_month,
-  tokens_total_per_month)` checks the hourly cap, then the deployment's, the
-  person's and the project's month, and counts the message only when all
-  pass (outcome `ok`, `rate`, `total_budget`, `user_budget` or `budget`,
-  with the seconds to wait, and the three months' weighted totals). It takes
-  a transaction-level advisory lock for the deployment, then one on the
-  project, then the person's `assistant_rate` row (`FOR UPDATE`), in that
-  order everywhere, so parallel turns are counted one by one and can't
-  deadlock. `app_assistant_charge(project, input, output)` adds a finished
-  turn's tokens in one upsert (parallel charges each count once) and returns
-  the three totals after it; `app_assistant_used(project)` reads them
-  (`project_used`, `user_used`, `total_used`; the deployment's is a sum
-  naming no one).
+  tokens_total_per_month, max_turn_tokens, min_turn_tokens,
+  reservation_seconds)` (264) charges every expired reservation in full,
+  checks the hourly cap, then whether the deployment's, the person's and the
+  project's month each has at least `min_turn_tokens` left (the cap less the
+  month's spend and every reservation in it), and only when all pass counts
+  the message and reserves the turn's budget, the least of
+  `max_turn_tokens` and the three months' remainders (outcome `ok`, `rate`,
+  `total_budget`, `user_budget` or `budget`, with the seconds to wait, the
+  three months' weighted totals, and on `ok` the `reservation_id` and
+  `budget`). It takes a transaction-level advisory lock for the deployment,
+  then one on the project, then the person's `assistant_rate` row
+  (`FOR UPDATE`), in that order everywhere, so parallel turns are counted
+  and reserved one by one and can't deadlock.
+  `app_assistant_charge(project, reservation, input, output)` adds a
+  finished turn's tokens in one upsert (parallel charges each count once) to
+  the reservation's month and deletes the reservation, in one transaction;
+  only the person who began it, on its project, may settle it (`42501`
+  otherwise). A reservation already charged at its expiry gets the tokens
+  added again (never counted short), and a NULL reservation charges this
+  month (a viewer and above). It returns the three totals after it;
+  `app_assistant_used(project)` reads them (`project_used`, `user_used`,
+  `total_used`; the deployment's is a sum naming no one), reservations
+  counted as spent. Spend and reservations are summed in one statement
+  (`assistant_month_spent`), so a charge committing alongside is seen once.
 - `assistant_usage` is read-only to `water_app`: one SELECT policy,
   `assistant_usage_own` (`user_id = app_current_user_id()`), so a person
   reads their own rows (the export's `assistantUsage`) and the totals come
-  only from the functions. `assistant_rate` has a deny-all policy. Proven
-  with positive controls in `src/assistant/assistant.db.test.ts`.
+  only from the functions. `assistant_rate` has a deny-all policy, and
+  `assistant_reservation` no policy and no grant (owner-only). Proven with
+  positive controls in `src/assistant/assistant.db.test.ts`.
 - Retention: the job tick calls `app_purge_assistant(13)` (the worker only;
   `jobs/runner.ts` `ASSISTANT_USAGE_RETENTION_MONTHS`), which deletes rate
   rows whose hour is over and usage rows of months before the last 13 (the
   current one included): a year of each project's spend to set against the
-  bill.
+  bill. It charges every expired reservation in full first, as begin does.
 - An account deletion clears `assistant_usage.user_id` (the spend stays
   counted against the project's month, without the name, until its
-  retention ends) and removes the `assistant_rate` row.
+  retention ends) and removes the `assistant_rate` row. A reservation of a
+  turn still running keeps counting with its `user_id` cleared, until it is
+  charged or expires.
 
 ### Two-step sign-in (150_mfa.sql, 206_mfa_email_code.sql)
 

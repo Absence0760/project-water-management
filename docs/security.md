@@ -3792,6 +3792,7 @@ PDF someone else asked for kept the person as a recipient
 | Dam traces, counted for the hourly cap: the user's id and the project's (186) | `map_compute_throttle` | One hour from the window's first attempt | Lapses with its window | Lapses with its window |
 | The assistant's use (262): the person's tokens (input and output) and messages per project and UTC month, as counts only (never the conversation); own rows only under RLS; in "Download my data" (`assistantUsage`) | `assistant_usage` | The month it counts and the 12 after it (`ASSISTANT_USAGE_RETENTION_MONTHS`, 13), then deleted by the job tick (`app_purge_assistant`) | Kept without the name (`user_id` set null), so the month still counts what was spent, until its retention ends | Deleted |
 | The assistant's messages per person in the current hour, for the hourly cap (262); no one reads it but the cap's own function | `assistant_rate` | Until its hour is over: the person's next message or the job tick deletes it | Deleted | – |
+| A running assistant turn's reserved budget (264): who began it, on which project, and how many weighted tokens; no one reads it but the assistant's own functions | `assistant_reservation` | While the turn runs: deleted when it is charged, or, if never charged, converted into the usage row in full once it expires (the turn's deadline + 120 s; the next turn or the job tick) | Kept without the name (`user_id` set null) until it is charged or expires | – |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
@@ -4391,7 +4392,8 @@ sends project data to a model. What goes, and what keeps it bounded:
   returns a patch the person still has to review and save.
 - **Nothing kept.** No transcript, prompt or answer is stored or logged; the
   server keeps only token and message counts (`assistant_usage`,
-  `assistant_rate`, 262). The usage rows are in "Download my data"
+  `assistant_rate`, 262), and a running turn's reservation
+  (`assistant_reservation`, 264, minutes). The usage rows are in "Download my data"
   (`assistantUsage`) and kept 13 months; an account deletion clears their
   name. The rate rows go once their hour is over. Bedrock's model invocation
   logging (an account setting Terraform can't pin off) would write every
@@ -4404,10 +4406,16 @@ sends project data to a model. What goes, and what keeps it bounded:
   2 M), the person's across projects (`ASSISTANT_TOKENS_PER_USER_MONTH`,
   1 M) and the deployment's in all (`ASSISTANT_TOKENS_PER_MONTH_TOTAL`,
   derived in Terraform from `assistant_budget_monthly_usd`), so neither more
-  projects nor more accounts get past the last. Each is checked before a turn
-  and charged after, so it can be passed by at most one turn's tokens
-  (`ASSISTANT_MAX_TURN_TOKENS`, 150 K) for each turn in flight at once, which
-  the assistant Lambda's reserved concurrency bounds. A message cap per
+  projects nor more accounts get past the last. None is ever passed: a turn
+  reserves its budget before it starts (the least of
+  `ASSISTANT_MAX_TURN_TOKENS`, 150 K, and what each cap has left after the
+  month's spend and every other running turn's reservation; 264), keeps
+  within it hop by hop (each hop's output cap cut to what is left, input
+  estimated high), and settles the reservation with its real tokens after;
+  one never settled is charged in full when it expires. The only residual
+  is a provider counting more input tokens than UTF-8 bytes plus a fixed
+  framing allowance, or writing past the output cap it was given
+  (architecture.md § Assistant). A message cap per
   person per hour across projects (`ASSISTANT_MESSAGES_PER_HOUR`, 30; 429
   with `Retry-After`). All counted in Postgres under advisory locks taken in
   one order (the deployment's, the project's, then the person's row), so
