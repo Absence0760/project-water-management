@@ -567,13 +567,6 @@ open:
       Durable fix: `penpan_v2` beside `penpan_day`, tested on the paper's
       worked values, and the method text naming the version. Trigger: a copy
       of the paper, or the validation showing PenPan's bias is too large.
-- [ ] **The proposal's kind label.** Missing: the proposal and its reason name the
-      kind as "Class-A pan evaporation" (`evaporation.ts` `KIND_LABEL`),
-      followed by the dataset's source "Modelled Class-A pan (PenPan): …".
-      Durable fix: a kind label that says "modelled Class-A pan (PenPan)"
-      when the dataset is modelled, which needs a `model` column on
-      `evaporation_dataset` (or reading the method's first words). Trigger:
-      before the block lifts, so production never shows the plain label.
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 

@@ -43,7 +43,7 @@ import { wakeForRerun } from '../series/routes.js';
 import {
 	citeEvaporation,
 	evaporationDatasets,
-	KIND_LABEL,
+	evaporationLabel,
 	summariseEvaporation,
 	TARGET_OF,
 	type EvaporationDataset,
@@ -120,7 +120,7 @@ const howTaken = (b: Boundary, s: EvaporationSummary) =>
 
 /** The PE row's `source` (at most PE_SOURCE_MAX): the dataset's citation and how it was taken. */
 export const peSourceFor = (d: EvaporationDataset, b: Boundary, s: EvaporationSummary) =>
-	`Proposed from the map: ${KIND_LABEL[d.kind]}, ${citeEvaporation(d)}, ${howTaken(b, s)}; taken as GR4J's PE unchanged.`.slice(0, PE_SOURCE_MAX);
+	`Proposed from the map: ${evaporationLabel(d)}, ${citeEvaporation(d)}, ${howTaken(b, s)}; taken as GR4J's PE unchanged.`.slice(0, PE_SOURCE_MAX);
 
 /** GET …/evaporation-stations' query: the search radius from the boundary, km. */
 export const EvaporationStationsQuery = z.object({ within: z.coerce.number().finite().positive().max(EVAP_STATIONS_WITHIN_MAX_KM).optional() }).strict();
@@ -236,7 +236,7 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 			const revision = await recordModelRevision(db, id, {
 				source: 'settings_patch',
 				before,
-				reason: `${what} from the map: ${summary.annualMm} mm a year of ${KIND_LABEL[d.kind]}, ${howTaken(boundary, summary)}; ${citeEvaporation(d)}. ${d.method}`.slice(0, 500)
+				reason: `${what} from the map: ${summary.annualMm} mm a year of ${evaporationLabel(d)}, ${howTaken(boundary, summary)}; ${citeEvaporation(d)}. ${d.method}`.slice(0, 500)
 			});
 			return c.json({ target, monthlyMm: summary.monthlyMm, dataset: d.dataset, revisionId: revision?.id ?? null });
 		});

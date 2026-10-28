@@ -15,6 +15,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseEvaporationArgs, readEvaporationFiles, SYNTHETIC_PENPAN_FILE as PENPAN_FIXTURE, writeEvaporationJson } from '../../scripts/import-evaporation.js';
 import { DPET, evaporationFromJson, evaporationMethodFor, MODELLED_APAN_LABEL, modelledApanSource, PENPAN } from './evaporationGrid.js';
+import { evaporationLabel } from './evaporation.js';
 
 const fixture = () => JSON.parse(readFileSync(PENPAN_FIXTURE, 'utf8')) as Record<string, unknown> & { cells: unknown[]; model: Record<string, unknown> };
 
@@ -104,5 +105,14 @@ describe('the operator’s load of a PenPan grid', () => {
 		expect(back.kind).toBe('apan');
 		expect(back.model).toEqual(fixture().model);
 		expect(back.source).toBe(PENPAN.source);
+	});
+});
+
+describe('the words for a dataset’s values', () => {
+	it('say modelled for a PenPan grid, and leave a measured pan grid and ET₀ as they were', () => {
+		expect(evaporationLabel({ kind: 'apan', source: PENPAN.source })).toBe('modelled Class-A pan evaporation (PenPan, not a measured pan)');
+		expect(evaporationLabel({ kind: 'apan', source: modelledApanSource('my own POWER pull') })).toMatch(/^modelled /);
+		expect(evaporationLabel({ kind: 'apan', source: 'A measured pan grid' })).toBe('Class-A pan evaporation');
+		expect(evaporationLabel({ kind: 'et0', source: DPET.source })).toBe('reference evapotranspiration (FAO-56 Penman-Monteith ET₀)');
 	});
 });

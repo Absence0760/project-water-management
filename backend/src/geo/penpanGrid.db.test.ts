@@ -72,6 +72,7 @@ describe('a PenPan grid, locally', () => {
 		const [{ reason }] = (await asOwner('SELECT reason FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1', [projectId])) as [{ reason: string }];
 		expect(reason).toMatch(/Modelled Class-A pan \(PenPan\)/);
 		expect(reason).toMatch(/not a measured pan/);
+		expect(reason).toMatch(/mm a year of modelled Class-A pan evaporation \(PenPan, not a measured pan\)/);
 		// The provenance row keeps the whole method (the reason is cut at 500 characters).
 		const [acc] = await asOwner('SELECT kind, method FROM evaporation_accepted WHERE project_id = $1', [projectId]);
 		expect(acc).toMatchObject({ kind: 'apan', method: expect.stringMatching(/^Modelled, not measured: PenPan/) });
