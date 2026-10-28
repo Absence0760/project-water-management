@@ -10828,7 +10828,12 @@ confirmed farmers see the outlook, O5, issue #90).
   this one** (off by default; issue #620) runs the outlook with the method
   `climateState`: the same members, also summarised on the past seasons
   nearest this one's ENSO and SAM state (below); its description for a
-  screen reader says how they are chosen. **Run seasonal outlook**, in the
+  screen reader says how they are chosen. **Also give the chance of each
+  restriction level from the seasonal forecasts** (off by default; issue
+  #620 step 7) runs it with the method `c3s` instead: the same ESP, and
+  beside it the chances from the C3S forecasts (below). One method at a
+  time: ticking one clears the other, and each box's description for a
+  screen reader says what it adds. **Run seasonal outlook**, in the
   action row under the levels, hint and plan, queues an
   [outlook](./api.md#seasonal-outlooks) of the shown run; the season and
   the planning share are the project's settings (Settings → Seasonal
@@ -10881,6 +10886,37 @@ confirmed farmers see the outlook, O5, issue #90).
   could be chosen (the copy doesn't hold the indices, or fewer than 20
   candidate years) it says why in the engine's words, and the ESP above
   stands as it is.
+- **Chance of each restriction level** (method `c3s` only, issue #620 step
+  7, `outlook/ForecastChances.svelte`, view model `outlook/forecast.ts`,
+  [model.md §2.15d](./model.md#215d-the-forecast-conditioned-outlook-the-chance-of-each-restriction-level-issue-620-engine-11060);
+  `data-testid="outlook-forecast"`, `data-state` `ready` or `off`,
+  `data-leads` `forecast` or `esp`), after the planning figure's hint,
+  beside the ESP rather than instead of it. First which side leads, in
+  bold, by the **skill gate**: above zero, *The forecasts scored better
+  than past weather over 22 hindcast years (CRPSS +0.12), so they lead*; at
+  or below zero, *No better than past weather: …, so past weather leads and
+  the forecasts are shown beside it*; then the hindcast skill (CRPSS of the
+  season-end dam storage against past weather, over which years). Per
+  review date a table (*Review on 1 Jan 2019: Restriction levels (Settings
+  → Drought restrictions)*, or the review triggers' storage bands when no
+  rule is set): each level ("No restriction" first, with its *storage below
+  40 % of capacity*) or band (fullest first), and its chance from the
+  **Seasonal forecasts** and from **Past weather (every year alike)**, the
+  leading side's column first. Under the last table, plainly: *The chance
+  is of the dam storage on the review date only, at full demand: the rule's
+  EWR trigger, a filling dam's milder reading and a level held until the
+  next review are not in it.* Then the init (*Forecasts from …, the newest
+  issued by the decision date*), **Systems and members** (per system its
+  members, the day it was issued, its weight and its hindcast), the systems
+  left out and those not yet issued by the decision date, what it was
+  averaged over (the catchment boundary or the units' polygons, in 1°
+  cells), the model's notes (collapsed), that it is an aid to the WUA's
+  decision and not a promise, and the **Copernicus credit**: Copernicus's
+  notice with the year the copy fetched the data, the dataset's citation and
+  the contributing centres of the systems used (`c3sSeasonalCredit`). Off
+  (no forecast issued by the decision date, no hindcast in the copy, no
+  system with 20 hindcast years, no boundary or unit polygon on the Map), it
+  says why in one line and the ESP above stands as it is.
 - **Every analogue year** (collapsed): per year and level, the days below
   the EWR (or months met) and the season-end storage. Then the years not
   used and why (outside the record, a rainless day, the season itself,
@@ -13412,7 +13448,13 @@ published.
   past years’ weather, at this level you got about 81 % of the water you
   needed, and between 62 % and 97 % in most of them" (10th–90th percentile;
   too few years or no demand says so); the dam at the season's end the same
-  way (no dam, no line); "Your WUA reviews the level on 1 Jan."; and
+  way (no dam, no line); "Your WUA reviews the level on 1 Jan."; from an
+  outlook that also weighed the seasonal forecasts (method `c3s`, issue
+  #620), one line saying which side led, never a chance (the issue's open
+  question 4): "Your WUA also looked at the seasonal rain forecasts of the
+  Copernicus Climate Change Service. The figures above are still from past
+  years’ weather." or, when they scored no better, "… but this season they
+  did no better than past weather." (`data-testid="farm-outlook-forecast"`); and
   "Worked out by the model from past years’ weather: not a forecast, and
   not a promise. Only a notice from your WUA or from DWS is a
   restriction."; then "What is the season outlook?", a link to the

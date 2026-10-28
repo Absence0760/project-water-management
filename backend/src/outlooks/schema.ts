@@ -28,12 +28,13 @@ export const OUTLOOK_JOBS_PER_USER = 2;
 export const OUTLOOKS_KEPT = 20;
 
 /**
- * How the analogue years are used (267_outlook_method CHECK): `esp` every
- * year alike; `climateState` also the years nearest this season's ENSO and
- * SAM state (issue #620). A forecast-conditioned method (C3S, issue #620
- * steps 5–7) would be a third value.
+ * How the analogue years are used (267_outlook_method, 275_outlook_method_c3s
+ * CHECK): `esp` every year alike; `climateState` also the years nearest this
+ * season's ENSO and SAM state; `c3s` also the chance of each drought
+ * restriction level from the C3S seasonal forecasts (issue #620,
+ * docs/model.md §2.15d, outlooks/c3s.ts). The ESP figures are the same in all three.
  */
-export const OUTLOOK_METHODS = ['esp', 'climateState'] as const;
+export const OUTLOOK_METHODS = ['esp', 'climateState', 'c3s'] as const;
 export type OutlookMethod = (typeof OUTLOOK_METHODS)[number];
 
 const noNul = (s: string) => !s.includes('\u0000');
@@ -82,8 +83,12 @@ export const CreateOutlookBody = z
 		/**
 		 * esp (absent: the default): every analogue year alike. climateState: also
 		 * the same members summarised on the years nearest this season's ENSO and
-		 * SAM state (issue #620, the engine's selectClimateAnalogues); the ESP
-		 * figures are the same either way.
+		 * SAM state (issue #620, the engine's selectClimateAnalogues). c3s: also
+		 * the chance of each drought restriction level on each review date from
+		 * the C3S seasonal forecasts in the data mirror (the engine's
+		 * runForecastOutlook); off, with the reason, when the copy holds no
+		 * forecast issued by the decision date or no hindcast. The ESP figures
+		 * are the same in every method.
 		 */
 		method: z.enum(OUTLOOK_METHODS).optional()
 	})

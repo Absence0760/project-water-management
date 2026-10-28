@@ -728,20 +728,33 @@ runs and accumulations are real) can't be decided without the client.
       held observed ends and multiplicative tails; 20 hindcast years per lead
       month; the nearest analogue by standardised RMS distance; the 1 mm
       zero-month rule; systems weighted equally; the skill scored from this
-      season's state, the forecast leading only above a CRPSS of 0. **Next,
-      step 7:** the backend bridge (the 1° cells averaged over the catchment
-      and summed into calendar months from `c3s/<init>` and
-      `c3s-hc/<system>/<MM>`), the outlook job running it beside the ESP,
-      the routes, the panel's chance of each restriction level with the
-      systems, the skill and the Copernicus credit, and the farm card
-      (api.md, ui.md, e2e). Step 7 also passes only forecasts *issued* on or
-      before the decision date (C3S publishes between the 6th and the 13th;
-      the engine has no issue date, model.md §2.15d), says on the panel that
-      the chance reflects storage only (not a rule's EWR trigger, the
-      filling-dam reading or the hold), and adds the methodology statement's
-      paragraph on the forecast-conditioned outlook once the chances reach a
-      report (a new methodology version if methodology-13 is published by
-      then).
+      season's state, the forecast leading only above a CRPSS of 0. **Step 7
+      is built** (`backend/src/outlooks/c3s.ts`, method `c3s`, migration 275,
+      the panel's *Chance of each restriction level*, the farm card's line;
+      model.md §2.15d § The backend bridge). Calls made in step 7, to
+      confirm: the chances at the full demand (no level's ops), on the rule's
+      review dates else the outlook's own; the newest init with any system
+      issued by the decision date, not the init with the most systems (a
+      decision on the 7th takes ECMWF's alone); "issued by" as the release
+      day on or before the decision date (the release is at 12 UTC that day);
+      the catchment boundary, else the units' polygons together, weighted by
+      share × cos(latitude); under per-unit rain each unit's forecast
+      reported but not driving the engine (it rescales units by the
+      catchment's factor); the farm card saying only which side led. Still
+      open: the methodology statement's paragraph on the forecast-conditioned
+      outlook once the chances reach a report (a new methodology version if
+      methodology-13 is published by then).
+- [ ] **C3S outlook read cost (issue #620 step 7, `outlooks/c3s.ts`).** A
+      `c3s` outlook reads one chunk (one member's whole 215-day forecast over
+      the 29 × 32 grid, ~0.4 MB gzipped) per member per hindcast year of each
+      system used: about 600 GETs per system with 25 hindcast members, 5 000
+      or more with every system, inside the job's transaction. Fine on the
+      synthetic copy; on the full copy it is tens of seconds of S3 reads per
+      outlook. The durable fix: the ingest also writes each system's monthly
+      totals per cell (`c3s-hc-monthly/<system>/<MM>`, (year, member,
+      lead_month, lat, lon), ~30× smaller and one chunk per system), which
+      the bridge reads instead. Trigger: the first live outlook with the
+      hindcasts backfilled, or a worker timeout on a `c3s` outlook.
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
@@ -4742,6 +4755,8 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       client's hydrologist; issue #646 item 6, the hydrologist's F5; maps.md
       § Evaporation stations, data-sources.md § dws-evaporation). DWS's
       permission recorded 2026-10-28 covers verified daily **flow** only.
+      The request is drafted in
+      [legal/dws-evaporation-request.md](./legal/dws-evaporation-request.md).
       Ask DWS (GeoRequests@dws.gov.za, through the hydrologist, as for flow)
       to extend it to the verified daily pan evaporation of weather stations
       (`E` codes, Class-A and Symons) near the client's catchment, stored and
