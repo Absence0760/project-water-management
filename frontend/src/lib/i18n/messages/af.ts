@@ -993,6 +993,10 @@ export const af: Catalogue = {
 	'2f141624': 'Jou dam was aan die einde van die seisoen ongeveer {mid} vol, en in die meeste van daardie jare tussen {low} en {high}.',
 	// Your WUA reviews the level on {date}.
 	'1a2694d0': 'Jou WGV hersien die vlak op {date}.',
+	// Your WUA also looked at the seasonal rain forecasts of the Copernicus Climate Change Service. The figures above are still from past years’ weather.
+	'937ad93d': 'Jou WGV het ook na die seisoensreënvoorspellings van die Copernicus Climate Change Service gekyk. Die syfers hierbo kom steeds uit vorige jare se weer.',
+	// Your WUA also checked the seasonal rain forecasts of the Copernicus Climate Change Service, but this season they did no better than past weather.
+	'14c08a70': 'Jou WGV het ook die seisoensreënvoorspellings van die Copernicus Climate Change Service nagegaan, maar hierdie seisoen het die voorspellings dit nie beter gedoen as vorige jare se weer nie.',
 	// What the model found
 	'6312837d': 'Wat die model gevind het',
 	// Why about {pct}?
