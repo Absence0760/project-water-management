@@ -90,9 +90,11 @@ export function verdictsSummary<S>(summary: S): S {
 	out.farms = [];
 	out.users = [];
 	out.warnings = [];
+	// The coded warnings carry the same texts (and their figures), so they go with them (engine ≥ 1.102.0).
+	if (s.warningCodes !== undefined) out.warningCodes = [];
 	out.calibration = null;
 	out.allocations = { ...pick(s.allocations!, ['mode', 'tolerance', 'used', 'notMatched']), nodes: [], verdictsOnly: true };
-	out.withheld = Object.keys(s).filter((k) => !(k in SUMMARY_VERDICTS) && !['farms', 'users', 'warnings', 'calibration', 'allocations'].includes(k) && s[k] !== undefined && s[k] !== null).sort();
+	out.withheld = Object.keys(s).filter((k) => !(k in SUMMARY_VERDICTS) && !['farms', 'users', 'warnings', 'warningCodes', 'calibration', 'allocations'].includes(k) && s[k] !== undefined && s[k] !== null).sort();
 	return out as S;
 }
 

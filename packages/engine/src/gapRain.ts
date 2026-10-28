@@ -35,6 +35,7 @@ import {
 import { RAIN_SOURCE_CODE } from './rainSourcePeriods';
 import { applyChirpsCorrection, chirpsBiasFactors, fitWindowText, type AccumulationSpans, type ChirpsCorrection, type ChirpsMonthFactor } from './rain';
 import { clonePlain } from './warmstart/plain';
+import { warn } from './warningCodes';
 
 /**
  * ERA5-Land's wet-day threshold, mm: a day below it is dry before the
@@ -321,9 +322,13 @@ export function gapRainWarnings(info: GapRainInfo): string[] {
 	for (const p of info.products) {
 		if (!p.present) {
 			out.push(
-				p.product === 'era5l'
-					? "the gap-filling product is ERA5-Land, but the run has no ERA5-Land rain (our copy holds none yet for the CHIRPS feed's cells, or no CHIRPS feed writes the CHIRPS series the run reads): catchment-rain gaps it would fill fall through to forecast rain, or run as 0 mm"
-					: "IMERG Late fills the recent days, but the run has no IMERG Late rain (our copy holds none yet for the CHIRPS feed's cells, or no CHIRPS feed writes the CHIRPS series the run reads)"
+				warn(
+					'rain.gapProduct.absent',
+					{ product: p.product },
+					p.product === 'era5l'
+						? "the gap-filling product is ERA5-Land, but the run has no ERA5-Land rain (our copy holds none yet for the CHIRPS feed's cells, or no CHIRPS feed writes the CHIRPS series the run reads): catchment-rain gaps it would fill fall through to forecast rain, or run as 0 mm"
+						: "IMERG Late fills the recent days, but the run has no IMERG Late rain (our copy holds none yet for the CHIRPS feed's cells, or no CHIRPS feed writes the CHIRPS series the run reads)"
+				)
 			);
 			continue;
 		}
@@ -333,20 +338,30 @@ export function gapRainWarnings(info: GapRainInfo): string[] {
 		const where = p.product === 'imerg_late' && info.tailFrom ? ` from ${dayText(info.tailFrom)}, past the last reading of ${info.product === 'era5l' ? 'ERA5-Land' : info.product === 'chirps' ? 'CHIRPS' : 'CHIRPS and ERA5-Land'}` : '';
 		if (!c || c.correctedDays === 0) {
 			out.push(
-				`${p.label} fills ${span}${where} uncorrected: fewer than ${c?.minDays ?? 90} days with ${c?.minMm ?? 50} mm of ${p.label} where it and the catchment rain both have a reading, so no factor could be fitted. Those days may run too wet or too dry.`
+				warn(
+					'rain.gapProduct.uncorrected',
+					{ product: p.product, days: p.days },
+					`${p.label} fills ${span}${where} uncorrected: fewer than ${c?.minDays ?? 90} days with ${c?.minMm ?? 50} mm of ${p.label} where it and the catchment rain both have a reading, so no factor could be fitted. Those days may run too wet or too dry.`
+				)
 			);
 		} else {
 			const qm = c.quantileMap;
 			const map = qm
 				? ` Its wet days are quantile-mapped onto the catchment's (wet day ≥ ${qm.wetDayMm} mm, ${plural(qm.mappedDays, 'gap day')} changed${qm.unmappedDays ? `, ${plural(qm.unmappedDays, 'day')} in months too thin to map left to the factor` : ''}${qm.partialMonthDays ? `, ${plural(qm.partialMonthDays, 'day')} of a month not yet whole left to the factor` : ''}), keeping each month's corrected total.`
 				: '';
-			out.push(`${p.label} fills ${span}${where}, bias-corrected with its own factors fitted on ${fitWindowText(c.fitWindow)}: ${factorText(c.months)}.${map}`);
+			out.push(
+				warn('rain.gapProduct.corrected', { product: p.product, days: p.days }, `${p.label} fills ${span}${where}, bias-corrected with its own factors fitted on ${fitWindowText(c.fitWindow)}: ${factorText(c.months)}.${map}`)
+			);
 		}
 		const dm = p.doubleMass;
 		if (dm && dm.breaks.length) {
 			const segs = dm.segments.map((s) => `${waterYearLabel(s.fromWaterYear)}–${waterYearLabel(s.toWaterYear)} ${f2(s.slope)}`).join(', ');
 			out.push(
-				`The double-mass check of catchment rain against ${p.label} finds ${plural(dm.breaks.length, 'break')} (catchment / ${p.label} by segment: ${segs}), and ${p.label} fills ${plural(p.days, 'day')} with factors fitted on the whole record: days in an era whose ratio differs may run too wet or too dry.`
+				warn(
+					'rain.gapProduct.doubleMassBreak',
+					{ product: p.product, breaks: dm.breaks.length },
+					`The double-mass check of catchment rain against ${p.label} finds ${plural(dm.breaks.length, 'break')} (catchment / ${p.label} by segment: ${segs}), and ${p.label} fills ${plural(p.days, 'day')} with factors fitted on the whole record: days in an era whose ratio differs may run too wet or too dry.`
+				)
 			);
 		}
 	}

@@ -11,6 +11,7 @@ import type { PlausibilityChecks } from './plausibility';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { GapRainInfo } from './gapRain';
 import type { RainSourceInfo } from './rainSourcePeriods';
+import type { CodedWarning } from './warningCodes';
 import type { ApanDailyInfo } from './evaporation/apanDaily';
 import type { FlowFillSummary, FlowGapFillSettings } from './flowGapFill';
 import type { SeriesOrigin } from './seriesProvenance';
@@ -4397,6 +4398,12 @@ export interface RunSummary {
 	supplyAssurance?: SupplyAssurance;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
+	/**
+	 * The warnings above that have a stable code (engine ≥ 1.102.0, ./warningCodes.ts, issue #611): each with its
+	 * code, the figures and names it reports, and its text exactly as in `warnings`, in the same order. Data checks,
+	 * the rain chain and calibration so far; any other warning is in `warnings` only. Absent on older runs.
+	 */
+	warningCodes?: CodedWarning[];
 	/**
 	 * Never written by the engine: the summary fields the API left out for a
 	 * viewer kept from each registered volume, on a cap or full-allocation run

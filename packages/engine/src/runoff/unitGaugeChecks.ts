@@ -21,6 +21,7 @@
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { blankFitExcluded, checkedCatchmentRainRecord, checkedRain } from '../prepare';
 import { unitRainSeriesKey, type DailySeries, type ModelInput, type ProjectSettings } from '../project';
+import { warn } from '../warningCodes';
 
 /** A unit gauge's checked rain over a window, and what the checks did there. */
 export interface CheckedUnitGauge {
@@ -134,19 +135,43 @@ export function unitGaugeCheckWarnings(name: string, c: CheckedUnitGauge): strin
 	const who = `unit rain: "${name}"’s own gauge`;
 	if (c.zeroRunDays > 0)
 		out.push(
-			`${who} is treated as missing on ${plural(c.zeroRunDays, 'day')} of flagged zero runs (§2.4c, with the catchment’s settings): its CHIRPS (levelled), then the next link of its rule, stands in. The stored series is unchanged.`
+			warn(
+				'rain.unitGauge.zeroRun.missing',
+				{ unit: name, days: c.zeroRunDays },
+				`${who} is treated as missing on ${plural(c.zeroRunDays, 'day')} of flagged zero runs (§2.4c, with the catchment’s settings): its CHIRPS (levelled), then the next link of its rule, stands in. The stored series is unchanged.`
+			)
 		);
 	if (c.zeroRunAsRecordedDays > 0)
-		out.push(`${who} has flagged zero runs on ${plural(c.zeroRunAsRecordedDays, 'day')} run as recorded (dry): Model settings → Rain gaps → Flagged rain → Flagged zero runs is "Run as recorded (dry)".`);
+		out.push(
+			warn(
+				'rain.unitGauge.zeroRun.asRecorded',
+				{ unit: name, days: c.zeroRunAsRecordedDays },
+				`${who} has flagged zero runs on ${plural(c.zeroRunAsRecordedDays, 'day')} run as recorded (dry): Model settings → Rain gaps → Flagged rain → Flagged zero runs is "Run as recorded (dry)".`
+			)
+		);
 	if (c.spreadWindows > 0)
 		out.push(
-			`${who} has ${plural(c.spreadWindows, 'multi-day accumulation')} spread over ${plural(c.spreadDays, 'run day')} (${mm(c.spreadMm)}) in proportion to CHIRPS (§2.4d, with the catchment’s settings). The stored series is unchanged.`
+			warn(
+				'rain.unitGauge.accumulation.spread',
+				{ unit: name, windows: c.spreadWindows, days: c.spreadDays, mm: Math.round(c.spreadMm) },
+				`${who} has ${plural(c.spreadWindows, 'multi-day accumulation')} spread over ${plural(c.spreadDays, 'run day')} (${mm(c.spreadMm)}) in proportion to CHIRPS (§2.4d, with the catchment’s settings). The stored series is unchanged.`
+			)
 		);
 	if (c.setAside > 0)
 		out.push(
-			`${who} has ${plural(c.setAside, 'reading')} after a blank outage set aside as missing (§2.4d): each may hold the outage’s rain, so its CHIRPS (levelled), then the next link of its rule, stands in.`
+			warn(
+				'rain.unitGauge.accumulation.setAside',
+				{ unit: name, readings: c.setAside },
+				`${who} has ${plural(c.setAside, 'reading')} after a blank outage set aside as missing (§2.4d): each may hold the outage’s rain, so its CHIRPS (levelled), then the next link of its rule, stands in.`
+			)
 		);
 	if (c.asRecorded > 0)
-		out.push(`${who} has ${plural(c.asRecorded, 'multi-day accumulation')} run as recorded, because Model settings → Rain gaps → Flagged rain → Multi-day accumulations → Accumulated readings is "Run as recorded (one day)".`);
+		out.push(
+			warn(
+				'rain.unitGauge.accumulation.asRecorded',
+				{ unit: name, windows: c.asRecorded },
+				`${who} has ${plural(c.asRecorded, 'multi-day accumulation')} run as recorded, because Model settings → Rain gaps → Flagged rain → Multi-day accumulations → Accumulated readings is "Run as recorded (one day)".`
+			)
+		);
 	return out;
 }

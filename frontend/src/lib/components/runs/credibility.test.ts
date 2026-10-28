@@ -24,6 +24,40 @@ describe('warningGroups', () => {
 		]);
 		expect(warningGroups(undefined)).toEqual({ check: [], data: [] });
 	});
+
+	it('groups a coded warning by its code (engine ≥ 1.102.0), whatever its text; an uncoded one, or an unknown code, by its text', () => {
+		const handled = 'Catchment rain from a reworded note the regexes don’t know';
+		const doubted = 'CHIRPS rain bias-corrected on 12 days, but the code says check';
+		const future = 'CHIRPS rain bias-corrected on 30 days (a code this page doesn’t know yet)';
+		const plain = 'Catchment rain accumulations spread over the days they cover: 1 window';
+		const g = warningGroups(
+			[handled, doubted, future, plain, 'a warning the engine adds next year'],
+			[
+				{ code: 'rain.zeroRun.missing', text: handled },
+				{ code: 'rain.chirps.uncorrected', text: doubted },
+				{ code: 'rain.someday' as never, text: future }
+			]
+		);
+		expect(g.data).toEqual([handled, future, plain]);
+		expect(g.check).toEqual([doubted, 'A warning the engine adds next year']);
+		// Without codes (a run before 1.102.0) the texts decide, as before.
+		expect(warningGroups([handled, doubted], null)).toEqual({ check: [handled], data: [doubted] });
+	});
+
+	it('gives every code the group its text gave before codes, where the regexes knew the text', () => {
+		// The engine's own texts for each code DATA_NOTES matches (synthetic figures): a code never moves a warning.
+		const cases: [string, string][] = [
+			['rain.chirps.corrected', 'CHIRPS rain bias-corrected on 120 days where catchment rain is blank (300 mm raw → 330 mm): factor …'],
+			['rain.zeroRun.missing', 'Catchment rain treated as missing on 90 days: 1 Jun 2019 to 15 Aug 2019 (76 days, flagged zero run). …'],
+			['rain.accumulation.spread', 'Catchment rain accumulations spread over the days they cover: 1 window, 21 run days: …'],
+			['data.zerorun', 'Rainfall (catchment): 1 run of zero rain covering 60 or more days in the wet half of the year: …'],
+			['data.flatline', 'Rainfall (catchment): 1 flat stretch of 10 or more days with the same value (…). A stuck logger or a filled-in gap?']
+		];
+		for (const [code, text] of cases) {
+			expect(warningGroups([text]).data, code).toHaveLength(1);
+			expect(warningGroups([text], [{ code: code as never, text }]).data, code).toHaveLength(1);
+		}
+	});
 });
 
 describe('credibility', () => {

@@ -6733,6 +6733,50 @@ signed document matching its hashed manifest (ui-playbook § Dates, issue
 #521 round 3), the run report prints ISO (#586 D9), and the limitations are
 docs/engine-audit.md's own words, hashed into every sign-off and pack.
 
+**Run warning codes (engine ≥ 1.102.0, issue #611 phase 2).** Beside
+`summary.warnings`, whose sentences don't change, `summary.warningCodes`
+lists the warnings that have a stable code, in the same order, each as
+`{ code, params, text }`: `text` is the warning exactly as in `warnings`,
+`params` the figures and names it reports (days, mm, a station or unit id, a
+date). A page groups, counts and links a warning by its code instead of
+matching its English, and can offer "go to setting". The catalogue is
+`warningCodes.ts` `WARNING_CODES` (exported on its own as
+`@water-management/engine/warnings`): for each code the settings panel that
+changes what it reports (`setting`, a panel anchor of frontend
+`settings/sections.ts`; null when the fix is on the Data page) and its group
+(`note`: how the data were handled, as set up; `check`: something to look
+at). Only the actionable warnings are coded so far:
+
+| Family | Codes | Params | Panel |
+| --- | --- | --- | --- |
+| Data checks (`seriesChecks`, §2.10a, the double-mass check §2.4b) | `data.negative`, `data.outlier`, `data.flatline`, `data.zerorun`, `data.lowvschirps`, `data.doublemass` (the check's kind) | `series`, `days` | `set-quality` (double-mass: `set-rain`) |
+| Gauge vs logger (§2.10a) | `data.flowAgreement` | `years` | `set-record` |
+| Zero runs (§2.4c) | `rain.zeroRun.missing`, `.keptDry`, `.chirpsDry`, `.asRecorded`; `rain.keepDry.doubtful` | `days`, … | `set-rain` |
+| Accumulations (§2.4d) | `rain.accumulation.spread`, `.noChirps`, `.setAside`, `.kept`, `.asRecorded`, `.noReading` | `windows` or `readings`, … | `set-rain` |
+| CHIRPS fallback (§2.4b) | `rain.chirps.corrected`, `.uncorrected`, `.quantileMapFallback`, `.doubleMassBreak` | `days`, … | `set-rain` |
+| Gap-filling product (§2.4b) | `rain.gapProduct.absent`, `.uncorrected`, `.corrected`, `.doubleMassBreak` | `product`, … | `set-rain` |
+| Rain gaps elsewhere | `rain.sourcePeriod` (§2.4e), `rain.missingDays` (W2), `rain.none`, `rain.chirpsShadowed` | dates, `days` | `set-rain`; the last two the Data page |
+| Rain stations (§2.4i) | `rain.station.noRecord`, `.unreliable`, `.unreliableInvalid`; `rain.station.zeroRun.*`, `rain.station.accumulation.*` | `station`, … | `set-share`; the checks `set-rain` |
+| A unit's own gauge (§2.4h) | `rain.unitGauge.zeroRun.*`, `rain.unitGauge.accumulation.*`; `rain.unit.catchmentFallback` | `unit`, … | `set-rain`; the fallback `set-unit-rain` |
+| Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord` | `kind`, `site`, … | `set-record` (no values in the period: `set-period`) |
+
+Not coded on purpose: the area-fragmentation, High/Low-MAP, `areaMismatches`
+and EWR-split warnings, which issues #615–#617 remove or reword, and every
+settings-validation warning. An uncoded warning is in `warnings` only.
+The texts travel through the engine as plain strings, so `warn(code,
+params, text)` returns the text for the usual `warnings.push` and keeps the
+code keyed on it; the summary reads the codes back for its final warnings
+(`warningCodesOf`). Two codes never build the same text. A run before
+1.102.0 has no `warningCodes`, and the frontend falls back to its text
+heuristic (`runs/credibility.ts` `warningGroups`); a code's group matches
+the group that heuristic gives its text, so a code moves no warning. No
+figure moves, but the summary has a new field, so a 1.101.0 run made again
+at 1.102.0 has another results digest. A viewer kept from the registered
+volumes reads no warnings and no codes (`verdictsSummary`). Tests:
+`warningCodes.test.ts` triggers each code and checks its text is the plain
+warning's (four beside their texts' own tests, which it names), and that
+every code in the catalogue is used by the engine.
+
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`
 (`network/damLevel.ts` `damFigures`), so the Summary's Dams today card

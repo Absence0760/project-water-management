@@ -12,6 +12,7 @@ import {
 import { defaultProjectSettings, type DailySeries, type ModelInput, type SeriesKind, type ZeroRainSettings } from './project';
 import { chirpsBiasFactors } from './rain';
 import { runModel } from './run';
+import { warningCodesOf } from './warningCodes';
 
 /** The accumulation fields (engine ≥ 0.20.0) at their defaults. */
 const ACC: Pick<ZeroRainSettings, 'accumulationMode' | 'keepReadings' | 'addAccumulations'> = { accumulationMode: 'spread', keepReadings: [], addAccumulations: [] };
@@ -206,6 +207,8 @@ describe('doubleMassRunWarning', () => {
 		const corr = chirpsBiasFactors(s, 'monthly')!;
 		const pooled = corr.pooled.ownFactor!;
 		const w = doubleMassRunWarning(dm, corr, c, h, d0)!;
+		// Its stable code (engine ≥ 1.102.0, warningCodes.ts).
+		expect(warningCodesOf([w])).toEqual([{ code: 'rain.chirps.doubleMassBreak', params: { breaks: dm.breaks.length, ranges: 0 }, text: w }]);
 		const last = dm.segments[2]!;
 		expect(w).toBe(
 			`CHIRPS fills catchment-rain gaps with factors fitted on the whole record (pooled catchment / CHIRPS ${pooled.toFixed(2)}), ` +

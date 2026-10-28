@@ -100,6 +100,7 @@ import {
 	type StationContext
 } from './runoff/stationForcing';
 import type { StationAreaForcing } from './project';
+import { warn } from './warningCodes';
 
 /** One rain-source period's fitted factors (rainSourceFactors), keyed by the period's stable JSON. */
 export type RainSourceFactorsOf = ReturnType<typeof rainSourceFactors>[number];
@@ -504,7 +505,7 @@ function alignToWindow(
 	const apanDaily = apanDailyInfo(series.evap_apan_mm, alignSeries(series.evap_apan_mm, start, days), start, settings.apanMm.every((v) => v === 0), warnings);
 
 	if (!plan && !hasRainInput(series, settings.rainSource)) {
-		warnings.push('no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain');
+		warnings.push(warn('rain.none', {}, 'no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain'));
 	}
 
 	return {
@@ -845,7 +846,13 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		}
 	}
 	if (s.calibrationStart && s.calibrationEnd && s.calibrationStart > s.calibrationEnd) {
-		warnings.push(`calibration window ${dayText(s.calibrationStart)} … ${dayText(s.calibrationEnd)} ends before it starts; scoring the whole record`);
+		warnings.push(
+			warn(
+				'calibration.windowReversed',
+				{ start: s.calibrationStart, end: s.calibrationEnd },
+				`calibration window ${dayText(s.calibrationStart)} … ${dayText(s.calibrationEnd)} ends before it starts; scoring the whole record`
+			)
+		);
 		s.calibrationStart = null;
 		s.calibrationEnd = null;
 	}

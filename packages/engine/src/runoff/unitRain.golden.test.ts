@@ -100,8 +100,9 @@ const SUMMED = /^(rain_used|rain_final|rain_chirps_corrected|rain_source|rain_un
 function fingerprint(out: ModelOutput) {
 	const units = out.summary.unitRain?.units.map((u) => ({ nodeId: u.nodeId, rule: u.rule, rainKey: u.rainKey, factor: u.factor === null ? null : Number(u.factor.toPrecision(9)), chirps: u.chirps?.source ?? null, days: u.days })) ?? null;
 	// The EWR split's record (engine ≥ 1.94.0, issue #553 round 4) is new fields beside the old ones, not a change to them:
-	// left out, so the rest of every case, the EWR split by the flow share included, is still pinned as it was.
-	const { unitRain: _unitRain, ewrSplit: _ewrSplit, ...rest } = out.summary;
+	// left out, so the rest of every case, the EWR split by the flow share included, is still pinned as it was. So are
+	// the warnings' codes (engine ≥ 1.102.0, issue #611): each is a warning's text again, which `warnings` pins.
+	const { unitRain: _unitRain, ewrSplit: _ewrSplit, warningCodes: _warningCodes, ...rest } = out.summary;
 	const farms = rest.farms.map(({ ewrShare: _ewrShare, ...f }) => f);
 	return { units, golden: goldenFingerprint(out, SUMMED, { ...rest, farms }) };
 }
