@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import type { MapFeature, RunMeta } from '#lib/api/types.js';
 import { fmtDate } from '#lib/format/number.js';
 import type { MapStatus } from './mapStatus';
-import { ewrLine, featureResult, legendRows, noRunLine, resultFills, runCaption, runOption, unlinkedAreas, VIEW_OPTIONS, viewFromParam, viewParam } from './mapResults';
+import { ewrLine, featureResult, featureZone, legendRows, noRunLine, resultFills, runCaption, runOption, unlinkedAreas, VIEW_OPTIONS, viewFromParam, viewOptions, viewParam, zoneFills, zoneLegendRows } from './mapResults';
+import type { ZoneGroup } from '#lib/calibration/zoneGroups.js';
 
 const poly = { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } as MapFeature['geometry'];
 const point = { type: 'Point', coordinates: [0, 0] } as MapFeature['geometry'];
@@ -24,8 +25,15 @@ describe('the measure in the URL', () => {
 		for (const o of VIEW_OPTIONS) expect(viewFromParam(viewParam(o.id))).toBe(o.id);
 	});
 
-	it('offers the four measures, days short first, then Kind as the off state', () => {
-		expect(VIEW_OPTIONS.map((o) => o.id)).toEqual(['daysShort', 'curtailment', 'damLevel', 'allocation', 'kind']);
+	it('offers the four measures, days short first, the calibration zone, then Kind as the off state', () => {
+		expect(VIEW_OPTIONS.map((o) => o.id)).toEqual(['daysShort', 'curtailment', 'damLevel', 'allocation', 'zone', 'kind']);
+		expect(viewFromParam('zone')).toBe('zone');
+	});
+
+	it('offers the measures only with a run, and the calibration zone only when one applies (issue #555)', () => {
+		expect(viewOptions(true, false).map((o) => o.id)).toEqual(['daysShort', 'curtailment', 'damLevel', 'allocation', 'kind']);
+		expect(viewOptions(false, true).map((o) => o.id)).toEqual(['zone', 'kind']);
+		expect(viewOptions(true, true).map((o) => o.id)).toEqual(['daysShort', 'curtailment', 'damLevel', 'allocation', 'zone', 'kind']);
 	});
 });
 
@@ -88,5 +96,36 @@ describe('the fills and a feature’s figure', () => {
 		expect(featureResult(f('x', 'farm_parcel', 'zz'), units, ewr)).toMatchObject({ band: 'none', label: 'No figure for what it stands for' });
 		expect(featureResult(features[3], units, ewr)).toBeNull();
 		expect(featureResult(features[4], units, ewr)).toBeNull();
+	});
+});
+
+describe('calibration zones on the map (issue #555)', () => {
+	const weir: ZoneGroup = { nodeId: 'H', name: 'Weir', units: ['A'], fitted: false, token: '--series-1' };
+	const site: ZoneGroup = { nodeId: null, name: 'Outlet', units: ['B', 'C'], fitted: true, token: '--series-2' };
+	const byUnit = new Map([
+		['A', weir],
+		['B', site],
+		['C', site]
+	]);
+
+	it('lists each zone in the legend, upstream first, with its units and colour token', () => {
+		expect(zoneLegendRows([weir, site])).toEqual([
+			{ key: 'H', text: 'Weir zone, not fitted yet', count: 1, token: '--series-1' },
+			{ key: 'site', text: 'Outlet zone (calibration site)', count: 2, token: '--series-2' }
+		]);
+	});
+
+	it('fills each unit’s area in its zone’s colour and every other area in the no-figure colour', () => {
+		const features = [f('a', 'farm_parcel', 'A'), f('b', 'farm_parcel', 'B'), f('u', 'farm_parcel', null), f('d', 'farm_parcel', 'D'), f('bd', 'catchment_boundary', null), f('p', 'farm_parcel', 'C', point)];
+		const colour = (t: string) => (t === '--series-1' ? '#111' : '#222');
+		expect(zoneFills(features, byUnit, colour, '#999')).toEqual({ a: '#111', b: '#222', u: '#999', d: '#999' });
+	});
+
+	it('names a feature’s zone for its card and table row', () => {
+		expect(featureZone(f('a', 'farm_parcel', 'A'), byUnit)).toBe('Weir zone, not fitted yet');
+		expect(featureZone(f('b', 'farm_parcel', 'B'), byUnit)).toBe('Outlet zone (calibration site)');
+		expect(featureZone(f('u', 'farm_parcel', null), byUnit)).toBe('Not linked to a unit');
+		expect(featureZone(f('g', 'gauge', 'H', point), byUnit)).toBe('In no zone (not a land unit)');
+		expect(featureZone(f('r', 'river', null, line), byUnit)).toBeNull();
 	});
 });

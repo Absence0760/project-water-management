@@ -40,6 +40,8 @@
 	import ChangesList from '#lib/components/compare/ChangesList.svelte';
 	import { attributionSummary, lineAuthors } from '#lib/components/compare/attribution.js';
 	import CalibrationPanel from '#lib/components/calibration/CalibrationPanel.svelte';
+	import ZoneCalibrationTable from '#lib/components/calibration/ZoneCalibrationTable.svelte';
+	import { runZoneRows } from '#lib/calibration/zoneStats.js';
 	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
 	import LineChart from '#lib/components/charts/LineChart.svelte';
 	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
@@ -480,6 +482,8 @@
 							requestedStart={settings.calibrationStart ?? null}
 							requestedEnd={settings.calibrationEnd ?? null}
 						/>
+						<!-- Calibration zones (issue #555): every zone's parameters and scores at its own gauge. -->
+						<ZoneCalibrationTable rows={runZoneRows(summary)} />
 						{#if run.settings}<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} runForcing={runForcingOfSummary(run.summary)} observedOrigin={originOfFit(run.inputSeries, run.settings.fitRecord)} />{/if}
 						<LineChart
 							print

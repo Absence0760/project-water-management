@@ -6,13 +6,14 @@
 // read again whenever the app's theme changes (`dark`). Built during the
 // tab's init, so its effects belong to the tab.
 import { untrack } from 'svelte';
-import type { NetworkNode } from '@water-management/engine';
+import type { NetworkNode, ProjectSettings } from '@water-management/engine';
+import { zoneByUnit, zoneGroups, type ZoneGroup } from '#lib/calibration/zoneGroups.js';
 import { api, type MapFeature, type Role, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
 import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
 import { damLevelsFromSummary, damsInRun, loadDamLevels, type DamLevel } from '#lib/components/overview/damLevels.js';
 import { historyEnd } from '#lib/components/overview/latestRun.js';
 import { BAND_TOKEN, bandFills, chooseMapRun, ewrStatuses, mapRuns, readToken, unitStatuses, type MapBand, type MapStatus } from './mapStatus';
-import { MEASURE_PARAM, RUN_PARAM, resultFills, viewFromParam, type MapView } from './mapResults';
+import { MEASURE_PARAM, RUN_PARAM, resultFills, viewFromParam, zoneFills, type MapView } from './mapResults';
 import type { ReadonlyURLSearchParams } from '$app/state';
 
 export interface MapResultsInput {
@@ -25,6 +26,8 @@ export interface MapResultsInput {
 	params: () => ReadonlyURLSearchParams;
 	/** The app's theme now (appTheme.ts): the fills are read again when it changes. */
 	dark: () => boolean;
+	/** The project's saved settings, for the calibration zones (issue #555); null while unknown. */
+	settings?: () => Pick<ProjectSettings, 'calibrationZones' | 'calibrationSiteNodeId' | 'unitRain' | 'gr4j'> | null;
 }
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -53,8 +56,13 @@ export class MapResults {
 	get run(): RunMeta | null {
 		return this.choice.run;
 	}
-	/** A measure is shown: a run to read and a measure picked. */
-	readonly on: boolean = $derived(!!this.run && this.view !== 'kind');
+	/** A measure is shown: a run to read and a measure picked (calibration zone is the settings', not a run's measure). */
+	readonly on: boolean = $derived(!!this.run && this.view !== 'kind' && this.view !== 'zone');
+	/** The calibration zones the next run applies (issue #555), from the model now and the saved settings; null = none. */
+	readonly zones: ZoneGroup[] | null = $derived(zoneGroups(this.#in().nodes(), this.#in().settings?.() ?? null));
+	/** Calibration zones are shown: picked, and some apply. No run is needed. */
+	readonly zoneOn: boolean = $derived(this.view === 'zone' && !!this.zones);
+	readonly zoneBy: Map<string, ZoneGroup> = $derived(zoneByUnit(this.zones));
 
 	#params() {
 		return this.#o.params();
@@ -143,7 +151,7 @@ export class MapResults {
 	readonly summary = $derived(this.detail && this.run && this.detail.run.id === this.run.id ? this.detail.run.summary : null);
 	/** Every unit's figure for the measure (empty while the run loads or no measure is shown). */
 	readonly units: MapStatus[] = $derived.by(() => {
-		if (!this.on || !this.summary || this.view === 'kind') return [];
+		if (!this.on || !this.summary || this.view === 'kind' || this.view === 'zone') return [];
 		const levels = this.damLevels?.runId === this.run?.id ? this.damLevels!.levels : null;
 		return unitStatuses(this.view, { nodes: this.#in().nodes(), summary: this.summary, damLevels: levels });
 	});
@@ -160,8 +168,14 @@ export class MapResults {
 		void this.#in().dark();
 		return Object.fromEntries((Object.keys(BAND_TOKEN) as MapBand[]).map((b) => [b, readToken(BAND_TOKEN[b])])) as Record<MapBand, string>;
 	});
+	/** Each zone's resolved colour by token, read again when `dark` changes (the zones' fills and legend swatches). */
+	readonly zoneColours: Record<string, string> = $derived.by(() => {
+		void this.#in().dark();
+		return Object.fromEntries((this.zones ?? []).map((g) => [g.token, readToken(g.token)]));
+	});
 	/** The fills for CatchmentMap (undefined = each feature's kind colour). */
 	readonly fills: Record<string, string> | undefined = $derived.by(() => {
+		if (this.zoneOn) return zoneFills(this.#in().features(), this.zoneBy, (t) => this.zoneColours[t] ?? readToken(t), this.colours.none);
 		if (!this.ready) return undefined;
 		const c = this.colours;
 		// Units first, then the gauges' EWR for nodes that aren't units (the outlet may be a unit).

@@ -9,23 +9,29 @@ import type { NetworkNode, RunSummary } from '@water-management/engine';
 import { fmtNum } from '#lib/format/number.js';
 import { LOW_PCT, type DamLevel } from '#lib/components/overview/damLevels.js';
 import { BAND_LABEL, bandsPresent, supplyByNode, type SupplyBand } from './supplyColour';
+import { unitCount, zoneByUnit, zoneName, type ZoneGroup } from '#lib/calibration/zoneGroups.js';
 
-export type ColourMode = 'supply' | 'dam';
+export type ColourMode = 'supply' | 'dam' | 'zone';
 
-/** Supply and dam level share the three good / mid / bad bands (and their colours); `none` and `absent` as for supply. */
-export type ColourBand = SupplyBand;
+/**
+ * Supply and dam level share the three good / mid / bad bands (and their colours); `none` and `absent` as for supply.
+ * `zone` (issue #555): a calibration zone's colour, carried by the node's or the legend entry's `swatch`.
+ */
+export type ColourBand = SupplyBand | 'zone';
 
 export interface NodeColour {
 	band: ColourBand;
-	/** The node's label line, e.g. "82% supplied", "64% full", "20.0 ha planted". */
+	/** The node's label line, e.g. "82% supplied", "64% full", "Weir zone". */
 	text: string;
+	/** The fill for band `zone` (a CSS colour, `var(--series-N)`). */
+	swatch?: string;
 }
 
 export interface Colouring {
 	mode: ColourMode;
 	byNode: ReadonlyMap<string, NodeColour>;
-	/** The bands present, in order, with their words. */
-	legend: { band: ColourBand; label: string }[];
+	/** The bands present, in order, with their words (band `zone`: one entry per zone, with its swatch). */
+	legend: { band: ColourBand; label: string; swatch?: string }[];
 	/** One sentence: what the colours show, and from which run. */
 	caption: string;
 	/** The colours are a run's, and the model has unsaved edits they don't reflect. */
@@ -90,5 +96,29 @@ export function damColouring(nodes: readonly NetworkNode[], levels: readonly Dam
 		legend: present(byNode, ['met', 'short', 'low', 'none', 'absent'] as const, DAM_LABEL),
 		caption: `Hydrological units coloured by how full their dam was at the end of run “${run.name}”, ran ${run.ago}.`,
 		unsaved
+	};
+}
+
+/**
+ * Units by calibration zone (issue #555, docs/model.md §2.10n): each ticked gauge's land units in its own colour,
+ * upstream first, then the calibration site's zone. From the model as edited and the saved settings, by the
+ * engine's rule (calibration/zoneGroups.ts), so it is live, not a run's. A unit with no land area isn't in a zone.
+ */
+export function zoneColouring(nodes: readonly NetworkNode[], groups: readonly ZoneGroup[]): Colouring {
+	const of = zoneByUnit(groups);
+	const byNode = new Map<string, NodeColour>();
+	for (const n of nodes) {
+		if (n.kind !== 'farm') continue;
+		const g = of.get(n.id);
+		byNode.set(n.id, g ? { band: 'zone', text: zoneName(g), swatch: `var(${g.token})` } : { band: 'none', text: 'no land area, in no zone' });
+	}
+	const legend: Colouring['legend'] = groups.map((g) => ({ band: 'zone', label: `${zoneName(g)}: ${unitCount(g.units.length)}`, swatch: `var(${g.token})` }));
+	if ([...byNode.values()].some((c) => c.band === 'none')) legend.push({ band: 'none', label: 'No land area, in no zone' });
+	return {
+		mode: 'zone',
+		byNode,
+		legend,
+		caption: `Hydrological units coloured by calibration zone: the units each ticked gauge calibrates, upstream first, then the calibration site’s (Calibration → Calibration record, Calibrate at several gauges, as saved).`,
+		unsaved: false
 	};
 }

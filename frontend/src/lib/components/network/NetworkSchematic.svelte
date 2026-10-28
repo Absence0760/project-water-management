@@ -118,7 +118,7 @@
 		user: nodes.some((n) => n.kind === 'user'),
 		transfer: transfers.length > 0
 	});
-	const COLOUR_HEADING = { supply: 'Colour: supply', dam: 'Colour: dam level' } as const;
+	const COLOUR_HEADING = { supply: 'Colour: supply', dam: 'Colour: dam level', zone: 'Colour: calibration zone' } as const;
 
 	const name = (n: NetworkNode) => n.name || '(unnamed)';
 	// Names as drawn: at most 17 characters, and never two different names cut to the same text.
@@ -380,8 +380,8 @@
 		{#if colouring && legend.length}
 			<ul class="legend">
 				<li class="key-h">{COLOUR_HEADING[colouring.mode]}</li>
-				{#each legend as l (l.band)}
-					<li data-supply={l.band}>
+				{#each legend as l (l.band + l.label)}
+					<li data-supply={l.band} style:--zone-fill={l.swatch}>
 						<svg width="36" height="18" viewBox="-10 -10 38 20"><circle class="farm" r="8" /><rect class="farm" x="10" y="-8" width="16" height="16" rx="3" /></svg>
 						{l.label}
 					</li>
@@ -458,6 +458,7 @@
 				class:drop-over={drag?.moved && drag.over === n.id}
 				class:dragged={drag?.moved && drag.id === n.id}
 				data-supply={sup?.band}
+				style:--zone-fill={sup?.swatch}
 				data-changed={chg ? 'true' : undefined}
 				transform="translate({p.x},{p.y})"
 				onclick={() => !editable && onselect?.(n.id)}
@@ -790,6 +791,11 @@
 	}
 	[data-supply='low'] .dam-water {
 		stroke: var(--sch-fill);
+	}
+	/* Colour by calibration zone (issue #555): each zone's palette colour, set on the node or legend item as
+	   --zone-fill; the zone's name is in the label line, the legend and the drainage tree, so no colour stands alone. */
+	[data-supply='zone'] .farm {
+		fill: color-mix(in srgb, var(--zone-fill) 70%, var(--sch-fill));
 	}
 	[data-supply='none'] .farm {
 		fill: var(--sch-fill);

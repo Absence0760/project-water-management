@@ -11,4 +11,5 @@ export * from './prompts';
 export * from './riverWorks';
 export * from './locality';
 export * from './damObservations';
+export * from './calibrationZones';
 export * from '../geo/localityMap';

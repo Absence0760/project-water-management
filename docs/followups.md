@@ -2243,29 +2243,45 @@ Round 3 of the 2026-10-28 rounds (draft PR #644, engine 1.106.0) built
 only), the stepwise fit upstream first, the API's checks, the verify
 cross-check and Settings' *Calibrate at several gauges* table with the fit
 card's steps ([model.md §2.10n](./model.md), ui.md § Settings & calibration).
-Still open, for round 4 (each its own piece):
+Round 4 (`feat/r4-zonesview`) built the rest of the screens:
 
-- **Zones on the Network tab and the Map.** A zone column or colour per
-  unit, and on the Map when parcels exist, from `summary.unitRain.zones` or
-  the engine's `resolveZones`. Trigger: round 4.
-- **Calibration statistics per ticked site in a run**, each labelled in or
-  out of sample by its own fit record (`calibrationFitStatus` at the zone's
-  site and window). Today a run scores `RunSummary.calibration` at the
-  calibration site only; a zone's gauge has its out-of-sample
-  `plausibility.gauges[].fit` check. Trigger: round 4.
-- **The report and the evidence pack** list every zone's parameters and fit
-  record (today they show `gr4j` and `fitRecord`, the site's zone). The
-  evidence pack's manifest must take the zones' fit records into its hash.
-  Trigger: round 4, before a zoned project issues a pack.
-- **A per-zone run comparison**: compare.ts lists the ticked rows'
-  parameters as one *Calibration zones* line; it should diff each zone's
-  X1–X4 as the GR4J lines do. Trigger: round 4.
+- ✅ **Zones on the Network tab and the Map**: *Colour hydrological units by →
+  Calibration zone* and *Colour areas by → Calibration zone* (`measure=zone`),
+  each with a legend, from the settings by the engine's rule (ui.md §
+  Network, maps.md § Calibration zones on the map).
+- ✅ **Calibration statistics per ticked site in a run**
+  (`summary.calibrationZones`), each in or out of sample by its own zone's
+  fit, in the Calibration page's and the report's *Calibration zones* table.
+- ✅ **The report and the evidence pack** list every zone's parameters, fit
+  record and scores (report format `evidence-22`, evidence-pack.md §
+  Calibration zones; a zone above the site with no stored fit is flagged).
+- ✅ **A per-zone run comparison**: one input-diff line per zone and a
+  statistics table per zone gauge (run-comparison.md).
+
+Still open:
+
 - **Automated calibration and the uncertainty ensemble per zone.**
   `calibrate/auto.ts` and `uncertainty/ensemble.ts` still fit or perturb the
   site's zone's parameters alone (the zones above it stay at their stored
   parameters). Durable fix: run the rules' cases stepwise, and perturb each
   zone's parameters by its own fit's spread. Trigger: before a zoned project
   signs off calibration rules or cites an ensemble.
+- **Errata keyed on a zone's fit engine outside the evidence report.** The
+  evidence report (`evidence-22`) passes every zone fit's engine version to
+  `errataFor`, but the run's validation statement
+  (`liability/validation.ts`), its sign-off statements
+  (`liability/signoff.ts`) and the runs' *May be affected* status
+  (`backend/src/errata/runs.ts`, `runs/read.ts`, `evidence/packs.ts`,
+  `share/links.ts`, `signoffs/routes.ts`) read only
+  `inputs->'settings'->'fitRecord'->>'engineVersion'`, the site's fit. So an
+  erratum keyed on a zone fit's engine is in the pack's errata but not on the
+  same run's statement. Durable fix: carry `fitEngineVersions` (the site's
+  and each ticked zone's `fitRecord.engineVersion`, read from the settings
+  snapshot with a `jsonb_array_elements` over `calibrationZones`) through
+  those queries and let `errataFor` take a list. Trigger: the first erratum
+  keyed on a fit's engine (`keyedOn: fit`) published while a project has a
+  fitted zone, or with the automated-calibration-per-zone work below,
+  whichever comes first.
 - **A zone step's score and the EWR shares.** While a zone above the site is
   fitted, the units below it run on their pre-fit parameters, and the natural
   MAR shares follow every unit's runoff, so a step's score can differ from a

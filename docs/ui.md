@@ -3226,7 +3226,7 @@ itself.
   previous page"). A drawing that fits its page prints as one picture, as
   before, and the screen never bands.
 - **Colour hydrological units by** (the Catchment map card's header, offered once there is
-  a farm and a run; component state, not kept in the URL, so no old link can
+  a farm and a run, or a farm and a calibration zone; component state, not kept in the URL, so no old link can
   name a removed mode). Rules in
   `network/farmColour.ts`; each mode gives every farm a band, the words for its
   second label line, the legend entries and a caption sentence, so nothing is
@@ -3242,6 +3242,19 @@ itself.
     (`SUPPLY_TARGET`), **70–95 %** and **under 70 %** (`LOW_SUPPLY`), "no
     demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
     (added since) hatched. Label: "82% supplied".
+  - **Calibration zone** (issue #555, offered whenever a calibration zone
+    applies, with or without a run: a gauge ticked in Calibrate at several
+    gauges under Per unit flow generation; `farmColour.ts` `zoneColouring`,
+    zones from `calibration/zoneGroups.ts`): each land unit in its zone's
+    colour (the crop palette's tokens in order, `ZONE_TOKENS`, upstream first,
+    the calibration site's zone last), from the model as edited and the saved
+    settings by the engine's own rule (`resolveZones`), so it is what the next
+    run applies, not a run's (no "unsaved changes" line). Label: "Middle weir
+    zone", "Outflow gauge zone (calibration site)", ", not fitted yet" while
+    the zone's units take the catchment's parameters; a farm with no land area
+    is dashed, "no land area, in no zone". The key (**Colour: calibration
+    zone**) lists each zone with its unit count. Under Fragmentation, or with
+    no usable ticked gauge, the option isn't offered.
   - **Dam level, end of latest run** (offered with a run and a dam): each
     dam's storage on the run's last day, from the run summary's dam figures
     (engine ≥ 1.2.0, issue #55, `damLevelsFromSummary`), or for an older run
@@ -4039,7 +4052,7 @@ map" card) stays the schematic; this is the geography.
   `MapKeyRow.svelte`, state in `mapResults.svelte.ts`): **Colour areas by**
   (`measure=`: Days short, the default and so absent from the URL;
   `curtailment`, `dam-level`, `allocation`; `kind` is the off state, the kind
-  colours above) and, for editors and owners when there is more than one run,
+  colours above; `zone`, **Calibration zone**, below) and, for editors and owners when there is more than one run,
   **Run** (`run=`; each option "name · day · published"). Both are history
   entries, so Back undoes a change. The run is the published one by default;
   an editor with nothing published sees their newest; below editor only the
@@ -4057,6 +4070,18 @@ map" card) stays the schematic; this is the geography.
   is never the only way to read a colour. Loading and a failed load (with
   Retry) show beside the pickers; dam level loads the run's dam levels as the
   Network does. The page fits 1440×960 with thirty units and the legend.
+- **Calibration zone** on the map (issue #555, `measure=zone`; maps.md §
+  Calibration zones on the map): offered in **Colour areas by** whenever a
+  calibration zone applies, with or without a run (with no run the picker
+  offers only it and Kind, and the no-run line stays). Each area linked to a
+  land unit takes its zone's colour (the Network's, read from the theme), every
+  other area "No figure"'s; the Run picker hides, since no run is read. A line
+  says where the zones come from, the legend (**Calibration zone**,
+  `MapZoneKey.svelte`, its own chunk, loaded only while zones show, which keeps
+  the Map tab's chunk under its 60 KB ceiling) lists each
+  zone in words with its unit count, the picked feature's card adds
+  **Calibration zone** ("Middle weir zone"; "Not linked to a unit"; "In no
+  zone (not a land unit)") and Every feature a **Calibration zone** column.
 - **The picked feature's card** (the side column's Details): its name, Kind,
   Area (or Position, or Shape for a line), **Stands for** (a select of the
   nodes of fitting kinds for editors, else the node's name), **Siting** for
@@ -9493,6 +9518,20 @@ read it before.
      runoff model's (mm); a run with the optional terms, too wide for any
      column, scrolls inside its box with the water year held at its left edge,
      as on a phone).
+     **Calibration zones** (issue #555, `calibration/ZoneCalibrationTable.svelte`,
+     rows from `calibration/zoneStats.ts` `runZoneRows`), under the statistics
+     when the run applied calibration zones: one row per zone, upstream first
+     and the calibration site's zone last, with its land units, the GR4J
+     parameters they ran on ("(the catchment’s: not fitted yet)" for a zone
+     with none of its own), the run's NSE, KGE, PBIAS and days at its own gauge
+     on its own window (`summary.calibrationZones`, model.md §2.10n; the site's
+     row is the run's statistics above) and **Scores are**: in sample
+     ("in-sample") only when that zone's own parameters were fitted on those
+     days, else why not ("parameters not from an automatic fit", "fitted on
+     other days", "parameters edited since the fit"), each zone by its own fit
+     record. A gauge with no record in its window reads "no record in its
+     window". The printable report's Calibration section shows the same
+     table.
      The **calibration check** (issue #444, `calibration/CalibrationCheck.svelte`,
      sums in `calibration/calibrationCheck.ts`), inside `#res-calibration`
      under the statistics, where a hydrologist calibrating reads the fit, so it
@@ -12667,7 +12706,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     it but who, when and its rule, since the browser stores an ensemble only
     when every set has run), the baseline's bands (R1), the paired bands
     (R2) and the printed rules.
-  - **3 Model and data**: calibration record, validation (`FitProvenance`, or
+  - **3 Model and data**: calibration record, then, when the baseline ran
+    with calibration zones (`evidence-22`, issue #555), **Calibration zones**:
+    the run's zone table plus each zone's fit (its description, edited
+    parameters, in-sample, split-sample and dry → wet scores on its own
+    objective; "No stored fit: not validated" for a zone with none; from the
+    document's `calibrationZones`, `zoneStats.ts` `evidenceZoneRows`), then
+    validation (`FitProvenance`, or
     *Not assessed* without a stored fit), WR2012, the validation statement,
     and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,

@@ -13,7 +13,8 @@
 	import { farmPlanting } from '#lib/components/crops/farmDrawer.js';
 	import { fmtDate } from '#lib/format/number.js';
 	import { ranAgo, supplyByNode } from './supplyColour';
-	import { damColouring, supplyColouring, type ColourMode, type Colouring } from './farmColour';
+	import { damColouring, supplyColouring, zoneColouring, type ColourMode, type Colouring } from './farmColour';
+	import { zoneGroups } from '#lib/calibration/zoneGroups.js';
 	import FlowUnitSelect from './FlowUnitSelect.svelte';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -199,8 +200,11 @@
 		const runNodes = id && latestRun?.id === id ? detailCache.get(id)?.run.model?.nodes : undefined;
 		return new Map([...damChanges(runNodes as { id: string }[] | undefined, nodes)].map(([nodeId, c]) => [nodeId, { text: c.text, capacity: !!c.capacity }]));
 	});
+	// Calibration zones (issue #555): from the model as edited and the saved settings, no run needed; null = none applies.
+	const zones = $derived(zoneGroups(nodes, settings));
 	const colouring = $derived.by((): Colouring | null => {
 		if (colourBy === 'none' || !farms.length) return null;
+		if (colourBy === 'zone') return zones ? zoneColouring(nodes, zones) : null;
 		if (!latestRun || supplyRun?.id !== latestRun.id) return null;
 		const run = { name: latestRun.label || fmtDate(latestRun.createdAt, true), ago: ranAgo(latestRun.createdAt) };
 		const changed = changedDams.size ? { changed: changedDams } : {};
@@ -587,14 +591,15 @@
 {/snippet}
 
 {#snippet colourByControl()}
-	<!-- Every mode is a run's (supply, dam level), so with no run there is nothing to pick (irrigated area went, issue #174). -->
-	{#if farms.length && latestRun}
+	<!-- Supply and dam level are a run's; calibration zone (issue #555) is the settings', so it shows without a run. -->
+	{#if farms.length && (latestRun || zones)}
 		<div class="colour-by">
 			<label for="sch-colour">Colour hydrological units by</label>
 			<select id="sch-colour" bind:value={colourBy}>
 				<option value="none">Nothing</option>
-				<option value="supply">Supply, latest run</option>
-				{#if farms.some((f) => f.damCapacityM3 >= 1)}<option value="dam">Dam level, end of latest run</option>{/if}
+				{#if latestRun}<option value="supply">Supply, latest run</option>{/if}
+				{#if latestRun && farms.some((f) => f.damCapacityM3 >= 1)}<option value="dam">Dam level, end of latest run</option>{/if}
+				{#if zones}<option value="zone">Calibration zone</option>{/if}
 			</select>
 		</div>
 	{/if}

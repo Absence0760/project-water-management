@@ -331,7 +331,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-21');
+		expect(r.version).toBe('evidence-22');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -1036,7 +1036,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-21');
+		expect(got.version).toBe('evidence-22');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1695,7 +1695,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-21');
+		expect(r.version).toBe('evidence-22');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1751,7 +1751,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-21');
+		expect(r.version).toBe('evidence-22');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
@@ -1935,5 +1935,35 @@ describe('observed wet days (evidence-21, issue #604 R5-C)', () => {
 
 	it('is an empty list for an applicant with no observations yet', () => {
 		expect(evidenceReport(input()).damObservations).toMatchObject({ dams: [] });
+	});
+});
+
+describe('calibration zones (evidence-22, issue #555)', () => {
+	// The baseline with the weir S as a calibration zone's gauge (Farm two above it), Per unit flow generation.
+	const zin = baseInput({ midGauge: true });
+	zin.settings.unitRain = { mode: 'perUnit' } as never;
+	const zone = { nodeId: 'S', enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitRecord: null };
+	zin.settings.calibrationZones = [zone] as never;
+	const sOut = runModel(zin).series.find((s) => s.nodeId === 'S' && s.key === 'outflow')!.values;
+	zin.series['flow_observed_m3s@S'] = { startDate: START, values: sOut.map((q) => q / 86_400) };
+	const zout = runModel(zin);
+
+	it('lists every zone upstream first, the site’s own zone last, with its parameters, fit and statistics', () => {
+		const r = evidenceReport(input({ application: null, baseline: stored('zb', zin, zout) }));
+		expect(r.version).toBe('evidence-22');
+		expect(r.calibrationZones).toEqual([
+			{ nodeId: 'S', name: 'Weir', units: 1, areaKm2: 15, params: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitted: true, fit: null, stats: expect.objectContaining({ fitStatus: 'notFitted' }) },
+			expect.objectContaining({ nodeId: null, name: 'Gauge', units: 1, areaKm2: 25, fitted: true, fit: null })
+		]);
+		// The zone's gauge scored its own record (its outflow, unchanged): a perfect fit.
+		expect(r.calibrationZones![0]!.stats!.nse).toBeCloseTo(1, 9);
+		// A zone above the site with no stored fit has no validation: flagged.
+		expect(r.flags.find((f) => f.id === 'zoneNoFit')?.text).toBe('Validation not assessed for the calibration zone at Weir: its parameters don’t come from a stored automatic fit.');
+	});
+
+	it('is null, with no zone flag, when the baseline ran one parameter set', () => {
+		const r = evidenceReport(input());
+		expect(r.calibrationZones).toBeNull();
+		expect(r.flags.some((f) => f.id === 'zoneNoFit')).toBe(false);
 	});
 });

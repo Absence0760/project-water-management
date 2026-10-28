@@ -34,6 +34,7 @@ import { licenceImpactSection } from './impact';
 import { authorisedUnavailable } from './authorised';
 import { localitySection } from './locality';
 import { damObservationsSection } from './damObservations';
+import { calibrationZoneFitVersions, calibrationZoneFlags, calibrationZonesSection } from './calibrationZones';
 import { proposedRiverWorks, riverWorks, riverWorksName, unboundedRiverWorks, type RiverWorks } from './riverWorks';
 import {
 	EVIDENCE_REPORT_VERSION,
@@ -415,9 +416,13 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 	};
 	const licenceImpact = licenceImpactSection(b, a, input.impact);
 	if (a) rows.push(combinedRow(cumulative.combined!));
+	// The baseline's calibration zones (evidence-22, issue #555): every zone's parameters, fit record and statistics.
+	const calibrationZones = calibrationZonesSection(b);
 	const errata = dedupe([
 		...errataFor(b.engineVersion, input.liability.errata, fitVersion(b)),
-		...(a ? errataFor(a.engineVersion, input.liability.errata, fitVersion(a)) : [])
+		...(a ? errataFor(a.engineVersion, input.liability.errata, fitVersion(a)) : []),
+		// Each zone's own fit (evidence-22): an erratum keyed on the fit's engine reaches the units it fitted.
+		...calibrationZoneFitVersions(calibrationZones).flatMap((v) => errataFor(b.engineVersion, input.liability.errata, v))
 	]);
 	const coverage = baseSum?.coverage[0]?.fraction ?? null;
 	const coverageWarning = !!baseSum?.coverageWarning;
@@ -502,6 +507,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 			ewrSiteNodeIds: river.flatMap((s) => (s.isOutlet ? [] : [s.key])),
 			models: [a?.inputs.model, b.inputs.model]
 		}),
+		calibrationZones,
 		// The applicant's own dams' observed wet days over the baseline's period (evidence-21); null unless an applicant's application.
 		damObservations: damObservationsSection(input.damObservations, {
 			applicant: !!a && a.scenario.origin === 'applicant',
@@ -1994,6 +2000,8 @@ function evidenceFlags(
 	if (!b.summary.calibration || !b.summary.calibration.days) add('noCalibration', 'caution', 'Not assessed: the baseline has no observed flow in its calibration window, so its fit is untested.');
 	const fit = (b.inputs?.settings as { fitRecord?: unknown } | undefined)?.fitRecord;
 	if (!fit) add('noFit', 'caution', 'Validation not assessed: the runoff parameters don’t come from a stored automatic fit.', 'The scores are in-sample only.');
+	// A calibration zone above the site with no stored fit (evidence-22, issue #555).
+	for (const z of calibrationZoneFlags(calibrationZonesSection(b))) add(z.key, 'caution', z.text, z.why);
 	const infill = b.summary.chirpsCorrection?.pooled.days;
 	if (b.summary.chirpsCorrection && infill) add('chirps', 'count', `CHIRPS satellite rain fills gaps in the catchment rain (bias-corrected; factors fitted on ${infill} shared days).`);
 	const dq = b.summary.dataQuality?.seriesChecks?.length ?? 0;
