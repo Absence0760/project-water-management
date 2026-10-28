@@ -142,8 +142,17 @@ interface Named {
 	name: string;
 }
 
+/** The polygon a value was taken over, as it stood then (273, issue #646 F7): what "changed since" compares with the map now. */
+export interface PolygonStamp {
+	featureId: string;
+	updatedAt: string;
+	areaM2: number;
+}
+
 export interface UnitMapUnit extends Named {
 	featureId: string;
+	/** The unit's polygon as it is read now: what an apply records in node.map_polygon. */
+	polygon: PolygonStamp;
 	mapMm: number;
 	cells: number;
 	coveredShare: number;
@@ -182,9 +191,13 @@ export interface UnitMapProposal {
 
 interface UnitWithParcel extends Named {
 	featureId: string;
+	polygon: PolygonStamp;
 	geometry: Geometry;
 	current: { mapMm: number | null; mapSource: string | null };
 }
+
+/** Whether a recorded polygon is the one read now (unknown counts as the same): the same feature, not edited since. */
+export const samePolygon = (then: PolygonStamp | null, now: PolygonStamp): boolean => then === null || (then.featureId === now.featureId && then.updatedAt === now.updatedAt);
 
 /**
  * The proposal: every land unit over every loaded grid, the grid chosen
@@ -195,11 +208,12 @@ export async function unitMapProposal(db: Db, projectId: string, asked?: string)
 	const grids = await unitMapGrids(db);
 	if (asked !== undefined && !grids.some((g) => g.dataset === asked)) return null;
 	const units = await loadUnits(db, projectId);
-	const { rows: maps } = await db.query<{ id: string; map_mm: number | null; map_source: string | null }>(
-		`SELECT id, map_mm, map_source FROM node WHERE project_id = $1 AND kind = 'farm' AND area_km2 > 0`,
+	const { rows: maps } = await db.query<{ id: string; map_mm: number | null; map_source: string | null; map_polygon: PolygonStamp | null }>(
+		`SELECT id, map_mm, map_source, map_polygon FROM node WHERE project_id = $1 AND kind = 'farm' AND area_km2 > 0`,
 		[projectId]
 	);
 	const mapOf = new Map(maps.map((r) => [r.id, { mapMm: r.map_mm, mapSource: r.map_source }]));
+	const stampOf = new Map(maps.map((r) => [r.id, r.map_polygon]));
 	const withoutPolygon: Named[] = [];
 	const refused: (Named & { reason: string })[] = [];
 	const placed: UnitWithParcel[] = [];
@@ -207,7 +221,7 @@ export async function unitMapProposal(db: Db, projectId: string, asked?: string)
 		const p = unitParcel(u);
 		if (p === null) withoutPolygon.push({ nodeId: u.nodeId, name: u.name });
 		else if (p === 'several') refused.push({ nodeId: u.nodeId, name: u.name, reason: 'the unit has several parcels on the map and none is its area: use one parcel’s area for the unit on the Map tab first' });
-		else placed.push({ nodeId: u.nodeId, name: u.name, featureId: p.id, geometry: p.geometry, current: mapOf.get(u.nodeId) ?? { mapMm: null, mapSource: null } });
+		else placed.push({ nodeId: u.nodeId, name: u.name, featureId: p.id, polygon: { featureId: p.id, updatedAt: p.updatedAt, areaM2: p.areaM2 }, geometry: p.geometry, current: mapOf.get(u.nodeId) ?? { mapMm: null, mapSource: null } });
 	}
 	const over = new Map<string, UnitOverGrid[]>();
 	for (const g of grids) {
@@ -253,11 +267,15 @@ export async function unitMapProposal(db: Db, projectId: string, asked?: string)
 				nodeId: u.nodeId,
 				name: u.name,
 				featureId: u.featureId,
+				polygon: u.polygon,
 				mapMm: r.mapMm,
 				cells: r.cells,
 				coveredShare: r.coveredShare,
 				current: u.current,
-				same: u.current.mapMm === r.mapMm && u.current.mapSource === source
+				// The same MAP from the same grid, over the outline it was taken over (273): a redrawn outline is worth
+				// applying again even when its MAP comes out the same, so the record says what it was taken over. A MAP
+				// from before 273 records no outline, and is the same by its value alone.
+				same: u.current.mapMm === r.mapMm && u.current.mapSource === source && samePolygon(stampOf.get(u.nodeId) ?? null, u.polygon)
 			});
 		} else {
 			out.uncovered.push({ nodeId: u.nodeId, name: u.name, coveredShare: r.coveredShare, reason: r.reason });

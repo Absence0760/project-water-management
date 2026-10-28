@@ -66,6 +66,9 @@ interface Polygon {
 	geometry: Geometry;
 	/** A unit's polygon only: whether it is a farm parcel (else the other area its area came from). */
 	parcel?: boolean;
+	/** A unit's polygon only: when it was last edited and its area, as recorded with an accepted area (273). */
+	updatedAt?: string;
+	areaM2?: number;
 }
 
 /**
@@ -88,7 +91,8 @@ async function unitParcels(db: Db, projectId: string, nodeId: string): Promise<P
  */
 async function unitPolygons(db: Db, projectId: string, nodeId: string): Promise<{ all: Polygon[]; summed: Polygon[] }> {
 	const { rows } = await db.query<Polygon & { linkedParcel: boolean }>(
-		`SELECT f.id, f.name, f.geometry, f.kind = 'farm_parcel' AS parcel, (f.node_id IS NOT DISTINCT FROM n.id AND f.kind = 'farm_parcel') AS "linkedParcel"
+		`SELECT f.id, f.name, f.geometry, f.kind = 'farm_parcel' AS parcel, f.area_m2 AS "areaM2",
+			to_char(f.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "updatedAt", (f.node_id IS NOT DISTINCT FROM n.id AND f.kind = 'farm_parcel') AS "linkedParcel"
 		 FROM node n JOIN map_feature f ON ${UNIT_POLYGONS_SQL}
 		 WHERE n.project_id = $1 AND n.id = $2
 		 ORDER BY f.created_at, f.id`,
@@ -273,10 +277,11 @@ export const croplandRoutes = new Hono<AuthEnv>()
 				[id, nodeId, body.cropId, areaM2]
 			);
 			await db.query(
-				`INSERT INTO crop_area_land_cover (project_id, node_id, crop_id, area_m2, dataset, source, version, method, basis, feature_name, layer)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				`INSERT INTO crop_area_land_cover (project_id, node_id, crop_id, area_m2, dataset, source, version, method, basis, feature_name, layer, polygons)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
 				 ON CONFLICT (node_id, crop_id) DO UPDATE SET area_m2 = EXCLUDED.area_m2, dataset = EXCLUDED.dataset, source = EXCLUDED.source,
-					version = EXCLUDED.version, method = EXCLUDED.method, basis = EXCLUDED.basis, feature_name = EXCLUDED.feature_name, layer = EXCLUDED.layer, accepted_at = now()`,
+					version = EXCLUDED.version, method = EXCLUDED.method, basis = EXCLUDED.basis, feature_name = EXCLUDED.feature_name, layer = EXCLUDED.layer,
+					polygons = EXCLUDED.polygons, accepted_at = now()`,
 				[
 					id,
 					nodeId,
@@ -288,7 +293,10 @@ export const croplandRoutes = new Hono<AuthEnv>()
 					cited.method,
 					body.featureId ? 'parcel' : 'unit',
 					body.featureId ? (parcels[0]!.name || 'unnamed').slice(0, 100) : null,
-					body.layer ?? null
+					body.layer ?? null,
+					// The polygons it was summed over as they stand (273, issue #646 F7): a redrawn one shows as changed since.
+					// More than the column holds (500) is recorded as unknown.
+					parcels.length <= 500 ? JSON.stringify(parcels.map((p) => ({ featureId: p.id, updatedAt: p.updatedAt, areaM2: p.areaM2 }))) : null
 				]
 			);
 			const revision = await recordModelRevision(db, id, {
