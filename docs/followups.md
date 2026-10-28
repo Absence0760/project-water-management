@@ -629,6 +629,21 @@ runs and accumulations are real) can't be decided without the client.
       at least 10, and none drawn under 20 candidates; the SPI-3 at the
       decision date not a term. The issue asks for the hydrologist's
       sign-off on the analogue count; no skill score until the C3S slice.
+- [ ] **The forecast-conditioned outlook (issue #620 step 6, engine
+      1.106.0, model.md §2.15d).** The engine part is built and off until the
+      copy holds a hindcast (`runForecastOutlook` returns `off` and runs
+      nothing; the ESP is unchanged to the bit). Calls made in the build, to
+      confirm with the skill gate (engine-audit.md FC1): Hazen positions,
+      held observed ends and multiplicative tails; 20 hindcast years per lead
+      month; the nearest analogue by standardised RMS distance; the 1 mm
+      zero-month rule; systems weighted equally; the skill scored from this
+      season's state, the forecast leading only above a CRPSS of 0. **Next,
+      step 7:** the backend bridge (the 1° cells averaged over the catchment
+      and summed into calendar months from `c3s/<init>` and
+      `c3s-hc/<system>/<MM>`), the outlook job running it beside the ESP,
+      the routes, the panel's chance of each restriction level with the
+      systems, the skill and the Copernicus credit, and the farm card
+      (api.md, ui.md, e2e).
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
