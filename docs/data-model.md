@@ -4011,7 +4011,14 @@ the restored one.
 keyed by `(kind, dataset)`: the reference-bucket object a production load
 of a map dataset read (`land-cover`, `evaporation`, `rivers`, since
 225 `gazetteer`, and since 238 `map-grid`) and the
-SHA-256 it was checked against. Written in the same transaction as the
+SHA-256 it was checked against. Since 258 also `dws`: a production load of
+one river gauge's DWS flow table into the gauge record store (below, DWS
+gauge records), its `dataset` the operator's label for that file, written
+in the transaction that writes its rows; those rows aren't a dataset that
+is replaced, so nothing deletes the record but a reload under the same
+label. 258's list names `waterbodies` too, for PR #606's kind, so the two
+migrations' constraints agree whichever runs last
+(`referenceLoad.db.test.ts` inserts a row of every kind production allows). Written in the same transaction as the
 dataset by the replace functions (`replaceCroplandDataset`,
 `replaceEvaporationDataset`, `replaceRivers`, `replacePlaces`,
 `replaceRainMapDataset`, through
@@ -4543,10 +4550,14 @@ feed with `DWS_SOURCE=store` reads its station's days from our own store
 (`backend/src/feeds/fromGaugeRecord.ts`) instead of asking
 `HyData.aspx` per feed. Three writers fill it, each its own **source**:
 
-- `dws-request`: DWS's reply to a written data request, loaded by the
-  operator (`pnpm import:dws <file> --reference "…"`,
-  `backend/scripts/import-dws.ts`). The primary route for a station's
-  history, and the one that settles storing the data in a commercial tool.
+- `dws-request`: DWS's verified record of a station, held under DWS's
+  permission (obtained through the client's hydrologist, 2026-10-28): its
+  reply to a data request or the `HyData.aspx` pages saved from its site,
+  loaded by the operator with a reference (`pnpm import:dws <file>
+  --reference "…"`, `backend/scripts/import-dws.ts`, locally; in production
+  `load-reference.yml` kind `dws`, `backend/src/geo/referenceLoad.ts`; both
+  through `backend/src/feeds/gaugeRecordImport.ts`). The primary route for
+  a station's history.
 - `dws-web`: the weekly pass (`backend/src/ingest/dws.ts`), the newest two
   years of each station an enabled DWS feed names, handed over through the
   mirror bucket and loaded by the worker's tick
@@ -4585,7 +4596,8 @@ A gap row is a row like any other: DWS listing a day with no value (170
   values[], quality[], fetched_at, reference)`** (invoker's rights,
   `search_path` pinned, closed to `water_app` and PUBLIC, as
   `authority_confirm_by_operator`): the operator's import, as the schema
-  owner. Replaces the source's rows over `from`–`to` (a day it no longer
+  owner (`pnpm import:dws`, or the migrate Lambda's `dws` reference load).
+  Replaces the source's rows over `from`–`to` (a day it no longer
   lists goes; other sources stay) and merges the span. Bounds (else
   23514): origin, source and station known; the span 1–7330 days (DWS's 20
   years a request) ending by today in South Africa; the arrays of one

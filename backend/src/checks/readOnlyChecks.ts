@@ -130,6 +130,55 @@ export const CHECKS = {
 			FROM reference_load`,
 		columns: ['kind', 'dataset', 'source_sha256', 'upstream_version', 'upstream_etag', 'upstream_last_modified', 'originals', 'loaded_at'],
 		orderBy: 'kind, dataset'
+	},
+	// Issue #618 step 6d (docs/deployment.md § DWS gauge records, Which
+	// stations need the reply first): before dws_source = "store", every river
+	// gauge an enabled DWS feed reads must be covered by some source's span
+	// (247 gauge_record_span, origin dws) from the first day its feeds still
+	// ask for, or those feeds wait. needed_from is, per feed, the day after
+	// its newest day or two years back, whichever is earlier (a backfill
+	// resumes after its newest day; a caught-up feed re-reads inside the
+	// weekly pass's two years), else its startDate, else ten years back
+	// (fetch.ts fetchWindow: DWS_FIRST_YEARS, DWS_WINDOW_DAYS), never before
+	// its startDate; the station's is the earliest of its feeds'. hole_days counts the days from
+	// needed_from to covered_to that no span covers (first_hole the first),
+	// null when nothing covers the station at all; days_behind is today in
+	// South Africa less covered_to. Covered: hole_days 0 and days_behind about
+	// a week or less. Station codes, dates and counts only: a public DWS gauge
+	// code, but paste "covered" or not into an issue, never the codes (they
+	// point at the client's catchment, and the repo is public).
+	'dws-coverage': {
+		about: 'each river gauge enabled DWS feeds read, and the days the gauge record store covers for it (issue #618 step 6d)',
+		sql: `WITH t AS (SELECT (now() AT TIME ZONE 'Africa/Johannesburg')::date AS today),
+			feeds AS (
+				SELECT f.config ->> 'station' AS station,
+					greatest(
+						CASE WHEN f.last_data_date IS NULL THEN coalesce((f.config ->> 'startDate')::date, t.today - 3650)
+							ELSE least(f.last_data_date + 1, t.today - 729) END,
+						coalesce((f.config ->> 'startDate')::date, date '1900-01-01')
+					) AS needed_from
+				FROM data_feed f CROSS JOIN t
+				WHERE f.source = 'dws' AND f.enabled AND (f.config ->> 'station') ~ '^[A-Z][0-9]H[0-9]{3}$'
+			),
+			need AS (SELECT station, min(needed_from) AS needed_from FROM feeds GROUP BY station),
+			spans AS (
+				SELECT n.station, n.needed_from, greatest(s.day_from, n.needed_from) AS a, s.day_to AS b,
+					max(s.day_to) OVER (PARTITION BY n.station ORDER BY greatest(s.day_from, n.needed_from), s.day_to
+						ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS before_to
+				FROM need n JOIN gauge_record_span s ON s.origin = 'dws' AND s.station = n.station AND s.day_to >= n.needed_from
+			)
+			SELECT n.station,
+				to_char(n.needed_from, 'YYYY-MM-DD') AS needed_from,
+				to_char(min(sp.a), 'YYYY-MM-DD') AS covered_from,
+				to_char(max(sp.b), 'YYYY-MM-DD') AS covered_to,
+				CASE WHEN count(sp.a) = 0 THEN NULL
+					ELSE sum(greatest(sp.a - coalesce(sp.before_to, n.needed_from - 1) - 1, 0))::int END AS hole_days,
+				to_char(min(CASE WHEN sp.a - coalesce(sp.before_to, n.needed_from - 1) - 1 > 0 THEN coalesce(sp.before_to + 1, n.needed_from) END), 'YYYY-MM-DD') AS first_hole,
+				(SELECT today FROM t) - max(sp.b) AS days_behind
+			FROM need n LEFT JOIN spans sp ON sp.station = n.station
+			GROUP BY n.station, n.needed_from`,
+		columns: ['station', 'needed_from', 'covered_from', 'covered_to', 'hole_days', 'first_hole', 'days_behind'],
+		orderBy: 'station'
 	}
 } as const satisfies Record<string, ReadOnlyCheck>;
 

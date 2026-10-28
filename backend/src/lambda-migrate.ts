@@ -20,12 +20,14 @@
 //
 // It also loads the map's reference datasets in production (docs/deployment.md
 // § Reference datasets): an event `{ "load": { kind, key, sha256, dataset,
-// source?, minOrder? } }` (from .github/workflows/load-reference.yml) runs no
-// migration and no role sync; it reads one file from the private reference
-// bucket (REFERENCE_BUCKET, through the S3 endpoint), checks it against the
-// SHA-256 the operator gave, and replaces that dataset as the owner
-// (geo/referenceLoad.ts, which refuses every kind docs/maps.md § Sources
-// doesn't mark allowed). It answers with counts only.
+// source?, minOrder?, station? } }` (from .github/workflows/load-reference.yml)
+// runs no migration and no role sync; it reads one file from the private
+// reference bucket (REFERENCE_BUCKET, through the S3 endpoint), checks it
+// against the SHA-256 the operator gave, and replaces that dataset as the
+// owner (geo/referenceLoad.ts, which refuses every kind docs/maps.md § Sources
+// doesn't mark allowed), or, for kind dws, writes one river gauge's DWS daily
+// flow into the gauge record store (deployment.md § DWS gauge records). It
+// answers with counts only.
 //
 // And it runs the read-only production checks (docs/deployment.md § Read-only
 // production checks): an event `{ "check": "<name>" }` runs no migration and

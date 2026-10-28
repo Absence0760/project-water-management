@@ -1922,11 +1922,16 @@ station's days from our own store, `gauge_record` (247,
 **behind `DWS_SOURCE`**: `store` reads it, `live` keeps the per-feed request
 to DWS's page through the fetcher. Unset follows `FEED_SOURCE` (`live` in
 production, `store` in dev, CI and e2e); production says `live` until the
-operator has DWS's written answer and has loaded its reply
+operator has loaded each station's record and the `dws-coverage` check
+says it is covered
 ([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
+The operator's load is `pnpm import:dws` locally and, in production,
+`load-reference.yml` kind `dws` (the migrate Lambda, from the reference
+bucket); both read and write through `feeds/gaugeRecordImport.ts`.
 
 ```
 operator ── pnpm import:dws <DWS's reply> ──► gauge_record (source dws-request)
+operator ── reference/dws/<file> + load-reference.yml (kind dws) ──► migrate Lambda ──► the same
 
 EventBridge, daily 04:00 UTC ──► fetcher, {"mode":"dws-weekly"} (outside the VPC)
    reads   dws/stations.json            ◄── worker tick: app_dws_feed_stations()

@@ -279,14 +279,13 @@ provenance, `ingest/verify_copy.py`):
       shift the sample copy's days to today in fixtures mode (as the file
       fixtures re-date themselves), `rainCopy.ts` should report the shifted
       days too, so the line matches what feeds read.
-- [ ] **Loading DWS's reply in production** (R3-B). `pnpm import:dws`
-      writes `gauge_record` locally, but production's database is reachable
-      only through the migrate Lambda, whose reference load
-      (`backend/src/geo/referenceLoad.ts`, `load-reference.yml`) has no `dws`
-      kind. Add one (the reply uploaded to the reference bucket, loaded with
-      `source = 'dws-request'` through the same parser) once DWS's written
-      answer allows storing the data. Until then `dws_source` stays `live`.
-      Trigger: DWS's reply to the operator's request (#604 operator steps).
+- [x] **Loading DWS's reply in production** (R3-B). Built (#618 step 6b):
+      `load-reference.yml` kind `dws` loads one station's saved
+      `HyData.aspx` page or DWS reply from the reference bucket through
+      the migrate Lambda, as `dws-request` rows (origin `dws`) by the same
+      reader and writes as `pnpm import:dws`, recorded in `reference_load`
+      (258); the `dws-coverage` read-only check says which stations are
+      covered ([deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)).
 - [ ] **Table datasets' originals and upstream versions** (R3-D). Migration
       248 records provenance for every `reference_load` kind, but only tile
       archives fill it: `load-reference.yml` takes no inputs for a table

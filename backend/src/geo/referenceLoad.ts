@@ -7,7 +7,7 @@
 // operator uploads one prepared file to the private reference bucket
 // (infra/map_data.tf) and runs .github/workflows/load-reference.yml (the
 // `production` environment, OIDC), which invokes the Lambda with
-// `{ load: { kind, key, sha256, dataset, source?, minOrder? } }`.
+// `{ load: { kind, key, sha256, dataset, source?, minOrder?, station? } }`.
 //
 // Only kinds whose licence docs/maps.md § Sources marks allowed load
 // (decision D-B in #326); the rest are refused here, by name, with the
@@ -23,16 +23,25 @@
 // size cap, and parse as its kind's file. Nothing here prints the file's
 // contents: the caller gets counts, and a failure's code; the skipped
 // features' reasons go to CloudWatch only (the deploy log is public).
+//
+// One kind is not a map dataset: `dws`, a DWS verified daily flow table for
+// one river gauge, written into the gauge record store (247; issue #618 step
+// 6b) by the same reader and gauge_record_write calls `pnpm import:dws` makes
+// locally (feeds/gaugeRecordImport.ts), as source dws-request and origin dws.
+// Its dataset label names that file's load in reference_load; the rows merge
+// with the station's other windows rather than replacing a dataset.
 import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import type pg from 'pg';
+import { DWS_RIVER_GAUGE } from '../feeds/config.js';
+import { type Plan, planImport, stationOf, writeGaugeRecordPlan } from '../feeds/gaugeRecordImport.js';
 import { croplandFromJson, jsonDatasetMeta, replaceCroplandDataset } from './croplandGrid.js';
 import { DPET, evaporationFromJson, evaporationMethodFor, replaceEvaporationDataset } from './evaporationGrid.js';
 import { replaceRivers, riverRecords } from './loadRivers.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { placeRecords, placesSummary, replacePlaces } from './loadGazetteer.js';
 import { rainMapFromJson, replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
-import { parseTileProvenance, recordTileProvenance, referenceLoadOf, TILE_ARCHIVES, type ReferenceLoadRecord } from './referenceOrigin.js';
+import { parseTileProvenance, recordReferenceOrigin, recordTileProvenance, referenceLoadOf, TILE_ARCHIVES, type ReferenceLoadRecord } from './referenceOrigin.js';
 
 /** One dataset of a kind allowed dataset by dataset: its own Sources row, and what a load stores with it. */
 export type ReferenceDataset = {
@@ -138,6 +147,18 @@ export const REFERENCE_KINDS = {
 				why: "the Lynch (2004) grid's licence is unconfirmed (followups.md, Decision: the Lynch (2004) MAP grid's licence)"
 			}
 		}
+	},
+	// DWS verified daily flow for one river gauge, into the gauge record store
+	// (247), allowed since the client's hydrologist obtained DWS's permission to
+	// store it (2026-10-28, #618 step 6a; docs/data-sources.md § dws-flow). One
+	// file per station and window (HyData.aspx gives up to 20 years a request).
+	dws: {
+		status: 'allowed',
+		sourcesRows: ['DWS verified daily flow'],
+		file: /\.(txt|html?|aspx)(\.gz)?$/,
+		what: 'one river gauge’s DWS daily flow table: a HyData.aspx page saved from the website, or DWS’s text reply (.txt, .html, .htm or .aspx, gzipped or not)',
+		// 20 years of days is about 7 300 rows, under 1 MB as a saved page. Far past that it is not one station's table.
+		limits: { object: 8 * 1024 * 1024, text: 16 * 1024 * 1024 }
 	}
 } as const satisfies Record<string, ReferenceKind>;
 
@@ -165,10 +186,12 @@ export interface LoadRequest {
 	sha256: string;
 	/** The dataset label it loads as (a load replaces that dataset). */
 	dataset: string;
-	/** Rivers: the source and attribution stored on every reach that has none of its own (HydroRIVERS has none). Land cover and evaporation: overrides the file’s own. Gazetteer: the credit stored on every place (GeoNames' attribution when null). MAP grid: always null (the dataset's recorded lines are stored). */
+	/** Rivers: the source and attribution stored on every reach that has none of its own (HydroRIVERS has none). Land cover and evaporation: overrides the file’s own. Gazetteer: the credit stored on every place (GeoNames' attribution when null). MAP grid: always null (the dataset's recorded lines are stored). DWS: the record's reference (DWS's reply, or the permission it is held under), stored on every row, required. */
 	source: string | null;
 	/** Rivers: leave out reaches below this Strahler order. */
 	minOrder: number;
+	/** DWS: the river gauge, when the file doesn't name exactly one (it must agree with the one the file names); null for every other kind. */
+	station: string | null;
 }
 
 export type LoadErrorCode = 'refused' | 'not_found' | 'too_large' | 'checksum_mismatch' | 'unreadable' | 'empty' | 'load_failed';
@@ -223,9 +246,15 @@ export function parseLoadRequest(raw: unknown): LoadRequest {
 		if (source !== null) throw refused(`${kind} takes no source: the dataset's source and credit are the ones recorded with its licence`);
 	}
 	if (kind === 'rivers' && source === null) throw refused('rivers need a source: the attribution stored on every reach');
+	if (kind === 'dws' && (source === null || !source.trim() || source.length > 200)) {
+		throw refused('dws needs a source of 1 to 200 characters: the record’s reference (DWS’s reply, or the permission it is held under), stored on every row');
+	}
 	const minOrder = r.minOrder === undefined || r.minOrder === null ? 1 : r.minOrder;
 	if (!Number.isInteger(minOrder) || (minOrder as number) < 1 || (minOrder as number) > 15) throw refused('minOrder is a Strahler order, 1 to 15');
-	return { kind: kind as AllowedKind, key, sha256, dataset, source, minOrder: minOrder as number };
+	const station = r.station === undefined || r.station === null || r.station === '' ? null : r.station;
+	if (station !== null && kind !== 'dws') throw refused('station is for the dws kind only');
+	if (station !== null && (typeof station !== 'string' || !DWS_RIVER_GAUGE.test(station))) throw refused('station must be a DWS river gauge code (an H code, e.g. A2H012)');
+	return { kind: kind as AllowedKind, key, sha256, dataset, source, minOrder: minOrder as number, station };
 }
 
 /** Reads one object from the reference bucket: its size first, its bytes only when asked. */
@@ -377,6 +406,7 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
 		}
 	}
+	if (req.kind === 'dws') return loadDws(client, req, text, origin, replaced, log);
 	if (req.kind === 'gazetteer') {
 		// Places of the kinds the search leaves out (roads, schools, …) are dropped quietly, not counted as skipped.
 		const got = placeRecords(text, name, req.source ?? GEONAMES_SOURCE);
@@ -402,4 +432,65 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 	} catch (e) {
 		throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
 	}
+}
+
+/** The fixed public reason for each way a DWS table can't be read (the CloudWatch line has the detail). */
+const DWS_UNREADABLE = 'the file is not a DWS daily flow table (DATE, D AVG F/R, QUAL columns, the flow in m3/s); the reason is in CloudWatch';
+
+/**
+ * Load one river gauge's DWS daily flow table (kind dws) into the gauge
+ * record store as source dws-request, origin dws, and record the file in
+ * reference_load, in one transaction: a file the store refuses writes nothing.
+ * Re-loading a file writes the same rows again; the windows of one station
+ * merge (gauge_record_write merges spans that overlap or touch).
+ */
+async function loadDws(
+	client: pg.ClientBase,
+	req: LoadRequest,
+	text: string,
+	origin: { key: string; sha256: string },
+	replaced: ReferenceLoadRecord | null,
+	log: (line: string) => void
+): Promise<LoadResult> {
+	const name = req.key.split('/').pop()!;
+	// The station the file names (the text before its table, else its file name), if exactly one.
+	let named: string | null = null;
+	try {
+		named = stationOf(text, name, null);
+	} catch {
+		named = null;
+	}
+	if (req.station && named && named !== req.station) {
+		throw new LoadError(`${req.key}: the file names ${named}, the load gave ${req.station}`, 'refused', 'the file names another station than the one given');
+	}
+	const station = req.station ?? named;
+	if (!station) throw new LoadError(`${req.key}: no single station named`, 'unreadable', 'the file names no station, or several: give the station');
+	let plan: Plan;
+	try {
+		plan = planImport(text, { file: name, station, from: null, to: null });
+	} catch (e) {
+		const message = (e as Error).message;
+		if (/lists no days/.test(message)) throw new LoadError(`${req.key}: ${message}`, 'empty', 'the file lists no days');
+		throw new LoadError(`${req.key}: ${message}`, 'unreadable', DWS_UNREADABLE);
+	}
+	const from = plan.chunks[0]!.from;
+	const to = plan.chunks.at(-1)!.to;
+	await client.query('BEGIN');
+	let written: number;
+	try {
+		written = await writeGaugeRecordPlan(client, plan, { origin: 'dws', source: 'dws-request', reference: req.source, fetchedAt: new Date() });
+		await recordReferenceOrigin(client, 'dws', req.dataset, origin);
+		await client.query('COMMIT');
+	} catch (e) {
+		await client.query('ROLLBACK').catch(() => {});
+		// gauge_record_write's bounds (247): a day after today, a span over 20 years, a flow past 100 000 m3/s, a quality code it can't keep.
+		const bounds = (e as { code?: string }).code === '23514';
+		throw new LoadError(
+			`loading ${req.dataset} (${plan.station}): ${(e as Error).message}`,
+			'load_failed',
+			bounds ? 'the store refused a row (a day after today, a flow over 100 000 m3/s or a quality code it cannot keep); the reason is in CloudWatch' : null
+		);
+	}
+	log(`dws: ${plan.station} ${from} to ${to}: ${written} day(s) as dws-request (origin dws), ${plan.gaps} of them gaps`);
+	return { kind: req.kind, dataset: req.dataset, written, skipped: 0, belowOrder: 0, replaced };
 }
