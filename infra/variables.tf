@@ -739,7 +739,7 @@ variable "jobs_backlog_alarm_seconds" {
 # --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
 
 variable "alarm_tier" {
-  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; two fewer after the cutover (chirps_source = \"mirror\" and dws_source = \"store\" remove the fetch-requests and ingest-results queues and their DLQ alarms, feeds.tf), 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), two more with daily_ingest_enabled (the preliminary and GEFS copies'), one more with era5l_enabled (ERA5-Land's lag, era5land.tf), one more with imerg_enabled (IMERG Late's lag, imerg.tf) and one more with climate_indices_enabled (the ONI and AAO copy's lag, climate_indices.tf). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
+  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 13 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors and throttles, unhandled API errors and failed mail sends; two fewer after the cutover (chirps_source = \"mirror\" and dws_source = \"store\" remove the fetch-requests and ingest-results queues and their DLQ alarms, feeds.tf), 15 once ingest_image_tag is set (the data mirror's two freshness alarms, ingest.tf), two more with daily_ingest_enabled (the preliminary and GEFS copies'), one more with era5l_enabled (ERA5-Land's lag, era5land.tf), one more with imerg_enabled (IMERG Late's lag, imerg.tf) and one more with climate_indices_enabled (the ONI and AAO copy's lag, climate_indices.tf) and one more with c3s_enabled (the C3S seasonal copy's lag, c3s.tf). \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
   type        = string
   default     = "full"
 
@@ -859,6 +859,23 @@ variable "climate_indices_enabled" {
   description = "Turn on the climate indices copy (climate_indices.tf, issue #620): the daily EventBridge rule that invokes the fetcher with {\"mode\":\"daily-ingest\",\"pass\":\"indices\"} (NOAA CPC's ONI and AAO, two requests a day), the fetcher's reads and writes under indices/ in the mirror bucket, and the copy's freshness alarm (MirrorLagDays{Product=indices}, breaching on missing data). Until it is on, an outlook asking for the climate-state analogues says the indices aren't held and shows the ESP alone. Off (the default) until a backend release with the pass is deployed, or the alarm fires for a pass that doesn't exist yet. Runbook: docs/deployment.md § Climate indices."
   type        = bool
   default     = false
+}
+
+variable "c3s_enabled" {
+  description = "Turn on the C3S seasonal forecast copy (c3s.tf, issue #620 step 5): the daily EventBridge rule (14:20 UTC, after the 6th's and 10th's 12 UTC releases) that sends the mirror-ingest Lambda {\"product\":\"c3s\",\"mode\":\"monthly\"} (collect the CDS requests that are ready, submit each system's newest released init and the wanted hindcasts) and the copy's freshness alarm (MirrorLagDays{Product=c3s}, breaching on missing data). Needs ingest_image_tag set, the CDS key in the <project>/ingest/cds-key secret (ERA5-Land's) and, on that CDS account, both the seasonal dataset's licence and its Additional licence to use non European contributions accepted: docs/deployment.md § C3S seasonal forecasts. Off by default; nothing in the app reads the copy until #620 step 6-7."
+  type        = bool
+  default     = false
+}
+
+variable "c3s_lag_alarm_days" {
+  description = "MirrorLagDays{Product=c3s} past this alarms (c3s.tf): days since the 1st of the newest init month every system is held for. A healthy copy runs up to about 42 days behind: month M's last systems are released on the 10th of M and collected a day or two later, so just before that the newest complete init is M-1's, about 31 + 11 days back (ingest/c3s_seasonal.py)."
+  type        = number
+  default     = 45
+
+  validation {
+    condition     = var.c3s_lag_alarm_days >= 43 && floor(var.c3s_lag_alarm_days) == var.c3s_lag_alarm_days
+    error_message = "c3s_lag_alarm_days must be a whole number of days, at least 43: a healthy C3S copy runs up to ~42 days behind."
+  }
 }
 
 variable "assistant_model_id" {

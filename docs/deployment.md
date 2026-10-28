@@ -2163,6 +2163,83 @@ show (docs/data-sources.md § agera5).
 **Cost:** cents a month: under a minute of Lambda a day and the array's
 chunks (a few MB).
 
+### C3S seasonal forecasts
+
+C3S's multi-system seasonal forecasts and their hindcasts (issue #620 step
+5): daily precipitation from every member of nine systems (ECMWF, the Met
+Office, Météo-France, DWD, CMCC, NCEP, JMA and ECCC's two), leads to 215
+days, on a 1° grid, copied by the same `mirror-ingest` function
+(`ingest/c3s_seasonal.py`; how it works: ingest/README.md § The C3S
+seasonal job) into `c3s/<YYYY-MM>/` and `c3s-hc/<system>/<MM>/`. Nothing in
+the app reads the copy yet: the forecast-conditioned outlook is #620 steps
+6–7, and until then outlooks stay ESP. Like ERA5-Land, each request is
+submitted on one run and collected on a later one.
+
+**No new secret.** The runs read ERA5-Land's `water-management/ingest/cds-key`
+(`infra/era5land.tf`). The daily rule (14:20 UTC,
+`{"product":"c3s","mode":"monthly"}`: the first run after ECMWF's release on
+the 6th and the others' on the 10th, both at 12 UTC) and the
+`mirror-lag-c3s` alarm exist only with `c3s_enabled = true` (default false,
+`infra/variables.tf`, `infra/c3s.tf`), which needs `ingest_image_tag` set
+to a release that has `c3s_seasonal.py`.
+
+The operator, once:
+
+1. **The CDS account and key**: [§ ERA5-Land](#era5-land) steps 1, 3 and 4,
+   the same account. Skip what is already done.
+2. **Accept both licences of the seasonal dataset, with that account.**
+   Signed in, open "Seasonal forecast daily and subdaily data on single
+   levels" (`seasonal-original-single-levels`), go to its Download tab, and
+   under "Terms of use" accept **both** the CC-BY licence **and** the
+   "Additional licence to use non European contributions" (it covers NCEP's,
+   JMA's and ECCC's systems). Each dataset has its own acceptance: ERA5-Land's
+   and AgERA5's don't cover it. Until both are accepted the CDS answers 403,
+   which stops the run on purpose for the UTC day.
+3. **Turn it on:** `c3s_enabled = true` in the prod tfvars, then `plan` and,
+   with the operator's go-ahead, `apply`. The next 14:20 UTC run submits four
+   systems' newest released init; the following runs collect them and submit
+   the rest (four queued at most), so a month's nine systems are held within
+   a few days of the 10th.
+4. **Check the first live collection** against what the job expects (it has
+   only met the synthetic fixture): the run's log line names the request,
+   its members and years. A failure that names the file's fields, grid or
+   leads means the CDS's GRIB differs from the fixture's; record what the
+   file holds in issue #620 before changing `c3s_seasonal.py`. If the CDS
+   refuses a hindcast as too large for one request, say so there too: the
+   durable fix is a request per system, month and year (the key gains the
+   year), not a bigger Lambda.
+
+**The hindcast backfill**, once (and again only when SYSTEMS gains a system):
+one synchronous invocation per init month marks that month's hindcast wanted
+for every system; the daily runs drain them after the forecasts, four in the
+queue at a time, so the twelve months take a few weeks. Start it outside the
+6th–13th, so the month's forecasts aren't waiting behind hindcasts:
+`for m in 01 02 03 04 05 06 07 08 09 10 11 12; do aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload "{\"product\":\"c3s\",\"mode\":\"backfill\",\"month\":\"$m\"}" --cli-read-timeout 900 --region af-south-1 --profile water-management /dev/null >/dev/null || echo "$m failed"; done`
+(add `\"system\":\"ukmo-604\"` to the payload for one system). Each
+hindcast is one request for 1993–2016; the years a system has are recorded
+on the copy (`years`).
+
+**When it alarms** (`mirror-lag-c3s`, past `c3s_lag_alarm_days`, default 45:
+days since the 1st of the newest init month every system is held for; a
+healthy copy runs up to about 42 days behind just before the 10th's
+collection): read the `mirror-ingest` log group's `c3s:` lines,
+`c3s/index.json` (the systems each init holds) and
+`ingest-state/c3s/requests.json`. A **401/403**: 401 a wrong or expired key
+(ERA5-Land's step 4), 403 a licence not accepted (step 2); the run writes
+`ingest-state/c3s/refused.json` and no run calls the CDS again that UTC day.
+**`RequestsFailed`**: a request failed five times; the usual cause is a system
+C3S has replaced (the Met Office's changes about yearly). Update
+`ingest/c3srequest.py` `SYSTEMS` from C3S's documentation, release, then
+delete the failed entry from `requests.json`.
+
+**Attribution:** CC BY 4.0 and the additional licence: Copernicus's notice,
+the dataset's citation and the contributing centres wherever its values show
+(docs/data-sources.md § c3s-seasonal); the arrays carry them.
+
+**Cost:** about $0.70 a month in S3 once the hindcasts are held (roughly
+150 MB of forecasts a month and 20–25 GB of hindcasts, once), a few minutes
+of Lambda a month, one alarm metric.
+
 ## DWS gauge records
 
 DWS feeds move onto a store of ours too (issue #604 R3-B, design D14; the
