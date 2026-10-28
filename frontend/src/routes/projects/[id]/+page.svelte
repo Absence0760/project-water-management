@@ -936,25 +936,26 @@
 		<span class="fresh-none muted">No data yet</span>
 	{/if}
 {/snippet}
-<!-- The tab's own actions, then the Assistant (issue #610): shown to anyone the server lets use it here. -->
-{#snippet headerActions()}
-	{@render headerSlot.actions?.()}
-	{#if assistantOn}
-		<button
-			type="button"
-			class="btn assistant-btn"
-			aria-haspopup="dialog"
-			data-testid="assistant-open"
-			onclick={openAssistant}
-			onpointerenter={() => prefetch(loadAssistant)}
-			onfocus={() => prefetch(loadAssistant)}
-		>
-			<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"
-				><path d="M2.5 3h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H8l-3.2 2.5v-2.5H2.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><path d="M5 6.5h6M5 8.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /></svg
-			>
-			Assistant
-		</button>
-	{/if}
+<!-- The Assistant (issue #610), on the title's line after How this page works: the same place on every section,
+     for anyone the server lets use it here (docs/ui.md § Assistant). A sparkle in a chat bubble, then its name. -->
+{#snippet assistButton()}
+	<button
+		type="button"
+		class="btn btn-sm assist-btn"
+		aria-haspopup="dialog"
+		aria-expanded={assistantOpen}
+		data-testid="assistant-open"
+		onclick={openAssistant}
+		onpointerenter={() => prefetch(loadAssistant)}
+		onfocus={() => prefetch(loadAssistant)}
+	>
+		<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"
+			><path d="M2.5 2.5h11a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H8.2l-3.4 2.6v-2.6H2.5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><path
+				d="M8 4.2l.75 1.85L10.6 6.8l-1.85.75L8 9.4l-.75-1.85L5.4 6.8l1.85-.75z"
+				fill="currentColor"
+			/></svg
+		><span class="assist-text">Assistant</span>
+	</button>
 {/snippet}
 <!-- Add data, then Run model (the tab's main action on Runs & results, its run form): what every section ends on. -->
 {#snippet headerMain()}
@@ -1075,7 +1076,8 @@
 				badge={unsavedBadge}
 				context={headerSlot.context ?? (contextText ? pageContext : null)}
 				status={fresh || series || headerSlot.status ? headerStatus : null}
-				actions={headerSlot.actions || assistantOn ? headerActions : null}
+				assist={assistantOn ? assistButton : null}
+				actions={headerSlot.actions}
 				main={canEdit || headerSlot.main ? headerMain : null}
 				notices={headerNotices}
 			/>
@@ -1316,11 +1318,6 @@
 		padding-bottom: calc(var(--dock-h, 0px) + 1rem);
 	}
 	.add,
-	.assistant-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-	}
 	.fresh {
 		position: relative;
 		font-size: 0.85rem;

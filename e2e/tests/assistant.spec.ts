@@ -4,10 +4,12 @@
 // project with (the network, the series, the gauge's fit) and names the gauge;
 // the disclaimer and the budget sit under the box; the sheet passes axe. With
 // the assistant off (the second e2e API, which leaves it at its default) the
-// header has no Assistant button. Invented data only.
+// header has no Assistant button. The button sits in one place on every
+// section, after How this page works on the title's line, at every width.
+// Invented data only.
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
-import { ask, assistantSheet, openAssistant } from '../support/assistant.ts';
+import { ask, assistantButton, assistantSheet, openAssistant } from '../support/assistant.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { viaMfaApi } from '../support/mfaApi.ts';
 import { sectionHeader } from '../support/sectionHeader.ts';
@@ -62,7 +64,7 @@ test('with the assistant off the header has no Assistant button (control: on, it
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Assistant off farm');
 	await page.goto(`/projects/${project.id}`);
-	await expect(sectionHeader(page).getByRole('button', { name: 'Assistant', exact: true })).toBeVisible();
+	await expect(assistantButton(page)).toBeVisible();
 
 	// The second e2e API leaves ASSISTANT_PROVIDER at its default, off: GET …/assistant answers { available: false }.
 	await viaMfaApi(page);
@@ -70,4 +72,34 @@ test('with the assistant off the header has no Assistant button (control: on, it
 	await expect(page.getByRole('heading', { level: 1, name: 'Summary' })).toBeVisible();
 	await expect(sectionHeader(page).getByTestId('assistant-open')).toHaveCount(0);
 	await expect(assistantSheet(page)).toHaveCount(0);
+});
+
+test('the Assistant button is in one place on every section: after the guide on the title’s line, never in More actions', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Assistant place farm');
+	await createRun(page.request, project.id, 'Baseline');
+	for (const size of [
+		{ width: 1440, height: 900 },
+		{ width: 360, height: 740 }
+	]) {
+		await page.setViewportSize(size);
+		for (const tab of ['overview', 'network', 'settings', 'runs']) {
+			await page.goto(`/projects/${project.id}?tab=${tab}`);
+			const at = `${tab} at ${size.width}`;
+			const h = sectionHeader(page);
+			const button = assistantButton(page);
+			await expect(button, at).toBeVisible();
+			// Not one of the tab's actions (on a phone those fold into More actions).
+			await expect(h.getByTestId('header-own').getByTestId('assistant-open'), at).toHaveCount(0);
+			const guide = (await h.getByTestId('section-guide').boundingBox())!;
+			const box = (await button.boundingBox())!;
+			// Right after the guide, centred on its line.
+			expect(box.x, at).toBeGreaterThan(guide.x + guide.width);
+			expect(Math.abs(box.y + box.height / 2 - (guide.y + guide.height / 2)), at).toBeLessThan(4);
+			// Its word on a wide screen; on a phone the icon alone, a 36 px circle, still named Assistant.
+			if (size.width === 1440) await expect(button, at).toHaveText('Assistant');
+			else expect(box.height, at).toBeGreaterThanOrEqual(36);
+		}
+	}
+	await expectNoViolations(page);
 });

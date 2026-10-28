@@ -1235,6 +1235,9 @@ role, freshness, Add data) and each tab's own header:
   (`TAB_GUIDE` in `lib/workspace/tabs.ts`, ids only so the workspace never
   loads the guides; `guides.test.ts` checks every tab has one, about that
   tab). The Applicant view's header links to the Applications guide.
+  After the guide, where the server has it on, the page's **Assistant**
+  ([§ Assistant](#assistant)): on the title's line, so it is in the same
+  place on every section and never among the actions.
 - **A one-line context** under it. A tab gives its own through
   `fillHeader({ context, actions })` (`workspace/headerSlot.svelte.ts`,
   called from an `$effect`, like the sidebar's slot): the Summary names the
@@ -1259,8 +1262,7 @@ role, freshness, Add data) and each tab's own header:
   units' run menu and **Open in Runs & results**, Dams' **Open in Runs & results**, Scenarios'
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
-  longest waiting**), then the page's **Assistant** where the server has it
-  on ([§ Assistant](#assistant)), then for editors **Add data** and **Run model**, the
+  longest waiting**), then for editors **Add data** and **Run model**, the
   primary action, on every section (issue #444: the client looked for a way
   to run the model from where they had just changed it). On every section
   but Runs & results, **Run model** (`workspace/RunButton.svelte`) doesn't
@@ -11328,9 +11330,19 @@ at gauge X not respond to rainfall?", "Which settings would you change to
 improve the fit at the outlet?"), answered by a model the backend calls
 with read-only tools over the project's data. It never changes anything.
 
-- **Where.** **Assistant** in the section header, after the tab's own
-  actions (on a phone, in More actions), on every section. It is not a
-  sidebar row (the sidebar's row budget is full, `app-sidebar.spec.ts`).
+- **Where.** **Assistant** on the section header's title line, right after
+  **How this page works**, on every section: one place that doesn't move
+  with each tab's actions, never in More actions. A chat bubble with a
+  sparkle, then its word, tinted in the accent so it reads apart from the
+  tab's buttons while staying smaller than **Run model**; on a phone the
+  icon alone in the same 36 px circle as the guide's "?" (its target 44 px),
+  still named Assistant. Not among the actions: those end on Add data and
+  Run model, and one more control there made the header taller than the
+  first half of a 360 px phone on the Summary and pushed Model settings'
+  controls under its title at 1440 (`workspace-phone.spec.ts`). Not a
+  sidebar row either (the sidebar's row budget is full,
+  `app-sidebar.spec.ts`). `assistant.spec.ts` pins the place on four
+  sections at 1440 and 360.
   The page asks `GET …/assistant` once per project, and the button shows only
   when that says `available`. It doesn't show when the server has
   `ASSISTANT_PROVIDER=off`, the default, which keeps the dev server
@@ -11367,7 +11379,10 @@ with read-only tools over the project's data. It never changes anything.
   Try again in about 4 min", from `Retry-After`, after which the box takes
   questions again. When the month's budget is used up (from the status, or
   a refusal or stream error whose code names the budget), the sheet says
-  when it starts again and the box takes nothing. Any other refusal shows
+  whose (the project's, yours across your projects, or the server's: three
+  monthly caps, docs/api.md § Assistant) and when it starts again, and the
+  box takes nothing. The share left under the box is of the cap nearest its
+  end. Any other refusal shows
   its message.
 - **A recommended change** (the `propose_settings` tool) is a card in the
   answer, **Recommended change**: its one-line summary, a table of the
