@@ -43,6 +43,7 @@ export * from './calibrate/auto';
 export { dds, reflect, type Bounds, type DdsOptions, type DdsResult } from './calibrate/dds';
 export { Rng } from './random';
 export * from './quality';
+export * from './checkPeriods';
 export * from './rain';
 export * from './rainSourcePeriods';
 export * from './gapRain';

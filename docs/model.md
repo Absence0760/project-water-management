@@ -8709,6 +8709,39 @@ On a client catchment, which runs and years the checks flag is client data,
 so the skipped-without-`data/` suite in `quality.test.ts` tests only their
 presence.
 
+**Flagged periods (issue #611; `checkPeriods.ts`; no run output, so no
+engine version).** A `SeriesCheck` is one summary per series and check, with
+at most five examples (the outliers' five largest). The Warnings page needs
+every period, so `checkPeriods(seriesId, kind, series, dq, chirps, opts)`
+lists them, one `CheckPeriod` each, from the same sources the checks use,
+under the same `settings.dataQuality` limits. It takes `checkSeries`' inputs,
+so the browser runs it on every stored series, a unit's own gauge, an outlet
+station and an inner gauge's flow record included:
+
+| Check | One period is | Days | Default treatment |
+| --- | --- | --- | --- |
+| `negative` | consecutive negative days (`seriesRowFlags`) | each day | flow, and with `opts.negativeAsMissing` a unit's own gauge or a station (§2.4h, §2.4i): `missing`; the catchment gauge: `none` (a reading, runs as 0, §2.4b) |
+| `outlier` | consecutive outlier days (`seriesRowFlags`) | each day | flow: `fitExcluded` (suspect, left out of Fit automatically only, §2.10h); rain: `none` |
+| `flatline` | one flat stretch (`flatRuns`) | each day | non-zero flow: `fitExcluded`; zero flow (judged by the zero-flow rule instead, §2.10h) and rain: `none` |
+| `zerorun` | one zero run (`zeroRainRuns`, the `rain_catchment_mm` kind only), with its CHIRPS verdict | each day | `setAside` (§2.4c); a run CHIRPS reads as dry too (`maybeDry`) is listed with severity `info` and `none` |
+| `lowvschirps` | one flagged water year (`rainVsChirps`; with `opts.lowVsChirps`, the catchment gauge only, as a run and the Data tab do) | the shared days | `none` |
+| `doublemass` | the segment after each break of the `DoubleMass` passed in `opts.doubleMass` | the segment's judged days | `none` |
+
+Its day counts per check equal `checkSeries`' (`doublemass` aside, which
+counts every segment there). `runCheckPeriods(summary, seriesIdOf)` adds what
+only a run knows: each window of `summary.rainAccumulation` (`accumulation`,
+its treatment what the run did: `spread` for status spread or noChirps,
+`setAside`, else `none`; §2.4d), and the segment after each break of
+`summary.plausibility.flowDoubleMass` on the record it was scored on
+(`flowdoublemass`, `none`, §2.10d). `seriesIdOf` maps the run's catchment rain
+and calibration flow kind to stored series ids. Each item's id is
+`checkItemId(check, seriesId, start, end)` =
+`<check>:<seriesId>:<start>:<end>` (ISO days): a recheck that flags the same
+period gives the same id, so a decision kept against it survives; a period
+that grows (a flat stretch with new data) gets a new id and is open again.
+Items are in date order, then by check; day arithmetic is on epoch days, so
+the list is the same in any time zone.
+
 The warning is deliberately neutral: it says the two records disagree and
 asks which to calibrate against, without presuming an instrument fault. Two
 instruments on the same reach should roughly agree, and a sustained gap can
