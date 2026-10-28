@@ -91,6 +91,8 @@ export function calibrateStepwise(
 	} = {}
 ): StepwiseCalibrationReport {
 	const plan = zoneFitPlan(input) ?? [{ zoneNodeId: null, name: '', units: [] }];
+	// The prior bounds need a prior for every step: refused before the first fit, not after the upstream ones ran.
+	if (opts.bounds === 'prior' && plan.some((step) => !opts.prior?.(step))) throw new Error('the prior bounds need a regional prior for every calibration zone');
 	const steps: ZoneFitStep[] = [];
 	let evaluations = 0;
 	let cancelled = false;

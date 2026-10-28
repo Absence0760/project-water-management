@@ -7,7 +7,7 @@ import { regionalPrior, type Gr4jDonor } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { centroidOf, priorRanges, PriorQuery, PriorStart, targetAttributes } from './prior.js';
 
-const ring = (w: number, s: number, e: number, n: number) => [
+const ring = (w: number, s: number, e: number, n: number): [number, number][] => [
 	[w, s],
 	[e, s],
 	[e, n],
@@ -24,7 +24,7 @@ describe('centroidOf', () => {
 		const [mx] = centroidOf({ type: 'MultiPolygon', coordinates: [[ring(0, 0, 1, 1)], [ring(10, 0, 12, 1)]] })!;
 		expect(mx).toBeCloseTo((0.5 + 22) / 3, 12);
 		expect(centroidOf({ type: 'Point', coordinates: [1, 2] })).toBeNull();
-		expect(centroidOf({ type: 'Polygon', coordinates: [[[1, 1], [1, 1], [1, 1]]] })).toBeNull();
+		expect(centroidOf({ type: 'Polygon', coordinates: [[[1, 1], [1, 1], [1, 1]] as [number, number][]] })).toBeNull();
 	});
 });
 

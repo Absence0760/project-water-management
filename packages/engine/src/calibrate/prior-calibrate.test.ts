@@ -175,8 +175,9 @@ describe('the prior penalty', () => {
 		// x4 held at 1.7, far from a narrow x4 prior: it adds nothing, so the penalty at the start is x1's and x3's.
 		const narrow = { ...RANGES, x4: { p10: 0.5, p50: 0.55, p90: 0.6 } };
 		const r = calibrate(input, { ...OPTS, budget: 30, free: ['x1', 'x3'], prior: prior({}, CATCHMENT, narrow) });
-		const z1 = (Math.log(350) - Math.log(650)) / ((Math.log(800) - Math.log(500)) / (2 * 1.2815515655446004));
-		const z3 = (Math.log(90) - Math.log(80)) / ((Math.log(100) - Math.log(60)) / (2 * 1.2815515655446004));
+		// Two-piece σ: x1 350 sits below its median (p50 − p10 side), x3 90 above its (p90 − p50 side).
+		const z1 = (Math.log(350) - Math.log(650)) / ((Math.log(650) - Math.log(500)) / 1.2815515655446004);
+		const z3 = (Math.log(90) - Math.log(80)) / ((Math.log(100) - Math.log(80)) / 1.2815515655446004);
 		expect(r.prior!.penaltyAtStart).toBeCloseTo((z1 * z1 + z3 * z3) / 2, 10);
 	});
 });
@@ -197,6 +198,13 @@ describe('the prior bounds', () => {
 			}
 			expect(r.notes.some((n) => /the search kept to its p10–p90 box/.test(n))).toBe(true);
 		}
+	});
+
+	it('says when the box pins a free parameter', () => {
+		const pinned = { ...RANGES, x4: { p10: 1.5, p50: 1.5, p90: 1.5 } };
+		const r = calibrate(lumped(), { ...OPTS, budget: 30, bounds: 'prior', prior: prior({}, CATCHMENT, pinned) });
+		expect(r.params.x4).toBe(1.5);
+		expect(r.notes.some((n) => /box holds x4 at one value/.test(n))).toBe(true);
 	});
 
 	it('the fit record carries the prior, and none when the fit used none', () => {
@@ -241,11 +249,38 @@ describe('the prior under calibration zones', () => {
 		expect(priorTargetOf(z, null)).toMatchObject({ zoneNodeId: null, units: ['B'], areaKm2: 60 });
 		expect(() => priorTargetOf(z, 'G')).toThrow(/no calibration zone/);
 		const l = priorTargetOf(lumped(), null);
-		expect(l).toMatchObject({ zoneNodeId: null, units: null, areaKm2: 40 });
+		// Five whole water years (2010/11 … 2014/15): the MAP is their mean total, on the catchment's rain.
+		expect(l).toMatchObject({ zoneNodeId: null, units: null, areaKm2: 40, years: 5, rainFrom: 'catchment' });
 		const rain = lumped().series.rain_catchment_mm!.values as number[];
-		expect(l.mapMm!).toBeCloseTo((rain.reduce((a, b) => a + b, 0) / rain.length) * 365.25, 9);
+		expect(l.mapMm!).toBeCloseTo(rain.reduce((a, b) => a + b, 0) / 5, 9);
 		expect(l.aridity!).toBeGreaterThan(0);
+		// Under Per unit flow generation each zone's climate is its own units' rain: A's is 1.3 × the catchment's, B's 0.9 ×.
+		const h = priorTargetOf(z, 'H');
+		const site = priorTargetOf(z, null);
+		const base = (z.series.rain_catchment_mm!.values as number[]).reduce((a, b) => a + b, 0) / 5;
+		expect(h.rainFrom).toBe('units');
+		expect(h.mapMm! / base).toBeCloseTo(1.3, 9);
+		expect(site.mapMm! / base).toBeCloseTo(0.9, 9);
+		expect(h.aridity! / site.aridity!).toBeCloseTo(1.3 / 0.9, 9);
 		expect(() => priorTargetOf(lumped(), 'H')).toThrow(/no calibration zone/);
+	});
+
+	it('takes the climate over whole water years before any forecast tail', () => {
+		const input = lumped();
+		const rain = input.series.rain_catchment_mm!.values as number[];
+		// 200 days past the record's end (a part water year) of forecast rain at 20 mm a day: neither counts.
+		input.series.rain_forecast_mm = { startDate: '2015-10-01', values: new Array(200).fill(20) };
+		const t = priorTargetOf(input, null);
+		expect(t.years).toBe(5);
+		expect(t.mapMm!).toBeCloseTo(rain.reduce((a, b) => a + b, 0) / 5, 9);
+		// A record of 1.3 water years has one whole year: the MAP is that year's total, not 1.3 years' mean × 365.25.
+		const short = lumped();
+		const cut = 365 + 120;
+		short.series.rain_catchment_mm = { startDate: START, values: rain.slice(0, cut) };
+		short.series.flow_observed_m3s = { startDate: START, values: (short.series.flow_observed_m3s!.values as number[]).slice(0, cut) };
+		const st = priorTargetOf(short, null);
+		expect(st.years).toBe(1);
+		expect(st.mapMm!).toBeCloseTo(rain.slice(0, 365).reduce((a, b) => a + b, 0), 9);
 	});
 
 	it('the stepwise fit gives each step the prior built for its zone, and refuses another zone’s', () => {
@@ -261,6 +296,18 @@ describe('the prior under calibration zones', () => {
 			{ zoneNodeId: 'H', units: ['A'] },
 			{ zoneNodeId: null, units: ['B'] }
 		]);
+		// The prior bounds need a prior for every step: refused before the first fit runs.
+		let fits = 0;
+		expect(() =>
+			calibrateStepwise(z, {
+				budget: 20,
+				validate: false,
+				bounds: 'prior',
+				prior: (step) => (step.zoneNodeId === 'H' ? forStep('H') : undefined),
+				onProgress: () => void fits++
+			})
+		).toThrow(/prior for every calibration zone/);
+		expect(fits).toBe(0);
 		// The upstream zone's prior on the site's step, or the catchment's on a zone's, is refused.
 		expect(() => calibrate(z, { ...OPTS, budget: 20, prior: forStep('H') })).toThrow(/another target/);
 		expect(() => calibrate(z, { ...OPTS, budget: 20, zone: 'H', prior: prior() })).toThrow(/another target/);

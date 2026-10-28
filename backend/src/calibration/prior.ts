@@ -69,7 +69,9 @@ export interface PriorTargetView {
 	pawcMm: number | null;
 	/** Why the soil grid gave no PAWC; null when it did. */
 	soilProblem: string | null;
-	rainDays: number;
+	/** Complete water years the MAP and aridity were taken over, and whose rain: the catchment's or its units' own. */
+	climateYears: number;
+	rainFrom: 'catchment' | 'units';
 }
 
 /** A donor the prior kept, with what the panel and the Map show of it. */
@@ -219,9 +221,10 @@ export function computePrior(l: Loaded, zone: string | null): PriorResponse {
 		attributes: targetAttributes(info),
 		pawcMm,
 		soilProblem: !l.soil ? 'no soil water capacity grid is loaded' : !l.boundary ? 'there is no catchment boundary on the map' : l.soilResult && 'problem' in l.soilResult ? l.soilResult.problem : null,
-		rainDays: info.rainDays
+		climateYears: info.years,
+		rainFrom: info.rainFrom
 	};
-	const started = currentPriorStart((settings as { gr4jPrior?: PriorStartRecord[] | null }).gr4jPrior, info.zoneNodeId, zoneParams(settings, info.zoneNodeId));
+	const started = currentPriorStart((settings as { gr4jPrior?: PriorStartRecord[] | null }).gr4jPrior, { zoneNodeId: info.zoneNodeId, units: info.units }, zoneParams(settings, info.zoneNodeId));
 	const out: PriorResponse = { ...base, target, started };
 	if (!l.dataset) return { ...out, problem: 'No GR4J donor basins are loaded (the operator loads them: docs/deployment.md § Reference datasets).' };
 	if (target.lon === null || target.lat === null) return { ...out, problem: 'There is no catchment boundary on the map, so the catchment has no position to compare donors by: draw or import it on the Map first.' };

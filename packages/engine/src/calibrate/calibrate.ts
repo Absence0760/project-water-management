@@ -45,7 +45,7 @@ import { wr2012FitStats, type Wr2012FitStats } from '../reference/wr2012Fit';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
 import { dds } from './dds';
 import { CALIBRATION_PARAMS, MAX_STARTS, type FitBounds, type ParamSet } from './params';
-import { calibrationPriorError, priorBox, priorPenalty, type CalibrationPrior, type ParamPriors, type PriorFitResult, type PriorParam } from './prior';
+import { calibrationPriorError, priorBox, priorPenalty, sameTarget, type CalibrationPrior, type ParamPriors, type PriorFitResult, type PriorParam } from './prior';
 import { excludedDayMask, exclusionRanges } from './provenance';
 import { bootstrapIntervals, scoreBenchmarks, type ScoreBenchmarks, type ScoreIntervals } from './bootstrap';
 import { fitScores, objectiveLoss, type FitScores } from './objective';
@@ -784,7 +784,9 @@ export const SCATTER_SHARE = 0.1;
 export function startsNotes(
 	objective: ObjectiveId,
 	results: readonly StartResult[],
-	specs: readonly { key: string; label: string; unit: string; lo: number; hi: number }[]
+	specs: readonly { key: string; label: string; unit: string; lo: number; hi: number }[],
+	/** The regional prior's penalty was on (issue #622): the start kept is the one with the lowest penalised loss, not the best score. */
+	priorPenalised = false
 ): string[] {
 	const scored = results.filter((r): r is StartResult & { score: number } => r.score !== null);
 	if (scored.length < 2) return [];
@@ -813,7 +815,9 @@ export function startsNotes(
 	if (short.length) {
 		out.push(
 			`${short.length} of ${results.length} starts stopped short of the best ${label} (lowest ${fmt(Math.min(...short.map((r) => r.score)))} against ${fmt(top)}); ` +
-				'the best is kept. If many do, a larger budget may find better parameters.'
+				(priorPenalised
+					? 'the start with the lowest loss, the regional prior’s penalty included, is kept, so it need not be the one with the best score.'
+					: 'the best is kept. If many do, a larger budget may find better parameters.')
 		);
 	}
 	return out;
@@ -1003,9 +1007,8 @@ function fitPriorOf(p: CalibrationPrior | undefined, bounds: FitBounds, free: re
 	if (err) throw new Error(err);
 	if (!(p.weight > 0) && bounds !== 'prior') throw new Error('a regional prior with no penalty weight is used only as the search box (bounds “prior”)');
 	const t = p.provenance.target;
-	const units = pb.zoneUnits ? [...pb.zoneUnits].sort() : null;
-	const sameUnits = units === null ? t.units === null : t.units !== null && t.units.length === units.length && [...t.units].sort().every((u, i) => u === units[i]);
-	if ((t.zoneNodeId ?? null) !== (units === null ? null : (pb.zoneNodeId ?? null)) || !sameUnits) {
+	const units = pb.zoneUnits ? [...pb.zoneUnits] : null;
+	if (!sameTarget(t, { zoneNodeId: units === null ? null : (pb.zoneNodeId ?? null), units })) {
 		throw new Error(
 			units === null
 				? 'the regional prior was built for a calibration zone, but this fit is of the whole catchment: build the prior for the catchment'
@@ -1017,13 +1020,22 @@ function fitPriorOf(p: CalibrationPrior | undefined, bounds: FitBounds, free: re
 	return { weight: p.weight, ranges, box: priorBox(p.ranges) };
 }
 
-/** What a fit with the regional prior says about it (issue #622): what it did, and when the prior has no skill. */
-export function priorNotes(p: CalibrationPrior, bounded: boolean): string[] {
+/**
+ * What a fit with the regional prior says about it (issue #622): what it did,
+ * a free parameter its box pins (clipped to GR4J's bounds or with no spread),
+ * and when the prior has no skill or no score.
+ */
+export function priorNotes(p: CalibrationPrior, bounded: boolean, free: readonly string[] = []): string[] {
 	const n = p.provenance.donors.length;
 	const how = [p.weight > 0 ? `a penalty of weight ${p.weight} pulled the parameters toward its medians` : null, bounded ? 'the search kept to its p10–p90 box' : null]
 		.filter(Boolean)
 		.join(', and ');
 	const out = [`The fit used the regional GR4J prior from ${n} donor basin${n === 1 ? '' : 's'} of ${p.provenance.donorCount} (${p.provenance.dataset}${p.provenance.synthetic ? ', invented donors' : ''}): ${how}.`];
+	if (bounded) {
+		const box = priorBox(p.ranges);
+		const pinned = free.filter((k): k is PriorParam => k in box && !(box[k as PriorParam].max - box[k as PriorParam].min > 1e-9));
+		if (pinned.length) out.push(`The prior’s box holds ${pinned.join(', ')} at one value (no spread among the donors, or clipped to GR4J’s bounds), so the fit doesn’t move ${pinned.length === 1 ? 'it' : 'them'}.`);
+	}
 	const skill = p.provenance.leaveOneOutSkill;
 	if (skill === null || skill <= 0) {
 		out.push(
@@ -1211,7 +1223,8 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 				const s = specs.find((x) => x.key === k)!;
 				const { min: lo, max: hi } = boxOf(s, bounds, prior);
 				return { key: k, label: s.label, unit: s.unit, lo, hi };
-			})
+			}),
+			!!prior && prior.weight > 0
 		)
 	);
 	if (pb.zoneNodeId != null) notes.push(zoneNote(input.model.nodes.find((n) => n.id === pb.zoneNodeId)?.name ?? pb.zoneNodeId, pb.zoneUnits?.length ?? 0));
@@ -1222,7 +1235,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		const at = pb.siteNodeId === null ? zoneSiteName(input.model.nodes, null) : (input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId);
 		notes.push(...zoneCoverageNotes(at, zoneCompleteWaterYears(pb.startDate, pb.allDays ?? all).length, differential !== null));
 	}
-	if (opts.prior) notes.push(...priorNotes(opts.prior, bounds === 'prior'));
+	if (opts.prior) notes.push(...priorNotes(opts.prior, bounds === 'prior', free));
 	if (cancelled) notes.push('Calibration was cancelled: the parameters are the best found before it stopped.');
 
 	const fitClean = scored(pb, params, all);

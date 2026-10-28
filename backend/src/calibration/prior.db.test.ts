@@ -22,8 +22,9 @@ import { loadModelInput } from '../runs/execute.js';
 type User = Awaited<ReturnType<typeof signUp>>;
 const URL_ = () => process.env.TEST_MIGRATION_DATABASE_URL!;
 const START = '2015-10-01';
-const DAYS = 3 * 365;
-const rain = Array.from({ length: DAYS }, (_, i) => (i % 4 === 0 ? 8 : 0));
+// Three whole water years (2015/16 has 29 February): the target's MAP is their mean total.
+const DAYS = 366 + 365 + 365;
+const rain: number[] = Array.from({ length: DAYS }, (_, i) => (i % 4 === 0 ? 8 : 0));
 // Inside the synthetic soil grid's four 120 mm cells (soilGrid.db.test.ts), near the synthetic donors.
 const BOUNDARY = [
 	[
@@ -75,9 +76,9 @@ describe('the catchment’s prior', () => {
 		expect(b.target).toMatchObject({ zoneNodeId: null, units: null, positionFrom: 'boundary', pawcMm: 120, soilProblem: null });
 		expect(b.target.lon).toBeCloseTo(21.35, 9);
 		expect(b.target.lat).toBeCloseTo(-33.65, 9);
-		// The rain's mean × 365.25 days; 40 km².
+		// The mean of the three water years' totals; 40 km².
 		expect(b.target.attributes).toMatchObject({ areaKm2: 40, slopeDeg: null, clayPct: null });
-		expect(b.target.attributes.mapMm).toBeCloseTo((rain.reduce((x, y) => x + y, 0) / DAYS) * 365.25, 6);
+		expect(b.target.attributes.mapMm).toBeCloseTo(rain.reduce((x, y) => x + y, 0) / 3, 6);
 		expect(b.target.attributes.aridity).toBeGreaterThan(0);
 		expect(b.prior.ok).toBe(true);
 		expect(b.donors).toHaveLength(7);

@@ -488,7 +488,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 			coverageWarning,
 			coverage
 		},
-		credibility: { nominations: input.nominations.map((n) => ({ ...n })), regionalPrior: evidenceRegionalPrior(input.baseline.inputs?.settings) },
+		credibility: { nominations: input.nominations.map((n) => ({ ...n })), regionalPrior: evidenceRegionalPrior(input.baseline.inputs) },
 		users,
 		servedWhileFailing: served,
 		cumulative,

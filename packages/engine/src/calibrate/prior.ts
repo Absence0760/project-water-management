@@ -502,11 +502,14 @@ export function regionalPrior(target: PriorTarget, donors: readonly Gr4jDonor[],
 // ---------------------------------------------------------------------------
 
 /**
- * The log-normal penalty of `params` under `priors`: ½ Σ z², with z = (ln x −
- * ln p50) / σ and σ = (ln p90 − ln p10) / (2 Z90) for x1, x3 and x4 (x2
- * linearly). A parameter with no spread (p10 = p90, e.g. x2 fixed at 0) or
- * missing from `params` adds nothing; a non-positive x1, x3 or x4 is
- * Infinity. 0 at the p50s; 0.5 × Z90² ≈ 0.82 per parameter at a p10 or p90.
+ * The log-normal penalty of `params` under `priors`: ½ Σ z², with a two-piece
+ * σ so the penalty agrees with the quantiles the prior states however
+ * lopsided they are: z = (ln x − ln p50) / σ, σ = (ln p50 − ln p10) / Z90
+ * below the median and (ln p90 − ln p50) / Z90 above it, for x1, x3 and x4
+ * (x2 linearly). A side with no spread (p10 = p50 or p50 = p90, e.g. x2 fixed
+ * at 0) adds nothing; a parameter missing from `params` adds nothing; a
+ * non-positive x1, x3 or x4 is Infinity. 0 at the p50s and ½ × Z90² ≈ 0.82
+ * per parameter at a p10 or p90, continuous at the p50.
  */
 export function priorPenalty(priors: Partial<ParamPriors>, params: Partial<Gr4jParams>): number {
 	let sum = 0;
@@ -516,11 +519,11 @@ export function priorPenalty(priors: Partial<ParamPriors>, params: Partial<Gr4jP
 		if (!r || x === undefined) continue;
 		const log = LOG_PARAMS.has(p);
 		if (log && !(x > 0)) return Infinity;
-		const lo = log ? Math.log(r.p10) : r.p10;
-		const hi = log ? Math.log(r.p90) : r.p90;
-		const sigma = (hi - lo) / (2 * Z90);
+		const f = (v: number) => (log ? Math.log(v) : v);
+		const d = f(x) - f(r.p50);
+		const sigma = (d < 0 ? f(r.p50) - f(r.p10) : f(r.p90) - f(r.p50)) / Z90;
 		if (!(sigma > 1e-12)) continue;
-		const z = ((log ? Math.log(x) : x) - (log ? Math.log(r.p50) : r.p50)) / sigma;
+		const z = d / sigma;
 		sum += z * z;
 	}
 	return sum / 2;
@@ -617,9 +620,15 @@ export function calibrationPriorError(p: unknown): string | null {
 		if (LOG_PARAMS.has(k) && !(p10 > 0)) return `the prior's ${k} range must be over 0`;
 	}
 	if (!isObj(p.provenance) || !isObj(p.provenance.target)) return 'the prior has no provenance';
-	const t = p.provenance.target;
+	const pv = p.provenance;
+	if (typeof pv.dataset !== 'string' || typeof pv.donorSetSha256 !== 'string') return 'the prior names no donor set';
+	if (!Number.isInteger(pv.donorCount) || !(Array.isArray(pv.donors) && pv.donors.every((d) => isObj(d) && typeof d.id === 'string' && typeof d.weight === 'number'))) {
+		return 'the prior names no donors';
+	}
+	if (!(pv.leaveOneOutSkill === null || (typeof pv.leaveOneOutSkill === 'number' && Number.isFinite(pv.leaveOneOutSkill)))) return 'the prior’s leave-one-out skill must be a number or null';
+	const t = pv.target as Record<string, unknown>;
 	if (!(t.zoneNodeId === null || typeof t.zoneNodeId === 'string')) return 'the prior names no target zone';
-	if (!(t.units === null || (Array.isArray(t.units) && t.units.every((u) => typeof u === 'string')))) return 'the prior names no target units';
+	if (!(t.units === null || (Array.isArray(t.units) && t.units.every((u: unknown) => typeof u === 'string')))) return 'the prior names no target units';
 	return null;
 }
 
@@ -648,9 +657,23 @@ export interface PriorStartRecord {
 
 const closeTo = (a: unknown, b: number) => typeof a === 'number' && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
 
-/** A target's start record, when its parameters (`gr4j`) still hold what the start wrote; null otherwise. */
-export function currentPriorStart(records: readonly PriorStartRecord[] | null | undefined, zoneNodeId: string | null, gr4j: Partial<Gr4jParams> | null | undefined): PriorStartRecord | null {
-	const r = (records ?? []).find((x) => (x?.provenance?.target?.zoneNodeId ?? null) === zoneNodeId);
+/** Two targets are the same: one zone (or none) and the same land units (or both every unit). */
+export function sameTarget(a: PriorTargetRef, b: PriorTargetRef): boolean {
+	if ((a.zoneNodeId ?? null) !== (b.zoneNodeId ?? null)) return false;
+	if (a.units === null || b.units === null) return a.units === b.units;
+	if (a.units.length !== b.units.length) return false;
+	const x = [...a.units].sort();
+	const y = [...b.units].sort();
+	return x.every((u, i) => u === y[i]);
+}
+
+/**
+ * The start record for `target`, when its parameters (`gr4j`) still hold what
+ * the start wrote; null otherwise. A record for another target (another zone,
+ * or the same zone with other units since the zones changed) never counts.
+ */
+export function currentPriorStart(records: readonly PriorStartRecord[] | null | undefined, target: PriorTargetRef, gr4j: Partial<Gr4jParams> | null | undefined): PriorStartRecord | null {
+	const r = (records ?? []).find((x) => x?.provenance?.target && sameTarget(x.provenance.target, target));
 	if (!r || !gr4j) return null;
 	return PRIOR_PARAMS.every((k) => closeTo(gr4j[k], r.params[k])) ? r : null;
 }
