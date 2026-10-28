@@ -231,8 +231,22 @@ describe('writing settings.rainStations', () => {
 		expect(patchUsabilityText({ usable: false, reason: 'it has no reading on any of the main station’s 52 gap days in the run window', gapDays: 52, fills: 0, from: '2010-01-01', to: '2011-12-31' })).toBe(
 			'can’t help: it has no reading on any of the main station’s 52 gap days in the run window; record 2010-01-01 to 2011-12-31'
 		);
-		expect(patchUsabilityText({ usable: false, reason: 'it has no MAP to scale its rain to the unit’s MAP', gapDays: 52, fills: 30, from: null, to: null })).toBe(
-			'can’t help: it has no MAP to scale its rain to the unit’s MAP; fills 30 of the main station’s 52 gap days (58 %)'
+		expect(patchUsabilityText({ usable: false, reason: 'it has no MAP to scale its rain by', gapDays: 52, fills: 30, from: null, to: null })).toBe(
+			'can’t help: it has no MAP to scale its rain by; fills 30 of the main station’s 52 gap days (58 %)'
+		);
+	});
+
+	it('says which days the gaps are counted over, and that a forecast tail is left out (issue #612)', () => {
+		const w = { windowFrom: '2015-01-01', windowTo: '2020-12-31' };
+		expect(patchUsabilityText({ usable: true, reason: null, gapDays: 52, fills: 40, from: '1990-01-01', to: '2004-12-31', ...w, forecastDays: 30 })).toBe(
+			'fills 40 of the main station’s 52 gap days (77 %); gaps counted 2015-01-01 to 2020-12-31, the run’s 30 forecast days left out; record 1990-01-01 to 2004-12-31'
+		);
+		expect(patchUsabilityText({ usable: true, reason: null, gapDays: 1, fills: 1, from: null, to: null, ...w, forecastDays: 0 })).toBe('fills 1 of the main station’s 1 gap day (100 %); gaps counted 2015-01-01 to 2020-12-31');
+		expect(patchUsabilityText({ usable: false, reason: 'it has no reading on any of the main station’s 3 gap days before the forecast', gapDays: 3, fills: 0, from: null, to: null, ...w, forecastDays: 1 })).toBe(
+			'can’t help: it has no reading on any of the main station’s 3 gap days before the forecast; gaps counted 2015-01-01 to 2020-12-31, the run’s 1 forecast day left out'
+		);
+		expect(patchUsabilityText({ usable: false, reason: 'the main station has no gap before the forecast', gapDays: 0, fills: 0, from: null, to: null, forecastDays: 4 })).toBe(
+			'can’t help: the main station has no gap before the forecast; the run’s 4 forecast days left out'
 		);
 	});
 

@@ -131,6 +131,8 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 		// which Fragmentation's EWR shares read too, issue #615), what the flow share splits, and the EWR split.
 		'set-share': [
 			s.unitRain?.mode === 'perUnit' ? 'Per unit' : `Fragmentation · flow share: ${share.charAt(0).toLowerCase()}${share.slice(1)}`,
+			// The catchment's station (issue #612 follow-up): said only when set, since most projects run on the rain series.
+			s.rainStations?.catchment ? 'catchment rain from a station' : null,
 			(() => {
 				const n = Object.keys(s.rainStations?.units ?? {}).length;
 				// Under Fragmentation said only when a unit has one: a new project has none and needs no word of it.

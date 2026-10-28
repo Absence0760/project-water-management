@@ -143,7 +143,7 @@ export const CHIRPS_PATCH: PatchValue = 'chirps';
 const isDefaultPatch = (p: readonly RainPatchSource[]) => p.length === 1 && p[0]!.source === 'chirps';
 
 /** An assignment with `patch` stored: the default ([CHIRPS]) stored as none, so a unit left at it stores what it had. */
-function storedPatch(a: RainStationAssignment, patch: readonly RainPatchSource[]): RainStationAssignment {
+export function storedPatch(a: RainStationAssignment, patch: readonly RainPatchSource[]): RainStationAssignment {
 	const { patch: _p, ...rest } = a;
 	return isDefaultPatch(patch) ? rest : { ...rest, patch: patch.map((p) => ({ ...p })) };
 }
@@ -194,7 +194,7 @@ export function patchAdd(values: readonly PatchValue[], stations: readonly Stati
 	return values.includes(CHIRPS_PATCH) ? null : [...values, CHIRPS_PATCH];
 }
 
-/** The usability of one station as a unit's patch station (the engine's stationPatchUsability, read for the form). */
+/** The usability of one station as a patch station of a unit's or the catchment's main station (the engine's stationPatchUsability, read for the form). */
 export interface PatchUsability {
 	usable: boolean;
 	reason: string | null;
@@ -202,14 +202,33 @@ export interface PatchUsability {
 	fills: number;
 	from: string | null;
 	to: string | null;
+	/** The run days the gaps are counted over: the run's history, its forecast tail left out (never patched). */
+	windowFrom?: string | null;
+	windowTo?: string | null;
+	/** The forecast tail days left out of the count. */
+	forecastDays?: number;
 }
 
-/** "fills 40 of 52 gap days (77 %), record 1990-01-01 to 2004-12-31", or the reason it can't help with the same counts. */
+/** "; gaps counted 2015-01-01 to 2020-12-31, the run’s 30 forecast days left out": which days the count covers. */
+function patchWindowText(u: PatchUsability): string {
+	const n = u.forecastDays ?? 0;
+	const tail = n > 0 ? `the run’s ${n} forecast ${n === 1 ? 'day' : 'days'} left out` : '';
+	if (u.windowFrom && u.windowTo) return `; gaps counted ${u.windowFrom} to ${u.windowTo}${tail ? `, ${tail}` : ''}`;
+	return tail ? `; ${tail}` : '';
+}
+
+/**
+ * "fills 40 of the main station’s 52 gap days (77 %); gaps counted 2015-01-01 to 2020-12-31; record 1990-01-01 to
+ * 2004-12-31", or the reason it can't help with the same counts.
+ */
 export function patchUsabilityText(u: PatchUsability): string {
 	const pct = u.gapDays ? Math.round((100 * u.fills) / u.gapDays) : 0;
 	const span = u.from && u.to ? `; record ${u.from} to ${u.to}` : '';
-	const fills = u.gapDays ? `fills ${u.fills} of the main station’s ${u.gapDays} gap ${u.gapDays === 1 ? 'day' : 'days'} (${pct} %)` : 'the main station has no gaps in the run window';
-	return u.usable ? `${fills}${span}` : `can’t help: ${u.reason}${u.reason?.startsWith('it has no reading') || !u.gapDays ? '' : `; ${fills}`}${span}`;
+	const win = patchWindowText(u);
+	const fills = u.gapDays
+		? `fills ${u.fills} of the main station’s ${u.gapDays} gap ${u.gapDays === 1 ? 'day' : 'days'} (${pct} %)`
+		: `the main station has no gaps ${(u.forecastDays ?? 0) > 0 ? 'before the forecast' : 'in the run window'}`;
+	return u.usable ? `${fills}${win}${span}` : `can’t help: ${u.reason}${u.reason?.startsWith('it has no reading') || !u.gapDays ? '' : `; ${fills}`}${win}${span}`;
 }
 
 /** The setting with a unit's "Scale to unit MAP" set. Scaling is the default, so on stores none. */

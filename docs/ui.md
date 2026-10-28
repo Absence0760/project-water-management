@@ -7334,6 +7334,25 @@ two.
   summary line names the method ("Fragmentation · flow share: by catchment
   area · EWR by each unit's natural MAR", "Per unit · 2 units on a rainfall
   station · EWR by each unit's natural MAR").
+  - **The catchment's rainfall station**, a card above the units' (issue
+    #612 follow-up, `settings/FlowGenerationCatchment.svelte`, helpers in
+    `settings/catchmentRainStation.ts`; `settings.rainStations.catchment`,
+    [model.md §2.4i](./model.md)), under both methods, since the catchment
+    rain is what GR4J runs on under Fragmentation and what demand and the
+    dams read under either: **Station** (*No station: the catchment rain
+    series, as before stations*, the default, or one of the project's
+    stations; a deleted one says so in red), then, with a station, **Then
+    patch gaps from** (the same pull-downs and fill counts as a unit's,
+    named "for the catchment", the CHIRPS entry being the catchment's own
+    CHIRPS), **Scale to catchment MAP** (on by default, stored as none; the
+    catchment MAP is the units' area-weighted mean, `catchmentMapMm` has no
+    field yet) and **Gaps: CHIRPS corrected against** (*Its station* by
+    default, stored as none). Changing the station keeps the rest, less the
+    new main station from the patching priority; *No station* removes the
+    assignment, so a project that tries one and takes it away stores what
+    it had. The summary line adds "catchment rain from a station" when one
+    is set. Without any station a note says to add one in the Data tab.
+    `rain-patch-priority.spec.ts` covers it, with a forecast tail.
   - **Per unit** shows two cards. **Each unit's rainfall station**
     (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
     helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
@@ -7354,13 +7373,19 @@ two.
     source** (the next free station that can help, then CHIRPS; at most 8);
     *CHIRPS, corrected* alone by default (stored as none), an empty list
     says the gaps go to the next fallback. Each station entry says what it
-    fills ("fills 40 of the main station's 52 gap days (77 %); record … to
-    …") or why it can't help (no reading on any of the gaps, no MAP while
-    scaling is on), in red; a station that can't help is disabled in the
-    pull-down with its reason. The counts are the engine's
+    fills and which days it counted ("fills 40 of the main station's 52 gap
+    days (77 %); gaps counted 2015-01-01 to 2020-12-31, the run's 30
+    forecast days left out; record … to …") or why it can't help (no reading
+    on any of the gaps before the forecast, no MAP while scaling is on), in
+    red; a station that can't help is disabled in the pull-down with its
+    reason. The gaps are counted over the run's history only: a forecast
+    tail day is never patched ([model.md §2.4i](./model.md), the window the
+    gaps are counted over). The counts are the engine's
     `stationPatchChoices` over the model input (`settings/patchChoices.ts`,
     loaded when a unit has a station, fetched once per visit); without rain
-    to run on, a note says they show later. **Gaps: CHIRPS corrected
+    to run on, a note says they show later. The pull-downs are
+    `settings/PatchChain.svelte`, shared with the catchment's station
+    below. **Gaps: CHIRPS corrected
     against**, the station whose rain, at the unit's MAP, the unit's CHIRPS
     is corrected against (*Its station* by default, stored as none). A unit
     whose station was deleted says so in red and keeps its id until another

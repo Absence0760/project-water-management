@@ -1169,6 +1169,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.rainStations']
 	},
 	{
+		id: 'catchment-rain-station',
+		term: 'The catchment’s rainfall station',
+		short: 'The catchment rain from a station × catchment MAP ÷ its MAP, its gaps patched in the order you set; none = the rain series as before.',
+		units: 'mm/day',
+		category: 'flow'
+	},
+	{
 		id: 'actual-evaporation',
 		term: 'Actual evaporation (AET)',
 		short: 'Water the catchment actually evaporates each day in GR4J, in mm: never more than the potential evaporation.',
