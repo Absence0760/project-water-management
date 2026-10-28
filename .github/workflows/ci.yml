@@ -519,8 +519,11 @@ jobs:
 
       # The released migrations are the reference for "applied" (an edited
       # one stops the deploy's migrate step); a shallow fetch of just the tags.
+      # Depth 2, not 1: a release tagged on the commit under test (cut right
+      # after its merge, while this run is going) would otherwise mark that
+      # commit shallow and cut off HEAD^1, the base the next step reads.
       - name: Fetch the backend release tags
-        run: git fetch --no-tags --depth=1 origin 'refs/tags/backend@*:refs/tags/backend@*'
+        run: git fetch --no-tags --depth=2 origin 'refs/tags/backend@*:refs/tags/backend@*'
 
       - name: Migrations (a new one sorts after the base's highest; an applied one is unchanged)
         run: node scripts/guards/check_migration_order.mjs
