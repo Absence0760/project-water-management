@@ -2484,8 +2484,11 @@ the counters in [data-model.md § Assistant usage](./data-model.md#assistant-usa
 the controls in [security.md § Assistant](./security.md#assistant)). The
 model is called from the backend only, never the browser, so the site's CSP
 doesn't change. The assistant reads; it never writes the project. A
-recommended settings change comes back as a proposal the person loads into
-the Settings draft and an editor saves with the normal Save.
+recommended change comes back as a proposal: a recalibration or a
+correction the person loads into the Settings draft and an editor saves with
+the normal Save, or a management change (an outcome goal, issue #640) an
+editor makes a scenario on the run, to run and compare (§ Assistant tools
+below).
 
 ```mermaid
 sequenceDiagram
@@ -2601,8 +2604,8 @@ argument, a missing run or node, or a withheld series:
 | Tool | Reads | Kept small by |
 | --- | --- | --- |
 | `get_run_summary` | `readRun`: the catchment's figures, warnings, `summary.calibration`, plausibility, data quality (also allocations, water balance on request); the run's id, dates and kind, never its label, notes or maker | 30 warnings, short arrays, 4 significant digits |
-| `get_settings` | the run's snapshot as it ran, or the project's merged over the engine's defaults (`mergeSettings`), model inputs only, picked by name (`MODEL_INPUT`), the calibration rules' sign-off as signed and its date, never the signer | `keys` picks top-level settings |
-| `get_network` | the run's model snapshot (or the project's model): each node's kind, drainage, area, dam, crops, and the units, dams and gauges above each gauge | fields picked by name |
+| `get_settings` | the run's snapshot as it ran, or the project's merged over the engine's defaults (`mergeSettings`), model inputs only, picked by name (`MODEL_INPUT`), the calibration rules' sign-off as signed and its date, never the signer; each setting's kind beside it (`kinds`, `settingKinds.ts`) | `keys` picks top-level settings |
+| `get_network` | the run's model snapshot (or the project's model): each node's kind, drainage, area, dam (with its release rule), crops, a unit's operating rules where set (hands-off flow, supply rule, river pump, borehole rule), the transfers with their ids and rules, and the units, dams and gauges above each gauge | fields picked by name |
 | `get_series` | `readSeries`: one series of a node or the catchment | monthly means (latest 120 months), water-year means, or up to 92 days |
 | `get_gauge_fit` | the calibration site's `summary.calibration`; at another gauge, `calibrationStats` on its `outflow` and `observed_flow_check` over the run's calibration window and exclusions | the scores and a few annual volumes |
 | `search_help` | `helpIndex.json`, no database | 8 hits, 700-character snippets |
@@ -2618,6 +2621,34 @@ section and per glossary entry, and `scripts/guards/assistant_help_index.test.mj
 (`pnpm test:guards`) fails until it is rerun after a help text changes.
 `search_help` ranks entries by the query's words (title and aliases over the
 summary over the text).
+
+**`propose_settings`** (`tools/proposeSettings.ts`, issue #640) takes a
+`goal` and a list of changes, each with its own reason, and checks them as the
+app would without saving anything. The goal decides what may change, as data
+in `settingKinds.ts`: each setting is `calibrated` (fitted to the observed
+flow, or forcing that trades off against the fit: GR4J's X1–X4, the pan
+coefficients and PE, the CHIRPS bias settings), `input` (the rest of the
+catchment and its data), `assessment` (what results are judged against: the
+EWR, the Reserve's tables, the assurance threshold, the reporting window) or
+`management` (the drought restriction, the allocation mode).
+
+| Goal | May change | Apply |
+| --- | --- | --- |
+| `outcome` (the EWR, yield, assurance, supply) | management settings; a unit's or other water user's operating levers (`MANAGEMENT_NODE_FIELDS`: own runoff and upstream inflow to the dam, diversion, minimum level, release rule and amounts, outlet capacity, hands-off flow and whether it keeps the EWR, supply rule, river pump and trigger levels, borehole rule, irrigation efficiency, the crops' water source, an other user's fixed restriction); a transfer's rule (`MANAGEMENT_TRANSFER_FIELDS`: months, rates, daily cap, minimum dam storage, on or off, priority, hands-off flow); demand scaled (`demand.scale`) | a scenario on the conversation's run: the ops are checked as `POST /scenarios` checks them (`scenarios/schema.ts` `checkOps`), then applied to the run's input (`applyScenario`), and any problem is the tool's error |
+| `recalibration` (the fit to observed flow) | calibrated and input settings | a settings patch, checked as a save (`SettingsPatch`, `checkedSettingsPatch`, the engine's resolver) |
+| `correction` (a setup error the run shows) | input and assessment settings | as a recalibration |
+
+So a calibrated parameter is a recalibration's only: changed for an outcome
+it is refused, and the error tells the model to use a management lever or say
+that none exists. An outcome goes through a scenario because that is where the
+app judges a management change against its base, and where the EWR-keeping
+rules run at all ([model.md §2.9g](./model.md#29g-the-ewr-in-the-baseline-assessed-and-reported-never-applied-engine-1840-issue-523-b4)).
+The proposal has no free-text title: the server builds it from the changes it
+accepted (`<goal>: <each change's label>`), and each change carries the
+engine's input-diff lines for it alone (`diffInputs`) beside its reason, so the
+card can never claim a change it doesn't make. A `summary` argument is refused
+with that explanation. The system prompt (`prompt.ts`) states the same rules,
+and asks that a recommendation never worsens a bias the run's own fit shows.
 
 ## Key choices
 
