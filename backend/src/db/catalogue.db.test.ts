@@ -253,7 +253,13 @@ const READ_ONLY = new Set([
 	// app_dam_observation_load (the worker, with no user) and dropped by map_feature_outline_changed when a dam is redrawn.
 	'waterbody_reference',
 	'dam_waterbody_match',
-	'dam_observation'
+	'dam_observation',
+	// The regional GR4J prior's reference data (268_soil_grid, 269_gr4j_donors), loaded by the operator as the schema
+	// owner (`pnpm import:soils`, `pnpm import:gr4j-donors`, or a production reference load).
+	'soil_dataset',
+	'soil_cell_reference',
+	'gr4j_donor_dataset',
+	'gr4j_donor'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
