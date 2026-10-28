@@ -4079,9 +4079,14 @@ export type StationPatchUse =
 			clamped: boolean;
 			/** Why the run skipped it (no record, no MAP under scaling, the main station), or null. */
 			skipped: string | null;
-			/** The main station's gap days in the run window, and how many of them this station has a checked reading on. */
+			/**
+			 * The main station's gap days in the run's history (the run window less its forecast tail, which is never
+			 * patched), and how many of them this station has a checked reading on.
+			 */
 			gapDays: number;
 			fills: number;
+			/** The forecast tail days left out of gapDays; absent without a tail. */
+			forecastDays?: number;
 			/** The days it gave the area's rain (after the sources before it). */
 			days: number;
 	  }
