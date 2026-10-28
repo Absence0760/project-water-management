@@ -56,7 +56,13 @@ describe('load: a reference load’s inputs', () => {
 		// The Southwestern Cape MAP surface: its credit is stored with the dataset and shown with the layer (docs/maps.md § MAP grid).
 		const mapGrid = { ...landCover, LOAD_KIND: 'map-grid', LOAD_KEY: 'reference/map-grid/waas-swcape.json.gz', LOAD_DATASET: 'WAAS-SWCape-2007' };
 		assert.deepEqual(loadProblems(mapGrid, lacks), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws']);
+		// SoilGrids 2.0, iSDAsoil, GRDC-Caravan and HydroATLAS are CC BY 4.0: the attribution is stored with the dataset (issue #622).
+		const soils = { ...landCover, LOAD_KIND: 'soils', LOAD_KEY: 'reference/soils/soils-d1.json.gz', LOAD_DATASET: 'SoilGrids2-iSDA-D1' };
+		assert.deepEqual(loadProblems(soils, lacks), []);
+		const donors = { ...landCover, LOAD_KIND: 'gr4j-donors', LOAD_KEY: 'reference/gr4j-donors/caravan-d1.json.gz', LOAD_DATASET: 'Caravan-D1-2026' };
+		assert.deepEqual(loadProblems(donors, lacks), []);
+		assert.match(loadProblems({ ...donors, LOAD_KEY: 'reference/soils/caravan-d1.json.gz' }, lacks).join('\n'), /reference\/gr4j-donors\//);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws', 'soils', 'gr4j-donors']);
 	});
 
 	it('a DWS flow table needs its reference, takes a station only as a river gauge code, and no other kind takes one', () => {

@@ -477,6 +477,73 @@ open:
       Trigger: the first production load of the polygons, before turning
       the flag on.
 
+## Regional GR4J prior (issue #622)
+
+Round 3 of 2026-10-28 built steps 1–3 and the pure part of step 4
+([model.md §2.10m](./model.md)). These are the data-source rows, the soil
+water capacity grid (migration 268), the `gr4j-donors` reference kind
+(migration 269) with its offline fit, and `regionalPrior` with its
+leave-one-out score and soil x1 relation. Nothing reads a prior yet. What's
+open:
+
+- [ ] **Step 4's wiring: the prior in `calibrate()`.** Missing: the optional
+      `prior` (the log-normal penalty `priorPenalty`, weighted like the
+      WR2012 MAR penalty) and `bounds: 'prior'` (the `priorBox`). Both are
+      off by default, and calibration stays bit-identical with them off. The
+      fit record (`provenance.ts`) names the prior, `k`, the weight, the
+      donor set's SHA-256 and its `reference_load`. Durable fix: those
+      options, a bit-identity test with the prior off, `ENGINE_VERSION`, and
+      an engine-reviewer pass. Trigger: round 4, after #555's calibration
+      changes land (they touched the same files this round).
+- [ ] **A flow-space leave-one-out score.** Missing: the LOO score is in
+      parameter space (log error of the p50 against the plain median).
+      Flow space is what the hydrologist judges: KGE′ of the prior's p50 run
+      on each held-out donor, against its own fit. Durable fix:
+      `fit-donors.ts` runs it after the fits, with the forcing it already
+      holds, and stores it on `gr4j_donor_dataset` (a new column, a forward
+      migration). Trigger: with step 4's wiring, before the UI shows a skill
+      score.
+- [ ] **Donors at a typical bound.** Broken (maybe): donors are fitted on
+      Perrin's typical bounds, so x4 of a large basin or x1 of a semi-arid
+      one can stack at a bound, and the prior's p10–p90 can never leave the
+      box. `fit-donors.ts` prints the count per parameter; nothing records
+      it per donor. Durable fix: a per-donor at-bound column (a forward
+      migration), then with the hydrologist either fit donors on the wide
+      bounds or leave a bound-hit donor out of that parameter's quantiles.
+      Trigger: the first real fit's counts.
+- [ ] **The prior's forcing against the target's.** Donors are fitted on
+      uncorrected CHIRPS v3 finals. A target running on station rain, an
+      areal correction or a CHIRPS correction should be told its prior
+      comes from other forcing (parameters absorb forcing bias). Durable
+      fix: a note in the fit record and the panel. Trigger: step 5.
+- [ ] **A target's own attributes.** Missing: `regionalPrior` needs the
+      target's HydroATLAS attributes. The donors carry theirs, from
+      GRDC-Caravan; a project's catchment or unit has none. Durable fix:
+      load BasinATLAS level-12 sub-basins (CC BY 4.0, figshare; read its
+      record's licence field first, data-sources.md § GR4J priors) as a
+      reference kind, and area-weight them over the boundary, as the soil
+      grid is. Trigger: step 5.
+- [ ] **Step 5: show and apply the prior.** Missing: the Settings &
+      calibration panel (the donors on the Map, the ranges, the LOO skill,
+      "Start from the prior", and a soil prior without skill labelled so),
+      the evidence pack's § 3 line (a report format bump), the credits for
+      the four sources on `/data-sources`, and api.md, ui.md,
+      evidence-pack.md and e2e. Trigger: after step 4's wiring.
+- [ ] **Step 6 (optional): x1 per unit by PAWC.** Changes `runModel`, so it
+      needs its own `ENGINE_VERSION`, the `verify/` mirror, an invariant
+      (equal PAWC across units reproduces the shared parameters bit for
+      bit) and an engine-audit.md entry. Trigger: only after step 5 is in
+      use and the hydrologist asks for it (#622 open question 4).
+- [ ] **The operator's loads.** Nothing uses the prior in production until
+      the operator builds the soil grid, fits the donors and loads both
+      ([deployment.md § Reference datasets](./deployment.md#reference-datasets),
+      *Soils and GR4J donors*). Fitting needs the copy's CHIRPS v3 finals
+      back to 1981 and a real dPET grid in the checkout's database. Trigger:
+      step 5 shipping. The hydrologist accepts the donor criteria (≥ 8
+      years, < 5 % regulation, ≤ 10 000 km², and the proposed KGE′ ≥ 0.5
+      on the donor's own record) and the similarity method first (#622
+      Blockers).
+
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
 - [x] **Guard pending notices as db-setup.ts guards pending jobs.** The
@@ -629,6 +696,28 @@ runs and accumulations are real) can't be decided without the client.
       at least 10, and none drawn under 20 candidates; the SPI-3 at the
       decision date not a term. The issue asks for the hydrologist's
       sign-off on the analogue count; no skill score until the C3S slice.
+- [ ] **The forecast-conditioned outlook (issue #620 step 6, engine
+      1.106.0, model.md §2.15d).** The engine part is built and off until the
+      copy holds a hindcast (`runForecastOutlook` returns `off` and runs
+      nothing; the ESP is unchanged to the bit). Calls made in the build, to
+      confirm with the skill gate (engine-audit.md FC1): Hazen positions,
+      held observed ends and multiplicative tails; 20 hindcast years per lead
+      month; the nearest analogue by standardised RMS distance; the 1 mm
+      zero-month rule; systems weighted equally; the skill scored from this
+      season's state, the forecast leading only above a CRPSS of 0. **Next,
+      step 7:** the backend bridge (the 1° cells averaged over the catchment
+      and summed into calendar months from `c3s/<init>` and
+      `c3s-hc/<system>/<MM>`), the outlook job running it beside the ESP,
+      the routes, the panel's chance of each restriction level with the
+      systems, the skill and the Copernicus credit, and the farm card
+      (api.md, ui.md, e2e). Step 7 also passes only forecasts *issued* on or
+      before the decision date (C3S publishes between the 6th and the 13th;
+      the engine has no issue date, model.md §2.15d), says on the panel that
+      the chance reflects storage only (not a rule's EWR trigger, the
+      filling-dam reading or the hold), and adds the methodology statement's
+      paragraph on the forecast-conditioned outlook once the chances reach a
+      report (a new methodology version if methodology-13 is published by
+      then).
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent

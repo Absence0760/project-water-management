@@ -1,0 +1,361 @@
+{
+ "_comment": "SYNTHETIC test data, invented for this repository: no real basin, gauge, flow or parameter. 14 invented donor basins (ids SYN-01 … SYN-14) scattered over the Western Cape around the seeded examples, with invented HydroATLAS-style attributes and GR4J parameters. The rule: PAWC = 60 + 14 (k − 1) mm for SYN-k, and x1 = 1.9 × PAWC × e^ε with a fixed small ε per donor (so the soil x1 relation is fitted with skill); x2 = 0; the other values are invented in fixed patterns. Every donor meets the criteria (≥ 8 years of flow, regulation under 5 %).",
+ "kind": "gr4j-donors",
+ "source": "Synthetic donor basins (this repository; invented, not GRDC-Caravan or HydroATLAS)",
+ "version": "synthetic 1",
+ "method": "Invented: not fitted. A real set is fitted by backend/scripts/fit-donors.ts (GR4J on CHIRPS v3 from our copy and dPET PE, KGE′, typical bounds).",
+ "attribution": "Synthetic test data (this repository)",
+ "engineVersion": "1.106.0",
+ "donors": [
+  {
+   "id": "SYN-01",
+   "lon": 19.6,
+   "lat": -34.2,
+   "areaKm2": 40.0,
+   "attributes": {
+    "aridity": 0.25,
+    "mapMm": 300,
+    "slopeDeg": 2.0,
+    "clayPct": 14.0,
+    "sandPct": 70.0,
+    "forestPct": 0.0
+   },
+   "dorPct": 0.0,
+   "pawcMm": 60,
+   "flowYears": 8,
+   "params": {
+    "x1": 123.5,
+    "x2": 0,
+    "x3": 40,
+    "x4": 1.2
+   },
+   "kgeFit": 0.62,
+   "kgeValidation": null
+  },
+  {
+   "id": "SYN-02",
+   "lon": 19.87,
+   "lat": -33.25,
+   "areaKm2": 64.0,
+   "attributes": {
+    "aridity": 0.34,
+    "mapMm": 615,
+    "slopeDeg": 11.9,
+    "clayPct": 20.0,
+    "sandPct": 60.5,
+    "forestPct": 4.5
+   },
+   "dorPct": 0.3,
+   "pawcMm": 74,
+   "flowYears": 9,
+   "params": {
+    "x1": 124.7,
+    "x2": 0,
+    "x3": 67,
+    "x4": 1.9
+   },
+   "kgeFit": 0.64,
+   "kgeValidation": 0.52
+  },
+  {
+   "id": "SYN-03",
+   "lon": 20.14,
+   "lat": -32.3,
+   "areaKm2": 102.4,
+   "attributes": {
+    "aridity": 0.43,
+    "mapMm": 300,
+    "slopeDeg": 9.2,
+    "clayPct": 26.0,
+    "sandPct": 51.0,
+    "forestPct": 9.0
+   },
+   "dorPct": 0.6,
+   "pawcMm": 88,
+   "flowYears": 10,
+   "params": {
+    "x1": 175.8,
+    "x2": 0,
+    "x3": 94,
+    "x4": 1.2
+   },
+   "kgeFit": 0.66,
+   "kgeValidation": 0.54
+  },
+  {
+   "id": "SYN-04",
+   "lon": 20.41,
+   "lat": -34.01,
+   "areaKm2": 163.8,
+   "attributes": {
+    "aridity": 0.52,
+    "mapMm": 615,
+    "slopeDeg": 6.5,
+    "clayPct": 15.2,
+    "sandPct": 68.1,
+    "forestPct": 13.5
+   },
+   "dorPct": 0.9,
+   "pawcMm": 102,
+   "flowYears": 11,
+   "params": {
+    "x1": 188.1,
+    "x2": 0,
+    "x3": 121,
+    "x4": 1.9
+   },
+   "kgeFit": 0.68,
+   "kgeValidation": 0.56
+  },
+  {
+   "id": "SYN-05",
+   "lon": 20.68,
+   "lat": -33.06,
+   "areaKm2": 262.1,
+   "attributes": {
+    "aridity": 0.61,
+    "mapMm": 300,
+    "slopeDeg": 3.8,
+    "clayPct": 21.2,
+    "sandPct": 58.6,
+    "forestPct": 18.0
+   },
+   "dorPct": 1.2,
+   "pawcMm": 116,
+   "flowYears": 12,
+   "params": {
+    "x1": 243.6,
+    "x2": 0,
+    "x3": 148,
+    "x4": 1.2
+   },
+   "kgeFit": 0.7,
+   "kgeValidation": null
+  },
+  {
+   "id": "SYN-06",
+   "lon": 20.95,
+   "lat": -32.11,
+   "areaKm2": 419.4,
+   "attributes": {
+    "aridity": 0.28,
+    "mapMm": 615,
+    "slopeDeg": 13.7,
+    "clayPct": 27.2,
+    "sandPct": 49.1,
+    "forestPct": 1.5
+   },
+   "dorPct": 1.5,
+   "pawcMm": 130,
+   "flowYears": 13,
+   "params": {
+    "x1": 230.3,
+    "x2": 0,
+    "x3": 49,
+    "x4": 1.9
+   },
+   "kgeFit": 0.72,
+   "kgeValidation": 0.6
+  },
+  {
+   "id": "SYN-07",
+   "lon": 21.22,
+   "lat": -33.82,
+   "areaKm2": 671.1,
+   "attributes": {
+    "aridity": 0.37,
+    "mapMm": 300,
+    "slopeDeg": 11.0,
+    "clayPct": 16.4,
+    "sandPct": 66.2,
+    "forestPct": 6.0
+   },
+   "dorPct": 1.8,
+   "pawcMm": 144,
+   "flowYears": 14,
+   "params": {
+    "x1": 279.1,
+    "x2": 0,
+    "x3": 76,
+    "x4": 1.2
+   },
+   "kgeFit": 0.74,
+   "kgeValidation": 0.62
+  },
+  {
+   "id": "SYN-08",
+   "lon": 21.49,
+   "lat": -32.87,
+   "areaKm2": 1073.7,
+   "attributes": {
+    "aridity": 0.46,
+    "mapMm": 615,
+    "slopeDeg": 8.3,
+    "clayPct": 22.4,
+    "sandPct": 56.7,
+    "forestPct": 10.5
+   },
+   "dorPct": 2.1,
+   "pawcMm": 158,
+   "flowYears": 15,
+   "params": {
+    "x1": 274.4,
+    "x2": 0,
+    "x3": 103,
+    "x4": 1.9
+   },
+   "kgeFit": 0.76,
+   "kgeValidation": 0.64
+  },
+  {
+   "id": "SYN-09",
+   "lon": 21.76,
+   "lat": -31.92,
+   "areaKm2": 1718.0,
+   "attributes": {
+    "aridity": 0.55,
+    "mapMm": 300,
+    "slopeDeg": 5.6,
+    "clayPct": 28.4,
+    "sandPct": 47.2,
+    "forestPct": 15.0
+   },
+   "dorPct": 2.4,
+   "pawcMm": 172,
+   "flowYears": 16,
+   "params": {
+    "x1": 347.0,
+    "x2": 0,
+    "x3": 130,
+    "x4": 1.2
+   },
+   "kgeFit": 0.78,
+   "kgeValidation": null
+  },
+  {
+   "id": "SYN-10",
+   "lon": 22.03,
+   "lat": -33.63,
+   "areaKm2": 40.0,
+   "attributes": {
+    "aridity": 0.64,
+    "mapMm": 615,
+    "slopeDeg": 2.9,
+    "clayPct": 17.6,
+    "sandPct": 64.3,
+    "forestPct": 19.5
+   },
+   "dorPct": 2.7,
+   "pawcMm": 186,
+   "flowYears": 17,
+   "params": {
+    "x1": 339.5,
+    "x2": 0,
+    "x3": 157,
+    "x4": 1.9
+   },
+   "kgeFit": 0.8,
+   "kgeValidation": 0.68
+  },
+  {
+   "id": "SYN-11",
+   "lon": 22.3,
+   "lat": -32.68,
+   "areaKm2": 64.0,
+   "attributes": {
+    "aridity": 0.31,
+    "mapMm": 300,
+    "slopeDeg": 12.8,
+    "clayPct": 23.6,
+    "sandPct": 54.8,
+    "forestPct": 3.0
+   },
+   "dorPct": 0.0,
+   "pawcMm": 200,
+   "flowYears": 18,
+   "params": {
+    "x1": 424.2,
+    "x2": 0,
+    "x3": 58,
+    "x4": 1.2
+   },
+   "kgeFit": 0.82,
+   "kgeValidation": 0.7
+  },
+  {
+   "id": "SYN-12",
+   "lon": 22.57,
+   "lat": -31.73,
+   "areaKm2": 102.4,
+   "attributes": {
+    "aridity": 0.4,
+    "mapMm": 615,
+    "slopeDeg": 10.1,
+    "clayPct": 29.6,
+    "sandPct": 45.3,
+    "forestPct": 7.5
+   },
+   "dorPct": 0.3,
+   "pawcMm": 214,
+   "flowYears": 19,
+   "params": {
+    "x1": 382.9,
+    "x2": 0,
+    "x3": 85,
+    "x4": 1.9
+   },
+   "kgeFit": 0.84,
+   "kgeValidation": 0.5
+  },
+  {
+   "id": "SYN-13",
+   "lon": 22.84,
+   "lat": -33.44,
+   "areaKm2": 163.8,
+   "attributes": {
+    "aridity": 0.49,
+    "mapMm": 300,
+    "slopeDeg": 7.4,
+    "clayPct": 18.8,
+    "sandPct": 62.4,
+    "forestPct": 12.0
+   },
+   "dorPct": 0.6,
+   "pawcMm": 228,
+   "flowYears": 8,
+   "params": {
+    "x1": 446.4,
+    "x2": 0,
+    "x3": 112,
+    "x4": 1.2
+   },
+   "kgeFit": 0.86,
+   "kgeValidation": null
+  },
+  {
+   "id": "SYN-14",
+   "lon": 23.11,
+   "lat": -32.49,
+   "areaKm2": 262.1,
+   "attributes": {
+    "aridity": 0.58,
+    "mapMm": 615,
+    "slopeDeg": 4.7,
+    "clayPct": 24.8,
+    "sandPct": 52.9,
+    "forestPct": 16.5
+   },
+   "dorPct": 0.9,
+   "pawcMm": 242,
+   "flowYears": 9,
+   "params": {
+    "x1": 424.4,
+    "x2": 0,
+    "x3": 139,
+    "x4": 1.9
+   },
+   "kgeFit": 0.62,
+   "kgeValidation": 0.54
+  }
+ ]
+}

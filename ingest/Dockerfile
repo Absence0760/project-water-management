@@ -16,7 +16,7 @@ COPY requirements.txt ${LAMBDA_TASK_ROOT}/
 RUN pip install --no-cache-dir --require-hashes -r ${LAMBDA_TASK_ROOT}/requirements.txt
 
 # The job's modules only: no tests, no fixtures (production runs FEED_SOURCE=live).
-COPY agera5.py agera5request.py cdsjob.py chcnetcdf.py chirps_final.py cloudwatch.py ecmwf.py era5land.py era5request.py fao56.py grid.py imerg.py lambda_handler.py lease.py manifest.py nasapower.py polite.py zarrstore.py ${LAMBDA_TASK_ROOT}/
+COPY agera5.py agera5request.py c3s_seasonal.py c3srequest.py cdsjob.py chcnetcdf.py chirps_final.py cloudwatch.py ecmwf.py era5land.py era5request.py fao56.py grid.py imerg.py lambda_handler.py lease.py manifest.py nasapower.py polite.py zarrstore.py ${LAMBDA_TASK_ROOT}/
 
 # Not root (Trivy DS-0002). Lambda runs the image as its own unprivileged
 # user anyway; this covers a local `docker run`. 65534 is nobody: numeric, so

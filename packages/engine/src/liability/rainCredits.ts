@@ -30,6 +30,52 @@ export const ERA5L_CITATION =
 export const imergCitation = (accessed: string, version = 'V07'): string =>
 	`Huffman, G.J., E.F. Stocker, D.T. Bolvin, E.J. Nelkin, J. Tan (2024), GPM IMERG Late Precipitation L3 1 day 0.1 degree x 0.1 degree ${version}, edited by Andrey Savtchenko, Greenbelt, MD, Goddard Earth Sciences Data and Information Services Center (GES DISC), accessed ${accessed}, doi:10.5067/GPM/IMERGDL/DAY/07.`;
 
+/**
+ * C3S's seasonal forecasts (issue #620, docs/data-sources.md § c3s-seasonal):
+ * CDS dataset `seasonal-original-single-levels`, under CC BY 4.0 and the
+ * Additional licence to use non European contributions, which asks that the
+ * source be acknowledged. Wherever its values show: Copernicus's notice
+ * (`copernicusC3sNotice`, the same words as ERA5-Land's, as the copy
+ * converts it too), the dataset's citation, and the contributing centres.
+ * The ingest writes the same words into the arrays (ingest/c3s_seasonal.py
+ * CREDIT, CITATION; ingest/c3srequest.py CENTRE_NAMES; its test checks).
+ */
+export const copernicusC3sNotice = copernicusEra5lNotice;
+
+/** The seasonal dataset's citation (docs/data-sources.md § c3s-seasonal). */
+export const C3S_SEASONAL_CITATION = 'Copernicus Climate Change Service, Climate Data Store (2018): Seasonal forecast daily and subdaily data on single levels. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). DOI: 10.24381/cds.181d637e';
+
+/** Each originating centre of the C3S multi-system, by the CDS's `originating_centre`, as the credit names it. */
+export const C3S_CENTRES: Readonly<Record<string, string>> = {
+	ecmwf: 'European Centre for Medium-Range Weather Forecasts (ECMWF)',
+	ukmo: 'Met Office',
+	meteo_france: 'Météo-France',
+	dwd: 'Deutscher Wetterdienst (DWD)',
+	cmcc: 'Euro-Mediterranean Center on Climate Change (CMCC)',
+	ncep: 'NOAA National Centers for Environmental Prediction (NCEP)',
+	jma: 'Japan Meteorological Agency (JMA)',
+	eccc: 'Environment and Climate Change Canada (ECCC)'
+};
+
+/**
+ * The credit lines a C3S-conditioned outlook owes: Copernicus's notice with
+ * the year the data were read, the citation, and the contributing centres
+ * of the systems used (`<centre>-<system>` ids, `ecmwf-51`), each once, in
+ * the systems' order. An unknown centre is named by its id rather than
+ * dropped, so a new system is still credited.
+ */
+export function c3sSeasonalCredit(systems: readonly string[], accessed: string): string[] {
+	const centres: string[] = [];
+	for (const s of systems) {
+		const id = s.replace(/-\d+$/, '');
+		const name = Object.hasOwn(C3S_CENTRES, id) ? C3S_CENTRES[id]! : id;
+		if (!centres.includes(name)) centres.push(name);
+	}
+	const lines = [copernicusC3sNotice(accessed.slice(0, 4)), C3S_SEASONAL_CITATION];
+	if (centres.length) lines.push(`Contributing centres: ${centres.join('; ')}.`);
+	return lines;
+}
+
 /** A rain product whose credit must go with its values. */
 export type CreditedRainProduct = 'era5l' | 'imerg_late' | 'ecmwf_ens';
 
