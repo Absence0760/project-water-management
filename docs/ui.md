@@ -6536,7 +6536,13 @@ exceptions queue). `warnings/WarningsTab.svelte`, its logic in
   thirty records). A pick is a step in history. A filter with nothing in it
   says so with **Show every period**.
 - **Decisions (editors).** Rain: **Patch** or **Keep**; flow: **Exclude from
-  calibration** or **Keep**; any other record: **Keep**; a decided row:
+  calibration** or **Keep**; any other record, and a rain record the run
+  doesn't read under the project's rain stations (a station no area is
+  assigned to, a unit's own gauge whose unit has a station, the catchment
+  gauge while another station stands in for the catchment; the row says "Not
+  read by the run"): **Keep** only. When the catchment gauge is itself the
+  catchment station, its patches go to its unreliable periods, as any
+  station's; a decided row:
   **Reopen**, which cuts its days out of the list that decided it. Ticks and
   **Select all N matching** (every row the filters show, folded rows too)
   feed one bulk row above the table, always drawn so ticking never moves the
@@ -6546,7 +6552,9 @@ exceptions queue). `warnings/WarningsTab.svelte`, its logic in
   cover yet (a list's own periods stay as typed), and refuses past a cap
   (100 periods a catchment list or flow record, 50 flow records, 200
   unreliable periods a rain record, 300 kept checks) with a message, never
-  cutting. Each saves at once through the settings PATCH with a reason
+  cutting. A decision is built on the settings read from the server just
+  before it saves, not the page's copy, so a save made elsewhere since the
+  page loaded stays. Each saves at once through the settings PATCH with a reason
   ("Warnings: patched 3 flat stretches"), the page's settings draft rebasing
   on it (`onProjectChange`), so Runs & results' "Inputs changed since the
   latest run" follows. A row's decision moves the focus to the row now in

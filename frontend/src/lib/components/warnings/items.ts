@@ -38,6 +38,7 @@ import {
 	type CheckPeriodKind,
 	type DailySeries,
 	type ProjectSettings,
+	type RainStationSettings,
 	type RunSummary,
 	type SeriesKind,
 	waterYearLabel
@@ -46,8 +47,14 @@ import { firstOutletSeries } from '#lib/series/pick.js';
 import { fmtDay, fmtNum, fmtPct } from '#lib/format/number.js';
 import { UNRELIABLE_PERIODS_MAX, withRecordList, withUnreliable } from '#lib/components/settings/recordPeriods.js';
 
-/** What a record is to the page: which decisions it takes and where they're written. */
-export type RecordRole = 'catchmentRain' | 'rain' | 'flow' | 'other';
+/**
+ * What a record is to the page: which decisions it takes and where they're written. 'unreadRain' is a rain record
+ * the run doesn't read under the project's rain stations (settings.rainStations): a station no area is assigned to
+ * (its unreliable periods are read only while it is), a unit's own gauge whose unit has a station, or the catchment
+ * gauge while another station stands in for the catchment (its zeroRainRuns lists then read no gauge, prepare.ts).
+ * Patching one would change nothing, so it takes Keep only.
+ */
+export type RecordRole = 'catchmentRain' | 'rain' | 'unreadRain' | 'flow' | 'other';
 
 /**
  * An item's status:
@@ -109,9 +116,25 @@ export interface SeriesLike {
 	siteNodeId?: string | null;
 }
 
-/** The record's role: the catchment gauge (the first outlet catchment rain by name, the one a run reads), another rain record, a flow record, or anything else. */
-export function recordRole(s: SeriesLike, catchmentId: string | null): RecordRole {
-	if (s.kind === 'rain_catchment_mm' && s.id === catchmentId) return 'catchmentRain';
+/**
+ * The record's role: the catchment gauge (the first outlet catchment rain by name, the one a run reads), another rain
+ * record, a rain record the run doesn't read (the stations above), a flow record, or anything else. Under a catchment
+ * station that is the catchment gauge itself, the gauge's periods go to its unreliable list, as any station's.
+ */
+export function recordRole(s: SeriesLike, catchmentId: string | null, stations: RainStationSettings | null | undefined = null): RecordRole {
+	const catchmentStation = stations?.catchment?.stationId ?? null;
+	const unitStations = Object.entries(stations?.units ?? {});
+	if (s.kind === 'rain_catchment_mm' && s.id === catchmentId) {
+		if (!catchmentStation) return 'catchmentRain';
+		return catchmentStation === s.id ? 'rain' : 'unreadRain';
+	}
+	if (s.kind === 'rain_catchment_mm' && !s.siteNodeId) {
+		// Another outlet catchment rain series: read as a station only while an area is assigned to it.
+		const assigned = catchmentStation === s.id || unitStations.some(([, a]) => a?.stationId === s.id);
+		return assigned ? 'rain' : 'unreadRain';
+	}
+	// A unit's own gauge: not read while a station stands in for its unit.
+	if (s.kind === 'rain_catchment_mm' && s.siteNodeId && unitStations.some(([unit, a]) => unit === s.siteNodeId && a?.stationId)) return 'unreadRain';
 	if ((RAIN_RECORD_KINDS as readonly string[]).includes(s.kind)) return 'rain';
 	if ((FLOW_RECORD_KINDS as readonly string[]).includes(s.kind)) return 'flow';
 	return 'other';
@@ -258,7 +281,7 @@ export function warningItems(src: ItemSources): WarningItem[] {
 	return listPeriods(src).flatMap((p) => {
 		const s = byId.get(p.seriesId);
 		if (!s) return [];
-		const role = recordRole(s, catchmentId);
+		const role = recordRole(s, catchmentId, src.settings?.rainStations);
 		return [{ ...p, role, record: recordName(s, src.nodeName), status: itemStatus(p, role, src.settings) }];
 	});
 }
@@ -287,6 +310,7 @@ export function statusDetail(i: WarningItem): string {
 			if (i.treatment === 'spread') return 'Spread over its days by default';
 			return 'Handled by default';
 		case 'open':
+			if (i.role === 'unreadRain') return 'Not read by the run: a rain station stands in for it, so there is nothing to patch';
 			return i.treatment === 'fitExcluded' ? 'Left out of Fit automatically only: the run’s statistics still score it' : 'Used as recorded';
 	}
 }

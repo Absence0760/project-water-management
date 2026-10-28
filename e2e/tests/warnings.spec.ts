@@ -7,7 +7,7 @@
 // it without the ticks and buttons. A linked-only view: it shows in the
 // sidebar, under Data, only while open. Synthetic series only.
 import type { Page } from '@playwright/test';
-import { addMember, createRun } from '../support/api.ts';
+import { addMember, createRun, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { pinClockToProject } from '../support/clock.ts';
 import { sections } from '../support/data.ts';
@@ -133,6 +133,20 @@ test.describe('1440×960', () => {
 		await warningRow(page, 'Valley gauge').getByRole('button', { name: /^Reopen/ }).click();
 		await expect(page.getByTestId('warnings-none')).toBeVisible();
 		expect(((await savedSettings(page.request, project.id)).zeroRainRuns as { missing: unknown[] }).missing).toEqual([]);
+	});
+
+	test('a decision is built on the settings as saved now, so a save made elsewhere since the page loaded stays', async ({ page, owner }) => {
+		void owner;
+		const project = await seedWarnings(page.request, 'Warnings after another save');
+		await openWarnings(page, project.id);
+		// Saved elsewhere after the page drew (another editor, another tab): a period of the same list.
+		await updateSettings(page.request, project.id, { zeroRainRuns: { missing: [{ start: '2022-01-01', end: '2022-01-05', reason: 'Typed in Settings' }] } });
+		await warningRow(page, '11 Oct 2021 – 16 Oct 2021').getByRole('button', { name: /^Patch:/ }).click();
+		await expect(page.getByTestId('warnings-notice')).toHaveText('Patched 1 flat stretch. Run the model to use it.');
+		expect(((await savedSettings(page.request, project.id)).zeroRainRuns as { missing: unknown[] }).missing).toEqual([
+			{ start: '2022-01-01', end: '2022-01-05', reason: 'Typed in Settings' },
+			{ start: '2021-10-11', end: '2021-10-16', reason: 'Warnings: flat stretch' }
+		]);
 	});
 
 	test('thirty periods: the list folds, Select all N matching takes the folded rows too, and one bulk Patch saves them', async ({ page, owner }) => {

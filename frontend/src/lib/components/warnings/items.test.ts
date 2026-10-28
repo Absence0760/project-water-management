@@ -7,6 +7,7 @@ import {
 	filterCounts,
 	filterItems,
 	periodText,
+	statusDetail,
 	whatText,
 	itemsNoun,
 	itemStatus,
@@ -90,9 +91,9 @@ describe('warningItems', () => {
 			['2021-10-17', '2021-10-22']
 		]);
 		expect(flats.every((i) => i.role === 'catchmentRain' && i.record === 'A gauge' && i.status === 'open')).toBe(true);
-		// A station's negative is read as missing: handled by default.
+		// A station no area is assigned to isn't read by the run (its negative would be read as missing): Keep only.
 		const neg = find(items, 'negative', STATION)[0]!;
-		expect(neg.role).toBe('rain');
+		expect(neg.role).toBe('unreadRain');
 		expect(neg.status).toBe('handled');
 		// A unit's own gauge is named with its unit.
 		expect(find(items, 'flatline', UNIT_GAUGE)[0]!.record).toBe('C unit gauge (Upper farm)');
@@ -113,6 +114,41 @@ describe('warningItems', () => {
 		expect(acc).toHaveLength(1);
 		expect(acc[0]!.status).toBe('handled');
 		expect(decisionsFor(acc[0]!)).toEqual(['patch', 'keep']);
+	});
+});
+
+describe('rain stations (settings.rainStations): only what the run reads takes a patch', () => {
+	it('an unassigned station and a unit gauge whose unit has a station take Keep only, and say the run doesn’t read them', () => {
+		const s = sources();
+		const items = warningItems(s);
+		// No stations at all: a second outlet rain series is read by nothing.
+		expect(find(items, 'negative', STATION)[0]!.role).toBe('unreadRain');
+		const withStations = sources({ rainStations: { units: { n1: { stationId: STATION } } } });
+		const st = warningItems(withStations);
+		// Assigned to a unit: read, so it takes a patch; that unit's own gauge isn't read any more.
+		expect(find(st, 'negative', STATION)[0]!.role).toBe('rain');
+		const unitGauge = find(st, 'flatline', UNIT_GAUGE)[0]!;
+		expect(unitGauge.role).toBe('unreadRain');
+		expect(decisionsFor(unitGauge)).toEqual(['keep']);
+		expect(statusDetail(unitGauge)).toMatch(/^Not read by the run/);
+		// A station no area is assigned to: not read.
+		const other = sources({ rainStations: { units: { n2: { stationId: UNIT_GAUGE } } } });
+		expect(find(warningItems(other), 'negative', STATION)[0]!.role).toBe('unreadRain');
+		expect(decide(find(warningItems(other), 'negative', STATION), 'patch', other.settings)).toEqual({ ok: false, error: 'None of these can be patched.' });
+	});
+
+	it('under a catchment station the gauge is unread, unless it is that station, when its patch goes to its unreliable list', () => {
+		const other = sources({ rainStations: { catchment: { stationId: STATION } } });
+		const flat = find(warningItems(other), 'flatline', RAIN)[0]!;
+		expect(flat.role).toBe('unreadRain');
+		expect(decisionsFor(flat)).toEqual(['keep']);
+		const self = sources({ rainStations: { catchment: { stationId: RAIN } } });
+		const flats = find(warningItems(self), 'flatline', RAIN);
+		expect(flats[0]!.role).toBe('rain');
+		const r = decide(flats, 'patch', self.settings);
+		expect(r.ok && r.patch.zeroRainRuns).toBeUndefined();
+		expect(r.ok && r.patch.rainStations?.unreliable).toEqual({ [RAIN]: [['2021-10-11', '2021-10-22']] });
+		expect(r.ok && r.patch.rainStations?.catchment).toEqual({ stationId: RAIN });
 	});
 });
 

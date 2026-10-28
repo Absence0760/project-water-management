@@ -44,6 +44,7 @@
 		filterCounts,
 		filterItems,
 		itemsNoun,
+		itemStatus,
 		openCount,
 		parseFilters,
 		periodText,
@@ -197,13 +198,29 @@
 	let notice = $state<{ tone: 'ok' | 'error'; text: string } | null>(null);
 	const DONE: Record<Decision, string> = { patch: 'Patched', exclude: 'Excluded from calibration', keep: 'Kept' };
 
-	async function save(patch: SettingsPatch, reason: string, done: string): Promise<boolean> {
+	type Built = { patch: SettingsPatch; reason: string; done: string } | { error: string };
+
+	/**
+	 * Save one decision. The lists it writes are sent whole (rainStations and flowMissing are replaced whole), so the
+	 * patch is built from the settings as the server holds them now, read just before, never from this page's copy:
+	 * another editor's save, or this person's in another tab, since the page loaded stays (issue #611 review). The
+	 * items are judged against those settings too, so a period someone else decided meanwhile isn't added again.
+	 */
+	async function save(build: (settings: ProjectSettings, judge: (list: readonly WarningItem[]) => WarningItem[]) => Built): Promise<boolean> {
 		saving = true;
 		notice = null;
 		try {
-			const p = await api.projects.update(projectId, { settings: patch as Partial<ProjectSettings>, reason });
+			const current = await api.projects.get(projectId);
+			const fresh = current.settings as ProjectSettings;
+			const built = build(fresh, (list) => list.map((i) => ({ ...i, status: itemStatus(i, i.role, fresh) })));
+			if ('error' in built) {
+				onProjectChange(current);
+				notice = { tone: 'error', text: built.error };
+				return false;
+			}
+			const p = await api.projects.update(projectId, { settings: built.patch as Partial<ProjectSettings>, reason: built.reason });
 			onProjectChange(p);
-			notice = { tone: 'ok', text: `${done} Run the model to use ${done.startsWith('Reopened') ? 'the change' : 'it'}.` };
+			notice = { tone: 'ok', text: `${built.done} Run the model to use ${built.done.startsWith('Reopened') ? 'the change' : 'it'}.` };
 			return true;
 		} catch (e) {
 			notice = { tone: 'error', text: `Couldn’t save: ${e instanceof Error ? e.message : String(e)}` };
@@ -216,19 +233,15 @@
 	/** One row's decision (or Reopen): the focus goes to the row now in its place, or stays on the row when it remains. */
 	async function decideRow(i: WarningItem, d: Decision | 'reopen', at: number) {
 		if (saving) return;
-		let ok: boolean;
-		if (d === 'reopen') {
-			const r = reopen(i, settings);
-			if (!r) return;
-			ok = await save(r.patch, r.reason, `Reopened ${itemsNoun([i])}.`);
-		} else {
-			const r = decide([i], d, settings);
-			if (!r.ok) {
-				notice = { tone: 'error', text: r.error };
-				return;
+		const ok = await save((fresh, judge) => {
+			const [now] = judge([i]);
+			if (d === 'reopen') {
+				const r = reopen(now!, fresh);
+				return r ? { ...r, done: `Reopened ${itemsNoun([i])}.` } : { error: 'Someone has reopened this period already.' };
 			}
-			ok = await save(r.patch, r.reason, `${DONE[d]} ${itemsNoun([i])}.`);
-		}
+			const r = decide([now!], d, fresh);
+			return r.ok ? { patch: r.patch, reason: r.reason, done: `${DONE[d]} ${itemsNoun([i])}.` } : { error: r.error };
+		});
 		if (!ok) return;
 		await tick();
 		const still = document.querySelector<HTMLElement>(`#warn-rows tr[data-item="${CSS.escape(i.id)}"] [data-row-action]`);
@@ -239,13 +252,13 @@
 	/** A bulk decision on the ticked rows; the focus stays on its button (it stays, aria-disabled once nothing is ticked). */
 	async function decideBulk(d: Decision) {
 		if (saving || !bulkCount(d)) return;
-		const r = decide(picked, d, settings);
-		if (!r.ok) {
-			notice = { tone: 'error', text: r.error };
-			return;
-		}
-		const noun = itemsNoun(picked.filter((i) => decisionsFor(i).includes(d)));
-		if (await save(r.patch, r.reason, `${DONE[d]} ${noun}.`)) selected = new Set();
+		const targets = picked;
+		const ok = await save((fresh, judge) => {
+			const now = judge(targets);
+			const r = decide(now, d, fresh);
+			return r.ok ? { patch: r.patch, reason: r.reason, done: `${DONE[d]} ${itemsNoun(now.filter((i) => decisionsFor(i).includes(d)))}.` } : { error: r.error };
+		});
+		if (ok) selected = new Set();
 	}
 
 	// --- filters in the URL: a pick is a step in history (ui-playbook.md § 4) ---
