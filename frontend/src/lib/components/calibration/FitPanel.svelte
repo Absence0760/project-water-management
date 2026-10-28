@@ -355,7 +355,7 @@
 					<!-- The stepwise fit of calibration zones (issue #555, model.md §2.10n): every step, upstream first, then the
 					     calibration site's own step in full below. Apply writes them all, as one. -->
 					<section class="steps" aria-labelledby="{uid}-steps-h" data-testid="fit-steps">
-						<h5 id="{uid}-steps-h">Steps, upstream first <HelpTip key="auto-calibration" label="About fitting automatically" /></h5>
+						<h5 id="{uid}-steps-h">Steps, upstream first <HelpTip key="calibration-zones" label="About calibration zones" /></h5>
 						<p class="small muted">
 							Each zone was fitted on its own gauge’s record with the zones above it fixed at their fitted parameters, then the calibration site
 							last. Apply writes every step’s parameters and fit record.

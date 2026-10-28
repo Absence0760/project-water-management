@@ -5183,8 +5183,10 @@ saves the catchment's model, and override mode there edits the scenario's
   unsaved changes, the drawer's own edits included (a hint says why), and a
   viewer gets no Use ("Only an editor can use a value."). **Source and
   method** (a disclosure) gives the dataset's source, version, label,
-  attribution and counting method. Other states: no parcel linked (with
-  **Open the Map**), no dataset loaded (in plain words, with what to enter by hand; the
+  attribution and counting method. Other states: no boundary or parcel
+  linked ("No boundary or farm parcel on the map is linked to …": its area
+  feature, the polygon Use its area took, or its farm parcels; issue #646
+  F1; with **Open the Map**), no dataset loaded (in plain words, with what to enter by hand; the
   loader's command is only in maps.md), no cropland
   in the parcels, no crop yet, and a "Synthetic test data" warning for the
   committed grid. On a narrow sheet the Use buttons are 44 px targets; the
@@ -8463,8 +8465,11 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   Under Fragmentation the ticks are disabled and a note says calibrating at
   several gauges needs Per unit flow generation, linking to Model selection
   for flow generation; with a gauge ticked under Per unit, "Fit
-  automatically fits N zones, upstream first." Not yet (issue #555's next
-  round): the zones on the Network tab and the Map.
+  automatically fits N zones, upstream first." The legend and the fit's
+  *Steps, upstream first* carry the *Calibration zones* help tip (help
+  article `calibration-zones`); the fieldset is `#fld-cal-zones`, where the
+  Warnings page's fix for a `calibration.zone.*` warning lands. Not yet
+  (issue #555's next round): the zones on the Network tab and the Map.
 - **Fit automatically** (`#set-fit`, `calibration/FitPanel.svelte`) fits the
   selected model's parameters in a Web Worker (`lib/calibration/`). Its card
   shows the choices that decide the fit in one row (**Objective**,

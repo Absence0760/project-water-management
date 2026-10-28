@@ -344,3 +344,37 @@ describe('the stepwise fit', () => {
 		expect(r.notes.some((n) => /record at "Weir" has no dry year/.test(n))).toBe(true);
 	});
 });
+
+describe('the zone warnings’ codes (Warnings page, issue #611)', () => {
+	/** The run's coded zone warnings as [code, params], after checking each one's text is exactly one of its warnings. */
+	const zoneCodes = (input: ModelInput): [string, unknown][] => {
+		const { summary } = runModel(input);
+		const coded = (summary.warningCodes ?? []).filter((c) => c.code.startsWith('calibration.zone.'));
+		for (const c of coded) expect(summary.warnings, c.code).toContain(c.text);
+		return coded.map((c) => [c.code, c.params]);
+	};
+
+	it('codes a row that is listed twice, has no gauge or isn’t a gauge, and the parts that read only the site’s zone', () => {
+		const rows = [zone('H', { gr4j: TRUTH_H }), zone('H'), zone('A'), { enabled: true }] as never;
+		expect(zoneCodes(withZones(network(), rows))).toEqual([
+			['calibration.zone.duplicate', { node: 'H' }],
+			['calibration.zone.noGauge', {}],
+			['calibration.zone.unusable', { node: 'A', reason: '"Farm A" is not a gauge' }],
+			['calibration.zone.siteOnlyElsewhere', { units: 1, zones: 1 }]
+		]);
+	});
+
+	it('codes parameters out of bounds and a zone not fitted yet', () => {
+		const rows = [zone('H', { gr4j: { x1: 5, x2: 0, x3: 90, x4: 1.7 } })];
+		expect(zoneCodes(withZones(network(), rows))).toEqual([
+			['calibration.zone.badParams', { node: 'H', reason: 'Production store capacity X1 must be 10–3000 mm' }],
+			['calibration.zone.unfitted', { node: 'H', name: 'Weir' }],
+			['calibration.zone.siteOnlyElsewhere', { units: 1, zones: 1 }]
+		]);
+	});
+
+	it('codes zones that are not a list, and ticked zones under Fragmentation', () => {
+		expect(zoneCodes(withZones(network(), 'H' as never))).toEqual([['calibration.zone.notList', {}]]);
+		expect(zoneCodes(withZones(network(), [zone('H', { gr4j: TRUTH_H }), zone('K')], { unitRain: null }))).toEqual([['calibration.zone.needsPerUnit', { gauges: 2 }]]);
+	});
+});
