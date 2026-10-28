@@ -18,4 +18,14 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-0 strings: 0 on the site, 0 in emails, 0 in the glossary.
+1 strings: 1 on the site, 0 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### terms-update
+
+The page a signed-in person sees after the Terms of use or Privacy notice changed, before anything else: what changed, and a button to accept the new terms (or sign out).
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `9f9ceb0f` | Where a project has the assistant, you can ask an AI model about the project’s model and results. What you type and the project data it reads are sent to the model, which may answer from an AWS region outside South Africa. It never sees names or email addresses, and we keep only counts of how much it is used, never the conversation. |  |  |

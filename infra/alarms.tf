@@ -222,6 +222,49 @@ resource "aws_budgets_budget" "daily" {
   depends_on = [aws_sns_topic_policy.alerts_us_east_1]
 }
 
+# The assistant's own budget (assistant.tf, issue #610): Anthropic's models
+# on Bedrock are billed through AWS Marketplace, and nothing else in this
+# account is (the model card: "charges appear … under the model provider (not
+# under Amazon Bedrock)"), so the account's AWS Marketplace charges are the
+# assistant's model spend. ACTUAL 80% and 100% of
+# var.assistant_budget_monthly_usd (USD 50, issue #610's figure); no forecast,
+# which a usage-driven line with a short history only makes noisy. Billing
+# data lags a day, and Marketplace charges up to a day more: the app's own
+# per-project token budget (ASSISTANT_TOKENS_PER_MONTH, checked before each
+# turn) and the Lambda's reserved concurrency are what bound the spend as it
+# happens; this says what it cost. A third budget, so about $0.62 a month.
+resource "aws_budgets_budget" "assistant" {
+  count        = local.assistant_enabled && var.budget_monthly_usd > 0 && var.assistant_budget_monthly_usd > 0 ? 1 : 0
+  name         = "${local.project}-assistant"
+  budget_type  = "COST"
+  limit_amount = tostring(var.assistant_budget_monthly_usd)
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  cost_filter {
+    name   = "BillingEntity"
+    values = ["AWS Marketplace"]
+  }
+
+  notification {
+    comparison_operator       = "GREATER_THAN"
+    threshold                 = 80
+    threshold_type            = "PERCENTAGE"
+    notification_type         = "ACTUAL"
+    subscriber_sns_topic_arns = [aws_sns_topic.alerts_us_east_1.arn]
+  }
+
+  notification {
+    comparison_operator       = "GREATER_THAN"
+    threshold                 = 100
+    threshold_type            = "PERCENTAGE"
+    notification_type         = "ACTUAL"
+    subscriber_sns_topic_arns = [aws_sns_topic.alerts_us_east_1.arn]
+  }
+
+  depends_on = [aws_sns_topic_policy.alerts_us_east_1]
+}
+
 # --- Cost Anomaly Detection -------------------------------------------------
 # Free. An AWS-managed "AWS services" monitor learns each service's normal
 # spend and flags a jump in any one of them, which the budgets only see once
@@ -337,6 +380,69 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
 
   dimensions = {
     FunctionName = aws_lambda_function.backend.function_name
+  }
+}
+
+# --- Assistant Lambda (assistant.tf) ---------------------------------------
+# Only while it exists. Errors and throttles are essential: an error is a
+# turn that failed past the app's own error events (an init failure, a
+# timeout, a crash), and a throttle is every turn slot busy, which is also
+# the model spend at its per-minute ceiling. Duration is full tier.
+
+resource "aws_cloudwatch_metric_alarm" "assistant_errors" {
+  count               = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  alarm_name          = "${local.project}-assistant-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 2
+  alarm_description   = "Assistant Lambda failed more than 2 invocations in 5 minutes (init failure, timeout or crash; a model or tool error inside a turn is an error event to the page, not this). Its log group has the error codes; prompts and answers are never logged."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.assistant[0].function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "assistant_throttles" {
+  count               = local.assistant_enabled && local.alarms_essential ? 1 : 0
+  alarm_name          = "${local.project}-assistant-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Assistant Lambda hit its reserved concurrency (assistant_reserved_concurrency, ${var.assistant_reserved_concurrency}): every turn slot was busy and a message got a 429. Sustained, it is also the model spend at its per-minute ceiling: check the assistant budget and Bedrock's token metrics before raising the cap (and redo infra/README.md § Connections if you do)."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.assistant[0].function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "assistant_duration" {
+  count               = local.assistant_enabled && local.alarms_full ? 1 : 0
+  alarm_name          = "${local.project}-assistant-duration-p95"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  extended_statistic  = "p95"
+  threshold           = var.assistant_timeout_seconds * 1000 * 0.8
+  alarm_description   = "Assistant Lambda p95 duration above 80% of its timeout for 10 minutes: turns are running into ASSISTANT_TURN_SECONDS (slow model responses, or too many hops). Bedrock's InvocationLatency for the model says which."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.assistant[0].function_name
   }
 }
 
@@ -595,6 +701,23 @@ resource "aws_cloudwatch_log_metric_filter" "origin_secret_rejected" {
   metric_transformation {
     name          = "OriginSecretRejected"
     namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+# The assistant's Function URL is public by AWS design too, and its app
+# refuses a request without the header the same way: the same metric.
+resource "aws_cloudwatch_log_metric_filter" "origin_secret_rejected_assistant" {
+  count          = local.assistant_enabled && local.alarms_full ? 1 : 0
+  name           = "${local.project}-origin-secret-rejected-assistant"
+  log_group_name = aws_cloudwatch_log_group.assistant[0].name
+  pattern        = aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].pattern
+
+  metric_transformation {
+    name          = aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].metric_transformation[0].name
+    namespace     = aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].metric_transformation[0].namespace
     value         = "1"
     default_value = "0"
     unit          = "Count"

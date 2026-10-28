@@ -3655,10 +3655,44 @@ built in. None rests on consent.
   [§ Two-step sign-in](#two-step-sign-in)), all strictly necessary. No
   analytics, no third-party scripts or fonts (the CSP allows none), so no
   cookie banner.
-- Sub-processors: AWS only (hosting, RDS, S3, SES mail, CloudWatch logs),
-  in the region chosen at deploy (`af-south-1` recommended; any other region
-  is a cross-border transfer under s72 *(confirm)*). The data-feed hosts
-  (CHIRPS, DWS) receive no personal data ([§ Input handling](#input-handling)).
+- Sub-processors: AWS only (hosting, RDS, S3, SES mail, CloudWatch logs,
+  and, for the assistant, Amazon Bedrock running Anthropic's Claude), in
+  the region chosen at deploy (`af-south-1` recommended; any other region
+  is a cross-border transfer under s72 *(confirm)*). Anthropic is not a
+  sub-processor: Bedrock runs the model in AWS's own accounts, and the model
+  provider has no access to prompts, completions or Bedrock's logs (AWS,
+  [Bedrock data protection](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html)).
+  The data-feed hosts (CHIRPS, DWS) receive no personal data
+  ([§ Input handling](#input-handling)).
+- **The assistant's transfer (s72), recorded 2026-10-27** (issue #610;
+  [deployment.md § The assistant](./deployment.md#the-assistant)). From
+  `af-south-1`, Anthropic's models on Bedrock are reachable only through a
+  *global* cross-Region inference profile (`global.anthropic.…`): the call
+  enters Bedrock in `af-south-1` through the VPC endpoint, and Bedrock runs
+  it in any supported commercial AWS region worldwide, over AWS's network,
+  encrypted in transit; CloudTrail records each call in `af-south-1` with
+  the region that ran it (`additionalEventData.inferenceRegion`). AWS also
+  says prompts and outputs "may be stored in the opt-in Regions for abuse
+  detection purposes". So a turn is a transfer outside South Africa.
+  *What crosses:* the person's message, the conversation the page sends
+  back, and the tools' results (the project's settings, network, run
+  summaries and series, gauge fits, help text), after the routes' own
+  withholding, with member, farmer and registered-user names dropped and no
+  email or display name (§ Assistant). A message or a project's free text
+  (a unit named after its owner, a note quoted back) can still carry
+  personal information: Privacy §4 asks people not to type any. *Not
+  crossing:* the usage counters (`assistant_usage`, `assistant_rate`, in
+  RDS in `af-south-1`); no transcript is kept anywhere. *Basis (provisional,
+  pre-counsel, as the operator's own access from the United States):*
+  s72(1)(c)/(d), the transfer is needed to perform the agreement the person
+  asked for when they choose to use the assistant, and s72(1)(a), AWS's
+  binding data processing addendum (the AWS DPA, which covers Bedrock).
+  Disclosed in Privacy §5–§6 (`LEGAL_VERSION` 2026-10-27). *Avoiding it:*
+  only a model Bedrock serves in-region in `af-south-1`, none of
+  Anthropic's today; a geographic profile (`eu.`, `us.`) would bound the
+  regions but none is offered from `af-south-1` either. The operator
+  agreement's § 11 and clause 6.1 name it for each client
+  ([legal/operator-agreement.md](./legal/operator-agreement.md)).
 
 **What is kept, and what deletion does.** Every foreign key to `app_user` is
 classified (cascade, set null, or restrict) in `catalogue.db.test.ts`

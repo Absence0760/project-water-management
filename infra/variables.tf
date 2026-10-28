@@ -461,7 +461,7 @@ variable "lambda_reserved_concurrency" {
     about 10 panels at once, so the old cap of 10 throttled a single cold
     load (issue #541). AWS keeps >= 10 executions unreserved, so the
     account's Lambda concurrent-executions quota must cover the sum of every
-    reservation + 10 (48 at the defaults) before the apply: infra/README.md
+    reservation + 10 (52 at the defaults, the assistant's 2 included) before the apply: infra/README.md
     § Operator steps. Never -1 (unreserved): that removes the cap on spend
     and on DB connections.
   EOT
@@ -838,5 +838,99 @@ variable "cloudfront_price_class" {
   validation {
     condition     = contains(["PriceClass_100", "PriceClass_200", "PriceClass_All"], var.cloudfront_price_class)
     error_message = "Must be PriceClass_100, PriceClass_200 or PriceClass_All."
+  }
+}
+
+# --- The assistant (assistant.tf, issue #610) --------------------------------
+
+variable "assistant_enabled" {
+  description = "The AI assistant in production (assistant.tf, docs/deployment.md § The assistant): true creates its Lambda, Function URL, CloudFront behaviour, the bedrock-runtime VPC endpoint, its alarms and its budget, and sets ASSISTANT_PROVIDER=bedrock on it and on the API (whose status turns the chat on). false (the default): none of it exists and the API answers { available: false }. Turn it on only once the privacy notice names the model provider (LEGAL_VERSION) and the operator has enabled the model in the Bedrock console and run its first invocation (docs/followups.md § Blocking releases)."
+  type        = bool
+  default     = false
+}
+
+variable "assistant_model_id" {
+  description = "The one Bedrock model the assistant may call: a model id (anthropic.…, in-region) or a system inference profile id (global.anthropic.…, eu.anthropic.…). Its IAM policy and the endpoint policy allow this model alone. From af-south-1, Anthropic's models are reachable only through the global profile, which may run the request in any commercial AWS region (docs/deployment.md § The assistant)."
+  type        = string
+  default     = "global.anthropic.claude-sonnet-5-5"
+  validation {
+    condition     = can(regex("^((global|us|eu|apac|au|jp|ca)\\.)?anthropic\\.[A-Za-z0-9.:_-]+$", var.assistant_model_id))
+    error_message = "assistant_model_id must be an Anthropic model on Bedrock: anthropic.<model> or <profile>.anthropic.<model> (global, us, eu, apac, au, jp, ca), as backend/src/config/production.ts accepts."
+  }
+}
+
+variable "assistant_memory_mb" {
+  description = "Assistant Lambda memory. Its tools read a run's series and compute a gauge's fit (monthly means, calibrationStats), the same work the API does for a page, so the API's 1024 MB."
+  type        = number
+  default     = 1024
+}
+
+variable "assistant_timeout_seconds" {
+  description = "Assistant Lambda timeout. A turn is up to assistant_max_hops model calls with tool reads between them. CloudFront's origin read timeout on its behaviour (60 s) limits the gap between two packets, not the response, and the stream sends a keepalive every 15 s. ASSISTANT_TURN_SECONDS is set 15 s below it, so a long turn ends with an error event (and is charged) before the runtime cuts it off."
+  type        = number
+  default     = 120
+  validation {
+    condition     = var.assistant_timeout_seconds >= 60 && var.assistant_timeout_seconds <= 300
+    error_message = "Between 60 s (a turn of several model calls) and 300 s (each running container is a database connection and a reserved slot)."
+  }
+}
+
+variable "assistant_reserved_concurrency" {
+  description = "Max concurrent assistant Lambda executions: how many turns run at once across every user. Bounds the model spend per minute and the database connections (x a pool of 1: infra/README.md § Connections, which the precondition in lambda.tf sums). A turn holds its container for tens of seconds, so a third user sending at once gets a 429 they can resend. Never -1: raise the account quota instead (lambda_reserved_concurrency)."
+  type        = number
+  default     = 2
+  validation {
+    condition     = var.assistant_reserved_concurrency >= 1 && var.assistant_reserved_concurrency <= 10
+    error_message = "Between 1 and 10: -1 (unreserved) removes the spend and connection cap, and more than 10 needs infra/README.md § Connections redone."
+  }
+}
+
+variable "assistant_tokens_per_month" {
+  description = "Tokens (input + output) one project may use in a calendar month (UTC), counted in Postgres and checked before each turn (ASSISTANT_TOKENS_PER_MONTH, set on the assistant and the API alike so the status shows what is enforced). 2 M is issue #610's starting point."
+  type        = number
+  default     = 2000000
+  validation {
+    condition     = var.assistant_tokens_per_month >= 1 && floor(var.assistant_tokens_per_month) == var.assistant_tokens_per_month
+    error_message = "A whole number of tokens, at least 1."
+  }
+}
+
+variable "assistant_messages_per_hour" {
+  description = "Messages one user may send in an hour across projects (ASSISTANT_MESSAGES_PER_HOUR; a 429 with Retry-After past it)."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.assistant_messages_per_hour >= 1 && floor(var.assistant_messages_per_hour) == var.assistant_messages_per_hour
+    error_message = "A whole number of messages, at least 1."
+  }
+}
+
+variable "assistant_max_hops" {
+  description = "Model calls in one turn (ASSISTANT_MAX_HOPS); the turn ends with an error event past it."
+  type        = number
+  default     = 6
+  validation {
+    condition     = var.assistant_max_hops >= 1 && var.assistant_max_hops <= 12 && floor(var.assistant_max_hops) == var.assistant_max_hops
+    error_message = "A whole number from 1 to 12."
+  }
+}
+
+variable "assistant_budget_monthly_usd" {
+  description = "The assistant's own AWS budget in USD a month (alarms.tf aws_budgets_budget.assistant), on the account's AWS Marketplace charges: Anthropic's models on Bedrock are billed through AWS Marketplace, and nothing else in this account is. 0 skips it; with budget_monthly_usd = 0 there are no budgets at all. It is a third budget, so it costs about $0.62 a month (AWS gives two free)."
+  type        = number
+  default     = 50
+  validation {
+    condition     = var.assistant_budget_monthly_usd >= 0
+    error_message = "assistant_budget_monthly_usd must be 0 (no assistant budget) or a positive USD amount."
+  }
+}
+
+variable "bedrock_endpoint_az_count" {
+  description = "How many AZs get an ENI for the bedrock-runtime interface endpoint (assistant.tf). 1 halves the cost (~$7.30 a month per AZ); if its AZ is down the assistant answers with an error and the rest of the app carries on."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.bedrock_endpoint_az_count >= 1 && var.bedrock_endpoint_az_count <= 2
+    error_message = "Must be 1 or 2."
   }
 }

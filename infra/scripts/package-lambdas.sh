@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build and zip the four backend Lambdas, and bundle the fifth (the report
+# Build and zip the five backend Lambdas, and bundle the sixth (the report
 # renderer, a container image). Used by .github/workflows/deploy-backend.yml;
 # runnable locally from anywhere in the repo (needs `pnpm install` first).
 #
-#   infra/scripts/package-lambdas.sh            # → backend/dist/{lambda,migrate,worker,fetcher}.zip
+#   infra/scripts/package-lambdas.sh            # → backend/dist/{lambda,migrate,worker,fetcher,assistant}.zip
 #                                               #   + backend/dist/renderer/lambda-renderer.mjs
 #
 # Package layouts (they must match the handlers in infra/lambda.tf):
@@ -29,7 +29,12 @@
 #     lambda-fetcher.mjs              esbuild bundle of backend/src/lambda-fetcher.ts
 #                                     (no database, so no CA bundle)
 #
-# playwright-core stays OUT of the API, worker and fetcher bundles (--external): only the
+#   assistant.zip                     handler lambda-assistant.handler (infra/assistant.tf)
+#     lambda-assistant.mjs            esbuild bundle of backend/src/lambda-assistant.ts
+#                                     (the API's app, the assistant's routes only)
+#     rds-global-bundle.pem
+#
+# playwright-core stays OUT of the API, worker, fetcher and assistant bundles (--external): only the
 # report renderer drives Chromium, and it ships as a container image with
 # playwright-core installed beside its bundle (backend/renderer.Dockerfile,
 # built by deploy-backend.yml). The API reaches the render code only through
@@ -95,8 +100,8 @@ esbuild() {
   mv "$outfile.map" "$maps/"
 }
 
-rm -rf "$out/lambda.zip" "$out/migrate.zip" "$out/worker.zip" "$out/fetcher.zip" "$out/renderer" "$maps"
-mkdir -p "$out" "$maps" "$meta" "$stage/api" "$stage/migrate/dist" "$stage/migrate/migrations" "$stage/worker" "$stage/fetcher"
+rm -rf "$out/lambda.zip" "$out/migrate.zip" "$out/worker.zip" "$out/fetcher.zip" "$out/assistant.zip" "$out/renderer" "$maps"
+mkdir -p "$out" "$maps" "$meta" "$stage/api" "$stage/migrate/dist" "$stage/migrate/migrations" "$stage/worker" "$stage/fetcher" "$stage/assistant"
 
 # --- API ---------------------------------------------------------------------
 esbuild api "$backend/src/lambda.ts" "$stage/api/lambda.mjs" --external:playwright-core
@@ -124,6 +129,13 @@ esbuild renderer "$backend/src/lambda-renderer.ts" "$out/renderer/lambda-rendere
 esbuild fetcher "$backend/src/lambda-fetcher.ts" "$stage/fetcher/lambda-fetcher.mjs" --external:playwright-core
 (cd "$stage/fetcher" && zip -q -9 -X -r "$out/fetcher.zip" .)
 
+# --- Assistant -------------------------------------------------------------------
+# The API's app behind its own Function URL (infra/assistant.tf). It calls
+# Bedrock through the SDK bundled here, like the API's SES and SQS clients.
+esbuild assistant "$backend/src/lambda-assistant.ts" "$stage/assistant/lambda-assistant.mjs" --external:playwright-core
+cp "$ca" "$stage/assistant/rds-global-bundle.pem"
+(cd "$stage/assistant" && zip -q -9 -X -r "$out/assistant.zip" .)
+
 # guard <bundle> [--forbid|--forbid-static <package> <why>]…: refuse a bundle
 # whose metafile shows the package, either bundled (its files are inputs) or
 # imported as an external (the import left in the output). --forbid-static
@@ -142,7 +154,7 @@ guard() {
 # scripts/migrate-cli.ts, with the dev env loader), so nothing it bundles
 # imports dotenv.
 dotenv=(--forbid dotenv 'docs/STACK.md § Two backend entry points')
-# Nor may the API, worker and fetcher carry Chromium's driver (see above).
+# Nor may the API, worker, fetcher and assistant carry Chromium's driver (see above).
 # playwright-core is --external in all of them, so it is never an input: the
 # guard reads the output's imports, and refuses any but the lazy
 # `await import('playwright-core')` in src/reports/render.ts, which the API and
@@ -156,8 +168,9 @@ guard migrate "${dotenv[@]}"
 guard worker "${dotenv[@]}" "${chromium[@]}"
 guard fetcher "${dotenv[@]}" "${chromium[@]}" "${pg[@]}"
 guard renderer "${dotenv[@]}" "${pg[@]}"
+guard assistant "${dotenv[@]}" "${chromium[@]}"
 
-for z in lambda migrate worker fetcher; do
+for z in lambda migrate worker fetcher assistant; do
   echo "== $z.zip ($(du -h "$out/$z.zip" | cut -f1))"
   unzip -Z1 "$out/$z.zip" | sed 's/^/   /'
 done

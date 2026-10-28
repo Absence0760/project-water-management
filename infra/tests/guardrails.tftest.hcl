@@ -950,12 +950,13 @@ run "runtime_secrets" {
   # Exactly the keys each role uses (RUNTIME_SECRETS in backend/src/config/runtimeSecrets.ts).
   assert {
     condition = (
-      toset(keys(local.runtime_secrets)) == toset(["api", "migrate", "worker"]) &&
+      toset(keys(local.runtime_secrets)) == toset(["api", "migrate", "worker", "assistant"]) &&
       toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET", "CLOUDFRONT_PRIVATE_KEY", "APP_ENCRYPTION_KEY"]) &&
       toset(keys(local.runtime_secrets.worker)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "ALERTS_TOKEN_SECRET"]) &&
-      toset(keys(local.runtime_secrets.migrate)) == toset(["WATER_APP_PASSWORD"])
+      toset(keys(local.runtime_secrets.migrate)) == toset(["WATER_APP_PASSWORD"]) &&
+      toset(keys(local.runtime_secrets.assistant)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET"])
     )
-    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret, the download signing key and the TOTP sealing key for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
+    error_message = "Each runtime secret holds exactly its Lambda's keys: the download signing key and the TOTP sealing key for the API only (the edge secret for the API and the assistant), the unsubscribe key for the worker only, the water_app password for migrate only."
   }
   assert {
     condition = (
@@ -4038,8 +4039,8 @@ run "network" {
       for f in fileset(".", "*.tf") : [
         for b in regexall("(?s)resource \"aws_vpc_security_group_ingress_rule\" \"[A-Za-z0-9_-]+\" \\{.*?\\n\\}", file(f)) :
         format("%s <- %s %s/%s-%s",
-          try(regex("\\n\\s*security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "?"),
-          try(regex("\\n\\s*referenced_security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "NOT-A-SECURITY-GROUP"),
+          try(regex("\\n\\s*security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)(?:\\[0\\])?\\.id", b)[0], "?"),
+          try(regex("\\n\\s*referenced_security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)(?:\\[0\\])?\\.id", b)[0], "NOT-A-SECURITY-GROUP"),
           try(regex("\\n\\s*ip_protocol\\s*=\\s*\"([^\"]+)\"", b)[0], "?"),
           try(regex("\\n\\s*from_port\\s*=\\s*([0-9]+)", b)[0], "?"),
           try(regex("\\n\\s*to_port\\s*=\\s*([0-9]+)", b)[0], "?"),
@@ -4059,16 +4060,20 @@ run "network" {
       "vpce_s3 <- worker_lambda tcp/443-443",
       "vpce_s3 <- api_lambda tcp/443-443",
       "vpce_s3 <- migrate_lambda tcp/443-443",
+      # The assistant (assistant.tf), only with assistant_enabled; pinned on in assistant.tftest.hcl.
+      "rds <- assistant_lambda tcp/5432-5432",
+      "vpce <- assistant_lambda tcp/443-443",
+      "bedrock_vpce <- assistant_lambda tcp/443-443",
     ])
-    error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker; the S3 endpoint from the worker (pack PDF checks, packs.tf), the API and migrate (reference loads, map_data.tf). A new edge is a deliberate change to this list."
+    error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker; the S3 endpoint from the worker (pack PDF checks, packs.tf), the API and migrate (reference loads, map_data.tf); with assistant_enabled, Postgres, the Secrets Manager endpoint and the Bedrock endpoint from the assistant (assistant.tf). A new edge is a deliberate change to this list."
   }
   assert {
     condition = aws_vpc.main.cidr_block != "" && toset(flatten([
       for f in fileset(".", "*.tf") : [
         for b in regexall("(?s)resource \"aws_vpc_security_group_egress_rule\" \"[A-Za-z0-9_-]+\" \\{.*?\\n\\}", file(f)) :
         format("%s -> %s %s/%s-%s",
-          try(regex("\\n\\s*security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "?"),
-          try(regex("\\n\\s*referenced_security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "NOT-A-SECURITY-GROUP"),
+          try(regex("\\n\\s*security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)(?:\\[0\\])?\\.id", b)[0], "?"),
+          try(regex("\\n\\s*referenced_security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)(?:\\[0\\])?\\.id", b)[0], "NOT-A-SECURITY-GROUP"),
           try(regex("\\n\\s*ip_protocol\\s*=\\s*\"([^\"]+)\"", b)[0], "?"),
           try(regex("\\n\\s*from_port\\s*=\\s*([0-9]+)", b)[0], "?"),
           try(regex("\\n\\s*to_port\\s*=\\s*([0-9]+)", b)[0], "?"),
@@ -4088,6 +4093,9 @@ run "network" {
       "worker_lambda -> vpce_s3 tcp/443-443",
       "api_lambda -> vpce_s3 tcp/443-443",
       "migrate_lambda -> vpce_s3 tcp/443-443",
+      "assistant_lambda -> rds tcp/5432-5432",
+      "assistant_lambda -> vpce tcp/443-443",
+      "assistant_lambda -> bedrock_vpce tcp/443-443",
     ])
     error_message = "Egress rules must be exactly the Lambdas' paths to Postgres and their endpoints; RDS and the endpoints have no egress."
   }
@@ -4161,9 +4169,9 @@ run "network" {
   assert {
     condition = aws_vpc.main.cidr_block != "" && alltrue([
       for f in fileset(".", "*.tf") :
-      length(regexall("resource \"aws_security_group\"", file(f))) == length(regexall("resource \"aws_security_group\" \"(api_lambda|migrate_lambda|worker_lambda|rds|vpce|vpce_sqs|vpce_ses|vpce_s3)\"", file(f)))
+      length(regexall("resource \"aws_security_group\"", file(f))) == length(regexall("resource \"aws_security_group\" \"(api_lambda|migrate_lambda|worker_lambda|rds|vpce|vpce_sqs|vpce_ses|vpce_s3|assistant_lambda|bedrock_vpce)\"", file(f)))
     ])
-    error_message = "A new security group needs its description pinned in the assert above."
+    error_message = "A new security group needs its description pinned in the assert above (the assistant's two, which exist only with assistant_enabled, in assistant.tftest.hcl)."
   }
   assert {
     condition = alltrue([

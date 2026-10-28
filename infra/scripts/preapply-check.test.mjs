@@ -82,10 +82,11 @@ test('every check passes against a ready account, with read-only calls only', ()
 		assert.match(r.line(name), /^PASS/, `${name}:\n${r.stdout}`);
 	}
 	// The defaults in variables.tf: API 25 + migrate 1 + worker 8 + fetcher 2
-	// + renderer 2 + mirror ingest 2 = 40, + 10 unreserved = 50 (infra/README.md
-	// step 3 says 50).
-	assert.match(r.line('lambda-quota'), /quota 1000 >= 50 \(reservations 40 \+ 10 unreserved\)/);
-	assert.match(r.line('lambda-quota'), /lambda=25 migrate=1 worker=8 fetcher=2 renderer=2 ingest=2/);
+	// + renderer 2 + mirror ingest 2 + assistant 2 = 42, + 10 unreserved = 52
+	// (infra/README.md step 3 says 52). The assistant's counts even while
+	// assistant_enabled is false, as the renderer's does before its image.
+	assert.match(r.line('lambda-quota'), /quota 1000 >= 52 \(reservations 42 \+ 10 unreserved\)/);
+	assert.match(r.line('lambda-quota'), /lambda=25 migrate=1 worker=8 fetcher=2 renderer=2 ingest=2 assistant=2/);
 	assert.match(r.line('rds-orderable'), /db\.t4g\.micro offers PostgreSQL 17 in af-south-1 \(17\.5 17\.6\)/);
 	assert.match(r.stdout, /All pre-apply checks passed/);
 
@@ -109,13 +110,13 @@ test('every check passes against a ready account, with read-only calls only', ()
 });
 
 test('a quota below the reservations + 10 fails; exactly enough passes', () => {
-	const low = run({ state: { 'service-quotas get-service-quota': { Quota: { Value: 49.0 } } } });
+	const low = run({ state: { 'service-quotas get-service-quota': { Quota: { Value: 51.0 } } } });
 	assert.equal(low.status, 1);
-	assert.match(low.line('lambda-quota'), /^FAIL .*quota 49 < 50/);
+	assert.match(low.line('lambda-quota'), /^FAIL .*quota 51 < 52/);
 	assert.match(low.stdout, /1 check\(s\) FAILED/);
 	// A new account's quota of 10.
 	assert.equal(run({ state: { 'service-quotas get-service-quota': { Quota: { Value: 10.0 } } } }).status, 1);
-	const exact = run({ state: { 'service-quotas get-service-quota': { Quota: { Value: 50.0 } } } });
+	const exact = run({ state: { 'service-quotas get-service-quota': { Quota: { Value: 52.0 } } } });
 	assert.equal(exact.status, 0, exact.stdout);
 });
 
@@ -132,7 +133,7 @@ test('the var file overrides the reservations, the region and the DB class', () 
 		state: { 'service-quotas get-service-quota': { Quota: { Value: 40.0 } } },
 	});
 	assert.equal(r.status, 1);
-	assert.match(r.line('lambda-quota'), /^FAIL .*quota 40 < 45 \(reservations 35/, 'lambda 20, a commented-out line ignored');
+	assert.match(r.line('lambda-quota'), /^FAIL .*quota 40 < 47 \(reservations 37/, 'lambda 20, a commented-out line ignored');
 	assert.ok(r.calls.every((c) => c.op === 'get-bucket-location' || c.op === 'describe-key' || c.global['--region'] === 'af-south-1'));
 	assert.equal(r.calls.find((c) => c.op === 'describe-orderable-db-instance-options').args['--db-instance-class'], 'db.t4g.small');
 });

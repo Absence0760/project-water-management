@@ -22,7 +22,10 @@
 // Problems name the setting, never its value: the value may be a secret.
 // This module imports nothing, so every Lambda bundle can carry it.
 
-export const ROLES = ['api', 'worker', 'fetcher', 'renderer', 'migrate'] as const;
+// `assistant` is the AI assistant's own Lambda (lambda-assistant.ts, issue
+// #610): the API's bundle and app, serving only the assistant's routes, with a
+// longer timeout and the one role that may call the model (infra/assistant.tf).
+export const ROLES = ['api', 'worker', 'fetcher', 'renderer', 'migrate', 'assistant'] as const;
 export type Role = (typeof ROLES)[number];
 
 type Env = Record<string, string | undefined>;
@@ -193,17 +196,58 @@ const contactEmail: Check = (v) => {
 	return null;
 };
 
+/** A whole number of at least 1 (the assistant's limits): the code falls back to its default on anything else, so production refuses it instead. */
+const wholeNumber: Check = (v) => {
+	if (!set(v)) return 'is not set';
+	const n = Number(v.trim());
+	return Number.isInteger(n) && n >= 1 ? null : 'must be a whole number of at least 1';
+};
+
+/** A whole number from `min` to `max` (the assistant's keepalive, against CloudFront's origin read timeout). */
+const wholeNumberIn =
+	(min: number, max: number): Check =>
+	(v) => {
+		if (!set(v)) return 'is not set';
+		const n = Number(v.trim());
+		return Number.isInteger(n) && n >= min && n <= max ? null : `must be a whole number from ${min} to ${max}`;
+	};
+
+/**
+ * A Bedrock model id the assistant may name: Anthropic's, in-region
+ * (anthropic.…) or through a system inference profile (global., us., eu., …),
+ * or an inference profile's ARN. Never an Ollama tag or an Anthropic API id
+ * (claude-…), which would only fail at the first message.
+ */
+const bedrockModelId: Check = (v) => {
+	if (!set(v)) return 'is not set';
+	const t = v.trim();
+	if (/^((global|us|eu|apac|au|jp|ca)\.)?anthropic\.[A-Za-z0-9.:_-]+$/.test(t)) return null;
+	if (/^arn:aws[a-z-]*:bedrock:[a-z0-9-]+:\d{12}:(application-)?inference-profile\/[A-Za-z0-9.:_-]+$/.test(t)) return null;
+	return 'is not an Anthropic model id on Bedrock (anthropic.…, global.anthropic.…) or an inference profile ARN';
+};
+
+/**
+ * The region the assistant calls Bedrock in: the Lambda's own (AWS_REGION, set
+ * by the runtime), whose bedrock-runtime VPC endpoint it reaches. The VPC has
+ * no route anywhere else, so another region would fail every message.
+ */
+const bedrockRegion: Check = (v, env) => {
+	if (!set(v)) return 'is not set';
+	const own = env?.AWS_REGION?.trim();
+	return own && v.trim() !== own ? 'must be the Lambda’s own region (AWS_REGION): its bedrock-runtime VPC endpoint is there, and the VPC has no route to another' : null;
+};
+
 const ALL = (check: Check): Partial<Record<Role, Check>> => Object.fromEntries(ROLES.map((r) => [r, check]));
 
 export const SETTINGS: Record<string, Setting> = {
 	// --- The edge and the session ---------------------------------------------------------
 	CLOUDFRONT_SHARED_SECRET: {
-		why: 'CloudFront stamps it on every /api request; unset, app.ts skips the check (local dev). In Lambda it comes from the runtime secret.',
-		checks: { api: secret(32) }
+		why: 'CloudFront stamps it on every /api request (the assistant’s origin too); unset, app.ts skips the check (local dev). In Lambda it comes from the runtime secret.',
+		checks: { api: secret(32), assistant: secret(32) }
 	},
 	AUTH_JWT_SECRET: {
-		why: 'Signs sessions (the API only; the worker reaches session.ts through shared modules but never calls it), and keys the run stamps (runs/stamp.ts, 077): the API and the worker (a re-run job) store runs.',
-		checks: { api: secret(32), worker: secret(32) }
+		why: 'Signs sessions (the API, and the assistant, which checks the session of each message; the worker reaches session.ts through shared modules but never calls it), and keys the run stamps (runs/stamp.ts, 077): the API and the worker (a re-run job) store runs.',
+		checks: { api: secret(32), worker: secret(32), assistant: secret(32) }
 	},
 	APP_ENCRYPTION_KEY: {
 		why: 'Seals the TOTP secrets of two-step sign-in at rest (auth/secretBox.ts, 150_mfa): the API only, which enrols and checks codes.',
@@ -211,14 +255,14 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	MFA_REQUIRED: {
 		why: 'false turns off the second-factor requirement (auth/stepUp.ts: the actions that always need it, and owners\' and team admins\' where a project or team requires it) for the DB tests and the e2e server only; mfaRequired refuses it on Lambda too.',
-		checks: { api: optional(oneOf('true')), worker: optional(oneOf('true')) }
+		checks: { api: optional(oneOf('true')), worker: optional(oneOf('true')), assistant: optional(oneOf('true')) }
 	},
 	REGISTRATION_CHECK_REQUIRED: {
 		why: 'false lets every project issue a pack without a recorded check of its specialist signers\' registrations, whatever the project\'s own setting (signoffs/registrationCheck.ts, 167_signers), for the DB tests and the e2e server only; registrationCheckRequired refuses it on Lambda too.',
 		checks: { api: optional(oneOf('true')) }
 	},
-	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },
-	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site.', checks: { api: publicHttpsList } },
+	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')), assistant: optional(oneOf('true')) } },
+	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site. The assistant’s messages are POSTs, so it checks it as the API does.', checks: { api: publicHttpsList, assistant: publicHttpsList } },
 	PASSWORD_HASH_FAST: { why: '1 hashes new passwords with the smallest Argon2id parameters, for the local e2e server only; auth/password.ts refuses it in Lambda.', checks: { api: unset, worker: unset } },
 	SIGNUP_OPEN: {
 		why: 'true opens sign-up to anyone; false (and unset, on Lambda) admits only the holder of a live invite for that address (auth/signupOpen.ts). Terraform var.signup_open; closed until docs/legal-status.md Gates A and C are done.',
@@ -230,6 +274,9 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	VITEST: { why: 'Set by the test runner; new password hashes use the smallest Argon2id parameters.', checks: ALL(unset) },
 	AWS_LAMBDA_FUNCTION_NAME: { why: 'Set by the Lambda runtime (reserved, Terraform cannot override it): the signal that this is production.' },
+	AWS_REGION: {
+		why: 'Set by the Lambda runtime (reserved): the function’s region. The assistant’s Bedrock region defaults to it (assistant/config.ts), and ASSISTANT_BEDROCK_REGION must equal it in production (its VPC endpoint is in that region).'
+	},
 	AWS_LAMBDA_LOG_FORMAT: {
 		why: 'Set by the Lambda runtime from the function\'s logging_config (reserved; infra/lambda.tf local.lambda_logging): JSON makes logging/logEvent.ts log an object, so every alarm\'s filter ($.message.event) matches. Pinned to JSON on every Lambda by infra/tests/logging.tftest.hcl, not here: Terraform sets it through logging_config, not an environment block.'
 	},
@@ -237,22 +284,25 @@ export const SETTINGS: Record<string, Setting> = {
 	// --- Runtime secrets (config/runtimeSecrets.ts) --------------------------------------
 	RUNTIME_SECRET_ARN: {
 		why: 'The Secrets Manager secret holding this Lambda’s secrets (RUNTIME_SECRETS), read at cold start; the secrets themselves never sit in the environment.',
-		checks: { api: secretsManagerArn, worker: secretsManagerArn, migrate: secretsManagerArn }
+		checks: { api: secretsManagerArn, worker: secretsManagerArn, migrate: secretsManagerArn, assistant: secretsManagerArn }
 	},
 	RUNTIME_SECRET_VERSION: {
 		why: 'The secret version Terraform last wrote: pins what a cold start reads, and changing it cold-starts every instance onto a rotation.',
-		checks: { api: required, worker: required, migrate: required }
+		checks: { api: required, worker: required, migrate: required, assistant: required }
 	},
 
 	// --- The database ---------------------------------------------------------------------
-	DATABASE_URL: { why: 'The water_app (RLS-bound) connection; in Lambda, from the runtime secret (it holds the password).', checks: { api: postgresUrl, worker: postgresUrl } },
+	DATABASE_URL: {
+		why: 'The water_app (RLS-bound) connection; in Lambda, from the runtime secret (it holds the password).',
+		checks: { api: postgresUrl, worker: postgresUrl, assistant: postgresUrl }
+	},
 	NODE_EXTRA_CA_CERTS: {
 		why: 'Read by Node itself: the RDS CA bundle, without which sslmode=verify-full cannot connect.',
-		checks: { api: required, worker: required, migrate: required }
+		checks: { api: required, worker: required, migrate: required, assistant: required }
 	},
 	DB_POOL_MAX: {
-		why: 'The pg pool per container (db/pool.ts poolMax): Terraform sets 2 for the API and the worker, and each cap × 2 is what the database’s connections are sized on (infra/README.md § Connections, issue #541). Unset would be the local default of 5, 2.5 times the sizing, so both check it.',
-		checks: { api: poolSize, worker: poolSize }
+		why: 'The pg pool per container (db/pool.ts poolMax): Terraform sets 2 for the API and the worker and 1 for the assistant (one message per container, each holding at most one connection at a time), and each cap × its pool is what the database’s connections are sized on (infra/README.md § Connections, issue #541). Unset would be the local default of 5, past the sizing, so all three check it.',
+		checks: { api: poolSize, worker: poolSize, assistant: poolSize }
 	},
 	DB_HOST: { why: 'The migrate Lambda builds the owner URL from these.', checks: { migrate: host } },
 	DB_PORT: { why: 'Defaults to 5432.', checks: { migrate: optional(port) } },
@@ -312,8 +362,8 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	FETCH_REQUESTS_QUEUE_URL: { why: 'Where the worker sends fetch requests: required with FEED_FETCHER=sqs; Terraform sets it only while the queue exists.', checks: { worker: fetchRequestsUrlFor } },
 	FEED_SOURCE: {
-		why: 'fixtures (the default) is synthetic data. Only the fetcher fetches in production, but it is also which CHIRPS cell cache a process reads (feeds/cellCacheStore.ts cacheOrigin: live reads the chc rows the worker merges, fixtures a set production never fills), so a run started on the API with it unset reads no CHIRPS cell for its reference cell or rainfall stations, and the Data feeds panel calls live feeds sample data. Every Lambda that reaches it must say live.',
-		checks: { api: oneOf('live'), worker: oneOf('live'), fetcher: oneOf('live') }
+		why: 'fixtures (the default) is synthetic data. Only the fetcher fetches in production, but it is also which CHIRPS cell cache a process reads (feeds/cellCacheStore.ts cacheOrigin: live reads the chc rows the worker merges, fixtures a set production never fills), so a run started on the API with it unset reads no CHIRPS cell for its reference cell or rainfall stations, and the Data feeds panel calls live feeds sample data. Every Lambda that reaches it must say live (the assistant too: it carries the API’s modules, and its tools read the same runs and feeds).',
+		checks: { api: oneOf('live'), worker: oneOf('live'), fetcher: oneOf('live'), assistant: oneOf('live') }
 	},
 	INGEST_RESULTS_QUEUE_URL: {
 		why: 'Where the fetcher answers a per-feed fetch request. Terraform sets it only while the queues exist (infra/feeds.tf local.per_feed_fetching, issue #604 R3-C); without them the fetcher has no SQS trigger and runs only its scheduled modes, which never send, so it is checked only when set (a stray request with none still fails loudly: jobs/transport.ts sendToQueue).',
@@ -341,6 +391,55 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	FEED_FIXTURE_REWRITE: {
 		why: 'Fixtures only (FEED_SOURCE=fixtures): 1 serves some synthetic CHIRPS finals rewritten in place, to watch the re-check locally. The live client never reads it, and the fetcher refuses the fixtures in production.'
+	},
+
+	// --- The assistant (issue #610) ----------------------------------------------------------
+	// Two Lambdas reach assistant/config.ts: the assistant's own, which runs the
+	// chat, and the API, which answers GET /projects/:id/assistant (whether the
+	// chat is on, and the project's tokens left this month) and never calls a
+	// model. Terraform gives both the same values (infra/assistant.tf), so the
+	// status the page shows is what the assistant enforces. Unset on the API is
+	// off (the chat hidden), today's behaviour, so an API release can go out
+	// before the apply that sets them; a value set is checked.
+	ASSISTANT_PROVIDER: {
+		why: 'Which model the assistant talks to (assistant/config.ts). off (the default) hides the chat; mock (scripted answers, tests and e2e) and ollama (a local model) are dev only, and anthropic needs the internet, which no VPC Lambda has (the out-of-VPC proxy it would need is not built: docs/followups.md). Production runs bedrock, through the VPC endpoint with an IAM permission and no key (infra/assistant.tf).',
+		checks: { api: optional(oneOf('off', 'bedrock')), assistant: oneOf('bedrock') }
+	},
+	ASSISTANT_MODEL: {
+		why: 'The model id the provider asks for; empty takes the provider’s default. On Bedrock it is the one model or inference profile the assistant’s IAM policy and its endpoint policy allow (var.assistant_model_id), so the assistant must name it. The API never calls a model.',
+		checks: { api: optional(bedrockModelId), assistant: bedrockModelId }
+	},
+	ASSISTANT_BEDROCK_REGION: {
+		why: 'The region the Bedrock client calls; unset is AWS_REGION. Terraform sets the Lambda’s own, where its bedrock-runtime endpoint is (a global inference profile still routes the request on from there: docs/deployment.md § The assistant).',
+		checks: { assistant: bedrockRegion }
+	},
+	OLLAMA_URL: { why: 'The ollama provider only (a local model), which production refuses (ASSISTANT_PROVIDER).' },
+	ANTHROPIC_API_KEY: {
+		why: 'The anthropic provider’s key (providers/anthropic.ts). Production runs Bedrock (IAM, no key) and refuses the anthropic provider, so no Lambda may hold one: in the environment it is readable by any GetFunctionConfiguration caller, and a key belongs in a runtime secret if that route is ever built (docs/followups.md).',
+		checks: { api: unset, assistant: unset }
+	},
+	ASSISTANT_TOKENS_PER_MONTH: {
+		why: 'Tokens one project may use in a calendar month. The code falls back to its default (2 M) on a value it can’t read, so production refuses one; the API reads it for the tokens left the status shows. Terraform var.assistant_tokens_per_month.',
+		checks: { api: optional(wholeNumber), assistant: wholeNumber }
+	},
+	ASSISTANT_MESSAGES_PER_HOUR: {
+		why: 'Messages one user may send in an hour (the 429 with Retry-After). Terraform var.assistant_messages_per_hour; a value set is checked, as ASSISTANT_TOKENS_PER_MONTH.',
+		checks: { api: optional(wholeNumber), assistant: wholeNumber }
+	},
+	ASSISTANT_MAX_HOPS: {
+		why: 'Model calls in one turn (var.assistant_max_hops). Checked when set: the code default (6) is safe.',
+		checks: { api: optional(wholeNumber), assistant: optional(wholeNumber) }
+	},
+	ASSISTANT_MAX_OUTPUT_TOKENS: { why: 'Output tokens per model call. Checked when set: the code default is safe.', checks: { api: optional(wholeNumber), assistant: optional(wholeNumber) } },
+	ASSISTANT_MAX_TOOL_RESULT_CHARS: { why: 'The cap on one tool result the model sees. Checked when set: the code default is safe.', checks: { api: optional(wholeNumber), assistant: optional(wholeNumber) } },
+	ASSISTANT_MAX_INPUT_CHARS: { why: 'The cap on the conversation the page sends. Checked when set: the code default is safe.', checks: { api: optional(wholeNumber), assistant: optional(wholeNumber) } },
+	ASSISTANT_KEEPALIVE_SECONDS: {
+		why: 'Seconds between `: keepalive` comments on the stream. CloudFront cuts a response after its origin read timeout with nothing sent (60 s on the assistant’s origin, infra/s3_cloudfront.tf), so production keeps it from 1 to 30 s; unset is the code default (15).',
+		checks: { assistant: optional(wholeNumberIn(1, 30)) }
+	},
+	ASSISTANT_TURN_SECONDS: {
+		why: 'How long one turn may run before it ends with an error event. Terraform sets it below the assistant Lambda’s timeout (var.assistant_timeout_seconds less 15), so a long turn ends cleanly and is charged rather than cut off by the runtime. Checked when set.',
+		checks: { assistant: optional(wholeNumber) }
 	},
 
 	// --- Reports ---------------------------------------------------------------------------

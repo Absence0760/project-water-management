@@ -111,14 +111,23 @@ locals {
     migrate = {
       WATER_APP_PASSWORD = local.db_app_password
     }
+    # The assistant (assistant.tf): it checks each message's session and the
+    # CloudFront header, and connects as water_app. No model key: Bedrock is
+    # an IAM permission. Written only while the assistant exists (the secret
+    # follows runtime_secret_roles below).
+    assistant = {
+      AUTH_JWT_SECRET          = local.auth_jwt_secret
+      DATABASE_URL             = local.assistant_database_url
+      CLOUDFRONT_SHARED_SECRET = random_password.cloudfront_shared_secret.result
+    }
   }
 
-  # The role that may read each secret.
-  runtime_secret_roles = {
+  # The role that may read each secret. The assistant's only while it exists.
+  runtime_secret_roles = merge({
     api     = aws_iam_role.lambda
     worker  = aws_iam_role.worker_lambda
     migrate = aws_iam_role.migrate_lambda
-  }
+  }, local.assistant_enabled ? { assistant = aws_iam_role.assistant_lambda[0] } : {})
 }
 
 resource "aws_secretsmanager_secret" "runtime" {
@@ -140,9 +149,10 @@ resource "aws_secretsmanager_secret_version" "runtime" {
   secret_string_wo_version = var.runtime_secret_version
 
   lifecycle {
-    # A new CloudFront header must reach the API's secret in the same apply,
-    # or every API request gets 403 until the next sops edit. All three are
-    # rewritten (for_each can't narrow it); the other two just cold-start.
+    # A new CloudFront header must reach the API's (and the assistant's)
+    # secret in the same apply, or every request gets 403 until the next sops
+    # edit. All are rewritten (for_each can't narrow it); the others just
+    # cold-start.
     replace_triggered_by = [random_password.cloudfront_shared_secret]
   }
 }

@@ -105,6 +105,12 @@
 			<strong>Emails we send you:</strong> which alert emails went out, and whether an address bounced. We don’t track whether you open
 			an email or follow its links: our emails carry no tracking pixels or tracked links.
 		</li>
+		<li>
+			<strong>The assistant, if you use it:</strong> how many messages you sent it in the last hour, and how many tokens (the
+			pieces of text the AI model reads and writes) your messages used in each project each month. Not what you or the assistant
+			wrote: the conversation stays in your browser tab, is sent with each new message, and is gone when you close the tab. We
+			don’t keep it or log it.
+		</li>
 		<li><strong>Server logs:</strong> requests and errors, kept briefly to run and fix the service.</li>
 	</ul>
 	<p>
@@ -138,11 +144,27 @@
 				</tr>
 				<tr><td>Your answer to “Was this useful?” on an alert email, so the organisation can make its alerts better</td><td>The organisation’s legitimate interest in useful alerts; answering is up to you</td></tr>
 				<tr><td>The project’s history, notes, sign-offs and published results</td><td>The organisation’s legitimate interest in a reproducible record of its decisions and the evidence behind them (s11(1)(f))</td></tr>
+				<tr>
+					<td>Answering your questions in the assistant about a project’s model and results, and counting its use so it stays within its limits</td>
+					<td>
+						Needed to perform our agreement with you when you choose to use it (s11(1)(b)); the counts, our legitimate interest in
+						keeping its cost and use within bounds (s11(1)(f))
+					</td>
+				</tr>
 				<tr><td>Stopping password guessing, spam and abuse; keeping the service running</td><td>Our legitimate interest in a secure service</td></tr>
 			</tbody>
 		</table>
 	</div>
 	<p>We do not sell personal information, use it for advertising, or make decisions about you by automated means alone.</p>
+	<h3>The assistant</h3>
+	<p>
+		Where a project has the assistant, its members can ask an AI model about the project’s model and results. To answer, the
+		model is sent what you type and the conversation so far, and the project data it reads for you: the model settings, the
+		catchment network, run results and their series, and the help guides. It reads only what you can see in the project, and
+		never your or anyone’s name or email address, or the names of members, farmers or registered water users. Please don’t
+		type personal information into it. Its answers are advice to check, not results of the model: it never changes a project
+		itself, and a setting it suggests changes nothing until someone with edit rights reviews and saves it.
+	</p>
 	<h3>Do you have to give it?</h3>
 	<p>
 		No law requires you to give us personal information, and using the service is voluntary. An email address, a name and a
@@ -182,7 +204,9 @@
 		</li>
 		<li>
 			<strong>Our service providers</strong>, who process information only on our instructions: Amazon Web Services (hosting, the
-			database, file storage, sending email, and logs).
+			database, file storage, sending email, and logs) and, for the assistant, its Amazon Bedrock service, which runs the AI model
+			(Anthropic’s Claude). Bedrock runs the model itself: Anthropic, the model’s maker, doesn’t receive what is sent to it, and it
+			isn’t used to train models.
 		</li>
 		<li><strong>Authorities,</strong> if the law requires it. We will tell you unless the law forbids it.</li>
 	</ul>
@@ -198,6 +222,13 @@
 		requests through; they don’t store your information.
 	</p>
 	<p>
+		The assistant is the exception. Its AI model is reached through Amazon Bedrock in the same Cape Town region, but from there
+		Bedrock offers this model only by running each request in one of its regions anywhere in the world, which AWS chooses. So
+		what is sent to the model (section 4, The assistant) leaves South Africa while it is answered. It travels only on AWS’s own
+		network, encrypted; we keep no copy there, and AWS may keep it only to detect abuse of its service. The same POPIA grounds
+		as in the next paragraph apply.
+	</p>
+	<p>
 		We run the service from the United States, so when we operate or support it, information may be accessed from there. POPIA
 		allows this (s72): it is needed to provide the service you asked for (s72(1)(c) and (d)), and Amazon Web Services is bound by
 		a written agreement to protect it to a standard at least as high as POPIA’s (s72(1)(a)). We access it only as needed, under the
@@ -210,6 +241,11 @@
 		<li><strong>Links in emails:</strong> a password-reset link lasts 1 hour, a confirmation link 48 hours, an invitation 7 days (then it is kept, marked expired, for 90 days and deleted).</li>
 		<li><strong>Sign-in attempts and wrong two-step sign-in codes:</strong> forgotten after a day without attempts. <strong>Account-email counts:</strong> 24 hours. <strong>Sign-in codes we emailed:</strong> until used or 10 minutes old; when we sent them, a day.</li>
 		<li><strong>Two-step sign-in:</strong> the app’s key, whether codes by email are on, and the recovery codes until you turn it off (a used recovery code is deleted at once); the record of when you turned it on or off until the account is deleted. A request to remove it when you can’t get a code: 90 days after it ended (the record that it happened stays with the account); its links until it ends; the count of requests 24 hours.</li>
+		<li>
+			<strong>The assistant’s counts:</strong> the messages in the last hour, an hour; the tokens each month, as long as the
+			project, as its record of what the assistant cost (if your account is deleted, they stay without your name). The
+			conversation itself is never kept.
+		</li>
 		<li><strong>Alert emails sent:</strong> 180 days. <strong>Report files:</strong> 7 days. <strong>Server logs:</strong> 30 days.</li>
 		<li>
 			<strong>Feedback on alert emails:</strong> an answer and its comment, 1 year after you gave it. A “Was this useful?” link works

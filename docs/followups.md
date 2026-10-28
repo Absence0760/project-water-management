@@ -62,6 +62,49 @@ are in. Still open:
 
 The checklist for these is issue #62; the history scrub is #63.
 
+- [ ] **Turn the AI assistant on in production (issue #610).** Built off
+      (`assistant_enabled = false`), so nothing here blocks a release until
+      the chat is wanted. Then, in order (operator; [deployment.md § The
+      assistant](./deployment.md#the-assistant)):
+      1. Confirm the privacy notice that names the model (`LEGAL_VERSION`
+         2026-10-27, Privacy §3–§7) is live with the `web@` release that
+         ships the panel, and that the client accepts the transfer below
+         (operator agreement § 11, clause 6.1).
+      2. In the Bedrock console in af-south-1, open the model catalogue,
+         choose Claude Sonnet 5.5 and submit Anthropic's first-time use-case
+         form if it asks; then run one prompt in the playground with the
+         global profile `global.anthropic.claude-sonnet-5-5`. Anthropic's
+         models are sold through AWS Marketplace, and the first call
+         subscribes the account (it needs `aws-marketplace:Subscribe`,
+         which the assistant's role deliberately lacks), so the first call
+         must be the operator's.
+      3. Check the endpoint service exists in the account:
+         `aws ec2 describe-vpc-endpoint-services --region af-south-1 --service-names com.amazonaws.af-south-1.bedrock-runtime --query 'ServiceDetails[0].ServiceName' --output text`
+         (expect the name back), and that the Lambda concurrency quota
+         covers 2 more reserved (infra/README.md § Operator steps).
+      4. Set `assistant_enabled = true` in `prod.tfvars`, plan, and apply
+         through `scripts/tf.sh`.
+      5. Re-run `~/github/templates/scripts/export-tf-vars.sh infra/` so the
+         repository variable `ASSISTANT_FUNCTION_NAME` exists, then release
+         `backend@…`: the deploy skips the assistant until both exist.
+      6. Ask one question in a project; check CloudTrail's
+         `additionalEventData.inferenceRegion` on the `InvokeModelWithResponseStream`
+         event (where it ran) and that the `assistant-*` alarms are OK.
+      Trigger: the release that turns the chat on.
+- [ ] **If Bedrock's Claude ever stops being reachable from af-south-1
+      (issue #610, open decision).** On 2026-10-27 af-south-1 offers
+      Anthropic's models through the global inference profile only
+      (deployment.md § Region recommendation). If that route closes, the
+      fallback is the Anthropic API through an **out-of-VPC proxy Lambda**
+      holding the key in its own runtime secret, invoked by the assistant
+      through a Lambda interface endpoint: a new sub-processor (Anthropic),
+      its own s72 record, the key in `infra-secrets/water-management/prod.sops.yaml`,
+      and `ASSISTANT_PROVIDER=anthropic` allowed by `config/production.ts`
+      for the assistant (refused today). Not a NAT gateway: a fixed monthly
+      charge, and the whole VPC opened to the internet. Trigger: the global
+      profile missing from Bedrock's af-south-1 availability, or the client
+      refusing the global routing's transfer.
+
 - [ ] **Runs on the rejected reference-gauge formula (issue #500,
       engine 1.80.0–1.84.0).** Those engines levelled a unit's CHIRPS with a
       reference gauge set by × unit MAP ÷ the reference unit's MAP, which the

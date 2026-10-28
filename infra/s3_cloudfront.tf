@@ -372,6 +372,9 @@ resource "aws_cloudfront_function" "tiles_range" {
 # former hostnames (var.redirect_domains) are aliases too, whose pages
 # spa_rewrite redirects to it.
 #   - default    → S3 frontend bucket via OAC (signed sigv4)
+#   - /api/projects/*/assistant/*
+#                → the assistant's Function URL (assistant.tf), the same
+#                  shared secret header, only with assistant_enabled
 #   - /api/*     → Lambda Function URL (custom origin + shared secret header)
 #   - /reports/* → S3 reports bucket via its own OAC, CloudFront signed URLs
 #                  only (reports.tf)
@@ -475,6 +478,32 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
+  # The assistant's Function URL (assistant.tf), only while it exists: the
+  # same custom origin and shared-secret header as the API's, so the app
+  # refuses a direct call the same way. A turn streams for up to its 120 s
+  # timeout; origin_read_timeout is the longest gap between two packets, and
+  # the stream sends a keepalive comment every 15 s (ASSISTANT_KEEPALIVE_SECONDS),
+  # so 60 s (the most CloudFront allows without a quota increase) leaves room
+  # for a slow first token.
+  dynamic "origin" {
+    for_each = local.assistant_enabled ? [1] : []
+    content {
+      domain_name = "${aws_lambda_function_url.assistant[0].url_id}.lambda-url.${var.aws_region}.on.aws"
+      origin_id   = "lambda-assistant"
+      custom_origin_config {
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "https-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+        origin_read_timeout    = 60
+      }
+      custom_header {
+        name  = "X-CloudFront-Shared-Secret"
+        value = random_password.cloudfront_shared_secret.result
+      }
+    }
+  }
+
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
@@ -488,6 +517,32 @@ resource "aws_cloudfront_distribution" "frontend" {
     function_association {
       event_type   = "viewer-request"
       function_arn = aws_cloudfront_function.spa_rewrite.arn
+    }
+  }
+
+  # /api/projects/*/assistant/* -> the assistant's Function URL (assistant.tf),
+  # only while it exists. Before /api/*, which would otherwise take it: CloudFront
+  # matches ordered behaviours in order. The status (GET
+  # /api/projects/:id/assistant, no trailing segment) stays on the API. The
+  # same policies and prefix strip as /api/* (the WAF covers both: it is on the
+  # distribution, and its API rate rule matches /api/).
+  dynamic "ordered_cache_behavior" {
+    for_each = local.assistant_enabled ? [1] : []
+    content {
+      path_pattern               = "/api/projects/*/assistant/*"
+      target_origin_id           = "lambda-assistant"
+      viewer_protocol_policy     = "https-only"
+      allowed_methods            = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+      cached_methods             = ["GET", "HEAD"]
+      compress                   = false                                  # an event stream: compression would buffer it
+      cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+      origin_request_policy_id   = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # Managed-AllViewerExceptHostHeader
+      response_headers_policy_id = aws_cloudfront_response_headers_policy.api.id
+
+      function_association {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.api_strip_prefix.arn
+      }
     }
   }
 
