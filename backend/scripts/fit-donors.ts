@@ -6,7 +6,7 @@
 //   pnpm fit-donors --caravan <dir> --basins <basins.geojson> --out <donors.json[.gz]>
 //       [--from 1981-01-01] [--to YYYY-MM-DD] [--product sat|rnl]
 //       [--evaporation <dataset>] [--soils <dataset>] [--max-area <km²>]
-//       [--only <id,…>] [--budget 1500] [--starts 5] [--seed 1]
+//       [--min-kge 0.5] [--only <id,…>] [--budget 1500] [--starts 5] [--seed 1]
 //
 //  --caravan  the unzipped GRDC_Caravan_extension_csv/ (Zenodo
 //             10.5281/zenodo.15349031): attributes/grdc/attributes_other_grdc.csv
@@ -21,8 +21,12 @@
 // regulation (HydroATLAS dor_pc_pva, stored × 10), at most --max-area km²
 // (default 10 000: a lumped GR4J over a larger basin says little about a
 // catchment the app models), and at least DONOR_MIN_FLOW_YEARS of observed
-// flow inside the window. Each is fitted with the engine's own calibrate()
-// (KGE′, the typical bounds, x2 fixed at 0, the split-sample test run) on:
+// flow inside the window; once fitted, it needs a KGE′ of at least
+// --min-kge (default 0.5) on its own record. Each is fitted with the engine's
+// own calibrate() (KGE′, the typical bounds, x2 fixed at 0, the split-sample
+// test run) on the forcing below; a basin with a day of no rain inside the
+// copy's run is refused rather than run dry that day. How many donors ended at
+// a typical bound, per parameter, is printed:
 //
 //  - rain: the area-weighted mean of the CHIRPS v3 cells the polygon covers
 //    (each 0.05° cell by its area × the share inside, geo/gridShares.ts),
@@ -47,6 +51,7 @@ import {
 	calibrate,
 	ENGINE_VERSION,
 	fromEpochDay,
+	GR4J_PARAMS,
 	toEpochDay,
 	type CalibrationReport,
 	type Gr4jParams,
@@ -313,12 +318,26 @@ export function fitDonor(input: ModelInput, opts: FitOptions = {}): { params: Gr
 	};
 }
 
+/** Below this KGE′ on its own record a fit's parameters mean little, so the basin is no donor (the ensemble's behavioural threshold, §2.10e; the hydrologist's to confirm). */
+export const DEFAULT_MIN_KGE = 0.5;
+
+/** The free parameters that ended within 1 % (of the box's width) of a typical bound: there the search, not the record, set them. */
+export function atBounds(params: Gr4jParams): string[] {
+	return GR4J_PARAMS.filter((p) => !p.fixedByDefault)
+		.filter((p) => {
+			const [lo, hi] = p.typical;
+			const tol = 0.01 * (hi - lo);
+			return params[p.key] <= lo + tol || params[p.key] >= hi - tol;
+		})
+		.map((p) => p.key);
+}
+
 /** The fit's method in words, stored with the set. */
-export function fitMethod(o: { product: string; from: string; to: string; evaporation: string; budget: number; starts: number; seed: number; maxAreaKm2: number }): string {
+export function fitMethod(o: { product: string; from: string; to: string; evaporation: string; budget: number; starts: number; seed: number; maxAreaKm2: number; minKge: number }): string {
 	return (
 		`GR4J (engine ${ENGINE_VERSION}) calibrated per basin with calibrate(): KGE′, Perrin’s typical bounds, x2 fixed at 0, ${o.starts} starts of ${o.budget} runs, seed ${o.seed}. ` +
 		`Rain: CHIRPS v3 ${o.product} from our copy, area-weighted over the basin, ${o.from} to ${o.to} (final days only). PE: the evaporation grid “${o.evaporation}” (dPET monthly means) over the basin. ` +
-		`Donors: GRDC-Caravan basins in region D1 with at least ${DONOR_MIN_FLOW_YEARS} years of flow in that window, under ${DONOR_MAX_DOR_PCT} % regulation (HydroATLAS dor_pc_pva) and at most ${o.maxAreaKm2} km². Caravan’s ERA5-Land forcing is not used.`
+		`Donors: GRDC-Caravan basins in region D1 with at least ${DONOR_MIN_FLOW_YEARS} years of flow in that window, under ${DONOR_MAX_DOR_PCT} % regulation (HydroATLAS dor_pc_pva) and at most ${o.maxAreaKm2} km², whose fit reached KGE′ ${o.minKge} or more. Caravan’s ERA5-Land forcing is not used.`
 	);
 }
 
@@ -336,13 +355,14 @@ export interface FitDonorsArgs {
 	evaporation: string | null;
 	soils: string | null;
 	maxAreaKm2: number;
+	minKge: number;
 	only: Set<string> | null;
 	budget: number;
 	starts: number;
 	seed: number;
 }
 
-const FLAGS = ['--caravan', '--basins', '--out', '--from', '--to', '--product', '--evaporation', '--soils', '--max-area', '--only', '--budget', '--starts', '--seed'];
+const FLAGS = ['--caravan', '--basins', '--out', '--from', '--to', '--product', '--evaporation', '--soils', '--max-area', '--min-kge', '--only', '--budget', '--starts', '--seed'];
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 export function parseFitDonorsArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): FitDonorsArgs | string {
@@ -375,9 +395,12 @@ export function parseFitDonorsArgs(argv: string[], env: NodeJS.ProcessEnv = proc
 	const seed = int('--seed', 1, 0, 2 ** 31 - 1);
 	const maxAreaKm2 = int('--max-area', DEFAULT_MAX_AREA_KM2, 1, 1_000_000);
 	if (budget === null || starts === null || seed === null || maxAreaKm2 === null) return '--budget (100–100000), --starts (1–10), --seed and --max-area (km²) are whole numbers';
+	const minKgeText = flag('--min-kge');
+	const minKge = minKgeText === null ? DEFAULT_MIN_KGE : Number(minKgeText);
+	if (!(Number.isFinite(minKge) && minKge <= 1)) return '--min-kge is a KGE′, at most 1';
 	const onlyText = flag('--only');
 	const only = onlyText === null ? null : new Set(onlyText.split(',').map((s) => s.trim()).filter(Boolean));
-	return { caravan: path(caravan), basins: path(basins), out: path(out), from, to, product, evaporation: flag('--evaporation'), soils: flag('--soils'), maxAreaKm2, only, budget, starts, seed };
+	return { caravan: path(caravan), basins: path(basins), out: path(out), from, to, product, evaporation: flag('--evaporation'), soils: flag('--soils'), maxAreaKm2, minKge, only, budget, starts, seed };
 }
 
 /** The polygons of a GeoJSON FeatureCollection by their gauge_id. */
@@ -397,12 +420,22 @@ export async function basinRain(store: MirrorStore, product: 'sat' | 'rnl', g: G
 	const cells = basinCells(g);
 	if ('problem' in cells) return cells;
 	const got = await readCells(store, product, cells.cells, window);
-	const rain = arealRain(got.cells.read, got.cells.values, cells.weights);
+	return trimRain(arealRain(got.cells.read, got.cells.values, cells.weights), window.start);
+}
+
+/**
+ * A daily rain series from `start`, trimmed to its run of days with a value;
+ * a day inside the run with none is a problem (it would run as 0 mm, the
+ * engine's dry day, and bias the fit), as is a series with no value at all.
+ */
+export function trimRain(rain: (number | null)[], start: string): { startDate: string; rainMm: (number | null)[] } | { problem: string } {
 	const first = rain.findIndex((v) => v !== null);
 	if (first < 0) return { problem: 'the copy holds no final day of the window over it' };
 	let last = rain.length - 1;
 	while (rain[last] === null) last--;
-	return { startDate: fromEpochDay(toEpochDay(window.start) + first), rainMm: rain.slice(first, last + 1) };
+	const gaps = rain.slice(first, last + 1).filter((v) => v === null).length;
+	if (gaps) return { problem: `${gaps} day(s) inside the copy's run have no rain over it (they would run as dry days)` };
+	return { startDate: fromEpochDay(toEpochDay(start) + first), rainMm: rain.slice(first, last + 1) };
 }
 
 /** The flow over [startDate, startDate + days), null outside the record. */
@@ -429,6 +462,7 @@ async function run(args: FitDonorsArgs, url: string): Promise<void> {
 		if (args.soils && !soil) throw new Error(`no soil grid "${args.soils}" is loaded`);
 		const to = args.to ?? fromEpochDay(Math.floor(Date.now() / 86_400_000));
 		const donors: DonorRecord[] = [];
+		const boundHits = new Map<string, number>();
 		for (const [i, b] of kept.entries()) {
 			const say = (m: string) => console.error(`[${i + 1}/${kept.length}] ${b.id}: ${m}`);
 			const g = polygons.get(b.id);
@@ -460,6 +494,11 @@ async function run(args: FitDonorsArgs, url: string): Promise<void> {
 				refused.push({ id: b.id, reason: 'the fit has no KGE′ (too few scored days)' });
 				continue;
 			}
+			if (fit.kgeFit < args.minKge) {
+				refused.push({ id: b.id, reason: `KGE′ ${fit.kgeFit.toFixed(2)} on its own record, under --min-kge ${args.minKge}: its parameters say little` });
+				continue;
+			}
+			for (const p of atBounds(fit.params)) boundHits.set(p, (boundHits.get(p) ?? 0) + 1);
 			donors.push({
 				id: b.id,
 				lon: b.lon,
@@ -478,7 +517,7 @@ async function run(args: FitDonorsArgs, url: string): Promise<void> {
 		const meta = {
 			source: `GRDC-Caravan v0.6 daily streamflow (Zenodo 10.5281/zenodo.15349031) and HydroATLAS v1.0 attributes; GR4J fitted on CHIRPS v3 (${args.product}, our copy) and ${evap.dataset} PE`,
 			version: `GRDC-Caravan 0.6; HydroATLAS 1.0; engine ${ENGINE_VERSION}`,
-			method: fitMethod({ product: args.product, from: args.from, to, evaporation: evap.dataset, budget: args.budget, starts: args.starts, seed: args.seed, maxAreaKm2: args.maxAreaKm2 }),
+			method: fitMethod({ product: args.product, from: args.from, to, evaporation: evap.dataset, budget: args.budget, starts: args.starts, seed: args.seed, maxAreaKm2: args.maxAreaKm2, minKge: args.minKge }),
 			attribution: GR4J_DONORS.attribution,
 			engineVersion: ENGINE_VERSION
 		};
@@ -486,13 +525,15 @@ async function run(args: FitDonorsArgs, url: string): Promise<void> {
 		writeFileSync(args.out, /\.gz$/i.test(args.out) ? gzipSync(json) : json);
 		for (const r of refused) console.log(`refused ${r.id}: ${r.reason}`);
 		console.log(`${donors.length} donor(s) written to ${args.out}; ${refused.length} basin(s) in the region refused`);
+		// A parameter stacked at a typical bound can't leave the box, which narrows the prior's p10–p90 (model.md §2.10m).
+		for (const [p, n] of boundHits) console.log(`${p}: ${n} donor(s) ended within 1 % of a typical bound`);
 	} finally {
 		await client.end();
 	}
 }
 
 const USAGE =
-	'usage: pnpm fit-donors --caravan <dir> --basins <basins.geojson> --out <donors.json[.gz]> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--product sat|rnl] [--evaporation <dataset>] [--soils <dataset>] [--max-area <km²>] [--only <id,…>] [--budget n] [--starts n] [--seed n]';
+	'usage: pnpm fit-donors --caravan <dir> --basins <basins.geojson> --out <donors.json[.gz]> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--product sat|rnl] [--evaporation <dataset>] [--soils <dataset>] [--max-area <km²>] [--min-kge 0.5] [--only <id,…>] [--budget n] [--starts n] [--seed n]';
 
 if (import.meta.url === `file://${process.argv[1]}`) {
 	loadDevEnv();

@@ -3268,12 +3268,13 @@ copy's S3 URL with your SSO profile, or a local copy of it. The steps:
    (paths resolve from the folder the command is typed in). Optional:
    `--from` (default 1981-01-01, CHIRPS v3's start), `--to`, `--product
    sat|rnl`, `--evaporation <dataset>` and `--soils <dataset>` (default the
-   newest real one of each), `--max-area` (default 10 000 km²), `--only
+   newest real one of each), `--max-area` (default 10 000 km²), `--min-kge` (default 0.5), `--only
    <id,…>` to try a few, and `--budget`, `--starts` and `--seed`. A donor
    is a basin in region D1 with at least 8 years of flow in the window and
-   under 5 % regulation. Each is calibrated with the engine's own
+   under 5 % regulation, whose fit reaches KGE′ 0.5 (`--min-kge`). Each is calibrated with the engine's own
    `calibrate()` (KGE′, the typical bounds, x2 fixed, the split-sample
-   test). Every basin it refuses is printed with its reason. Expect a few
+   test). Every basin it refuses is printed with its reason, and so is how
+   many donors ended at a typical bound, per parameter. Expect a few
    hundred basins, each a few seconds to a minute.
 4. Look at it locally: `pnpm import:gr4j-donors donors-d1.json.gz --dataset Caravan-D1-2026`.
 5. Keep the zip under `originals/gr4j-donors/`, then upload and load:

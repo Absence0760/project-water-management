@@ -12,6 +12,7 @@ import { fixtureMirrorUrl } from '../src/mirror/source.js';
 import { openStore } from '../src/mirror/store.js';
 import {
 	arealRain,
+	atBounds,
 	basinCells,
 	basinPolygons,
 	basinRain,
@@ -24,7 +25,8 @@ import {
 	parseCsv,
 	parseFitDonorsArgs,
 	selectCandidates,
-	streamflowFromCsv
+	streamflowFromCsv,
+	trimRain
 } from './fit-donors.js';
 
 const square = (w: number, s: number, e: number, n: number): Geometry => ({
@@ -113,6 +115,12 @@ describe('our forcing over a basin', () => {
 		expect(rain).toEqual([3.5, 4, null, null]);
 	});
 
+	it('trims the rain to its run of days and refuses a day with none inside it', () => {
+		expect(trimRain([null, 1, 0, 2, null], '2000-01-01')).toEqual({ startDate: '2000-01-02', rainMm: [1, 0, 2] });
+		expect(trimRain([1, null, 2], '2000-01-01')).toEqual({ problem: expect.stringMatching(/^1 day\(s\) inside/) });
+		expect(trimRain([null, null], '2000-01-01')).toEqual({ problem: expect.stringMatching(/no final day/) });
+	});
+
 	it('reads a basin’s rain from the copy, trimmed to its final days', async () => {
 		const store = openStore(fixtureMirrorUrl());
 		const got = await basinRain(store, 'sat', square(25.05, -20.25, 25.25, -20.05), { start: '2022-12-30', end: '2026-01-05' });
@@ -157,9 +165,15 @@ describe('the fit', () => {
 		expect(fit.report.objective).toBe('kgePrime');
 	});
 
+	it('names the free parameters a fit left at a typical bound', () => {
+		expect(atBounds({ x1: 1200, x2: 0, x3: 90, x4: 1.105 })).toEqual(['x1', 'x4']);
+		expect(atBounds({ x1: 400, x2: 0, x3: 90, x4: 1.7 })).toEqual([]);
+	});
+
 	it('writes a file the donor loader reads back', () => {
-		const meta = { source: 's', version: 'v', method: fitMethod({ product: 'sat', from: '1981-01-01', to: '2023-12-31', evaporation: 'dPET', budget: 1500, starts: 5, seed: 1, maxAreaKm2: 10_000 }), attribution: 'a', engineVersion: ENGINE_VERSION };
+		const meta = { source: 's', version: 'v', method: fitMethod({ product: 'sat', from: '1981-01-01', to: '2023-12-31', evaporation: 'dPET', budget: 1500, starts: 5, seed: 1, maxAreaKm2: 10_000, minKge: 0.5 }), attribution: 'a', engineVersion: ENGINE_VERSION };
 		expect(meta.method).toMatch(/KGE′, Perrin’s typical bounds/);
+		expect(meta.method).toMatch(/KGE′ 0.5 or more/);
 		const donor = {
 			id: 'SYN_1',
 			lon: 21.2,
@@ -185,12 +199,14 @@ describe('the command line', () => {
 	it('needs the Caravan directory, the polygons and the output, and checks the rest', () => {
 		expect(parseFitDonorsArgs([])).toMatch(/--caravan/);
 		const ok = parseFitDonorsArgs(['--caravan', 'c', '--basins', 'b.geojson', '--out', 'd.json.gz', '--only', 'A,B'], { INIT_CWD: '/w' });
-		expect(ok).toMatchObject({ caravan: '/w/c', basins: '/w/b.geojson', out: '/w/d.json.gz', from: '1981-01-01', to: null, product: 'sat', maxAreaKm2: 10_000, budget: 1500, starts: 5, seed: 1 });
+		expect(ok).toMatchObject({ caravan: '/w/c', basins: '/w/b.geojson', out: '/w/d.json.gz', from: '1981-01-01', to: null, product: 'sat', maxAreaKm2: 10_000, minKge: 0.5, budget: 1500, starts: 5, seed: 1 });
 		expect((ok as { only: Set<string> }).only).toEqual(new Set(['A', 'B']));
 		expect(parseFitDonorsArgs(['--caravan', 'c', '--basins', 'b', '--out', 'd.csv'])).toMatch(/--out/);
 		expect(parseFitDonorsArgs(['--caravan', 'c', '--basins', 'b', '--out', 'd.json', '--product', 'era5'])).toMatch(/--product/);
 		expect(parseFitDonorsArgs(['--caravan', 'c', '--basins', 'b', '--out', 'd.json', '--starts', '0'])).toMatch(/--starts/);
 		expect(parseFitDonorsArgs(['--caravan', 'c', '--basins', 'b', '--out', 'd.json', '--from', '2000-01-01', '--to', '1999-01-01'])).toMatch(/--to/);
+		expect(parseFitDonorsArgs(['--caravan', 'c', '--basins', 'b', '--out', 'd.json', '--min-kge', '1.2'])).toMatch(/--min-kge/);
+		expect(parseFitDonorsArgs(['--caravan', 'c', '--basins', 'b', '--out', 'd.json', '--min-kge', '0.3'])).toMatchObject({ minKge: 0.3 });
 		expect(parseFitDonorsArgs(['--bogus'])).toBe('unknown option --bogus');
 	});
 });

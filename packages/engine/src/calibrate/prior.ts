@@ -11,8 +11,11 @@
 // caller, every calibration is bit-identical to before (issue #622 step 4's
 // wiring follows, docs/followups.md).
 //
-// The method (Oudin et al. 2008, Water Resour. Res. 44, W03413, combining
-// physical similarity and spatial proximity):
+// The method, after Oudin et al. (2008, Water Resour. Res. 44, W03413), who
+// compared physical similarity and spatial proximity and found combining
+// them best; the blend, the weighting and the parameter quantiles below are
+// this model's own (Oudin et al. preferred averaging the donors' simulated
+// flows, which the flow-space score still to come tests):
 //
 //  1. Each attribute (PRIOR_ATTRIBUTES; catchment area in log space) is
 //     standardised over the donors: z = (a − mean) / sd, sd the population
@@ -23,7 +26,9 @@
 //     none, and is ranked on distance alone); its geographic distance d_g is
 //     the great-circle distance in km between the two outlets (or centroids).
 //  3. Each is scaled by its median over the donors (so neither unit
-//     dominates) and mixed: D = w × d_s / med(d_s) + (1 − w) × d_g / med(d_g),
+//     dominates; when the median is 0, as when most donors tie the target
+//     exactly, by the mean of the values over 0, so the term never vanishes)
+//     and mixed: D = w × d_s / med(d_s) + (1 − w) × d_g / med(d_g),
 //     w = `similarityWeight` (default 0.5; 1 = similarity only, 0 =
 //     proximity only).
 //  4. The k donors with the smallest D (ties by id) are kept and weighted by
@@ -70,7 +75,7 @@ const LOG_PARAMS: ReadonlySet<PriorParam> = new Set(['x1', 'x3', 'x4']);
 export interface Gr4jDonor {
 	/** Its basin id (GRDC-Caravan's gauge_id, e.g. `GRDC_1160091`). */
 	id: string;
-	/** The outlet (or centroid), WGS84 degrees. */
+	/** The gauge outlet, WGS84 degrees (a target gives its outlet too, so the distances compare like with like). */
 	lon: number;
 	lat: number;
 	attributes: CatchmentAttributes;
@@ -238,6 +243,14 @@ const median = (v: readonly number[]): number => {
 	return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 };
 
+/** The median, or when that is 0 the mean of the values over 0 (0 only when every value is). */
+export function scaleOf(v: readonly number[]): number {
+	const m = median(v);
+	if (m > 0) return m;
+	const pos = v.filter((x) => x > 0);
+	return pos.length ? pos.reduce((a, b) => a + b, 0) / pos.length : 0;
+}
+
 /**
  * The weighted quantile `p` (0–1) of `values` with `weights` (Hazen positions,
  * see the header), interpolated in log space when `log`.
@@ -333,7 +346,7 @@ function ols(x: readonly number[], y: readonly number[]): Ols | null {
  * under SOIL_PRIOR_MIN_LOO_R2.
  */
 export function soilX1Relation(donors: readonly Pick<Gr4jDonor, 'params' | 'pawcMm'>[]): SoilX1Relation {
-	const with_ = donors.filter((d) => d.pawcMm != null && d.pawcMm > 0 && d.params.x1 > 0);
+	const with_ = donors.filter((d) => d.pawcMm != null && Number.isFinite(d.pawcMm) && d.pawcMm > 0 && d.params.x1 > 0);
 	const n = with_.length;
 	if (n < SOIL_PRIOR_MIN_DONORS) return { status: 'dropped', n, looR2: null, reason: `only ${n} donor(s) have a soil water capacity: the relation needs ${SOIL_PRIOR_MIN_DONORS}` };
 	const x = with_.map((d) => Math.log(d.pawcMm!));
@@ -367,6 +380,16 @@ export function soilX1At(rel: Extract<SoilX1Relation, { status: 'used' }>, pawcM
 // The prior
 // ---------------------------------------------------------------------------
 
+/** The valid donors, the first of any repeated id only (two donors under one id would read each other's parameters). */
+function usable(donors: readonly Gr4jDonor[]): Gr4jDonor[] {
+	const seen = new Set<string>();
+	return donors.filter((d) => {
+		if (!validDonor(d) || seen.has(d.id)) return false;
+		seen.add(d.id);
+		return true;
+	});
+}
+
 const validDonor = (d: Gr4jDonor) =>
 	Number.isFinite(d.lon) && Number.isFinite(d.lat) && PRIOR_PARAMS.every((p) => Number.isFinite(d.params[p]) && (!LOG_PARAMS.has(p) || d.params[p] > 0));
 
@@ -379,8 +402,8 @@ function rank(target: PriorTarget, donors: readonly Gr4jDonor[], k: number, w: n
 		distanceKm: greatCircleKm(target.lon, target.lat, d.lon, d.lat)
 	}));
 	const sims = rows.map((r) => r.similarity).filter((s): s is number => s !== null);
-	const medS = median(sims);
-	const medG = median(rows.map((r) => r.distanceKm));
+	const medS = scaleOf(sims);
+	const medG = scaleOf(rows.map((r) => r.distanceKm));
 	const scaled = (v: number, m: number) => (m > 0 ? v / m : 0);
 	// A donor with no similarity is ranked on distance alone (as if similarity weighed nothing for it).
 	const scored = rows.map((r) => ({
@@ -405,7 +428,7 @@ const paramError = (p: PriorParam, predicted: number, actual: number) => (LOG_PA
 
 /** The method's leave-one-out score on `donors` (k and the weight as given). */
 export function priorLeaveOneOut(donors: readonly Gr4jDonor[], k: number, similarityWeight: number): PriorLooScore | null {
-	const ok = donors.filter(validDonor);
+	const ok = usable(donors);
 	if (ok.length < PRIOR_LOO_MIN_DONORS) return null;
 	// Only parameters that vary among the donors say anything (x2, fixed at 0, doesn't).
 	const scored = PRIOR_PARAMS.filter((p) => new Set(ok.map((d) => d.params[p])).size > 1);
@@ -446,7 +469,7 @@ export function priorLeaveOneOut(donors: readonly Gr4jDonor[], k: number, simila
  * k past the donors keeps them all.
  */
 export function regionalPrior(target: PriorTarget, donors: readonly Gr4jDonor[], opts: RegionalPriorOptions = {}): RegionalPrior {
-	const ok = donors.filter(validDonor);
+	const ok = usable(donors);
 	// The donors it could use: an invalid one changes nothing the prior says.
 	const hash = donorSetHash(ok);
 	if (!ok.length) return { ok: false, reason: donors.length ? 'no donor has a full, valid parameter set' : 'no donor basins are loaded', donorCount: donors.length, donorSetHash: hash };
@@ -459,7 +482,7 @@ export function regionalPrior(target: PriorTarget, donors: readonly Gr4jDonor[],
 	const kept = rank(target, ok, k, w);
 	const params = paramPriors(kept, new Map(ok.map((d) => [d.id, d])));
 	const soil = soilX1Relation(ok);
-	const soilX1 = soil.status === 'used' && target.pawcMm != null && target.pawcMm > 0 ? soilX1At(soil, target.pawcMm) : null;
+	const soilX1 = soil.status === 'used' && target.pawcMm != null && Number.isFinite(target.pawcMm) && target.pawcMm > 0 ? soilX1At(soil, target.pawcMm) : null;
 	return {
 		ok: true,
 		params,

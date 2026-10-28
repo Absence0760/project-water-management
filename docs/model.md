@@ -10739,6 +10739,16 @@ whose outlet is in region D1, with:
 - under 5 % upstream regulation (HydroATLAS `dor_pc_pva`, stored × 10);
 - at most 10 000 km² by default (`--max-area`; a lumped GR4J over a larger
   basin says little about a catchment the app models).
+- once fitted, KGE′ ≥ 0.5 on its own record by default (`--min-kge`, the
+  ensemble's behavioural threshold, §2.10e): a poor fit's parameters say
+  little. This one is proposed, for the hydrologist to confirm.
+
+A basin with a day of no rain inside the copy's run is refused rather than
+run dry that day. The fit prints how many donors ended within 1 % of a
+typical bound, per parameter. Such a value was set by the search box, not
+the record, so stacked bounds narrow the prior's p10–p90 and flatter its
+leave-one-out score; whether donors should be fitted on the wide bounds
+instead is open (followups.md).
 
 Each donor is **recalibrated on the app's own forcing**, never on Caravan's
 ERA5-Land, because parameters absorb forcing bias (x1 above all). The
@@ -10769,8 +10779,13 @@ integers):
 | area | – | km², compared in log space |
 
 **The prior** (`packages/engine/src/calibrate/prior.ts` `regionalPrior(target,
-donors, opts)`). It combines physical similarity with spatial proximity, as
-Oudin et al. (2008, *Water Resour. Res.* 44, W03413) did:
+donors, opts)`). After Oudin et al. (2008, *Water Resour. Res.* 44, W03413),
+who compared physical similarity and spatial proximity and found combining
+them best. The blend, the weighting and the parameter quantiles below are
+this model's own. Oudin et al. preferred averaging the donors' simulated
+flows to averaging their parameters, which the flow-space score still to
+come will test. Distances are between gauge outlets, so a target gives its
+outlet too:
 
 1. Standardise each attribute over the donors: z = (a − mean) / sd, the
    population sd. An attribute with no spread, or one the target lacks, is
@@ -10779,8 +10794,11 @@ Oudin et al. (2008, *Water Resour. Res.* 44, W03413) did:
    (z_target − z_donor)²). Geographic distance: d_g, the great-circle km
    between the outlets.
 3. Mixed dissimilarity: D = w × d_s / median(d_s) + (1 − w) × d_g /
-   median(d_g), with w = `similarityWeight`, 0.5 by default. A donor with no
-   shared attribute is ranked on d_g alone.
+   median(d_g), with w = `similarityWeight`, 0.5 by default. When a median
+   is 0 (most donors tie the target exactly), the term is scaled by the mean
+   of its values over 0 instead, so it never vanishes. A donor with no
+   shared attribute is ranked on d_g alone. Of a repeated id, only the first
+   donor is used.
 4. Keep the k donors with the smallest D (k = 7 by default, the upper end
    of the 4–7 Oudin found best; all of them when fewer). Weight each by
    1 / max(D, 10⁻⁹), normalised.

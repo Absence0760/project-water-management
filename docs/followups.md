@@ -503,6 +503,19 @@ open:
       holds, and stores it on `gr4j_donor_dataset` (a new column, a forward
       migration). Trigger: with step 4's wiring, before the UI shows a skill
       score.
+- [ ] **Donors at a typical bound.** Broken (maybe): donors are fitted on
+      Perrin's typical bounds, so x4 of a large basin or x1 of a semi-arid
+      one can stack at a bound, and the prior's p10–p90 can never leave the
+      box. `fit-donors.ts` prints the count per parameter; nothing records
+      it per donor. Durable fix: a per-donor at-bound column (a forward
+      migration), then with the hydrologist either fit donors on the wide
+      bounds or leave a bound-hit donor out of that parameter's quantiles.
+      Trigger: the first real fit's counts.
+- [ ] **The prior's forcing against the target's.** Donors are fitted on
+      uncorrected CHIRPS v3 finals. A target running on station rain, an
+      areal correction or a CHIRPS correction should be told its prior
+      comes from other forcing (parameters absorb forcing bias). Durable
+      fix: a note in the fit record and the panel. Trigger: step 5.
 - [ ] **A target's own attributes.** Missing: `regionalPrior` needs the
       target's HydroATLAS attributes. The donors carry theirs, from
       GRDC-Caravan; a project's catchment or unit has none. Durable fix:
@@ -527,8 +540,9 @@ open:
       *Soils and GR4J donors*). Fitting needs the copy's CHIRPS v3 finals
       back to 1981 and a real dPET grid in the checkout's database. Trigger:
       step 5 shipping. The hydrologist accepts the donor criteria (≥ 8
-      years, < 5 % regulation, ≤ 10 000 km²) and the similarity method
-      first (#622 Blockers).
+      years, < 5 % regulation, ≤ 10 000 km², and the proposed KGE′ ≥ 0.5
+      on the donor's own record) and the similarity method first (#622
+      Blockers).
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 

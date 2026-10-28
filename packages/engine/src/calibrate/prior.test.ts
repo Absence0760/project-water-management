@@ -13,6 +13,7 @@ import {
 	priorLeaveOneOut,
 	priorPenalty,
 	regionalPrior,
+	scaleOf,
 	similarityDistance,
 	soilX1At,
 	soilX1Relation,
@@ -103,6 +104,33 @@ describe('regionalPrior', () => {
 		expect(w.n1! / w.n2!).toBeCloseTo(2, 9);
 		expect(w.n1! / w.n4!).toBeCloseTo(4, 9);
 		expect(p.donors[0]!.distanceKm).toBeCloseTo(greatCircleKm(20, -30, 20, -31), 9);
+	});
+
+	it('keeps similarity in play when most donors tie the target exactly (the median d_s is 0)', () => {
+		// Three wet donors match the target's aridity exactly but lie 100–200 km off; two dry ones lie 1–2 km off.
+		const ds = [
+			donor('w1', 20, -30.9, 200, { attributes: attrs({ aridity: 0.5 }) }),
+			donor('w2', 20, -31.4, 210, { attributes: attrs({ aridity: 0.5 }) }),
+			donor('w3', 20, -31.8, 220, { attributes: attrs({ aridity: 0.5 }) }),
+			donor('d1', 20, -30.009, 1100, { attributes: attrs({ aridity: 0.1 }) }),
+			donor('d2', 20, -30.018, 1150, { attributes: attrs({ aridity: 0.1 }) })
+		];
+		const p = regionalPrior({ lon: 20, lat: -30, attributes: attrs({ aridity: 0.5 }) }, ds, { k: 3, similarityWeight: 0.9, leaveOneOut: false });
+		if (!p.ok) throw new Error(p.reason);
+		// d_s's median is 0, so it is scaled by the mean of the positive ones and the matching donors win.
+		expect(p.donors.map((d) => d.id).sort()).toEqual(['w1', 'w2', 'w3']);
+		expect(p.params.x1.p50).toBeLessThan(250);
+		expect(scaleOf([0, 0, 0, 2, 4])).toBe(3);
+		expect(scaleOf([0, 0])).toBe(0);
+		expect(scaleOf([1, 2, 3])).toBe(2);
+	});
+
+	it('takes only the first donor of a repeated id', () => {
+		const ds = [donor('a', 20, -31, 100), donor('a', 20, -31.5, 900), donor('b', 20, -32, 200)];
+		const p = regionalPrior({ lon: 20, lat: -30, attributes: NONE }, ds, { leaveOneOut: false });
+		if (!p.ok) throw new Error(p.reason);
+		expect(p.k).toBe(2);
+		expect(p.params.x1.p90).toBeLessThanOrEqual(200);
 	});
 
 	it('keeps the k nearest and ranks ties by id', () => {
