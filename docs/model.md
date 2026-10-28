@@ -10767,10 +10767,9 @@ any zone with land units, is not 0. `summary.runoff.params` stays the
 calibration site's zone's parameters (the catchment's stores are the units'
 area-weighted means, so the run's runoff self-check caps the production store
 at the units' area-weighted X1); each zone's are in `summary.unitRain.zones`.
-While the report, the evidence pack, the uncertainty ensemble and automated
-calibration don't yet read the zones, every run that applies one warns that
-they show or vary only the site's parameters (`Calibration zones: N land
-units ran on …`).
+While the uncertainty ensemble and automated calibration don't yet read the
+zones, every run that applies one warns that they vary only the site's
+parameters (`Calibration zones: N land units ran on …`).
 
 **Only under Per unit.** Under Fragmentation one GR4J runs for the whole
 catchment (§2.5), so zones can't have their own parameters: ticked rows warn
@@ -10780,9 +10779,32 @@ catchment's parameters.
 
 **The run summary.** `summary.unitRain.zones` (only when zones applied):
 each usable zone upstream first, then the site's own zone (`nodeId` null),
-each `{ nodeId, name, units, params, fitted }`. The run comparison lists a
-change of the ticked rows' parameters (*Calibration zones*; a window, a fit
-record or an unticked row is no change).
+each `{ nodeId, name, units, params, fitted }`.
+
+**Statistics at each zone's gauge** (`summary.calibrationZones`, issue #555
+round 4, `run.ts` `zoneCalibrationStats`): for each zone above the site, in
+the same order, the run's calibration statistics (§2.10k's
+`CalibrationStats`) of its gauge's record (the row's record, else the
+gauge's first) against the gauge's simulated outflow, on the row's window
+and exclusions, with `siteNodeId`, `siteName` and `fitStatus` computed on the
+zone's own settings (`zoneCalibrationSettings`: its parameters, fit record,
+window, exclusions and record), so each site is in sample only when its own
+zone's parameters were fitted on those days. The site's own zone is
+`summary.calibration`, as before. A zone whose gauge has no record is left
+out; absent when no zone applied. Statistics only: no other output changes,
+so a run without zones is unchanged to the bit. A gauge's own low-flow
+periods and quality flags are not applied here, as at a gauge site (§2.10k).
+
+**Comparison, report and evidence pack.** The run comparison words each zone
+(`calibrationZoneChanges`: added, removed, or what changed among its
+parameters, window, record, exclusions and fit record) and sets each zone
+gauge's statistics side by side (`comparison.calibrationZones`;
+run-comparison.md). The report's and the Calibration page's **Calibration
+zones** table lists each zone's units, parameters and scores (ui.md § Runs
+& results), and the evidence report (`evidence-22`) every zone's
+parameters, fit record and scores (evidence-pack.md § Calibration zones).
+The Network and the Map colour each unit by its zone (ui.md § Network,
+maps.md § Calibration zones on the map).
 
 **The stepwise fit** (`calibrate/stepwise.ts` `calibrateStepwise`). Zones are
 fitted in network order, **upstream first**: a zone with more ticked gauges
@@ -10835,11 +10857,9 @@ Projects). Each zone warning a run gives has a stable code
 links it to the table (`?field=fld-cal-zones`), to Fit the parameters, or to
 Model selection for flow generation.
 
-**Not yet** (issue #555's next round, docs/followups.md): the zones on the
-Network tab and the Map, calibration statistics per ticked site in a run, the
-report's and evidence pack's per-zone lines, a per-zone run comparison, and
-automated calibration and the uncertainty ensemble per zone (both still fit
-or perturb the site's zone's parameters alone).
+**Not yet** (docs/followups.md § Calibration zones): automated calibration
+and the uncertainty ensemble per zone (both still fit or perturb the site's
+zone's parameters alone).
 
 ### 2.10l Modelled vs observed dam area (app, issue #604 R5-B)
 

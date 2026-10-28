@@ -933,6 +933,40 @@ the legend). What the page shows is in [ui.md § Map](./ui.md#map-tabmap).
   CatchmentMap's DOM buttons, which don't read `fills`. The EWR is in the
   card, the table and the legend's count line meanwhile.
 
+## Calibration zones on the map
+
+Issue #555 (model.md §2.10n): when a calibration zone applies (a gauge
+ticked in Calibrate at several gauges, under Per unit flow generation),
+**Colour areas by** offers **Calibration zone** (`measure=zone`), with or
+without a run. It is the settings', not a run's: the zones come from the
+model as edited and the project's saved settings by the engine's own rule
+(`resolveZones`, through `frontend/src/lib/calibration/zoneGroups.ts`), the
+same groups and colours the Network colours by, so the map shows what the
+next run applies.
+
+- **No new route.** The settings come with the project (`MapTab`'s
+  `settings`), the units' parcels with the features already loaded; a parcel
+  reaches its zone through `map_feature.node_id`.
+- **Colours** (`mapResults.ts` `zoneFills`): each area linked to a land unit
+  takes its zone's colour token, the crop palette's in order
+  (`ZONE_TOKENS`, `--series-1`, `--series-2`, `--series-3`, `--series-5`, …;
+  upstream first, the calibration site's zone last), read from `<html>`'s
+  computed style and again on a theme switch (`MapResults.zoneColours`), as
+  the bands are. Every other area (not linked, a gauge, a water user, a farm
+  with no land area) takes "No figure"'s colour (`resultFills`). Past nine
+  zones the colours repeat; the name beside each is what tells them apart.
+- **Words.** The legend lists each zone ("Middle weir zone (1 unit)",
+  "Outflow gauge zone (calibration site)", ", not fitted yet"), the card
+  adds **Calibration zone** and Every feature a **Calibration zone** column
+  (`featureZone`), so a colour is never the only cue; the outline and the
+  words carry WCAG 1.4.1 and 1.4.11, as for results.
+- **Not offered** under Fragmentation, or when no ticked gauge is usable
+  (the run would apply none). A `measure=zone` link then shows the kinds.
+
+`mapResults.test.ts` (the options, the fills, the words),
+`calibration/zoneGroups.test.ts`, and `e2e/tests/calibration-zones-views.spec.ts`
+(the legend's colours read from the palette tokens, no pixels read).
+
 ## In an evidence pack
 
 The licensing evidence report prints a site locality map at the top of § 1
