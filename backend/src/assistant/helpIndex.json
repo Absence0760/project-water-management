@@ -4311,7 +4311,7 @@
 			],
 			"url": "/help/glossary/input-data#preview-view",
 			"summary": "Which columns the daily preview shows: All, one hydrological unit’s rain side by side, or a group (stations, catchment rain, flow).",
-			"text": "All shows every column, as the preview always has. A hydrological unit shows only what that unit’s rain is made of, side by side: its station as recorded, the station adjusted to the unit (× the ratio of the unit’s MAP to the station’s, three decimals in the header), the unit’s own CHIRPS as stored and bias-corrected, the rain a run reads and where each day came from, then any other series stored at the unit. Above the table it lists the twelve monthly CHIRPS factors, the station they were fitted against, or why that pairing was refused. A unit without a rainfall station, under per-unit rain, shows the links of its own chain instead: its own gauge after the checks, the catchment gauge adjusted to it (× its MAP ratio), its CHIRPS as stored and levelled as a run levels it, the rain used and which link each day came from, with the rule and its factors above the table. With per-unit rain off it shows only the series stored at it. The groups gather the rainfall stations, the average catchment rainfall (when Settings assigns the catchment a station) and every flow record with its m³/day and the calibration exclusions. The Columns checkboxes hide columns inside the view, and Missing only and Flagged only read only the stored series shown. The view is kept in the address while the preview is open, so a reload or a shared link opens the same view."
+			"text": "All shows every column, as the preview always has. A hydrological unit shows only what that unit’s rain is made of, side by side: its station as recorded, the station adjusted to the unit (× the ratio of the unit’s MAP to the station’s, three decimals in the header), each patch station raw and adjusted to the unit in its patching priority, the unit’s own CHIRPS as stored and bias-corrected, the rain a run reads and where each day came from, then any other series stored at the unit. Above the table it lists the twelve monthly CHIRPS factors, fitted for that unit against its correcting station’s rain adjusted to the unit’s MAP, or why that pairing was refused, and the patching priority with the days each source filled. A unit without a rainfall station, under per-unit rain, shows the links of its own chain instead: its own gauge after the checks, the catchment gauge adjusted to it (× its MAP ratio), its CHIRPS as stored and levelled as a run levels it, the rain used and which link each day came from, with the rule and its factors above the table. With per-unit rain off it shows only the series stored at it. The groups gather the rainfall stations, the average catchment rainfall (when Settings assigns the catchment a station) and every flow record with its m³/day and the calibration exclusions. The Columns checkboxes hide columns inside the view, and Missing only and Flagged only read only the stored series shown. The view is kept in the address while the preview is open, so a reload or a shared link opens the same view."
 		},
 		{
 			"kind": "glossary",
@@ -4332,6 +4332,30 @@
 			"url": "/help/glossary/input-data#preview-area-station-scaled",
 			"summary": "An area’s rainfall station as recorded × the ratio of the area’s MAP to the station’s: derived when viewed, not stored. (mm/day)",
 			"text": "Shown for the average catchment rainfall and each land unit that reads a rainfall station (Settings → Model selection for flow generation). It is the station’s record as stored, multiplied by the ratio a run applies: the area’s MAP divided by the station’s MAP, or 1 when a MAP is missing or the scaling is off. Blank where the station has no reading. Nothing here is stored: it is worked out when the preview opens, with the same engine code a run uses over the inputs a run would read, so it changes as soon as a series or a setting does. It is the same column as “station × ratio” in the Data tab’s Full CSV. In a unit’s own view (the View select) its header names the station, the unit and the ratio to three decimals, and the station raw column sits beside it."
+		},
+		{
+			"kind": "glossary",
+			"id": "preview-area-patch-raw",
+			"title": "Patch station raw (daily preview)",
+			"aliases": [
+				"patch station",
+				"patching priority"
+			],
+			"url": "/help/glossary/input-data#preview-area-patch-raw",
+			"summary": "A station in an area’s patching priority as recorded, over the run window, beside the same rain adjusted to the area’s MAP. (mm/day)",
+			"text": "Each station in the area’s patching priority (Model settings → Model selection for flow generation, under Per unit: “Then patch gaps from”) as stored, cut to the run window, shown in the area’s own view after the main station’s lines and before its CHIRPS, in priority order. The header numbers it by its place in the priority, the same number the Rain used from column gives a day it fills, so a CHIRPS earlier in the list keeps its place. A station the run skips (no record, or no MAP while scaling to the MAP) has no lines. The All view leaves it out: the station is a stored series column there already."
+		},
+		{
+			"kind": "glossary",
+			"id": "preview-area-patch-scaled",
+			"title": "Patch station × ratio (daily preview)",
+			"aliases": [
+				"patch station adjusted",
+				"patch times ratio"
+			],
+			"url": "/help/glossary/input-data#preview-area-patch-scaled",
+			"summary": "A patch station’s record × the area’s MAP ÷ that station’s MAP: what fills the main station’s gaps from it. Derived when viewed, not stored. (mm/day)",
+			"text": "A patch station’s record × the area’s MAP ÷ that station’s own MAP (kept between 0.25 and 4, or × 1 with the scaling off), the ratio to three decimals in the header. On a day the main station has no usable reading, the run takes the first source of the priority with a value; when that is this station, the rain used is this column’s value and Rain used from names it. Derived when the preview opens, never stored: the Full CSV’s “patch N: <station> × ratio” column, which follows the station × ratio column in priority order."
 		},
 		{
 			"kind": "glossary",
@@ -4366,7 +4390,7 @@
 			"id": "preview-area-rain-from",
 			"title": "Rain used from (daily preview)",
 			"url": "/help/glossary/input-data#preview-area-rain-from",
-			"summary": "Where each day of an area’s rain used came from: the station, corrected CHIRPS, the next fallback or no source.",
+			"summary": "Where each day of an area’s rain used came from: the station, a patch station by name, corrected CHIRPS, the next fallback or none.",
 			"text": "Each day of the area’s rain used names its source: station (the station × ratio), patch 1: and the station’s name (a patch station × its ratio, numbered by its place in the patching priority), corrected CHIRPS (the station had no reading, or the day was set aside), next fallback (nothing in the patching priority had a value that day either) or no source, which a run reads as dry. The Full CSV writes the same as station, patch 1: <station>, chirps, fallback or none. For a unit without a station the sources are the links of its chain: own gauge, catchment gauge × MAP ratio, own CHIRPS (levelled), catchment rain, forecast or no source (unitGauge, gaugeMap, unitChirps, catchment, forecast, none in the CSV). Read down it to see where a long record leans on CHIRPS, or where an area had no rain at all."
 		},
 		{
