@@ -32,6 +32,8 @@
 	const loadGridModal = () => import('#lib/components/model/GridModal.svelte');
 	// An applicant's whole view of the project (WP-3.3): the workspace's tabs all refuse them.
 	const loadApplicantView = () => import('#lib/components/scenarios/ApplicantView.svelte');
+	// The assistant's side sheet (issue #610), from the header's Assistant button.
+	const loadAssistant = () => import('#lib/components/assistant/AssistantPanel.svelte');
 </script>
 
 <script lang="ts">
@@ -72,6 +74,9 @@
 	import { fetchProjectPage, takeProjectPage } from '#lib/workspace/firstLoad.js';
 	import { compareTabHref } from '#lib/components/compare/picker.js';
 	import { carriedRun, isRunTab, pickOf, tabHref as tabLinkHref } from '#lib/workspace/tabLinks.js';
+	import { defaultRunId } from '#lib/components/runs/runList.js';
+	import { AssistantChat } from '#lib/components/assistant/chat.svelte.js';
+	import type { SettingsProposal } from '#lib/api/types.js';
 	import { focusPageStart } from '#lib/a11y/focusPage.js';
 	import { firstOutletSeries } from '#lib/series/pick.js';
 	import { withoutFarm } from '#lib/components/crops/farmDrawer.js';
@@ -696,6 +701,57 @@
 		return tabLinkHref(id, page.url.pathname, carried);
 	}
 
+	// --- the assistant (issue #610, docs/ui.md § Assistant) ---------------------
+	// One conversation per project, held here so closing the sheet or changing tab keeps it (nothing is
+	// stored on the server). Its button shows only when the server has the assistant on for this caller
+	// (GET …/assistant answers `available`); a farmer or an applicant never reaches the workspace.
+	let assistant = $state.raw<{ id: string; chat: AssistantChat } | null>(null);
+	let assistantOpen = $state(false);
+	let assistantMounted = $state(false);
+	const assistantReady = $derived(!!project && !applicantProject);
+	$effect(() => {
+		const id = projectId;
+		if (!assistantReady) {
+			assistant = null;
+			return;
+		}
+		const chat = new AssistantChat({ status: () => api.assistant.status(id), send: (body, signal) => api.assistant.send(id, body, signal) });
+		assistant = { id, chat };
+		assistantOpen = false;
+		void chat.load();
+		// Leaving the project stops an answer still streaming.
+		return () => chat.stop();
+	});
+	const assistantOn = $derived(assistant?.chat.available ?? false);
+	// The run the conversation is about: the one a run tab shows, else the one carried between tabs, else the default.
+	const assistantRun = $derived(
+		(isRunTab(tab) ? page.url.searchParams.get('run') : null) ?? carried ?? (runs ? defaultRunId(runs, project?.role) : null)
+	);
+	function openAssistant() {
+		assistantMounted = true;
+		assistantOpen = true;
+	}
+	/** The save reason Apply filled in, cleared again if the change is discarded rather than saved. */
+	let appliedReason = '';
+	/**
+	 * Apply on a recommended change: it goes into the settings form, unsaved, as any edit there would, and Model
+	 * settings opens with the save bar's reason filled in. The person checks it and saves with the normal Save
+	 * (the server validates it as any save), or discards it; the assistant saves nothing.
+	 */
+	async function applyProposal(p: SettingsProposal) {
+		settings.applyPatch(p.patch);
+		appliedReason = `Assistant suggestion: ${p.summary}`;
+		saveReason = appliedReason;
+		assistantOpen = false;
+		if (tab !== 'settings') await goto('?tab=settings', { reset: false });
+	}
+	$effect(() => {
+		if (!unsaved && appliedReason && saveReason === appliedReason) {
+			saveReason = '';
+			appliedReason = '';
+		}
+	});
+
 	// Following a sidebar link puts the focus on the new page's title (its h1, focusPageStart), so Tab
 	// carries on in the page, not from the top of the sidebar (issue #586; ui-playbook.md § 4). The arrow
 	// keys between the links keep it on the link instead (tabKeydown).
@@ -880,6 +936,26 @@
 		<span class="fresh-none muted">No data yet</span>
 	{/if}
 {/snippet}
+<!-- The tab's own actions, then the Assistant (issue #610): shown to anyone the server lets use it here. -->
+{#snippet headerActions()}
+	{@render headerSlot.actions?.()}
+	{#if assistantOn}
+		<button
+			type="button"
+			class="btn assistant-btn"
+			aria-haspopup="dialog"
+			data-testid="assistant-open"
+			onclick={openAssistant}
+			onpointerenter={() => prefetch(loadAssistant)}
+			onfocus={() => prefetch(loadAssistant)}
+		>
+			<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"
+				><path d="M2.5 3h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H8l-3.2 2.5v-2.5H2.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><path d="M5 6.5h6M5 8.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /></svg
+			>
+			Assistant
+		</button>
+	{/if}
+{/snippet}
 <!-- Add data, then Run model (the tab's main action on Runs & results, its run form): what every section ends on. -->
 {#snippet headerMain()}
 	{#if canEdit}
@@ -999,7 +1075,7 @@
 				badge={unsavedBadge}
 				context={headerSlot.context ?? (contextText ? pageContext : null)}
 				status={fresh || series || headerSlot.status ? headerStatus : null}
-				actions={headerSlot.actions}
+				actions={headerSlot.actions || assistantOn ? headerActions : null}
 				main={canEdit || headerSlot.main ? headerMain : null}
 				notices={headerNotices}
 			/>
@@ -1205,6 +1281,13 @@
 					{/snippet}
 				</Lazy>
 			{/if}
+			{#if assistantMounted && assistant}
+				<Lazy load={loadAssistant}>
+					{#snippet children(AssistantPanel)}
+						<AssistantPanel bind:open={assistantOpen} chat={assistant!.chat} runId={assistantRun} onapply={applyProposal} />
+					{/snippet}
+				</Lazy>
+			{/if}
 			{#if canEdit}
 				{#if addMounted}
 					<Lazy load={loadAddData}>
@@ -1232,7 +1315,8 @@
 	.page {
 		padding-bottom: calc(var(--dock-h, 0px) + 1rem);
 	}
-	.add {
+	.add,
+	.assistant-btn {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;

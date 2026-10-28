@@ -1259,7 +1259,8 @@ role, freshness, Add data) and each tab's own header:
   units' run menu and **Open in Runs & results**, Dams' **Open in Runs & results**, Scenarios'
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
-  longest waiting**), then for editors **Add data** and **Run model**, the
+  longest waiting**), then the page's **Assistant** where the server has it
+  on ([§ Assistant](#assistant)), then for editors **Add data** and **Run model**, the
   primary action, on every section (issue #444: the client looked for a way
   to run the model from where they had just changed it). On every section
   but Runs & results, **Run model** (`workspace/RunButton.svelte`) doesn't
@@ -11318,6 +11319,75 @@ after two saves and its link) and `e2e/tests/history-page.spec.ts` (the page: he
 deep link, the filters' URL and Back, pagination, a restore picking itself,
 empty states, a viewer, the phone layout, `?tab=changes`, axe at desktop
 light and dark and phone).
+
+## Assistant
+
+Issue #610 (`lib/components/assistant/`; [api.md § Assistant](./api.md#assistant)).
+A chat about one project's model and results ("Why does the simulated flow
+at gauge X not respond to rainfall?", "Which settings would you change to
+improve the fit at the outlet?"), answered by a model the backend calls
+with read-only tools over the project's data. It never changes anything.
+
+- **Where.** **Assistant** in the section header, after the tab's own
+  actions (on a phone, in More actions), on every section. It is not a
+  sidebar row (the sidebar's row budget is full, `app-sidebar.spec.ts`).
+  The page asks `GET …/assistant` once per project, and the button shows only
+  when that says `available`. It doesn't show when the server has
+  `ASSISTANT_PROVIDER=off`, the default, which keeps the dev server
+  key-free, or when the caller can't use it (a farmer or an applicant
+  never reaches the workspace). Any member from viewer up can ask.
+- **The sheet** (`AssistantPanel.svelte`, a side sheet like Notes', fetched
+  the first time it opens) has a short line on what the assistant reads,
+  two example questions while the conversation is empty, the conversation,
+  then the question box (**Enter** sends, **Shift+Enter** is a new line) with
+  **Send**, or **Stop** while an answer streams. Under the box are the share
+  of the project's monthly budget left and when it starts again, then the
+  disclaimer the server sends (the reports' `DISCLAIMER`). The foot has
+  **New conversation** and **Close**.
+- **An answer streams in** (`stream.ts`: `fetch` and a `ReadableStream` on
+  the POST, not `EventSource`, so the request goes through the same
+  credentials and CSRF handling as every other POST; keepalive comments are
+  ignored, and a chunk may end anywhere). Each tool the assistant reads the
+  project with shows as a line ("Reading the run summary"): a ring while it
+  runs, filled when it's done, red if it failed (named so for a screen
+  reader too). The text follows as it comes, as plain text with line breaks
+  kept, never `{@html}` or markdown. A polite status line says when the
+  answer is finished, without reading the words out as they arrive.
+  **Stop** aborts the fetch and keeps what came so far. An answer that ends
+  early says so.
+- **The conversation lives in the page** (`chat.svelte.ts` `AssistantChat`,
+  held by `routes/projects/[id]/+page.svelte`). Closing the sheet or changing
+  tab keeps it, and opening another project starts a new one. Nothing is
+  stored on the server, so the whole conversation goes with each turn,
+  along with the run the page shows (a run tab's `run=`, the run carried
+  between tabs, else the default). A question that got no answer is left
+  out of what is sent.
+- **Refusals before an answer** put the question back in the box and say
+  why above it. A 429 is the hourly limit: "limit of 30 messages an hour.
+  Try again in about 4 min", from `Retry-After`, after which the box takes
+  questions again. When the month's budget is used up (from the status, or
+  a refusal or stream error whose code names the budget), the sheet says
+  when it starts again and the box takes nothing. Any other refusal shows
+  its message.
+- **A recommended change** (the `propose_settings` tool) is a card in the
+  answer, **Recommended change**: its one-line summary, a table of the
+  engine's input-diff lines (Setting, Now, Suggested; `compare.ts`
+  `diffInputs`, run on the server against the stored settings) and why each
+  setting changes. For an editor (`canApply` in the status) it has **Apply to
+  the settings form**. A viewer sees the same card with "An editor can
+  apply this change."
+- **Apply** (`applyProposal` on the page) puts the patch into the settings
+  draft (`settingsDraft.svelte.ts` `applyPatch`). It merges as the save
+  does: a top-level setting replaces, and a nested one merges one level
+  deep, except those the server replaces whole (`PATCH_REPLACED_WHOLE`,
+  checked against `projects/settings.ts` `REPLACED_WHOLE`). The patch's
+  settings win over an edit typed to them, and every other edit stays. Then
+  the sheet closes, Model settings opens, and the save bar's **Reason for
+  this change** says "Assistant suggestion: <summary>". Nothing is saved:
+  the person checks the change and saves with the normal **Save changes**,
+  which the server validates as any save, and History keeps the reason.
+  Discarding the change clears the reason again. The card then says the
+  change is in the form, not saved.
 
 ## Notes
 

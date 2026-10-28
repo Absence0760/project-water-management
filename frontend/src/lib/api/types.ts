@@ -3769,3 +3769,56 @@ export interface UnitRainApplyResult {
 	/** The units left out (refused, or with no parcel), and why. */
 	skipped?: { nodeId: string; name: string; reason: string }[];
 }
+
+// ---- The assistant (issue #610, docs/api.md § Assistant) ------------------
+// Mirrors backend/src/assistant/types.ts's wire format (no codegen: change both).
+
+/** Which model the assistant talks to (the server's ASSISTANT_PROVIDER). */
+export type AssistantProviderName = 'mock' | 'ollama' | 'anthropic' | 'bedrock';
+
+/** One turn of the conversation the page keeps and sends back each time (no transcript is stored). */
+export interface ChatMessage {
+	role: 'user' | 'assistant';
+	content: string;
+}
+
+/** A recommended settings change from propose_settings, validated and dry-run by the server before it reaches the page. */
+export interface SettingsProposal {
+	/** A settings patch the project save accepts: top-level keys replace, nested objects merge one level deep. */
+	patch: Record<string, unknown>;
+	/** Why, one per changed top-level key (key → reason). */
+	reasons: Record<string, string>;
+	/** One-line summary, prefilled as the revision reason: "Assistant suggestion: …". */
+	summary: string;
+	/** The engine's input-diff lines (compare.ts diffInputs) between the stored and the patched settings. */
+	diff: { label: string; before: string; after: string }[];
+}
+
+/** GET /projects/:id/assistant */
+export type AssistantStatus =
+	| { available: false }
+	| {
+			available: true;
+			provider: AssistantProviderName;
+			/** The caller's role allows Apply (editor or above). */
+			canApply: boolean;
+			budget: { tokensPerMonth: number; tokensUsed: number; resetsAt: string };
+			rate: { messagesPerHour: number };
+			/** The report disclaimer, shown under the panel. */
+			disclaimer: string;
+	  };
+
+/** POST /projects/:id/assistant/messages body. The last message is the user's new one. */
+export interface AssistantRequest {
+	messages: ChatMessage[];
+	runId?: string;
+}
+
+/** One event of the POST's `text/event-stream` answer (`event: <type>\ndata: <json>`). */
+export type AssistantStreamEvent =
+	| { type: 'text'; delta: string }
+	| { type: 'tool'; name: string; label: string; status: 'start' | 'done' | 'error' }
+	| { type: 'proposal'; proposal: SettingsProposal }
+	| { type: 'usage'; inputTokens: number; outputTokens: number; tokensUsed: number; tokensPerMonth: number }
+	| { type: 'error'; code: string; error: string }
+	| { type: 'done' };

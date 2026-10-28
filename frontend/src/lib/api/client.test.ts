@@ -942,3 +942,44 @@ describe('jobs and yield client', () => {
 		expect(call(cancel)).toEqual({ url: '/projects/p/yield/j%2F1/cancel', method: 'POST', body: undefined });
 	});
 });
+
+// The assistant's POST streams its answer (issue #610): fetch, not EventSource, so it goes out like every POST.
+describe('api.assistant.send', () => {
+	it('POSTs the conversation with the session cookie and JSON, and hands back the unread stream', async () => {
+		const f = vi.fn(async () => new Response('event: done\ndata: {"type":"done"}\n\n', { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+		const ctrl = new AbortController();
+		const body = await createApi('http://x', f).assistant.send('p 1', { messages: [{ role: 'user', content: 'Why?' }], runId: 'r1' }, ctrl.signal);
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('http://x/projects/p%201/assistant/messages');
+		expect(init.method).toBe('POST');
+		expect(init.credentials).toBe('include');
+		expect(init.signal).toBe(ctrl.signal);
+		expect(init.headers).toMatchObject({ 'Content-Type': 'application/json', Accept: 'text/event-stream' });
+		expect(JSON.parse(init.body as string)).toEqual({ messages: [{ role: 'user', content: 'Why?' }], runId: 'r1' });
+		expect(await new Response(body).text()).toBe('event: done\ndata: {"type":"done"}\n\n');
+	});
+
+	it('turns a refusal before the stream into an ApiError with its code, and Retry-After into params.retryAfter', async () => {
+		const f = vi.fn(async () => new Response(JSON.stringify({ error: 'Too many messages in the last hour', code: 'x_code' }), { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '90' } }));
+		const err = await createApi('http://x', f, async () => {}).assistant.send('p', { messages: [] }).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(ApiError);
+		expect((err as ApiError).status).toBe(429);
+		expect((err as ApiError).code).toBe('x_code');
+		expect((err as ApiError).message).toBe('Too many messages in the last hour');
+		expect((err as ApiError).params.retryAfter).toBe(90);
+		// The API's own 429 is never resent.
+		expect(f).toHaveBeenCalledTimes(1);
+	});
+
+	it('rejects with the fetch’s own AbortError once aborted, not an ApiError', async () => {
+		const ctrl = new AbortController();
+		ctrl.abort();
+		const f = vi.fn(async (_u: string, init?: RequestInit) => {
+			if (init?.signal?.aborted) throw new DOMException('aborted', 'AbortError');
+			return new Response('');
+		});
+		const err = await createApi('http://x', f as unknown as typeof fetch).assistant.send('p', { messages: [] }, ctrl.signal).catch((e: unknown) => e);
+		expect(err).not.toBeInstanceOf(ApiError);
+		expect((err as DOMException).name).toBe('AbortError');
+	});
+});

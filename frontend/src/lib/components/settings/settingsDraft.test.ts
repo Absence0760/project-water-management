@@ -1,6 +1,7 @@
 import { defaultProjectSettings, type ProjectSettings } from '@water-management/engine';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { editableSettings, rebaseSettings, SettingsDraft } from './settingsDraft.svelte';
+import { editableSettings, PATCH_REPLACED_WHOLE, rebaseSettings, SettingsDraft, withPatch } from './settingsDraft.svelte';
 
 const saved = (over: Partial<ProjectSettings> = {}): ProjectSettings => ({ ...defaultProjectSettings(), ...over });
 
@@ -180,5 +181,50 @@ describe('rebaseSettings', () => {
 		const after = editableSettings(saved({ lakeEvapFactor: 0.6 }));
 		expect(rebaseSettings(draft, before, after).lakeEvapFactor).toBe(0.5);
 		expect(rebaseSettings(draft, before, after, 'saved').lakeEvapFactor).toBe(0.6);
+	});
+});
+
+describe('applyPatch: a recommended change put into the form (the assistant, issue #610)', () => {
+	it('merges a nested setting one level deep, replaces a top-level one, and leaves the form unsaved', () => {
+		const d = new SettingsDraft();
+		d.load(saved());
+		d.applyPatch({ gr4j: { x1: 420 }, effectiveRainFraction: 0.4 });
+		expect(d.dirty).toBe(true);
+		// The patched field changes; the group's other fields stay as stored.
+		expect(d.s.gr4j).toEqual({ ...defaultProjectSettings().gr4j, x1: 420 });
+		expect(d.s.effectiveRainFraction).toBe(0.4);
+		// Nothing saved: the saved copy is what it was, and Discard puts it back.
+		expect(d.saved.gr4j.x1).toBe(defaultProjectSettings().gr4j.x1);
+		d.revert();
+		expect(d.dirty).toBe(false);
+		expect(d.s.gr4j.x1).toBe(defaultProjectSettings().gr4j.x1);
+	});
+
+	it('keeps other edits, takes the patch over an edit to the same setting, and opens X2 when it isn’t 0', () => {
+		const d = new SettingsDraft();
+		d.load(saved());
+		d.s.apanMm[0] = 123;
+		d.s.gr4j.x1 = 300;
+		expect(d.x2Open).toBe(false);
+		d.applyPatch({ gr4j: { x1: 500, x2: -0.5 } });
+		expect(d.s.apanMm[0]).toBe(123);
+		expect(d.s.gr4j.x1).toBe(500);
+		expect(d.x2Open).toBe(true);
+	});
+
+	it('replaces whole the settings the server replaces whole, so no stale field is left behind', () => {
+		const before = editableSettings(saved({ pe: { kind: 'monthly', mm: new Array(12).fill(10), source: 'x' } as unknown as ProjectSettings['pe'] }));
+		const out = withPatch(before, { pe: { kind: 'pan' } });
+		expect(out.pe).toEqual({ kind: 'pan' });
+		// Neither argument changed.
+		expect(before.pe).toEqual({ kind: 'monthly', mm: new Array(12).fill(10), source: 'x' });
+	});
+
+	it('replaces whole exactly the settings backend/src/projects/settings.ts REPLACED_WHOLE lists', () => {
+		const src = readFileSync(new URL('../../../../../backend/src/projects/settings.ts', import.meta.url), 'utf8');
+		const list = /const REPLACED_WHOLE = new Set\(\[([^\]]*)\]\)/.exec(src)?.[1] ?? '';
+		const server = [...list.matchAll(/'([A-Za-z0-9]+)'/g)].map((m) => m[1]!);
+		expect(server.length).toBeGreaterThan(5);
+		expect([...PATCH_REPLACED_WHOLE].sort()).toEqual(server.sort());
 	});
 });
