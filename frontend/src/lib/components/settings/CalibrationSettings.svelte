@@ -12,6 +12,8 @@
 	// Automated calibration's rules and run (issue #153): their own chunks, for the same reason.
 	const loadCalibrationRules = () => import('./CalibrationRulesFields.svelte');
 	const loadAutoFit = () => import('#lib/components/calibration/AutoFitPanel.svelte');
+	// The regional GR4J prior (issue #622): its own chunk, as the evaporation proposal's.
+	const loadPrior = () => import('#lib/components/calibration/RegionalPriorPanel.svelte');
 	// Evaporation from the map (issue #326 B-evap): out of the tab's chunk, for the same reason; it loads its proposal on mount.
 	const loadEvaporationProposal = () => loadSections().then((m) => ({ default: m.EvaporationProposal }));
 	// The FAO-56 pan-coefficient helper: editors only, under pan coefficient × A-pan, so a viewer or a monthly-PE
@@ -606,6 +608,22 @@
 	<!-- Two cards (2026-10-10): fit now with its record at its foot, and the declared rules with their run in the
 	     head beside the sign-off (issue #521). Each card's main action sits right under its deciding choices or in
 	     its head, never under the other's fields. -->
+	<!-- The regional GR4J prior (issue #622): its ranges, donors and skill, and Start from the prior; Fit automatically
+	     below uses it as a penalty or its search box. Its own chunk, loaded when the section draws. -->
+	<div class="sub-card" data-testid="prior-card">
+		<Lazy load={loadPrior}>
+			{#snippet children(RegionalPriorPanel)}
+				<RegionalPriorPanel
+					projectId={project.id}
+					{readonly}
+					formDirty={dirty}
+					zones={(s.calibrationZones ?? []).filter((z) => z.enabled).map((z) => ({ nodeId: z.nodeId, name: nodeName(z.nodeId) ?? 'a gauge' }))}
+					currentParams={(zone) => (zone === null ? s.gr4j : ((s.calibrationZones ?? []).find((z) => z.nodeId === zone)?.gr4j ?? s.gr4j))}
+					onApplied={reloadAfterApply}
+				/>
+			{/snippet}
+		</Lazy>
+	</div>
 	<div class="sub-card" data-testid="fit-now-card">
 	<FitPanel
 		projectId={project.id}

@@ -60,6 +60,8 @@ self.onmessage = (e: MessageEvent<FitRequest | EnsembleJob | SensitivityJob>) =>
 			validationRecord: req.validationRecord,
 			// One step of the stepwise fit of calibration zones (issue #555): runner.ts startStepwiseFit sends each.
 			...(req.zone !== undefined ? { zone: req.zone } : {}),
+			// The regional prior built for this fit's target (issue #622): absent, the fit is every engine's before it.
+			...(req.prior ? { prior: req.prior } : {}),
 			onProgress: (progress) => {
 				const now = performance.now();
 				if (now - last >= 100 || progress.evaluations === progress.budget) {

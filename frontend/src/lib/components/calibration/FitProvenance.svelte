@@ -16,6 +16,7 @@
 	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { apanDailyText, chirpsFactorsText, et0DailyText, fitModelLabel, monthsText, paramLabel } from './provenance';
 	import { dayQualityGist, ratingLine } from './dayQuality';
+	import { priorRecordLine } from '#lib/calibration/prior.js';
 
 	const chirpsBiasLabel = (mode: string) => CHIRPS_BIAS_OPTIONS.find((o) => o.value === mode)?.label ?? mode;
 
@@ -102,7 +103,9 @@
 		{#each caveats as c (c)}<p class="alert alert-warning small" role="status">{c}</p>{/each}
 		<dl class="meta">
 			<div><dt>Objective</dt><dd>{objectiveName(record.objective)}</dd></div>
-			<div><dt>Bounds</dt><dd>{record.bounds === 'typical' ? 'typical (Perrin et al. 80 %)' : 'wide'}</dd></div>
+			<div><dt>Bounds</dt><dd>{record.bounds === 'typical' ? 'typical (Perrin et al. 80 %)' : record.bounds === 'prior' ? 'the regional prior’s p10–p90' : 'wide'}</dd></div>
+			<!-- Issue #622: the regional prior the fit used, its donors and the donor set's hash. -->
+			{#if record.prior}<div data-testid="fit-prior"><dt>Regional prior</dt><dd>{priorRecordLine(record.prior)}</dd></div>{/if}
 			<div><dt>Seed</dt><dd>{record.seed}</dd></div>
 			<div><dt>Model runs</dt><dd>{fmtNum(record.budget)} per fit{(record.starts ?? 1) > 1 ? `, ${record.starts} starts` : ''}, {fmtNum(record.evaluations)} in all{record.cancelled ? ' (cancelled)' : ''}</dd></div>
 			<div><dt>Engine</dt><dd>{record.engineVersion}</dd></div>

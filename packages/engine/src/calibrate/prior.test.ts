@@ -267,6 +267,17 @@ describe('the soil x1 relation', () => {
 });
 
 describe('priorPenalty and priorBox', () => {
+	it('takes a two-piece σ, so a lopsided range costs ½ Z90² at both its p10 and its p90', () => {
+		const lop = { x1: { p10: 100, p50: 150, p90: 1000 } };
+		expect(priorPenalty(lop, { x1: 100 })).toBeCloseTo(0.5 * Z90 ** 2, 12);
+		expect(priorPenalty(lop, { x1: 1000 })).toBeCloseTo(0.5 * Z90 ** 2, 12);
+		expect(priorPenalty(lop, { x1: 150 })).toBe(0);
+		// Continuous at the median: just either side costs next to nothing.
+		expect(priorPenalty(lop, { x1: 150.001 })).toBeLessThan(1e-9);
+		expect(priorPenalty(lop, { x1: 149.999 })).toBeLessThan(1e-9);
+		// One side with no spread adds nothing on that side.
+		expect(priorPenalty({ x1: { p10: 150, p50: 150, p90: 300 } }, { x1: 120 })).toBe(0);
+	});
 	const priors = {
 		x1: { p10: 100, p50: 200, p90: 400 },
 		x2: { p10: 0, p50: 0, p90: 0 },

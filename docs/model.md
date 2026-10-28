@@ -10917,7 +10917,7 @@ together.
   area, the curve, what flows in, the demand), never at a correction: the
   hydrologist decides.
 
-### 2.10m Regional GR4J prior (engine 1.106.0, issue #622; pure part only)
+### 2.10m Regional GR4J prior (engine 1.106.0, issue #622)
 
 Most catchments have no flow gauge, or a short one. Uncalibrated, GR4J runs
 on Perrin's defaults (§2.4a), checked only against the WR2012 MAR band
@@ -11040,35 +11040,124 @@ relation is **dropped, with its reason**, when:
 At a target's PAWC, `soilX1At` gives p50 = e^(a + b ln PAWC) and p10, p90
 = e^(… ∓ 1.2816 s), leaving out the coefficients' own uncertainty.
 
-**What calibration will read** (built, not yet called):
+**The target** (`calibrate/priorTarget.ts` `priorTargetOf`, the backend's
+`calibration/prior.ts`). What the prior is built for is what the fit it
+serves fits:
 
-- `priorPenalty(priors, params)` = ½ Σ z², with z = (ln x − ln p50) / σ and
-  σ = (ln p90 − ln p10) / (2 × 1.2816). x2 is taken linearly. A parameter
-  with no spread adds nothing. The penalty is 0 at the p50s and ½ × 1.2816²
-  ≈ 0.82 per parameter at a p10 or p90.
-- `priorBox(priors)`: each parameter's p10–p90 inside GR4J's hard bounds.
+- with no calibration zone, the catchment: `{ zoneNodeId: null, units:
+  null }`;
+- under calibration zones (§2.10n), one zone: its gauge and its own land
+  units, or for the calibration site's own zone `zoneNodeId: null` and the
+  units left to it. **Each zone takes a prior built for its own units, never
+  the catchment's.** A zone's parameters describe only its units, and the
+  donors are lumped basins compared on their own basin's attributes, so the
+  like-for-like target is the zone: its area is its units' sum, its climate
+  its units' own rain, its position its gauge on the map.
 
-**Built vs to come.** Built (engine 1.106.0):
+The target's attributes are what the app knows of it:
 
-- the pure prior, its LOO score, the soil relation and the two helpers;
-- the soil grid (migration 268, `ingest/soils.py`, `pnpm import:soils`);
-- the donor table (migration 269, `pnpm import:gr4j-donors`) and the
-  offline fit.
+- area: the zone's units' areas summed, or the catchment's as the run takes
+  it (§2.4h);
+- MAP: the mean of complete water years' rain totals, on the days before
+  any forecast tail. The rain is what GR4J reads: the catchment's
+  (`runoffForcing`), or under Per unit flow generation the area-weighted
+  mean of the target's units' own rain (§2.4h). A water year with a day of no
+  rain reading is left out, so a part year never weighs one season twice;
+- aridity: that MAP ÷ the mean of the same years' GR4J PE totals (the
+  catchment PE every unit runs on);
+- PAWC: the soil grid over the catchment boundary (maps.md § Soil water
+  capacity);
+- position: the zone's gauge on the map, else the boundary's centroid.
 
-Synthetic grid and donors stand in for dev and CI. Not yet wired (#622,
-the next steps, [followups.md](./followups.md)):
+Slope, clay, sand and forest stay unknown until a target's own HydroATLAS
+attributes are loaded (followups.md), so the donors are compared on area,
+MAP and aridity, and distance. The target's MAP and aridity come from the
+project's own forcing (station or CHIRPS rain, GR4J's PE); the donors' from
+HydroATLAS (WorldClim P, Global-PET). The comparison mixes the two sources
+until BasinATLAS targets load.
 
-- `calibrate()`'s optional `prior` (the penalty beside the WR2012 MAR
-  penalty) and `bounds: 'prior'` (the box). Both are off by default; until
-  then every calibration is bit-identical to before.
-- The fit record naming the prior, the donor set's SHA-256 and its
-  `reference_load`.
-- A target's own attributes from BasinATLAS, and its PAWC from the soil
-  grid.
-- The Settings & calibration panel, and the evidence pack's § 3 line.
-- Per-unit x1 scaled by PAWC (step 6), which would change `runModel` and
-  needs its own `ENGINE_VERSION`, the `verify/` mirror and an
-  engine-audit.md entry.
+**In calibration** (`calibrate()`, `CalibrateOptions.prior`, a
+`CalibrationPrior`: the ranges, a weight and the provenance). With a weight
+w > 0, every fit's loss is
+
+  loss = (1 − objective) + MAR penalty (§2.10c, when on) + w × priorPenalty
+
+over the **free** parameters only: a fixed one is no choice of the fit's
+and adds nothing.
+
+- It applies to every fit: the full fit and each start, the split-sample
+  and dry → wet fits, and the MAR penalty's unpenalised fit (which drops
+  only the MAR term). The starts are ranked by the penalised loss.
+- `priorPenalty` = ½ Σ z², with a **two-piece** σ so it agrees with the
+  quantiles the prior states however lopsided they are: z = (ln x − ln
+  p50) / σ, σ = (ln p50 − ln p10) / Z90 below the median and (ln p90 − ln
+  p50) / Z90 above it (x2 linearly). It is ½ Z90² ≈ 0.82 at a p10 or p90,
+  0 at the p50, continuous there. A side with no spread adds nothing.
+- Every objective is 1 − a skill, so w is in skill units: at w = 0.1 a
+  parameter at its p10 or p90 costs about 0.08 of KGE′. It is a
+  regulariser, not a Bayesian posterior: it doesn't grow with the record's
+  length. `DEFAULT_PRIOR_WEIGHT` = 0.1 is **provisional**, for the
+  hydrologist to judge; at most `PRIOR_MAX_WEIGHT` = 10.
+
+`bounds: 'prior'` searches the p10–p90 box (`priorBox`), clipped into
+GR4J's hard bounds, instead of the wide or typical box; the start is
+clamped into it. A box clipped flat or with no spread pins that parameter
+(a free x2 is held at 0, since the donors fix it), and the fit's notes name
+it. A weight of 0 is allowed only with the box. A fit's notes say the prior
+was used, from how many donors, and when it has no skill (or no score).
+
+The prior must be built for the fit's target, or `calibrate()` refuses it:
+`sameTarget` compares the zone and the units. `calibrateStepwise` takes the
+prior per step (`prior(step)`), each built for its own zone, and refuses
+`bounds: 'prior'` before the first fit when a step has none. **With no
+prior, every calibration is bit-identical** to engine 1.106.0 before it
+(`prior-calibrate.test.ts` pins whole reports' hashes taken before the
+wiring). After a fit in the prior's box the uncertainty ensemble samples
+Perrin's typical box instead, with a note (sampling the prior's box is
+followups.md's).
+
+**Provenance.** The fit's report and its fit record (§2.10b) carry `prior`:
+the weight, whether the box was used, the ranges, the penalty (unweighted)
+at the start and at the fit, and the provenance the backend gave it
+(`PriorProvenance`): the donor dataset's label and version, whether it is
+the invented set, the SHA-256 of the loaded set and the engine's 64-bit
+fingerprint of the donors it used, the donors offered and the k kept with
+their weights, the leave-one-out skill and its n, whether x1 came from the
+soil relation, the dataset's production load (`reference_load` as
+`app_reference_provenance()` shows it; null for a local import) and the
+target.
+
+**Start from the prior** (`priorStartParams`, the server's `POST
+/projects/:id/gr4j-prior/start`). For a project with no flow record to fit,
+the p50s (held inside GR4J's hard bounds) are written into the target's
+parameters (`gr4j`, or the zone's row) as one settings revision, with a
+`PriorStartRecord` in `settings.gr4jPrior` (one per target: the time, the
+engine, the parameters written, the ranges and the provenance). The server
+re-derives the prior; a settings save never writes the record. A record
+counts while its target is the same (`currentPriorStart`, `sameTarget`) and
+the target's parameters still hold what it wrote.
+
+**The evidence pack** (report format `evidence-22`,
+`evidence/regionalPrior.ts`). § 3 names the prior when the baseline's
+parameters came from it: a fit record that used it and whose parameters
+aren't edited since ("parameters calibrated with the regional prior, n
+donors"), else the catchment's start record for the target the run's
+parameters are now, with no fit applied after it ("parameters from the
+regional prior, n donors (the donors' medians, not calibrated)"). The line
+gives the donor set, its SHA-256 and the leave-one-out skill, and says when
+the prior has no skill, or that its skill is unknown with too few donors.
+
+**Built vs to come.** Built (engine 1.106.0): the prior, its LOO score and
+soil relation; the soil grid (migration 268) and the donor table (269); the
+wiring into `calibrate()`, the stepwise fit and the fit record; the target's
+own climate; Start from the prior; the Calibration page's panel and fit
+choices; the evidence line; the data credits. Synthetic grid and donors
+stand in for dev and CI. To come (followups.md § Regional GR4J prior): a
+target's HydroATLAS attributes, a flow-space LOO score, the donors on the
+Map, the ensemble sampling the prior's box, the prior in automated
+calibration's rules, and per-unit x1 scaled by PAWC (step 6, which would
+change `runModel` and needs its own `ENGINE_VERSION`, the `verify/` mirror
+and an engine-audit.md entry).
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 

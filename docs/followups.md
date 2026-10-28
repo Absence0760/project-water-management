@@ -480,29 +480,36 @@ open:
 ## Regional GR4J prior (issue #622)
 
 Round 3 of 2026-10-28 built steps 1–3 and the pure part of step 4
-([model.md §2.10m](./model.md)). These are the data-source rows, the soil
-water capacity grid (migration 268), the `gr4j-donors` reference kind
-(migration 269) with its offline fit, and `regionalPrior` with its
-leave-one-out score and soil x1 relation. Nothing reads a prior yet. What's
-open:
+([model.md §2.10m](./model.md)): the data-source rows, the soil water
+capacity grid (migration 268), the `gr4j-donors` reference kind (migration
+269) with its offline fit, and `regionalPrior` with its leave-one-out score
+and soil x1 relation. Round 4 (`feat/r4-priorcal`) wired it in and built
+step 5. What's done and what's open:
 
-- [ ] **Step 4's wiring: the prior in `calibrate()`.** Missing: the optional
-      `prior` (the log-normal penalty `priorPenalty`, weighted like the
-      WR2012 MAR penalty) and `bounds: 'prior'` (the `priorBox`). Both are
-      off by default, and calibration stays bit-identical with them off. The
-      fit record (`provenance.ts`) names the prior, `k`, the weight, the
-      donor set's SHA-256 and its `reference_load`. Durable fix: those
-      options, a bit-identity test with the prior off, `ENGINE_VERSION`, and
-      an engine-reviewer pass. Trigger: round 4, after #555's calibration
-      changes land (they touched the same files this round).
+- [x] **Step 4's wiring: the prior in `calibrate()`.** Done: the optional
+      `prior` (a two-piece log-normal penalty over the free parameters,
+      weighted in skill units) and `bounds: 'prior'` (the p10–p90 box), off
+      by default and bit-identical when off (`prior-calibrate.test.ts` pins
+      whole reports' hashes); each calibration zone takes the prior built
+      for its own units (`calibrateStepwise`'s `prior(step)`, refused for
+      another target); the fit record carries the prior, the donor set's
+      SHA-256 and its reference load. Reviewed by engine-reviewer.
+- [x] **Step 5: show and apply the prior.** Done: `GET
+      /projects/:id/gr4j-prior` and `POST …/gr4j-prior/start`, the
+      Calibration page's Regional prior panel (ranges, donors, LOO skill,
+      "No skill", Start from the prior), Fit automatically's penalty and
+      box choice, the fit record's line, the evidence pack's § 3 line
+      (`evidence-22`), the four sources' credits on `/data-sources`, and
+      `regional-prior.spec.ts`.
 - [ ] **A flow-space leave-one-out score.** Missing: the LOO score is in
-      parameter space (log error of the p50 against the plain median).
-      Flow space is what the hydrologist judges: KGE′ of the prior's p50 run
-      on each held-out donor, against its own fit. Durable fix:
-      `fit-donors.ts` runs it after the fits, with the forcing it already
-      holds, and stores it on `gr4j_donor_dataset` (a new column, a forward
-      migration). Trigger: with step 4's wiring, before the UI shows a skill
-      score.
+      parameter space (log error of the p50 against the plain median), and
+      the panel now shows it as the prior's skill. Flow space is what the
+      hydrologist judges: KGE′ of the prior's p50 run on each held-out
+      donor, against its own fit. Durable fix: `fit-donors.ts` runs it
+      after the fits, with the forcing it already holds, and stores it on
+      `gr4j_donor_dataset` (a new column, a forward migration); the panel
+      shows both. Trigger: the first real donor fit, before the prior is
+      used for a real catchment.
 - [ ] **Donors at a typical bound.** Broken (maybe): donors are fitted on
       Perrin's typical bounds, so x4 of a large basin or x1 of a semi-arid
       one can stack at a bound, and the prior's p10–p90 can never leave the
@@ -512,23 +519,45 @@ open:
       bounds or leave a bound-hit donor out of that parameter's quantiles.
       Trigger: the first real fit's counts.
 - [ ] **The prior's forcing against the target's.** Donors are fitted on
-      uncorrected CHIRPS v3 finals. A target running on station rain, an
-      areal correction or a CHIRPS correction should be told its prior
-      comes from other forcing (parameters absorb forcing bias). Durable
-      fix: a note in the fit record and the panel. Trigger: step 5.
-- [ ] **A target's own attributes.** Missing: `regionalPrior` needs the
-      target's HydroATLAS attributes. The donors carry theirs, from
-      GRDC-Caravan; a project's catchment or unit has none. Durable fix:
+      uncorrected CHIRPS v3 finals; a target's MAP and aridity come from its
+      own forcing (station or CHIRPS rain, GR4J's PE), and the donors' from
+      HydroATLAS. A target running on station rain, an areal correction or a
+      CHIRPS correction should be told its prior comes from other forcing
+      (parameters absorb forcing bias). Durable fix: a note in the fit
+      record and the panel naming the target's rain source against the
+      donors', and a `targetAttributeSource` on the provenance. Trigger:
+      the first real donor fit.
+- [ ] **A target's own attributes.** Missing: the target has area, MAP and
+      aridity from the project, but no slope, clay, sand or forest, so the
+      donors are compared on three attributes and distance. Durable fix:
       load BasinATLAS level-12 sub-basins (CC BY 4.0, figshare; read its
       record's licence field first, data-sources.md § GR4J priors) as a
-      reference kind, and area-weight them over the boundary, as the soil
-      grid is. Trigger: step 5.
-- [ ] **Step 5: show and apply the prior.** Missing: the Settings &
-      calibration panel (the donors on the Map, the ranges, the LOO skill,
-      "Start from the prior", and a soil prior without skill labelled so),
-      the evidence pack's § 3 line (a report format bump), the credits for
-      the four sources on `/data-sources`, and api.md, ui.md,
-      evidence-pack.md and e2e. Trigger: after step 4's wiring.
+      reference kind, and area-weight them over the boundary (and a zone's
+      units, once units have polygons), as the soil grid is. Trigger: the
+      operator's real donor load.
+- [ ] **The donors on the Map.** Missing: the panel lists each donor's
+      distance and position, but the Map draws none. Durable fix: a Map
+      layer of the kept donors' outlets for the target, from the GET's
+      `donors`, with their weights. Trigger: the hydrologist reviewing a
+      real prior.
+- [ ] **The ensemble in the prior's box (CR-1).** Missing: after a fit in
+      the prior's box the uncertainty ensemble samples Perrin's typical box
+      instead, with a note (`resolveEnsembleOptions`). Durable fix: sample
+      the fit record's prior box, as `bounds: 'prior'` with the ranges in
+      the ensemble's options and result (the evidence rule's bounds widened
+      to name it). Trigger: the first fit with the prior that feeds an
+      evidence pack's ensemble.
+- [ ] **The prior in automated calibration's rules.** Missing: the server's
+      rules (§2.10j) fit with wide or typical bounds only. Durable fix: a
+      rules option for the prior (use and weight), the server building the
+      prior per case's target from the loaded donors, recorded in each case.
+      Trigger: a project calibrating by rules on a short record.
+- [ ] **What the prior cost the fit.** Missing: the report gives the
+      penalty at the start and the fit, but not the objective with the prior
+      left out, so a hydrologist can't see how much KGE′ the prior cost.
+      Durable fix: an optional unpriored full fit, as `marPenalty.unpenalised`.
+      Trigger: the hydrologist asking, or a fit whose penalty at the fit is
+      large.
 - [ ] **Step 6 (optional): x1 per unit by PAWC.** Changes `runModel`, so it
       needs its own `ENGINE_VERSION`, the `verify/` mirror, an invariant
       (equal PAWC across units reproduces the shared parameters bit for
@@ -541,8 +570,8 @@ open:
       back to 1981 and a real dPET grid in the checkout's database. Trigger:
       step 5 shipping. The hydrologist accepts the donor criteria (≥ 8
       years, < 5 % regulation, ≤ 10 000 km², and the proposed KGE′ ≥ 0.5
-      on the donor's own record) and the similarity method first (#622
-      Blockers).
+      on the donor's own record), the similarity method and the penalty's
+      provisional default weight (0.1) first (#622 Blockers).
 
 ## A modelled Class-A pan grid (issue #646 item 7)
 

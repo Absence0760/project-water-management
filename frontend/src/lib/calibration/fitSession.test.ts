@@ -173,6 +173,17 @@ describe('FitSession', () => {
 			expect(s.seed).toBe(9);
 		});
 
+		it('starts the regional prior’s use and weight from a fit that used it (issue #622), and resets them', () => {
+			const s = new FitSession();
+			s.reset('p1');
+			s.searchFrom({ bounds: 'prior', budget: 800, starts: 3, seed: 42, prior: { weight: 0.3, bounded: true } as never });
+			expect([s.bounds, s.priorUse, s.priorWeight]).toEqual(['wide', 'both', 0.3]);
+			s.reset('p2');
+			expect([s.priorUse, s.priorWeight]).toEqual(['off', 0.1]);
+			s.searchFrom(record);
+			expect(s.priorUse).toBe('off');
+		});
+
 		it('reads a record from before starts were recorded as one start', () => {
 			const s = new FitSession();
 			s.reset('p1');

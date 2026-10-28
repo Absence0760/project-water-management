@@ -5,11 +5,11 @@
 // parameters; runModel never reads any of this.
 //
 // Built (engine 1.106.0): `regionalPrior`, its leave-one-out score, the soil
-// x1 relation, and the helpers calibration will need (`priorPenalty`, the
-// log-normal penalty value of a parameter set; `priorBox`, the p10–p90 box).
-// Not yet wired into calibrate(), its objectives or its bounds: with no
-// caller, every calibration is bit-identical to before (issue #622 step 4's
-// wiring follows, docs/followups.md).
+// x1 relation, and what calibration reads (`priorPenalty`, the log-normal
+// penalty value of a parameter set; `priorBox`, the p10–p90 box). calibrate()
+// takes a prior as `CalibrationPrior` (issue #622 step 4, ./calibrate.ts):
+// the penalty when its weight is over 0, the box under `bounds: 'prior'`.
+// Without one, every calibration is bit-identical to before.
 //
 // The method, after Oudin et al. (2008, Water Resour. Res. 44, W03413), who
 // compared physical similarity and spatial proximity and found combining
@@ -498,15 +498,18 @@ export function regionalPrior(target: PriorTarget, donors: readonly Gr4jDonor[],
 }
 
 // ---------------------------------------------------------------------------
-// What calibration will read (not wired yet)
+// What calibration reads (issue #622 step 4, ./calibrate.ts)
 // ---------------------------------------------------------------------------
 
 /**
- * The log-normal penalty of `params` under `priors`: ½ Σ z², with z = (ln x −
- * ln p50) / σ and σ = (ln p90 − ln p10) / (2 Z90) for x1, x3 and x4 (x2
- * linearly). A parameter with no spread (p10 = p90, e.g. x2 fixed at 0) or
- * missing from `params` adds nothing; a non-positive x1, x3 or x4 is
- * Infinity. 0 at the p50s; 0.5 × Z90² ≈ 0.82 per parameter at a p10 or p90.
+ * The log-normal penalty of `params` under `priors`: ½ Σ z², with a two-piece
+ * σ so the penalty agrees with the quantiles the prior states however
+ * lopsided they are: z = (ln x − ln p50) / σ, σ = (ln p50 − ln p10) / Z90
+ * below the median and (ln p90 − ln p50) / Z90 above it, for x1, x3 and x4
+ * (x2 linearly). A side with no spread (p10 = p50 or p50 = p90, e.g. x2 fixed
+ * at 0) adds nothing; a parameter missing from `params` adds nothing; a
+ * non-positive x1, x3 or x4 is Infinity. 0 at the p50s and ½ × Z90² ≈ 0.82
+ * per parameter at a p10 or p90, continuous at the p50.
  */
 export function priorPenalty(priors: Partial<ParamPriors>, params: Partial<Gr4jParams>): number {
 	let sum = 0;
@@ -516,11 +519,11 @@ export function priorPenalty(priors: Partial<ParamPriors>, params: Partial<Gr4jP
 		if (!r || x === undefined) continue;
 		const log = LOG_PARAMS.has(p);
 		if (log && !(x > 0)) return Infinity;
-		const lo = log ? Math.log(r.p10) : r.p10;
-		const hi = log ? Math.log(r.p90) : r.p90;
-		const sigma = (hi - lo) / (2 * Z90);
+		const f = (v: number) => (log ? Math.log(v) : v);
+		const d = f(x) - f(r.p50);
+		const sigma = (d < 0 ? f(r.p50) - f(r.p10) : f(r.p90) - f(r.p50)) / Z90;
 		if (!(sigma > 1e-12)) continue;
-		const z = ((log ? Math.log(x) : x) - (log ? Math.log(r.p50) : r.p50)) / sigma;
+		const z = d / sigma;
 		sum += z * z;
 	}
 	return sum / 2;
@@ -536,4 +539,141 @@ export function priorBox(priors: ParamPriors): Record<PriorParam, { min: number;
 		out[spec.key] = { min, max };
 	}
 	return out;
+}
+
+/** The penalty weight the fit panel offers by default (docs/model.md §2.10m: provisional, for the hydrologist to judge). */
+export const DEFAULT_PRIOR_WEIGHT = 0.1;
+/** Highest penalty weight a fit accepts. */
+export const PRIOR_MAX_WEIGHT = 10;
+
+/** What the fit's target was: the catchment (no calibration zone), or one zone's land units (issue #555, docs/model.md §2.10n). */
+export interface PriorTargetRef {
+	/** The calibration zone's gauge; null = the calibration site's own zone (with no zone, the whole catchment). */
+	zoneNodeId: string | null;
+	/** The land units the prior was built for, sorted; null = every unit (no calibration zone applies). */
+	units: string[] | null;
+}
+
+/**
+ * Where a prior came from, as the fit record and the evidence pack cite it.
+ * The engine copies it unchanged; the backend fills it in from the donor
+ * dataset it read (docs/api.md § Regional GR4J prior).
+ */
+export interface PriorProvenance {
+	/** The donor dataset's label, version and whether it is the repo's invented set. */
+	dataset: string;
+	datasetVersion: string;
+	synthetic: boolean;
+	/** SHA-256 of the whole loaded set (gr4j_donor_dataset.donor_set_sha256), and the engine's 64-bit fingerprint of the donors it used (donorSetHash). */
+	donorSetSha256: string;
+	donorSetHash: string;
+	/** Donors offered, and the k kept with their weights. */
+	donorCount: number;
+	k: number;
+	similarityWeight: number;
+	donors: { id: string; weight: number }[];
+	/** The leave-one-out skill over x1, x3 and x4 (null: none, or too few donors) and how many donors it scored. */
+	leaveOneOutSkill: number | null;
+	leaveOneOutN: number | null;
+	/** Whether x1's range is the soil relation's at the target's PAWC, or the donors' own. */
+	x1From: 'donors' | 'soil';
+	/** The production load of the donor set (reference_load, as app_reference_provenance() shows it); null for a local import (the synthetic set). */
+	referenceLoad: { loadedAt: string; upstreamVersion: string | null; licence: string | null } | null;
+	/** What the prior was built for. */
+	target: PriorTargetRef;
+}
+
+/** A prior as calibrate() takes it (CalibrateOptions.prior). */
+export interface CalibrationPrior {
+	/** Each parameter's p10, p50 and p90 (regionalPrior's `params`, x1 from the soil relation when `provenance.x1From` says so). */
+	ranges: ParamPriors;
+	/** The penalty's weight: loss + weight × priorPenalty. 0 = no penalty (the box alone, under bounds 'prior'). */
+	weight: number;
+	provenance: PriorProvenance;
+}
+
+/** What a prior did to a fit (CalibrationReport.prior, FitRecord.prior). */
+export interface PriorFitResult {
+	/** The penalty's weight (0: off). */
+	weight: number;
+	/** Whether the search was held to the p10–p90 box (bounds 'prior'). */
+	bounded: boolean;
+	ranges: ParamPriors;
+	provenance: PriorProvenance;
+	/** priorPenalty (unweighted) at the fitted parameters and at the starting ones. */
+	penaltyAtFit: number;
+	penaltyAtStart: number;
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Why `p` can't be used as a calibration prior, or null. */
+export function calibrationPriorError(p: unknown): string | null {
+	if (!isObj(p)) return 'the prior must be an object';
+	if (typeof p.weight !== 'number' || !(p.weight >= 0 && p.weight <= PRIOR_MAX_WEIGHT)) return `the prior's penalty weight must be from 0 to ${PRIOR_MAX_WEIGHT}`;
+	if (!isObj(p.ranges)) return 'the prior has no parameter ranges';
+	for (const k of PRIOR_PARAMS) {
+		const r = (p.ranges as Record<string, unknown>)[k];
+		if (!isObj(r) || ![r.p10, r.p50, r.p90].every((x) => typeof x === 'number' && Number.isFinite(x))) return `the prior's ${k} range must be three numbers`;
+		const { p10, p50, p90 } = r as unknown as ParamRange;
+		if (!(p10 <= p50 && p50 <= p90)) return `the prior's ${k} range must be p10 ≤ p50 ≤ p90`;
+		if (LOG_PARAMS.has(k) && !(p10 > 0)) return `the prior's ${k} range must be over 0`;
+	}
+	if (!isObj(p.provenance) || !isObj(p.provenance.target)) return 'the prior has no provenance';
+	const pv = p.provenance;
+	if (typeof pv.dataset !== 'string' || typeof pv.donorSetSha256 !== 'string') return 'the prior names no donor set';
+	if (!Number.isInteger(pv.donorCount) || !(Array.isArray(pv.donors) && pv.donors.every((d) => isObj(d) && typeof d.id === 'string' && typeof d.weight === 'number'))) {
+		return 'the prior names no donors';
+	}
+	if (!(pv.leaveOneOutSkill === null || (typeof pv.leaveOneOutSkill === 'number' && Number.isFinite(pv.leaveOneOutSkill)))) return 'the prior’s leave-one-out skill must be a number or null';
+	const t = pv.target as Record<string, unknown>;
+	if (!(t.zoneNodeId === null || typeof t.zoneNodeId === 'string')) return 'the prior names no target zone';
+	if (!(t.units === null || (Array.isArray(t.units) && t.units.every((u: unknown) => typeof u === 'string')))) return 'the prior names no target units';
+	return null;
+}
+
+/** The prior's p50s, as GR4J parameters ("Start from the prior"), held inside GR4J's hard bounds. */
+export function priorStartParams(priors: ParamPriors): Gr4jParams {
+	const out = {} as Gr4jParams;
+	for (const spec of GR4J_PARAMS) out[spec.key] = Math.min(spec.max, Math.max(spec.min, priors[spec.key].p50));
+	return out;
+}
+
+/**
+ * "Start from the prior" (settings.gr4jPrior): the p50s written into a
+ * target's GR4J parameters, the ranges and where they came from. The server
+ * writes it; no fit is made, so the parameters are the donors' medians, not a
+ * calibration.
+ */
+export interface PriorStartRecord {
+	/** ISO timestamp of the start. */
+	appliedAt: string;
+	engineVersion: string;
+	/** The parameters written (priorStartParams). */
+	params: Gr4jParams;
+	ranges: ParamPriors;
+	provenance: PriorProvenance;
+}
+
+const closeTo = (a: unknown, b: number) => typeof a === 'number' && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+
+/** Two targets are the same: one zone (or none) and the same land units (or both every unit). */
+export function sameTarget(a: PriorTargetRef, b: PriorTargetRef): boolean {
+	if ((a.zoneNodeId ?? null) !== (b.zoneNodeId ?? null)) return false;
+	if (a.units === null || b.units === null) return a.units === b.units;
+	if (a.units.length !== b.units.length) return false;
+	const x = [...a.units].sort();
+	const y = [...b.units].sort();
+	return x.every((u, i) => u === y[i]);
+}
+
+/**
+ * The start record for `target`, when its parameters (`gr4j`) still hold what
+ * the start wrote; null otherwise. A record for another target (another zone,
+ * or the same zone with other units since the zones changed) never counts.
+ */
+export function currentPriorStart(records: readonly PriorStartRecord[] | null | undefined, target: PriorTargetRef, gr4j: Partial<Gr4jParams> | null | undefined): PriorStartRecord | null {
+	const r = (records ?? []).find((x) => x?.provenance?.target && sameTarget(x.provenance.target, target));
+	if (!r || !gr4j) return null;
+	return PRIOR_PARAMS.every((k) => closeTo(gr4j[k], r.params[k])) ? r : null;
 }

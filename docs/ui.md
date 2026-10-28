@@ -8531,8 +8531,37 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   article `calibration-zones`); the fieldset is `#fld-cal-zones`, where the
   Warnings page's fix for a `calibration.zone.*` warning lands. Not yet
   (issue #555's next round): the zones on the Network tab and the Map.
+- **Regional prior** (`#set-prior`, `calibration/RegionalPriorPanel.svelte`,
+  its own chunk, the first card under Fit the parameters; issue #622,
+  model.md §2.10m) shows GR4J's parameter ranges from donor basins for the
+  catchment (`GET /projects/:id/gr4j-prior`), or, with ticked calibration
+  zones, for the zone picked in **For** (each zone's own units, or the
+  calibration site's own zone). A table of each parameter's p10, p50 and
+  p90 beside its value in the form now ("below p10", "above p90"; X1 "from
+  soil water capacity" when the soil relation has skill), the **Skill**
+  line (the leave-one-out skill and its n, "Not scored" with too few donors,
+  and a **No skill** badge at 0 or below), one line of what the donors were
+  compared on (area, MAP over n water years, aridity, distance from the
+  zone's gauge or the boundary's centre) and the soil relation's state, a
+  fold with **The n donors** (weight, distance, area, own KGE′, X1, X3,
+  X4), the synthetic-data warning over the invented set, and the donor and
+  soil datasets' credits with a link to `/data-sources`. Editors get **Start
+  from the prior** in the heading's row, marked *Saves now*: it asks first,
+  then writes the medians into the target's parameters as one settings
+  revision naming the donors (`POST …/gr4j-prior/start`), and the panel then
+  says they were started from it and haven't been changed since. It waits
+  while the form has unsaved changes. With no donors or no boundary it says
+  why (`prior-problem`). `regional-prior.spec.ts`.
 - **Fit automatically** (`#set-fit`, `calibration/FitPanel.svelte`) fits the
-  selected model's parameters in a Web Worker (`lib/calibration/`). Its card
+  selected model's parameters in a Web Worker (`lib/calibration/`). Its
+  **Regional prior** choice (`lib/calibration/prior.ts`): **Off (default)**,
+  **Penalty** (pull toward the donors' medians, with a **Penalty weight**,
+  provisional default 0.1, at most 10), **Search box** (its p10–p90; the
+  Bounds select is then set aside) or **Penalty and search box**. When on,
+  the fit fetches the prior for each step's target (the catchment, or each
+  calibration zone's own) before it runs, and the result's notes and the fit
+  record (**Regional prior** row) name it, its donors and the donor set's
+  SHA-256. Its card
   shows the choices that decide the fit in one row (**Objective**,
   **Parameters to fit**, **Validation**), then one **Search:** line with the
   bounds, model runs, starts and seed ("Wide bounds · 1 500 runs × 5 starts ·

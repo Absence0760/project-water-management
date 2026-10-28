@@ -4,6 +4,7 @@
 // rebuilt and hashed. Every figure comes from the runs' own stored summaries
 // and the stored ensembles, by the same definitions the compare page and the
 // ensemble use (G14): nothing here re-runs the model.
+import { evidenceRegionalPrior } from './regionalPrior';
 import { chosenReserveGrid, resolveEwrDailySource } from '../reserve/dailySource';
 import {
 	allocationStatus,
@@ -492,7 +493,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 			coverageWarning,
 			coverage
 		},
-		credibility: { nominations: input.nominations.map((n) => ({ ...n })) },
+		credibility: { nominations: input.nominations.map((n) => ({ ...n })), regionalPrior: evidenceRegionalPrior(input.baseline.inputs) },
 		users,
 		servedWhileFailing: served,
 		cumulative,

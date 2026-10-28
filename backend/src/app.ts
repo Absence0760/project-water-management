@@ -70,6 +70,7 @@ import { signoffRoutes } from './signoffs/routes.js';
 import { sweepRoutes } from './sweeps/routes.js';
 import { assessmentRoutes } from './assessments/routes.js';
 import { autoCalibrationRoutes } from './calibration/routes.js';
+import { priorRoutes } from './calibration/prior.js';
 import { outlookRoutes } from './outlooks/routes.js';
 import { teamRoutes } from './teams/routes.js';
 import { teamMfaResetRoutes } from './teams/mfa-reset-routes.js';
@@ -199,6 +200,7 @@ export function createApp() {
 	projects.route('/', sweepRoutes);
 	projects.route('/', assessmentRoutes);
 	projects.route('/', autoCalibrationRoutes);
+	projects.route('/', priorRoutes);
 	projects.route('/', outlookRoutes);
 	projects.route('/', feedRoutes);
 	projects.route('/', feedFromBoundaryRoutes);

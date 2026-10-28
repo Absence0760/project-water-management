@@ -96,6 +96,19 @@ export const HYDRORIVERS_MAP_ATTRIBUTION = 'Rivers: HydroRIVERS, HydroSHEDS v1 �
  */
 export const JRC_WATER_MAP_ATTRIBUTION = `Dam outline: traced from JRC Global Surface Water (${JRC_WATER_STATEMENT}), modified`;
 
+/**
+ * The regional GR4J prior's sources (issue #622): the donors' flow records,
+ * their basin attributes, and the soil water capacity grid. Word for word as
+ * docs/data-sources.md § GR4J priors and docs/maps.md § Sources record them,
+ * and as the backend stores them on the datasets (geo/gr4jDonors.ts
+ * GR4J_DONORS, geo/soilGrid.ts SOILS).
+ */
+export const CARAVAN_STATEMENT =
+	'Donor flow records: GRDC-Caravan (Färber et al. 2025, Zenodo 10.5281/zenodo.15349031), CC BY 4.0, from data held by the Global Runoff Data Centre (GRDC); South Africa’s and Namibia’s records © their departments of water.';
+export const HYDROATLAS_STATEMENT = 'Basin attributes: HydroATLAS v1.0 (BasinATLAS; Linke et al. 2019, Lehner et al. 2022), CC BY 4.0.';
+export const SOILGRIDS_STATEMENT = 'Soil water retention: SoilGrids 2.0 © ISRIC – World Soil Information, CC BY 4.0.';
+export const ISDA_STATEMENT = 'Depth to bedrock: iSDAsoil © Innovative Solutions for Decision Agriculture (iSDA), CC BY 4.0.';
+
 export const DATA_CREDITS: readonly DataCredit[] = [
 	{
 		id: 'basemap',
@@ -224,6 +237,49 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		licenceUrl: 'https://download.geonames.org/export/dump/readme.txt',
 		read: '2026-10-13',
 		statements: [GEONAMES_STATEMENT]
+	},
+	{
+		id: 'grdc-caravan',
+		name: 'GRDC-Caravan (the regional GR4J prior’s donor basins)',
+		usedFor: 'The regional GR4J prior on the Calibration page: GR4J fitted, offline, to gauged basins in the region; only the fitted parameters are loaded, never the flows.',
+		publisher: 'Färber et al. (2025) on Zenodo, from data held by the Global Runoff Data Centre (GRDC) and its providers',
+		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0); South Africa’s and Namibia’s records “free to use”',
+		licenceUrl: 'https://doi.org/10.5281/zenodo.15349031',
+		read: '2026-10-28',
+		statements: [CARAVAN_STATEMENT],
+		citation: 'Färber, C. et al. (2025). GRDC-Caravan: extending Caravan with data from the Global Runoff Data Centre. Zenodo, https://doi.org/10.5281/zenodo.15349031. Kratzert, F. et al. (2023). Caravan, a global community dataset for large-sample hydrology. Scientific Data 10, 61.'
+	},
+	{
+		id: 'hydroatlas',
+		name: 'HydroATLAS v1.0 (BasinATLAS basin attributes)',
+		usedFor: 'The regional GR4J prior: the donor basins’ aridity, rainfall, slope, soil texture and forest, on which they are compared.',
+		publisher: 'WWF and McGill University (HydroSHEDS)',
+		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
+		licenceUrl: 'https://www.hydrosheds.org/hydroatlas',
+		read: '2026-10-28',
+		statements: [HYDROATLAS_STATEMENT],
+		citation: 'Linke, S. et al. (2019). Global hydro-environmental sub-basin and river reach characteristics at high spatial resolution. Scientific Data 6, 283.'
+	},
+	{
+		id: 'soilgrids',
+		name: 'SoilGrids 2.0 water retention',
+		usedFor: 'The regional GR4J prior: a catchment’s and each donor’s root-zone plant-available water capacity, to which X1 is related.',
+		publisher: 'ISRIC – World Soil Information',
+		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
+		licenceUrl: 'https://www.isric.org/explore/soilgrids/faq-soilgrids',
+		read: '2026-10-28',
+		statements: [SOILGRIDS_STATEMENT],
+		citation: 'Turek, M.E. et al. (2023). Global mapping of volumetric water retention at 100, 330 and 15 000 cm suction using the WoSIS database. International Soil and Water Conservation Research 11(2), 225–239.'
+	},
+	{
+		id: 'isdasoil',
+		name: 'iSDAsoil depth to bedrock',
+		usedFor: 'The regional GR4J prior: where the root zone ends, for the soil water capacity.',
+		publisher: 'Innovative Solutions for Decision Agriculture (iSDA)',
+		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
+		licenceUrl: 'https://registry.opendata.aws/isdasoil/',
+		read: '2026-10-28',
+		statements: [ISDA_STATEMENT]
 	},
 	{
 		id: 'fonts',
