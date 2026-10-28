@@ -183,7 +183,7 @@ test.describe('1440×960', () => {
 		await expectNoViolations(viewer.page);
 	});
 
-	test('opens from Data’s checks panel and its row’s count, and from Runs & results', async ({ page, owner }) => {
+	test('opens from Data’s checks panel and its row’s count, from Runs & results, and a #warn-run link lands on its heading', async ({ page, owner }) => {
 		void owner;
 		const project = await seedWarnings(page.request, 'Warnings links');
 		const run = await createRun(page.request, project.id, 'Baseline');
@@ -198,9 +198,9 @@ test.describe('1440×960', () => {
 		await expect(warningRows(page)).toHaveCount(3);
 
 		await page.goto(`/projects/${project.id}?tab=runs`);
-		await expect(page.getByTestId('run-to-warnings')).toHaveAttribute('href', `?tab=warnings&run=${run}`);
+		await expect(page.getByTestId('run-to-warnings')).toHaveAttribute('href', `?tab=warnings&run=${run}#warn-run`);
 		await page.getByTestId('run-to-warnings').click();
-		await expect(page.getByRole('heading', { level: 1, name: 'Warnings' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Run warnings' })).toBeFocused();
 		await expect(page).toHaveURL(new RegExp(`[?&]run=${run}`));
 	});
 });

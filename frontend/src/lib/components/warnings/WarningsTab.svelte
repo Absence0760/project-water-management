@@ -28,7 +28,7 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { shownRun } from '#lib/components/calibration/page.js';
-	import { fmtNum } from '#lib/format/number.js';
+	import { fmtNum, fmtWhen } from '#lib/format/number.js';
 	import { landOnAnchor } from '#lib/help/anchor.js';
 	import { followAnchors } from '#lib/nav/anchorLanding.js';
 	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
@@ -57,6 +57,9 @@
 		type StatusFilter,
 		type WarningItem
 	} from './items';
+	import { runWarningRows } from './runWarnings';
+	import WarningText from '#lib/components/runs/WarningText.svelte';
+	import { warningPlaceHref } from '#lib/components/runs/warningText.js';
 	import { loadRunSummary, loadValues } from './sources';
 
 	let {
@@ -82,6 +85,8 @@
 
 	/** Rows shown before "Show all N periods". */
 	const FOLD = 25;
+	/** Run warnings shown before "Show all N run warnings". */
+	const RUN_FOLD = 8;
 
 	let values = $state.raw<Record<string, Daily> | null>(null);
 	let failed = $state.raw<Record<string, string>>({});
@@ -151,9 +156,11 @@
 			.filter((s): s is SeriesMeta => !!s)
 			.map((s) => s.name || s.kind)
 	);
+	const runRows = $derived(runWarningRows(summaryFor === run?.id ? summary : null));
 
 	let allShown = $state(false);
 	const visible = $derived(allShown || shown.length <= FOLD ? shown : shown.slice(0, FOLD));
+	let runAll = $state(false);
 
 	// --- selection: ids, kept across a fold; a filter change starts over ---
 	let selected = $state<Set<string>>(new Set());
@@ -255,11 +262,11 @@
 		void goto(id ? withParam(page.url, 'series', id) : withoutParam(page.url, 'series'), { reset: false });
 	}
 
-	// A link to the panel (`#warn-checks`): the tab is a lazy chunk, so land once drawn (help/anchor.ts).
+	// A link to a panel (`#warn-checks`, `#warn-run`): the tab is a lazy chunk, so land once drawn (help/anchor.ts).
 	onMount(() =>
 		followAnchors({
 			page: 'warnings',
-			land: (hash) => (hash === 'warn-checks' ? landOnAnchor(hash) : undefined),
+			land: (hash) => (hash === 'warn-checks' || hash === 'warn-run' ? landOnAnchor(hash) : undefined),
 			forward: (to) => void goto(to, { replace: true, reset: false })
 		})
 	);
@@ -274,6 +281,7 @@
 	</span>
 {/snippet}
 {#snippet headerActions()}
+	<a class="btn" href="#warn-run" data-testid="to-run-warnings">Run warnings{runRows.length ? ` (${runRows.length})` : ''}</a>
 	<a class="btn" href="?tab=series#data-checks">Data checks on Data</a>
 {/snippet}
 
@@ -449,6 +457,42 @@
 		</LoadState>
 	</section>
 
+	<section class="panel" id="warn-run" aria-labelledby="warn-run-h">
+		<div class="panel-head">
+			<div class="head-text">
+				<h2 id="warn-run-h" tabindex="-1">Run warnings</h2>
+				<p class="muted small intro" data-testid="warn-run-line">
+					{#if run}From {run.label || 'Untitled run'}, ran {fmtWhen(run.createdAt)}: things to check first, then notes on how the data were handled, each
+						with the setting that changes it.{:else}No run
+						yet.{/if}
+				</p>
+			</div>
+		</div>
+		{#if run && summaryFor !== run.id && !runError}
+			<p class="muted" role="status">Loading the run’s warnings…</p>
+		{:else if run && summaryFor === run.id}
+			{#if !runRows.length}
+				<p class="empty" data-testid="warn-run-none">This run raised no warnings.</p>
+			{:else}
+				{@const all = runRows}
+				{@const list = runAll || all.length <= RUN_FOLD ? all : all.slice(0, RUN_FOLD)}
+				<ul class="run-list" id="warn-run-list" data-testid="warn-run-list">
+					{#each list as r, k (k)}
+						<li class:note={r.group === 'note'}>
+							{#if r.group === 'note'}<span class="badge">Note</span>{:else}<span class="badge badge-warn">Check</span>{/if}
+							<span class="text"><WarningText text={r.text} placeHref={(place) => warningPlaceHref(place, run.id)} /></span>
+							{#if r.href}<a class="go" href={r.href}>{r.label}</a>{:else}<span class="go muted small">No setting linked yet</span>{/if}
+						</li>
+					{/each}
+				</ul>
+				{#if all.length > RUN_FOLD}
+					<button type="button" class="btn btn-sm fold" aria-expanded={runAll} aria-controls="warn-run-list" onclick={() => (runAll = !runAll)}
+						>{runAll ? `Show only the first ${RUN_FOLD} run warnings` : `Show all ${fmtNum(all.length)} run warnings`}</button
+					>
+				{/if}
+			{/if}
+		{/if}
+	</section>
 </div>
 
 <style>
@@ -472,7 +516,8 @@
 		align-items: center;
 		gap: 0.35rem;
 	}
-	.h-row h2 {
+	.h-row h2,
+	#warn-run-h {
 		margin: 0;
 	}
 	.intro {
@@ -635,6 +680,38 @@
 	.empty {
 		margin: 0.5rem 0 0;
 		color: var(--text-2);
+	}
+	.run-list {
+		list-style: none;
+		margin: 0.4rem 0 0;
+		padding: 0;
+		display: grid;
+		gap: 0.35rem;
+	}
+	.run-list li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.2rem 0.5rem;
+		padding: 0.45rem 0.6rem;
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--warning);
+		border-radius: var(--radius);
+		background: var(--surface);
+	}
+	.run-list li.note {
+		border-left-color: var(--border-strong);
+	}
+	.run-list .text {
+		flex: 1 1 28rem;
+		min-width: 0;
+		overflow-wrap: break-word;
+	}
+	.run-list .go {
+		white-space: nowrap;
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
 	}
 	.cell-label {
 		display: none;

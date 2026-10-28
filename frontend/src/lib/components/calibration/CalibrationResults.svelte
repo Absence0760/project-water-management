@@ -323,7 +323,7 @@
 		</p>
 		{#if calWarnings}
 			<p class="small warn-line" data-testid="calibration-to-warnings">
-				<a href="?tab=warnings&run={encodeURIComponent(run.id)}"
+				<a href="?tab=warnings&run={encodeURIComponent(run.id)}#warn-run"
 					>{calWarnings === 1 ? '1 warning' : `${calWarnings} warnings`} about the record and its data in this run, each with its setting, on Warnings</a
 				>
 			</p>

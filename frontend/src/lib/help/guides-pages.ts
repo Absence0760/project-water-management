@@ -545,6 +545,15 @@ export const PAGE_GUIDES: Guide[] = [
 					}
 				]
 			},
+			{
+				heading: 'Run warnings',
+				blocks: [
+					{
+						type: 'p',
+						text: '**Run warnings** lists what the shown run warned about (the latest run, or the one picked on Runs & results), things to check first, then notes on how the data were handled. Each warning the engine gives a code links to the setting that changes it (**Go to Rain gaps**, **Go to Calibration record**) or to **Data** when the fix is to load or rename a series; the rest are listed as they are.'
+					}
+				]
+			}
 		],
 		terms: ['data-quality-limits', 'flow-missing', 'calibration-exclusions'],
 		related: ['add-data', 'calibration-page', 'rain-gap-filling']

@@ -6495,9 +6495,10 @@ editors run one now and read the map's proposals, viewers read.
 
 ## Warnings (`?tab=warnings`)
 
-Every period a data check flags on a stored series, one row each, with its
-fix (issue #611, modelled on feohledger's exceptions queue).
-`warnings/WarningsTab.svelte`, its logic in `warnings/items.ts` (pure), its loading in
+Every period a data check flags on a stored series, one row each, and the
+shown run's warnings, each with its fix (issue #611, modelled on feohledger's
+exceptions queue). `warnings/WarningsTab.svelte`, its logic in
+`warnings/items.ts` (pure) and `warnings/runWarnings.ts`, its loading in
 `warnings/sources.ts`.
 
 - **A linked-only view** (`tabs.ts` `LINKED_ONLY`, `TAB_GROUP` core): no
@@ -6551,8 +6552,17 @@ fix (issue #611, modelled on feohledger's exceptions queue).
   latest run" follows. A row's decision moves the focus to the row now in
   its place (or keeps it on the row when it stays).
 - **Viewers** read every row and status with no tick boxes, buttons or bulk row.
+- **Run warnings** (`#warn-run`): the shown run's warnings, things to check
+  first, then notes, each text once. A coded one (`summary.warningCodes`,
+  engine ≥ 1.102.0) links to its `WARNING_CODES` setting (**Go to Rain gaps**,
+  **Go to Calibration record**, `settings/sections.ts` `settingsPageOf` for
+  the page; **Go to Data** when the catalogue names none); an uncoded one is
+  grouped by its text as Runs & results groups it and says **No setting linked
+  yet**. Places a warning names link as on Runs & results. Eight show, then
+  **Show all N run warnings**.
 - **Layout:** a reading page in the window's one scroll. The header's context
-  says "N open of M flagged periods in K records", its action **Data checks on Data**. Twenty-five rows show,
+  says "N open of M flagged periods in K records", its actions **Run warnings
+  (N)** (to `#warn-run`) and **Data checks on Data**. Twenty-five rows show,
   then **Show all N periods**; the table never scrolls in a box of its own.
   Under a 640 px container each row is a card, its decisions 44 px side by
   side.
@@ -6564,8 +6574,10 @@ fix (issue #611, modelled on feohledger's exceptions queue).
   URL with Back, one title, the sidebar while open, a row's Patch and Exclude
   landing in their settings and the next run reading them as missing, Reopen,
   thirty periods with Select all N matching and a bulk Patch, a viewer, the
-  links in, axe at 1440 and 390, 320 px reflow); `warnings/items.test.ts` for
-  the helpers.
+  links in, axe at 1440 and 390, 320 px reflow) and
+  `e2e/tests/warnings-run.spec.ts` (each coded warning's Go to link landing on
+  its panel, Calibration's line, the empty states); `warnings/items.test.ts`
+  and `warnings/runWarnings.test.ts` for the helpers.
 
 ## Model settings
 
