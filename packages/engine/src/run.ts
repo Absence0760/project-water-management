@@ -300,6 +300,8 @@ function runNetwork(
 		...(capturing ? { captureFits: true } : {})
 	});
 	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill, gapRain } = prepared;
+	// Every later reader of the input sees a record's own missing periods as gaps (engine ≥ 1.102.0, ./recordPeriods.ts).
+	if (series !== input.series) input = { ...input, series };
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
 	// The days before a forecast tail (engine ≥ 1.28.0, engine-audit.md K1): the record-wide
 	// statistics (GR4J's cycled warm-up, the land-cover Q75, the Reserve's assessed months and

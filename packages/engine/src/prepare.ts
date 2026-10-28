@@ -48,6 +48,7 @@ import { doubleMass as doubleMassOf, doubleMassRunWarning, type DoubleMass } fro
 import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
+import { resolveChecksKept, resolveFlowMissing, withRecordPeriods } from './recordPeriods';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
 import { resolveEwrSplit } from './network/ewrSplit';
 import { resolveEwrDailySource } from './reserve/dailySource';
@@ -217,7 +218,9 @@ export function prepareRun(input: ModelInput, options: PrepareOptions = {}): Pre
 	const warnings: string[] = [];
 	// A resumed run's pairing factors (engine ≥ 1.91.0) stand in for a fit, as its CHIRPS factors do.
 	let settings = withPinnedStationFactors(mergeSettings(input.settings, warnings), options.pinned?.stationFactors);
-	const series = input.series ?? {};
+	// A record's own periods (engine ≥ 1.102.0, issue #611, ./recordPeriods.ts): settings.flowMissing on a flow record and
+	// settings.rainStations.unreliable on the alternative gauge are gaps from here on, for every reader of the run.
+	const series = withRecordPeriods(settings, input.series ?? {}, warnings);
 	// Rainfall stations (engine ≥ 1.91.0, issue #553, docs/model.md §2.4i): with a station for the catchment, its rule
 	// is the catchment rain. The catchment gauge's own handling (§2.4b's fit, §2.4c–§2.4e) then reads no gauge: the
 	// station's record went through its checks in ./runoff/stationRecord.ts. Without settings.rainStations: as before.
@@ -554,6 +557,9 @@ export interface CheckedRain {
  * are fitted on.
  */
 export function checkedRain(settings: ProjectSettings, series: ModelInput['series'], start: number, days: number, options: PrepareOptions = {}): CheckedRain {
+	// The alternative gauge's unreliable periods (engine ≥ 1.102.0, issue #611): blank wherever its rain-source periods
+	// read it, whoever calls (prepareRun has blanked them already and warned; this repeats nothing there).
+	series = withRecordPeriods({ rainStations: settings.rainStations, flowMissing: null }, series, []);
 	const dq = settings.dataQuality;
 	const checks = { dq, chirps: series.rain_chirps_mm ?? null };
 	const replaced = rainSourceSpans(settings.rainSource);
@@ -813,6 +819,18 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	}
 	s.calibrationSiteNodeId ??= null;
 	s.calibrationExclusions = sanitizeExclusions(raw?.calibrationExclusions, warnings);
+	// One flow record's missing periods and the kept data checks (engine ≥ 1.102.0, issue #611, ./recordPeriods.ts):
+	// only when stored, so settings without them normalise as before.
+	if (raw?.flowMissing != null) {
+		const fm = resolveFlowMissing(raw.flowMissing, warnings);
+		if (fm) s.flowMissing = fm;
+		else delete s.flowMissing;
+	}
+	if (raw?.checksKept != null) {
+		const kept = resolveChecksKept(raw.checksKept, warnings);
+		if (kept) s.checksKept = kept;
+		else delete s.checksKept;
+	}
 	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): off unless a record has a spec.
 	s.flowGapFill = resolveFlowGapFill(raw?.flowGapFill, warnings);
 	// Provenance only: never read by the model.

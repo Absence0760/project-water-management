@@ -3,6 +3,7 @@
 // field maps onto the b023 workbook.
 import type { ForecastSummary } from './forecast';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
+import type { FlowMissingSettings } from './recordPeriods';
 import type { QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
@@ -632,6 +633,22 @@ export interface ProjectSettings {
 	 */
 	calibrationExclusions: CalibrationExclusion[];
 	/**
+	 * Periods of one flow record treated as missing (engine ≥ 1.102.0, issue
+	 * #611, ./recordPeriods.ts, docs/model.md §2.10h): series id → periods,
+	 * each with a reason, as calibrationExclusions' entries. Where the run
+	 * reads that record it has no reading on those days, so every score, the
+	 * fit and the plausibility checks skip them and its gap fill may fill
+	 * them; the other records keep theirs. Absent or {} = none.
+	 */
+	flowMissing?: FlowMissingSettings | null;
+	/**
+	 * The data-check items the user kept as recorded (engine ≥ 1.102.0, issue
+	 * #611): item ids `<check>:<seriesId>:<start>:<end>`. No run effect, but a
+	 * kept outlier or flat stretch of a flow record isn't `suspect` there
+	 * (./calibrate/dayFlags.ts). Absent = none.
+	 */
+	checksKept?: string[] | null;
+	/**
 	 * Gap filling of the observed flow records (engine ≥ 1.23.0, issue #66,
 	 * ./flowGapFill.ts, docs/model.md §2.10i): a spec per record, null = not
 	 * filled (the default). Filled values never change the stored series;
@@ -1151,9 +1168,13 @@ export interface RainStationSettings {
 	 */
 	sites?: Record<string, { unitId: string }> | null;
 	/**
-	 * Station id → inclusive [from, to] ISO date ranges the user marks
+	 * Rain record id → inclusive [from, to] ISO date ranges the user marks
 	 * unreliable: those days count as gaps (§2.4e's rain-source periods,
-	 * generalised to every station).
+	 * generalised to every station). Since engine 1.102.0 (issue #611) any
+	 * rain record's id, not only a station's: a unit's own gauge (after its
+	 * checks, ./runoff/unitGaugeChecks.ts) and the alternative catchment
+	 * gauge (./recordPeriods.ts) honour it too, wherever they are read. A
+	 * station's are read only while it is assigned.
 	 */
 	unreliable?: Record<string, [string, string][]> | null;
 	/**
@@ -2972,6 +2993,15 @@ export interface DailySeries {
 	 * the run comparison and the fit record.
 	 */
 	origin?: SeriesOrigin | null;
+	/**
+	 * The stored series' id (time_series.id), set by the backend on every
+	 * series it reads and kept by a run's input snapshot (engine ≥ 1.102.0,
+	 * issue #611). The model reads it only to match the settings that name a
+	 * record by its id: settings.flowMissing and settings.rainStations
+	 * .unreliable on a record that isn't a station (./recordPeriods.ts), and
+	 * settings.checksKept. Absent = matches none of them.
+	 */
+	seriesId?: string | null;
 }
 
 export interface SeriesMeta {

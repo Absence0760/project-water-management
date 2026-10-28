@@ -54,6 +54,8 @@
 	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import type { RunBlocker } from '#lib/calibration/autoFit.js';
 	import CalibrationExclusions from '#lib/components/calibration/CalibrationExclusions.svelte';
+	import FlowMissingPeriods from '#lib/components/calibration/FlowMissingPeriods.svelte';
+	import type { RecordOption } from './recordPeriods';
 	import CalibrationWindowFields from '#lib/components/calibration/CalibrationWindowFields.svelte';
 	import FitPanel from '#lib/components/calibration/FitPanel.svelte';
 	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
@@ -89,6 +91,7 @@
 		observedOrigins,
 		apanDaily,
 		flowRecordId = null,
+		flowRecords = null,
 		readonly,
 		onProjectChange
 	}: {
@@ -115,6 +118,8 @@
 		apanDaily?: ApanDailyFingerprint | null;
 		/** A flow record the calibration can score against, for the link to where its site is set (the Data tab). */
 		flowRecordId?: string | null;
+		/** The project's flow records, for each one's missing periods (settings.flowMissing, issue #611); null = not loaded. */
+		flowRecords?: RecordOption[] | null;
 		readonly: boolean;
 		/** The server saved an automated fit or a proposal: the project as it now is. */
 		onProjectChange: (p: Project) => void;
@@ -507,6 +512,14 @@
 		dataHref={flowRecordId ? `?tab=series&series=${encodeURIComponent(flowRecordId)}#data-chart` : null}
 	/>
 	<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={draft.errors.exclusions} {readonly} />
+	<!-- One record's own missing periods (issue #611): the exclusions above leave days out of every record, these out of one.
+	     Emptied, the setting goes back to how it was saved (absent or null), so adding and removing a period isn't an edit. -->
+	<FlowMissingPeriods
+		bind:value={() => s.flowMissing, (v) => (s.flowMissing = v ?? (draft.saved.flowMissing === undefined ? undefined : null))}
+		bind:error={draft.errors.flowMissing}
+		records={flowRecords}
+		{readonly}
+	/>
 	<!-- Periods in which only a record's low flows are valid (issue #557): stored with the quality flags, shown beside the exclusions. -->
 	<LowFlowPeriods
 		bind:list={() => s.qualityFlags.lowFlowPeriods ?? [], (v) => (s.qualityFlags = { ...s.qualityFlags, lowFlowPeriods: v.length ? v : undefined })}

@@ -74,8 +74,9 @@ describe('runModel(loadRunInput(run)) reproduces the stored run', () => {
 		// forecast tail: an ordinary run leaves it out (WP-2.12; Sandspruit has one).
 		const original = withoutForecastTail(inputOf(ex));
 		expect(Object.keys(input.series).sort()).toEqual(Object.keys(original.series).sort());
-		// Each carries the product/version and the source and given unit the run recorded (032, 107; the imported examples record neither).
-		for (const [kind, s] of Object.entries(original.series)) expect(input.series[kind as SeriesKind]).toEqual({ ...s, provenance: null, origin: null });
+		// Each carries the product/version and the source and given unit the run recorded (032, 107; the imported examples record neither),
+		// and the stored series it was read from (engine ≥ 1.102.0, issue #611).
+		for (const [kind, s] of Object.entries(original.series)) expect(input.series[kind as SeriesKind]).toEqual({ ...s, provenance: null, origin: null, seriesId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
 
 		const again = runModelChecked(input);
 		expect(canon(again.summary)).toBe(canon(stored));

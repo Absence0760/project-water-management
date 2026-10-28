@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "issue #611 slice 2: the per-record flow missing periods and rain unreliable periods fields (Calibration record, Flagged rain), their helpers and help text, and the engine's record periods (recordPeriods.ts, checkItems.ts) in every chunk that bundles the engine; measured 2114 KB on origin/main 1e36c4c0d, 2119 KB with the change"
+}

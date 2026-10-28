@@ -6837,7 +6837,15 @@ two.
   name: *Keep a water year dry* / *Keep a date range dry*, *Add a missing
   water year* / *Add a missing date range* (Also treat as missing), *Keep a
   water year's readings* / *… date range's readings*, *Spread a water year* /
-  *Spread a date range* (Also spread), *Add a rain-source period*. While
+  *Spread a date range* (Also spread), *Add a rain-source period*. Last on
+  the Flagged rain card, **Unreliable periods of a rain record**
+  (`settings/RainRecordPeriods.svelte`; engine ≥ 1.102.0, issue #611,
+  `settings.rainStations.unreliable`, model.md §2.4i): every rain record of
+  the project (each catchment rain series, a unit's own gauge with its
+  unit, the alternative gauge), each with *Mark a period unreliable* and
+  From/To rows (no reason: the setting keeps none). A reversed or blank date
+  blocks Save. Each period counts in the fold's line ("2 unreliable
+  periods"). While
   every choice is its default (`rain.ts` `rainGapsAtDefaults`), both cards
   fold into one line, "All defaults: bias-corrected per month, whole record,
   zero runs missing, accumulations spread" with **Change** (`rainGapsLine`;
@@ -7787,7 +7795,17 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   2015-10-01 – 2016-09-30"). A blank reason, a reversed range or a period
   listed twice shows an alert and blocks Save (the save bar links here).
   Excluded days are left out of Fit automatically and the run's calibration
-  statistics (model.md §2.10). Under them, **Low flows only**
+  statistics (model.md §2.10). Under them, each flow record's **Missing
+  periods of <record>** (`calibration/FlowMissingPeriods.svelte`; engine ≥
+  1.102.0, issue #611, `settings.flowMissing`, model.md §2.10h): one period
+  list a flow record of the project (the gauge, logger and reference
+  records, named by series name and gauge; one the setting names that the
+  project has since deleted shows as *A deleted series*), each with "A water
+  year missing" and "A date range missing" and a required reason. Those
+  days of that record only are read as missing; the calibration exclusions
+  above leave days out of every record. A problem in any list blocks Save,
+  named by its record. Emptied, the setting goes back to how it was saved.
+  Then **Low flows only**
   (`calibration/LowFlowPeriods.svelte`; engine ≥ 1.90.0, issue #557,
   `settings.qualityFlags.lowFlowPeriods`, model.md §2.10h): "Use only low
   flows in a date range" adds a row with the **Record** (the project's
