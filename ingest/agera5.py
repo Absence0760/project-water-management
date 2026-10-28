@@ -86,7 +86,6 @@ from agera5request import (  # noqa: E402,F401  (re-exported: agera5.DATASET, ag
     DATASET,
     PRODUCT,
     VARIABLE,
-    VERSION,
     month_days,
     month_request,
     request_month,

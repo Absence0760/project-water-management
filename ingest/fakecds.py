@@ -54,7 +54,7 @@ class FakeCds:
     def _gate(self, what, *args):
         self.calls.append((what, *args))
         if self.refuse:
-            raise polite.StopRun(f"{era5request.CDS_URL} ({what})", self.refuse)
+            raise polite.StopRun(f"{cdsjob.CDS_URL} ({what})", self.refuse)
 
     def submit(self, dataset, request) -> str:
         self._gate("submit", dataset)
