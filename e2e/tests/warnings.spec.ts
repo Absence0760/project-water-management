@@ -197,10 +197,30 @@ test.describe('1440×960', () => {
 		await expect(warningRows(viewer.page)).toHaveCount(3);
 		await expect(warningsTable(viewer.page).getByRole('checkbox')).toHaveCount(0);
 		await expect(warningsTable(viewer.page).getByRole('button')).toHaveCount(0);
+		// Reading a period is for everyone: each row's View is a link.
+		await expect(warningsTable(viewer.page).getByRole('link', { name: /^View on the chart:/ })).toHaveCount(3);
 		await expect(bulkBar(viewer.page)).toHaveCount(0);
 		await expect(warningRow(viewer.page, 'Weir record')).toContainText('Open');
 		await expect(checksPanel(viewer.page)).toContainText('An editor patches rain');
 		await expectNoViolations(viewer.page);
+	});
+
+	test('a period’s View opens its record on Data’s chart, on that period, hatched', async ({ page, owner }) => {
+		void owner;
+		const project = await seedWarnings(page.request, 'Warnings view');
+		await openWarnings(page, project.id, '&source=checks');
+		const row = warningRow(page, '11 Oct 2021 – 16 Oct 2021');
+		await row.getByRole('link', { name: /^View on the chart:/ }).click();
+
+		await expect(page).toHaveURL(/[?&]tab=series(&|$)/);
+		await expect(page).toHaveURL(/[?&]view=2021-10-11~2021-10-16(&|#|$)/);
+		await expect(page).toHaveURL(/#data-chart$/);
+		const chart = page.locator('#data-chart');
+		await expect(chart.locator('[data-band-from]')).toHaveAttribute('data-band-from', '2021-10-11');
+		await expect(chart.locator('.band-key')).toContainText('Flagged');
+		// The record the row named is the one charted.
+		await expect(page.getByTestId('series-details')).toBeVisible();
+		await expect(chart).toContainText('Valley gauge');
 	});
 
 	test('opens from Data’s checks panel and its row’s count, from Runs & results, and a #warn-run link lands on its heading', async ({ page, owner }) => {
