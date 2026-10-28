@@ -380,7 +380,7 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 		{ key: 'aet', label: 'Actual evaporation', unit: 'mm', values: Array.from(aet) },
 		...gr4j.stores.map((s, j) => ({ key: s.key, label: s.label, unit: 'mm', values: Array.from(stores[j]!) }))
 	];
-	if (p.x2 !== 0 || zones?.zones.some((z) => z.params.x2 !== 0)) series.push({ key: 'exchange', label: 'Groundwater exchange (+ gained / − lost)', unit: 'mm', values: Array.from(ex) });
+	if (p.x2 !== 0 || zones?.zones.some((z) => z.units.length > 0 && z.params.x2 !== 0)) series.push({ key: 'exchange', label: 'Groundwater exchange (+ gained / − lost)', unit: 'mm', values: Array.from(ex) });
 	const total = (a: ArrayLike<number>) => {
 		let s = 0;
 		for (let t = 0; t < a.length; t++) s += a[t]!;

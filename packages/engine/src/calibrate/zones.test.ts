@@ -6,7 +6,7 @@ import { toEpochDay } from '../calendar';
 import { gaugeSeriesKey, type Gr4jSettings, type ModelInput, type NetworkNode } from '../project';
 import { mergeSettings } from '../prepare';
 import { Rng } from '../random';
-import { runModel } from '../run';
+import { runModel, runModelChecked } from '../run';
 import { sameOutput } from '../testing/invariants';
 import type { Gr4jParams } from '../runoff/params';
 import { calibrate, prepareCalibration, zoneNote } from './calibrate';
@@ -126,6 +126,10 @@ describe('calibration zone settings', () => {
 		]);
 		expect(warnings).toHaveLength(3);
 		expect(warnings[0]).toMatch(/X1 must be 10–3000 mm/);
+		// An unticked row's bad fields don't warn: it changes nothing a run does.
+		const quiet: string[] = [];
+		sanitizeCalibrationZones([{ nodeId: 'H', enabled: false, gr4j: { x1: 5, x2: 0, x3: 1, x4: 1 }, calibrationExclusions: [{ waterYear: 'x' }] }], quiet);
+		expect(quiet).toEqual([]);
 	});
 
 	it('refuses a row that is gone, not a gauge, the outlet, the site, or below the site, and a repeat', () => {
@@ -219,6 +223,23 @@ describe('runs under calibration zones', () => {
 		]);
 	});
 
+	it('the run’s self-checks pass with a zone’s X1 far above the site’s (the store cap is each unit’s zone’s X1)', () => {
+		const input = withZones(network(), [zone('H', { gr4j: { x1: 2500, x2: 0, x3: 220, x4: 3.1 } })], { gr4j: { x1: 100, x2: 0, x3: 50, x4: 1.3, warmupDays: 365 } });
+		const out = runModelChecked(input);
+		expect(out.summary.verification?.passed, JSON.stringify(out.summary.verification)).toBe(true);
+		expect(Math.max(...out.series.find((x) => x.nodeId === null && x.key === 'production_store')!.values)).toBeGreaterThan(100);
+		expect(out.summary.warnings.some((w) => /^Calibration zones: 1 land unit ran on a calibration zone’s own GR4J parameters/.test(w))).toBe(true);
+	});
+
+	it('the exchange series follows a zone’s X2 only when the zone has land units', () => {
+		// Farm C moved off the bare gauge K, so K's zone has no land unit.
+		const net = network();
+		const input = { ...net, model: { ...net.model, nodes: net.model.nodes.map((n) => (n.id === 'C' ? { ...n, downstreamNodeId: 'G' } : n)) } };
+		const has = (z: CalibrationZone[]) => runModel(withZones(input, z)).series.some((x) => x.key === 'exchange');
+		expect(has([zone('H', { gr4j: { ...TRUTH_H, x2: -0.5 } })])).toBe(true);
+		expect(has([zone('K', { gr4j: { ...TRUTH_H, x2: -0.5 } })])).toBe(false);
+	});
+
 	it('a zone with no parameters yet runs on the catchment’s, with a warning; Fragmentation ignores zones with one', () => {
 		const input = network();
 		const bare = runModel(input);
@@ -253,6 +274,15 @@ describe('the stepwise fit', () => {
 		expect(() => zoneFitPlan(withZones(empty, [zone('H')]))).toThrow(/"Weir" has no land unit/);
 		const allUp = { ...input, model: { ...input.model, nodes: input.model.nodes.map((n) => (n.id === 'B' || n.id === 'C' ? { ...n, downstreamNodeId: 'H' } : n)) } };
 		expect(() => zoneFitPlan(withZones(allUp, [zone('H')]))).toThrow(/nothing of its own to fit/);
+		// An inner site whose own zone's units all drain beside it: its step's score couldn't move.
+		const inner = { ...input, model: { ...input.model, nodes: [...input.model.nodes.map((n) => (n.id === 'H' ? { ...n, downstreamNodeId: 'S' } : n)), node({ id: 'S', name: 'Site weir', kind: 'gauge', downstreamNodeId: 'G', sortOrder: 6 })] } };
+		expect(() => zoneFitPlan(withZones(inner, [zone('H')], { calibrationSiteNodeId: 'S' }))).toThrow(/drains through it/);
+		// With a unit of its own above it, it fits.
+		const own = { ...inner, model: { ...inner.model, nodes: inner.model.nodes.map((n) => (n.id === 'C' ? { ...n, downstreamNodeId: 'S' } : n)) } };
+		expect(zoneFitPlan(withZones(own, [zone('H')], { calibrationSiteNodeId: 'S' }))!.map((s) => [s.zoneNodeId, s.units])).toEqual([
+			['H', ['A']],
+			[null, ['B', 'C']]
+		]);
 	});
 
 	it('a zone fit moves only its own units and scores its own gauge', () => {

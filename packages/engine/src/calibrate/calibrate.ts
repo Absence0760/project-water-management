@@ -448,7 +448,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// Refused as runModel refuses it (runoff/simulate.ts).
 	if (!hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')), hasDailyEt0Value(aligned('evap_et0_mm')))) throw new Error(GR4J_NO_PET);
 	const area = requireCatchmentAreaKm2(settings.calibration, input);
-	const startParams: ParamSet = zoneNodeId === null ? { ...baseParams } : { ...resolveParams<Gr4jParams>(GR4J_PARAMS, cs.gr4j, 'GR4J', warnings) };
+	// A zone's start: its row's parameters (in bounds, sanitizeCalibrationZones) over the catchment's, already warned of.
+	const startParams: ParamSet = zoneNodeId === null ? { ...baseParams } : { ...resolveParams<Gr4jParams>(GR4J_PARAMS, cs.gr4j, 'GR4J', []) };
 	const natural = new Float64Array(days);
 	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.28.0).
 	const { historyDays } = forecastTail(run);

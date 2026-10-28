@@ -10701,7 +10701,15 @@ next ticked gauge downstream, and the site's zone is the rest. Each unit runs
 GR4J with its zone's X1–X4 (the row's `gr4j`, else, with a warning that the
 zone has no parameters of its own yet, the catchment's `gr4j`); the warm-up
 (`gr4j.warmupDays`), PE and forcing are the catchment's, as under §2.4h. The
-groundwater exchange series is written when any zone's X2 is not 0.
+groundwater exchange series is written when the catchment's X2, or that of
+any zone with land units, is not 0. `summary.runoff.params` stays the
+calibration site's zone's parameters (the catchment's stores are the units'
+area-weighted means, so the run's runoff self-check caps the production store
+at the units' area-weighted X1); each zone's are in `summary.unitRain.zones`.
+While the report, the evidence pack, the uncertainty ensemble and automated
+calibration don't yet read the zones, every run that applies one warns that
+they show or vary only the site's parameters (`Calibration zones: N land
+units ran on …`).
 
 **Only under Per unit.** Under Fragmentation one GR4J runs for the whole
 catchment (§2.5), so zones can't have their own parameters: ticked rows warn
@@ -10716,9 +10724,10 @@ change of the ticked rows' parameters (*Calibration zones*; a window, a fit
 record or an unticked row is no change).
 
 **The stepwise fit** (`calibrate/stepwise.ts` `calibrateStepwise`). Zones are
-fitted in network order, **upstream first**: a zone whose gauge drains
-through another ticked gauge comes before it (zones that don't are ordered by
-name, then id), and the site's own zone is last. Each step is a whole
+fitted in network order, **upstream first**: a zone with more ticked gauges
+below it comes first (so one whose gauge drains through another ticked gauge
+is always before it), then by name, then id, and the site's own zone is
+last. Each step is a whole
 `calibrate()` (§2.10b) with the same objective, bounds, budget, starts, seed
 and validation:
 
@@ -10751,8 +10760,10 @@ curtailment, a hands-off flow, the senior users' claims, land cover's
 low-flow threshold).
 
 **Refusals and warnings.** The fit refuses when a ticked zone has no land
-unit above its gauge, or when every land unit is in a zone above the site
-(`zoneFitError`). Each step under zones notes when its record has fewer than
+unit above its gauge, when every land unit is in a zone above the site, or
+when the site is a gauge inside the network and none of its own zone's units
+drains through it (they all join the river beside it, so its step's score
+couldn't move with the parameters it fits) (`zoneFitError`). Each step under zones notes when its record has fewer than
 2 complete water years (95 % of a water year's days observed, outside the
 exclusions) or no dry → wet test (no dry year to fit on), the representativeness
 and dry → wet notes beside it (`zoneCoverageNotes`). The API refuses a new

@@ -49,7 +49,7 @@ export function zoneFitPlan(input: ModelInput): ZoneFitPlanStep[] | null {
 	const settings = mergeSettings(input.settings, []);
 	const a = assignment(input, settings);
 	if (!a) return null;
-	const err = zoneFitError(a);
+	const err = zoneFitError(a, input.model.nodes, settings.calibrationSiteNodeId ?? null);
 	if (err) throw new Error(err);
 	return [
 		...a.zones.map((z) => ({ zoneNodeId: z.nodeId, name: z.name, units: [...z.units] })),

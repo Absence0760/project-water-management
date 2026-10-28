@@ -96,16 +96,18 @@ export function sanitizeCalibrationZones(raw: unknown, warnings: string[]): Cali
 		}
 		seen.add(z.nodeId);
 		const e = zoneParamsError(z.gr4j ?? null);
-		if (e) warnings.push(`calibration zone at gauge node ${z.nodeId}: ${e}; its units take the catchment's parameters`);
+		const ticked = z.enabled === true;
+		// Only a ticked row's problems warn: an unticked row changes nothing a run does, its warnings included.
+		if (e && ticked) warnings.push(`calibration zone at gauge node ${z.nodeId}: ${e}; its units take the catchment's parameters`);
 		const qf = isObj(z.qualityFlags) && (FLAG_USES as readonly unknown[]).includes(z.qualityFlags.suspect) && !zeroFlowMonthsError(z.qualityFlags.zeroFlowMonths ?? []) ? z.qualityFlags : null;
 		const kind = z.calibrationFlowKind === 'flow_observed_m3s' || z.calibrationFlowKind === 'flow_logger_m3s' ? z.calibrationFlowKind : null;
 		out.push({
 			nodeId: z.nodeId,
-			enabled: z.enabled === true,
+			enabled: ticked,
 			calibrationStart: isoDate(z.calibrationStart) ? z.calibrationStart : null,
 			calibrationEnd: isoDate(z.calibrationEnd) ? z.calibrationEnd : null,
 			calibrationFlowKind: kind,
-			calibrationExclusions: sanitizeExclusions(z.calibrationExclusions, warnings, `calibration exclusion at gauge node ${z.nodeId}`),
+			calibrationExclusions: sanitizeExclusions(z.calibrationExclusions, ticked ? warnings : [], `calibration exclusion at gauge node ${z.nodeId}`),
 			qualityFlags: qf ? { suspect: qf.suspect as FlagUse, ...(Array.isArray(qf.zeroFlowMonths) && qf.zeroFlowMonths.length ? { zeroFlowMonths: [...(qf.zeroFlowMonths as number[])] } : {}) } : null,
 			gr4j: e || z.gr4j == null ? null : (Object.fromEntries(GR4J_PARAMS.map((s) => [s.key, (z.gr4j as Record<string, number>)[s.key]])) as unknown as Gr4jParams),
 			fitRecord: isObj(z.fitRecord) ? (z.fitRecord as unknown as FitRecord) : null
@@ -238,6 +240,13 @@ export function resolveZones(nodes: readonly ZoneNode[], settings: Pick<ProjectS
 	for (const z of zones) {
 		if (!z.fitted) warnings.push(`Calibration zone "${z.name}" has no parameters of its own yet: its units run on the catchment's GR4J parameters until it is fitted`);
 	}
+	// Until the report, the evidence pack, the uncertainty ensemble and automated calibration read the zones (issue #555's
+	// next round), the run says that they show or vary the calibration site's zone's parameters only.
+	const zoned = zones.reduce((n, z) => n + z.units.length, 0);
+	if (zoned)
+		warnings.push(
+			`Calibration zones: ${zoned} land unit${zoned === 1 ? '' : 's'} ran on ${zones.length === 1 ? 'a calibration zone’s' : 'calibration zones’'} own GR4J parameters. The report, the evidence pack, the uncertainty ensemble and automated calibration still show or vary only the calibration site’s parameters (Model settings → Flow calibration)`
+		);
 	return { zones, primaryUnits: landUnits.filter((u) => unitZone.get(u) === null), unitZone };
 }
 
@@ -283,10 +292,18 @@ export function zoneSiteName(nodes: readonly ZoneNode[], siteNodeId: string | nu
 	return site?.name ?? nodes.find((n) => n.downstreamNodeId === null)?.name ?? 'the outlet';
 }
 
-/** Why the zones can't be fitted stepwise, or null: a ticked zone, or the primary zone, with no land unit. */
-export function zoneFitError(a: ZoneAssignment): string | null {
+/**
+ * Why the zones can't be fitted stepwise, or null: a ticked zone with no land
+ * unit, or a calibration site none of whose own zone's units drains through
+ * it (every unit in a zone above it, or the rest all beside an inner site), so
+ * its step's score couldn't move with the parameters it fits.
+ */
+export function zoneFitError(a: ZoneAssignment, nodes: readonly ZoneNode[], siteNodeId: string | null): string | null {
 	for (const z of a.zones) if (!z.units.length) return `the calibration zone "${z.name}" has no land unit above its gauge (none drains to it that isn't in a zone further up): untick it, or give a unit above it an area`;
 	if (!a.primaryUnits.length) return 'every land unit is in a zone above the calibration site, so the site has nothing of its own to fit: untick the lowest gauge, or calibrate there instead (Scored at)';
+	const byId = new Map(nodes.map((n) => [n.id, n]));
+	if (siteNodeId !== null && byId.has(siteNodeId) && !a.primaryUnits.some((u) => pathDown(byId, u).includes(siteNodeId)))
+		return `none of the land units left to the calibration site "${byId.get(siteNodeId)!.name}" drains through it (they are all beside it), so its step could not fit them: calibrate at the outlet instead (Scored at), or untick the gauge above the site`;
 	return null;
 }
 
