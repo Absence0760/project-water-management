@@ -1800,6 +1800,19 @@ Interaction details that bit:
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
   under it and Close pinned (`notes/NotesDrawer.svelte`).
+- **A chat sheet pins its composer in the sheet's action row.** The
+  assistant's sheet (issue #610) put its box, budget line and six
+  disclaimer paragraphs in the scrolling body under the conversation, with a
+  Close button below them and the ✕ above: the examples sat 270 px over the
+  box with nothing between, and the disclaimer took a third of the sheet.
+  Now the box, its hint and Send are one bordered block in the Dialog's
+  `actions` (pinned), with one quiet meta line under it; the body's content
+  sits at its foot (`margin-top: auto`), so the examples or the newest turn
+  are always next to the box; a long legal text keeps its first line in view
+  and folds the rest (`common/Fold.svelte`) into a box capped at 25vh; the ✕
+  alone closes it. Follow a stream only if the reader was at the foot
+  *before* the update (`$effect.pre`): measured after, a card taller than the
+  slack stopped the follow (`assistant/AssistantPanel.svelte`).
 - **A grid's actions go above it, in one row.** The node table, the crop
   grids and the Demands grid put add, sort, paste, load and download after
   the rows, the totals and a field guide, so the operator didn't find a file

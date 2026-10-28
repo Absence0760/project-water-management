@@ -12,6 +12,8 @@
 -->
 <script lang="ts">
 	import Dialog from '#lib/components/common/Dialog.svelte';
+	import Fold from '#lib/components/common/Fold.svelte';
+	import { tick } from 'svelte';
 	import type { SettingsProposal } from '#lib/api/types.js';
 	import { fmtDay, fmtPct } from '#lib/format/number.js';
 	import { basePath } from '#lib/nav/base.js';
@@ -56,19 +58,45 @@
 		return t.proposals.length ? 'The assistant answered with a recommended change.' : 'The assistant answered.';
 	});
 
-	// The newest words stay in view while they stream, unless the reader scrolled up to read.
-	$effect(() => {
+	// The newest words stay in view while they stream, unless the reader scrolled up to read. Whether the reader
+	// was at the foot is measured before the DOM grows (`$effect.pre`): measured after, a proposal card (taller
+	// than any slack) left the conversation behind. A question just sent always brings the foot into view.
+	/** The sheet's body (Dialog.svelte's `.body`) is what scrolls. */
+	const scroller = () => log?.closest<HTMLElement>('.body') ?? null;
+	const turnSize = () => {
 		const t = lastTurn;
-		void (t?.role === 'assistant' ? t.text.length + t.tools.length + t.proposals.length : 0);
-		const el = log?.parentElement;
-		if (!el) return;
-		if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
+		return chat.turns.length + (t?.role === 'assistant' ? t.text.length + t.tools.length + t.proposals.length : 0);
+	};
+	let follow = true;
+	$effect.pre(() => {
+		void turnSize();
+		const el = scroller();
+		if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 48) follow = true;
+	});
+	$effect(() => {
+		void turnSize();
+		const el = scroller();
+		if (!el || !follow) return;
+		el.scrollTop = el.scrollHeight;
+		follow = false;
+	});
+
+	/** Opening the disclaimer shortens the body: keep the newest words in view rather than the oldest. */
+	function keepFoot() {
+		const el = scroller();
+		if (el) el.scrollTop = el.scrollHeight;
+	}
+	// Opened again on a conversation, the sheet shows its newest words, once the Dialog's own effect has shown it
+	// (a closed <dialog> has no height to scroll).
+	$effect(() => {
+		if (open) void tick().then(keepFoot);
 	});
 
 	async function send(text = draft) {
 		const q = text.trim();
 		if (!q || chat.busy || blocked) return;
 		draft = '';
+		follow = true;
 		const taken = await chat.ask(q, runId);
 		// Not taken (the hourly limit, the budget, an error): the question goes back in the box.
 		if (!taken && !draft) draft = q;
@@ -88,24 +116,27 @@
 </script>
 
 <Dialog bind:open title="Assistant" side>
-	<div class="assistant" data-testid="assistant-panel">
-		<p class="muted intro">
-			Ask about this project’s model and results. The assistant reads the project’s data, the run you have open and
-			the help guides. It never changes anything: a recommended settings change is yours to apply and save.
-		</p>
-
+	<!-- The conversation scrolls in the sheet's body; the question box, the budget and the disclaimer's line are the
+	     sheet's pinned foot (its actions), so they stay in view however long the conversation gets. -->
+	<div class="convo" data-testid="assistant-panel">
 		{#if chat.turns.length === 0}
-			<div class="examples">
-				<p class="label">For example</p>
-				<ul>
+			<div class="empty">
+				<p class="intro">
+					Ask about this project’s model and results. The assistant reads the project’s data, the run you have open and
+					the help guides. It never changes anything: a recommended settings change is yours to apply and save.
+				</p>
+				<p class="label" id="assistant-examples">For example</p>
+				<ul class="suggestions" aria-labelledby="assistant-examples">
 					{#each EXAMPLES as q (q)}
-						<li><button type="button" class="btn btn-sm example" disabled={chat.busy || blocked} onclick={() => send(q)}>{q}</button></li>
+						<li>
+							<button type="button" class="btn suggestion" disabled={chat.busy || blocked} onclick={() => send(q)}>
+								<span>{q}</span><span class="arrow" aria-hidden="true">→</span>
+							</button>
+						</li>
 					{/each}
 				</ul>
 			</div>
-		{/if}
-
-		<div class="log-scroll">
+		{:else}
 			<ol class="log" bind:this={log} aria-label="Conversation">
 				{#each chat.turns as t, i (i)}
 					{#if t.role === 'user'}
@@ -115,64 +146,85 @@
 					{/if}
 				{/each}
 			</ol>
-		</div>
+		{/if}
 		<p class="visually-hidden" role="status" aria-live="polite">{announce}</p>
-
-		{#if chat.refusal?.kind === 'rate' && st}
-			<p class="note warn" role="alert" data-testid="assistant-rate-limited">
-				You have reached the assistant’s limit of {st.rate.messagesPerHour} messages an hour. Try again in about {waitText(chat.refusal.seconds)}.
-			</p>
-		{:else if chat.spent && st}
-			<p class="note warn" role="alert" data-testid="assistant-budget-spent">
-				This project’s assistant budget for the month is used up. It starts again on {fmtDay(st.budget.resetsAt)}.
-			</p>
-		{:else if chat.refusal?.kind === 'error'}
-			<p class="note err" role="alert">The question wasn’t sent: {chat.refusal.message}</p>
-		{/if}
-
-		<form
-			class="ask"
-			onsubmit={(e) => {
-				e.preventDefault();
-				void send();
-			}}
-		>
-			<label for="assistant-q" class="label">Your question</label>
-			<textarea
-				id="assistant-q"
-				rows="3"
-				bind:this={box}
-				bind:value={draft}
-				{onkeydown}
-				disabled={blocked}
-				aria-describedby="assistant-q-hint"
-				placeholder="Ask about this project…"
-			></textarea>
-			<div class="ask-row">
-				<span id="assistant-q-hint" class="muted hint">Enter sends, Shift+Enter starts a new line.</span>
-				{#if chat.busy}
-					<button type="button" class="btn" onclick={() => chat.stop()}>Stop</button>
-				{:else}
-					<button type="submit" class="btn btn-primary" disabled={blocked || !draft.trim()}>Send</button>
-				{/if}
-			</div>
-		</form>
-
-		{#if st}
-			<p class="muted budget" data-testid="assistant-budget">
-				{fmtPct(left, 0)} of this month’s budget left · starts again {fmtDay(st.budget.resetsAt)}
-			</p>
-			<!-- The status's disclaimer: paragraphs a blank line apart, `{site}` this site's address (as the report's, liability/Disclaimer.svelte). -->
-			<div class="muted disclaimer" data-testid="assistant-disclaimer">
-				{#each st.disclaimer.split(/\n\s*\n/) as para, i (i)}<p>{withSite(para, site)}</p>{/each}
-			</div>
-		{/if}
 	</div>
 	{#snippet actions()}
-		{#if chat.turns.length}
-			<button type="button" class="btn btn-ghost" onclick={() => chat.clear()}>New conversation</button>
-		{/if}
-		<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
+		<div class="foot">
+			{#if chat.refusal?.kind === 'rate' && st}
+				<p class="note warn" role="alert" data-testid="assistant-rate-limited">
+					You have reached the assistant’s limit of {st.rate.messagesPerHour} messages an hour. Try again in about {waitText(chat.refusal.seconds)}.
+				</p>
+			{:else if chat.spent && st}
+				<p class="note warn" role="alert" data-testid="assistant-budget-spent">
+					This project’s assistant budget for the month is used up. It starts again on {fmtDay(st.budget.resetsAt)}.
+				</p>
+			{:else if chat.refusal?.kind === 'error'}
+				<p class="note err" role="alert">The question wasn’t sent: {chat.refusal.message}</p>
+			{/if}
+
+			<form
+				class="composer"
+				onsubmit={(e) => {
+					e.preventDefault();
+					void send();
+				}}
+			>
+				<label for="assistant-q" class="visually-hidden">Your question</label>
+				<!-- The box takes the focus when the sheet opens: asking is what it is for. -->
+				<!-- svelte-ignore a11y_autofocus -->
+				<textarea
+					id="assistant-q"
+					rows="2"
+					autofocus
+					bind:this={box}
+					bind:value={draft}
+					{onkeydown}
+					disabled={blocked}
+					aria-describedby="assistant-q-hint"
+					placeholder="Ask about this project…"
+				></textarea>
+				<div class="composer-row">
+					<span id="assistant-q-hint" class="hint">Enter sends, Shift+Enter starts a new line.</span>
+					{#if chat.busy}
+						<button type="button" class="btn btn-sm" onclick={() => chat.stop()}>Stop</button>
+					{:else}
+						<button type="submit" class="btn btn-primary btn-sm" disabled={blocked || !draft.trim()}>Send</button>
+					{/if}
+				</div>
+			</form>
+
+			{#if st || chat.turns.length}
+				<div class="meta">
+					{#if st}
+						<span class="budget" data-testid="assistant-budget">
+							{fmtPct(left, 0)} of this month’s budget left · starts again {fmtDay(st.budget.resetsAt)}
+						</span>
+					{/if}
+					{#if chat.turns.length}
+						<button type="button" class="btn btn-ghost btn-sm" onclick={() => chat.clear()}>New conversation</button>
+					{/if}
+				</div>
+			{/if}
+
+			{#if st}
+				<!-- The status's disclaimer, paragraphs a blank line apart and `{site}` this site's address (as the report's,
+				     liability/Disclaimer.svelte). Its first paragraph, what the answers are, stays in view; the report's
+				     paragraphs under it fold away, one click from the box. -->
+				{@const [first = '', ...rest] = st.disclaimer.split(/\n\s*\n/).map((p) => withSite(p, site))}
+				{#if rest.length}
+					<Fold line={first} change="Read the full disclaimer" problem={false} body="none" class="disclaimer" testid="assistant-disclaimer" ontoggle={keepFoot}>
+						<!-- Scrolls in its own box: it takes the focus so the keyboard can scroll it (axe scrollable-region-focusable). -->
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+						<div class="disclaimer-text" role="region" aria-label="The full disclaimer" tabindex="0">
+							{#each rest as para, i (i)}<p>{para}</p>{/each}
+						</div>
+					</Fold>
+				{:else}
+					<p class="hint" data-testid="assistant-disclaimer">{first}</p>
+				{/if}
+			{/if}
+		</div>
 	{/snippet}
 </Dialog>
 
@@ -234,23 +286,32 @@
 {/snippet}
 
 <style>
-	.assistant {
+	/* The body: the empty state or the conversation, both settled at the foot beside the box, as a chat reads
+	   (the newest words nearest the question box; no gap between the examples and the box). */
+	.convo {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
 		min-height: 100%;
 	}
+	.empty {
+		margin-top: auto;
+		padding-block: 1rem 0.25rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
 	.intro {
-		margin: 0;
-		font-size: var(--font-sm);
+		margin: 0 0 0.5rem;
+		color: var(--text-2);
+		line-height: 1.5;
 	}
 	.label {
-		margin: 0 0 0.25rem;
+		margin: 0;
 		font-weight: 500;
-		font-size: 0.85rem;
-		color: var(--text-2);
+		font-size: var(--font-sm);
+		color: var(--text-muted);
 	}
-	.examples ul,
+	.suggestions,
 	.log,
 	.tools,
 	.reasons {
@@ -258,25 +319,33 @@
 		margin: 0;
 		padding: 0;
 	}
-	.examples ul {
+	.suggestions {
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
+		gap: 0.5rem;
 	}
-	.example {
+	.suggestion {
+		width: 100%;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.6rem 0.75rem;
+		border-color: var(--border);
+		border-radius: var(--radius);
+		font-weight: 400;
+		line-height: 1.4;
 		text-align: left;
 		white-space: normal;
-		height: auto;
 	}
-	.log-scroll {
-		flex: 1;
-		overflow-y: auto;
-		min-height: 0;
+	.arrow {
+		flex: none;
+		color: var(--accent);
 	}
 	.log {
+		margin-top: auto;
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 1rem;
+		padding-block: 0.25rem 0.5rem;
 	}
 	.turn {
 		max-width: 100%;
@@ -294,11 +363,11 @@
 	.bot {
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
+		gap: 0.5rem;
 	}
 	.text {
 		white-space: pre-wrap;
-		line-height: 1.5;
+		line-height: 1.55;
 	}
 	.tools {
 		display: flex;
@@ -380,29 +449,69 @@
 		background: var(--success-soft);
 		color: var(--text);
 	}
-	.ask {
+
+	/* The foot: one block, the box with its hint and Send inside it, then a quiet line of meta. It fills the
+	   Dialog's action row (a wrapping flex row). */
+	.foot {
+		flex: 1 1 100%;
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 0.4rem;
 	}
-	.ask textarea {
-		width: 100%;
+	.composer {
+		display: flex;
+		flex-direction: column;
+		border: 1px solid var(--border-input);
+		border-radius: var(--radius);
+		background: var(--surface);
 	}
-	.ask-row {
+	/* The box draws the focus ring for the field inside it. */
+	.composer:focus-within {
+		outline: 2px solid var(--focus);
+		outline-offset: 1px;
+	}
+	.composer textarea {
+		padding: 0.6rem 0.75rem 0.25rem;
+		border: 0;
+		background: none;
+		resize: vertical;
+	}
+	.composer textarea:focus-visible {
+		outline: none;
+	}
+	.composer-row {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.5rem;
+		padding: 0.25rem 0.4rem 0.4rem 0.75rem;
 	}
 	.hint {
-		font-size: var(--font-xs);
-	}
-	.budget,
-	.disclaimer {
 		margin: 0;
 		font-size: var(--font-xs);
+		color: var(--text-muted);
 	}
-	.disclaimer p {
-		margin: 0 0 0.4rem;
+	.meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0 0.5rem;
+		font-size: var(--font-xs);
+		color: var(--text-muted);
+	}
+	.meta button {
+		margin-left: auto;
+	}
+	/* The disclaimer's line: what the answers are, in view; the report's paragraphs fold under it and scroll
+	   in their own box, so opening them never pushes the question box off a phone's screen. */
+	.foot :global(.disclaimer > summary),
+	.disclaimer-text {
+		font-size: var(--font-xs);
+	}
+	.disclaimer-text {
+		max-height: 25vh;
+		overflow-y: auto;
 	}
 </style>

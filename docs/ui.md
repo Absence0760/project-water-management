@@ -11337,13 +11337,28 @@ with read-only tools over the project's data. It never changes anything.
   key-free, or when the caller can't use it (a farmer or an applicant
   never reaches the workspace). Any member from viewer up can ask.
 - **The sheet** (`AssistantPanel.svelte`, a side sheet like Notes', fetched
-  the first time it opens) has a short line on what the assistant reads,
-  two example questions while the conversation is empty, the conversation,
-  then the question box (**Enter** sends, **Shift+Enter** is a new line) with
-  **Send**, or **Stop** while an answer streams. Under the box are the share
-  of the project's monthly budget left and when it starts again, then the
-  disclaimer the server sends (the reports' `DISCLAIMER`). The foot has
-  **New conversation** and **Close**.
+  the first time it opens) scrolls the conversation in its body and pins a
+  foot under it, so the box never moves however long the conversation gets.
+  While the conversation is empty the body holds a short line on what the
+  assistant reads and two example questions, full-width buttons that ask
+  them, settled at its foot right above the box (no gap between them); a
+  conversation settles there too, newest nearest the box, and follows the
+  answer while it streams unless you scrolled up (measured before each
+  update, so a proposal card taller than the slack doesn't leave it behind).
+  Opened again, it shows the newest words. The foot is one block: the box
+  (it has the focus when the sheet opens; **Enter** sends, **Shift+Enter** is
+  a new line), with the hint and **Send** (or **Stop** while an answer
+  streams) inside its border; under it one quiet line with the share of the
+  project's monthly budget left, when it starts again, and **New
+  conversation** once there is one; then the disclaimer the server sends.
+  Its first paragraph ("The assistant's answers are advice, not model
+  output, and they can be wrong.") is the line of a `common/Fold.svelte`,
+  always in view; the reports' `DISCLAIMER` paragraphs fold under it
+  (**Read the full disclaimer**) in a box that scrolls on its own (at most a
+  quarter of the window), so opening it never pushes the box off a phone.
+  The ✕ is the one way out (no Close button in the foot as well); Escape
+  closes it too. `assistant.spec.ts` pins the layout at 1440×960 and
+  390×844.
 - **An answer streams in** (`stream.ts`: `fetch` and a `ReadableStream` on
   the POST, not `EventSource`, so the request goes through the same
   credentials and CSRF handling as every other POST; keepalive comments are
