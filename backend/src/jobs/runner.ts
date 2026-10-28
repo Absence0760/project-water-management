@@ -149,7 +149,8 @@ export const DELETED_NOTE_RETENTION_DAYS = 90;
 export const ERASURE_LOG_RETENTION_DAYS = 40;
 /**
  * The assistant's usage rows (262_assistant_usage) are kept for the month they count and the 12 before it:
- * a year of each project's spend to set against the bill. Its rate rows go once their hour is over.
+ * a year of each project's spend to set against the bill. Its rate rows go once their hour is over, and a turn's
+ * reservation left unsettled past its expiry is charged to its usage row in full (264_assistant_reservation).
  */
 export const ASSISTANT_USAGE_RETENTION_MONTHS = 13;
 
@@ -202,7 +203,7 @@ export interface TickResult {
 	notesPurged: number;
 	/** Erasure log entries past ERASURE_LOG_RETENTION_DAYS deleted (159_erasure_log). */
 	erasuresPurged: number;
-	/** The assistant's rate rows past their hour and usage rows past ASSISTANT_USAGE_RETENTION_MONTHS deleted (262_assistant_usage). */
+	/** The assistant's rate rows past their hour and usage rows past ASSISTANT_USAGE_RETENTION_MONTHS deleted (262_assistant_usage), and expired reservations charged in full (264). */
 	assistantPurged: number;
 	claimed: number;
 	done: number;

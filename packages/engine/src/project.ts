@@ -323,9 +323,9 @@ export const LEGACY_UPGRADED_WARNING =
 /**
  * Top-level settings an engine retired: ignored when read (prepare.ts mergeSettings, the backend's too) and stripped
  * from stored projects by a migration. `ewrSplit` (engines 1.94.0 – 1.104.x, issue #553): from 1.105.0 the EWR is
- * always split by each unit's natural MAR (issue #615, ./network/ewrSplit.ts, 263_retire_ewr_split.sql).
+ * always split by each unit's natural MAR (issue #615, ./network/ewrSplit.ts, 265_retire_ewr_split.sql).
  * `flowShareMethod` and `hiLoSplit` (b023's area, Hi/Lo MAP and specific fragmentation): from 1.105.0 the flow is
- * split by the same natural MAR shares (issue #616, docs/model.md §2.5, 264_retire_flow_share_method.sql); a run
+ * split by the same natural MAR shares (issue #616, docs/model.md §2.5, 266_retire_flow_share_method.sql); a run
  * whose input still names Hi/Lo MAP or specific says so once (FLOW_SHARE_METHOD_RETIRED_WARNING).
  */
 export const RETIRED_SETTINGS_KEYS = ['ewrSplit', 'flowShareMethod', 'hiLoSplit'] as const;

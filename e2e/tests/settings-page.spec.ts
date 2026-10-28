@@ -421,8 +421,17 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 
 	// Model settings' panels.
 	await openSettings(page, project.id);
-	// Model selection for flow generation (issue #553 round 3, issue #614): Fragmentation by default, its one card the flow share.
-	expect(await names('set-share')).toEqual(['Model selection for flow generation', 'Flow share']);
+	// Model selection for flow generation (issue #553 round 3, issue #614): Fragmentation by default, its cards the Per
+	// unit setup (shown under both methods, issue #615: it makes each unit's natural MAR share), the catchment's station
+	// first (issue #612), then the flow share (issue #616). MAP from the grid is lazy: wait for it.
+	await expect(page.locator('#set-share').getByRole('heading', { name: 'MAP from the grid' })).toBeVisible();
+	expect(await names('set-share')).toEqual([
+		'Model selection for flow generation',
+		'The catchment’s rainfall station',
+		'Each unit’s rainfall station',
+		'MAP from the grid',
+		'Flow share and the EWR split'
+	]);
 	// Rain gaps: three cards, the gap-filling product first (issue #604: it decides what CHIRPS gap filling corrects), the last's three topics under it (h4).
 	expect(await names('set-rain')).toEqual(['Rain gaps', 'Gap-filling product', 'CHIRPS gap filling', 'Flagged rain']);
 	expect(

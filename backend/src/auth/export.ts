@@ -82,6 +82,8 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	// The assistant (262_assistant_usage): the person's tokens and messages per project and month; the hourly count is a cap's only.
 	'assistant_usage.user_id': { section: 'assistantUsage' },
 	'assistant_rate.user_id': { excluded: 'a count of assistant messages for the hourly cap, an hour at most' },
+	// 264: settled into assistantUsage when the turn ends, or charged there in full when it expires.
+	'assistant_reservation.user_id': { excluded: 'a running turn’s reserved budget, minutes at most; settled into assistantUsage' },
 	'api_key.created_by': { excluded: 'the project’s key; api_key.created is in auditEvents; never key material' },
 	'api_key.revoked_by': { excluded: 'the project’s key; api_key.revoked is in auditEvents' },
 	'audit_event.actor_user_id': { section: 'auditEvents' },

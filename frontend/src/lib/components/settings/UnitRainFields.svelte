@@ -67,7 +67,7 @@
 </script>
 
 <fieldset class="plain unit-rain" id="set-unit-rain" data-testid="unit-rain-settings">
-	<legend><h4 class="sub">Units without a station <HelpTip key="settings.unitRain" /></h4></legend>
+	<legend><h4 class="sub">Units without a station <HelpTip key="settings.unitRain" label="About units without a station" /></h4></legend>
 	<span class="hint explain" id="{uid}-h">
 		A unit given no station above runs as before stations: on its own gauge, the catchment gauge × the unit’s MAP ÷ the gauge’s MAP, or its own CHIRPS
 		scaled to its MAP; a unit with none of them falls back to the catchment rain and the run says so.

@@ -3430,13 +3430,14 @@ output, because the model's output costs five times its input
 Sonnet 5.5 through the global profile from af-south-1 costs $2.00 per
 million input and $10.00 per million output tokens (AWS Price List API,
 `AmazonBedrockFoundationModels`, af-south-1, read 2026-10-27;
-`assistant_input_usd_per_million`). In the app, each checked before a turn
-and charged after it: 2 M a project a month (`assistant_tokens_per_month`),
+`assistant_input_usd_per_million`). In the app, each reserved before a turn
+(the turn's budget is what every cap has left, never more) and settled after
+it: 2 M a project a month (`assistant_tokens_per_month`),
 1 M a person a month across projects (`assistant_tokens_per_user_month`),
 and a deployment-wide monthly cap (`assistant_tokens_per_month_total`,
 derived by default from the assistant's budget at the input price: 25 M
-for $50 at $2/M), so no number of projects or accounts gets past the
-budget by more than the turns in flight; then 30 messages a user an hour
+for $50 at $2/M), so no number of projects, accounts or turns at once gets
+past the budget (architecture.md § Assistant); then 30 messages a user an hour
 (`assistant_messages_per_hour`), and per turn 6 model calls
 (`assistant_max_hops`), 150 K weighted tokens (`assistant_max_turn_tokens`,
 since each call resends the transcript), 4 tool calls a model call
