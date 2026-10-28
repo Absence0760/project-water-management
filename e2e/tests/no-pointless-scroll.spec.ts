@@ -11,11 +11,11 @@ import { rulesCard } from '../support/transfers.ts';
 const GUTTER = 14;
 
 const TABS = [
-	'overview', 'network', 'map', 'crops', 'transfers', 'series', 'settings', 'calibration', 'runs', 'river',
-	'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'applications', 'history'
+	'overview', 'network', 'map', 'crops', 'transfers', 'series', 'warnings', 'settings', 'calibration', 'runs', 'river',
+	'supply', 'dams', 'scenarios', 'allocations', 'project', 'applications', 'history'
 ];
 /** Views opened from links, never sidebar rows (tabs.ts LINKED_ONLY): measured too, not counted among the links. */
-const LINKED = ['warnings'];
+const LINKED = ['compare'];
 
 /** How far the page scrolls, and how far its content (the `.page` box less its bottom padding) reaches past the window. */
 const measure = (page: Page) =>

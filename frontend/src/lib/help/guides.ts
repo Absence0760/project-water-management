@@ -32,7 +32,7 @@ export const SETUP_TABS = ['overview', 'network', 'crops', 'transfers', 'series'
 /**
  * Tabs under *Build the model* that the setup path skips: optional, not a
  * step every catchment needs (the Map, issue #288: a model builds and runs
- * without one; Warnings, issue #611, a view opened from Data's checks). Calibration joined the path once its panels moved there (issue #586 round 3).
+ * without one; Warnings, issue #611, the project's list of warnings, not a setup step). Calibration joined the path once its panels moved there (issue #586 round 3).
  * "Getting around a project" still names them in place.
  */
 export const OPTIONAL_MODEL_TABS: readonly string[] = ['map', 'warnings'];
@@ -154,7 +154,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project’s tabs are grouped in three sections. **Review** holds the Project page, Applications and the History of changes. **Build the model** is what the model is made of, in setup order: Network, the **Map** (the geography: boundary, parcels, dams, gauges and rivers; the Network’s header links to it too), Crops & demand, Transfers, Data (with **Warnings**, every period its checks flag with its fix, which shows in the sidebar while it is open), Model settings and Calibration (fitting the runoff parameters and judging the fit, together). **Outcomes** is what the model says: the Summary (where a project opens), EWR, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations.'
+						text: 'A project’s tabs are grouped in three sections. **Review** holds the Project page, Applications and the History of changes. **Build the model** is what the model is made of, in setup order: Network, the **Map** (the geography: boundary, parcels, dams, gauges and rivers; the Network’s header links to it too), Crops & demand, Transfers, Data, **Warnings** (every warning and problem in the project with its fix, its count of open items beside it), Model settings and Calibration (fitting the runoff parameters and judging the fit, together). **Outcomes** is what the model says: the Summary (where a project opens), EWR, Hydrological units, Runs & results (**Compare runs** opens from there, and from Scenarios, and shows under it while open), Dams, Scenarios and Allocations.'
 					},
 					{
 						type: 'p',
@@ -971,7 +971,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Run a baseline.',
 							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again. That run is a what-if. A scenario’s run, made and run on **Scenarios**, is a what-if too.',
-							'Open **Compare runs** (under **Outcomes**, or the link at the top of the runs list on Runs & results). It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
+							'Open **Compare runs** from the link at the top of the runs list on Runs & results (or **Compare with published**, or a scenario’s comparison); while it is open the sidebar shows it under Runs & results. It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
 							'To weigh two changes against each other, press **+ Add a second what-if**. It picks the newest run that isn’t already on the page; **Remove** takes it off again.',
 							'Read the cards (each what-if’s main change), then **What the change does**: each outcome for the baseline and every what-if, with the change from the baseline under each what-if’s value (dam storage at the end of the run too, as a share of each run’s own dam capacity), and the takeaways in plain words under it. **Days below the reserve, each year** shows the same test year by year (October to September); when a compared run has a rule table it is headed by the daily EWR the bars count (**Days below the pragmatic EWR, each year**, or the DRM table the daily EWR comes from), since the rule table judges whole months instead. Each run’s bars count its own daily EWR: when the runs’ sources differ, the chart says **each run’s daily EWR** and names each run’s beside it.',
 							'Below that, **Full comparison** has every detail for the baseline against one what-if (pick which): **Inputs that differ** (every input difference), **Headline results**, fit and validation, uncertainty, the reserve by month, hydrological units and the daily series. There the baseline is run A and the what-if run B.',

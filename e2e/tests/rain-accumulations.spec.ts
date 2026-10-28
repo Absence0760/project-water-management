@@ -69,7 +69,7 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 
 	// The Data tab follows the saved settings.
 	// Its old rain is behind, so the section's link carries the badge's count in its name.
-	await page.getByRole('link', { name: /^Data \(\d+ series behind\)( \(\d+ open warnings?\))?$/ }).click();
+	await page.getByRole('link', { name: /^Data \(\d+ series behind\)$/ }).click();
 	await viewCatchment();
 	await expect(shaded).toHaveCount(0);
 	await expect(chart).not.toHaveAttribute('data-shaded');
@@ -85,7 +85,7 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 	await add.getByLabel('Reason').fill('Station log: gauge read after the observer returned');
 	await saveSettings(page);
 	// Its old rain is behind, so the section's link carries the badge's count in its name.
-	await page.getByRole('link', { name: /^Data \(\d+ series behind\)( \(\d+ open warnings?\))?$/ }).click();
+	await page.getByRole('link', { name: /^Data \(\d+ series behind\)$/ }).click();
 	await viewCatchment();
 	await expect(page.getByText('Shaded: 1 multi-day accumulation, 12 days, whose recorded total a run spreads over the days it covers by CHIRPS.')).toBeVisible();
 

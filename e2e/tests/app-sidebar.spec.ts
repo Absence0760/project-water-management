@@ -26,6 +26,7 @@ const OWNER_TABS = [
 	'Crops & demand',
 	'Transfers',
 	'Data',
+	'Warnings',
 	'Model settings',
 	'Calibration',
 	'Summary',
@@ -33,7 +34,6 @@ const OWNER_TABS = [
 	'Hydrological units',
 	'Runs & results',
 	'Dams',
-	'Compare runs',
 	'Scenarios',
 	'Allocations'
 ];

@@ -36,7 +36,7 @@ describe('visibleTabs', () => {
 	it('shows a viewer Overview, Data and Runs & results (and Dams, Compare runs, Scenarios, Allocations) by default', () => {
 		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
 		const core = ['overview', 'series', 'runs', 'scenarios', 'allocations'];
-		expect(visibleTabs('viewer')).toEqual(['overview', 'map', 'series', 'calibration', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project']);
+		expect(visibleTabs('viewer')).toEqual(['overview', 'map', 'series', 'warnings', 'calibration', 'runs', 'river', 'supply', 'dams', 'scenarios', 'allocations', 'project']);
 		expect(visibleTabs('viewer', {}, PAGE)).toEqual(core);
 		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(core);
 	});
@@ -217,7 +217,7 @@ describe('navSections', () => {
 		expect(navSections(ALL_TABS)).toEqual([
 			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
 			{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'warnings', 'settings', 'calibration'] },
-			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] }
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'compare', 'dams', 'scenarios', 'allocations'] }
 		]);
 	});
 
@@ -299,25 +299,31 @@ describe('the Map (issue #288; a sidebar row since #326 D3)', () => {
 		expect(model.tabs.indexOf('map')).toBe(model.tabs.indexOf('network') + 1);
 		// A viewer sees it without "Show model inputs" (it shows results too), but not the Network.
 		const viewer = navSections(visibleTabs('viewer', { hidden: [] }));
-		expect(viewer.find((s) => s.id === 'model')?.tabs).toEqual(['map', 'series', 'calibration']);
+		expect(viewer.find((s) => s.id === 'model')?.tabs).toEqual(['map', 'series', 'warnings', 'calibration']);
 		expect(TAB_GROUP.map).toBe('core');
 	});
 });
 
-describe('Warnings (issue #611): a linked-only view', () => {
-	it('is never in the sidebar, opens for every member from a link, and shows under Data while open', () => {
-		expect(LINKED_ONLY).toEqual(['warnings']);
+describe('Warnings has a row; Compare runs is linked-only (issue #611)', () => {
+	it('lists Warnings for every member right after Data, and Compare runs only while it is open, under Runs & results', () => {
+		expect(LINKED_ONLY).toEqual(['compare']);
 		expect(TAB_GROUP.warnings).toBe('core');
 		for (const role of ['owner', 'editor', 'viewer'] as const) {
 			const shown = visibleTabs(role, { hidden: [] });
-			expect(shown).not.toContain('warnings');
-			expect(canOpenTab(role, 'warnings')).toBe(true);
-			// Open from a link: the strip shows it in its place, right after Data.
-			const strip = stripTabs(shown, 'warnings', ALL_TABS);
-			const model = navSections(strip).find((s) => s.id === 'model')!;
+			const model = navSections(shown).find((s) => s.id === 'model')!;
 			expect(model.tabs.indexOf('warnings')).toBe(model.tabs.indexOf('series') + 1);
+			expect(shown).not.toContain('compare');
+			expect(canOpenTab(role, 'compare')).toBe(true);
+			const outcomes = navSections(stripTabs(shown, 'compare', ALL_TABS)).find((s) => s.id === 'outcomes')!;
+			expect(outcomes.tabs.indexOf('compare')).toBe(outcomes.tabs.indexOf('runs') + 1);
 		}
-		// A farmer or an applicant never gets it (the workspace shows them their own views).
 		expect(visibleTabs('contributor', { hidden: [] })).toEqual(['overview']);
+	});
+
+	it('ignores a saved hidden list that names Compare runs, and lets Warnings be hidden like any row', () => {
+		const roleTabs = visibleTabs('owner', {});
+		expect(hiddenTabs(roleTabs, ['compare', 'history'])).toEqual(['history']);
+		expect(visibleTabs('owner', { hidden: ['compare'] })).toEqual(visibleTabs('owner', { hidden: [] }));
+		expect(visibleTabs('owner', { hidden: ['warnings'] })).not.toContain('warnings');
 	});
 });
