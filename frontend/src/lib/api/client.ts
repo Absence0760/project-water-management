@@ -196,6 +196,7 @@ import type {
 	CroplandProposals,
 	CropTypeLayer,
 	EvaporationProposals,
+	Gr4jPrior,
 	EvaporationStationProposals,
 	SpanConversionId,
 	EvaporationTarget
@@ -1355,6 +1356,21 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					`${p(id)}/nodes/${enc(nodeId)}/crop-area-from-land-cover`,
 					body
 				)
+		},
+		/**
+		 * The regional GR4J prior (issue #622, docs/api.md § Regional GR4J prior): for the catchment, or one calibration
+		 * zone's own land units (`zone`), from a donor set (`dataset`, default the first). `start` writes its medians into
+		 * that target's GR4J parameters as one settings revision; the server re-derives them.
+		 */
+		gr4jPrior: {
+			get: (id: string, q: { zone?: string | null; dataset?: string } = {}) => {
+				const qs = new URLSearchParams();
+				if (q.zone) qs.set('zone', q.zone);
+				if (q.dataset) qs.set('dataset', q.dataset);
+				return request<Gr4jPrior>('GET', `${p(id)}/gr4j-prior${qs.size ? `?${qs}` : ''}`);
+			},
+			start: (id: string, body: { zone?: string | null; dataset?: string } = {}) =>
+				request<{ params: { x1: number; x2: number; x3: number; x4: number }; revisionId: string | null }>('POST', `${p(id)}/gr4j-prior/start`, body)
 		},
 		/**
 		 * The catchment boundary's evaporation from a grid (issue #326 B-evap, docs/api.md § Catchment map): reference ET proposed as

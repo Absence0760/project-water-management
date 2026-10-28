@@ -6,6 +6,7 @@
 // running or a result not yet applied asks first (the page's guardUnsaved);
 // leaving anyway, or opening another project, cancels the fit.
 import {
+	DEFAULT_PRIOR_WEIGHT,
 	DEFAULT_STARTS,
 	type ApanDailyFingerprint,
 	type DailySeries,
@@ -21,6 +22,7 @@ import {
 	type StepwiseProgress,
 	type ZoneFitStep
 } from '@water-management/engine';
+import { priorUseOfRecord, type PriorUse } from './prior';
 import { FitCancelled, type FitHandle } from './runner';
 
 /** What the shown report was run on, for its fit record. */
@@ -44,6 +46,10 @@ export class FitSession {
 	projectId = $state<string | null>(null);
 	objective = $state<ObjectiveId>('kgePrime');
 	bounds = $state<CalibrationBounds>('wide');
+	/** How the fit uses the regional prior (issue #622): off, a penalty, the search box, or both. */
+	priorUse = $state<PriorUse>('off');
+	/** The prior's penalty weight (engine DEFAULT_PRIOR_WEIGHT unless changed). */
+	priorWeight = $state<number | null>(DEFAULT_PRIOR_WEIGHT);
 	budget = $state<number | null>(1500);
 	validate = $state(true);
 	// Shown and recorded: the same seed, inputs and engine version reproduce the fit.
@@ -154,6 +160,8 @@ export class FitSession {
 		this.projectId = projectId;
 		this.objective = 'kgePrime';
 		this.bounds = 'wide';
+		this.priorUse = 'off';
+		this.priorWeight = DEFAULT_PRIOR_WEIGHT;
 		this.budget = 1500;
 		this.validate = true;
 		this.seed = 1;
@@ -172,10 +180,14 @@ export class FitSession {
 	 * none yet): the defaults stay, and a later load with a record still
 	 * applies it.
 	 */
-	searchFrom(record: Pick<FitRecord, 'bounds' | 'budget' | 'starts' | 'seed'> | null | undefined): void {
+	searchFrom(record: Pick<FitRecord, 'bounds' | 'budget' | 'starts' | 'seed' | 'prior'> | null | undefined): void {
 		if (this.#searchSeeded || !record) return;
 		this.#searchSeeded = true;
-		this.bounds = record.bounds;
+		// A fit with the regional prior (issue #622): its use and weight; its box is the prior's, not a Bounds choice.
+		const p = priorUseOfRecord(record);
+		this.bounds = p.bounds;
+		this.priorUse = p.use;
+		if (p.weight !== null) this.priorWeight = p.weight;
 		this.budget = record.budget;
 		this.starts = record.starts ?? 1;
 		this.seed = record.seed;

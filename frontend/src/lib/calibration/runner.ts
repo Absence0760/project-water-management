@@ -5,6 +5,7 @@
 import {
 	gr4jOfParamSet,
 	withZoneParams,
+	type CalibrationPrior,
 	type CalibrationProgress,
 	type CalibrationReport,
 	type EnsembleProgress,
@@ -81,7 +82,13 @@ export function startFit(req: FitRequest, onProgress: (p: CalibrationProgress) =
  * step, upstream first: each step fits its zone on the input with the zones before it at their fitted parameters, as
  * the engine's calibrateStepwise does. cancel() stops the step running and every one after it.
  */
-export function startStepwiseFit(req: FitRequest, plan: readonly ZoneFitPlanStep[], onProgress: (p: StepwiseProgress) => void): FitHandle {
+export function startStepwiseFit(
+	req: FitRequest,
+	plan: readonly ZoneFitPlanStep[],
+	onProgress: (p: StepwiseProgress) => void,
+	/** The regional prior per step, built for that step's zone (issue #622), by priorKey: each zone takes its own, never the catchment's. */
+	priors?: Readonly<Record<string, CalibrationPrior>>
+): FitHandle {
 	let current: FitHandle | null = null;
 	let cancelled = false;
 	const run = async (): Promise<ZoneFitStep[]> => {
@@ -89,7 +96,9 @@ export function startStepwiseFit(req: FitRequest, plan: readonly ZoneFitPlanStep
 		let input = req.input;
 		for (const [i, step] of plan.entries()) {
 			if (cancelled) throw new FitCancelled();
-			current = startFit({ ...req, input, ...(step.zoneNodeId !== null ? { zone: step.zoneNodeId } : {}) }, (p) =>
+			const { prior: _one, ...rest } = req;
+			const prior = priors?.[step.zoneNodeId ?? ''];
+			current = startFit({ ...rest, input, ...(step.zoneNodeId !== null ? { zone: step.zoneNodeId } : {}), ...(prior ? { prior } : {}) }, (p) =>
 				onProgress({ ...p, step: i + 1, steps: plan.length, zoneNodeId: step.zoneNodeId })
 			);
 			const report = await current.result;

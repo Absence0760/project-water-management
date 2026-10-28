@@ -2,6 +2,11 @@
 import type { Locale } from '@water-management/engine/languages';
 import type {
 	AppliedOp,
+	CatchmentAttributes,
+	ParamPriors,
+	PriorProvenance,
+	PriorStartRecord,
+	RegionalPrior,
 	CalibrationBounds,
 	CalibrationExclusion,
 	CalibrationRules,
@@ -3402,6 +3407,45 @@ export interface EvaporationAccepted {
 	acceptedAt: string;
 	/** The saved settings still hold it (not typed over since). */
 	current: boolean;
+}
+
+/** A donor the regional prior kept (GET /projects/:id/gr4j-prior). */
+export interface Gr4jPriorDonor {
+	id: string;
+	lon: number;
+	lat: number;
+	areaKm2: number;
+	weight: number;
+	distanceKm: number;
+	similarity: number | null;
+	kgeFit: number;
+	kgeValidation: number | null;
+	params: { x1: number; x2: number; x3: number; x4: number };
+}
+
+/** GET /projects/:id/gr4j-prior (issue #622, docs/api.md § Regional GR4J prior): the prior for the catchment or one calibration zone. */
+export interface Gr4jPrior {
+	dataset: { dataset: string; version: string; source: string; method: string; attribution: string; synthetic: boolean; donorSetSha256: string; donors: number } | null;
+	datasets: { dataset: string; version: string; synthetic: boolean; donors: number }[];
+	soil: { dataset: string; version: string; attribution: string; synthetic: boolean } | null;
+	target: {
+		zoneNodeId: string | null;
+		units: string[] | null;
+		lon: number | null;
+		lat: number | null;
+		positionFrom: 'gauge' | 'boundary' | null;
+		attributes: CatchmentAttributes;
+		pawcMm: number | null;
+		soilProblem: string | null;
+		climateYears: number;
+		rainFrom: 'catchment' | 'units';
+	} | null;
+	prior: RegionalPrior | null;
+	problem: string | null;
+	donors: Gr4jPriorDonor[];
+	ranges: ParamPriors | null;
+	provenance: PriorProvenance | null;
+	started: PriorStartRecord | null;
 }
 
 /** GET /projects/:id/evaporation-proposals: the boundary's evaporation from a grid, beside the saved settings. */

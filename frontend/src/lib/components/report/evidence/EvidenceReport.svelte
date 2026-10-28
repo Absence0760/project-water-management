@@ -382,6 +382,10 @@
 			{:else if s.id === 'credibility'}
 				<h3>Calibration record</h3>
 				<CalibrationPanel calibration={sum.calibration} requestedStart={settings.calibrationStart ?? null} requestedEnd={settings.calibrationEnd ?? null} />
+				<!-- evidence-22 (issue #622): where the regional GR4J prior had a part in the baseline's parameters. -->
+				{#if report.credibility.regionalPrior}
+					<p class="small" data-testid="evidence-regional-prior">{report.credibility.regionalPrior.text}</p>
+				{/if}
 				<h3>Validation</h3>
 				{#if fit}
 					<p class="small">Parameters from the {describeFitRecord(fit)}.</p>

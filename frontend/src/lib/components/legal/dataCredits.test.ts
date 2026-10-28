@@ -4,7 +4,7 @@
 // docs/followups.md), and the map's own notices say the same.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
+import { CARAVAN_STATEMENT, HYDROATLAS_STATEMENT, ISDA_STATEMENT, SOILGRIDS_STATEMENT, LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
 import { copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION } from '@water-management/engine';
 import { TERRAIN_ATTRIBUTION } from '#lib/components/map/mapStyle.js';
 import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '#lib/components/map/delineation.js';
@@ -24,6 +24,15 @@ describe('the data credits', () => {
 		// The operator's decision behind the Southwestern Cape surface's use is on record with its credit line.
 		expect(doc('legal/map-data-licences.md')).toContain(`"${WAAS_MAP_STATEMENT}"`);
 		expect(doc('followups.md')).toContain(`"${COPERNICUS_LIABILITY}"`);
+		// The regional prior's sources (issue #622): as data-sources.md and maps.md record them, and as the backend stores them.
+		const sources = doc('data-sources.md');
+		expect(sources).toContain(CARAVAN_STATEMENT);
+		expect(sources).toContain(`"${HYDROATLAS_STATEMENT}"`);
+		expect(maps).toContain(`"${SOILGRIDS_STATEMENT}"`);
+		expect(maps).toContain(`"${ISDA_STATEMENT}"`);
+		const geo = (f: string) => readFileSync(new URL(`../../../../../backend/src/geo/${f}`, import.meta.url), 'utf8');
+		expect(geo('gr4jDonors.ts')).toContain(`${CARAVAN_STATEMENT} ${HYDROATLAS_STATEMENT}`);
+		expect(geo('soilGrid.ts')).toContain(`${SOILGRIDS_STATEMENT} ${ISDA_STATEMENT}`);
 		// Each credit's read date is one the Sources table records, and the page's "Licences last read" is the latest.
 		for (const c of DATA_CREDITS) expect(maps, c.name).toContain(`read ${c.read}`);
 		expect(LICENCES_READ).toBe([...DATA_CREDITS.map((c) => c.read)].sort().at(-1));

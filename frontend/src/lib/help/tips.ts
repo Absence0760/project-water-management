@@ -1236,6 +1236,12 @@ export const TIPS: HelpTipText[] = [
 		category: 'fit'
 	},
 	{
+		id: 'regional-prior',
+		term: 'Regional GR4J prior',
+		short: 'GR4J’s parameters in similar, nearby gauged basins (donors): a start for an ungauged catchment, or a penalty or search box in a fit.',
+		category: 'fit'
+	},
+	{
 		id: 'wr2012-check',
 		term: 'WR2012 check',
 		short: 'Compares simulated natural flow with the naturalised flow WR2012 publishes for the quaternary, scaled to the modelled catchment.',

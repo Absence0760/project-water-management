@@ -9,6 +9,8 @@ import {
 	OBJECTIVE_LABELS,
 	waterYearLabel,
 	type CalibrationBounds,
+	type CalibrationPrior,
+	type FitBounds,
 	type FitRecord,
 	type CalibrationFlowKind,
 	type CalibrationProgress,
@@ -37,8 +39,8 @@ export interface FitRequest {
 	input: ModelInput;
 	model: RunoffModelId;
 	objective: ObjectiveId;
-	/** The box the search explores. Default 'wide' (each parameter's min/max). */
-	bounds?: CalibrationBounds;
+	/** The box the search explores. Default 'wide' (each parameter's min/max); 'prior' needs `prior`. */
+	bounds?: FitBounds;
 	budget: number;
 	free: string[];
 	validate: boolean;
@@ -49,12 +51,15 @@ export interface FitRequest {
 	validationRecord?: CalibrationFlowKind;
 	/** The calibration zone this step fits (engine CalibrateOptions.zone, issue #555); undefined = the site's own zone. */
 	zone?: string;
+	/** The regional prior built for this fit's target (engine CalibrateOptions.prior, issue #622); undefined = none. */
+	prior?: CalibrationPrior;
 }
 
 /** The "Bounds" select's label for each option (issue #4 phase 6). */
-export const BOUNDS_LABEL: Record<CalibrationBounds, string> = {
+export const BOUNDS_LABEL: Record<FitBounds, string> = {
 	wide: 'Wide (default)',
-	typical: 'Typical (Perrin et al. 80 %)'
+	typical: 'Typical (Perrin et al. 80 %)',
+	prior: 'Regional prior (p10–p90)'
 };
 
 /** The hint shown under the "Bounds" select. */
@@ -68,7 +73,7 @@ export const boundsHint = (b: CalibrationBounds): string =>
  * their values"): "Wide bounds · 1 500 runs × 5 starts · seed 1". Bounds are left out where the
  * caller lists them elsewhere (the calibration rules try several); a missing number reads "–".
  */
-export function searchSummary(s: { bounds?: CalibrationBounds; budget: number | null; starts: number | null; seed: number | null }): string {
+export function searchSummary(s: { bounds?: FitBounds; budget: number | null; starts: number | null; seed: number | null }): string {
 	const parts: string[] = [];
 	if (s.bounds) parts.push(`${BOUNDS_LABEL[s.bounds].replace(' (default)', '')} bounds`);
 	parts.push(`${fmtNum(s.budget)} runs × ${fmtNum(s.starts)} start${s.starts === 1 ? '' : 's'}`);

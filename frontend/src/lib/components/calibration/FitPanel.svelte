@@ -13,6 +13,8 @@
 		DEFAULT_STARTS,
 		MAX_STARTS,
 		OBJECTIVES,
+		PRIOR_MAX_WEIGHT,
+		type CalibrationPrior,
 		calibrationSeriesKey,
 		gr4jOfParamSet,
 		zoneCalibrationSettings,
@@ -62,6 +64,7 @@
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
 	import { wr2012FitPeriods } from '#lib/calibration/wr2012Fit.js';
 	import { startFit, startStepwiseFit } from '#lib/calibration/runner.js';
+	import { calibrationPriorOf, fitBoundsOf, priorKey, priorUseHint, priorWeightError, PRIOR_USE_LABEL, PRIOR_USES } from '#lib/calibration/prior.js';
 	import { stepRows } from '#lib/calibration/zones.js';
 	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -132,7 +135,10 @@
 	// The WR2012 MAR penalty (its fields beside the choices, penaltyFields) adds a fit without it, for comparison.
 	const penalty = $derived(marPenaltyOn(settings()));
 	const runs = $derived(totalRuns(session.budget ?? 0, session.validate, penalty, startsOk ? session.starts! : 1));
-	const canStart = $derived(hasObserved && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && startsOk && !session.busy);
+	// The regional prior (issue #622): a penalty, the search box or both; its weight only matters with the penalty.
+	const priorProblem = $derived(priorWeightError(session.priorUse, session.priorWeight));
+	const priorBox = $derived(session.priorUse === 'bounds' || session.priorUse === 'both');
+	const canStart = $derived(hasObserved && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && !priorProblem && startsOk && !session.busy);
 	const columns = $derived(report ? scoreColumns(report) : []);
 	// Model vs the mean-flow and climatology benchmarks (engine ≥ 1.19.0, CR-5); none on an older report.
 	const benchCols = $derived(benchmarkColumns(columns));
@@ -150,13 +156,16 @@
 	// A report for another model than the form now shows can't be applied.
 
 	function start() {
-		const { budget, seed, starts, objective, bounds, validate } = session;
+		const { budget, seed, starts, objective, validate, priorUse, priorWeight } = session;
+		const bounds = fitBoundsOf(priorUse, session.bounds);
 		if (!canStart || budget === null || seed === null || starts === null) return;
 		const validationRecord = chosenRecord;
 		let server: Awaited<ReturnType<typeof api.runs.modelInput>>;
 		let input: ReturnType<typeof fitInput>;
 		// Calibration zones (issue #555): the stepwise fit's steps, upstream first; null = one fit, as before.
 		let plan: ZoneFitPlanStep[] | null = null;
+		// The regional prior per step, each built for its own target by the server (issue #622): by priorKey.
+		const priors: Record<string, CalibrationPrior> = {};
 		void session.start(
 			async () => {
 				server = await api.runs.modelInput(projectId);
@@ -164,6 +173,14 @@
 				input = fitInput(server, form, model?.());
 				// Refuses a zone, or a site, with no land unit (engine zoneFitError): the fit's error line says why.
 				plan = zoneFitPlan(input);
+				if (priorUse !== 'off') {
+					for (const zone of plan ? plan.map((st) => st.zoneNodeId) : [null]) {
+						const got = await api.gr4jPrior.get(projectId, { zone });
+						const prior = calibrationPriorOf(got, priorUse, priorWeight);
+						if (!prior) throw new Error(`The regional prior can’t be used${zone ? ' for a calibration zone' : ''}: ${got.problem ?? 'there is none'}`);
+						priors[priorKey(zone)] = prior;
+					}
+				}
 				// The CHIRPS series' label as the server loaded it: the record's forcing keeps it (issue #40c).
 				// And the daily A-pan series it runs on (issue #45), by the hash a run's snapshot records.
 				return {
@@ -184,11 +201,17 @@
 				const f = free;
 				const req = { input, model: 'gr4j' as const, objective, bounds, budget, free: f, validate, seed, starts, validationRecord: validationRecord ?? undefined };
 				if (plan)
-					return startStepwiseFit(req, plan, (p) => {
-						session.progress = p;
-						session.stepProgress = { step: p.step, steps: p.steps, zoneNodeId: p.zoneNodeId };
-					});
-				return startFit(req, (p) => (session.progress = p));
+					return startStepwiseFit(
+						req,
+						plan,
+						(p) => {
+							session.progress = p;
+							session.stepProgress = { step: p.step, steps: p.steps, zoneNodeId: p.zoneNodeId };
+						},
+						priors
+					);
+				const prior = priors[priorKey(null)];
+				return startFit(prior ? { ...req, prior } : req, (p) => (session.progress = p));
 			},
 			// The fitted record's source and given unit as the server loaded it (107_series_source.sql); undefined when it didn't say.
 			// At the calibration site: the outlet's record, or a gauge's (engine ≥ 1.41.0).
@@ -282,14 +305,27 @@
 				{/if}
 			</fieldset>
 			{@render penaltyFields?.()}
+			<!-- The regional GR4J prior (issue #622): its ranges, donors and skill are in "Regional prior" above. -->
+			<div class="field" data-testid="fit-prior">
+				<label for="{uid}-prior">Regional prior <HelpTip key="regional-prior" label="About the regional prior" /></label>
+				<select id="{uid}-prior" bind:value={session.priorUse} disabled={status === 'running'} aria-describedby="{uid}-prior-h">
+					{#each PRIOR_USES as u (u)}<option value={u}>{PRIOR_USE_LABEL[u]}</option>{/each}
+				</select>
+				<span class="hint" id="{uid}-prior-h">{priorUseHint(session.priorUse)}</span>
+				{#if session.priorUse === 'penalty' || session.priorUse === 'both'}
+					<label for="{uid}-prior-w">Penalty weight</label>
+					<NumberInput id="{uid}-prior-w" min={0.01} max={PRIOR_MAX_WEIGHT} step={0.05} bind:value={session.priorWeight} disabled={status === 'running'} aria-describedby="{uid}-prior-w-h" aria-invalid={priorProblem ? 'true' : undefined} />
+					<span class="hint" class:explain={!priorProblem} id="{uid}-prior-w-h">{priorProblem ?? 'In score units: at 0.1, a parameter at its p10 or p90 costs about 0.08 of KGE′. Provisional default 0.1.'}</span>
+				{/if}
+			</div>
 		</div>
-		<Fold name="Search:" line={searchSummary({ bounds: session.bounds, budget: session.budget, starts: session.starts, seed: session.seed })} testid="fit-search" lineTestid="fit-search-summary">
+		<Fold name="Search:" line={searchSummary({ bounds: fitBoundsOf(session.priorUse, session.bounds), budget: session.budget, starts: session.starts, seed: session.seed })} testid="fit-search" lineTestid="fit-search-summary">
 			<div class="field">
 				<label for="{uid}-bounds">Bounds <HelpTip key="calibration-bounds" /></label>
-				<select id="{uid}-bounds" bind:value={session.bounds} disabled={status === 'running'} aria-describedby="{uid}-bounds-h">
+				<select id="{uid}-bounds" bind:value={session.bounds} disabled={status === 'running' || priorBox} aria-describedby="{uid}-bounds-h">
 					{#each CALIBRATION_BOUNDS as b (b)}<option value={b}>{BOUNDS_LABEL[b]}</option>{/each}
 				</select>
-				<span class="hint" id="{uid}-bounds-h">{boundsHint(session.bounds)}</span>
+				<span class="hint" id="{uid}-bounds-h">{priorBox ? 'Set aside: the fit searches the regional prior’s p10–p90 box (Regional prior, above).' : boundsHint(session.bounds)}</span>
 			</div>
 			<div class="field">
 				<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
