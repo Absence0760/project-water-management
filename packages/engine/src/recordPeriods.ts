@@ -69,13 +69,14 @@ export function resolveFlowMissing(raw: unknown, warnings: string[]): FlowMissin
 		warnings.push('flow missing periods are not an object of series id → periods; ignored');
 		return null;
 	}
-	const out: FlowMissingSettings = {};
+	const kept: [string, CalibrationExclusion[]][] = [];
 	for (const [id, list] of Object.entries(raw as Record<string, unknown>)) {
 		if (!id || unsafeKey(id)) continue;
 		const periods = sanitizeExclusions(list, warnings, 'flow missing period');
-		if (periods.length) out[id] = periods;
+		if (periods.length) kept.push([id, periods]);
 	}
-	return out;
+	// Built from its entries, never by assignment through a stored key.
+	return Object.fromEntries(kept);
 }
 
 /** settings.checksKept as the engine reads it: the strings, each once; null when absent. */
@@ -147,7 +148,7 @@ export function withRecordPeriods(settings: Pick<ProjectSettings, 'flowMissing' 
 	const altId = series.rain_catchment_alt_mm?.seriesId;
 	const altRanges = altId ? unreliableRanges(settings, altId) : [];
 	if ((!fm || !Object.keys(fm).length) && !altRanges.length) return series;
-	let out: Record<string, DailySeries> | null = null;
+	const replaced: [string, DailySeries][] = [];
 	const all = series as Record<string, DailySeries | undefined>;
 	for (const [key, s] of Object.entries(all)) {
 		if (!s || unsafeKey(key)) continue;
@@ -162,7 +163,7 @@ export function withRecordPeriods(settings: Pick<ProjectSettings, 'flowMissing' 
 					: [];
 		const r = blankRanges(s, ranges);
 		if (r.series === s) continue;
-		(out ??= { ...(series as Record<string, DailySeries>) })[key] = r.series;
+		replaced.push([key, r.series]);
 		if (r.blanked === 0) continue;
 		warnings.push(
 			key === 'rain_catchment_alt_mm'
@@ -170,5 +171,5 @@ export function withRecordPeriods(settings: Pick<ProjectSettings, 'flowMissing' 
 				: `${flowRecordName(key)}: ${plural(r.blanked, 'reading')} in its own missing periods (set under Calibration → Calibration record) are treated as missing: the calibration statistics, the fit, the EWR test on the observed record and the plausibility checks skip them, and the record's gap fill may fill them. The stored series is unchanged.`
 		);
 	}
-	return (out ?? series) as ModelInput['series'];
+	return (replaced.length ? { ...(series as Record<string, DailySeries>), ...Object.fromEntries(replaced) } : series) as ModelInput['series'];
 }
