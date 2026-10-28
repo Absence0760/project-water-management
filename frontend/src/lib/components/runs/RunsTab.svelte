@@ -45,6 +45,7 @@
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '#lib/components/river/links.js';
 	import { hasForecastRain, runBlockers } from './runReady';
+	import { unitsOnCatchmentRain } from '#lib/components/settings/flowGeneration.js';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Hydrological units
@@ -525,6 +526,9 @@
 	const blockers = $derived(runBlockers(editor.model, project.settings, series));
 	const missing = $derived(blockers.missing);
 	const overAllocated = $derived(blockers.overAllocated);
+	// Run readiness (issue #615): the land units with no rain of their own run on the catchment rain, so their EWR share
+	// follows their area. A note, not a blocker: the run says so too.
+	const onCatchmentRain = $derived(series ? unitsOnCatchmentRain(editor.model.nodes, project.settings, series) : []);
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	// The in-page menu (SectionNav): above the results, or beside them from 62rem of results (a 1440 px
 	// window), where 13rem of index leaves the results about as wide as at 1280 px without it (issue #462). The index lists the
@@ -635,6 +639,13 @@
 			{/if}
 		</p>
 		{#if runBusy}<div class="progress" aria-hidden="true"><span></span></div>{/if}
+		{#if !runBusy && onCatchmentRain.length}
+			<p class="note" data-testid="run-catchment-rain">
+				{onCatchmentRain.length === 1 ? '1 unit has' : `${onCatchmentRain.length} units have`} no rain of {onCatchmentRain.length === 1 ? 'its' : 'their'} own, so {onCatchmentRain.length === 1 ? 'its' : 'their'} EWR share follows {onCatchmentRain.length === 1 ? 'its' : 'their'} area:
+				{onCatchmentRain.slice(0, 6).map((n) => n.name || 'unnamed').join(', ')}{onCatchmentRain.length > 6 ? ` and ${onCatchmentRain.length - 6} more` : ''}. Set up their rain in
+				<a href="?tab=settings#set-share">Model settings</a>.
+			</p>
+		{/if}
 	</div>
 {:else if stale}
 	<p class="alert alert-info">Inputs changed since the latest run ({stale.join('; ')}); an editor can run the model again.</p>

@@ -1170,16 +1170,18 @@ describe('SettingsPatch.ewrChargeSource and lowFlowMeasure (engine ≥ 1.3.0, is
 	});
 });
 
-describe('SettingsPatch.ewrSplit (engine ≥ 1.94.0, issue #553)', () => {
-	const ok = (ewrSplit: unknown) => SettingsPatch.safeParse({ ewrSplit }).success;
-
-	it('accepts the flow share and each unit’s natural MAR, and nothing else', () => {
-		for (const v of ['flowShare', 'naturalMar']) expect(ok(v), v).toBe(true);
-		for (const v of ['', 'mar', 'NaturalMar', null, 1]) expect(ok(v), String(v)).toBe(false);
+describe('the retired ewrSplit (engine 1.94.0 – 1.104.x; retired by issue #615)', () => {
+	it('a patch with it still saves (an older web build), the key stripped', () => {
+		for (const v of ['flowShare', 'naturalMar', 'anything']) {
+			const r = SettingsPatch.safeParse({ ewrSplit: v, lowFlowMeasure: 'total' });
+			expect(r.success, v).toBe(true);
+			expect(r.data).toEqual({ lowFlowMeasure: 'total' });
+		}
 	});
 
-	it('defaults to the flow share, what every earlier run did, for a project that never set it', () => {
-		expect(mergeSettings({}).ewrSplit).toBe('flowShare');
+	it('merging drops a stored value, and the defaults have none', () => {
+		expect('ewrSplit' in mergeSettings({})).toBe(false);
+		expect('ewrSplit' in mergeSettings({ ewrSplit: 'naturalMar' })).toBe(false);
 	});
 });
 

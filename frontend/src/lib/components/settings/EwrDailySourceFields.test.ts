@@ -42,7 +42,7 @@ describe('EwrDailySourceFields: the scaling default', () => {
 	});
 });
 
-// The rendered markup as text: comments stripped to a fixpoint (as EwrSplitFields.test.ts does), then the
+// The rendered markup as text: comments stripped to a fixpoint, then the
 // tags, then any `<` or `>` left over, so no tag or comment marker can survive whatever a removal joined up.
 const text = (html: string) => {
 	let s = html;

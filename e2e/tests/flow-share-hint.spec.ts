@@ -2,8 +2,8 @@
 // Model settings, § Data; docs/model.md §2.4h, §2.5). On the sample
 // model and its catchment rain series (synthetic):
 // - Settings → Model selection for flow generation's flow-share line follows the method:
-//   Fragmentation, GR4J's one run's flow and the EWR; Per unit, only the EWR
-//   and the land cover's low-flow threshold (issue #553 round 3).
+//   Fragmentation, GR4J's one run's flow; Per unit, only the land cover's
+//   low-flow threshold (issue #553 round 3; the EWR by natural MAR, issue #615).
 // - Units without a station reads the gauge's MAP from the catchment rain station:
 //   an older project's settings gaugeMapMm until the station has one, then
 //   the station's. Its link opens the series in Series details, where an
@@ -22,14 +22,12 @@ test('Model selection for flow generation’s flow share says what it splits, by
 	const share = page.locator('#set-share');
 	const hint = share.getByTestId('share-hint');
 	await expect(hint).toHaveAttribute('data-unit-rain', 'off');
-	await expect(hint).toHaveText(
-		'GR4J runs once on the catchment rain; the flow share splits its flow and the EWR between units. To give each unit its own runoff, choose Per unit above.'
-	);
+	await expect(hint).toHaveText('GR4J runs once on the catchment rain; the flow share splits its flow between units. To give each unit its own runoff, choose Per unit above.');
 
 	// Per unit (unsaved is enough: the line reads the form), it says the flow is no longer split.
 	await share.getByRole('radio', { name: 'Per unit' }).check();
 	await expect(hint).toHaveAttribute('data-unit-rain', 'on');
-	await expect(hint).toHaveText('Each unit makes its own runoff; the flow share now splits only the EWR and the land cover’s low-flow threshold between units, not the flow.');
+	await expect(hint).toHaveText('Each unit makes its own runoff; the flow share now splits only the land cover’s low-flow threshold between units, not the flow or the EWR.');
 	await saveSettings(page);
 	await page.reload();
 	await expect(hint).toHaveAttribute('data-unit-rain', 'on');

@@ -112,14 +112,16 @@ function fingerprint(out: ModelOutput) {
  * 195e66c86 (issue #553 round 1, pushed), which gives the same values on macOS and Linux; the shapes re-pinned at
  * engine 1.98.0, whose warnings name Model settings and Calibration (issue #586 round 3: text only, every series'
  * sums unchanged), and unitGauge's and reference's at 1.100.0, whose warnings write their days day first (#586 R4-O:
- * text only, every series' and the summary's sums unchanged). Print them with
+ * text only, every series' and the summary's sums unchanged), and all four at 1.105.0, whose runs note how the EWR
+ * was split by each unit's natural MAR under both methods (issue #615: a note's text only; the forcing, every series'
+ * and the summary's sums unchanged). Print them with
  * `GOLDEN_PRINT=1 pnpm -C packages/engine exec vitest run src/runoff/unitRain.golden.test.ts`.
  */
 const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 	fragmentation: {
 		units: null,
 		golden: {
-			shape: "92bd1ca403d76ee9",
+			shape: "ad7590d5bbce8db0",
 			series: {
 				"natural_flow@": {
 					sum: 31197362.536312077,
@@ -248,7 +250,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "767f9b8c73543fe1",
+			shape: "96b7cd9ff25640e2",
 			series: {
 				"natural_flow@": {
 					sum: 42767824.923284635,
@@ -417,7 +419,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "7a38a3338456e296",
+			shape: "a3229ba078b84d55",
 			series: {
 				"natural_flow@": {
 					sum: 40724533.36977918,
@@ -586,7 +588,7 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			}
 		],
 		golden: {
-			shape: "3f3c4380773662dd",
+			shape: "c194c5a751911a4a",
 			series: {
 				"natural_flow@": {
 					sum: 17320217.189539496,

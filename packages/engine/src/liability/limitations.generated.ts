@@ -106,7 +106,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium (projects with runoff from each unit's own rain, settings.unitRain perUnit)",
 		"title": "Each unit's rain level rested on provisional calls",
-		"status": "Pending the hydrologist on the MAP period, the reference cell, rain-source days in the fit, and the land-cover threshold on flow shares; the decided rules are built in engine 1.85.0 (issue #500). From engine 1.94.0 the EWR can be split by each unit's natural MAR instead of the flow shares (the operator's option, its MAR period provisional, ES1)"
+		"status": "Pending the hydrologist on the MAP period, the reference cell, rain-source days in the fit, and the land-cover threshold on flow shares; the decided rules are built in engine 1.85.0 (issue #500). From engine 1.105.0 the EWR is split by each unit's natural MAR under both methods (FM1; its MAR period provisional, ES1)"
 	},
 	{
 		"id": "L1",

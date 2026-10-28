@@ -4,8 +4,8 @@
 	rule from before stations. The catchment rain gauge's MAP (a read-out of the catchment rain station's since issue
 	#553, edited in the Data tab's Series details), the MAP period the CHIRPS factors compare over, and the reference
 	gauge and unit whose monthly factors level every such unit's CHIRPS (issue #500, docs/model.md §2.4h *Reference
-	gauge*). The flow generation radio switches settings.unitRain on and off (SettingsTab.svelte); this shows only
-	while it is Per unit. The parent works out `error` (unitRainProblem), which blocks Save; it shows under the field
+	gauge*). The flow generation radio switches settings.unitRain between `perUnit` and `catchment` (SettingsTab.svelte);
+	this shows under both, since Fragmentation's EWR shares run on the same setup (issue #615). The parent works out `error` (unitRainProblem), which blocks Save; it shows under the field
 	it is fixed in. Its own chunk: the Settings tab chunk sits at its size ceiling.
 -->
 <script lang="ts">
@@ -21,7 +21,6 @@
 		mapPeriodYears,
 		unitGaugeKey,
 		unitMapCoverage,
-		unitRainOn,
 		stationHref,
 		unitRainProblem,
 		withMapPeriodYears,
@@ -45,15 +44,17 @@
 	} = $props();
 
 	const uid = $props.id();
-	const on = $derived(unitRainOn(value));
+	// Shown under both methods (issue #615): under Fragmentation it sets only the EWR shares' runs, and a project that
+	// never set it reads as Fragmentation's bare setting until a field is changed.
+	const cur = $derived<UnitRainSettings>(value ?? { mode: 'catchment' });
 	const problem = $derived(unitRainProblem(value));
-	const years = $derived(mapPeriodYears(value));
-	const note = $derived(mapPeriodNote(value));
-	const gauge = $derived(gaugeMapReadout(value, catchmentRain));
+	const years = $derived(mapPeriodYears(cur));
+	const note = $derived(mapPeriodNote(cur));
+	const gauge = $derived(gaugeMapReadout(cur, catchmentRain));
 	const coverage = $derived(unitMapCoverage(nodes));
 	/** The units with land, the reference unit's choices (and each one's own gauge, the reference gauge's). */
 	const land = $derived(nodes.filter((n) => n.kind === 'farm' && n.areaKm2 > 0));
-	const reference = $derived(on && value ? (value.reference ?? null) : null);
+	const reference = $derived(cur.reference ?? null);
 	/** A stored reference unit the model no longer has as a unit with land: the run warns and ignores the reference. */
 	const refGone = $derived(!!reference?.unitId && !land.some((n) => n.id === reference.unitId));
 	const lastYear = Number(localIsoDate().slice(0, 4));
@@ -71,130 +72,128 @@
 		A unit given no station above runs as before stations: on its own gauge, the catchment gauge × the unit’s MAP ÷ the gauge’s MAP, or its own CHIRPS
 		scaled to its MAP; a unit with none of them falls back to the catchment rain and the run says so.
 	</span>
-	{#if on && value}
-		<p class="hint coverage" data-testid="unit-rain-coverage">
-			{coverage.text} Set each unit’s MAP on its form in Network or from the MAP grid below, and its CHIRPS under <a href="?tab=series&rain=units#data-feeds">Data feeds → Rain for each unit</a>.
+	<p class="hint coverage" data-testid="unit-rain-coverage">
+		{coverage.text} Set each unit’s MAP on its form in Network or from the MAP grid below, and its CHIRPS under <a href="?tab=series&rain=units#data-feeds">Data feeds → Rain for each unit</a>.
+	</p>
+	{#if coverage.without.length}
+		<p class="hint coverage" data-testid="unit-rain-without-map">
+			Without a MAP:
+			{#each coverage.without.slice(0, MISSING_SHOWN) as n, i (n.id)}{i ? ', ' : ' '}<a href="?tab=network&edit={encodeURIComponent(n.id)}&section=area">{n.name}</a>{/each}{coverage.without.length > MISSING_SHOWN ? ` and ${coverage.without.length - MISSING_SHOWN} more` : ''}.
 		</p>
-		{#if coverage.without.length}
-			<p class="hint coverage" data-testid="unit-rain-without-map">
-				Without a MAP:
-				{#each coverage.without.slice(0, MISSING_SHOWN) as n, i (n.id)}{i ? ', ' : ' '}<a href="?tab=network&edit={encodeURIComponent(n.id)}&section=area">{n.name}</a>{/each}{coverage.without.length > MISSING_SHOWN ? ` and ${coverage.without.length - MISSING_SHOWN} more` : ''}.
-			</p>
-		{/if}
-		<!-- The gauge's MAP is the catchment rain station's (issue #553): read here, edited in the Data tab's Series details.
-		     A project from before stations still shows its settings.unitRain.gaugeMapMm until a station MAP is set. -->
-		<div class="gauge-map" role="group" aria-labelledby="{uid}-gmap-l" data-testid="unit-rain-gauge-map">
-			<span class="lbl" id="{uid}-gmap-l">Rain gauge’s MAP</span>
-			<p class="readout" data-testid="unit-rain-gauge-map-value" data-from={gauge.from ?? 'none'}>
-				{#if gauge.mm !== null}
-					<strong>{fmtNum(gauge.mm, 1, true)} mm</strong>{gauge.source ? ` (${gauge.source})` : ''}{#if gauge.from === 'station' && catchmentRain}, the station MAP of “{catchmentRain.name || 'Catchment rain'}”{:else if gauge.from === 'settings'}, kept from these settings: set it on the catchment rain station to move it there{/if}.
-				{:else if catchmentRain === null}
-					Not set: the project has no catchment rain series yet. Add one with Add data, then set its station MAP.
-				{:else}
-					Not set.
-				{/if}
-				{#if catchmentRain}
-					<a href={stationHref(catchmentRain)} data-testid="unit-rain-gauge-map-edit">{readonly ? 'See it in Series details' : gauge.mm !== null && gauge.from === 'station' ? 'Change it in Series details' : 'Set it in Series details'}</a>
-				{/if}
-			</p>
-			<span class="hint explain">The catchment rain station’s own mean annual rain. With it, a unit with a MAP runs on the station’s rain × unit MAP ÷ this.</span>
-			{#if problem?.field === 'gaugeMap' || problem?.field === 'gaugeSource'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
-		</div>
-		<fieldset class="plain period">
-			<legend>MAP period</legend>
-			<div class="fields">
-				<div class="field">
-					<label for="{uid}-from">First year</label>
-					<NumberInput
-						id="{uid}-from"
-						min={FIRST_YEAR}
-						max={lastYear}
-						step={1}
-						grouped={false}
-						disabled={readonly}
-						value={years.from}
-						aria-invalid={problem?.field === 'period' || undefined}
-						aria-describedby={describe('period', `${uid}-per-h`)}
-						onchange={(v) => {
-							if (v !== null && value) value = withMapPeriodYears(value, Math.round(v), years.to);
-						}}
-					/>
-				</div>
-				<div class="field">
-					<label for="{uid}-to">Last year</label>
-					<NumberInput
-						id="{uid}-to"
-						min={FIRST_YEAR}
-						max={lastYear}
-						step={1}
-						grouped={false}
-						disabled={readonly}
-						value={years.to}
-						aria-invalid={problem?.field === 'period' || undefined}
-						aria-describedby={describe('period', `${uid}-per-h`)}
-						onchange={(v) => {
-							if (v !== null && value) value = withMapPeriodYears(value, years.from, Math.round(v));
-						}}
-					/>
-				</div>
+	{/if}
+	<!-- The gauge's MAP is the catchment rain station's (issue #553): read here, edited in the Data tab's Series details.
+	     A project from before stations still shows its settings.unitRain.gaugeMapMm until a station MAP is set. -->
+	<div class="gauge-map" role="group" aria-labelledby="{uid}-gmap-l" data-testid="unit-rain-gauge-map">
+		<span class="lbl" id="{uid}-gmap-l">Rain gauge’s MAP</span>
+		<p class="readout" data-testid="unit-rain-gauge-map-value" data-from={gauge.from ?? 'none'}>
+			{#if gauge.mm !== null}
+				<strong>{fmtNum(gauge.mm, 1, true)} mm</strong>{gauge.source ? ` (${gauge.source})` : ''}{#if gauge.from === 'station' && catchmentRain}, the station MAP of “{catchmentRain.name || 'Catchment rain'}”{:else if gauge.from === 'settings'}, kept from these settings: set it on the catchment rain station to move it there{/if}.
+			{:else if catchmentRain === null}
+				Not set: the project has no catchment rain series yet. Add one with Add data, then set its station MAP.
+			{:else}
+				Not set.
+			{/if}
+			{#if catchmentRain}
+				<a href={stationHref(catchmentRain)} data-testid="unit-rain-gauge-map-edit">{readonly ? 'See it in Series details' : gauge.mm !== null && gauge.from === 'station' ? 'Change it in Series details' : 'Set it in Series details'}</a>
+			{/if}
+		</p>
+		<span class="hint explain">The catchment rain station’s own mean annual rain. With it, a unit with a MAP runs on the station’s rain × unit MAP ÷ this.</span>
+		{#if problem?.field === 'gaugeMap' || problem?.field === 'gaugeSource'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
+	</div>
+	<fieldset class="plain period">
+		<legend>MAP period</legend>
+		<div class="fields">
+			<div class="field">
+				<label for="{uid}-from">First year</label>
+				<NumberInput
+					id="{uid}-from"
+					min={FIRST_YEAR}
+					max={lastYear}
+					step={1}
+					grouped={false}
+					disabled={readonly}
+					value={years.from}
+					aria-invalid={problem?.field === 'period' || undefined}
+					aria-describedby={describe('period', `${uid}-per-h`)}
+					onchange={(v) => {
+						if (v !== null) value = withMapPeriodYears(cur, Math.round(v), years.to);
+					}}
+				/>
 			</div>
-			<span class="hint explain" id="{uid}-per-h">
-				The calendar years a unit’s CHIRPS mean annual rain is taken over, to compare with its MAP. Default {DEFAULT_UNIT_MAP_PERIOD.start.slice(0, 4)}–{DEFAULT_UNIT_MAP_PERIOD.end.slice(0, 4)},
-				the years CHIRPS’s own climatology uses; take the years the MAPs were made for.
-			</span>
-			{#if note}<span class="hint note" role="note" data-testid="unit-rain-period-note">{note}</span>{/if}
-			{#if problem?.field === 'period'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
-		</fieldset>
-		<fieldset class="plain reference" data-testid="unit-rain-reference">
-			<legend>Reference gauge for the units’ CHIRPS</legend>
-			<div class="fields">
+			<div class="field">
+				<label for="{uid}-to">Last year</label>
+				<NumberInput
+					id="{uid}-to"
+					min={FIRST_YEAR}
+					max={lastYear}
+					step={1}
+					grouped={false}
+					disabled={readonly}
+					value={years.to}
+					aria-invalid={problem?.field === 'period' || undefined}
+					aria-describedby={describe('period', `${uid}-per-h`)}
+					onchange={(v) => {
+						if (v !== null) value = withMapPeriodYears(cur, years.from, Math.round(v));
+					}}
+				/>
+			</div>
+		</div>
+		<span class="hint explain" id="{uid}-per-h">
+			The calendar years a unit’s CHIRPS mean annual rain is taken over, to compare with its MAP. Default {DEFAULT_UNIT_MAP_PERIOD.start.slice(0, 4)}–{DEFAULT_UNIT_MAP_PERIOD.end.slice(0, 4)},
+			the years CHIRPS’s own climatology uses; take the years the MAPs were made for.
+		</span>
+		{#if note}<span class="hint note" role="note" data-testid="unit-rain-period-note">{note}</span>{/if}
+		{#if problem?.field === 'period'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
+	</fieldset>
+	<fieldset class="plain reference" data-testid="unit-rain-reference">
+		<legend>Reference gauge for the units’ CHIRPS</legend>
+		<div class="fields">
+			<div class="field">
+				<label for="{uid}-rgauge">Reference gauge</label>
+				<select
+					id="{uid}-rgauge"
+					disabled={readonly}
+					value={reference?.gauge ?? ''}
+					aria-describedby="{uid}-ref-h"
+					onchange={(e) => {
+						value = withReferenceGauge(cur, e.currentTarget.value);
+					}}
+				>
+					<option value="">None: each unit’s CHIRPS scaled to its MAP</option>
+					<option value={CATCHMENT_GAUGE}>The catchment rain gauge</option>
+					{#each land as n (n.id)}<option value={unitGaugeKey(n.id)}>{n.name}’s own gauge</option>{/each}
+				</select>
+			</div>
+			{#if reference}
 				<div class="field">
-					<label for="{uid}-rgauge">Reference gauge</label>
+					<label for="{uid}-runit">Reference unit</label>
 					<select
-						id="{uid}-rgauge"
+						id="{uid}-runit"
 						disabled={readonly}
-						value={reference?.gauge ?? ''}
-						aria-describedby="{uid}-ref-h"
+						value={reference.unitId}
+						aria-invalid={problem?.field === 'reference' || refGone || undefined}
+						aria-describedby={describe('reference', `${uid}-runit-h`)}
 						onchange={(e) => {
-							if (value) value = withReferenceGauge(value, e.currentTarget.value);
+							value = withReferenceUnit(cur, e.currentTarget.value);
 						}}
 					>
-						<option value="">None: each unit’s CHIRPS scaled to its MAP</option>
-						<option value={CATCHMENT_GAUGE}>The catchment rain gauge</option>
-						{#each land as n (n.id)}<option value={unitGaugeKey(n.id)}>{n.name}’s own gauge</option>{/each}
+						<option value="" disabled>Pick the unit the gauge stands in</option>
+						{#each land as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 					</select>
+					<span class="hint explain" id="{uid}-runit-h">The CHIRPS cell at this unit’s centre is what the gauge is compared with.</span>
+					{#if problem?.field === 'reference'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
+					{#if refGone}<span class="err" data-testid="unit-rain-reference-gone">The reference unit is no longer a unit with land: runs ignore the reference until another is picked.</span>{/if}
 				</div>
-				{#if reference}
-					<div class="field">
-						<label for="{uid}-runit">Reference unit</label>
-						<select
-							id="{uid}-runit"
-							disabled={readonly}
-							value={reference.unitId}
-							aria-invalid={problem?.field === 'reference' || refGone || undefined}
-							aria-describedby={describe('reference', `${uid}-runit-h`)}
-							onchange={(e) => {
-								if (value) value = withReferenceUnit(value, e.currentTarget.value);
-							}}
-						>
-							<option value="" disabled>Pick the unit the gauge stands in</option>
-							{#each land as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
-						</select>
-						<span class="hint explain" id="{uid}-runit-h">The CHIRPS cell at this unit’s centre is what the gauge is compared with.</span>
-						{#if problem?.field === 'reference'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
-						{#if refGone}<span class="err" data-testid="unit-rain-reference-gone">The reference unit is no longer a unit with land: runs ignore the reference until another is picked.</span>{/if}
-					</div>
-				{/if}
-			</div>
-			<span class="hint explain" id="{uid}-ref-h">
-				With a reference gauge, every unit’s CHIRPS is scaled by 12 monthly factors, the gauge’s rain ÷ the CHIRPS at the reference unit’s cell on the days
-				both have a reading, then rescaled so each unit’s long-term yearly total over the MAP period above is its own MAP. A month with fewer than 90 shared
-				days, or under 50 mm of CHIRPS, keeps a factor of 1.
-			</span>
-		</fieldset>
-	{/if}
+			{/if}
+		</div>
+		<span class="hint explain" id="{uid}-ref-h">
+			With a reference gauge, every unit’s CHIRPS is scaled by 12 monthly factors, the gauge’s rain ÷ the CHIRPS at the reference unit’s cell on the days
+			both have a reading, then rescaled so each unit’s long-term yearly total over the MAP period above is its own MAP. A month with fewer than 90 shared
+			days, or under 50 mm of CHIRPS, keeps a factor of 1.
+		</span>
+	</fieldset>
 	<!-- A stored setting that is off but can't be saved (another client wrote it) has no field to show its problem under. -->
-	{#if problem && !on}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
+	{#if problem && value && value.mode !== 'perUnit' && value.mode !== 'catchment'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
 	<FieldHistoryLine field="settings:unitRain" />
 </fieldset>
 

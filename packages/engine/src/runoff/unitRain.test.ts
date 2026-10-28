@@ -76,7 +76,7 @@ function everyRule(): ModelInput {
 }
 
 describe('settings.unitRain off', () => {
-	it('absent, null and catchment mode give the same output to the bit, with or without unit records in the input', () => {
+	it('absent, null and catchment mode give the same output to the bit; unit records move only the EWR shares (issue #615)', () => {
 		const plain = runModel(catchment('absent'));
 		for (const u of [null, { mode: 'catchment' as const }, { mode: 'catchment' as const, gaugeMapMm: 500, gaugeMapSource: 'x' }]) {
 			const o = runModel(catchment(u));
@@ -86,9 +86,16 @@ describe('settings.unitRain off', () => {
 			expect(JSON.stringify(o.summary), JSON.stringify(u)).toBe(JSON.stringify(plain.summary));
 			expect(JSON.stringify(o), JSON.stringify(u)).toBe(JSON.stringify(plain));
 		}
+		// Fragmentation reads the Per unit setup for the EWR shares only (engine ≥ 1.105.0, §2.5b): the flow is the same
+		// to the bit, and each unit's EWR share is the Per unit run's.
 		const withRecords = everyRule();
-		withRecords.settings.unitRain = { mode: 'catchment' };
-		expect(JSON.stringify(runModel(withRecords))).toBe(JSON.stringify(plain));
+		withRecords.settings.unitRain = { ...withRecords.settings.unitRain!, mode: 'catchment' };
+		const frag = runModel(withRecords);
+		for (const key of ['natural_flow', 'rain_used', 'simulated_outflow']) expect(col(frag, key), key).toEqual(col(plain, key));
+		expect(frag.summary.unitRain).toBeUndefined();
+		const per = runModel(everyRule());
+		for (const f of per.summary.farms) expect(frag.summary.farms.find((g) => g.nodeId === f.nodeId)!.ewrShare, f.nodeId).toBe(f.ewrShare);
+		expect(frag.summary.farms.find((f) => f.nodeId === 'A')!.ewrShare).not.toBe(plain.summary.farms.find((f) => f.nodeId === 'A')!.ewrShare);
 		expect(plain.summary.unitRain).toBeUndefined();
 		expect(plain.series.some((s) => s.key === 'rain_unit' || s.key === 'runoff_natural')).toBe(false);
 	});
@@ -677,7 +684,7 @@ describe('more of the per-unit run', () => {
 		expect(unitRainFingerprintChanged(fa, structuredClone(fa))).toBe(false);
 	});
 
-	it('off is identical to the bit on random networks, unit records and MAPs in the input or not', () => {
+	it('off runs the same flow to the bit on random networks, unit records and MAPs in the input or not (they move only the EWR shares)', () => {
 		for (let seed = 1; seed <= 25; seed++) {
 			const plain = randomInput(seed);
 			let before: string;
@@ -686,10 +693,18 @@ describe('more of the per-unit run', () => {
 			} catch {
 				continue;
 			}
+			const flow = (o: Out) => JSON.stringify(o.series.filter((s) => s.key === 'natural_flow' || s.key === 'rain_used'));
+			const plainFlow = flow(JSON.parse(before) as Out);
+			let last: string | null = null;
 			for (const unitRain of [null, { mode: 'catchment' as const }]) {
 				const off = withUnitRainRecords(randomInput(seed), seed);
 				off.settings.unitRain = unitRain;
-				expect(JSON.stringify(runModel(off)), `seed ${seed}`).toBe(before);
+				const out = runModel(off);
+				expect(flow(out), `seed ${seed}`).toBe(plainFlow);
+				// Null and `catchment` are the same setting: the same run to the bit, EWR shares too.
+				const all = JSON.stringify(out);
+				if (last !== null) expect(all, `seed ${seed}`).toBe(last);
+				last = all;
 			}
 		}
 	}, 120_000);

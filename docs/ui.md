@@ -7319,8 +7319,9 @@ two.
   record and the engine's "fitted under …" message use them. The radio writes the same `settings.unitRain` the checkbox did, so no
   stored project changes and no migration was needed; switching to
   Fragmentation keeps the Per unit setting (`draft.kept.unitRain`) until the
-  form is saved, and the stations assigned stay stored, unused, so Per unit
-  brings them back. When the form's parameters come from a fit made under
+  form is saved, and the stations assigned stay stored, so Per unit brings
+  them back; from issue #615 Fragmentation keeps the rest of the Per unit
+  setting too (`{ …, mode: 'catchment' }`) and reads it for the EWR shares. When the form's parameters come from a fit made under
   the other method (`fitMethodMismatch`, the engine's `fitFlowMethod`: a fit
   whose forcing records per-unit rain ran Per unit), an alert under the radio
   says "Parameters not fitted for this method: the GR4J parameters were
@@ -7328,7 +7329,8 @@ two.
   `#set-fit`, and the fit record lists the same caveat (`methodChanged`,
   `fitRecordCaveats`); choosing the fit's method again clears it. The
   summary line names the method ("Fragmentation · flow share: by catchment
-  area", "Per unit · 2 units on a rainfall station · EWR flow share: …").
+  area · EWR by each unit's natural MAR", "Per unit · 2 units on a rainfall
+  station · EWR by each unit's natural MAR").
   - **Per unit** shows two cards. **Each unit's rainfall station**
     (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
     helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
@@ -7355,32 +7357,41 @@ two.
     stacks into a block with its fields labelled, so nothing scrolls sideways
     (`flow-generation.spec.ts` at 390 px). Then **Units without a station**
     ([§ Calibration](#calibration), in Flow calibration's description) and, for editors, MAP from the grid.
-  - **Flow share** (Fragmentation) or **Flow share: the EWR between units**
-    (Per unit), a card: the **Flow share method** and the **High/low MAP
-    split** (High, Low, their Sum, amber unless 100 %) only while the method
-    is *High/low MAP split*, the one method that reads it (issue #174); under
-    *by area* or *manual* it is hidden and its saved value kept. The line
-    under its heading follows the method: Fragmentation, "GR4J runs once on
-    the catchment rain; the flow share splits its flow and the EWR between
-    units. To give each unit its own runoff, choose Per unit above." (an
-    explanation); Per unit, "Each unit makes its own runoff; the flow share
-    now splits only the EWR and the land cover's low-flow threshold between
-    units, not the flow." (a state line, shown with the explanations off;
-    `e2e/tests/flow-share-hint.spec.ts`); with the EWR split by natural MAR
-    (below) the Per unit line says the flow share now splits only the land
-    cover's low-flow threshold. At the card's foot, **Split the EWR between
-    units by** (`settings.ewrSplit`, engine ≥ 1.94.0, issue #553 round 4,
-    model.md §2.5b; `EwrSplitFields.svelte`, in the lazy sections chunk):
-    *The flow share* (the default, what every earlier run did) or *Each
-    unit's natural MAR* (its own natural runoff over the run's complete water
-    years ÷ the units' total; the period is provisional). Its explanation
-    says what follows the split (the charge, curtailment, hands-off EWR
-    flows, the drought restriction's EWR trigger); its state line, shown with
-    the explanations off, follows the method: under Fragmentation both give
-    the flow share and the choice matters only under Per unit; under Per
-    unit, which share splits the EWR. A split other than the flow share
-    joins the panel's summary line, and the field has its change history
-    (`e2e/tests/ewr-split.spec.ts`).
+  - **Under Fragmentation too** (issue #615, model.md §2.5b), both cards
+    above show, under a line saying the setup there sets only how the EWR
+    is split ("GR4J also runs once on each unit's own rain, for each unit's
+    natural MAR share, and the catchment's one run still makes the flow.",
+    `flowgen-share-setup`). Switching to Fragmentation keeps the Per unit
+    setup (`settings.unitRain` becomes `{ …, mode: 'catchment' }`, not
+    null), so a unit's station, the MAP period and the reference gauge carry
+    over both ways; a project that never set one shows the defaults.
+  - **Flow share and the EWR split**, a card. First a state line (shown with
+    the explanations off, `ewr-split-hint`): "The EWR is split between the
+    units by each unit's natural MAR: its own GR4J runoff over the run's
+    complete water years ÷ the units' total[, from the runs on each unit's
+    own rain above]. The run's summary lists each unit's share." There is no
+    choice: the split is the same under both methods (`settings.ewrSplit`,
+    1.94.0 – 1.104.x, is retired). Then, when some land unit has no rain of
+    its own (no station, rain gauge or CHIRPS series of its own, and no MAP
+    with a gauge MAP; `unitsOnCatchmentRain`, an estimate from the setup, as
+    the run decides from the records), a line naming them, up to six and a
+    count: they run on the catchment rain, so their EWR share follows their
+    area (`ewr-split-catchment-rain`). Then the **Flow share method** and
+    the **High/low MAP split** (High, Low, their Sum, amber unless 100 %)
+    only while the method is *High/low MAP split*, the one method that
+    reads it (issue #174); under *by area* or *manual* it is hidden and its
+    saved value kept. The line under them follows the method: Fragmentation,
+    "GR4J runs once on the catchment rain; the flow share splits its flow
+    between units. To give each unit its own runoff, choose Per unit above."
+    (an explanation); Per unit, "Each unit makes its own runoff; the flow
+    share now splits only the land cover's low-flow threshold between units,
+    not the flow or the EWR." (a state line;
+    `e2e/tests/flow-share-hint.spec.ts`). The panel's summary line ends
+    "EWR by each unit's natural MAR", after the units on a rainfall station
+    (under Fragmentation only when there are some; `e2e/tests/ewr-split.spec.ts`).
+    The hydrological unit table's *In use* column still shows the flow
+    share from the saved settings; issue #616 turns it into the latest
+    run's natural MAR share with the run's date.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,
@@ -9053,7 +9064,11 @@ read it before.
   use the saved network…", with a sentence on what Run forecast does when it
   is offered, in words rather than the button's hover title, #586 D18) is one
   slim line under the header (`#run-note`, the buttons' accessible
-  description), with the progress bar under it. A run the header started on
+  description), with the progress bar under it. Under it, Run readiness
+  names the land units with no rain of their own (no station, rain gauge or
+  CHIRPS of their own, no MAP with a gauge MAP; issue #615): they run on the
+  catchment rain, so their EWR share follows their area, with a link to
+  Model settings (`run-catchment-rain`, a note, never a blocker). A run the header started on
   another section and still going when the page opens shows here the same
   way, the form waiting for it. A viewer gets no form, and
   the inputs-changed note as before.

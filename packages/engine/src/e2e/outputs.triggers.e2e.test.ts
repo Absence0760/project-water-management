@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput, ModelOutput } from '../project';
-import { captureModelState, runModelFrom, runModelWithoutChecks, withDamStorage } from '../index';
+import { captureModelState, ewrSplitPinOf, runModelFrom, runModelWithoutChecks, withDamStorage } from '../index';
 import { testCatchment } from '../outlook/testCatchment';
 import { outlookAnalogues, outlookSeasonInput } from '../outlook/outlook';
 import { reviewTriggerBands, runReviewTriggers } from '../outlook/triggers';
@@ -94,6 +94,8 @@ describe('outputs e2e: review-trigger bands from the record (§2.15a)', () => {
 				const plainInput: ModelInput = {
 					...BASE,
 					settings: { ...BASE.settings, simulationEnd: season.seasonEnd, damStorageReset: { date: reviewDate, storageM3: b.storageM3ByDam } },
+					// The base run's EWR shares (engine ≥ 1.105.0), as the member from the snapshot takes the capture run's.
+					ewrSplitPinned: ewrSplitPinOf(BASE),
 					series: { rain_catchment_mm: { startDate: rain.startDate, values: [...rain.values.slice(0, k), ...rf.slice(ai, ai + 120)] } }
 				};
 				const plain = runModelWithoutChecks(plainInput);

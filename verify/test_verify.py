@@ -420,8 +420,9 @@ MUTANTS = [
     ("rule 2's level under the catchment's station is the station MAP, without r", '"gauge_level": None if st_map is None else st_map * r,', '"gauge_level": None if st_map is None else st_map,'),
     ("rule 2 applies on gaugeMapMm when the catchment's station has no MAP", '        gauge_level = rain["gauge_level"]\n', '        gauge_level = rain["gauge_level"] or gauge_map\n'),
     ("the reference fit keeps the catchment station's accumulation windows", '"fit_window_days": rec.prep["fit_window_days"],', '"fit_window_days": set(),'),
-    # The EWR split by natural MAR (§2.5b, engine 1.94.0, issue #553).
-    ("the natural MAR split is ignored (the flow share splits the EWR)", 'if settings.get("ewrSplit") == "naturalMar" and local is not None:', "if False:"),
+    # The EWR split by natural MAR (§2.5b, engine 1.94.0, issue #553; under both methods from 1.105.0, issue #615).
+    ("the natural MAR split is ignored (the flow share splits the EWR)", "    if split_src is not None:", "    if False:"),
+    ("Fragmentation's share runs are ignored (the flow share splits the EWR there)", "split_src = local if local is not None else share_local", "split_src = local"),
     ("the natural MAR is taken over every day, not the complete water years", "period = full if full else list(range(hist))", "period = list(range(hist))"),
 ]
 

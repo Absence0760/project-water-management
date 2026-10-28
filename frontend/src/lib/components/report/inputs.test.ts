@@ -109,6 +109,20 @@ describe('settingsRows', () => {
 		);
 	});
 
+	it('names the EWR split on every run from engine 1.105.0, which has no setting for it (issue #615)', () => {
+		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
+		const key = 'EWR split between units';
+		const at = (ewrSplit: unknown) => Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j' } as never), { ...run, summary: { ewrSplit } as never }))[key];
+		const period = { start: '2000-10-01', end: '2010-09-30', waterYears: 10 };
+		const mar = 'each unit’s natural MAR (its own GR4J runoff ÷ the units’ total) over the run’s complete water years, or the whole run without one; the period is provisional, pending the hydrologist’s review';
+		expect(at({ applied: 'naturalMar', period, runoffFrom: 'unitRain' })).toBe(mar);
+		expect(at({ applied: 'naturalMar', period, runoffFrom: 'shareRuns', catchmentRain: [{ nodeId: 'd', name: 'Unit D' }] })).toBe(
+			`${mar}; under Fragmentation, from GR4J runs on each unit’s own rain made for the shares only (the flow is the catchment’s one run, split by the flow share); on the catchment rain, so their share follows their area: Unit D`
+		);
+		expect(at({ applied: 'area', why: 'noRunoff', period })).toBe('each unit’s area: no unit made natural runoff over the run');
+		expect(at({ applied: 'flowShare', why: 'noLandUnit' })).toBe('the flow share: no unit has an area, so there is no natural MAR to split by');
+	});
+
 	it('names the runoff model and lists GR4J parameters only for a GR4J run', () => {
 		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
 		const gr4j = Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j' }), run));

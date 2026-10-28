@@ -17,7 +17,7 @@ import type { ModelInput } from '../project';
 import { Rng } from '../random';
 import { captureModelState, runModelFrom, runModelWithoutChecks } from '../run';
 import type { ScenarioOp } from '../scenario/ops';
-import { randomInput, withEwrSplit, withUnitRain } from '../testing/fuzz';
+import { randomInput, withUnitRain } from '../testing/fuzz';
 import { outlookAnalogues, outlookMember, outlookMemberInput, outlookSeasonInput } from './outlook';
 import { checkInvariants } from '../testing/invariants';
 import type { OutlookSeason } from './season';
@@ -53,7 +53,7 @@ function caseFor(seed: number, strip: boolean, perUnit = false): Case | null {
 	if (strip) input = withoutReturns(input);
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h), from its own stream.
 	// The EWR split by natural MAR (engine ≥ 1.94.0) on about half, which a member must keep from the base's snapshot.
-	if (perUnit) input = withEwrSplit(withUnitRain(input, seed), seed);
+	if (perUnit) input = withUnitRain(input, seed);
 	const base = runModelWithoutChecks(input);
 	const g = new Rng(seed ^ 0x0e5b);
 	const len = g.int(30, 200);

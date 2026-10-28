@@ -289,10 +289,10 @@ export function areaRowInfo(it: AreaItem<Pick<SeriesMeta, 'id' | 'kind' | 'name'
 	const sentence =
 		areaSentence({ name: u.name, mapMm: u.mapMm ?? null, catchment: false, hasChirps: it.series.some((s) => s.kind === 'rain_chirps_mm') }, a, ctx.stations) ??
 		(ctx.settings?.rainStations?.units?.[u.id] && !perUnit
-			? 'Runs split the catchment’s flow by the flow share (per-unit rain is off), so its station isn’t read.'
+			? 'Runs split the catchment’s flow by the flow share (per-unit rain is off); its station sets only the unit’s share of the EWR.'
 			: perUnit
 				? 'No rainfall station assigned: its rain follows Model settings → Model selection for flow generation → Units without a station.'
-				: 'Runs split the catchment’s flow by the flow share; this unit has no rain of its own.');
+				: 'Runs split the catchment’s flow by the flow share; this unit has no rain of its own, so its share of the EWR follows its area.');
 	return {
 		kind: 'Hydrological unit',
 		name: u.name,

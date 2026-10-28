@@ -12,7 +12,6 @@ import {
 	exclusionKey,
 	EXCLUSIONS_MAX,
 	EWR_CHARGE_SOURCES,
-	EWR_SPLIT_METHODS,
 	EWR_NATURAL_SOURCES,
 	EWR_RULE_COMPONENTS,
 	EWR_RULE_POINTS_MAX,
@@ -47,6 +46,7 @@ import {
 	AREAL_RAIN_METHODS,
 	resolveFitRecord,
 	RETIRED_CALIBRATION_KEYS,
+	RETIRED_SETTINGS_KEYS,
 	RUNOFF_MODELS,
 	WR2012_MAX_PENALTY_WEIGHT,
 	WR2012_SCALINGS,
@@ -125,12 +125,15 @@ export function mergeSettings(stored: unknown): ProjectSettings {
  * Settings with what the legacy runoff model left behind removed (engine
  * 1.0.0, issue #16; migration 064 does the same to the stored rows): the
  * model is GR4J, the calibration group loses the legacy model's keys, and a
- * fit of the legacy model is dropped. A run's snapshot comes from here
+ * fit of the legacy model is dropped. A retired setting (RETIRED_SETTINGS_KEYS,
+ * engine ≥ 1.105.0) is dropped too. A run's snapshot comes from here
  * (runs/execute.ts), and a snapshot that names any model but 'gr4j' reads as
  * a legacy run, so a project still stored as 'legacy' must not reach one.
  */
 function withoutLegacyRunoff(s: Json): Json {
 	s.runoffModel = 'gr4j';
+	// Retired settings (engine RETIRED_SETTINGS_KEYS: ewrSplit, issue #615; 262_retire_ewr_split.sql strips the rows).
+	for (const k of RETIRED_SETTINGS_KEYS) delete s[k];
 	if (isObj(s.calibration)) s.calibration = withoutRetiredCalibration(s.calibration);
 	if (isObj(s.fitRecord) && s.fitRecord.model !== 'gr4j') s.fitRecord = null;
 	return s;
@@ -1153,8 +1156,8 @@ export const SettingsPatch = z
 		lakeEvapFactorSource: z.string().trim().max(PE_SOURCE_MAX),
 		apanMm: monthlyNonNeg,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
-		// How the EWR is split between the units (engine ≥ 1.94.0, issue #553): the flow share or each unit's natural MAR.
-		ewrSplit: z.enum(EWR_SPLIT_METHODS),
+		// ewrSplit (engine 1.94.0 – 1.104.x) is retired (issue #615): not here, so an older web build's patch with it still
+		// saves, the key stripped like any other unknown one.
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
 		// GR4J is the only model since engine 1.0.0 (issue #16); the setting records it.
 		runoffModel: z.enum(RUNOFF_MODELS, { error: 'the legacy runoff model was removed in engine 1.0.0: GR4J is the only runoff model' }),
