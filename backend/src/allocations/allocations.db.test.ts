@@ -1117,6 +1117,7 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 	const paramsOf = (pattern: string): Record<string, string> => ({
 		...(pattern.includes('/reports/:jobId') ? { jobId: reportJob } : {}),
 		...(pattern.includes('/assessments/:aid') ? { aid: ids.assessmentId! } : {}),
+		...(pattern.includes('/map/start/requests/:rid') ? { rid: ids.planRid! } : {}),
 		// The ensemble is the base run's.
 		...(pattern.includes(':uid') ? { runId: baseRun } : {})
 	});
@@ -1241,7 +1242,10 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		reportJob = (await ctx.editor.call('POST', `${at}/reports`, { runId: scenarioRun, against: `${ctx.projectId}:${baseRun}` })).body.jobId as string;
 		const assessmentId = (await post('/assessments', SAMPLE['POST /projects/:id/assessments']!(ctx).body)).assessment.id as string;
 		const [rid] = await asOwner(`INSERT INTO delineation_request (project_id, click_kind, click_lon, click_lat, from_window) VALUES ($1, 'outlet', 21.31, -33.69, 256) RETURNING id`, [ctx.projectId]);
-		ids = { ...ctx.ids, sid, sweepId: sweep, uid, packId, assessmentId, rid: rid!.id as string };
+		// A Start's plan request (#646 item 3, 272_plan_request.sql): …/map/start/requests/:rid reads only those, so the
+		// click's request above would be a 404 there, a route not swept.
+		const [planRid] = await asOwner(`INSERT INTO delineation_request (project_id, plan_kind, plan_body, from_window) VALUES ($1, 'start', '{}', 256) RETURNING id`, [ctx.projectId]);
+		ids = { ...ctx.ids, sid, sweepId: sweep, uid, packId, assessmentId, rid: rid!.id as string, planRid: planRid!.id as string };
 		[capRun, fullRun] = await allocationModeRuns(post, baseRun);
 	}, 300_000);
 
