@@ -30,6 +30,7 @@
 </script>
 
 <script lang="ts">
+	import type { ProjectSettings } from '@water-management/engine';
 	// Catchment map (?tab=map, issue #288, roadmap WP-3.12; laid out as a
 	// Network-style workspace in #326 E3–E6; docs/ui.md § Map, docs/maps.md).
 	// The map on the left, fitted to the window, its tools on its left edge
@@ -96,7 +97,7 @@
 	import MeasureBar from './measure/MeasureBar.svelte';
 	import { MeasureDraft } from './measure/measureDraft.svelte';
 	import MapKeyRow from './MapKeyRow.svelte';
-	import { featureResult, viewLabel } from './mapResults';
+	import { featureResult, featureZone, viewLabel } from './mapResults';
 	import { MapResults } from './mapResults.svelte';
 	import { BAND_WORD } from './mapStatus';
 	import ClickBar from './ClickBar.svelte';
@@ -129,6 +130,7 @@
 		runs = null,
 		role = null,
 		projectName = null,
+		settings = null,
 		onModelChanged
 	}: {
 		projectId: string;
@@ -140,6 +142,8 @@
 		role?: Role | null;
 		/** The project's name, for the GeoJSON download's file name. */
 		projectName?: string | null;
+		/** The project's saved settings: the calibration zones the map can colour by (issue #555). */
+		settings?: ProjectSettings | null;
 		/** An area was accepted into the model: the page reloads its inputs. */
 		onModelChanged: () => Promise<void> | void;
 	} = $props();
@@ -1043,7 +1047,8 @@
 		nodes: () => editor.model.nodes,
 		features: () => features,
 		params: () => params,
-		dark: () => dark
+		dark: () => dark,
+		settings: () => settings
 	});
 
 	// --- Layers and Key: tabs in the side column on a wide page with features (until 2026-10-03 boxes over the map's corners);
@@ -1267,6 +1272,11 @@
 
 <!-- The picked feature's figure from the run the map shows (#326 A1): the measure's, or a gauge's EWR, in words with its band. -->
 {#snippet resultFacts(f: MapFeature)}
+	{@const z = results.zoneOn ? featureZone(f, results.zoneBy) : null}
+	{#if z}
+		<dt>Calibration zone</dt>
+		<dd data-testid="map-card-zone">{z}</dd>
+	{/if}
 	{@const r = results.ready ? featureResult(f, results.unitBy, results.ewrBy) : null}
 	{#if r}
 		<dt>{r.measure === 'ewr' ? 'EWR' : viewLabel(results.view)}</dt>
@@ -1538,7 +1548,7 @@
 									<button type="button" class="btn btn-sm map-ctl" onclick={() => mapRef?.showAll()} data-testid="map-show-everything">Show everything</button>
 								{/if}
 								<button type="button" class="btn btn-sm map-ctl" aria-expanded={keyShown} aria-controls={panelsInSide ? `${uid}-panel-key` : `${uid}-key`} bind:this={keyBtn} onclick={() => openPanel('key', !keyShown)} data-testid="map-key-toggle">
-									Key{#if results.on}<span class="ctl-sub">· {viewLabel(results.view)}</span>{/if}
+									Key{#if results.on || results.zoneOn}<span class="ctl-sub">· {viewLabel(results.view)}</span>{/if}
 								</button>
 							</div>
 						</div>
@@ -1798,6 +1808,7 @@
 							<p class="muted small grid-note">
 									Areas are computed on the server from each polygon (geodesic, WGS84).
 									{#if results.ready}Result and Band: {viewLabel(results.view).toLowerCase()} for what each area stands for, and the EWR at gauges, from the run the map shows.{/if}
+									{#if results.zoneOn}Calibration zone: the zone of the unit each area stands for, from the saved settings.{/if}
 								</p>
 							<div class="table-wrap">
 								<table class="data map-table" data-testid="map-feature-table">
@@ -1810,6 +1821,7 @@
 											<th scope="col">Stands for</th>
 											<th scope="col">Unit’s area</th>
 											{#if results.ready}<th scope="col">Result</th><th scope="col">Band</th>{/if}
+											{#if results.zoneOn}<th scope="col">Calibration zone</th>{/if}
 											{#if canEdit}<th scope="col">Area into the model <HelpTip key="map-area" /></th><th scope="col"><span class="visually-hidden">Actions</span></th>{/if}
 										</tr>
 									</thead>
@@ -1828,13 +1840,16 @@
 													<td data-testid="map-grid-result"><span class="cell-label" aria-hidden="true">Result{' '}</span>{#if r}{r.label}{:else}<span class="muted">–</span>{/if}</td>
 													<td data-testid="map-grid-band" data-band={r?.band}><span class="cell-label" aria-hidden="true">Band{' '}</span>{#if r}{BAND_WORD[r.band]}{:else}<span class="muted">–</span>{/if}</td>
 												{/if}
+												{#if results.zoneOn}
+													<td data-testid="map-grid-zone"><span class="cell-label" aria-hidden="true">Calibration zone{' '}</span>{featureZone(f, results.zoneBy) ?? '–'}</td>
+												{/if}
 												{#if canEdit}
 													<td class="area-cell"><span class="cell-label" aria-hidden="true">Area into the model </span>{@render areaInto(f)}</td>
 													<td class="row-actions">{@render deleteButton(f)}</td>
 												{/if}
 											</tr>
 											{#if rowError?.id === f.id}
-												<tr><td colspan={(canEdit ? 7 : 5) + (results.ready ? 2 : 0)}><p class="err" role="alert">{rowError.text}</p></td></tr>
+												<tr><td colspan={(canEdit ? 7 : 5) + (results.ready ? 2 : 0) + (results.zoneOn ? 1 : 0)}><p class="err" role="alert">{rowError.text}</p></td></tr>
 											{/if}
 										{/each}
 									</tbody>
