@@ -8,6 +8,10 @@
 //                          dPET years (.nc, or the .json --reduce wrote) averaged into monthly means, or one fixture-form .json
 //   pnpm import:evaporation <file> … --dataset <label> --out <grid.json[.gz]> [same options]
 //                          the same monthly means written to a file instead of loaded (no database)
+//   pnpm import:evaporation <apan.json[.gz]> --dataset <label>
+//                          a modelled Class-A pan grid (PenPan) that ingest/apan_grid.py grid wrote
+//                          (issue #646 item 7): kind "apan" with its "model", its source always
+//                          starting "Modelled Class-A pan (PenPan)"; local only, production refuses it
 //
 // Runs as the schema owner (MIGRATION_DATABASE_URL), like import-land-cover:
 // the app role only reads evaporation_dataset and evaporation_cell_reference.
@@ -29,7 +33,7 @@ import { loadDevEnv } from '../src/config/devEnv.js';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import pg from 'pg';
 import { SYNTHETIC_EVAPORATION_DATASET } from '../src/geo/evaporation.js';
 import {
@@ -38,6 +42,8 @@ import {
 	evaporationFromJson,
 	evaporationMethodFor,
 	evaporationToJson,
+	modelledApanSource,
+	PENPAN,
 	readDpetYear,
 	replaceEvaporationDataset,
 	SOUTH_AFRICA_BBOX,
@@ -50,12 +56,17 @@ import {
 
 /** The committed synthetic grid. */
 export const SYNTHETIC_EVAPORATION_FILE = fileURLToPath(new URL('../fixtures/geo/evaporation.synthetic.json', import.meta.url));
+/** ingest/apan_grid.py's committed synthetic output, a modelled Class-A pan grid (issue #646 item 7; its tests, never loaded by setup). */
+export const SYNTHETIC_PENPAN_FILE = fileURLToPath(new URL('../../ingest/fixtures/apan/penpan.synthetic.json', import.meta.url));
 
 const cliPath = (p: string, env: NodeJS.ProcessEnv = process.env): string => resolve(env.INIT_CWD ?? process.cwd(), p);
 
 export type EvaporationArgs =
 	| { mode: 'reduce'; out: string; files: string[]; bbox: Bbox }
 	| { mode: 'load'; files: string[]; dataset: string; bbox: Bbox; source: string | null; version: string | null; attribution: string | null; out?: string | null };
+
+const isJson = (p: string) => /\.json(\.gz)?$/i.test(p);
+const readJsonText = (f: string) => (/\.gz$/i.test(f) ? gunzipSync(readFileSync(f)).toString('utf8') : readFileSync(f, 'utf8'));
 
 const FLAGS = ['--dataset', '--bbox', '--source', '--version', '--attribution', '--reduce', '--out'];
 
@@ -84,8 +95,8 @@ export function parseEvaporationArgs(argv: string[], env: NodeJS.ProcessEnv = pr
 	if (out !== null && !/\.json(\.gz)?$/i.test(out)) return '--out takes a .json or .json.gz file';
 	const base = { bbox, source: flag('--source'), version: flag('--version'), attribution: flag('--attribution'), out: out === null ? null : cliPath(out, env) };
 	if (positional.length === 0) return { mode: 'load', ...base, files: [SYNTHETIC_EVAPORATION_FILE], dataset: SYNTHETIC_EVAPORATION_DATASET };
-	const bad = positional.find((p) => !['.nc', '.json'].includes(extname(p).toLowerCase()));
-	if (bad) return `${bad}: give dPET files (.nc), the years --reduce wrote (.json), or one fixture-form .json`;
+	const bad = positional.find((p) => extname(p).toLowerCase() !== '.nc' && !isJson(p));
+	if (bad) return `${bad}: give dPET files (.nc), the years --reduce wrote (.json), or one fixture-form .json or .json.gz`;
 	const dataset = flag('--dataset');
 	if (!dataset || dataset.length > 50) return 'give the dataset a label of at most 50 characters with --dataset (e.g. dPET-1991-2020)';
 	if (dataset === SYNTHETIC_EVAPORATION_DATASET) return `"${SYNTHETIC_EVAPORATION_DATASET}" is the committed fixture's label; pick another`;
@@ -111,7 +122,7 @@ export async function readEvaporationFiles(
 	args: Extract<EvaporationArgs, { mode: 'load' }>,
 	log: (line: string) => void = () => {}
 ): Promise<{ meta: EvaporationDatasetMeta; climatology: Climatology; problems: string[] }> {
-	const docs = args.files.map((f) => ({ f, doc: extname(f).toLowerCase() === '.json' ? (JSON.parse(readFileSync(f, 'utf8')) as { product?: unknown; kind?: unknown }) : null }));
+	const docs = args.files.map((f) => ({ f, doc: isJson(f) ? (JSON.parse(readJsonText(f)) as { product?: unknown; kind?: unknown }) : null }));
 	const fixtures = docs.filter((d) => d.doc && d.doc.product === undefined);
 	if (fixtures.length) {
 		if (docs.length > 1) throw new Error('give one fixture-form .json on its own');
@@ -119,14 +130,22 @@ export async function readEvaporationFiles(
 		const got = evaporationFromJson(doc);
 		if (typeof got === 'string') throw new Error(`${f}: ${got}`);
 		const c = got.climatology;
+		const model = got.meta.model;
+		// dPET's lines describe a reference-ET grid only: a PenPan grid has its own, and any other A-pan grid must name its source.
+		const defaults = model ? PENPAN : got.kind === 'et0' ? DPET : null;
+		const source = args.source ?? got.meta.source ?? defaults?.source;
+		if (!source || !defaults && !(args.attribution ?? got.meta.attribution)) {
+			throw new Error(`${f}: an A-pan grid names its source and attribution (--source, --attribution, or "source" and "attribution" in the file)`);
+		}
 		return {
 			meta: {
 				dataset: args.dataset,
 				kind: got.kind,
-				source: args.source ?? got.meta.source ?? DPET.source,
-				version: args.version ?? got.meta.version ?? DPET.version,
-				attribution: args.attribution ?? got.meta.attribution ?? DPET.attribution,
-				method: evaporationMethodFor(c.cellDeg, c.firstYear, c.lastYear, got.kind)
+				source: model ? modelledApanSource(source) : source,
+				version: args.version ?? got.meta.version ?? defaults?.version ?? 'unstated',
+				attribution: (args.attribution ?? got.meta.attribution ?? defaults?.attribution)!,
+				method: evaporationMethodFor(c.cellDeg, c.firstYear, c.lastYear, got.kind, model),
+				...(model ? { model } : {})
 			},
 			climatology: c,
 			problems: got.problems.map((p) => `${f}: ${p}`)

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { DATASETS, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
+import { BLOCKED_EVAPORATION, DATASETS, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
 
 const has = () => true;
 const lacks = () => false;
@@ -108,6 +108,22 @@ describe('load: a reference load’s inputs', () => {
 		assert.match(loadProblems({ ...tiles, LOAD_DATASET: 'rivers' }, has).join('\n'), /only the datasets whose licence is recorded: basemap, fonts, terrain, water/);
 		assert.match(loadProblems({ ...tiles, LOAD_SOURCE: 'x' }, has).join('\n'), /takes no source/);
 		assert.match(loadProblems({ ...tiles, LOAD_KEY: 'originals/terrain/terrain.pmtiles' }, has).join('\n'), /reference\/tiles\/<file>/);
+	});
+
+	it('refuses a modelled Class-A pan (PenPan) or any A-pan evaporation grid by its key or label; dPET still passes', () => {
+		assert.deepEqual(loadProblems(evaporation, lacks), []);
+		for (const extra of [
+			{ LOAD_KEY: 'reference/evaporation/penpan-1991-2020.json.gz' },
+			{ LOAD_DATASET: 'PenPan-1991-2020' },
+			{ LOAD_DATASET: 'apan-power' },
+			{ LOAD_KEY: 'reference/evaporation/class-a-grid.json' }
+		]) {
+			const problems = loadProblems({ ...evaporation, ...extra }, lacks);
+			assert.equal(problems.length, 1, JSON.stringify(extra));
+			assert.match(problems[0], /blocked in production until its validation .*docs\/data-sources\.md § penpan-apan/);
+		}
+		// Only evaporation: a land-cover file that happens to say "apan" is not this gate's business.
+		assert.ok(!BLOCKED_EVAPORATION.test('reference/evaporation/dpet-1991-2020.json.gz dPET-1991-2020'));
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {
