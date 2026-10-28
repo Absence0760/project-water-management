@@ -929,12 +929,14 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
         if a is not None and st.record(a["stationId"]) is not None:
             # §2.4i: the unit's station × r, its CHIRPS × the pairing's factors, then the catchment forcing × 1.
             diag["station_units"] += 1
-            area = st.area_rain(a, u.get("mapMm"), Series(series.get(f"rain_chirps_mm@{uid}")))
+            area = st.area_rain(a, u.get("mapMm"), Series(series.get(f"rain_chirps_mm@{uid}")), uid)
             vals = []
             for i, o in enumerate(days):
                 v, kind = area(o)
                 if kind == "station":
                     diag["station_unit_days"] += 1
+                elif kind == "patch":
+                    diag["station_patch_days"] += 1
                 elif kind == "chirps":
                     diag["station_unit_chirps_days"] += 1
                 else:
@@ -1032,7 +1034,35 @@ STATION_DIAG = (
     "station_ratio_clamped", "station_unscaled", "station_ratio_missing_map", "station_catchment",
     "station_catchment_map_from_units", "station_catchment_map_missing", "station_unit_days", "station_unit_chirps_days",
     "station_unit_fallback_days", "station_checks_set_aside", "station_windows", "station_units",
+    # The patching priority (issue #612, engine 1.105.0).
+    "station_patch_days", "station_patch_skipped",
 )
+
+PATCH_MAX = 8
+
+
+def resolve_patch(raw, main: str) -> list:
+    """An assignment's patching priority as §2.4i runs it (issue #612): absent
+    or not a list = [CHIRPS]; entries that aren't a source, a second CHIRPS, a
+    station listed twice and the main station left out; at most PATCH_MAX."""
+    if not isinstance(raw, list):
+        return ["chirps"]
+    out: list = []
+    for e in raw:
+        if not isinstance(e, dict):
+            continue
+        if e.get("source") == "chirps":
+            key = "chirps"
+        elif e.get("source") == "station" and isinstance(e.get("stationId"), str) and 0 < len(e["stationId"]) <= 200:
+            key = e["stationId"]
+        else:
+            continue
+        if key == main or key in out:
+            continue
+        if len(out) >= PATCH_MAX:
+            break
+        out.append(key)
+    return out
 
 
 def station_key(sid: str) -> str:
@@ -1097,16 +1127,17 @@ class StationRecord:
         return None if o in self.prep["fit_window_days"] else self.value(o)
 
 
-def fit_station_pairing(rec: StationRecord, diag: dict):
-    """§2.4i's pairing: per calendar month Σ station ÷ Σ CHIRPS at the
-    station over the days both have a reading (the checked record,
-    accumulation windows left out), over their whole records; 1 without 90
+def fit_station_pairing(rec: StationRecord, h, r: float, diag: dict):
+    """§2.4i's pairing of a station with an area (per area since engine
+    1.105.0, issue #612): per calendar month Σ (station × r) ÷ Σ CHIRPS of
+    the area (`h`: a unit's own, or the catchment's) over the days both have
+    a reading (the checked record, accumulation windows left out), over
+    their whole records; r is the area's ratio to the station. 1 without 90
     shared days and 50 mm of CHIRPS; clamped to 0.25–4. None (refused) with
-    no CHIRPS at the station or fewer than 5 complete calendar years in
-    common (every day of the year a reading in both, the station's record
-    as the forcing reads it: a spread accumulation's days count as read,
-    engine 1.96.0, engine-audit.md RS6)."""
-    h = rec.at
+    no CHIRPS for the area or fewer than 5 complete calendar years in common
+    (every day of the year a reading in both, the station's record as the
+    forcing reads it: a spread accumulation's days count as read, engine
+    1.96.0, engine-audit.md RS6)."""
     if h is None or not h or not rec.stored:
         diag["station_pairings_refused"] += 1
         return None
@@ -1120,7 +1151,7 @@ def fit_station_pairing(rec: StationRecord, diag: dict):
         if valid(sv) and valid(cv):
             m = cal_month(o)
             n[m] += 1
-            g[m] += sv
+            g[m] += sv * r
             c[m] += cv
         # The complete years count on the forcing's record, the factors on the fit's (RS6).
         yv = rec.value(o)
@@ -1153,20 +1184,23 @@ class Stations:
         self.rs = station_settings(settings)
         self.settings, self.series, self.stations, self.diag = settings, series, stations or {}, diag
         self._rec: dict[str, StationRecord | None] = {}
-        self._pair: dict[str, list | None] = {}
+        self._pair: dict[tuple, list | None] = {}
 
     def record(self, sid: str):
         if sid not in self._rec:
             self._rec[sid] = StationRecord(sid, self.settings, self.series, self.rs, self.stations, self.diag) if self.series.get(station_key(sid)) else None
         return self._rec[sid]
 
-    def pairing(self, sid: str):
-        if sid not in self._pair:
+    def pairing(self, sid: str, area_id, h, r: float):
+        """The pairing of station `sid` with an area (a unit's id, or None for the catchment) whose CHIRPS is `h`,
+        read at the area's ratio `r` to the station: one per area and station (issue #612)."""
+        key = (sid, area_id)
+        if key not in self._pair:
             rec = self.record(sid)
             if rec is None:
                 self.diag["station_pairings_refused"] += 1
-            self._pair[sid] = None if rec is None else fit_station_pairing(rec, self.diag)
-        return self._pair[sid]
+            self._pair[key] = None if rec is None else fit_station_pairing(rec, h, r, self.diag)
+        return self._pair[key]
 
     def ratio(self, a: dict, sid: str, area_map) -> float:
         if a.get("scaleToMap") is False:
@@ -1182,23 +1216,42 @@ class Stations:
             self.diag["station_ratio_clamped"] += 1
         return r
 
-    def area_rain(self, a: dict, area_map, chirps: Series, r: float | None = None):
+    def area_rain(self, a: dict, area_map, chirps: Series, area_id, r: float | None = None):
         """The area's rain by §2.4i's rule, o → (value, kind) with kind
-        'station' or 'chirps', or (None, None) for the area's next fallback."""
+        'station', 'patch' (a patch station × its own ratio, issue #612) or
+        'chirps', or (None, None) for the area's next fallback. The patching
+        priority's first source with a value fills a gap in the main station."""
         sid = a["stationId"]
         rec = self.record(sid)
         if r is None:
             r = self.ratio(a, sid, area_map)
-        f = self.pairing(a.get("correctAgainst") or sid)
+        links = []
+        for p in resolve_patch(a.get("patch"), sid):
+            if p == "chirps":
+                against = a.get("correctAgainst") or sid
+                f = self.pairing(against, area_id, chirps, self.ratio(a, against, area_map))
+                links.append(("chirps", f))
+                continue
+            prec = self.record(p)
+            # Skipped: no record, or no MAP of its own to scale by under scaling.
+            if prec is None or (a.get("scaleToMap") is not False and (self.stations.get(p) or {}).get("mapMm") is None):
+                self.diag["station_patch_skipped"] += 1
+                continue
+            links.append(("patch", (prec, self.ratio(a, p, area_map))))
 
         def rain(o):
             v = rec.value(o)
             if v is not None:
                 return v * r, "station"
-            if f is not None:
-                w = chirps.get(o)
-                if valid(w):
-                    return w * f[cal_month(o)], "chirps"
+            for kind, f in links:
+                if kind == "patch":
+                    w = f[0].value(o)
+                    if w is not None:
+                        return w * f[1], "patch"
+                elif f is not None:
+                    w = chirps.get(o)
+                    if valid(w):
+                        return w * f[cal_month(o)], "chirps"
             return None, None
 
         return rain
@@ -1236,15 +1289,19 @@ def station_catchment_rain(st: Stations, rain: dict, farms: list[dict]) -> dict:
     series = st.series
     h = Series(series.get("rain_chirps_mm"))
     fc = Series(series.get("rain_forecast_mm"))
-    r = st.ratio(a, a["stationId"], catchment_map(st.rs, farms, st.diag))
-    area = st.area_rain(a, None, h, r)
+    cmap = catchment_map(st.rs, farms, st.diag)
+    r = st.ratio(a, a["stationId"], cmap)
+    area = st.area_rain(a, cmap, h, None, r)
     rec = st.record(a["stationId"])
     # The level the catchment rain is at, which rule 2 of §2.4h divides a unit's MAP by: station MAP × r.
     st_map = (st.stations.get(a["stationId"]) or {}).get("mapMm")
 
     def pick(o):
         v, kind = area(o)
-        if kind == "station":
+        # A patch station's day is the catchment rain at its level, as the main station's is (issue #612).
+        if kind == "station" or kind == "patch":
+            if kind == "patch":
+                st.diag["station_patch_days"] += 1
             return v, 0
         if kind == "chirps":
             return v, 2
@@ -1253,14 +1310,16 @@ def station_catchment_rain(st: Stations, rain: dict, farms: list[dict]) -> dict:
             return v, 4
         return None, None
 
-    # The run window: the first (last) day the catchment rain has a value: a station day, a corrected
-    # CHIRPS day (none when the pairing is refused) or a forecast day.
+    # The run window: the first (last) day, inside the spans of the station's stored record, the CHIRPS and the
+    # forecast, that the catchment rain has a value: a station or patch day, a corrected CHIRPS day (none when the
+    # pairing is refused or CHIRPS isn't in the patching priority) or a forecast day.
     cands = []
-    st_days = [o for o in range(rec.stored.start, rec.stored.end + 1) if rec.value(o) is not None] if rec.stored else []
-    f = st.pairing(a.get("correctAgainst") or a["stationId"])
-    ch_days = [o for o in range(h.start, h.end + 1) if valid(h.get(o))] if (h and f is not None) else []
+    spans = [(x.start, x.end) for x in (rec.stored, h, fc) if x]
+    lo_, hi_ = (min(x for x, _ in spans), max(y for _, y in spans)) if spans else (0, -1)
     fc_days = [fc.start + i for i, v in enumerate(fc.values) if v is not None and math.isfinite(v)]
-    for d_ in (st_days, ch_days, fc_days):
+    has_days = [o for o in range(lo_, hi_ + 1) if area(o)[0] is not None]
+    st_days = [o for o in range(rec.stored.start, rec.stored.end + 1) if rec.value(o) is not None] if rec.stored else []
+    for d_ in (has_days, fc_days):
         if d_:
             cands.append((d_[0], d_[-1]))
     has = bool(st_days)

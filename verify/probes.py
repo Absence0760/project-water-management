@@ -1294,6 +1294,30 @@ def station_units() -> dict:
     return doc
 
 
+def station_patch() -> dict:
+    """The patching priority (§2.4i, issue #612, engine 1.105.0) on
+    station_units' network and records, with a third station C (no MAP,
+    every day read): u1 (MAP 720) on A patched from B (MAP 900, ratio 0.8,
+    not A's 1.2) then CHIRPS, so A's gaps read B where B reads and u1's
+    CHIRPS on B's own gaps; u2 on A with CHIRPS before B, so B fills
+    nothing; u4 on A patched from C first, skipped (no MAP under scaling),
+    then B; u5 (scaleToMap false) patched from C × 1; u8 on A with an empty
+    priority, its gaps to the catchment forcing."""
+    doc = station_units()
+    n = len(doc["series"]["rain_station_mm#A"]["values"])
+    start = dt.date.fromisoformat(doc["series"]["rain_station_mm#A"]["startDate"])
+    doc["series"]["rain_station_mm#C"] = {"startDate": start.isoformat(), "values": _season(start, n, 12, 0.9)}
+    doc["stations"]["C"] = _station("C", None)
+    u = doc["settings"]["rainStations"]["units"]
+    b, c, ch = {"source": "station", "stationId": "B"}, {"source": "station", "stationId": "C"}, {"source": "chirps"}
+    u["u1"] = {"stationId": "A", "patch": [b, ch]}
+    u["u2"] = {"stationId": "A", "patch": [ch, b]}
+    u["u4"] = {"stationId": "A", "patch": [c, b, ch]}
+    u["u5"] = {**u["u5"], "patch": [c, ch]}
+    u["u8"] = {"stationId": "A", "patch": []}
+    return doc
+
+
 def ewr_split_station_units() -> dict:
     """The EWR split by each unit's natural MAR (§2.5b, engine >= 1.94.0) on
     station_units' network: u1 and u2 share station A, u2 drains into u1, so
@@ -1679,6 +1703,7 @@ PROBES = {
     "pool-storage-only": pool_storage_only(),
     # Rainfall stations (issue #553).
     "station-units": station_units(),
+    "station-patch": station_patch(),
     "station-pairing-refused": station_pairing_refused(),
     "station-pairing-as-recorded": station_pairing_as_recorded(),
     "station-catchment": station_catchment(),

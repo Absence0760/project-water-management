@@ -452,7 +452,11 @@ def add_rain_stations(rng: random.Random, doc: dict, start: dt.date, days: int, 
     catchment MAP, one out of range, or the farms' mean, which needs every
     land unit's MAP); under per-unit rain each land unit has one 60 % of the
     time, often with CHIRPS of its own for the gaps. Now and then an
-    assignment names a station with no record, or has no station id."""
+    assignment names a station with no record, or has no station id. Last,
+    so every draw above is as before: a patching priority (issue #612) on
+    40 % of the assignments, a shuffled list of other stations (now and then
+    the main one, a repeat or one with no record) with CHIRPS somewhere or
+    absent, and now and then empty."""
     if rng.random() >= (0.65 if dense else 0.3):
         return
     s = doc["settings"]
@@ -528,6 +532,20 @@ def add_rain_stations(rng: random.Random, doc: dict, start: dt.date, days: int, 
             rs["units"] = units
     if not rs.get("catchment") and not rs.get("units"):
         return
+    for a in [rs.get("catchment"), *(rs.get("units") or {}).values()]:
+        if not a or rng.random() >= 0.4:
+            continue
+        if rng.random() < 0.1:
+            a["patch"] = []
+            continue
+        pool = [x for x in ids if rng.random() < 0.7] + (["no-such-station"] if rng.random() < 0.05 else [])
+        rng.shuffle(pool)
+        patch = [{"source": "station", "stationId": x} for x in pool]
+        if rng.random() < 0.75:
+            patch.insert(rng.randint(0, len(patch)), {"source": "chirps"})
+        if patch and rng.random() < 0.05:
+            patch.append(dict(patch[0]))
+        a["patch"] = patch
     s["rainStations"] = rs
     doc["stations"] = stations
 
