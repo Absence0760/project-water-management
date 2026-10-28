@@ -1875,6 +1875,20 @@
 		},
 		{
 			"kind": "glossary",
+			"id": "calibration-zones",
+			"title": "Calibration zones",
+			"aliases": [
+				"calibrate at several gauges",
+				"multi-site calibration",
+				"stepwise calibration",
+				"zone parameters"
+			],
+			"url": "/help/glossary/goodness-of-fit#calibration-zones",
+			"summary": "Under Per unit, a ticked gauge gives the land units draining to it their own GR4J parameters, fitted on its record, upstream first.",
+			"text": "One parameter set rarely fits a whole catchment: a wet mountain headwater and a dry lowland drain differently. When a gauge inside the network has a long enough record of its own, it can calibrate the land units above it on that record, and the calibration site (the outlet, or the gauge it is scored at) the rest. Each such gauge, with the land units it calibrates, is a calibration zone. Tick Calibrate here on a gauge’s row under Calibrate at several gauges. Its zone holds the land units draining to it that aren’t in a ticked zone further upstream; the calibration site’s zone holds every unit left. Untick a gauge and its units join the next ticked gauge downstream. Each row has its own calibration window, excluded periods, record and treatment of suspect days; the site keeps the settings above the table. Fit automatically fits the zones one at a time, upstream first: each zone on its own gauge’s record, with only its units’ parameters free, and then fixed for every zone below it, so the site is fitted last with everything above it in place. Until a zone is fitted its units run on the catchment’s parameters, and the run says so. A gauge with fewer than 2 complete water years, or no dry year to test on, gets a note: its parameters rest on too short a record to trust alone. Zones need Per unit flow generation, where each unit runs its own GR4J. Under Fragmentation one GR4J runs for the whole catchment, so ticked gauges are ignored and the run warns. Not yet per zone: the report, the evidence pack, the uncertainty ensemble and the automated calibration rules show or vary only the calibration site’s zone’s parameters, and every run that uses zones says so."
+		},
+		{
+			"kind": "glossary",
 			"id": "gauge-logger-agreement",
 			"title": "Gauge vs logger agreement",
 			"aliases": [
