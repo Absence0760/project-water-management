@@ -103,6 +103,19 @@ describe('dam observations: read by the project, written only by the worker', ()
 		expect(await rowsAs(stranger, 'SELECT feature_id FROM dam_waterbody_match WHERE project_id = $1', [projectId])).toEqual([]);
 	});
 
+	it('Sentinel rows (277) are read as the others are: the project’s viewer and the dam’s farmer (positive controls), never another project or a neighbour', async () => {
+		await withoutUser(async (db) => {
+			for (const f of [damA, damB, damOther]) for (const source of ['s2', 's1']) expect((await load(db, source, f, [['2020-01-07', 300, 100, `${source}_synthetic_1`]])).written).toBe(1);
+		});
+		const pairs = (rows: { feature_id: string; source: string }[]) => rows.map((r) => `${r.feature_id}|${r.source}`).sort();
+		const q = 'SELECT feature_id, source FROM dam_observation';
+		expect(pairs(await rowsAs(viewer, q))).toEqual([`${damA}|s1`, `${damA}|s2`, `${damB}|s1`, `${damB}|s2`].sort());
+		expect(pairs(await rowsAs(farmer, q))).toEqual([`${damA}|s1`, `${damA}|s2`].sort());
+		expect(pairs(await rowsAs(stranger, q))).toEqual([`${damOther}|s1`, `${damOther}|s2`].sort());
+		// Signed in, the loader refuses a Sentinel file as it does any other.
+		expect(await code(withUser(owner.id, (db) => load(db, 's2', damA, [['2020-01-08', 1, 100, 'k']])))).toBe('42501');
+	});
+
 	it('a farmer reads their own farm’s dam (positive control), never a neighbour’s', async () => {
 		await seed();
 		const obs = await rowsAs<{ feature_id: string }>(farmer, 'SELECT DISTINCT feature_id FROM dam_observation');

@@ -3567,8 +3567,8 @@ export interface RegisterDamProposal {
 	loadedAt: string;
 }
 
-/** Where a dam observation comes from (backend dams/observed/compare.ts). */
-export type ObservedSource = 'waterbodies' | 'wofs';
+/** Where a dam observation comes from (backend dams/observed/compare.ts); 's2' and 's1' (Sentinel-2, Sentinel-1 radar) from 277, issue #624, no rows yet. */
+export type ObservedSource = 'waterbodies' | 'wofs' | 's2' | 's1';
 /** Why an observation wasn't compared with the model (backend dams/observed/compare.ts SkipReason). */
 export type ObservedSkip = 'partly-seen' | 'not-this-dam' | 'partial-unit' | 'other-source' | 'outside-run' | 'no-run';
 /** Which side says full or empty while the other clearly doesn't. */

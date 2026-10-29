@@ -166,6 +166,11 @@ describe('the table of views', () => {
 			['2 Jan 2022', 'DE Africa Waterbodies', '2.00 ha', '100%', '3.00 ha', 'Model +1.00 ha', false]
 		]);
 	});
+
+	it('names the Sentinel sources the table allows since 277 (issue #624), as their own outline views', () => {
+		const d = dam([point('2022-01-05', 100, { source: 's2' }), point('2022-01-06', 100, { source: 's1' })]);
+		expect(viewRows(d).map((r) => r.source)).toEqual(['Sentinel-1 radar, inside the dam’s outline', 'Sentinel-2, inside the dam’s outline']);
+	});
 });
 
 describe('observedFor', () => {

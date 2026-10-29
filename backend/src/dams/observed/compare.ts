@@ -14,8 +14,12 @@
 // by the same source that day.
 import { estimatedDamAreaForEngine, resolveDamCurve, toEpochDay, type DamCurvePoint } from '@water-management/engine';
 
-/** Where an observation comes from (dam_observation.source). */
-export type ObservedSource = 'waterbodies' | 'wofs';
+/**
+ * Where an observation comes from (dam_observation.source). 's2' (Sentinel-2) and 's1' (Sentinel-1 radar) are
+ * allowed by the table since 277 (issue #624), but no pass writes them yet, and their precedence here is a later
+ * slice of #624: until then they compare as any own-outline source would.
+ */
+export type ObservedSource = 'waterbodies' | 'wofs' | 's2' | 's1';
 
 /** How a dam polygon matched a Waterbodies polygon (R5-A's match table); null when it was never matched. */
 export type MatchStatus = 'matched' | 'merged' | 'none';

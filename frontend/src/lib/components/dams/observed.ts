@@ -13,7 +13,12 @@ import { fmtDay, fmtNum } from '#lib/format/number.js';
 export const HA = 10_000;
 export const fmtHa = (m2: number) => `${fmtNum(m2 / HA, m2 < 10 * HA ? 2 : 1)} ha`;
 
-export const SOURCE_WORDS: Record<ObservedSource, string> = { waterbodies: 'DE Africa Waterbodies', wofs: 'WOfS, inside the dam’s outline' };
+export const SOURCE_WORDS: Record<ObservedSource, string> = {
+	waterbodies: 'DE Africa Waterbodies',
+	wofs: 'WOfS, inside the dam’s outline',
+	s2: 'Sentinel-2, inside the dam’s outline',
+	s1: 'Sentinel-1 radar, inside the dam’s outline'
+};
 
 export const SKIP_WORDS: Record<ObservedSkip, string> = {
 	'partly-seen': 'partly seen (cloud or shadow)',
