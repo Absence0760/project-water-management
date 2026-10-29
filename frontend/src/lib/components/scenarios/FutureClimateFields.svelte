@@ -143,7 +143,7 @@
 						<caption>Change factors of {picked.model}, {SSP_LABEL[picked.ssp]}, {windowText(picked.horizon)}, by calendar month</caption>
 						<thead>
 							<tr>
-								<th scope="col"></th>
+								<th scope="col"><span class="visually-hidden">Input</span></th>
 								{#each MONTH_NAMES as m (m)}<th scope="col" class="num">{m}</th>{/each}
 							</tr>
 						</thead>
