@@ -13637,7 +13637,10 @@ rain factors rise. `verify/` mirrors the op from this section (probes
 factors from the copy's yearly monthly aggregates per 0.25° cell
 (`heldWindowClimate`: the window mean over the years the copy holds,
 counted, so the synthetic copy's one or two years a window are said, not
-hidden; `futureFactorsComplete` is false on them). `runFutureYield` then,
+hidden; `futureFactorsComplete` is false on them). `runFutureYield` then
+(one implementation, `futureYieldSteps`, a generator that yields after each
+case; `runFutureYieldAsync` awaits its caller between cases, so the job checks
+for a cancel and reports progress there, with the same result),
 for the historical record (no op) and each case (its `climate.delta` op
 applied to both inputs through `applyScenario`), runs the baseline and the
 application (`runModel`) and reads: the applicant's dam's firm yield and its

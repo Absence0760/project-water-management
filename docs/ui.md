@@ -12977,9 +12977,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     failure with the job's reason) and reads the report again once it is
     done. **Cancel** beside the job's line (`POST …/future-yield/:jobId/cancel`,
     284_cancel_future_jobs) ends a waiting job at once; a running one says
-    *Cancelling: it stops at its next step.* and stops after reading the
-    copy (before its runs) or after its runs (before the write), storing
-    nothing. A cancelled job is said plainly (*The last run was
+    *Cancelling: it stops at its next step.* and stops after the model it
+    is reading from the copy or the case it is running, before the next,
+    storing nothing; the progress bar counts the models read (to 10 %), then
+    the cases run. A cancelled job is said plainly (*The last run was
     cancelled.*, `evidence-future-cancelled`), never as a failure, and the
     Run button comes back. A reload or another tab picks the job up (the GET returns the
     newest one). Viewers get no board, and a pack never has one: a pack

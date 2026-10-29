@@ -11,9 +11,11 @@
 // median and the range across models: never one number.
 //
 // Pure: no I/O. The backend's `future_yield` job (280_future_yield) runs it
-// once and stores the result; the report freezes that result, factor table
-// included, so reproduce:pack runs every pair again from the frozen factors
-// (bundle.ts `climate:delta`, checkFutureYield) with nothing but the bundle.
+// once, case by case (runFutureYieldAsync over futureYieldSteps, so it checks
+// for a cancel and reports progress between cases), and stores the result;
+// the report freezes that result, factor table included, so reproduce:pack
+// runs every pair again from the frozen factors (bundle.ts `climate:delta`,
+// checkFutureYield) with nothing but the bundle.
 import { ENGINE_VERSION } from '../version';
 import type { ModelInput } from '../project';
 import { runModel } from '../run';
@@ -348,8 +350,21 @@ export function futureDamError(application: ModelInput, nodeId: string): string 
 	return null;
 }
 
-/** § 8's result: the historical pair, then every case's, and the ranges (see the file's head). */
-export function runFutureYield(args: RunFutureYieldArgs): FutureYieldResult {
+/** How far § 8's runs are: `done` of `total` (the historical pair, then each case). */
+export interface FutureYieldStep {
+	done: number;
+	total: number;
+}
+
+/**
+ * § 8's runs one at a time: yields after the historical pair and after each
+ * case, and returns the result. The one implementation: runFutureYield drives
+ * it straight through, runFutureYieldAsync awaits its caller between cases (so
+ * the backend's job can check for a cancel and report progress), and both
+ * return the same result. Stopping is the caller's: it just stops calling
+ * next(). The checks run on the first next().
+ */
+export function* futureYieldSteps(args: Omit<RunFutureYieldArgs, 'onCase'>): Generator<FutureYieldStep, FutureYieldResult, void> {
 	const { baseline, application, nodeId, factors } = args;
 	const tableError = futureFactorTableError(factors);
 	if (tableError) throw new Error(tableError);
@@ -358,11 +373,8 @@ export function runFutureYield(args: RunFutureYieldArgs): FutureYieldResult {
 	const owned = new Set(args.ownedNodeIds);
 	const warnings: string[] = [];
 	const total = factors.cases.length + 1;
-	const tick = (done: number) => {
-		if (args.onCase?.(done, total) === false) throw new Error('cancelled');
-	};
 	const historical = measures(baseline, application, nodeId, owned, warnings, 'the historical record');
-	tick(1);
+	yield { done: 1, total };
 	const cases: FutureCaseResult[] = [];
 	for (const c of factors.cases) {
 		const op = futureCaseOp(c, factors);
@@ -372,7 +384,7 @@ export function runFutureYield(args: RunFutureYieldArgs): FutureYieldResult {
 			horizon: c.horizon,
 			...measures(withOp(baseline, op, 'baseline'), withOp(application, op, 'application'), nodeId, owned, warnings, op.label)
 		});
-		tick(cases.length + 1);
+		yield { done: cases.length + 1, total };
 	}
 	const models = [...new Set(factors.cases.map((c) => c.model))].sort();
 	return {
@@ -393,6 +405,30 @@ export function runFutureYield(args: RunFutureYieldArgs): FutureYieldResult {
 		groups: futureGroups(cases, factors),
 		warnings
 	};
+}
+
+/** § 8's result: the historical pair, then every case's, and the ranges (see the file's head). */
+export function runFutureYield(args: RunFutureYieldArgs): FutureYieldResult {
+	const steps = futureYieldSteps(args);
+	for (let s = steps.next(); ; s = steps.next()) {
+		if (s.done) return s.value;
+		if (args.onCase?.(s.value.done, s.value.total) === false) throw new Error('cancelled');
+	}
+}
+
+/**
+ * runFutureYield, awaiting `onCase` after the historical pair and each case
+ * before the next one starts: false stops it there (throws 'cancelled'), so
+ * no further case runs. The same result as runFutureYield.
+ */
+export async function runFutureYieldAsync(
+	args: Omit<RunFutureYieldArgs, 'onCase'> & { onCase: (done: number, total: number) => Promise<boolean | void> | boolean | void }
+): Promise<FutureYieldResult> {
+	const steps = futureYieldSteps(args);
+	for (let s = steps.next(); ; s = steps.next()) {
+		if (s.done) return s.value;
+		if ((await args.onCase(s.value.done, s.value.total)) === false) throw new Error('cancelled');
+	}
 }
 
 /**

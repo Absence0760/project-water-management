@@ -146,9 +146,15 @@ export async function readModelCells(store: MirrorStore, model: string, cells: r
  * read and worked out (engine buildFutureFactorTable), with a note for each
  * model that left cells out. § 8's future_yield job and the Scenarios tab's
  * climate_factors job both read the copy through it. Throws
- * Cmip6NotInCopyError when the copy holds no usable model.
+ * Cmip6NotInCopyError when the copy holds no usable model. `onModel` is
+ * awaited after each model is read, with how many of all are: the jobs report
+ * progress there and throw to stop on a cancel, before the next model's reads.
  */
-export async function readFactorTable(store: MirrorStore, cells: readonly ClimateGridCell[]): Promise<{ factors: FutureFactorTable; warnings: string[] }> {
+export async function readFactorTable(
+	store: MirrorStore,
+	cells: readonly ClimateGridCell[],
+	onModel?: (done: number, total: number) => Promise<void>
+): Promise<{ factors: FutureFactorTable; warnings: string[] }> {
 	const copy = await cmip6Copy(store);
 	const models: FutureModelCells[] = [];
 	const sources: FutureSourceFile[] = [];
@@ -158,6 +164,7 @@ export async function readFactorTable(store: MirrorStore, cells: readonly Climat
 		if (read.dropped) warnings.push(`${model}: ${read.dropped} of the catchment's 0.25° cells hold no value (the sea, or a gap) and were left out`);
 		models.push(read.cells);
 		sources.push(...read.sources);
+		await onModel?.(models.length, copy.models.length);
 	}
 	return { factors: buildFutureFactorTable(models, { sources, citation: copy.citation, licence: copy.licence }), warnings };
 }
