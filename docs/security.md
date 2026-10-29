@@ -2777,7 +2777,7 @@ In short:
     carries a traced dam's lon/lat box and dates, never its name, project
     or owner; the scenes are public and read anonymously, and the COG
     reader refuses anything but the expected format, with every tile's
-    inflated size bounded (`cog.ts`).
+    decompressed size bounded (`raster/cog.ts`).
     `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
     On Lambda only the fetcher may build a live client at all

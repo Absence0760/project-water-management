@@ -35,7 +35,7 @@
 //
 // Each STAC search is a year (WINDOW_DAYS) over the outline's box; its scenes
 // are taken a date at a time: each scene's header, then the tiles under the
-// outline (cog.ts), summed inside it (sum.ts). Two scenes on one date
+// outline (raster/cog.ts), summed inside it (raster/mask.ts, sum.ts). Two scenes on one date
 // (neighbouring Landsat rows overlap) give ONE row: the scene that saw the
 // most of the dam clearly, then the one covering most of it, then the lower
 // item id. They aren't combined pixel by pixel: the rows' grids needn't line
@@ -104,9 +104,10 @@ import {
 	type PassStatus,
 	type WantedOutline
 } from '../handover.js';
-import { openCog, readWindow, type RangeRead } from './cog.js';
+import { openCog, readWindow, type RangeRead } from '../../../raster/cog.js';
+import { outlineMask, sceneWindow, type OutlineMask } from '../../../raster/mask.js';
 import { searchScenes, type WofsScene } from './stac.js';
-import { observation, outlineMask, sceneWindow, tally, type OutlineMask } from './sum.js';
+import { observation, tally, WOFS_ACCEPT } from './sum.js';
 
 /** The first-backfill window's start: the Landsat 8 era (Landsat 7 beside it). Earlier history isn't fetched. */
 export const WOFS_BACKFILL_FROM = '2013-01-01';
@@ -275,7 +276,7 @@ async function viewScene(http: FeedHttp, scene: WofsScene, outline: WantedOutlin
 		}
 		return http.range(scene.url, start, end);
 	};
-	const cog = await openCog(read);
+	const cog = await openCog(read, WOFS_ACCEPT);
 	if (!cog) throw new FeedFormatError('the scene STAC lists is not in the bucket');
 	// Scenes of one path/row share a grid: the mask is made once for it.
 	const gridKey = `${cog.epsg}/${cog.originX}/${cog.originY}/${cog.pixelSizeX}/${cog.pixelSizeY}`;

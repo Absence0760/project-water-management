@@ -15,7 +15,7 @@
 // wofs_ls/…tif` object read over HTTPS from the bucket's public endpoint
 // (WOFS_S3_BASE). Anything else is refused as a FeedFormatError: we never follow
 // an href to another host. The item's CRS is taken from the scene's own
-// GeoKeys (cog.ts), not from the item.
+// GeoKeys (raster/cog.ts), not from the item.
 import { z } from 'zod';
 import { FeedFormatError } from '../../../feeds/errors.js';
 import type { FeedHttp } from '../../../feeds/http.js';
