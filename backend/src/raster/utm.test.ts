@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { centralMeridian, toUtm, utmEpsgFor, utmZone } from './utm.js';
+import { centralMeridian, fromUtm, toUtm, utmEpsgFor, utmZone } from './utm.js';
 
 // Reference values from PROJ 9 (pyproj Transformer EPSG:4326 → the code,
 // always_xy), computed once and pasted here: [lon, lat, epsg, x, y].
@@ -51,6 +51,45 @@ describe('toUtm', () => {
 		expect(() => toUtm(19, -89, 32734)).toThrow(/outside/);
 		expect(() => toUtm(Number.NaN, -34, 32734)).toThrow(/outside/);
 		expect(() => toUtm(100, -34, 32734)).toThrow(/too far/);
+	});
+});
+
+describe('fromUtm', () => {
+	it.each(PROJ)('takes PROJ’s (%f, %f) in EPSG %i back to its point, to 1e-8°', (lon, lat, epsg, x, y) => {
+		const p = fromUtm(x, y, epsg);
+		// 1e-8° is ~1 mm; PROJ's numbers are printed to 0.1 mm.
+		expect(Math.abs(p.lon - lon)).toBeLessThan(1e-8);
+		expect(Math.abs(p.lat - lat)).toBeLessThan(1e-8);
+	});
+
+	// The zone 34 / 35 line, 24° E: a point there is 3° east of zone 34's meridian and 3° west of zone 35's,
+	// so its eastings mirror about 500 km (PROJ: 789 409.6532 in 34, 210 590.3468 in 35, as (18°, −30°) in 34).
+	it('places 24° E, 30° S in both zones as PROJ does, and carries it from one to the other', () => {
+		expect(fromUtm(789409.6532, 6677424.0956, 32734)).toMatchObject({ lon: expect.closeTo(24, 9), lat: expect.closeTo(-30, 9) });
+		expect(fromUtm(210590.3468, 6677424.0956, 32735)).toMatchObject({ lon: expect.closeTo(24, 9), lat: expect.closeTo(-30, 9) });
+		const g = fromUtm(789409.6532, -3322575.9044, 32634);
+		const q = toUtm(g.lon, g.lat, 32735);
+		expect(q.x).toBeCloseTo(210590.3468, 3);
+		expect(q.y).toBeCloseTo(6677424.0956, 3);
+	});
+
+	it.each([-0.05, -0.02, 0, 0.02, 0.05])('round-trips points %f° from the zone line at 24° E in both zones to a millimetre', (dLon) => {
+		for (const lat of [-22.4, -28, -33.9]) {
+			for (const epsg of [32734, 32735, 32634, 32635]) {
+				const p = toUtm(24 + dLon, lat, epsg);
+				const g = fromUtm(p.x, p.y, epsg);
+				const back = toUtm(g.lon, g.lat, epsg);
+				expect(Math.hypot(back.x - p.x, back.y - p.y)).toBeLessThan(0.001);
+				expect(Math.abs(g.lon - (24 + dLon))).toBeLessThan(1e-9);
+				expect(Math.abs(g.lat - lat)).toBeLessThan(1e-9);
+			}
+		}
+	});
+
+	it('refuses a code that is not UTM, and a point beyond its reach', () => {
+		expect(() => fromUtm(500000, 6000000, 4326)).toThrow(/not WGS 84 \/ UTM/);
+		expect(() => fromUtm(Number.NaN, 6000000, 32734)).toThrow(/not a number/);
+		expect(() => fromUtm(9_000_000, 6000000, 32734)).toThrow(/reach/);
 	});
 });
 

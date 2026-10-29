@@ -2320,15 +2320,32 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     the one covering most of it, then the lower item id; the row is keyed
     by its item. Each pixel of the dam the base has NO data for (off its
     tile or footprint) is filled from the next-best scene of that date that
-    has, when the two grids are one lattice (the same CRS and pixel size,
-    origins whole pixels apart: 1° s1_rtc tiles, MGRS tiles of one UTM
-    zone, Landsat rows of one path). So a dam across a tile edge is seen
-    whole, not as the larger half (under the 90 % a clear view needs). A
-    pixel the base saw, clearly or under cloud, is never replaced: two looks
-    at one pixel (Sentinel-1's ascending and descending passes) aren't
-    mixed. Scenes on other lattices (two UTM zones) aren't joined; the
-    better view is kept. The scenes that filled a row stay in the file's
-    `upstream` list beside the row's own.
+    has: pixel for pixel when the two grids are one lattice (the same CRS
+    and pixel size, origins whole pixels apart: 1° s1_rtc tiles, MGRS tiles
+    of one UTM zone, Landsat rows of one path), and by nearest neighbour
+    when they're two UTM grids that don't line up (a dam across a zone line,
+    as 24° E between zones 34 and 35, seen by a scene gridded in each zone).
+    Nearest neighbour takes the base pixel's centre to the ground and into
+    the other zone (`raster/utm.ts`, Krüger's series both ways, no
+    dependency) and copies the class of the pixel it lands in: the classes
+    (wet, dry, not clear, off the scene) are categorical, so they're never
+    averaged into mixes no scene saw. Where that pixel is outside the other
+    view's own outline mask (the grids cut the outline's edge differently),
+    its nearest outline pixel within one pixel stands in. The base's own
+    lattice fills first (exact), then other zones, each in the same order;
+    counts stay in the base's pixels at the base's ground area, so the join
+    loses at most a pixel a row along a seam where two footprints just
+    meet (a synthetic dam split 50/50 across 24° E comes out ≥ 98 %
+    observed, its wet area within 1 % of one whole view's, `merge.test.ts`).
+    So a dam across a tile edge or a zone line is seen whole, not as the
+    larger half (under the 90 % a clear view needs). A pixel the base saw,
+    clearly or under cloud, is never replaced: two looks at one pixel
+    (Sentinel-1's ascending and descending passes) aren't mixed. Only UTM
+    views join across lattices: each pass joins its own source's views, and
+    Sentinel-1's (EPSG:4326, one pixel size) are all one lattice, so a
+    geographic view never meets a UTM one; views on any other two lattices
+    aren't joined, the better one is kept. The scenes that filled a row
+    stay in the file's `upstream` list beside the row's own.
   - **Newest first, then history.** `dams/wofs-state.json` (the pass's
     own, never read by the worker) keeps per dam the SHA-256 of its
     outline and the span read so far, `[backfilledFrom, scannedThrough]`.
