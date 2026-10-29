@@ -4,7 +4,7 @@ import type { FarmDamObserved } from '#lib/api/types.js';
 import { damObservedCard } from './damObserved';
 
 const sp = (s: string | null | undefined) => s?.replace(/[  ]/g, ' ');
-const base: FarmDamObserved = { outlines: 1, latest: { date: '2026-10-14', wetAreaM2: 32_000, source: 'wofs' }, fullAreaM2: 40_000, attribution: 'Digital Earth Africa, CC BY 4.0' };
+const base: FarmDamObserved = { outlines: 1, latest: { date: '2026-10-14', wetAreaM2: 32_000, source: 'wofs' }, fullAreaM2: 40_000, attribution: 'Digital Earth Africa, CC BY 4.0', sentinelCredit: null };
 
 describe('damObservedCard', () => {
 	it('says when a satellite last saw the dam clearly, its water’s area against the area it covers when full (no percentage), with the credit', () => {
@@ -21,6 +21,18 @@ describe('damObservedCard', () => {
 		expect(sp(damObservedCard({ ...base, latest: { ...base.latest!, wetAreaM2: 44_000 } })!.line)).toBe('On 14 Oct 2026 a satellite saw water over 4.4 ha, more than the 4.0 ha your dam covers when full.');
 		expect(sp(damObservedCard({ ...base, latest: { ...base.latest!, wetAreaM2: 40_000 } })!.line)).toBe('On 14 Oct 2026 a satellite saw water over 4.0 ha of the 4.0 ha your dam covers when full.');
 		expect(sp(damObservedCard({ ...base, fullAreaM2: null })!.line)).toBe('On 14 Oct 2026 a satellite saw water over 3.2 ha of your dam.');
+	});
+
+	it('says a radar view is radar and “about”, never “more than” full, and credits Copernicus for a Sentinel view (issue #624)', () => {
+		const radar = { ...base, latest: { ...base.latest!, source: 's1' as const }, sentinelCredit: 'Contains modified Copernicus Sentinel data 2026, processed by Digital Earth Africa' };
+		expect(sp(damObservedCard(radar)!.line)).toBe('On 14 Oct 2026 a radar satellite, which sees through cloud, saw water over about 3.2 ha of the 4.0 ha your dam covers when full.');
+		expect(sp(damObservedCard({ ...radar, latest: { ...radar.latest, wetAreaM2: 44_000 } })!.line)).toBe('On 14 Oct 2026 a radar satellite, which sees through cloud, saw water over about 4.4 ha of your dam.');
+		expect(sp(damObservedCard({ ...radar, fullAreaM2: null })!.line)).toBe('On 14 Oct 2026 a radar satellite, which sees through cloud, saw water over about 3.2 ha of your dam.');
+		expect(damObservedCard(radar)!.credit).toBe('Satellite views: Digital Earth Africa, CC BY 4.0. Contains modified Copernicus Sentinel data 2026, processed by Digital Earth Africa.');
+		// A Sentinel-2 view reads as any optical one, with the same credit.
+		const s2 = { ...radar, latest: { ...radar.latest, source: 's2' as const } };
+		expect(sp(damObservedCard(s2)!.line)).toBe('On 14 Oct 2026 a satellite saw water over 3.2 ha of the 4.0 ha your dam covers when full.');
+		expect(damObservedCard(s2)!.credit).toContain('Copernicus Sentinel data 2026');
 	});
 
 	it('says there is no clear view yet, and shows nothing for a dam not drawn as an outline', () => {

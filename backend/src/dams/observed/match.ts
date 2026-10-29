@@ -128,6 +128,9 @@ export interface DamOutlineRow {
 	matched_at: Date | null;
 	waterbodies_newest: string | null;
 	wofs_newest: string | null;
+	/** The newest Sentinel-2 and Sentinel-1 rows (279). */
+	s2_newest: string | null;
+	s1_newest: string | null;
 }
 
 /** Every traced dam polygon (worker only: no user). */
@@ -135,7 +138,8 @@ export async function damOutlines(db: Db): Promise<DamOutlineRow[]> {
 	return (
 		await db.query<DamOutlineRow>(
 			`SELECT feature_id, project_id, geometry, updated_at, status, uid, match_stale, matched_at,
-				to_char(waterbodies_newest, 'YYYY-MM-DD') AS waterbodies_newest, to_char(wofs_newest, 'YYYY-MM-DD') AS wofs_newest
+				to_char(waterbodies_newest, 'YYYY-MM-DD') AS waterbodies_newest, to_char(wofs_newest, 'YYYY-MM-DD') AS wofs_newest,
+				to_char(s2_newest, 'YYYY-MM-DD') AS s2_newest, to_char(s1_newest, 'YYYY-MM-DD') AS s1_newest
 			 FROM app_dam_outlines()`
 		)
 	).rows;

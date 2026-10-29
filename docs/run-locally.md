@@ -509,6 +509,24 @@ today, as production's hourly runs do once a day): nothing is asked. With
 no time limit here, the first run already read each dam's history back to
 2013 (the fixture holds none that old, so those searches come back empty).
 
+The Sentinel-2 pass (issue #624) is off by default, as in production.
+`DAM_OBSERVATIONS_S2=on pnpm dev:dams:run` runs it after WOfS on invented
+Sentinel-2 scenes (`backend/fixtures/feeds/s2-sample.json`,
+`backend/src/dams/observed/sentinel/fixtures.ts`): the same water field at
+10 m, a pass every 5 days, a band of cloud every third day, and some days
+without B11 (the NDWI fallback), into `dam_observation` as source `s2`.
+`DAM_OBSERVATIONS_S2=on DAM_OBSERVATIONS_S1=on pnpm dev:dams:run` adds the
+Sentinel-1 radar pass after it (`backend/fixtures/feeds/s1-sample.json`,
+`backend/src/dams/observed/sentinel/s1Fixtures.ts`: the same water field on
+radar's 0.0002° grid, two passes every 6 days, a shadow strip every 0.1° of
+longitude, and a windy day every tenth whose open water reads dry), as
+source `s1`, and prints the S1/S2 agreement: how many radar days agree with
+a clear Sentinel-2 view within a day, against issue #624's 85 % bar. Its
+last tick loads radar only for the dams whose own agreement passes (at
+least 10 pairs); `DAM_OBSERVATIONS_S1=measure` runs the pass and prints the
+agreement but loads no radar, as production's measuring stage does
+(architecture.md § Dam observations).
+
 The worker's tick does the same each time it runs only with
 `DAM_OBSERVATIONS=on` and a `MIRROR_URL` of its own, in a gitignored
 `backend/.env.development.local`; it is off by default. Your own clip of
@@ -516,6 +534,36 @@ the real polygons loads with
 `pnpm import:waterbodies <file.geojson> --dataset <label> [--bbox w,s,e,n]`
 ([maps.md § Waterbodies](./maps.md#waterbodies)); `FEED_SOURCE=live` in the
 same file lets `pnpm dev:dams:run` read DE Africa's real series.
+
+## Observed actual ET
+
+FAO WaPOR's dekadal actual ET averaged over each unit's farm parcels
+(issue #623, [architecture.md § Observed actual ET](./architecture.md#observed-actual-et)),
+offline: synthetic WaPOR dekads, no network.
+
+```bash
+pnpm seed:examples        # the examples' units and their farm parcels, if not seeded yet
+pnpm dev:et:run           # tick (wanted list) → WaPOR pass (fixtures) → tick (load into et_observation)
+```
+
+It prints what each step did. The pass reads invented dekads
+(`backend/fixtures/feeds/wapor-sample.json`,
+`backend/src/water-use/observed/fixtures.ts`): the last half year, a
+seasonal ETa field, some dekads partly under cloud, only over the seeded
+examples' synthetic catchments (a unit elsewhere gets rows with a valid
+share of 0). A unit whose parcels lie on the synthetic land cover
+(`pnpm import:land-cover`, which `pnpm setup` runs) is averaged over its
+cropland only (`mask` `cropland`), the rest over their whole parcels
+(`parcel`). Run it again and nothing is asked: every dekad served is held.
+The handover goes through `MIRROR_URL` when it names a directory of its own,
+else a scratch directory under the system's temp directory, never the
+committed `backend/fixtures/mirror/`.
+
+The worker's tick does the same each time it runs only with
+`ET_OBSERVATIONS=on` and a `MIRROR_URL` of its own, in a gitignored
+`backend/.env.development.local`; it is off by default. The same setting
+makes a unit's ET panel say the check is on (the API reads it for
+`enabled`), so with it off the panel says it is off on this site.
 
 ## Reports
 

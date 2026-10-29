@@ -36,6 +36,7 @@ import { croplandRoutes } from './geo/croplandRoutes.js';
 import { evaporationRoutes } from './geo/evaporationRoutes.js';
 import { damRoutes } from './geo/damRoutes.js';
 import { damObservedRoutes } from './dams/observed/routes.js';
+import { etObservedRoutes } from './water-use/observed/routes.js';
 import { delineationRoutes } from './delineation/routes.js';
 import { traceRoutes } from './delineation/traceRoutes.js';
 import { startRoutes } from './delineation/startRoutes.js';
@@ -75,6 +76,7 @@ import { outlookRoutes } from './outlooks/routes.js';
 import { teamRoutes } from './teams/routes.js';
 import { teamMfaResetRoutes } from './teams/mfa-reset-routes.js';
 import { yieldRoutes } from './yield/routes.js';
+import { futureYieldRoutes } from './future/routes.js';
 
 /**
  * The production entry point (lambda.ts) refuses to start without the
@@ -197,6 +199,7 @@ export function createApp() {
 	projects.route('/', projectInviteRoutes);
 	projects.route('/', jobRoutes);
 	projects.route('/', yieldRoutes);
+	projects.route('/', futureYieldRoutes);
 	projects.route('/', sweepRoutes);
 	projects.route('/', assessmentRoutes);
 	projects.route('/', autoCalibrationRoutes);
@@ -222,6 +225,7 @@ export function createApp() {
 	projects.route('/', channelRoutes);
 	projects.route('/', demGridRoutes);
 	projects.route('/', croplandRoutes);
+	projects.route('/', etObservedRoutes);
 	projects.route('/', evaporationRoutes);
 	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);

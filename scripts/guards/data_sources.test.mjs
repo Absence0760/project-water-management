@@ -170,7 +170,10 @@ describe('the real tree', () => {
 			'www.dws.gov.za',
 			// Digital Earth Africa's bucket (Waterbodies, WOfS scenes) and its STAC search (WOfS, issue #604 R5).
 			'deafrica-services.s3.af-south-1.amazonaws.com',
-			'explorer.digitalearth.africa'
+			'explorer.digitalearth.africa',
+			// Its Sentinel-2 L2A Collection 1 and Sentinel-1 RTC buckets (issue #624).
+			'deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com',
+			'deafrica-sentinel-1.s3.af-south-1.amazonaws.com'
 		]) assert.ok(listed.has(host), `${host} not in ${hosts.join(', ')}`);
 	});
 

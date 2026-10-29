@@ -855,6 +855,28 @@ variable "dam_observations_enabled" {
   default     = false
 }
 
+variable "future_yield_enabled" {
+  description = "Turn on the future climate (issue #621): the evidence report's § 8 Future yield (a future_yield job re-runs an application and its baseline under each NEX-GDDP-CMIP6 model's change factors) and the Scenarios tab's change factors (a climate_factors job). Sets FUTURE_YIELD on the API (which queues the jobs and puts § 8 in a report), the worker (which runs them, reading cmip6/ in the mirror bucket through MIRROR_URL) and the assistant (which builds the same reports), so all three agree. Off (the default) until the copy holds every model's whole windows and NASA's caveat is quoted (docs/deployment.md § NEX-GDDP-CMIP6); with it on and no cmip6 in the copy, each job dies saying the operator loads it."
+  type        = bool
+  default     = false
+}
+
+variable "et_observations_enabled" {
+  description = "Turn on the observed actual ET (et_observations.tf, issue #623): the hourly EventBridge rule that invokes the fetcher with {\"mode\":\"et-dekadal\"} (FAO WaPOR v3's dekadal actual ET averaged over each unit's farm parcels, newest dekads first, then the history to 2018), the fetcher's reads and writes under et/ in the mirror bucket, the worker's write of et/wanted.json, and the pass's heartbeat and recency alarms. It also sets the worker's ET_OBSERVATIONS (jobs.tf), which turns its ET tick on; the plan refuses the flag if the worker's environment ever loses it (et_observations.tf terraform_data.et_observations_gate). Off (the default) until FAO's reply on WaPOR's licence is recorded on issue #618 (step 8a), a backend release with the mode is deployed and a unit has farm parcels, or the alarms fire for a pass that has nothing to read. Runbook: docs/deployment.md § Observed actual ET."
+  type        = bool
+  default     = false
+}
+
+variable "et_recency_alarm_days" {
+  description = "Alarm when the newest WaPOR dekad any unit holds began more than this many days ago (EtObservationAgeDays{Source=wapor}). A dekad lasts up to 11 days and FAO publishes it about 3 days after it ends, so a healthy copy runs up to ~14 days behind; 30 is two dekads missed."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.et_recency_alarm_days >= 20 && floor(var.et_recency_alarm_days) == var.et_recency_alarm_days
+    error_message = "A whole number of days, at least 20: a healthy WaPOR copy runs up to ~14 days behind (the dekad's length plus FAO's ~3-day lag)."
+  }
+}
+
 variable "climate_indices_enabled" {
   description = "Turn on the climate indices copy (climate_indices.tf, issue #620): the daily EventBridge rule that invokes the fetcher with {\"mode\":\"daily-ingest\",\"pass\":\"indices\"} (NOAA CPC's ONI and AAO, two requests a day), the fetcher's reads and writes under indices/ in the mirror bucket, and the copy's freshness alarm (MirrorLagDays{Product=indices}, breaching on missing data). Until it is on, an outlook asking for the climate-state analogues says the indices aren't held and shows the ESP alone. Off (the default) until a backend release with the pass is deployed, or the alarm fires for a pass that doesn't exist yet. Runbook: docs/deployment.md § Climate indices."
   type        = bool
@@ -1062,6 +1084,42 @@ variable "bedrock_endpoint_az_count" {
   validation {
     condition     = var.bedrock_endpoint_az_count >= 1 && var.bedrock_endpoint_az_count <= 2
     error_message = "Must be 1 or 2."
+  }
+}
+
+variable "dam_s2_enabled" {
+  description = "Run the Sentinel-2 pass of the dam observations (issue #624; dam_observations.tf, backend/src/dams/observed/sentinel/pass.ts): DE Africa's Sentinel-2 L2A Collection 1 scenes classified by us (MNDWI, SCL cloud masking) inside every traced dam's outline, after the WOfS pass in each hourly dams-weekly run. Only with dam_observations_enabled: it sets the fetcher's DAM_OBSERVATIONS_S2 and adds the s2 heartbeat and recency alarms. Off (the default) until a backend release with the pass is deployed. Runbook: docs/deployment.md § Dam observations."
+  type        = bool
+  default     = false
+}
+
+variable "dam_s2_recency_alarm_days" {
+  description = "Alarm when the newest Sentinel-2 observation any traced dam holds is more than this many days old (DamObservationAgeDays{Source=s2}). Three Sentinel-2 satellites pass every few days and a clouded view still writes a row, so 21 days with nothing means the collection or our pass has stopped."
+  type        = number
+  default     = 21
+  validation {
+    condition     = var.dam_s2_recency_alarm_days >= 10 && floor(var.dam_s2_recency_alarm_days) == var.dam_s2_recency_alarm_days
+    error_message = "A whole number of days, at least 10: DE Africa publishes a scene days after it is taken."
+  }
+}
+
+variable "dam_s1_mode" {
+  description = "Sentinel-1 radar's stage in the dam observations (issue #624 step 5 and open question 3; dam_observations.tf, backend/src/dams/observed/handover.ts damS1Mode), set as the fetcher's and the worker's DAM_OBSERVATIONS_S1. \"off\" (the default): no radar. \"measure\": each hourly dams-weekly run adds the radar pass after Sentinel-2's (DE Africa's Sentinel-1 RTC classified by us: VV under a fixed -18 dB, the RTC mask's shadow and layover left out, inside every traced dam's outline) and the S1/S2 agreement report (the fetcher's dams_s1_agreement log line), with the s1 heartbeat and recency alarms, but the worker loads no radar row, so nobody sees it. \"on\": the same, and the worker loads radar for the dams whose own agreement passes issue #624's bar (at least 10 paired days with a clear Sentinel-2 view, 85 % of them within 0.1 of the full area), withholding the rest. Only with dam_observations_enabled. Measure first; go to on once the pooled agreement passes the bar on real dams. Runbook: docs/deployment.md § Dam observations."
+  type        = string
+  default     = "off"
+  validation {
+    condition     = contains(["off", "measure", "on"], var.dam_s1_mode)
+    error_message = "dam_s1_mode is off, measure or on."
+  }
+}
+
+variable "dam_s1_recency_alarm_days" {
+  description = "Alarm when the newest Sentinel-1 radar observation any traced dam holds is more than this many days old (DamObservationAgeDays{Source=s1}). Sentinel-1 revisits every 6-12 days and sees through cloud, so 30 days with nothing means the collection or our pass has stopped."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.dam_s1_recency_alarm_days >= 14 && floor(var.dam_s1_recency_alarm_days) == var.dam_s1_recency_alarm_days
+    error_message = "A whole number of days, at least 14: a 12-day revisit plus DE Africa's processing lag."
   }
 }
 

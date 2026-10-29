@@ -595,21 +595,26 @@ export async function confirmAuthorityDelegate(projectId: string, userId: string
 export async function plantDamObservations(
 	featureId: string,
 	match: { status: 'matched' | 'merged' | 'none'; uid?: string },
-	rows: { date: string; wetAreaM2: number; pctObserved: number }[]
+	rows: { date: string; wetAreaM2: number; pctObserved: number; source?: 'wofs' | 's2' | 's1' }[]
 ): Promise<void> {
 	await withDb(async (db) => {
 		const { rows: f } = await db.query<{ updated_at: Date }>('SELECT updated_at FROM map_feature WHERE id = $1', [featureId]);
 		const uid = match.status === 'none' ? null : (match.uid ?? 'zzzze2e001');
 		await db.query('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6, $7)', [featureId, match.status, uid, uid ? 0.9 : null, uid ? 0.5 : null, f[0]!.updated_at, null]);
-		await db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
-			'wofs',
-			featureId,
-			rows.map((r) => r.date),
-			rows.map((r) => r.wetAreaM2),
-			rows.map((r) => r.pctObserved),
-			rows.map(() => 'ga_ls_wofs_e2e_synthetic'),
-			new Date()
-		]);
+		// One pass file per source, as the worker loads them (WOfS by default; Sentinel-2 and Sentinel-1 since 278, issue #624).
+		for (const source of ['wofs', 's2', 's1'] as const) {
+			const mine = rows.filter((r) => (r.source ?? 'wofs') === source);
+			if (!mine.length) continue;
+			await db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
+				source,
+				featureId,
+				mine.map((r) => r.date),
+				mine.map((r) => r.wetAreaM2),
+				mine.map((r) => r.pctObserved),
+				mine.map(() => (source === 'wofs' ? 'ga_ls_wofs_e2e_synthetic' : `${source}_e2e_synthetic`)),
+				new Date()
+			]);
+		}
 	});
 }
 
@@ -621,5 +626,37 @@ export async function dropRunDrought(runId: string): Promise<void> {
 	await withDb(async (db) => {
 		const r = await db.query(`UPDATE model_run SET summary = summary - 'drought' WHERE id = $1`, [runId]);
 		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}
+
+/**
+ * A unit's observed actual ET (issue #623, 277_et_observation), as the
+ * worker's ET pass loads it: app_et_observation_load as the schema owner with
+ * no user, the way the worker runs it. The unit needs a farm parcel on the
+ * map first (the loader refuses a unit without one). Invented values only.
+ */
+export async function plantEtObservations(
+	nodeId: string,
+	rows: { dekad: string; etaMmDay: number; validShare: number }[],
+	areaM2 = 180_000,
+	source: 'wapor' | 'ssebop' = 'wapor'
+): Promise<void> {
+	const [version, file] = source === 'wapor' ? ['WAPOR-3', (d: string) => `WAPOR-3.L2-AETI-D.${d}.e2e-synthetic.tif`] : ['v6.1', (d: string) => `ssebop-${d}.e2e-synthetic.zip`];
+	await withDb(async (db) => {
+		const { rows: r } = await db.query<{ applied: boolean }>(
+			`SELECT applied FROM app_et_observation_load($8, $1, $2::date[], $3::float8[], $4::float8[], $5::float8[], 'cropland', $6::text[], $7::text[], $9, now())`,
+			[
+				nodeId,
+				rows.map((x) => x.dekad),
+				rows.map((x) => x.etaMmDay),
+				rows.map((x) => x.validShare),
+				rows.map(() => areaM2),
+				rows.map((x) => file(x.dekad)),
+				rows.map(() => '"e2e"'),
+				source,
+				version
+			]
+		);
+		if (!r[0]?.applied) throw new Error(`the ET loader refused unit ${nodeId} (no farm parcel?)`);
 	});
 }

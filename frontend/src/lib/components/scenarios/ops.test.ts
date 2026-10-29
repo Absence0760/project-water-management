@@ -104,6 +104,10 @@ describe('describeOp', () => {
 		);
 		expect(d({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9 })).toBe('Rainfall — catchment: × 0.9 (−10 %)');
 		expect(d({ op: 'series.scale', kind: 'rain_chirps_mm', factor: 1.25, from: '2022-01-01' })).toBe('Rainfall — CHIRPS: × 1.25 (+25 %), 1 Jan 2022 to end');
+		// Future climate (engine 1.107.0, issue #621): the case's label, the range of each row and the source.
+		expect(
+			d({ op: 'climate.delta', rainFactorByMonth: [0.8, ...new Array(10).fill(1), 1.1], evapFactorByMonth: new Array(12).fill(1.05), label: 'SYN-A SSP2-4.5 2036–2065', source: 'synthetic' })
+		).toBe('Future climate, SYN-A SSP2-4.5 2036–2065: rain × 0.8 to × 1.1 by month, evaporation × 1.05 to × 1.05 by month (synthetic)');
 		expect(d({ op: 'demand.scale', factor: 0.85 })).toBe("Irrigation demand of every hydrological unit: 85 % of what they'd take (× 0.85)");
 		expect(d({ op: 'demand.scale', factor: 0.7, nodeIds: [UP, LO], months: [12, 1, 2] })).toBe("Irrigation demand of Upper farm, Lower farm: 70 % of what they'd take (× 0.7), in Jan, Feb, Dec");
 		expect(d({ op: 'demand.scale', factor: 1.1, category: 'user' })).toBe("Demand of every other water user: 110 % of what they'd take (× 1.1)");
@@ -206,6 +210,38 @@ describe('buildOp', () => {
 	let n = 0;
 	const id = () => `11111111-0000-4000-8000-${String(++n).padStart(12, '0')}`;
 	const draft = (o: Partial<OpDraft>): OpDraft => ({ ...emptyDraft(o.kind), ...o });
+
+	// Future climate (issue #621 slice 5): one case of the project's factor table, labelled as § 8 labels it.
+	it('builds a climate.delta from the picked case of the factor table, and says what is missing', () => {
+		const windows = { baseline: { from: 1985, to: 2014 }, mid: { from: 2036, to: 2065 }, late: { from: 2066, to: 2095 } };
+		const kase = (model: string, ssp: 'ssp245' | 'ssp585', horizon: 'mid' | 'late', f: number) => ({
+			model,
+			ssp,
+			horizon,
+			rainFactorByMonth: new Array<number>(12).fill(f),
+			evapFactorByMonth: new Array<number>(12).fill(1.04),
+			years: { baseline: 30, future: 30 },
+			warnings: []
+		});
+		const table = { method: 'delta-1' as const, windows, cases: [kase('SYN-A', 'ssp245', 'mid', 0.95), kase('SYN-A', 'ssp585', 'late', 0.85)], sources: [], citation: 'NEX-GDDP-CMIP6', licence: 'CC0' };
+		const d = draft({ kind: 'climate.delta', climateModel: 'SYN-A', climateSsp: 'ssp585', climateHorizon: 'late' });
+		expect(buildOp(d, m, id, { climate: table })).toEqual({
+			ok: true,
+			op: {
+				op: 'climate.delta',
+				rainFactorByMonth: new Array(12).fill(0.85),
+				evapFactorByMonth: new Array(12).fill(1.04),
+				label: 'SYN-A SSP5-8.5 2066–2095',
+				source: 'NEX-GDDP-CMIP6 monthly change factors, method delta-1, baseline 1985–2014'
+			}
+		});
+		expect(buildOp(d, m)).toEqual({ ok: false, error: 'Work the change factors out first' });
+		expect(buildOp(draft({ kind: 'climate.delta', climateModel: 'SYN-A' }), m, id, { climate: table })).toEqual({ ok: false, error: 'Pick a pathway' });
+		expect(buildOp({ ...d, climateHorizon: 'mid' }, m, id, { climate: table })).toEqual({ ok: false, error: 'The change factors have no case for SYN-A, ssp585, mid: work them out again' });
+		// Picking the kind alone isn't work to lose; picking a model is.
+		expect(draftStarted(emptyDraft('climate.delta'))).toBe(false);
+		expect(draftStarted(draft({ kind: 'climate.delta', climateModel: 'SYN-A' }))).toBe(true);
+	});
 
 	it('builds a dam raise from the typed capacity, and a percentage field from its percent', () => {
 		expect(buildOp(draft({ kind: 'node.set', nodeId: UP, field: 'damCapacityM3', value: '180 000' }), m)).toEqual({ ok: true, op: raise });

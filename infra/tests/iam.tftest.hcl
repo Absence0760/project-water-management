@@ -788,6 +788,8 @@ run "lambda_logs_scoped" {
         data.aws_iam_policy_document.worker_dws.statement,
         data.aws_iam_policy_document.fetcher_dams.statement,
         data.aws_iam_policy_document.worker_dams.statement,
+        data.aws_iam_policy_document.fetcher_et.statement,
+        data.aws_iam_policy_document.worker_et.statement,
         ] : [
         for s in st : [for a in s.actions : !startswith(a, "logs:")]
       ]

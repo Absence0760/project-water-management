@@ -4,3 +4,4 @@ export * from './overrides';
 export { structureIssues, type StructureIssues } from './structure';
 export * from './combine';
 export * from './cumulative';
+export * from './climate';

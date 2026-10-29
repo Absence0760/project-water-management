@@ -9,7 +9,7 @@ import { errataFor, type Erratum } from './errata';
 import { ENGINE_ERRATA } from './errata.generated';
 import { METHODOLOGY } from './methodology.generated';
 import { KNOWN_LIMITATIONS } from './limitations.generated';
-import { packSignoffStatement, signoffStatement, signoffStatementText, type SignoffPack } from './signoff';
+import { FUTURE_YIELD_CONFIRMATION, packSignoffStatement, signoffStatement, signoffStatementText, type SignoffPack } from './signoff';
 import { moriasiNse, moriasiPbias, parseEngineBuild, validationStatement } from './validation';
 
 const bare = (over: Partial<RunSummary> = {}): RunSummary =>
@@ -214,6 +214,15 @@ describe('packSignoffStatement (WP-3.14)', () => {
 		baseline: run,
 		application: { id: '00000000-0000-4000-8000-000000000002', engineVersion: '0.40.0', scenario: true }
 	};
+
+	it('adds § 8’s confirmation, under pack-signoff-2, only to a pack with a future yield (evidence-23)', () => {
+		const s = packSignoffStatement({ ...pack, futureYield: true });
+		expect(s.version).toBe('pack-signoff-2');
+		expect(s.confirmations.map((c) => c.id)).toEqual([...packSignoffStatement(pack).confirmations.map((c) => c.id), 'futureYield']);
+		expect(s.confirmations.at(-1)!.text).toBe(FUTURE_YIELD_CONFIRMATION);
+		// Positive control: without § 8 the statement is pack-signoff-1, word for word.
+		expect(signoffStatementText(packSignoffStatement({ ...pack, futureYield: false }))).toBe(signoffStatementText(packSignoffStatement(pack)));
+	});
 
 	it('has its own version, binds the manifest hash, and adds the pack confirmation to the run statement\'s', () => {
 		const s = packSignoffStatement(pack);

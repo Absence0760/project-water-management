@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 187 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 191 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -697,6 +697,8 @@ farm without area: each unit's CHIRPS levelled as without a reference).
 `forecast-member-rescaled` (issue #620 step 6, model.md §2.15d): a member of the forecast-conditioned outlook is an ordinary run, its `rain_forecast_mm` the record's own days rescaled month by month (× 1.5, × 0.4, × 0); nothing else of that outlook is mirrored here.
 
 `calibration-zones-nested` and `calibration-zones-no-exchange` (issue #555, model.md §2.10n): ticked gauges one inside the other under Per unit, so a unit takes the first ticked gauge on its way down, not the one nearest the outlet; an unticked row that changes nothing; and the exchange series written for a zone's X2 though the catchment's is 0, and not written when every applied zone's X2 is 0 too. diff.py only notes a series the engine alone writes, so the mutant for that rule has python write it whatever the zones' X2.
+
+Future climate, 2026-10-29 (engine 1.107.0, issue #621, model.md §2.17): `model.py` applies the `climate.delta` scenario op as §2.17 states it (`apply_climate_delta`), and a case may carry verify/'s own field `scenarioOps`, which `run_engine.ts` applies with the public `applyScenario` (any problem refuses the case) and `model.py` itself; only `climate.delta` is modelled (`unsupported` names any other op). Four probes: `climate-delta` (a dam, a crop and the EWR on fourteen months, a CHIRPS-filled gap and a no-data code, the A-pan row under pan × A-pan), and the probes `unit-rain-rules`, `station-units` and `daily-et0-monthly-pe` under the same factors (`climate-delta-unit-map`, `-stations`, `-monthly-pe`: rule 3's level moving with the MAPs' annual factor while rule 2's and the stations' MAP ratios don't, a monthly PE row and the daily reference ET). Written from §2.17 alone, all four agreed with the engine on every compared column at the first run; four mutants (the MAPs left alone, the rain factors read by water-year month, the A-pan row's months unshifted, the annual factor a plain mean) are each caught.
 
 Reference gauge, 2026-10-10 (engine 1.80.0): the examples, the 27 probes and
 30 random and 30 dense networks (seed 1000) agree on every compared column,

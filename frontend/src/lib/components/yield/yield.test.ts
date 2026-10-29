@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { YIELD_DEFAULT_TOLERANCE, type ScenarioOp, type YieldPoint } from '@water-management/engine';
 import type { JobMeta, RunMeta, YieldJob, YieldResult } from '#lib/api/index.js';
-import { assuranceLabel, curveChart, engineDiffersNote, jobStatus, jobToFollow, latestResults, modelRuns, yieldWithheld, patternLabel, PREVIEW_TOLERANCE, previewSource, type CurveResult } from './yield';
+import { assuranceLabel, cancellableJobStatus, curveChart, engineDiffersNote, jobStatus, jobToFollow, latestResults, modelRuns, yieldWithheld, patternLabel, PREVIEW_TOLERANCE, previewSource, type CurveResult } from './yield';
 
 const job = (over: Partial<JobMeta>): JobMeta => ({
 	id: 'j',
@@ -57,6 +57,25 @@ describe('jobStatus', () => {
 		expect(jobStatus(job({ status: 'dead', error: 'cancelled' }))).toEqual({ text: 'Cancelled.', busy: false, failed: true });
 		expect(jobStatus(job({ status: 'dead', error: 'the yield search failed: no demand' }))?.text).toBe('Failed: the yield search failed: no demand.');
 		expect(jobStatus(job({ status: 'failed', error: 'a database error (SQLSTATE 40001)' }))?.text).toMatch(/^Failed, will retry/);
+	});
+});
+
+describe('cancellableJobStatus', () => {
+	it('offers Cancel while the job waits or runs, until this page asked', () => {
+		expect(cancellableJobStatus(null, null)).toBeNull();
+		expect(cancellableJobStatus(job({ status: 'done' }), null)).toBeNull();
+		expect(cancellableJobStatus(job({ status: 'queued' }), null)).toEqual({ text: 'Queued: waiting for the background worker.', busy: true, failed: false, cancelled: false, canCancel: true });
+		expect(cancellableJobStatus(job({ status: 'running', progress: 10 }), null)).toMatchObject({ text: 'Running: 10 % done.', canCancel: true });
+		// Asked: a running job stops at its next step, and no second Cancel shows meanwhile.
+		expect(cancellableJobStatus(job({ status: 'running', progress: 10 }), 'j')).toEqual({ text: 'Cancelling: it stops at its next step.', busy: true, failed: false, cancelled: false, canCancel: false });
+		// Another job than the one asked about is offered as usual.
+		expect(cancellableJobStatus(job({ id: 'k', status: 'running' }), 'j')).toMatchObject({ text: 'Running…', canCancel: true });
+	});
+
+	it('says a cancelled job plainly, never as a failure', () => {
+		expect(cancellableJobStatus(job({ status: 'dead', error: 'cancelled' }), 'j')).toEqual({ text: 'Cancelled.', busy: false, failed: false, cancelled: true, canCancel: false });
+		expect(cancellableJobStatus(job({ status: 'dead', error: 'the future yield failed: no dam' }), null)).toMatchObject({ failed: true, cancelled: false, canCancel: false });
+		expect(cancellableJobStatus(job({ status: 'failed', error: 'timeout' }), null)).toMatchObject({ failed: true, busy: false, canCancel: false });
 	});
 });
 

@@ -352,6 +352,13 @@ so that test pins them exactly beside the report.
   file that issues or withdraws a pack, sweeps an erratum or fires an alert
   sends the mail (`runTick`) or settles it
   (`settlePendingNotices(projectId)` in `__tests__/helpers.ts`).
+  It covers enabled data feeds too: the tick's scheduler queues every due
+  feed in the database, so a CHIRPS feed one file left on was fetched by a
+  later file's `runTick` and its cached cells landed in
+  `feeds/productCache.db.test.ts`'s counts (PR #655). A file that makes
+  feeds calls `disableFeedsAfterFile()` (`__tests__/helpers.ts`) at its top
+  level, and a file that fills the CHIRPS cell cache empties it
+  (`chirps_cell_year`, `chirps_file`, `chirps_cell_stale`) when it ends.
 - **e2e ticks are scoped to the test's own projects.** Playwright's workers
   share one e2e database and run in parallel, so unlike the DB files an e2e
   test can't count on nobody else ticking: `runJobsTick` requires the

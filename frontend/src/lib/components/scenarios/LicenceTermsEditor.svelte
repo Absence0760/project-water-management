@@ -68,7 +68,8 @@
 			{/if}
 			<button type="button" class="btn btn-sm" {disabled} onclick={() => (ops = [...applied])}>Start again from the changes applied for</button>
 			{#if effective}
-				<OpForm input={effective} onadd={add} {disabled} {projectId} />
+				<!-- A licence's terms are the application's changes revised: the climate is never one of them. -->
+				<OpForm input={effective} onadd={add} {disabled} {projectId} futureClimate={false} />
 			{:else}
 				<p class="muted">The base run can’t be read here, so no change can be added.</p>
 			{/if}

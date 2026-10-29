@@ -65,8 +65,8 @@ it reads to answer, go to Amazon Bedrock and may be processed in any
 commercial AWS region (docs/security.md § Assistant). Nothing of it is kept
 in this system, so an incident there is learnt of from AWS (its notice to
 the account, the AWS Health dashboard), not from our logs. The evidence is
-CloudTrail in af-south-1: each model call is an `InvokeModelWithResponseStream`
-event by the assistant's role, with the region that answered in
+CloudTrail in af-south-1: each model call is a `ConverseStream` event
+(eventSource `bedrock.amazonaws.com`) by the assistant's role, with the region that answered in
 `additionalEventData.inferenceRegion`; the assistant's own log has only one
 `assistant_turn` line per turn (token counts, no text). If Bedrock model
 invocation logging was ever turned on (the post-apply check refuses it), the

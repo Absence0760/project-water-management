@@ -297,7 +297,7 @@ export async function readDailyBlock(d: DailyArray, d0: number, d1: number, bloc
 }
 
 /** zarrita's chunk as a C-ordered Float32Array (it may hand back other strides). */
-function contiguous(chunk: zarr.Chunk<'float32'>, shape: [number, number, number]): Float32Array {
+export function contiguous(chunk: zarr.Chunk<'float32'>, shape: [number, number, number]): Float32Array {
 	const [a, b, c] = shape;
 	const [s0, s1, s2] = chunk.stride as [number, number, number];
 	const data = chunk.data as Float32Array;

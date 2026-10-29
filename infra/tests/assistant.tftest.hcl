@@ -1271,3 +1271,32 @@ run "assistant_connections_count_toward_the_database_sum" {
 
   expect_failures = [aws_lambda_function.backend]
 }
+
+# --- The future climate (issue #621) -------------------------------------------
+
+run "future_yield_follows_the_api" {
+  command = plan
+
+  variables {
+    assistant_enabled = true
+  }
+
+  assert {
+    condition     = aws_lambda_function.assistant[0].environment[0].variables["FUTURE_YIELD"] == "off" && aws_lambda_function.backend.environment[0].variables["FUTURE_YIELD"] == "off"
+    error_message = "Off by default: the assistant builds evidence reports without § 8, as the API does."
+  }
+}
+
+run "future_yield_on_follows_the_api" {
+  command = plan
+
+  variables {
+    assistant_enabled    = true
+    future_yield_enabled = true
+  }
+
+  assert {
+    condition     = aws_lambda_function.assistant[0].environment[0].variables["FUTURE_YIELD"] == "on" && aws_lambda_function.backend.environment[0].variables["FUTURE_YIELD"] == "on"
+    error_message = "With future_yield_enabled the assistant's evidence reports have § 8 exactly as the API's do (FUTURE_YIELD=on on both)."
+  }
+}

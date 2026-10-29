@@ -4,7 +4,9 @@
 // would move a local-midnight date a day.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ObservedDam, ObservedPoint } from '#lib/api/types.js';
-import { fullAreaWords, matchNotes, OBSERVED_LANE_COLOR, observedChartSeries, observedFor, observedLanes, observedLine, summaryWords, viewRows } from './observed';
+import { readFileSync } from 'node:fs';
+import { SENTINEL_STATEMENT } from '#lib/components/legal/dataCredits.js';
+import { creditLine, sentinelCredit, SOURCE_ORDER, fullAreaWords, matchNotes, OBSERVED_LANE_COLOR, observedChartSeries, observedFor, observedLanes, observedLine, opticalWords, sourcesLine, summaryWords, viewRows } from './observed';
 
 let tz: string | undefined;
 beforeAll(() => {
@@ -49,6 +51,11 @@ const dam = (points: ObservedPoint[], more: Partial<ObservedDam> = {}): Observed
 			seenFull: c.filter((p) => p.seenFull).length,
 			seenEmpty: c.filter((p) => p.seenEmpty).length,
 			mismatches: c.filter((p) => p.mismatch).length,
+			radar: c.filter((p) => p.source === 's1').length,
+			// Without radar the model is 1 % over, every optical view within: so a radar view's pull shows.
+			optical: c.some((p) => p.source !== 's1')
+				? { compared: c.filter((p) => p.source !== 's1').length, biasPctOfFull: 1.2, withinShare: 1 }
+				: { compared: 0, biasPctOfFull: null, withinShare: null },
 			latestClear: points.length ? { date: points.at(-1)!.date, source: 'wofs', wetAreaM2: points.at(-1)!.wetAreaM2, pctObserved: 100 } : null
 		},
 		...more
@@ -99,9 +106,9 @@ describe('the words beside the chart', () => {
 			]
 		});
 		expect(matchNotes(d)).toEqual([
-			'“B” is merged with a neighbouring water body in DE Africa Waterbodies, so only WOfS views of its own outline are compared.',
-			'An unnamed dam outline has no DE Africa Waterbodies polygon (too small, or not mapped): only WOfS views of its own outline.',
-			'“D” hasn’t been matched to DE Africa Waterbodies yet: only WOfS views of its own outline are compared.'
+			'“B” is merged with a neighbouring water body in DE Africa Waterbodies, so only views of its own outline (WOfS and Sentinel) are compared.',
+			'An unnamed dam outline has no DE Africa Waterbodies polygon (too small, or not mapped): only views of its own outline (WOfS and Sentinel).',
+			'“D” hasn’t been matched to DE Africa Waterbodies yet: only views of its own outline (WOfS and Sentinel) are compared.'
 		]);
 	});
 });
@@ -155,6 +162,79 @@ describe('the chart', () => {
 		]);
 		expect(observedLanes(dam([point('2022-01-02', 20_000)]))).toEqual([]);
 	});
+
+	it('draws compared radar views as their own smaller points, and marks their days with a doubled strip, never a flag (issue #624)', () => {
+		const d = dam([point('2022-01-02', 20_000, { source: 's2' }), point('2022-01-03', 30_000, { source: 's1' }), point('2022-01-04', 10_000, { source: 's1', compared: false, skip: 'other-source' })]);
+		const s = observedChartSeries(d, { startDate: '2022-01-01', values: [30_000, 31_000, 32_000, 33_000] });
+		expect(s.map((x) => [x.label, x.values, x.color, x.pointSize])).toEqual([
+			['Modelled area', [3, 3.1, 3.2, 3.3], '--series-1', undefined],
+			['Seen from space', [null, 2, null, null], '--series-2', 8],
+			['Seen by radar', [null, null, 3, null], '--series-2', 8],
+			['Seen, not compared', [null, null, null, 1], '--text-muted', 6],
+			['Full area', [4, 4, 4, 4], '--text-2', undefined]
+		]);
+		// Rings, not smaller dots: a shape apart from the optical views in the plot and the key.
+		expect(s.find((x) => x.label === 'Seen by radar')!.hollow).toBe(true);
+		expect(s.find((x) => x.label === 'Seen from space')!.hollow).toBeUndefined();
+		// Only the compared radar day has the strip: the one Sentinel-2 beat isn't a radar view on the chart's points.
+		expect(observedLanes(d).map((l) => [l.label, l.color, l.doubled ?? false, l.ranges])).toEqual([['Radar', OBSERVED_LANE_COLOR.radar, true, [{ start: '2022-01-03', end: '2022-01-03' }]]]);
+	});
+});
+
+describe('the sources, the radar and the credit (issue #624)', () => {
+	it('lists the sources in the backend’s own precedence (compare.ts SOURCE_PRECEDENCE)', () => {
+		const src = readFileSync(new URL('../../../../../backend/src/dams/observed/compare.ts', import.meta.url), 'utf8');
+		const m = /SOURCE_PRECEDENCE: readonly ObservedSource\[\] = (\[[^\]]*\])/.exec(src);
+		expect(m, 'SOURCE_PRECEDENCE in compare.ts').not.toBeNull();
+		expect(JSON.parse(m![1]!.replace(/'/g, '"'))).toEqual([...SOURCE_ORDER]);
+	});
+
+	it('counts the views per source, best first, and says the sharpest wins a shared day; nothing with one source', () => {
+		const d = dam([point('2022-01-02', 1, { source: 'wofs' }), point('2022-01-02', 1, { source: 's2' }), point('2022-01-03', 1, { source: 's1' }), point('2022-01-04', 1, { source: 's2' })]);
+		expect(sourcesLine(d)).toBe(
+			'Views by source: 2 Sentinel-2, 1 WOfS, 1 Sentinel-1 radar. A day more than one saw clearly is compared with the most trusted: Sentinel-2, then WOfS, then Waterbodies, then radar.'
+		);
+		expect(sourcesLine(dam([point('2022-01-02', 1), point('2022-01-03', 1)]))).toBeNull();
+		expect(sourcesLine(dam([]))).toBeNull();
+	});
+
+	it('says how many compared views are radar, in the fold’s line and the summary, and that they are never called full or empty', () => {
+		const d = dam([point('2022-01-05', 25_000, { source: 's2' }), point('2022-01-21', 39_000, { source: 's1' })]);
+		expect(sp(observedLine(d, false, null, 0.1))).toBe('2 clear views compared (1 radar) · none disagree · 75% within ±10%');
+		expect(sp(summaryWords(d, 0.1))).toContain(' 1 of the 2 views is radar (Sentinel-1, through cloud), never called full or empty on its own.');
+		const all = dam([point('2022-01-05', 25_000, { source: 's1' }), point('2022-01-21', 39_000, { source: 's1' })]);
+		expect(sp(summaryWords(all, 0.1))).toContain(' All are radar (Sentinel-1, through cloud), never called full or empty on their own.');
+		expect(sp(observedLine(dam([point('2022-01-05', 25_000)]), false, null, 0.1))).toBe('1 clear view compared · none disagree · 75% within ±10%');
+	});
+
+	it('gives the optical views’ own figures after the radar note, so radar’s pull on the average shows, and nothing extra without radar', () => {
+		const d = dam([point('2022-01-05', 25_000, { source: 's2' }), point('2022-01-21', 39_000, { source: 's1' })]);
+		expect(sp(summaryWords(d, 0.1))).toMatch(/never called full or empty on its own\. Without radar \(1 clear view\): the model has 1% of the full area more water surface on average; within ±10% on 100% of them\.$/);
+		expect(sp(opticalWords({ ...d.summary, optical: { compared: 3, biasPctOfFull: -0.3, withinShare: 2 / 3 } }, 0.1))).toBe(
+			' Without radar (3 clear views): the model and the satellites agree on average; within ±10% on 67% of them.'
+		);
+		expect(sp(opticalWords({ ...d.summary, optical: { compared: 2, biasPctOfFull: -7.6, withinShare: 0.5 } }, 0.1))).toContain('the model has 8% of the full area less water surface on average');
+		// Every compared view radar: nothing optical to show.
+		const all = dam([point('2022-01-05', 25_000, { source: 's1' })]);
+		expect(sp(summaryWords(all, 0.1))).toMatch(/ No optical view to compare without radar\.$/);
+		// No radar: the summary's own figures are the optical ones, so no second sentence.
+		const optical = dam([point('2022-01-05', 25_000, { source: 's2' })]);
+		expect(opticalWords(optical.summary, 0.1)).toBe('');
+		expect(sp(summaryWords(optical, 0.1))).not.toContain('Without radar');
+	});
+
+	it('credits Copernicus beside DE Africa when Sentinel views are listed', () => {
+		const a = 'Digital Earth Africa, CC BY 4.0';
+		expect(creditLine(a, dam([point('2021-01-02', 1)]))).toBe('Satellite views: Digital Earth Africa, CC BY 4.0 (Waterbodies and WOfS, from Landsat).');
+		expect(creditLine(a, null)).toBe('Satellite views: Digital Earth Africa, CC BY 4.0 (Waterbodies and WOfS, from Landsat).');
+		// This dam's own Sentinel views' years, not another dam's.
+		expect(creditLine(a, dam([point('2023-01-02', 1, { source: 's1' }), point('2021-05-02', 1, { source: 's2' }), point('2025-01-02', 1)]))).toBe(
+			'Satellite views: Digital Earth Africa, CC BY 4.0 (Waterbodies and WOfS, from Landsat). Contains modified Copernicus Sentinel data 2021–2023, processed by Digital Earth Africa.'
+		);
+		// The licence's words, as /data-sources and the backend have them (dataCredits.test.ts holds those two together).
+		expect(sentinelCredit([{ date: '2024-03-01', source: 's2' }])).toBe(SENTINEL_STATEMENT.replace('[year]', '2024'));
+		expect(sentinelCredit([{ date: '2024-03-01', source: 'wofs' }])).toBeNull();
+	});
 });
 
 describe('the table of views', () => {
@@ -166,12 +246,21 @@ describe('the table of views', () => {
 			['2 Jan 2022', 'DE Africa Waterbodies', '2.00 ha', '100%', '3.00 ha', 'Model +1.00 ha', false]
 		]);
 	});
+
+	it('names the Sentinel sources (issue #624) as their own outline views, says a radar view is never called full or empty, and why one lost its day', () => {
+		const d = dam([point('2022-01-05', 100, { source: 's2' }), point('2022-01-05', 100, { source: 'wofs', compared: false, skip: 'other-source' }), point('2022-01-06', 100, { source: 's1' })]);
+		expect(viewRows(d).map((r) => [r.source, sp(r.note)])).toEqual([
+			['Sentinel-1 radar, inside the dam’s outline', 'Model +2.99 ha; radar, never called full or empty on its own'],
+			['WOfS, inside the dam’s outline', 'Not compared: Sentinel-2 saw it clearly the same day'],
+			['Sentinel-2, inside the dam’s outline', 'Model +2.99 ha']
+		]);
+	});
 });
 
 describe('observedFor', () => {
 	it('finds the unit’s entry, or null', () => {
 		const d = dam([]);
-		const data = { attribution: 'x', thresholds: { minPctObserved: 90, fullShare: 0.95, emptyShare: 0.05, pixelM2: 900, clearlyNotFull: 0.8, clearlyWet: 0.2, withinShare: 0.1 }, run: null, dams: [d] };
+		const data = { attribution: 'x', sentinelCredit: null, thresholds: { minPctObserved: 90, fullShare: 0.95, emptyShare: 0.05, pixelM2: { s2: 400, wofs: 900, s1: 429, waterbodies: 900 }, clearlyNotFull: 0.8, clearlyWet: 0.2, withinShare: 0.1 }, run: null, dams: [d] };
 		expect(observedFor(data, 'n1')).toBe(d);
 		expect(observedFor(data, 'n2')).toBeNull();
 		expect(observedFor(null, 'n1')).toBeNull();

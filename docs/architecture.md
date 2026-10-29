@@ -718,7 +718,13 @@ dam yield's `yield`, the scenario sweep's `sweep`, the seasonal
 outlook's `outlook`, automated calibration's `auto_calibration` and
 `uncertainty` (below), and the Map's `delineate`, a catchment too large for
 the delineation request (`jobs/handlers/delineate.ts`,
-[design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)); step 2's
+[design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)), and the
+evidence pack's § 8 `future_yield` (`jobs/handlers/future-yield.ts`, reading
+the data copy's NEX-GDDP-CMIP6 aggregates, [evidence-pack.md § Future
+yield](./evidence-pack.md#future-yield)), and the Scenarios tab's
+`climate_factors` (`jobs/handlers/climate-factors.ts`, the same reading of
+the copy, stored as the catchment's change factor table, [scenarios.md §
+Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors)); step 2's
 alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,
@@ -792,9 +798,12 @@ alerts plug in as a further kind.
   its own connection, outside the job's transaction (whose writes nobody sees
   until it commits), so `GET /jobs` shows it at once. Only the lease holder
   of a running job can write it. It answers false once someone cancelled the
-  job (`app_cancel_job`, which kills a waiting job outright and flags a
-  running one) or the lease was lost, and the handler then stops: dead,
-  `cancelled`, its work rolled back.
+  job (`app_cancel_job_outcome`, 285, which kills a waiting job outright and
+  flags a running one, and says whether this call changed it) or the lease
+  was lost, and the handler then stops: dead, `cancelled`, its work rolled
+  back. `future_yield` and `climate_factors` report after each model read
+  from the copy, and `future_yield` after each case it runs
+  (`runFutureYieldAsync`), so a cancel lands before the next.
 - **`yield`** (WP-3.6, `jobs/handlers/yield.ts`, [api.md § Yield](./api.md#yield)):
   the engine's firm-yield search (`network/yield.ts`, model.md §2.13) on a
   saved run's stored inputs or a scenario applied to its base run, as the
@@ -1860,6 +1869,19 @@ EventBridge, daily
   fails the job; no forecast or no hindcast in the copy leaves the outlook
   the ESP alone with the reason. Locally the committed copy holds invented
   members (`backend/fixtures/mirror/c3s/`, `backend/scripts/c3s-fixture.ts`).
+- **NEX-GDDP-CMIP6's monthly aggregates (issue #621 slice 2).** Not a
+  scheduled product: the operator copies them once, in us-west-2 next to
+  NASA's bucket (`ingest/cmip6_delta.py`,
+  [deployment.md § NEX-GDDP-CMIP6 (one-off)](./deployment.md#nex-gddp-cmip6-one-off)),
+  into `cmip6/<model>/<scenario>` groups (`pr_mm` monthly totals,
+  `tasmax_c` and `tasmin_c` monthly means; (year, month, lat, lon) on a
+  0.25° grid whose 110 × 124 cells tile D1) with `cmip6/index.json`. Each
+  manifest file is one NEX daily file, with its release `version` and its
+  global `license` attribute verbatim; both validators (`ingest/manifest.py`,
+  `backend/src/mirror/manifest.ts`) hold the same rules. Nothing reads it
+  yet (the future yield, slices 3–4). Locally the committed copy holds
+  invented models SYN-A..C (`backend/fixtures/mirror/cmip6/`,
+  `backend/scripts/cmip6-fixture.ts`).
 - **ERA5-Land (issue #604 R4-A).** The Python ingest Lambda copies
   Copernicus's ERA5-Land daily total precipitation, about 5 days behind,
   into `era5l/`, the finals layout on the 0.1° grid (275 × 310, from 1950).
@@ -2115,11 +2137,18 @@ EventBridge, hourly at :20 ──► fetcher, {"mode":"dams-weekly"} (outside th
       writes dams/waterbodies/<uid>.json, dams/waterbodies-status.json
    WOfS pass (R5-C): each dam's newest scenes once a UTC day, the rest of the run its history backward
       writes dams/wofs/<featureId>.json, dams/wofs-status.json
+   Sentinel-2 pass (#624, DAM_OBSERVATIONS_S2=on): the same, s2_l2a_c1 classified by us, back to 2019
+      writes dams/s2/<featureId>.json, dams/s2-status.json
+   Sentinel-1 pass (#624 step 5, DAM_OBSERVATIONS_S1=measure|on): the same, s1_rtc radar classified by us, back to 2019
+      writes dams/s1/<featureId>.json, dams/s1-status.json, then dams/s1-agreement.json (log: dams_s1_agreement)
    each pass: DamPassCompleted{Source} + DamObservationAgeDays{Source} (EMF)
 
 worker tick: each status, then each key due by its load mark (≤ 200 a tick, oldest lastGood first)
-   ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs)
+   ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs | s2 | s1)
    ──► app_dam_load_mark_write ──► dam_observation_load_mark (what was loaded, kept across restarts)
+   s1 only with DAM_OBSERVATIONS_S1=on, for the dams dams/s1-agreement.json passes (start ≥ 85 %, stay ≥ 80 %);
+   any other s1 key, or an s1 mark still shown that the status no longer lists
+   ──► app_dam_s1_withhold (its rows removed) + a mark with targets S1_WITHHELD, no file read
 ```
 
 - **Why hourly.** The fetcher's 120 s limit, less Waterbodies' share (up to
@@ -2237,20 +2266,47 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     512 tiles, DEFLATE with the horizontal predictor, `GDAL_NODATA` 1,
     30 m, GeoKeys for WGS 84 / UTM (EPSG 326xx; DE Africa writes the
     southern hemisphere in the **north** zone codes, so northings are
-    negative). The reader takes that and its legal variants (big-endian,
-    no compression or predictor, PixelIsPoint, an empty sparse tile, the
-    south codes) and refuses anything else with a reason: BigTIFF, strips,
-    other sample types or bands, another CRS or units, a rotation matrix,
-    a GDAL scale/offset, implausible sizes; a tile never inflates past its
-    pixels. No dependency (`geotiff` would bring a decoder zoo; the CHIRPS
-    reader, `feeds/sources/tiff.ts`, refuses tiles on purpose and stays
-    so). `cog.test.ts` round-trips it through `cogWrite.ts`.
-  - **Projection** (`utm.ts`): WGS 84 → UTM by Krüger's series to n⁶
+    negative).
+  - **The COG reader** (`backend/src/raster/cog.ts`, shared with the coming
+    WaPOR actual ET pass, #623, and the Sentinel-1/2 passes, #624) reads
+    classic TIFF and BigTIFF of either byte order; tiles; one band of
+    uint8, int16, uint16 or float32 (PlanarConfiguration 1, or 2, which is
+    the same bytes for one band and what WaPOR and Sentinel-1 write); no compression, DEFLATE or LZW (the
+    CHIRPS reader's decoder, `feeds/sources/tiff.ts`); predictor 1, 2 on
+    integers, or 3 (floating point) on float32; WGS 84 / UTM (EPSG
+    326xx / 327xx, metres) or geographic WGS 84 (EPSG:4326, degrees);
+    PixelIsPoint; `GDAL_NODATA` as a value of the sample type (NaN for a
+    float `nan`), and an empty sparse tile as no-data. It refuses anything
+    else with a reason: strips, other sample types or bands, another CRS
+    or units, a rotation matrix, old-style LZW, implausible sizes; a tile
+    never decompresses past its size. Each caller says what it accepts
+    (`CogAccept`): the WOfS pass reads uint8 on UTM only (`WOFS_ACCEPT`,
+    `sum.ts`), and a GDAL scale/offset is refused unless the caller reads
+    it (WaPOR's int16 × 0.1). It reads the header (16 KB), then for a
+    window only the slice of the TileOffsets / TileByteCounts tables from
+    its first tile to its last (a WaPOR dekad's tables are ~2.8 MB; WOfS's
+    sit inside the header read), then the tiles, neighbours as one range.
+    `bboxWindow` gives a geographic scene's pixels under a lon/lat box. No
+    dependency (`geotiff` would bring a decoder zoo; the CHIRPS reader
+    refuses tiles on purpose and stays so). `cog.test.ts` round-trips every
+    form through `cogWrite.ts`, which also writes the fixtures. Checked
+    against real headers on 2026-10-29 (one WaPOR dekad, one Sentinel-1 VV
+    and MASK, one Sentinel-2 B03, B11 and SCL; headers and IFDs by range
+    request, a small window of each decoded in memory, nothing kept):
+    `raster/cogLayouts.ts` records each one's tags, and the fixtures and
+    `cogLayouts.test.ts` write synthetic files in those layouts (GDAL's
+    structural metadata before the IFD, tile trailers, overview IFDs, the
+    citations in GeoAsciiParams) and read them through the production
+    `CogAccept`s. The check found the one refusal the round-trip tests
+    couldn't: PlanarConfiguration 2, which every WaPOR and Sentinel-1 file
+    has, was refused until then.
+  - **Projection** (`raster/utm.ts`): WGS 84 → UTM by Krüger's series to n⁶
     (Karney 2011), checked against PROJ to a millimetre, with the point
     scale factor k. No dependency: proj4js would carry a CRS database for
     one projection.
   - **Summing**: a pixel counts when its centre is inside the outline
-    (projected vertex by vertex, scanline crossings, even-odd per polygon
+    (`raster/mask.ts`; projected vertex by vertex on a UTM grid, scaled
+    from degrees on a geographic one, scanline crossings, even-odd per polygon
     so holes are out, polygons of a MultiPolygon unioned). Exactly 128 is
     clear wet, exactly 0 clear dry, anything else (cloud, shadow, no data,
     water under a flag) not clear; a pixel inside the outline but off the
@@ -2259,12 +2315,41 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     ÷ inside × 100. An outline no pixel centre falls in (smaller than a
     pixel, or a sliver) gives no row, and so does a scene whose footprint
     missed the dam (every inside pixel no-data); a scene that saw it under
-    cloud gives a 0 % row.
-  - **Two scenes on one date** (neighbouring Landsat rows overlap): one
-    row, from the scene that saw most of the dam clearly, then the one
-    covering most of it, then the lower item id. Not combined pixel by
-    pixel: the rows' grids needn't line up, and the better view is what a
-    reader would pick.
+    cloud gives a 0 % row. On a geographic grid the mask takes a pixel's
+    ground area from the WGS 84 ellipsoid (M·N·cos φ·Δφ·Δλ) at the
+    outline's box centre, for the passes that will read one.
+  - **Two scenes on one date** (neighbouring Landsat rows, MGRS tiles or
+    Sentinel-1's 1° tiles): one row (`wofs/merge.ts`, shared by all three
+    passes). The base is the scene that saw most of the dam clearly, then
+    the one covering most of it, then the lower item id; the row is keyed
+    by its item. Each pixel of the dam the base has NO data for (off its
+    tile or footprint) is filled from the next-best scene of that date that
+    has: pixel for pixel when the two grids are one lattice (the same CRS
+    and pixel size, origins whole pixels apart: 1° s1_rtc tiles, MGRS tiles
+    of one UTM zone, Landsat rows of one path), and by nearest neighbour
+    when they're two UTM grids that don't line up (a dam across a zone line,
+    as 24° E between zones 34 and 35, seen by a scene gridded in each zone).
+    Nearest neighbour takes the base pixel's centre to the ground and into
+    the other zone (`raster/utm.ts`, Krüger's series both ways, no
+    dependency) and copies the class of the pixel it lands in: the classes
+    (wet, dry, not clear, off the scene) are categorical, so they're never
+    averaged into mixes no scene saw. Where that pixel is outside the other
+    view's own outline mask (the grids cut the outline's edge differently),
+    its nearest outline pixel within one pixel stands in. The base's own
+    lattice fills first (exact), then other zones, each in the same order;
+    counts stay in the base's pixels at the base's ground area, so the join
+    loses at most a pixel a row along a seam where two footprints just
+    meet (a synthetic dam split 50/50 across 24° E comes out ≥ 98 %
+    observed, its wet area within 1 % of one whole view's, `merge.test.ts`).
+    So a dam across a tile edge or a zone line is seen whole, not as the
+    larger half (under the 90 % a clear view needs). A pixel the base saw,
+    clearly or under cloud, is never replaced: two looks at one pixel
+    (Sentinel-1's ascending and descending passes) aren't mixed. Only UTM
+    views join across lattices: each pass joins its own source's views, and
+    Sentinel-1's (EPSG:4326, one pixel size) are all one lattice, so a
+    geographic view never meets a UTM one; views on any other two lattices
+    aren't joined, the better one is kept. The scenes that filled a row
+    stay in the file's `upstream` list beside the row's own.
   - **Newest first, then history.** `dams/wofs-state.json` (the pass's
     own, never read by the worker) keeps per dam the SHA-256 of its
     outline and the span read so far, `[backfilledFrom, scannedThrough]`.
@@ -2307,6 +2392,298 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     invented overlapping scenes in every UTM zone, two paths, a seasonal
     water field and cloud on some dates, written as real tiled DEFLATE
     COGs, so the production reader runs offline.
+- **Reading them back** (`dams/observed/compare.ts`, issue #624). The
+  store keeps every source's row for a day; the reader picks one. Of the
+  sources that saw the whole unit at least 90 % clear that day, the sharpest
+  wins (`SOURCE_PRECEDENCE`: Sentinel-2, then WOfS, then Waterbodies, then
+  Sentinel-1 radar) and the rest are `other-source`. Radar is compared but
+  never sets a flag ([model.md § 2.10l](./model.md#210l-modelled-vs-observed-dam-area-app-issue-604-r5-b)).
+  The panel and the farm card carry Copernicus's credit for the years of any
+  Sentinel views they show (`upstream.ts` `sentinelCredit`), beside DE
+  Africa's.
+
+- **Sentinel-2, classified inside our own outlines** (issue #624 step 4,
+  `backend/src/dams/observed/sentinel/`). DE Africa publishes no Sentinel
+  water mask, so its Sentinel-2 L2A Collection 1 scenes (`s2_l2a_c1`, 10 m,
+  every few days) are classified here. It is the WOfS pass with its own
+  parts (`wofs/pass.ts` `runScenePass` takes a `ScenePassSource`:
+  `sentinel/pass.ts` `S2_PASS`), so everything above about the turns, the
+  state (`dams/s2-state.json`), the re-scanned tail, a redrawn outline, a
+  refusal's pause and the file holds for it as written. Its own parts:
+  - **The search**: `collections=s2_l2a_c1` on the same explorer, items
+    checked by `sentinel/s2.ts` `s2Item` (the `green` B03, `swir16` B11,
+    `nir` B08 and `scl` assets, each only under `sentinel-2-c1-l2a/` in
+    `deafrica-sentinel-2-l2a-c1`, `stac.ts` `assetUrl`; an item with
+    neither B11 nor B08 is refused), with each band's DN offset from its
+    `raster:bands` (−1000 for Collection 1, checked 2026-10-29).
+  - **The bands**: uint16 COGs in UTM (EPSG 327xx, the south codes, unlike
+    WOfS); B03 and B08 at 10 m (1024-pixel tiles), B11 and SCL at 20 m
+    (512) on the same origin, DEFLATE with the horizontal predictor, no
+    data 0. Each reflectance file carries its own GDAL scale and offset,
+    1e-4 and −0.1 (checked 2026-10-29), which is the item's −1000 DN
+    offset at 1e-4 a DN, and the pass uses the file's (the item's offset
+    only for a file without one); SCL carries none. The
+    mask is made on B03's grid; B11 and SCL are read over the window of
+    their own grids under it (`windowOn`) and each 10 m pixel takes the
+    20 m pixel its centre falls in; B08 is read only when a clear inside
+    pixel has no B11. So a scene is three COG headers and three small
+    windows (four with B08).
+  - **The classification** (MNDWI > 0, NDWI > 0 where B11 is missing, SCL 0,
+    1, 3, 8, 9, 10 not clear): [model.md §2.10l](./model.md#210l-modelled-vs-observed-dam-area-app-issue-604-r5-b).
+    `wet_area_m2` = wet pixels × 100 m² ÷ k², `pct_observed` as WOfS's.
+  - **History** to 2019 (`S2_BACKFILL_FROM`, Collection 1 consistent from
+    there), newest first. A dam's `since` is the wanted list's `sinceBy.s2`
+    (the day after its newest `s2` row, `app_dam_outlines`' `s2_newest`,
+    279), never WOfS's.
+  - **Politeness**: one request a second to each host (the explorer, and
+    the bucket, `S2_SCENE_INTERVAL_MS`), one in flight. The fetcher hands
+    the WOfS pass's STAC pacer on to the Sentinel-2 pass, so the explorer
+    sees one a second across both. A 403 or throttling stops the pass and
+    pauses `s2` alone.
+  - **Budget**: with it on, a run gives Waterbodies up to 30 %, WOfS up to
+    65 % (`WOFS_BUDGET_SHARE_WITH_S2`) and Sentinel-2 the rest (up to 85 %,
+    `S2_BUDGET_SHARE_WITH_S1`, when Sentinel-1 follows; `lambda-fetcher.ts`
+    `scenePassShares`); a pass that finishes early leaves its time to the next.
+  - **Off by default**, behind `DAM_OBSERVATIONS_S2` on the fetcher as well
+    as the dam observations themselves (Terraform `dam_s2_enabled`, only
+    with `dam_observations_enabled`), with its own heartbeat and recency
+    alarms (`Source = s2`, breaching on missing data). The worker loads
+    `s2` and `s1` files by the same path as WOfS's; the panel and the farm
+    card show them (#624 step 6, above).
+  - **Locally** `sentinel/fixtures.ts` answers the search and the bands
+    from `backend/fixtures/feeds/s2-sample.json`: WOfS's invented water
+    field seen at 10 m, overlapping tiles, a band of cloud with its shadow
+    every third day, overcast days, and days whose item lists no B11 (the
+    NDWI fallback). `pnpm dev:dams:run` runs it with
+    `DAM_OBSERVATIONS_S2=on`.
+
+- **Sentinel-1 radar, the secondary source** (issue #624 step 5,
+  `sentinel/s1.ts`, `sentinel/pass.ts` `S1_PASS`). The same scene pass
+  after Sentinel-2's, on DE Africa's radiometrically terrain-corrected
+  radar (`s1_rtc`), which sees through cloud. Its own parts:
+  - **The search**: `collections=s1_rtc`, items checked by `s1Item` (the
+    `vv` and `mask` assets, each only under `s1_rtc/` in
+    `deafrica-sentinel-1`; VH is never read).
+  - **The bands**: VV, float32 gamma0 in linear power with NaN for no
+    data, and the RTC `mask` (uint8: 0 no data, 1 valid, 2 shadow or
+    layover), both on one 0.0002° geographic grid (EPSG:4326) in 1° tiles
+    (checked against a live item's metadata 2026-10-29, then against the
+    VV and MASK headers the same day: 5000 × 5000, 256-pixel tiles,
+    DEFLATE with the float predictor (MASK the horizontal one),
+    `GDAL_NODATA` `nan` and `0`, no scale; a decoded window's VV was 0.006
+    to 0.41, linear power, not dB). The outline's
+    mask is made on that grid (`raster/mask.ts`, the ellipsoid's cell area,
+    about 420 m² at 32° S), and a mask band on any other grid is refused.
+    Two COG headers and two small windows a scene.
+  - **The classification** (VV < −18 dB, applied as VV < 10^−1.8 in linear
+    power; mask 2, or a valid pixel without backscatter, not clear; mask 0
+    not covered): [model.md §2.10l](./model.md#210l-modelled-vs-observed-dam-area-app-issue-604-r5-b).
+  - **History** to 2019 (`S1_BACKFILL_FROM`, Sentinel-2's start: older
+    radar can't be checked against it), from `sinceBy.s1`; one request a
+    second to each host (`S1_SCENE_INTERVAL_MS`), the explorer's pacer
+    shared with WOfS and Sentinel-2; its own pause.
+  - **The S1/S2 agreement** (`sentinel/agreement.ts`): after the pass, the
+    fetcher pairs each clear radar view (≥ 90 % of the outline) with the
+    clear Sentinel-2 view of the same dam on the same day, else a day
+    either side, and counts the pairs whose wet areas are within 0.1 of
+    the outline's own area. Per dam in `dams/s1-agreement.json`
+    (recomputed for the dams either Sentinel pass wrote, and up to 200
+    others a run that have no entry yet), summed into one log line,
+    `dams_s1_agreement` (dams, pairs, within, the pooled rate and whether
+    it passes issue #624's bar of 85 %; counts only).
+  - **Three stages**, `DAM_OBSERVATIONS_S1` on the fetcher and the worker
+    alike (`handover.ts damS1Mode`; Terraform `dam_s1_mode`, only with
+    `dam_observations_enabled`; issue #624 open question 3): `off` (the
+    default) no pass; `measure` the pass, its heartbeat and recency alarms
+    (`Source = s1`) and the agreement report, but **the worker loads no
+    `s1` row**, so radar is measured without being shown; `on` the same,
+    and the worker loads `s1` **only for the dams whose own agreement
+    passes** (`sentinel/agreement.ts s1Shows`: at least 10 pairs and
+    85 % within). A dam with fewer pairs can't be judged, so its radar
+    isn't loaded: the threshold is fixed, not tuned per dam, and an
+    unchecked dam (small, windy, shallow) is where it reads wrong.
+  - **Hysteresis.** A dam's radar starts being shown at 85 % and, once
+    shown, stays until its rate falls **below 80 %**
+    (`S1_AGREEMENT.keepBar`), so a dam hovering at the bar isn't withheld
+    and reloaded tick after tick. Five points: the rate is over every pair
+    the dam has, so from 20 pairs one new pair moves it by at most five
+    points, and falling out takes a run of disagreeing days, not one windy
+    pass; at 80 % four radar days in five still sit within 0.1 F of
+    Sentinel-2. Under 10 pairs is never shown. The previous state is the
+    dam's own `s1` load mark (targets `''` with a `last_good`: its last
+    successful decision loaded it), so it needs no file or table of its
+    own and survives a restart; a stage change to `measure` or `off`
+    withholds every dam, so turning `on` again starts each at 85 %.
+  - **Withheld radar** (the dams tick, `tick.ts` step 4): a dam's `s1` key
+    that may not be loaded is withheld instead of read: its rows are
+    removed (`app_dam_s1_withhold`, 283; none on a first look) and its load
+    mark's `targets` set to `S1_WITHHELD` (`''` when loaded). A dam moving
+    between the two (it starts or stops passing, or the stage changes)
+    makes the key due again, so a dam that stops passing loses its radar on
+    the next tick, without a new fetch, and one that passes again is
+    reloaded from its file. Withholding reads no file (its own cap of 200 a
+    tick). Besides the keys `dams/s1-status.json` lists, every `s1` mark
+    still shown is checked, so radar loaded before is withheld in
+    `measure`, `off` or for a dam that stops passing even when the status
+    file is gone or no longer lists the dam (a shown dam the status
+    doesn't list that may still be shown keeps its rows: there is no file
+    to reload). No report in `on` (before any measurement) means no dam passes;
+    a report that can't be read leaves radar alone that tick (logged
+    `dams_tick_failed`, step `s1_agreement`).
+  - **Locally** `sentinel/s1Fixtures.ts` answers the search and both bands
+    from `backend/fixtures/feeds/s1-sample.json`: WOfS's invented water
+    field on the geographic grid, two passes every six days, a strip of
+    shadow every 0.1° of longitude, and a windy day every tenth whose open
+    water reads dry. `pnpm dev:dams:run` runs it with
+    `DAM_OBSERVATIONS_S1=measure` or `on` and prints the agreement (and,
+    after its last tick, how many dams' radar was withheld).
+
+### Observed actual ET: the comparison
+
+Satellite actual ET per unit and dekad (`et_observation`, 277, issue #623)
+is read back only as a check on the run, never as an input: the unit
+drawer asks `GET /projects/:id/nodes/:nodeId/et-observed`
+(`backend/src/water-use/observed/routes.ts`), which reads the unit's rows
+and the newest run's columns for it (`gross_demand`, `effective_rain`,
+`crop_requirement`, `demand`, `supplied` and its demand objects') under the
+caller's RLS (`read.ts`) and hands both to a pure comparison (`compare.ts`,
+[model.md § 2.10o](./model.md#210o-observed-actual-et-against-the-modelled-irrigation-use-app-issue-623)).
+No engine change and no stored result: the comparison is worked out on each
+request from what is stored, as the dam check is
+(`dams/observed/compare.ts`).
+
+```
+worker (no user) ──► app_et_observation_load ──► et_observation (277)
+unit drawer ──► GET …/nodes/:nodeId/et-observed ──► withUser:
+   et_observation (RLS)  +  model_run / run_series (the newest run, the unit's columns)
+   ──► compareEt (pure) ──► dekads, half water years, summary, credit
+```
+
+### Observed actual ET
+
+FAO WaPOR v3's dekadal actual evapotranspiration (ETa) averaged over each
+unit's farm parcels (issue #623 step 4), in our own store, `et_observation`
+(277, [data-model.md § Observed actual ET](./data-model.md#observed-actual-et-276_et_observationsql)):
+the independent check on a unit's modelled irrigation use (the comparison
+is #623 step 5). The dam observations' pattern, end to end. Off until
+`et_observations_enabled` (Terraform) and `ET_OBSERVATIONS=on` (the worker);
+the plan refuses the first without the second (`infra/et_observations.tf`'s
+gate), and WaPOR stays off in production until FAO's reply on its licence is
+recorded on #618 (step 8a; [data-sources.md § wapor-aeti](./data-sources.md#wapor-aeti)).
+
+```
+worker tick (ET_OBSERVATIONS=on, no user; water-use/observed/tick.ts):
+   app_et_units('wapor')      every unit with farm parcels: its polygons, when they last changed (281)
+   app_et_cropland(box)       the default land cover's cropland cells under each unit (281; kept per unit an hour)
+   put   et/wanted.json       { units: [{ unitKey (node id), parcels (one MultiPolygon), changedAt, cropland? }] }
+
+EventBridge, hourly at :50 ──► fetcher, {"mode":"et-dekadal"} (outside the VPC; water-use/observed/pass.ts)
+   per dekad, newest first back to 2018: the file's header once, then per unit due
+      the slice of its tile tables and the tiles under the unit's parcels' box (raster/cog.ts), 1 request a second
+   writes et/wapor/<unitKey>.json, et/wapor-state.json, et/wapor-status.json
+   EtPassCompleted{Source=wapor} + EtObservationAgeDays{Source=wapor} (EMF)
+
+worker tick: the status, then each unit due by its load mark (≤ 200 a tick, oldest lastGood first)
+   ──► app_et_observation_load ──► et_observation (source wapor)
+   ──► app_et_load_mark_write  ──► et_observation_load_mark
+```
+
+- **Why the fetcher, in Node** (the compute decision, as for WOfS). A
+  WaPOR dekad is one ~2.1 GB BigTIFF COG on EPSG:4326 at 1/1024°, int16 ×
+  0.1 mm/day (GDAL's band scale), nodata −9999, LZW without a predictor,
+  512-pixel tiles, the global grid 180° W–180° E and 60° N–60° S
+  (368 640 × 122 880, ten overviews; FAO's 2025-09-D1 header, read
+  2026-10-29, `raster/cogLayouts.ts`): the
+  shared reader (`backend/src/raster/cog.ts`, `WAPOR_ACCEPT` in
+  `water-use/observed/wapor.ts`: int16, geographic, the scale read and
+  required to be 0.1 with no offset) reads the header, then only the slice
+  of the ~2.8 MB tile tables for a unit's tile rows, then its tiles. No
+  Python, no GDAL. The worker never reaches FAO's bucket; the fetcher has no
+  database.
+- **What the worker hands over.** Ids and geometry only: a unit's key is its
+  node id, its parcels one MultiPolygon, its land cover a list of
+  `[row, col, share]` cells (the default dataset's, real before synthetic,
+  as the proposals choose; at most 40 000 cells and a 1° box, else none).
+  No name, project or person crosses the bucket. The worker reads the
+  parcels and the cells through `SECURITY DEFINER` functions (281), since it
+  runs with no user and both tables' policies need one. The list is written
+  only once every unit's cells are known (at most 500 lookups a tick, kept an
+  hour per unit), so a cold worker never hands over a partial list; a unit
+  whose parcels pass 200 000 vertices or 1000 polygons is left out
+  (`tooLarge`, logged as a count).
+- **A unit's mean** (`wapor.ts`): the pixels whose centres fall inside the
+  parcels (`raster/mask.ts`, a pixel two parcels share counted once), each
+  weighted by the cropland share of the land-cover cell its centre is in
+  (`mask: 'cropland'`, the parcels ∩ cropland, assuming the cropland spread
+  evenly in each cell, as the planted-area proposals assume), or by 1 where
+  no land cover is loaded or it maps no cropland under the parcels
+  (`mask: 'parcel'`, the whole parcels, labelled). `area_m2` is the summed
+  weights × the pixel's ground area on the ellipsoid; `valid_share` the
+  weight of pixels that aren't nodata and read 0–50 mm/day, over all;
+  `eta_mm_day` the weighted mean over those (0, meaning nothing, when the
+  valid share is 0). A unit no pixel centre falls in, or too large for one
+  window, is noted unobservable (`no_pixels`, `too_large`) and not read
+  again until its parcels change.
+- **The pass** (`pass.ts`). The dekads go newest first, from the last one
+  that has ended back to 2018, so every unit is current before time goes on
+  history; a first backfill (~300 dekads, about four requests a unit a
+  dekad) runs over a few hours of hourly runs, each going on below where the
+  last stopped, since a dekad every unit holds costs nothing. A unit is read
+  for a dekad when its file has no row for it, or its row came from another
+  version of the file. A 404 for a dekad that ended in the last 30 days isn't
+  published yet (asked next run); an older one is noted missing.
+  - **Rewrites** (FAO rewrote 2025's files in 2026-05): each file's ETag is
+    kept in `et/wapor-state.json` and checked again 30 days after it was
+    read (`RECHECK_DAYS`), by a conditional GET of the header (Range with
+    If-None-Match; feeds/http.ts `rangeConditional`): a 304 costs one
+    request; a new ETag re-reads every unit's row of that dekad, and the
+    loader revises them (`revision` + 1). Every read of one file must carry
+    the header's ETag: a response with another (rewritten mid-read) abandons
+    that dekad for the run, nothing kept from it.
+  - **A unit whose parcels or cropland changed** (its hash in the state
+    differs) starts again from scratch. One whose list changed only in
+    `generatedAt` (its parcels changed back to the same shape) has its file
+    rewritten with the new `parcelsAt` and no request: the loader takes
+    `parcelsAt` as the fetch time and refuses a file made from parcels older
+    than their last change (277's trigger dropped the unit's rows and
+    cleared its marks at that change).
+  - **Politeness**: one request a second, one in flight, the live client's
+    host and path allowlist; a 403 or throttling stops the pass (the status
+    says stopped and why, the invocation fails), and the pass then asks
+    nothing for 24 hours or a longer `Retry-After`, publishing no heartbeat,
+    so the heartbeat alarm is the alert (the dams' `pausedUntil`). A timeout
+    ends that unit's read of that dekad (counted with a code, `failedCodes`
+    in the log); the next run tries again.
+  - **A refused file** (the reader's `FeedFormatError`: a header it can't
+    read, a band scale other than 0.1, a tile under a unit it can't decode)
+    is counted the same way and marked in `et/wapor-state.json` with the
+    file's ETag: the whole file (`refused`) or the units refused
+    (`refusedUnits`). It isn't asked for again until the 30-day re-check,
+    whose conditional GET keeps the mark on a 304; a new ETag clears it and
+    reads the units again. A unit whose parcels change leaves the mark. While
+    a mark stands the unit's status keeps `error: 'format'`, and the log
+    counts the reads held back (`refusedHeld`).
+  - **Locally** (`FEED_SOURCE=fixtures`) the files come from
+    `water-use/observed/fixtures.ts` and `backend/fixtures/feeds/wapor-sample.json`:
+    a grid laid out like FAO's (its tile tables as long as a continental
+    grid's) with data only in the tiles under the seeded examples' synthetic
+    catchments, half a year of dekads, a seasonal ETa field and cloud on
+    some dekads, written by `raster/cogWrite.ts` (`tileValues`, so the empty
+    tiles cost nothing), so the production reader runs offline.
+    `pnpm dev:et:run` runs it end to end ([run-locally.md § Observed actual ET](./run-locally.md#observed-actual-et)).
+- **SSEBop** (#623 step 6, planned): FEWS NET's SSEBop v6.1 is a ~93 MB
+  zip per dekad holding a deflated tiled GeoTIFF, so it can't be range-read
+  like WaPOR. When it is built (FAO declining, or a second opinion wanted)
+  it is a bounded whole-file pass in its own fetcher mode: one file a run,
+  streamed and inflated as it arrives, the header and tables through
+  `raster/cog.ts` and only the tiles under the wanted units kept, writing
+  `et/ssebop/<unitKey>.json` for the same tick and `et_observation`
+  (`source` `ssebop`). The decision, the file's layout and the cost:
+  [data-sources.md § ssebop-eta](./data-sources.md#ssebop-eta).
+- **The tick** loads a unit's file when its status `lastGood` is newer than
+  its load mark's and its `fetchedAt` newer than the mark's: a restarted
+  worker repeats nothing. A refused file (`refused`, its parcels changed
+  since) is marked and waits for the pass's rewrite.
 
 ## Server-side reports
 

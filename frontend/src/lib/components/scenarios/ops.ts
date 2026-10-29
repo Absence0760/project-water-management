@@ -6,6 +6,7 @@
 import { findSystem, systemLabel } from '#lib/model/systems.js';
 import {
 	blankEwrRuleTable,
+	futureCaseOp,
 	DEMAND_OBJECT_CATEGORY_LABEL,
 	DEMAND_SCALE_MAX,
 	newDemandObjectDefaults,
@@ -25,6 +26,9 @@ import {
 	type DemandObjectCategory,
 	type DemandObjectSizing,
 	type DemandPart,
+	type ClimateHorizon,
+	type ClimateSsp,
+	type FutureFactorTable,
 	type EwrRuleTable,
 	type ModelInput,
 	type NetworkNode,
@@ -199,6 +203,7 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 	'settings.set': 'Change a setting',
 	'series.scale': 'Scale rainfall or daily A-pan',
 	'demand.scale': 'Scale demand',
+	'climate.delta': 'Future climate (monthly change factors)',
 	'ewrRule.set': "Set an EWR site's rule table",
 	'ewrRule.remove': "Remove an EWR site's rule table",
 	'allocation.set': 'Set a registered volume',
@@ -349,6 +354,11 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const pct = (op.factor - 1) * 100;
 			const days = op.from || op.to ? `, ${op.from ? fmtDay(op.from) : 'start'} to ${op.to ? fmtDay(op.to) : 'end'}` : '';
 			return `${kindLabel(op.kind)}: × ${fmtNum(op.factor, 4, true)} (${pct > 0 ? '+' : ''}${fmtNum(pct, 2, true)} %)${days}`;
+		}
+		case 'climate.delta': {
+			// Engine 1.107.0 (issue #621): one case of the project's factor table, picked in Add a change (FutureClimateFields.svelte).
+			const span = (f: readonly number[]) => `× ${fmtNum(Math.min(...f), 3, true)} to × ${fmtNum(Math.max(...f), 3, true)} by month`;
+			return `Future climate, ${op.label}: rain ${span(op.rainFactorByMonth)}, evaporation ${span(op.evapFactorByMonth)} (${op.source})`;
 		}
 		case 'demand.scale': {
 			const user = op.category === 'user';
@@ -532,6 +542,10 @@ export interface OpDraft {
 	alFrom: string;
 	alTo: string;
 	alRate: string;
+	/** climate.delta (engine 1.107.0, issue #621 slice 5): the case picked from the project's factor table; '' = not yet. */
+	climateModel: string;
+	climateSsp: ClimateSsp | '';
+	climateHorizon: ClimateHorizon | '';
 }
 
 /** The form's value for a new registered volume (allocation.set with a fresh id). */
@@ -604,7 +618,10 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		alStorage: '',
 		alFrom: '',
 		alTo: '',
-		alRate: ''
+		alRate: '',
+		climateModel: '',
+		climateSsp: '',
+		climateHorizon: ''
 	};
 }
 
@@ -703,7 +720,7 @@ function parsed(spec: ValueSpec, input: string | number[] | PeDraft | DroughtRes
  * new node's place in the order. Whether the op applies to the base (its
  * target still exists, the network stays valid) is the server's check.
  */
-export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = () => crypto.randomUUID()): Built {
+export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = () => crypto.randomUUID(), ctx: BuildContext = {}): Built {
 	let op: ScenarioOp;
 	let spec: ValueSpec | null = null;
 	try {
@@ -962,6 +979,9 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 			case 'allocation.remove':
 				op = { op: 'allocation.remove', allocationId: need(d.allocationId, 'a registered volume') };
 				break;
+			case 'climate.delta':
+				op = climateOp(d, ctx.climate ?? null);
+				break;
 			default:
 				throw new DraftError('pick a kind of change');
 		}
@@ -970,6 +990,22 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 		throw e;
 	}
 	return checkOp(op, spec);
+}
+
+/** What buildOp reads besides the draft: the project's climate factor table, for climate.delta (null: not worked out yet). */
+export interface BuildContext {
+	climate?: FutureFactorTable | null;
+}
+
+/** climate.delta: the picked case of the factor table, as the engine labels it (futureCaseOp: model, SSP and window; the method and baseline as its source). */
+function climateOp(d: OpDraft, table: FutureFactorTable | null): ScenarioOp {
+	if (!table) throw new DraftError('work the change factors out first');
+	const model = need(d.climateModel, 'a climate model');
+	const ssp = need(d.climateSsp, 'a pathway');
+	const horizon = need(d.climateHorizon, 'a window');
+	const c = table.cases.find((x) => x.model === model && x.ssp === ssp && x.horizon === horizon);
+	if (!c) throw new DraftError(`the change factors have no case for ${model}, ${ssp}, ${horizon}: work them out again`);
+	return futureCaseOp(c, table);
 }
 
 /**

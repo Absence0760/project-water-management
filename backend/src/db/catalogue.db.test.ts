@@ -23,8 +23,10 @@ const NO_RLS = new Set(['schema_migrations']);
 // The allocation holder keys' salt and each run's frozen keys (219_allocation_holder_keys, #523 N/P): only its definer functions and trigger.
 // dam_observation_load_mark (261): what the dams tick last loaded per pass file, read and written only through
 // app_dam_load_marks and app_dam_load_mark_write from the worker's session with no user.
+// et_observation_load_mark (277): what the ET tick last loaded per source and unit, and when its parcels changed, read and
+// written only through app_et_load_marks, app_et_load_mark_write and the et_parcels_changed trigger.
 // assistant_reservation (264): a turn's reserved budget, read and written only by the assistant's definer functions.
-const OWNER_ONLY = new Set(['assistant_reservation', 'erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder', 'dam_observation_load_mark']);
+const OWNER_ONLY = new Set(['assistant_reservation', 'erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder', 'dam_observation_load_mark', 'et_observation_load_mark']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
@@ -163,7 +165,8 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', '
  * security event never changes (150_mfa.sql).
  */
 // Page 1's board against full authorised use is replaced, never changed: the newest wins, the older go (165).
-const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact']);
+// § 8's future yield is written once by its job, and the newest few kept per pair (280); so is a climate factor table, per project (282).
+const NO_UPDATE = new Set(['yield_result', 'future_yield', 'climate_factors', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes
@@ -257,6 +260,9 @@ const READ_ONLY = new Set([
 	'waterbody_reference',
 	'dam_waterbody_match',
 	'dam_observation',
+	// Observed actual ET per unit and dekad (277_et_observation, issue #623): written only by app_et_observation_load
+	// (the worker, with no user) and dropped by et_parcels_changed when a unit's parcels change.
+	'et_observation',
 	// The regional GR4J prior's reference data (268_soil_grid, 269_gr4j_donors), loaded by the operator as the schema
 	// owner (`pnpm import:soils`, `pnpm import:gr4j-donors`, or a production reference load).
 	'soil_dataset',
@@ -277,7 +283,10 @@ const READ_ONLY = new Set([
  * farmer-aware SELECT policy (one that calls app_farm_nodes) or a place here,
  * so a new per-farm table can't ship without a decision about farmers.
  */
-const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'crop_area_land_cover']);
+// et_observation_load_mark (277) is the ET tick's own bookkeeping per unit: owner only, read by no app role (OWNER_ONLY).
+// future_yield (280) is § 8 of an evidence report on whole-catchment runs, viewers and an application's applicant.
+// climate_factors (282) is the catchment's climate change factors for the Scenarios tab: viewers only.
+const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'future_yield', 'climate_factors', 'crop_area_land_cover', 'et_observation_load_mark']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
@@ -404,7 +413,11 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'user_email_otp.user_id': 'cascade',
 	'mfa_email_code.user_id': 'cascade',
 	'mfa_email_send.user_id': 'cascade',
-	'yield_result.created_by': 'set null'
+	'yield_result.created_by': 'set null',
+	// § 8's future yield keeps its result when its author's account goes (280), as yield_result.
+	'future_yield.created_by': 'set null',
+	// A climate factor table stays when its author's account goes (282), as future_yield.
+	'climate_factors.created_by': 'set null'
 };
 
 /**
@@ -422,7 +435,9 @@ const JOB_REFERENCES: Record<string, { updateTrigger: false } | { updateTrigger:
 	'report.job_id': { updateTrigger: false },
 	'scenario_sweep.job_id': { updateTrigger: true, purgeTest: 'src/sweeps/sweeps.db.test.ts' },
 	'seasonal_outlook.job_id': { updateTrigger: true, purgeTest: 'src/outlooks/outlooks.db.test.ts' },
-	'yield_result.job_id': { updateTrigger: false }
+	'yield_result.job_id': { updateTrigger: false },
+	'future_yield.job_id': { updateTrigger: false },
+	'climate_factors.job_id': { updateTrigger: false }
 };
 
 /**

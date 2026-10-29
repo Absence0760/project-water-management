@@ -5,8 +5,10 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
+import type { AbsolutePath } from '@zarrita/storage';
 import {
 	agera5Coverage,
+	cmip6FileKey,
 	era5lCoverage,
 	powerHeldDays,
 	era5lWrittenDays,
@@ -305,5 +307,71 @@ describe('manifests per product (issue #604 R4-B; ingest/manifest.py holds the s
 		expect(i).toMatchObject({ grid: tenth, finalThrough: null, prelimThrough: '2026-02-08' });
 		expect(imergVersions(i!).get('2026-02-08')).toBe('V08');
 		expect(imergVersions(i!).get('2026-01-25')).toBe('V07');
+	});
+});
+
+describe('cmip6 manifests (issue #621; ingest/manifest.py holds the same rules)', () => {
+	const url = (model = 'SYN-A', scenario = 'ssp245', v = '_v1.1') => `s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/${model}/${scenario}/r1i1p1f1/pr/pr_day_${model}_${scenario}_r1i1p1f1_gn_2036${v}.nc`;
+	const cmip6 = (): Manifest => ({
+		product: 'cmip6/SYN-A/ssp245',
+		revision: 1,
+		region: { w: 10, s: -35.5, e: 41, n: -8 },
+		grid: { origin: { lat: -35.375, lon: 10.125 }, step: 0.25 },
+		years: { first: 2036, last: 2036 },
+		finalThrough: null,
+		prelimThrough: null,
+		files: [{ url: url(), etag: null, lastModified: null, size: 1, valuesSha256: 'a'.repeat(64), revision: 1, fetchedAt: '2026-10-29T00:00:00Z', version: 'v1.1', license: null }],
+		changes: []
+	});
+	const problem = (m: unknown) => {
+		try {
+			parseManifest(m);
+			return null;
+		} catch (e) {
+			return (e as Error).message;
+		}
+	};
+	const withFile = (patch: Record<string, unknown>, drop?: string) => {
+		const m = cmip6();
+		const f: Record<string, unknown> = { ...m.files[0]!, ...patch };
+		if (drop) delete f[drop];
+		return { ...m, files: [f] };
+	};
+
+	it('names each file by the object it was read from, with its release and its license attribute', () => {
+		expect(problem(cmip6())).toBeNull();
+		expect(problem(withFile({ license: 'CC0 1.0 Universal' }))).toBeNull();
+		expect(cmip6FileKey(url())).toEqual({ model: 'SYN-A', scenario: 'ssp245', variant: 'r1i1p1f1', variable: 'pr', gridLabel: 'gn', year: 2036, version: 'v1.1' });
+		// A name with no suffix is the first release.
+		expect(cmip6FileKey(url('SYN-A', 'ssp245', ''))?.version).toBe('v1.0');
+		expect(problem(withFile({ url: url('SYN-A', 'ssp245', ''), version: 'v1.0' }))).toBeNull();
+	});
+
+	it('refuses what ingest/manifest.py refuses', () => {
+		expect(problem(withFile({}, 'license'))).toMatch(/without its license/);
+		expect(problem(withFile({}, 'version'))).toMatch(/version is not its name's \(v1\.1\)/);
+		expect(problem(withFile({ version: 'v1.0' }))).toMatch(/version is not its name's/);
+		expect(problem(withFile({ version: 'V07' }))).toMatch(/version is not its name's/);
+		expect(problem(withFile({ url: url('SYN-B') }))).toMatch(/another model or scenario/);
+		expect(problem(withFile({ url: 'https://example.org/pr_2036.nc' }))).toMatch(/not a NEX-GDDP-CMIP6 file/);
+		expect(problem({ ...cmip6(), finalThrough: '2036-12-31' })).toMatch(/holds no final days|projection/);
+		expect(problem({ ...cmip6(), grid: { origin: { lat: -35.45, lon: 10.05 }, step: 0.1 } })).toMatch(/grid\.step must be 0.25° for cmip6/);
+		expect(problem({ ...cmip6(), product: 'cmip6/SYN-A/ssp126' })).toMatch(/product/);
+		// Only cmip6's files carry a license.
+		expect(problem({ ...sample(), files: [{ ...sample().files[0]!, license: 'CC0' }] })).toMatch(/carry no license/);
+	});
+
+	it('the committed fixture copy’s cmip6 manifests are valid', async () => {
+		const fixture = openStore(pathToFileURL(MIRROR_FIXTURE_DIR).href);
+		const index = JSON.parse(new TextDecoder().decode(await fixture.get('/cmip6/index.json' as AbsolutePath))) as { products: Record<string, Record<string, number[]>> };
+		expect(Object.keys(index.products)).toEqual(['SYN-A', 'SYN-B', 'SYN-C']);
+		for (const [model, scenarios] of Object.entries(index.products)) {
+			for (const [scenario, years] of Object.entries(scenarios)) {
+				const product = `cmip6/${model}/${scenario}`;
+				const m = parseManifest(JSON.parse(new TextDecoder().decode(await fixture.get(`/${product}/manifest.json` as AbsolutePath))), product);
+				expect(m.files).toHaveLength(3 * years.length);
+				expect(m.years).toEqual({ first: years[0], last: years.at(-1) });
+			}
+		}
 	});
 });

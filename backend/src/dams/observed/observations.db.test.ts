@@ -148,11 +148,66 @@ describe('the worker’s functions', () => {
 		});
 	});
 
+	it('loads Sentinel-2 and Sentinel-1 rows (278) as WOfS’s: into the dam named, unless it changed after the fetch, each source its own row', async () => {
+		const before = new Date(Date.now() - 60_000);
+		await withoutUser(async (db) => {
+			for (const source of ['s2', 's1']) {
+				expect(await load(db, source, damA, [['2021-03-01', 10, 95, `${source}-item-1`]], before)).toEqual({ written: 0, dams: 0, applied: false });
+				expect(await load(db, source, damA, [['2021-03-01', 10, 95, `${source}-item-1`]])).toEqual({ written: 1, dams: 1, applied: true });
+				// Unchanged: not rewritten.
+				expect(await load(db, source, damA, [['2021-03-01', 10, 95, `${source}-item-1`]])).toEqual({ written: 0, dams: 1, applied: true });
+				expect(await load(db, source, crypto.randomUUID(), [['2021-03-01', 10, 95, 'k']])).toEqual({ written: 0, dams: 0, applied: false });
+			}
+			expect(await load(db, 'wofs', damA, [['2021-03-01', 20, 100, 'item-1']])).toEqual({ written: 1, dams: 1, applied: true });
+		});
+		const rows = await asOwner('SELECT source, wet_area_m2 FROM dam_observation WHERE feature_id = $1 ORDER BY source', [damA]);
+		expect(rows).toEqual([
+			{ source: 's1', wet_area_m2: 10 },
+			{ source: 's2', wet_area_m2: 10 },
+			{ source: 'wofs', wet_area_m2: 20 }
+		]);
+	});
+
+	it('records Sentinel load marks against the dam feature, as WOfS’s, and refuses an unknown source', async () => {
+		const mark = (db: Db, source: string, key: string) =>
+			db.query<{ applied: boolean }>(`SELECT applied FROM app_dam_load_mark_write($1, $2, now(), now(), '', false)`, [source, key]).then((r) => r.rows[0]!.applied);
+		try {
+			await withoutUser(async (db) => {
+				expect(await mark(db, 's2', damA)).toBe(true);
+				expect(await mark(db, 's1', damA)).toBe(true);
+				// A feature that is gone records nothing.
+				expect(await mark(db, 's2', crypto.randomUUID())).toBe(false);
+			});
+			expect(await asOwner('SELECT source, feature_id FROM dam_observation_load_mark WHERE source IN ($1, $2) ORDER BY source', ['s1', 's2'])).toEqual([
+				{ source: 's1', feature_id: damA },
+				{ source: 's2', feature_id: damA }
+			]);
+			for (const [source, key] of [
+				['s3', damA],
+				['sentinel2', damA],
+				['S2', damA],
+				['s2', 'zzzzza0001']
+			] as const) {
+				expect(await code(withoutUser((db) => mark(db, source, key))), `${source} ${key}`).toBe('23514');
+			}
+			// The table's own CHECKs: an unknown source, and a feature-keyed source without its feature.
+			expect(await code(asOwner(`INSERT INTO dam_observation_load_mark (source, key, feature_id) VALUES ('s3', $1::text, $2::uuid)`, [damA, damA]))).toBe('23514');
+			expect(await code(asOwner(`INSERT INTO dam_observation_load_mark (source, key) VALUES ('s2', $1::text)`, [damA]))).toBe('23514');
+			expect(await code(asOwner(`INSERT INTO dam_observation (project_id, feature_id, source, obs_date, wet_area_m2, pct_observed, upstream_key) VALUES ($1, $2, 'sentinel2', '2021-03-01', 1, 100, 'k')`, [projectId, damA]))).toBe('23514');
+		} finally {
+			await asOwner('DELETE FROM dam_observation_load_mark WHERE source IN ($1, $2)', ['s1', 's2']);
+		}
+	});
+
 	it('refuses rows out of bounds', async () => {
 		const bad = async (source: string, key: string, rows: [string, number, number, string][]) => code(withoutUser((db) => load(db, source, key, rows)));
 		expect(await bad('other', 'zzzzza0001', [])).toBe('23514');
 		expect(await bad('waterbodies', 'NOT-A-UID', [])).toBe('23514');
 		expect(await bad('wofs', 'not-a-uuid', [])).toBe('23514');
+		expect(await bad('s2', 'not-a-uuid', [])).toBe('23514');
+		expect(await bad('s1', 'zzzzza0001', [])).toBe('23514');
+		expect(await bad('s3', damA, [])).toBe('23514');
+		expect(await bad('sentinel1', damA, [])).toBe('23514');
 		expect(await bad('wofs', damA, [['1983-12-31', 1, 100, 'k']])).toBe('23514');
 		expect(await bad('wofs', damA, [['2999-01-01', 1, 100, 'k']])).toBe('23514');
 		expect(

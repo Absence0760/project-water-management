@@ -75,7 +75,11 @@ Every job that fetches from an upstream:
 | [chirps-gefs](#chirps-gefs) | CHIRPS-GEFS v3 16-day forecast | live; the copy built (R3-A), read with `CHIRPS_SOURCE=mirror` | `data.chc.ucsb.edu` | `chirps_gefs` | `backend/src/ingest/gefs.ts` (the copy), `backend/src/feeds/fromMirrorGefs.ts` (feeds read it); `backend/src/feeds/sources/chirps.ts` until the cutover |
 | [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until the stations' records are loaded (`load-reference.yml` kind `dws`) | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
 | [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies: v0.0.2 per-waterbody wet-area series and v0.0.3 polygons (built R5-A) | built; off in production until `dam_observations_enabled`; the public series frozen upstream since 2024-02 | `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
-| [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `cog.ts`, `sum.ts`, `utm.ts`) |
+| [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `sum.ts`), `backend/src/raster/` (`cog.ts`, `mask.ts`, `utm.ts`) |
+| [deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1) | DE Africa Sentinel-2 L2A Collection 1 (`s2_l2a_c1`), our own water classification inside traced dam outlines (issue #624) | built, off by default (#624 step 4: the pass, behind `DAM_OBSERVATIONS_S2` / `dam_s2_enabled`; not shown on a screen yet) | `deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s2.ts`, `pass.ts`); `wofs/stac.ts` (`assetUrl`, `s2_l2a_c1`) |
+| [deafrica-sentinel-1](#deafrica-sentinel-1) | DE Africa Sentinel-1 RTC (`s1_rtc`), radar water as a secondary dam observation (issue #624) | built, off by default (#624 step 5: the pass and the S1/S2 agreement report, behind `DAM_OBSERVATIONS_S1` / `dam_s1_mode`: `measure` runs it with no radar shown, `on` also loads radar for the dams whose own agreement passes) | `deafrica-sentinel-1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s1.ts`, `pass.ts`, `agreement.ts`); `wofs/stac.ts` (`assetUrl`, `s1_rtc`) |
+| [wapor-aeti](#wapor-aeti) | FAO WaPOR v3 `L2-AETI-D`, dekadal actual ET and interception at 100 m (a unit's observed water use, issue #623) | built, off (`et_observations_enabled`); blocked in production until FAO's reply is recorded on #618 (step 8a) | `storage.googleapis.com` (bucket `fao-gismgr-wapor-3-data` only) | – | `backend/src/water-use/observed/` (`wapor.ts`, `pass.ts`; the comparison is #623 step 5) |
+| [ssebop-eta](#ssebop-eta) | USGS FEWS NET SSEBop v6.1 global dekadal actual ET at 1 km (WaPOR's fallback, issue #623) | planned (#623 step 6: a bounded whole-file pass, decided; built only if FAO declines or as a second opinion) | `edcintl.cr.usgs.gov` (the `…/global/dekadal/etav61/` tree only) | – | `backend/src/water-use/observed/upstream.ts` |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
 | [dpet](#dpet) | dPET daily potential evapotranspiration | reference load | `data.bris.ac.uk` | – | `bin/evaporation-fetch.sh`, `pnpm import:evaporation` |
 | [worldcover](#worldcover) | ESA WorldCover 10 m 2021 v200 (cropland) | reference load | `esa-worldcover.org` (the operator's download) | – | `pnpm import:land-cover` |
@@ -102,6 +106,7 @@ Every job that fetches from an upstream:
 | [penpan-apan](#penpan-apan) | A modelled Class-A pan grid: PenPan from NASA POWER's daily weather, monthly means at 0.1° (issue #646 item 7) | blocked (built against synthetic weather; production waits for the validation against DWS Class-A pans and the hydrologist's sign-off) | `power.larc.nasa.gov` (the operator's offline run) | – | `ingest/penpan.py`, `ingest/apan_grid.py`, `pnpm import:evaporation` (kind `apan`) |
 | [climate-indices](#climate-indices) | NOAA CPC's ONI (ENSO) and AAO (the SAM's proxy), monthly | built (#620); the fetcher's indices pass off in production until `climate_indices_enabled` | `www.cpc.ncep.noaa.gov` | – | `backend/src/feeds/sources/cpc.ts`, `backend/src/ingest/indices.ts`, `infra/climate_indices.tf` |
 | [c3s-seasonal](#c3s-seasonal) | C3S multi-system seasonal forecasts and hindcasts, daily precipitation (1°) | built (#620 step 5); the copy's job off in production until `c3s_enabled` (the CDS key is ERA5-Land's; both licences accepted first); nothing reads it yet (#620 step 6–7) | `cds.climate.copernicus.eu` | – | `ingest/c3s_seasonal.py`, `ingest/c3srequest.py`, `infra/c3s.tf` |
+| [nex-gddp-cmip6](#nex-gddp-cmip6) | NASA NEX-GDDP-CMIP6 daily downscaled projections (`pr`, `tasmax`, `tasmin`; 0.25°), for future yield (issue #621) | registered (slice 1); a one-off static load, monthly aggregates for region D1 only, still to be built (slice 2) and off in the app until the copy holds `cmip6` | `s3://nex-gddp-cmip6` (us-west-2, anonymous) | – | `ingest/cmip6_delta.py` (slice 2), the engine's `scenario/climate.ts` (the factors) |
 
 ## Live feeds
 
@@ -389,16 +394,302 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   until `dam_observations_enabled`).
 - **Rows kept:** per dam and date, the wet area (wet pixels × the pixel's
   ground area) and the share of the outline seen clearly; two scenes on one
-  date give the one that saw more. No row for a date the dam's outline
+  date give the one that saw more, its gaps off its footprint filled from
+  the other where their grids line up (architecture.md § Dam observations).
+  No row for a date the dam's outline
   holds no pixel centre or the scene's footprint missed it.
 - **Fallback:** none current: Waterbodies' public series are frozen
   ([deafrica-waterbodies-series](#deafrica-waterbodies-series)), and
-  Sentinel-1/2 water masks are a Round 6 candidate. The values already
+  Sentinel-2 and Sentinel-1 ([deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1),
+  [deafrica-sentinel-1](#deafrica-sentinel-1)): Sentinel-2's pass is built
+  (#624 step 4) and Sentinel-1's (#624 step 5), both off by default. The values already
   loaded stay in `dam_observation`.
 - **Offline:** `FEED_SOURCE=fixtures` answers STAC and the scenes from
   invented ones (`backend/fixtures/feeds/wofs-sample.json`,
   `wofs/fixtures.ts`), so dev, CI and e2e never reach either host.
 - **Owner:** the operator; code `backend/src/dams/observed/wofs/`.
+
+### deafrica-sentinel-2-c1
+
+- **Source:** Copernicus Sentinel-2 Level-2A surface reflectance, Collection 1
+  reprocessing, as Digital Earth Africa publishes it (collection
+  `s2_l2a_c1`): one item per scene and MGRS tile, cloud-optimised GeoTIFFs in
+  UTM, bands B03 and B08 at 10 m, B11 and the SCL scene classification at
+  20 m, updated daily (Sentinel-2A, 2B and 2C). DE Africa publishes no
+  Sentinel water mask (its only water product is `wofs_ls`), so we classify
+  the pixels ourselves: MNDWI from B03 and B11, NDWI from B08 where B11 is
+  missing, SCL masking cloud, shadow and no data (issue #624 § Design).
+  The bands are uint16 COGs (DEFLATE, the horizontal predictor, no data 0;
+  1024-pixel tiles at 10 m, 512 at 20 m) in the south UTM codes, each
+  carrying GDAL's scale 1e-4 and offset −0.1 (the item's −1000 DN offset);
+  SCL is uint8 with none. Headers read 2026-10-29
+  (`backend/src/raster/cogLayouts.ts`).
+- **Hosts:** `deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com` (the
+  bucket, anonymous range reads, same region as the app; objects under
+  `sentinel-2-c1-l2a/<utm zone>/<latitude band>/<grid square>/<year>/<month>/<scene id>/`,
+  DE Africa's spec page, read 2026-10-29) and
+  `explorer.digitalearth.africa` (the STAC search, as for WOfS). Both are in
+  `FEED_HOSTS`; a `s2_l2a_c1` item's asset may only name a
+  `sentinel-2-c1-l2a/…tif` key in that bucket (`stac.ts` `assetUrl`), and
+  no other collection's item may name one.
+- **Licence:** Copernicus Sentinel data is "free, full and open" under the
+  EU's legal notice on the use of Copernicus Sentinel data and service
+  information (Regulation (EU) No 1159/2013; read 2026-10-27). DE Africa's
+  spec pages state no separate licence and link to the Copernicus terms.
+  Commercial use and derived products are allowed with the credit below, so
+  D-B is met.
+- **Attribution:** "Contains modified Copernicus Sentinel data [year],
+  processed by Digital Earth Africa" ([year] the years of the values shown)
+  wherever Sentinel values show: the *Seen from space* panel, the farm dam
+  card, evidence packs' § 7 (from report format `evidence-24`, frozen with
+  the years of the dates it counts and checked by `reproduce:pack`,
+  [evidence-pack.md § Observed wet days](./evidence-pack.md#observed-wet-days))
+  and `/data-sources`.
+- **Contact:** Digital Earth Africa's help desk and community forum
+  (digitalearthafrica.org; docs.digitalearthafrica.org); the Copernicus
+  Data Space Ecosystem for the data itself.
+- **Access pattern:** a pass in the fetcher's `dams-weekly` mode after
+  WOfS (`sentinel/pass.ts`, WOfS's `runScenePass`), with its per-dam state
+  (`dams/s2-state.json`), deadline and pacing: one STAC search per year
+  window over the outline's snapped box, then three COG headers and three
+  windowed reads a scene (B03, B11, SCL; B08 too only where B11 is
+  missing), never a whole scene; the history backfills newest first to
+  2019 (Collection 1 is consistent from there). Off until
+  `DAM_OBSERVATIONS_S2=on` on the fetcher (Terraform `dam_s2_enabled`, with
+  `dam_observations_enabled`). Asset keys and offsets checked against a
+  live item 2026-10-29: `green` B03, `nir` B08, `swir16` B11, `scl` SCL,
+  each band `raster:bands` nodata 0 and offset −1000 (SCL none), EPSG
+  327xx.
+- **Limits we keep to:** at most one request a second per host (the
+  explorer, shared with the WOfS pass, and the bucket), one in flight,
+  feeds/http.ts's User-Agent, host allowlist, 20 s timeout and 4 MB cap; a
+  403 or 429/503 stops the pass and pauses it a day, never retried.
+- **Limits of the data:** 10 m (B11 and SCL 20 m), about a 5-day revisit
+  from 2019 (the backfill's start); optical, so cloud still hides a dam on a
+  winter day, which is what Sentinel-1 is for.
+- **Freshness:** its own heartbeat (`DamPassCompleted{Source=s2}`, 18 h)
+  and recency (`DamObservationAgeDays{Source=s2}`, `dam_s2_recency_alarm_days`,
+  21 by default) alarms, both breaching on missing data
+  (`infra/dam_observations.tf`).
+- **Rows kept:** `dam_observation` source `s2` (migration
+  `278_dam_observation_sentinel.sql`): per dam and date, the wet pixels ×
+  the 10 m pixel's ground area and the share of the outline seen clearly
+  (model.md §2.10l).
+- **Fallback:** WOfS (30 m) for the same dates; the S1 radar view through
+  cloud.
+- **Offline:** synthetic scenes only (`sentinel/fixtures.ts`,
+  `backend/fixtures/feeds/s2-sample.json`); dev, CI and e2e never reach the
+  bucket.
+- **Owner:** the operator; code `backend/src/dams/observed/` (#624).
+
+### deafrica-sentinel-1
+
+- **Source:** Copernicus Sentinel-1 radiometrically terrain-corrected
+  backscatter as Digital Earth Africa publishes it (collection `s1_rtc`):
+  VV and VH gamma0, float32, on a 0.0002° geographic grid (EPSG:4326, not
+  UTM), with a `mask` band flagging layover and shadow; from 2018, every 6–12
+  days (Sentinel-1D items were present from 2026-09-05, so the 6-day
+  revisit is back). Water is VV below −18 dB inside the outline, a fixed
+  threshold (issue #624 § Design). Each 1° tile is a 5000 × 5000 COG in
+  256-pixel tiles: VV float32 linear power (DEFLATE, the float predictor,
+  no data `nan`), `mask` uint8 (no data 0); headers read 2026-10-29
+  (`backend/src/raster/cogLayouts.ts`).
+- **Hosts:** `deafrica-sentinel-1.s3.af-south-1.amazonaws.com` (the bucket,
+  anonymous, same region as the app; objects under
+  `s1_rtc/<tile id>/<year>/<month>/<day>/<datatake id>/`, DE Africa's spec
+  page, read 2026-10-29) and `explorer.digitalearth.africa` (the STAC
+  search). Both are in `FEED_HOSTS`; an `s1_rtc` item's asset may only name
+  an `s1_rtc/…tif` key in that bucket (`stac.ts` `assetUrl`).
+- **Licence:** as [deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1):
+  Copernicus "free, full and open" (read 2026-10-27).
+- **Attribution:** "Contains modified Copernicus Sentinel data [year],
+  processed by Digital Earth Africa", wherever its values show.
+- **Contact:** as Sentinel-2's.
+- **Access pattern:** the fetcher's pass after Sentinel-2's (#624 step 5,
+  `sentinel/pass.ts` `S1_PASS`): the STAC search with `collections=s1_rtc`,
+  then two windowed reads a scene (VV and `mask`; VH never), with the same
+  state, deadline and pacing (one request a second to each host). The
+  item's assets were checked against one live item's metadata on
+  2026-10-29 (keys `vv` and `mask`; VV float32 linear gamma0, no-data NaN;
+  mask uint8, 0 no data, 1 valid, 2 shadow or layover; 1° tiles of 5000 ×
+  5000 cells), no pixel fetched.
+- **Limits we keep to:** as Sentinel-2's.
+- **Limits of the data:** secondary only. Radar sees through cloud, but
+  wind roughens open water so it looks dry, and dry sand can look wet, so an
+  S1 view is shown as radar and never alone sets "seen full" or "seen
+  empty"; hilly dams with layover get none. It is measured first
+  (`dam_s1_mode = "measure"`: the pass and its same-day agreement with
+  Sentinel-2 clear views, logged as `dams_s1_agreement` by
+  `sentinel/agreement.ts`, with no radar shown), and shown (`"on"`) only
+  once the pooled agreement passes the bar in #624's acceptance criteria
+  (≥ 85 % of days within 0.1 F), and then only for the dams whose own
+  agreement passes (at least 10 pairs).
+- **Freshness:** its own heartbeat and recency alarms (`Source = s1`,
+  `dam_s1_recency_alarm_days`, default 30).
+- **Rows kept:** `dam_observation` source `s1` (migration
+  `278_dam_observation_sentinel.sql`).
+- **Fallback:** Sentinel-2 and WOfS on clear days.
+- **Offline:** `FEED_SOURCE=fixtures` answers the search and both bands
+  from invented scenes (`backend/fixtures/feeds/s1-sample.json`,
+  `sentinel/s1Fixtures.ts`), so dev, CI and e2e never reach either host.
+- **Owner:** the operator; code `backend/src/dams/observed/` (#624).
+
+## Observed actual evapotranspiration
+
+Satellite actual ET (ETa) over each unit's farm parcels, an independent
+check on its modelled irrigation use (issue #623). Built for WaPOR: the store
+(`et_observation`, migration 277), the fetcher's `et-dekadal` mode, the
+handover and the worker's tick (step 4, [architecture.md § Observed actual
+ET](./architecture.md#observed-actual-et)); the comparison is step 5. It follows the dam
+observations' pattern: out of the VPC, through the mirror bucket, loaded by
+the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
+`et_observations_enabled`), and dev, CI and e2e read a synthetic file only.
+
+### wapor-aeti
+
+- **Source:** FAO WaPOR v3, mapset `L2-AETI-D` (actual evapotranspiration
+  and interception, level 2, dekadal): 100 m (1/1024°, EPSG:4326), Africa
+  and the Near East, from January 2018. int16 × 0.1 mm/day, nodata −9999.
+  One BigTIFF COG per dekad, about 2.1 GB (512-pixel tiles, LZW without a
+  predictor, GDAL's band scale 0.1, the grid 180° W–180° E, 60° N–60° S;
+  header read 2026-10-29, `backend/src/raster/cogLayouts.ts`).
+- **Host:** `storage.googleapis.com`, FAO's own public bucket
+  `fao-gismgr-wapor-3-data`, anonymous HTTPS:
+  `DATA/WAPOR-3/MAPSET/L2-AETI-D/WAPOR-3.L2-AETI-D.<YYYY-MM-Dn>.tif`
+  (`water-use/observed/upstream.ts` `WAPOR_BASE`). The host serves every
+  public bucket on Google Cloud Storage, so `FEED_HOSTS` holds it with a
+  path limit (`FEED_HOST_PATHS`, `feeds/http.ts`): a live fetch, or a
+  redirect, may ask only paths under `/fao-gismgr-wapor-3-data/`. The
+  `s3://wapor-v3/` bucket (af-south-1) refused anonymous list and get
+  (AccessDenied, 2026-10-27), so it isn't used.
+- **Licence** (read 2026-10-27): FAO's [statistical database terms of
+  use](https://www.fao.org/contact-us/terms/db-terms-of-use) list WaPOR in
+  **Annex 1**, under **CC BY 4.0** "unless specified otherwise in their
+  metadata"; the mapset's metadata (FAO's GISMGR API,
+  `catalog/workspaces/WAPOR-3/mapsets/L2-AETI-D`) names no other licence
+  (`additionalInfo` empty, re-checked 2026-10-29). That exception is per
+  mapset and is used: `L1-RET-M`'s own citation says "License: CC BY-NC-SA
+  4.0", which is why reference ET is rejected ([maps.md §
+  Sources](./maps.md#sources)). So re-check `L2-AETI-D`'s metadata before
+  enabling, and ask FAO to confirm it covers this mapset. The same terms bar using the data "for or in conjunction with
+  the promotion of a commercial enterprise", which we read as a bar on
+  advertising with it, not on commercial use (D-B's test), and ask FAO to
+  confirm. Two other labels exist: Digital Earth Africa labels its copy
+  CC BY-SA 4.0, and older FAO material says CC BY-NC-SA 3.0 IGO. Either
+  would fail D-B. So the email to FAO (#618 step 8a) confirms a likely
+  CC BY 4.0 rather than settling an open question: the code may be built
+  now, and **production waits on FAO's reply** being recorded on #618
+  before `et_observations_enabled = true` with WaPOR.
+- **Attribution:** "FAO WaPOR v3, CC BY 4.0"
+  (`water-use/observed/upstream.ts` `WAPOR_ATTRIBUTION`) wherever an ETa
+  value shows: the unit drawer's panel, reports, CSVs, and `/data-sources`.
+- **Contact:** FAO's WaPOR team, through the WaPOR portal's contact (the
+  address #618 step 8a writes to).
+- **Access pattern** (`water-use/observed/pass.ts`): never a whole file. Per unit with
+  parcels and per dekad, the BigTIFF header, the slice of the TileOffsets
+  and TileByteCounts arrays for the tile rows under the parcels' bounding
+  box (not the whole ~2.8 MB array), then those tiles: the header once a
+  dekad, then about 3 range requests a unit. Each file's ETag is checked
+  again 30 days after it was read, by a conditional GET of the header (a 304
+  costs one request); a changed ETag on a dekad already read (FAO rewrites
+  files: `updated` 2026-05 on 2025 files) means a re-read and a new revision
+  of that dekad's rows. Only units with parcels are read. The band scale
+  must read 0.1 with no offset, or the file is refused; a refused file (or
+  a unit's refused read of it) is marked with its ETag and not asked for
+  again until the 30-day re-check finds a new one.
+- **Limits we keep to:** one request a second, one connection;
+  feeds/http.ts's User-Agent, host and path allowlist, 20 s timeout and
+  4 MB cap per response; a 403 stops the pass, never retried, and a
+  429/503 pauses the host for its `Retry-After`.
+- **Freshness:** a dekad appears about 3 days after it ends (2026-10-D2 was
+  written 2026-10-23, checked 2026-10-29). The pass's heartbeat
+  (`EtPassCompleted`, 18 h) and recency (`EtObservationAgeDays`, 30 days)
+  alarms treat missing data as breaching (`infra/et_observations.tf`).
+- **Rows kept:** per unit and dekad, the area-weighted mean ETa (mm/day)
+  over the unit's parcels (∩ WorldCover cropland where loaded, else the
+  whole parcel, labelled), and the share of the area with a valid pixel
+  ([data-model.md § Observed actual ET](./data-model.md#observed-actual-et)).
+- **Fallback:** [ssebop-eta](#ssebop-eta). The values already loaded stay.
+- **Offline:** `FEED_SOURCE=fixtures` serves a synthetic BigTIFF over the
+  seeded examples' parcels (`water-use/observed/fixtures.ts`,
+  `fixtures/feeds/wapor-sample.json`), so dev, CI and e2e never reach the
+  host.
+- **Owner:** the operator; code `backend/src/water-use/observed/`.
+
+### ssebop-eta
+
+- **Source:** USGS FEWS NET's global SSEBop actual ET, version 6.1
+  (VIIRS-based), dekadal, about 1 km, from 2012-02 (the listing checked
+  2026-10-29 runs `d2012021.zip` to `d2026102.zip`, the last written
+  2026-10-22). Dataset: doi:10.5066/P9QJWQ6K.
+- **The file** (read 2026-10-29 from `d2026102.zip` with two range requests,
+  its zip directory and the first 256 KB, nothing kept): a 93 MB zip of
+  two entries, both deflated: `d2026102_viirsSSEBopETv61_actual_mm.tif`
+  (95.9 MB, deflate saves 3 %) and its `.tif.xml`. The GeoTIFF is classic
+  TIFF, tiled 512 × 512, LZW with the horizontal predictor, int16, one
+  band, EPSG:4326 (WGS 84) at 0.009652° (37 200 × 14 500 pixels from
+  180° W, 80° N), nodata −9999, no band scale; the values are the dekad's
+  total in mm (the name's `actual_mm`; GDAL's statistics 0–74), not
+  mm/day. The tiles are stored row by row, so South Africa's (tile rows
+  20–23, columns 39–43, about 2 MB) lie 88.6–97.6 % of the way through the
+  TIFF. The server sends an ETag and Last-Modified and accepts ranges.
+- **Host:** `edcintl.cr.usgs.gov`, under
+  `/downloads/sciweb1/shared/fews/web/global/dekadal/etav61/downloads/dekadal/d<YYYYMMD>.zip`
+  (`water-use/observed/upstream.ts` `SSEBOP_BASE`). The host carries much
+  else of FEWS NET's, so `FEED_HOST_PATHS` keeps a live fetch to the
+  `…/global/dekadal/etav61/` tree. The older `etav6/` tree stops at
+  `d2024042` and isn't used.
+- **Licence:** **CC0** (USGS; read 2026-10-27, the dataset's ScienceBase
+  record). No operator step.
+- **Attribution:** not required; we credit it anyway, "USGS FEWS NET SSEBop
+  v6, CC0" (`SSEBOP_ATTRIBUTION`), wherever its values show.
+- **Contact:** USGS EROS (FEWS NET's early-warning team,
+  earlywarning.usgs.gov).
+- **Access pattern (decided 2026-10-29, #623 step 6; built only when
+  FAO declines or a second opinion is wanted):** a **bounded whole-file
+  pass**, not a reference load. The TIFF is deflated inside the zip, so no
+  tile can be reached without inflating everything before it: reaching
+  South Africa's tiles costs ~91 MB of the 93, and a range read saves
+  nothing. A reference load would download the same whole files, so it
+  spares the host nothing either, and it would add an operator step every
+  dekad (or let the check go stale) and a second loading path beside the
+  pass, handover, tick and `et_observation` that WaPOR already uses. The
+  pass, as built:
+  - one file a run, newest dekad first, back to 2018 (WaPOR's start, the
+    span a second opinion is wanted for; 2012 only if FAO declines);
+  - one streamed GET, inflated as it arrives (`node:zlib` raw inflate after
+    the zip's local header): the TIFF's header and tile tables from its
+    first ~270 KB go through `raster/cog.ts`, then only the bytes of the
+    tiles under the wanted units' windows are kept (a few MB) and the rest
+    dropped; the connection closes after the last tile wanted. Nothing is
+    stored but the per-unit rows;
+  - an ETag per file in its own state file, re-checked 30 days on by a
+    conditional GET (a 304 costs nothing), and a refused file marked as
+    WaPOR's are;
+  - the values divided by the dekad's days to mm/day before the same
+    `unitMean`, with the 0–50 mm/day sanity range;
+  - its own fetcher mode beside `et-dekadal`, with its own heartbeat.
+- **Cost of that pass:** backfill to 2018 is ~315 files, ~29 GB, at one
+  an hour about 13 days (2.2 GB a day); then ~3 files a month, ~3.4 GB a
+  year. Each file is a few seconds to a minute of the fetcher (512 MB,
+  outside the VPC, so no NAT charge; data into AWS is free): cents a
+  month. It fits the fetcher's 900 s timeout with room, but not the live
+  client's 4 MB cap or 20 s timeout, which stay as they are for every
+  other read: the pass needs a streamed read of its own, allowed only
+  under `FEED_HOST_PATHS`' SSEBop prefix, capped at 120 MB and 300 s.
+- **What building it takes** (why it isn't built yet): that streamed read
+  in `feeds/http.ts` (security review: the allowlist, cap and timeout), a
+  zip local-header reader and the streamed inflate, a range reader over the
+  tiles kept, the pass and its state, the tick loading `ssebop` (it loads
+  WaPOR only), Terraform (the mode's schedule, flag and alarms), a
+  synthetic zip fixture and the panel already showing a second source (the
+  Source switch). About the size of WaPOR's step 4.
+- **Limits we keep to:** one request a second, one connection; feeds/http.ts's
+  allowlist and User-Agent; a 403 stops the pass.
+- **Fallback:** none at 1 km and dekadal; the modelled use stands unchecked.
+- **Owner:** the operator; code `backend/src/water-use/observed/` (#623
+  step 6).
+
 ## The copy's recent days
 
 ### imerg
@@ -907,6 +1198,110 @@ the copy; nothing in the app reads it yet.
   few members, any lead count, three hindcast years), served by
   `ingest/fakecds.py` `FakeC3sCds` under `FEED_SOURCE=fixtures`.
 
+## Future climate
+
+An evidence pack's Future yield section and the Scenarios tab's future
+climate (issue #621) rerun the record under monthly change factors from
+downscaled climate projections ([model.md §2.17](./model.md#217-future-climate-monthly-change-factors-engine-11070-issue-621)).
+The factors come from our own copy: monthly aggregates of one archive,
+loaded once.
+
+### nex-gddp-cmip6
+
+- **Source:** NASA Earth Exchange Global Daily Downscaled Projections,
+  CMIP6 (NEX-GDDP-CMIP6), NASA Ames Research Center's NEX: daily `pr`,
+  `tasmax` and `tasmin` from CMIP6 models, bias-corrected and spatially
+  disaggregated (BCSD) against the GMFD observations onto a 0.25° grid, for
+  the `historical` run (to 2014) and the four Tier-1 SSPs (to 2100). We
+  take `historical`, `ssp245` and `ssp585` only. The archive is static: no
+  further updates are planned, so this is a **one-off load**, nothing
+  scheduled (issue #621 § Design).
+- **Host:** `s3://nex-gddp-cmip6` (AWS Open Data, **us-west-2**, anonymous
+  read; the bucket's NetCDF files, one per model, scenario, variable and
+  year, with a version suffix on revised files). The load runs once, in
+  us-west-2 (CloudShell or a temporary Lambda, the operator's go-ahead
+  first; issue #621 open question 1), and writes only the region's monthly
+  aggregates to our copy in af-south-1.
+- **Licence:** **CC0** ("since September 2022 every output is under a
+  blanket CC0", the AWS Registry of Open Data entry for NEX-GDDP-CMIP6,
+  read 2026-10-27). The archive was first released under **CC BY-SA 4.0**,
+  and the Scientific Data paper and some mirrors still say so; share-alike
+  on our output would fail D-B, CC0 passes it. Because the files' own
+  metadata may predate the change, the ingest records each file's global
+  `license` attribute in the manifest, so a file still marked CC BY-SA is
+  visible (and is the operator's to decide on, not loaded silently).
+- **Attribution:** none is required under CC0; we credit anyway, wherever
+  the factors show (the scenario's source line, an evidence pack's § 8,
+  the Data sources and credits page): "Climate projections: NASA Earth
+  Exchange Global Daily Downscaled Projections (NEX-GDDP-CMIP6), NASA Ames
+  Research Center, from the CMIP6 models of the modelling groups listed,
+  downscaled by NASA NEX. We thank the climate modelling groups of the
+  World Climate Research Programme's CMIP6 for producing and making
+  available their model output." with the models used and their groups.
+  The engine's credit text lands with slice 4.
+- **The caveat (owed before slice 4):** NASA's technical note asks for
+  expert input before the projections are used for engineering (the #604
+  research read it in `NEX-GDDP-CMIP6-Tech_Note_4.pdf`). **That URL returns
+  404 today** (2026-10-27), so the caveat is **not yet quoted**. Before §
+  8 *Future yield* ships, the current tech note is found and its caveat
+  quoted here verbatim, with its URL and the date read; § 8 opens with
+  those words.
+- **The model list (frozen; provisional, pending the hydrologist):** ten
+  models, one per modelling centre so the range isn't one centre's model
+  counted twice, each needing `pr`, `tasmax` and `tasmin` for
+  `historical`, `ssp245` and `ssp585` (the load checks the bucket's listing
+  for every file before it starts, and stops on a gap rather than drop a
+  model):
+
+  | Model | Group | Variant |
+  | --- | --- | --- |
+  | ACCESS-CM2 | CSIRO-ARCCSS (Australia) | r1i1p1f1 |
+  | CNRM-CM6-1 | CNRM-CERFACS (France) | r1i1p1f2 |
+  | EC-Earth3 | EC-Earth consortium (Europe) | r1i1p1f1 |
+  | GFDL-ESM4 | NOAA GFDL (USA) | r1i1p1f1 |
+  | INM-CM5-0 | INM (Russia) | r1i1p1f1 |
+  | IPSL-CM6A-LR | IPSL (France) | r1i1p1f1 |
+  | MIROC6 | MIROC (Japan) | r1i1p1f1 |
+  | MPI-ESM1-2-HR | MPI-M and DWD (Germany) | r1i1p1f1 |
+  | MRI-ESM2-0 | MRI (Japan) | r1i1p1f1 |
+  | NorESM2-MM | NCC (Norway) | r1i1p1f1 |
+
+  Why these (issue #621 open question 2): the issue asks for about ten
+  models with all three variables for both SSPs and good skill for
+  southern Africa's winter rainfall (the frontal rain of the Western
+  Cape, which the client catchments get). Independence first: one model
+  per centre. The skill screen itself (how well each model's historical
+  run gives the winter rainfall's seasonal cycle and its interannual
+  variability over the region) is **the hydrologist's to confirm** against
+  the regional CMIP6 evaluations before the list is used for a pack; a
+  model may be swapped for another of the same centre or another centre
+  then, and this table changes with it (the factors' manifest names the
+  list in force). Each SSP, horizon and section shows the range across
+  the models, never one number (§ 8 needs at least 5).
+- **Contact:** NASA NEX (the registry entry's contact); the AWS Open Data
+  team for the bucket.
+- **Access pattern:** a one-off read, in us-west-2, of the three variables'
+  daily files for the ten models (1985–2014 historical; 2036–2065 and
+  2066–2095 for each SSP), each cut to region D1 by its chunking or ranges,
+  never whole global files downloaded to af-south-1. Kept: **monthly
+  aggregates only** (the month's `pr` total in mm, the means of `tasmax`
+  and `tasmin`; the factor code takes them in °C) per model, SSP and year, as Zarr
+  `cmip6/<model>/<ssp>`, with each source file's name, version suffix,
+  `license` attribute and our hash of the values kept in the manifest
+  (slice 2).
+- **Limits we keep to:** one pass; at most 2 requests in flight; no
+  daily values kept; the ranges of each file read once.
+- **Fallback:** none needed upstream (static); our copy is the record.
+  Without it the Future yield section and the picker stay off
+  (`FUTURE_YIELD=off`, the default).
+- **Owner:** the operator (the load's go-ahead); code `ingest/cmip6_delta.py`
+  (slice 2) and `packages/engine/src/scenario/climate.ts` (the factors,
+  from the aggregates: ratios of the area-weighted means over the 0.25°
+  cells, Hargreaves–Samani PET from the temperatures, clamped to 0.5–1.5).
+- **Fixtures:** synthetic monthly aggregates for invented models `SYN-A`
+  to `SYN-C` (`ingest/fixtures/cmip6/`, `backend/fixtures/mirror/cmip6/`,
+  slice 2); dev, CI and e2e never read the bucket.
+
 ## Planned sources
 
 From #604's Rounds 4 and 5. Each gets its full section here when its round
@@ -978,10 +1373,8 @@ its comments 4, 6, 7 and 8).
 
 | Source | Licence | Access | Use |
 | --- | --- | --- | --- |
-| NEX-GDDP-CMIP6 | CC0 (NASA's expert-use caveat) | S3 us-west-2 | future yield in evidence packs |
 | GloFAS v4 reanalysis | CEMS-FLOODS, free with attribution | EWDS API | modelled daily flow for ungauged catchments |
-| WaPOR v3 actual ET | **contested** (CC BY-SA, CC BY-NC-SA, FAO terms); ask FAO first | `s3://wapor-v3/` af-south-1 | observed vs modelled water use; SSEBop at 1 km if FAO says no |
-| Sentinel-1/2 water masks, SWOT lake heights | Copernicus free and open; SWOT terms unconfirmed | DE Africa STAC; PO.DAAC | small dams through cloud; area–volume curves (trial) |
+| SWOT lake heights (Sentinel-1/2 and WaPOR moved to the register for #624 and #623) | SWOT terms unconfirmed | PO.DAAC | area–volume curves (trial) |
 
 ## Rejected
 

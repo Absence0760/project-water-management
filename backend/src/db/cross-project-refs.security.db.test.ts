@@ -56,6 +56,8 @@ interface World {
 	sweepJobId: string;
 	outlookJobId: string;
 	yieldJobId: string;
+	futureJobId: string;
+	climateJobId: string;
 	/** A finished `auto_calibration` job, and a complete, unapplied run of the calibration rules with a kept fit (108). */
 	autoCalJobId: string;
 	calibrationId: string;
@@ -171,6 +173,8 @@ async function world(name: string): Promise<World> {
 			sweepJobId: await job('sweep'),
 			outlookJobId: await job('outlook'),
 			yieldJobId: await job('yield'),
+			futureJobId: await job('future_yield'),
+			climateJobId: await job('climate_factors'),
 			autoCalJobId: await job('auto_calibration'),
 			calibrationId: await one(
 				`INSERT INTO auto_calibration (project_id, "trigger", rules, rules_revision, input_sha256, plan, engine_version, created_by, status, report, chosen, completed_at)
@@ -366,6 +370,14 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 	},
 	'dam_observation_load_mark.feature_id': {
 		reason: 'no project_id of its own: the worker’s record of the WOfS pass file it last loaded for that dam feature (key = feature_id), owner-only, water_app has no grant; written only by app_dam_load_mark_write from the worker’s session with no user (261)',
+		premise: 'no project_id'
+	},
+	'et_observation.node_id': {
+		reason: 'water_app writes none of it (SELECT only); app_et_observation_load, SECURITY DEFINER, copies the project from the unit itself (277), and et_observation_same_project checks it',
+		premise: 'not writable'
+	},
+	'et_observation_load_mark.node_id': {
+		reason: 'no project_id of its own: the worker’s record of what it last loaded for that unit, owner-only, water_app has no grant; written only by app_et_load_mark_write and et_parcels_changed (277)',
 		premise: 'no project_id'
 	}
 };
@@ -758,6 +770,33 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.decidedApplicationId,
 		asUser: () => authority.id,
 		insert: (h, ref) => [`INSERT INTO decision_event (project_id, scenario_id, position, kind, forum, event_date) VALUES ($1, $2, 1, 'lodged', 'court', '2026-10-01')`, [h.projectId, ref]]
+	},
+	// § 8's future yield (280): future_yield_guard checks both runs and the job within the row's project.
+	'future_yield.baseline_run_id': {
+		ref: (w) => w.runId,
+		insert: (h, ref) => [
+			`INSERT INTO future_yield (project_id, baseline_run_id, application_run_id, node_id, method, result, engine_version) VALUES ($1, $2, $3, $4, 'delta-1', '{}', 'x')`,
+			[h.projectId, ref, h.scenarioRunId, h.farmId]
+		]
+	},
+	'future_yield.application_run_id': {
+		ref: (w) => w.scenarioRunId,
+		insert: (h, ref) => [
+			`INSERT INTO future_yield (project_id, baseline_run_id, application_run_id, node_id, method, result, engine_version) VALUES ($1, $2, $3, $4, 'delta-1', '{}', 'x')`,
+			[h.projectId, h.runId, ref, h.farmId]
+		]
+	},
+	'future_yield.job_id': {
+		ref: (w) => w.futureJobId,
+		insert: (h, ref) => [
+			`INSERT INTO future_yield (project_id, baseline_run_id, application_run_id, node_id, job_id, method, result, engine_version) VALUES ($1, $2, $3, $4, $5, 'delta-1', '{}', 'x')`,
+			[h.projectId, h.runId, h.scenarioRunId, h.farmId, ref]
+		]
+	},
+	// The Scenarios tab's climate factors (282): climate_factors_guard checks the job within the row's project.
+	'climate_factors.job_id': {
+		ref: (w) => w.climateJobId,
+		insert: (h, ref) => [`INSERT INTO climate_factors (project_id, job_id, method, boundary_sha256, factors) VALUES ($1, $2, 'delta-1', repeat('0', 64), '{}')`, [h.projectId, ref]]
 	},
 	'yield_result.scenario_id': {
 		ref: (w) => w.scenarioId,
@@ -1266,7 +1305,11 @@ const FIELDS: Record<string, string[] | string> = {
 	'yield/routes.ts:jobId': 'a read filter within the project',
 	'yield/store.ts:nodeId': ['POST /projects/:id/yield nodeId'],
 	'yield/store.ts:runId': ['POST /projects/:id/yield runId'],
-	'yield/store.ts:scenarioId': 'checked by yield_result_guard (the SQL case)'
+	'yield/store.ts:scenarioId': 'checked by yield_result_guard (the SQL case)',
+	// § 8 (280): the run is the route's :runId, looked up WHERE project_id = … AND id = … (futurePair), and the dam must be a node of
+	// that run's own input (futureDamError), so another project's id is a 404 or a 400; the job's payload is re-checked the same way.
+	'future/store.ts:applicationRunId': 'a job payload, re-checked by futurePair within the job’s project, as the route checks :runId',
+	'future/store.ts:nodeId': 'a node of the run’s own stored input (futureDamError), never a row looked up by id'
 };
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));

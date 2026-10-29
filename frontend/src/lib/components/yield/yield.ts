@@ -46,6 +46,30 @@ export function jobStatus(job: JobMeta | null): { text: string; busy: boolean; f
 }
 
 /**
+ * jobStatus for a job its page can cancel (§ 8's future yield and the change
+ * factors, 284_cancel_future_jobs): `cancelAskedFor` is the id of the job
+ * this page asked to cancel, so a running one that hasn't reached its next
+ * step yet says so, and a cancelled job is said plainly rather than as a
+ * failure. `canCancel`: the Cancel button shows.
+ */
+export function cancellableJobStatus(
+	job: JobMeta | null,
+	cancelAskedFor: string | null
+): { text: string; busy: boolean; failed: boolean; cancelled: boolean; canCancel: boolean } | null {
+	const s = jobStatus(job);
+	if (!s || !job) return null;
+	const cancelled = job.status === 'dead' && job.error === 'cancelled';
+	const asked = cancelAskedFor === job.id && job.status === 'running';
+	return {
+		text: asked ? 'Cancelling: it stops at its next step.' : s.text,
+		busy: s.busy,
+		failed: s.failed && !cancelled,
+		cancelled,
+		canCancel: s.busy && !asked
+	};
+}
+
+/**
  * The pending job the panel should follow when it opens (one queued in
  * another tab, before a reload, or by a colleague): a running one first,
  * then a waiting one, then one waiting to retry. The API lists newest first.

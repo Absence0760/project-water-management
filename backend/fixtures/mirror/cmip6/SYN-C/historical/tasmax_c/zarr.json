@@ -1,0 +1,68 @@
+{
+  "zarr_format": 3,
+  "node_type": "array",
+  "shape": [
+    65,
+    12,
+    110,
+    124
+  ],
+  "data_type": "float32",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        12,
+        22,
+        31
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "codecs": [
+    {
+      "name": "bytes",
+      "configuration": {
+        "endian": "little"
+      }
+    },
+    {
+      "name": "gzip",
+      "configuration": {
+        "level": 6
+      }
+    }
+  ],
+  "fill_value": "NaN",
+  "dimension_names": [
+    "year",
+    "month",
+    "lat",
+    "lon"
+  ],
+  "attributes": {
+    "units": "degC",
+    "aggregation": "monthly mean",
+    "long_name": "monthly mean of daily maximum near-surface air temperature",
+    "firstYear": 1950,
+    "region": {
+      "w": 10,
+      "s": -35.5,
+      "e": 41,
+      "n": -8
+    },
+    "grid": {
+      "origin": {
+        "lat": -35.375,
+        "lon": 10.125
+      },
+      "step": 0.25
+    }
+  }
+}

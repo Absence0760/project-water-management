@@ -12,6 +12,7 @@
 		declaredRuleText,
 		describeFitRecord,
 		ENSEMBLE_MEASURES_SINCE,
+		SSP_LABEL,
 		type Band,
 		type EvidenceReport,
 		type EwrAssuranceSite,
@@ -45,10 +46,12 @@
 	import { bandText as useBandText, countsText, m3, measuredNote, partNote, ratioText, registeredText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
 	import LocalityMap from './LocalityMap.svelte';
+	import DamObservations from './DamObservations.svelte';
 	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
 	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
 	import { CHANGE_LABEL, sizingText } from './demandObjects';
+	import { factorText, futureRows } from './future';
 	import { sourceLabel, sourceLine } from '#lib/components/runs/demandSources.js';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
 
@@ -815,46 +818,102 @@
 					</div>
 				{/if}
 			{:else if s.id === 'damObservations' && report.damObservations}
-				<!-- evidence-21: the applicant's own dams as DE Africa's WOfS saw them (satellite evidence beside the model, not an input to it). -->
-				{@const dov = report.damObservations}
-				<p class="small muted">
-					For each of the applicant’s dams, the dates from {fmtDate(dov.startDate)} to {fmtDate(dov.endDate)} (the baseline’s period) on which the satellite water layer saw
-					it, read by one rule (provisional). <strong>Wet:</strong> at least {dov.wetMinPixels} pixels of its traced outline were water (about {fmtNum(dov.wetMinPixels * dov.pixelAreaM2)} m²),
-					however much of it was seen: proof of water needs no full view. <strong>Dry:</strong> no water at all, with at least {dov.dryMinClearPct} % of the outline seen
-					free of cloud and shadow, so the last pool at the wall can’t hide. <strong>Inconclusive:</strong> anything else. Landsat sees a dam every 8 to 16 days, so these are
-					counts of dates seen, not of days.
-				</p>
-				{#if dov.dams.length}
+				<!-- evidence-21: the applicant's own dams as the satellites saw them (Sentinel-2 beside WOfS from evidence-24; satellite evidence beside the model, not an input to it). -->
+				<DamObservations dov={report.damObservations} />
+			{:else if s.id === 'futureYield' && report.futureYield}
+				<!-- evidence-23 (issue #621): the applicant's dam, their supply and the EWR, the record re-run under each climate model's monthly change factors. -->
+				{@const fy = report.futureYield}
+				<div class="future-caveat" data-testid="evidence-future-caveat">
+					{#each fy.caveat.ours as p, i (i)}<p class="small">{p}</p>{/each}
+					{#if fy.caveat.nasa.text}
+						<blockquote class="small">
+							<p>{fy.caveat.nasa.text}</p>
+							<footer>{fy.caveat.nasa.source}, {fy.caveat.nasa.url}, read {fmtDate(fy.caveat.nasa.readOn ?? '')}.</footer>
+						</blockquote>
+					{:else}
+						<p class="small placeholder" data-testid="evidence-future-caveat-placeholder"><strong>{fy.caveat.nasa.placeholder}</strong></p>
+					{/if}
+				</div>
+				{#if fy.status === 'notRun'}
+					<p class="na" data-testid="evidence-future-na">{fy.note}</p>
+				{:else}
+					<p class="small muted">
+						The yields are of {fy.nodeName}’s dam on the application, searched with a constant draft: the firm yield (no failure day) and the yield at {fmtNum(fy.assurance * 100)} %
+						assurance (water years with a failure day at most {fmtNum((1 - fy.assurance) * 100)} %). The applicant’s assurance is the share of water years their units’ supply met
+						the project’s annual threshold. The EWR column is the application’s change in days below the pragmatic EWR at the outlet, each case’s baseline and application
+						under the same factors. Run {fmtDate(fy.createdAt.slice(0, 10))}{fy.createdBy ? ` by ${fy.createdBy}` : ''}, engine {fy.engineVersion}, method {fy.method}.
+					</p>
+					{#if fy.fewModels}
+						<p class="banner-amber" data-testid="evidence-future-few">
+							Only {fy.models.length} climate model{fy.models.length === 1 ? '' : 's'} ({fy.models.join(', ')}): fewer than the {fy.minModels} a range across models needs, so each range below
+							is too narrow to read as the spread of the projections.
+						</p>
+					{/if}
+					{#if !fy.complete}
+						<p class="banner-amber" data-testid="evidence-future-partial">
+							The change factors rest on part of their 30-year windows: the data copy holds only some of their years (each case’s count is in the factor table below). That isn’t the
+							method, so this section can’t be issued.
+						</p>
+					{/if}
 					<div class="table-wrap">
-						<table class="data compact" data-testid="evidence-dam-observations">
+						<table class="data compact" data-testid="evidence-future-table">
+							<caption class="visually-hidden">Future yield: the historical record, then the median and range across climate models for each pathway and window</caption>
 							<thead>
 								<tr>
-									<th scope="col">Dam</th>
-									<th scope="col" class="num">Dates observed</th>
-									<th scope="col" class="num">Wet</th>
-									<th scope="col" class="num">Dry</th>
-									<th scope="col" class="num">Inconclusive</th>
-									<th scope="col">Dates span</th>
+									<th scope="col">Climate</th>
+									<th scope="col" class="num">Models</th>
+									<th scope="col" class="num">Firm yield</th>
+									<th scope="col" class="num">Yield at {fmtNum(fy.assurance * 100)} %</th>
+									<th scope="col" class="num">Applicant’s assurance</th>
+									<th scope="col" class="num">Change in days below the EWR</th>
 								</tr>
 							</thead>
 							<tbody>
-								{#each dov.dams as d (d.featureId)}
+								{#each futureRows(fy) as row (row.label)}
 									<tr>
-										<th scope="row">{d.name || 'Unnamed dam'}</th>
-										<td class="num">{fmtNum(d.observedDates)}</td>
-										<td class="num">{fmtNum(d.wetDates)}</td>
-										<td class="num">{fmtNum(d.dryDates)}</td>
-										<td class="num">{fmtNum(d.inconclusiveDates)}</td>
-										<td>{d.dates.length ? `${fmtDate(d.dates[0]![0])} to ${fmtDate(d.dates.at(-1)![0])}` : '–'}</td>
+										<th scope="row">{row.label}</th>
+										<td class="num">{row.models || '–'}</td>
+										{#each row.cells as c, j (j)}<td class="num">{c}</td>{/each}
 									</tr>
 								{/each}
 							</tbody>
 						</table>
 					</div>
-				{:else}
-					<p class="na" data-testid="evidence-dam-observations-na">No dam on the applicant’s units is traced on the map, so none was observed.</p>
+					<p class="small muted">Each value is the median across the models, with the smallest and largest in brackets; the range is not a confidence interval.</p>
+					<h3>Change factors</h3>
+					<div class="table-wrap">
+						<table class="data compact" data-testid="evidence-future-factors">
+							<caption class="visually-hidden">Each case’s monthly change factors, January to December</caption>
+							<thead>
+								<tr>
+									<th scope="col">Model</th>
+									<th scope="col">Pathway</th>
+									<th scope="col">Window</th>
+									<th scope="col">Rain, January to December</th>
+									<th scope="col">Evaporation, January to December</th>
+									<th scope="col" class="num">Years (baseline, future)</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each fy.factors.cases as c (`${c.model} ${c.ssp} ${c.horizon}`)}
+									<tr>
+										<th scope="row">{c.model}</th>
+										<td>{SSP_LABEL[c.ssp]}</td>
+										<td>{fy.factors.windows[c.horizon].from}–{fy.factors.windows[c.horizon].to}</td>
+										<td class="factors">{factorText(c.rainFactorByMonth)}</td>
+										<td class="factors">{factorText(c.evapFactorByMonth)}</td>
+										<td class="num">{c.years.baseline}, {c.years.future}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<p class="small muted" data-testid="evidence-future-sources">
+						Baseline window {fy.factors.windows.baseline.from}–{fy.factors.windows.baseline.to}. Source: {fy.factors.citation} {fy.factors.licence} The {fy.factors.sources.length} products
+						the factors come from, each with the SHA-256 of its files, are in the pack’s manifest.
+					</p>
+					<p class="small muted">The applicant’s specialist confirms this section in their sign-off (Appendix B.2).</p>
 				{/if}
-				<p class="small muted" data-testid="evidence-dam-observations-credit">Source: {dov.citation}, summed inside the dams’ traced outlines by this app.</p>
 			{:else if s.id === 'appendixInputs'}
 				<h3>A.1 Settings that drive the results</h3>
 				<dl class="kv">
@@ -1089,6 +1148,22 @@
 	}
 	.nowrap {
 		white-space: nowrap;
+	}
+	/* § 8 (evidence-23): the caveat opens the section, and a placeholder for NASA's words is unmissable. */
+	.future-caveat {
+		border-left: 3px solid var(--border-strong);
+		padding-left: 0.75rem;
+		max-width: 90ch;
+	}
+	.future-caveat .placeholder {
+		border: 1px dashed var(--danger);
+		background: var(--danger-soft);
+		padding: 0.35rem 0.6rem;
+	}
+	.factors {
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		font-size: var(--font-sm);
 	}
 	.na {
 		font-style: italic;

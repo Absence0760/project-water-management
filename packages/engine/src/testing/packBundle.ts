@@ -25,12 +25,56 @@ import { applyScenario } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import { localityMapSvg } from '../geo/localityMap';
 import type { EvidenceReport } from '../evidence/types';
-import { damObservationsSection, type EvidenceDamObservations } from '../evidence/damObservations';
+import { damObservationsSection, damObservationsSectionV1, type EvidenceDamObservations, type EvidenceDamObservationsAny, type EvidenceDamObservationsV1 } from '../evidence/damObservations';
 import { canonicalJson, seriesDigest } from '../manifest';
 import type { ModelInput, ModelOutput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModelChecked } from '../run';
 import { ENGINE_VERSION } from '../version';
+import { runFutureYield, type FutureFactorCase, type FutureFactorTable, type FutureYieldResult } from '../evidence/future';
+import { futureYieldSection } from '../evidence/report';
+
+/** Farm one's dam in § 8's fixture: 200 000 m³ catching half its own runoff. */
+export const FUTURE_FIXTURE_DAM: Partial<NetworkNode> = { damCapacityM3: 200_000, damInitialPct: 0.5, pctRunoffToDam: 0.5, damAreaFullM2: 40_000 };
+
+/**
+ * An invented factor table (evidence-23): `models` models (SYN-A …), each
+ * drier and warmer under SSP5-8.5 and later, whole windows unless `partial`.
+ */
+export function fixtureFactorTable(models = 3, opts: { partial?: boolean } = {}): FutureFactorTable {
+	const cases: FutureFactorCase[] = [];
+	for (let i = 0; i < models; i++) {
+		const model = `SYN-${String.fromCharCode(65 + i)}`;
+		for (const ssp of ['ssp245', 'ssp585'] as const) {
+			for (const horizon of ['mid', 'late'] as const) {
+				const k = (ssp === 'ssp585' ? 2 : 1) * (horizon === 'late' ? 2 : 1);
+				cases.push({
+					model,
+					ssp,
+					horizon,
+					rainFactorByMonth: Array.from({ length: 12 }, (_, m) => Math.round((1 - 0.03 * k - 0.01 * i + (m % 3) * 0.01) * 1e4) / 1e4),
+					evapFactorByMonth: Array.from({ length: 12 }, (_, m) => Math.round((1 + 0.02 * k + 0.005 * i + (m % 2) * 0.005) * 1e4) / 1e4),
+					years: { baseline: opts.partial ? 2 : 30, future: opts.partial ? 1 : 30 },
+					warnings: []
+				});
+			}
+		}
+	}
+	return {
+		method: 'delta-1',
+		windows: { baseline: { from: 1985, to: 2014 }, mid: { from: 2036, to: 2065 }, late: { from: 2066, to: 2095 } },
+		cases,
+		sources: [{ product: 'cmip6/SYN-A/historical', revision: 1, files: 6, filesSha256: 'a'.repeat(64), versions: ['v1.0'], licenses: ['CC0 1.0 Universal (synthetic fixture: invented values)'] }],
+		citation: 'Synthetic fixture (invented models)',
+		licence: 'CC0 1.0'
+	};
+}
+
+/** § 8 as the report freezes it, for the fixture's two inputs. */
+function fixtureFutureSection(base: ModelInput, app: ModelInput, tamper: (r: FutureYieldResult) => FutureYieldResult) {
+	const result = tamper(runFutureYield({ baseline: base, application: app, nodeId: 'F1', ownedNodeIds: ['F1'], factors: fixtureFactorTable() }));
+	return futureYieldSection({ result, createdAt: '2026-10-29T00:00:00.000Z', createdBy: 'Analyst' });
+}
 
 /** SHA-256 hex, synchronous (node:crypto in a test). */
 export type SyncHash = (data: string | Uint8Array) => string;
@@ -140,9 +184,18 @@ function fixtureLocality(hash: SyncHash, applicant: boolean, svgSha256?: string)
  */
 export function packBundleFixture(
 	hash: SyncHash,
-	opts: { application?: boolean; locality?: boolean | { svgSha256: string }; seriesChoice?: boolean; observations?: boolean | EvidenceDamObservations } = {}
+	opts: {
+		application?: boolean;
+		locality?: boolean | { svgSha256: string };
+		seriesChoice?: boolean;
+		/** § 7: true for evidence-24's (fixtureObservations), or this section (a tampered one, or an older pack's dam-obs-1). */
+		observations?: boolean | EvidenceDamObservationsAny;
+		/** § 8 (evidence-23): Farm one gets a dam, and the report the future yield of the fixture's factors (or this result, a tampered one). */
+		future?: boolean | ((r: FutureYieldResult) => FutureYieldResult);
+	} = {}
 ): PackBundleInput {
 	const base = packFixtureInput();
+	if (opts.future) base.model.nodes = base.model.nodes.map((n) => (n.id === 'F1' ? { ...n, ...FUTURE_FIXTURE_DAM } : n));
 	// Two CHIRPS series, the one read the shorter (engine ≥ 1.90.0, issue #561): its runs warn, and the warning reads input.seriesChoice.
 	if (opts.seriesChoice) {
 		base.series.rain_chirps_mm = { startDate: START, values: Array.from({ length: 30 }, () => 1) };
@@ -150,8 +203,9 @@ export function packBundleFixture(
 	}
 	const baseline = storedRun(hash, '00000000-0000-4000-8000-0000000000a1', base, runModelChecked(structuredClone(base)));
 	let application: PackBundleRun | null = null;
+	let app: ModelInput | null = null;
 	if (opts.application !== false) {
-		const app: ModelInput = { ...base, model: { ...base.model, cropAreas: base.model.cropAreas.map((a) => ({ ...a, areaM2: 600_000 })) } };
+		app = { ...base, model: { ...base.model, cropAreas: base.model.cropAreas.map((a) => ({ ...a, areaM2: 600_000 })) } };
 		application = storedRun(hash, '00000000-0000-4000-8000-0000000000a2', app, runModelChecked(structuredClone(app)), {
 			id: '00000000-0000-4000-8000-0000000000c1',
 			baseRunId: baseline.runId,
@@ -183,32 +237,45 @@ export function packBundleFixture(
 		},
 		summaries: { baseline: baseline.summary, application: application?.summary ?? null },
 		...(opts.locality ? { builtBy: ENGINE_VERSION, localityMap: fixtureLocality(hash, !!application, typeof opts.locality === 'object' ? opts.locality.svgSha256 : undefined) } : {}),
-		...(opts.observations ? { builtBy: ENGINE_VERSION, damObservations: opts.observations === true ? fixtureObservations() : opts.observations } : {})
+		...(opts.observations ? { builtBy: ENGINE_VERSION, damObservations: opts.observations === true ? fixtureObservations() : opts.observations } : {}),
+		...(opts.future && application ? { builtBy: ENGINE_VERSION, futureYield: fixtureFutureSection(base, app!, opts.future === true ? (r) => r : opts.future) } : {})
 	} as unknown as EvidenceReport;
 	const manifest = buildPackManifest({ pack: { id: PACK_FIXTURE_ID, version: 1, supersedes: null }, project, report, engine: { version: ENGINE_VERSION, build: null } });
 	// As the backend reads it back from jsonb.
 	return { manifest: JSON.parse(JSON.stringify(manifest)), baseline, application };
 }
 
-/** Observed wet days (evidence-21) of one invented dam on Farm one, as the report freezes them: 5 dates, 2 wet, 1 dry, 2 inconclusive. */
+/** The invented dam on Farm one and its rows: WOfS (5 dates: 2 wet, 1 dry, 2 inconclusive) and Sentinel-2 (4 dates, 1 shared with WOfS). */
+const OBSERVATION_FIXTURE_DAMS = [
+	{
+		featureId: '00000000-0000-4000-8000-0000000000d1',
+		name: 'Farm one dam',
+		nodeId: 'F1',
+		rows: [
+			{ source: 'wofs' as const, date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 }, // wet
+			{ source: 'wofs' as const, date: '2020-01-13', wetAreaM2: 900, pctObserved: 40 }, // one wet pixel: inconclusive
+			{ source: 'wofs' as const, date: '2020-01-21', wetAreaM2: 0, pctObserved: 99.5 }, // dry
+			{ source: 'wofs' as const, date: '2020-01-29', wetAreaM2: 2700, pctObserved: 30 }, // wet at any clear share
+			{ source: 'wofs' as const, date: '2020-02-06', wetAreaM2: 0, pctObserved: 95 }, // no water on a 95 % view: inconclusive
+			{ source: 's2' as const, date: '2020-01-10', wetAreaM2: 900, pctObserved: 100 }, // 9 pixels: wet
+			{ source: 's2' as const, date: '2020-01-13', wetAreaM2: 0, pctObserved: 100 }, // dry, and takes the date WOfS couldn't call
+			{ source: 's2' as const, date: '2020-01-20', wetAreaM2: 500, pctObserved: 20 }, // 5 pixels: inconclusive
+			{ source: 's2' as const, date: '2021-02-01', wetAreaM2: 0, pctObserved: 99 } // dry
+		]
+	}
+];
+
+/**
+ * Observed wet days (evidence-24, dam-obs-2) of one invented dam on Farm one, as the report freezes them:
+ * Sentinel-2 4 dates (1 wet, 2 dry, 1 inconclusive), WOfS 5 (2, 1, 2), together 8 (3 wet, 3 dry, 2 inconclusive).
+ */
 export function fixtureObservations(): EvidenceDamObservations {
-	return damObservationsSection(
-		[
-			{
-				featureId: '00000000-0000-4000-8000-0000000000d1',
-				name: 'Farm one dam',
-				nodeId: 'F1',
-				rows: [
-					{ date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 }, // wet
-					{ date: '2020-01-13', wetAreaM2: 900, pctObserved: 40 }, // one wet pixel: inconclusive
-					{ date: '2020-01-21', wetAreaM2: 0, pctObserved: 99.5 }, // dry
-					{ date: '2020-01-29', wetAreaM2: 2700, pctObserved: 30 }, // wet at any clear share
-					{ date: '2020-02-06', wetAreaM2: 0, pctObserved: 95 } // no water on a 95 % view: inconclusive
-				]
-			}
-		],
-		{ applicant: true, ownNodeIds: ['F1'], startDate: START, endDate: END, models: [] }
-	)!;
+	return damObservationsSection(OBSERVATION_FIXTURE_DAMS, { applicant: true, ownNodeIds: ['F1'], startDate: START, endDate: END, models: [] })!;
+}
+
+/** The same dam as a pack drafted from evidence-21 to evidence-23 froze it (dam-obs-1, WOfS alone): 5 dates, 2 wet, 1 dry, 2 inconclusive. */
+export function fixtureObservationsV1(): EvidenceDamObservationsV1 {
+	return damObservationsSectionV1(OBSERVATION_FIXTURE_DAMS, { applicant: true, ownNodeIds: ['F1'], startDate: START, endDate: END, models: [] })!;
 }
 
 /** The headline fixture's registered volumes (synthetic): two takes on Farm one, one storage-only row (s21b, not a take). */

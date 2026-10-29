@@ -26,7 +26,8 @@ import { CHC_BASE } from './sources/chirps.js';
 import { CPC_BASE } from './sources/cpc.js';
 import { DWS_BASE } from './sources/dws.js';
 import { DEAFRICA_SERVICES_BASE } from '../dams/observed/upstream.js';
-import { WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
+import { S1_S3_BASE, S2_C1_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
+import { SSEBOP_BASE, WAPOR_BASE } from '../water-use/observed/upstream.js';
 
 export interface FeedHttp {
 	/** Bytes [start, end] (inclusive) of `url`; null for HTTP 404 (not published yet). */
@@ -49,7 +50,17 @@ export interface FeedHttp {
 	 * null. Optional: the dam observations' Waterbodies pass uses it.
 	 */
 	textConditional?(url: string, etag: string | null): Promise<ConditionalText | null>;
+	/**
+	 * Bytes [start, end] of `url` asked for only if its ETag is no longer
+	 * `etag` (a Range GET with If-None-Match): `not-modified` for HTTP 304,
+	 * null for HTTP 404, else the bytes and the file's tag (fileTag).
+	 * Optional: the observed ET pass re-checks the WaPOR dekads it has read
+	 * with it (water-use/observed/pass.ts).
+	 */
+	rangeConditional?(url: string, start: number, end: number, etag: string): Promise<ConditionalRange | null>;
 }
+
+export type ConditionalRange = { status: 'not-modified' } | { status: 'ok'; bytes: Uint8Array; tag: string | null };
 
 export type ConditionalText = { status: 'not-modified' } | { status: 'ok'; text: string; etag: string | null; lastModified: string | null };
 
@@ -125,13 +136,40 @@ export const FEED_HOSTS: readonly string[] = [
 	new URL(DEAFRICA_SERVICES_BASE).host,
 	// Digital Earth Africa's STAC search: the WOfS scenes over a dam (dams/observed/wofs, issue #604 R5-C).
 	new URL(WOFS_STAC_SEARCH).host,
+	// Digital Earth Africa's Sentinel-2 L2A Collection 1 and Sentinel-1 RTC buckets (dams/observed, issue #624).
+	new URL(S2_C1_S3_BASE).host,
+	new URL(S1_S3_BASE).host,
 	// NOAA CPC: the ONI and AAO climate indices (ingest/indices.ts, issue #620).
-	new URL(CPC_BASE).host
+	new URL(CPC_BASE).host,
+	// FAO's WaPOR v3 bucket on Google Cloud Storage: the dekadal actual ET (water-use/observed, issue #623). FEED_HOST_PATHS keeps it to that bucket.
+	new URL(WAPOR_BASE).host,
+	// USGS FEWS NET: SSEBop's dekadal actual ET, the fallback (issue #623). FEED_HOST_PATHS keeps it to that tree.
+	new URL(SSEBOP_BASE).host
 ];
+
+/**
+ * Hosts shared with things that aren't our sources, and the only path
+ * prefixes a live fetch may ask on them (each ends in `/`). Google Cloud
+ * Storage serves every bucket from one host, so allowing the host alone
+ * would let a redirect, or a later code path, read any public bucket. The
+ * path is the URL's parsed one, dot segments (`..`, `%2e%2e`) already
+ * resolved, so a path can't climb out of its prefix.
+ */
+export const FEED_HOST_PATHS: Readonly<Record<string, readonly string[]>> = {
+	[new URL(WAPOR_BASE).hostname]: [new URL(WAPOR_BASE).pathname],
+	[new URL(SSEBOP_BASE).hostname]: [new URL(SSEBOP_BASE).pathname]
+};
+
 /** Redirects followed per request, each checked against FEED_HOSTS. */
 const MAX_REDIRECTS = 3;
 
-const allowed = (url: URL) => url.protocol === 'https:' && url.port === '' && url.username === '' && url.password === '' && FEED_HOSTS.includes(url.hostname);
+const pathAllowed = (url: URL) => {
+	const prefixes = Object.hasOwn(FEED_HOST_PATHS, url.hostname) ? FEED_HOST_PATHS[url.hostname] : undefined;
+	return !prefixes || prefixes.some((p) => url.pathname.startsWith(p));
+};
+
+const allowed = (url: URL) =>
+	url.protocol === 'https:' && url.port === '' && url.username === '' && url.password === '' && FEED_HOSTS.includes(url.hostname) && pathAllowed(url);
 
 const transportError = (err: unknown) =>
 	new FeedUnavailableError((err as Error).name === 'TimeoutError' ? 'the request timed out' : 'the request failed');
@@ -441,6 +479,12 @@ export function liveHttp(
 			if (got === null) return null;
 			if (got === 'not-modified') return { status: 'not-modified' };
 			return { status: 'ok', text: new TextDecoder().decode(got.bytes), etag: kept(got.headers.get('etag')), lastModified: kept(got.headers.get('last-modified')) };
+		},
+		rangeConditional: async (url, start, end, etag) => {
+			const got = await get(url, { range: `bytes=${start}-${end}`, 'if-none-match': etag });
+			if (got === null) return null;
+			if (got === 'not-modified') return { status: 'not-modified' };
+			return { status: 'ok', bytes: got.whole ? got.bytes.subarray(start, end + 1) : got.bytes, tag: got.tag };
 		}
 	};
 }

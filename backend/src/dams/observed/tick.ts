@@ -15,7 +15,8 @@
 //      tick after tick. A dam that can't be compared (too large, too complex)
 //      is recorded 'none' with its reason and leaves the stale list.
 //   2. Publishes dams/wanted.json: the uids of the matched dams and every
-//      dam's outline with the date WOfS should start from, written only when
+//      dam's outline with the date WOfS should start from (and Sentinel-2's
+//      and Sentinel-1's, once the dam holds a row of either), written only when
 //      it differs from what this process last wrote (one GET when it hasn't).
 //   3. Loads what the passes fetched, into dam_observation
 //      (app_dam_observation_load). What was loaded is kept in the database
@@ -31,6 +32,25 @@
 //      costs one GET a week and no load). At most LOADS_PER_TICK files are
 //      read a tick, the oldest lastGood first and keys whose last attempt
 //      failed after the others; the rest wait for the next tick.
+//   4. Radar (s1) only as DAM_OBSERVATIONS_S1 allows (handover.ts damS1Mode;
+//      issue #624 open question 3): in `on`, a dam's s1 file is loaded only
+//      when its own S1/S2 agreement passes (dams/s1-agreement.json,
+//      sentinel/agreement.ts s1Shows), with hysteresis: a dam starts at the
+//      85 % bar and, once shown, stays down to 80 % (S1_AGREEMENT.keepBar).
+//      Whether it was shown is its s1 load mark: targets '' with a lastGood
+//      (a load that succeeded), so the state needs no file or table of its
+//      own and survives a restart. In `measure` and `off`, never. A
+//      dam's s1 key that may not be loaded is withheld instead: its rows are
+//      removed (app_dam_s1_withhold, 283; none on a first look) and its mark
+//      written with targets S1_WITHHELD, without reading the file. The mark's
+//      targets ('' loaded, S1_WITHHELD withheld) make the key due again when
+//      the dam starts or stops passing, so a dam that stops passing loses its
+//      radar on the next tick, and one that passes again is reloaded from the
+//      file. Withholding reads no file, so it has its own cap (LOADS_PER_TICK).
+//      Besides the keys dams/s1-status.json lists, every s1 load mark still
+//      shown is checked too, so radar loaded before is withheld even when the
+//      status file is gone (or no longer lists the dam).
+//      An agreement report that can't be read leaves s1 alone that tick.
 // A failure is logged and left to the next tick; the rest of the tick goes on.
 // The log names counts only, never a dam, uid or project.
 import { createHash } from 'node:crypto';
@@ -39,6 +59,7 @@ import { logEvent } from '../../logging/logEvent.js';
 import { safeError } from '../../logging/safeError.js';
 import type { MirrorStore } from '../../mirror/store.js';
 import {
+	damS1Mode,
 	damsStore,
 	MAX_OUTLINES,
 	OBSERVATION_SOURCES,
@@ -52,6 +73,7 @@ import {
 	writeWanted
 } from './handover.js';
 import { damOutlines, type DamOutlineRow, matchAndWrite } from './match.js';
+import { readAgreement, s1Passing } from './sentinel/agreement.js';
 
 type Env = Record<string, string | undefined>;
 
@@ -83,6 +105,18 @@ export async function loadObservationFile(db: Db, f: ObservationFile): Promise<{
 	return r.applied ? { written: r.written, dams: r.dams } : false;
 }
 
+/**
+ * The load mark's targets for a dam's s1 key whose radar is withheld (step 4): a fixed digest (the column takes '' or
+ * 64 hex digits), so the key is due again whenever the dam moves between loaded ('') and withheld.
+ */
+export const S1_WITHHELD = createHash('sha256').update('s1:withheld').digest('hex');
+
+/** Remove one dam's radar rows, as the worker: how many were removed. */
+export async function withholdS1(db: Db, key: string): Promise<number> {
+	const { rows } = await db.query<{ removed: number }>('SELECT removed FROM app_dam_s1_withhold($1)', [key]);
+	return rows[0]!.removed;
+}
+
 const nextDay = (iso: string) => new Date(Date.parse(`${iso}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 
 export interface DamsTickResult {
@@ -103,6 +137,9 @@ export interface DamsTickResult {
 	deferred: number;
 	/** Rows inserted or changed. */
 	rows: number;
+	/** Dams' radar (s1) keys withheld this tick (step 4), and the rows that removed. */
+	withheld: number;
+	withheldRows: number;
 }
 
 /** Per process: the wanted list last written, and when each dam's match last failed (those go after the others). */
@@ -145,6 +182,9 @@ export function targetsDigest(dams: readonly Pick<DamOutlineRow, 'feature_id' | 
 
 const ms = (d: Date | null | undefined) => (d ? new Date(d).getTime() : -Infinity);
 
+/** Whether a dam's radar was shown at the worker's last decision: its s1 mark's last success loaded it (targets ''). */
+const s1Shown = (mark: LoadMark | undefined): boolean => !!mark && mark.targets === '' && mark.last_good !== null;
+
 const writeMark = (db: Db, source: ObservationSource, key: string, lastGood: string | null, fetchedAt: string | null, targets: string, failed: boolean) =>
 	db.query('SELECT applied FROM app_dam_load_mark_write($1, $2, $3, $4, $5, $6)', [source, key, lastGood, fetchedAt, targets, failed]);
 
@@ -164,7 +204,7 @@ export async function runDamsTick(
 	const now = o.now ?? Date.now;
 	const matchesPerTick = o.matchesPerTick ?? MATCHES_PER_TICK;
 	const loadsPerTick = o.loadsPerTick ?? LOADS_PER_TICK;
-	const result: DamsTickResult = { dams: 0, matched: 0, matchFailed: 0, published: false, loaded: 0, unreached: 0, failed: 0, unchanged: 0, deferred: 0, rows: 0 };
+	const result: DamsTickResult = { dams: 0, matched: 0, matchFailed: 0, published: false, loaded: 0, unreached: 0, failed: 0, unchanged: 0, deferred: 0, rows: 0, withheld: 0, withheldRows: 0 };
 	let store: MirrorStore;
 	try {
 		store = o.store ?? damsStore(env);
@@ -207,7 +247,16 @@ export async function runDamsTick(
 		try {
 			const wanted: Omit<WantedList, 'generatedAt'> = {
 				waterbodies: [...new Set(outlines.filter((d) => d.status === 'matched' && d.uid).map((d) => d.uid!))].sort(),
-				outlines: outlines.map((d) => ({ featureId: d.feature_id, geometry: d.geometry, since: d.wofs_newest ? nextDay(d.wofs_newest) : WOFS_FIRST_DATE }))
+				outlines: outlines.map((d) => {
+					// A Sentinel source's `since` only once the dam holds a row of it: until then its pass starts from its own backfill.
+					const sinceBy = { ...(d.s2_newest ? { s2: nextDay(d.s2_newest) } : {}), ...(d.s1_newest ? { s1: nextDay(d.s1_newest) } : {}) };
+					return {
+						featureId: d.feature_id,
+						geometry: d.geometry,
+						since: d.wofs_newest ? nextDay(d.wofs_newest) : WOFS_FIRST_DATE,
+						...(Object.keys(sinceBy).length ? { sinceBy } : {})
+					};
+				})
 			};
 			const key = JSON.stringify(wanted);
 			if (published !== key) {
@@ -232,28 +281,79 @@ export async function runDamsTick(
 	} catch (err) {
 		logEvent('error', { event: 'dams_tick_failed', step: 'marks', ...safeError(err) });
 	}
+	// 4. Which dams' radar may be loaded (see the header); null: leave s1 alone this tick.
+	let s1Loads: ((key: string) => boolean) | null = null;
 	if (marks) {
-		const due: { source: ObservationSource; key: string; lastGood: string; targets: string; mark: LoadMark | undefined }[] = [];
+		try {
+			const mode = damS1Mode(env);
+			if (mode === 'on') {
+				const shown = new Set([...marks.values()].filter((m) => m.source === 's1' && s1Shown(m)).map((m) => m.key));
+				const passing = s1Passing(await readAgreement(store), shown);
+				s1Loads = (key) => passing.has(key);
+			} else s1Loads = () => false;
+		} catch (err) {
+			logEvent('error', { event: 'dams_tick_failed', step: 's1_agreement', ...safeError(err) });
+		}
+	}
+	if (marks) {
+		type Due = { source: ObservationSource; key: string; lastGood: string; targets: string; mark: LoadMark | undefined };
+		const due: Due[] = [];
+		const withhold: Due[] = [];
 		for (const source of OBSERVATION_SOURCES) {
+			if (source === 's1' && !s1Loads) continue;
 			try {
 				const status = await readStatus(store, source);
+				if (source === 's1') {
+					// Radar shown before for a dam the status no longer lists (the file deleted, or the dam dropped from it):
+					// withheld by its mark alone when it may not be shown now. One that may stays as it is: there is no file to read.
+					const listed = (key: string) => {
+						const s = status && Object.hasOwn(status.perKey, key) ? status.perKey[key] : undefined;
+						return !!s?.lastGood && !Number.isNaN(Date.parse(s.lastGood));
+					};
+					for (const mark of marks.values()) {
+						if (mark.source !== 's1' || !s1Shown(mark) || listed(mark.key) || s1Loads!(mark.key)) continue;
+						const lastGood = new Date(mark.last_good!).toISOString();
+						withhold.push({ source, key: mark.key, lastGood, targets: S1_WITHHELD, mark });
+					}
+				}
 				for (const [key, s] of Object.entries(status?.perKey ?? {})) {
 					if (!s.lastGood || Number.isNaN(Date.parse(s.lastGood))) continue;
 					// A Waterbodies file reaches the dams matched to its uid only: none, nothing to load.
 					if (source === 'waterbodies' && !matchedTo.has(key)) continue;
-					const targets = source === 'waterbodies' ? targetsDigest(matchedTo.get(key)!) : '';
+					const withheld = source === 's1' && !s1Loads!(key);
+					const targets = source === 'waterbodies' ? targetsDigest(matchedTo.get(key)!) : withheld ? S1_WITHHELD : '';
 					const mark = marks.get(`${source}:${key}`);
 					if (mark && Date.parse(s.lastGood) <= ms(mark.last_good) && mark.targets === targets) continue;
-					due.push({ source, key, lastGood: s.lastGood, targets, mark });
+					(withheld ? withhold : due).push({ source, key, lastGood: s.lastGood, targets, mark });
 				}
 			} catch (err) {
 				logEvent('error', { event: 'dams_tick_failed', step: 'status', source, ...safeError(err) });
 			}
 		}
 		// Never-failed (or since succeeded) first, oldest lastGood first; then the failing ones, oldest failure first.
-		const failedAt = (d: (typeof due)[number]) => (d.mark?.failed_at ? ms(d.mark.failed_at) : 0);
-		due.sort((a, b) => failedAt(a) - failedAt(b) || Date.parse(a.lastGood) - Date.parse(b.lastGood) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-		result.deferred = Math.max(0, due.length - loadsPerTick);
+		const failedAt = (d: Due) => (d.mark?.failed_at ? ms(d.mark.failed_at) : 0);
+		const order = (a: Due, b: Due) => failedAt(a) - failedAt(b) || Date.parse(a.lastGood) - Date.parse(b.lastGood) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+		due.sort(order);
+		withhold.sort(order);
+		result.deferred = Math.max(0, due.length - loadsPerTick) + Math.max(0, withhold.length - loadsPerTick);
+		// Radar withheld: no file read; the rows go, the mark says withheld (its fetchedAt kept, else the status's lastGood).
+		for (const { source, key, lastGood, targets, mark } of withhold.slice(0, loadsPerTick)) {
+			try {
+				const removed = await withoutUser(async (db) => {
+					const n = await withholdS1(db, key);
+					await writeMark(db, source, key, lastGood, mark?.fetched_at ? new Date(mark.fetched_at).toISOString() : lastGood, targets, false);
+					return n;
+				});
+				result.withheld++;
+				result.withheldRows += removed;
+			} catch (err) {
+				result.failed++;
+				logEvent('error', { event: 'dams_load_failed', source, step: 'withhold', ...safeError(err) });
+				await withoutUser((db) => writeMark(db, source, key, null, null, targets, true)).catch((e) =>
+					logEvent('error', { event: 'dams_tick_failed', step: 'mark', source, ...safeError(e) })
+				);
+			}
+		}
 		for (const { source, key, lastGood, targets, mark } of due.slice(0, loadsPerTick)) {
 			try {
 				const file = await readObservationFile(store, source, key);
@@ -280,7 +380,7 @@ export async function runDamsTick(
 			}
 		}
 	}
-	if (result.matched || result.matchFailed || result.published || result.loaded || result.failed || result.deferred) {
+	if (result.matched || result.matchFailed || result.published || result.loaded || result.failed || result.deferred || result.withheldRows) {
 		logEvent(result.failed || result.matchFailed ? 'warn' : 'info', { event: 'dams_tick', ...result });
 	}
 	return result;

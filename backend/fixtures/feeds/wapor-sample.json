@@ -1,0 +1,11 @@
+{
+	"$comment": "Synthetic WaPOR v3 L2-AETI-D dekads for FEED_SOURCE=fixtures (backend/src/water-use/observed/fixtures.ts, issue #623). Invented values, no real place or measurement: a grid laid out like FAO's (EPSG:4326 at 1/1024°, 512-pixel tiles, int16 x 0.1 mm/day, nodata -9999, BigTIFF, LZW), with data only in the tiles that meet `cover` (the seeded examples' synthetic catchments) and every other tile empty.",
+	"grid": { "originLon": -30, "originLat": 40, "widthDeg": 95, "heightDeg": 80, "pixelsPerDeg": 1024, "tile": 512 },
+	"cover": [
+		[21.0, -34.0, 22.0, -33.5],
+		[21.0, -28.5, 22.0, -28.0]
+	],
+	"schedule": { "historyDekads": 18, "lagDays": 3 },
+	"eta": { "mean": 3.2, "amplitude": 2.2, "peakDayOfYear": 15, "wavelengthDeg": [0.031, 0.047], "spatial": 0.35 },
+	"cloud": { "everyNthDekad": 5, "bandPx": 24 }
+}

@@ -145,6 +145,9 @@ import type {
 	User,
 	UserPreferences,
 	JobMeta,
+	ClimateFactorsState,
+	FutureYieldState,
+	QueuedJob,
 	Sweep,
 	SweepRequest,
 	Assessment,
@@ -175,6 +178,7 @@ import type {
 	MapSearchAnswer,
 	DamProposals,
 	DamObservations,
+	EtObserved,
 	FarmDamObserved,
 	DelineationProposal,
 	DelineationRequest,
@@ -1333,6 +1337,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 * space): the run named, else the project's newest.
 		 */
 		damObservations: (id: string, runId?: string | null) => request<DamObservations>('GET', `${p(id)}/dams/observations${runId ? `?${new URLSearchParams({ run: runId })}` : ''}`),
+		/** A unit's satellite actual ET against a run's modelled irrigation use (issue #623, docs/api.md § Observed actual ET): the run named, else the newest. */
+		etObserved: (id: string, nodeId: string, runId?: string | null) =>
+			request<EtObserved>('GET', `${p(id)}/nodes/${enc(nodeId)}/et-observed${runId ? `?${new URLSearchParams({ run: runId })}` : ''}`),
 		damProposals: {
 			get: (id: string, nodeId: string) => request<DamProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/dam-proposals`),
 			areaFromMap: (id: string, nodeId: string, featureId: string) =>
@@ -1398,6 +1405,24 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
 				return request<{ jobs: JobMeta[] }>('GET', `${p(id)}/jobs${qs.size ? `?${qs}` : ''}`).then((r) => r.jobs);
 			}
+		},
+		/**
+		 * The Scenarios tab's future climate (docs/api.md § Future climate, issue #621 slice 5): the catchment's
+		 * monthly change factors per climate model, pathway and window, worked out by a background job (editor).
+		 */
+		climateFactors: {
+			get: (id: string) => request<ClimateFactorsState>('GET', `${p(id)}/climate-factors`),
+			start: (id: string) => request<QueuedJob>('POST', `${p(id)}/climate-factors`, {}),
+			/** A waiting job is dead at once; a running one stops before it stores a table (284_cancel_future_jobs). */
+			cancel: (id: string, jobId: string) => request<{ status: JobMeta['status']; cancelled: boolean }>('POST', `${p(id)}/climate-factors/${enc(jobId)}/cancel`)
+		},
+		/** § 8 Future yield of an application run (docs/api.md § Future yield): the newest result and job; queue it (editor). */
+		futureYield: {
+			get: (id: string, runId: string) => request<FutureYieldState>('GET', `${p(id)}/runs/${enc(runId)}/future-yield`),
+			start: (id: string, runId: string) => request<QueuedJob>('POST', `${p(id)}/runs/${enc(runId)}/future-yield`, {}),
+			/** A waiting job is dead at once; a running one stops before its runs or its write (284_cancel_future_jobs). */
+			cancel: (id: string, runId: string, jobId: string) =>
+				request<{ status: JobMeta['status']; cancelled: boolean }>('POST', `${p(id)}/runs/${enc(runId)}/future-yield/${enc(jobId)}/cancel`)
 		},
 		/**
 		 * Firm yield and storage–yield curves (docs/api.md § Yield, WP-3.6): queue

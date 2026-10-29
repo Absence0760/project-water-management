@@ -41,6 +41,12 @@ sides share.
   with `FEED_SOURCE=fixtures`, the synthetic series under `fixtures/waterbodies/`
   and the synthetic WOfS scenes of `fixtures/feeds/wofs-sample.json`); off unless
   `DAM_OBSERVATIONS=on`; architecture.md § Dam observations).
+  Observed actual ET (`src/water-use/observed/`): the tick hands each unit's
+  farm parcels (and their cropland) to the fetcher's hourly `et-dekadal`
+  WaPOR pass through the mirror bucket and loads the dekadal means it wrote
+  into `et_observation` (with `FEED_SOURCE=fixtures`, the synthetic dekads of
+  `fixtures/feeds/wapor-sample.json`); off unless `ET_OBSERVATIONS=on`;
+  architecture.md § Observed actual ET).
   Alert emails (`src/alerts/`) are evaluated by an `alert_eval` job and sent
   by the tick, each built as its recipient under RLS (Mailpit locally;
   `ALERTS_ENABLED=false` is the kill switch).
@@ -160,6 +166,7 @@ pnpm dev:run:worker         # the job worker alone: polls every 15 s and on LIST
 pnpm dev:jobs:tick          # run every due job once and exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default, no network) and exit
 pnpm dev:dams:run           # dam observations once: match traced dams, both passes, Waterbodies and WOfS (fixtures by default, no network), load (run-locally.md § Dam observations)
+pnpm dev:et:run             # observed actual ET once: each unit's parcels, the WaPOR pass (fixtures by default, no network), load (run-locally.md § Observed actual ET)
 pnpm dev:ingest:push        # push the synthetic logger CSV to /ingest with the API key in WM_INGEST_KEY (run-locally.md § Ingest)
 pnpm dev:ingest:run [rnl|sat|era5l|imerg_late|ecmwf|agera5_et0|power_et0|c3s]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
 
@@ -269,7 +276,7 @@ pnpm test:ingest            # the bulk ingest job's unittest suite (ingest/, Pyt
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
 pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
 pnpm gen:waterbodies-fixture # rewrite the synthetic Waterbodies polygons and series round the Sandspruit dams (backend/fixtures/waterbodies/; no DB; maps.md § Waterbodies)
-pnpm gen:mirror-fixture     # rewrite the synthetic rain data copy (backend/fixtures/mirror/: Zarr arrays + manifests from the synthetic CHIRPS files, plus invented ERA5-Land, IMERG, ECMWF and reference ET products; no DB; architecture.md § Data feeds)
+pnpm gen:mirror-fixture     # rewrite the synthetic rain data copy (backend/fixtures/mirror/: Zarr arrays + manifests from the synthetic CHIRPS files, plus invented ERA5-Land, IMERG, ECMWF, reference ET, C3S and NEX-GDDP-CMIP6 products; no DB; architecture.md § Data feeds)
 pnpm gen:example            # rewrite the example catchment the empty project list starts from (Kleinberg; no DB; issue #286)
 pnpm gen:help-art           # re-render the help pictures, by day and at dusk for dark mode (optional: Blender 5 + ImageMagick 7; HELP_ART_ONLY, HELP_ART_LIGHT, HELP_ART_DEVICE; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)

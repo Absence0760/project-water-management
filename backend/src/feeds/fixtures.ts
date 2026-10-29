@@ -28,7 +28,9 @@
 // the invented 8 × 6 grid repeated around it, so a feed over a seeded
 // example's synthetic catchment (backend/scripts/examples/map.ts) reads rain
 // offline. DE Africa's STAC search and its WOfS scenes are answered by
-// dams/observed/wofs/fixtures.ts (wofs-sample.json), and NOAA CPC's ONI and
+// dams/observed/wofs/fixtures.ts (wofs-sample.json), its Sentinel-2 scenes from
+// dams/observed/sentinel/fixtures.ts (s2-sample.json), FAO's WaPOR v3 dekads by
+// water-use/observed/fixtures.ts (wapor-sample.json), and NOAA CPC's ONI and
 // AAO files by sources/cpc.ts (invented values). Any other URL is a 404. Invented grid and station: no real
 // place, catchment or measurement.
 import { createHash } from 'node:crypto';
@@ -42,7 +44,11 @@ import { AAO_URL, aaoFixtureText, ONI_URL, oniFixtureText } from './sources/cpc.
 import { DWS_BASE, parseDwsDaily } from './sources/dws.js';
 import { writeGrid } from './sources/tiff-write.js';
 import { wofsFixture } from '../dams/observed/wofs/fixtures.js';
-import { WOFS_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
+import { S1_RTC_COLLECTION, S1_S3_BASE, S2_C1_COLLECTION, S2_C1_S3_BASE, WOFS_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
+import { s2Fixture } from '../dams/observed/sentinel/fixtures.js';
+import { s1Fixture } from '../dams/observed/sentinel/s1Fixtures.js';
+import { waporFixture } from '../water-use/observed/fixtures.js';
+import { WAPOR_BASE } from '../water-use/observed/upstream.js';
 
 export const FIXTURE_DIR = fileURLToPath(new URL('../../fixtures/feeds/', import.meta.url));
 
@@ -170,9 +176,22 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 	// DE Africa's STAC search and WOfS scenes (dams/observed/wofs/fixtures.ts), made when first asked.
 	let wofs: ReturnType<typeof wofsFixture> | null = null;
 	const wofsOf = () => (wofs ??= wofsFixture(today));
+	// And its Sentinel-2 search and bands (dams/observed/sentinel/fixtures.ts).
+	let s2: ReturnType<typeof s2Fixture> | null = null;
+	const s2Of = () => (s2 ??= s2Fixture(today));
+	// And its Sentinel-1 radar search and bands (dams/observed/sentinel/s1Fixtures.ts).
+	let s1: ReturnType<typeof s1Fixture> | null = null;
+	const s1Of = () => (s1 ??= s1Fixture(today));
+
+	// FAO's WaPOR v3 dekads (water-use/observed/fixtures.ts), made when first asked.
+	let wapor: ReturnType<typeof waporFixture> | null = null;
+	const waporOf = () => (wapor ??= waporFixture(today));
 
 	const file = (url: string): Uint8Array | null => {
 		if (url.startsWith(`${WOFS_S3_BASE}/`)) return wofsOf().scene(url);
+		if (url.startsWith(`${S2_C1_S3_BASE}/`)) return s2Of().scene(url);
+		if (url.startsWith(`${S1_S3_BASE}/`)) return s1Of().scene(url);
+		if (url.startsWith(WAPOR_BASE)) return waporOf().file(url);
 		const t = toEpochDay(today());
 		let m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/final\/rnl\/\d{4}\/chirps-v3\.0\.rnl\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
 		if (m && url.startsWith(CHC_BASE)) {
@@ -219,8 +238,17 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 			const bytes = file(url);
 			return bytes ? { tag: tagOf(bytes) } : null;
 		},
+		async rangeConditional(url, start, end, etag) {
+			const bytes = file(url);
+			if (!bytes) return null;
+			const tag = tagOf(bytes);
+			return tag === etag ? { status: 'not-modified' } : { status: 'ok', bytes: bytes.subarray(start, end + 1), tag };
+		},
 		async text(url) {
-			if (url.startsWith(`${WOFS_STAC_SEARCH}?`)) return wofsOf().search(url);
+			if (url.startsWith(`${WOFS_STAC_SEARCH}?`)) {
+				const collection = new URL(url).searchParams.get('collections');
+				return collection === S2_C1_COLLECTION ? s2Of().search(url) : collection === S1_RTC_COLLECTION ? s1Of().search(url) : wofsOf().search(url);
+			}
 			// NOAA CPC's climate indices (sources/cpc.ts): invented values, re-dated to today.
 			if (url === ONI_URL) return oniFixtureText(today());
 			if (url === AAO_URL) return aaoFixtureText(today());

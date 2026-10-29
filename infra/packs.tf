@@ -348,4 +348,15 @@ data "aws_iam_policy_document" "s3_endpoint" {
       identifiers = [aws_iam_role.worker_lambda.arn]
     }
   }
+  # And the observed ET's wanted list (issue #623, et_observations.tf
+  # worker_et, which the role holds only with et_observations_enabled).
+  statement {
+    sid       = "WorkerWritesEtWantedList"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.mirror.arn}/et/wanted.json"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.worker_lambda.arn]
+    }
+  }
 }

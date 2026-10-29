@@ -9887,7 +9887,7 @@ the ensemble's members). Each change is a scenario op (`applyScenario`,
 
 | Factor | Low / high (default) | What changes | Skipped when |
 | --- | --- | --- | --- |
-| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; under per-unit rain, engine ≥ 1.78.0, the units' own records too, with the unit MAPs and the gauge MAP × the same factor, §2.4h; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
+| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; the units' own records, engine ≥ 1.78.0, §2.4h; through `series.scale`), and from engine 1.108.0 every other rain record (each rainfall station's record and the CHIRPS at it, §2.4i, the reference unit's CHIRPS cell) and **every MAP** × the same factor, in any rain mode: each unit's, the gauge MAP, the stations' catchment MAP and each station's (`scaleRainMaps`, the one climate.delta uses, §2.17). So CHIRPS's bias-correction factors and every MAP ratio (a unit levelled to the gauge, an area to its station) are unchanged, the rain on every area moves by the factor exactly once (rain × 1.1 runs as climate.delta at a flat 1.1, tested), and the whole forcing moves: runoff, effective rain on the crops, rain on the dams. Up to 1.107.0 only the units' MAPs and the gauge MAP moved, and only under per-unit rain, while the stations' records stayed: a unit read from its station still moved once (its MAP ratio did), but the catchment's station read at an entered catchment MAP didn't move under per-unit rain, nor any catchment station under Fragmentation ([ER-31](./engine-errata.md)) | there is no rain |
 | Pan coefficient | × 0.85 / × 1.15 | the monthly row (`settings.set panCoefficient`), capped at 2 | GR4J's PE is a monthly PE row (`pe.kind: 'monthly'`), which doesn't read it; or it is 0 in every month |
 | Dam evaporation factor | × 0.85 / × 1.15 | the A-pan lake-evaporation factor k_lake (§2.7a, audit N2; `lakeEvapFactor`, or each month of `lakeEvapFactorMonthly` when set), capped at 2 | no farm has a dam, or the factor is 0 |
 | Abstraction (demand) | × 0.7 / × 1.3 | every unit's demand (crop requirement and demand objects, §2.7f) and every other water user's (`demand.scale`, categories `farm` and `user`); boreholes and the river pump supply that demand, so they follow it. On a full-allocation run, 0.7 and 1.3 × the registered volume (engine ≥ 1.70.0, §2.12a; before, both ends were the central run) | no unit or user has demand over the reporting window |
@@ -10874,13 +10874,64 @@ together.
 - **Modelled.** The run's `dam_area` column for the unit the dam polygons
   stand for (`map_feature.node_id`): m², at the start of each day, from the
   survey curve (`damCurve`, linear between rows) or the power law
-  `A = A_full (S/C)^b` (§2.7a). A satellite pass (Landsat, about 10:30 local)
-  is compared with that day's value; the day's own change is small beside
-  the observation's error.
-- **Observed.** `dam_observation` (261, R5-A): per dam polygon, source
-  (`waterbodies`: DE Africa Waterbodies' area series for the polygon it
-  matched; `wofs`: WOfS water pixels inside the app's own outline, R5-C),
-  date, wet area (m²) and the share of the outline seen clearly.
+  `A = A_full (S/C)^b` (§2.7a). A satellite pass (Landsat and Sentinel-2
+  about 10:30 local, Sentinel-1 about 06:00 or 18:00) is compared with that
+  day's value; the day's own change is small beside the observation's error.
+- **Observed.** `dam_observation` (261, R5-A; 278, issue #624): per dam
+  polygon, source (`waterbodies`: DE Africa Waterbodies' area series for the
+  polygon it matched; `wofs`: WOfS water pixels inside the app's own
+  outline, R5-C; `s2`: Sentinel-2 pixels we classify inside the same
+  outline, below; `s1`: Sentinel-1 radar water inside it, below), date,
+  wet area (m²) and the share of the outline seen clearly.
+- **Sentinel-2's classification** (`backend/src/dams/observed/sentinel/s2.ts`;
+  fixed thresholds, never tuned per dam). DE Africa publishes no Sentinel
+  water mask, so each 10 m pixel whose centre is inside the outline is
+  classified from the L2A Collection 1 bands:
+  - **water** where MNDWI = (B03 − B11) / (B03 + B11) > 0, B11 (20 m) taken
+    from the 20 m pixel the 10 m centre falls in (Xu 2006's modified NDWI:
+    the short-wave infrared copes better with turbid farm dams than the
+    near infrared); where B11 is missing (its no-data, or no B11 asset),
+    NDWI = (B03 − B08) / (B03 + B08) > 0 (McFeeters 1996) instead;
+  - each band is reflectance-proportional after the item's offset (DN −
+    1000 for Collection 1; a band's own GDAL scale and offset when its file
+    gives one). With one offset in both bands the sign of the difference,
+    and so the 0 threshold, doesn't depend on it; two that sum to 0 or less
+    are no view;
+  - **not clear** where the scene classification (SCL, 20 m) is 0 (no data),
+    1 (saturated or defective), 3 (cloud shadow), 8 or 9 (cloud, medium or
+    high probability) or 10 (thin cirrus); every other class (2 dark area,
+    4 to 7, 11 snow) is a clear view;
+  - **off the scene** where B03 is no-data or SCL is 0: not counted as
+    covered, as WOfS's no-data bit isn't;
+  - wet area = wet pixels × the pixel's ground area (100 m² ÷ k², k the UTM
+    scale factor, raster/mask.ts), the share observed = clear ÷ inside ×
+    100, and the same 90 % clear-view rule below. A 0.3 ha dam is ~30 such
+    pixels, where WOfS's 30 m pixels give it three or, for a narrow one,
+    none.
+  The share observed is per scene: two overlapping tiles on a date give the
+  one that saw more of the dam clearly, as two Landsat rows do.
+- **Sentinel-1's classification** (`backend/src/dams/observed/sentinel/s1.ts`,
+  issue #624 step 5; one fixed threshold, never tuned per dam). DE Africa's
+  radiometrically terrain-corrected radar (`s1_rtc`) gives VV backscatter
+  (gamma0, linear power) on a 0.0002° geographic grid, with a data mask.
+  Each cell whose centre is inside the outline is:
+  - **water** where VV < **−18 dB** (VV < 10^−1.8 ≈ 0.0158 in linear power):
+    calm open water mirrors the radar away from the satellite, so it is
+    dark, while land and vegetation scatter some of it back (−18 dB is the
+    usual fixed threshold for C-band VV open-water mapping, below land's
+    typical −15 to −5 dB);
+  - **not clear** where the mask is anything but 1 (valid): 2 is radar
+    shadow or layover, where the terrain hides the ground or folds slopes
+    onto each other, so hilly dams lose cells; and a valid cell with no
+    backscatter (no-data, or 0 or less);
+  - **off the scene** where the mask is 0 (no data);
+  - wet area = wet cells × the cell's ground area on the ellipsoid at the
+    outline (raster/mask.ts; about 420 m² at 32° S), the share observed as
+    Sentinel-2's.
+  Radar's known errors are why it is secondary (below): wind roughens open
+  water so it reads dry (the wet area falls short), and dry sand or smooth
+  bare soil can read wet. How often it agrees with Sentinel-2 is measured
+  (*The S1/S2 agreement*, below), never assumed.
 - **Clear views only.** A view is compared when at least **90 %** of the dam
   was seen clearly (`minPctObserved`): the wet area counts the part seen, so
   a partly clouded view understates the water. DE Africa's Waterbodies
@@ -10891,16 +10942,70 @@ together.
   that day (else `partial-unit`).
 - **Which source.** A Waterbodies view counts only for a polygon matched to
   that waterbody alone (`matched`); `merged` (the waterbody also holds other
-  water) or `none` leaves only WOfS (`not-this-dam`). When both saw the dam
-  on one day, WOfS inside the dam's own outline wins (`other-source`).
+  water) or `none` leaves only the views of its own outline
+  (`not-this-dam`). When several sources saw the whole unit clearly on one
+  day, the sharpest wins and the rest are left out (`other-source`;
+  `SOURCE_PRECEDENCE`, issue #624): **Sentinel-2** (10 m) > **WOfS** (30 m)
+  > **Waterbodies** (a polygon's series, from WOfS) > **Sentinel-1**
+  (radar). The issue put radar above Waterbodies; it is last here because
+  radar sets no flag (below), so a radar win over a clear Waterbodies view
+  would drop that day's seen full or seen empty. A source that saw the day only partly, or saw some of the unit's
+  polygons only, doesn't take the day from one that saw it all: the next
+  source down does. The rank alone decides, never the area, so a tie (or a
+  wetter view from a coarser source) can't change the pick between runs.
+  One view a day keeps the summary from counting a day twice.
+- **Radar is never alone a flag** (Sentinel-1, issue #624). Radar sees
+  through the winter cloud that hides Landsat and Sentinel-2, but wind
+  roughens open water so that it looks dry, and dry sand can look wet. A
+  radar view is compared (it is in the bias and the share within, and counted
+  as `radar`), but it sets no **seen full**, no **seen empty** and no
+  mismatch: each of those reads the satellite's side, which those errors
+  move. The model's own full and empty stand. Radar is last in the
+  precedence, so it takes a day only when no optical source saw it clearly,
+  and "never alone" is "never". Radar's errors do move the bias and the
+  share within, which is why the summary counts its views (`radar`).
+  Beside the summary, `optical` gives the same average difference and
+  share within over the optical views alone (every compared view but
+  radar's), and the Dams panel says it after the radar note ("Without
+  radar (n clear views): …"). Radar isn't simply left out of the average:
+  it takes the days no optical source saw, mostly cloudy (wet-season)
+  ones, so dropping it would skew the sample to clear days; showing both
+  lets the reader see how far radar moved the figure. Both Sentinel passes
+  are built (their classifications are above), each off until its own
+  flag. The reader takes whatever `s1` rows the store holds; what keeps
+  untrusted radar out of it is the worker: with `DAM_OBSERVATIONS_S1=measure`
+  (Terraform `dam_s1_mode`) it loads none, and with `on` only the dams
+  whose own agreement below passes (at least 10 pairs, 85 % within to
+  start, and once shown down to 80 %, so a dam near the bar doesn't flip;
+  architecture.md § Dam observations).
+- **The S1/S2 agreement** (`sentinel/agreement.ts`, issue #624's acceptance
+  criteria). For each clear radar view of a dam (at least 90 % seen), the
+  clear Sentinel-2 view of the same dam on the same day, else the day
+  before, else the day after; the pair **agrees** when the two wet areas
+  differ by at most **0.1 F**, F here the traced outline's own area (the
+  dam polygon is drawn round the full water surface, and both sources sum
+  inside it; the run's F is a model-side quantity the fetcher never sees).
+  Radar passes the bar when at least **85 %** of the paired days agree,
+  pooled over the dams; a dam's own rate is judged from 10 pairs. The
+  fetcher logs the counts after every Sentinel-1 pass (`dams_s1_agreement`)
+  and `pnpm dev:dams:run` prints them. A day a day apart compares two
+  different days' water, which on a farm dam moves far less than 0.1 F in
+  a day outside a flood.
 - **Full area F.** The run's own: the survey curve's top area when the curve
   is usable, else `damAreaFullM2`, else the estimate from the capacity that
   run's engine used (`estimatedDamAreaForEngine`). Sedimentation's loss of
   capacity (§2.7g) isn't applied to F.
 - **Flags** (on compared views; O observed, M modelled):
   - **seen full** (likely spilling): O ≥ 0.95 F; **model full**: M ≥ 0.95 F;
-  - **seen empty**: O ≤ max(0.05 F, 900 m²) (one 30 m pixel: less water than
-    that can't be told from none); **model empty**: M ≤ 0.05 F;
+  - **seen empty**: O ≤ max(0.05 F, one pixel of the source that saw it)
+    (less water than a pixel can't be told from none): `pixelM2` 400 m² for
+    Sentinel-2 (one 20 m cell: its water test reads B11 and its cloud mask
+    is SCL, both 20 m, so its 10 m pixels are finer than it can tell), 900 m² for WOfS and Waterbodies (a 30 m Landsat
+    pixel), and for Sentinel-1 RTC's 0.0002° cell about 430 m² at 30° S
+    (22.24 m × 22.24 m · cos φ: 405 to 460 m² over South Africa), shown but
+    never used, radar setting no flag. So on a 0.3 ha dam (5 % is 150 m²)
+    Sentinel-2 calls 500 m² of water water, where WOfS can't tell it from
+    none; **model empty**: M ≤ 0.05 F;
   - **mismatch**, the first that holds: the model full while O < 0.8 F
     (`model-full`); the model empty while O > 0.2 F (`model-empty`); seen
     full while M < 0.8 F (`seen-full`); seen empty while M > 0.2 F
@@ -11160,6 +11265,94 @@ Map, the ensemble sampling the prior's box, the prior in automated
 calibration's rules, and per-unit x1 scaled by PAWC (step 6, which would
 change `runModel` and needs its own `ENGINE_VERSION`, the `verify/` mirror
 and an engine-audit.md entry).
+
+### 2.10o Observed actual ET against the modelled irrigation use (app, issue #623)
+
+A check of a run against satellites, not part of the engine: nothing here
+changes `runModel` or its output, and observed ET never feeds a run
+(`backend/src/water-use/observed/compare.ts`, pure, unit-tested; the unit
+drawer's panel in [ui.md § Farm drawer](./ui.md#farm-drawer); API in
+[api.md § Observed actual ET](./api.md#observed-actual-et)). Issue #623 named
+it §2.10m, which the regional GR4J prior had taken, so it is §2.10o. The
+thresholds are provisional and live in one place (`ET_OBSERVED`); change
+them there and here together.
+
+- **Observed.** `et_observation` (277): per unit, source and dekad, the
+  area-weighted mean actual evapotranspiration ETa (mm/day) over the unit's
+  farm parcels (∩ WorldCover cropland where land cover is loaded, else the
+  whole parcels: `mask`), the share of that area with a valid pixel, and the
+  area. FAO WaPOR v3 `L2-AETI-D` (100 m, from 2018), or USGS SSEBop v6 (1 km,
+  from 2012) as the fallback; each source is compared on its own. A dekad is
+  the 1st–10th, 11th–20th or 21st to the month's end (8–11 days), taken as
+  calendar days in UTC.
+- **Modelled**, summed over the dekad's days from the run's own columns for
+  the unit:
+  - **the requirement** = `gross_demand`, Σ planted area × crop factor ×
+    A-pan (§2.3 steps 1–2), each day at least 0 as the engine takes it: the
+    crop's water use at full supply, reported for reference;
+  - **effective rain** = `effective_rain`, the part of that the model's rain
+    and soil store covered (§2.3 steps 3–4; never more than the need);
+  - **irrigation reaching the crop** = e·G (§2.7: the crop gets e·G of the G
+    supplied). With D = F ÷ e it is F × G ÷ D each day, from
+    `crop_requirement` (F), `supplied` (G) and `demand` (D), each less the
+    unit's demand objects (`object_demand@…`, `object_supplied@…`), which
+    aren't irrigation. This reads e as the run applied it (the unit's blended
+    e*, §2.3 item 6) without recomputing it, and leaves out the application
+    losses, which a satellite over the field doesn't see as crop ET. The
+    identity holds because `demand` is F ÷ e* + Σ object demand every day,
+    unrestricted, under a drought restriction and a short dam alike
+    (`packages/engine/src/run.irrigationReachingCrop.test.ts`). `supplied`
+    itself (the abstraction) is reported beside it for reference;
+  - **crop ET as the run supplied it** = effective rain + the irrigation
+    reaching the crop. Not the requirement: a dry dam, the drought
+    restriction (§2.7), an allocation cap, the abstraction start date or a
+    demand factor gives the crop less than it needs, and the satellite sees
+    what the crop used. Compared with the requirement, a dry year would read
+    as a crop-factor error.
+- **The two comparisons**, as volumes over the same land, the run's planted
+  area A (Σ the unit's crop areas in the run's model snapshot, of crops the
+  model has: the engine skips a row naming a missing crop), since the
+  model multiplies its depths by it: observed crop ET = ETa × days × A ÷ 1000
+  (m³) against the crop ET as the run supplied it; observed irrigation = max(0, observed
+  crop ET − effective rain) against the irrigation reaching the crop. The
+  second subtracts the model's own effective rain (issue #623 Q2): until a
+  rain-fed reference from dryland pixels nearby is tried, it is the
+  satellite's ET the model's rain doesn't explain.
+- **Compared dekads only.** A dekad is compared when at least **80 %** of
+  the area had a valid pixel (`minValidShare`; the mean is over the valid
+  part, so a mostly clouded dekad is a few pixels' mean), when the run covers
+  all its days before any forecast (else `partial-dekad`, or `outside-run`
+  with no overlap) with no missing value, and when the unit plants something
+  (`no-area`). A run that has the unit but not these columns (an older
+  engine's) gives `no-series`: run it again. The rest are listed with the
+  reason.
+- **The band.** A pair agrees when |M − O| ≤ 25 % of the larger
+  (`withinShare`), or ≤ 0.5 mm/day over A for the dekad's days
+  (`floorMmDay`), so a dry winter dekad's few m³ aren't held to a share.
+  Both are provisional: satellite ETa products are generally reported within
+  about 15–30 % of flux-tower ET at dekadal steps, and the crop factors carry
+  an error of their own (§2.3); 0.5 mm/day is under the crop ET of a winter
+  dekad on the lowest ARC/SABI factors (about 0.4 × 2 mm/day of A-pan), so
+  the floor absorbs only the smallest dekads.
+- **Summary**, overall and per half water year (summer Oct–Mar, the
+  irrigation season; winter Apr–Sep): the sums, the bias (Σ M − Σ O) ÷ Σ O
+  × 100 (+: the model uses more water than the satellite sees), and the
+  share of dekads within the band, for each comparison.
+- **The area check.** The observed area (the newest dekad's) is reported
+  against A and flagged outside 1.5× either way (`areaRatio`): parcels
+  include veld, roads and buildings, and cropland includes dryland and
+  fallow, so it is a prompt to check the planted areas and the parcels, not
+  a figure to use.
+- **What it can't say.** ETa is a model of its own (WaPOR's ETLook), with
+  its errors; the dekad's mean is over a mask that may not be the irrigated
+  land; e·G assumes the losses never reach the crop, and with plantings on
+  different irrigation systems it is the unit's blended e* (§2.3 item 6),
+  not each planting's own; and over a dekad a soil
+  store can move water from one to the next, which neither side's dekadal
+  sum aligns exactly. A disagreement points at the inputs (the crops, their
+  areas, the crop factors, the A-pan row, §2.4a, the efficiency), never at a
+  correction: the hydrologist decides. Making observed ETa an engine input
+  would be an engine change with its own audit entry (issue #623 Q3).
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
@@ -13342,6 +13535,128 @@ snapshot is small (815 bytes of JSON on the invented catchment, 3.3 kB with
 its rule table's curves), so storing one per base run stays possible if a
 job ever runs without the base run's input, but it would save only that one
 run.
+
+
+### 2.17 Future climate: monthly change factors (engine 1.107.0, issue #621)
+
+A licence lasts decades, but a run replays the historical record. A
+**future climate** reruns it with the rain and evaporation each calendar
+month is expected to have in a future window, as the scenario op
+`climate.delta` ([scenarios.md § climate.delta](./scenarios.md)). Pure, in
+`packages/engine/src/scenario/climate.ts`. Provisional, pending the
+hydrologist ([engine-audit.md](./engine-audit.md) CD1).
+
+**The factors** (`climateDeltaFactors`). From downscaled daily projections
+(NEX-GDDP-CMIP6, 0.25°, [data-sources.md](./data-sources.md)), stored as
+monthly aggregates per model, SSP and year: each month's rain total `pr`
+and its mean daily maximum and minimum temperatures `tasmax`, `tasmin`
+(°C). For one model, SSP and horizon:
+
+- Each 0.25° cell over the catchment has a weight `a_i`, the catchment's
+  area inside it; a cell with weight 0 counts for nothing, and a catchment
+  with no cell of positive weight is refused.
+- Each window's climate is the mean of its years' months
+  (`windowClimate`): the baseline **1985–2014** (CMIP6's historical run),
+  the future **2036–2065** (mid-century) or **2066–2095** (late century),
+  for **SSP2-4.5** and **SSP5-8.5**. A year missing from a window is
+  refused.
+- **Rain**, per calendar month m: `f_m = Σ a_i P̄f_i,m ÷ Σ a_i P̄b_i,m`, the
+  ratio of the area-weighted means (not the mean of the cells' ratios),
+  `P̄b`, `P̄f` the baseline and future window means.
+- **Evaporation**, per calendar month: the same ratio of Hargreaves–Samani
+  PET (Hargreaves & Samani 1985), `0.0023 · Ra · (T̄ + 17.8) · √(Tmax − Tmin)`
+  mm/day × the month's days, `T̄ = (Tmax + Tmin) ÷ 2`, 0 when the range or
+  `T̄ + 17.8` isn't positive; `Ra` the extraterrestrial radiation at the
+  cell's latitude on the month's middle day (day of the year 15, 46, 74,
+  105, 135, 162, 198, 228, 258, 288, 318, 344), FAO-56 eq. 21 × 0.408 (mm/day).
+  A temperature-only formula, used only as a ratio, never as an evaporation.
+- A month with no baseline rain (or PET) takes factor 1, with a warning: a
+  dry month stays dry under any factor.
+- Each factor is **clamped to 0.5–1.5**, with a warning naming the month
+  and the factor before the clamp.
+
+**The op.** `{ op: 'climate.delta', rainFactorByMonth, evapFactorByMonth,
+label, source }`: 12 factors each, by calendar month (index 0 = January),
+each 0.5–1.5. Each day's reading is multiplied by its calendar month's
+factor:
+
+- **every rain series** (every series key starting `rain_`): the catchment
+  gauge, CHIRPS, the forecast, a rain-source period's series, the
+  reanalysis and the gap-filling products (§2.4b, §2.4e), a land unit's own
+  records (§2.4h), each rainfall station's record and its CHIRPS (§2.4i),
+  the reference unit's CHIRPS cell, by the rain factors;
+- the daily A-pan `evap_apan_mm` (§2.3a) and the daily reference ET
+  `evap_et0_mm` (§2.4a) by the evaporation factors, and the monthly A-pan
+  row `apanMm` and a monthly PE row `pe.mm` month by month (water-year
+  month w takes calendar month (w + 9) mod 12's factor, index 0 =
+  January). The pan coefficient is unchanged: PE moves with the A-pan.
+
+A reading is scaled only when it is a finite number ≥ 0: a blank day and a
+no-data code (a negative reading) stay as they were. Flow records are
+never scaled.
+
+**The MAPs** move by one **annual rain factor** `F = Σ_m w_m f_m ÷ Σ_m w_m`,
+`w_m` the catchment rain record's mean daily reading in calendar month m ×
+the month's days (31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31; the
+record is `rain_catchment_mm`, else `rain_chirps_mm`, the first with a
+reading above 0; readings as above, a month with none weighing 0), or
+`w_m` the days alone without such a record. F is exactly 1 when every rain
+factor is 1. Each land unit's MAP, the gauge MAP of per-unit rain, the
+catchment MAP of the rainfall stations and each station's MAP are
+multiplied by F (a MAP that is not a number above 0 stays as it is; at
+most 12 000 mm). One factor keeps every ratio of two MAPs as it was (a
+unit's MAP ÷ the gauge's, §2.4h rule 2; an area's MAP ÷ a station's, §2.4i),
+while a unit's CHIRPS levelled to its MAP (§2.4h rule 3, k_unit) moves
+with the climate instead of being pulled back to today's MAP.
+
+Everything else of the run is as it was: GR4J keeps its calibrated
+parameters, the network, the demand rules, the EWR and its rule tables.
+So irrigation demand (A-pan × crop factor, less effective rain), dam
+evaporation and rain on the dams, and the natural flow all move with the
+climate; the EWR's requirement moves only where it reads the natural flow
+(a rule table's percentiles, a DRM percentile table).
+
+**What it keeps and what it doesn't.** The delta method keeps the
+record's sequence: the order of wet and dry years, how long droughts last
+and how variable daily rain is, with only each month's mean moved. A
+future with longer droughts or heavier storms at the same monthly mean is
+not represented (quantile delta mapping on daily values would be; a
+follow-up). GR4J is held at the historical parameters (a drier
+catchment is assumed to respond as today's). These are known limitations
+(engine-audit.md CD1).
+
+**Invariants** (`climate.invariants.test.ts`): every factor 1 reproduces
+the run to the bit; a run under random factors passes every engine
+invariant (the mass balance, the water account, order invariance); on a
+single dam with no return flow, firm yield (§2.13) doesn't fall as the
+rain factors rise. `verify/` mirrors the op from this section (probes
+`climate-delta`, `climate-delta-unit-map`).
+
+**The evidence pack's § 8 (issue #621 slice 4,
+`packages/engine/src/evidence/future.ts`, builder `future-1`).**
+`buildFutureFactorTable` works out every model × SSP × horizon's 24
+factors from the copy's yearly monthly aggregates per 0.25° cell
+(`heldWindowClimate`: the window mean over the years the copy holds,
+counted, so the synthetic copy's one or two years a window are said, not
+hidden; `futureFactorsComplete` is false on them). `runFutureYield` then
+(one implementation, `futureYieldSteps`, a generator that yields after each
+case; `runFutureYieldAsync` awaits its caller between cases, so the job checks
+for a cancel and reports progress there, with the same result),
+for the historical record (no op) and each case (its `climate.delta` op
+applied to both inputs through `applyScenario`), runs the baseline and the
+application (`runModel`) and reads: the applicant's dam's firm yield and its
+yield at 98 % assurance on the application (§2.13, `prepareYield` once per
+case, a constant draft), the applicant's annual assurance (Σ water years met
+÷ Σ water years over their own units in `supplyAssurance.reliability`), and
+the application's change in days below the pragmatic EWR at the outlet.
+Per SSP and horizon it gives each measure's median and range across models
+(`futureRange`; nulls left out), and says when there are fewer than 5
+models. Nothing in a run changes: § 8 builds on runs, it isn't one, so
+**`ENGINE_VERSION` stays 1.107.0** (the result records the engine that ran
+the pairs, and `checkFutureYield` names it when a re-run differs). Tested by
+the invariants above at the case level (factors of 1 give the historical
+measures to the bit; the firm yield doesn't fall as the rain factor rises)
+in `evidence/future.test.ts`.
 
 ---
 

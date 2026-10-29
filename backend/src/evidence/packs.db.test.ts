@@ -20,7 +20,9 @@
 // only the backend's imports see it, never the engine's own.
 import {
 	buildPackManifest,
+	checkDamObservations,
 	checkPackBundle,
+	damObservationsSectionV1,
 	declaredRuleRequest,
 	ENGINE_VERSION,
 	localityMapSvg,
@@ -29,6 +31,7 @@ import {
 	runEnsemble,
 	runPairedEnsemble,
 	type DeclaredUncertaintyRule,
+	type EvidenceDamObservations,
 	type ModelInput,
 	type PackManifest
 } from '@water-management/engine';
@@ -284,7 +287,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-22');
+		expect(manifest.report.version).toBe('evidence-24');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -1745,7 +1748,7 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 	});
 });
 
-describe.skipIf(!minio)('an applicant’s application pack with observed wet days (evidence-21, issue #604 R5-C)', () => {
+describe.skipIf(!minio)('an applicant’s application pack with observed wet days (evidence-21; Sentinel-2 from evidence-24)', () => {
 	let applicant: User;
 	let damId: string;
 	let runId: string;
@@ -1758,23 +1761,30 @@ describe.skipIf(!minio)('an applicant’s application pack with observed wet day
 		const pubs = await owner.call('GET', `${at()}/publication`);
 		if (!JSON.stringify(pubs.body).includes(baseRun)) expect((await owner.call('POST', `${at()}/publication`, { runId: baseRun })).status).toBe(201);
 		damId = await addFeature({ kind: 'dam', name: 'Upper dam', nodeId: farmId, geometry: { type: 'Polygon', coordinates: [square(21.31, -33.69, 0.002)] } });
-		// Invented WOfS rows in the baseline's period, loaded as the worker does (app_dam_observation_load, 261): wet, dry, inconclusive.
-		const rows: [string, number, number][] = [
+		// Invented rows in the baseline's period, loaded as the worker does (app_dam_observation_load, 261/278).
+		const load = (source: 'wofs' | 's2', rows: [string, number, number][]) =>
+			withoutUser((db) =>
+				db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
+					source,
+					damId,
+					rows.map((r) => r[0]),
+					rows.map((r) => r[1]),
+					rows.map((r) => r[2]),
+					rows.map(() => `synthetic-${source}-item`),
+					new Date()
+				])
+			);
+		// WOfS: wet, dry, inconclusive.
+		await load('wofs', [
 			['2019-02-03', 2700, 60],
 			['2019-02-11', 0, 100],
 			['2019-02-19', 0, 80]
-		];
-		await withoutUser((db) =>
-			db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
-				'wofs',
-				damId,
-				rows.map((r) => r[0]),
-				rows.map((r) => r[1]),
-				rows.map((r) => r[2]),
-				rows.map(() => 'synthetic-wofs-item'),
-				new Date()
-			])
-		);
+		]);
+		// Sentinel-2: wet on a date WOfS couldn't call, and dry on a date of its own.
+		await load('s2', [
+			['2019-02-19', 1500, 70],
+			['2019-02-24', 0, 100]
+		]);
 		const created = await applicant.call('POST', `${at()}/scenarios`, { name: 'Applicant dam', baseRunId: baseRun, ops: [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 150_000 }] });
 		expect(created.status, JSON.stringify(created.body)).toBe(201);
 		const sid = created.body.scenario.id as string;
@@ -1792,26 +1802,50 @@ describe.skipIf(!minio)('an applicant’s application pack with observed wet day
 		await dropFeatures([damId]);
 	});
 
-	it('freezes § 7 in the manifest its hash covers, and the stored bundle checks observations:wofs', async () => {
+	it('freezes § 7 in the manifest its hash covers, and the stored bundle checks each source and the dates together', async () => {
 		const p = await draft(editor, runId);
 		const [row] = await asOwner('SELECT manifest, manifest_sha256 FROM evidence_pack WHERE id = $1', [p.id]);
 		const manifest = row!.manifest as PackManifest;
-		const obs = manifest.report.damObservations!;
-		expect(obs).toMatchObject({ source: 'wofs', startDate: manifest.report.identity.baseline.startDate, endDate: manifest.report.identity.baseline.endDate });
+		const obs = manifest.report.damObservations as EvidenceDamObservations;
+		expect(manifest.report.version).toBe('evidence-24');
+		expect(obs).toMatchObject({ version: 'dam-obs-2', startDate: manifest.report.identity.baseline.startDate, endDate: manifest.report.identity.baseline.endDate });
+		expect(obs.sources.map((x) => [x.source, x.citation])).toEqual([
+			['s2', 'Contains modified Copernicus Sentinel data 2019, processed by Digital Earth Africa'],
+			['wofs', 'Digital Earth Africa WOfS, CC BY 4.0']
+		]);
 		expect(obs.dams).toEqual([
 			{
 				featureId: damId,
 				name: 'Upper dam',
 				nodeId: farmId,
-				observedDates: 3,
-				wetDates: 1,
-				dryDates: 1,
-				inconclusiveDates: 1,
-				dates: [
-					['2019-02-03', 2700, 60],
-					['2019-02-11', 0, 100],
-					['2019-02-19', 0, 80]
-				]
+				// Together: 02-03 wet, 02-11 dry, 02-19 wet (Sentinel-2's 15 pixels over WOfS's 80 % view), 02-24 dry.
+				observedDates: 4,
+				wetDates: 2,
+				dryDates: 2,
+				inconclusiveDates: 0,
+				sources: {
+					s2: {
+						observedDates: 2,
+						wetDates: 1,
+						dryDates: 1,
+						inconclusiveDates: 0,
+						dates: [
+							['2019-02-19', 1500, 70],
+							['2019-02-24', 0, 100]
+						]
+					},
+					wofs: {
+						observedDates: 3,
+						wetDates: 1,
+						dryDates: 1,
+						inconclusiveDates: 1,
+						dates: [
+							['2019-02-03', 2700, 60],
+							['2019-02-11', 0, 100],
+							['2019-02-19', 0, 80]
+						]
+					}
+				}
 			}
 		]);
 		// The hash covers § 7: the stored manifest hashes to it, and without § 7 it wouldn't.
@@ -1829,11 +1863,47 @@ describe.skipIf(!minio)('an applicant’s application pack with observed wet day
 			const hash = (d: string | Uint8Array) => createHash('sha256').update(d).digest('hex');
 			const checked = await checkPackBundle(bytes as Uint8Array<ArrayBuffer>, { hash, expectManifestSha256: p.manifestSha256 });
 			expect(checked.checks.filter((k) => !k.ok)).toEqual([]);
-			expect(checked.checks.find((k) => k.id === 'observations:wofs')).toMatchObject({ ok: true });
+			for (const id of ['observations:s2', 'observations:wofs', 'observations:days']) expect(checked.checks.find((k) => k.id === id)).toMatchObject({ ok: true });
 			expect(checked.ok).toBe(true);
 		} finally {
 			// Withdrawn, so no later test finds an application pack issued.
 			expect((await editor.call('POST', `${packPath(p.id)}/withdraw`, { reason: 'test observed wet days pack' })).status).toBe(200);
+		}
+	});
+
+	it('still matches a pack drafted from evidence-21 to evidence-23 to its hash: its § 7 stays WOfS alone (dam-obs-1), and nothing rebuilds it', async () => {
+		// A draft of today's report, deleted again, lends its manifest to the evidence-23 pack stored below.
+		const p = await draft(editor, runId);
+		const read0 = (await editor.call('GET', packPath(p.id))).body;
+		const now = read0.manifest as PackManifest;
+		expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+		const live = now.report.damObservations as EvidenceDamObservations;
+		// § 7 as dam-obs-1 froze it: the WOfS dates alone, under their own id and hash.
+		const v1 = damObservationsSectionV1(
+			live.dams.map((d) => ({ featureId: d.featureId, name: d.name, nodeId: d.nodeId, rows: d.sources.wofs.dates.map(([date, wetAreaM2, pctObserved]) => ({ source: 'wofs' as const, date, wetAreaM2, pctObserved })) })),
+			{ applicant: true, ownNodeIds: [farmId], startDate: live.startDate, endDate: live.endDate, models: [] }
+		)!;
+		const id = crypto.randomUUID();
+		const old = { ...now, pack: { ...now.pack, id }, report: { ...now.report, version: 'evidence-23', damObservations: v1 } } as unknown as PackManifest;
+		const hash = sha256(packManifestText(old));
+		await asOwner(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+			 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, 'evidence-23', $8, $9)`,
+			[id, projectId, baseRun, read0.pack.scenarioId, runId, JSON.stringify(old), hash, now.engine.version, editor.id]
+		);
+		try {
+			const res = await editor.call('GET', packPath(id));
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			const read = res.body;
+			expect(read.manifestMatches).toBe(true);
+			expect(read.pack.manifestSha256).toBe(hash);
+			expect(read.manifest.report.version).toBe('evidence-23');
+			expect(read.manifest.report.damObservations).toEqual(v1);
+			expect(read.manifest.report.damObservations.dams[0].wetDates).toBe(1);
+			// Its § 7 still checks, as dam-obs-1 (engine checkDamObservations, which reproduce:pack runs).
+			expect(checkDamObservations(read.manifest.report.damObservations, { period: { startDate: live.startDate, endDate: live.endDate } })).toEqual([]);
+		} finally {
+			expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
 		}
 	});
 });

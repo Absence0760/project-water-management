@@ -2,6 +2,8 @@
 import type { Locale } from '@water-management/engine/languages';
 import type {
 	AppliedOp,
+	FutureFactorTable,
+	FutureYieldResult,
 	CatchmentAttributes,
 	ParamPriors,
 	PriorProvenance,
@@ -2558,6 +2560,53 @@ export interface JobMeta {
 	progress?: number | null;
 }
 
+/**
+ * The Scenarios tab's future climate (docs/api.md § Future climate, issue #621 slice 5): whether it is on, the
+ * project's newest factor table, whether the catchment boundary changed since it was read (or is gone), and the
+ * newest job that works one out.
+ */
+export interface ClimateFactorsState {
+	enabled: boolean;
+	factors: {
+		id: string;
+		jobId: string | null;
+		factors: FutureFactorTable;
+		/** The job's notes (a model's cells with no value left out). */
+		warnings: string[];
+		boundarySha256: string;
+		createdBy: string | null;
+		createdAt: string;
+	} | null;
+	boundary: 'same' | 'changed' | 'none';
+	job: JobMeta | null;
+}
+
+/** § 8 Future yield of an application run (docs/api.md § Future yield): whether it is on, the newest result and the newest job. */
+export interface FutureYieldState {
+	enabled: boolean;
+	result: {
+		id: string;
+		baselineRunId: string;
+		applicationRunId: string;
+		nodeId: string;
+		jobId: string | null;
+		/** null, with withheld ['result'], for a viewer kept from the registered volumes on a cap or full-allocation run. */
+		result: FutureYieldResult | null;
+		withheld?: string[];
+		engineVersion: string;
+		createdBy: string | null;
+		createdAt: string;
+	} | null;
+	job: JobMeta | null;
+}
+
+/** Queueing a background job: the job, and whether it is new (false: one already waiting is returned). */
+export interface QueuedJob {
+	jobId: string;
+	job: JobMeta;
+	created: boolean;
+}
+
 /** A sweep member's outcome series as stored (docs/api.md § Sweeps): a missing value is null. */
 export interface StoredRunSeries {
 	nodeId: string | null;
@@ -3567,8 +3616,12 @@ export interface RegisterDamProposal {
 	loadedAt: string;
 }
 
-/** Where a dam observation comes from (backend dams/observed/compare.ts). */
-export type ObservedSource = 'waterbodies' | 'wofs';
+/**
+ * Where a dam observation comes from (backend dams/observed/compare.ts): 's2' and 's1' (Sentinel-2, Sentinel-1 radar)
+ * since 278, issue #624. A day several saw clearly goes to the sharpest (SOURCE_PRECEDENCE: s2, wofs, waterbodies, s1),
+ * and radar is never alone the reason for a flag.
+ */
+export type ObservedSource = 'waterbodies' | 'wofs' | 's2' | 's1';
 /** Why an observation wasn't compared with the model (backend dams/observed/compare.ts SkipReason). */
 export type ObservedSkip = 'partly-seen' | 'not-this-dam' | 'partial-unit' | 'other-source' | 'outside-run' | 'no-run';
 /** Which side says full or empty while the other clearly doesn't. */
@@ -3611,6 +3664,10 @@ export interface ObservedDam {
 		seenFull: number;
 		seenEmpty: number;
 		mismatches: number;
+		/** Of the compared views, how many are radar (Sentinel-1). */
+		radar: number;
+		/** biasPctOfFull and withinShare over the optical views alone (all but radar's), shown when radar is among them. */
+		optical: { compared: number; biasPctOfFull: number | null; withinShare: number | null };
 		latestClear: { date: string; source: ObservedSource; wetAreaM2: number; pctObserved: number } | null;
 	};
 }
@@ -3618,9 +3675,86 @@ export interface ObservedDam {
 /** GET …/dams/observations (issue #604 R5-B): each unit's dam seen from space against the run's modelled area. */
 export interface DamObservations {
 	attribution: string;
-	thresholds: { minPctObserved: number; fullShare: number; emptyShare: number; pixelM2: number; clearlyNotFull: number; clearlyWet: number; withinShare: number };
+	/** Copernicus's credit for the years of the Sentinel views listed (issue #624); null with none. */
+	sentinelCredit: string | null;
+	/** pixelM2: one pixel's ground area per source, the observed side's empty floor. */
+	thresholds: { minPctObserved: number; fullShare: number; emptyShare: number; pixelM2: Record<ObservedSource, number>; clearlyNotFull: number; clearlyWet: number; withinShare: number };
 	run: { id: string; label: string; createdAt: string; engineVersion: string; forecastFrom: string | null } | null;
 	dams: ObservedDam[];
+}
+
+/** et_observation.source (issue #623): FAO WaPOR v3, or USGS SSEBop v6 (the fallback). */
+export type EtSource = 'wapor' | 'ssebop';
+/** Why a dekad wasn't compared (backend water-use/observed/compare.ts EtSkipReason). */
+export type EtSkip = 'partly-seen' | 'partial-dekad' | 'outside-run' | 'no-area' | 'no-run' | 'no-series';
+
+/** One dekad of observed actual ET beside the run (volumes in m³ over the dekad, on the run's planted area). */
+export interface EtPoint {
+	source: EtSource;
+	dekad: string;
+	end: string;
+	days: number;
+	etaMmDay: number;
+	validShare: number;
+	areaM2: number;
+	mask: 'cropland' | 'parcel';
+	observedEtM3: number | null;
+	/** Effective rain + the irrigation reaching the crop: the crop's ET as the run supplied it. */
+	modelledEtM3: number | null;
+	/** Σ gross_demand: the requirement at full supply. */
+	requirementM3: number | null;
+	effectiveRainM3: number | null;
+	observedIrrigationM3: number | null;
+	modelledIrrigationM3: number | null;
+	suppliedM3: number | null;
+	compared: boolean;
+	skip: EtSkip | null;
+	etWithin: boolean | null;
+	irrigationWithin: boolean | null;
+}
+
+/** Sums and agreement over compared dekads; a bias is (modelled − observed) ÷ observed × 100. */
+export interface EtTotals {
+	compared: number;
+	skipped: number;
+	observedEtM3: number;
+	modelledEtM3: number;
+	observedIrrigationM3: number;
+	modelledIrrigationM3: number;
+	etBiasPct: number | null;
+	irrigationBiasPct: number | null;
+	etWithinShare: number | null;
+	irrigationWithinShare: number | null;
+}
+
+export interface EtSeason extends EtTotals {
+	waterYear: number;
+	half: 'summer' | 'winter';
+	label: string;
+}
+
+export interface EtSourceResult {
+	source: EtSource;
+	attribution: string;
+	area: { areaM2: number; mask: 'cropland' | 'parcel'; ratioToPlanted: number | null; differs: boolean } | null;
+	points: EtPoint[];
+	seasons: EtSeason[];
+	summary: EtTotals;
+}
+
+/** GET …/nodes/:nodeId/et-observed (issue #623): a unit's satellite actual ET against the run's modelled irrigation use. */
+export interface EtObserved {
+	nodeId: string;
+	name: string;
+	/** Whether this site runs the satellite ET check (the backend's ET_OBSERVATIONS); off by default. */
+	enabled: boolean;
+	/** Farm parcels (polygons) linked to the unit on the Map: what the check reads. */
+	parcels: number;
+	thresholds: { minValidShare: number; withinShare: number; floorMmDay: number; areaRatio: number };
+	run: { id: string; label: string; createdAt: string; engineVersion: string; forecastFrom: string | null; inRun: boolean } | null;
+	plantedAreaM2: number | null;
+	/** Empty with no observations: the fetch is off by default, the unit has no parcels, or none is read yet. */
+	sources: EtSourceResult[];
 }
 
 /** GET …/farm/:nodeId/dam-observed (issue #604 R5-B): the farm's dam seen from space. */
@@ -3630,6 +3764,8 @@ export interface FarmDamObserved {
 	latest: { date: string; wetAreaM2: number; source: ObservedSource } | null;
 	fullAreaM2: number | null;
 	attribution: string;
+	/** Copernicus's credit when the latest view is Sentinel's (issue #624); null otherwise. */
+	sentinelCredit: string | null;
 }
 
 /** GET …/nodes/:nodeId/dam-proposals: what the register and the map propose for a unit's dam. */

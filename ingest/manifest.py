@@ -3,7 +3,7 @@
 
     { product, revision, region: {w, s, e, n}, grid: {origin: {lat, lon}, step},
       years: {first, last}, finalThrough, prelimThrough,
-      files: [{ url, etag, lastModified, size, valuesSha256, revision, fetchedAt, version? }],
+      files: [{ url, etag, lastModified, size, valuesSha256, revision, fetchedAt, version?, license? }],
       changes: [{ revision, days: [from, to], cellsChanged, maxAbsDiff }] }
 
 `revision` is an integer from 1, dates are ISO `YYYY-MM-DD` (or null before
@@ -65,6 +65,18 @@ product's system and month), with no ETag or Last-Modified; neither holds
 final or preliminary days (both null). `years` is the init's year to the
 last lead day's year for a forecast, and the hindcast years held for a
 hindcast (the array's `years` attribute lists them).
+NEX-GDDP-CMIP6's monthly aggregates (issue #621, cmip6_delta.py):
+`cmip6/<model>/<scenario>` (scenario `historical`, `ssp245` or `ssp585`) on
+the 0.25 deg grid (step 0.25). Each file is one of NEX's yearly daily files,
+its URL exactly the object it was read from,
+`s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/<model>/<scenario>/<variant>/<var>/<var>_day_<model>_<scenario>_<variant>_<grid>_<YYYY>[_v<N.N>].nc`
+(`cmip6_file_key`), naming the product's model and scenario. Every file
+carries `version` (the file name's suffix, `v1.0` when it has none: the first
+release) and `license` (the file's global `license` attribute verbatim, or
+null when it has none); no other product's file carries a `license`.
+`valuesSha256` hashes the file's monthly aggregates, (month, lat, lon), not
+its days. Neither final nor preliminary days (both null): these are
+projections, not observations.
 `power_et0` (nasapower.py) is like `imerg_late`: no final days, one file a
 day, each URL exactly `power://temporal/daily/regional/fao56-et0/YYYY-MM-DD`
 with no ETag or Last-Modified (a day is computed from many responses), held
@@ -114,6 +126,25 @@ C3S_PRODUCT = re.compile(r"^(c3s/\d{4}-(0[1-9]|1[0-2])|c3s-hc/[a-z_]+-\d+/(0[1-9
 _C3S_URL = re.compile(r"^cds://seasonal-original-single-levels/total_precipitation/([a-z_]+-\d+)/(\d{4}-(0[1-9]|1[0-2])|hindcast/(0[1-9]|1[0-2]))$")
 
 
+#: NEX-GDDP-CMIP6's monthly aggregates (issue #621, cmip6_delta.py), on the 0.25 deg grid (grid.CMIP6).
+CMIP6_PRODUCT = grid.CMIP6_PRODUCT
+_CMIP6_URL = re.compile(
+    r"^s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/([A-Za-z0-9][A-Za-z0-9-]*)/(historical|ssp245|ssp585)/(r\d+i\d+p\d+f\d+)/(pr|tasmax|tasmin)/"
+    r"\4_day_\1_\2_\3_(g[a-z0-9]+)_(\d{4})(?:_(v\d+\.\d+))?\.nc$"
+)
+CMIP6_VERSION = re.compile(r"^v\d+\.\d+$")
+#: A NEX file whose name has no version suffix is from the first release.
+CMIP6_FIRST_VERSION = "v1.0"
+
+
+def cmip6_file_key(url: str) -> dict | None:
+    """What a cmip6 file's URL names (model, scenario, variant, var, grid label, year, version), or None."""
+    m = _CMIP6_URL.match(url)
+    if not m:
+        return None
+    return {"model": m[1], "scenario": m[2], "variant": m[3], "var": m[4], "gridLabel": m[5], "year": int(m[6]), "version": m[7] or CMIP6_FIRST_VERSION}
+
+
 def c3s_file_request(url: str) -> tuple[str, str] | None:
     """(system, init "YYYY-MM" or hindcast "hindcast/MM") a c3s file's URL (its CDS request) names, or None."""
     m = _C3S_URL.match(url)
@@ -126,6 +157,8 @@ def product_step(product: str) -> float | None:
         return PRODUCT_STEPS[product]
     if C3S_PRODUCT.match(product):
         return 1.0
+    if CMIP6_PRODUCT.match(product):
+        return 0.25
     m = re.match(r"^(gefs|ecmwf)/\d{4}-\d{2}-\d{2}$", product)
     return _FORECAST_STEPS[m[1]] if m else None
 
@@ -309,7 +342,7 @@ def validate(m: dict) -> dict:
     if not isinstance(m["files"], list):
         _fail("files must be a list")
     for i, f in enumerate(m["files"]):
-        _exact_keys(f, [*_FILE_KEYS, "version"] if isinstance(f, dict) and "version" in f else _FILE_KEYS, f"files[{i}]")
+        _exact_keys(f, [*_FILE_KEYS, *(k for k in ("version", "license") if isinstance(f, dict) and k in f)], f"files[{i}]")
         if not isinstance(f["url"], str) or not f["url"]:
             _fail(f"files[{i}].url must be a non-empty string")
         for k in ("etag", "lastModified"):
@@ -322,8 +355,8 @@ def validate(m: dict) -> dict:
         _int(f["revision"], f"files[{i}].revision", 1)
         if not isinstance(f["fetchedAt"], str) or not _UTC.match(f["fetchedAt"]):
             _fail(f"files[{i}].fetchedAt must be ISO UTC (…Z)")
-        if "version" in f and not (isinstance(f["version"], str) and IMERG_VERSION.match(f["version"])):
-            _fail(f"files[{i}].version must be an IMERG version (V07, V08, …), got {f['version']!r}")
+        if "license" in f and f["license"] is not None and not isinstance(f["license"], str):
+            _fail(f"files[{i}].license must be a string or null")
     if not isinstance(m["changes"], list):
         _fail("changes must be a list")
     for i, c in enumerate(m["changes"]):
@@ -343,8 +376,14 @@ def validate(m: dict) -> dict:
         _fail(f"grid.step must be {step} for {m['product']}, got {m['grid']['step']!r}")
     if m["product"] in _NO_PRELIM and m["prelimThrough"] is not None:
         _fail(f"{m['product']} has no preliminary days")
+    cmip6 = bool(CMIP6_PRODUCT.match(m["product"]))
+    for i, f in enumerate(m["files"]):
+        if "license" in f and not cmip6:
+            _fail(f"files[{i}] of {m['product']} carries a license: only cmip6's do")
     if m["product"] == "imerg_late":
         for i, f in enumerate(m["files"]):
+            if "version" in f and not (isinstance(f["version"], str) and IMERG_VERSION.match(f["version"])):
+                _fail(f"files[{i}].version must be an IMERG version (V07, V08, …), got {f['version']!r}")
             if imerg_file_day(f["url"]) is None:
                 _fail(f"files[{i}].url names no day (…3IMERG.YYYYMMDD-S000000-E235959.…), got {f['url']!r}")
         if m["finalThrough"] is not None:
@@ -352,10 +391,24 @@ def validate(m: dict) -> dict:
         days = imerg_coverage(m["files"])
         if m["prelimThrough"] is not None and (days is None or m["prelimThrough"] > days[1]):
             _fail(f"prelimThrough {m['prelimThrough']} runs past the newest day the files hold ({days[1] if days else 'none'})")
+    elif cmip6:
+        _, model, scenario = m["product"].split("/")
+        for i, f in enumerate(m["files"]):
+            k = cmip6_file_key(f["url"])
+            if k is None:
+                _fail(f"files[{i}].url is not a NEX-GDDP-CMIP6 file (s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/<model>/<scenario>/<variant>/<var>/<var>_day_…_<YYYY>[_vN.N].nc), got {f['url']!r}")
+            if (k["model"], k["scenario"]) != (model, scenario):
+                _fail(f"files[{i}].url names another model or scenario than {m['product']}")
+            if "version" not in f or "license" not in f:
+                _fail(f"files[{i}] of {m['product']} must carry its version and license")
+            if not (isinstance(f["version"], str) and CMIP6_VERSION.match(f["version"])) or f["version"] != k["version"]:
+                _fail(f"files[{i}].version must be the file name's version ({k['version']}), got {f['version']!r}")
+        if m["finalThrough"] is not None or m["prelimThrough"] is not None:
+            _fail(f"{m['product']} is a projection: it holds no final or preliminary days")
     else:
         for i, f in enumerate(m["files"]):
             if "version" in f:
-                _fail(f"files[{i}] of {m['product']} carries a version: only imerg_late's do")
+                _fail(f"files[{i}] of {m['product']} carries a version: only imerg_late's and cmip6's do")
     if m["product"] == "era5l":
         for i, f in enumerate(m["files"]):
             if era5l_file_month(f["url"]) is None:
@@ -414,7 +467,7 @@ def _ordered(m: dict) -> dict:
     out["region"] = {k: m["region"][k] for k in ("w", "s", "e", "n")}
     out["grid"] = {"origin": {k: m["grid"]["origin"][k] for k in ("lat", "lon")}, "step": m["grid"]["step"]}
     out["years"] = {k: m["years"][k] for k in ("first", "last")}
-    out["files"] = [{k: f[k] for k in [*_FILE_KEYS, *(["version"] if "version" in f else [])]} for f in m["files"]]
+    out["files"] = [{k: f[k] for k in [*_FILE_KEYS, *(k for k in ("version", "license") if k in f)]} for f in m["files"]]
     out["changes"] = [{k: c[k] for k in _CHANGE_KEYS} for c in m["changes"]]
     return out
 

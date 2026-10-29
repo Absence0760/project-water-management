@@ -168,6 +168,16 @@ beforeAll(async () => {
 			new Date()
 		]);
 	}
+	// Observed actual ET on every unit with a parcel (277, issue #623), loaded as the worker loads it: the neighbour's file named with the marker.
+	for (const n of [home, theirs, unlinked]) {
+		const file = n === home ? 'WAPOR-3.L2-AETI-D.2021-11-D1.tif' : `WAPOR-3.${MARKER}.2021-11-D1.tif`;
+		const [r] = await asOwner(
+			`SELECT applied FROM app_et_observation_load('wapor', $1, ARRAY['2021-11-01']::date[], ARRAY[4.5]::float8[], ARRAY[1]::float8[], ARRAY[200000]::float8[],
+				'parcel', ARRAY[$2]::text[], ARRAY[NULL]::text[], 'WAPOR-3', now())`,
+			[n.id, file]
+		);
+		expect(r!.applied).toBe(true);
+	}
 	expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(3000) } })).status).toBe(200);
 	const rain = Array.from({ length: 500 }, (_, i) => (i % 23 === 0 ? 12 : 0));
 	expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
@@ -233,7 +243,7 @@ describe('the farm dam page’s satellite views (GET …/farm/:nodeId/dam-observ
 		const r = await farmer.call('GET', `/projects/${projectId}/farm/${home.id}/dam-observed`);
 		expect(r.status).toBe(200);
 		// Exactly these fields: the count of outlines, the newest view, the full area (estimated from the capacity) and the credit.
-		expect(r.body).toEqual({ outlines: 1, latest: { date: '2021-11-18', wetAreaM2: 12_000, source: 'wofs' }, fullAreaM2: expect.any(Number), attribution: 'Digital Earth Africa, CC BY 4.0' });
+		expect(r.body).toEqual({ outlines: 1, latest: { date: '2021-11-18', wetAreaM2: 12_000, source: 'wofs' }, fullAreaM2: expect.any(Number), attribution: 'Digital Earth Africa, CC BY 4.0', sentinelCredit: null });
 		const text = JSON.stringify(r.body);
 		for (const trace of [damFeature.get(home.id)!, damFeature.get(theirs.id)!, MARKER, 'homeuid001', 'ga_ls_wofs', String(NEIGHBOUR_WET_M2), 'match', 'uid', 'upstream', 'featureId', 'nodeId'])
 			expect(text, `the answer carries ${trace}`).not.toContain(trace);

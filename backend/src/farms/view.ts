@@ -26,6 +26,7 @@ import type { StoredCatchmentView } from '../publish/publish.js';
 import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
 import { compareDam, fullAreaOf, type ObservedSource } from '../dams/observed/compare.js';
 import { OBSERVED_ATTRIBUTION, observationsOf, observedFeatures } from '../dams/observed/read.js';
+import { isSentinel, sentinelCredit } from '../dams/observed/upstream.js';
 
 const isoDate = z
 	.string()
@@ -277,6 +278,8 @@ export interface FarmDamObserved {
 	/** The area the dam covers when full, as the model has it (survey curve, entered, or estimated); null with no dam capacity. */
 	fullAreaM2: number | null;
 	attribution: string;
+	/** Copernicus's credit when the latest view is Sentinel's (its year); null otherwise. */
+	sentinelCredit: string | null;
 }
 
 /**
@@ -303,7 +306,13 @@ export async function farmDamObserved(db: Db, projectId: string, nodeId: string)
 		full
 	});
 	const l = r.summary.latestClear;
-	return { outlines: features.length, latest: l ? { date: l.date, wetAreaM2: l.wetAreaM2, source: l.source } : null, fullAreaM2: full?.areaM2 ?? null, attribution: OBSERVED_ATTRIBUTION };
+	return {
+		outlines: features.length,
+		latest: l ? { date: l.date, wetAreaM2: l.wetAreaM2, source: l.source } : null,
+		fullAreaM2: full?.areaM2 ?? null,
+		attribution: OBSERVED_ATTRIBUTION,
+		sentinelCredit: l && isSentinel(l.source) ? sentinelCredit([l.date]) : null
+	};
 }
 
 export const farmViewRoutes = new Hono<AuthEnv>()

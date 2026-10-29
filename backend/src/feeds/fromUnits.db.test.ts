@@ -23,6 +23,8 @@ type User = Awaited<ReturnType<typeof signUp>>;
 afterEach(async () => {
 	await asOwner('DELETE FROM data_feed');
 	await asOwner(`DELETE FROM job WHERE kind IN ('feed_fetch', 'feed_ingest')`);
+	// The cell cache its fetches fill is shared too (productCache.db.test.ts counts every row).
+	for (const t of ['chirps_cell_year', 'chirps_file', 'chirps_cell_stale']) await asOwner(`DELETE FROM ${t}`);
 });
 
 const ring = (w: number, s: number, e: number, n: number) => [

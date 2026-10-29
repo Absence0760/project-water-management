@@ -6,7 +6,9 @@
 	// makes the page's save bar unreachable while it is open, so it carries the
 	// same save row: reason, Save changes (the page's save), and Done. Under the
 	// areas, "From land cover" proposes a crop's area from the unit's parcels on
-	// the map (issue #326 B-landcover, CroplandProposalsBox.svelte).
+	// the map (issue #326 B-landcover, CroplandProposalsBox.svelte), then the
+	// unit's satellite actual ET against the newest run (issue #623,
+	// EtObservedBox.svelte).
 	import { untrack } from 'svelte';
 	import type { ProjectSettings } from '@water-management/engine';
 	import Dialog from '#lib/components/common/Dialog.svelte';
@@ -17,6 +19,7 @@
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import CroplandProposalsBox from './CroplandProposalsBox.svelte';
+	import EtObservedBox from './EtObservedBox.svelte';
 	import { farmDemands } from './demand';
 	import { farmPlanting, inOrder, plantedFirst } from './farmDrawer';
 	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
@@ -139,8 +142,9 @@
 	{#if node && node.kind === 'farm' && projectId}
 		{#if editor.savedNodeIds.has(node.id)}
 			<CroplandProposalsBox {projectId} nodeId={node.id} {readonly} dirty={editor.dirty} {onModelChanged} />
+			<EtObservedBox {projectId} nodeId={node.id} {name} dirty={editor.dirty} />
 		{:else}
-			<p class="muted small" data-testid="cropland-unsaved">Save the model to see this hydrological unit’s cultivated area from land cover.</p>
+			<p class="muted small" data-testid="cropland-unsaved">Save the model to see this hydrological unit’s cultivated area from land cover and its actual ET from satellite.</p>
 		{/if}
 	{/if}
 

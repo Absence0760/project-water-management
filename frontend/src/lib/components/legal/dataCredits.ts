@@ -65,6 +65,15 @@ export const DPET_STATEMENT =
 /** ESA WorldCover's attribution for a map or figure (CC BY 4.0). */
 export const WORLDCOVER_STATEMENT = '© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium';
 
+/** Digital Earth Africa's credit (CC BY 4.0) for the dam observations: the backend's `DEAFRICA_ATTRIBUTION` (dams/observed/upstream.ts), word for word. */
+export const DEAFRICA_STATEMENT = 'Digital Earth Africa, CC BY 4.0';
+
+/**
+ * Copernicus's credit for Sentinel-2 and Sentinel-1 values (issue #624): the backend's `SENTINEL_ATTRIBUTION`
+ * (dams/observed/upstream.ts), word for word, its [year] filled with the years of the views shown wherever they show.
+ */
+export const SENTINEL_STATEMENT = 'Contains modified Copernicus Sentinel data [year], processed by Digital Earth Africa';
+
 /** GeoNames' attribution (CC BY 4.0), shown under every Map search that lists a place: the backend's `GEONAMES_SOURCE` (geo/gazetteer.ts), word for word. */
 export const GEONAMES_STATEMENT = 'GeoNames (geonames.org), CC BY 4.0';
 
@@ -280,6 +289,27 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		licenceUrl: 'https://registry.opendata.aws/isdasoil/',
 		read: '2026-10-28',
 		statements: [ISDA_STATEMENT]
+	},
+	{
+		id: 'deafrica',
+		name: 'Digital Earth Africa Waterbodies and WOfS',
+		usedFor: 'Dams seen from space: the water surface satellites saw on a traced dam, beside the model’s, on the Dams tab and the farm’s dam page.',
+		publisher: 'Digital Earth Africa',
+		licence: 'Creative Commons Attribution 4.0 (CC BY 4.0), commercial use allowed with attribution',
+		licenceUrl: 'https://creativecommons.org/licenses/by/4.0/',
+		read: '2026-10-27',
+		statements: [DEAFRICA_STATEMENT]
+	},
+	{
+		id: 'copernicus-sentinel',
+		name: 'Copernicus Sentinel-2 and Sentinel-1 (Digital Earth Africa’s analysis-ready data)',
+		usedFor:
+			'Dams seen from space: the water inside each traced dam’s outline, from Sentinel-2 at 10 m and Sentinel-1 radar through cloud. The credit names the years of the views it stands under.',
+		publisher: 'The European Union’s Copernicus programme and the European Space Agency; processed by Digital Earth Africa',
+		licence: 'The legal notice on the use of Copernicus Sentinel data (Regulation (EU) No 1159/2013): free, full and open, modification and commercial use allowed with the credit',
+		licenceUrl: 'https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice',
+		read: '2026-10-27',
+		statements: [SENTINEL_STATEMENT]
 	},
 	{
 		id: 'fonts',

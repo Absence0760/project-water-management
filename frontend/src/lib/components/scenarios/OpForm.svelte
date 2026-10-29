@@ -6,7 +6,7 @@
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName, resolveCatchmentAreaKm2 } from '@water-management/engine';
+	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName, type FutureFactorTable, resolveCatchmentAreaKm2 } from '@water-management/engine';
 	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { guardUnsaved } from '#lib/nav/unsaved.js';
@@ -24,7 +24,8 @@
 		input,
 		onadd,
 		disabled = false,
-		projectId = null
+		projectId = null,
+		futureClimate = true
 	}: {
 		/** The input a new op meets: the base run with the listed ops applied. */
 		input: ModelInput;
@@ -32,8 +33,16 @@
 		projectId?: string | null;
 		onadd: (op: ScenarioOp) => Promise<boolean>;
 		disabled?: boolean;
+		/** Offer Future climate (climate.delta): false for an applicant, who reads no climate factor table. */
+		futureClimate?: boolean;
 	} = $props();
 
+	// climate.delta (engine 1.107.0, issue #621 slice 5) is a pick of model, pathway and window from the project's change
+	// factor table (FutureClimateFields), never factors typed in: the table is the copy's projections.
+	const kinds = $derived(SCENARIO_OP_NAMES.filter((k) => k !== 'climate.delta' || (futureClimate && projectId)));
+	const loadClimateFields = () => import('./FutureClimateFields.svelte');
+	/** The project's climate factor table, once FutureClimateFields has read it (buildOp's climate.delta). */
+	let climateTable = $state.raw<FutureFactorTable | null>(null);
 	let d = $state<OpDraft>(emptyDraft());
 	let error = $state<string | null>(null);
 	let busy = $state(false);
@@ -161,7 +170,7 @@
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
-		const r = buildOp(d, input.model);
+		const r = buildOp(d, input.model, undefined, { climate: climateTable });
 		if (!r.ok) {
 			error = r.error;
 			return;
@@ -297,7 +306,7 @@
 		<div class="field">
 			<label for="op-kind">Kind of change</label>
 			<select id="op-kind" value={d.kind} onchange={(e) => pickKind(e.currentTarget.value as ScenarioOpName)}>
-				{#each SCENARIO_OP_NAMES as k (k)}<option value={k}>{OP_LABEL[k]}</option>{/each}
+				{#each kinds as k (k)}<option value={k}>{OP_LABEL[k]}</option>{/each}
 			</select>
 		</div>
 
@@ -810,6 +819,14 @@
 			{:else}
 				<p class="hint">The table was removed. <button type="button" class="btn btn-sm" onclick={() => pickEwrSite(d.ewrSite)}>Start again</button></p>
 			{/if}
+		{/if}
+	{:else if d.kind === 'climate.delta'}
+		{#if projectId}
+			<Lazy load={loadClimateFields}>
+				{#snippet children(FutureClimateFields)}
+					<FutureClimateFields {projectId} bind:model={d.climateModel} bind:ssp={d.climateSsp} bind:horizon={d.climateHorizon} bind:table={climateTable} />
+				{/snippet}
+			</Lazy>
 		{/if}
 	{:else if d.kind === 'demand.scale'}
 		<div class="form-row">

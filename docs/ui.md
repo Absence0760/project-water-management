@@ -1930,19 +1930,34 @@ for every workspace tab. Its own chunk.
   views yet", "none compared · latest clear view …"). **Show** opens, in order:
   a line per outline DE Africa Waterbodies merged with a neighbouring water
   body, has no polygon for, or hasn't been matched to yet (its Waterbodies
-  views aren't compared, only WOfS inside the outline); the full area and
+  views aren't compared, only the views of its own outline, WOfS and
+  Sentinel); the full area and
   where it comes from (survey curve's top, as entered, or estimated from the
   capacity) with a summary in words (the span, the mean difference as a share
-  of the full area, the share within ±10 %, how often seen full or empty); the
+  of the full area, the share within ±10 %, how often seen full or empty, and
+  how many of the views are radar, "never called full or empty on their
+  own", then, with radar among them, the optical views' own figures,
+  "Without radar (n clear views): …", since wind makes radar read low and
+  pulls the mean down; model.md §2.10l); with more than one source, a line of how many views each gave,
+  best first ("Views by source: 3 Sentinel-2, 2 WOfS, 1 Sentinel-1 radar. A
+  day more than one saw clearly is compared with the most trusted: Sentinel-2,
+  then WOfS, then Waterbodies, then radar.", issue
+  #624); the
   chart (`LineChart`, ha: the run's area as a line, ending before a forecast
   run's forecast, whose views aren't compared either, the compared views as
-  dots, the views not compared as fainter dots off until the legend shows
+  dots, compared radar views as rings of their own (**Seen by radar**, the
+  same `--series-2`, `ChartSeries.hollow`: a shape apart in the plot and the
+  key), the views not compared as fainter dots
+  off until the legend shows
   them, the full area dashed, 30 days / 1 year / All opening on All) with the
   flags as lanes along its foot (**Disagree** `--lane-disagree`, **Seen full**
   `--lane-seen-full`, **Seen empty** `--lane-seen-empty`, each named in the
   lanes key; their own tokens, computed apart for colour-blind readers from
   each other and from every line the chart draws,
-  `dams/observedLaneColours.test.ts`), the y axis starting under 0 ha by the
+  `dams/observedLaneColours.test.ts`) and, on the days a radar view was
+  compared, a **doubled** strip, **Radar** `--lane-radar` (a shape, not a
+  flag: the key's heading becomes "Flags and radar days … solid: a flag;
+  double line: a radar view", and the caption says "rings: radar"), the y axis starting under 0 ha by the
   strips' height (`LineChart` `lanesRoom`, `charts/series.ts` `laneRoom`) so a
   view of an empty dam sits above them, not under; **The N views, newest
   first**, a table of the newest ten (`VIEWS_SHOWN`) with **Show all N views**
@@ -1951,7 +1966,14 @@ for every workspace tab. Its own chunk.
   disagrees in `--danger` with the words "Disagree: …"), which stacks each
   view as a block in a narrow column (36rem) rather than scrolling sideways;
   and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0 (Waterbodies
-  and WOfS, from Landsat)". The run's area loads through the Runs cache only
+  and WOfS, from Landsat).", followed, when any Sentinel view is listed, by
+  "Contains modified Copernicus Sentinel data 2021, processed by Digital
+  Earth Africa." for the years of that dam's own Sentinel views
+  (`observed.ts` `sentinelCredit`; the API's top-level `sentinelCredit`
+  covers every dam listed). A view left out for another the same day names
+  the one compared ("Not compared: Sentinel-2 saw it clearly the same
+  day"); a radar row adds "radar, never called full
+  or empty on its own". The run's area loads through the Runs cache only
   once the fold opens. A dam with no outline says so, with **Open the Map**;
   to an editor it says to draw the water surface as a polygon and link it, to
   a viewer that an editor draws the outline.
@@ -5249,6 +5271,50 @@ saves the catchment's model, and override mode there edits the scenario's
   "Vines, Top block: 1.29 ha"); a crop-type choice's confirmation says
   "from crop types" with the crop-type caution, and so does the notice.
   e2e: `crop-types-proposals.spec.ts`.
+- **Actual ET from satellite** (issue #623, `crops/EtObservedBox.svelte`,
+  rows in `crops/etObserved.ts`; the method in [model.md §
+  2.10o](./model.md#210o-observed-actual-et-against-the-modelled-irrigation-use-app-issue-623),
+  the API in [api.md § Observed actual ET](./api.md#observed-actual-et)):
+  under From land cover, for the same saved hydrological unit, one fold
+  (`Fold`, read-only, so its action reads "Show") whose line says how many
+  dekads of satellite actual ET were compared with the project's newest run
+  and which way the model leans ("5 dekads compared · crop ET +12% ·
+  irrigation −8%"; + means the model uses more, rounded before the sign).
+  Opened: the run it compares with ("Compared with the newest run,
+  “Baseline” (29 Oct 2026)."), a line when the drawer has unsaved changes
+  to the planted areas ("aren't in this run"), and with more than one
+  source a **Source** switch, "WaPOR (7 dekads) | SSEBop (3 dekads)" (`.seg`
+  buttons with `aria-pressed`; WaPOR first, the choice reset per unit), each
+  source compared on its own, the line, summary and tables following it;
+  the summary in words (each bias, and the share of dekads within ±25 %); the observed area
+  when it is more than 1.5× from the planted area either way, asking to
+  check the planted areas and the parcels; a note that modelled crop ET is
+  the model's effective rain plus the irrigation the run delivered to the
+  crop (at most planted area × crop factor × A-pan) and irrigation seen the
+  satellite's ET less that rain, and that a difference points at the inputs, never a correction (the model
+  never reads these values); a table per half water year (summer Oct–Mar,
+  winter Apr–Sep: dekads compared of seen, ET seen, crop ET modelled and
+  bias, irrigation the same; "ET seen", not "crop ET", since the satellite
+  sees soil and weeds too); the dekads newest first behind "The N WaPOR
+  dekads, newest first" (six, then "Show all N dekads"), each with ETa (mm/day), the four
+  volumes (m³) and why it wasn't compared, a dekad outside the band in the
+  danger colour; **Download the dekads (CSV)**, every source's dekads with
+  the credit on its first line (a `#` line, built in the browser); and the
+  credit per source, "Actual ET (WaPOR): FAO WaPOR v3, CC BY 4.0." With no
+  observations, the usual case, it says why, from the API's `enabled` and
+  `parcels` (`etObserved.ts` `emptyWords`): the check off on this site (line
+  "off on this site"; the open fold names the parcels linked, or that none
+  is), no farm parcels linked to the unit ("no farm parcels linked": draw or
+  link them on the Map), or parcels linked but no dekad read yet ("none read
+  yet": a dekad is published about three days after it ends), each with
+  **Open the Map**. The tables are app.css's `.table-stack`: the
+  drawer (480 px at most) is under its 50rem at every width, so each row is
+  a block with its figures under their own labels and nothing scrolls
+  sideways. An unsaved unit's line ("Save the model to see …") names this
+  panel too. The run's daily CSV
+  (`…/runs/:runId/export/daily.csv`) doesn't carry ETa: a dekadal value has
+  no day of its own, and the run's export is the run's alone, so the
+  comparison has its own file.
 - **Saving:** it edits the shared `ModelEditor`, so an edit shows on the Crops
   tab at once and the other way round. The sheet is modal, which makes the
   page's save bar unreachable, so it repeats the save row: status (unsaved,
@@ -11283,7 +11349,22 @@ them scenarios).
   × litres a day, the rest at the category's defaults), change one field of
   one (every field, labelled as on the Network tab's form; its on/off
   schedule with the Network tab's own schedule editor, recorded whole) or
-  remove one
+  remove one, and (issue #621 slice 5) **Future climate (monthly change
+  factors)**: a climate model, pathway and window picked from the
+  project's change factor table, never factors typed in
+  (`FutureClimateFields.svelte`, lazy; not offered to an applicant, who
+  reads no factor table, nor in a licence's terms). With `FUTURE_YIELD` off it says the
+  projections aren't loaded; with no catchment boundary on the Map tab, to
+  draw one; with no table yet, **Work out the change factors** queues the
+  `climate_factors` job and the form follows it (*Working out the change
+  factors. Queued…*, with **Cancel**: a waiting job ends at once, a running
+  one says *Cancelling…* and stops before it stores a table; a cancelled
+  job is no failure, and the button comes back), then shows the three pickers, which models and
+  baseline the table rests on, an amber note when the copy holds only part
+  of each 30-year window, and the picked case's 24 factors in a table
+  (`op-climate-factors`, rain and evaporation by calendar month). When the
+  boundary has changed since, an amber note and **Work them out again**
+  ([scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors))
   ([scenarios.md § UI](./scenarios.md#ui) has each one's wording). A setting's value is typed as
   Model settings or Calibration takes it; GR4J's PE input (`pe`, issue #39) has its own
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
@@ -12882,6 +12963,28 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     applicant has no demand object (`evidence-demand-objects-na`). A pack
     drafted before `evidence-9` has no § 6: its sections print as they
     always did.
+  - **8 Future yield** (application only, `evidence-23`, issue #621, with
+    `FUTURE_YIELD=on`; [evidence-pack.md § Future yield](./evidence-pack.md#future-yield)):
+    the caveat, then the historical record and per pathway and window the
+    median and range across climate models of the applicant's dam's yields,
+    their assurance and the EWR change, and the factor table; *Not
+    assessed* until it is run. Above the report, on screen only
+    (`FutureYieldRun.svelte`, `evidence-future-run`), an editor gets the
+    **§ 8 Future yield** board: **Run the future yield** (or **Run it
+    again** once there is a result) queues the `future_yield` job
+    (`POST …/future-yield`); the board then follows it (*Queued: waiting
+    for the background worker.*, *Running…* with a progress bar, a
+    failure with the job's reason) and reads the report again once it is
+    done. **Cancel** beside the job's line (`POST …/future-yield/:jobId/cancel`,
+    284_cancel_future_jobs) ends a waiting job at once; a running one says
+    *Cancelling: it stops at its next step.* and stops after the model it
+    is reading from the copy or the case it is running, before the next,
+    storing nothing; the progress bar counts the models read (to 10 %), then
+    the cases run. A cancelled job is said plainly (*The last run was
+    cancelled.*, `evidence-future-cancelled`), never as a failure, and the
+    Run button comes back. A reload or another tab picks the job up (the GET returns the
+    newest one). Viewers get no board, and a pack never has one: a pack
+    freezes § 8 as it was drafted.
   - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with
     their class and the input diff; A.3 series and SHA-256; A.4 baseline
     history since the previous publication; A.5 warnings verbatim; A.6 every
@@ -13593,7 +13696,16 @@ published.
   full."; without one, the sentence stops at the area), or "No clear view of
   your dam from space yet. …"; then "A satellite sees the water’s surface, not
   how deep it is: a check on the model, not a measurement of the water in your
-  dam." and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0." A
+  dam." and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0."
+  When the newest clear view is radar's (Sentinel-1, issue #624, often a
+  winter day Landsat and Sentinel-2 were clouded on) it says so and hedges
+  the area: "On 20 Dec 2021 a radar satellite, which sees through cloud, saw
+  water over about 0.6 ha of the 5.0 ha your dam covers when full.", and
+  never "more than" full (past it, or with no full area, "…over about 4.4 ha
+  of your dam."), since radar alone never calls a dam full. A Sentinel view
+  adds Copernicus's credit for its year: "Satellite views: Digital Earth
+  Africa, CC BY 4.0. Contains modified Copernicus Sentinel data 2021,
+  processed by Digital Earth Africa." A
   failed load is one line asking to check the connection and reload, as the
   map card's. Nothing of a neighbour's dam reaches it (the route names the
   farm, and 249's farmer policies are the second layer).

@@ -406,6 +406,7 @@ const INNER_JOINS = new Map<string, string>([
 	['reports/store.ts JOIN app_user u ON u.id = $3', 'the requester, whose job transaction this is'],
 	['jobs/queue.ts JOIN app_user u ON u.id = j.acting_user_id', 'job.acting_user_id is in app_user_visible'],
 	['yield/store.ts JOIN app_user u ON u.id = j.acting_user_id', 'job.acting_user_id is in app_user_visible (JOB_META, as jobs/queue.ts)'],
+	['future/climate.ts JOIN app_user u ON u.id = j.acting_user_id', 'job.acting_user_id is in app_user_visible (JOB_META, as jobs/queue.ts)'],
 	['invites/invites.ts JOIN app_user u ON u.id = i.invited_by', 'invite.invited_by is in app_user_visible'],
 	// UPDATE … FROM app_user: the member being changed, by an owner / a team admin.
 	// A removed member has no membership row to update, so 404 either way.

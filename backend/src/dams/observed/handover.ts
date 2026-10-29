@@ -8,6 +8,9 @@
 //   fetcher, hourly ─get─► dams/wanted.json
 //     Waterbodies pass ──► dams/waterbodies/<uid>.json, dams/waterbodies-status.json   (waterbodies.ts)
 //     WOfS pass        ──► dams/wofs/<featureId>.json,  dams/wofs-status.json          (R5-C)
+//     Sentinel-2 pass  ──► dams/s2/<featureId>.json,    dams/s2-status.json            (#624 step 4)
+//     Sentinel-1 pass  ──► dams/s1/<featureId>.json,    dams/s1-status.json,
+//                          dams/s1-agreement.json (sentinel/agreement.ts)                (#624 step 5)
 //   worker tick ──get──► each status, then every file whose last good fetch is newer than what it loaded
 //                ──────► app_dam_observation_load (load.ts)
 //
@@ -22,8 +25,45 @@ import { openStore, type MirrorStore } from '../../mirror/store.js';
 export type Position = [number, number];
 export type DamOutlineGeometry = { type: 'Polygon'; coordinates: Position[][] } | { type: 'MultiPolygon'; coordinates: Position[][][] };
 
-export type ObservationSource = 'waterbodies' | 'wofs';
-export const OBSERVATION_SOURCES: readonly ObservationSource[] = ['waterbodies', 'wofs'];
+export type ObservationSource = 'waterbodies' | 'wofs' | 's2' | 's1';
+export const OBSERVATION_SOURCES: readonly ObservationSource[] = ['waterbodies', 'wofs', 's2', 's1'];
+/** The sources that observe every traced dam over its own outline (a pass file per dam, keyed by its feature id). */
+export type OutlineSource = Exclude<ObservationSource, 'waterbodies'>;
+/** The Sentinel sources, each behind its own flag as well as DAM_OBSERVATIONS (damSourceOn). */
+export type SentinelSource = 's2' | 's1';
+
+/**
+ * DAM_OBSERVATIONS_S1, radar's stage (issue #624 open question 3; docs/architecture.md § Dam observations):
+ *   off      (or unset) no radar pass; the worker holds no s1 row (it withholds any loaded before, found by its
+ *            load marks, so with dams/s1-status.json gone as well);
+ *   measure  the fetcher runs the radar pass and the S1/S2 agreement report (dams_s1_agreement), but the worker
+ *            loads no s1 row, so nobody sees radar while it is being measured;
+ *   on       the same, and the worker loads s1 for the dams whose own agreement passes (sentinel/agreement.ts
+ *            s1Shows): at least S1_AGREEMENT.minPairs pairs, S1_AGREEMENT.bar of them within to start, and
+ *            S1_AGREEMENT.keepBar to stay shown. Any other dam's s1 rows are withheld (none loaded, those loaded
+ *            before removed) until it passes.
+ * infra/dam_observations.tf sets it from var.dam_s1_mode, on the fetcher and the worker alike.
+ */
+export type S1Mode = 'off' | 'measure' | 'on';
+export function damS1Mode(env: Record<string, string | undefined> = process.env): S1Mode {
+	const v = env.DAM_OBSERVATIONS_S1?.trim() ?? '';
+	if (v === '') return 'off';
+	if (v === 'off' || v === 'measure' || v === 'on') return v;
+	throw new Error(`unknown DAM_OBSERVATIONS_S1 "${v}" (expected off, measure or on)`);
+}
+
+/**
+ * Whether the fetcher runs a Sentinel source's pass: DAM_OBSERVATIONS_S2 on, off or unset (off); for radar,
+ * DAM_OBSERVATIONS_S1 measure or on (damS1Mode). infra/dam_observations.tf sets them only with
+ * dam_observations_enabled and the source's own variable.
+ */
+export function damSourceOn(source: SentinelSource, env: Record<string, string | undefined> = process.env): boolean {
+	if (source === 's1') return damS1Mode(env) !== 'off';
+	// Named in full, so the settings inventory (config/production.security.test.ts) sees it read.
+	const v = env.DAM_OBSERVATIONS_S2?.trim() ?? '';
+	if (v !== '' && v !== 'on' && v !== 'off') throw new Error(`unknown DAM_OBSERVATIONS_S2 "${v}" (expected on or off)`);
+	return v === 'on';
+}
 
 export interface WantedOutline {
 	featureId: string;
@@ -31,6 +71,8 @@ export interface WantedOutline {
 	geometry: DamOutlineGeometry;
 	/** The first date the WOfS pass needs for this dam (ISO): the day after the newest WOfS row held, or WOFS_FIRST_DATE. */
 	since: string;
+	/** The same for the Sentinel sources, only for a source the dam holds a row of (else the pass's own backfill start). */
+	sinceBy?: Partial<Record<SentinelSource, string>>;
 }
 export interface WantedList {
 	generatedAt: string;
@@ -49,7 +91,7 @@ export interface ObservationRow {
 }
 export interface ObservationFile {
 	source: ObservationSource;
-	/** The uid (waterbodies), or the featureId (wofs). */
+	/** The uid (waterbodies), or the featureId (wofs, s2, s1). */
 	key: string;
 	fetchedAt: string;
 	upstream: { url: string; etag?: string; lastModified?: string; itemId?: string }[];
@@ -95,7 +137,7 @@ export const MAX_ROWS = 20_000;
 export const WOFS_FIRST_DATE = '1984-01-01';
 /** A Waterbodies uid (a geohash; 261's waterbody_reference.uid). */
 export const WATERBODY_UID = /^[0-9a-z]{6,12}$/;
-const FEATURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const FEATURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** A real calendar date (2023-02-31 is not one), ISO. */
 export const isCalendarDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
 const IsoDay = z.string().refine(isCalendarDate, 'not a calendar date');
@@ -114,7 +156,8 @@ const Outline = z
 			z.object({ type: z.literal('Polygon'), coordinates: z.array(Ring).min(1) }).strict(),
 			z.object({ type: z.literal('MultiPolygon'), coordinates: z.array(z.array(Ring).min(1)).min(1) }).strict()
 		]),
-		since: IsoDay
+		since: IsoDay,
+		sinceBy: z.object({ s2: IsoDay.optional(), s1: IsoDay.optional() }).strict().optional()
 	})
 	.strict();
 
@@ -139,7 +182,7 @@ const Row = z
 
 export const ObservationFileSchema = z
 	.object({
-		source: z.enum(['waterbodies', 'wofs']),
+		source: z.enum(['waterbodies', 'wofs', 's2', 's1']),
 		key: z.string(),
 		fetchedAt: IsoTime,
 		upstream: z
@@ -157,7 +200,7 @@ export const ObservationFileSchema = z
 
 export const PassStatusSchema = z
 	.object({
-		source: z.enum(['waterbodies', 'wofs']),
+		source: z.enum(['waterbodies', 'wofs', 's2', 's1']),
 		ranAt: IsoTime,
 		stopped: z.boolean(),
 		reason: z.string().max(100).optional(),
@@ -170,7 +213,8 @@ export const PassStatusSchema = z
 	.strict();
 
 // --- Read and write -------------------------------------------------------------------
-async function readJson<T>(store: MirrorStore, key: AbsolutePath, schema: z.ZodType<T>, what: string): Promise<T | null> {
+/** One of the handover's JSON files, checked against `schema`; null when it isn't there. */
+export async function readJson<T>(store: MirrorStore, key: AbsolutePath, schema: z.ZodType<T>, what: string): Promise<T | null> {
 	const bytes = await store.get(key);
 	if (bytes === undefined) return null;
 	let raw: unknown;
@@ -183,7 +227,8 @@ async function readJson<T>(store: MirrorStore, key: AbsolutePath, schema: z.ZodT
 	if (!r.success) throw new FeedFormatError(`the mirror's ${what} is not valid`);
 	return r.data;
 }
-const writeJson = (store: MirrorStore, key: AbsolutePath, value: unknown) => store.set(key, new TextEncoder().encode(JSON.stringify(value)));
+/** Writes one of the handover's JSON files. */
+export const writeJson = (store: MirrorStore, key: AbsolutePath, value: unknown) => store.set(key, new TextEncoder().encode(JSON.stringify(value)));
 
 export const readWanted = (store: MirrorStore): Promise<WantedList | null> => readJson(store, WANTED_KEY, WantedListSchema, 'wanted dams list') as Promise<WantedList | null>;
 export const writeWanted = (store: MirrorStore, w: WantedList) => writeJson(store, WANTED_KEY, WantedListSchema.parse(w));
@@ -223,14 +268,15 @@ export const stopRetryAfter = (err: unknown): number | undefined => {
 };
 
 // --- Metrics (CloudWatch Embedded Metric Format, from the fetcher's log) ---------------
-// infra/dam_observations.tf alarms on them; every completed pass of either
+// infra/dam_observations.tf alarms on them; every completed pass of any
 // source publishes both, whatever it fetched (R5-C's WOfS pass too, with
-// Source = 'wofs', through damPassMetricLine).
+// Source = 'wofs', and #624's Sentinel-2 pass with Source = 's2', through
+// damPassMetricLine).
 /** The namespace both sources' pass metrics go to. */
 export const DAM_METRIC_NAMESPACE = 'water-management/DamObservations';
 /** Heartbeat: 1 per completed pass, dimension Source. Alarmed when missing for two days (each source). */
 export const DAM_PASS_METRIC = 'DamPassCompleted';
-/** Data recency: days from today back to the newest observation date any key holds, dimension Source. Alarmed for wofs only. */
+/** Data recency: days from today back to the newest observation date any key holds, dimension Source. Alarmed for wofs and s2 (not the frozen waterbodies). */
 export const DAM_RECENCY_METRIC = 'DamObservationAgeDays';
 /** The dimension's name. */
 export const DAM_METRIC_DIMENSION = 'Source';

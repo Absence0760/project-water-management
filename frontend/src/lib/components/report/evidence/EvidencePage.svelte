@@ -25,6 +25,7 @@
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { loadOnce } from '#lib/components/common/lazy.js';
 	import { boardChecks, DRAFT_STAMP, refusedChecks } from './sections';
+	import FutureYieldRun from './FutureYieldRun.svelte';
 
 	let { projectId, runId }: { projectId: string; runId: string | null } = $props();
 
@@ -257,6 +258,17 @@
 					{/if}
 					{#if authorisedError}<p class="alert alert-error" role="alert">{authorisedError}</p>{/if}
 				</section>
+			{/if}
+			<!-- § 8 Future yield (issue #621 slice 5): an editor runs it from the draft, and follows its job, here. -->
+			{#if report.futureYield && runId && hasRole(project?.role, 'editor')}
+				<FutureYieldRun
+					{projectId}
+					{runId}
+					assessed={report.futureYield.status === 'ok'}
+					onchange={async () => {
+						if (runId) report = await api.evidence.report(projectId, runId);
+					}}
+				/>
 			{/if}
 			<Lazy load={loadReport}>
 				{#snippet children(EvidenceReportView)}

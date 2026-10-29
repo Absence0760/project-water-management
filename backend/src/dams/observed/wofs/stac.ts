@@ -15,7 +15,18 @@
 // wofs_ls/…tif` object read over HTTPS from the bucket's public endpoint
 // (WOFS_S3_BASE). Anything else is refused as a FeedFormatError: we never follow
 // an href to another host. The item's CRS is taken from the scene's own
-// GeoKeys (cog.ts), not from the item.
+// GeoKeys (raster/cog.ts), not from the item.
+//
+// assetUrl also knows the two Sentinel collections' buckets (issue #624;
+// docs/data-sources.md, deafrica-sentinel-2-c1 and deafrica-sentinel-1):
+// `s2_l2a_c1` objects under `sentinel-2-c1-l2a/` in deafrica-sentinel-2-l2a-c1,
+// `s1_rtc` objects under `s1_rtc/` in deafrica-sentinel-1 (both checked on
+// DE Africa's spec pages 2026-10-29). Each collection's hrefs are read only
+// against its own bucket and key prefix: a WOfS item can't point at a
+// Sentinel object, nor a Sentinel item at another key of its bucket.
+// searchItems runs the same search for any of them, each item through the
+// collection's own parser (wofsItem here; sentinel/s2.ts s2Item for
+// `s2_l2a_c1`), on the same endpoint and paging rules.
 import { z } from 'zod';
 import { FeedFormatError } from '../../../feeds/errors.js';
 import type { FeedHttp } from '../../../feeds/http.js';
@@ -31,8 +42,25 @@ export const PAGE_LIMIT = 100;
 /** Pages followed per search at most: a year over one dam is ~50–200 items. */
 export const MAX_PAGES = 20;
 
-/** The asset object key: under wofs_ls/, a .tif, plain path characters, no `..`. */
-const ASSET_KEY = /^wofs_ls\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.tif$/;
+/** The Sentinel-2 L2A Collection 1 collection and the public HTTPS endpoint of its bucket (af-south-1, anonymous). */
+export const S2_C1_COLLECTION = 's2_l2a_c1';
+export const S2_C1_S3_BASE = 'https://deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com';
+/** The Sentinel-1 RTC collection and the public HTTPS endpoint of its bucket (af-south-1, anonymous). */
+export const S1_RTC_COLLECTION = 's1_rtc';
+export const S1_S3_BASE = 'https://deafrica-sentinel-1.s3.af-south-1.amazonaws.com';
+
+/** A collection whose asset hrefs assetUrl reads. */
+export type AssetCollection = typeof WOFS_COLLECTION | typeof S2_C1_COLLECTION | typeof S1_RTC_COLLECTION;
+
+/** A .tif key under `prefix/`: plain path characters (the `..` and `.` parts refused apart). */
+const keyUnder = (prefix: string) => new RegExp(`^${prefix}\\/(?:[A-Za-z0-9_.-]+\\/)*[A-Za-z0-9_.-]+\\.tif$`);
+
+/** Per collection: its bucket (the s3:// name), the bucket's HTTPS endpoint, and the keys an item may name. */
+const ASSET_BUCKETS: Readonly<Record<AssetCollection, { bucket: string; base: string; key: RegExp }>> = {
+	[WOFS_COLLECTION]: { bucket: 'deafrica-services', base: WOFS_S3_BASE, key: keyUnder('wofs_ls') },
+	[S2_C1_COLLECTION]: { bucket: 'deafrica-sentinel-2-l2a-c1', base: S2_C1_S3_BASE, key: keyUnder('sentinel-2-c1-l2a') },
+	[S1_RTC_COLLECTION]: { bucket: 'deafrica-sentinel-1', base: S1_S3_BASE, key: keyUnder('s1_rtc') }
+};
 const Printable = z.string().min(1).max(200).regex(/^[!-~]+$/);
 
 const Item = z.object({
@@ -47,7 +75,7 @@ const Page = z.object({
 	links: z.array(z.object({ rel: z.string(), href: z.string().max(4000) }).passthrough()).optional()
 });
 
-export interface WofsScene {
+export interface WofsScene extends SceneItem {
 	/** The STAC item id (dam_observation.upstream_key). */
 	itemId: string;
 	/** The acquisition date (UTC), ISO. */
@@ -58,12 +86,18 @@ export interface WofsScene {
 	url: string;
 }
 
-/** The HTTPS URL of an `s3://deafrica-services/wofs_ls/…` asset; null for any other href. */
-export function assetUrl(href: string): string | null {
-	const m = /^s3:\/\/deafrica-services\/(.+)$/.exec(href);
-	const key = m?.[1] ?? (href.startsWith(`${WOFS_S3_BASE}/`) ? href.slice(WOFS_S3_BASE.length + 1) : null);
-	if (!key || !ASSET_KEY.test(key) || key.split('/').some((p) => p === '..' || p === '.')) return null;
-	return `${WOFS_S3_BASE}/${key}`;
+/**
+ * The HTTPS URL of a collection's asset, given as `s3://<its bucket>/<key>` or its bucket's HTTPS endpoint: for
+ * `wofs_ls` (the default) a `wofs_ls/…tif` key in deafrica-services, for `s2_l2a_c1` a `sentinel-2-c1-l2a/…tif` key
+ * in deafrica-sentinel-2-l2a-c1, for `s1_rtc` an `s1_rtc/…tif` key in deafrica-sentinel-1. Null for any other href.
+ */
+export function assetUrl(href: string, collection: AssetCollection = WOFS_COLLECTION): string | null {
+	const at = ASSET_BUCKETS[collection];
+	if (!at) return null;
+	const s3 = `s3://${at.bucket}/`;
+	const key = href.startsWith(s3) ? href.slice(s3.length) : href.startsWith(`${at.base}/`) ? href.slice(at.base.length + 1) : null;
+	if (!key || !at.key.test(key) || key.split('/').some((p) => p === '..' || p === '.')) return null;
+	return `${at.base}/${key}`;
 }
 
 /** The grid the search's box is snapped out to, degrees (~5.5 km): SEARCH_GRID_DEG = 1 / SEARCH_GRID_PER_DEG. */
@@ -88,18 +122,40 @@ export function snapSearchBox([w, s, e, n]: readonly [number, number, number, nu
 	];
 }
 
-/** The search URL for one window's first page, over the outline's box snapped out (snapSearchBox). */
-export function searchUrl(bbox: readonly [number, number, number, number], from: string, to: string, limit = PAGE_LIMIT): string {
+/** The search URL for one window's first page, over the outline's box snapped out (snapSearchBox), in `collection` (default wofs_ls). */
+export function searchUrl(bbox: readonly [number, number, number, number], from: string, to: string, limit = PAGE_LIMIT, collection: AssetCollection = WOFS_COLLECTION): string {
 	const u = new URL(WOFS_STAC_SEARCH);
-	u.searchParams.set('collections', WOFS_COLLECTION);
+	u.searchParams.set('collections', collection);
 	u.searchParams.set('bbox', snapSearchBox(bbox).join(','));
 	u.searchParams.set('datetime', `${from}T00:00:00Z/${to}T23:59:59Z`);
 	u.searchParams.set('limit', String(limit));
 	return u.href;
 }
 
-/** Parses one page: its scenes and the next page's URL (checked to be the same search), or null. */
-export function parsePage(text: string): { scenes: WofsScene[]; next: string | null } {
+/** One search item as a scene: the item's id, acquisition date and time, and what the collection's reader needs. */
+export type ItemParser<S extends SceneItem> = (raw: unknown) => S;
+/** What every collection's scene carries (the pass's bookkeeping): the STAC item id, the date and time, and the URL its ETag is kept for. */
+export interface SceneItem {
+	itemId: string;
+	date: string;
+	datetime: string;
+	url: string;
+}
+
+/** A wofs_ls item as a scene (FeedFormatError for any other shape, or a water asset outside the WOfS bucket). */
+export function wofsItem(raw: unknown): WofsScene {
+	const item = Item.safeParse(raw);
+	if (!item.success) throw new FeedFormatError('a STAC item is not in the expected shape');
+	const url = assetUrl(item.data.assets.water.href);
+	if (!url) throw new FeedFormatError('a STAC item’s water asset is not in the WOfS bucket');
+	const datetime = new Date(item.data.properties.datetime).toISOString();
+	return { itemId: item.data.id, date: datetime.slice(0, 10), datetime, url };
+}
+
+/** Parses one page: its scenes (each item through `parseItem`, wofs_ls's by default) and the next page's URL (checked to be the same search), or null. */
+export function parsePage(text: string): { scenes: WofsScene[]; next: string | null };
+export function parsePage<S extends SceneItem>(text: string, parseItem: ItemParser<S>): { scenes: S[]; next: string | null };
+export function parsePage<S extends SceneItem>(text: string, parseItem: ItemParser<S> = wofsItem as unknown as ItemParser<S>): { scenes: S[]; next: string | null } {
 	let raw: unknown;
 	try {
 		raw = JSON.parse(text);
@@ -108,15 +164,7 @@ export function parsePage(text: string): { scenes: WofsScene[]; next: string | n
 	}
 	const page = Page.safeParse(raw);
 	if (!page.success) throw new FeedFormatError('the STAC search did not answer a feature collection');
-	const scenes: WofsScene[] = [];
-	for (const f of page.data.features) {
-		const item = Item.safeParse(f);
-		if (!item.success) throw new FeedFormatError('a STAC item is not in the expected shape');
-		const url = assetUrl(item.data.assets.water.href);
-		if (!url) throw new FeedFormatError('a STAC item’s water asset is not in the WOfS bucket');
-		const datetime = new Date(item.data.properties.datetime).toISOString();
-		scenes.push({ itemId: item.data.id, date: datetime.slice(0, 10), datetime, url });
-	}
+	const scenes = page.data.features.map((f) => parseItem(f));
 	const nextHref = page.data.links?.find((l) => l.rel === 'next')?.href ?? null;
 	let next: string | null = null;
 	if (nextHref !== null) {
@@ -136,14 +184,26 @@ export function parsePage(text: string): { scenes: WofsScene[]; next: string | n
  * each item once. Throws FeedFormatError for a page it can't read, and the
  * client's errors (FeedRefusedError for a 403, …) as they come.
  */
-export async function searchScenes(http: FeedHttp, bbox: readonly [number, number, number, number], from: string, to: string): Promise<WofsScene[]> {
-	const seen = new Map<string, WofsScene>();
-	let url: string | null = searchUrl(bbox, from, to);
+export function searchScenes(http: FeedHttp, bbox: readonly [number, number, number, number], from: string, to: string): Promise<WofsScene[]> {
+	return searchItems(http, WOFS_COLLECTION, wofsItem, bbox, from, to);
+}
+
+/** searchScenes for any collection assetUrl knows: its items through `parseItem` (sentinel/s2.ts's for s2_l2a_c1). */
+export async function searchItems<S extends SceneItem>(
+	http: FeedHttp,
+	collection: AssetCollection,
+	parseItem: ItemParser<S>,
+	bbox: readonly [number, number, number, number],
+	from: string,
+	to: string
+): Promise<S[]> {
+	const seen = new Map<string, S>();
+	let url: string | null = searchUrl(bbox, from, to, PAGE_LIMIT, collection);
 	for (let page = 0; url !== null; page++) {
 		if (page === MAX_PAGES) throw new FeedFormatError(`the STAC search ran past ${MAX_PAGES} pages`);
 		const text = await http.text(url);
 		if (text === null) throw new FeedFormatError('the STAC search answered not found');
-		const got = parsePage(text);
+		const got = parsePage(text, parseItem);
 		for (const s of got.scenes) seen.set(s.itemId, s);
 		// An empty page ends it, whatever its links say.
 		url = got.scenes.length ? got.next : null;

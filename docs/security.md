@@ -2773,11 +2773,25 @@ In short:
     to `FEED_HOSTS`. What a STAC answer may point the fetcher at is
     checked too (`stac.ts`): an item's water asset only as a `wofs_ls/…tif`
     key in that bucket (no `..`, no other bucket or host), and a `next`
-    page only to the same search endpoint, at most 20 pages. A request
+    page only to the same search endpoint, at most 20 pages. Issue #624
+    adds the Sentinel-2 L2A Collection 1 and Sentinel-1 RTC buckets
+    (`deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com`,
+    `deafrica-sentinel-1.s3.af-south-1.amazonaws.com`, anonymous) to
+    `FEED_HOSTS`, and `assetUrl` reads each collection's hrefs only against
+    its own bucket and key prefix (`s2_l2a_c1`: `sentinel-2-c1-l2a/…tif`;
+    `s1_rtc`: `s1_rtc/…tif`), so no item can point at another collection's
+    objects or another key of the bucket. A request
     carries a traced dam's lon/lat box and dates, never its name, project
     or owner; the scenes are public and read anonymously, and the COG
     reader refuses anything but the expected format, with every tile's
-    inflated size bounded (`cog.ts`).
+    decompressed size bounded (`raster/cog.ts`).
+    The observed actual ET sources (issue #623) add two hosts shared with
+    things that aren't ours, `storage.googleapis.com` (every public Google
+    Cloud Storage bucket) and `edcintl.cr.usgs.gov` (all of FEWS NET's
+    downloads), so each is held with a path limit too (`FEED_HOST_PATHS`):
+    a fetch or a redirect may ask only under FAO's WaPOR bucket
+    (`/fao-gismgr-wapor-3-data/`) and SSEBop's v6.1 dekadal tree, the
+    parsed path checked after dot segments resolve.
     `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
     On Lambda only the fetcher may build a live client at all
@@ -2922,6 +2936,37 @@ In short:
     is refused outside 0–30 mm a day (`feeds/fromMirrorEt0.ts`) before a feed
     writes it. The fetcher refuses an `agera5_et0` request: no per-feed path
     reaches either upstream.
+  - **Observed actual ET** (issue #623; `277_et_observation.sql`,
+    `281_et_units.sql`, architecture.md § Observed actual ET). `et_observation` holds a unit's satellite
+    actual ET per dekad: a project's viewers read it, a farmer or contributor
+    only their own linked units' (`et_observation_select_farmer`, through
+    `app_farm_nodes`), and `water_app` holds SELECT only. Only the worker,
+    with no user, writes it (`app_et_observation_load`, `SECURITY DEFINER`,
+    42501 to any signed-in caller), every value bounded, onto a node that is
+    a unit with parcels, refused when its parcels changed after the fetch;
+    the load marks are owner only. Changing a unit's parcels drops its rows
+    (`et_parcels_changed`). The dam observations' pattern for the fetch: the
+    worker writes `et/wanted.json` to the private mirror bucket, **every
+    unit's farm parcel outlines** from all projects with the unit's node id
+    and the land cover's cropland cells under them (`app_et_units`,
+    `app_et_cropland`, worker only, 42501 otherwise), never a name, a
+    project or a user. The outlines leave the VPC only to our own bucket, for
+    our own fetcher; what FAO's bucket receives is a dekad's public file path
+    and HTTP range reads of its COG, which reveal only which 512 × 512-pixel
+    tiles (0.5°, about 50 km) and tile-table rows are read. The mean over the
+    exact parcels runs in our fetcher. On that basis FAO is not treated as a
+    sub-processor (to be confirmed by the CISO / Security Analyst, as for DE
+    Africa). The fetcher's role reaches `et/` only (get and put, no delete);
+    the worker's one write is `et/wanted.json` (its role and the S3
+    endpoint's `WorkerWritesEtWantedList`). The files coming back are
+    schema-checked (`water-use/observed/handover.ts`), then bounded again by
+    `app_et_observation_load`, and land only on the unit their key names.
+    The live client reaches `storage.googleapis.com` under
+    `/fao-gismgr-wapor-3-data/` only (`FEED_HOST_PATHS`); log lines carry
+    counts and reason codes, never a unit. Guarded by
+    `water-use/observed/observations.security.db.test.ts` (positive controls
+    throughout), `tick.db.test.ts` (no name, project or user in the wanted
+    list) and the farmer-privacy sweep.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no

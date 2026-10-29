@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { FeedRefusedError, FeedThrottledError, FeedUnavailableError, feedErrorMessage } from './errors.js';
 import {
 	feedHttp,
+	FEED_HOST_PATHS,
+	FEED_HOSTS,
 	feedSourceMode,
 	fileTag,
 	hostPacer,
@@ -196,6 +198,20 @@ describe('liveHttp', () => {
 		await expect(liveHttp(respond(403), new Map()).textConditional!(WB, '"e1"')).rejects.toBeInstanceOf(FeedRefusedError);
 	});
 
+	it('asks for a range only if the file’s ETag changed (the observed ET pass’s re-check of a WaPOR dekad)', async () => {
+		const W = 'https://storage.googleapis.com/fao-gismgr-wapor-3-data/DATA/WAPOR-3/MAPSET/L2-AETI-D/WAPOR-3.L2-AETI-D.2024-01-D1.tif';
+		const same = vi.fn(async () => new Response(null, { status: 304 }));
+		expect(await liveHttp(same).rangeConditional!(W, 0, 15, '"e1"')).toEqual({ status: 'not-modified' });
+		expect((same.mock.calls[0] as unknown as [string, RequestInit])[1].headers).toMatchObject({ range: 'bytes=0-15', 'if-none-match': '"e1"' });
+		const changed = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), { status: 206, headers: { etag: '"e2"' } }));
+		expect(await liveHttp(changed).rangeConditional!(W, 0, 2, '"e1"')).toEqual({ status: 'ok', bytes: new Uint8Array([1, 2, 3]), tag: '"e2"' });
+		// A server that ignores Range: the range cut out of the whole.
+		const whole = vi.fn(async () => new Response(new Uint8Array([9, 8, 7, 6]), { status: 200, headers: { etag: '"e3"' } }));
+		expect(await liveHttp(whole).rangeConditional!(W, 1, 2, '"e1"')).toEqual({ status: 'ok', bytes: new Uint8Array([8, 7]), tag: '"e3"' });
+		expect(await liveHttp(respond(404)).rangeConditional!(W, 0, 1, '"e1"')).toBeNull();
+		await expect(liveHttp(respond(403), new Map()).rangeConditional!(W, 0, 1, '"e1"')).rejects.toBeInstanceOf(FeedRefusedError);
+	});
+
 	it('refuses a response over 4 MB, declared or streamed', async () => {
 		await expect(liveHttp(respond(200, 'x', { 'content-length': String(5 * 1024 * 1024) })).text('https://data.chc.ucsb.edu/p')).rejects.toThrow(/larger than expected/);
 		const big = new Uint8Array(4 * 1024 * 1024 + 1);
@@ -221,6 +237,47 @@ describe('liveHttp: where it may go', () => {
 		// Positive control: the real hosts are asked.
 		expect(await http.text('https://www.dws.gov.za/Hydrology/Verified/HyData.aspx?Station=X0H000')).toBe('ok');
 		expect(await http.text(CHC)).toBe('ok');
+	});
+
+	it('asks Digital Earth Africa’s Sentinel-2 C1 and Sentinel-1 buckets, and not their other buckets', async () => {
+		const f = vi.fn(async () => new Response('ok', { status: 200 }));
+		const http = liveHttp(f);
+		expect(await http.text('https://deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com/sentinel-2-c1-l2a/34/H/BH/2026/10/x/B03.tif')).toBe('ok');
+		expect(await http.text('https://deafrica-sentinel-1.s3.af-south-1.amazonaws.com/s1_rtc/S34E019/2026/10/20/0A1B2C/a_VV.tif')).toBe('ok');
+		await expect(http.text('https://deafrica-sentinel-2.s3.af-south-1.amazonaws.com/a.tif')).rejects.toThrow(/not a known source host/);
+		await expect(http.text('https://deafrica-sentinel-1.s3.us-west-2.amazonaws.com/a.tif')).rejects.toThrow(/not a known source host/);
+		expect(f).toHaveBeenCalledTimes(2);
+	});
+
+	it('asks the actual ET hosts only under their own prefix: FAO\'s bucket, never another bucket on Google Cloud Storage', async () => {
+		const WAPOR = 'https://storage.googleapis.com/fao-gismgr-wapor-3-data/DATA/WAPOR-3/MAPSET/L2-AETI-D/WAPOR-3.L2-AETI-D.2026-10-D2.tif';
+		const SSEBOP = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/fews/web/global/dekadal/etav61/downloads/dekadal/d2026102.zip';
+		expect(FEED_HOSTS).toEqual(expect.arrayContaining(['storage.googleapis.com', 'edcintl.cr.usgs.gov']));
+		expect(FEED_HOST_PATHS).toEqual({
+			'storage.googleapis.com': ['/fao-gismgr-wapor-3-data/'],
+			'edcintl.cr.usgs.gov': ['/downloads/sciweb1/shared/fews/web/global/dekadal/etav61/']
+		});
+		const f = vi.fn(async () => new Response('ok', { status: 200 }));
+		const http = liveHttp(f);
+		for (const url of [
+			'https://storage.googleapis.com/isric-share-soilgrids/pre-release/wv0033/x.tif',
+			'https://storage.googleapis.com/fao-gismgr-wapor-3-data-evil/a.tif',
+			'https://storage.googleapis.com/fao-gismgr-wapor-3-data',
+			'https://storage.googleapis.com/fao-gismgr-wapor-3-data/../other/a.tif',
+			'https://storage.googleapis.com/fao-gismgr-wapor-3-data/%2e%2e/other/a.tif',
+			'https://storage.googleapis.com/fao-gismgr-wapor-3-data%2F..%2Fother/a.tif',
+			'https://storage.googleapis.com/storage/v1/b/other/o',
+			'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/fews/web/global/dekadal/eta/downloads/d2021063.zip'
+		]) {
+			await expect(http.text(url), url).rejects.toThrow(/not a known source host/);
+		}
+		expect(f).not.toHaveBeenCalled();
+		// Positive control: the two trees are asked.
+		expect(await http.text(WAPOR)).toBe('ok');
+		expect(await http.text(SSEBOP)).toBe('ok');
+		// A redirect out of the bucket is refused like one off the hosts.
+		const hop = vi.fn<F>().mockResolvedValueOnce(redirect('/isric-share-soilgrids/a.tif'));
+		await expect(liveHttp(hop as never).text(WAPOR)).rejects.toThrow(/redirected somewhere it may not/);
 	});
 
 	it('gives every hop the one 20 s deadline: a single abort signal, set before the first request and shared by the redirect after it', async () => {

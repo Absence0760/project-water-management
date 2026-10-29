@@ -2453,6 +2453,7 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   | `crop` | only the crops planted on their linked farms |
   | `transfer` | rules with either end on a linked farm (the other end is an id they can't resolve) |
   | `farm_link` | their own links |
+  | `et_observation` | the observed actual ET of their linked units (277) |
   | `run_publication` | every publication of the project (the notice, counts-only `catchment_view`; 022) |
   | `publication_farm` | the projections of their linked farms (022) |
   | `run_series` | their linked farms' farm-allowlist series (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`) of the **current** publication's run, nothing else (022) |
@@ -3758,11 +3759,18 @@ The background job queue's source of truth ([architecture.md § Background work]
   - `app_job_progress(id, lease, pct)` (040): sets `progress` on a running
     job, only with the current lease; returns false for anyone else, or once
     the job was cancelled, which tells the handler to stop.
-  - `app_cancel_job(id)` (040): as the session's user, the one who queued
-    it or an editor of its project, and for `yield` jobs only: a `queued` or
-    `failed` job becomes `dead` with `last_error = 'cancelled'`; a `running`
-    one gets `cancel_requested_at`. NULL for a job that isn't the caller's to
-    cancel.
+  - `app_cancel_job_outcome(id)` (285) → `(status, changed)`: as the
+    session's user, the one who queued it or an editor of its project, and
+    for `yield`, `delineate` (191), `future_yield` and `climate_factors` (284)
+    jobs only: a `queued` or `failed` job becomes `dead` with `last_error =
+    'cancelled'`; a `running` one not flagged yet gets `cancel_requested_at`.
+    `status` is the job's status afterwards (NULL for a job that isn't the
+    caller's to cancel); `changed` is whether this call did either, so a
+    second cancel, of a job already dead or flagged, answers false. The cancel
+    routes answer `cancelled` from it.
+  - `app_cancel_job(id)` (040, latest 285): the same, returning only the
+    status (a wrapper over `app_cancel_job_outcome`, kept for the delineation
+    callers).
   - `app_enqueue_rerun(project, cause)` (042_auto_rerun.sql): the
     debounced automatic re-run behind the new-data hook
     ([architecture.md § Automatic runs](./architecture.md#automatic-runs)).
@@ -3833,6 +3841,67 @@ No job table of its own: `job` holds status, progress and errors.
   id answers as an unknown one), and the job re-checks it as its acting user
   (`JobHandler.alsoRole`), so it dies once they lose the role or the dam
   (`yield/contributor.db.test.ts`).
+
+### Climate factors (282_climate_factors.sql)
+
+The Scenarios tab's future climate (issue #621 slice 5,
+[scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors)):
+the catchment's monthly change factors per NEX-GDDP-CMIP6 model, SSP and
+horizon, written by a `climate_factors` job as its acting editor. `job.kind`
+accepts `climate_factors`.
+
+| Column | |
+| --- | --- |
+| `project_id` | the project (cascade) |
+| `job_id` | the job (`SET NULL` on the 30-day purge; must be a `climate_factors` job of the project, `climate_factors_guard`) |
+| `method` | `delta-1` |
+| `boundary_sha256` | SHA-256 (hex) of the catchment boundary's geometry as canonical JSON when the factors were read over it |
+| `factors` | the engine's `FutureFactorTable` (≤ 512 KB) |
+| `warnings` | the job's notes (a model's cells with no value left out), a JSON array |
+| `created_by`, `created_at` | stamped by the guard (`SET NULL` when the account goes) |
+
+Insert and delete only (the job keeps the newest 3 per project). RLS: a
+viewer reads; an editor inserts and deletes. No contributor or farmer reads
+any. Nothing else reads it: a `climate.delta` op made from it carries its own
+factors.
+
+### Future yield (280_future_yield.sql)
+
+§ 8 of an application's evidence report (issue #621 slice 4,
+[evidence-pack.md § Future yield](./evidence-pack.md#future-yield)), written
+by a `future_yield` job as its acting editor. `job.kind` accepts
+`future_yield`.
+
+| Column | What |
+| --- | --- |
+| `project_id` | the project |
+| `baseline_run_id`, `application_run_id` | the pair re-run (both `model_run`, cascade; never equal; both the row's project, `future_yield_guard`) |
+| `node_id` | the applicant's dam as the application run's input names it (no foreign key, as `yield_result.node_id`) |
+| `job_id` | the job (`SET NULL` on the 30-day purge; must be a `future_yield` job of the project) |
+| `method` | `delta-1` |
+| `result` | the engine's `FutureYieldResult` (factor table included), an object of at most 1 MB |
+| `engine_version`, `created_by`, `created_at` | the engine that ran the pairs; the session's user and time (stamped by the guard) |
+
+Insert and delete only (no `UPDATE` grant); the job keeps the newest 3 per
+pair. RLS: viewers and above read; an applicant reads the rows of their own
+application's runs (`app_future_yield_own_run`, SECURITY DEFINER); editors
+insert and delete; farmers read none. Covering index on every foreign key.
+280 also redefines `app_specialist_pack` (latest 188) to say whether a pack's
+manifest has a § 8 result (its specialist's statement is then
+`pack-signoff-2`).
+Migration 284 (`284_cancel_future_jobs.sql`) lets `app_cancel_job` cancel
+`future_yield` and `climate_factors` jobs (an editor, through the cancel
+routes of [api.md § Future yield](./api.md#future-yield) and § Future
+climate); a running `future_yield` or `climate_factors` job checks for a
+cancel after each model it reads from the copy, and `future_yield` after the
+historical pair and each case it runs, so a cancel stops it before the next
+one and nothing is stored.
+Migration 285 (`285_cancel_job_outcome.sql`) adds `app_cancel_job_outcome`,
+which also says whether the call changed the job, and makes `app_cancel_job`
+a wrapper over it (same signature and grants: expand only, so a backend still
+calling it while the migration lands keeps working). The yield, future yield
+and climate factors cancel routes answer `cancelled: false` for a job already
+dead or already flagged.
 
 ### Automated calibrations (108_auto_calibration.sql)
 
@@ -4909,7 +4978,7 @@ A gap row is a row like any other: DWS listing a day with no value (170
   the live path writes, waiting for days the store doesn't hold, the
   tick's handover); `ingest/dws.test.ts`; `scripts/import-dws.test.ts`.
 
-### Dam observations (261_dam_observation.sql)
+### Dam observations (261_dam_observation.sql, 278_dam_observation_sentinel.sql, 279_dam_outlines_sentinel.sql)
 
 What satellites saw of each traced dam (issue #604 R5,
 [architecture.md § Dam observations](./architecture.md#dam-observations)):
@@ -4917,15 +4986,20 @@ the wet area on a date, per source, in our own store. Two sources, both
 Digital Earth Africa (CC BY 4.0): **`waterbodies`**, DE Africa Waterbodies'
 per-waterbody series, for a dam matched to one waterbody; and **`wofs`**,
 Water Observations from Space summed inside the dam's own outline, for
-every traced dam (R5-C). The worker writes them from the files the fetcher's
-passes leave in the mirror bucket; no route writes them.
+every traced dam (R5-C). Since 278 (issue #624) two more are allowed,
+Copernicus Sentinel data processed by Digital Earth Africa and classified by
+us inside the dam's own outline as WOfS is: **`s2`** (Sentinel-2 L2A
+Collection 1, 10 m optical) and **`s1`** (Sentinel-1 RTC radar, a secondary
+source). The Sentinel-2 pass writes `s2` (issue #624 step 4, off by
+default); no pass writes `s1` yet. The worker writes them from the files the
+fetcher's passes leave in the mirror bucket; no route writes them.
 
 | Table | Holds |
 | --- | --- |
 | `waterbody_reference` | DE Africa Waterbodies polygons (the v0.0.3 historical extent): `uid` (primary key, the waterbody's geohash, `^[0-9a-z]{6,12}$`, which names its series upstream), `dataset` (`synthetic` for the committed fixture, else the operator's label), `geometry` (Polygon or MultiPolygon jsonb), its bounding box (`min_lon` … `max_lat`, indexed for the match's first pass), `area_m2` (geodesic), `source`, `loaded_at`. Global reference data like `dam_register_reference` (157): loaded by the operator (`pnpm import:waterbodies`, or `load-reference.yml` kind `waterbodies`), read-only to the app |
 | `dam_waterbody_match` | One row per traced dam polygon (`feature_id`, primary key; `project_id`): `status` `matched` (one waterbody is essentially this dam), `merged` (the waterbody also holds other water, or the dam is split over several) or `none`; `uid` (the best overlap's, null for `none`); `dam_share` and `waterbody_share` (0–1: how much of the dam the waterbody covers, and of the waterbody the dam is); `reason` (only with `none`: `too_large`, its box is over 1° a side, past what `app_waterbody_candidates` takes; `too_complex`, the overlap spent its work cap; null when it was compared); `matched_at`. A dam that can't be compared is recorded `none` with its reason, so it leaves the tick's stale list (tried again on the next reload of the reference set) and WOfS still observes it. `uid` is no foreign key: a reload of the reference set replaces its rows, and the worker matches every dam again (`matched_at` older than the newest `loaded_at`). Thresholds: `backend/src/dams/observed/match.ts` |
-| `dam_observation_load_mark` | Worker only, not project data. Per pass file (`source`, `key`: primary key): `last_good` (the status file's `lastGood` the key was last checked against), `fetched_at` (the file's `fetchedAt` last loaded), `targets` (for a Waterbodies uid, a SHA-256 of the matched dams' feature ids and `matched_at` it was loaded for; `''` for WOfS), `failed_at` (the last attempt failed; cleared by the next success), `updated_at`. A WOfS key also holds its `feature_id` (→ `map_feature` `ON DELETE CASCADE`, indexed), so the mark goes with its dam. It lets a restarted or cold worker skip every file it already loaded without a GET (architecture.md § Dam observations) |
-| `dam_observation` | One row per dam, `source` and `obs_date` (unique): `wet_area_m2` (the wet area seen, of the part seen clearly), `pct_observed` (0–100, the share of the outline seen clearly that date; for Waterbodies 100 − `pc_invalid`), `upstream_key` (the Waterbodies uid, or the WOfS STAC item id), `loaded_at`. `obs_date` from 1984 (Landsat's record) |
+| `dam_observation_load_mark` | Worker only, not project data. Per pass file (`source`, `key`: primary key): `last_good` (the status file's `lastGood` the key was last checked against), `fetched_at` (the file's `fetchedAt` last loaded), `targets` (for a Waterbodies uid, a SHA-256 of the matched dams' feature ids and `matched_at` it was loaded for; `''` for the feature-keyed sources, except an `s1` key whose radar is withheld, `S1_WITHHELD`, 283), `failed_at` (the last attempt failed; cleared by the next success), `updated_at`. A WOfS, `s2` or `s1` key also holds its `feature_id` (→ `map_feature` `ON DELETE CASCADE`, indexed; a CHECK requires it for exactly those three), so the mark goes with its dam. It lets a restarted or cold worker skip every file it already loaded without a GET (architecture.md § Dam observations) |
+| `dam_observation` | One row per dam, `source` and `obs_date` (unique): `wet_area_m2` (the wet area seen, of the part seen clearly), `pct_observed` (0–100, the share of the outline seen clearly that date; for Waterbodies 100 − `pc_invalid`), `upstream_key` (the Waterbodies uid, or the WOfS, Sentinel-2 or Sentinel-1 STAC item id), `loaded_at`. `obs_date` from 1984 (Landsat's record) |
 
 - **Same project**: both project tables reach their dam through the
   composite key `(feature_id, project_id)` → `map_feature (id, project_id)`
@@ -4953,7 +5027,12 @@ passes leave in the mirror bucket; no route writes them.
     oldest traced first, `created_at` then `id`, so past the cap the most
     recently traced wait; the tick logs `dams_outline_cap` at the cap),
     with its match, `match_stale`, `matched_at` and the newest observation
-    date per source: the match's input and the wanted list's outlines.
+    date per source (`waterbodies_newest`, `wofs_newest`, and since 279
+    `s2_newest` and `s1_newest`): the match's input and the wanted list's
+    outlines (a dam's `since`, and its `sinceBy` for the Sentinel sources).
+    279 dropped and created it again from 261's definition with the two
+    columns added (a function's result columns can't change in place),
+    its grant to `water_app` restated.
   - `app_waterbody_candidates(w, s, e, n)`: the waterbodies whose box meets
     the dam's (a box of at most 1° a side; at most 200, most shared box
     area first).
@@ -4966,12 +5045,12 @@ passes leave in the mirror bucket; no route writes them.
   - `app_dam_load_marks()` and `app_dam_load_mark_write(source, key,
     last_good, fetched_at, targets, failed)`: read every load mark, and
     record one: loaded (or found already loaded) as of `last_good`, clearing
-    a failure; or `failed`, which sets `failed_at` only. A WOfS key whose
-    feature is gone records nothing (`applied = false`).
+    a failure; or `failed`, which sets `failed_at` only. A WOfS, `s2` or
+    `s1` key whose feature is gone records nothing (`applied = false`).
   - `app_dam_observation_load(source, key, dates[], wet[], pct[],
     upstream_keys[], fetched_at)`: one pass file. `waterbodies`: `key` is a
-    uid and the rows go to every dam matched to it; `wofs`: `key` is a dam's
-    feature id, refused (`applied = false`) when the feature changed after
+    uid and the rows go to every dam matched to it; `wofs`, `s2` and `s1`:
+    `key` is a dam's feature id, refused (`applied = false`) when the feature changed after
     `fetched_at` (the outline the pass read may be gone) or is no longer a
     dam polygon. Rows are upserted by (dam, source, date), a row with
     unchanged values isn't rewritten, and nothing is deleted (a pass may
@@ -4981,6 +5060,17 @@ passes leave in the mirror bucket; no route writes them.
     most 20 000 rows; each date 1984 to tomorrow (UTC), listed once; wet
     area 0 to 10¹² m², never NaN; share 0–100; each upstream key 1–200
     printable characters; `fetched_at` not in the future.
+  - `app_dam_s1_withhold(key)` (283, issue #624 open question 3): removes
+    one dam's `s1` rows (`removed`), for the dams tick to withhold radar
+    the agreement hasn't passed (`DAM_OBSERVATIONS_S1` not `on`, or the
+    dam's own agreement below the bar or under 10 pairs); `key` a dam
+    feature id (else 23514). Its mark then holds `targets` `S1_WITHHELD`
+    (a fixed SHA-256, `tick.ts`), so the key is due again when the dam
+    starts or stops passing. A mark with `targets` `''` and a `last_good`
+    is also the tick's record that the dam's radar is shown: its
+    hysteresis (start at 85 %, stay down to 80 %) and its withholding of
+    radar the status file no longer lists read it (architecture.md § Dam
+    observations).
 - **reference_load** takes kind `waterbodies` (named in 258, kept beside `dws` by 261), so a production load
   records its file like the other reference datasets.
 - **Tests**: `dams/observed/observations.security.db.test.ts` (RLS with
@@ -4995,6 +5085,87 @@ passes leave in the mirror bucket; no route writes them.
   while another project's dam is matched the same tick; the loads' cap,
   oldest first; a fresh process GETting nothing it loaded, and loading a
   newer file);
+  `catalogue.db.test.ts`.
+
+### Observed actual ET (277_et_observation.sql)
+
+Satellite actual evapotranspiration (ETa) over each unit's farm parcels,
+per dekad, in our own store (issue #623): the independent check on a unit's
+modelled irrigation use. Two sources: **`wapor`** (FAO WaPOR v3
+`L2-AETI-D`, 100 m, from 2018) and **`ssebop`** (USGS FEWS NET SSEBop v6,
+1 km, from 2012, the fallback;
+[data-sources.md § Observed actual evapotranspiration](./data-sources.md#observed-actual-evapotranspiration)).
+The worker writes them, from what the fetcher's WaPOR pass handed over
+([architecture.md § Observed actual ET](./architecture.md#observed-actual-et));
+no route writes them, and nothing reads them yet (the comparison is #623
+step 5). Nothing here feeds the engine.
+
+| Table | Holds |
+| --- | --- |
+| `et_observation` | One row per unit (`node_id`, a node of kind `farm`), `source` and `dekad` (unique; the dekad's first day, the 1st, 11th or 21st, from 2012): `eta_mm_day` (the area-weighted mean over the valid part of the area, 0–50), `valid_share` (0–1, the share of the area with a valid pixel), `area_m2` and `mask` (`cropland`: the parcels ∩ WorldCover cropland; `parcel`: the whole parcels, where no land cover is loaded), the provenance `upstream_file`, `upstream_etag` (null when the file had none) and `upstream_version` (`WAPOR-3`, `v6.1`), `revision` (1 when first loaded, +1 each time a load changes the row: FAO rewrites files in place), `loaded_at` |
+| `et_observation_load_mark` | Worker only, not project data. Per `source` and unit (`node_id` → `node` `ON DELETE CASCADE`; primary key): `last_good` (the status file's `lastGood` the unit was last checked against), `fetched_at` (the file's `fetchedAt` last loaded), `failed_at` (the last attempt failed; cleared by the next success), `parcels_changed_at` (when the unit's parcels last changed), `updated_at` |
+
+- **Same project**: `et_observation.node_id` → `node ON DELETE CASCADE`,
+  held to the row's project by `assert_same_project('node_id')`
+  (`et_observation_same_project`); covering indexes on every foreign key.
+- **RLS**: a project's viewers and above read its rows; a farmer or
+  contributor reads their linked units' only (`et_observation_select_farmer`,
+  `node_id IN app_farm_nodes(project_id)`); `water_app` holds SELECT and
+  nothing else (`catalogue.db.test.ts` `READ_ONLY`).
+  `et_observation_load_mark`: owner only (RLS on, no policy, no privilege for
+  `water_app`; `OWNER_ONLY`, and `FARMERS_NEVER_READ` for its node column).
+- **A unit whose parcels change** (a `farm_parcel` feature inserted, deleted,
+  redrawn, turned into or out of a parcel, or moved to another node) loses
+  its rows, each a mean over the old parcels (`et_parcels_changed`, AFTER
+  triggers on `map_feature`, `SECURITY DEFINER` since the editor holds no
+  DELETE on them); a rename doesn't. Both sources' marks get
+  `parcels_changed_at = now()` with `last_good` and `fetched_at` cleared, so
+  the next pass reads the unit again from the start and a file fetched
+  before the change is refused. Both the trigger and the loader lock the
+  unit's `node` row first, so neither slips between the other's check and
+  write. A unit being deleted takes its rows and marks with it.
+- **The worker's functions** (`SECURITY DEFINER`, `water_app` EXECUTE,
+  worker only: no user and no API key, 245's `mirror_worker_context`, else
+  42501):
+  - `app_et_observation_load(source, node_id, dekads[], eta[], valid[],
+    area[], mask, files[], etags[], version, fetched_at)`: one unit's pass
+    file. Refused (`applied = false`, nothing written) when the node is gone,
+    isn't a `farm`, has no `farm_parcel`, or its parcels changed after
+    `fetched_at`. Rows are upserted by (unit, source, dekad); a row whose
+    values and provenance are unchanged isn't rewritten, a changed one is and
+    its `revision` goes up; nothing is deleted (a pass may send only the
+    dekads since the newest held). Returns `written` (inserted or changed)
+    and `revised` (changed). Bounds (else 23514): a known source and mask;
+    arrays of one length, at most 2000 rows; each a dekad's first day from
+    2012 to today (UTC), listed once; mean 0–50 mm/day, share 0–1, area over
+    0 and under 10¹¹ m², never NaN; each file 1–300 printable characters,
+    each ETag null or 1–200 printable characters with no edge spaces (as
+    `fileTag` keeps one); the version 1–50 printable characters;
+    `fetched_at` not in the future.
+  - `app_et_load_marks()` and `app_et_load_mark_write(source, node_id,
+    last_good, fetched_at, failed)`: read every mark, and record one: loaded
+    (or found already loaded) as of `last_good`, clearing a failure; or
+    `failed`, which sets `failed_at` only. `parcels_changed_at` is left as it
+    is; a unit that is gone records nothing (`applied = false`).
+  - `app_et_units(source)` (281): every unit with a `farm_parcel` polygon,
+    in any project, with its polygons as one jsonb array and that source's
+    `parcels_changed_at`, at most 5000, by unit id: the tick's wanted list.
+  - `app_et_cropland(w, s, e, n)` (281): the default land-cover dataset's
+    cropland cells (real before synthetic, then the newest load) in a box of
+    at most 1° a side, at most 200 000, with the dataset's label and cell
+    size on each row; none when no dataset is loaded. The worker can't read
+    `cropland_cell_reference` itself (its policy needs a user).
+- **Tests**: `water-use/observed/tick.db.test.ts` (the tick end to end: the
+  wanted list from 281's functions, a load, a revision, a refused file
+  after a redraw, the marks, the cap); `water-use/observed/observations.security.db.test.ts` (RLS with
+  positive controls: a viewer, each farmer's own unit, nothing across
+  projects or with no user; refused writes; the worker-only functions and
+  the owner-only marks); `water-use/observed/observations.db.test.ts` (the
+  upsert and its revision, the refused units, a file older than a parcel
+  change, every bound under a skewed TZ, the same-project trigger; a rename
+  against a redraw, an added, moved and deleted parcel, a deleted unit; the
+  marks); `farms/farmer-privacy.security.db.test.ts` (the sweep seeds each
+  unit's rows); `db/cross-project-refs.security.db.test.ts`;
   `catalogue.db.test.ts`.
 
 ### Feed days (031_feed_days.sql)

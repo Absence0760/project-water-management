@@ -35,6 +35,7 @@ const {
 	DAILY_INGEST_EVENT,
 	DAMS_WEEKLY_EVENT,
 	DWS_WEEKLY_EVENT,
+	ET_DEKADAL_EVENT,
 	FETCH_SEND_MARGIN_MS,
 	GEFS_INGEST_EVENT,
 	INDICES_INGEST_EVENT,
@@ -44,7 +45,12 @@ const {
 	isDailyIngestEvent,
 	isDamsWeeklyEvent,
 	isDwsWeeklyEvent,
-	withDeadline
+	isEtDekadalEvent,
+	S2_BUDGET_SHARE_WITH_S1,
+	scenePassShares,
+	WATERBODIES_BUDGET_SHARE,
+	withDeadline,
+	WOFS_BUDGET_SHARE_WITH_S2
 } =
 	await import('./lambda-fetcher.js');
 type DamsWeeklyAnswer = import('./lambda-fetcher.js').DamsWeeklyAnswer;
@@ -627,6 +633,70 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		expect(lines.join('\n')).not.toContain(dam().featureId);
 	});
 
+	it('runs the Sentinel-2 pass after WOfS only with DAM_OBSERVATIONS_S2=on, with its own heartbeat and log (issue #624)', async () => {
+		// The same 60 days as WOfS's: without sinceBy.s2 the pass backfills to 2019, years of synthetic 10 m scenes.
+		await bucket(undefined, [{ ...dam(), sinceBy: { s2: dam().since } }]);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		vi.stubEnv('DAM_OBSERVATIONS_S2', 'on');
+		const res = (await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer;
+		const metrics = out.mock.calls.map(([l]) => String(l)).filter((l) => l.includes('DamPassCompleted'));
+		out.mockRestore();
+		expect(res.s2).toEqual({ fetched: 1, unchanged: 0, failed: 0, fresh: 0, recencyDays: expect.any(Number), stopped: 'done' });
+		expect(metrics.map((l) => JSON.parse(l).Source)).toEqual(['waterbodies', 'wofs', 's2']);
+		const lines = info.mock.calls.map(([l]) => l as string);
+		expect(lines.map((l) => JSON.parse(l)).find((l) => l.event === 'dams_pass' && l.source === 's2')).toMatchObject({ fetched: 1, stopped: 'done', sceneFailed: 0 });
+		expect(lines.join('\n')).not.toContain(dam().featureId);
+		// Off (or unset): no Sentinel-2 pass, no heartbeat for it.
+		vi.stubEnv('DAM_OBSERVATIONS_S2', 'off');
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		expect(((await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer).s2).toBeUndefined();
+		vi.stubEnv('DAM_OBSERVATIONS_S2', 'yes');
+		await expect(handler({ mode: 'dams-weekly' } as never)).rejects.toThrow(/unknown DAM_OBSERVATIONS_S2/);
+	});
+
+	it('runs the Sentinel-1 pass after Sentinel-2 only with DAM_OBSERVATIONS_S1=on or measure, with its heartbeat and the S1/S2 agreement log (issue #624 step 5)', async () => {
+		await bucket(undefined, [{ ...dam(), sinceBy: { s2: dam().since, s1: dam().since } }]);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		vi.stubEnv('DAM_OBSERVATIONS_S2', 'on');
+		vi.stubEnv('DAM_OBSERVATIONS_S1', 'on');
+		const res = (await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer;
+		const metrics = out.mock.calls.map(([l]) => String(l)).filter((l) => l.includes('DamPassCompleted'));
+		out.mockRestore();
+		expect(res.s1).toEqual({ fetched: 1, unchanged: 0, failed: 0, fresh: 0, recencyDays: expect.any(Number), stopped: 'done' });
+		expect(metrics.map((l) => JSON.parse(l).Source)).toEqual(['waterbodies', 'wofs', 's2', 's1']);
+		const lines = info.mock.calls.map(([l]) => l as string);
+		const parsed = lines.map((l) => JSON.parse(l));
+		expect(parsed.find((l) => l.event === 'dams_pass' && l.source === 's1')).toMatchObject({ fetched: 1, stopped: 'done', sceneFailed: 0 });
+		// The agreement report: counts over the one dam, never the dam itself.
+		expect(parsed.find((l) => l.event === 'dams_s1_agreement')).toMatchObject({ dams: 1, damsPaired: expect.any(Number), pairs: expect.any(Number), within: expect.any(Number), passes: expect.any(Boolean) });
+		expect(lines.join('\n')).not.toContain(dam().featureId);
+		// measure: the same pass and report (only the worker tells measure from on: it loads no radar row).
+		vi.stubEnv('DAM_OBSERVATIONS_S1', 'measure');
+		info.mockClear();
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		expect(((await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer).s1).toMatchObject({ failed: 0, stopped: 'done' });
+		expect(info.mock.calls.some(([l]) => JSON.parse(l as string).event === 'dams_s1_agreement')).toBe(true);
+		// Off (or unset): no Sentinel-1 pass, no heartbeat and no report.
+		vi.stubEnv('DAM_OBSERVATIONS_S1', 'off');
+		info.mockClear();
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		expect(((await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer).s1).toBeUndefined();
+		expect(info.mock.calls.some(([l]) => JSON.parse(l as string).event === 'dams_s1_agreement')).toBe(false);
+		vi.stubEnv('DAM_OBSERVATIONS_S1', 'yes');
+		await expect(handler({ mode: 'dams-weekly' } as never)).rejects.toThrow(/unknown DAM_OBSERVATIONS_S1/);
+	});
+
+	it('gives each scene pass its share of the run: WOfS to 65 % with a Sentinel pass after it, Sentinel-2 to 85 % with radar after it', () => {
+		expect(scenePassShares(false, false)).toEqual({ wofs: 1, s2: 1, s1: 1 });
+		expect(scenePassShares(true, false)).toEqual({ wofs: WOFS_BUDGET_SHARE_WITH_S2, s2: 1, s1: 1 });
+		expect(scenePassShares(true, true)).toEqual({ wofs: WOFS_BUDGET_SHARE_WITH_S2, s2: S2_BUDGET_SHARE_WITH_S1, s1: 1 });
+		expect(scenePassShares(false, true)).toEqual({ wofs: WOFS_BUDGET_SHARE_WITH_S2, s2: S2_BUDGET_SHARE_WITH_S1, s1: 1 });
+		expect(WATERBODIES_BUDGET_SHARE).toBeLessThan(WOFS_BUDGET_SHARE_WITH_S2);
+		expect(WOFS_BUDGET_SHARE_WITH_S2).toBeLessThan(S2_BUDGET_SHARE_WITH_S1);
+	});
+
 	it('an hourly run with nothing due asks nothing, and still publishes both heartbeats and recencies', async () => {
 		await bucket(undefined, [dam()]);
 		vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -879,7 +949,7 @@ describe('the fetcher bundle', () => {
 	// the output, so it doesn't lean on tree-shaking: jobs/transport.ts once
 	// reached the runner through wakeWorker's memory transport (now jobs/wake.ts),
 	// and esbuild only dropped it because nothing called wakeWorker.
-	it('never reaches pg, the db layer, the job runner, or any engine module but the calendar, series provenance and DWS table reader', async () => {
+	it('never reaches pg, the db layer, the job runner, or any engine module but the calendar, series provenance, DWS table reader and Sentinel credit', async () => {
 		const { build } = await import('esbuild');
 		const out = await build({
 			entryPoints: [fileURLToPath(new URL('./lambda-fetcher.ts', import.meta.url))],
@@ -903,7 +973,75 @@ describe('the fetcher bundle', () => {
 		// `/provenance` subpath (seriesProvenance.ts: constants, no imports).
 		// feeds/sources/dws.ts reads rows through the `/dws` subpath (dws.ts:
 		// the row parser it shares with the manual import; imports only calendar.ts).
-		const allowed = ['packages/engine/src/calendar.ts', 'packages/engine/src/seriesProvenance.ts', 'packages/engine/src/dws.ts'];
+		// dams/observed/upstream.ts re-exports the Copernicus credit through the
+		// `/sentinel-credit` subpath (evidence/sentinelCredit.ts: no imports), its one definition.
+		const allowed = ['packages/engine/src/calendar.ts', 'packages/engine/src/seriesProvenance.ts', 'packages/engine/src/dws.ts', 'packages/engine/src/evidence/sentinelCredit.ts'];
 		expect(inputs.filter((f) => f.includes('packages/engine/') && !allowed.some((a) => f.endsWith(a)))).toEqual([]);
+	});
+});
+
+describe('the fetcher’s et-dekadal mode (issue #623)', () => {
+	const dirs: string[] = [];
+	afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
+	const UNIT = '00000000-0000-4000-8000-0000000000e1';
+	/** A bucket of its own holding the worker's wanted list: one invented unit inside the synthetic WaPOR's cover. */
+	const bucket = async () => {
+		const d = mkdtempSync(join(tmpdir(), 'wm-fetcher-et-'));
+		dirs.push(d);
+		const { openStore } = await import('./mirror/store.js');
+		const { writeWanted } = await import('./water-use/observed/handover.js');
+		const ring: [number, number][] = [
+			[21.31, -33.69],
+			[21.32, -33.69],
+			[21.32, -33.68],
+			[21.31, -33.68],
+			[21.31, -33.69]
+		];
+		await writeWanted(openStore(pathToFileURL(`${d}/`).href), { generatedAt: new Date().toISOString(), units: [{ unitKey: UNIT, parcels: { type: 'MultiPolygon', coordinates: [[ring]] } }] });
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${d}/`).href);
+	};
+
+	it('routes the scheduled event to the ET pass, and nothing else', () => {
+		expect(isEtDekadalEvent(ET_DEKADAL_EVENT)).toBe(true);
+		expect(isEtDekadalEvent({ mode: 'et-dekadal', 'detail-type': 'Scheduled Event' })).toBe(true);
+		expect(isEtDekadalEvent({ Records: [], mode: 'et-dekadal' })).toBe(false);
+		expect(isEtDekadalEvent(DAMS_WEEKLY_EVENT)).toBe(false);
+		expect(isDamsWeeklyEvent(ET_DEKADAL_EVENT)).toBe(false);
+		expect(isDailyIngestEvent(ET_DEKADAL_EVENT)).toBe(false);
+	});
+
+	it('runs the WaPOR pass (fixtures here), publishes its heartbeat and recency, and logs counts, never a unit', async () => {
+		await bucket();
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = await handler({ mode: 'et-dekadal' } as never);
+		const metric = out.mock.calls.map(([l]) => String(l)).find((l) => l.includes('EtPassCompleted'));
+		out.mockRestore();
+		expect(res).toMatchObject({ written: 1, failed: 0, stopped: 'done', recencyDays: expect.any(Number) });
+		expect(JSON.parse(metric!)).toMatchObject({ Source: 'wapor', EtPassCompleted: 1, EtObservationAgeDays: expect.any(Number) });
+		const lines = info.mock.calls.map(([l]) => l as string);
+		expect(lines.map((l) => JSON.parse(l)).find((l) => l.event === 'et_pass')).toMatchObject({ source: 'wapor', written: 1, stopped: 'done' });
+		expect(lines.join('\n')).not.toContain(UNIT);
+		expect(sent).toHaveLength(0);
+	}, 60_000);
+
+	it('fails the invocation on an HTTP 403, after its heartbeat and a log line saying refused, then pauses with no heartbeat', async () => {
+		await bucket();
+		vi.stubEnv('FEED_SOURCE', 'live');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, text: refuse, rangeTagged: refuse, rangeConditional: refuse };
+		await expect(handler({ mode: 'et-dekadal' } as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		expect(out.mock.calls.some(([l]) => String(l).includes('EtPassCompleted'))).toBe(true);
+		const logged = error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'et_pass');
+		expect(logged).toMatchObject({ source: 'wapor', stopped: 'refused', reason: 'refused', detail: 'HTTP 403', requests: 1 });
+		out.mockClear();
+		expect(await handler({ mode: 'et-dekadal' } as never)).toMatchObject({ stopped: 'paused' });
+		expect(out.mock.calls.some(([l]) => String(l).includes('EtPassCompleted'))).toBe(false);
+		expect(warn.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'et_pass')).toMatchObject({ stopped: 'paused' });
 	});
 });

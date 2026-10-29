@@ -1,6 +1,7 @@
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { defaultCalibrationRules } from '@water-management/engine';
 import pg from 'pg';
+import { afterAll, beforeAll } from 'vitest';
 import { createApp } from '../app.js';
 import { outbox, type Mail } from '../mail/transport.js';
 import { SESSION_COOKIE, signSession } from '../auth/session.js';
@@ -168,6 +169,24 @@ export async function asOwner(sql: string, params: unknown[] = []) {
 export async function retirePendingJobs(...projectIds: (string | undefined)[]) {
 	const ids = projectIds.filter((id): id is string => !!id);
 	if (ids.length) await asOwner(`${RETIRE_PENDING_JOBS_SQL} AND project_id = ANY($1::uuid[])`, [ids]);
+}
+
+/**
+ * Switch off, when this file ends, every data feed it made: test cleanup, as
+ * retirePendingJobs is for jobs. Call once at the top level of a DB test file
+ * that makes feeds. The tick's scheduler queues every due feed in the shared
+ * database, so one left on is fetched by a later file's runTick, and
+ * db-setup.ts fails the file that left it. DB files run one at a time, so the
+ * feeds made since the file began are its own.
+ */
+export function disableFeedsAfterFile() {
+	let since = '';
+	beforeAll(async () => {
+		since = String((await asOwner('SELECT clock_timestamp()::text AS t'))[0]!.t);
+	});
+	afterAll(async () => {
+		if (since) await asOwner('UPDATE data_feed SET enabled = false WHERE enabled AND created_at >= $1::timestamptz', [since]);
+	});
 }
 
 /**

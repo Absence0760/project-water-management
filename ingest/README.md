@@ -19,6 +19,10 @@ FAO-56 ET₀ by us (`nasapower.py` + `fao56.py`, product `power_et0`; § Referen
 evaporation). Issue #620 added C3S's seasonal forecasts and hindcasts
 (`c3s_seasonal.py`, products `c3s/<init>` and `c3s-hc/<system>/<MM>` on a
 1° grid, the same CDS submit-then-collect rules; § The C3S seasonal job).
+Issue #621 added a one-off, operator-run copy of NEX-GDDP-CMIP6's monthly
+aggregates for the future yield (`cmip6_delta.py`, products
+`cmip6/<model>/<scenario>` on a 0.25° grid; § NEX-GDDP-CMIP6, once), which is
+not in the image and never scheduled.
 
 | File | What it does |
 | --- | --- |
@@ -30,6 +34,8 @@ evaporation). Issue #620 added C3S's seasonal forecasts and hindcasts
 | `fakecds.py` | Fixtures mode's stand-in for the CDS: submit, status, find and download, serving `fixtures/era5land/`'s synthetic NetCDF (`FakeCds`), `fixtures/agera5/`'s synthetic zip (`FakeAgera5Cds`) and `fixtures/c3s/`'s synthetic GRIB (`FakeC3sCds`), checking each request against the request modules. Not in the image. |
 | `agera5.py` | AgERA5's daily FAO-56 reference ET into `agera5_et0` (§ Reference evaporation): the month request, the reader (a zip of daily NetCDFs or one NetCDF, cells placed by coordinate), the 0–30 mm check, the revision rule; its runs are `cdsjob.py`'s. |
 | `c3s_seasonal.py` | C3S's seasonal forecasts and hindcasts into `c3s/<init>` and `c3s-hc/<system>/<MM>` (§ The C3S seasonal job): per-system requests keyed by init, submit on one run and collect on a later one (cdsjob.py's rules and pieces), the GRIB reader and de-accumulation, the group arrays, the manifests, `c3s/index.json` and its own handler. |
+| `cmip6_delta.py` | NEX-GDDP-CMIP6's monthly aggregates into `cmip6/<model>/<scenario>` (§ NEX-GDDP-CMIP6, once): `plan` (what the bucket lists, the highest version of each file, what is missing) and `copy` (ranged reads of each daily file, D1 placed by coordinate, monthly totals and means, the checks, the manifest with each file's version and `license` attribute, `cmip6/index.json`, resumable). Operator-run once; not in the image. |
+| `fixtures/cmip6/make_cmip6_fixture.py` | Writes the synthetic NEX-GDDP-CMIP6 tree (models `SYN-A`, `SYN-B`, `SYN-C`, two years a scenario, one calendar each, a re-released file, a missing day, an old and a missing `license`) for `cmip6_delta.py --source fixtures` and the tests. Nothing committed but the script. |
 | `c3srequest.py` | C3S's request module: the dataset, `SYSTEMS`, the centres' names, the release days, a key's request and the key a request names; shared with `fakecds.py`. |
 | `fixtures/c3s/make_c3s_fixture.py` | Writes a synthetic C3S request's GRIB2 (accumulated `tp` per start, member and lead on the 1° grid; any member and lead count, a hindcast's years); `fakecds.py` calls it for each download. |
 | `fixtures/agera5/make_agera5_fixture.py` | Writes a synthetic AgERA5 month (a zip of daily NetCDF-4 files, or one file; x.x5 cells, or x.x0 points); `fakecds.py` calls it for each download. |
@@ -64,7 +70,7 @@ evaporation). Issue #620 added C3S's seasonal forecasts and hindcasts
 | `fixtures/imerg/make_imerg_fixture.py` | The synthetic IMERG Late daily field and file writer, in GPM_3IMERGDL V07's real layout (a global file from the command line). |
 | `tests/roundtrip.ts` | The Node half of the cross-language round trip (`test_roundtrip.py`). |
 | `Dockerfile` | The Lambda image (build context `ingest/`). |
-| `dev.sh` | `pnpm dev:ingest:run`, `pnpm test:ingest` and `ingest/dev.sh verify`. |
+| `dev.sh` | `pnpm dev:ingest:run`, `pnpm test:ingest`, `ingest/dev.sh verify` and `ingest/dev.sh cmip6`. |
 
 ## The event and the environment
 
@@ -524,6 +530,57 @@ year counts.
 Operator steps (both licences on the dataset's page, turning it on, the
 hindcast backfill): docs/deployment.md § C3S seasonal forecasts.
 
+## NEX-GDDP-CMIP6, once
+
+Issue #621 slice 2: the climate projections the future yield's change
+factors are computed from (slices 3-4; nothing reads the copy yet).
+`cmip6_delta.py`'s docstring is the spec; in short:
+
+- **Once, by the operator.** The archive is static (no updates are
+  planned), so there is no schedule, no Lambda and no `infra/` change: the
+  operator runs it once in us-west-2, next to the bucket, and only the
+  regional monthly aggregates travel to the copy in af-south-1 (the runbook:
+  docs/deployment.md § NEX-GDDP-CMIP6 (one-off)). `plan` first: it lists
+  what `copy` would read and what is missing without reading any data.
+- **Source:** `s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/<model>/<scenario>/<variant>/<var>/<var>_day_<model>_<scenario>_<variant>_<grid>_<YYYY>[_v<N.N>].nc`,
+  anonymous (read unsigned), daily, global 0.25°. `pr`, `tasmax` and
+  `tasmin` for `MODELS` (ten, frozen in docs/data-sources.md §
+  nex-gddp-cmip6) × `historical` 1985–2014, `ssp245` and `ssp585`
+  2036–2095. The highest version of each file is read (no suffix is the
+  first release, `v1.0`); a model listing two variants needs one pinned.
+- **Reading:** ranged GETs through a block cache (`S3RangeFile`), asking
+  HDF5 for D1's cells only. Cells are placed by coordinate (either latitude
+  direction), the margin is dropped. Time is decoded in the file's own
+  calendar (Gregorian, `noleap`, `all_leap`, `360_day`), and must be every
+  day of the file's year once. pr in kg m⁻² s⁻¹ (× 86400 mm/day, 0–2000),
+  temperatures in K (170–340); anything else stops the run before the year
+  is written.
+- **What is written:** monthly aggregates only, never a day. A group per
+  product with `pr_mm` (the month's total, mm), `tasmax_c` and `tasmin_c`
+  (the month's mean, °C), float32, dims (year, month, lat, lon) on
+  `grid.CMIP6` (110 × 124 cells tiling D1 exactly, [0, 0] centred at
+  35.375° S, 10.125° E), chunk (1, 12, 22, 31), year index from 1950
+  (historical) or 2015 (the SSPs). A month with a day missing at a cell is
+  NaN there. The group's attributes carry the model, variant, grid label,
+  calendar, the source, the licence, the credit, the citation and the
+  method. The manifest lists one file per NEX file, each with its `version`
+  and its global `license` attribute **verbatim** (null when it has none),
+  `valuesSha256` hashing that file's (month, lat, lon) aggregates; `years`
+  the first and last held. `cmip6/index.json` lists the years held per
+  model and scenario.
+- **Licence:** the AWS registry says CC0 for every output since September
+  2022; the archive was first released under CC BY-SA 4.0, which is why
+  each file's own attribute is kept, and the run's summary counts every
+  distinct value it met.
+- **Resuming:** a year whose three files the manifest already lists is
+  skipped without a read; a newer version replaces its entry (a revision
+  with a `changes` entry only when the aggregates differ).
+
+**Unverified until the first live run** (no session has listed the bucket):
+the key layout and version suffixes, each model's variant and grid label,
+the files' chunking (and so how much of each a region read costs), and the
+`license` attribute's presence and wording.
+
 ## The ECMWF forecast job
 
 `ecmwf_forecast.py` (issue #604 D17, R4-C; its docstring is the spec) copies each
@@ -715,6 +772,8 @@ pnpm dev:ingest:run agera5_et0  # AgERA5 reference ET from the fake CDS: the fir
 pnpm dev:ingest:run power_et0   # NASA POWER ET0 from the fake POWER (a recent run, 30 days)
 pnpm dev:ingest:run c3s      # C3S seasonal from the fake CDS: four systems a run, submitted then collected (run it 3-4 times)
 pnpm test:ingest             # the unittest suite
+ingest/dev.sh cmip6 plan     # the one-off NEX-GDDP-CMIP6 copy on the synthetic tree: what it would read
+ingest/dev.sh cmip6 copy     # … and the copy itself, into ingest/.mirror
 ```
 
 `dev:ingest:run` only writes to a `file://` copy and refuses an `s3://`
@@ -741,6 +800,7 @@ They cover:
 - **ERA5-Land** (`test_era5land.py`): each 00 UTC step as the day before's total, m to mm, the record's first day, the four-corner remap (inland and coastal), packing noise and a real negative, the 2000 mm bound, the phase from `expver`; a known cell and day at its array index and chunk; submit on one run and collect on a later one, one submit per month however often it runs, a held month never requested again, the gap after the newest held month, state lost while queued (adopted, not resubmitted), an intent without an id, state lost after collecting, a failed request's 1/2/4/8-day backoff and the loud stop after 5, the in-flight cap and the queue it drains; a re-check with the same values (no bump), with changed values (a bump with its `changes`), one still preliminary, and one with no `expver` (asked again every 30 days, up to the 180-day cap, and no more once a read says consolidated); a 401 and a 403 that stop the run and the rest of the UTC day; `LiveCds`'s 401/403/404/5xx mapping; the lease; the metric on every exit; the key read by ARN and not at all when no CDS call is needed; and the event through `lambda_handler.py`. The CDS is `fakecds.FakeCds`; nothing touches the network or needs a key.
 - **AgERA5** (`test_agera5.py`): a zip of daily files and one NetCDF, x.x5 cells taken as they are and x.x0 points remapped, cells placed by coordinate (north-first files), the month's own days (a missing day refused), units (another unit refused), the 30 mm bound, packing noise and a real negative; the request's shape and recognising it; the events and the backfill's bounds; submit then collect into the finals (year from 1979, the cell, the credit); a re-check with the same values (no bump) and changed values (a bump with its `changes`), the recheck's cap; a 403/401 silencing the day; the metric on every exit; the manifest's URL and coverage rules. The CDS is `fakecds.FakeAgera5Cds`.
 - **C3S seasonal** (`test_c3s_seasonal.py`): the 1° grid (D1 snapped outward, whole-degree centres) and the manifest's step; a request names its key back, someone else's doesn't; the release days (the 6th for ECMWF, the 10th for the rest, after 12 UTC plus the margin); the GRIB reader (de-accumulation to mm/day against the fixture's days, south-up, any lead count padded with NaN, a missing field leaving the two days it bounds NaN, packing noise clamped, a real drop or a flood refused, another request's file and a field twice refused, a hindcast's years); submit on one run and collect on a later one (four queued, nothing downloaded on the first run, a slow request, done means asked for nothing), the array (systems, members padded to the largest, the credit, the licence and the centres), the manifests and index, a re-collected forecast with other values (one revision), the catch-up bound; a failed request's backoff and the loud stop, a 403 silencing the day, a lost state adopting the queued request; the events; a hindcast backfill for one system and for all; the manifest's URL rules; the handler's routing, the lag on a failure, and the credit matching the engine's. The CDS is `fakecds.FakeC3sCds`.
+- **NEX-GDDP-CMIP6** (`test_cmip6_delta.py`): the calendars (days and hours since an epoch, noon steps, `noleap`, `all_leap`, `360_day`; unknown ones refused); the cut of D1 (only the land cells, the south-west cell at [0, 0], the implausible margin never read, a north-first file placed by coordinate); the aggregation (a month's total in mm and mean in °C against the fixture's own daily formula, a leap February, a noleap February, a 360-day December, a missing day making that cell's month NaN); the refusals (units, packing, another step, an axis short of D1, cells off the 0.25° lattice, another year, a day short, an unknown calendar, a missing variable, a day above 2000 mm or below zero, an implausible temperature, tasmin above tasmax), round-off below zero clamped; the plan (the highest version, a stray file ignored, a missing file stopping the copy before any read, two variants needing a pin); the copy (arrays, shapes, chunks, attributes, a known cell at its year index, only land chunks written, the v1.1 values, the manifest's version, size and hash, each `license` attribute verbatim including the old licence and a missing one, the summary's licence counts, the index); a rerun reading nothing, `--recheck`, a run cut short resuming; a new version with the same values (no bump) and with other values (a revision, its change, the cells and the largest difference), a change over values the copy no longer holds claiming every cell; a product never mixing variants or calendars; S3 on both sides (ranged reads only, the ETag and date kept, a staged S3 copy); the range file's cache; the cmip6 manifest rules; the command; not in the image; and the committed `backend/fixtures/mirror/cmip6/` (backend/scripts/cmip6-fixture.ts) against this writer's layout, words, files, licence attributes and hashes.
 - **FAO-56** (`test_fao56.py`): Example 8's Ra, Example 18's Ra, Rn and ET₀ (3.9 mm/day, from ea and from a dew point), eq. 7 both ways, e°, and NaN and no negative through the arrays.
 - **PenPan** (`test_penpan.py`): McMahon et al. (2013) Worked examples 1, 2 and 9 (Alice Springs, 20 July 1980: the intermediate values, P_rad, f_dir, Rs,pan, f_pan, Rnl and 2.2570 + 1.4027 = 3.6597 mm/day, which S19.90 misprints as 3.6587; S6.1 also worked by hand from the printed intermediates), Thom's function in SI units, FAO-56 eq. 47, f_dir's bounds, NaN in NaN out, no negative, a month as its steady-state day × its days, the screen factor, and wind, dry air and sun each raising it.
 - **The modelled pan grid** (`test_apan_grid.py`, against `power_fixture.FakePower`): one request per parameter, tile and year, the monthly means at a known point (a leap February), a reduced year not asked again, a missing day nulling the month, a 403 stopping the fetch; the `apan` form labelled modelled, every 0.1° centre in the box, a cell as its nearest point's PenPan averaged over the years in water-year order, screen and albedo recorded, a point missing a month left out, a gap or a repeated year refused, an implausible month refused; validation at a known ratio (bias and RMSE by month), a station outside the grid listed, the report from `fixtures/apan/stations.synthetic.csv` (invented stations); the commands end to end; and the committed `fixtures/apan/penpan.synthetic.json` (which `backend/src/geo/penpanGrid.test.ts` reads) against its generator (`test_apan_grid.py --write-fixture`).
@@ -800,6 +860,20 @@ the result:
 ```sh
 ingest/.venv/bin/python ingest/fixtures/make_chc_fixture.py
 ```
+
+`fixtures/cmip6/make_cmip6_fixture.py` writes the synthetic NEX-GDDP-CMIP6
+tree: models `SYN-A` (`proleptic_gregorian`, latitude south first), `SYN-B`
+(`noleap`, north first, variant `r1i1p1f2`) and `SYN-C` (`360_day`, hours
+since the epoch), each with historical 2013–2014 and both SSPs in 2036 and
+2066, on axes one cell wider than D1 each way; a few land cells (a 4 × 4
+block round 33.5° S, 21.5° E and D1's south-west cell) and two margin cells
+with implausible values the cut must drop; SYN-A's ssp245 tasmax 2036 also
+as a warmer `_v1.1`, one missing day in SYN-B's ssp585 tasmin 2066, SYN-C's
+historical files saying CC BY-SA 4.0 and its ssp585 pr 2066 with no
+`license`. Unallocated HDF5 chunks keep each file a few kB (1.7 MB in all).
+Nothing is committed but the script (`ingest/.venv/bin/python ingest/fixtures/cmip6/make_cmip6_fixture.py <dir>`).
+The backend's committed copy holds its own invented aggregates for the same
+models (`backend/scripts/cmip6-fixture.ts`).
 
 `fixtures/ecmwf/` holds one invented ECMWF issue, 15 step files with their
 `.index`, on ECMWF's real 0.1° global grid, 4 members each with a 2 m

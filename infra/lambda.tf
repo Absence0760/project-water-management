@@ -199,6 +199,16 @@ resource "aws_lambda_function" "backend" {
       # when the feeds read it. The API reads the copy's days from the
       # mirror_copy rows the worker records; it never reaches the copy itself.
       CHIRPS_SOURCE = var.chirps_source
+      # Whether the observed ET pass runs (issue #623, et_observations.tf): the
+      # same as the worker's (jobs.tf). The API runs no tick; it reads this
+      # only so a unit's ET panel can say the check is off on this site rather
+      # than that the unit has no observations yet (GET …/et-observed enabled).
+      ET_OBSERVATIONS = var.et_observations_enabled ? "on" : "off"
+      # The future climate (issue #621): § 8 Future yield and the change
+      # factors. The API queues the jobs and puts § 8 in a report; the same
+      # value as the worker's (jobs.tf), which runs them, and the
+      # assistant's (assistant.tf), which builds the same reports.
+      FUTURE_YIELD = var.future_yield_enabled ? "on" : "off"
 
       # Server-side reports (reports.tf): the API signs PDF downloads as
       # CloudFront signed URLs on the site's /reports/* path. The private key

@@ -16,9 +16,32 @@ export interface ChartSeries extends DailyInput {
 	width?: number;
 	/** A points series' dot size in CSS px (3 by default; sparse observations, such as a dam seen from space, read better larger). */
 	pointSize?: number;
+	/** A points series drawn as rings (a full-strength 2 px outline, no fill), and its key swatch the same: a shape apart from filled dots of the same colour (ui-playbook.md § 3, "add a shape"). */
+	hollow?: boolean;
 	/** Starts switched off; clicking its legend entry shows it. */
 	hidden?: boolean;
 }
+
+/** A points series' marks, as uPlot's `points` options: `stroke` is the series' resolved colour, `k` the print scale. */
+export interface PointMarks {
+	show: true;
+	size: number;
+	width: number;
+	fill: string;
+	stroke: string;
+}
+
+/**
+ * How a points series' marks are drawn: filled dots, or for a `hollow` one (the dam chart's radar views) rings, a
+ * full-strength 2 px outline round a see-through middle, so they read apart from filled dots of the same colour
+ * without leaning on colour (ui-playbook.md § 3). Sizes scale with `k` (printScale).
+ */
+export function pointMarks(s: Pick<ChartSeries, 'pointSize' | 'hollow'>, stroke: string, k = 1): PointMarks {
+	return { show: true, size: (s.pointSize ?? 3) * k, width: s.hollow ? 2 * k : 0, fill: s.hollow ? 'transparent' : stroke, stroke };
+}
+
+/** A series' key swatch fill: a filled dot's colour for a filled points series, none (an outline) for a line or a hollow one. */
+export const swatchFill = (s: Pick<ChartSeries, 'style' | 'hollow'> | undefined, stroke: string): string => (s?.style === 'points' && !s.hollow ? stroke : '');
 
 /**
  * Indices of values with no value either side. A line needs two points, so

@@ -28,8 +28,9 @@ import { withoutUser, withUser } from '../../db/tx.js';
 import { runTick } from '../../jobs/runner.js';
 import { openStore } from '../../mirror/store.js';
 import type { MirrorStore } from '../../mirror/store.js';
-import { type DamOutlineGeometry, readStatus, readWanted, writeObservationFile, writeStatus } from './handover.js';
-import { resetDamsTick, runDamsTick } from './tick.js';
+import { type DamOutlineGeometry, readStatus, readWanted, statusKey, writeObservationFile, writeStatus } from './handover.js';
+import { AGREEMENT_KEY } from './sentinel/agreement.js';
+import { resetDamsTick, runDamsTick, S1_WITHHELD } from './tick.js';
 import { fixtureWaterbodiesHttp, runWaterbodiesPass } from './waterbodies.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -46,6 +47,12 @@ const store = () => openStore(url);
 const zone = process.env.TZ;
 const withoutUserQuery = (sql: string, params: unknown[]) => withoutUser(async (db) => (await db.query(sql, params)).rows);
 const readStatusOf = async (st: MirrorStore) => (await readStatus(st, 'wofs'))!;
+/** The fetcher's S1/S2 agreement report (sentinel/agreement.ts), per dam. */
+const writeAgreement = (perDam: Record<string, { pairs: number; within: number }>) =>
+	store().set(
+		AGREEMENT_KEY,
+		new TextEncoder().encode(JSON.stringify({ computedAt: new Date().toISOString(), perDam: Object.fromEntries(Object.entries(perDam).map(([k, d]) => [k, { ...d, fullAreaM2: 1000 }])) }))
+	);
 
 beforeAll(async () => {
 	// Far east of UTC: a date taken in the server's zone instead would be a day out for half of every day.
@@ -167,6 +174,228 @@ describe('the dams tick', () => {
 		await runDamsTick({ env: env(), store: store() });
 		const after = new Date(Date.parse(`${tomorrow}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 		expect((await readWanted(store()))!.outlines.find((o) => o.featureId === none)!.since).toBe(after);
+	});
+
+	it('loads Sentinel-2 and Sentinel-1 files as their own sources, and tells each pass where its own rows end (issue #624, 279)', async () => {
+		const id = dams.get('Klipdrift dam')!;
+		// Radar loads only with DAM_OBSERVATIONS_S1=on for a dam whose agreement passes (the next test).
+		const env1 = { ...env(), DAM_OBSERVATIONS_S1: 'on' };
+		await writeAgreement({ [id]: { pairs: 12, within: 11 } });
+		await runDamsTick({ env: env1, store: store() });
+		// Before any Sentinel row: no sinceBy (each pass starts from its own backfill).
+		expect((await readWanted(store()))!.outlines.find((o) => o.featureId === id)!.sinceBy).toBeUndefined();
+		const fetchedAt = new Date().toISOString();
+		for (const [source, newest] of [
+			['s2', '2026-09-20'],
+			['s1', '2026-09-12']
+		] as const) {
+			await writeObservationFile(store(), {
+				source,
+				key: id,
+				fetchedAt,
+				upstream: [{ url: `https://example.invalid/stac/${source}-item-1`, itemId: `${source}-item-1` }],
+				rows: [
+					{ date: '2026-09-02', wetAreaM2: 1100, pctObserved: 100, upstreamKey: `${source}-item-1` },
+					{ date: newest, wetAreaM2: 950, pctObserved: 95, upstreamKey: `${source}-item-1` }
+				]
+			});
+			await writeStatus(store(), { source, ranAt: fetchedAt, stopped: false, perKey: { [id]: { lastGood: fetchedAt, newest } } });
+		}
+		const wofsBefore = (await observed('wofs')).get(id);
+		const r = await runDamsTick({ env: env1, store: store() });
+		expect(r).toMatchObject({ loaded: 2, failed: 0 });
+		expect((await observed('s2')).get(id)).toEqual({ feature_id: id, n: 2, newest: '2026-09-20' });
+		expect((await observed('s1')).get(id)).toEqual({ feature_id: id, n: 2, newest: '2026-09-12' });
+		// Positive control: the dam's WOfS rows are what they were, and so is its WOfS since.
+		expect((await observed('wofs')).get(id)).toEqual(wofsBefore);
+		resetDamsTick();
+		await runDamsTick({ env: env1, store: store() });
+		const listed = (await readWanted(store()))!.outlines.find((o) => o.featureId === id)!;
+		expect(listed.sinceBy).toEqual({ s2: '2026-09-21', s1: '2026-09-13' });
+		expect(listed.since).toBe(wofsBefore ? new Date(Date.parse(`${wofsBefore.newest}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10) : '1984-01-01');
+		// Another dam with no Sentinel row lists none.
+		const other = [...dams.values()].find((d) => d !== id)!;
+		expect((await readWanted(store()))!.outlines.find((o) => o.featureId === other)!.sinceBy).toBeUndefined();
+		// The worker's list itself (279): the newest row per source, the Sentinel ones included.
+		const row = await withoutUser(async (db) =>
+			(await db.query<{ s2: string; s1: string }>(`SELECT to_char(s2_newest, 'YYYY-MM-DD') AS s2, to_char(s1_newest, 'YYYY-MM-DD') AS s1 FROM app_dam_outlines() WHERE feature_id = $1`, [id])).rows[0]
+		);
+		expect(row).toEqual({ s2: '2026-09-20', s1: '2026-09-12' });
+	});
+
+	it('loads radar only in on, for a dam whose agreement passes; withholds it in measure and off, and when a dam stops passing (issue #624 open question 3)', async () => {
+		const id = dams.get('Klipdrift dam')!;
+		const other = [...dams.values()].find((d) => d !== id)!;
+		const s1Mark = async (key: string) =>
+			(await withoutUser(async (db) => (await db.query<{ targets: string }>(`SELECT targets FROM app_dam_load_marks() WHERE source = 's1' AND key = $1`, [key])).rows[0]))?.targets;
+		// After the dams were drawn (a fetch older than its feature is refused), seconds apart.
+		const base = Date.now();
+		const at = (n: number) => new Date(base + n * 1000).toISOString();
+		/** A radar file for both dams (fetched at `n`), and the status naming it. */
+		const radar = async (n: number) => {
+			for (const key of [id, other]) {
+				await writeObservationFile(store(), {
+					source: 's1',
+					key,
+					fetchedAt: at(n),
+					upstream: [{ url: 'https://example.invalid/stac/s1-item-1', itemId: 's1-item-1' }],
+					rows: [
+						{ date: '2026-09-06', wetAreaM2: 900, pctObserved: 100, upstreamKey: 's1-item-1' },
+						{ date: '2026-09-12', wetAreaM2: 800, pctObserved: 100, upstreamKey: 's1-item-1' }
+					]
+				});
+			}
+			await writeStatus(store(), { source: 's1', ranAt: at(n), stopped: false, perKey: { [id]: { lastGood: at(n), newest: '2026-09-12' }, [other]: { lastGood: at(n), newest: '2026-09-12' } } });
+		};
+		// The Sentinel-2 rows the test above loaded: the positive control at the end.
+		const s2Before = (await observed('s2')).get(id);
+		expect(s2Before).toMatchObject({ n: 2 });
+		const tick = (mode: string | undefined) => runDamsTick({ env: { ...env(), ...(mode ? { DAM_OBSERVATIONS_S1: mode } : {}) }, store: store() });
+		await radar(1);
+		// id passes; other has too few pairs to judge (all of them agree): not loaded.
+		await writeAgreement({ [id]: { pairs: 20, within: 18 }, [other]: { pairs: 9, within: 9 } });
+
+		// measure: the pass ran, but nothing reaches users; the radar rows the test above loaded for id go.
+		expect(await tick('measure')).toMatchObject({ withheld: 2, withheldRows: 2, failed: 0 });
+		expect((await observed('s1')).size).toBe(0);
+		expect(await s1Mark(id)).toBe(S1_WITHHELD);
+		// Nothing new: nothing due, no file read.
+		expect(await tick('measure')).toMatchObject({ withheld: 0, loaded: 0, unchanged: 0 });
+
+		// on: the passing dam's radar loads from its file, the unjudged one's stays withheld.
+		expect(await tick('on')).toMatchObject({ loaded: 1, withheld: 0, failed: 0 });
+		expect((await observed('s1')).get(id)).toEqual({ feature_id: id, n: 2, newest: '2026-09-12' });
+		expect((await observed('s1')).get(other)).toBeUndefined();
+		expect(await s1Mark(id)).toBe('');
+		expect(await s1Mark(other)).toBe(S1_WITHHELD);
+
+		// The dam falls below the keep bar (75 %; 80 % would keep it, the next test): its rows go on the next tick, without a new fetch.
+		await writeAgreement({ [id]: { pairs: 20, within: 15 }, [other]: { pairs: 9, within: 9 } });
+		expect(await tick('on')).toMatchObject({ withheld: 1, withheldRows: 2, loaded: 0 });
+		expect((await observed('s1')).get(id)).toBeUndefined();
+		// It passes again: reloaded from the same file.
+		await writeAgreement({ [id]: { pairs: 21, within: 18 }, [other]: { pairs: 9, within: 9 } });
+		expect(await tick('on')).toMatchObject({ loaded: 1, withheld: 0 });
+		expect((await observed('s1')).get(id)).toMatchObject({ n: 2 });
+
+		// No report at all (on before any measurement): no dam passes, and the loaded rows go.
+		rmSync(join(dir, AGREEMENT_KEY));
+		expect(await tick('on')).toMatchObject({ withheld: 1, withheldRows: 2, loaded: 0 });
+		expect((await observed('s1')).size).toBe(0);
+		// Back to off (unset) with the report there: still none loaded, and nothing due again.
+		await writeAgreement({ [id]: { pairs: 20, within: 18 } });
+		expect(await tick(undefined)).toMatchObject({ withheld: 0, loaded: 0 });
+		expect((await observed('s1')).size).toBe(0);
+		// Positive control: withholding radar leaves the dam's other sources' rows alone.
+		expect((await observed('s2')).get(id)).toEqual(s2Before);
+
+		// An agreement report that can't be read leaves radar alone that tick (no load, no withholding).
+		await writeAgreement({ [id]: { pairs: 20, within: 18 } });
+		await store().set(AGREEMENT_KEY, new TextEncoder().encode('not json'));
+		await radar(2);
+		expect(await tick('on')).toMatchObject({ loaded: 0, withheld: 0, failed: 0 });
+		expect(await s1Mark(id)).toBe(S1_WITHHELD);
+	});
+
+	/** One radar file for a dam (fetched at `fetchedAt`, after the dams were drawn) and the status naming it. */
+	const radarFor = async (key: string, fetchedAt: string) => {
+		await writeObservationFile(store(), {
+			source: 's1',
+			key,
+			fetchedAt,
+			upstream: [{ url: 'https://example.invalid/stac/s1-item-1', itemId: 's1-item-1' }],
+			rows: [
+				{ date: '2026-09-06', wetAreaM2: 900, pctObserved: 100, upstreamKey: 's1-item-1' },
+				{ date: '2026-09-12', wetAreaM2: 800, pctObserved: 100, upstreamKey: 's1-item-1' }
+			]
+		});
+		await writeStatus(store(), { source: 's1', ranAt: fetchedAt, stopped: false, perKey: { [key]: { lastGood: fetchedAt, newest: '2026-09-12' } } });
+	};
+	const s1Tick = (mode: string | undefined) => runDamsTick({ env: { ...env(), ...(mode ? { DAM_OBSERVATIONS_S1: mode } : {}) }, store: store() });
+
+	it('doesn’t flip a dam’s radar on and off while its agreement hovers between 80 % and 85 % (hysteresis, by its load mark)', async () => {
+		const id = dams.get('Klipdrift dam')!;
+		await radarFor(id, new Date().toISOString());
+		// Shown at 90 %.
+		await writeAgreement({ [id]: { pairs: 20, within: 18 } });
+		expect(await s1Tick('on')).toMatchObject({ loaded: 1, withheld: 0, failed: 0 });
+		expect((await observed('s1')).get(id)).toMatchObject({ n: 2 });
+		// Runs hovering round the bar, a restart among them (the state is the mark, not the process): never withheld.
+		let loads = 0;
+		let withholds = 0;
+		for (const [pairs, within] of [
+			[21, 17], // 81.0 %
+			[22, 18], // 81.8 %
+			[23, 20], // 87.0 %
+			[24, 20], // 83.3 %
+			[25, 20], // 80.0 %, the keep bar itself
+			[26, 22] //  84.6 %
+		] as const) {
+			await writeAgreement({ [id]: { pairs, within } });
+			resetDamsTick();
+			const r = (await s1Tick('on'))!;
+			loads += r.loaded;
+			withholds += r.withheld;
+			expect((await observed('s1')).get(id), `${within}/${pairs}`).toMatchObject({ n: 2 });
+		}
+		expect({ loads, withholds }).toEqual({ loads: 0, withholds: 0 });
+		// Below the keep bar: withheld once.
+		await writeAgreement({ [id]: { pairs: 27, within: 21 } }); // 77.8 %
+		expect(await s1Tick('on')).toMatchObject({ withheld: 1, withheldRows: 2, loaded: 0 });
+		expect((await observed('s1')).get(id)).toBeUndefined();
+		// Back between the bars: it stays withheld, tick after tick, until it reaches 85 % again.
+		for (const [pairs, within] of [
+			[28, 23], // 82.1 %
+			[29, 24], // 82.8 %
+			[30, 25] //  83.3 %
+		] as const) {
+			await writeAgreement({ [id]: { pairs, within } });
+			expect(await s1Tick('on'), `${within}/${pairs}`).toMatchObject({ withheld: 0, loaded: 0 });
+			expect((await observed('s1')).get(id)).toBeUndefined();
+		}
+		await writeAgreement({ [id]: { pairs: 40, within: 34 } }); // 85 %
+		expect(await s1Tick('on')).toMatchObject({ loaded: 1, withheld: 0 });
+		expect((await observed('s1')).get(id)).toMatchObject({ n: 2 });
+	});
+
+	it('withholds radar loaded before when the stage leaves on, even with dams/s1-status.json gone (by the load marks)', async () => {
+		const id = dams.get('Klipdrift dam')!;
+		await radarFor(id, new Date().toISOString());
+		await writeAgreement({ [id]: { pairs: 20, within: 18 } });
+		expect(await s1Tick('on')).toMatchObject({ loaded: 1, failed: 0 });
+		expect((await observed('s1')).get(id)).toMatchObject({ n: 2 });
+		rmSync(join(dir, statusKey('s1')));
+		// Positive control: on, the dam still passing, no status: its rows stay (nothing to load, nothing to withhold).
+		expect(await s1Tick('on')).toMatchObject({ loaded: 0, withheld: 0, failed: 0 });
+		expect((await observed('s1')).get(id)).toMatchObject({ n: 2 });
+		// off (unset): withheld by the mark alone, no status file and no file read.
+		rmSync(join(dir, 'dams', 's1'), { recursive: true, force: true });
+		expect(await s1Tick(undefined)).toMatchObject({ withheld: 1, withheldRows: 2, loaded: 0, failed: 0 });
+		expect((await observed('s1')).size).toBe(0);
+		expect(
+			(await withoutUser(async (db) => (await db.query<{ targets: string }>(`SELECT targets FROM app_dam_load_marks() WHERE source = 's1' AND key = $1`, [id])).rows[0]))?.targets
+		).toBe(S1_WITHHELD);
+		// Once withheld, the mark no longer counts as shown: nothing again the next tick.
+		expect(await s1Tick('off')).toMatchObject({ withheld: 0, loaded: 0 });
+	});
+
+	it('withholds radar for a dam the status no longer lists, and one that stops passing, with the status gone (on)', async () => {
+		const id = dams.get('Klipdrift dam')!;
+		await radarFor(id, new Date().toISOString());
+		await writeAgreement({ [id]: { pairs: 20, within: 18 } });
+		expect(await s1Tick('on')).toMatchObject({ loaded: 1 });
+		rmSync(join(dir, statusKey('s1')));
+		await writeAgreement({ [id]: { pairs: 20, within: 14 } }); // 70 %
+		expect(await s1Tick('on')).toMatchObject({ withheld: 1, withheldRows: 2 });
+		expect((await observed('s1')).size).toBe(0);
+	});
+
+	it('withholds radar only as the worker, and only a dam id (283; positive control: the worker)', async () => {
+		const id = dams.get('Klipdrift dam')!;
+		const code = (p: Promise<unknown>) => p.then(() => 'ok', (e: { code?: string }) => e.code);
+		expect(await code(withUser(owner.id, (db) => db.query('SELECT * FROM app_dam_s1_withhold($1)', [id])))).toBe('42501');
+		expect(await code(withoutUser((db) => db.query('SELECT * FROM app_dam_s1_withhold($1)', ['not-a-uuid'])))).toBe('23514');
+		expect(await withoutUser(async (db) => (await db.query<{ removed: number }>('SELECT removed FROM app_dam_s1_withhold($1)', [id])).rows[0]!.removed)).toBe(0);
 	});
 
 	it('matches every dam again after the reference set is reloaded', async () => {

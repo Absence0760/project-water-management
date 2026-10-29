@@ -13,15 +13,15 @@
 // seasonal level, so a dam's wet area rises and falls through the year;
 // every everyNth day a band of cloud crosses the scenes and every
 // overcastEveryNth day they're all cloud, so partly and wholly unobserved
-// days occur. Scenes are real tiled DEFLATE GeoTIFFs (cogWrite.ts), so the
+// days occur. Scenes are real tiled DEFLATE GeoTIFFs (raster/cogWrite.ts), so the
 // fixture exercises the production reader. No real scene, place or value.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
-import { writeCog } from './cogWrite.js';
+import { writeCog } from '../../../raster/cogWrite.js';
 import { WOFS_S3_BASE, WOFS_STAC_SEARCH } from './stac.js';
-import { toUtm, utmEpsgFor } from './utm.js';
+import { toUtm, utmEpsgFor } from '../../../raster/utm.js';
 import { WOFS_DRY, WOFS_WET } from './sum.js';
 
 const FIXTURE = fileURLToPath(new URL('../../../../fixtures/feeds/wofs-sample.json', import.meta.url));
@@ -57,8 +57,8 @@ function passDays(spec: WofsFixtureSpec, from: number, to: number): { day: numbe
 	return out;
 }
 
-/** The water level on a day: the field's threshold, seasonal. */
-function level(spec: WofsFixtureSpec, day: number): number {
+/** The water level on a day: the field's threshold, seasonal (the Sentinel-2 fixture's too, sentinel/fixtures.ts). */
+export function level(spec: Pick<WofsFixtureSpec, 'water'>, day: number): number {
 	const { mean, amplitude, peakDayOfYear } = spec.water.seasonal;
 	const iso = fromEpochDay(day);
 	const doy = day - toEpochDay(`${iso.slice(0, 4)}-01-01`);
@@ -70,9 +70,13 @@ export function wofsFixtureValue(spec: WofsFixtureSpec, day: number, x: number, 
 	const { everyNth, bandM, overcastEveryNth } = spec.cloud;
 	if (day % overcastEveryNth === 0) return CLOUD;
 	if (day % everyNth === 0 && ((x % (2 * bandM)) + 2 * bandM) % (2 * bandM) < bandM) return CLOUD;
+	return fixtureWet(spec, x, y, lvl) ? WOFS_WET : WOFS_DRY;
+}
+
+/** Whether the invented water field is wet at (x, y) (UTM metres, the zone's NORTH code's northing) at level `lvl`. */
+export function fixtureWet(spec: Pick<WofsFixtureSpec, 'water'>, x: number, y: number, lvl: number): boolean {
 	const [l1, l2] = spec.water.wavelengthM;
-	const f = 0.5 + 0.25 * Math.sin((2 * Math.PI * x) / l1) + 0.25 * Math.cos((2 * Math.PI * y) / l2);
-	return f < lvl ? WOFS_WET : WOFS_DRY;
+	return 0.5 + 0.25 * Math.sin((2 * Math.PI * x) / l1) + 0.25 * Math.cos((2 * Math.PI * y) / l2) < lvl;
 }
 
 export function wofsFixture(today: () => string, spec: WofsFixtureSpec = loadWofsFixture()) {

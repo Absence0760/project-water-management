@@ -117,10 +117,10 @@ test('an application on the nominated run gives the full evidence report, draft 
 	expect(svg).not.toContain('Lower');
 	await expect(locality.getByTestId('evidence-locality-figure')).toHaveAttribute('alt', /^Locality map of the application, north up/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Upper dam 300 000 m³' })).toBeVisible();
-	for (const h of ['1. The river', '2. Uncertainty', '3. Model and data', '4. Other users', '5. Registered water use', '6. The applicant’s demand objects', 'Appendix A. Inputs and assumptions', 'Appendix B. Limitations, sign-off and verification', 'Appendix C. Applicant’s statement'])
+	for (const h of ['1. The river', '2. Uncertainty', '3. Model and data', '4. Other users', '5. Registered water use', '6. The applicant’s demand objects', '8. Future yield', 'Appendix A. Inputs and assumptions', 'Appendix B. Limitations, sign-off and verification', 'Appendix C. Applicant’s statement'])
 		await expect(page.getByRole('heading', { level: 2, name: h })).toBeVisible();
-	// G12: the draft stamp on every section.
-	await expect(page.getByTestId('evidence-stamp')).toHaveCount(10);
+	// G12: the draft stamp on every section (§ 8 shows, Not assessed, while FUTURE_YIELD is on, as it is for e2e; evidence-23).
+	await expect(page.getByTestId('evidence-stamp')).toHaveCount(11);
 	for (const s of await page.getByTestId('evidence-stamp').all()) await expect(s).toHaveText('Draft · not issued');
 
 	// Page 1: the banner, the flags, and the fixed rows with paired bands and "worse in".
@@ -270,12 +270,12 @@ test('a run that isn’t the nomination is refused; a baseline-assumption applic
 	await expect(checks).toContainText('No baseline assumption is changed (stops issue)');
 });
 
-test('an applicant’s application report shows § 7, the observed wet days of their dam; a team application’s and baseline evidence don’t', async ({ page, owner, signIn }) => {
+test('an applicant’s application report shows § 7, the observed wet days of their dam by Sentinel-2 and WOfS; a team application’s and baseline evidence don’t', async ({ page, owner, signIn }) => {
 	void owner;
 	const { project, baseline, upper } = await seed(page, 'Evidence wet days');
 	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId: baseline } })).status()).toBe(201);
 
-	// The applicant's dam on Upper farm, with invented WOfS rows in the baseline's period, loaded as the worker does: wet, dry, inconclusive.
+	// The applicant's dam on Upper farm, with invented WOfS and Sentinel-2 rows in the baseline's period, loaded as the worker does.
 	const traced = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, {
 		data: { kind: 'dam', name: 'Upper farm dam', nodeId: upper, geometry: { type: 'Polygon', coordinates: [box(21.31, -33.69, 0.002)] } }
 	});
@@ -284,9 +284,11 @@ test('an applicant’s application report shows § 7, the observed wet days of t
 		.baseline.startDate;
 	const day = (n: number) => new Date(Date.parse(`${start}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 	await plantDamObservations(((await traced.json()) as { feature: { id: string } }).feature.id, { status: 'none' }, [
-		{ date: day(5), wetAreaM2: 2700, pctObserved: 70 },
-		{ date: day(13), wetAreaM2: 0, pctObserved: 100 },
-		{ date: day(21), wetAreaM2: 900, pctObserved: 100 }
+		{ date: day(5), wetAreaM2: 2700, pctObserved: 70 }, // WOfS wet
+		{ date: day(13), wetAreaM2: 0, pctObserved: 100 }, // WOfS dry
+		{ date: day(21), wetAreaM2: 900, pctObserved: 100 }, // WOfS one pixel: inconclusive …
+		{ date: day(21), wetAreaM2: 0, pctObserved: 100, source: 's2' }, // … so Sentinel-2's dry view takes the date
+		{ date: day(30), wetAreaM2: 1500, pctObserved: 50, source: 's2' } // Sentinel-2 wet: 15 pixels of 100 m²
 	]);
 
 	// The applicant's application on Upper farm, run and submitted.
@@ -308,10 +310,16 @@ test('an applicant’s application report shows § 7, the observed wet days of t
 	await expect(page.getByTestId('evidence-report')).toHaveAttribute('data-evidence-mode', 'application');
 	await expect(page.getByRole('heading', { level: 2, name: '7. Observed wet days' })).toBeVisible();
 	const table = page.getByTestId('evidence-dam-observations');
-	await expect(table.getByRole('columnheader')).toHaveText(['Dam', 'Dates observed', 'Wet', 'Dry', 'Inconclusive', 'Dates span']);
-	await expect(table.getByRole('row').nth(1).getByRole('cell')).toHaveText(['3', '1', '1', '1', /to/]);
-	await expect(table.getByRole('rowheader')).toHaveText(['Upper farm dam']);
-	await expect(page.getByTestId('evidence-dam-observations-credit')).toHaveText('Source: Digital Earth Africa WOfS, CC BY 4.0, summed inside the dams’ traced outlines by this app.');
+	await expect(table.getByRole('columnheader')).toHaveText(['Dam', 'Satellite', 'Dates observed', 'Wet', 'Dry', 'Inconclusive', 'Dates span']);
+	await expect(table.getByRole('rowheader')).toHaveText(['Upper farm dam', 'Either satellite', 'Sentinel-2 (10 m)', 'WOfS (Landsat, 30 m)']);
+	// Together 4 dates (2 wet, 2 dry), then Sentinel-2's 2 (1, 1) and WOfS's 3 (1, 1, 1 inconclusive).
+	await expect(table.getByRole('row').nth(1).getByRole('cell')).toHaveText(['4', '2', '2', '0', /to/]);
+	await expect(table.getByRole('row').nth(2).getByRole('cell')).toHaveText(['2', '1', '1', '0', /to/]);
+	await expect(table.getByRole('row').nth(3).getByRole('cell')).toHaveText(['3', '1', '1', '1', /to/]);
+	const years = [...new Set([day(21), day(30)].map((d) => d.slice(0, 4)))].join('–');
+	await expect(page.getByTestId('evidence-dam-observations-credit')).toHaveText(
+		`Sources: Digital Earth Africa WOfS, CC BY 4.0, and Sentinel-2, each summed inside the dams’ traced outlines by this app. Contains modified Copernicus Sentinel data ${years}, processed by Digital Earth Africa.`
+	);
 	await expectNoViolations(page);
 
 	// A team application on the same unit, and the baseline's own evidence: no § 7.

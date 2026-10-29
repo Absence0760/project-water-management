@@ -2342,6 +2342,99 @@ the dataset's citation and the contributing centres wherever its values show
 150 MB of forecasts a month and 20–25 GB of hindcasts, once), a few minutes
 of Lambda a month, one alarm metric.
 
+### NEX-GDDP-CMIP6 (one-off)
+
+NASA NEX's downscaled CMIP6 projections, as monthly aggregates over D1, for
+the evidence pack's future yield (issue #621; how it works: ingest/README.md
+§ NEX-GDDP-CMIP6, once). Unlike every product above, **this is a one-off
+copy the operator runs by hand**: the archive is static, so there is no
+schedule, no Lambda, no alarm and no `infra/` change. `ingest/cmip6_delta.py`
+reads the daily `pr`, `tasmax` and `tasmin` files of ten models (frozen in
+docs/data-sources.md § nex-gddp-cmip6) for historical 1985–2014 and SSP2-4.5
+and SSP5-8.5 2036–2095 from `s3://nex-gddp-cmip6` (us-west-2, anonymous) and
+writes only their monthly totals and means over D1 into
+`s3://<mirror bucket>/cmip6/<model>/<scenario>/`, with a manifest recording
+each file's name, version and `license` attribute.
+
+**Where to run it: in us-west-2, next to the bucket** (issue #621 open
+question 1). Each daily file is global; reading it from af-south-1 or a
+laptop pulls it across the world, while in us-west-2 the reads are in-region
+and only the aggregates (about 1–2 GB in all) cross to af-south-1. CloudShell
+in us-west-2 with the operator's own SSO session is enough: it can read the
+anonymous bucket and write to the mirror bucket, so nothing new is granted.
+A CloudShell session ends after about 20 minutes idle (and its `/tmp` with
+it); the copy resumes where it stopped, so run it a model at a time.
+
+What the app does with it: the evidence pack's § 8 Future yield
+(evidence-pack.md § Future yield) and the Scenarios tab's future climate
+(scenarios.md § Future climate, the `climate_factors` job), both behind
+**`FUTURE_YIELD`** (`on` | `off`, default `off`; anything else refuses to
+start a request). Off, nothing reads the copy's `cmip6`, no report has § 8
+and Add a change says the projections aren't loaded. Terraform sets it from
+**`future_yield_enabled`** (default `false`) on the API (`infra/lambda.tf`),
+the job worker (`infra/jobs.tf`) and the assistant (`infra/assistant.tf`,
+which builds the same reports), so all three agree; set it `true` only once
+the copy holds every model's whole windows (step 4 below shows 30
+historical years and 60 per SSP). The worker reads the copy through its
+existing `MIRROR_URL` and read grant (the production check refuses
+`FUTURE_YIELD=on` on a worker without an `s3://` `MIRROR_URL`), and the API
+never reads it, so no other `infra/` change. Until then leave it off:
+on with a partial copy, § 8 is computed on part of each window and the
+`futureYield` check holds every pack with it from issue. It is also held
+until NASA's caveat is quoted in `FUTURE_YIELD_CAVEAT`
+(`packages/engine/src/evidence/future.ts`), a code change. An editor can
+cancel a job that is waiting or running (§ 8's board, the Scenarios tab's
+form; 284_cancel_future_jobs). Locally it is off too
+(`backend/.env.development` doesn't set it); put `FUTURE_YIELD=on` in
+`backend/.env.development.local` to try it on the committed synthetic copy
+(3 invented models, partial windows), and run the job with `pnpm
+dev:jobs:tick` or `pnpm dev:full`. The e2e servers set it on.
+
+The operator, once:
+
+1. **Plan, from anywhere** (a listing, no data read): with the prod SSO
+   session, `AWS_PROFILE=water-management AWS_REGION=af-south-1 MIRROR_URL=s3://<mirror bucket> ingest/dev.sh cmip6 plan --source s3`.
+   Each product line names its variant, grid label, versions and the files
+   still to read. A `missing` line (a model without `tasmax`, say) or a
+   `problem` line (two variants) stops the copy: record it in issue #621,
+   then replace the model or pin its variant in `ingest/cmip6_delta.py`
+   `MODELS` **and** in docs/data-sources.md § nex-gddp-cmip6, through a PR.
+2. **Open CloudShell in us-west-2** (the console's region picker, then the
+   CloudShell icon) and get the checkout and Python 3.14 (CloudShell's own
+   Python is older). uv's installer is a shell script from astral.sh that
+   puts `uv` in `~/.local/bin`; read it first if you prefer:
+   `curl -LsSf https://astral.sh/uv/install.sh | sh && git clone --depth 1 https://github.com/Absence0760/project-water-management.git /tmp/wm && cd /tmp/wm/ingest && ~/.local/bin/uv venv --python 3.14 .venv && ~/.local/bin/uv pip install --python .venv/bin/python --require-hashes -r requirements.txt && cp requirements.txt .venv/.requirements.txt`
+   (in `/tmp`, since the home directory holds 1 GB).
+3. **Copy one model at a time:**
+   `cd /tmp/wm && AWS_REGION=af-south-1 AWS_DEFAULT_REGION=af-south-1 MIRROR_URL=s3://<mirror bucket> ingest/dev.sh cmip6 copy --source s3 --models ACCESS-CM2`
+   (the region is the copy's; the source bucket is always read in us-west-2)
+   It logs one line a year (`cmip6/ACCESS-CM2/ssp245 2036: added`) and ends
+   with a summary: per product what it added, skipped and changed, and every
+   distinct `license` attribute it met with its count. If the session ends,
+   open it again, redo step 2 if `/tmp/wm` is gone, and run the same
+   command: held years are skipped without a read. A run that stops on a
+   file (`Cmip6FormatError`, `ImplausibleValueError`) has written nothing for
+   that year; record the message in issue #621 before changing the reader.
+4. **Check the copy:** `aws s3 cp s3://<mirror bucket>/cmip6/index.json - --region af-south-1`
+   lists the years held per model and scenario (30 historical, 60 per SSP).
+   Record the summary's `license` values in issue #621: if any file says
+   something other than CC0 (the archive first shipped under CC BY-SA 4.0),
+   the register row must say so before slice 4 ships.
+
+**To redo a product** (a new release of the archive, a reader fix): run
+`copy` again; a newer version of a file replaces its entry, and
+`--recheck` re-reads files already held. Nothing else needs undoing.
+
+**Cost:** the reads are in-region, so no transfer charge on them; about 2 GB
+crossing to af-south-1 once (under $0.05) and its S3 storage (about $0.05 a
+month). CloudShell is free.
+
+**Unverified until the first run** (no session has listed the bucket): the
+key layout and version suffixes, each model's variant and grid label, the
+files' HDF5 chunking (if each day is one global chunk, a file is read whole,
+in-region; the run then takes hours rather than minutes) and the `license`
+attribute's presence and wording.
+
 ## DWS gauge records
 
 DWS feeds move onto a store of ours too (issue #604 R3-B, design D14; the
@@ -2563,6 +2656,44 @@ One Terraform variable, off by default:
     frozen upstream since 2024-02 (data-sources.md), so it would fire from
     the first day.
 - **`dam_wofs_recency_alarm_days`** (default 60, at least 21).
+- **`dam_s2_enabled`** (default `false`; issue #624): only with
+  `dam_observations_enabled`, sets the fetcher's `DAM_OBSERVATIONS_S2 = "on"`,
+  so each run's Sentinel-2 pass follows WOfS (WOfS then up to 65 % of the
+  run, Sentinel-2 the rest), and adds `…-dam-pass-s2` (the heartbeat, as
+  above) and `water-management-dam-recency-s2`
+  (`DamObservationAgeDays{Source=s2}` above `dam_s2_recency_alarm_days`,
+  default 21, at least 10, for two days, or missing). Its history goes back
+  to 2019 at one request a second per host, so a dam's first backfill takes
+  a few days of hourly runs. Turn it on with a backend release that has the
+  pass and migration 279 (the worker's list gives each dam's newest `s2`
+  row).
+- **`dam_s2_recency_alarm_days`** (default 21, at least 10).
+- **`dam_s1_mode`** (`"off"`, the default, `"measure"` or `"on"`; issue
+  #624 step 5 and open question 3): only with `dam_observations_enabled`,
+  sets `DAM_OBSERVATIONS_S1` on the fetcher and the worker. `"measure"`
+  adds the Sentinel-1 radar pass after Sentinel-2's in each run (WOfS up to
+  65 % of the run, Sentinel-2 to 85 %, radar the rest), `…-dam-pass-s1` and
+  `water-management-dam-recency-s1` (`DamObservationAgeDays{Source=s1}`
+  above `dam_s1_recency_alarm_days`, default 30, at least 14, for two days,
+  or missing), and the agreement report, **but the worker loads no radar
+  row**, so nobody sees it. After each pass the fetcher logs
+  `dams_s1_agreement` (Logs Insights on the fetcher log group: filter
+  `message.event = "dams_s1_agreement"` | fields `message.pairs`,
+  `message.within`, `message.rate`, `message.passes`, `message.damsPassing`,
+  `message.damsJudged`). Move to `"on"` once `passes` is true over at least
+  a few weeks of backfill (issue #624: at least 85 % of radar days within
+  0.1 of the outline's area of a clear Sentinel-2 view the same day or a
+  day either side). In `"on"` the worker loads radar **only for the dams
+  whose own agreement passes** (at least 10 pairs, 85 % within); the rest,
+  and a dam with too few pairs to judge, stay withheld. A dam once shown
+  keeps its radar down to 80 % (hysteresis, so one hovering at the bar
+  doesn't flip) and loses its rows on the next tick below that. Back to
+  `"measure"` or `"off"` removes every radar row within a few ticks, found
+  by the worker's load marks, so it works even after the `dams/s1*` files
+  are deleted. It
+  needs `dam_s2_enabled` too, or there is nothing to agree with. Turn it
+  on only with a backend release that has the pass and migration 283.
+- **`dam_s1_recency_alarm_days`** (default 30, at least 14).
 
 The flag also turns on the worker's side (`DAM_OBSERVATIONS`, `infra/jobs.tf`).
 The plan refuses the flag (a precondition on
@@ -2636,6 +2767,78 @@ v0.0.3, historical extent (CC BY 4.0)"). The file is capped at 64 MB
 (128 MB unzipped): a province or D1's box, not the continent. A reload
 replaces the dataset and makes the worker match every dam again on its
 next ticks (200 a tick).
+
+## Observed actual ET
+
+FAO WaPOR v3's dekadal actual ET over each unit's farm parcels, into
+`et_observation` (issue #623 step 4; the flow:
+[architecture.md § Observed actual ET](./architecture.md#observed-actual-et);
+the tables: [data-model.md § Observed actual ET](./data-model.md#observed-actual-et-276_et_observationsql);
+the source: [data-sources.md § wapor-aeti](./data-sources.md#wapor-aeti)).
+Off by default, and **not to be enabled until FAO's reply on WaPOR's licence
+is recorded on issue #618 (step 8a)**: the terms read 2026-10-27 point to
+CC BY 4.0, but other labels exist and the terms bar use "in conjunction with
+the promotion of a commercial enterprise", so the reply is the operator's
+go/no-go.
+
+- **`et_observations_enabled`** (default `false`, `infra/et_observations.tf`)
+  turns on the `water-management-et-dekadal` EventBridge rule (hourly at
+  :50, `{"mode":"et-dekadal"}` to the fetcher, never retried: the newest
+  dekads first, then the history back to 2018, each file's ETag re-checked
+  30 days after it was read; a run with nothing due asks FAO nothing and
+  still publishes the heartbeat and recency), the fetcher's get and put on
+  `et/` in the mirror bucket (`et-handover`), the worker's put of
+  `et/wanted.json` (`et-wanted-list`, and `WorkerWritesEtWantedList` on the
+  S3 interface endpoint, `infra/packs.tf`), the worker's `ET_OBSERVATIONS`
+  (`infra/jobs.tf`) and the API's (`infra/lambda.tf`, only so a unit's ET
+  panel can say the check is off), and the alarms (essential tier):
+  - `water-management-et-pass-wapor`: `EtPassCompleted{Source=wapor}`
+    (namespace `water-management/EtObservations`) under 1 for 18 hours
+    (three 6-hour periods), or missing (breaching): the pass stopped
+    running, fails before it ends, or is paused after a refusal (below).
+  - `water-management-et-recency-wapor`: `EtObservationAgeDays{Source=wapor}`
+    above `et_recency_alarm_days` for two days, or missing: no unit holds a
+    dekad that recent.
+- **`et_recency_alarm_days`** (default 30, at least 20: a healthy copy runs
+  up to ~14 days behind, the dekad's length plus FAO's ~3-day lag).
+
+The plan refuses the flag (`terraform_data.et_observations_gate`) if the
+worker Lambda's environment ever lacks `ET_OBSERVATIONS = "on"`, since
+without it the worker never writes the wanted list nor loads what the pass
+fetches, while the heartbeat stays green.
+
+### Turning it on
+
+1. Record FAO's reply on #618 (step 8a), and re-read `L2-AETI-D`'s metadata
+   in FAO's GISMGR catalogue for a licence of its own (data-sources.md).
+   Before the first run, read one real dekad's header (a few range requests,
+   no data kept) and confirm what the reader expects: BigTIFF, LZW, int16,
+   EPSG:4326 at 1/1024°, nodata −9999 and GDAL's band scale 0.1 with no
+   offset. The pass refuses a file without that scale (`format` in the
+   log's `failedCodes`) rather than guess the units (docs/followups.md §
+   Future climate, observed ET and Sentinel dam views).
+2. Deploy a backend release with migrations 277 and 281 and the
+   `et-dekadal` mode, then apply `et_observations_enabled = true` (a
+   `terraform plan` first, and the operator's go-ahead for the apply), once
+   at least one unit has farm parcels on a project's map: with none, the
+   pass holds no dekad and its recency alarm fires. The first worker tick
+   writes `et/wanted.json`; the next hourly run (at :50) reads the newest
+   dekads for every unit, the runs after it the history (a few hours of
+   runs at one request a second), and each tick after loads what came in.
+   Check: Logs Insights on the fetcher log group, `filter message.event =
+   "et_pass"`, then `filter message.event = "et_tick"` on the worker's.
+
+**When the ET heartbeat alarm fires.** Logs Insights on the fetcher log
+group: `filter message.event = "et_pass"`, newest first. `message.stopped`
+`paused` (with `message.pausedUntil`) means an earlier run met HTTP 403
+(`refused`) or throttling (`throttled`) from FAO's bucket and stopped on
+purpose; the pass asks nothing and publishes no heartbeat for 24 hours from
+the stop, or a longer `Retry-After`, then asks again by itself. A 403 from
+`storage.googleapis.com` is a block or a policy change on FAO's bucket: ask
+FAO (data-sources.md has the contact) and, until they answer, set
+`et_observations_enabled = false`. No `et_pass` line at all: the runs
+stopped or fail before the pass completes. The app keeps the observations
+it holds throughout.
 
 ## Climate indices
 
@@ -3551,7 +3754,8 @@ recorded as an s72 transfer in
 [security.md § Personal information (POPIA)](./security.md#personal-information-popia),
 disclosed in Privacy §5–§6 (`LEGAL_VERSION` 2026-10-27), and named in the
 operator agreement (§ 11, clause 6.1). CloudTrail's `additionalEventData.inferenceRegion`
-shows where each call ran. If a model is ever served In-Region in
+on each `ConverseStream` event (eventSource `bedrock.amazonaws.com`; the
+IAM action is still `InvokeModelWithResponseStream`) shows where each call ran. If a model is ever served In-Region in
 af-south-1, set `assistant_model_id` to its plain `anthropic.…` id: the IAM
 policy follows (the in-region shape), and the transfer goes away.
 

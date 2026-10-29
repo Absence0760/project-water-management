@@ -107,7 +107,9 @@ export default defineConfig({
 				WATER_URL: WATER_FIXTURE,
 				// The assistant on, with the scripted mock model (no key, no network; backend/src/assistant/providers/mock.ts;
 				// assistant.spec.ts, assistant-recommend.spec.ts). Lambda refuses mock.
-				ASSISTANT_PROVIDER: 'mock'
+				ASSISTANT_PROVIDER: 'mock',
+				// § 8 Future yield on, against the committed synthetic NEX-GDDP-CMIP6 copy (invented models SYN-A..C; evidence-pack.spec.ts).
+				FUTURE_YIELD: 'on'
 			}
 		},
 		// The same API with the second-factor requirement on (MFA_REQUIRED unset, production's default), on the

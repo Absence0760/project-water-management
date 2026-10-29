@@ -85,6 +85,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		JOBS_QUEUE_URL: SQS('jobs'),
 		FEED_SOURCE: 'live',
 		CHIRPS_SOURCE: 'chc',
+		ET_OBSERVATIONS: 'off',
+		FUTURE_YIELD: 'off',
 		STORAGE: 's3',
 		REPORTS_BUCKET: 'water-management-reports-000000000000',
 		PACKS_BUCKET: 'water-management-packs-000000000000',
@@ -112,6 +114,9 @@ const PROD: Record<Role, Record<string, string>> = {
 		DWS_SOURCE: 'live',
 		DWS_WEEKLY: 'off',
 		DAM_OBSERVATIONS: 'off',
+		DAM_OBSERVATIONS_S1: 'off',
+		ET_OBSERVATIONS: 'off',
+		FUTURE_YIELD: 'off',
 		MIRROR_URL: 's3://water-management-mirror-000000000000',
 		REPORT_RENDERER: 'sqs',
 		RENDER_REQUESTS_QUEUE_URL: SQS('render-requests'),
@@ -133,7 +138,9 @@ const PROD: Record<Role, Record<string, string>> = {
 		FEED_SOURCE: 'live',
 		INGEST_RESULTS_QUEUE_URL: SQS('ingest-results'),
 		MIRROR_URL: 's3://water-management-mirror-000000000000',
-		FEEDS_CONTACT: 'ops@icwbt.jaredhoward.com'
+		FEEDS_CONTACT: 'ops@icwbt.jaredhoward.com',
+		DAM_OBSERVATIONS_S2: 'off',
+		DAM_OBSERVATIONS_S1: 'off'
 	},
 	renderer: {
 		RENDER_SITE_URL: SITE,
@@ -161,6 +168,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		NODE_EXTRA_CA_CERTS: CA,
 		DB_POOL_MAX: '1',
 		FEED_SOURCE: 'live',
+		FUTURE_YIELD: 'off',
 		ASSISTANT_PROVIDER: 'bedrock',
 		ASSISTANT_MODEL: MODEL,
 		ASSISTANT_BEDROCK_REGION: 'af-south-1',
@@ -607,6 +615,21 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		expect(problemNames('fetcher', prod('fetcher', {}))).toEqual([]);
 	});
 
+	it('FUTURE_YIELD is on or off on the API, the worker and the assistant, and on, the worker reads the copy from its bucket', () => {
+		for (const role of ['api', 'worker', 'assistant'] as const) {
+			for (const v of ['yes', 'true', 'ON']) expect(problemNames(role, prod(role, { FUTURE_YIELD: v })), `${role} FUTURE_YIELD=${v}`).toContain('FUTURE_YIELD');
+			// Positive controls: on, off and unset (off), as Terraform sets it (infra/lambda.tf, jobs.tf, assistant.tf).
+			for (const v of ['on', 'off', undefined]) expect(problemNames(role, prod(role, { FUTURE_YIELD: v })), `${role} FUTURE_YIELD=${String(v)}`).not.toContain('FUTURE_YIELD');
+		}
+		// On, the future_yield and climate_factors jobs read cmip6/ from the copy: the worker must name its bucket, even with CHIRPS from CHC.
+		for (const v of [undefined, 'file:///var/task/fixtures/mirror/', 's3://'])
+			expect(problemNames('worker', prod('worker', { FUTURE_YIELD: 'on', CHIRPS_SOURCE: 'chc', MIRROR_URL: v })), `MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
+		expect(problemNames('worker', prod('worker', { FUTURE_YIELD: 'on', CHIRPS_SOURCE: 'chc', MIRROR_URL: 's3://water-management-mirror-000000000000' }))).toEqual([]);
+		expect(problemNames('worker', prod('worker', { FUTURE_YIELD: 'off', CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
+		// The API never reads the copy: on needs no MIRROR_URL there.
+		expect(problemNames('api', prod('api', { FUTURE_YIELD: 'on' }))).toEqual([]);
+	});
+
 	it('the worker says where DWS feeds read (store or live) and whether it runs the weekly pass, which needs the mirror bucket', () => {
 		for (const v of ['dws', 'fixtures']) expect(problemNames('worker', prod('worker', { DWS_SOURCE: v })), `DWS_SOURCE=${String(v)}`).toContain('DWS_SOURCE');
 		for (const v of ['yes', 'true']) expect(problemNames('worker', prod('worker', { DWS_WEEKLY: v })), `DWS_WEEKLY=${String(v)}`).toContain('DWS_WEEKLY');
@@ -617,6 +640,14 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		for (const v of [undefined, 'file:///tmp/mirror/', 's3://'])
 			expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'on', CHIRPS_SOURCE: 'chc', MIRROR_URL: v })), `MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
 		expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'off', CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
+	});
+
+	it('radar’s stage is off, measure or on, on the fetcher and the worker alike, and unset starts both (issue #624 open question 3)', () => {
+		for (const role of ['fetcher', 'worker'] as const) {
+			for (const v of ['yes', 'true', 'measuring']) expect(problemNames(role, prod(role, { DAM_OBSERVATIONS_S1: v })), `${role} DAM_OBSERVATIONS_S1=${v}`).toContain('DAM_OBSERVATIONS_S1');
+			// Positive controls: each stage, and unset (released before the apply that sets it).
+			for (const v of ['off', 'measure', 'on', undefined]) expect(problemNames(role, prod(role, { DAM_OBSERVATIONS_S1: v })), `${role} DAM_OBSERVATIONS_S1=${String(v)}`).toEqual([]);
+		}
 	});
 
 	// Release before apply: a worker or API released with code that reads the flags starts on the env Terraform last

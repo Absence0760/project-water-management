@@ -42,6 +42,14 @@
 // into the mirror bucket, for the worker to load into dam_observation, and
 // publishes its heartbeat and recency metrics (DamObservations namespace).
 //
+// A fifth (issue #623): a schedule invokes it with `{"mode":"et-dekadal"}`
+// (ET_DEKADAL_EVENT, infra/et_observations.tf), and it runs the WaPOR pass
+// (water-use/observed/pass.ts): it reads the wanted list the worker wrote
+// (et/wanted.json), averages FAO's dekadal actual ET over each unit's
+// parcels, writes et/wapor/<unitKey>.json and the status into the mirror
+// bucket for the worker to load into et_observation, and publishes its
+// heartbeat and recency (EtObservations namespace).
+//
 // CHC's request slot (feeds/hostSlot.ts): every path here that asks CHC
 // (a CHIRPS or CHIRPS-GEFS fetch request, the daily preliminary pass, the
 // GEFS pass) first takes the one slot it shares with the Python mirror-ingest
@@ -504,6 +512,18 @@ export function isDamsWeeklyEvent(event: unknown): event is DamsWeeklyEvent {
  * WOfS pass's, which reads scenes.
  */
 export const WATERBODIES_BUDGET_SHARE = 0.3;
+/**
+ * With a Sentinel pass on (DAM_OBSERVATIONS_S2 or _S1), where the WOfS pass's time ends, as a share of the whole run's
+ * budget: Waterbodies to 0.3, WOfS to 0.65, the Sentinel passes the rest. A pass that finishes early leaves its time to the next.
+ */
+export const WOFS_BUDGET_SHARE_WITH_S2 = 0.65;
+/** With both Sentinel passes on, where Sentinel-2's time ends: Sentinel-2 to 0.85, Sentinel-1 (radar, secondary) the rest. */
+export const S2_BUDGET_SHARE_WITH_S1 = 0.85;
+
+/** Each scene pass's deadline as a share of the run's budget, for the Sentinel passes that are on (see the shares above). */
+export function scenePassShares(s2On: boolean, s1On: boolean): { wofs: number; s2: number; s1: number } {
+	return { wofs: s2On || s1On ? WOFS_BUDGET_SHARE_WITH_S2 : 1, s2: s1On ? S2_BUDGET_SHARE_WITH_S1 : 1, s1: 1 };
+}
 
 /** What one source's pass answers (counts only, never a dam or uid). */
 export interface DamPassAnswer {
@@ -515,7 +535,7 @@ export interface DamPassAnswer {
 	stopped: string;
 }
 /** What a dams-weekly invocation answers: each source's pass that ran. */
-export type DamsWeeklyAnswer = Partial<Record<'waterbodies' | 'wofs', DamPassAnswer>>;
+export type DamsWeeklyAnswer = Partial<Record<'waterbodies' | 'wofs' | 's2' | 's1', DamPassAnswer>>;
 
 /**
  * A source paused after its pass stopped on a 403 or throttling (handover.ts
@@ -523,7 +543,7 @@ export type DamsWeeklyAnswer = Partial<Record<'waterbodies' | 'wofs', DamPassAns
  * (that is the alert, issue #604's rule: a refusal stops and alerts, never a
  * retry). Logged, and not an error: the stopping run already failed.
  */
-function pausedAnswer(source: 'waterbodies' | 'wofs', pausedUntil: string | undefined, ms: number): { answer: DamPassAnswer; error: null } {
+function pausedAnswer(source: 'waterbodies' | 'wofs' | 's2' | 's1', pausedUntil: string | undefined, ms: number): { answer: DamPassAnswer; error: null } {
 	logEvent('warn', { event: 'dams_pass', source, stopped: 'paused', pausedUntil: pausedUntil ?? null, ms });
 	return { answer: { fetched: 0, unchanged: 0, failed: 0, fresh: 0, recencyDays: null, stopped: 'paused' }, error: null };
 }
@@ -562,34 +582,43 @@ async function waterbodiesPass(deadline: number): Promise<{ answer: DamPassAnswe
 	return { answer: { fetched: r.fetched.length, unchanged: r.unchanged.length, failed: r.failed.length, fresh: r.fresh, recencyDays: r.recencyDays, stopped: r.stopped }, error: r.error };
 }
 
+/** The explorer's pacer, shared by the WOfS and Sentinel passes of one run (one STAC request a second across them). */
+type StacPacer = NonNullable<import('./dams/observed/wofs/pass.js').WofsPassOptions['stac']>;
+
 /**
- * The WOfS pass (dams/observed/wofs/pass.ts): DE Africa's per-scene water
- * layer summed inside every traced dam's outline. Its metrics whatever
- * happened, then its stop (an HTTP 403, 429/503) as the error. A scene it
- * couldn't read is counted (`sceneFailed`), never named.
+ * A per-scene pass (dams/observed/wofs/pass.ts runScenePass): the WOfS
+ * pass, DE Africa's per-scene water layer, or a Sentinel pass
+ * (dams/observed/sentinel/pass.ts), our own classification of Sentinel-2's
+ * bands or Sentinel-1's radar, each summed inside every traced dam's
+ * outline. Its metrics whatever happened, then its stop (an HTTP 403,
+ * 429/503) as the error, and the dams whose file it wrote (for the S1/S2
+ * agreement report, never logged). A scene it couldn't read is counted
+ * (`sceneFailed`), never named.
  */
-async function wofsPass(deadline: number): Promise<{ answer: DamPassAnswer; error: unknown }> {
-	const { runWofsPass, STAC_INTERVAL_MS, SCENE_INTERVAL_MS } = await import('./dams/observed/wofs/pass.js');
+async function scenePass(source: 'wofs' | 's2' | 's1', deadline: number, stac: StacPacer): Promise<{ answer: DamPassAnswer; error: unknown; written: string[] }> {
+	const { runWofsPass, SCENE_INTERVAL_MS } = await import('./dams/observed/wofs/pass.js');
+	const { runS1Pass, runS2Pass, S1_SCENE_INTERVAL_MS, S2_SCENE_INTERVAL_MS } = await import('./dams/observed/sentinel/pass.js');
 	const { damPassMetricLine, damsStore } = await import('./dams/observed/handover.js');
 	const started = Date.now();
 	const mode = feedSourceMode();
 	const live = mode === 'live';
-	const r = await runWofsPass({
+	const run = { wofs: runWofsPass, s2: runS2Pass, s1: runS1Pass }[source];
+	const r = await run({
 		store: damsStore(),
 		http: await feedHttp(mode),
 		today: utcToday(),
 		deadline,
-		stacIntervalMs: live ? STAC_INTERVAL_MS : 0,
-		sceneIntervalMs: live ? SCENE_INTERVAL_MS : 0
+		stac,
+		sceneIntervalMs: live ? { wofs: SCENE_INTERVAL_MS, s2: S2_SCENE_INTERVAL_MS, s1: S1_SCENE_INTERVAL_MS }[source] : 0
 	});
-	if (r.stopped === 'paused') return pausedAnswer('wofs', r.pausedUntil, Date.now() - started);
-	emitMetricLine(damPassMetricLine('wofs', r.recencyDays));
+	if (r.stopped === 'paused') return { ...pausedAnswer(source, r.pausedUntil, Date.now() - started), written: [] };
+	emitMetricLine(damPassMetricLine(source, r.recencyDays));
 	const message = r.error !== null ? feedErrorMessage(r.error) : null;
 	const unchanged = Math.max(0, r.turns - r.written.length - r.failures.length);
 	// Counts and reason codes, never a dam, an item or an upstream body.
 	logEvent(message !== null ? 'error' : r.failures.length || r.sceneFailures.length ? 'warn' : 'info', {
 		event: 'dams_pass',
-		source: 'wofs',
+		source,
 		fetched: r.written.length,
 		unchanged,
 		failed: r.failures.length,
@@ -604,12 +633,36 @@ async function wofsPass(deadline: number): Promise<{ answer: DamPassAnswer; erro
 		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
 		ms: Date.now() - started
 	});
-	return { answer: { fetched: r.written.length, unchanged, failed: r.failures.length, fresh: r.fresh, recencyDays: r.recencyDays, stopped: r.stopped }, error: r.error };
+	return { answer: { fetched: r.written.length, unchanged, failed: r.failures.length, fresh: r.fresh, recencyDays: r.recencyDays, stopped: r.stopped }, error: r.error, written: r.written };
+}
+
+/**
+ * The S1/S2 agreement report (dams/observed/sentinel/agreement.ts, issue #624: radar is turned on in production only
+ * once its agreement with Sentinel-2's clear views passes the bar), updated for the dams either Sentinel pass wrote
+ * this run and logged as counts (never a dam). A failure here is logged and doesn't fail the run: the passes' files
+ * are written, and the next run updates the report again.
+ */
+async function s1AgreementLog(written: string[]): Promise<void> {
+	try {
+		const { updateAgreement } = await import('./dams/observed/sentinel/agreement.js');
+		const { damsStore } = await import('./dams/observed/handover.js');
+		const summary = await updateAgreement(damsStore(), written);
+		if (summary) logEvent('info', { event: 'dams_s1_agreement', ...summary });
+	} catch (err) {
+		const message = feedErrorMessage(err);
+		logEvent('error', { event: 'dams_s1_agreement', reason: fetchFailureReason(message), detail: failureDetail(message) });
+	}
 }
 
 /**
  * One run of the dam observation passes: Waterbodies first (at most
- * WATERBODIES_BUDGET_SHARE of the time), then WOfS. A pass stopped by its
+ * WATERBODIES_BUDGET_SHARE of the time), then WOfS, then, with
+ * DAM_OBSERVATIONS_S2=on, Sentinel-2, then, with DAM_OBSERVATIONS_S1=measure
+ * or on (handover.ts damS1Mode; only the worker tells them apart),
+ * Sentinel-1 radar and the S1/S2 agreement report (scenePassShares: WOfS up
+ * to WOFS_BUDGET_SHARE_WITH_S2 with either on, Sentinel-2 up to
+ * S2_BUDGET_SHARE_WITH_S1 with radar after it; the scene passes share the
+ * explorer's pacer). A pass stopped by its
  * upstream doesn't keep the other from running; the invocation fails at the
  * end if either was stopped, and is not retried (dam_observations.tf: the
  * next hour's run tries again). Hourly for the WOfS backfill's sake; each
@@ -627,11 +680,109 @@ async function damsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): 
 	const wb = await waterbodiesPass(started + budget * WATERBODIES_BUDGET_SHARE);
 	answer.waterbodies = wb.answer;
 	if (wb.error !== null) errors.push(wb.error);
-	// WOfS with the rest of the budget.
-	const wofs = await wofsPass(started + budget);
+	const { damSourceOn } = await import('./dams/observed/handover.js');
+	const s2On = damSourceOn('s2');
+	const s1On = damSourceOn('s1');
+	const shares = scenePassShares(s2On, s1On);
+	const { pacedHttp } = await import('./ingest/daily.js');
+	const { STAC_INTERVAL_MS } = await import('./dams/observed/wofs/pass.js');
+	const mode = feedSourceMode();
+	const stac = pacedHttp(await feedHttp(mode), mode === 'live' ? STAC_INTERVAL_MS : 0, Date.now, (ms) => new Promise<void>((r) => setTimeout(r, ms)));
+	// WOfS with the rest of the budget, or its share of it when a Sentinel pass follows.
+	const wofs = await scenePass('wofs', started + budget * shares.wofs, stac);
 	answer.wofs = wofs.answer;
 	if (wofs.error !== null) errors.push(wofs.error);
+	const sentinelWritten: string[] = [];
+	if (s2On) {
+		const s2 = await scenePass('s2', started + budget * shares.s2, stac);
+		answer.s2 = s2.answer;
+		sentinelWritten.push(...s2.written);
+		if (s2.error !== null) errors.push(s2.error);
+	}
+	if (s1On) {
+		const s1 = await scenePass('s1', started + budget * shares.s1, stac);
+		answer.s1 = s1.answer;
+		sentinelWritten.push(...s1.written);
+		if (s1.error !== null) errors.push(s1.error);
+		await s1AgreementLog(sentinelWritten);
+	}
 	if (errors.length) throw errors[0];
+	return answer;
+}
+
+// --- Observed actual ET (issue #623) --------------------------------------------------------
+
+/** The scheduled event that runs the WaPOR pass (infra/et_observations.tf, the et-dekadal rule's input). */
+export const ET_DEKADAL_EVENT = { mode: 'et-dekadal' } as const;
+export type EtDekadalEvent = typeof ET_DEKADAL_EVENT;
+
+/** Whether `event` is the ET pass's scheduled event. */
+export function isEtDekadalEvent(event: unknown): event is EtDekadalEvent {
+	return typeof event === 'object' && event !== null && !Array.isArray(event) && !('Records' in event) && (event as { mode?: unknown }).mode === ET_DEKADAL_EVENT.mode;
+}
+
+/** What an et-dekadal invocation answers (counts only, never a unit). */
+export interface EtDekadalAnswer {
+	written: number;
+	failed: number;
+	unobservable: number;
+	filesRead: number;
+	filesChanged: number;
+	notModified: number;
+	recencyDays: number | null;
+	stopped: string;
+}
+
+/**
+ * One run of the WaPOR pass: its heartbeat and recency whatever it read,
+ * then its stop (an HTTP 403, 429/503) as the error, not retried
+ * (et_observations.tf: the next run tries again, and a stopped source is
+ * paused for a day or its Retry-After, with no heartbeat, so the heartbeat
+ * alarm fires).
+ */
+async function etDekadal(context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<EtDekadalAnswer> {
+	const { runWaporPass, REQUEST_INTERVAL_MS } = await import('./water-use/observed/pass.js');
+	const { etPassMetricLine, etStore } = await import('./water-use/observed/handover.js');
+	const started = Date.now();
+	const budget = context ? context.getRemainingTimeInMillis() - DAILY_SAVE_MARGIN_MS : DEFAULT_BUDGET_MS;
+	const mode = feedSourceMode();
+	const r = await runWaporPass({
+		store: etStore(),
+		http: await feedHttp(mode),
+		today: utcToday(),
+		deadline: started + budget,
+		intervalMs: mode === 'live' ? REQUEST_INTERVAL_MS : 0
+	});
+	const answer: EtDekadalAnswer = {
+		written: r.written.length,
+		failed: r.failures.length,
+		unobservable: r.unobservable,
+		filesRead: r.filesRead,
+		filesChanged: r.filesChanged,
+		notModified: r.notModified,
+		recencyDays: r.recencyDays,
+		stopped: r.stopped
+	};
+	if (r.stopped === 'paused') {
+		// Nothing asked and no heartbeat: the alarm is the alert (handover.ts pausedUntil).
+		logEvent('warn', { event: 'et_pass', source: 'wapor', stopped: 'paused', pausedUntil: r.pausedUntil ?? null, ms: Date.now() - started });
+		return answer;
+	}
+	emitMetricLine(etPassMetricLine('wapor', r.recencyDays));
+	const message = r.error !== null ? feedErrorMessage(r.error) : null;
+	// Counts and reason codes, never a unit or an upstream body.
+	logEvent(message !== null ? 'error' : r.failures.length ? 'warn' : 'info', {
+		event: 'et_pass',
+		source: 'wapor',
+		...answer,
+		failedCodes: [...new Set(r.failures.map((f) => f.code))],
+		changedMidRead: r.changedMidRead,
+		refusedHeld: r.refusedHeld,
+		requests: r.requests,
+		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
+		ms: Date.now() - started
+	});
+	if (r.error !== null) throw r.error;
 	return answer;
 }
 
@@ -639,10 +790,11 @@ export async function handler(event: SQSEvent, context?: Pick<Context, 'getRemai
 export async function handler(event: DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DailyIngestAnswer | GefsIngestAnswer | IndicesIngestAnswer>;
 export async function handler(event: DwsWeeklyEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DwsWeeklyAnswer>;
 export async function handler(event: DamsWeeklyEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DamsWeeklyAnswer>;
+export async function handler(event: EtDekadalEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<EtDekadalAnswer>;
 export async function handler(
-	event: SQSEvent | DailyIngestEvent | DwsWeeklyEvent | DamsWeeklyEvent,
+	event: SQSEvent | DailyIngestEvent | DwsWeeklyEvent | DamsWeeklyEvent | EtDekadalEvent,
 	context?: Pick<Context, 'getRemainingTimeInMillis'>
-): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer | IndicesIngestAnswer | DwsWeeklyAnswer | DamsWeeklyAnswer> {
+): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer | IndicesIngestAnswer | DwsWeeklyAnswer | DamsWeeklyAnswer | EtDekadalAnswer> {
 	if (isDailyIngestEvent(event)) {
 		// The indices pass reads CPC (NOAA), not CHC, so it takes no CHC slot.
 		if (isIndicesPass(event)) return indicesIngest();
@@ -652,10 +804,11 @@ export async function handler(
 	}
 	if (isDwsWeeklyEvent(event)) return dwsWeekly(context);
 	if (isDamsWeeklyEvent(event)) return damsWeekly(context);
+	if (isEtDekadalEvent(event)) return etDekadal(context);
 	if (!Array.isArray((event as SQSEvent | undefined)?.Records)) {
 		// No mode: nothing to answer, and a retry can't help. Fail loudly (the Errors alarm), naming no payload.
 		logEvent('error', { event: 'fetcher_event_unknown' });
-		throw new Error('the fetcher was invoked with an event it does not know (expected an SQS batch, {"mode":"daily-ingest"}, {"mode":"dws-weekly"} or {"mode":"dams-weekly"})');
+		throw new Error('the fetcher was invoked with an event it does not know (expected an SQS batch, {"mode":"daily-ingest"}, {"mode":"dws-weekly"}, {"mode":"dams-weekly"} or {"mode":"et-dekadal"})');
 	}
 	return fetchBatch(event as SQSEvent, context);
 }

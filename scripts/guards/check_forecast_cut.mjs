@@ -104,6 +104,7 @@ export const INVENTORY = [
 	},
 	// --- backend ----------------------------------------------------------------
 	{ path: 'backend/src/dams/observed/read.ts', reads: 1, how: 'cut', evidence: ['(input.forecastFrom && date >= input.forecastFrom)'], in: 'backend/src/dams/observed/compare.ts', note: 'views on a forecast run’s forecast days are left out of the comparison (outside-run)' },
+	{ path: 'backend/src/water-use/observed/read.ts', reads: 1, how: 'cut', evidence: ['const usable = Math.min(length, forecastIdx);'], in: 'backend/src/water-use/observed/compare.ts', note: 'a dekad with a forecast day is partial-dekad, one all forecast outside-run: never compared' },
 	{ path: 'backend/src/allocations/runUse.ts', reads: 1, how: 'cut', evidence: ['beforeForecast(values, startDate, forecastFrom)'] },
 	{ path: 'backend/src/compare/routes.ts', reads: 1, how: 'no-values', evidence: ["SELECT key, meta->>'label' AS label, meta->>'unit' AS unit"] },
 	{ path: 'backend/src/evidence/bundle.ts', reads: 1, how: 'whole', evidence: ['FORECAST_NOT_SIGNABLE'], in: 'backend/src/evidence/packs.ts', note: 'a pack’s reproduction bundle, bit-exact; a forecast run can’t be in a signed pack' },

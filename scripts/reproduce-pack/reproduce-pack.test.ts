@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildPackBundle } from '../../packages/engine/src/evidence/bundle';
 import { packManifestText } from '../../packages/engine/src/evidence/pack';
-import { fixtureObservations, headlinePackFixture, packBundleFixture } from '../../packages/engine/src/testing/packBundle';
+import { fixtureObservations, fixtureObservationsV1, headlinePackFixture, packBundleFixture } from '../../packages/engine/src/testing/packBundle';
 import { canonicalJson } from '../../packages/engine/src/manifest';
 import { zip, ZipArchive } from '../../packages/engine/src/zip';
 import { main, parseArgs } from './reproduce-pack';
@@ -113,19 +113,51 @@ describe('reproduce:pack', () => {
 		expect((await run([good, '--no-run'])).out).not.toContain('figure:locality');
 	});
 
-	it('classifies an evidence-21 pack’s observed wet days again (observations:wofs): exit 0; a count the dates don’t give fails it, exit 1', async () => {
+	it('classifies an evidence-24 pack’s observed wet days again per source and together (observations:s2, :wofs, :days): exit 0; a source’s count its dates don’t give fails that source alone, exit 1', async () => {
 		await writeFile(join(dir, 'wet.zip'), (await buildPackBundle(packBundleFixture(hash, { observations: true }), hash)).bytes);
 		const ok = await run(['wet.zip']);
 		expect(ok.code, ok.out).toBe(0);
-		expect(ok.out).toMatch(/ok\s+observations:wofs\s+the observed wet days of 1 dam over the baseline run's period \(2001-10-01 to 2030-01-01\) classify again from the manifest's 5 observed dates/);
+		expect(ok.out).toMatch(/ok\s+observations:s2\s+the Sentinel-2 dates of 1 dam over the baseline run's period \(2001-10-01 to 2030-01-01\) classify again from the manifest's 4 observed dates/);
+		expect(ok.out).toMatch(/ok\s+observations:wofs\s+the WOfS dates of 1 dam over the baseline run's period \(2001-10-01 to 2030-01-01\) classify again from the manifest's 5 observed dates/);
+		expect(ok.out).toMatch(/ok\s+observations:days\s+the 8 dates either source saw over the baseline run's period/);
 		const wrong = fixtureObservations();
-		wrong.dams[0]!.dryDates = 2;
+		wrong.dams[0]!.sources.s2.dryDates = 1;
 		await writeFile(join(dir, 'wet-bad.zip'), (await buildPackBundle(packBundleFixture(hash, { observations: wrong }), hash)).bytes);
 		const bad = await run(['wet-bad.zip', '--no-run']);
 		expect(bad.code).toBe(1);
-		expect(bad.out).toMatch(/FAIL\s+observations:wofs\s+dam 00000000-0000-4000-8000-0000000000d1: 2 dry dates named, 1 counted/);
+		expect(bad.out).toMatch(/FAIL\s+observations:s2\s+dam 00000000-0000-4000-8000-0000000000d1 \(Sentinel-2\): 1 dry dates named, 2 counted/);
+		expect(bad.out).toMatch(/ok\s+observations:wofs/);
+		expect(bad.out).toMatch(/ok\s+observations:days/);
 		// A pack without § 7 has no such check.
-		expect((await run([good, '--no-run'])).out).not.toContain('observations:wofs');
+		expect((await run([good, '--no-run'])).out).not.toContain('observations:');
+	});
+
+	it('still classifies an evidence-21 to evidence-23 pack’s WOfS-only observed wet days (observations:wofs alone): exit 0; a count the dates don’t give fails it, exit 1', async () => {
+		await writeFile(join(dir, 'wet-v1.zip'), (await buildPackBundle(packBundleFixture(hash, { observations: fixtureObservationsV1() }), hash)).bytes);
+		const ok = await run(['wet-v1.zip', '--no-run']);
+		expect(ok.code, ok.out).toBe(0);
+		expect(ok.out).toMatch(/ok\s+observations:wofs\s+the observed wet days of 1 dam over the baseline run's period \(2001-10-01 to 2030-01-01\) classify again from the manifest's 5 observed dates/);
+		expect(ok.out).not.toContain('observations:s2');
+		const wrong = fixtureObservationsV1();
+		wrong.dams[0]!.dryDates = 2;
+		await writeFile(join(dir, 'wet-v1-bad.zip'), (await buildPackBundle(packBundleFixture(hash, { observations: wrong }), hash)).bytes);
+		const bad = await run(['wet-v1-bad.zip', '--no-run']);
+		expect(bad.code).toBe(1);
+		expect(bad.out).toMatch(/FAIL\s+observations:wofs\s+dam 00000000-0000-4000-8000-0000000000d1: 2 dry dates named, 1 counted/);
+	});
+
+	it('runs an evidence-23 pack’s § 8 again from its frozen climate factors (climate:delta): exit 0; a case its factors don’t give fails it, exit 1', async () => {
+		await writeFile(join(dir, 'future.zip'), (await buildPackBundle(packBundleFixture(hash, { future: true }), hash)).bytes);
+		const ok = await run(['future.zip']);
+		expect(ok.code, ok.out).toBe(0);
+		expect(ok.out).toMatch(/ok\s+climate:delta\s+every pair of 12 cases \(3 models × 2 SSPs × 2 horizons\), method delta-1 run again with engine /);
+		const tampered = packBundleFixture(hash, { future: (r) => ({ ...r, historical: { ...r.historical, firmYieldM3Year: 1 } }) });
+		await writeFile(join(dir, 'future-bad.zip'), (await buildPackBundle(tampered, hash)).bytes);
+		const bad = await run(['future-bad.zip']);
+		expect(bad.code).toBe(1);
+		expect(bad.out).toMatch(/FAIL\s+climate:delta\s+the historical pair gives other values/);
+		// A pack without § 8 has no such check.
+		expect((await run([good, '--no-run'])).out).not.toContain('climate:delta');
 	});
 
 	describe('the headline board’s full-allocation pair (bundle-2, issue #523 G2)', () => {

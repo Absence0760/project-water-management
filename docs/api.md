@@ -3047,6 +3047,24 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   since the previous publication, up to 50 other scenario runs on the same
   baseline, the other applications on the baseline (below), and the engine's
   methodology, limitations and errata.
+- **§ 7 Observed wet days** (`damObservations`, `evidence-21`; counting
+  `dam-obs-2` from `evidence-24`, issue #624 step 7): for an applicant's
+  application, each of their own traced dams with its Sentinel-2 and WOfS
+  dates in the baseline's period, read as the reader under RLS:
+  `{ version: 'dam-obs-2', startDate, endDate, sources: [{ source: 's2' | 'wofs', citation, wetMinPixels, dryMinClearPct, pixelAreaM2 }], dams: [{ featureId, name, nodeId, observedDates, wetDates, dryDates, inconclusiveDates, sources: { s2, wofs } }] }`,
+  each `sources.<source>` that source's counts and `dates`
+  (`[date, wetAreaM2, pctObserved][]`), the dam's own counts the dates
+  together. A pack drafted from `evidence-21` to `evidence-23` keeps its
+  `dam-obs-1` section (WOfS alone, its counts and `dates` on each dam);
+  `null` for baseline evidence and a team scenario
+  ([evidence-pack.md § Observed wet days](./evidence-pack.md#observed-wet-days)).
+- **§ 8 Future yield** (`futureYield`, `evidence-23`, issue #621): for an
+  application run while `FUTURE_YIELD=on`, the newest stored result for its
+  two runs ([§ Future yield](#future-yield)), frozen whole with its factor
+  table and the caveat (`status: 'ok'`), or `status: 'notRun'` when none;
+  `null` while it is off and for baseline evidence. Its `futureYield` check
+  stops issue while NASA's caveat is a placeholder or a factor rests on part
+  of its window ([evidence-pack.md § Future yield](./evidence-pack.md#future-yield)).
 - **Other applications on the baseline** (`cumulative`, § 4): every other scenario that is
   submitted, or decided `licence_issued` (`approved` / `approved_with_conditions` in a pack drafted before `evidence-13`), with its
   newest run of its current ops (`inputs.scenario.opsSha256` equal to the
@@ -3825,12 +3843,17 @@ RLS (`backend/src/dams/observed/routes.ts`, `read.ts`, `compare.ts`).
 | --- | --- | --- | --- |
 | GET | `/projects/:id/dams/observations?run=&node=` | `DamObservations` (below). `run`: the run to compare with, else the project's newest by `created_at` (the run the Dams tab shows, `overview/latestRun.ts` `pickRuns`); another project's run or a malformed id is `404`. `node`: only that unit's dam (a malformed id `404`, a unit with no outline an empty `dams`). `Cache-Control: no-store` | viewer |
 
-`DamObservations = { attribution, thresholds, run, dams }`:
+`DamObservations = { attribution, sentinelCredit, thresholds, run, dams }`:
 
 - `attribution`: `"Digital Earth Africa, CC BY 4.0"`, shown wherever the
   values are.
+- `sentinelCredit`: Copernicus's credit when any Sentinel-2 or Sentinel-1
+  view is listed, its year or first and last ("Contains modified Copernicus
+  Sentinel data 2021–2024, processed by Digital Earth Africa"); `null` with
+  none (issue #624).
 - `thresholds`: the comparison's constants (`compare.ts` `OBSERVED`):
-  `minPctObserved` 90, `fullShare` 0.95, `emptyShare` 0.05, `pixelM2` 900,
+  `minPctObserved` 90, `fullShare` 0.95, `emptyShare` 0.05, `pixelM2` per
+  source (`{ s2: 400, wofs: 900, waterbodies: 900, s1: 429 }`, m²),
   `clearlyNotFull` 0.8, `clearlyWet` 0.2, `withinShare` 0.1.
 - `run`: `{ id, label, createdAt, engineVersion, forecastFrom } | null` (no run yet).
 - `dams`: one per unit with a dam polygon (points have no outline), plus one
@@ -3843,20 +3866,83 @@ RLS (`backend/src/dams/observed/routes.ts`, `read.ts`, `compare.ts`).
   `damAreaFullM2`, else the estimate its engine version used); `inRun` is
   whether the run stored a `dam_area` for the unit.
 - `points`, oldest first, one per (date, source) the unit's polygons were
-  seen: `{ date, source: 'waterbodies' | 'wofs', wetAreaM2, pctObserved, modelledAreaM2, compared, skip, seenFull, seenEmpty, modelFull, modelEmpty, mismatch }`.
+  seen: `{ date, source: 'waterbodies' | 'wofs' | 's2' | 's1', wetAreaM2, pctObserved, modelledAreaM2, compared, skip, seenFull, seenEmpty, modelFull, modelEmpty, mismatch }`.
   Several polygons of one unit (its composite dam) are summed, and the least
   share seen clearly kept. `modelledAreaM2` is the run's `dam_area` that day
   (`null` outside the run). `skip` says why a point wasn't compared:
-  `partly-seen`, `not-this-dam`, `partial-unit`, `other-source`,
-  `outside-run` (or a forecast day), `no-run`. The flags are set on compared
-  points only; `mismatch` is `model-full`, `model-empty`, `seen-full` or
-  `seen-empty`.
-- `summary`: `{ compared, skipped, biasPctOfFull, withinShare, seenFull, seenEmpty, mismatches, latestClear }`;
+  `partly-seen`, `not-this-dam`, `partial-unit`, `other-source` (a sharper
+  source saw the whole unit clearly that day: Sentinel-2, then WOfS, then
+  Waterbodies, then Sentinel-1), `outside-run` (or a forecast day),
+  `no-run`. The flags are set on compared points only, and never on a
+  Sentinel-1 (radar) point, which keeps only `modelFull`/`modelEmpty`;
+  `mismatch` is `model-full`, `model-empty`, `seen-full` or `seen-empty`.
+- `summary`: `{ compared, skipped, biasPctOfFull, withinShare, seenFull, seenEmpty, mismatches, radar, optical, latestClear }`
+  (`radar`: how many compared points are Sentinel-1's; `optical`:
+  `{ compared, biasPctOfFull, withinShare }` over the compared points that
+  aren't radar, equal to the summary's own without radar, null figures
+  with no optical point);
   `biasPctOfFull` is the mean of (modelled − observed) as % of the full area
   (+: the model holds more), `withinShare` the share of compared points
   within 10 % of the full area (0–1), `latestClear` the newest view at least
   90 % clear that wasn't left out for its source or a missing polygon
   (`{ date, source, wetAreaM2, pctObserved } | null`).
+
+## Observed actual ET
+
+A unit's satellite actual evapotranspiration against the run's modelled
+irrigation use (issue #623 step 5; the observations are 277's
+`et_observation`, loaded by the worker's ET pass, off by default; the method
+and thresholds in
+[model.md § 2.10o](./model.md#210o-observed-actual-et-against-the-modelled-irrigation-use-app-issue-623);
+the panel in [ui.md § Farm drawer](./ui.md#farm-drawer)). Read only, under
+the caller's RLS (`backend/src/water-use/observed/routes.ts`, `read.ts`,
+`compare.ts`): `et_observation` lets a project's viewers read it and a
+farmer only their own units' rows, but this route is the workspace's, so a
+farmer is `403`.
+
+| Method | Path | Response | Min role |
+| --- | --- | --- | --- |
+| GET | `/projects/:id/nodes/:nodeId/et-observed?run=` | `EtObserved` (below). `run`: the run to compare with, else the project's newest by `created_at`; another project's run or a malformed id is `404`. A node that isn't the project's (or a malformed id) is `404`, a gauge or other water user `400`. No observations, the usual case, is an empty `sources`; `enabled` and `parcels` say why. `Cache-Control: no-store` | viewer |
+
+`EtObserved = { nodeId, name, enabled, parcels, thresholds, run, plantedAreaM2, sources }`:
+
+- `enabled`: whether this deployment runs the check (`ET_OBSERVATIONS=on`;
+  Terraform sets the API's from `et_observations_enabled`, as the
+  worker's). Off by default.
+- `parcels`: the farm parcels (polygons) linked to the unit on the Map,
+  under the caller's RLS: what the pass reads (281's `app_et_units`). With
+  `sources` empty: `enabled: false` is the check off, `parcels: 0` nothing
+  to read, otherwise no dekad read yet.
+
+- `thresholds`: the comparison's constants (`compare.ts` `ET_OBSERVED`):
+  `minValidShare` 0.8, `withinShare` 0.25, `floorMmDay` 0.5, `areaRatio` 1.5.
+- `run`: `{ id, label, createdAt, engineVersion, forecastFrom, inRun } | null`
+  (no run yet); `inRun` is whether the run stored the unit's demand series.
+- `plantedAreaM2`: Σ the unit's crop areas in the run's model snapshot (m²; rows naming a crop the model lacks are left out, as the engine leaves them),
+  the area observed ETa is put on; `null` with no run or the unit not in it.
+- `sources`: one per source with observations (WaPOR first, then SSEBop):
+  `{ source: 'wapor' | 'ssebop', attribution, area, points, seasons, summary }`.
+  `attribution` (`"FAO WaPOR v3, CC BY 4.0"`, `"USGS FEWS NET SSEBop v6, CC0"`)
+  is shown wherever the values are. `area`: the newest dekad's
+  `{ areaM2, mask: 'cropland' | 'parcel', ratioToPlanted, differs }`
+  (`differs`: outside `areaRatio` either way).
+- `points`, oldest first, one per dekad: `{ source, dekad, end, days, etaMmDay, validShare, areaM2, mask, observedEtM3, modelledEtM3, requirementM3, effectiveRainM3, observedIrrigationM3, modelledIrrigationM3, suppliedM3, compared, skip, etWithin, irrigationWithin }`.
+  Volumes are m³ over the dekad: `observedEtM3` = ETa × days × planted area;
+  `modelledEtM3` the crop's ET as the run supplied it, effective rain +
+  `modelledIrrigationM3`; `requirementM3` Σ `gross_demand` (each day at
+  least 0), the requirement at full supply; `effectiveRainM3` Σ `effective_rain`;
+  `observedIrrigationM3` = max(0, observed − effective rain);
+  `modelledIrrigationM3` Σ e·G, the irrigation reaching the crop;
+  `suppliedM3` Σ the irrigation supplied (abstraction). `skip` says why a
+  dekad wasn't compared: `partly-seen`, `partial-dekad`, `outside-run`,
+  `no-area`, `no-run`, `no-series` (the run has the unit but not the columns:
+  an older engine's run). `etWithin` and `irrigationWithin` are set on compared
+  dekads only.
+- `seasons`, oldest first, one per half water year with a dekad
+  (`{ waterYear, half: 'summer' | 'winter', label, …totals }`), and
+  `summary` over all of them: `{ compared, skipped, observedEtM3, modelledEtM3, observedIrrigationM3, modelledIrrigationM3, etBiasPct, irrigationBiasPct, etWithinShare, irrigationWithinShare }`.
+  A bias is (Σ modelled − Σ observed) ÷ Σ observed × 100 (+: the model uses
+  more), `null` with nothing compared or observed.
 
 ## Start from the map
 
@@ -4239,7 +4325,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
 | GET | `/projects/:id/farm/:nodeId/map` | `FarmMap = { features: { id, kind, name, geometry, areaM2, center, credit? }[] }`: the farm's map (issue #326 A3): the parcels and dams linked to **this** farm, then the gauges, rivers and catchment boundary for orientation, never another farm's feature or an `other` one, and no node id, properties or author; `credit: 'hydrorivers'` (2026-10-02) on a river added from a HydroRIVERS reach and `credit: 'jrc-water'` (issue #523 C6) on an outline (a dam) traced from JRC Global Surface Water (its description names the source; the description itself never leaves), so the map shows that licence's credit (maps.md § Credits on the map), absent otherwise. The query names the farm, so a viewer previewing it gets what its farmer gets. `{ features: [] }` when the farm has no parcel or dam on the map (the page shows no map). No status: the page colours the land from the farm view's own band. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
-| GET | `/projects/:id/farm/:nodeId/dam-observed` | `FarmDamObserved = { outlines, latest: { date, wetAreaM2, source } \| null, fullAreaM2, attribution }`: the farm's dam seen from space (issue #604 R5-B, [Dams seen from space](#dams-seen-from-space)): how many of **this** farm's dams are drawn as an outline (`0`: the page shows nothing), the newest view at least 90 % clear of all of them together (summed for a composite dam; a Waterbodies polygon merged with a neighbour never counts; the comparison's own `latestClear`), `fullAreaM2` from the farm's own node (survey curve's top, `damAreaFullM2`, else the estimate from the capacity; `null` with no dam capacity) and the credit `"Digital Earth Africa, CC BY 4.0"`. No upstream id, match detail or feature id. Not tied to a publication. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
+| GET | `/projects/:id/farm/:nodeId/dam-observed` | `FarmDamObserved = { outlines, latest: { date, wetAreaM2, source } \| null, fullAreaM2, attribution, sentinelCredit }`: the farm's dam seen from space (issue #604 R5-B, [Dams seen from space](#dams-seen-from-space)): how many of **this** farm's dams are drawn as an outline (`0`: the page shows nothing), the newest view at least 90 % clear of all of them together (summed for a composite dam; a Waterbodies polygon merged with a neighbour never counts; the comparison's own `latestClear`), `fullAreaM2` from the farm's own node (survey curve's top, `damAreaFullM2`, else the estimate from the capacity; `null` with no dam capacity) and the credit `"Digital Earth Africa, CC BY 4.0"`, with `sentinelCredit` Copernicus's for the latest view's year when it is Sentinel-2's or Sentinel-1's (else `null`, issue #624). No upstream id, match detail or feature id. Not tied to a publication. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/privacy-contact` | `{ wuaName, contact: { organisation, name, email, postal } \| null }`: "Who decides about your farm's information" (POPIA s18(1)(b), 168): the project's team's name and its privacy contact ([Teams](#teams)), for every member, farmers included, through `app_project_privacy_contact` (a farmer can't read the team row); nothing else about the team. `contact` is `null` for a project without a team or a team without a contact; `wuaName` as in `FarmIndex`. `404` for a non-member | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my hydrological unit", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
 
@@ -4353,7 +4439,7 @@ scenario (its ops on its base run's inputs), never the live model.
 | POST | `/projects/:id/yield` | `{ nodeId, runId \| scenarioId, kind, params? }` | `202 { jobId, job: JobMeta, created: true }`. The same request while one is pending (queued, or failed and waiting to retry) is `200 { jobId, job, created: false }` with that job: an editor's matches any editor's, a contributor's only their own (they can't see anyone else's job, so an assessor's pending one never stands for theirs). A contributor (an applicant) only with `scenarioId` of an application they own and `nodeId` their own farm or a dam its `node.add` or `node.insert` ops add (`403` for a run or an application that isn't theirs; a dam hidden from them is the `400` an unknown node gets). `409` for a forecast run (issue #51: a yield is judged on history; the Network tab offers only ordinary runs), and for a scenario whose base is one | editor, or a contributor on their own application |
 | GET | `/projects/:id/yield?runId=\|scenarioId=&nodeId=&jobId=` | – | `{ results: YieldResult[] }`, newest first, at most 50: one of `runId` / `scenarioId` (or `jobId` alone), optionally one node. A contributor reads only the results they computed | contributor (RLS: their own) |
 | GET | `/projects/:id/yield/jobs?nodeId=&runId=\|scenarioId=` | – | `{ jobs: YieldJob[] }`: this dam's pending yield jobs (queued, running, or failed and waiting to retry), whoever queued them, newest first, at most 20; `nodeId` required, at most one of `runId` / `scenarioId` (`400` for both). A done or dead job drops off: read its result with `GET /yield?jobId=`. A contributor sees only their own jobs | contributor (RLS: their own) |
-| POST | `/projects/:id/yield/:jobId/cancel` | – | `200 { status, cancelled }`: a queued or retrying job is `dead` at once (its `error` is `cancelled`); a running one stays `running` until its next progress report, then goes `dead` with nothing stored. `404` for a job that isn't a yield job of this project, or isn't yours to cancel | the user who queued it, or an editor |
+| POST | `/projects/:id/yield/:jobId/cancel` | – | `200 { status, cancelled }` (`app_cancel_job_outcome`, 285): `cancelled` is whether this call changed the job, so cancelling one already dead, or running and already flagged, answers `false`. A queued or retrying job is `dead` at once (its `error` is `cancelled`); a running one stays `running` until its next progress report, then goes `dead` with nothing stored. `404` for a job that isn't a yield job of this project, or isn't yours to cancel | the user who queued it, or an editor |
 
 - `kind`: `firm` (one yield at the dam's own capacity) or `curve` (the yield
   at `points` capacities evenly from 0 to 2 × the dam's).
@@ -4398,6 +4484,49 @@ scenario (its ops on its base run's inputs), never the live model.
   `cancelled`, or the queue's own messages ([§ Jobs](#jobs)). It keeps the
   newest 5 results per run or scenario and dam.
 - Every number is **historical** (it replays the one record); the UI says so.
+
+## Future yield
+
+§ 8 of an application's evidence report (issue #621 slice 4,
+280_future_yield, [evidence-pack.md § Future yield](./evidence-pack.md#future-yield)):
+the application run and its baseline re-run under each climate model's
+monthly change factors from the data copy's NEX-GDDP-CMIP6 aggregates, by a
+background `future_yield` job. Off unless `FUTURE_YIELD=on` (deployment.md).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/runs/:runId/future-yield` | `{ nodeId? }` (strict) | `202 { jobId, job, created: true }`; the same request while it is pending is `200` with that job. `409` with `details.code`: `future_yield_off` (FUTURE_YIELD isn't on), `not_application` (not a run of a scenario on a baseline), `no_boundary` (no catchment boundary on the map), `boundary_cells` (the boundary covers no 0.25° cell of the copy's region); `409` for a forecast run or an application whose ops already hold a `climate.delta`. `400` (`details.code: 'future_yield_dam'`) when `nodeId` isn't a unit of the application with a dam above 0 m³, or, without `nodeId`, the application has no own unit with a dam or more than one. `429` with one already queued or running for you | editor |
+| GET | `/projects/:id/runs/:runId/future-yield` | – | `{ enabled, result: FutureYieldRow \| null, job: JobMeta \| null }`: `job` is the newest `future_yield` job for the run that RLS lets the caller read (any status; how the draft report's Run button follows one after a reload); the newest stored result for the run (`{ id, baselineRunId, applicationRunId, nodeId, jobId, result, engineVersion, createdBy, createdAt }`, `result` the engine's `FutureYieldResult`). `enabled: false, result: null` while it is off. A viewer kept from the registered volumes on runs that cap or scale use to them gets `result: null, withheld: ['result']` | contributor (RLS: viewers and above, an applicant their own application's) |
+| POST | `/projects/:id/runs/:runId/future-yield/:jobId/cancel` | – | `200 { status, cancelled }` (284_cancel_future_jobs; `app_cancel_job_outcome`, 285: `cancelled` is whether this call changed the job, `false` for one already dead or already flagged): a queued or retrying job is `dead` at once (its `error` is `cancelled`); a running one stays `running` until its next progress report (after each model read from the copy, and after the historical pair and each case it runs), then goes `dead` with nothing stored and no further model read or case run. `404` for a job that isn't this run's `future_yield` job in this project. Works with `FUTURE_YIELD` off | editor |
+
+- The job reads the copy over the boundary's cells, works out the factor
+  table (`buildFutureFactorTable`), runs every pair (`runFutureYieldAsync`, one case at a time) and
+  stores one row, keeping the newest 3 per pair. It dies (no retry) when
+  the copy holds no `cmip6` model (*… the operator loads it*), when a model
+  holds no year of a window, or when the engine refuses the input. Its
+  status is `GET /projects/:id/jobs`, and the newest one for the run comes
+  with the GET above.
+
+## Future climate
+
+The Scenarios tab's future climate (issue #621 slice 5, 282_climate_factors,
+[scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors)):
+the catchment's monthly change factors per climate model, SSP and horizon,
+worked out by a background `climate_factors` job, which Add a change turns
+into a `climate.delta` op. Off unless `FUTURE_YIELD=on`, as § 8.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/climate-factors` | `{}` or none (strict) | `202 { jobId, job, created: true }`; while one is pending, `200` with that job. `409` with `details.code`: `future_yield_off`, `no_boundary` (no catchment boundary on the map), `boundary_cells` (it covers no 0.25° cell of the copy's region) | editor |
+| GET | `/projects/:id/climate-factors` | – | `{ enabled, factors, boundary, job }`: `factors` the newest table (`{ id, jobId, factors: FutureFactorTable, warnings, boundarySha256, createdBy, createdAt }`) or null; `boundary` `'same'`, `'changed'` (the boundary on the map now isn't the one it was read over) or `'none'` (no boundary); `job` the newest `climate_factors` job (`JobMeta`) or null. `{ enabled: false, factors: null, boundary: 'none', job: null }` while it is off | viewer |
+| POST | `/projects/:id/climate-factors/:jobId/cancel` | – | `200 { status, cancelled }`, as § 8's cancel above (`cancelled: false` for a job already dead or flagged): a waiting job is `dead` at once; a running one stops after the model it is reading, before the next, and stores no table. `404` for a job that isn't a `climate_factors` job of this project | editor |
+
+- The job reads the boundary as it is when it runs, reads the copy over its
+  cells (`future/copy.ts readFactorTable`, as the `future_yield` job does),
+  stores one `climate_factors` row and keeps the newest 3 per project. It
+  dies (no retry) when the boundary is gone or unreadable, or the copy holds
+  no `cmip6` model. Nothing reads the table but the form: the op it makes
+  carries its own factors.
 
 ## Sweeps
 

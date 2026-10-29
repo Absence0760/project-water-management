@@ -390,6 +390,8 @@ resource "aws_lambda_function" "assistant" {
       DB_POOL_MAX            = local.assistant_db_pool_max
       # Its tools read the same runs and feeds the API does (lambda.tf).
       FEED_SOURCE = "live"
+      # It builds the same evidence reports, so § 8 shows exactly when the API's does (lambda.tf).
+      FUTURE_YIELD = var.future_yield_enabled ? "on" : "off"
 
       ASSISTANT_PROVIDER       = "bedrock"
       ASSISTANT_MODEL          = var.assistant_model_id

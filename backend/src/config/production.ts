@@ -115,10 +115,18 @@ const s3Url: Check = (v) => (!set(v) ? 'is not set' : /^s3:\/\/[a-z0-9][a-z0-9.-
 
 /**
  * MIRROR_URL on the worker: required when it reads the copy (CHIRPS_SOURCE=mirror), hands the weekly DWS pass its stations
- * (DWS_WEEKLY=on) or runs the dams tick (DAM_OBSERVATIONS=on, which reads the passes' files from the bucket), else checked only when set.
+ * (DWS_WEEKLY=on), runs the dams tick (DAM_OBSERVATIONS=on, which reads the passes' files from the bucket) or the observed ET tick
+ * (ET_OBSERVATIONS=on, the same) or the future climate's jobs (FUTURE_YIELD=on, which read cmip6/ from the copy), else checked
+ * only when set.
  */
 const mirrorUrlFor: Check = (v, env) =>
-	env?.CHIRPS_SOURCE?.trim() === 'mirror' || env?.DWS_WEEKLY?.trim() === 'on' || env?.DAM_OBSERVATIONS?.trim() === 'on' ? s3Url(v) : optional(s3Url)(v);
+	env?.CHIRPS_SOURCE?.trim() === 'mirror' ||
+	env?.DWS_WEEKLY?.trim() === 'on' ||
+	env?.DAM_OBSERVATIONS?.trim() === 'on' ||
+	env?.ET_OBSERVATIONS?.trim() === 'on' ||
+	env?.FUTURE_YIELD?.trim() === 'on'
+		? s3Url(v)
+		: optional(s3Url)(v);
 
 /**
  * Whether the worker's feeds all read our copy and store (CHIRPS_SOURCE=mirror
@@ -397,6 +405,18 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'on: the worker runs the dams tick (dams/observed/tick.ts, issue #604 R5): matches traced dams, writes the passes’ wanted list and loads what they fetched, through the mirror bucket, so MIRROR_URL must name it. Terraform is to set it from var.dam_observations_enabled (infra/jobs.tf; dam_observations.tf refuses the flag until it does). Unset is off (damObservationsOn), today’s production behaviour, so a release can go out before that apply; a value set is checked. The API reaches it through jobs/runner.ts but runs no tick.',
 		checks: { worker: optional(oneOf('on', 'off')) }
 	},
+	DAM_OBSERVATIONS_S2: {
+		why: 'on: the fetcher’s dams-weekly run adds the Sentinel-2 pass after WOfS (dams/observed/sentinel/pass.ts, issue #624; damSourceOn), still only while the dam observations are on. Terraform sets it from var.dam_s2_enabled, and only while dam_observations_enabled is (infra/feeds.tf, local.dam_s2_on). Unset is off, so a release can go out before that apply; a value set is checked.',
+		checks: { fetcher: optional(oneOf('on', 'off')) }
+	},
+	DAM_OBSERVATIONS_S1: {
+		why: 'Radar’s stage (issue #624 open question 3; handover.ts damS1Mode). measure: the fetcher’s dams-weekly run adds the Sentinel-1 radar pass after Sentinel-2’s and the S1/S2 agreement report (dams/observed/sentinel/pass.ts and agreement.ts, the dams_s1_agreement log line), but the worker loads no s1 row, so radar is measured without being shown. on: the same, and the worker’s dams tick loads s1 rows only for the dams whose own agreement passes (dams/s1-agreement.json, sentinel/agreement.ts s1Shows: 85 % to start, 80 % to stay shown), withholding the rest (dams/observed/tick.ts). off (or unset): no pass, and the worker withholds any s1 row loaded before (found by its load marks, status file or not). Terraform sets the fetcher’s and the worker’s from var.dam_s1_mode, and only while dam_observations_enabled is (infra/dam_observations.tf local.dam_s1_mode). Unset is off, so a release can go out before that apply; a value set is checked.',
+		checks: { fetcher: optional(oneOf('off', 'measure', 'on')), worker: optional(oneOf('off', 'measure', 'on')) }
+	},
+	ET_OBSERVATIONS: {
+		why: 'on: the worker runs the observed ET tick (water-use/observed/tick.ts, issue #623): writes the WaPOR pass’s wanted list (each unit’s parcels and their cropland) and loads what it fetched, through the mirror bucket, so MIRROR_URL must name it. Terraform sets it from var.et_observations_enabled (infra/jobs.tf; et_observations.tf refuses the flag without it), off until FAO confirms the licence (#618 8a). Unset is off (etObservationsOn), so a release can go out before that apply; a value set is checked. The API runs no tick: Terraform sets the same value there (infra/lambda.tf) so GET …/et-observed can say `enabled` (water-use/observed/routes.ts), and unset reads as off.',
+		checks: { worker: optional(oneOf('on', 'off')), api: optional(oneOf('on', 'off')) }
+	},
 	FEED_FIXTURE_REWRITE: {
 		why: 'Fixtures only (FEED_SOURCE=fixtures): 1 serves some synthetic CHIRPS finals rewritten in place, to watch the re-check locally. The live client never reads it, and the fetcher refuses the fixtures in production.'
 	},
@@ -520,6 +540,10 @@ export const SETTINGS: Record<string, Setting> = {
 	WATER_URL: {
 		why: 'The water occurrence raster tracing a dam reads (delineation/damTrace.ts, issue #326 C2): empty turns it off. The same forms and checks as DEM_URL; only the API traces.',
 		checks: { api: demUrl }
+	},
+	FUTURE_YIELD: {
+		why: 'The evidence pack’s § 8 Future yield (future/store.ts, issue #621): on or off, unset is off. The API reads it to queue the job and to put § 8 in a report; the worker (the job, a report it renders) and the assistant (which builds reports) reach it too. Terraform sets the same value on all three from var.future_yield_enabled (infra/lambda.tf, jobs.tf, assistant.tf), off by default; set on only once the copy holds every model’s whole windows (deployment.md § NEX-GDDP-CMIP6). On, the worker must name the copy (MIRROR_URL).',
+		checks: { api: optional(oneOf('on', 'off')), worker: optional(oneOf('on', 'off')), assistant: optional(oneOf('on', 'off')) }
 	},
 	WATER_LABEL: { why: 'The water occurrence dataset’s name on each traced outline; empty takes the archive’s own. A label, never a credential or a switch.' },
 	REPORTS_BUCKET: { why: 'The private reports bucket.', checks: { api: required, worker: required, renderer: required } },

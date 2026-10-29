@@ -133,6 +133,9 @@ function describe(op: ScenarioOp, unit: (id: string | null | undefined) => strin
 			return t('A catchment setting changed: {path}', { path: op.path });
 		case 'series.scale':
 			return t('The {kind} record scaled by {factor}', { kind: op.kind, factor: fmtNumber(op.factor, 2, true) });
+		case 'climate.delta':
+			// Engine 1.107.0 (issue #621): a future climate's change factors, named by the case's label (model, pathway and window).
+			return t('A future climate assumed: {label}', { label: op.label });
 		case 'demand.scale':
 			// One part of a unit's demand (engine ≥ 1.45.0): the crops or one category of demand object, by its technical name.
 			return op.part
