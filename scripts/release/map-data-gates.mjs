@@ -19,14 +19,20 @@
 //     LOAD_STATION (the workflow's inputs) must have the shapes the migrate
 //     Lambda accepts (backend/src/geo/referenceLoad.ts parseLoadRequest
 //     checks them again), the kind must be one the Sources table allows
-//     (land-cover, evaporation, rivers, gazetteer, map-grid, tiles, dws), a
-//     MAP grid must name a dataset whose licence is recorded (DATASETS) and
+//     (land-cover, evaporation, rivers, gazetteer, map-grid, tiles,
+//     waterbodies, dws, soils, gr4j-donors), a MAP grid must name a dataset whose licence is recorded (DATASETS) and
 //     give no source, a DWS flow table needs its reference (the source, at
 //     most 200 characters) and takes a station only as a river gauge code, and
 //     rivers need HydroSHEDS' Exhibit B statement in the app's legal text
 //     first (the HydroSHEDS licence, § 2.2), and the Terms' clause on map
 //     data licensed to us (§9: no stand-alone redistribution, no reverse
-//     engineering; the licence's § 2.1.2 and § 2.1.3).
+//     engineering; the licence's § 2.1.2 and § 2.1.3). An evaporation load
+//     whose key or dataset names an A-pan or PenPan grid is refused here,
+//     before the approval: the modelled Class-A pan grid (issue #646 item 7)
+//     is blocked until its validation report and the hydrologist's sign-off
+//     (docs/data-sources.md § penpan-apan). The migrate Lambda refuses any
+//     grid whose kind isn't "et0" whatever its name (referenceLoad.ts), so
+//     this is the early, named refusal, not the only one.
 //
 // "In the app's legal text" means some file under frontend/src (tests left
 // out) carries the sentence, wherever the legal notice puts it.
@@ -49,7 +55,7 @@ export const REQUIRED_TEXT = {
 };
 
 /** The kinds a production load may name (backend/src/geo/referenceLoad.ts REFERENCE_KINDS, the allowed ones; referenceLoad.test.ts keeps the two in step). */
-export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws'];
+export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws', 'soils', 'gr4j-donors'];
 
 /**
  * The kinds allowed dataset by dataset, and the labels each may load as
@@ -58,6 +64,9 @@ export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'ma
  * the archives the tiles bucket serves, whose provenance a load records (248).
  */
 export const DATASETS = { tiles: ['basemap', 'fonts', 'terrain', 'water'], 'map-grid': ['WAAS-SWCape-2007'] };
+
+/** An evaporation key or dataset that names an A-pan grid (PenPan's, or any other): blocked (docs/data-sources.md § penpan-apan). */
+export const BLOCKED_EVAPORATION = /(^|[^a-z])(pen-?pan|a-?pan|class-?a)([^a-z]|$)/i;
 
 const ARCHIVE = /^\/tiles\/[a-z0-9-]+\.pmtiles$/;
 const GLYPHS = '/tiles/fonts/{fontstack}/{range}.pbf';
@@ -119,6 +128,11 @@ export function loadProblems(env, hasText = legalTextHas) {
 	// This run's log is public and a station code points at the client's catchment: the key and label must not carry one.
 	if (kind === 'dws' && /[A-Z][0-9][A-Z][0-9]{3}/i.test(`${env.LOAD_KEY ?? ''} ${env.LOAD_DATASET ?? ''}`)) {
 		problems.push('name the dws key and dataset without a station code (this log is public): the station comes from the file, or the station input');
+	}
+	if (kind === 'evaporation' && BLOCKED_EVAPORATION.test(`${env.LOAD_KEY ?? ''} ${env.LOAD_DATASET ?? ''}`)) {
+		problems.push(
+			'an A-pan evaporation grid (the modelled Class-A pan, PenPan) is blocked in production until its validation against DWS Class-A pans and the hydrologist’s sign-off (docs/data-sources.md § penpan-apan): only a reference-ET grid (dPET) loads'
+		);
 	}
 	const station = env.LOAD_STATION ?? '';
 	if (station && kind !== 'dws') problems.push('station is for the dws kind only');

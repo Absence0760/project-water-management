@@ -619,3 +619,47 @@ describe('the import’s body limit', () => {
 		expect(huge.status).toBe(413);
 	});
 });
+
+describe('where a gauge stood when it became its node, and what the map list says each value was read over (273, issue #646 F7–F9)', () => {
+	it('records a linked gauge’s point on linking and only then: a move keeps it, an unlink clears it, a relink takes the new one', async () => {
+		const gauge = node('Mid gauge', null, { kind: 'gauge', areaKm2: 0 });
+		const pid = (await owner.call('POST', '/projects', { name: 'Map link points' })).body.project.id as string;
+		expect((await owner.call('PUT', `/projects/${pid}/model`, { nodes: [gauge], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		const here = { type: 'Point', coordinates: [21.32, -33.68] };
+		const there = { type: 'Point', coordinates: [21.33, -33.68] };
+		const made = await owner.call('POST', `/projects/${pid}/map/features`, { kind: 'gauge', name: 'G1', nodeId: gauge.id, geometry: here });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const fid = made.body.feature?.id ?? made.body.id;
+		const read = async () => (await owner.call('GET', `/projects/${pid}/map/features`)).body.features.find((f: { id: string }) => f.id === fid);
+		expect((await read()).linkPoint).toEqual([21.32, -33.68]);
+		// Moved: the link point stays where it was linked.
+		expect((await owner.call('PATCH', `/projects/${pid}/map/features/${fid}`, { geometry: there })).status).toBe(200);
+		expect(await read()).toMatchObject({ geometry: there, linkPoint: [21.32, -33.68] });
+		// A client can't write it: the body refuses the field, and the table's owner writing it is overruled by the trigger.
+		expect((await owner.call('PATCH', `/projects/${pid}/map/features/${fid}`, { linkPoint: [0, 0] })).status).toBe(400);
+		await asOwner(`UPDATE map_feature SET link_point = '{"type":"Point","coordinates":[0,0]}' WHERE id = $1`, [fid]);
+		expect((await read()).linkPoint).toEqual([21.32, -33.68]);
+		// Unlinked: none; linked again: where it stands now.
+		expect((await owner.call('PATCH', `/projects/${pid}/map/features/${fid}`, { nodeId: null })).status).toBe(200);
+		expect((await read()).linkPoint).toBeNull();
+		expect((await owner.call('PATCH', `/projects/${pid}/map/features/${fid}`, { nodeId: gauge.id })).status).toBe(200);
+		expect((await read()).linkPoint).toEqual([21.33, -33.68]);
+		// Anything but a gauge never has one.
+		const dam = await owner.call('POST', `/projects/${pid}/map/features`, { kind: 'other', name: 'Spot', geometry: here });
+		expect(dam.status).toBe(201);
+		const [{ link_point }] = await asOwner('SELECT link_point FROM map_feature WHERE project_id = $1 AND kind = $2', [pid, 'other']);
+		expect(link_point).toBeNull();
+	});
+
+	it('lists each unit rain feed’s mark beside the features, to a viewer (control) and to nobody outside the project', async () => {
+		const mark = { nodeId: farmA.id, featureId: crypto.randomUUID(), updatedAt: '2026-10-01T00:00:00.000Z', areaKm2: 3.214 };
+		await asOwner(`INSERT INTO data_feed (project_id, source, config, target_kind, target_name) VALUES ($1, 'chirps', $2, 'rain_chirps_mm', 'CHIRPS v3 (rnl) Farm A')`, [
+			projectId,
+			JSON.stringify({ cells: [{ lat: -33.675, lon: 21.325, weight: 1 }], unit: mark })
+		]);
+		const listed = (await viewer.call('GET', at('/features'))).body.accepted;
+		expect(listed.unitRain).toEqual([mark]);
+		expect(listed).toMatchObject({ unitMap: [], landCover: [], evaporation: [] });
+		expect((await stranger.call('GET', at('/features'))).status).toBe(404);
+	});
+});

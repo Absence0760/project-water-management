@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "The Map tab passed its 60 KB per-tab budget (61 KB) with round 4's shared code; the click bar (ClickBar and the pieces only it draws) moved to its own lazy chunk (tab 59 KB), which costs 2 KB of chunk overhead in the total (2251 → 2253 KB, measured)"
+}

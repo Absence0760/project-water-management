@@ -22,7 +22,8 @@ import { sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } 
 import type { FlowGapFillSettings, FlowGapFillSpec } from '../flowGapFill';
 import type { AutoCalibrationReport } from './auto';
 import type { CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ScoredPeriod, StartResult, ValidationTest } from './calibrate';
-import type { CalibrationBounds, ParamSet } from './params';
+import type { CalibrationBounds, FitBounds, ParamSet } from './params';
+import type { PriorFitResult } from './prior';
 import type { DayQuality } from './dayFlags';
 import { resolveQualityFlags, type QualityFlagSettings } from './qualityFlagSettings';
 import type { ObjectiveId } from './objectives';
@@ -169,8 +170,8 @@ export interface FitRecord {
 	engineVersion: string;
 	model: RunoffModelId;
 	objective: ObjectiveId;
-	/** The box the search explored (issue #4 phase 6 §"make the logger fit identifiable"). */
-	bounds: CalibrationBounds;
+	/** The box the search explored (issue #4 phase 6 §"make the logger fit identifiable"; 'prior': the regional prior's p10–p90, issue #622). */
+	bounds: FitBounds;
 	seed: number;
 	/** Starts of the full fit and each one's result (calibration research CR-2); absent on records made before it: one start. */
 	starts?: number;
@@ -195,6 +196,12 @@ export interface FitRecord {
 	 * before it: the outlet.
 	 */
 	siteNodeId?: string | null;
+	/**
+	 * The calibration zone the fit was one step of (engine 1.106.0, issue #555,
+	 * ./zones.ts): its gauge (null = the calibration site's own zone) and the
+	 * land units its parameters are for. Absent on a fit made without zones.
+	 */
+	zone?: { nodeId: string | null; units: string[] };
 	simulatedKey: 'simulated_outflow';
 	/** The calibration window and exclusions the fit used (the form's, at the time). */
 	calibrationStart: string | null;
@@ -363,6 +370,14 @@ export interface FitRecord {
 	 * MAR ratio, and the fit without it. null when it was off.
 	 */
 	marPenalty: MarPenaltyResult | null;
+	/**
+	 * The regional GR4J prior the fit used (engine 1.106.0, issue #622,
+	 * docs/model.md §2.10m): its penalty weight, whether it bounded the
+	 * search, its ranges and where it came from (the donor dataset, its
+	 * SHA-256 and reference load, the donors kept, the leave-one-out skill).
+	 * Absent when the fit used none.
+	 */
+	prior?: PriorFitResult;
 	/** The report's notes (limits of the validation, cancellation). */
 	notes: string[];
 	/**
@@ -545,6 +560,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		startParams: { ...r.startParams },
 		flowKind: r.flowKind,
 		siteNodeId: r.siteNodeId ?? null,
+		...(r.zoneUnits ? { zone: { nodeId: r.zoneNodeId ?? null, units: [...r.zoneUnits] } } : {}),
 		simulatedKey: r.simulatedKey,
 		calibrationStart: ctx.settings.calibrationStart ?? null,
 		calibrationEnd: ctx.settings.calibrationEnd ?? null,
@@ -587,6 +603,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		differential: r.differential,
 		independentRecord: r.independentRecord,
 		marPenalty: r.marPenalty ?? null,
+		...(r.prior ? { prior: structuredClone(r.prior) } : {}),
 		notes: [...r.notes],
 		// JSON, not structuredClone: a page may hand in a reactive proxy.
 		...(ctx.auto ? { auto: JSON.parse(JSON.stringify(ctx.auto)) as AutoFitRecord } : {}),

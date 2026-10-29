@@ -116,6 +116,31 @@ describe('FitSession', () => {
 		expect(s.picked).toEqual({});
 	});
 
+	it('keeps a stepwise fit’s steps beside the last step’s report, and drops them on discard (issue #555)', async () => {
+		const s = new FitSession();
+		const f = deferredFit();
+		const steps = [
+			{ zoneNodeId: 'H', name: 'Weir', units: ['A'], report },
+			{ zoneNodeId: null, name: 'Outlet', units: ['B'], report }
+		];
+		const done = s.start(context, () => ({ ...f.handle, steps: f.handle.result.then(() => steps) }), () => undefined);
+		await vi.waitFor(() => expect(s.status).toBe('running'));
+		s.stepProgress = { step: 1, steps: 2, zoneNodeId: 'H' };
+		f.resolve(report);
+		await done;
+		expect(s.steps).toEqual(steps);
+		expect(s.report).toBe(report);
+		s.discard();
+		expect([s.steps, s.stepProgress]).toEqual([null, null]);
+		// One fit has no steps.
+		const g = deferredFit();
+		const one = s.start(context, () => g.handle, () => undefined);
+		await vi.waitFor(() => expect(s.status).toBe('running'));
+		g.resolve(report);
+		await one;
+		expect(s.steps).toBeNull();
+	});
+
 	describe('searchFrom (issue #554)', () => {
 		const record = { bounds: 'typical', budget: 800, starts: 3, seed: 42 } as const;
 
@@ -146,6 +171,17 @@ describe('FitSession', () => {
 			expect(s.seed).toBe(1);
 			s.searchFrom({ ...record, seed: 9 });
 			expect(s.seed).toBe(9);
+		});
+
+		it('starts the regional prior’s use and weight from a fit that used it (issue #622), and resets them', () => {
+			const s = new FitSession();
+			s.reset('p1');
+			s.searchFrom({ bounds: 'prior', budget: 800, starts: 3, seed: 42, prior: { weight: 0.3, bounded: true } as never });
+			expect([s.bounds, s.priorUse, s.priorWeight]).toEqual(['wide', 'both', 0.3]);
+			s.reset('p2');
+			expect([s.priorUse, s.priorWeight]).toEqual(['off', 0.1]);
+			s.searchFrom(record);
+			expect(s.priorUse).toBe('off');
 		});
 
 		it('reads a record from before starts were recorded as one start', () => {

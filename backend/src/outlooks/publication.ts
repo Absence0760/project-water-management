@@ -67,7 +67,7 @@ async function projectToday(db: Db, projectId: string): Promise<string> {
  * 1.19.0: run it again, 409), and a season already over (409).
  */
 export async function publishOutlook(db: Db, projectId: string, outlookId: string, levelId: string): Promise<OutlookPublicationRow> {
-	const { rows } = await db.query<{ status: string; result: SeasonalOutlook | null; reviewDate: string | null; seasonEnd: string }>(
+	const { rows } = await db.query<{ status: string; result: (SeasonalOutlook & { forecast?: { status: string; leads: 'forecast' | 'esp' } }) | null; reviewDate: string | null; seasonEnd: string }>(
 		`SELECT status, result, to_char(review_date, 'YYYY-MM-DD') AS "reviewDate", to_char(season_end, 'YYYY-MM-DD') AS "seasonEnd"
 		 FROM seasonal_outlook WHERE project_id = $1 AND id = $2`,
 		[projectId, outlookId]
@@ -79,6 +79,8 @@ export async function publishOutlook(db: Db, projectId: string, outlookId: strin
 	if (o.status !== 'complete' || !o.result) throw new ApiError(409, 'the outlook is still running: publish it once it is complete');
 	if (o.seasonEnd < (await projectToday(db, projectId))) throw new ApiError(409, `the outlook's season ended on ${dayText(o.seasonEnd)}: there is nothing left of it to publish`);
 	const { rows: farms } = await db.query<{ id: string }>(`SELECT id FROM node WHERE project_id = $1 AND kind = 'farm' ORDER BY sort_order, name, id`, [projectId]);
+	// Whether the outlook weighed the seasonal forecasts (method c3s, issue #620): which led, never a chance (FarmOutlookProjection.forecast).
+	const forecast = o.result.forecast?.status === 'ready' ? { leads: o.result.forecast.leads } : null;
 	const views: { nodeId: string; view: FarmOutlookProjection }[] = [];
 	for (const f of farms) {
 		const got = farmOutlookProjection(o.result, levelId, f.id, o.reviewDate);
@@ -87,7 +89,7 @@ export async function publishOutlook(db: Db, projectId: string, outlookId: strin
 			if (got.problem === 'levelNotRun') throw new ApiError(409, 'that level did not run, so there are no figures to publish for it');
 			throw new ApiError(409, 'this outlook was computed before units had figures of their own: run it again to publish it');
 		}
-		views.push({ nodeId: f.id, view: got.projection });
+		views.push({ nodeId: f.id, view: forecast ? { ...got.projection, forecast } : got.projection });
 	}
 	await db.query(`UPDATE outlook_publication SET ended_at = now() WHERE project_id = $1 AND ended_at IS NULL`, [projectId]);
 	const { rows: pub } = await db.query<{ id: string }>(

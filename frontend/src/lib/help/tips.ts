@@ -469,6 +469,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind', 'settings.calibrationSiteNodeId']
 	},
 	{
+		id: 'calibration-zones',
+		term: 'Calibration zones',
+		short: 'Under Per unit, a ticked gauge gives the land units draining to it their own GR4J parameters, fitted on its record, upstream first.',
+		category: 'fit',
+		fields: ['settings.calibrationZones']
+	},
+	{
 		id: 'gauge-logger-agreement',
 		term: 'Gauge vs logger agreement',
 		short: 'Flags water years where the observed gauge and the logger disagree by more than the set ratio, on enough shared days.',
@@ -1226,6 +1233,12 @@ export const TIPS: HelpTipText[] = [
 		id: 'calibration-bounds',
 		term: 'Bounds (automatic calibration)',
 		short: 'How far the search may roam per parameter: wide (each parameter’s full calibration range) or typical (Perrin et al.’s published 80 % range).',
+		category: 'fit'
+	},
+	{
+		id: 'regional-prior',
+		term: 'Regional GR4J prior',
+		short: 'GR4J’s parameters in similar, nearby gauged basins (donors): a start for an ungauged catchment, or a penalty or search box in a fit.',
 		category: 'fit'
 	},
 	{

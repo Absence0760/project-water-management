@@ -2,8 +2,9 @@
 // issue #326 B-evap, docs/maps.md § Evaporation from the map): dPET's
 // defaults and the method text, the grid of monthly means in its JSON form
 // (`{ "kind": "et0", "cellDeg": 0.1, "firstYear": …, "lastYear": …,
-// "source"?, "version"?, "attribution"?, "cells": [[lon, lat, [Oct … Sep]], …] }`,
-// each cell by its centre: the committed synthetic fixture's form, and what
+// "source"?, "version"?, "attribution"?, "model"?, "cells": [[lon, lat, [Oct … Sep]], …] }`,
+// each cell by its centre (`model`: how a modelled A-pan grid was made, PenPan's
+// settings, written by ingest/apan_grid.py; issue #646 item 7): the committed synthetic fixture's form, and what
 // `pnpm import:evaporation … --out` writes for a production load), and the
 // load into the database, which replaces a dataset in one transaction.
 //
@@ -24,11 +25,45 @@ export const DPET = {
 		'hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0. Contains modified Copernicus Climate Change Service information (ERA5-Land, CC BY 4.0); neither the European Commission nor ECMWF is responsible for any use of it.'
 } as const;
 
+/**
+ * A modelled Class-A pan grid's defaults (issue #646 item 7): PenPan from NASA
+ * POWER's daily meteorology (`ingest/apan_grid.py`, which writes these same
+ * lines into its file). Every PenPan grid's source starts with
+ * MODELLED_APAN_LABEL, so the proposal and every revision citing it say
+ * "modelled", never a measured pan.
+ */
+export const MODELLED_APAN_LABEL = 'Modelled Class-A pan (PenPan)';
+export const PENPAN = {
+	source:
+		'Modelled Class-A pan (PenPan): Rotstayn, Roderick and Farquhar 2006 (GRL 33, L17715), as McMahon et al. 2013 (HESS 17, 1331, Supplement S6) set it out, from NASA POWER daily meteorology (AG community, 0.5°); not a measured pan',
+	version: 'PenPan (penpan.py); NASA POWER daily regional API',
+	attribution:
+		'NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan (Rotstayn et al. 2006) from its daily meteorology'
+} as const;
+
+/** How a modelled grid's values were made (the file's `model`): PenPan's settings and its inputs. */
+export interface EvaporationModel {
+	name: 'penpan';
+	/** The albedo of the ground round the pan (McMahon S6.4's α_s). */
+	groundAlbedo: number;
+	/** 1 for an unscreened pan, 0.93 for a bird-screened one (McMahon S16). */
+	screen: number;
+	/** The weather it was computed from, in words. */
+	inputs: string;
+}
+
 /** The dPET grid: 0.1° cells, centred on whole tenths of a degree. */
 export const DPET_CELL_DEG = 0.1;
 
 /** The summarising method in words, as proposals and revisions cite it. */
-export function evaporationMethodFor(cellDeg: number, firstYear: number, lastYear: number, kind: EvaporationKind): string {
+export function evaporationMethodFor(cellDeg: number, firstYear: number, lastYear: number, kind: EvaporationKind, model?: EvaporationModel): string {
+	if (model) {
+		return (
+			`Modelled, not measured: PenPan (Rotstayn et al. 2006; McMahon et al. 2013, Supplement S6, eqs. S6.1–S6.6) for ${model.screen === 1 ? 'an unscreened' : `a screened (× ${model.screen})`} US Class-A pan, ground albedo ${model.groundAlbedo}, from ${model.inputs}, ` +
+			`each month as a steady state; each ${cellDeg}° cell the nearest point's monthly totals averaged over ${firstYear}–${lastYear} (points with every month of every year only). ` +
+			'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
+		);
+	}
 	const what = kind === 'et0' ? 'reference evapotranspiration (ET₀)' : 'A-pan evaporation';
 	return (
 		`Pre-summarised at import: each ${cellDeg}° cell's daily ${what} summed into calendar-month totals and averaged over ${firstYear}–${lastYear} (cells with every year only). ` +
@@ -75,9 +110,9 @@ const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v
 
 /** The fixture form, or why it can't be read. Values are already monthly means in water-year order. */
 export function evaporationFromJson(doc: unknown):
-	| { kind: EvaporationKind; climatology: Climatology; meta: { source?: string; version?: string; attribution?: string }; problems: string[] }
+	| { kind: EvaporationKind; climatology: Climatology; meta: { source?: string; version?: string; attribution?: string; model?: EvaporationModel }; problems: string[] }
 	| string {
-	const d = doc as { kind?: unknown; cellDeg?: unknown; firstYear?: unknown; lastYear?: unknown; cells?: unknown; source?: unknown; version?: unknown; attribution?: unknown };
+	const d = doc as { kind?: unknown; cellDeg?: unknown; firstYear?: unknown; lastYear?: unknown; cells?: unknown; source?: unknown; version?: unknown; attribution?: unknown; model?: unknown };
 	if (d?.kind === 'span') return 'an S-pan dataset can’t be loaded: convert it to A-pan with your own monthly factors first, and say so in --source';
 	if (d?.kind !== 'et0' && d?.kind !== 'apan') return 'the JSON file has no "kind" of "et0" (reference ET) or "apan" (Class-A pan)';
 	const cellDeg = Number(d.cellDeg);
@@ -85,6 +120,8 @@ export function evaporationFromJson(doc: unknown):
 	const firstYear = Number(d.firstYear);
 	const lastYear = Number(d.lastYear);
 	if (!(Number.isInteger(firstYear) && Number.isInteger(lastYear) && firstYear <= lastYear)) return 'the JSON file has no "firstYear" ≤ "lastYear"';
+	const model = modelFromJson(d.model, d.kind);
+	if (typeof model === 'string') return model;
 	if (!Array.isArray(d.cells) || !d.cells.length) return 'the JSON file has no "cells"';
 	if (!Array.isArray(d.cells[0])) return 'the JSON file’s first cell is not [lon, lat, [12 values]]';
 	const problems: string[] = [];
@@ -107,10 +144,29 @@ export function evaporationFromJson(doc: unknown):
 	return {
 		kind: d.kind,
 		climatology: { cellDeg, originLon, originLat, firstYear, lastYear, cells, partial: 0 },
-		meta: { source: text(d.source, 500), version: text(d.version, 100), attribution: text(d.attribution, 500) },
+		meta: { source: text(d.source, 500), version: text(d.version, 100), attribution: text(d.attribution, 500), ...(model ? { model } : {}) },
 		problems
 	};
 }
+
+/** A file's `model` (absent: a grid of measured or reference values), or why it can't be read. Only an A-pan grid can be modelled. */
+function modelFromJson(v: unknown, kind: EvaporationKind): EvaporationModel | null | string {
+	if (v === undefined || v === null) return null;
+	const m = v as Partial<EvaporationModel>;
+	if (kind !== 'apan') return 'only an A-pan grid ("kind": "apan") carries a "model"';
+	if (m?.name !== 'penpan') return 'the JSON file’s "model" is not {"name": "penpan", …} (ingest/apan_grid.py writes it)';
+	const groundAlbedo = Number(m.groundAlbedo);
+	const screen = Number(m.screen);
+	if (!(groundAlbedo >= 0 && groundAlbedo <= 1)) return 'the PenPan model’s "groundAlbedo" is not 0–1';
+	if (!(screen >= 0.5 && screen <= 1)) return 'the PenPan model’s "screen" is not 0.5–1 (1: unscreened)';
+	const inputs = text(m.inputs, 300);
+	if (!inputs) return 'the PenPan model names no "inputs"';
+	return { name: 'penpan', groundAlbedo, screen, inputs };
+}
+
+/** A PenPan grid's source, always starting with MODELLED_APAN_LABEL (an operator's --source is put after it). */
+export const modelledApanSource = (source: string): string =>
+	source.startsWith(MODELLED_APAN_LABEL) ? source : `${MODELLED_APAN_LABEL}: ${source}`.slice(0, 500);
 
 /** Six decimals: a cell centre to about 0.1 m, so it lands back in its own cell. */
 const round6 = (x: number) => Math.round(x * 1e6) / 1e6;
@@ -120,9 +176,10 @@ const round6 = (x: number) => Math.round(x * 1e6) / 1e6;
  * file a production load takes): each cell by its centre, its values Oct … Sep,
  * with the dataset's kind, years, source, version and attribution.
  */
-export function evaporationToJson(meta: Pick<EvaporationDatasetMeta, 'kind' | 'source' | 'version' | 'attribution'>, clim: Climatology): string {
+export function evaporationToJson(meta: Pick<EvaporationDatasetMeta, 'kind' | 'source' | 'version' | 'attribution'> & { model?: EvaporationModel }, clim: Climatology): string {
 	return JSON.stringify({
 		kind: meta.kind,
+		...(meta.model ? { model: meta.model } : {}),
 		cellDeg: clim.cellDeg,
 		firstYear: clim.firstYear,
 		lastYear: clim.lastYear,
@@ -151,6 +208,8 @@ export interface EvaporationDatasetMeta {
 	method: string;
 	/** The licence and attribution line. */
 	attribution: string;
+	/** A modelled grid's model (PenPan): carried into a written file, not a column (the method text says it). */
+	model?: EvaporationModel;
 }
 
 const BATCH = 5_000;

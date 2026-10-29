@@ -16,6 +16,13 @@ describe('settingsBlockers (issue #586 round 3)', () => {
 		expect(settingsBlockers(s, errors).map((b) => b.id)).toEqual(['set-reporting', 'set-reserve', 'set-fit', 'set-wr2012']);
 	});
 
+	it('blocks Save on a catchment MAP without its source, under Flow generation (issue #612)', () => {
+		const s = editableSettings({ ...defaultProjectSettings(), rainStations: { catchmentMapMm: 750 } } as never);
+		expect(settingsBlockers(s, none())).toEqual([expect.objectContaining({ id: 'set-share', message: expect.stringMatching(/needs its source/) })]);
+		const ok = editableSettings({ ...defaultProjectSettings(), rainStations: { catchmentMapMm: 750, catchmentMapSource: 'a study' } } as never);
+		expect(settingsBlockers(ok, none())).toEqual([]);
+	});
+
 	it('checks the two windows', () => {
 		expect(periodError({ simulationStart: '2020-01-02', simulationEnd: '2020-01-01' })).toBe('Simulation start must be before the end.');
 		expect(periodError({ simulationStart: '2020-01-01', simulationEnd: null })).toBeNull();

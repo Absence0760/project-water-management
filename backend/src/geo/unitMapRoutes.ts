@@ -94,9 +94,16 @@ export const unitMapRoutes = new Hono<AuthEnv>()
 				);
 			}
 			// The values are the engine's range already (unitMap.ts fromShares, mapMmError's bounds); the source line is
-			// at most 50 + 100 + ~60 characters. The node's CHECKs (209) hold them too.
+			// at most 50 + 100 + ~60 characters. The node's CHECKs (209) hold them too. map_polygon (273) records the
+			// polygon it was taken over, so a redrawn outline shows as changed since (issue #646 F7).
 			for (const u of chosen) {
-				await db.query('UPDATE node SET map_mm = $3, map_source = $4 WHERE id = $1 AND project_id = $2', [u.nodeId, id, u.mapMm, unitMapSource({ dataset: grid.label, version: grid.version }, u.cells)]);
+				await db.query('UPDATE node SET map_mm = $3, map_source = $4, map_polygon = $5::jsonb WHERE id = $1 AND project_id = $2', [
+					u.nodeId,
+					id,
+					u.mapMm,
+					unitMapSource({ dataset: grid.label, version: grid.version }, u.cells),
+					JSON.stringify(u.polygon)
+				]);
 			}
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',

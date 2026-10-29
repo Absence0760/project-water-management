@@ -20,6 +20,8 @@
 	import CalibrationCheck from '#lib/components/calibration/CalibrationCheck.svelte';
 	import type { CheckNode } from '#lib/components/calibration/calibrationCheck.js';
 	import CalibrationPanel from '#lib/components/calibration/CalibrationPanel.svelte';
+	import ZoneCalibrationTable from '#lib/components/calibration/ZoneCalibrationTable.svelte';
+	import { runZoneRows } from '#lib/calibration/zoneStats.js';
 	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
 	import { CAL_SUBSECTIONS } from '#lib/components/calibration/page.js';
 	import EwrAgreementTable from '#lib/components/ewr/EwrAgreementTable.svelte';
@@ -406,6 +408,8 @@
 		<div class="slot">
 			<div class="panel" id="res-calibration">
 				<CalibrationPanel linked calibration={summary.calibration} requestedStart={windowSettings?.calibrationStart ?? null} requestedEnd={windowSettings?.calibrationEnd ?? null} />
+				<!-- Calibration zones (issue #555): each zone's scores at its own gauge, in or out of sample by its own fit. -->
+				<ZoneCalibrationTable rows={runZoneRows(summary)} />
 				<!-- Flow against use at each gauge with a record (issue #444): where a calibration gap is read. -->
 				<CalibrationCheck
 					{projectId}

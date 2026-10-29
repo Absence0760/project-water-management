@@ -186,6 +186,7 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * loaded by the operator as the schema owner (152_catchment_map.sql,
  * `pnpm import:quaternaries`); the app only proposes from it. So is the
  * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`),
+ * the evaporation stations and their pan records (274_evaporation_stations.sql, `pnpm import:evaporation-stations`),
  * the register of dams (157_dam_register.sql, `pnpm import:dam-register`),
  * the land-cover cropland grid (173_cropland_reference.sql, `pnpm import:land-cover`),
  * the orchard and vine grid (259_crop_type_reference.sql, `pnpm import:crop-types`),
@@ -207,6 +208,7 @@ const READ_ONLY = new Set([
 	'quaternary_reference',
 	'pack_reproduction',
 	'gauge_station_reference',
+	'evaporation_station_reference',
 	'dam_register_reference',
 	'river_reference',
 	'cropland_dataset',
@@ -254,7 +256,13 @@ const READ_ONLY = new Set([
 	// app_dam_observation_load (the worker, with no user) and dropped by map_feature_outline_changed when a dam is redrawn.
 	'waterbody_reference',
 	'dam_waterbody_match',
-	'dam_observation'
+	'dam_observation',
+	// The regional GR4J prior's reference data (268_soil_grid, 269_gr4j_donors), loaded by the operator as the schema
+	// owner (`pnpm import:soils`, `pnpm import:gr4j-donors`, or a production reference load).
+	'soil_dataset',
+	'soil_cell_reference',
+	'gr4j_donor_dataset',
+	'gr4j_donor'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).

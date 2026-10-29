@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "#646 items 4 and 5: the Map Checks for stale values after a map edit (stale.ts, mapChecks, the Use button) and the A-pan status row (2229 → 2232 KB, measured before and after the merge)"
+}

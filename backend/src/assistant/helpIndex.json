@@ -1875,6 +1875,20 @@
 		},
 		{
 			"kind": "glossary",
+			"id": "calibration-zones",
+			"title": "Calibration zones",
+			"aliases": [
+				"calibrate at several gauges",
+				"multi-site calibration",
+				"stepwise calibration",
+				"zone parameters"
+			],
+			"url": "/help/glossary/goodness-of-fit#calibration-zones",
+			"summary": "Under Per unit, a ticked gauge gives the land units draining to it their own GR4J parameters, fitted on its record, upstream first.",
+			"text": "One parameter set rarely fits a whole catchment: a wet mountain headwater and a dry lowland drain differently. When a gauge inside the network has a long enough record of its own, it can calibrate the land units above it on that record, and the calibration site (the outlet, or the gauge it is scored at) the rest. Each such gauge, with the land units it calibrates, is a calibration zone. Tick Calibrate here on a gauge’s row under Calibrate at several gauges. Its zone holds the land units draining to it that aren’t in a ticked zone further upstream; the calibration site’s zone holds every unit left. Untick a gauge and its units join the next ticked gauge downstream. Each row has its own calibration window, excluded periods, record and treatment of suspect days; the site keeps the settings above the table. Fit automatically fits the zones one at a time, upstream first: each zone on its own gauge’s record, with only its units’ parameters free, and then fixed for every zone below it, so the site is fitted last with everything above it in place. Until a zone is fitted its units run on the catchment’s parameters, and the run says so. A gauge with fewer than 2 complete water years, or no dry year to test on, gets a note: its parameters rest on too short a record to trust alone. Zones need Per unit flow generation, where each unit runs its own GR4J. Under Fragmentation one GR4J runs for the whole catchment, so ticked gauges are ignored and the run warns. The Network and the Map colour each unit by its zone, a run scores every ticked gauge on its own record (in or out of sample by that zone’s own fit), and the report, the evidence pack and Compare runs list every zone. Not yet per zone: the uncertainty ensemble and the automated calibration rules vary only the calibration site’s zone’s parameters, and every run that uses zones says so."
+		},
+		{
+			"kind": "glossary",
 			"id": "gauge-logger-agreement",
 			"title": "Gauge vs logger agreement",
 			"aliases": [
@@ -3110,7 +3124,7 @@
 			],
 			"url": "/help/glossary/natural-flow#catchment-rain-station",
 			"summary": "The catchment rain from a station × catchment MAP ÷ its MAP, its gaps patched in the order you set; none = the rain series as before. (mm/day)",
-			"text": "Under Model settings → Model selection for flow generation, The catchment’s rainfall station sets where the catchment rain comes from: the rain GR4J runs on under Fragmentation, and the rain demand and the dams read under either method. No station (the default) keeps the catchment rain series, as before stations. With a station it follows the same rule as a unit’s station (see A unit’s rainfall station): • On the station’s days the catchment runs on its rain × catchment MAP ÷ station MAP, held between 0.25 and 4; untick Scale to catchment MAP to run on its rain as recorded. The catchment MAP is the land units’ area-weighted mean MAP; if a unit has no MAP the ratio is 1, with a warning. • On its gaps and unreliable days the first source in Then patch gaps from with a reading fills in: another station × catchment MAP ÷ that station’s MAP, or CHIRPS, corrected: the catchment’s CHIRPS corrected month by month against the rain of the station chosen under Gaps: CHIRPS corrected against (its own by default) at the catchment’s MAP. CHIRPS alone is the default; an empty list sends the gaps to the forecast, else they are dry. • Each station in the list says how many of the main station’s gap days it fills over the run’s days before any forecast, or why it can’t help (no record, no MAP, or no reading on any of those gaps): such a station is greyed out. Under a catchment station the areal rainfall correction, the rain-source periods and the gap-filling product are not read: the station and its patching priority replace them, and the run warns. Changing the station changes the rain GR4J runs on: refit afterwards."
+			"text": "Under Model settings → Model selection for flow generation, The catchment’s rainfall station sets where the catchment rain comes from: the rain GR4J runs on under Fragmentation, and the rain demand and the dams read under either method. No station (the default) keeps the catchment rain series, as before stations. With a station it follows the same rule as a unit’s station (see A unit’s rainfall station): • On the station’s days the catchment runs on its rain × catchment MAP ÷ station MAP, held between 0.25 and 4; untick Scale to catchment MAP to run on its rain as recorded. The catchment MAP is the one entered under Catchment MAP with its source, else the land units’ area-weighted mean MAP; with neither (a unit has no MAP) the ratio is 1, with a warning. • On its gaps and unreliable days the first source in Then patch gaps from with a reading fills in: another station × catchment MAP ÷ that station’s MAP, or CHIRPS, corrected: the catchment’s CHIRPS corrected month by month against the rain of the station chosen under Gaps: CHIRPS corrected against (its own by default) at the catchment’s MAP. CHIRPS alone is the default; an empty list sends the gaps to the forecast, else they are dry. • Each station in the list says how many of the main station’s gap days it fills over the run’s days before any forecast, or why it can’t help (no record, no MAP, or no reading on any of those gaps): such a station is greyed out. Under a catchment station the areal rainfall correction, the rain-source periods and the gap-filling product are not read: the station and its patching priority replace them, and the run warns. Changing the station changes the rain GR4J runs on: refit afterwards."
 		},
 		{
 			"kind": "glossary",
@@ -3278,6 +3292,22 @@
 			"url": "/help/glossary/goodness-of-fit#calibration-bounds",
 			"summary": "How far the search may roam per parameter: wide (each parameter’s full calibration range) or typical (Perrin et al.’s published 80 % range).",
 			"text": "A short or drought-heavy record often can’t pin down X1 (production store) and X3 (routing store): the fit lands outside where GR4J parameters usually sit, because too little of the record constrains them. \"Typical\" restricts the search to Perrin et al.’s (2003) 80 % range over 429 catchments (X1 100–1200 mm, X3 20–300 mm, X4 1.1–2.9 days), which can make an under-constrained fit land somewhere plausible instead of at an extreme of the wide range. It is a constraint on the search, not evidence the catchment truly falls inside it: read the fit and validation scores either way, and prefer the wide range when the record constrains the parameters well. Recorded with the fit record."
+		},
+		{
+			"kind": "glossary",
+			"id": "regional-prior",
+			"title": "Regional GR4J prior",
+			"aliases": [
+				"GR4J prior",
+				"donor basins",
+				"regionalisation",
+				"parameter transfer",
+				"ungauged catchment",
+				"start from the prior"
+			],
+			"url": "/help/glossary/goodness-of-fit#regional-prior",
+			"summary": "GR4J’s parameters in similar, nearby gauged basins (donors): a start for an ungauged catchment, or a penalty or search box in a fit.",
+			"text": "The Regional prior card, under Fit the parameters on the Calibration page, builds for the catchment (or one calibration zone), GR4J’s parameter ranges from donor basins: gauged basins in the region, each recalibrated on the same CHIRPS v3 rain and dPET evaporation the app uses. The donors most like the catchment (area, mean annual rain, aridity) and nearest to it are kept, weighted by both, and each parameter’s p10, p50 and p90 are taken over them; X1’s range comes from the soil water capacity instead when that relation has skill. The leave-one-out skill says how well the method predicts a donor’s parameters from the others, against simply taking their median: at 0 or below the prior has no skill, and is labelled so. Three uses. “Start from the prior” writes the medians into the parameters, for a catchment with no flow record to fit (saved at once, as a settings revision naming the donors). In Fit automatically, a penalty pulls the fit toward the medians (its weight is in score units: at 0.1 a parameter at its p10 or p90 costs about 0.08 of KGE′), or the search keeps to the p10–p90 box, or both. Off, a fit is as before. The fit record and an evidence pack name the prior, its donors and the donor set’s hash."
 		},
 		{
 			"kind": "glossary",

@@ -404,12 +404,14 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	await openCalibration(page, project.id);
 	// The lazy panels first: Evaporation from the map, the quality flags and the flow gaps.
 	await expect(page.locator('#set-flow').getByRole('heading', { name: 'Evaporation from the map' })).toBeVisible();
+	await expect(page.locator('#set-flow').getByRole('heading', { name: 'Evaporation stations' })).toBeVisible();
+	await expect(page.locator('#set-fit').getByRole('heading', { name: 'Regional prior' })).toBeVisible();
 	// The quality flags and flow gaps are folded into one line of their values (issue #521): open it to see them.
 	await openFold(page.locator('#set-record'), 'record-flags');
 	await expect(page.locator('#set-record').getByRole('heading', { name: 'Flow gaps' })).toBeVisible();
 	await expect(page.locator('#set-record').getByRole('heading', { name: /^Quality flags for Fit automatically/ })).toBeVisible();
 	// Its cards (issue #521), each an h4 under the panel's h3; the switches inside Rain into GR4J are h5s under it.
-	expect((await names('set-flow', 'h3, h4')).slice(0, 5)).toEqual(['Flow calibration', 'GR4J parameters', 'Rain into GR4J', 'GR4J potential evaporation', 'Evaporation from the map']);
+	expect((await names('set-flow', 'h3, h4')).slice(0, 6)).toEqual(['Flow calibration', 'GR4J parameters', 'Rain into GR4J', 'GR4J potential evaporation', 'Evaporation from the map', 'Evaporation stations']);
 	await expect(page.locator('#set-flow').getByRole('heading', { level: 5, name: 'Areal rainfall correction' })).toBeVisible();
 	const record = await names('set-record', 'h3, h4');
 	expect(record[0]).toBe('Calibration record');
@@ -417,7 +419,8 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	expect(record).toContain('Flow gaps');
 	const fit = await names('set-fit', 'h3, h4');
 	expect(fit[0]).toBe('Fit the parameters');
-	expect(fit[1]).toBe('Fit automatically');
+	// The Regional prior first (issue #622): where the fit starts from, before the fit itself.
+	expect(fit.slice(1, 3)).toEqual(['Regional prior', 'Fit automatically']);
 
 	// Model settings' panels.
 	await openSettings(page, project.id);

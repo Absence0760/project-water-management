@@ -16,6 +16,8 @@
 	// Divide the model's sheet too, opened from the header on few visits (2026-10-02: the tools moving onto the map took the
 	// tab past its 60 KB, 62 KB; this brings it to 57 KB).
 	const loadDivideSheet = () => import('./DivideSheet.svelte');
+	// The click bar shows only while dividing by clicks: its own chunk keeps the tab under its budget (check:bundle).
+	const loadClickBar = () => import('./ClickBar.svelte');
 	// The sheets a tool opens once its point, shape or cut is on the map (Place, Delineate, Save a drawing, Split,
 	// Trace, Paste coordinates): one chunk for all six (sheets.ts), so they cost one request, warmed when a tool
 	// starts (the sheet opens a click or more later). 2026-10-11, issue #521: the tab was at its 60 KB ceiling;
@@ -30,6 +32,7 @@
 </script>
 
 <script lang="ts">
+	import type { ProjectSettings } from '@water-management/engine';
 	// Catchment map (?tab=map, issue #288, roadmap WP-3.12; laid out as a
 	// Network-style workspace in #326 E3–E6; docs/ui.md § Map, docs/maps.md).
 	// The map on the left, fitted to the window, its tools on its left edge
@@ -80,7 +83,8 @@
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import FeatureList from './FeatureList.svelte';
 	import MapChecks from './MapChecks.svelte';
-	import { mapChecks } from './mapChecks';
+	import { mapChecks, type MapCheck, type MapCheckInputs } from './mapChecks';
+	import { restOfCatchment, staleValues } from './stale';
 	import { alreadyAccepted, areaTargets, areaText, DAM_POSITION_LABEL, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea, takesDamPosition } from './mapData';
 	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
@@ -95,10 +99,9 @@
 	import MeasureBar from './measure/MeasureBar.svelte';
 	import { MeasureDraft } from './measure/measureDraft.svelte';
 	import MapKeyRow from './MapKeyRow.svelte';
-	import { featureResult, viewLabel } from './mapResults';
+	import { featureResult, featureZone, viewLabel } from './mapResults';
 	import { MapResults } from './mapResults.svelte';
 	import { BAND_WORD } from './mapStatus';
-	import ClickBar from './ClickBar.svelte';
 	import { ClickDivider, clickShape } from './clickPieces.svelte';
 	import { ChannelLayer } from './channelLayer.svelte';
 	import { openProposal } from './delineation';
@@ -116,6 +119,7 @@
 	import { frameFor } from './mapSearch';
 	import MapSetupPill from './MapSetupPill.svelte';
 	import { mapSetupSteps, type RainReads } from './mapSetup';
+	import { startDataItems, type DataFeed, type DataInput, type DataSeries } from './startData';
 	import MapToolPalette from './MapToolPalette.svelte';
 	import { toolStrip } from './mapTools';
 	import SourceList from './SourceList.svelte';
@@ -127,6 +131,7 @@
 		runs = null,
 		role = null,
 		projectName = null,
+		settings = null,
 		onModelChanged
 	}: {
 		projectId: string;
@@ -138,6 +143,8 @@
 		role?: Role | null;
 		/** The project's name, for the GeoJSON download's file name. */
 		projectName?: string | null;
+		/** The project's saved settings: the calibration zones the map can colour by (issue #555). */
+		settings?: ProjectSettings | null;
 		/** An area was accepted into the model: the page reloads its inputs. */
 		onModelChanged: () => Promise<void> | void;
 	} = $props();
@@ -250,10 +257,23 @@
 	// Divide a model that has nodes (#326 C3's follow-up): the same state, its own sheet.
 	const divideSheet = overlay('divide', '1', () => canEdit && (!startLoaded || !!startInfo));
 	// The consistency checks (#326 A4): the side column's Checks tab. `checks=1` (the sheet they were in until 2026-10-02) opens the tab.
-	const checks = $derived(mapChecks(features, nodes));
+	// The checks are worked out below, beside the Start state they read (`checks`).
 	async function pickFromCheck(id: string) {
 		await select(id);
 		sideTab = 'details';
+	}
+	/** A Use that failed, said in the Checks tab (acceptArea says it on the feature's row). */
+	let checkError = $state<string | null>(null);
+	/** A unit's area from an earlier outline (F6): Use the polygon's area now, on the basis the unit took, through the Map's Use. */
+	async function useFromCheck(u: NonNullable<MapCheck['use']>) {
+		const f = features.find((x) => x.id === u.featureId);
+		const n = farms.find((x) => x.id === u.nodeId);
+		if (!f || !n) return;
+		areaTarget[f.id] = n.id;
+		areaBasis[f.id] = n.areaBasis === 'effective' && offersEffective(f.areaM2, f.nonContributingM2) ? 'effective' : 'gross';
+		checkError = null;
+		await acceptArea(f);
+		if (rowError?.id === f.id) checkError = rowError.text;
 	}
 
 	// --- the side column: one thing at a time (Details · Features · Checks, and on a wide page Layers · Key), the Sub-catchments panel taking it over ---
@@ -410,6 +430,10 @@
 	// --- start the model from the map (#326 C3): editors, while the model is empty (or just started from it) ---
 	let startInfo = $state<StartState | null>(null);
 	let startLoaded = $state(false);
+	// The consistency checks (#326 A4). Since issue #646 item 4, also what a map edit left behind (F6–F9): the
+	// acceptances' polygons (GET …/map/features `accepted`) and Start's rest of the catchment.
+	const checkInputs = $derived<MapCheckInputs>({ accepted: data?.accepted ?? null, rest: restOfCatchment(startInfo?.proposals) });
+	const checks = $derived(mapChecks(features, nodes, {}, checkInputs));
 	async function loadStart() {
 		if (!canEdit) return;
 		try {
@@ -451,6 +475,51 @@
 	async function startApplied() {
 		notice = 'Started the model from the map. Its hydrological units are on the Network now, and each unit’s point and parcel stand for it on the map.';
 		await Promise.all([load(), loadStart(), onModelChanged()]);
+	}
+
+	// --- the data step's to-do list (issue #646): what a model started from the map holds now, read when it is one ---
+	/** Started from the map and past its review: the data step's list is shown (the sheet's step 4, then the Getting started pill). */
+	const startedData = $derived(canEdit && !!startInfo?.startedFromMap && !startInfo.modelEmpty);
+	/** What MapRainLink read from the feed list about the boundary (the Getting started pill's rain step). */
+	let rainReads = $state<RainReads>(null);
+	let dataSettings = $state.raw<DataInput['settings']>(null);
+	let dataFeeds = $state.raw<DataFeed[] | null>(null);
+	let dataSeries = $state.raw<DataSeries[] | null>(null);
+	/** Read again after anything on this tab changes them; following a link to another tab remounts the Map, which reads them afresh. */
+	async function loadStartData() {
+		const [st, fd, sr] = await Promise.allSettled([
+			api.projects.get(projectId).then((p) => p.settings),
+			api.request<{ feeds: DataFeed[] }>('GET', `/projects/${encodeURIComponent(projectId)}/feeds`).then((r) => r.feeds),
+			api.series.list(projectId)
+		]);
+		// One that can't be read leaves its items Checking: no status is better than a wrong one.
+		dataSettings = st.status === 'fulfilled' ? st.value : null;
+		dataFeeds = fd.status === 'fulfilled' ? fd.value : null;
+		dataSeries = sr.status === 'fulfilled' ? sr.value : null;
+	}
+	$effect(() => {
+		if (startedData) untrack(() => void loadStartData());
+	});
+	const dataItems = $derived(
+		startedData && data
+			? startDataItems({
+					model: editor.model,
+					settings: dataSettings,
+					feeds: dataFeeds,
+					series: dataSeries,
+					features,
+					hasBoundary: !!boundary,
+					rain: boundary ? rainReads : null,
+					runs,
+					owner: role === 'owner',
+					boundaryAreaM2: boundary?.areaM2 ?? null,
+					// Values read over an outline redrawn since (issue #646 F7/F8): their items read Started until proposed again.
+					stale: staleValues(features, nodes, data?.accepted)
+				})
+			: null
+	);
+	async function startDataApplied() {
+		await Promise.all([onModelChanged(), loadStartData()]);
 	}
 	async function startDiscarded() {
 		notice = 'Discarded the proposed model; nothing in the model changed.';
@@ -506,6 +575,7 @@
 		tracing = false;
 		draft.place('other');
 		draft.snapOn = false;
+		prefetch(loadClickBar);
 		dividing = true;
 		void afterStart();
 	}
@@ -537,6 +607,7 @@
 		divider.clear();
 		dividing = false;
 		clickLit = null;
+		backToSheet = null;
 		draft.cancel();
 		await tick();
 		document.querySelector<HTMLButtonElement>('[data-testid="map-start-delineate"]')?.focus();
@@ -566,7 +637,12 @@
 		draft.cancel();
 		await load();
 		if (r.features[0]) await pickInPlace(r.features[0].id);
-		notice = `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
+		// Opened from the Start sheet's points step (#646 F13): each saved area is a unit's boundary there, and the sheet comes back.
+		notice =
+			backToSheet === 'start'
+				? `Saved ${r.summary} on the map as areas: each is a unit’s boundary in the Start sheet.`
+				: `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
+		await returnToStart();
 	}
 	async function pickPiece(key: string) {
 		pieceFocus = key;
@@ -973,7 +1049,8 @@
 		nodes: () => editor.model.nodes,
 		features: () => features,
 		params: () => params,
-		dark: () => dark
+		dark: () => dark,
+		settings: () => settings
 	});
 
 	// --- Layers and Key: tabs in the side column on a wide page with features (until 2026-10-03 boxes over the map's corners);
@@ -1051,9 +1128,8 @@
 			featureName: draft.feature ? featureName(draft.feature) : null
 		})
 	);
-	let rainReads = $state<RainReads>(null);
 	const setupSteps = $derived(
-		canEdit && data ? mapSetupSteps({ boundaryName: boundary ? featureName(boundary) : null, rain: boundary ? rainReads : null, canDelineate: !!delineation?.available }) : null
+		canEdit && data ? mapSetupSteps({ boundaryName: boundary ? featureName(boundary) : null, rain: boundary ? rainReads : null, canDelineate: !!delineation?.available, data: dataItems }) : null
 	);
 	const rainLink = $derived(
 		boundary && (rainReads === 'none' || rainReads === 'changed')
@@ -1107,6 +1183,7 @@
 			uploadHref={withParam(page.url, 'upload', '1')}
 			ondrawboundary={draft.mode !== 'draw' ? () => startDraw('catchment_boundary') : null}
 			ondelineate={delineation?.available && !delineating ? startDelineate : null}
+			startHref={dataItems ? withParam(page.url, 'start', '1') : null}
 		/>
 	{/if}
 {/snippet}
@@ -1119,7 +1196,7 @@
 		{/if}
 		{#if canDivide && !pendingDivide}
 			<!-- Divide the model (#326 C3's follow-up): a sheet over the page, as Start from the map is for an empty model. -->
-			<a class="btn" href={withParam(page.url, 'divide', '1')} title="Each unit’s own area and order, proposed from its point on the map" data-testid="map-divide-open">Divide the model</a>
+			<a class="btn" href={withParam(page.url, 'divide', '1')} title="Each unit’s area from its boundary on the map; the elevation model orders and checks them" data-testid="map-divide-open">Divide the model</a>
 		{/if}
 	{/if}
 {/snippet}
@@ -1197,6 +1274,11 @@
 
 <!-- The picked feature's figure from the run the map shows (#326 A1): the measure's, or a gauge's EWR, in words with its band. -->
 {#snippet resultFacts(f: MapFeature)}
+	{@const z = results.zoneOn ? featureZone(f, results.zoneBy) : null}
+	{#if z}
+		<dt>Calibration zone</dt>
+		<dd data-testid="map-card-zone">{z}</dd>
+	{/if}
 	{@const r = results.ready ? featureResult(f, results.unitBy, results.ewrBy) : null}
 	{#if r}
 		<dt>{r.measure === 'ewr' ? 'EWR' : viewLabel(results.view)}</dt>
@@ -1369,7 +1451,7 @@
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}
 					{#if canEdit && dividing && !wide}
-						<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />
+						<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
 					{:else if canEdit && draft.active && !dividing && !wide}
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
@@ -1468,7 +1550,7 @@
 									<button type="button" class="btn btn-sm map-ctl" onclick={() => mapRef?.showAll()} data-testid="map-show-everything">Show everything</button>
 								{/if}
 								<button type="button" class="btn btn-sm map-ctl" aria-expanded={keyShown} aria-controls={panelsInSide ? `${uid}-panel-key` : `${uid}-key`} bind:this={keyBtn} onclick={() => openPanel('key', !keyShown)} data-testid="map-key-toggle">
-									Key{#if results.on}<span class="ctl-sub">· {viewLabel(results.view)}</span>{/if}
+									Key{#if results.on || results.zoneOn}<span class="ctl-sub">· {viewLabel(results.view)}</span>{/if}
 								</button>
 							</div>
 						</div>
@@ -1526,7 +1608,7 @@
 					{#if canEdit && dividing && wide}
 						<!-- Beside the map: the clicks' key takes the column over, so the map keeps its height. -->
 						<div class="panel side-box card click-panel">
-							<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />
+							<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
 						</div>
 
 					{:else if !features.length}
@@ -1582,7 +1664,8 @@
 										<span class="muted">The map’s checks found no problems.</span>
 									{/if}
 								</p>
-								{#if checks.length}<MapChecks {features} {nodes} onpick={pickFromCheck} heading={false} />{/if}
+								{#if checkError}<p class="err small" role="alert" data-testid="map-check-error">{checkError}</p>{/if}
+								{#if checks.length}<MapChecks {features} {nodes} inputs={checkInputs} onpick={pickFromCheck} onuse={canEdit ? useFromCheck : undefined} {busy} heading={false} />{/if}
 							</div>
 							{#if panelsInSide}
 								<!-- Layers and Key (until 2026-10-03 boxes over the map); the map's buttons pick these tabs, Escape gives the tab back. -->
@@ -1638,6 +1721,12 @@
 					ondelineate={delineation?.available ? () => fromStart(startDelineate) : null}
 					ondraw={() => fromStart(() => startDraw('catchment_boundary'))}
 					onplace={() => fromStart(startPlace)}
+					onsubcatchments={delineation?.available ? () => fromStart(startDividing) : null}
+					ondrawunit={() => fromStart(() => startDraw('other-area'))}
+					{dataItems}
+					nodes={editor.model.nodes}
+					modelDirty={editor.dirty}
+					ondataapplied={startDataApplied}
 					onproposed={loadStart}
 					onapplied={startApplied}
 					ondiscarded={startDiscarded}
@@ -1721,6 +1810,7 @@
 							<p class="muted small grid-note">
 									Areas are computed on the server from each polygon (geodesic, WGS84).
 									{#if results.ready}Result and Band: {viewLabel(results.view).toLowerCase()} for what each area stands for, and the EWR at gauges, from the run the map shows.{/if}
+									{#if results.zoneOn}Calibration zone: its unit’s, from the saved settings.{/if}
 								</p>
 							<div class="table-wrap">
 								<table class="data map-table" data-testid="map-feature-table">
@@ -1733,6 +1823,7 @@
 											<th scope="col">Stands for</th>
 											<th scope="col">Unit’s area</th>
 											{#if results.ready}<th scope="col">Result</th><th scope="col">Band</th>{/if}
+											{#if results.zoneOn}<th scope="col">Calibration zone</th>{/if}
 											{#if canEdit}<th scope="col">Area into the model <HelpTip key="map-area" /></th><th scope="col"><span class="visually-hidden">Actions</span></th>{/if}
 										</tr>
 									</thead>
@@ -1751,13 +1842,16 @@
 													<td data-testid="map-grid-result"><span class="cell-label" aria-hidden="true">Result{' '}</span>{#if r}{r.label}{:else}<span class="muted">–</span>{/if}</td>
 													<td data-testid="map-grid-band" data-band={r?.band}><span class="cell-label" aria-hidden="true">Band{' '}</span>{#if r}{BAND_WORD[r.band]}{:else}<span class="muted">–</span>{/if}</td>
 												{/if}
+												{#if results.zoneOn}
+													<td data-testid="map-grid-zone"><span class="cell-label" aria-hidden="true">Calibration zone{' '}</span>{featureZone(f, results.zoneBy) ?? '–'}</td>
+												{/if}
 												{#if canEdit}
 													<td class="area-cell"><span class="cell-label" aria-hidden="true">Area into the model </span>{@render areaInto(f)}</td>
 													<td class="row-actions">{@render deleteButton(f)}</td>
 												{/if}
 											</tr>
 											{#if rowError?.id === f.id}
-												<tr><td colspan={(canEdit ? 7 : 5) + (results.ready ? 2 : 0)}><p class="err" role="alert">{rowError.text}</p></td></tr>
+												<tr><td colspan={(canEdit ? 7 : 5) + (results.ready ? 2 : 0) + (results.zoneOn ? 1 : 0)}><p class="err" role="alert">{rowError.text}</p></td></tr>
 											{/if}
 										{/each}
 									</tbody>
@@ -1778,7 +1872,7 @@
 											<strong>{n.name}</strong>: {fmtNum(n.areaKm2, 3)} km² ·
 											{#if n.areaSource === 'map'}
 												<span class="badge">From the map</span>
-												{src ? `“${featureName(src)}”` : 'a feature since deleted'}
+												{src ? `“${featureName(src)}”` : 'a feature since deleted'}{#if src && !alreadyAccepted(n, src)}<span data-testid="map-area-earlier">’s earlier outline (the Checks offer its area now)</span>{/if}
 											{:else}
 												typed
 											{/if}

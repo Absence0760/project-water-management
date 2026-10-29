@@ -33,8 +33,9 @@ const PUBLISHED: Record<string, string> = {
 	'methodology-10': 'a5aefa72de72037f3483aa631b50efd1526d3e3a51b791e7635d1463f560f021',
 	'methodology-11': '7a458617797c09d0a57da182d758714ed79d6d0626f7dbb25fe5ca08547c6351',
 	'methodology-12': 'ac81926f72c3f59970c7a5e93e3e7d17e71e38e0a5b2addce621f2585827c949',
-	// Revised before its first release (issue #616, the flow split by the same natural MAR share, in the same draft as #615).
-	'methodology-13': '40ba78816e17c4a17dd9ddf7f2435dbb5a39e8b9db38a0d673b67f27bc85230a'
+	// Revised before its first release (issue #616, the flow split by the same natural MAR share, in the same draft as #615;
+	// issue #622, the regional GR4J prior in § 6 and § 8).
+	'methodology-13': '01080a221739ce69ccb529a9582730fa1249af2584aae4ec688896c9ce8329a2'
 };
 
 describe('methodology statement (generated from docs/methodology)', () => {

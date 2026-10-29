@@ -28,6 +28,7 @@ import { alignFlow } from '../prepare';
 import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, fillPlanOutletEwr, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
 import { calibrationSiteIndex } from './site';
+import { zoneCompleteWaterYears, resolveZones, zoneCalibrationSettings, zoneCoverageNotes, zoneParamsOf, zoneSiteName } from './zones';
 import { MM_KM2_TO_M3, requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
 import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
@@ -43,7 +44,8 @@ import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012'
 import { wr2012FitStats, type Wr2012FitStats } from '../reference/wr2012Fit';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
 import { dds } from './dds';
-import { CALIBRATION_PARAMS, MAX_STARTS, type CalibrationBounds, type ParamSet } from './params';
+import { CALIBRATION_PARAMS, MAX_STARTS, type FitBounds, type ParamSet } from './params';
+import { calibrationPriorError, priorBox, priorPenalty, sameTarget, type CalibrationPrior, type ParamPriors, type PriorFitResult, type PriorParam } from './prior';
 import { excludedDayMask, exclusionRanges } from './provenance';
 import { bootstrapIntervals, scoreBenchmarks, type ScoreBenchmarks, type ScoreIntervals } from './bootstrap';
 import { fitScores, objectiveLoss, type FitScores } from './objective';
@@ -75,10 +77,11 @@ export interface CalibrateOptions {
 	 * §"make the logger fit identifiable"): 'wide' (default) is each
 	 * parameter's min/max (GR4J_PARAMS); 'typical' is Perrin et
 	 * al.'s (2003) 80 % range (`typical`), tighter but not always enough to
-	 * pin down a short, drought-dominated record either. The starting point is
-	 * clamped into whichever box is used.
+	 * pin down a short, drought-dominated record either; 'prior' is the regional
+	 * prior's p10–p90 box (issue #622, `prior` required; docs/model.md §2.10m).
+	 * The starting point is clamped into whichever box is used.
 	 */
-	bounds?: CalibrationBounds;
+	bounds?: FitBounds;
 	/** Model runs per optimisation (the full fit, and each validation fit). Default 1 500. */
 	budget?: number;
 	/** Default 1. The same seed gives the same result. */
@@ -126,6 +129,26 @@ export interface CalibrateOptions {
 	validationRecord?: CalibrationFlowKind;
 	/** Progress after every model run; return true to cancel (the best so far is returned). */
 	onProgress?: (p: CalibrationProgress) => boolean | void;
+	/**
+	 * The calibration zone to fit (engine 1.106.0, issue #555, ./zones.ts,
+	 * docs/model.md §2.10n): a ticked row of settings.calibrationZones, by its
+	 * gauge. Only that zone's land units take the candidate parameters; every
+	 * other unit keeps its zone's (the site's zone: settings.gr4j), and the fit
+	 * reads the zone's site, window, exclusions, record and quality flags
+	 * (zoneCalibrationSettings). Absent or null = the calibration site's own
+	 * zone (with no ticked zone, every unit: every engine before).
+	 */
+	zone?: string | null;
+	/**
+	 * The regional GR4J prior (engine 1.106.0, issue #622, ./prior.ts,
+	 * docs/model.md §2.10m): with a weight over 0, every fit's loss adds
+	 * weight × priorPenalty over the free parameters (the log-normal penalty);
+	 * under `bounds: 'prior'` the search keeps to its p10–p90 box. It must be
+	 * built for the fit's target: the catchment, or under calibration zones
+	 * the zone being fitted (its gauge and land units). Absent: no prior, and
+	 * the fit is every engine's before it, to the bit.
+	 */
+	prior?: CalibrationPrior;
 }
 
 /** 'unpenalised': the second full fit, without the WR2012 MAR penalty, run only when the penalty is on. */
@@ -215,8 +238,8 @@ export interface StartResult {
 export interface CalibrationReport {
 	model: RunoffModelId;
 	objective: ObjectiveId;
-	/** The box the search explored (issue #4 phase 6 §"make the logger fit identifiable"). */
-	bounds: CalibrationBounds;
+	/** The box the search explored (issue #4 phase 6 §"make the logger fit identifiable"; 'prior': the regional prior's, issue #622). */
+	bounds: FitBounds;
 	budget: number;
 	seed: number;
 	/** Starts of the full fit, and each one's result (`CalibrateOptions.starts`). */
@@ -238,6 +261,10 @@ export interface CalibrationReport {
 	siteNodeId?: string | null;
 	/** The stored series fitted to (engine ≥ 1.102.0, CalibrationProblem.flowSeriesId); absent when the input didn't say. */
 	flowSeriesId?: string;
+	/** The calibration zone fitted (engine 1.106.0, issue #555): its gauge, null = the site's own zone; absent without zones. */
+	zoneNodeId?: string | null;
+	/** The land units the fitted parameters are for (engine 1.106.0); absent without zones (every unit). */
+	zoneUnits?: string[];
 	simulatedKey: 'simulated_outflow';
 	fit: ScoredPeriod;
 	/** The project's current parameters scored on the same days. */
@@ -253,6 +280,8 @@ export interface CalibrationReport {
 	 * was on: its weight, and the fit with and without it. null (or absent) when off.
 	 */
 	marPenalty?: MarPenaltyResult | null;
+	/** The regional prior, when the fit used one (engine 1.106.0, issue #622): its penalty weight, box, ranges and provenance. Absent without. */
+	prior?: PriorFitResult;
 	/** Every period left out of the scores: the stored exclusions, then `exclusions`. */
 	exclusions: DateRange[];
 	/**
@@ -326,6 +355,10 @@ export interface CalibrationProblem {
 	flowKind: string;
 	/** Where the record is and the simulated flow is taken (engine ≥ 1.41.0): null = the outlet, else the gauge's node id. */
 	siteNodeId: string | null;
+	/** The calibration zone fitted (engine 1.106.0, CalibrateOptions.zone): its gauge, null = the site's own zone; absent without zones. */
+	zoneNodeId?: string | null;
+	/** The land units whose parameters the candidates move (engine 1.106.0); absent without zones (every unit). */
+	zoneUnits?: string[];
 	/** The stored series the fitted record is (DailySeries.seriesId, engine ≥ 1.102.0): whose kept checks change the scored days. Null when the input doesn't say. */
 	flowSeriesId: string | null;
 	/** The calibration records at the site, in CALIBRATION_FLOW_KINDS order: the fitted one and any for independent validation. */
@@ -410,16 +443,27 @@ export interface RecordProblem {
 }
 
 /** Build the calibration problem for a project. Throws when there is nothing to calibrate against. */
-export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = [], model?: RunoffModelId): CalibrationProblem {
+export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = [], model?: RunoffModelId, zoneNodeId: string | null = null): CalibrationProblem {
 	const run = prepareRun(input);
 	// The fit reads a record's own missing periods as gaps, as the run does (engine ≥ 1.102.0, ../recordPeriods.ts).
 	if (run.series !== input.series) input = { ...input, series: run.series };
 	const { settings, days, startDate, aligned, month, warnings, start } = run;
+	// Calibration zones (engine 1.106.0, issue #555, ./zones.ts): the zones the run applies, and the settings this fit
+	// reads its site, window, exclusions, record, quality flags and start from (the zone's, or the project's for the
+	// site's own zone). No ticked zone: `zones` is null and every unit takes the candidate, as before.
+	const baseParams = resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings);
+	const zones = resolveZones(input.model.nodes, settings, baseParams, warnings);
+	if (zoneNodeId !== null) {
+		if (!zones) throw new Error('calibration zones need Per unit flow generation and a ticked, usable gauge: there is no zone to fit');
+		if (!zones.zones.some((z) => z.nodeId === zoneNodeId)) throw new Error(`no ticked calibration zone at gauge node ${zoneNodeId}`);
+	}
+	const cs = zoneCalibrationSettings(settings, zoneNodeId);
 	const modelId = model ?? settings.runoffModel;
 	// Refused as runModel refuses it (runoff/simulate.ts).
 	if (!hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')), hasDailyEt0Value(aligned('evap_et0_mm')))) throw new Error(GR4J_NO_PET);
 	const area = requireCatchmentAreaKm2(settings.calibration, input);
-	const startParams: ParamSet = { ...resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings) };
+	// A zone's start: its row's parameters (in bounds, sanitizeCalibrationZones) over the catchment's, already warned of.
+	const startParams: ParamSet = zoneNodeId === null ? { ...baseParams } : { ...resolveParams<Gr4jParams>(GR4J_PARAMS, cs.gr4j, 'GR4J', []) };
 	const natural = new Float64Array(days);
 	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.28.0).
 	const { historyDays } = forecastTail(run);
@@ -456,12 +500,12 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	);
 
 	// The site (engine ≥ 1.41.0, ./site.ts): the outlet's records and outflow, or an inner gauge's.
-	const siteNodeId = settings.calibrationSiteNodeId ?? null;
+	const siteNodeId = cs.calibrationSiteNodeId ?? null;
 	const siteIndex = calibrationSiteIndex(input.model.nodes, topo.outflow, siteNodeId);
 	const series = input.series ?? {};
 	const at = (k: CalibrationFlowKind) => series[calibrationSeriesKey(k, siteNodeId)];
 	const siteSeries: ModelInput['series'] = siteNodeId === null ? series : Object.fromEntries(CALIBRATION_FLOW_KINDS.flatMap((k) => (at(k) ? [[k, at(k)!]] : [])));
-	const kind = pickObservedKind(settings.calibrationFlowKind, siteSeries, warnings);
+	const kind = pickObservedKind(cs.calibrationFlowKind, siteSeries, warnings);
 	if (!kind) {
 		throw new Error(
 			siteNodeId === null
@@ -475,9 +519,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const observed = observedOf(kind);
 
 	const d0 = run.start;
-	const lo = settings.calibrationStart ? toEpochDay(settings.calibrationStart) - d0 : 0;
-	const hi = settings.calibrationEnd ? toEpochDay(settings.calibrationEnd) - d0 : days - 1;
-	const allExclusions: DateRange[] = [...exclusionRanges(settings.calibrationExclusions).map(({ start, end }) => ({ start, end })), ...exclusions];
+	const lo = cs.calibrationStart ? toEpochDay(cs.calibrationStart) - d0 : 0;
+	const hi = cs.calibrationEnd ? toEpochDay(cs.calibrationEnd) - d0 : days - 1;
+	const allExclusions: DateRange[] = [...exclusionRanges(cs.calibrationExclusions).map(({ start, end }) => ({ start, end })), ...exclusions];
 	const excluded = excludedDayMask(allExclusions, startDate, days);
 	const windowIdx: number[] = [];
 	for (let t = Math.max(0, lo); t <= Math.min(days - 1, hi); t++) if (!excluded[t]) windowIdx.push(t);
@@ -489,8 +533,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// The gauged ranges (settings.qualityFlags.ratings) are the outlet records' ratings, so a gauge's record has none:
 	// no day of it can be flagged as extrapolated. The data checks' suspect days still apply.
 	// The same classes the run stores as `observed_flow_quality` (recordFlowFlags).
-	const qf = siteQualityFlags(settings.qualityFlags, siteNodeId);
-	const flagsOf = (k: CalibrationFlowKind) => recordFlowFlags({ kind: k, series: siteSeries[k], start: d0, days, settings, siteNodeId, flowFill: run.flowFill });
+	const qf = siteQualityFlags(cs.qualityFlags, siteNodeId);
+	const flagsOf = (k: CalibrationFlowKind) => recordFlowFlags({ kind: k, series: siteSeries[k], start: d0, days, settings: cs, siteNodeId, flowFill: run.flowFill });
 	const flags = flagsOf(kind);
 	const scoring = scoringDays(windowIdx, flags, qf, ratingOf(qf, kind), days);
 	const idx = scoring.idx;
@@ -517,7 +561,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		if (perUnit) {
 			// The same products and the same node-id order as the run's (runoff/simulate.ts unitNaturalFlow), so a scored
 			// day's flow is runModel's to the bit.
-			const traces = simulateUnits(perUnit.units, p as unknown as Gr4jParams, forcing.petMm, { warmupDays, trace: false, days: n, cycleDays: historyDays });
+			// Under calibration zones only the fitted zone's units take the candidate; the rest keep their zone's.
+			const paramsOf = zoneParamsOf(zones, baseParams, { zone: zoneNodeId, free: p as unknown as Gr4jParams });
+			const traces = simulateUnits(perUnit.units, p as unknown as Gr4jParams, forcing.petMm, { warmupDays, trace: false, days: n, cycleDays: historyDays, ...(paramsOf ? { paramsOf } : {}) });
 			natural.fill(0, 0, n);
 			perUnit.units.forEach((u, k) => {
 				const q = traces[k]!.qMm;
@@ -579,6 +625,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		startParams,
 		flowKind: kind,
 		siteNodeId,
+		...(zones ? { zoneNodeId, zoneUnits: zoneNodeId === null ? [...zones.primaryUnits] : [...zones.zones.find((z) => z.nodeId === zoneNodeId)!.units] } : {}),
 		flowSeriesId: siteSeries[kind]?.seriesId ?? null,
 		records: CALIBRATION_FLOW_KINDS.filter((k) => !!siteSeries[k]),
 		observed,
@@ -601,7 +648,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		natural,
 		// On natural flow, never the outflow: WR2012 flows are naturalised. They are net of WRSM's Bedloss
 		// too, so with bed losses on (engine ≥ 1.76.0) on the natural flow at the outlet net of them.
-		marPenalty: netOfReachLosses(
+		// A zone above the site moves only its own units' flow, so the catchment's WR2012 MAR is no target for it.
+		marPenalty: zoneNodeId !== null ? null : netOfReachLosses(
 			wr2012Penalty(
 				settings.wr2012,
 				startDate,
@@ -644,6 +692,14 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
  */
 export const siteNote = (name: string): string =>
 	`Scored at the gauge "${name}": its record against the simulated flow there. The gauged ranges and gap filling in Calibration → Calibration record are the outlet records', so none applies to this record. A run scores its calibration statistics here too; the outlet's EWR test stays the outlet's.`;
+
+/** A fit of a calibration zone above the site (engine 1.106.0, issue #555): what it moves and what it leaves. */
+export const zoneNote = (name: string, units: number): string =>
+	`Fitted the calibration zone at the gauge "${name}": the parameters of its ${units} land unit${units === 1 ? '' : 's'} only, on that gauge's record against the simulated flow there, with every zone above it at its own parameters. The gauged ranges, gap filling and WR2012 MAR penalty are the outlet's, so none applies to this record; the run's calibration statistics stay at the calibration site.`;
+
+/** A fit of the site's own zone when zones above it apply (engine 1.106.0). */
+export const siteZoneNote = (units: number): string =>
+	`Fitted the calibration site's own zone: the parameters of its ${units} land unit${units === 1 ? '' : 's'}, with the units in the calibration zones above it at their zones' parameters.`;
 
 /** Observed and simulated values on the given days. */
 function pair(obs: Float64Array, sim: Float64Array, idx: Int32Array): [Float64Array, Float64Array] {
@@ -728,7 +784,9 @@ export const SCATTER_SHARE = 0.1;
 export function startsNotes(
 	objective: ObjectiveId,
 	results: readonly StartResult[],
-	specs: readonly { key: string; label: string; unit: string; lo: number; hi: number }[]
+	specs: readonly { key: string; label: string; unit: string; lo: number; hi: number }[],
+	/** The regional prior's penalty was on (issue #622): the start kept is the one with the lowest penalised loss, not the best score. */
+	priorPenalised = false
 ): string[] {
 	const scored = results.filter((r): r is StartResult & { score: number } => r.score !== null);
 	if (scored.length < 2) return [];
@@ -757,7 +815,9 @@ export function startsNotes(
 	if (short.length) {
 		out.push(
 			`${short.length} of ${results.length} starts stopped short of the best ${label} (lowest ${fmt(Math.min(...short.map((r) => r.score)))} against ${fmt(top)}); ` +
-				'the best is kept. If many do, a larger budget may find better parameters.'
+				(priorPenalised
+					? 'the start with the lowest loss, the regional prior’s penalty included, is kept, so it need not be the one with the best score.'
+					: 'the best is kept. If many do, a larger budget may find better parameters.')
 		);
 	}
 	return out;
@@ -773,8 +833,9 @@ function fit(
 	stage: CalibrationStage,
 	onProgress: CalibrateOptions['onProgress'],
 	penalty: Wr2012Penalty | null = null,
-	bounds: CalibrationBounds = 'wide',
-	start?: { start: number; starts: number }
+	bounds: FitBounds = 'wide',
+	start?: { start: number; starts: number },
+	prior: FitPrior | null = null
 ): FitResult {
 	const specs = free.map((k) => CALIBRATION_PARAMS[pb.model].find((s) => s.key === k)!);
 	const p: ParamSet = { ...pb.startParams };
@@ -794,11 +855,13 @@ function fit(
 			obs[i] = sim[i]! >= c ? sim[i]! : c;
 		}
 		const l = objectiveLoss(objective, obs, sim, years);
-		return penalty ? l + penalty.penalty(pb.natural) : l;
+		const m = penalty ? l + penalty.penalty(pb.natural) : l;
+		// The regional prior's log-normal penalty over the free parameters (issue #622), when its weight is over 0.
+		return prior && prior.weight > 0 ? m + prior.weight * priorPenalty(prior.ranges, p) : m;
 	};
 	const res = dds(
 		loss,
-		specs.map((s) => (bounds === 'typical' ? { min: s.typical[0], max: s.typical[1] } : { min: s.min, max: s.max })),
+		specs.map((s) => boxOf(s, bounds, prior)),
 		{
 			budget,
 			seed,
@@ -809,6 +872,19 @@ function fit(
 	const params: ParamSet = { ...pb.startParams };
 	specs.forEach((s, j) => (params[s.key] = res.x[j]!));
 	return { params, loss: res.f, evaluations: res.evaluations, cancelled: res.stopped };
+}
+
+/** The prior as a fit reads it: its weight, and its ranges for the free parameters only (a fixed one is no choice of the fit's). */
+interface FitPrior {
+	weight: number;
+	ranges: Partial<ParamPriors>;
+	box: ReturnType<typeof priorBox>;
+}
+
+/** A parameter's search box: GR4J's min/max, Perrin's typical range, or the prior's p10–p90 (inside the min/max). */
+function boxOf(s: (typeof CALIBRATION_PARAMS)['gr4j'][number], bounds: FitBounds, prior: FitPrior | null): { min: number; max: number } {
+	if (bounds === 'prior') return prior!.box[s.key as PriorParam];
+	return bounds === 'typical' ? { min: s.typical[0], max: s.typical[1] } : { min: s.min, max: s.max };
 }
 
 /** Days grouped by water year, for water years with at least `minDays` scored days. */
@@ -916,6 +992,61 @@ export function validationNotes(
 const MIN_DAYS_PER_YEAR = 180;
 const WET_DRY_CONTRAST = 1.5;
 
+/**
+ * The prior as the fits read it, after checking it (issue #622): null with no
+ * prior. Throws on a prior that can't be one, `bounds: 'prior'` without one, a
+ * prior that would do nothing (no weight, no box), or one built for another
+ * target than the fit's (the catchment, or the calibration zone fitted).
+ */
+function fitPriorOf(p: CalibrationPrior | undefined, bounds: FitBounds, free: readonly string[], pb: CalibrationProblem): FitPrior | null {
+	if (!p) {
+		if (bounds === 'prior') throw new Error('the prior bounds need a regional prior');
+		return null;
+	}
+	const err = calibrationPriorError(p);
+	if (err) throw new Error(err);
+	if (!(p.weight > 0) && bounds !== 'prior') throw new Error('a regional prior with no penalty weight is used only as the search box (bounds “prior”)');
+	const t = p.provenance.target;
+	const units = pb.zoneUnits ? [...pb.zoneUnits] : null;
+	if (!sameTarget(t, { zoneNodeId: units === null ? null : (pb.zoneNodeId ?? null), units })) {
+		throw new Error(
+			units === null
+				? 'the regional prior was built for a calibration zone, but this fit is of the whole catchment: build the prior for the catchment'
+				: 'the regional prior was built for another target than the calibration zone fitted: build it for this zone’s land units'
+		);
+	}
+	const ranges: Partial<ParamPriors> = {};
+	for (const k of free) if (k in p.ranges) ranges[k as PriorParam] = p.ranges[k as PriorParam];
+	return { weight: p.weight, ranges, box: priorBox(p.ranges) };
+}
+
+/**
+ * What a fit with the regional prior says about it (issue #622): what it did,
+ * a free parameter its box pins (clipped to GR4J's bounds or with no spread),
+ * and when the prior has no skill or no score.
+ */
+export function priorNotes(p: CalibrationPrior, bounded: boolean, free: readonly string[] = []): string[] {
+	const n = p.provenance.donors.length;
+	const how = [p.weight > 0 ? `a penalty of weight ${p.weight} pulled the parameters toward its medians` : null, bounded ? 'the search kept to its p10–p90 box' : null]
+		.filter(Boolean)
+		.join(', and ');
+	const out = [`The fit used the regional GR4J prior from ${n} donor basin${n === 1 ? '' : 's'} of ${p.provenance.donorCount} (${p.provenance.dataset}${p.provenance.synthetic ? ', invented donors' : ''}): ${how}.`];
+	if (bounded) {
+		const box = priorBox(p.ranges);
+		const pinned = free.filter((k): k is PriorParam => k in box && !(box[k as PriorParam].max - box[k as PriorParam].min > 1e-9));
+		if (pinned.length) out.push(`The prior’s box holds ${pinned.join(', ')} at one value (no spread among the donors, or clipped to GR4J’s bounds), so the fit doesn’t move ${pinned.length === 1 ? 'it' : 'them'}.`);
+	}
+	const skill = p.provenance.leaveOneOutSkill;
+	if (skill === null || skill <= 0) {
+		out.push(
+			skill === null
+				? 'The prior has no leave-one-out score (too few donors), so how well it predicts a catchment’s parameters is unknown.'
+				: `The prior has no skill: left out in turn, the donors’ parameters are predicted no better than by the plain median of the others (skill ${skill.toFixed(2)}).`
+		);
+	}
+	return out;
+}
+
 /** Calibrate a runoff model's parameters against the project's observed flow. */
 export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): CalibrationReport {
 	const objective = opts.objective ?? 'kgePrime';
@@ -923,17 +1054,18 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	const budget = Math.max(10, Math.floor(opts.budget ?? 1500));
 	const seed = opts.seed ?? 1;
 	const starts = Math.min(MAX_STARTS, Math.max(1, Math.floor(opts.starts ?? 1)));
-	const pb = prepareCalibration(input, opts.exclusions, opts.model);
+	const pb = prepareCalibration(input, opts.exclusions, opts.model, opts.zone ?? null);
 	const specs = CALIBRATION_PARAMS[pb.model];
 	const free = opts.free ?? specs.filter((s) => !s.fixedByDefault).map((s) => s.key);
 	if (free.length === 0) throw new Error('no parameters to calibrate');
 	const unknown = free.filter((k) => !specs.some((s) => s.key === k));
 	if (unknown.length) throw new Error(`not a calibratable ${pb.model} parameter: ${unknown.join(', ')}`);
+	const prior = fitPriorOf(opts.prior, bounds, free, pb);
 	let evaluations = 0;
 	let cancelled = false;
 	const penalty = pb.marPenalty;
 	const fitOnce = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true, start?: { start: number; starts: number }) => {
-		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null, bounds, start);
+		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null, bounds, start, prior);
 		evaluations += r.evaluations;
 		cancelled ||= r.cancelled;
 		return r;
@@ -1089,12 +1221,21 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			startResults,
 			free.map((k) => {
 				const s = specs.find((x) => x.key === k)!;
-				const [lo, hi] = bounds === 'typical' ? s.typical : [s.min, s.max];
+				const { min: lo, max: hi } = boxOf(s, bounds, prior);
 				return { key: k, label: s.label, unit: s.unit, lo, hi };
-			})
+			}),
+			!!prior && prior.weight > 0
 		)
 	);
-	if (pb.siteNodeId !== null) notes.push(siteNote(input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId));
+	if (pb.zoneNodeId != null) notes.push(zoneNote(input.model.nodes.find((n) => n.id === pb.zoneNodeId)?.name ?? pb.zoneNodeId, pb.zoneUnits?.length ?? 0));
+	else if (pb.siteNodeId !== null) notes.push(siteNote(input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId));
+	if (pb.zoneNodeId === null && pb.zoneUnits) notes.push(siteZoneNote(pb.zoneUnits.length));
+	// Under calibration zones each step warns of a short record or no dry year at its gauge (issue #555).
+	if (pb.zoneUnits) {
+		const at = pb.siteNodeId === null ? zoneSiteName(input.model.nodes, null) : (input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId);
+		notes.push(...zoneCoverageNotes(at, zoneCompleteWaterYears(pb.startDate, pb.allDays ?? all).length, differential !== null));
+	}
+	if (opts.prior) notes.push(...priorNotes(opts.prior, bounds === 'prior', free));
 	if (cancelled) notes.push('Calibration was cancelled: the parameters are the best found before it stopped.');
 
 	const fitClean = scored(pb, params, all);
@@ -1115,6 +1256,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		startParams: pb.startParams,
 		flowKind: pb.flowKind,
 		siteNodeId: pb.siteNodeId,
+		...(pb.zoneUnits ? { zoneNodeId: pb.zoneNodeId ?? null, zoneUnits: [...pb.zoneUnits] } : {}),
 		...(pb.flowSeriesId ? { flowSeriesId: pb.flowSeriesId } : {}),
 		simulatedKey: 'simulated_outflow',
 		fit: fitClean,
@@ -1123,6 +1265,18 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		differential,
 		independentRecord,
 		marPenalty,
+		...(opts.prior && prior
+			? {
+					prior: {
+						weight: opts.prior.weight,
+						bounded: bounds === 'prior',
+						ranges: structuredClone(opts.prior.ranges),
+						provenance: structuredClone(opts.prior.provenance),
+						penaltyAtFit: priorPenalty(prior.ranges, params),
+						penaltyAtStart: priorPenalty(prior.ranges, pb.startParams)
+					}
+				}
+			: {}),
 		notes,
 		exclusions: pb.exclusions,
 		representativeness,

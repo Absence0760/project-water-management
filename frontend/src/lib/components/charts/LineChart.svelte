@@ -10,7 +10,7 @@
 	import 'uplot/dist/uPlot.min.css';
 	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
-	import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, laneRoom, logFloor, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
+	import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, focusWindow, isolatedIndices, laneRoom, logFloor, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
 	import { zoomHint } from './zoomHint';
 
 	let {
@@ -36,6 +36,7 @@
 		lanesNote = '',
 		lanesRoom = false,
 		band,
+		focus,
 		pannable = true,
 		print = false,
 		printWidth = 680,
@@ -103,6 +104,12 @@
 		 * so it never rests on colour alone. The forecast days (WP-2.12).
 		 */
 		band?: { from: string; to?: string; label: string; note: string };
+		/**
+		 * Daily charts: a period to open on (focusWindow: the period with context on each side), in place of the
+		 * recent window, e.g. a warning's View. A new period moves the view to it; a zoom or pan after that is the
+		 * reader's.
+		 */
+		focus?: { start: string; end: string } | null;
 		/**
 		 * Daily charts: Shift+drag moves the view through the record, with
 		 * Earlier / Later buttons as the non-drag route (shown once there is
@@ -331,13 +338,29 @@
 		// A rebuild (log scale, units, theme) keeps the window the user was
 		// looking at; a first build, or a window the new data doesn't cover,
 		// opens on the recent period as before.
-		if (isTime && prev && prev.min >= dataLo && prev.max <= dataHi && prev.max - prev.min < dataHi - dataLo) plot.setScale('x', prev);
+		const focused = isTime && focus && focusKey !== focusShown ? focusWindow(focus, dataLo, dataHi) : null;
+		if (focused) {
+			focusShown = focusKey;
+			plot.setScale('x', focused);
+		} else if (isTime && prev && prev.min >= dataLo && prev.max <= dataHi && prev.max - prev.min < dataHi - dataLo) plot.setScale('x', prev);
 		else if (windows?.length && isTime) {
 			const open = windows.findIndex((w) => w.days === recentDays);
 			applyWindow(picked ?? (open >= 0 ? open : windows.length - 1));
 		} else if (canWindow) showRecent();
 		if (isTime && pannable) attachPan(plot);
 	}
+
+	// The focused period shown last: a rebuild (log scale, theme) keeps the reader's view; a new period moves it.
+	const focusKey = $derived(focus ? `${focus.start}~${focus.end}` : null);
+	let focusShown: string | null = null;
+	$effect(() => {
+		const key = focusKey;
+		if (!plot || !isTime || !focus || key === focusShown || !aligned.x.length) return;
+		const w = focusWindow(focus, dataLo, dataHi);
+		if (!w) return;
+		focusShown = key;
+		untrack(() => plot!.setScale('x', w));
+	});
 
 	/** Shift+drag moves the view; a plain drag is left to uPlot's zoom box. */
 	function attachPan(u: uPlot) {

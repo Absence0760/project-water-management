@@ -96,4 +96,20 @@ describe('the Checks panel', () => {
 		expect(text(body)).toContain('Alpha, Bravo');
 		expect(body).not.toContain('<button');
 	});
+
+	it('offers Use for a unit area from an earlier outline to an editor, and links a stale value to where it is proposed again (issue #646)', () => {
+		// The unit took 3 km² from its parcel, which is 4 km² now; its MAP was taken over the parcel before it was redrawn.
+		const nodes = [{ ...unit('a', 'Alpha'), areaKm2: 3, areaFeatureId: 'p1' }];
+		const features = [parcel('p1', 'Alpha', 'a', 21)];
+		const inputs = { accepted: { unitMap: [{ nodeId: 'a', polygon: { featureId: 'p1', updatedAt: '2026-09-01T00:00:00Z', areaM2: 3e6 } }], unitRain: [], landCover: [], evaporation: [] } };
+		const editor = render(MapChecks, { props: { features, nodes, inputs, onpick: () => {}, onuse: () => {} } }).body;
+		expect(text(editor)).toContain("Alpha's area is from an earlier outline of Alpha: 3.00 km² in the model, 4.00 km² now.");
+		expect(editor).toContain('data-testid="map-check-use"');
+		expect(text(editor)).toContain('Use 4.00 km²');
+		expect(editor).toContain('href="?tab=settings#set-unit-map"');
+		// A viewer reads the same warnings without Use.
+		const viewer = render(MapChecks, { props: { features, nodes, inputs } }).body;
+		expect(viewer).not.toContain('data-testid="map-check-use"');
+		expect(viewer).toContain('data-testid="map-check-link"');
+	});
 });

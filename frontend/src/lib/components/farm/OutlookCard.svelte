@@ -21,6 +21,7 @@
 	<p>{vm.got}</p>
 	{#if vm.dam}<p>{vm.dam}</p>{/if}
 	{#if vm.review}<p>{vm.review}</p>{/if}
+	{#if vm.forecast}<p data-testid="farm-outlook-forecast">{vm.forecast}</p>{/if}
 	<p class="fine">{vm.fine}</p>
 	<a class="link" href={wordsHref(basePath(), page.url, 'farm-season-outlook')}>{t('What is the season outlook?')}</a>
 </section>

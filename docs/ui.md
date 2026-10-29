@@ -3228,7 +3228,7 @@ itself.
   previous page"). A drawing that fits its page prints as one picture, as
   before, and the screen never bands.
 - **Colour hydrological units by** (the Catchment map card's header, offered once there is
-  a farm and a run; component state, not kept in the URL, so no old link can
+  a farm and a run, or a farm and a calibration zone; component state, not kept in the URL, so no old link can
   name a removed mode). Rules in
   `network/farmColour.ts`; each mode gives every farm a band, the words for its
   second label line, the legend entries and a caption sentence, so nothing is
@@ -3244,6 +3244,19 @@ itself.
     (`SUPPLY_TARGET`), **70–95 %** and **under 70 %** (`LOW_SUPPLY`), "no
     demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
     (added since) hatched. Label: "82% supplied".
+  - **Calibration zone** (issue #555, offered whenever a calibration zone
+    applies, with or without a run: a gauge ticked in Calibrate at several
+    gauges under Per unit flow generation; `farmColour.ts` `zoneColouring`,
+    zones from `calibration/zoneGroups.ts`): each land unit in its zone's
+    colour (the crop palette's tokens in order, `ZONE_TOKENS`, upstream first,
+    the calibration site's zone last), from the model as edited and the saved
+    settings by the engine's own rule (`resolveZones`), so it is what the next
+    run applies, not a run's (no "unsaved changes" line). Label: "Middle weir
+    zone", "Outflow gauge zone (calibration site)", ", not fitted yet" while
+    the zone's units take the catchment's parameters; a farm with no land area
+    is dashed, "no land area, in no zone". The key (**Colour: calibration
+    zone**) lists each zone with its unit count. Under Fragmentation, or with
+    no usable ticked gauge, the option isn't offered.
   - **Dam level, end of latest run** (offered with a run and a dam): each
     dam's storage on the run's last day, from the run summary's dam figures
     (engine ≥ 1.2.0, issue #55, `damLevelsFromSummary`), or for an older run
@@ -3889,7 +3902,17 @@ map" card) stays the schematic; this is the geography.
   marker's `data-state`, `loading`, `current`, `changed`, `none`, `error`,
   says when it is in). The pill goes once both are done, and doesn't show
   while the feeds are still read or failed to load. Viewers don't get it (the
-  header's context line says "no boundary").
+  header's context line says "no boundary"). **A model started from the
+  map** (issue #646 F2, `startData.ts`) keeps its data step here once the
+  Start sheet is closed: the pill lists the same to-do items as the sheet's
+  data step (below), each with its status beside its title (Done, Started,
+  To do, Checking; `data-status` on the step), its detail line and, while
+  not done, a link to where it is accepted named by the place ("Data →
+  Data feeds", "Model settings → Demand" · "Evaporation from the map", each
+  link a 24 px target), and under the list **Review each unit’s rain and
+  MAP together** (`start=1`, the sheet's data step). The popover scrolls
+  inside the window. The pill goes once every item a run needs is done
+  (the optional ones aside).
 - **Section header** (`fillHeader`; the header's "Map" is the page's only
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
@@ -4031,7 +4054,7 @@ map" card) stays the schematic; this is the geography.
   `MapKeyRow.svelte`, state in `mapResults.svelte.ts`): **Colour areas by**
   (`measure=`: Days short, the default and so absent from the URL;
   `curtailment`, `dam-level`, `allocation`; `kind` is the off state, the kind
-  colours above) and, for editors and owners when there is more than one run,
+  colours above; `zone`, **Calibration zone**, below) and, for editors and owners when there is more than one run,
   **Run** (`run=`; each option "name · day · published"). Both are history
   entries, so Back undoes a change. The run is the published one by default;
   an editor with nothing published sees their newest; below editor only the
@@ -4049,6 +4072,18 @@ map" card) stays the schematic; this is the geography.
   is never the only way to read a colour. Loading and a failed load (with
   Retry) show beside the pickers; dam level loads the run's dam levels as the
   Network does. The page fits 1440×960 with thirty units and the legend.
+- **Calibration zone** on the map (issue #555, `measure=zone`; maps.md §
+  Calibration zones on the map): offered in **Colour areas by** whenever a
+  calibration zone applies, with or without a run (with no run the picker
+  offers only it and Kind, and the no-run line stays). Each area linked to a
+  land unit takes its zone's colour (the Network's, read from the theme), every
+  other area "No figure"'s; the Run picker hides, since no run is read. A line
+  says where the zones come from, the legend (**Calibration zone**,
+  `MapZoneKey.svelte`, its own chunk, loaded only while zones show, which keeps
+  the Map tab's chunk under its 60 KB ceiling) lists each
+  zone in words with its unit count, the picked feature's card adds
+  **Calibration zone** ("Middle weir zone"; "Not linked to a unit"; "In no
+  zone (not a land unit)") and Every feature a **Calibration zone** column.
 - **The picked feature's card** (the side column's Details): its name, Kind,
   Area (or Position, or Shape for a line), **Stands for** (a select of the
   nodes of fitting kinds for editors, else the node's name), **Siting** for
@@ -4111,8 +4146,11 @@ map" card) stays the schematic; this is the geography.
   composite dam, the default, / Another water user (no land) / Not in the
   model), other point (Its unit’s river pump, the default, / Another water
   user / Not in the model) and gauge (A gauge in the network (no land), the
-  default, / Not in the model) with a select, **Place a point** (into the
-  drawing mode, back after the save), the outlet (The boundary’s own
+  default, / Not in the model) with a select, **Draw a unit’s boundary**
+  (an *other* area), **Sub-catchments, one per click** (with a DEM; the
+  saved pieces' notice says "each is a unit’s boundary in the Start sheet")
+  and **Place a point** (each into its mode, back after the save; #646
+  F13), the outlet (The boundary’s own
   outlet, or a gauge), the count (`countText`: "2 units, plus the rest of
   the catchment; 1 dam or pump as part of the unit around it."), and
   **Propose the network**. **The proposal** (drawn on the map piece by
@@ -4145,10 +4183,44 @@ map" card) stays the schematic; this is the geography.
   which asks first ("The empty model gets 4 hydrological units, with 3 areas (a unit’s is
   its boundary on the map) and 2 drains-into from the proposal. Each unit’s
   dams and pump are linked to it, their sizes yours to enter. … It is
-  saved now as one change in History."). **Data and the first run**: links
-  to rain from the boundary, observed flow, evaporation (the A-pan the dams lose, to Settings' Demand group), each unit’s composite dam (its volume and the area draining to it yours to enter; the register a reference only), cultivated
-  area, the Network and **Run the model**. With nodes typed in, the sheet
-  says the model isn't started from the map and points to Divide the model.
+  saved now as one change in History."). **Data and the first run** (issue
+  #646 item 2; `StartDataList.svelte`, `startData.ts`): a to-do list in the
+  order a run reads it, each line numbered (a check once done), its title a
+  link to where it is accepted, its status (Done, Started, To do,
+  Checking), **Next** on the first a run still needs, "(optional)" on the
+  catchment's MAP, the WR2012 check, the cultivated area and the units'
+  areas, and a detail line with the place in words: The units’ areas and
+  order (Network), How natural flow is made (`#set-share`), Rain from the
+  boundary (`?rain=boundary`), The catchment’s MAP (`#set-share`), Rain for
+  each unit (`?rain=units`), MAP for each unit (`#set-unit-map`),
+  Evaporation (Settings' Demand group, the A-pan the dams lose, with
+  Evaporation from the map beside it), WR2012 check (`#set-wr2012`),
+  Observed flow (`?tab=series&feed=dws#data-feeds`: the attach card opens
+  on a DWS gauge with the nearest gauging stations proposed, for an
+  owner), Each unit’s composite dam (Dams: its volume and the area
+  draining to it yours to enter; the register a reference only),
+  Cultivated area (Crops) and **Run the model** (Runs & results). Each
+  status is worked out from what the project holds (the settings, the feed
+  list, the series list, the model, the runs), read when the Map opens and
+  again after an apply here. Evaporation is done once the monthly A-pan or
+  a daily A-pan series is set; until then it reads "A-pan not set: crop
+  demand and dam evaporation are zero" (issue #646 item 5). A unit's rain,
+  its MAP, a planted area from land cover or the evaporation from the map
+  read over an outline redrawn since turns its item back to Started with
+  "Changed since: …" (F7, F8; `stale.ts`). For an editor, the feed items
+  say "An owner of the project attaches it", and past about 2,500 km² the
+  boundary's rain item says one feed will refuse it (F14). Under it, **Each unit’s rain and MAP,
+  together** (`StartUnitsData.svelte`): one row a land unit, its MAP from
+  the MAP grid ("640 mm (now 600 mm)", the grid cited above the table) and
+  its rain ("A new feed: 3 cells, 62 % of their area inside"), each with a
+  tick, unticked at first; a value already in the model, or none with the
+  reason ("None: outside the grid"); **Tick all** and **Apply the ticked
+  values** (asks first, naming the grid and the product; disabled while
+  the model has unsaved changes), then "Applied: …" and the list's
+  statuses follow. An editor sees the rain without a tick ("an owner sets
+  the feed up"). With nodes typed in, the sheet says the model isn't
+  started from the map and points to Divide the model (each unit's area
+  from its boundary, the elevation model ordering and checking them).
   With the sheet closed, a piece (or its number) under the pointer shows
   "Proposed piece 2 / <name>" over the map's corner, a click on one opens
   the sheet at its card, focused, and a line over the map ("A proposed
@@ -4170,6 +4242,16 @@ map" card) stays the schematic; this is the geography.
   so; an outlet gauge with none stops the proposal with the server's
   sentence. There is no confluence question any more (it went with issue
   #472). Divide's sheet does the same.
+- **A catchment too large to route at once** (`start-17`, issue #646;
+  [maps.md § Start from the map](./maps.md#start-from-the-map)): Start
+  answers straight away with the plan a server without a DEM would make (each
+  unit its boundary's area, no order, the first warning saying what wasn't
+  routed or checked), and the sheet says the routed plan is being worked out
+  in the background; where the worker runs it replaces the quick plan while
+  that is still open. Divide's sheet waits for its routed plan instead. The
+  rest of the catchment's card has a tick for **what it drains into**: the
+  first unit, water user or gauge its flow path meets (the outflow only when
+  nothing lies below it).
 - **Divide the model** (editors, a model with nodes, a DEM on the server;
   #326 C3's follow-up, `DivideSheet.svelte`, its own chunk, `divideFlow.ts`,
   [maps.md § Start from the map](./maps.md#start-from-the-map)). The
@@ -4514,7 +4596,15 @@ map" card) stays the schematic; this is the geography.
   the warnings, named "Checks 1 warning" so the name holds the tab's words): the count ("1 warning from the map’s
   checks", or "The map’s checks found no problems.") and the warnings, each
   with buttons that pick its features and show their Details ([maps.md §
-  Checks](./maps.md#checks)). Until 2026-10-02 a line in the column with
+  Checks](./maps.md#checks)). Since issue #646 item 4 they include what a
+  map edit left behind: a unit's area from an earlier outline with **Use
+  14.10 km²** for an editor (the Use confirm; a failure shows above the
+  list), and a value read over a redrawn outline, the rest of the
+  catchment's area, a dam in another unit's boundary and a moved gauge, each
+  with a link to where it is set again (MAP from the grid, Rain for each
+  unit, Crops, Evaporation from the map, Network). The grid's "Where each
+  hydrological unit’s area came from" says "’s earlier outline" beside such
+  a unit. Until 2026-10-02 a line in the column with
   **Show the checks** opening a side sheet, **Map checks** (`checks=1`); that
   link now opens the Checks tab and the parameter goes in place.
 - **Every feature** (`grid=map-features`, a full modal drawn by the tab:
@@ -5135,8 +5225,10 @@ saves the catchment's model, and override mode there edits the scenario's
   unsaved changes, the drawer's own edits included (a hint says why), and a
   viewer gets no Use ("Only an editor can use a value."). **Source and
   method** (a disclosure) gives the dataset's source, version, label,
-  attribution and counting method. Other states: no parcel linked (with
-  **Open the Map**), no dataset loaded (in plain words, with what to enter by hand; the
+  attribution and counting method. Other states: no boundary or parcel
+  linked ("No boundary or farm parcel on the map is linked to …": its area
+  feature, the polygon Use its area took, or its farm parcels; issue #646
+  F1; with **Open the Map**), no dataset loaded (in plain words, with what to enter by hand; the
   loader's command is only in maps.md), no cropland
   in the parcels, no crop yet, and a "Synthetic test data" warning for the
   committed grid. On a narrow sheet the Use buttons are 44 px targets; the
@@ -5869,6 +5961,10 @@ with the table the data needs).
   word (issue #586). Deleting the charted series drops the parameter
   (`goto` with `replace`); an upload through **Add data** on this tab charts the
   uploaded series (`series=<id>`, with `replace`, the page's `onUploaded`).
+  A `view=<start>~<end>` beside `series=` (a flagged period's **View** on
+  Warnings) opens the chart on that period, with context on each side, and
+  hatches it (**Flagged**); a malformed or backwards `view` is ignored, and a
+  zoom or pan after that is the reader's.
   The chart sits under the table, so after a pick it scrolls just into view
   (smoothly, unless the viewer prefers reduced motion; not at all when it is
   already in view, and not for the upload's replacing pick).
@@ -6435,7 +6531,8 @@ editors run one now and read the map's proposals, viewers read.
   automatically … → Data feeds** (in-page, `#data-feeds`), the Map's
   Getting started step and the Start sheet's data step
   (`?tab=series&rain=boundary#data-feeds`, and **Observed flow**
-  `?tab=series#data-feeds`), Model settings' Rain for each unit line (Model selection for flow generation)
+  `?tab=series&feed=dws#data-feeds`, which opens the DWS gauge's card with
+  the nearest gauging stations for an owner), Model settings' Rain for each unit line (Model selection for flow generation)
   (`?tab=series&rain=units#data-feeds`) and Runs & results' stub for a run
   with no forecast (`res-forecast`, `runs/missingPanel.ts`). Each lands
   through `landOnAnchor` (`help/anchor.ts`): once the lazy panel's heading
@@ -6743,6 +6840,13 @@ linking to where it is fixed; and the shown run's warnings.
   warnings about the record and its data in this run…**, from its
   `calibration.*` and `data.*` codes). It carries `run=` like the run pages
   (`tabLinks.ts` `RUN_TABS`).
+- **Every flagged period has a View** (a link, for viewers too, before an
+  editor's decisions): it opens the record on Data's chart, on the period
+  with as many days again on each side (at least 30), the period hatched and
+  keyed **Flagged** (`series/viewPeriod.ts` `viewPeriodHref`:
+  `?tab=series&series=<id>&view=<start>~<end>#data-chart`; the chart's
+  `focus` and `band`, `charts/series.ts` `focusWindow`). So a reader sees the
+  days a check flagged before patching, excluding or keeping them.
 - **Every row is solvable** (operator, issue #611): each says **How to fix:**
   in plain words and carries one primary action, and every row an editor
   can't fix can be kept. A run warning's fix is its `WARNING_CODES` code's
@@ -7044,9 +7148,15 @@ other sections.
   (`?tab=project#project-report-schedules`; also "schedule", "email",
   "PDF"), and the fit's panels that moved in round 3, each **…, on
   Calibration** (`?tab=calibration#set-flow`, `#set-record`, `#set-fit`,
-  `#set-wr2012` and the Evaporation from the map card's `#set-evaporation`;
-  also by the settings they hold: "X3", "pan coefficient", "exclusions",
-  "fit automatically", "quaternary", "dPET"). Their old anchors still work: `?tab=settings#set-feeds`,
+  `#set-wr2012`, the Evaporation from the map card's `#set-evaporation`,
+  the Evaporation stations card's `#set-evaporation-station` and the
+  Regional prior's `#set-prior`; also by the settings they hold: "X3", "pan
+  coefficient", "exclusions", "fit automatically", "quaternary", "dPET",
+  "Symons", "donors", "ungauged"). Every `#set-…` the Calibration page draws
+  is in `CALIBRATION_SETTINGS_ANCHORS` (settings/sections.ts), so a link to
+  it stays there; one missing reads as a Model settings anchor to
+  `nav/anchorMoves.ts`, which sends the link to Model settings
+  (`calibration/page.test.ts` walks the page's components and fails on one). Their old anchors still work: `?tab=settings#set-feeds`,
   `#set-api-keys` and `#set-report-schedules`, from an old email, a bookmark
   or a note, go on to those addresses with every other parameter kept
   (`?tab=settings&rain=boundary#set-feeds` opens
@@ -7401,15 +7511,31 @@ two.
     stations; a deleted one says so in red), then, with a station, **Then
     patch gaps from** (the same pull-downs and fill counts as a unit's,
     named "for the catchment", the CHIRPS entry being the catchment's own
-    CHIRPS), **Scale to catchment MAP** (on by default, stored as none; the
-    catchment MAP is the units' area-weighted mean, `catchmentMapMm` has no
-    field yet) and **Gaps: CHIRPS corrected against** (*Its station* by
-    default, stored as none). Changing the station keeps the rest, less the
-    new main station from the patching priority; *No station* removes the
-    assignment, so a project that tries one and takes it away stores what
-    it had. The summary line adds "catchment rain from a station" when one
-    is set. Without any station a note says to add one in the Data tab.
-    `rain-patch-priority.spec.ts` covers it, with a forecast tail.
+    CHIRPS), **Scale to catchment MAP** (on by default, stored as none) and
+    **Gaps: CHIRPS corrected against** (*Its station* by default, stored as
+    none). Changing the station keeps the rest, less the new main station
+    from the patching priority; *No station* removes the assignment, so a
+    project that tries one and takes it away stores what it had. Below them,
+    with a station (or a MAP already stored, which then says it isn't used
+    without one, so it can be cleared), **Catchment MAP (mm)** and **MAP
+    source** (`catchmentMapMm` / `catchmentMapSource`, 1–12 000 mm, the
+    source required with a MAP and a MAP with a source, up to 600
+    characters; helpers `withCatchmentMap`, `catchmentMapFormError`,
+    `catchmentMapReadout` in `settings/flowGeneration.ts`): blank (the
+    default, stored as none) is the land units' area-weighted mean MAP, as
+    the engine takes it, and the line under the field says which is in use
+    and the ratio it gives the station's rain ("The station's rain × 1.25:
+    750 mm ÷ its 600 mm.", clamped and 0.5–2 flagged as a unit's), or why
+    it's × 1 (scaling off, the station without a MAP, a land unit without
+    one, no land unit). The units' mean in figures shows when the page
+    passes the model's `nodes`. A MAP without its source, or a source
+    without its MAP, is kept as typed and named in red under the source
+    (the API refuses it on Save); clearing both stores none again. The
+    summary line adds "catchment rain from a station" when one is set.
+    Without any station a note says to add one in the Data tab.
+    `rain-patch-priority.spec.ts` covers the station, with a forecast tail;
+    `catchment-rain-map.spec.ts` the MAP: entered, saved, scaling a run's
+    station rain, and cleared.
   - **Per unit** shows two cards. **Each unit's rainfall station**
     (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
     helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
@@ -8088,7 +8214,17 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   warning stays visible). **Evaporation from the map** is a card of its own,
   its **Use as …** in the heading's row beside a **Saves now** tag (the
   button's description), since it saves straight to the project while every
-  other field here waits for the save bar. The **rain threshold for demand**
+  other field here waits for the save bar. **Evaporation stations**, the
+  card under it, works the same way (issue #646 item 6, `EvaporationStationProposal.svelte`):
+  the nearest DWS evaporation stations to the boundary as radio choices
+  (code, name, pan, distance, record and share of days read), the chosen
+  station's 12 monthly means beside the saved A-pan row, a tick for a
+  Class-A pan's daily record (**Also write its daily record (…) as the daily
+  A-pan series "DWS <code>"**, on by default), and for a Symons pan a choice of the S→A equation with
+  Taljaard's "cannot be inverted" warning, an equation that can't be used
+  disabled with its reason, and no A-pan or **Use as the A-pan** until one
+  is picked ([maps.md § Evaporation stations](./maps.md#evaporation-stations)).
+  The **rain threshold for demand**
   moved to Demand (it only affects irrigation demand under GR4J). The
   explanations under the rain-for-each-unit fields, the FAO-56 helper and
   the evaporation proposal are `.explain` (behind the explain switch). Then,
@@ -8381,8 +8517,63 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   the run's statistics). Each number is held inside its
   bounds by its field, so the section never blocks Save. The fit record
   below lists the fitted record's source and its gap filling.
+    Last, when the model has a gauge above the outlet with a flow record,
+  **Calibrate at several gauges** (engine 1.106.0, issue #555,
+  `calibration/CalibrationZonesTable.svelte`, its own chunk,
+  `lib/calibration/zones.ts`, `settings.calibrationZones`, [model.md
+  §2.10n](./model.md)): a table of the calibration site (the outlet, or
+  *Scored at*'s gauge, its **Calibrate here** always ticked and disabled:
+  its window is the fields above) and every other such gauge, each with
+  **Calibrate here: <gauge>**, its **Record** coverage in complete water
+  years spanned (gaps not counted; "(too short)" under 2, from the series
+  list) and its zone's **Parameters** ("Not fitted yet: its units run on the
+  parameters above" until a fit applies some). A first tick adds the gauge's
+  row; an untick keeps it (its window and parameters stay for the next
+  tick). Under each gauge with a row, a fold (`<gauge>:` and its window,
+  exclusions and suspect-day rule) with its own **From** / **To**,
+  **Record**, **Suspect days** (*As the calibration site's quality flags*,
+  *Left out of the fit* or *Scored*), exclusions and fit record line. A
+  reversed window or a bad exclusion blocks Save, named by its gauge
+  ("Calibration zone at Middle weir: …"), through the window's own blocker.
+  Under Fragmentation the ticks are disabled and a note says calibrating at
+  several gauges needs Per unit flow generation, linking to Model selection
+  for flow generation; with a gauge ticked under Per unit, "Fit
+  automatically fits N zones, upstream first." The legend and the fit's
+  *Steps, upstream first* carry the *Calibration zones* help tip (help
+  article `calibration-zones`); the fieldset is `#fld-cal-zones`, where the
+  Warnings page's fix for a `calibration.zone.*` warning lands. Not yet
+  (issue #555's next round): the zones on the Network tab and the Map.
+- **Regional prior** (`#set-prior`, `calibration/RegionalPriorPanel.svelte`,
+  its own chunk, the first card under Fit the parameters; issue #622,
+  model.md §2.10m) shows GR4J's parameter ranges from donor basins for the
+  catchment (`GET /projects/:id/gr4j-prior`), or, with ticked calibration
+  zones, for the zone picked in **For** (each zone's own units, or the
+  calibration site's own zone). A table of each parameter's p10, p50 and
+  p90 beside its value in the form now ("below p10", "above p90"; X1 "from
+  soil water capacity" when the soil relation has skill), the **Skill**
+  line (the leave-one-out skill and its n, "Not scored" with too few donors,
+  and a **No skill** badge at 0 or below), one line of what the donors were
+  compared on (area, MAP over n water years, aridity, distance from the
+  zone's gauge or the boundary's centre) and the soil relation's state, a
+  fold with **The n donors** (weight, distance, area, own KGE′, X1, X3,
+  X4), the synthetic-data warning over the invented set, and the donor and
+  soil datasets' credits with a link to `/data-sources`. Editors get **Start
+  from the prior** in the heading's row, marked *Saves now*: it asks first,
+  then writes the medians into the target's parameters as one settings
+  revision naming the donors (`POST …/gr4j-prior/start`), and the panel then
+  says they were started from it and haven't been changed since. It waits
+  while the form has unsaved changes. With no donors or no boundary it says
+  why (`prior-problem`). `regional-prior.spec.ts`.
 - **Fit automatically** (`#set-fit`, `calibration/FitPanel.svelte`) fits the
-  selected model's parameters in a Web Worker (`lib/calibration/`). Its card
+  selected model's parameters in a Web Worker (`lib/calibration/`). Its
+  **Regional prior** choice (`lib/calibration/prior.ts`): **Off (default)**,
+  **Penalty** (pull toward the donors' medians, with a **Penalty weight**,
+  provisional default 0.1, at most 10), **Search box** (its p10–p90; the
+  Bounds select is then set aside) or **Penalty and search box**. When on,
+  the fit fetches the prior for each step's target (the catchment, or each
+  calibration zone's own) before it runs, and the result's notes and the fit
+  record (**Regional prior** row) name it, its donors and the donor set's
+  SHA-256. Its card
   shows the choices that decide the fit in one row (**Objective**,
   **Parameters to fit**, **Validation**), then one **Search:** line with the
   bounds, model runs, starts and seed ("Wide bounds · 1 500 runs × 5 starts ·
@@ -8514,6 +8705,25 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     stored until Save. The result stays shown, its button then reading
     **Apply to form again**, and the unsaved settings take over the leave
     guard from the fit.
+  - **The stepwise fit** (engine 1.106.0, issue #555, model.md §2.10n):
+    with a gauge ticked under *Calibrate at several gauges* (Per unit only),
+    **Fit automatically** fits one step per zone, upstream first, then the
+    calibration site, each in its own worker run with the choices above
+    (`lib/calibration/runner.ts` `startStepwiseFit`, the plan from the engine's
+    `zoneFitPlan`, which refuses a zone, or a site, with no land unit, shown
+    as the fit's error). The progress line starts "Step 1 of 2 (an upstream
+    zone)", and the bar spans every step. The result opens with **Steps,
+    upstream first** (`data-testid="fit-steps"`): one row per step (*1.
+    Upstream zone* / *2. Calibration site*, where it was scored, its land
+    units, its fitted parameters, and the objective's fit, split-sample and
+    dry → wet validation scores), each earlier step's notes in a closed
+    *Notes on step N* (the short-record and no-dry-year warnings among them),
+    then the calibration site's step in full under **Step N: the
+    calibration site**. **Apply to form** writes every step: the site's
+    parameters and fit record as before, and each zone's parameters and fit
+    record (`FitRecord.zone`) into its row. Not yet: automated calibration
+    and the uncertainty ensemble per zone (they fit or perturb the site's
+    zone alone).
     At the card's foot (issue #521), **Fit record of these parameters**
     (`calibration/FitProvenance.svelte`), in a fold whose line is the
     record's first ("Fit record: GR4J fit of 24 Sep 2026 10:05 UTC",
@@ -9360,6 +9570,20 @@ read it before.
      runoff model's (mm); a run with the optional terms, too wide for any
      column, scrolls inside its box with the water year held at its left edge,
      as on a phone).
+     **Calibration zones** (issue #555, `calibration/ZoneCalibrationTable.svelte`,
+     rows from `calibration/zoneStats.ts` `runZoneRows`), under the statistics
+     when the run applied calibration zones: one row per zone, upstream first
+     and the calibration site's zone last, with its land units, the GR4J
+     parameters they ran on ("(the catchment’s: not fitted yet)" for a zone
+     with none of its own), the run's NSE, KGE, PBIAS and days at its own gauge
+     on its own window (`summary.calibrationZones`, model.md §2.10n; the site's
+     row is the run's statistics above) and **Scores are**: in sample
+     ("in-sample") only when that zone's own parameters were fitted on those
+     days, else why not ("parameters not from an automatic fit", "fitted on
+     other days", "parameters edited since the fit"), each zone by its own fit
+     record. A gauge with no record in its window reads "no record in its
+     window". The printable report's Calibration section shows the same
+     table.
      The **calibration check** (issue #444, `calibration/CalibrationCheck.svelte`,
      sums in `calibration/calibrationCheck.ts`), inside `#res-calibration`
      under the statistics, where a hydrologist calibrating reads the fit, so it
@@ -10656,7 +10880,12 @@ confirmed farmers see the outlook, O5, issue #90).
   this one** (off by default; issue #620) runs the outlook with the method
   `climateState`: the same members, also summarised on the past seasons
   nearest this one's ENSO and SAM state (below); its description for a
-  screen reader says how they are chosen. **Run seasonal outlook**, in the
+  screen reader says how they are chosen. **Also give the chance of each
+  restriction level from the seasonal forecasts** (off by default; issue
+  #620 step 7) runs it with the method `c3s` instead: the same ESP, and
+  beside it the chances from the C3S forecasts (below). One method at a
+  time: ticking one clears the other, and each box's description for a
+  screen reader says what it adds. **Run seasonal outlook**, in the
   action row under the levels, hint and plan, queues an
   [outlook](./api.md#seasonal-outlooks) of the shown run; the season and
   the planning share are the project's settings (Settings → Seasonal
@@ -10695,7 +10924,7 @@ confirmed farmers see the outlook, O5, issue #90).
   [model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620);
   `data-testid="outlook-climate"`, `data-state` `ready` or `problem`), after
   the planning figure's hint, beside the ESP rather than instead of it:
-  this season's state (*ONI JAS 2018 +0.45; AAO Jul–Sep 2018 −0.31*), a
+  this season's state (*ONI JAS 2015 +0.45; AAO Jul–Sep 2015 −0.31*), a
   headline (*In the 10 past seasons nearest this one, the dams ended at …
   at 100 %, against … in all 31 years*), and a table per demand level of the
   season-end dam storage and the years met in full, those seasons beside
@@ -10709,6 +10938,37 @@ confirmed farmers see the outlook, O5, issue #90).
   could be chosen (the copy doesn't hold the indices, or fewer than 20
   candidate years) it says why in the engine's words, and the ESP above
   stands as it is.
+- **Chance of each restriction level** (method `c3s` only, issue #620 step
+  7, `outlook/ForecastChances.svelte`, view model `outlook/forecast.ts`,
+  [model.md §2.15d](./model.md#215d-the-forecast-conditioned-outlook-the-chance-of-each-restriction-level-issue-620-engine-11060);
+  `data-testid="outlook-forecast"`, `data-state` `ready` or `off`,
+  `data-leads` `forecast` or `esp`), after the planning figure's hint,
+  beside the ESP rather than instead of it. First which side leads, in
+  bold, by the **skill gate**: above zero, *The forecasts scored better
+  than past weather over 22 hindcast years (CRPSS +0.12), so they lead*; at
+  or below zero, *No better than past weather: …, so past weather leads and
+  the forecasts are shown beside it*; then the hindcast skill (CRPSS of the
+  season-end dam storage against past weather, over which years). Per
+  review date a table (*Review on 1 Jan 2019: Restriction levels (Settings
+  → Drought restrictions)*, or the review triggers' storage bands when no
+  rule is set): each level ("No restriction" first, with its *storage below
+  40 % of capacity*) or band (fullest first), and its chance from the
+  **Seasonal forecasts** and from **Past weather (every year alike)**, the
+  leading side's column first. Under the last table, plainly: *The chance
+  is of the dam storage on the review date only, at full demand: the rule's
+  EWR trigger, a filling dam's milder reading and a level held until the
+  next review are not in it.* Then the init (*Forecasts from …, the newest
+  issued by the decision date*), **Systems and members** (per system its
+  members, the day it was issued, its weight and its hindcast), the systems
+  left out and those not yet issued by the decision date, what it was
+  averaged over (the catchment boundary or the units' polygons, in 1°
+  cells), the model's notes (collapsed), that it is an aid to the WUA's
+  decision and not a promise, and the **Copernicus credit**: Copernicus's
+  notice with the year the copy fetched the data, the dataset's citation and
+  the contributing centres of the systems used (`c3sSeasonalCredit`). Off
+  (no forecast issued by the decision date, no hindcast in the copy, no
+  system with 20 hindcast years, no boundary or unit polygon on the Map), it
+  says why in one line and the ESP above stands as it is.
 - **Every analogue year** (collapsed): per year and level, the days below
   the EWR (or months met) and the season-end storage. Then the years not
   used and why (outside the record, a rainless day, the season itself,
@@ -12551,7 +12811,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     it but who, when and its rule, since the browser stores an ensemble only
     when every set has run), the baseline's bands (R1), the paired bands
     (R2) and the printed rules.
-  - **3 Model and data**: calibration record, validation (`FitProvenance`, or
+  - **3 Model and data**: calibration record, then, when the baseline ran
+    with calibration zones (`evidence-22`, issue #555), **Calibration zones**:
+    the run's zone table plus each zone's fit (its description, edited
+    parameters, in-sample, split-sample and dry → wet scores on its own
+    objective; "No stored fit: not validated" for a zone with none; from the
+    document's `calibrationZones`, `zoneStats.ts` `evidenceZoneRows`), then
+    validation (`FitProvenance`, or
     *Not assessed* without a stored fit), WR2012, the validation statement,
     and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
@@ -13287,7 +13553,13 @@ published.
   past years’ weather, at this level you got about 81 % of the water you
   needed, and between 62 % and 97 % in most of them" (10th–90th percentile;
   too few years or no demand says so); the dam at the season's end the same
-  way (no dam, no line); "Your WUA reviews the level on 1 Jan."; and
+  way (no dam, no line); "Your WUA reviews the level on 1 Jan."; from an
+  outlook that also weighed the seasonal forecasts (method `c3s`, issue
+  #620), one line saying which side led, never a chance (the issue's open
+  question 4): "Your WUA also looked at the seasonal rain forecasts of the
+  Copernicus Climate Change Service. The figures above are still from past
+  years’ weather." or, when they scored no better, "… but this season they
+  did no better than past weather." (`data-testid="farm-outlook-forecast"`); and
   "Worked out by the model from past years’ weather: not a forecast, and
   not a promise. Only a notice from your WUA or from DWS is a
   restriction."; then "What is the season outlook?", a link to the

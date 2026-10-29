@@ -26,6 +26,17 @@ export interface FarmOutlookProjection {
 	demandMet: OutlookStat | null;
 	/** This farm's dam at the season end, as a share of its capacity; null without a dam. */
 	dam: { capacityM3: number; seasonEndShare: OutlookStat | null } | null;
+	/**
+	 * Whether the WUA's outlook also weighed the C3S seasonal forecasts (issue
+	 * #620, an outlook of method c3s whose forecast part ran, docs/model.md
+	 * §2.15d): `forecast` when they scored better than past weather over the
+	 * hindcast years and led, `esp` when they didn't. Set by the backend when
+	 * it publishes (farmOutlookProjection leaves it out); absent or null for an
+	 * outlook without them. Never a chance: the farmer sees the level the WUA
+	 * set (the issue's open question 4), and the figures above are the
+	 * analogue years' either way.
+	 */
+	forecast?: { leads: 'forecast' | 'esp' } | null;
 }
 
 /** Why a published outlook can't be shown per farm. */

@@ -578,6 +578,65 @@ GR4J fit made under pan coefficient × A-pan marks the fit stale
 The run's `fitStatus` (in-sample or not, §2.10) is unaffected: the scored days
 are still the fitted ones.
 
+**A station's pan record (issue #646 item 6).** Calibration → Flow calibration
+→ **Evaporation stations** proposes the nearest DWS evaporation station's
+record as the A-pan ([maps.md § Evaporation stations](./maps.md#evaporation-stations)).
+It writes nothing the engine didn't already read: the 12 monthly means go into
+`settings.apanMm`, and a Class-A pan's daily record into an `evap_apan_mm`
+series, both used exactly as above. The engine's only addition is
+`packages/engine/src/evaporation/spanToApan.ts`, a pure helper the backend
+calls to propose values; `runModel` never calls it, so results are unchanged
+and `ENGINE_VERSION` stays where it was.
+
+- **The 12 means.** A calendar month of the record counts when at least 80 %
+  of its days have a value; its total is then the mean of those days × the
+  month's days. Each water-year month's mean is over its counted years and
+  needs at least 3 of them, else the station proposes nothing (a mean of
+  one or two years is that year's weather).
+- **A Class-A pan** is the A-pan as it stands: its means are the row and its
+  record the daily series.
+- **A Symons (S) pan** is converted to A-pan only with the equation the user
+  picks, and the revision cites it. South Africa publishes only S ← A
+  equations (§2.7a's presets, `SPAN_FROM_APAN`), S = a × A + b on monthly
+  totals in mm: WR90's general monthly equation (a 0.8793, b −16.2354;
+  Midgley, Pitman & Middleton 1994, as reproduced in Taljaard 2023 Eq. 16,
+  Table 5-9) and Taljaard's new general monthly equation (a 0.8706,
+  b −11.1745; Taljaard 2023, Eq. 33, Table 5-10, p. 158). The proposal
+  inverts the chosen one, **A = (S − b) ÷ a**, and says so: Taljaard warns
+  these equations "can only be used as written and cannot be inverted"
+  (§2.6.1.4, p. 43), since a least-squares fit of S on A is not the fit of A
+  on S, and no national A ← S equation is published. So nothing converts by
+  default; the panel shows the warning beside the choice, and the revision's
+  reason names the inverse and the equation it came from. A month whose
+  S-pan mean is under the forward floor's S (−2b: WR90 32.5 mm, Taljaard
+  22.3 mm a month, where the intercept would be most of the A-pan) refuses
+  the conversion and names the month; the A-pan it does give is then always
+  at or above §2.7a's preset floor. A Symons record is **never** written as
+  the daily series: the equations are fitted on monthly totals, so scaling
+  each day would invent a daily relation nobody fitted. The 12 converted
+  means reach the model as the monthly row, spread over each month as any
+  monthly A-pan is.
+- **Source.** Taljaard, C.M.L. (2023), *A revision of evaporation and pan
+  factors in use in South Africa*, MEng thesis, Stellenbosch University,
+  http://hdl.handle.net/10019.1/127336 (the same pages §2.7a checked on
+  2026-09-30).
+
+**Where a modelled A-pan comes from, and its limits** (issue #646 item 7).
+With no pan station near, the A-pan row can be proposed from a **modelled**
+Class-A pan grid: PenPan (Rotstayn et al. 2006, as McMahon et al. 2013
+Supplement S6 set it out), Penman's equation for the pan itself, run each
+month as a steady state on NASA POWER's monthly mean weather
+([maps.md § The evaporation grid](./maps.md#the-evaporation-grid)). The
+engine doesn't change: the 12 values go into `settings.apanMm` like typed
+ones, with the dataset cited ("Modelled Class-A pan (PenPan)"). Unlike ET₀,
+they are A-pan values, so the crop and lake factors apply to them as they
+stand. The limits: the values are a normal (each month's mean over the
+years), not the season; POWER's 0.5° weather averages out relief and coasts;
+the model ignores a pan's siting and heat storage; and a measured record
+wins wherever there is one (the daily series above, or a nearby station's
+monthly means). Production refuses the grid until it is validated against
+DWS Class-A pans and the hydrologist signs off.
+
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
 **Retired in engine 1.0.0 (issue #16, 2026-09-26).** The engine's runoff
@@ -3154,8 +3213,9 @@ and demand's and the dams' under either): **Station** (*No station* keeps
 the catchment rain series), **Then patch gaps from**, **Scale to catchment
 MAP** and **Gaps: CHIRPS corrected against**, with the units' controls and
 stored defaults (`settings/PatchChain.svelte` is the patching priority's
-pull-downs for both). `catchmentMapMm` has no field yet (the API takes it;
-[followups.md](./followups.md)).
+pull-downs for both). **Catchment MAP (mm)** and **MAP source** set
+`catchmentMapMm` / `catchmentMapSource` below them (blank = the units'
+area-weighted mean).
 `unreliable` is set under Model settings → Rain gaps → Flagged rain
 (**Unreliable periods of a rain record**, issue #611): From/To rows for every
 rain record of the project. A fit's forcing records each unit's station, so the form says
@@ -7038,6 +7098,8 @@ at). Only the actionable warnings are coded so far:
 | Rain stations (§2.4i) | `rain.station.noRecord`, `.unreliable`, `.unreliableInvalid`; `rain.station.zeroRun.*`, `rain.station.accumulation.*` | `station`, … | `set-share`; the checks `set-rain` |
 | A unit's own gauge (§2.4h) | `rain.unitGauge.zeroRun.*`, `rain.unitGauge.accumulation.*`, `rain.unitGauge.unreliable`; `rain.unit.catchmentFallback` | `unit`, … | `set-rain`; the fallback `set-unit-rain` |
 | Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord` | `kind`, `site`, … | `set-record` (no values in the period: `set-period`) |
+| Calibration zones (§2.10n) | `calibration.zone.notList`, `.noGauge`, `.duplicate`, `.badParams`, `.needsPerUnit`, `.unusable`, `.unfitted`; `.siteOnlyElsewhere` (a note) | `node`, `reason`, `name`, `gauges`; `units`, `zones` | `set-record` (Per unit needed: `set-share`; not fitted: `set-fit`) |
+| The map (issue #646 F6, `mapAreas.ts`) | `map.areaFromEarlierOutline`: a unit's area is from an earlier outline of its polygon on the map (`ModelInput.mapAreas`, set by the backend's `runs/execute.ts` `staleMapAreas`; only this warning reads it, and the run's stored input keeps it for a reproduction). Not for a unit whose area in the run isn't the model's (a scenario set it) | `unit`, `modelKm2`, `mapKm2` | none: the Map's Checks (the Warnings page links there) |
 
 Not coded on purpose: the EWR-split note and the retired flow-share method's
 note (issues #615 and #616 reworded them; the area-fragmentation, High/Low-MAP
@@ -7059,7 +7121,7 @@ figure moves, but the summary has a new field, so a 1.101.0 run made again
 at 1.102.0 has another results digest. A viewer kept from the registered
 volumes reads no warnings and no codes (`verdictsSummary`). Tests:
 `warningCodes.test.ts` triggers each code and checks its text is the plain
-warning's (four beside their texts' own tests, which it names), and that
+warning's (twelve beside their texts' own tests, which it names: the zone codes' in `calibrate/zones.test.ts`), and that
 every code in the catalogue is used by the engine.
 
 **Flow generation renamed (engine ≥ 1.103.0, issue #614).** The panel that
@@ -10563,7 +10625,9 @@ that never sets it fits exactly as before.
   The fitted parameters are still the catchment's GR4J parameters: one runoff
   model runs for the whole catchment and the unit shares (§2.5) route it to
   each node, so a fit at a gauge assumes the sub-catchment above it responds
-  as the whole catchment does.
+  as the whole catchment does. Under Per unit flow generation, calibration
+  zones (§2.10n, engine 1.106.0) give the units above a gauge parameters of
+  their own instead, fitted there, and the outlet the rest.
 - **No gauged range and no gap filling.** `settings.qualityFlags.ratings` and
   `settings.flowGapFill` are the outlet records' settings, so a gauge's record
   has neither: no day of it is flagged extrapolated or censored, and none is
@@ -10663,6 +10727,140 @@ table's monthly requirement is not used here, as at the outlet. A project
 without such a site has no key. The summary CSV writes each site's table
 after the outlet's.
 
+### 2.10n Calibration zones: calibrating at several gauges (engine 1.106.0, issue #555)
+
+Not in the workbook. §2.10k fits the catchment's one GR4J parameter set at
+one site. Under Per unit flow generation (§2.4h) each land unit runs its own
+GR4J, so a gauge inside the network with a long enough record can calibrate
+**the units upstream of it on its own record**, and the outlet the rest.
+
+**The setting.** `settings.calibrationZones` (`CalibrationZone` in
+`packages/engine/src/calibrate/zones.ts`): one row per gauge, `{ nodeId,
+enabled, calibrationStart, calibrationEnd, calibrationFlowKind,
+calibrationExclusions, qualityFlags, gr4j, fitRecord }`. `enabled` is the
+row's *Calibrate here* tick; `qualityFlags` is `{ suspect, zeroFlowMonths? }`
+or null for the catchment's (a gauge's record has no gauged range or gap fill,
+§2.10k, so those flags don't apply); `gr4j` is the zone's X1–X4 (each inside
+the bounds calibration searches) or null, not fitted yet. The **calibration
+site's own zone** (the outlet's, or *Scored at*'s gauge, §2.10k) keeps the
+settings it always had: `calibrationSiteNodeId`, the calibration window,
+`calibrationFlowKind`, `calibrationExclusions`, `qualityFlags`, `gr4j` and
+`fitRecord`. Absent, `[]` (what migration 270 stored in every project) or no
+ticked row is exactly every engine before: one parameter set, to the bit (an
+invariant test runs and fits every example catchment both ways under both
+methods, `backend/src/model/examples.zones.test.ts`).
+
+**The zones.** A ticked row is usable when its node is a gauge inside the
+network (not the outlet), is not the calibration site and is not below it
+(on the site's path to the outlet); an unusable ticked row warns
+(`Calibration zone: …`) and is left out. Each land unit (a farm with an area,
+§2.4h) belongs to the **first usable ticked gauge on its path downstream**
+(the unit itself excluded); a unit that reaches none is in the site's zone.
+So a ticked gauge's zone is the land units draining to it that aren't in a
+ticked zone further upstream, unticking a gauge merges its units into the
+next ticked gauge downstream, and the site's zone is the rest. Each unit runs
+GR4J with its zone's X1–X4 (the row's `gr4j`, else, with a warning that the
+zone has no parameters of its own yet, the catchment's `gr4j`); the warm-up
+(`gr4j.warmupDays`), PE and forcing are the catchment's, as under §2.4h. The
+groundwater exchange series is written when the catchment's X2, or that of
+any zone with land units, is not 0. `summary.runoff.params` stays the
+calibration site's zone's parameters (the catchment's stores are the units'
+area-weighted means, so the run's runoff self-check caps the production store
+at the units' area-weighted X1); each zone's are in `summary.unitRain.zones`.
+While the uncertainty ensemble and automated calibration don't yet read the
+zones, every run that applies one warns that they vary only the site's
+parameters (`Calibration zones: N land units ran on …`).
+
+**Only under Per unit.** Under Fragmentation one GR4J runs for the whole
+catchment (§2.5), so zones can't have their own parameters: ticked rows warn
+(`Calibration zones: … need Per unit flow generation`) and the run is the
+one-parameter-set run. Fragmentation's share runs (§2.5b) keep the
+catchment's parameters.
+
+**The run summary.** `summary.unitRain.zones` (only when zones applied):
+each usable zone upstream first, then the site's own zone (`nodeId` null),
+each `{ nodeId, name, units, params, fitted }`.
+
+**Statistics at each zone's gauge** (`summary.calibrationZones`, issue #555
+round 4, `run.ts` `zoneCalibrationStats`): for each zone above the site, in
+the same order, the run's calibration statistics (§2.10k's
+`CalibrationStats`) of its gauge's record (the row's record, else the
+gauge's first) against the gauge's simulated outflow, on the row's window
+and exclusions, with `siteNodeId`, `siteName` and `fitStatus` computed on the
+zone's own settings (`zoneCalibrationSettings`: its parameters, fit record,
+window, exclusions and record), so each site is in sample only when its own
+zone's parameters were fitted on those days. The site's own zone is
+`summary.calibration`, as before. A zone whose gauge has no record is left
+out; absent when no zone applied. Statistics only: no other output changes,
+so a run without zones is unchanged to the bit. A gauge's own low-flow
+periods and quality flags are not applied here, as at a gauge site (§2.10k).
+
+**Comparison, report and evidence pack.** The run comparison words each zone
+(`calibrationZoneChanges`: added, removed, or what changed among its
+parameters, window, record, exclusions, quality flags and fit record) and sets each zone
+gauge's statistics side by side (`comparison.calibrationZones`;
+run-comparison.md). The report's and the Calibration page's **Calibration
+zones** table lists each zone's units, parameters and scores (ui.md § Runs
+& results), and the evidence report (`evidence-22`) every zone's
+parameters, fit record and scores (evidence-pack.md § Calibration zones).
+The Network and the Map colour each unit by its zone (ui.md § Network,
+maps.md § Calibration zones on the map).
+
+**The stepwise fit** (`calibrate/stepwise.ts` `calibrateStepwise`). Zones are
+fitted in network order, **upstream first**: a zone with more ticked gauges
+below it comes first (so one whose gauge drains through another ticked gauge
+is always before it), then by name, then id, and the site's own zone is
+last. Each step is a whole
+`calibrate()` (§2.10b) with the same objective, bounds, budget, starts, seed
+and validation:
+
+1. A zone step (`CalibrateOptions.zone`) fits **only that zone's units'**
+   parameters: every other unit keeps its zone's. It scores the zone's gauge
+   (its record against the gauge's simulated outflow, as §2.10k scores a
+   gauge site), on the row's window, exclusions, record and quality flags
+   (`zoneCalibrationSettings`). Only the units above the gauge and the dams,
+   abstractions, transfers and losses above it reach the score; units below
+   or beside it can't move it. The WR2012 MAR penalty is off for a zone step
+   (it targets the whole catchment's natural MAR).
+2. Its fitted parameters are then fixed for every step below it, so its
+   simulated outflow is routed down with them.
+3. The site's own zone is fitted last, on the site's settings, with every
+   zone above it at its fitted parameters.
+
+Each step has its own scores, split-sample and dry → wet tests, notes and fit
+record (`FitRecord.zone`: `{ nodeId, units }`, `nodeId` null for the site's
+zone). The steps are applied as one result (`applyStepwise`): the site's
+zone's parameters and fit record into `gr4j` and `fitRecord`, each zone's into
+its row. A cancelled step stops the fit and nothing is applied. With no
+ticked zone the stepwise fit is one step, `calibrate()` itself.
+
+While a zone above the site is being fitted, the units below it run on their
+current parameters (not yet refitted), and the units' natural MAR shares
+(§2.5b) follow every unit's runoff, so a zone's step score can differ from
+a run made after every step is applied wherever something above the gauge
+reads the units' shares or the whole catchment's natural flow (an EWR charge,
+curtailment, a hands-off flow, the senior users' claims, land cover's
+low-flow threshold).
+
+**Refusals and warnings.** The fit refuses when a ticked zone has no land
+unit above its gauge, when every land unit is in a zone above the site, or
+when the site is a gauge inside the network and none of its own zone's units
+drains through it (they all join the river beside it, so its step's score
+couldn't move with the parameters it fits) (`zoneFitError`). Each step under zones notes when its record has fewer than
+2 complete water years (95 % of a water year's days observed, outside the
+exclusions) or no dry → wet test (no dry year to fit on), the representativeness
+and dry → wet notes beside it (`zoneCoverageNotes`). The API refuses a new
+row whose gauge isn't a gauge inside the network with a flow record, a
+gauge listed twice, and a ticked row that is the site or below it (api.md §
+Projects). Each zone warning a run gives has a stable code
+(`calibration.zone.*`, § Run warning codes in §2.8), so the Warnings page
+links it to the table (`?field=fld-cal-zones`), to Fit the parameters, or to
+Model selection for flow generation.
+
+**Not yet** (docs/followups.md § Calibration zones): automated calibration
+and the uncertainty ensemble per zone (both still fit or perturb the site's
+zone's parameters alone).
+
 ### 2.10l Modelled vs observed dam area (app, issue #604 R5-B)
 
 A check of a run against satellites, not part of the engine: nothing here
@@ -10718,6 +10916,250 @@ together.
   little either way. A disagreement points at the inputs (capacity, full
   area, the curve, what flows in, the demand), never at a correction: the
   hydrologist decides.
+
+### 2.10m Regional GR4J prior (engine 1.106.0, issue #622)
+
+Most catchments have no flow gauge, or a short one. Uncalibrated, GR4J runs
+on Perrin's defaults (§2.4a), checked only against the WR2012 MAR band
+(§2.10c). The regional prior gives such a project the parameter ranges of
+calibrated, similar, nearby gauged basins ("donors"), and a soil-water
+prior for x1. It only chooses parameters: `runModel` never reads it, so
+`verify/` needs nothing.
+
+**Donors** (`backend/scripts/fit-donors.ts`, offline, operator-run;
+[deployment.md § Reference datasets](./deployment.md#reference-datasets),
+*Soils and GR4J donors*). A donor is a GRDC-Caravan basin
+([data-sources.md § GR4J priors](./data-sources.md#gr4j-priors-issue-622))
+whose outlet is in region D1, with:
+
+- at least 8 years of observed flow in the fit window;
+- under 5 % upstream regulation (HydroATLAS `dor_pc_pva`, stored × 10);
+- at most 10 000 km² by default (`--max-area`; a lumped GR4J over a larger
+  basin says little about a catchment the app models).
+- once fitted, KGE′ ≥ 0.5 on its own record by default (`--min-kge`, the
+  ensemble's behavioural threshold, §2.10e): a poor fit's parameters say
+  little. This one is proposed, for the hydrologist to confirm.
+
+A basin with a day of no rain inside the copy's run is refused rather than
+run dry that day. The fit prints how many donors ended within 1 % of a
+typical bound, per parameter. Such a value was set by the search box, not
+the record, so stacked bounds narrow the prior's p10–p90 and flatter its
+leave-one-out score; whether donors should be fitted on the wide bounds
+instead is open (followups.md).
+
+Each donor is **recalibrated on the app's own forcing**, never on Caravan's
+ERA5-Land, because parameters absorb forcing bias (x1 above all). The
+forcing:
+
+- Rain: the area-weighted CHIRPS v3 over the basin polygon, from our copy,
+  final days only.
+- PE: the evaporation grid's dPET monthly means over the polygon, as
+  `settings.pe`.
+
+The fit is the engine's own `calibrate()`: KGE′, the typical bounds, x2
+fixed at 0, five starts, and the split-sample test for a validation score.
+Stored per donor (`gr4j_donor`, migration 269): x1–x4, KGE′ over the fit
+and the validation half, the years of flow, the outlet, the area, the
+HydroATLAS attributes and the soil grid's PAWC.
+
+**The attributes** (`PRIOR_ATTRIBUTES`, converted from HydroATLAS's scaled
+integers):
+
+| Attribute | HydroATLAS | Unit |
+| --- | --- | --- |
+| aridity, P/PET | `ari_ix_sav` ÷ 100 | – |
+| MAP | `pre_mm_syr` | mm |
+| slope | `slp_dg_sav` ÷ 10 | ° |
+| clay | `cly_pc_sav` | % |
+| sand | `snd_pc_sav` | % |
+| forest | `for_pc_sse` | % |
+| area | – | km², compared in log space |
+
+**The prior** (`packages/engine/src/calibrate/prior.ts` `regionalPrior(target,
+donors, opts)`). After Oudin et al. (2008, *Water Resour. Res.* 44, W03413),
+who compared physical similarity and spatial proximity and found combining
+them best. The blend, the weighting and the parameter quantiles below are
+this model's own. Oudin et al. preferred averaging the donors' simulated
+flows to averaging their parameters, which the flow-space score still to
+come will test. Distances are between gauge outlets, so a target gives its
+outlet too:
+
+1. Standardise each attribute over the donors: z = (a − mean) / sd, the
+   population sd. An attribute with no spread, or one the target lacks, is
+   left out.
+2. Similarity distance: d_s = √(mean over the shared attributes of
+   (z_target − z_donor)²). Geographic distance: d_g, the great-circle km
+   between the outlets.
+3. Mixed dissimilarity: D = w × d_s / median(d_s) + (1 − w) × d_g /
+   median(d_g), with w = `similarityWeight`, 0.5 by default. When a median
+   is 0 (most donors tie the target exactly), the term is scaled by the mean
+   of its values over 0 instead, so it never vanishes. A donor with no
+   shared attribute is ranked on d_g alone. Of a repeated id, only the first
+   donor is used.
+4. Keep the k donors with the smallest D (k = 7 by default, the upper end
+   of the 4–7 Oudin found best; all of them when fewer). Weight each by
+   1 / max(D, 10⁻⁹), normalised.
+5. Each parameter's p10, p50 and p90 are the weighted quantiles of the kept
+   donors' values, at Hazen positions with weights: the sorted donor i sits
+   at W_i − w_i / 2, where W_i is the cumulative weight. Between donors the
+   quantile is interpolated linearly, in log space for x1, x3 and x4. Past
+   the end positions it is the end donor's value.
+
+The prior carries the donors it used (weight, D, d_s, d_g), k, w, the
+number offered and the donor set's fingerprint (`donorSetHash`: a 64-bit
+hash of `donorSetCanonical`, the donors sorted by id; the backend stores the
+SHA-256 of the same text). An empty donor set, or one with no valid donor,
+gives `ok: false` with the reason.
+
+**How good the prior is: leave-one-out** (`priorLeaveOneOut`). Each donor
+in turn is the target of a prior built from the others, with the same k and
+w. For each parameter that varies among the donors:
+
+- the error is ln(p50 ÷ the donor's value) (x2: p50 − value);
+- the null prior is the plain median of the others;
+- skill = 1 − Σ err² / Σ err_null²;
+- coverage is the share of held-out donors inside their p10–p90.
+
+The overall skill pools x1, x3 and x4. It needs at least 3 donors. This
+score is in parameter space. A flow-space score (KGE′ of the prior's p50 on
+each held-out donor) needs the donors' forcing, so it belongs to the
+offline fit; that is to come.
+
+**The soil x1 prior** (`soilX1Relation`). Fitted on the donors, not
+asserted: ln x1 = a + b ln PAWC by least squares over the donors with a
+PAWC value. PAWC comes from the soil grid, [maps.md § Soil water
+capacity](./maps.md#soil-water-capacity). The residual sd is s =
+√(SSE / (n − 2)). The skill test is a PRESS leave-one-out R²: each donor is
+predicted by the line fitted on the others, against the others' mean. The
+relation is **dropped, with its reason**, when:
+
+- fewer than 4 donors have a PAWC;
+- PAWC doesn't vary;
+- the LOO R² is under 0.2.
+
+At a target's PAWC, `soilX1At` gives p50 = e^(a + b ln PAWC) and p10, p90
+= e^(… ∓ 1.2816 s), leaving out the coefficients' own uncertainty.
+
+**The target** (`calibrate/priorTarget.ts` `priorTargetOf`, the backend's
+`calibration/prior.ts`). What the prior is built for is what the fit it
+serves fits:
+
+- with no calibration zone, the catchment: `{ zoneNodeId: null, units:
+  null }`;
+- under calibration zones (§2.10n), one zone: its gauge and its own land
+  units, or for the calibration site's own zone `zoneNodeId: null` and the
+  units left to it. **Each zone takes a prior built for its own units, never
+  the catchment's.** A zone's parameters describe only its units, and the
+  donors are lumped basins compared on their own basin's attributes, so the
+  like-for-like target is the zone: its area is its units' sum, its climate
+  its units' own rain, its position its gauge on the map.
+
+The target's attributes are what the app knows of it:
+
+- area: the zone's units' areas summed, or the catchment's as the run takes
+  it (§2.4h);
+- MAP: the mean of complete water years' rain totals, on the days before
+  any forecast tail. The rain is what GR4J reads: the catchment's
+  (`runoffForcing`), or under Per unit flow generation the area-weighted
+  mean of the target's units' own rain (§2.4h). A water year with a day of no
+  rain reading is left out, so a part year never weighs one season twice;
+- aridity: that MAP ÷ the mean of the same years' GR4J PE totals (the
+  catchment PE every unit runs on);
+- PAWC: the soil grid over the catchment boundary (maps.md § Soil water
+  capacity);
+- position: the zone's gauge on the map, else the boundary's centroid.
+
+Slope, clay, sand and forest stay unknown until a target's own HydroATLAS
+attributes are loaded (followups.md), so the donors are compared on area,
+MAP and aridity, and distance. The target's MAP and aridity come from the
+project's own forcing (station or CHIRPS rain, GR4J's PE); the donors' from
+HydroATLAS (WorldClim P, Global-PET). The comparison mixes the two sources
+until BasinATLAS targets load.
+
+**In calibration** (`calibrate()`, `CalibrateOptions.prior`, a
+`CalibrationPrior`: the ranges, a weight and the provenance). With a weight
+w > 0, every fit's loss is
+
+  loss = (1 − objective) + MAR penalty (§2.10c, when on) + w × priorPenalty
+
+over the **free** parameters only: a fixed one is no choice of the fit's
+and adds nothing.
+
+- It applies to every fit: the full fit and each start, the split-sample
+  and dry → wet fits, and the MAR penalty's unpenalised fit (which drops
+  only the MAR term). The starts are ranked by the penalised loss.
+- `priorPenalty` = ½ Σ z², with a **two-piece** σ so it agrees with the
+  quantiles the prior states however lopsided they are: z = (ln x − ln
+  p50) / σ, σ = (ln p50 − ln p10) / Z90 below the median and (ln p90 − ln
+  p50) / Z90 above it (x2 linearly). It is ½ Z90² ≈ 0.82 at a p10 or p90,
+  0 at the p50, continuous there. A side with no spread adds nothing.
+- Every objective is 1 − a skill, so w is in skill units: at w = 0.1 a
+  parameter at its p10 or p90 costs about 0.08 of KGE′. It is a
+  regulariser, not a Bayesian posterior: it doesn't grow with the record's
+  length. `DEFAULT_PRIOR_WEIGHT` = 0.1 is **provisional**, for the
+  hydrologist to judge; at most `PRIOR_MAX_WEIGHT` = 10.
+
+`bounds: 'prior'` searches the p10–p90 box (`priorBox`), clipped into
+GR4J's hard bounds, instead of the wide or typical box; the start is
+clamped into it. A box clipped flat or with no spread pins that parameter
+(a free x2 is held at 0, since the donors fix it), and the fit's notes name
+it. A weight of 0 is allowed only with the box. A fit's notes say the prior
+was used, from how many donors, and when it has no skill (or no score).
+
+The prior must be built for the fit's target, or `calibrate()` refuses it:
+`sameTarget` compares the zone and the units. `calibrateStepwise` takes the
+prior per step (`prior(step)`), each built for its own zone, and refuses
+`bounds: 'prior'` before the first fit when a step has none. **With no
+prior, every calibration is the same** as engine 1.106.0 before it:
+`prior-calibrate.test.ts` pins its fitted parameters to the bit and every
+other part of its report (`testing/golden.ts` `reportGolden`, numbers at
+1e-9 relative, `fixtures/prior-off-calibration.golden.json`), taken before
+the wiring and checked on macOS and Linux. After a fit in the prior's box the uncertainty ensemble samples
+Perrin's typical box instead, with a note (sampling the prior's box is
+followups.md's).
+
+**Provenance.** The fit's report and its fit record (§2.10b) carry `prior`:
+the weight, whether the box was used, the ranges, the penalty (unweighted)
+at the start and at the fit, and the provenance the backend gave it
+(`PriorProvenance`): the donor dataset's label and version, whether it is
+the invented set, the SHA-256 of the loaded set and the engine's 64-bit
+fingerprint of the donors it used, the donors offered and the k kept with
+their weights, the leave-one-out skill and its n, whether x1 came from the
+soil relation, the dataset's production load (`reference_load` as
+`app_reference_provenance()` shows it; null for a local import) and the
+target.
+
+**Start from the prior** (`priorStartParams`, the server's `POST
+/projects/:id/gr4j-prior/start`). For a project with no flow record to fit,
+the p50s (held inside GR4J's hard bounds) are written into the target's
+parameters (`gr4j`, or the zone's row) as one settings revision, with a
+`PriorStartRecord` in `settings.gr4jPrior` (one per target: the time, the
+engine, the parameters written, the ranges and the provenance). The server
+re-derives the prior; a settings save never writes the record. A record
+counts while its target is the same (`currentPriorStart`, `sameTarget`) and
+the target's parameters still hold what it wrote.
+
+**The evidence pack** (report format `evidence-22`,
+`evidence/regionalPrior.ts`). § 3 names the prior when the baseline's
+parameters came from it: a fit record that used it and whose parameters
+aren't edited since ("parameters calibrated with the regional prior, n
+donors"), else the catchment's start record for the target the run's
+parameters are now, with no fit applied after it ("parameters from the
+regional prior, n donors (the donors' medians, not calibrated)"). The line
+gives the donor set, its SHA-256 and the leave-one-out skill, and says when
+the prior has no skill, or that its skill is unknown with too few donors.
+
+**Built vs to come.** Built (engine 1.106.0): the prior, its LOO score and
+soil relation; the soil grid (migration 268) and the donor table (269); the
+wiring into `calibrate()`, the stepwise fit and the fit record; the target's
+own climate; Start from the prior; the Calibration page's panel and fit
+choices; the evidence line; the data credits. Synthetic grid and donors
+stand in for dev and CI. To come (followups.md § Regional GR4J prior): a
+target's HydroATLAS attributes, a flow-space LOO score, the donors on the
+Map, the ensemble sampling the prior's box, the prior in automated
+calibration's rules, and per-unit x1 scaled by PAWC (step 6, which would
+change `runModel` and needs its own `ENGINE_VERSION`, the `verify/` mirror
+and an engine-audit.md entry).
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
@@ -12382,7 +12824,7 @@ run's stored series ([ui.md § Summary](./ui.md#summary)).
 definition, a gamma fit and three SPI values and a GLO fit and three SPEI
 values against references computed in Python with no shared code; monthly
 totals (partial months, a missing day, `lastDay`) under two skewed `TZ`s;
-the reference period chosen; over a 44-year synthetic record the SPI-3 is
+the reference period chosen; over a synthetic record of 1981–2024 the SPI-3 is
 about standard normal over 1991–2020 and never falls as the total rises;
 the badge reads the last whole month of history and ignores forecast days
 after it, a dry spell reads dry, and each kind of gap is named. The
@@ -12496,6 +12938,234 @@ equal to the plain ESP **to the bit** with the indices, with none held and
 with too few years, and the same choice under two skewed `TZ`s. The backend
 (`outlooks.db.test.ts`) checks the same against the committed synthetic
 copy.
+
+### 2.15d The forecast-conditioned outlook: the chance of each restriction level (issue #620, engine 1.106.0)
+
+"Will we be restricted this season?" answered from the C3S multi-system
+seasonal forecasts (`seasonal-original-single-levels`, 1°, members and
+hindcasts 1993–2016, [data-sources.md](./data-sources.md)), on top of the
+ESP (§2.15) rather than in place of it. Pure, in
+`packages/engine/src/outlook/forecast.ts` (`runForecastOutlook`, and its
+parts `seasonMonths`, `analogueMonthlyTotals`, `rankAnalogues`,
+`forecastMemberBaseRun`), `qm.ts` (`fitQuantileMap`, `applyQuantileMap`)
+and `skill.ts` (`crpsEnsemble`, `crpss`). Its input is each system's
+**catchment-average monthly totals** (`SeasonalForecastSystem`: one init
+month, each member's complete months from lead 0, the init month;
+`SeasonalHindcastSystem`: the same per hindcast year for one init calendar
+month). Averaging the 1° cells over a catchment and summing the days into
+calendar months is the backend's (issue #620 step 7), not the engine's.
+
+**Off until the copy has a hindcast.** With no forecast, no hindcast, or no
+system that qualifies (below), `runForecastOutlook` runs nothing and returns
+`status: 'off'` with the reason (`noForecast`, `noHindcast`,
+`noQualifyingSystem`; also `noDams`, `noAnalogues`, `levelProblems`), and
+the caller keeps the ESP. Nothing in the ESP path changed: the outlook, its
+members and the review triggers are what they were to the bit
+(`forecast.test.ts` › "leaves the ESP outlook as it was"), and a forecast
+outlook runs its own ESP members from the same snapshot beside its forecast
+members. `runOutlookMemberRun` is `runOutlookMember` that also returns the
+member's run (for the storage on a review date); `runOutlookMember` is it
+without the run.
+
+1. **Quantile mapping** (`qm.ts`). Per system × lead month (so per calendar
+   month: one init month per outlook), each forecast total is mapped onto the
+   base run's own monthly `rain_final` for that calendar month: x′ =
+   Q_obs(F_fc(x)), empirical, fitted on the hindcast years whose month the
+   record holds **wholly before the decision date** (nothing after it is
+   known, §2.15), the forecast sample pooling every member of those years.
+   - *Plotting position*: Hazen, (i − 0.5) ÷ n, for both samples (symmetric,
+     a sample's median at 0.5, close to unbiased for most distributions,
+     Cunnane 1978); a block of tied forecast values sits at the mean of its
+     positions (so a 0 mm forecast in a sample with many zeros maps to the
+     observed quantile at the middle of the zeros), linear between distinct
+     values. Q_obs is linear between the observed values and **held** at the
+     smallest and largest below and above their positions, since the pooled
+     forecast sample (members × years) is many times the observed one (one
+     value a year) and spans wider positions.
+   - *Tails*: outside the forecast sample's range the correction at that end
+     carries on **multiplicatively**: x × Q_obs(F_fc(top)) ÷ top above the
+     largest forecast value (Q_obs(F_fc(top)) + x when the top is 0 mm), x ×
+     Q_obs(F_fc(bottom)) ÷ bottom below the smallest. The map is continuous,
+     increasing and never negative, and a forecast wetter than any hindcast
+     month stays wetter than any observed month by the same ratio.
+   - *Too few years*: a cell fitted on fewer than
+     `FORECAST_MIN_HINDCAST_YEARS` = 20 years fails its system, which is then
+     left out with the reason ("lead month 3 (01) has 19 hindcast years …").
+     So only systems with at least 20 hindcast years the record covers take
+     part (the issue's open question 2). One outlook takes one init month,
+     the newest whose month starts on or before the decision date: a system
+     with another init, or one starting after the decision date (its months
+     would know days after it, §2.15), is left out. C3S issues a month's
+     forecasts on the 6th to the 13th, so a decision on the 1st with that
+     month's init would know a week or so of issue-day weather; the engine
+     has no issue date, and the backend (step 7) passes only forecasts issued
+     on or before the decision date.
+   - A member's complete months are its values up to the first that isn't a
+     number ≥ 0 (the mirror pads short systems with NaN); a member with none
+     is left out and counted. A system reaches the season months whose lead
+     is below its shortest member's months; later months keep the analogue's
+     own days (below).
+2. **A member.** Its mapped totals M_k per season month k (the calendar
+   months the season's days fall in, `seasonMonths`) pick the **nearest ESP
+   analogue year** (`rankAnalogues`): the analogue's totals T_k are its whole
+   calendar months in its own year (the season's month shifted by the
+   analogue's offset; a whole month also where the season holds only part of
+   it), and the distance is
+   d = √( (1/K) Σ_k ((M_k − T_k) ÷ σ_k)² )
+   over the K months the member gives, σ_k the sample standard deviation of
+   T_k across the analogue years (a month alike in every year adds 0), as
+   §2.15c's distance; ties to the newer year. An analogue without a whole
+   month of record where the member gives one isn't a candidate. Then each
+   month's days of the analogue's stretch are **rescaled by f_k = M_k ÷ T_k**,
+   the catchment's `rain_final` and, under runoff from each unit's own rain
+   (§2.4h), every unit's `rain_unit` by the same factor, so the member keeps
+   the analogue's day-to-day sequence and each unit's share of it
+   (`forecastMemberBaseRun`). A month the member gives its analogue's own
+   total has f = 1 and its days are the analogue's **to the bit**. The
+   member is then an ordinary ESP member of that analogue
+   (`runOutlookMemberRun` from the base run's snapshot, §2.15, §2.16): its
+   A-pan and reference ET are the analogue's, its rain the rescaled days in
+   `rain_forecast_mm` (and `rain_forecast_mm@<unit>`).
+   - **The zero-month rule.** A month whose analogue total is under
+     `FORECAST_MIN_PATTERN_MM` = 1 mm has no daily pattern to rescale. When
+     the member asks for at least 1 mm there, the month takes the days of
+     the **next-nearest analogue** (in the same ranking) with at least 1 mm
+     that month, × M_k ÷ its total (its unit rain alike; the evaporation stays
+     the member's own analogue's). With no such analogue the month keeps its
+     analogue's days: rescaled when they hold any rain, else dry, with a
+     warning. A member asking for under 1 mm in such a month takes the
+     analogue's days rescaled to it (M_k ÷ T_k; factor 1 when the analogue's
+     month is dry, the difference then under 1 mm), and one asking for 0 mm in
+     a month with rain gets f = 0, every day dry. The factor has no ceiling:
+     with no donor, 40 mm on an analogue month of 0.1 mm lands on its one
+     drizzle day (a question for the hydrologist, FC1).
+   - Where only one of the season and the analogue spans a 29 February, the
+     stretch's days drift a day from the analogue's calendar months (§2.15),
+     so a full month's rescaled total can miss M_k by that day's rain.
+3. **Weights.** Each qualifying system that gave at least one member weighs
+   1 ÷ (such systems) and each of its members an equal share of that (a
+   system none of whose members matches an analogue with whole months of
+   record is reported as not used, and with none left the outlook is off,
+   `noAnalogues`) (`ForecastMemberResult.weight`), so a
+   51-member system doesn't outweigh a 7-member one (the issue's open
+   question 2).
+4. **The chance of each restriction level.** On each review date (the
+   options' dates; else, with a rule, the rule's review dates in the season
+   (none in the season: no chances, with a warning), §2.7i; without one, the
+   review triggers' default, `defaultReviewDate`,
+   §2.15a) each member's farm dam storage at the start of the day (the end
+   of the day before; on the decision date the base run's) is read as the
+   rule reads it: Σ storage ÷ Σ capacity that day over every farm dam
+   (`total`) or the listed ones (`dams`), the level the deepest whose
+   `belowPct` the share is below; under `own` the deepest level any unit
+   in the rule's scope reaches on its own dam (the catchment column of
+   §2.7i). The chance of a level is the weight of the members at it ÷ the
+   total weight, with **"No restriction"** (level 0) first, so the chances
+   sum to 1 on every review date. **Without a rule** the categories are the
+   review triggers' storage bands on that date (§2.15a: the terciles of the
+   base run's storage on that day of the year, over the years before the
+   decision date), fullest first. The outlook runs without the rule
+   (`withoutDroughtRestriction`, as §2.15) and reads only the storage, so a
+   rule's EWR trigger, a filling dam's milder reading and the hysteresis of
+   a level that holds until the next review are not in the chance: it is
+   the chance that the storage on the date is in the level's range. The
+   ESP's own chances (`espChances`, every analogue alike) come with it.
+5. **The skill gate** (`skill.ts`). Each outlook scores its systems on the
+   hindcast years: for each year y with an analogue in the record (the one
+   whose init month, shifted as the season's is, falls in y), the outcome is
+   that analogue's ESP member's season-end storage (the season driven by
+   year y's own recorded rain **from this season's state**), the ESP's
+   forecast is every other analogue's member, equally weighted, and the
+   forecast's is year y's hindcast members, mapped **leaving year y out**
+   (each cell then needs 19 years), matched to an analogue other than y's,
+   rescaled and run, the systems weighted as above. Each is scored by the
+   CRPS of a weighted ensemble, Σ w_i |x_i − y| − ½ Σ_i Σ_j w_i w_j |x_i −
+   x_j| (Gneiting and Raftery 2007; Hersbach 2000), and **CRPSS = 1 − mean
+   CRPS(forecast) ÷ mean CRPS(ESP)** over the years. Fewer than 10 scored
+   years (`OUTLOOK_MIN_YEARS`) or a perfect ESP: no score (`null`, with the
+   reason). **The forecast leads only when the CRPSS is above 0**; at or
+   below 0 (or with no score) `leads` is `esp` and the result says "no better
+   than past weather". Holding the initial state fixed isolates what the
+   forecast adds to the ESP, which starts from the same state, and costs one
+   run of the season per hindcast member; scoring from each year's own state
+   would need a snapshot per year. Turn it off with `skill: false`.
+
+**What it can't say.** A 1° cell is about 110 km across, larger than most
+catchments the app models, so a member's catchment total is a cell average
+(or a few), whose rain can differ from the catchment's by more than the
+map's bias correction takes out; the mapping corrects the distribution, not
+the timing within a month; and with 20–24 hindcast years a map's tails
+rest on two or three values. The members' daily rain is an analogue year's,
+rescaled by month, so a forecast's storm timing never reaches the model.
+Known limitation FC1 ([engine-audit.md](./engine-audit.md)).
+
+**Tests** (`outlook/forecast.test.ts`, `forecast.invariants.test.ts`,
+`forecast.perf.test.ts`; invented catchment and forecasts,
+`forecastFixture.ts`): the map on hand-computed cases (interior, held ends,
+multiplicative tails, ties, monotone, refusals); the CRPS and CRPSS by hand;
+the analogue ranking against a hand-computed distance, ties to the newer
+year; the rescaling (factors, every unit alike, the other days untouched)
+and the zero-month rule's three cases; off without a forecast or a
+hindcast with nothing run, a 19-year hindcast and another init month left
+out, and the ESP outlook to the bit; the weights per system; the bias mapped
+out; a forecast starting after the decision date left out; the chances summing to 1, equal to the members' weights, under a rule
+(each level from the storage share) and by the bands; the skill score over
+24 years, a skilful system leading and a confidently wrong one not. The
+invariants: a factor-1 member equals the ESP member to the bit (catchment
+rain and per-unit rain); members re-run in full share the history to the bit
+and from the snapshot differ only in their season's rain; the chances sum to
+1 on random rules (each basis) and without one; the base run is never
+changed, and members built one after another on one scratch copy equal
+members built alone; the same result under two skewed `TZ`s. The perf budget: 3 systems × 10 members under 400 ms, with the
+skill score under 3 s. `verify/` mirrors `runModel` only, and a member is an
+ordinary run: probe `forecast-member-rescaled` feeds one.
+
+**The backend bridge** (issue #620 step 7, `backend/src/outlooks/c3s.ts`,
+called by the outlook job for the method `c3s`, [api.md § Seasonal
+outlooks](./api.md#seasonal-outlooks)). The engine's input is made from the
+data mirror's 1° daily arrays (`c3s/<YYYY-MM>/tp_mm`,
+`c3s-hc/<system>/<MM>/tp_mm`, `c3s/index.json`):
+- *The area*: the project's catchment boundary on the map, else the union of
+  its units' polygons (the unit feeds' rule). Each 1° cell it touches weighs
+  share inside × cos(latitude), exact clipping as the CHIRPS boundary cells
+  (cells with under 0.1 % inside left out); no polygon at all, and the
+  outlook is off (`noArea`). Under runoff from each unit's own rain (§2.4h)
+  each unit's polygon is averaged on its own too and reported (`area.units`:
+  each system's mean raw monthly totals per unit), but the engine takes the
+  catchment's totals only and rescales every unit's rain by the catchment's
+  factor (step 2 above), so the units' own forecasts don't drive it.
+- *Only forecasts issued by the decision date* (§2.15): C3S releases
+  ECMWF's forecast from init month M on the 6th of M and the other centres'
+  on the 10th (at 12 UTC; `ingest/c3srequest.py` `release_at`, checked
+  against it by `c3s.test.ts`). The init is the newest whose month starts on
+  or before the decision date with at least one system issued on or before
+  it; only those systems are passed, and the others of that init are listed
+  as not issued. A decision on the 7th of a month thus takes ECMWF's forecast
+  of that month alone, a decision on the 1st the previous month's from every
+  system held.
+- *Monthly totals*: a member's daily catchment mean is Σ w·v ÷ Σ w (a day
+  with a NaN cell has none); lead month k is the k-th calendar month from
+  the init month's 1st (a hindcast year's own, so a leap February has 29
+  days), and a member's months run to the first that isn't whole, at most
+  7 in 215 days. A member slot the system doesn't fill isn't passed; one
+  filled but with no whole month is passed empty, so the engine counts it as
+  dropped.
+- *Hindcasts*: for each system passed, its hindcast of the init's calendar
+  month, every year held (1993–2016); the engine fits on the years whose
+  months the record holds wholly before the decision date (step 1).
+- *The run*: one call after the ESP members and the trigger table, at the
+  **full demand** (no level's ops), on the outlook's kept analogue years, on
+  the drought restriction rule's review dates, else the outlook's own review
+  date, else the engine's default. Its own ESP members run from the same
+  snapshot, so nothing stored for the ESP changes: an outlook of method `c3s`
+  stores the same `result` and triggers as an `esp` one plus
+  `result.forecast` (`outlooks.db.test.ts`). An engine refusal is stored as
+  the forecast part's message (`failed`), never the outlook's failure; a
+  copy laid out otherwise fails the job.
+- *The farm page* never gets a chance (the issue's open question 4):
+  publishing a level of such an outlook adds only which side led
+  (`FarmOutlookProjection.forecast`), and the farm's figures are the
+  analogue years' as before.
 
 ### 2.16 Starting a run from a saved state: model-state snapshots (engine ≥ 1.1.0, issue #53)
 

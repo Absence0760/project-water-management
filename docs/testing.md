@@ -260,6 +260,17 @@ golden block of `runoff/stationForcing.test.ts` use it; `GOLDEN_PRINT=1`
 prints a test's values. Pin values on a commit from before the change they
 guard, so the pin proves "unchanged", not "the same as now".
 
+A result that isn't a run, such as a calibration report, uses the same
+file's `reportGolden` and `reportDiff`: its JSON with the numbers blanked,
+exact, and each number compared on its own at 1e-9 relative. Moments don't
+suit it: a report's few statistics sit beside volumes and day counts, so
+the sum hides a change to one of them (one report's numbers summed to
+about 4e7). `calibrate/prior-calibrate.test.ts` pins the prior-off
+calibrations this way, in `packages/engine/fixtures/prior-off-calibration.golden.json`
+(`GOLDEN_WRITE=1` rewrites it). An exact hash taken on a Mac failed on CI's
+Linux (run 40775756367); the fitted parameters do agree to the bit there,
+so that test pins them exactly beside the report.
+
 ## Why the slow ones are shaped the way they are
 
 - **Engine random soak** (`packages/engine/src/fuzz/`): checkAll on 400 seeds

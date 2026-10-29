@@ -477,6 +477,126 @@ open:
       Trigger: the first production load of the polygons, before turning
       the flag on.
 
+## Regional GR4J prior (issue #622)
+
+Round 3 of 2026-10-28 built steps 1–3 and the pure part of step 4
+([model.md §2.10m](./model.md)): the data-source rows, the soil water
+capacity grid (migration 268), the `gr4j-donors` reference kind (migration
+269) with its offline fit, and `regionalPrior` with its leave-one-out score
+and soil x1 relation. Round 4 (`feat/r4-priorcal`) wired it in and built
+step 5. What's done and what's open:
+
+- [x] **Step 4's wiring: the prior in `calibrate()`.** Done: the optional
+      `prior` (a two-piece log-normal penalty over the free parameters,
+      weighted in skill units) and `bounds: 'prior'` (the p10–p90 box), off
+      by default and bit-identical when off (`prior-calibrate.test.ts` pins
+      whole reports' hashes); each calibration zone takes the prior built
+      for its own units (`calibrateStepwise`'s `prior(step)`, refused for
+      another target); the fit record carries the prior, the donor set's
+      SHA-256 and its reference load. Reviewed by engine-reviewer.
+- [x] **Step 5: show and apply the prior.** Done: `GET
+      /projects/:id/gr4j-prior` and `POST …/gr4j-prior/start`, the
+      Calibration page's Regional prior panel (ranges, donors, LOO skill,
+      "No skill", Start from the prior), Fit automatically's penalty and
+      box choice, the fit record's line, the evidence pack's § 3 line
+      (`evidence-22`), the four sources' credits on `/data-sources`, and
+      `regional-prior.spec.ts`.
+- [ ] **A flow-space leave-one-out score.** Missing: the LOO score is in
+      parameter space (log error of the p50 against the plain median), and
+      the panel now shows it as the prior's skill. Flow space is what the
+      hydrologist judges: KGE′ of the prior's p50 run on each held-out
+      donor, against its own fit. Durable fix: `fit-donors.ts` runs it
+      after the fits, with the forcing it already holds, and stores it on
+      `gr4j_donor_dataset` (a new column, a forward migration); the panel
+      shows both. Trigger: the first real donor fit, before the prior is
+      used for a real catchment.
+- [ ] **Donors at a typical bound.** Broken (maybe): donors are fitted on
+      Perrin's typical bounds, so x4 of a large basin or x1 of a semi-arid
+      one can stack at a bound, and the prior's p10–p90 can never leave the
+      box. `fit-donors.ts` prints the count per parameter; nothing records
+      it per donor. Durable fix: a per-donor at-bound column (a forward
+      migration), then with the hydrologist either fit donors on the wide
+      bounds or leave a bound-hit donor out of that parameter's quantiles.
+      Trigger: the first real fit's counts.
+- [ ] **The prior's forcing against the target's.** Donors are fitted on
+      uncorrected CHIRPS v3 finals; a target's MAP and aridity come from its
+      own forcing (station or CHIRPS rain, GR4J's PE), and the donors' from
+      HydroATLAS. A target running on station rain, an areal correction or a
+      CHIRPS correction should be told its prior comes from other forcing
+      (parameters absorb forcing bias). Durable fix: a note in the fit
+      record and the panel naming the target's rain source against the
+      donors', and a `targetAttributeSource` on the provenance. Trigger:
+      the first real donor fit.
+- [ ] **A target's own attributes.** Missing: the target has area, MAP and
+      aridity from the project, but no slope, clay, sand or forest, so the
+      donors are compared on three attributes and distance. Durable fix:
+      load BasinATLAS level-12 sub-basins (CC BY 4.0, figshare; read its
+      record's licence field first, data-sources.md § GR4J priors) as a
+      reference kind, and area-weight them over the boundary (and a zone's
+      units, once units have polygons), as the soil grid is. Trigger: the
+      operator's real donor load.
+- [ ] **The donors on the Map.** Missing: the panel lists each donor's
+      distance and position, but the Map draws none. Durable fix: a Map
+      layer of the kept donors' outlets for the target, from the GET's
+      `donors`, with their weights. Trigger: the hydrologist reviewing a
+      real prior.
+- [ ] **The ensemble in the prior's box (CR-1).** Missing: after a fit in
+      the prior's box the uncertainty ensemble samples Perrin's typical box
+      instead, with a note (`resolveEnsembleOptions`). Durable fix: sample
+      the fit record's prior box, as `bounds: 'prior'` with the ranges in
+      the ensemble's options and result (the evidence rule's bounds widened
+      to name it). Trigger: the first fit with the prior that feeds an
+      evidence pack's ensemble.
+- [ ] **The prior in automated calibration's rules.** Missing: the server's
+      rules (§2.10j) fit with wide or typical bounds only. Durable fix: a
+      rules option for the prior (use and weight), the server building the
+      prior per case's target from the loaded donors, recorded in each case.
+      Trigger: a project calibrating by rules on a short record.
+- [ ] **What the prior cost the fit.** Missing: the report gives the
+      penalty at the start and the fit, but not the objective with the prior
+      left out, so a hydrologist can't see how much KGE′ the prior cost.
+      Durable fix: an optional unpriored full fit, as `marPenalty.unpenalised`.
+      Trigger: the hydrologist asking, or a fit whose penalty at the fit is
+      large.
+- [ ] **Step 6 (optional): x1 per unit by PAWC.** Changes `runModel`, so it
+      needs its own `ENGINE_VERSION`, the `verify/` mirror, an invariant
+      (equal PAWC across units reproduces the shared parameters bit for
+      bit) and an engine-audit.md entry. Trigger: only after step 5 is in
+      use and the hydrologist asks for it (#622 open question 4).
+- [ ] **The operator's loads.** Nothing uses the prior in production until
+      the operator builds the soil grid, fits the donors and loads both
+      ([deployment.md § Reference datasets](./deployment.md#reference-datasets),
+      *Soils and GR4J donors*). Fitting needs the copy's CHIRPS v3 finals
+      back to 1981 and a real dPET grid in the checkout's database. Trigger:
+      step 5 shipping. The hydrologist accepts the donor criteria (≥ 8
+      years, < 5 % regulation, ≤ 10 000 km², and the proposed KGE′ ≥ 0.5
+      on the donor's own record), the similarity method and the penalty's
+      provisional default weight (0.1) first (#622 Blockers).
+
+## A modelled Class-A pan grid (issue #646 item 7)
+
+Round 3 of 2026-10-28 built PenPan (`ingest/penpan.py`), the operator's grid
+and validation (`ingest/apan_grid.py`) and the local load. Production refuses
+it ([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)). What's
+open:
+
+- [ ] **The validation and the hydrologist's sign-off.** Missing: `apan_grid.py
+      validate`'s report against DWS Class-A pan stations' monthly means, and
+      the client hydrologist's judgement on it: is the ratio by month close
+      enough to 1 (McMahon et al. found 1.078 over 68 Australian stations)?
+      Screened or unscreened (`--screen`)? Which ground albedo? Durable fix:
+      the report, the sign-off recorded on the data-sources row, then one
+      change that makes the row `reference load` and lets `referenceLoad.ts`
+      and `map-data-gates.mjs` take a PenPan grid, with its tests. Trigger:
+      DWS's permission covering evaporation station records (#646 item 6).
+- [ ] **PenPan-V2.** Missing: Lim, Roderick and Farquhar (2016, J. Hydrol. 540,
+      641–658) add the pan's wall heat exchange for monthly steady-state use,
+      and it fit Australian pans better than PenPan. Its equations could not
+      be confirmed from a readable copy of the paper, so they aren't guessed.
+      Durable fix: `penpan_v2` beside `penpan_day`, tested on the paper's
+      worked values, and the method text naming the version. Trigger: a copy
+      of the paper, or the validation showing PenPan's bias is too large.
+
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
 - [x] **Guard pending notices as db-setup.ts guards pending jobs.** The
@@ -629,6 +749,41 @@ runs and accumulations are real) can't be decided without the client.
       at least 10, and none drawn under 20 candidates; the SPI-3 at the
       decision date not a term. The issue asks for the hydrologist's
       sign-off on the analogue count; no skill score until the C3S slice.
+- [ ] **The forecast-conditioned outlook (issue #620 step 6, engine
+      1.106.0, model.md §2.15d).** The engine part is built and off until the
+      copy holds a hindcast (`runForecastOutlook` returns `off` and runs
+      nothing; the ESP is unchanged to the bit). Calls made in the build, to
+      confirm with the skill gate (engine-audit.md FC1): Hazen positions,
+      held observed ends and multiplicative tails; 20 hindcast years per lead
+      month; the nearest analogue by standardised RMS distance; the 1 mm
+      zero-month rule; systems weighted equally; the skill scored from this
+      season's state, the forecast leading only above a CRPSS of 0. **Step 7
+      is built** (`backend/src/outlooks/c3s.ts`, method `c3s`, migration 275,
+      the panel's *Chance of each restriction level*, the farm card's line;
+      model.md §2.15d § The backend bridge). Calls made in step 7, to
+      confirm: the chances at the full demand (no level's ops), on the rule's
+      review dates else the outlook's own; the newest init with any system
+      issued by the decision date, not the init with the most systems (a
+      decision on the 7th takes ECMWF's alone); "issued by" as the release
+      day on or before the decision date (the release is at 12 UTC that day);
+      the catchment boundary, else the units' polygons together, weighted by
+      share × cos(latitude); under per-unit rain each unit's forecast
+      reported but not driving the engine (it rescales units by the
+      catchment's factor); the farm card saying only which side led. Still
+      open: the methodology statement's paragraph on the forecast-conditioned
+      outlook once the chances reach a report (a new methodology version if
+      methodology-13 is published by then).
+- [ ] **C3S outlook read cost (issue #620 step 7, `outlooks/c3s.ts`).** A
+      `c3s` outlook reads one chunk (one member's whole 215-day forecast over
+      the 29 × 32 grid, ~0.4 MB gzipped) per member per hindcast year of each
+      system used: about 600 GETs per system with 25 hindcast members, 5 000
+      or more with every system, inside the job's transaction. Fine on the
+      synthetic copy; on the full copy it is tens of seconds of S3 reads per
+      outlook. The durable fix: the ingest also writes each system's monthly
+      totals per cell (`c3s-hc-monthly/<system>/<MM>`, (year, member,
+      lead_month, lat, lon), ~30× smaller and one chunk per system), which
+      the bridge reads instead. Trigger: the first live outlook with the
+      hindcasts backfilled, or a worker timeout on a `c3s` outlook.
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
       [#482](https://github.com/Absence0760/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
@@ -2109,6 +2264,61 @@ the suggested order (the IDs carry the detail):
       ratings, CR-25 human-use flag, CR-30 assurance-table EWR, CR-31 licence
       scenario report, CR-32 dam and abstraction assumptions, CR-33 seasonal
       reporting.
+
+## Calibration zones (issue #555)
+
+Round 3 of the 2026-10-28 rounds (draft PR #644, engine 1.106.0) built
+`settings.calibrationZones` and migration 270, the zones in the run (Per unit
+only), the stepwise fit upstream first, the API's checks, the verify
+cross-check and Settings' *Calibrate at several gauges* table with the fit
+card's steps ([model.md §2.10n](./model.md), ui.md § Settings & calibration).
+Round 4 (`feat/r4-zonesview`) built the rest of the screens:
+
+- ✅ **Zones on the Network tab and the Map**: *Colour hydrological units by →
+  Calibration zone* and *Colour areas by → Calibration zone* (`measure=zone`),
+  each with a legend, from the settings by the engine's rule (ui.md §
+  Network, maps.md § Calibration zones on the map).
+- ✅ **Calibration statistics per ticked site in a run**
+  (`summary.calibrationZones`), each in or out of sample by its own zone's
+  fit, in the Calibration page's and the report's *Calibration zones* table.
+- ✅ **The report and the evidence pack** list every zone's parameters, fit
+  record and scores (report format `evidence-22`, evidence-pack.md §
+  Calibration zones; a zone above the site with no stored fit is flagged).
+- ✅ **A per-zone run comparison**: one input-diff line per zone and a
+  statistics table per zone gauge (run-comparison.md).
+
+Still open:
+
+- **Automated calibration and the uncertainty ensemble per zone.**
+  `calibrate/auto.ts` and `uncertainty/ensemble.ts` still fit or perturb the
+  site's zone's parameters alone (the zones above it stay at their stored
+  parameters). Durable fix: run the rules' cases stepwise, and perturb each
+  zone's parameters by its own fit's spread. Trigger: before a zoned project
+  signs off calibration rules or cites an ensemble.
+- **Errata keyed on a zone's fit engine outside the evidence report.** The
+  evidence report (`evidence-22`) passes every zone fit's engine version to
+  `errataFor`, but the run's validation statement
+  (`liability/validation.ts`), its sign-off statements
+  (`liability/signoff.ts`) and the runs' *May be affected* status
+  (`backend/src/errata/runs.ts`, `runs/read.ts`, `evidence/packs.ts`,
+  `share/links.ts`, `signoffs/routes.ts`) read only
+  `inputs->'settings'->'fitRecord'->>'engineVersion'`, the site's fit. So an
+  erratum keyed on a zone fit's engine is in the pack's errata but not on the
+  same run's statement. Durable fix: carry `fitEngineVersions` (the site's
+  and each ticked zone's `fitRecord.engineVersion`, read from the settings
+  snapshot with a `jsonb_array_elements` over `calibrationZones`) through
+  those queries and let `errataFor` take a list. Trigger: the first erratum
+  keyed on a fit's engine (`keyedOn: fit`) published while a project has a
+  fitted zone, or with the automated-calibration-per-zone work below,
+  whichever comes first.
+- **A zone step's score and the EWR shares.** While a zone above the site is
+  fitted, the units below it run on their pre-fit parameters, and the natural
+  MAR shares follow every unit's runoff, so a step's score can differ from a
+  run on the applied result wherever something above the gauge reads the
+  shares (model.md §2.10n). Durable fix if it matters in practice: pin the
+  shares to the start parameters' for the whole stepwise fit, or iterate the
+  steps once more. Trigger: a client catchment with an EWR charge above a
+  ticked gauge.
 
 ## Verification
 
@@ -4570,6 +4780,29 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `gauge-stations` kind on the production path (`geo/referenceLoad.ts`,
       `scripts/release/map-data-gates.mjs`, the workflow's choices), which
       refuses it until then.
+- [ ] **Decision: DWS evaporation station records** (operator, through the
+      client's hydrologist; issue #646 item 6, the hydrologist's F5; maps.md
+      § Evaporation stations, data-sources.md § dws-evaporation). DWS's
+      permission recorded 2026-10-28 covers verified daily **flow** only.
+      The request is drafted in
+      [legal/dws-evaporation-request.md](./legal/dws-evaporation-request.md).
+      Ask DWS (GeoRequests@dws.gov.za, through the hydrologist, as for flow)
+      to extend it to the verified daily pan evaporation of weather stations
+      (`E` codes, Class-A and Symons) near the client's catchment, stored and
+      shown as results in the tool, and request those stations' records and
+      the area's station list (`WMA*_Met.pdf`). Until then the Calibration
+      page's Evaporation stations reads only the synthetic stations, and
+      production refuses the `evaporation-stations` load (the gate's
+      `LOADABLE` and `REFERENCE_KINDS`, `blocked`). On a yes: record the
+      permission in data-sources.md § dws-evaporation and the maps.md
+      Sources row (allowed), add a file shape and a loader branch to
+      `geo/referenceLoad.ts` (reading `evaporationStationRecords` into
+      `replaceEvaporationStations`, `geo/loadEvaporationStations.ts`), add
+      the kind to `LOADABLE` in `scripts/release/map-data-gates.mjs` and to
+      `load-reference.yml`'s choices, and check the reader
+      (`geo/dwsEvaporation.ts`) against a real reply first: it is built on
+      the flow page's layout, since DWS's evaporation page could not be read
+      from outside South Africa.
 - [ ] **Decision: the Lynch (2004) MAP grid's licence** (operator; maps.md §
       MAP grid, § Sources, decision D-B). The Lynch (2004) national grid
       from the WRC's Atlas of Climatology and Agrohydrology: its portal
@@ -4825,7 +5058,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       stream, quoting both areas; keep "Use that channel" primary only for
       rule 4's gully. Trigger: the next placement round, with a test on the
       synthetic DEM's tributary beside the river.
-- [ ] **Start and Divide have no worker** (new in the gauge rerun). Start
+- [x] **Start and Divide have no worker** (new in the gauge rerun). Start
       places a gauge outlet as Delineate does (where both are right they
       agree within 5 % at all 301 stations), but routes at most 3 072
       cells, so it refuses `too_large` 48 of 129 gauges of 1 000–10 000 km²
@@ -4833,6 +5066,14 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       or Divide plan cut at its last window to a worker job, as Delineate
       does (delineation_request with a plan kind, the same aim). Trigger:
       a client catchment over about 1 000 km², or a Start refusal reported.
+      **Done (#646 item 3, 2026-10-28):** migration 272 gives
+      `delineation_request` a plan kind; the `delineate` job routes a plan
+      with windows up to 6 144 cells (`jobs/handlers/delineate-plan.ts`).
+      A Start too large for the request answers at once with the plan a
+      server without a DEM makes (the hydrologist's review F11), which the
+      routed one replaces while open; a Divide waits for the worker
+      (maps.md § Start from the map). Locally without a worker (`pnpm
+      dev`), a Start keeps that quick plan and a Divide waits.
 - [x] **No caveat on a gully snap with no reach within 1 km** (finding 7's
       other half, still open after the gauge rerun). **Obsolete (issue #472,
       2026-10-09):** a point now goes only on a cell with 1 km² or more
@@ -5288,19 +5529,16 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       source note from an entered MAP. Trigger: the hydrologist setting a
       correction by hand in the app.
 
-- [ ] **Rainfall station settings with no field yet** (issue #553 round 3,
-      2026-10-24; narrowed by the #612 follow-up, 2026-10-28). Settings →
-      Model selection for flow generation sets each land unit's station and
-      the catchment's (`settings.rainStations.units`, `.catchment`: the
-      station, its patching priority, scaling and correcting station), each
-      station's site, and Rain gaps → Flagged rain the `unreliable` periods
-      (issue #611). One part stays API-only: `catchmentMapMm` /
-      `catchmentMapSource`, the catchment MAP the catchment station's ratio
-      uses (absent = the land units' area-weighted mean MAP, [model.md
-      §2.4i](./model.md)). Durable fix: a MAP and source field under The
-      catchment's rainfall station, showing the units' mean it replaces and
-      the ratio it gives. Trigger: the operator has a catchment MAP from a
-      study that differs from the units' mean.
+- [x] **Rainfall station settings with no field yet** (issue #553 round 3,
+      2026-10-24; narrowed by the #612 follow-up; done 2026-10-28, #612
+      follow-up round 3). Every part of `settings.rainStations` now has a
+      field: each land unit's station and the catchment's (the station, its
+      patching priority, scaling and correcting station), each station's
+      site, Rain gaps → Flagged rain the `unreliable` periods (issue #611),
+      and **Catchment MAP (mm)** / **MAP source** (`catchmentMapMm` /
+      `catchmentMapSource`) under The catchment's rainfall station, blank
+      for the land units' area-weighted mean, with the ratio it gives
+      ([ui.md § Model settings](./ui.md)). Test: `catchment-rain-map.spec.ts`.
 
 ## Notes (WP-2.7)
 
@@ -6992,3 +7230,54 @@ events after a decision, append-only (228_decision_events). Left open:
       a `varied` appeal event. Trigger: a pilot assessor's report showing the
       line, or a second report-request feature that needs a scenario run off
       the request path.
+
+## Map edits and the values taken from the map (issue #646 items 4 and 5, 2026-10-28)
+
+Built: a unit's area from an earlier outline (Checks with Use, the area
+grid, a coded run warning), MAP, rain, land cover and evaporation read over
+a redrawn outline (273's stamps, Checks and the Start data list), the rest
+of the catchment's area after a boundary edit, a dam inside another unit's
+boundary, a gauge moved since it became its node, the A-pan row, and an
+editor's and a large boundary's notes in step 4
+([maps.md § Checks](./maps.md#checks)). Left:
+
+- [ ] **Divide's area half without an elevation model** (F9). Divide needs
+      a DEM (`divide.ts` `no_dem`), so a server without one has no batch
+      re-proposal of the units' areas beside "Now:". Not built here: a
+      plan without routing is Start's (`planWithoutDem`), and Divide's
+      apply and review assume a routed plan (drains-into, gauges, the
+      rest's piece). The Checks' **Use** on each unit whose boundary was
+      redrawn is the stand-in, one unit at a time. Durable fix: a
+      `planWithoutDem` for Divide (the units' boundary areas beside the
+      model's, no order), reviewed and applied as a division with every
+      drains-into unticked. Trigger: a client dividing without a DEM, or
+      more than a handful of units redrawn at once (start-from-map.md § Not
+      built).
+- [ ] **The WR2012 quaternary isn't re-checked after a boundary edit** (F8,
+      F14). The reference stores the quaternary's values, not the point or
+      feature it was looked up at (it may have been a gauge, or typed), so
+      nothing can tell that the moved boundary now lies in another
+      quaternary without guessing. Durable fix: record the lookup's point
+      and feature with `settings.wr2012.reference` (from QuaternaryProposal),
+      and flag it in the Checks when that feature's outline changed or its
+      point's quaternary differs. Trigger: the next WR2012 change, or a
+      client catchment redrawn across a quaternary line.
+- [ ] **WR2012 uses one quaternary** (F14). A catchment across two
+      quaternaries gets the first one's MAR × the area ratio. Durable fix:
+      area-weight every quaternary the boundary covers (the quaternary
+      layer's polygons are loaded; the reference would become a list with
+      shares, an engine and settings change with its own ENGINE_VERSION).
+      Trigger: a client catchment that crosses a quaternary line by more
+      than ~10 % of its area.
+- [ ] **The rest of the catchment beside units' boundaries has no outline**
+      (F14), so rain and MAP for each unit can't read it. Durable fix: with a
+      DEM, save the outlet's piece less the units' boundaries as the rest's
+      parcel on apply (the routed plan has its cells; Start's apply would
+      polygonise them as it does a routed unit's piece). Trigger: a rest
+      over ~20 % of the catchment in a client model, or the next Start
+      change.
+- [ ] **Changed since is told by area** (F7). A redraw that keeps the area
+      to 0.5 m² (a unit feed's mark: 0.001 km²) reads as the same outline,
+      so a rename or relink (which bump `updated_at`) isn't flagged. Durable
+      fix: a geometry hash in the stamp (and in the feed marks). Trigger: a
+      client report of a reshaped boundary not flagged.

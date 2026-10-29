@@ -82,6 +82,11 @@ test('the contents list shows on a desktop and folds on a phone', async ({ page 
 	const toc = page.getByRole('navigation', { name: 'Contents' });
 	await expect(toc.getByRole('link', { name: '1. Who we are' })).toBeVisible();
 	await expect(toc.getByText(/^Contents/)).toBeHidden();
+	// One list in the accessibility tree at a time, never a collapsed disclosure's content shown by CSS (an a11y scan
+	// read that as hidden once /data-sources' column scrolled): every section once.
+	const sections = await page.locator('main h2[id]').count();
+	await expect(toc.getByRole('link')).toHaveCount(sections);
+	await expect(toc.locator('details:not([open]) a:visible')).toHaveCount(0);
 
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/privacy');
@@ -91,6 +96,7 @@ test('the contents list shows on a desktop and folds on a phone', async ({ page 
 	// Folded, the privacy notice's own words start on the first screen.
 	await expect(page.getByText('This notice explains what personal information')).toBeInViewport();
 	await fold.click();
+	await expect(toc.getByRole('link')).toHaveCount(sections);
 	await toc.getByRole('link', { name: '10. Your rights' }).click();
 	await expect(page).toHaveURL('/privacy#rights');
 });

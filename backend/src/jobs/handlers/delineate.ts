@@ -17,6 +17,9 @@
 // The budget also fits the worker Lambda's remaining time (JobContext
 // deadline): a job claimed late in a tick, or one cut short by it, goes back
 // to the queue for the next tick instead of being killed or wrongly refused.
+//
+// A request with a plan kind (272, a Start or Divide plan) is routed by
+// delineate-plan.ts instead: the same job kind, cap and budget.
 import { z } from 'zod';
 import { configuredDem } from '../../delineation/dem.js';
 import { delineate, DelineationRefused, tooLargeText, type LargerChannel, type WindowAim } from '../../delineation/delineate.js';
@@ -29,6 +32,7 @@ import { logEvent } from '../../logging/logEvent.js';
 import { safeError } from '../../logging/safeError.js';
 import { JobError, JobRelease } from '../errors.js';
 import { defineHandler } from '../registry.js';
+import { runPlanJob } from './delineate-plan.js';
 
 export const DelineatePayload = z.object({ requestId: z.string().uuid() }).strict();
 
@@ -61,6 +65,8 @@ export const delineateHandler = defineHandler({
 		if (!req) throw new JobError('the delineation request is gone, or belongs to another catchment', { retry: false });
 		// Superseded by a newer click, or finished by an earlier attempt that committed.
 		if (req.status !== 'queued') return;
+		// A Start or Divide plan (272): routed by its own half (delineate-plan.ts).
+		if (req.plan_kind) return runPlanJob({ db, job, progress, deadline }, req);
 
 		const refuse = async (code: string, message: string, larger?: LargerChannel) => {
 			await db.query(
@@ -72,7 +78,7 @@ export const delineateHandler = defineHandler({
 
 		const dem = configuredDem();
 		if (!dem) return refuse('off', 'Delineation is off: the server has no elevation model.');
-		const click: [number, number] = [req.click_lon, req.click_lat];
+		const click: [number, number] = [req.click_lon!, req.click_lat!];
 		// The mapped river near the click, only to word a refusal: it never places the outlet (place.ts, issue #472).
 		const near = await nearestReach(db, click);
 		const mapped = near ? { name: `reach ${near.reachId} of ${near.dataset}`, km2: near.upstreamKm2 } : null;
@@ -116,7 +122,7 @@ export const delineateHandler = defineHandler({
 		if (now[0]?.status !== 'queued') return;
 		let proposalId: string;
 		try {
-			proposalId = (await storeProposal(db, job.projectId, req.click_kind, result, { background: true })).id;
+			proposalId = (await storeProposal(db, job.projectId, req.click_kind!, result, { background: true })).id;
 		} catch (err) {
 			// Another delineation finished at the same moment (the unique open index): the retry stores this one after it.
 			if (err instanceof ApiError && err.status === 409) throw new JobError(err.message, { retry: true });

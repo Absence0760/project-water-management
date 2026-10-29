@@ -9,6 +9,8 @@ export * from './pack';
 export * from './bundle';
 export * from './prompts';
 export * from './riverWorks';
+export * from './regionalPrior';
 export * from './locality';
 export * from './damObservations';
+export * from './calibrationZones';
 export * from '../geo/localityMap';

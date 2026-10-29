@@ -3507,7 +3507,7 @@ placed points. The server never trusts the browser with geometry:
   the map feature, not a node, so the sweep can't tie a row to a farm
   without them, and once it seeds views it sees each farmer read their own
   dam's rows (the entries allow exactly the `dam` features on the farmer's
-  own farms). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the orchard and vine grid (`crop_type_dataset`, `crop_type_cell_reference`, 259, empty in production until SANLC's terms are recorded), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207), `river_reference` (171) and the gazetteer (`gazetteer_reference`, 225) are public reference data, readable by any
+  own farms). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the orchard and vine grid (`crop_type_dataset`, `crop_type_cell_reference`, 259, empty in production until SANLC's terms are recorded), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207), `river_reference` (171) the gazetteer (`gazetteer_reference`, 225), the soil water capacity grid (`soil_dataset`, `soil_cell_reference`, 268) and the GR4J donor basins (`gr4j_donor_dataset`, `gr4j_donor`, 269; issue #622) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
   schema owner). The gazetteer's read policy is `FOR SELECT USING (true)`
   with `SELECT` granted to `water_app` and no write policy or grant; it is
@@ -4362,7 +4362,9 @@ key there would let any read-only principal forge any user's session.
 CI's Trivy config scan (`terraform.yml`, Terraform and
 `backend/renderer.Dockerfile`, HIGH/CRITICAL to the Security tab) flags these
 on purpose-built resources. Each carries a `#trivy:ignore:<ID>` with its reason
-beside the resource; a new ignore needs a line here too.
+beside the resource; a new ignore needs a line here too. The Trivy version
+is pinned in the workflow (`version:`), not left to the action's default:
+an older Trivy silently skips any check whose minimum version it is below.
 
 | Finding | Resources | Why it stays |
 | --- | --- | --- |

@@ -15,9 +15,12 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: ["--maxkb=500"]
+      # Generated fixtures are byte-for-byte what their generator writes (fixture.test.ts compares them): no fixing.
       - id: end-of-file-fixer
+        exclude: ^backend/fixtures/mirror/
       - id: trailing-whitespace
         args: ["--markdown-linebreak-ext=md"]
+        exclude: ^backend/fixtures/mirror/
       - id: check-yaml
       - id: check-json
 

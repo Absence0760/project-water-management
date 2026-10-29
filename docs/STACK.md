@@ -149,7 +149,7 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 ## Commands (run from repo root)
 
 ```bash
-pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, orchards and vines, evaporation, MAP grid, gazetteer, Waterbodies polygons), start Mailpit and MinIO (one-time)
+pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, orchards and vines, evaporation, evaporation stations, MAP grid, gazetteer, Waterbodies polygons, soil water capacity grid, GR4J donor basins), start Mailpit and MinIO (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (starts Postgres first via dev:db:up; the backend applies pending migrations)
 pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only; also starts Postgres)
 pnpm dev:all                # everything: Mailpit, MinIO + the map's basemap if cached (never fetched), then dev:full
@@ -161,7 +161,7 @@ pnpm dev:jobs:tick          # run every due job once and exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default, no network) and exit
 pnpm dev:dams:run           # dam observations once: match traced dams, both passes, Waterbodies and WOfS (fixtures by default, no network), load (run-locally.md § Dam observations)
 pnpm dev:ingest:push        # push the synthetic logger CSV to /ingest with the API key in WM_INGEST_KEY (run-locally.md § Ingest)
-pnpm dev:ingest:run [rnl|sat|era5l|imerg_late|ecmwf|agera5_et0|power_et0]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
+pnpm dev:ingest:run [rnl|sat|era5l|imerg_late|ecmwf|agera5_et0|power_et0|c3s]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
 
 pnpm dev:db:up              # Postgres 17 in docker on :5434
 pnpm dev:db:down
@@ -207,7 +207,12 @@ pnpm import:crop-types      # load the synthetic orchard and vine grid the plant
 pnpm import:evaporation     # load the synthetic evaporation grid Calibration → Evaporation from the map proposes from (pnpm setup runs it);
                              # <file> … --dataset <label> [--bbox w,s,e,n] loads dPET years (.nc, or the totals --reduce <dir> wrote) as monthly means;
                              # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)
+                             # <apan.json[.gz]> --dataset <label> loads ingest/apan_grid.py's modelled Class-A pan grid (PenPan; local only,
+                             # production blocked until the hydrologist signs off its validation; data-sources.md § penpan-apan)
 pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 GB a year, deleted once reduced) and load it (maps.md § Evaporation from the map)
+pnpm import:evaporation-stations  # load the synthetic DWS evaporation stations Calibration → Evaporation stations proposes the A-pan from (pnpm setup runs it);
+                             # <stations.csv> --records <dir> --dataset <label> --source "<DWS reply reference, date>" loads your own DWS pan records
+                             # (DWS's permission doesn't cover them yet: local only, production refuses them; maps.md § Evaporation stations)
 pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid layer draws (pnpm setup runs it);
                              # <grid.asc> --dataset <label> --source "<product, author, year>" [--bbox w,s,e,n] loads your own ESRI ASCII grid
                              # in WGS84 degrees; [--out <grid.json[.gz]>] writes it for a production load instead, which takes only the
@@ -220,6 +225,10 @@ pnpm import:dws <file> --reference "<reply>"   # load a DWS daily flow table (DW
                              # (backend/fixtures/dws/ holds an invented reply; deployment.md § DWS gauge records)
 pnpm import:waterbodies     # load the synthetic DE Africa Waterbodies polygons the dam observations match traced dams to (pnpm setup runs it);
                              # <file.geojson> --dataset <label> [--bbox w,s,e,n] [--source "…"] loads your clip of the v0.0.3 historical extent (CC BY 4.0; maps.md § Waterbodies)
+pnpm import:soils           # load the synthetic soil water capacity grid the regional GR4J prior reads (pnpm setup runs it);
+                             # <soils.json[.gz]> --dataset <label> loads the grid ingest/soils.py writes from SoilGrids 2.0 + iSDAsoil (maps.md § Soil water capacity)
+pnpm import:gr4j-donors     # load the synthetic GR4J donor basins the regional prior is built from (pnpm setup runs it); <donors.json[.gz]> --dataset <label> loads fit-donors' file
+pnpm fit-donors --caravan <dir> --basins <basins.geojson> --out <donors.json[.gz]>   # operator-run, offline: refit GRDC-Caravan basins in D1 on our own forcing (model.md §2.10m; deployment.md § Reference datasets)
 pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + the Showcase (every feature: runs, scenarios, map, allocations, evidence pack draft, notes, alerts; run-locally.md § The showcase; SEED_SHOWCASE=0 skips it) + the Licence comparison map (every band of the Allocations map, issue #510; skipped with the Showcase) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
@@ -349,7 +358,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/spikes/`: one-off spikes that settle a plan's assumptions before it is built (`604-round0.md`: CHC's NetCDF vs its TIFFs, dynamical.org, zarrita, issue #604)
 - `docs/upstream/`: bug reports drafted for upstream projects (the V8 Maglev OSR miscompile behind engine-audit.md V1, issue #232)
 - `docs/legal/disclaimer-review.md`: the report disclaimer, sign-off statement and farmer liability lines, quoted for the client's legal review (issue #47)
-- `docs/legal/operator-agreement.md` (POPIA s20–21 template for each client) and `docs/legal/incident-procedure.md` (personal-information breach: who decides, timelines, the Regulator's report); `docs/legal/known-defect-procedure.md` (a confirmed engine bug: the errata row, the runs' May be affected flag, the owners' email); `docs/legal/information-officer.md` (registering with the Information Regulator); `docs/legal/map-data-licences.md` (the Terms against the map data's licences, and the map credits; for counsel); `docs/legal-status.md` tracks what is open
+- `docs/legal/operator-agreement.md` (POPIA s20–21 template for each client) and `docs/legal/incident-procedure.md` (personal-information breach: who decides, timelines, the Regulator's report); `docs/legal/known-defect-procedure.md` (a confirmed engine bug: the errata row, the runs' May be affected flag, the owners' email); `docs/legal/information-officer.md` (registering with the Information Regulator); `docs/legal/map-data-licences.md` (the Terms against the map data's licences, and the map credits; for counsel); `docs/legal/dws-evaporation-request.md` (the draft asking DWS to extend the flow permission to pan evaporation, #646 items 6–7); `docs/legal-status.md` tracks what is open
 - `docs/calibration-research.md`: literature and South African practice review of calibration, recession, data uncertainty and EWR reporting, with prioritised recommendations (CR-1 … CR-34)
 - `docs/data-model.md`: tables, workbook mapping, roles and RLS, series storage
 - `docs/api.md`: HTTP contract

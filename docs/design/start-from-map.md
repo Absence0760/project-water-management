@@ -74,6 +74,42 @@ reload) lands on the same step.
    (Crops), and finally **Run the model** (Runs & results). Nothing there is
    new: the step links the proposals that already exist, in order.
 
+   **As a to-do list** (issue #646 item 2, the hydrologist's review F2–F4):
+   the step lists every proposal a run needs, in the order a run reads
+   them (the units' areas and order, how natural flow is made, rain from the
+   boundary, the catchment's MAP, rain for each unit, MAP for each unit,
+   evaporation, the WR2012 check, observed flow, each unit's composite dam,
+   the cultivated area, Run the model), each with a **status derived from
+   what the project holds now** (Done, Started for some units, To do), never
+   a stored tick, so it can't drift from the data: a unit's rain is a feed
+   with its unit mark, its MAP `mapMm`, observed flow a record at the outlet
+   or a DWS feed waiting for its fetch. The five proposals the first build
+   didn't link are in it (rain and MAP for each unit, the catchment's MAP,
+   the WR2012 lookup, the flow-method choice), and observed flow opens
+   the DWS form with the nearest stations (`?feed=dws`). The list outlives
+   the sheet: the Map's Getting started pill shows the same items once the
+   sheet is closed, until every item a run needs is done. One step reviews
+   the per-unit proposals together: each unit's MAP from the grid and its
+   own rain feed in one table, each value with its source and its own tick,
+   unticked until ticked or **Tick all**; **Apply the ticked values** asks
+   first and sends only the ticked units to each proposal's own POST. Still
+   nothing is filled in silently, and the A-pan, the WR2012 values and the
+   flow feed are accepted where they live, as before.
+
+   **Stale values and the A-pan** (issue #646 items 4 and 5, the
+   hydrologist's review F6–F9 and F14). Evaporation is Done only once the
+   monthly A-pan or a daily A-pan series is set ("A-pan not set: crop demand
+   and dam evaporation are zero" until then). A per-unit value, a planted
+   area from land cover or the evaporation from the map read over an outline
+   redrawn since turns its item back to Started ("Changed since: …"), so
+   the Getting started pill comes back until it is proposed again; the
+   Map's Checks list the same, with a unit's area from an earlier outline
+   (and **Use** for the area now), the rest of the catchment's area after a
+   boundary edit, a dam inside another unit's boundary and a gauge moved
+   since it became its node ([maps.md § Checks](../maps.md#checks)). An
+   editor's feed items say an owner attaches them, and a boundary past
+   about 2,500 km² is said up front to be too large for one rain feed.
+
 **Typing stays.** The Network's *Add outflow gauge* is untouched, a GeoJSON
 upload works at every step (step 1 and 2 link it), and any applied value can
 be typed over afterwards (an area typed over goes back to *typed*, as now).
@@ -160,8 +196,17 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    middle when the outlet is to be found in it), at the smallest of
    delineation's windows (1 024, 2 048, 3 072 cells) that holds the
    boundary's box. Filled and routed once; grown while the outlet's
-   catchment reaches the window's edge; refused at the cap (the ~100 km
-   limit stays, followups.md), as a single delineation is. Since
+   catchment reaches the window's edge. At the request's cap (3 072 cells,
+   about 100 km) or past its 20 s it is no longer refused (#646 item 3, the
+   hydrologist's review F11): the refusal carries the window it stopped at
+   and where it cut the catchment (`aim`), a Start answers with the plan a
+   server without a DEM makes from the same map (each unit's area is its
+   boundary's since `start-16`, so only the order and the checks are
+   missing, as its first warning says), and the plan goes to the worker's
+   `delineate` job, which routes it with windows up to 6 144 cells and
+   proposes the routed plan in its place while it is open; a Divide waits
+   for the worker (`202`). [delineation.md § Where it runs](./delineation.md#where-it-runs)
+   has the worker's side; past its 6 144 cells the job refuses. Since
    `start-12` (issue #390, the hydrologist persona's findings 1 and 6,
    as Delineate's `delineate-6`, [delineation.md § Method](./delineation.md#method)
    step 2):
@@ -286,6 +331,25 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    measure `geo/area.ts` uses), summed, so the pieces and the rest add up
    to the catchment exactly; the simplified outline's own area runs a
    little off it. The parcel saved for a piece stores the cells' area. The rest of the catchment is the outlet's own piece.
+   **Beside the units' boundaries** (`start-16`) the rest has no piece of
+   its own: it is the catchment's cells that no kept unit's boundary holds,
+   and since `start-17` (#646 item 3, the hydrologist's review F10;
+   `restDrainsOf`) it drains where they do, not always into the outflow.
+   Each such cell's owner in the partition (step 5) is the land-owning unit,
+   or the outlet, its D8 path meets first; the owner taking most of the
+   rest's area is where the rest goes, from the rest's most-accumulating
+   cell there down the D8 path to the first point in the order (a unit's,
+   a water user's or a gauge's cell, so a gauge on the way is met first).
+   The outlet is the outflow gauge, or the unit whose boundary holds it.
+   The share of the rest draining that way is kept, and under 90 % (for a
+   rest over 1 % of the catchment) it is said, since the rest of it reaches
+   other units first: one rest node can only drain one way, and the
+   durable answer is to draw its parts as units' boundaries. The review's
+   case is an undrawn headwater above the farmed units: draining straight
+   into the outflow, its runoff missed every unit below it (their river
+   pumps short of the inflow) while the outflow total, unchanged, hid it.
+   Without a DEM nothing says where the rest lies, so it drains into the
+   outflow gauge, with a warning.
 7. **Checks, as warnings**: the catchment above the outlet against the
    boundary's area (over 10 % apart: said, since a drawn boundary and the
    DEM disagree); a unit whose area is under one hectare; a dropped point.
@@ -428,7 +492,20 @@ API: `POST /projects/:id/map/divide` and `…/map/divide/:spid/apply`
   decided against by the client's hydrologist (#90): the composite dam's
   volume and contributing area and the pump's capacity are the user's
   input, the register a reference only.
-- **Catchments larger than about 100 km across**: refused, as delineation
-  is (followups.md, the worker-job path).
+- **Catchments larger than about 200 km across**: past the worker's
+  6 144-cell window a plan is refused there, as delineation is (a Start
+  keeping its plan without the order). Up to it, Start and Divide go to the
+  worker (#646 item 3, § Sub-catchments: the method, step 1); 8 192 cells
+  would need about 1.9 GB.
+- **A Divide without the order** (as a too-large Start gets): not built,
+  since a division has no plan without a DEM (Divide needs one); a
+  division too large for the request waits for the worker instead, and
+  locally without a worker it waits. A Divide that proposes only the
+  boundaries' areas beside the values now, with no order, would serve a
+  server without a DEM too (the hydrologist's review F9); trigger: a client
+  dividing without a DEM, or past the worker's window. Meanwhile, without a
+  DEM, the Map's Checks give each unit whose boundary was redrawn its
+  boundary's area beside the model's, with **Use** (issue #646 F6), one
+  unit at a time ([followups.md](../followups.md)).
 - **Dividing without an elevation model**: there is nothing to divide by;
   the sheet says so, and the Network and the per-feature tools stay.

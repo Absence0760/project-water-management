@@ -70,6 +70,7 @@ import {
 import { CHIRPS_FACTOR_MIN_DAYS, CHIRPS_FACTOR_MIN_MM, chirpsFactorOn, type ChirpsCorrection } from '../rain';
 import { cmpStr } from '../order';
 import { gr4j } from './gr4j';
+import type { ZoneAssignment } from '../calibrate/zones';
 import type { Gr4jParams } from './params';
 import { simulateRunoff, type RunoffForcing, type RunoffTrace } from './simulate';
 import { isLandUnit, MM_KM2_TO_M3 } from './area';
@@ -669,18 +670,27 @@ export function unitRainForcing(
 	return { units, recipes, reference: fit.reference, stations: stationForcings, stationContext: ctx.stations ?? null };
 }
 
-/** GR4J over each unit's forcing (one parameter set, the catchment PE); the per-unit simulateRunoff traces, in `units` order. */
+/** GR4J over each unit's forcing (one parameter set, or each unit's zone's, and the catchment PE); the per-unit simulateRunoff traces, in `units` order. */
 export function simulateUnits(
 	units: readonly Pick<UnitForcing, 'nodeId' | 'rainMm'>[],
 	p: Gr4jParams,
 	petMm: Float64Array,
-	opts: { warmupDays: number; trace?: boolean; days?: number; cycleDays?: number; initial?: readonly { id: string; state: readonly number[] }[]; captureAt?: number }
+	opts: {
+		warmupDays: number;
+		trace?: boolean;
+		days?: number;
+		cycleDays?: number;
+		initial?: readonly { id: string; state: readonly number[] }[];
+		captureAt?: number;
+		/** Each unit's parameters under calibration zones (engine 1.106.0, ../calibrate/zones.ts zoneParamsOf); absent = `p` for every unit. */
+		paramsOf?: (unitId: string) => Gr4jParams;
+	}
 ): RunoffTrace[] {
 	return units.map((u) => {
 		const init = opts.initial?.find((x) => x.id === u.nodeId);
 		if (opts.initial && !init) throw new Error(`the snapshot holds no runoff state for the unit ${u.nodeId}`);
 		const forcing: RunoffForcing = { rainMm: u.rainMm, petMm };
-		return simulateRunoff(gr4j, p, forcing, {
+		return simulateRunoff(gr4j, opts.paramsOf ? opts.paramsOf(u.nodeId) : p, forcing, {
 			warmupDays: opts.warmupDays,
 			...(opts.trace !== undefined ? { trace: opts.trace } : {}),
 			...(opts.days !== undefined ? { days: opts.days } : {}),
@@ -696,7 +706,14 @@ export function simulateUnits(
  * in node-id order). `hist` is the run's historical days: the day counts are
  * of the whole run.
  */
-export function unitRainSummary(u: UnitRainSettings, units: readonly UnitForcing[], traces: readonly RunoffTrace[], petMm: Float64Array, reference?: UnitRainReferenceFit | null): UnitRainSummary {
+export function unitRainSummary(
+	u: UnitRainSettings,
+	units: readonly UnitForcing[],
+	traces: readonly RunoffTrace[],
+	petMm: Float64Array,
+	reference?: UnitRainReferenceFit | null,
+	zones?: { assignment: ZoneAssignment; base: Gr4jParams; siteName: string } | null
+): UnitRainSummary {
 	const sum = (a: ArrayLike<number>) => {
 		let s = 0;
 		for (let t = 0; t < a.length; t++) s += a[t]!;
@@ -752,6 +769,15 @@ export function unitRainSummary(u: UnitRainSettings, units: readonly UnitForcing
 			};
 		}),
 		// Only with a reference, so a summary without one is as before 1.80.0.
-		...(reference ? { reference: structuredClone(reference) } : {})
+		...(reference ? { reference: structuredClone(reference) } : {}),
+		// Only when the run applied calibration zones (engine 1.106.0, issue #555), so a summary without is as before.
+		...(zones
+			? {
+					zones: [
+						...zones.assignment.zones.map((z) => ({ nodeId: z.nodeId, name: z.name, units: [...z.units], params: { ...z.params }, fitted: z.fitted })),
+						{ nodeId: null, name: zones.siteName, units: [...zones.assignment.primaryUnits], params: { ...zones.base }, fitted: true }
+					]
+				}
+			: {})
 	};
 }

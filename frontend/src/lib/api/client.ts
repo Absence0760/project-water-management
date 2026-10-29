@@ -186,6 +186,7 @@ import type {
 	MinOccurrence,
 	MapGeometry,
 	StartProposal,
+	PlanRequest,
 	StartRole,
 	PlacementChoice,
 	StartState,
@@ -195,6 +196,9 @@ import type {
 	CroplandProposals,
 	CropTypeLayer,
 	EvaporationProposals,
+	Gr4jPrior,
+	EvaporationStationProposals,
+	SpanConversionId,
 	EvaporationTarget
 } from './types';
 
@@ -1307,14 +1311,16 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		start: {
 			get: (id: string) => request<StartState>('GET', `${p(id)}/map/start`),
 			propose: (id: string, body: { outletFeatureId?: string | null; outletUseLarger?: boolean; points: ({ featureId: string; role: StartRole } & PlacementChoice)[] }) =>
-				request<{ proposal: StartProposal }>('POST', `${p(id)}/map/start`, body),
+				request<{ proposal: StartProposal; request?: PlanRequest | null }>('POST', `${p(id)}/map/start`, body),
+			/** A plan the background worker routes (272): waiting, running, or what came of it (viewer). */
+			request: (id: string, rid: string) => request<{ request: PlanRequest }>('GET', `${p(id)}/map/start/requests/${enc(rid)}`),
 			apply: (id: string, spid: string, ticks: StartTicks) => request<{ proposal: StartProposal; model: ProjectModel }>('POST', `${p(id)}/map/start/${enc(spid)}/apply`, ticks),
 			discard: (id: string, spid: string) => request<{ proposal: StartProposal | DivideProposal }>('POST', `${p(id)}/map/start/${enc(spid)}/discard`)
 		},
 		/** Divide a model that has nodes into sub-catchments from the map (182, docs/api.md § Start from the map); read and discarded through `start`. */
 		divide: {
 			propose: (id: string, body: { outletFeatureId?: string | null; outletUseLarger?: boolean; points: ({ featureId: string; nodeId: string | null } & PlacementChoice)[] }) =>
-				request<{ proposal: DivideProposal }>('POST', `${p(id)}/map/divide`, body),
+				request<{ proposal: DivideProposal } | { request: PlanRequest }>('POST', `${p(id)}/map/divide`, body),
 			apply: (id: string, spid: string, ticks: DivideTicks) => request<{ proposal: DivideProposal; model: ProjectModel }>('POST', `${p(id)}/map/divide/${enc(spid)}/apply`, ticks)
 		},
 		/**
@@ -1352,6 +1358,21 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				)
 		},
 		/**
+		 * The regional GR4J prior (issue #622, docs/api.md § Regional GR4J prior): for the catchment, or one calibration
+		 * zone's own land units (`zone`), from a donor set (`dataset`, default the first). `start` writes its medians into
+		 * that target's GR4J parameters as one settings revision; the server re-derives them.
+		 */
+		gr4jPrior: {
+			get: (id: string, q: { zone?: string | null; dataset?: string } = {}) => {
+				const qs = new URLSearchParams();
+				if (q.zone) qs.set('zone', q.zone);
+				if (q.dataset) qs.set('dataset', q.dataset);
+				return request<Gr4jPrior>('GET', `${p(id)}/gr4j-prior${qs.size ? `?${qs}` : ''}`);
+			},
+			start: (id: string, body: { zone?: string | null; dataset?: string } = {}) =>
+				request<{ params: { x1: number; x2: number; x3: number; x4: number }; revisionId: string | null }>('POST', `${p(id)}/gr4j-prior/start`, body)
+		},
+		/**
 		 * The catchment boundary's evaporation from a grid (issue #326 B-evap, docs/api.md § Catchment map): reference ET proposed as
 		 * GR4J's monthly PE, or A-pan as the A-pan row, never converted. An accept saves the 12 values as one settings revision citing the dataset.
 		 */
@@ -1359,6 +1380,17 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			get: (id: string, dataset?: string) => request<EvaporationProposals>('GET', `${p(id)}/evaporation-proposals${dataset ? `?${new URLSearchParams({ dataset })}` : ''}`),
 			fromMap: (id: string, dataset: string) =>
 				request<{ target: EvaporationTarget; monthlyMm: number[]; dataset: string; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-map`, { dataset })
+		},
+		/**
+		 * The nearest DWS evaporation stations to the boundary (issue #646 item 6, docs/api.md § Catchment map): a station's
+		 * monthly means proposed as the A-pan row (a Symons pan's only through the S→A equation picked), and a Class-A pan's
+		 * daily record as the daily A-pan series. An accept is one settings revision citing the station.
+		 */
+		evaporationStations: {
+			get: (id: string, withinKm?: number) =>
+				request<EvaporationStationProposals>('GET', `${p(id)}/evaporation-stations${withinKm ? `?${new URLSearchParams({ within: String(withinKm) })}` : ''}`),
+			fromStation: (id: string, body: { station: string; conversion?: SpanConversionId; daily?: boolean }) =>
+				request<{ station: string; apanMm: number[]; conversion: SpanConversionId | null; series: string | null; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-station`, body)
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {

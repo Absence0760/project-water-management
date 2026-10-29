@@ -181,6 +181,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover': (c) => ({ body: { cropId: c.ids.cropId, dataset: 'synthetic' } }),
 	// Needs the synthetic evaporation grid loaded (scripts/import-evaporation.ts) and a catchment boundary on the map inside it.
 	'POST /projects/:id/evaporation-from-map': () => ({ body: { dataset: 'synthetic' } }),
+	// A DWS evaporation station (issue #646 item 6): refused (400) past the role check unless the synthetic stations are loaded and a boundary drawn.
+	'POST /projects/:id/evaporation-from-station': () => ({ body: { station: 'Z1E001', daily: false } }),
 	// Needs the synthetic MAP grid loaded (scripts/import-map-grid.ts); the ladder's parcel lies in its region Z.
 	'POST /projects/:id/map/unit-map': () => ({ body: { dataset: 'synthetic' } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),

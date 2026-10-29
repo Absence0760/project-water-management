@@ -1679,6 +1679,71 @@ def daily_et0_monthly_pe(pe_kind: str = "monthly", zero_row: bool = False) -> di
     return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
 
 
+def _zone(gauge: str, gr4j: dict | None, enabled: bool = True) -> dict:
+    return {
+        "nodeId": gauge, "enabled": enabled, "calibrationStart": None, "calibrationEnd": None, "calibrationFlowKind": None,
+        "calibrationExclusions": [], "qualityFlags": None, "gr4j": gr4j, "fitRecord": None,
+    }
+
+
+def calibration_zones_nested(zone_x2: float = -1.0) -> dict:
+    """Calibration zones (§2.10n, engine 1.106.0, issue #555) one inside the
+    other, under Per unit with the catchment's X2 at 0: u1 drains through
+    the ticked gauges g1 then g2, so it takes g1's zone (the first ticked
+    gauge on its way down), not g2's; u2 drains to g2 alone and takes g2's;
+    u3 joins the outlet beside them, on the catchment's parameters. g1's
+    zone has X2 = zone_x2, so the exchange series is written when that is
+    not 0 although the catchment's X2 is; at 0 (the second probe) it is not
+    written, though an unticked row on g3 holds an X2 of -2. Two years of
+    invented rain on the catchment's own gauge."""
+    start = dt.date(2019, 1, 1)
+    n = (dt.date(2020, 12, 31) - start).days + 1
+    nodes = [
+        _node("o", "gauge", None),
+        _node("g2", "gauge", "o"),
+        _node("g1", "gauge", "g2"),
+        _node("g3", "gauge", "o"),
+        _node("u1", "farm", "g1", areaKm2=3),
+        _node("u2", "farm", "g2", areaKm2=2),
+        _node("u3", "farm", "g3", areaKm2=4),
+    ]
+    s = _settings(
+        gr4j={"x1": 350, "x2": 0, "x3": 90, "x4": 1.7, "warmupDays": 200},
+        unitRain={"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented"},
+        calibrationZones=[
+            _zone("g1", {"x1": 120, "x2": zone_x2, "x3": 40, "x4": 1.2}),
+            _zone("g2", {"x1": 900, "x2": 0, "x3": 250, "x4": 3.1}),
+            _zone("g3", {"x1": 60, "x2": -2, "x3": 20, "x4": 0.8}, enabled=False),
+        ],
+    )
+    series = {"rain_catchment_mm": {"startDate": start.isoformat(), "values": _wave(start, n, 0)}}
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
+def forecast_member_rescaled() -> dict:
+    """A member of the forecast-conditioned outlook (issue #620, §2.15d) is an
+    ordinary run: 91 days of recorded rain (January–March 2020), then a
+    forecast tail for April and May made of the record's own first 61 days
+    rescaled month by month, as a member whose analogue is that stretch: April
+    × 1.5 (a wetter month than the analogue's), May × 0.4, and the tail's last
+    week × 0 (a dry month asked to stay dry). Its dam, demand and EWR run on
+    the tail as on any rain (§2.4a, §2.4f, §2.15)."""
+    rain = [0.0, 14.0, 3.0, 0.0, 0.0, 22.0, 0.0, 6.5, 0.0, 0.0, 1.5, 9.0, 0.0] * 7
+    factor = [1.5] * 30 + [0.4] * 24 + [0.0] * 7
+    nodes = [
+        _node("o", "gauge", None),
+        _node("f", "farm", "o", areaKm2=4, damCapacityM3=150000, damInitialPct=0.3, damMinPct=0.05,
+              pctUpstreamToDam=1, pctRunoffToDam=0.3),
+    ]
+    crops, areas = _crop("f", 400000)
+    series = {
+        "rain_catchment_mm": {"startDate": "2020-01-01", "values": rain},
+        "rain_forecast_mm": {"startDate": "2020-04-01", "values": [r * k for r, k in zip(rain, factor)]},
+    }
+    s = _settings(ewrPragmaticM3PerDay=[400] * 12, effectiveRainFraction=0)
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []}, "series": series}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -1743,4 +1808,9 @@ PROBES = {
     "daily-et0-monthly-pe": daily_et0_monthly_pe(),
     "daily-et0-pan-pe": daily_et0_monthly_pe("pan"),
     "daily-et0-zero-row": daily_et0_monthly_pe(zero_row=True),
+    # The forecast-conditioned outlook's member (issue #620 step 6).
+    "forecast-member-rescaled": forecast_member_rescaled(),
+    # Calibration zones (issue #555).
+    "calibration-zones-nested": calibration_zones_nested(),
+    "calibration-zones-no-exchange": calibration_zones_nested(0.0),
 }

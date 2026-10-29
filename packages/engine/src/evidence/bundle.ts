@@ -162,9 +162,10 @@ export function runResultsText(r: { startDate: string; summary: unknown; series:
  * run read and the others, which a run warning reads; engine ≥ 1.90.0, issue
  * #561), a forecast run's `forecastRainSource` (its units' forecast days,
  * engine ≥ 1.85.0), the latter only as one of its values (`ecmwf_ens` from issue #604 R4-E), and `stations`
- * (the rainfall stations' names and MAPs, engine ≥ 1.91.0, issue #553).
+ * (the rainfall stations' names and MAPs, engine ≥ 1.91.0, issue #553), and `mapAreas` (the units whose area is from an
+ * earlier outline of their polygon on the map, issue #646 F6: its warning reads them).
  */
-export function bundleRunInput(snapshot: Pick<RunInputsSnapshot, 'settings' | 'model' | 'seriesChoice' | 'forecastRainSource' | 'stations'>, series: Record<string, DailySeries>): ModelInput {
+export function bundleRunInput(snapshot: Pick<RunInputsSnapshot, 'settings' | 'model' | 'seriesChoice' | 'forecastRainSource' | 'stations' | 'mapAreas'>, series: Record<string, DailySeries>): ModelInput {
 	const source = snapshot.forecastRainSource;
 	const stations = snapshot.stations;
 	return {
@@ -174,7 +175,9 @@ export function bundleRunInput(snapshot: Pick<RunInputsSnapshot, 'settings' | 'm
 		...(snapshot.seriesChoice ? { seriesChoice: snapshot.seriesChoice } : {}),
 		...(forecastRainSourceOf(source) ? { forecastRainSource: forecastRainSourceOf(source)! } : {}),
 		// The rainfall stations' details (engine ≥ 1.91.0, issue #553): the station forcing reads their MAPs.
-		...(stations && typeof stations === 'object' && !Array.isArray(stations) ? { stations } : {})
+		...(stations && typeof stations === 'object' && !Array.isArray(stations) ? { stations } : {}),
+		// The units whose area is from an earlier map outline (issue #646 F6): only their warning reads it.
+		...(Array.isArray(snapshot.mapAreas) ? { mapAreas: snapshot.mapAreas } : {})
 	} as ModelInput;
 }
 

@@ -705,7 +705,27 @@ alongside teams, e.g. to give an outside client `viewer` access.
   the copy's gauge. A run reads it too: its calibration statistics are
   scored at the site (`RunSummary.calibration.siteNodeId`, below), and a
   stored site the run can't use (its gauge gone, or no record attached any
-  more) warns (`Calibration site: …`) while the run scores the outlet. `dataQuality` (the data-check limits) takes
+  more) warns (`Calibration site: …`) while the run scores the outlet.
+  `calibrationZones` (engine 1.106.0, issue #555, [model.md §2.10n](./model.md))
+  is the whole list of the gauges that calibrate their own zone, replaced on a
+  save (`[]` = none, which migration 270 stored in every project): each row
+  `{ nodeId (UUID), enabled, calibrationStart, calibrationEnd
+  (YYYY-MM-DD | null), calibrationFlowKind, calibrationExclusions (as the
+  site's), qualityFlags ({ suspect: exclude | include, zeroFlowMonths? } |
+  null), gr4j ({ x1, x2, x3, x4 } inside the bounds calibration searches |
+  null), fitRecord (a fit record, never an automated one, | null) }`, a
+  gauge at most once. Each row new to the list is checked as a new site is
+  (`400 calibrationZones: no such hydrological unit in this project` / `the
+  site is the outlet (null) or a gauge above it` / `that gauge has no
+  observed flow record attached`), and whenever the list or
+  `calibrationSiteNodeId` changes, no ticked row may be the calibration site
+  or below it (`400 calibrationZones: calibration zone: "<gauge>" is the
+  calibration site (Scored at), …` / `… is below the calibration site, …`);
+  a stored row whose gauge has gone blocks no save (the run warns and leaves
+  it out). Each row's fit record has its `editedParams` recomputed against
+  the row's own parameters. A copy or an imported project document moves
+  each row, and its fit record's site and zone (`FitRecord.zone` `{ nodeId,
+  units }`), to the copy's nodes. `dataQuality` (the data-check limits) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
   `agreementMinDays` (whole days, 1–366), and (engine ≥ 1.20.0, issue #66)
   `outlierFactorRain` / `outlierFactorFlow` (above 1, at most 1000),
@@ -1016,7 +1036,11 @@ alongside teams, e.g. to give an outside client `viewer` access.
   never holds the low-flow periods) and `fitAllDays` (a scored
   period, or `null`), from engine 1.25.0 the optional `auto` (issue #153:
   `{ rules, ruleExclusions, chosen, cases }`, how automated calibration chose
-  the fit), and no others. `auto` is the server's to write
+  the fit), from engine 1.106.0 the optional `prior` (issue #622: `{ weight
+  (0–10), bounded, ranges, provenance, penaltyAtFit, penaltyAtStart }`, the
+  regional GR4J prior the fit used, checked by the engine's
+  `calibrationPriorError`, a `400` otherwise; `bounds` is then `wide`,
+  `typical` or `prior`, the prior's box), and no others. `auto` is the server's to write
   ([§ Automated calibration](#automated-calibration) `…/apply`): a save whose
   `fitRecord` carries a new or changed `auto` is a `409`; one carrying the
   stored record back unchanged is fine. `POST /projects/import` checks a
@@ -3594,7 +3618,7 @@ is its composite dam, its volume the user's), and is `404` now.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/map/features` | – | `{ features: MapFeature[], sources: { id, fileName, sha256, crs, importedAt, importedBy, features }[], nodes: { id, name, kind, areaKm2, areaSource: 'typed' \| 'map', areaBasis: 'gross' \| 'effective' \| null, areaFeatureId }[], quaternaryDatasets: { dataset, count }[] }`; the catchment boundary first | viewer |
+| GET | `/projects/:id/map/features` | – | `{ features: MapFeature[], sources: { id, fileName, sha256, crs, importedAt, importedBy, features }[], nodes: { id, name, kind, areaKm2, areaSource: 'typed' \| 'map', areaBasis: 'gross' \| 'effective' \| null, areaFeatureId }[], quaternaryDatasets: { dataset, count }[], accepted: { unitMap: { nodeId, polygon }[], unitRain: { nodeId, featureId, updatedAt, areaKm2 }[], landCover: { nodeId, cropId, cropName, polygons }[], evaporation: { target: 'pe' \| 'apan', boundary \| null }[] } }`; the catchment boundary first. Each feature carries `linkPoint` (a gauge linked to its node: `[lon, lat]` where it stood when linked, 273; else `null`). `accepted` (273, issue #646 F7/F8; `geo/acceptances.ts`) is what each value taken from the map was read over, each polygon `{ featureId, updatedAt, areaM2 }` as it stood then, for the Map's Checks (maps.md § Checks) | viewer |
 | GET | `/projects/:id/map/linked-nodes` | – | `{ nodeIds: string[] }`: each node at least one feature is linked to, once, and no geometry. The "Show on map" links on Network, Hydrological units and Dams (issue #326) read this rather than the feature list. A farmer gets `403`, as from `/map/features` | viewer |
 | POST | `/projects/:id/map/features` | `{ kind, name?, nodeId?, lon, lat }` (a point) or `{ kind, name?, nodeId?, geometry, traced? }` | `201 { feature }`. `400` for a geometry that fails the checks (the message says which: projected, 3D, a ring that crosses itself …), a type the kind doesn't take, a node of another project or of a kind the feature can't stand for. A `catchment_boundary` replaces the current one. `traced: { lon, lat, minOccurrence: 10 \| 25 \| 50 \| 75, edited }` (#326 C2, a `dam` or `other` polygon only): the outline was traced from the water occurrence data at that point; the server traces it again, refuses (`400`) an outline sent with `edited: false` that isn't that trace, writes the method in `properties.description` and audits `map.feature_created` with `from: 'dam_trace'`, the dataset, the share and `edited`; `409` when tracing is off, `422` with `details.reason` when the point no longer traces, `429` past the trace cap (as `POST …/map/dam-trace`; a `traced` save counts as a trace) | editor |
 | PATCH | `/projects/:id/map/features/:fid` | any of `kind`, `name`, `nodeId` (`null` unlinks), `damPosition` (`'on_channel'` \| `'off_channel'` \| `null`, a dam polygon only, 194), `lon` + `lat` or `geometry` | `200 { feature }`; the area is recomputed when the geometry changes. `damPosition` on anything but a dam polygon is a `400`; it is kept through other edits while the feature stays a dam polygon and cleared when it stops being one. A change to it is in the `map.feature_changed` event (`damPosition: { from, to }`) | editor |
@@ -3617,10 +3641,12 @@ is its composite dam, its volume the user's), and is `404` now.
 | POST | `/projects/:id/map/unit-map` | `{ dataset, nodeIds?: uuid[] }`, strict | `200 { dataset, units: { nodeId, mapMm, mapSource }[], changed, revisionId }`: re-derived on the server from the grid and the parcels as they are, each chosen unit's (every unit `dataset` covers, or the `nodeIds`) `mapMm` and `mapSource` (`<label> <version>, area-weighted mean over the unit’s parcel, <n> cells`) written as one model revision (`model_put`, its reason citing the grid; `revisionId` null when nothing changed). `400` codes in `details.code`: `dataset_unknown`, `unit_unknown` (a node that isn't a land unit), `nothing_covered`; `409`: `unit_uncovered` (a named unit the grid doesn't cover, has no parcel or is refused; `details.units` says why), `grid_mixed` (a unit would keep a MAP from another grid; `details.units`) | editor |
 | GET | `/projects/:id/nodes/:nodeId/dam-proposals` | – | `200 { nodeId, nodeName, current: { damCapacityM3, damAreaFullM2 }, dam: { id, name, geometryType, point: [lon, lat], areaM2 } \| null, radiusM: 1000, register: RegisterDamProposal[], area: { featureId, featureName, areaM2, method } \| null, datasets: { dataset, count }[] }` (issue #326 B-dams, `geo/damRoutes.ts`, [maps.md § Dams from the register and the map](./maps.md#dams-from-the-register-and-the-map)): the hydrological unit's dam on the map (a linked `dam` feature, a polygon first, then the earliest), the registered dams within 1 km of its centroid or point, nearest first, at most 5, and the polygon's area as the full-supply area (`null` for a point). `dam: null` when no dam feature is linked. `current` is the saved model's. Writes nothing. `400` for a node that isn't a farm; `404` for another project's node | viewer |
 | POST | `/projects/:id/nodes/:nodeId/dam-area-from-map` | `{ featureId }` | `200 { nodeId, damAreaFullM2, areaFeatureId, revisionId }`: the unit's `damAreaFullM2` set to the dam polygon's geodesic area, recorded as a model revision whose reason names the feature. `400` for a node that isn't a farm, a feature that isn't a `dam`, a dam point (no area), a dam linked to another unit, or a unit with no dam capacity; `404` for another project's feature or node | editor |
-| GET | `/projects/:id/nodes/:nodeId/cropland-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { nodeId, nodeName, dataset: CroplandDataset \| null, datasets: { dataset, version, synthetic }[], parcels: { featureId, name, areaM2, cultivatedM2 }[], unit: { areaM2, cultivatedM2 } \| null, catchment: { featureId, name, areaM2, cultivatedM2 } \| null, crops: { cropId, name, areaM2, accepted: CropAreaFromLandCover \| null }[], cropTypes: { dataset: CropTypeDataset, parcels: { featureId, name, areaM2, orchardM2, vineM2, newOrchardM2, newVineM2 }[], unit: { areaM2, orchardM2, vineM2, newOrchardM2, newVineM2 } \| null } \| null }` (issue #326 B-landcover, `geo/croplandRoutes.ts`, [maps.md § Cultivated area from land cover](./maps.md#cultivated-area-from-land-cover)): each `farm_parcel` linked to the unit (oldest first) with its area and the area the land cover maps as cropland in it (m², rounded), their sum (`unit`, null without parcels), the catchment boundary's for reference, and the project's crops with the unit's planted area now (0 = none) and where an accepted area came from. A polygon that can't be summarised (too big) has `problem` in place of the figures. No dataset loaded: `dataset: null` and no figures. `cropTypes` (issue #604 R5-D, [maps.md § Orchards and vines from SANLC](./maps.md#orchards-and-vines-from-sanlc)): the same parcels' permanent orchards and vines from the default crop-type dataset, and the part of each new since its `baselineVersion` (0 without one), m² rounded, the unit's sums adding the rounded parcels; `null` with no crop-type dataset loaded, as in production until SANLC's terms are recorded. Writes nothing. `400` for a node that isn't a farm or an unknown dataset; `404` for another project's node | viewer |
+| GET | `/projects/:id/nodes/:nodeId/cropland-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { nodeId, nodeName, dataset: CroplandDataset \| null, datasets: { dataset, version, synthetic }[], parcels: { featureId, name, areaM2, cultivatedM2 }[], unit: { areaM2, cultivatedM2 } \| null, catchment: { featureId, name, areaM2, cultivatedM2 } \| null, crops: { cropId, name, areaM2, accepted: CropAreaFromLandCover \| null }[], cropTypes: { dataset: CropTypeDataset, parcels: { featureId, name, areaM2, orchardM2, vineM2, newOrchardM2, newVineM2 }[], unit: { areaM2, orchardM2, vineM2, newOrchardM2, newVineM2 } \| null } \| null }` (issue #326 B-landcover, `geo/croplandRoutes.ts`, [maps.md § Cultivated area from land cover](./maps.md#cultivated-area-from-land-cover)): each `farm_parcel` linked to the unit (oldest first; with none, the polygon its area came from, `area_feature_id`, a parcel or an *other* area, issue #646 F1, `geo/unitPolygon.ts`) with its area and the area the land cover maps as cropland in it (m², rounded), their sum (`unit`, null without parcels), the catchment boundary's for reference, and the project's crops with the unit's planted area now (0 = none) and where an accepted area came from. A polygon that can't be summarised (too big) has `problem` in place of the figures. No dataset loaded: `dataset: null` and no figures. `cropTypes` (issue #604 R5-D, [maps.md § Orchards and vines from SANLC](./maps.md#orchards-and-vines-from-sanlc)): the same parcels' permanent orchards and vines from the default crop-type dataset, and the part of each new since its `baselineVersion` (0 without one), m² rounded, the unit's sums adding the rounded parcels; `null` with no crop-type dataset loaded, as in production until SANLC's terms are recorded. Writes nothing. `400` for a node that isn't a farm or an unknown dataset; `404` for another project's node | viewer |
 | POST | `/projects/:id/nodes/:nodeId/crop-area-from-land-cover` | `{ cropId, dataset, featureId?, layer? }` | `200 { nodeId, cropId, areaM2, dataset, layer?, revisionId }`: the crop's planted area on the unit set to the cultivated area of the unit's parcels (or the one parcel `featureId`), each parcel rounded to the m² before the sum, re-derived on the server; with `layer` (`orchard` or `vine`), their permanent orchards or vines from the crop-type dataset `dataset` names instead (the revision says "from crop types" and the method names the class), recorded as a model revision whose reason cites the dataset, its version and the method, and as a `crop_area_land_cover` row (174). The client names the crop; the land cover never does. `400` for a node that isn't a farm, an unknown dataset (or crop-type dataset, with `layer`), an unknown `layer`, a unit with no parcel, a feature that isn't a parcel linked to it, parcels the land cover can't summarise or with no cropland (or no orchard, no vine); `404` for another project's node, crop or feature | editor |
 | GET | `/projects/:id/evaporation-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { dataset: EvaporationDataset \| null, datasets: { dataset, kind, version, synthetic }[], boundary: { featureId, name } \| null, target: 'pe' \| 'apan' \| null, proposal: { monthlyMm, annualMm, coverage, cells } \| { problem } \| null, settings: { apanMm, peKind, peMm, dailyApan }, accepted: EvaporationAccepted[] }` (issue #326 B-evap, `geo/evaporationRoutes.ts`, [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)): the catchment boundary's 12 monthly means (Oct … Sep, mm, to 0.1) from the grid, area-weighted over the cells it covers, with the share of the boundary that has values; `target` is where the dataset's kind goes (`et0` → `pe`, GR4J's monthly PE; `apan` → `apan`, the A-pan row), never converted. `settings` is the saved settings' A-pan row, PE kind and monthly PE row (null under `pan`), and `dailyApan`, the days a daily A-pan record (`evap_apan_mm`) covers, `{ from, to }` to its last value, or null without one: it replaces the monthly A-pan row on those days, and the panel's confirmation says so. `proposal: null` without a dataset or a boundary; `{ problem }` when the grid can't stand for it (no value inside, under 50 % covered, too big). Writes nothing. `400` for an unknown dataset | viewer |
 | POST | `/projects/:id/evaporation-from-map` | `{ dataset }` | `200 { target, monthlyMm, dataset, revisionId }`: the 12 values, re-derived on the server from the boundary as it is, written into `settings.pe` (`{ kind: 'monthly', mm, source }`, the source naming the dataset; for a reference-ET grid) or `settings.apanMm` (for an A-pan grid), recorded as one settings revision whose reason cites the dataset, its version, period and method, and as an `evaporation_accepted` row (181). `400` for an unknown dataset, no catchment boundary, a boundary the grid can't summarise, or no evaporation in it | editor |
+| GET | `/projects/:id/evaporation-stations` | `?within=` km (default 100, at most 300) | `200 { boundary: { featureId, name } \| null, withinKm, datasets: { dataset, count }[], stations: EvaporationStationProposal[], settings: { apanMm, dailyApan: { name, source, from, to }[] } }` (issue #646 item 6, `geo/evaporationRoutes.ts`, [maps.md § Evaporation stations](./maps.md#evaporation-stations)): the DWS evaporation stations in `evaporation_station_reference` within `within` km of the catchment boundary (0 inside it), nearest first (ties by code), at most 8; each `{ code, name, pan: 'class_a' \| 'symons', lon, lat, distanceKm, recordStart, recordEnd, recordYears, completeness, dataset, synthetic, source, monthly: { meansMm, years, first, last, problem }, apan, conversions, seriesName }`. `monthly.meansMm` is the record's 12 monthly means (Oct … Sep, mm, to 0.1; null for a month with under 3 counted years, `problem` saying which). A Class-A pan has `apan` (`{ ok: true, apanMm }` or `{ ok: false, reason }`) and `conversions: null`; a Symons pan has `apan: null` and `conversions`, one `{ id: 'taljaard2023' \| 'wr90', label, result }` per inverted S→A equation, `result` the A-pan means it gives or why not. `settings.dailyApan` lists the project's daily A-pan series. No boundary: `boundary: null`, no stations. Writes nothing. `400` for a radius out of range | viewer |
+| POST | `/projects/:id/evaporation-from-station` | `{ station, conversion?: 'wr90' \| 'taljaard2023', daily?: boolean }` | `200 { station, apanMm, conversion, series, revisionId }`: the station's 12 monthly means, re-derived on the server, written as `settings.apanMm` (a Symons pan's through the inverted `conversion`, which it needs and a Class-A pan refuses) in one settings revision whose reason cites the station, its pan, distance, the months the means came from, the equation and the dataset's source; with `daily` (default true for a Class-A pan, refused for a Symons pan) the record is also written as the daily A-pan series `DWS <code>` (`evap_apan_mm`), which queues a re-run and an automatic calibration like any new series. `400` with no boundary, an unknown station, one more than 300 km from the boundary, or a record that can't be used (with its reason); `409` when the project holds another daily A-pan series and `daily` is on | editor |
 
 - A feature's `name` (0–100 characters after trimming) is one line, as a
   model name is (§ Model data; migration 192): the Map draws it as a label.
@@ -3835,7 +3861,7 @@ RLS (`backend/src/dams/observed/routes.ts`, `read.ts`, `compare.ts`).
 ## Start from the map
 
 An empty model started from the map (issue #326 C3, `178_start_proposal.sql`,
-`backend/src/delineation/start.ts` and `subcatchments.ts`, [maps.md § Start
+`backend/src/delineation/start.ts`, its routes `startRoutes.ts`, and `subcatchments.ts`, [maps.md § Start
 from the map](./maps.md#start-from-the-map),
 [design/start-from-map.md](./design/start-from-map.md)): the server proposes
 a unit for each boundary the editor names (an *other* area or a parcel on
@@ -3847,27 +3873,40 @@ never sized from anything (their volume, contributing area and capacity are
 the user's). The editor applies the values they tick. With `DEM_URL` empty
 every unit drains into the outflow gauge, and the rest of the catchment is
 the boundary less the units. A model that has nodes is **divided** instead
-(`182_divide_proposal.sql`, `backend/src/delineation/divide.ts`): each
+(`182_divide_proposal.sql`, `backend/src/delineation/divide.ts`, its routes `divideRoutes.ts`): each
 unit's boundary stands for its node, and its area and drains-into are
 proposed beside the node's values now, taken only when ticked. A plan from
 before `start-16` (a unit at a dam or an abstraction point, `role` `dam` or
 `abstraction`) is refused at apply (`409`, "propose again").
 
+A catchment too large to route within the request (its routing reaches the
+edge of the request's 3 072-cell window, or would pass its 20 s) is never
+refused for it (#646 item 3, the hydrologist's review F11; `272_plan_request`,
+`delineation/planRequests.ts`): a **Start** answers `201` at once with the
+plan a server without a DEM makes from the same map (`fromDem: false`, each
+unit its boundary's area, no order, the first warning saying the order and
+the checks are missing) and, when a worker window is larger, a `request`
+the background worker routes (a `PlanRequest`); the routed plan replaces
+the quick one while it is still open. A **Divide** answers `202 { request }`,
+and the division comes from the worker. A plan past the worker's own largest
+window is refused there, the quick plan standing.
+
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/map/start` | – | `{ elevation, dataset \| null, modelEmpty, startedFromMap, proposals: (StartProposal \| DivideProposal)[] }`: the newest 5 of either mode, any status. `elevation` is false when `DEM_URL` is empty or the DEM can't be read; `modelEmpty` whether the model has no nodes; `startedFromMap` whether a start proposal was ever applied | viewer |
-| POST | `/projects/:id/map/start` | `{ outletFeatureId?: uuid \| null, outletUseLarger?: boolean, points: { featureId, role: 'unit' \| 'dam' \| 'abstraction' \| 'user' \| 'gauge', useLarger?: boolean }[] }` (at most 50, each once; `useLarger` below the table; strict, so the `outletReach` and `reach` older clients sent are `400`) | `201 { proposal }`, the project's one open proposal (the previous open one, of either mode, becomes `superseded`). The outlet is the gauge point named, else the boundary's (its delineation's outlet when it came from Delineate, else the most-drained cell inside it). `unit` is a unit's boundary, an *other* area or a parcel (`start-16`); `dam` (a dam, a point or a polygon) is part of the composite dam, and `abstraction` (an other point) the river pump, of the unit whose boundary holds it (else the rest's; outside the catchment boundary, dropped); `user` is a point or a dam in the order with no land; `gauge` (a gauge node in the order, owning no land) is a gauge point's only. Without a DEM a unit, user or gauge outside the boundary is dropped. `400` for no boundary and no outlet, an outlet that isn't a gauge point, a `unit` role on anything but an area, `dam` on anything but a dam, `abstraction` on anything but an other point, a `gauge` role on anything but a gauge point, or a feature not on this map; `409` once the model has nodes, or a second proposal finished at the same moment; `422 { error, details: { reason } }` when the DEM refuses (`outside`, `no_data`, `too_large`, `too_small`, `outline`, as delineation's, and `off_channel` for an outlet gauge with no terrain channel within 150 m: "No terrain channel runs within 150 m of the outlet. …"; any other point with none is dropped, not refused); `429` past 30 a project an hour, or the account's elevation-model cap (as delineation's); `503` when the DEM can't be read | editor |
-| POST | `/projects/:id/map/start/:spid/apply` | `{ outletName, units: { key, name, area, areaBasis?, drainsInto, runoffToDam, upstreamToDam? }[], rest: { include, name, area, areaBasis? } }`, every proposed unit once | `200 { proposal, model }`: the outflow gauge, one node per unit (a boundary a `farm` node, a user a `user` node, a gauge point a `gauge` node), and the rest of the catchment if included, in one model revision ("Started from the map: …", saying which areas were gross and which effective). Only what is ticked is taken: a unit's ticked area is its boundary, linked to it (`area_feature_id`, `area_source = 'map'`, gross; the decision's `boundaryId`); the rest's ticked area is saved as its `farm_parcel` when it has an outline (linked, its description naming the dataset and method, with the piece's `nonContributingM2`; gross, or with `areaBasis: 'effective'` (195) the piece less what drains into pans, `400` without the area ticked or a pans figure), else typed (beside the boundaries); an unticked one stays 0; an unticked drains-into is the outflow gauge. `runoffToDam` and `upstreamToDam` must be false (`400`: the composite dam's shares are the user's, `start-16`). Each boundary, user and gauge is linked to its node, and each unit's dams and pump (`members`) to it, never a feature already linked. `400` for ticks that don't match the plan, a value ticked that wasn't proposed, or two nodes of one name; `409` for a proposal that isn't open, a division, a plan from before `start-16`, a boundary gone or redrawn since (its area ticked), or a model that has nodes | editor |
+| GET | `/projects/:id/map/start` | – | `{ elevation, dataset \| null, modelEmpty, startedFromMap, proposals: (StartProposal \| DivideProposal)[], request: PlanRequest \| null }`: the newest 5 of either mode, any status. `elevation` is false when `DEM_URL` is empty or the DEM can't be read; `modelEmpty` whether the model has no nodes; `startedFromMap` whether a start proposal was ever applied; `request` the newest plan the worker still has (queued or running) | viewer |
+| GET | `/projects/:id/map/start/requests/:rid` | – | `{ request: PlanRequest }`; `404` for a click's request (that is `…/map/delineation/requests/:rid`), another project's, or none | viewer |
+| POST | `/projects/:id/map/start` | `{ outletFeatureId?: uuid \| null, outletUseLarger?: boolean, points: { featureId, role: 'unit' \| 'dam' \| 'abstraction' \| 'user' \| 'gauge', useLarger?: boolean }[] }` (at most 50, each once; `useLarger` below the table; strict, so the `outletReach` and `reach` older clients sent are `400`) | `201 { proposal, request: PlanRequest \| null }`, the project's one open proposal (the previous open one, of either mode, becomes `superseded`); `request` when the routing was too large for the request and handed to the worker (above), else null. The outlet is the gauge point named, else the boundary's (its delineation's outlet when it came from Delineate, else the most-drained cell inside it). `unit` is a unit's boundary, an *other* area or a parcel (`start-16`); `dam` (a dam, a point or a polygon) is part of the composite dam, and `abstraction` (an other point) the river pump, of the unit whose boundary holds it (else the rest's; outside the catchment boundary, dropped); `user` is a point or a dam in the order with no land; `gauge` (a gauge node in the order, owning no land) is a gauge point's only. Without a DEM a unit, user or gauge outside the boundary is dropped. `400` for no boundary and no outlet, an outlet that isn't a gauge point, a `unit` role on anything but an area, `dam` on anything but a dam, `abstraction` on anything but an other point, a `gauge` role on anything but a gauge point, or a feature not on this map; `409` once the model has nodes, or a second proposal finished at the same moment; `422 { error, details: { reason } }` when the DEM refuses (`outside`, `no_data`, `too_small`, `outline`, as delineation's; never `too_large`, which falls back as above; and `off_channel` for an outlet gauge with no terrain channel within 150 m: "No terrain channel runs within 150 m of the outlet. …"; any other point with none is dropped, not refused); `429` past 30 a project an hour, or the account's elevation-model cap (as delineation's); `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/start/:spid/apply` | `{ outletName, units: { key, name, area, areaBasis?, drainsInto, runoffToDam, upstreamToDam? }[], rest: { include, name, area, areaBasis?, drainsInto? } }`, every proposed unit once | `200 { proposal, model }`: the outflow gauge, one node per unit (a boundary a `farm` node, a user a `user` node, a gauge point a `gauge` node), and the rest of the catchment if included, in one model revision ("Started from the map: …", saying which areas were gross and which effective). Only what is ticked is taken: a unit's ticked area is its boundary, linked to it (`area_feature_id`, `area_source = 'map'`, gross; the decision's `boundaryId`); the rest's ticked area is saved as its `farm_parcel` when it has an outline (linked, its description naming the dataset and method, with the piece's `nonContributingM2`; gross, or with `areaBasis: 'effective'` (195) the piece less what drains into pans, `400` without the area ticked or a pans figure), else typed (beside the boundaries); an unticked one stays 0; an unticked drains-into is the outflow gauge, the rest's too (its ticked `drainsInto`, `start-17`, is the unit `plan.rest.drainsInto` names; `400` when none was proposed or the rest isn't included). `runoffToDam` and `upstreamToDam` must be false (`400`: the composite dam's shares are the user's, `start-16`). Each boundary, user and gauge is linked to its node, and each unit's dams and pump (`members`) to it, never a feature already linked. `400` for ticks that don't match the plan, a value ticked that wasn't proposed, or two nodes of one name; `409` for a proposal that isn't open, a division, a plan from before `start-16`, a boundary gone or redrawn since (its area ticked), or a model that has nodes | editor |
 | POST | `/projects/:id/map/start/:spid/discard` | – | `200 { proposal }` (a start or a division; audited as `map.start_discarded` or `map.divide_discarded`); `409` for one that isn't open | editor |
-| POST | `/projects/:id/map/divide` | `{ outletFeatureId?: uuid \| null, outletUseLarger?, points: { featureId, nodeId: uuid \| null, useLarger? }[] }` (1 to 50, each feature once, each node once; `nodeId` null = a new gauge node, a gauge point only) | `201 { proposal }` (`mode: 'divide'`), superseding the open one. The outlet is a gauge linked to the model's outflow (or unlinked), else the boundary's, as starting; the outflow is the model's one node that drains nowhere. Each feature's role comes from its node (`unit` for a `farm`, whose feature must be its boundary, an *other* area or a parcel; `user`; `gauge`). The dams and other points linked to no node and not named are read too: each inside a unit's boundary is listed in its `members` and linked to it on apply (`start-16`). `400` for a feature standing for the outflow, a dam or point standing for a unit ("… part of its unit …, not where the unit ends"), a node its kind can't stand for (map_feature's `KIND_NODES`), or another node than the one it is linked to, a feature not on this map, a model without exactly one outflow; `409` for an empty model; `422 { error, details: { reason } }` with `reason: 'no_dem'` when `DEM_URL` is empty, or the DEM's refusals as starting's (`off_channel` included); `429` (shared with starting, and the account's elevation-model cap); `503` | editor |
-| POST | `/projects/:id/map/divide/:spid/apply` | `{ units: { key, area, areaBasis?, drainsInto, runoffToDam, upstreamToDam?, add, name? }[], rest: { to: 'none' } \| { to: 'node', nodeId, areaBasis? } \| { to: 'new', name, areaBasis? } }`, every proposed point once (`add` and `name` a new gauge's only) | `200 { proposal, model }`, one model revision ("Divided from the map: …", saying which areas were gross and which effective). Only what is ticked changes: a unit's ticked area is its boundary, linked to it (`area_source = 'map'`, `area_feature_id`, gross; the decision's `boundaryId`; `409` when the boundary was redrawn since); the rest's area, given to a unit, is saved as its `farm_parcel` ("<name>: own sub-catchment", with the piece's `nonContributingM2`; a parcel an earlier division made for it is redrawn in place) when it has an outline, the piece's gross area or with `areaBasis: 'effective'` (195) the piece less what drains into pans (`400` without a pans figure), else typed; a ticked drains-into is the proposed point's node (a new gauge's when added) or the outflow; `runoffToDam` and `upstreamToDam` must be false (`400`, `start-16`); `add` makes the new gauge a `gauge` node (draining into the outflow unless its order is ticked); the rest's area goes to one of the plan's `untouched` units, or a new unit draining into the outflow. Unlinked features are linked to their nodes, and each unit's unlinked `members` to it. `409` for a plan from before `start-16`, a ticked value whose current one changed since the proposal (the plan keeps each node's `current` values, and the rest's candidates' areas), a node gone, an outflow that moved, a proposal not open, or a start proposal; `400` for ticks that don't match the plan, a value not proposed, an order into a new gauge not added, a loop, a clashing name, or a rest node that is one of the points | editor |
+| POST | `/projects/:id/map/divide` | `{ outletFeatureId?: uuid \| null, outletUseLarger?, points: { featureId, nodeId: uuid \| null, useLarger? }[] }` (1 to 50, each feature once, each node once; `nodeId` null = a new gauge node, a gauge point only) | `201 { proposal }` (`mode: 'divide'`), superseding the open one; `202 { request: PlanRequest }` when the routing was too large for the request (above). The outlet is a gauge linked to the model's outflow (or unlinked), else the boundary's, as starting; the outflow is the model's one node that drains nowhere. Each feature's role comes from its node (`unit` for a `farm`, whose feature must be its boundary, an *other* area or a parcel; `user`; `gauge`). The dams and other points linked to no node and not named are read too: each inside a unit's boundary is listed in its `members` and linked to it on apply (`start-16`). `400` for a feature standing for the outflow, a dam or point standing for a unit ("… part of its unit …, not where the unit ends"), a node its kind can't stand for (map_feature's `KIND_NODES`), or another node than the one it is linked to, a feature not on this map, a model without exactly one outflow; `409` for an empty model; `422 { error, details: { reason } }` with `reason: 'no_dem'` when `DEM_URL` is empty, or the DEM's refusals as starting's (`off_channel` included; `too_large` only when no worker window is larger); `429` (shared with starting, and the account's elevation-model cap); `503` | editor |
+| POST | `/projects/:id/map/divide/:spid/apply` | `{ units: { key, area, areaBasis?, drainsInto, runoffToDam, upstreamToDam?, add, name? }[], rest: { to: 'none' } \| { to: 'node', nodeId, areaBasis? } \| { to: 'new', name, areaBasis?, drainsInto? } }`, every proposed point once (`add` and `name` a new gauge's only) | `200 { proposal, model }`, one model revision ("Divided from the map: …", saying which areas were gross and which effective). Only what is ticked changes: a unit's ticked area is its boundary, linked to it (`area_source = 'map'`, `area_feature_id`, gross; the decision's `boundaryId`; `409` when the boundary was redrawn since); the rest's area, given to a unit, is saved as its `farm_parcel` ("<name>: own sub-catchment", with the piece's `nonContributingM2`; a parcel an earlier division made for it is redrawn in place) when it has an outline, the piece's gross area or with `areaBasis: 'effective'` (195) the piece less what drains into pans (`400` without a pans figure), else typed; a ticked drains-into is the proposed point's node (a new gauge's when added) or the outflow; `runoffToDam` and `upstreamToDam` must be false (`400`, `start-16`); `add` makes the new gauge a `gauge` node (draining into the outflow unless its order is ticked); the rest's area goes to one of the plan's `untouched` units, or a new unit draining into the outflow, or with `drainsInto` (`start-17`) into the point's node `plan.rest.drainsInto` names (a new gauge's only when added; `400` when none was proposed). Unlinked features are linked to their nodes, and each unit's unlinked `members` to it. `409` for a plan from before `start-16`, a ticked value whose current one changed since the proposal (the plan keeps each node's `current` values, and the rest's candidates' areas), a node gone, an outflow that moved, a proposal not open, or a start proposal; `400` for ticks that don't match the plan, a value not proposed, an order into a new gauge not added, a loop, a clashing name, or a rest node that is one of the points | editor |
 
 - `StartProposal = { id, status: 'proposed' | 'applied' | 'discarded' |
   'superseded', plan, fromDem, dataset, datasetFingerprint, method,
   methodVersion, decision, createdBy, createdAt, decidedBy, decidedAt }`.
   `plan = { fromDem, outlet: { featureId, name, point, snapDistanceM,
   foundIn, placement }, catchment: { areaM2, boundaryAreaM2 }, units: StartUnit[]
-  (upstream first), rest: { name, areaM2, geometry, nonContributingM2? }, pans?: PanReport, dropped: { featureId,
+  (upstream first), rest: { name, areaM2, geometry, nonContributingM2?, members?, drainsInto?, drainsIntoProposed? }, pans?: PanReport, dropped: { featureId,
   name, reason, placement? }[], warnings: string[], cellSizeM, zoom, windowCells }`;
   `StartUnit = { key (the feature's id), featureName, role, name, point,
   snapDistanceM, areaM2, totalAreaM2, geometry, demAreaM2?, members?, drainsInto (a key, or null
@@ -3877,7 +3916,14 @@ before `start-16` (a unit at a dam or an abstraction point, `role` `dam` or
   `demAreaM2` (what drains to its outflow and to no unit above it, the
   check) and no `nonContributingM2`, and `members: { featureId, name, role:
   'dam' \| 'abstraction' }[]`, its composite dam's parts and its river pump;
-  `rest.members` the dams and pumps in no unit's boundary. `damShares`
+  `rest.members` the dams and pumps in no unit's boundary. Beside the
+  units' boundaries with a DEM (`start-17`, the hydrologist's review F10)
+  `rest.drainsInto` is the unit (its key) the rest's flow path meets first,
+  from where most of its area drains, or null for the outflow gauge, and
+  `drainsIntoProposed` is true when it names a unit (a warning says so when
+  under 90 % of a rest over 1 % of the catchment drains that way); absent
+  without a DEM (then a warning says the rest drains into the outflow
+  until the order is set) and on older plans. `damShares`
   appears on plans before `start-16` only. The pans' figures (start-11; absent without a
   DEM and on older plans): what of the catchment, the rest, each unit's own
   piece and its whole catchment drains into pans, reported beside the areas
@@ -3887,7 +3933,7 @@ before `start-16` (a unit at a dam or an abstraction point, `role` `dam` or
 - `DivideProposal` = the same with `mode: 'divide'` and `plan = { mode,
   outlet: { featureId, nodeId, name, point, snapDistanceM, foundIn, placement },
   catchment, units: DivideUnit[] (upstream first), rest: { areaM2, geometry,
-  nonContributingM2? }, pans?: PanReport, untouched: { nodeId, name, areaKm2 }[] (farm nodes no point stands for, the ones the rest may go to, with their area when proposed),
+  nonContributingM2?, drainsInto?, drainsIntoProposed? } (as starting's, a point's key), pans?: PanReport, untouched: { nodeId, name, areaKm2 }[] (farm nodes no point stands for, the ones the rest may go to, with their area when proposed),
   dropped, warnings, cellSizeM, zoom, windowCells }`; `DivideUnit = { key,
   featureName, nodeId (null: a new gauge), name, role, point,
   snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto, current: {
@@ -3934,9 +3980,23 @@ before `start-16` (a unit at a dam or an abstraction point, `role` `dam` or
   its `placement` too, so one placed on a small stream beside its river can
   be moved onto it the same way. The proposal's `method` names only the
   rules that ran.
+- `PlanRequest = { id, kind: 'start' | 'divide', status: 'queued' |
+  'running' | 'failed' | 'proposed' | 'refused' | 'superseded', progress,
+  error, proposal, fallbackId, refusal: { reason, message } | null,
+  createdAt, finishedAt }` (272): `proposal` the routed one (with
+  `proposed`), `fallbackId` a Start's quick plan; `superseded` when the
+  editor moved on before the job stored anything (the quick plan applied
+  or discarded, a newer proposal, the model no longer empty for a Start or
+  empty for a Divide, or a newer plan request of the same account in the
+  project), `refused` with the reason (`too_large`, `map_changed` for a
+  feature gone since, `off`, or the DEM's refusals), `failed` when the job
+  died. It shares the account's one waiting or running delineation with
+  Delineate's clicks (`429` otherwise; for a Start the quick plan is still
+  stored, with `request: null`). With no worker running (`pnpm dev`) it
+  stays queued: a Start keeps its quick plan.
 - Each write is in the audit log (`map.start_proposed`, `map.start_applied`,
   `map.start_discarded`, `map.divide_proposed`, `map.divide_applied`,
-  `map.divide_discarded`: ids and counts; never a polygon). A stranger gets
+  `map.divide_discarded`: ids and counts, and `background: true` on a proposal the worker made; never a polygon). A stranger gets
   `404`.
 
 ## Assistant
@@ -3998,7 +4058,7 @@ each setting's kind (`backend/src/assistant/settingKinds.ts`, which
 `get_settings` sends as `kinds`): an outcome only management settings and the
 network's operating levers, a recalibration the calibrated and input
 settings, a correction the input and assessment settings; a calibrated
-parameter (GR4J X1–X4, the pan coefficients, PE, the CHIRPS bias settings) is
+parameter (GR4J X1–X4, the calibration zones, the pan coefficients, PE, the CHIRPS bias settings) is
 refused for any goal but a recalibration ([architecture.md § Assistant
 tools](./architecture.md#assistant-tools) lists the levers). There is no
 title argument, and a `summary` is refused: the server builds the title.
@@ -4393,6 +4453,51 @@ outcome series, or the problems that kept it from running.
 - Progress: the job reports 0–100 after each member (`job.progress`, and
   `GET /jobs`). A sweep can't be cancelled; it is at most 12 runs.
 
+## Regional GR4J prior
+
+GR4J's parameter ranges for the catchment, or one calibration zone, from
+calibrated, similar, nearby gauged donor basins (issue #622,
+`backend/src/calibration/prior.ts`, [model.md §2.10m](./model.md)): what the
+Calibration page's Regional prior panel shows and Fit automatically uses,
+and "Start from the prior".
+
+| Method | Path | Body / query | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/gr4j-prior` | `?zone=<gauge node id>` (optional: a ticked calibration zone; absent = the calibration site's own zone, or with no zone the catchment), `?dataset=<label>` (optional; default a real donor set before the synthetic one, then the newest load) | `200 { dataset, datasets, soil, target, prior, problem, donors, ranges, provenance, started }` | viewer |
+| POST | `/projects/:id/gr4j-prior/start` | `{ zone?: <gauge node id> \| null, dataset?: <label> }` | `200 { params: { x1, x2, x3, x4 }, record: PriorStartRecord, revisionId }` | editor |
+
+- `dataset`: the donor set read (`{ dataset, version, source, method,
+  attribution, synthetic, donorSetSha256, donors }`), `null` with none
+  loaded; `datasets` every loaded set; `soil` the soil grid read (`{
+  dataset, version, attribution, synthetic }`) or `null`.
+- `target`: `{ zoneNodeId, units (sorted, null = every unit), lon, lat,
+  positionFrom ('gauge' | 'boundary' | null), attributes (the engine's
+  CatchmentAttributes: area, MAP and aridity from the project, the
+  HydroATLAS-only ones null), pawcMm, soilProblem, climateYears, rainFrom
+  ('catchment' | 'units') }`. The position is the zone's gauge on the map,
+  else the catchment boundary's centroid; PAWC is the soil grid over the
+  boundary.
+- `prior` is the engine's `RegionalPrior` (or `null` with no donors or no
+  position); `ranges` the ranges a fit or a start uses (x1 from the soil
+  relation when it has skill and the target has a PAWC); `provenance` the
+  engine's `PriorProvenance` (the donor set and its SHA-256, the donors kept
+  with their weights, the LOO skill, the reference load, the target), which
+  a fit passes to `calibrate()` with the ranges. `donors` the kept donors
+  with their position, area, weight, distance, similarity, own KGE′ and
+  parameters. `problem` says why there is no prior to use (no donors loaded,
+  no boundary, the engine's reason), else `null`. `started` the target's
+  start record while its parameters still hold what it wrote, else `null`.
+- `400` for an unknown dataset or a gauge that isn't a calibration zone;
+  `404` for a non-member.
+- `POST …/start` re-derives the prior on the server (the client only names
+  the target and dataset) and writes the p50s into the target's GR4J
+  parameters (`gr4j`, or the zone's row), with a `PriorStartRecord` in
+  `settings.gr4jPrior` replacing that target's (one per zone), as one
+  settings revision whose reason names the donors. `settings.gr4jPrior` is
+  never written by a settings save (`PATCH /projects/:id` drops it). `400`
+  when there is no prior (the `problem`); `409` when the donor set changed
+  while it was read.
+
 ## Automated calibration
 
 A server run of the project's saved calibration rules (issue #153,
@@ -4549,11 +4654,13 @@ farmer view E3, migration 106).
   storage): an explicit review date is then `422`, an absent one is null.
   `analogueYears` (1–200 distinct water
   years): absent, every one the record holds but the season's own.
-  `method` (issue #620, migration 267): `esp` (absent: the default) uses
-  every analogue year alike; `climateState` also adds `result.climate`,
-  the same members summarised on the years nearest this season's ENSO and
-  SAM state (below). Any other value is `400`. The ESP figures are the
-  same either way.
+  `method` (issue #620, migrations 267 and 275): `esp` (absent: the
+  default) uses every analogue year alike; `climateState` also adds
+  `result.climate`, the same members summarised on the years nearest this
+  season's ENSO and SAM state; `c3s` also adds `result.forecast`, the
+  chance of each drought restriction level from the C3S seasonal forecasts
+  (below). Any other value is `400`. The ESP figures, and the trigger
+  table, are the same in every method.
 - Checked before anything is queued: the base run as for a sweep (`404`,
   `409` for a scenario or forecast run), and the season: the decision date
   must fall after the run's first day and at most the day after its last
@@ -4609,6 +4716,54 @@ farmer view E3, migration 106).
   [architecture.md § Data feeds](./architecture.md#data-feeds)) before any
   member runs: a copy whose manifest or files can't be read fails the job;
   a copy without the indices gives `indexNotHeld`.
+- `result.forecast` (method `c3s` only; [model.md
+  §2.15d](./model.md#215d-the-forecast-conditioned-outlook-the-chance-of-each-restriction-level-issue-620-engine-11060)):
+  the engine's `ForecastOutlook` with its members compact, plus what the
+  backend read. `{ method: 'c3s', status: 'ready' | 'off', reason, message,
+  decisionDate, seasonEnd, init, systems, members, chances, espChances,
+  skill, leads, warnings, source, area }`.
+  - `status: 'off'` runs nothing and the outlook is the ESP alone, with
+    `reason`: the engine's `noForecast` (no forecast *issued* by the
+    decision date in the copy), `noHindcast`, `noQualifyingSystem` (no
+    system with 20 hindcast years the record covers), `noDams`,
+    `noAnalogues`, `levelProblems`; or the backend's `noArea` (the project
+    has no catchment boundary and no unit polygon on the map, so there is
+    nowhere to average the forecasts over; `source` and `area` null) and
+    `failed` (the engine refused it: its words in `message`).
+  - `systems`: per system passed, `{ system, init, members, membersDropped,
+    months: [{ month, lead, years }], used, weight, reason }` (`years`: the
+    hindcast years each lead month was fitted on). `members` (compact):
+    `{ system, member, weight, analogueYear, analogueLabel, distance,
+    seasonEndStorageM3, reviewStorageM3, categories }`, never a member's
+    whole season.
+  - `chances` and `espChances`: per review date `{ reviewDate, basis:
+    'rule' | 'bands', categories: [{ id, label, belowPct, fromM3, toM3,
+    chance }] }`, "No restriction" (`level-0`) or the fullest band first;
+    each date's chances sum to 1. The review dates are the drought
+    restriction rule's in the season, else the outlook's own review date,
+    else the engine's default. The chances are at the **full demand** (no
+    level's ops) and of the dam storage only (model.md §2.15d, step 4).
+  - `skill`: `{ metric: 'crpssSeasonEndStorage', crpss, nYears, years,
+    reason }`; `leads` is `forecast` only with `crpss` above 0, else `esp`
+    ("no better than past weather").
+  - `source` (backend `outlooks/c3s.ts` `C3sSource`): `{ init, issued:
+    [{ system, issuedOn }], notIssued, hindcasts: [{ system, initMonth,
+    years, members }], centres, fetchedAt, notes }`: the init used, the
+    systems issued by the decision date (ECMWF on the 6th of the init month,
+    the other centres on the 10th) and those not yet, the hindcasts read,
+    the contributing centres the copy names, and when the copy fetched the
+    newest file read (the credit's year). `area`: `{ source: 'boundary' |
+    'units', cells, units, notes }`; `units` lists, under runoff from each
+    unit's own rain (§2.4h), each unit's `{ nodeId, name, cells, systems:
+    [{ system, meanMonthlyMm }] }` (its raw forecast rain, before mapping;
+    the engine rescales a unit's rain by the catchment's factor).
+  - The worker reads the forecasts from the copy (`MIRROR_URL`) before any
+    member runs: a copy laid out otherwise (an index naming an array that
+    isn't there, another shape) fails the job. Wherever these values show,
+    the Copernicus credit and the contributing centres go with them
+    (`@water-management/engine/credits` `c3sSeasonalCredit`). A farm page
+    never gets a chance: publishing a level of a `c3s` outlook adds only
+    `forecast: { leads }` to each farm's view (below).
 - `triggers` (null without a review date): `{ reviewDate, table, problem,
   excluded, failures }`. `reviewDate` is the season's: the day the WUA reads
   its dams. The outlook's season usually starts after the base run ends
@@ -4633,7 +4788,9 @@ farmer view E3, migration 106).
   project, that farm's own figures at the level (the engine's
   `farmOutlookProjection`: the level, the season and review date, `nYears`,
   `demandYears`, `demandMet` and the dam's season-end share of capacity as
-  `{ p10, p50, p90 }` or null), and the farm page reads them back
+  `{ p10, p50, p90 }` or null; from a `c3s` outlook whose forecast part
+  ran, also `forecast: { leads: 'forecast' | 'esp' }`, which side led,
+  never a chance, issue #620), and the farm page reads them back
   ([§ Farm](#farm), `FarmView.outlook`) until the season ends
   where the catchment is (project time zone). One current per project; the
   newest 12 are kept. Refused: an outlook still running (`409`), a level it
@@ -4656,7 +4813,7 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 | DELETE | `/projects/:id/feeds/:feedId` | – | `204`. The series keeps its days | owner |
 | GET | `/projects/:id/feeds/chirps/from-boundary` | – | The rain feed from the map's catchment boundary (issue #326 B-rain, [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)): `{ boundary: { featureId, name, updatedAt, areaKm2 }, cells: { lat, lon, weight, share }[], rows, cellsKm2, insideKm2, method, apply, runSeries, replace, canApply }`. `apply` is what Apply would do: `{ action: "none", feedId }` (a CHIRPS feed reads this version already), `{ action: "update", feedId, targetKind, targetName, product, startDate }` (a CHIRPS feed whose series holds no days) or `{ action: "create", targetKind: "rain_chirps_mm", targetName, product, startDate }`, with the product and first day it reads unless told otherwise. A new series never takes over unseen from the CHIRPS record runs read (issue #561): `targetName` is `""` while no record exists, else the first free name that sorts after it (`"CHIRPS boundary"`, `"… 2"`, or `"<record> (boundary)"`); with a record, `product` is `rnl` when it starts before 1998 (else `sat`) and `startDate` its first day; with none, `sat` and `null` (the last 60 days). `runSeries`: the CHIRPS series runs read now, `{ name, firstDay, lastDay }` or null. `replace`: replacing that record instead, `{ available: true, targetName, product, startDate }`, `{ available: false, targetName, reason }` (another feed writes it, or it already holds the product and version the feed writes) or null (no record, or a feed reads this boundary). `409 { error, details: { code } }`: `no_boundary`, or `boundary_cells` (too big: over 100 cells or 25 rows; not a polygon; beyond 60°) | editor |
 | POST | `/projects/:id/feeds/chirps/from-boundary` | `{ featureId, updatedAt, feedId?, targetName?, product?, startDate?, replace? }`, strict | Apply it: with `feedId`, `200 { feed }` gives that CHIRPS feed the cells (its threshold kept; `product` and `startDate` as sent, else its own, else the proposal's); without, `201 { feed }` attaches a CHIRPS feed into `rain_chirps_mm` / `targetName` (default: the proposal's) reading `product` from `startDate` (defaults: the proposal's; a default start before the product's first day starts on it). `replace: true` (without `feedId` or `targetName`) attaches it into the record runs read instead, as a confirmed replacement (`replaceSeries`, below): a full backfill from the record's first day into a stage, swapped in whole once complete. The feed's `config` is `{ cells, boundary, product, startDate? }` (`boundary` as in the proposal; only this route writes it, and the plain routes refuse it with `400`). Records `feed.configured` with `boundary: { featureId, name }` and `cells` (the count). `409`: `boundary_changed` (the boundary's id or `updatedAt` isn't the current one: another project's feature never matches), `no_boundary`, `boundary_cells`, `series_area` (the target series already holds a record: a feed never splices two areas), `series_takes_over` (the target is a new series that sorts ahead of the record runs read, `details: { runSeries, targetName }`), `nothing_to_replace` / `series_replace` (with `replace`: no record, another feed writes it, or it already holds what the feed writes), `series_backfill` (with `replace`: a later `startDate`, or `sat` for a record before 1998), `feed_fetching` (with `feedId`: a fetch for that feed is still out, asked for with its old cells; the feed's row is held while it checks, so a late answer can't land under the new cells), a non-CHIRPS feed, the 60-feed cap; `404` for a feed not in the project | owner |
-| GET | `/projects/:id/feeds/chirps/from-units[?product=sat\|rnl]` | – | Rain for each unit (issue #482, [maps.md § Rain for each unit](./maps.md#rain-for-each-unit)): `{ product, units, withoutPolygon, refused, canApply, maxFeeds }` (`maxFeeds`: the project's feed cap, `MAX_FEEDS`, so the UI keeps no copy). `product` is the one asked for, else the one every unit feed already reads, else `rnl`. `units: { nodeId, name, featureId, areaKm2, cells: { lat, lon, share, weight }[], feedId, seriesDays, action }[]`: each land unit (a farm with an area above 0) whose polygon (its farm parcel: the one its area came from, else its only one) gives cells; `feedId` its feed (`null` = none yet), `seriesDays` the days its own CHIRPS series holds, `action` what POST would do (`create`; `update`: its feed's series is still empty and the cells or the product differ; `none`: the feed reads the same product over the same cells, even from a redrawn parcel). `withoutPolygon: { nodeId, name }[]`: land units with no parcel. `refused: { nodeId, name, reason }[]`: several parcels and none its area; the cells can't be read (over 100 cells or 25 rows, beyond 60°); its feed's series already holds days of other cells or another product; it has a CHIRPS series of its own no feed writes; a series of the feed's name holds another record. Gauges and water users are never listed. `400` for another product | editor |
+| GET | `/projects/:id/feeds/chirps/from-units[?product=sat\|rnl]` | – | Rain for each unit (issue #482, [maps.md § Rain for each unit](./maps.md#rain-for-each-unit)): `{ product, units, withoutPolygon, refused, canApply, maxFeeds }` (`maxFeeds`: the project's feed cap, `MAX_FEEDS`, so the UI keeps no copy). `product` is the one asked for, else the one every unit feed already reads, else `rnl`. `units: { nodeId, name, featureId, areaKm2, cells: { lat, lon, share, weight }[], feedId, seriesDays, action }[]`: each land unit (a farm with an area above 0) whose polygon (the area feature its area came from, `area_feature_id`, a farm parcel or an *other* area, issue #646 F1; else its only linked farm parcel; `geo/unitPolygon.ts`, as `GET …/map/unit-map` and the reference cell read it) gives cells; `feedId` its feed (`null` = none yet), `seriesDays` the days its own CHIRPS series holds, `action` what POST would do (`create`; `update`: its feed's series is still empty and the cells or the product differ; `none`: the feed reads the same product over the same cells, even from a redrawn parcel). `withoutPolygon: { nodeId, name }[]`: land units with no parcel. `refused: { nodeId, name, reason }[]`: several parcels and none its area; the cells can't be read (over 100 cells or 25 rows, beyond 60°); its feed's series already holds days of other cells or another product; it has a CHIRPS series of its own no feed writes; a series of the feed's name holds another record. Gauges and water users are never listed. `400` for another product | editor |
 | POST | `/projects/:id/feeds/chirps/from-units` | `{ product?: "sat" \| "rnl", startDate?: "YYYY-MM-DD", nodeIds?: uuid[] }`, strict | `200 { created, updated, feeds: { nodeId, feedId }[], skipped: { nodeId, name, reason }[] }` (`created` and `updated` count the feeds changed; `feeds` lists every chosen unit's feed, those already up to date included): one CHIRPS feed per unit (every unit the proposal lists, or the `nodeIds`), each into `rain_chirps_mm` named `CHIRPS v3 (<product>) <unit name>` (a project's series are unique by kind and name), a series this route creates empty and sited at the unit before the first fetch. `product` defaults as in the GET; `startDate` to the product's first day (1981-01-01 `rnl`, 1998-01-01 `sat`; earlier is a `400 { details: { code: "start_date" } }`). The feed's `config` is `{ cells, unit: { nodeId, featureId, updatedAt, areaKm2 }, product, startDate }` (only this route writes `unit`; the plain routes refuse it with `400`). An `update` gives the feed the new cells or product (a product change renames its empty series). `skipped`: without `nodeIds`, the units refused or without a polygon. Records one `feed.configured` `{ action: "units", source, targetKind, product, startDate, created, updated, units: { nodeId, name, feedId, action, cells }[] }` when anything changed. `409 { error, details: { code } }`: `unit_refused` (a named unit is refused or has no polygon; `details.units` says why), `feed_limit` (past the 60-feed cap), `feed_fetching` (a fetch for a unit's feed is still out), `feed_changed` (a unit's feed was saved after the proposal was worked out); `400 unit_unknown` for a named node that isn't a land unit of the project | owner |
 | POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. Rate-limited per feed (`RUN_NOW_RATE`, feeds/routes.ts): 6 presses that queue a fetch or pull a waiting one forward, then one more every 10 minutes; a press onto a fetch already due takes none. Past that, `429 { error, details: { retryAfter } }` with `Retry-After` (seconds), and nothing is queued or moved. `409` for a switched-off feed | editor |
 

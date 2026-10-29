@@ -49,6 +49,8 @@
 	import PieceBadge from './PieceBadge.svelte';
 	import { proposalPieces, REST_KEY } from './pieces';
 	import { OUTLET_KEY, placementLine, withPlacement } from './placement';
+	import { isPlanWaiting, planOutcomeText, planWaitingText } from './planWait';
+	import { PlanWait } from './planWait.svelte';
 	import { isUnitBoundary, openDivide, outletGauges, planBeforeBoundaries } from './startFlow';
 
 	let {
@@ -115,11 +117,31 @@
 		h.focus();
 	}
 
+	// --- a catchment too large to route within the request (#646 item 3): the worker routes it, and the sheet waits ---
+	const plan = new PlanWait(
+		() => projectId,
+		async (r) => {
+			if (r.status === 'proposed' && r.proposal?.mode === 'divide') {
+				await onproposed(r.proposal);
+				void focusTitle();
+			} else error = planOutcomeText(r);
+		}
+	);
+	// svelte-ignore state_referenced_locally
+	if (info.request?.kind === 'divide' && isPlanWaiting(info.request)) plan.start(info.request);
+	$effect(() => () => plan.stop());
+
 	async function proposeNow() {
 		busy = 'propose';
 		error = null;
 		try {
 			const r = await api.divide.propose(projectId, withPlacement(divideBody(choices, outlet), draft.placement));
+			if ('request' in r) {
+				// Too large for the request: the worker has it now.
+				plan.start(r.request);
+				return;
+			}
+			plan.stop();
 			await onproposed(r.proposal);
 			void focusTitle();
 		} catch (err) {
@@ -157,7 +179,7 @@
 	let restNewName = $state('Rest of the catchment');
 	function setRest(v: string) {
 		if (!ticks) return;
-		ticks.rest = v === 'none' ? { to: 'none' } : v === 'new' ? { to: 'new', name: restNewName } : { to: 'node', nodeId: v };
+		ticks.rest = v === 'none' ? { to: 'none' } : v === 'new' ? { to: 'new', name: restNewName, drainsInto: false } : { to: 'node', nodeId: v };
 	}
 
 	async function apply(p: DivideProposal) {
@@ -259,6 +281,12 @@
 					</select>
 					<span class="hint">Where the river leaves the catchment: the model’s outflow, {outflow?.name}.</span>
 				</div>
+				{#if plan.waiting}
+					<div class="waiting" role="status" data-testid="divide-routing" data-status={plan.waiting.status}>
+						<p>{planWaitingText(plan.waiting)}</p>
+						{#if plan.waiting.status === 'running' && plan.waiting.progress !== null}<progress max="100" value={plan.waiting.progress} aria-label="How far it is"></progress>{/if}
+					</div>
+				{/if}
 				{#if twice}<p class="err" role="alert">Two points stand for {nodeName(twice)}: each hydrological unit takes one point.</p>{/if}
 				<p class="hint" data-testid="divide-count">{chosen === 1 ? '1 point' : `${chosen} points`} in the division.</p>
 			</form>
@@ -380,6 +408,13 @@
 									<label for="{uid}-rest-name">Its name</label>
 									<input id="{uid}-rest-name" bind:value={r.name} oninput={(e) => (restNewName = e.currentTarget.value)} maxlength="100" />
 								</div>
+								{#if p.rest.drainsIntoProposed && p.rest.drainsInto}
+									{@const into = p.units.find((x) => x.key === p.rest.drainsInto)}
+									<label class="check">
+										<input type="checkbox" bind:checked={() => !!r.drainsInto, (v) => (r.drainsInto = v)} data-testid="divide-tick-rest-drains" />
+										<span>Drains into <strong>{into?.name ?? 'a unit'}</strong>: the first unit its flow path meets, from where most of it drains (unticked, the outflow)</span>
+									</label>
+								{/if}
 							{/if}
 							{#if ticks.rest.to !== 'none' && offersEffective(p.rest.areaM2, p.rest.nonContributingM2)}
 								{@const r = ticks.rest}
@@ -410,7 +445,7 @@
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
 		{#if step === 'points'}
-			<button type="submit" form="{uid}-points" class="btn btn-primary" disabled={busy === 'propose' || !!twice || chosen === 0 || (!boundary && !outlet)} data-testid="divide-propose">
+			<button type="submit" form="{uid}-points" class="btn btn-primary" disabled={busy === 'propose' || !!plan.waiting || !!twice || chosen === 0 || (!boundary && !outlet)} data-testid="divide-propose">
 				{busy === 'propose' ? 'Proposing…' : 'Propose the division'}
 			</button>
 		{:else if step === 'review' && pending}
@@ -495,6 +530,20 @@
 	.err {
 		color: var(--danger);
 		margin: 0;
+	}
+	.waiting {
+		display: grid;
+		gap: 0.4rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--accent-soft);
+	}
+	.waiting p {
+		margin: 0;
+	}
+	.waiting progress {
+		width: 100%;
 	}
 	.how summary {
 		cursor: pointer;

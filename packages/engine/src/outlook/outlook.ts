@@ -666,11 +666,30 @@ export function runOutlookMember(
 	ops: readonly ScenarioOp[] = [],
 	siteNodeId: string | null = null
 ): { member: OutlookMember | null; problems: string[] } {
+	const r = runOutlookMemberRun(snapshot, input, baseRun, season, analogue, ops, siteNodeId);
+	return { member: r.member, problems: r.problems };
+}
+
+/**
+ * runOutlookMember with the member's run as well (null with problems): what
+ * the forecast-conditioned outlook (./forecast.ts) reads the dams' storage on
+ * a review date from. runOutlookMember is this, without the run.
+ */
+export function runOutlookMemberRun(
+	snapshot: ModelStateSnapshot,
+	input: ModelInput,
+	baseRun: OutlookBaseRun,
+	season: OutlookSeason,
+	analogue: OutlookAnalogue,
+	ops: readonly ScenarioOp[] = [],
+	siteNodeId: string | null = null
+): { member: OutlookMember | null; output: ModelOutput | null; problems: string[] } {
 	if (snapshot.date !== resolveSeason(season).decisionDate) throw new RangeError(`the snapshot is of ${snapshot.date}, not the season's first day ${season.decisionDate}`);
 	const m = outlookSeasonInput(input, baseRun, season, analogue, ops);
-	if (m.problems.length) return { member: null, problems: m.problems };
+	if (m.problems.length) return { member: null, output: null, problems: m.problems };
 	// Nothing after the decision date is known (§2.15): a snapshot straight from captureModelState gets the same factor as outlookBaseAndSnapshot's.
-	return { member: outlookMember(runModelFrom(withAllocationKnownBefore(snapshot, input), m.input), m.input.model, season, analogue, siteNodeId), problems: [] };
+	const output = runModelFrom(withAllocationKnownBefore(snapshot, input), m.input);
+	return { member: outlookMember(output, m.input.model, season, analogue, siteNodeId), output, problems: [] };
 }
 
 function stat(values: readonly (number | null)[], enough: boolean): OutlookStat | null {

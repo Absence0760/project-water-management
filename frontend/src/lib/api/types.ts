@@ -2,6 +2,11 @@
 import type { Locale } from '@water-management/engine/languages';
 import type {
 	AppliedOp,
+	CatchmentAttributes,
+	ParamPriors,
+	PriorProvenance,
+	PriorStartRecord,
+	RegionalPrior,
 	CalibrationBounds,
 	CalibrationExclusion,
 	CalibrationRules,
@@ -42,6 +47,9 @@ import type {
 	SeasonalOutlook,
 	ClimateIndexId,
 	ClimateOutlook,
+	ForecastMemberResult,
+	ForecastOffReason,
+	ForecastOutlook,
 	SeriesMeta,
 	StoredRunoffModelId,
 	YearClassMethod,
@@ -2710,16 +2718,47 @@ export type OutlookClimate = ClimateOutlook & {
 	source: Partial<Record<ClimateIndexId, { url: string; through: string; revision: number; fetchedAt: string }>>;
 };
 
+/** What the forecast-conditioned outlook read from the data mirror (issue #620, backend outlooks/c3s.ts C3sSource). */
+export interface OutlookForecastSource {
+	init: string | null;
+	issued: { system: string; issuedOn: string }[];
+	notIssued: { system: string; issuedOn: string }[];
+	hindcasts: { system: string; initMonth: number; years: number[]; members: number }[];
+	centres: string[];
+	fetchedAt: string | null;
+	notes: string[];
+}
+
+/**
+ * The forecast-conditioned outlook as stored (issue #620, method c3s, backend
+ * StoredForecastOutlook): the engine's ForecastOutlook with compact members,
+ * what was read (`source`) and over what (`area`). Off with the engine's
+ * reason, or the backend's: noArea (no polygon) or failed (the engine's words in `message`).
+ */
+export type OutlookForecast = Omit<ForecastOutlook, 'members' | 'reason'> & {
+	reason: ForecastOffReason | 'noArea' | 'failed' | null;
+	members: Omit<ForecastMemberResult, 'outcome' | 'months'>[];
+	source: OutlookForecastSource | null;
+	area: {
+		source: 'boundary' | 'units';
+		cells: number;
+		units: { nodeId: string; name: string; cells: number; systems: { system: string; meanMonthlyMm: number[] }[] }[];
+		notes: string[];
+	} | null;
+};
+
 /** An outlook's result: the engine's SeasonalOutlook, with the backend's exclusions and the members the engine refused. */
 export type OutlookResult = Omit<SeasonalOutlook, 'excluded' | 'climate'> & {
 	excluded: OutlookExcludedYear[];
 	failures: { levelId: string; label: string; waterYear: number; message: string }[];
 	/** Method climateState only (issue #620): the years nearest this season's ENSO and SAM state. */
 	climate?: OutlookClimate;
+	/** Method c3s only (issue #620): the chance of each restriction level from the C3S seasonal forecasts. */
+	forecast?: OutlookForecast;
 };
 
 /** How an outlook uses its analogue years (backend outlooks/schema.ts OUTLOOK_METHODS). */
-export type OutlookMethod = 'esp' | 'climateState';
+export type OutlookMethod = 'esp' | 'climateState' | 'c3s';
 
 /** A trigger table as stored (backend outlooks/store.ts StoredTriggerTable): the engine's ReviewTriggers without each band's whole outlook. */
 export type OutlookTriggerTable = Omit<ReviewTriggers, 'rows'> & { rows: Omit<ReviewTriggerRow, 'outlook'>[] };
@@ -2873,6 +2912,8 @@ export interface MapFeature {
 	createdBy: string | null;
 	createdAt: string;
 	updatedAt: string;
+	/** A gauge linked to its node: where it stood when linked (273, issue #646 F9); null or absent otherwise, or linked before 273. */
+	linkPoint?: MapPosition | null;
 }
 
 /** One feature on a farm's map (GET /projects/:id/farm/:nodeId/map, issue #326 A3): the farm's own parcels and dams, the boundary, rivers and gauges. No node, no properties, no author. */
@@ -2926,6 +2967,24 @@ export interface MapFeatureList {
 	nodes: MapNodeArea[];
 	/** The quaternary datasets loaded (empty: the lookup has nothing to propose from). */
 	quaternaryDatasets: { dataset: string; count: number }[];
+	/** What each value accepted from the map was taken over (273, issue #646 F7/F8; backend geo/acceptances.ts). */
+	accepted?: MapAcceptances;
+}
+
+/** A polygon as it stood when a value was read over it (273). */
+export interface PolygonStamp {
+	featureId: string;
+	updatedAt: string;
+	areaM2: number;
+}
+
+/** GET …/map/features `accepted`: the polygon each value from the map was read over (map/stale.ts compares them with the map now). */
+export interface MapAcceptances {
+	unitMap: { nodeId: string; polygon: PolygonStamp }[];
+	/** A unit's own CHIRPS feed's `unit` mark (its area rounded to 0.001 km²). */
+	unitRain: { nodeId: string; featureId: string; updatedAt: string; areaKm2: number }[];
+	landCover: { nodeId: string; cropId: string; cropName: string; polygons: PolygonStamp[] }[];
+	evaporation: { target: 'pe' | 'apan'; boundary: PolygonStamp | null }[];
 }
 
 /** GET …/map/linked-nodes: the nodes at least one feature is linked to, each once (no geometry). */
@@ -3384,6 +3443,45 @@ export interface EvaporationAccepted {
 	current: boolean;
 }
 
+/** A donor the regional prior kept (GET /projects/:id/gr4j-prior). */
+export interface Gr4jPriorDonor {
+	id: string;
+	lon: number;
+	lat: number;
+	areaKm2: number;
+	weight: number;
+	distanceKm: number;
+	similarity: number | null;
+	kgeFit: number;
+	kgeValidation: number | null;
+	params: { x1: number; x2: number; x3: number; x4: number };
+}
+
+/** GET /projects/:id/gr4j-prior (issue #622, docs/api.md § Regional GR4J prior): the prior for the catchment or one calibration zone. */
+export interface Gr4jPrior {
+	dataset: { dataset: string; version: string; source: string; method: string; attribution: string; synthetic: boolean; donorSetSha256: string; donors: number } | null;
+	datasets: { dataset: string; version: string; synthetic: boolean; donors: number }[];
+	soil: { dataset: string; version: string; attribution: string; synthetic: boolean } | null;
+	target: {
+		zoneNodeId: string | null;
+		units: string[] | null;
+		lon: number | null;
+		lat: number | null;
+		positionFrom: 'gauge' | 'boundary' | null;
+		attributes: CatchmentAttributes;
+		pawcMm: number | null;
+		soilProblem: string | null;
+		climateYears: number;
+		rainFrom: 'catchment' | 'units';
+	} | null;
+	prior: RegionalPrior | null;
+	problem: string | null;
+	donors: Gr4jPriorDonor[];
+	ranges: ParamPriors | null;
+	provenance: PriorProvenance | null;
+	started: PriorStartRecord | null;
+}
+
 /** GET /projects/:id/evaporation-proposals: the boundary's evaporation from a grid, beside the saved settings. */
 export interface EvaporationProposals {
 	/** The dataset summarised (a real one before the synthetic grid); null with none loaded. */
@@ -3403,6 +3501,49 @@ export interface EvaporationProposals {
 	 */
 	settings: { apanMm: number[]; peKind: 'pan' | 'monthly'; peMm: number[] | null; dailyApan?: { from: string; to: string } | null };
 	accepted: EvaporationAccepted[];
+}
+
+/** How a DWS evaporation station's pan record becomes A-pan (issue #646 item 6): as it stands, or by an S→A equation's 12 values. */
+export type StationApan = { ok: true; apanMm: number[]; spanMm: number[] | null; conversion: SpanConversionId | null; note: string | null } | { ok: false; reason: string };
+/** The inverted S-pan ← A-pan equations a Symons station's means may be converted by (engine spanToApan.ts). */
+export type SpanConversionId = 'wr90' | 'taljaard2023';
+
+/** One DWS evaporation station near the catchment boundary (GET /projects/:id/evaporation-stations). */
+export interface EvaporationStationProposal {
+	code: string;
+	name: string;
+	pan: 'class_a' | 'symons';
+	lon: number;
+	lat: number;
+	/** From the catchment boundary, km; 0 inside it. */
+	distanceKm: number;
+	recordStart: string;
+	recordEnd: string;
+	recordYears: number;
+	/** Share of the record's days with a value, 0–1. */
+	completeness: number;
+	dataset: string;
+	source: string;
+	/** The repo's invented stations: never real values. */
+	synthetic: boolean;
+	/** The record's 12 monthly means (water-year order), as the pan read them; null where a month has too few complete years. */
+	monthly: { meansMm: (number | null)[]; years: number[]; first: string | null; last: string | null; problem: string | null };
+	/** A Class-A pan's A-pan (its means as they stand); null for a Symons pan. */
+	apan: StationApan | null;
+	/** A Symons pan's means through each S→A equation; null for a Class-A pan. */
+	conversions: { id: SpanConversionId; label: string; result: StationApan }[] | null;
+	/** The daily series a Class-A pan's record is written as. */
+	seriesName: string;
+}
+
+/** GET /projects/:id/evaporation-stations: the nearest DWS evaporation stations to the boundary, beside the saved A-pan. */
+export interface EvaporationStationProposals {
+	boundary: { featureId: string; name: string } | null;
+	withinKm: number;
+	datasets: { dataset: string; count: number }[];
+	stations: EvaporationStationProposal[];
+	/** The saved A-pan row, and the project's daily A-pan series (first by name is the one a run reads). */
+	settings: { apanMm: number[]; dailyApan: { name: string; source: string | null; from: string; to: string }[] };
 }
 
 /** A registered dam near a unit's dam on the map (issue #326 B-dams; docs/api.md § Catchment map). */
@@ -3646,7 +3787,17 @@ export interface StartPlan {
 	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
 	units: StartUnit[];
 	/** Beside units' boundaries (start-16): the catchment less them, with no outline; `members` the dams and pumps in no unit's boundary. */
-	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number; members?: StartMember[] };
+	rest: {
+		name: string;
+		areaM2: number | null;
+		geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null;
+		nonContributingM2?: number;
+		members?: StartMember[];
+		/** Beside units' boundaries with a DEM (start-17): the unit it drains into (its key), or null for the outflow gauge. */
+		drainsInto?: string | null;
+		/** Whether drainsInto is proposed, to tick; absent or false, it drains into the outflow gauge. */
+		drainsIntoProposed?: boolean;
+	};
 	/** What of the catchment drains into pans (start-11; absent without an elevation model or before). */
 	pans?: PanReport;
 	/** `placement`: how a dropped point was put on the channel (start-7): one beside a larger channel can be moved there. */
@@ -3662,7 +3813,8 @@ export interface StartTicks {
 	outletName: string;
 	/** `areaBasis`: with `area`, the gross area (the default) or the effective one (195). */
 	units: { key: string; name: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean }[];
-	rest: { include: boolean; name: string; area: boolean; areaBasis?: MapAreaBasis };
+	/** `drainsInto`: take the rest's proposed drains-into (start-17); absent or false, the outflow gauge. */
+	rest: { include: boolean; name: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto?: boolean };
 }
 
 export interface StartProposal {
@@ -3727,7 +3879,8 @@ export interface DividePlan {
 	outlet: { featureId: string | null; nodeId: string; name: string; point: MapPosition; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary'; placement?: PointPlacement };
 	catchment: { areaM2: number; boundaryAreaM2: number | null };
 	units: DivideUnit[];
-	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number };
+	/** `drainsInto`: beside units' boundaries (start-17), the point (its key) the rest drains into, or null for the outflow; proposed when `drainsIntoProposed`. */
+	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number; drainsInto?: string | null; drainsIntoProposed?: boolean };
 	/** What of the catchment drains into pans (start-11; absent before). */
 	pans?: PanReport;
 	untouched: { nodeId: string; name: string; areaKm2: number }[];
@@ -3742,7 +3895,7 @@ export interface DividePlan {
 export interface DivideTicks {
 	/** `areaBasis`: with `area`, the gross area (the default) or the effective one (195). */
 	units: { key: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean; add: boolean; name?: string }[];
-	rest: { to: 'none' } | { to: 'node'; nodeId: string; areaBasis?: MapAreaBasis } | { to: 'new'; name: string; areaBasis?: MapAreaBasis };
+	rest: { to: 'none' } | { to: 'node'; nodeId: string; areaBasis?: MapAreaBasis } | { to: 'new'; name: string; areaBasis?: MapAreaBasis; drainsInto?: boolean };
 }
 
 export interface DivideProposal extends Omit<StartProposal, 'mode' | 'plan'> {
@@ -3757,6 +3910,26 @@ export interface StartState {
 	modelEmpty: boolean;
 	startedFromMap: boolean;
 	proposals: (StartProposal | DivideProposal)[];
+	/** A Start or Divide the background worker is still routing (queued or running), else null (272; absent from an older server). */
+	request?: PlanRequest | null;
+}
+
+/**
+ * A Start or Divide plan handed to the background worker: its routing reached the edge of the request's window (272,
+ * docs/api.md § Start from the map). A Start's `fallbackId` is its proposal without the order, which the routed one replaces
+ * while open. `failed`: the job died, and `error` says why.
+ */
+export interface PlanRequest {
+	id: string;
+	kind: 'start' | 'divide';
+	status: DelineationRequest['status'];
+	progress: number | null;
+	error: string | null;
+	proposal: StartProposal | DivideProposal | null;
+	fallbackId: string | null;
+	refusal: { reason: string; message: string } | null;
+	createdAt: string;
+	finishedAt: string | null;
 }
 
 /** One click's piece (POST …/map/subcatchments): its incremental catchment, the land draining to it before any other click. */

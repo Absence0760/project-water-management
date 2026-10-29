@@ -77,7 +77,7 @@ describe('anchorForward: Settings and Runs & results → Calibration (issue #586
 		for (const id of CALIBRATION_SETTINGS_ANCHORS) {
 			expect(anchorForward('settings', at(`/projects/p1?tab=settings#${id}`)), id).toBe(`/projects/p1?tab=calibration#${id}`);
 		}
-		expect(CALIBRATION_SETTINGS_ANCHORS).toEqual(['set-flow', 'set-record', 'set-fit', 'set-wr2012', 'set-evaporation']);
+		expect(CALIBRATION_SETTINGS_ANCHORS).toEqual(['set-flow', 'set-record', 'set-fit', 'set-wr2012', 'set-evaporation', 'set-evaporation-station', 'set-prior']);
 		expect(anchorForward('settings', at('/app/projects/p1?ref=mail&tab=settings&run=r2#set-fit'))).toBe('/app/projects/p1?ref=mail&tab=calibration&run=r2#set-fit');
 		expect(anchorForward('settings', at('/projects/p1?tab=settings#set%2Dfit'))).toBe('/projects/p1?tab=calibration#set-fit');
 	});

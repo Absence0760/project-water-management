@@ -2,3 +2,6 @@
 export * from './season';
 export * from './outlook';
 export * from './climate';
+export * from './qm';
+export * from './skill';
+export * from './forecast';

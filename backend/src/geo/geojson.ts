@@ -88,6 +88,18 @@ export const KIND_GEOMETRY: Record<FeatureKind, readonly GeometryType[]> = {
 	other: ['Point', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']
 };
 
+/** The node kinds a feature of each kind may stand for. */
+export const KIND_NODES: Record<FeatureKind, readonly string[]> = {
+	catchment_boundary: [],
+	farm_parcel: ['farm', 'user'],
+	dam: ['farm', 'user'],
+	gauge: ['gauge'],
+	river: [],
+	other: ['farm', 'user', 'gauge']
+};
+/** A hydrological unit's kind in words (the model's `farm` is a unit with land). */
+export const NODE_KIND_WORD: Record<string, string> = { farm: 'a unit with land', user: 'an other water user', gauge: 'a gauge' };
+
 /** The properties a feature's kind is read from, in order (the key's case ignored). */
 const KIND_KEYS = ['kind', 'type', 'layer'];
 /** The words a file may use for each kind (lower case, spaces for `_` and `-`; a plural `s` is dropped before looking up). */

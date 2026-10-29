@@ -63,7 +63,7 @@ erDiagram
 | `language` | The languages a person or an invite can have (`code`), synced from the engine's language table; see [Languages](#languages-080_languagesql) | none |
 | `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); `privacy_contact_name` / `_email` / `_postal` (168: whom to ask about the team's projects' personal information); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
 | `team_member` | (team, user, team role) | none |
-| `project` | One catchment/place: name, description, optional `team_id`, `wua_name` (095_wua_name, issue #74: the WUA the farm pages' contact lines name, "Questions? Contact Vaalbank WUA."; NULL = "your WUA", 1–200 characters by a CHECK; not the team's name, which may be a consultancy's; every member reads it, farmers included, and an editor changes it), `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`, and the zone server-rendered PDFs print in (`app_project_time_zone`, 217: the render-session exchange reads it for any member, issue #521); the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days (`[Farm spec]`'s method and Hi/Lo split were `flowShareMethod` and `hiLoSplit` until engine 1.105.0 retired them, issue #616: the importers no longer read them, `mergeSettings` drops them and [266](#flow-share-methods-retired-266_retire_flow_share_methodsql) removed them from stored projects), `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `calibrationSiteNodeId` (engine 1.41.0: where calibration scores, null = the outlet or a gauge above it with a flow record, [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410); no SQL migration, null from `mergeSettings`), `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `chirpsQuantileMap` (engine 1.53.0, CR-23: the CHIRPS gap fill's opt-in quantile map, `{ wetDayMm }` or null, [model.md §2.4b](./model.md#quantile-map-engine--1530-cr-23); no SQL migration, null from `mergeSettings`), `gapRain` (engine 1.101.0, issue #604 R4-B: the product that fills the catchment rain's blank days, `{ product: 'chirps' \| 'era5l' \| 'chirpsThenEra5l', imergLate }` or null = CHIRPS alone, [model.md §2.4b](./model.md#gap-filling-product-engine--11010-issue-604-r4-b); no SQL migration, null from `mergeSettings`), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `lakeEvapFactorSource` (engine 1.49.0: free-text provenance of the dam evaporation factors, e.g. a lake-factor preset's note, [model.md §2.7a](./model.md) item 4; never read by the model; no SQL migration, '' from `mergeSettings`), `arealRain` (engine 1.13.0: the areal rainfall correction on GR4J's rain, `{ factors, method, source }` or null, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130); no SQL migration, null from `mergeSettings`), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `allocationMode` and `allocationTolerance` (engine 1.18.0, issue #72: what the registered volumes do to a run, `'none'` by default, `'cap'` or `'fullAllocation'`, and the comparison's band, a fraction in [0, 1), default 0.1, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72); no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrChargeSource` and `lowFlowMeasure` (engine 1.3.0, issue #64: what the EWR charge follows, `'pragmatic'` by default or `'ruleTable'`, and what low flows are judged on, `'total'` by default or `'baseflow'`, [model.md §2.9c–§2.9d](./model.md); pending the hydrologist; no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrDailySource` (engine 1.77.0, issue #455: where the outlet's daily EWR comes from, the pragmatic EWR, the DRM TAB file or the DRM percentile tables, with the scaling and the tables, or null = the pragmatic EWR; an optional `[EWR options]` sheet imports it; [model.md §2.9f](./model.md); no SQL migration, null from `mergeSettings`; issue #617 adds the optional, display-only `tabFile` and `rulFile`, the parsed `.tab` and the `.rul`'s header, which no run reads, absent on earlier sources), `ewrSplit` (engines 1.94.0 – 1.104.x, issue #553: how the EWR was split between the units, `'flowShare'` or `'naturalMar'`; **retired in engine 1.105.0**, issue #615, when every run splits the EWR by each unit's natural MAR, [model.md §2.5b](./model.md): `mergeSettings` drops it, a patch's is stripped and [263](#ewr-split-retired-265_retire_ewr_splitsql) removed it from stored projects), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Five keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `responsibleAuthority` (163, `projects/authoritySettings.ts`: who decides the project's licence applications), `ewrHeadline` (issue #444, `projects/ewrHeadlineSettings.ts`: `{ source: 'auto' } \| { source: 'pragmatic' } \| { source: 'ruleTable', siteNodeId }`, which EWR test the results are judged by, `auto` by default and for an absent key; a copy remaps its site; no SQL migration), `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, R6, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null, review: { month, day } \| null }`, null = the engine's defaults, 1 October – 30 April, 0.8 and the review on 1 January, confirmed by the client (O3, O6, issue #90); how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
+| `project` | One catchment/place: name, description, optional `team_id`, `wua_name` (095_wua_name, issue #74: the WUA the farm pages' contact lines name, "Questions? Contact Vaalbank WUA."; NULL = "your WUA", 1–200 characters by a CHECK; not the team's name, which may be a consultancy's; every member reads it, farmers included, and an editor changes it), `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`, and the zone server-rendered PDFs print in (`app_project_time_zone`, 217: the render-session exchange reads it for any member, issue #521); the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days (`[Farm spec]`'s method and Hi/Lo split were `flowShareMethod` and `hiLoSplit` until engine 1.105.0 retired them, issue #616: the importers no longer read them, `mergeSettings` drops them and [266](#flow-share-methods-retired-266_retire_flow_share_methodsql) removed them from stored projects), `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `calibrationSiteNodeId` (engine 1.41.0: where calibration scores, null = the outlet or a gauge above it with a flow record, [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410); no SQL migration, null from `mergeSettings`), `calibrationZones` (engine 1.106.0, issue #555: the gauges that calibrate the land units draining to them on their own record, each row `{ nodeId, enabled, calibrationStart, calibrationEnd, calibrationFlowKind, calibrationExclusions, qualityFlags, gr4j, fitRecord }`, [model.md §2.10n](./model.md); the calibration site's own zone keeps today's keys (`calibrationSiteNodeId`, the window, `calibrationFlowKind`, `calibrationExclusions`, `qualityFlags`, `gr4j`, `fitRecord`), so nothing is retired; [270](#calibration-zones-270_calibration_sitessql) wrote `[]` into every project, which the engine reads as none), `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `chirpsQuantileMap` (engine 1.53.0, CR-23: the CHIRPS gap fill's opt-in quantile map, `{ wetDayMm }` or null, [model.md §2.4b](./model.md#quantile-map-engine--1530-cr-23); no SQL migration, null from `mergeSettings`), `gapRain` (engine 1.101.0, issue #604 R4-B: the product that fills the catchment rain's blank days, `{ product: 'chirps' \| 'era5l' \| 'chirpsThenEra5l', imergLate }` or null = CHIRPS alone, [model.md §2.4b](./model.md#gap-filling-product-engine--11010-issue-604-r4-b); no SQL migration, null from `mergeSettings`), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `lakeEvapFactorSource` (engine 1.49.0: free-text provenance of the dam evaporation factors, e.g. a lake-factor preset's note, [model.md §2.7a](./model.md) item 4; never read by the model; no SQL migration, '' from `mergeSettings`), `arealRain` (engine 1.13.0: the areal rainfall correction on GR4J's rain, `{ factors, method, source }` or null, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130); no SQL migration, null from `mergeSettings`), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `allocationMode` and `allocationTolerance` (engine 1.18.0, issue #72: what the registered volumes do to a run, `'none'` by default, `'cap'` or `'fullAllocation'`, and the comparison's band, a fraction in [0, 1), default 0.1, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72); no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrChargeSource` and `lowFlowMeasure` (engine 1.3.0, issue #64: what the EWR charge follows, `'pragmatic'` by default or `'ruleTable'`, and what low flows are judged on, `'total'` by default or `'baseflow'`, [model.md §2.9c–§2.9d](./model.md); pending the hydrologist; no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrDailySource` (engine 1.77.0, issue #455: where the outlet's daily EWR comes from, the pragmatic EWR, the DRM TAB file or the DRM percentile tables, with the scaling and the tables, or null = the pragmatic EWR; an optional `[EWR options]` sheet imports it; [model.md §2.9f](./model.md); no SQL migration, null from `mergeSettings`; issue #617 adds the optional, display-only `tabFile` and `rulFile`, the parsed `.tab` and the `.rul`'s header, which no run reads, absent on earlier sources), `ewrSplit` (engines 1.94.0 – 1.104.x, issue #553: how the EWR was split between the units, `'flowShare'` or `'naturalMar'`; **retired in engine 1.105.0**, issue #615, when every run splits the EWR by each unit's natural MAR, [model.md §2.5b](./model.md): `mergeSettings` drops it, a patch's is stripped and [265](#ewr-split-retired-265_retire_ewr_splitsql) removed it from stored projects), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Five keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `responsibleAuthority` (163, `projects/authoritySettings.ts`: who decides the project's licence applications), `ewrHeadline` (issue #444, `projects/ewrHeadlineSettings.ts`: `{ source: 'auto' } \| { source: 'pragmatic' } \| { source: 'ruleTable', siteNodeId }`, which EWR test the results are judged by, `auto` by default and for an absent key; a copy remaps its site; no SQL migration), `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, R6, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null, review: { month, day } \| null }`, null = the engine's defaults, 1 October – 30 April, 0.8 and the review on 1 January, confirmed by the client (O3, O6, issue #90); how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm`, `gauge` or (engine ≥ 0.22.0, migration 011) `user`, an other water user, `downstream_node_id` (tree to one outflow gauge), area, dam and diversion parameters, irrigation efficiency and return flow | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `irrigation_system` | A project's irrigation systems (migration 198, engine ≥ 1.72.0, [model.md §2.3](./model.md#23-irrigation-demand)): `name`, `efficiency` (0 < e ≤ 1), `preset` (the SABI 2021 system it started as, NULL for the project's own) and `sort_order`. A trigger seeds every new project with the six SABI rows (through `irrigation_system_seed`, SECURITY INVOKER since migration 200, which `water_app` can't execute: only the project-insert trigger calls it); the backfill added a row "Imported, NN %" for each efficiency in use that none matched. Read from viewer up (201; a farmer or an applicant reads none of it), written by editors | none (the workbook import adds "Workbook, NN %" rows) |
@@ -483,6 +483,11 @@ area-weighted CHIRPS (`rain_chirps_mm`, the from-units feeds,
   every existing row, so every stored model runs as before. Besides `PUT
   /model`, `POST /map/unit-map` writes both from a MAP grid (a `model_put`
   revision; [maps.md § MAP for each unit](./maps.md#map-for-each-unit)).
+  `node.map_polygon` (273, issue #646 F7): the polygon `POST /map/unit-map`
+  took the MAP over, `{ featureId, updatedAt, areaM2 }` as it stood; the
+  model store clears it when a save changes the MAP or its source (a typed
+  MAP is over no polygon), and nothing else writes it. NULL = unknown or
+  typed.
 - Both functions are `SECURITY INVOKER` with a pinned `search_path`: they read
   `node` and `data_feed` under the writer's RLS, and whoever may write a
   project's series may read both. No new table, grant, policy or foreign key.
@@ -1992,6 +1997,13 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `created_at`, `updated_at`. At most one `catchment_boundary` per project
   (partial unique index). It is Step 2's `catchment_geometry` source for the
   feeds' polygon extraction (wiring the fetcher to it is a follow-up).
+  `link_point` (273, issue #646 F9): a gauge's geometry (a Point) when it
+  was linked to its node, owned by the `map_feature_link_point` trigger
+  (BEFORE INSERT OR UPDATE, pinned `search_path`): set on an insert with a
+  node and whenever the node changes, kept through every other update
+  (whatever the statement sends), NULL for anything but a linked gauge and
+  for a gauge linked before 273 (no backfill). The Map's Checks say how far
+  a gauge moved since.
 - **`node.area_source`** (`typed` | `map`, default `typed`) and
   **`node.area_feature_id`** (composite key `(area_feature_id, project_id)`
   → `map_feature (id, project_id)`, `ON DELETE SET NULL (area_feature_id)`):
@@ -2024,6 +2036,24 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   proposal), `loaded_at`. Global: loaded by the operator as the schema owner
   (`pnpm import:gauge-stations`), SELECT for anyone signed in, read-only to
   `water_app` (the catalogue guard's `READ_ONLY`).
+- **`evaporation_station_reference`** (`274_evaporation_stations.sql`,
+  issue #646 item 6): the DWS evaporation stations whose daily pan record
+  the A-pan proposal reads ([maps.md § Evaporation
+  stations](./maps.md#evaporation-stations)). `code` (primary key, a DWS
+  weather-station code `^[A-Z][0-9]E[0-9]{3}$`, e.g. `A2E001`), `name`
+  (≤ 200), `pan` (`class_a` or `symons`), `lon`, `lat` (WGS84; indexed
+  `(lat, lon)` for the bounding-box first pass), `start_date` and `values`
+  (the daily record, mm, `values[1]` on `start_date`, NULL for a day not
+  read; 1–21 960 days, each 0–50 mm), `days_with_value` (stored with the
+  record so the station list never reads the array; a CHECK keeps it within
+  the record's length), `dataset` (`synthetic` for the committed fixture,
+  region Z; indexed), `source` (1–500, cited in every revision that uses
+  the station), `loaded_at`. Global: loaded by the operator as the schema
+  owner (`pnpm import:evaporation-stations`), SELECT for anyone signed in,
+  read-only to `water_app` (the catalogue guard's `READ_ONLY`). Accepting a
+  station writes no row of its own: it is a settings revision (and, for a
+  Class-A pan, an `evap_apan_mm` series named `DWS <code>`). Production
+  never loads it until DWS's permission covers evaporation records.
 - **`gazetteer_reference`** (`225_gazetteer.sql`, issue #523 C5): the
   named places the Map's search finds after the map's own layers
   ([maps.md § Search](./maps.md#search)). Keyed `(dataset, place_id)`
@@ -2128,6 +2158,19 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `app_release_job` (191, the worker's own call) puts a claimed job back to
   `queued` 120 s on, giving back the attempt its claim counted: a delineate
   job the tick had too little time left for (never a failure, no backoff).
+  **Migration 272** (#646 item 3) lets a request be a Start or Divide plan
+  instead of a click: `plan_kind` (`start` | `divide`) and `plan_body`
+  (jsonb ≤ 16 KB: the editor's request body as sent), with the click
+  columns nullable and a check that a row is exactly one of the two;
+  `plan_proposal_id` (the `start_proposal` the job made, with `proposed`)
+  and `fallback_proposal_id` (a Start's proposal without the order, made
+  at once, that the routed one replaces while open; a Divide has none),
+  each a composite key → `start_proposal (id, project_id)`, `ON DELETE SET
+  NULL` of its own column (that table gained `UNIQUE (id, project_id)`),
+  each with a covering index. `refusal_code` also takes `off_channel` and
+  `map_changed` (a plan's feature gone before the job read the map), and
+  `delineation_request_final` (latest 272) compares the plan columns too.
+  The click views never show a plan, nor the plan view a click.
 - **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
   [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
   proposed for an empty project from its map, and the editor's decision.
@@ -2225,6 +2268,9 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   crop. Viewers read, editors write, same-project trigger on `node_id` and
   `crop_id`, covering indexes on `project_id` and `crop_id`. Farmers don't
   read it (the catalogue guard's `FARMERS_NEVER_READ`).
+  `polygons` (273, issue #646 F7): the polygons the area was summed over,
+  `[{ featureId, updatedAt, areaM2 }]` as they stood (1–500 of them, no
+  foreign key: a record of what was read); NULL from before 273.
 - **`evaporation_dataset`** and **`evaporation_cell_reference`**
   (`180_evaporation_reference.sql`, issue #326 B-evap,
   [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)):
@@ -2259,6 +2305,38 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   Lambda, for the one allowed dataset (`WAAS-SWCape-2007`, issue #560;
   deployment.md § Reference datasets), and migration 238 adds `map-grid` to
   `reference_load`'s kinds.
+- **`soil_dataset`** and **`soil_cell_reference`** (`268_soil_grid.sql`,
+  issue #622, [maps.md § Soil water capacity](./maps.md#soil-water-capacity)):
+  the soil water capacity grid the regional GR4J prior reads. A dataset
+  row: `dataset` (primary key, 1–50; `synthetic` for the committed
+  fixture), `source`, `version`, `method` (the computation in words),
+  `attribution` (SoilGrids 2.0's and iSDAsoil's), `cell_deg`, `origin_lon`
+  and `origin_lat` (0 ≤ origin < cell), `loaded_at`. A cell row: `dataset`
+  (cascades with it), `row_idx`, `col_idx` (keyed as the evaporation grid's;
+  primary key `(dataset, row_idx, col_idx)`, also a polygon's range lookup),
+  `pawc_mm` (root-zone plant-available water capacity, 0–1000) and
+  `root_depth_cm` (min(200, the depth to bedrock), over 0). A cell not
+  listed has no value. Global reference data: any signed-in user reads it,
+  water_app is granted SELECT only; `pnpm import:soils` or a production
+  `load-reference.yml` load (kind `soils`) writes it as the schema owner.
+- **`gr4j_donor_dataset`** and **`gr4j_donor`** (`269_gr4j_donors.sql`,
+  issue #622, [model.md §2.10m](./model.md)): the calibrated donor basins the
+  regional prior is built from. A dataset row: `dataset` (primary key;
+  `synthetic` for the committed donors), `source`, `version`, `method` (the
+  fit and the donor criteria in words), `attribution` (GRDC-Caravan's and
+  HydroATLAS's), `engine_version` (the engine that fitted them),
+  `donor_set_sha256` (of the engine's `donorSetCanonical`, which a prior's
+  fit record will name), `loaded_at`. A donor row: `dataset` (cascades),
+  `basin_id` (GRDC-Caravan's gauge id; primary key `(dataset, basin_id)`),
+  `lon`, `lat`, `area_km2`, the HydroATLAS attributes in plain units
+  (`aridity` P/PET, `map_mm`, `slope_deg`, `clay_pct`, `sand_pct`,
+  `forest_pct`, each nullable), `dor_pct` (regulation, a CHECK holds it
+  under 5), `pawc_mm` (nullable), `flow_years` (a CHECK holds it at 8 or
+  more), `x1`–`x4` (GR4J's hard bounds) and `kge_fit`, `kge_validation`
+  (nullable). Every number is double precision, so the donors read back are
+  the values the SHA-256 was taken of. No flow is stored. Global reference
+  data, read and written as the soil grid is (`pnpm import:gr4j-donors`,
+  kind `gr4j-donors`).
 - **`evaporation_accepted`** (`181_evaporation_accepted.sql`): where an
   evaporation row accepted from the map came from. Primary key
   `(project_id, target)`, `target` `pe` (GR4J's monthly PE) or `apan` (the
@@ -2280,6 +2358,9 @@ audit trail of what was flagged; the hydrologist, and later a licensing
 assessor, needs it long after the import. `POST /projects/import` stores it in
 the import's own transaction ([api.md § Import report](./api.md#import-report)).
 
+  `boundary` (273, issue #646 F8): the catchment boundary the values were
+  summarised over, `{ featureId, updatedAt, areaM2 }` as it stood; NULL from
+  before 273.
 - **Columns:** `project_id` (→ `project`, cascade), `imported_at`,
   `imported_by` (→ `app_user`, `ON DELETE SET NULL` since 138, like
   `model_run.created_by`: the record stays with who imported it cleared),
@@ -3919,7 +4000,7 @@ series, and there are years × levels of them (up to 240), not 12.
 | `result`, `engine_version`, `completed_at` | Set on completion (CHECK: all three exactly when `complete`). `result` is the engine's `SeasonalOutlook` with the backend's `excluded` (plus `overLimit`, `memberFailed`) and `failures`, ≤ 8 MB |
 | `review_date` | The season's review date for the review triggers (migration 106, issue #53 R6): after `decision_date`, on or before `season_end` (CHECK), or NULL = no trigger table. Fixed at insert |
 | `triggers` | Set on completion when there is a review date (CHECK: then never NULL on a complete outlook; NULL without a review date): the backend's `StoredTriggers` (the engine's `ReviewTriggers` table without each band's whole outlook, or why it couldn't be drawn), ≤ 8 MB |
-| `method` | How the analogue years are used (migration 267, issue #620): `esp` (the default, every existing row) every year alike, or `climateState`, which adds `result.climate`: the same members summarised on the years nearest this season's ENSO and SAM state ([model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620)), with the selection and the data mirror's manifest entry of each index it read. CHECK on the two values; fixed at insert (no UPDATE grant names it) |
+| `method` | How the analogue years are used (migrations 267 and 275, issue #620): `esp` (the default, every existing row) every year alike, `climateState`, which adds `result.climate`: the same members summarised on the years nearest this season's ENSO and SAM state ([model.md §2.15c](./model.md#215c-past-seasons-like-this-one-the-climate-state-analogues-issue-620)), with the selection and the data mirror's manifest entry of each index it read, or `c3s` (migration 275), which adds `result.forecast`: the chance of each restriction level from the C3S seasonal forecasts ([model.md §2.15d](./model.md#215d-the-forecast-conditioned-outlook-the-chance-of-each-restriction-level-issue-620-engine-11060)). CHECK on the three values; fixed at insert (no UPDATE grant names it) |
 | `created_by`, `created_at` | Stamped by the insert trigger; `created_by` `ON DELETE SET NULL` (derived, like a sweep) |
 
 `seasonal_outlook_member`:
@@ -4135,8 +4216,38 @@ A column with a CHECK on an existing table: no policy, index or trigger
 changes. The guard (`seasonal_outlook_guard`, latest definition 106) reads
 no column of it. `water_app` writes it through 063's table-wide INSERT and
 no UPDATE grant names it, so a completed outlook's method can't change
-under its result. A forecast-conditioned method (C3S, #620's later slices)
-would widen the CHECK.
+under its result.
+
+### Outlook method c3s (275_outlook_method_c3s.sql)
+
+Widens 267's CHECK by `c3s` (issue #620 step 7): the outlook also stores the
+chance of each drought restriction level from the C3S seasonal forecasts in
+`result.forecast` ([api.md § Seasonal
+outlooks](./api.md#seasonal-outlooks), [model.md
+§2.15d](./model.md#215d-the-forecast-conditioned-outlook-the-chance-of-each-restriction-level-issue-620-engine-11060)).
+The constraint is dropped by its exact name and added again with the three
+values; every existing row is `esp` or `climateState`, so it validates
+without a rewrite. No table, policy, grant, trigger, function or index
+changes, and the method stays fixed at insert. The forecast members aren't
+stored as `seasonal_outlook_member` rows (they run inside the one engine
+call); a publication of a `c3s` outlook adds `forecast: { leads }` to each
+farm's `outlook_publication_farm.view`, never a chance.
+
+### Calibration zones (270_calibration_sites.sql)
+
+Engine 1.106.0 calibrates at several gauges, upstream units first (issue
+#555, [model.md §2.10n](./model.md)): `settings.calibrationZones`, one row
+per gauge (`{ nodeId, enabled, calibrationStart, calibrationEnd,
+calibrationFlowKind, calibrationExclusions, qualityFlags, gr4j, fitRecord }`,
+engine `calibrate/zones.ts`). The expand half of expand/contract, with
+nothing to contract: the calibration site's own zone (the outlet's, or
+*Scored at*'s gauge) keeps today's keys, which every reader still reads, so
+today's single site and parameters are the new shape's one zone. The
+migration writes `[]` into every project that has no list (a project that
+has one keeps it); the engine reads `[]` as no zone, so no run changes.
+Stored runs and model revisions keep their JSON; `team.settings` holds no
+calibration settings. Data only: no table, policy or grant changes. Tested in
+`backend/src/db/migration-270.db.test.ts`.
 
 ### Account deletion reaches every key (066_account_fk_clears.sql)
 
@@ -4175,8 +4286,9 @@ the restored one.
 `reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
 keyed by `(kind, dataset)`: the reference-bucket object a production load
 of a map dataset read (`land-cover`, `evaporation`, `rivers`, since
-225 `gazetteer`, since 238 `map-grid`, and since 261 `waterbodies`, the
-DE Africa Waterbodies polygons) and the
+225 `gazetteer`, since 238 `map-grid`, since 261 `waterbodies`, the
+DE Africa Waterbodies polygons, since 268 `soils` and since 269
+`gr4j-donors`, the regional GR4J prior's soil grid and donors) and the
 SHA-256 it was checked against. Since 258 also `dws`: a production load of
 one river gauge's DWS flow table into the gauge record store (below, DWS
 gauge records), its `dataset` the operator's label for that file, written
@@ -4187,7 +4299,7 @@ kind production allows is in the constraint
 (`referenceLoad.db.test.ts` inserts a row of every kind production allows). Written in the same transaction as the
 dataset by the replace functions (`replaceCroplandDataset`,
 `replaceEvaporationDataset`, `replaceRivers`, `replacePlaces`,
-`replaceRainMapDataset`, through
+`replaceRainMapDataset`, `replaceSoilDataset`, `replaceDonorDataset`, through
 `geo/referenceOrigin.ts`), and deleted by any other replace of that
 dataset (a local `pnpm import:*`), so it never outlives the data it
 describes. No foreign key: rivers have no dataset table. Owner-only like

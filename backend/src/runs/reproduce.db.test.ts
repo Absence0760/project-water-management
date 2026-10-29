@@ -148,4 +148,36 @@ describe('GET …/runs/:runId/reproduce', () => {
 		expect(warned).toEqual([expect.stringMatching(new RegExp(`^for the unit “${unit.name}”, the run read the CHIRPS series “A short own” \\(.+\\), which spans 30 of its \\d+ days, but “B long own”`))]);
 		expect((await reproduce(u, r, p)).body.status).toBe('identical');
 	});
+
+	it('warns, coded, for a unit whose area is from an earlier outline of its polygon, and reproduces it (issue #646 F6)', async () => {
+		const u = await signUp('ReproMapArea');
+		const p = await importProjectData(small, u.email);
+		const nodes = (await u.call('GET', `/projects/${p}/model`)).body.nodes as { id: string; name: string; kind: string; areaKm2: number }[];
+		const unit = nodes.find((n) => n.kind === 'farm' && n.areaKm2 > 0)!;
+		const square = (d: number) => ({ type: 'Polygon', coordinates: [[[21.3, -33.7], [21.3 + d, -33.7], [21.3 + d, -33.7 + d], [21.3, -33.7 + d], [21.3, -33.7]]] });
+		const made = await u.call('POST', `/projects/${p}/map/features`, { kind: 'farm_parcel', name: 'Its parcel', nodeId: unit.id, geometry: square(0.02) });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const fid = (made.body.feature?.id ?? made.body.id) as string;
+		expect((await u.call('POST', `/projects/${p}/nodes/${unit.id}/area-from-map`, { featureId: fid })).status).toBe(200);
+		const stored = async (run: string) =>
+			(await asOwner(`SELECT summary->'warnings' AS warnings, summary->'warningCodes' AS codes, inputs->'mapAreas' AS areas FROM model_run WHERE id = $1`, [run]))[0] as {
+				warnings: string[];
+				codes: { code: string; params: Record<string, unknown> }[];
+				areas: unknown;
+			};
+		// Positive control: the area is the outline's, so nothing is recorded or said.
+		const before = await stored(await newRun(u, p, 'outline as used'));
+		expect(before.areas).toBeNull();
+		expect(before.warnings.some((w) => w.includes('earlier outline'))).toBe(false);
+		// Redrawn larger: the model still holds the old area, and the run says so.
+		expect((await u.call('PATCH', `/projects/${p}/map/features/${fid}`, { geometry: square(0.03) })).status).toBe(200);
+		const r = await newRun(u, p, 'outline redrawn');
+		const row = await stored(r);
+		const [{ km2: usedKm2 }] = await asOwner('SELECT area_km2 AS km2 FROM node WHERE id = $1', [unit.id]);
+		const [{ m2: nowM2 }] = await asOwner('SELECT area_m2 AS m2 FROM map_feature WHERE id = $1', [fid]);
+		expect(row.areas).toEqual([{ nodeId: unit.id, modelKm2: usedKm2, outlineKm2: nowM2 / 1e6 }]);
+		expect(row.warnings.filter((w) => w.includes('earlier outline'))).toEqual([expect.stringMatching(new RegExp(`^"${unit.name}": its area is from an earlier outline of its polygon on the map: the run used \\d+\\.\\d\\d km², the outline is \\d+\\.\\d\\d km² now\\.`))]);
+		expect(row.codes.filter((c) => c.code === 'map.areaFromEarlierOutline')).toEqual([expect.objectContaining({ params: { unit: unit.name, modelKm2: expect.any(Number), mapKm2: expect.any(Number) } })]);
+		expect((await reproduce(u, r, p)).body.status).toBe('identical');
+	});
 });

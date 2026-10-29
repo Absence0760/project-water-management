@@ -68,7 +68,12 @@ terms each listed run applied (report format `evidence-20`, issue #523
 G3/G4, 2026-10-12; [§ The responsible authority](#the-responsible-authority)); and § 7's
 observed wet days of the applicant's own dams from Digital Earth Africa's
 WOfS (report format `evidence-21`, issue #604 R5-C, 2026-10-27;
-[§ Observed wet days](#observed-wet-days)). What is left is
+[§ Observed wet days](#observed-wet-days)); and § 3's calibration zones,
+every zone's parameters, fit record and statistics, and the regional GR4J
+prior when the baseline's parameters came from it (report format
+`evidence-22`, issue #555 and #622, 2026-10-28; [§ Calibration
+zones](#calibration-zones), [§ The regional prior in
+§ 3](#the-regional-prior-in--3)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -144,6 +149,34 @@ classifies them again ([§ Observed wet days](#observed-wet-days)). No manifest
 version changed, as for `evidence-8`. A pack drafted before has no
 `damObservations`: its stored manifest still hashes to its recorded hash,
 and its report prints without § 7.
+
+### The regional prior in § 3
+
+§ 3 (*Model and data*) names the regional GR4J prior (report format
+`evidence-22`, issue #622, [model.md §2.10m](./model.md)) as
+`report.credibility.regionalPrior`, built from the baseline run's input
+snapshot only (`evidence/regionalPrior.ts`), so it says what that run ran
+on:
+
+- when its fit record used the prior (a penalty, its p10–p90 box or both)
+  and its fitted parameters weren't edited since: "Parameters calibrated
+  with the regional prior, n donors; penalty weight w, search held to its
+  p10–p90 box.";
+- else, when the parameters are still the medians a "Start from the prior"
+  wrote for the target they are now (the catchment, or under calibration
+  zones the site's own zone and its units) and no fit was applied after it:
+  "Parameters from the regional prior, n donors (the donors' medians, not
+  calibrated).";
+- else nothing (`null`).
+
+Either line goes on with the donor set's label (and "invented donors" for
+the synthetic set), how many were offered, the first 12 hex digits of its
+SHA-256 and the leave-one-out skill, ending "the prior has no skill" at 0
+or below, or saying its skill is unknown when there were too few donors to
+score it. The report shows the line above *Validation*. The manifest's
+hash covers it; no manifest version changed, as for `evidence-8`. A pack
+drafted before has no `regionalPrior`: its stored manifest still hashes to
+its recorded hash, and its § 3 prints without the line.
 
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, the reproduction bundle's key and
@@ -504,6 +537,51 @@ never reads another applicant's dam rows), `frontend/…/report/evidence/section
 (§ 7 listed only for an applicant's application), and
 `e2e/tests/evidence-report.spec.ts` (§ 7's table on an applicant's report,
 none on a team application's or the baseline's).
+
+## Calibration zones
+
+A baseline calibrated at several gauges (model.md §2.10n) runs each ticked
+gauge's land units on that zone's own GR4J parameters, so the site's
+parameters and fit no longer describe every unit's runoff. From report
+format `evidence-22` (issue #555, `evidence/calibrationZones.ts`
+`calibrationZonesSection`) the document carries `calibrationZones`: one
+entry per zone the baseline applied, upstream first, the calibration site's
+own zone last (`nodeId` null), each with
+
+- its gauge's name, its land units' count and area (km², the run's model;
+  no unit names, as elsewhere in a baseline report),
+- the X1–X4 its units ran on (`summary.unitRain.zones`), and whether they
+  were the zone's own or the catchment's (`fitted`),
+- its fit (`fit`): the fit record's description, its engine version, its
+  objective, its in-sample score and its split-sample and dry → wet scores
+  on that objective (null when the test wasn't run), and the parameters
+  edited since (judged against the parameters the units ran on, as the run's
+  `fitStatus` is, not the record's stored list); null when the zone's
+  parameters don't come from a stored fit,
+- the run's statistics at its gauge (`stats`: days, NSE, KGE, PBIAS and
+  `fitStatus`, the zone's own in or out of sample; the site's are the run's
+  calibration statistics), null with no scored day.
+
+Everything is read from what the run froze (its summary, settings snapshot
+and model), so the manifest's hash covers each zone's parameters and fit
+record (they were already in `appendix.baselineInputs`; the section states
+them), and reproduction re-derives them from the re-run. A zone above the
+site with no stored fit raises the caution flag `zoneNoFit` ("Validation not
+assessed for the calibration zone at …"), and each zone's fit engine
+reaches the report's errata (an erratum keyed on the fit's engine). The
+run's validation statement, its sign-off statement and its *May be
+affected* status still read only the site's fit engine
+(followups.md § Calibration zones). The input diff
+(Appendix A.2) words each zone (run-comparison.md). Null when the baseline
+ran one parameter set; absent from a pack drafted before `evidence-22`,
+which keeps its document. § 3 prints the section as a table
+(ui.md § Evidence report). The uncertainty ensemble still varies only the
+site's parameters (followups.md § Calibration zones).
+
+Tests: `evidence/calibrationZones.test.ts` (the fit's scores, the errata
+versions, the flag), `evidence/report.test.ts` (a zoned baseline's section,
+upstream first, its gauge scored on its own record, and null with one
+parameter set), the evidence DB tests (`evidence-22`).
 
 ## The responsible authority
 

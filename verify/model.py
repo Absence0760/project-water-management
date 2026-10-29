@@ -560,6 +560,54 @@ class Gr4j:
 # --------------------------------------------------------------------------
 
 
+# §2.10n: the bounds calibration searches (GR4J_PARAMS min/max), which a zone's X1–X4 must lie inside.
+GR4J_BOUNDS = {"x1": (10, 3000), "x2": (-5, 3), "x3": (1, 1000), "x4": (0.5, 10)}
+
+
+def zone_params(settings: dict, nodes: list[dict], units: list[dict]) -> dict[str, dict]:
+    """§2.10n (engine 1.106.0, issue #555): each land unit in a usable ticked
+    calibration zone -> that zone's X1–X4 (the row's gr4j, else the
+    catchment's). A ticked row is usable when its node is a gauge inside the
+    network, not the calibration site and not on the site's path to the
+    outlet. A unit belongs to the first usable ticked gauge on its path
+    downstream; a unit reaching none (the site's zone) is not in the result.
+    Per unit only: the caller asks only then."""
+    rows = settings.get("calibrationZones")
+    if not isinstance(rows, list):
+        return {}
+    by_id = {n["id"]: n for n in nodes}
+    site = settings.get("calibrationSiteNodeId")
+
+    def down(i):
+        out, seen = [], set()
+        while i is not None and i not in seen:
+            seen.add(i)
+            out.append(i)
+            i = (by_id.get(i) or {}).get("downstreamNodeId")
+        return out
+
+    below_site = set(down(site)) if site in by_id else set()
+    usable: dict[str, dict] = {}
+    seen_rows = set()
+    for z in rows:
+        if not isinstance(z, dict) or not isinstance(z.get("nodeId"), str) or z["nodeId"] in seen_rows:
+            continue
+        seen_rows.add(z["nodeId"])
+        n = by_id.get(z["nodeId"])
+        if z.get("enabled") is not True or not n or n["kind"] != "gauge" or n.get("downstreamNodeId") is None or z["nodeId"] in below_site:
+            continue
+        p = z.get("gr4j")
+        ok = isinstance(p, dict) and all(isinstance(p.get(k), (int, float)) and lo <= p[k] <= hi for k, (lo, hi) in GR4J_BOUNDS.items())
+        usable[z["nodeId"]] = {k: p[k] for k in GR4J_BOUNDS} if ok else settings["gr4j"]
+    out: dict[str, dict] = {}
+    for u in units:
+        for i in down(u["id"])[1:]:
+            if i in usable:
+                out[u["id"]] = usable[i]
+                break
+    return out
+
+
 def topo_order(nodes: list[dict]) -> list[dict]:
     by_id = {n["id"]: n for n in nodes}
     ups: dict[str, list[str]] = {n["id"]: [] for n in nodes}
@@ -1461,10 +1509,14 @@ def run(doc: dict) -> dict:
         local = {}
         acc = {k: [0.0] * n for k in ("rain", "aet", "prod", "rout", "uh", "exch")}
         natural = [0.0] * n
+        # §2.10n (engine 1.106.0, issue #555): each land unit on its calibration zone's X1–X4.
+        zone_p = zone_params(settings, model["nodes"], units)
+        diag["zone_units"] = diag.get("zone_units", 0) + len(zone_p)
         for u in units:
             a = float(u["areaKm2"])
             pu = forcing[u["id"]]
-            gu = Gr4j(g["x1"], g["x2"], g["x3"], g["x4"])
+            zp = zone_p.get(u["id"], g)
+            gu = Gr4j(zp["x1"], zp["x2"], zp["x3"], zp["x4"])
             for k in range(int(g.get("warmupDays", 365))):
                 i = k % hist if hist > 0 else 0
                 gu.step(pu[i], pet[i])
@@ -1491,7 +1543,8 @@ def run(doc: dict) -> dict:
     put(None, "routing_store", rout)
     put(None, "uh_store", uhs)
     put(None, "natural_flow", natural)
-    if g["x2"] != 0:
+    # §2.10n: the exchange series is written when the catchment's X2, or any applied zone's, is not 0.
+    if g["x2"] != 0 or (per_unit and any(p["x2"] != 0 for p in zone_params(settings, model["nodes"], units).values())):
         put(None, "exchange", exch)
     if rain["chirps"] and rain["bias_on"] and any(f is not None for f in rain["fit_factors"][1:]):
         put(None, "chirps_factor", [NAN if rain["fit_factors"][cal_month(o)] is None else rain["fit_factors"][cal_month(o)] for o in days])

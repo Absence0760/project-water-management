@@ -1246,7 +1246,10 @@ runs in production as `JOB_TRANSPORT=sqs` (infra/jobs.tf):
   the `jobs` queue and no `JOB_TRANSPORT` / `JOBS_QUEUE_URL` (the production
   settings check asks them of the API alone): a job that queues follow-up
   work leaves it to the tick. `backend/src/lambda-worker.test.ts` fails if
-  anything the worker bundles reaches `jobs/wake.ts` or a routes module, and
+  anything the worker bundles reaches `jobs/wake.ts` or a routes module (so
+  the plan code the worker shares with a route lives apart from it:
+  `delineation/start.ts` and `divide.ts` beside `startRoutes.ts` and
+  `divideRoutes.ts`), and
   `infra/tests/guardrails.tftest.hcl` if the worker's environment gets either
   setting back.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
@@ -2200,6 +2203,100 @@ show (docs/data-sources.md § agera5).
 **Cost:** cents a month: under a minute of Lambda a day and the array's
 chunks (a few MB).
 
+### C3S seasonal forecasts
+
+C3S's multi-system seasonal forecasts and their hindcasts (issue #620 step
+5): daily precipitation from every member of nine systems (ECMWF, the Met
+Office, Météo-France, DWD, CMCC, NCEP, JMA and ECCC's two), leads to 215
+days, on a 1° grid, copied by the same `mirror-ingest` function
+(`ingest/c3s_seasonal.py`; how it works: ingest/README.md § The C3S
+seasonal job) into `c3s/<YYYY-MM>/` and `c3s-hc/<system>/<MM>/`. Like
+ERA5-Land, each request is submitted on one run and collected on a later
+one.
+
+**What the app does with it** (#620 step 7): an outlook run with *Also give
+the chance of each restriction level from the seasonal forecasts* (method
+`c3s`) has the worker read the copy (`MIRROR_URL`, the worker's read of the
+whole mirror bucket, `infra/ingest.tf` `worker_mirror`: nothing new) through
+`backend/src/outlooks/c3s.ts`: the newest init with a system issued by the
+decision date (ECMWF's on the 6th, the others' on the 10th), its hindcasts,
+averaged over the project's catchment boundary (else its units' polygons)
+([model.md §2.15d](./model.md#215d-the-forecast-conditioned-outlook-the-chance-of-each-restriction-level-issue-620-engine-11060)).
+**It is off until the copy holds them**: with `c3s_enabled = false` (the
+default) the copy has no `c3s/index.json`, so such an outlook says *No
+seasonal forecast issued by the decision date is held* and is the ESP alone,
+unchanged to the bit; once the forecasts are held but before the hindcast
+backfill below, it says the copy holds no hindcast. No new environment
+variable, flag or permission: the API never reads the copy (it isn't told
+where it is), only the worker. Each such outlook reads one chunk (~0.4 MB)
+per member per hindcast year of each system used, about 600 per system with
+25 hindcast members; see docs/followups.md § C3S outlook read cost.
+
+**No new secret.** The runs read ERA5-Land's `water-management/ingest/cds-key`
+(`infra/era5land.tf`). The daily rule (14:20 UTC,
+`{"product":"c3s","mode":"monthly"}`: the first run after ECMWF's release on
+the 6th and the others' on the 10th, both at 12 UTC) and the
+`mirror-lag-c3s` alarm exist only with `c3s_enabled = true` (default false,
+`infra/variables.tf`, `infra/c3s.tf`), which needs `ingest_image_tag` set
+to a release that has `c3s_seasonal.py`.
+
+The operator, once:
+
+1. **The CDS account and key**: [§ ERA5-Land](#era5-land) steps 1, 3 and 4,
+   the same account. Skip what is already done.
+2. **Accept both licences of the seasonal dataset, with that account.**
+   Signed in, open "Seasonal forecast daily and subdaily data on single
+   levels" (`seasonal-original-single-levels`), go to its Download tab, and
+   under "Terms of use" accept **both** the CC-BY licence **and** the
+   "Additional licence to use non European contributions" (it covers NCEP's,
+   JMA's and ECCC's systems). Each dataset has its own acceptance: ERA5-Land's
+   and AgERA5's don't cover it. Until both are accepted the CDS answers 403,
+   which stops the run on purpose for the UTC day.
+3. **Turn it on:** `c3s_enabled = true` in the prod tfvars, then `plan` and,
+   with the operator's go-ahead, `apply`. The next 14:20 UTC run submits four
+   systems' newest released init; the following runs collect them and submit
+   the rest (four queued at most), so a month's nine systems are held within
+   a few days of the 10th.
+4. **Check the first live collection** against what the job expects (it has
+   only met the synthetic fixture): the run's log line names the request,
+   its members and years. A failure that names the file's fields, grid or
+   leads means the CDS's GRIB differs from the fixture's; record what the
+   file holds in issue #620 before changing `c3s_seasonal.py`. If the CDS
+   refuses a hindcast as too large for one request, say so there too: the
+   durable fix is a request per system, month and year (the key gains the
+   year), not a bigger Lambda.
+
+**The hindcast backfill**, once (and again only when SYSTEMS gains a system):
+one synchronous invocation per init month marks that month's hindcast wanted
+for every system; the daily runs drain them after the forecasts, four in the
+queue at a time, so the twelve months take a few weeks. Start it outside the
+6th–13th, so the month's forecasts aren't waiting behind hindcasts:
+`for m in 01 02 03 04 05 06 07 08 09 10 11 12; do aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload "{\"product\":\"c3s\",\"mode\":\"backfill\",\"month\":\"$m\"}" --cli-read-timeout 900 --region af-south-1 --profile water-management /dev/null >/dev/null || echo "$m failed"; done`
+(add `\"system\":\"ukmo-604\"` to the payload for one system). Each
+hindcast is one request for 1993–2016; the years a system has are recorded
+on the copy (`years`).
+
+**When it alarms** (`mirror-lag-c3s`, past `c3s_lag_alarm_days`, default 45:
+days since the 1st of the newest init month every system is held for; a
+healthy copy runs up to about 42 days behind just before the 10th's
+collection): read the `mirror-ingest` log group's `c3s:` lines,
+`c3s/index.json` (the systems each init holds) and
+`ingest-state/c3s/requests.json`. A **401/403**: 401 a wrong or expired key
+(ERA5-Land's step 4), 403 a licence not accepted (step 2); the run writes
+`ingest-state/c3s/refused.json` and no run calls the CDS again that UTC day.
+**`RequestsFailed`**: a request failed five times; the usual cause is a system
+C3S has replaced (the Met Office's changes about yearly). Update
+`ingest/c3srequest.py` `SYSTEMS` from C3S's documentation, release, then
+delete the failed entry from `requests.json`.
+
+**Attribution:** CC BY 4.0 and the additional licence: Copernicus's notice,
+the dataset's citation and the contributing centres wherever its values show
+(docs/data-sources.md § c3s-seasonal); the arrays carry them.
+
+**Cost:** about $0.70 a month in S3 once the hindcasts are held (roughly
+150 MB of forecasts a month and 20–25 GB of hindcasts, once), a few minutes
+of Lambda a month, one alarm metric.
+
 ## DWS gauge records
 
 DWS feeds move onto a store of ours too (issue #604 R3-B, design D14; the
@@ -3074,7 +3171,10 @@ Lambda's list against the Sources table):
 | `gazetteer` | GeoNames, CC BY 4.0: allowed (its attribution, "GeoNames (geonames.org), CC BY 4.0", is stored on every place and shown under every Map search that lists one) | GeoNames' South Africa dump, `ZA.txt`, and its six neighbours' (`BW`, `LS`, `MZ`, `NA`, `SZ`, `ZW`) concatenated into a second file (gzip each); the kinds the search doesn't keep (roads, schools, …), a neighbour's places outside the basemap, and any other country's are left out at load | download the seven zips from download.geonames.org/export/dump/, unzip each in its own folder, `gzip -k ZA.txt`, and `cat` the six neighbours into one file, gzipped (steps below; maps.md § Gazetteer) |
 | `map-grid` | allowed dataset by dataset: the Southwestern Cape surface (WAAS, 2007) only, by the operator's decision of 2026-10-23 (terms not stated; legal/map-data-licences.md § 3.3b), as dataset `WAAS-SWCape-2007`, stored with its recorded source, version and credit line whatever the file says; `Lynch-2004` and any other label refused (the gate and the Lambda), and so is a `source` | the grid cut to the client's area, in the JSON form `--out` writes (gzipped), never the ASCII grid itself | `pnpm import:map-grid waas.asc --dataset WAAS-SWCape-2007 --source "…" --bbox <w,s,e,n> --out waas-swcape.json.gz` (steps below) |
 | `dws` | DWS verified daily flow: allowed, by DWS's permission obtained through the client's hydrologist (2026-10-28; data-sources.md § dws-flow). Not map data: one river gauge's flow, written into the gauge record store as `dws-request` rows (origin `dws`), merged with the station's other windows rather than replacing a dataset; `source` (the record's reference, 1–200 characters) is required, `station` optional | one station's DWS daily table: a `HyData.aspx` page saved as HTML (up to 20 years a request) or DWS's text reply, `.txt`, `.html`, `.htm` or `.aspx`, gzipped or not; at most 8 MiB (16 MiB unzipped) | save the page or keep the reply, `gzip -c` it to a neutral name ([§ DWS gauge records](#dws-gauge-records), Loading DWS's reply) |
+| `soils` | SoilGrids 2.0 and iSDAsoil, CC BY 4.0: allowed (their attribution is stored on the dataset row) | the soil water capacity grid `ingest/soils.py` writes (JSON, gzipped), never the GeoTIFFs; at most 32 MiB (64 MiB unzipped) | the GDAL steps below, then `python3 ingest/soils.py … --out soils-d1.json.gz` |
+| `gr4j-donors` | GRDC-Caravan and HydroATLAS, CC BY 4.0: allowed (only fitted parameters, scores and attributes are in the file, no flow; the recorded attribution `GR4J_DONORS` is stored whatever the file says) | the donor file `pnpm fit-donors` writes (JSON, gzipped); at most 4 MiB (8 MiB unzipped) | the donor fit below (offline, on our own forcing) |
 | `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
+| `evaporation-stations` | blocked: DWS's permission (2026-10-28, data-sources.md § dws-flow) covers verified daily flow only, not evaporation station records (data-sources.md § dws-evaporation) | the station list and the stations' DWS daily evaporation replies, once allowed | refused by the gate (not in its allowed kinds) and by the Lambda (`REFERENCE_KINDS` status `blocked`) until followups.md *Decision: DWS evaporation station records* is made and the Sources row says allowed; a pan record can't arrive as `dws` either (a river gauge's `H` code and a flow table only). Until then the live site's Calibration page lists no evaporation stations ([maps.md § Evaporation stations](./maps.md#evaporation-stations)) |
 | `crop-types` | blocked: SANLC's terms not yet recorded (issue #604 R5-D, #618 step 8b) | the orchard and vine summary `pnpm import:crop-types … --out` writes, once allowed | refused until followups.md *Decision: SANLC's licence* is made; the live site shows no orchards or vines until then |
 
 ```bash
@@ -3104,6 +3204,34 @@ capital), so after that release reload every gazetteer dataset already
 loaded: the same two runs below, same keys and the same dataset labels (a
 load replaces its own dataset in one transaction, so the search keeps
 working throughout). The steps, from an empty folder outside the repo:
+
+**A modelled Class-A pan grid (PenPan; issue #646 item 7) is blocked in
+production.** It loads locally only. Production refuses it twice: the
+release gate refuses an evaporation key or label naming PenPan or an A-pan
+grid, and the migrate Lambda refuses any grid whose kind isn't `et0`
+([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)). The
+operator's run, offline, from `ingest/` with its venv (`ingest/dev.sh test`
+makes it; `INGEST_CONTACT` is the User-Agent's contact):
+
+```bash
+ingest/.venv/bin/python ingest/apan_grid.py fetch --years 1991 2020 --dir ~/.cache/water-management-tiles/apan
+ingest/.venv/bin/python ingest/apan_grid.py grid --dir ~/.cache/water-management-tiles/apan --years 1991 2020 --out penpan-1991-2020.json.gz
+ingest/.venv/bin/python ingest/apan_grid.py validate --grid penpan-1991-2020.json.gz --stations dws-apan-stations.csv --out penpan-validation.md
+pnpm import:evaporation penpan-1991-2020.json.gz --dataset PenPan-1991-2020
+```
+
+`fetch` asks NASA POWER 24 requests a year at one a second (about 12
+minutes for 30 years) and keeps each year's monthly means, so a re-run
+resumes. `--screen 0.93` models a bird-screened pan if the stations it
+stands in for are screened. The station CSV is `station,lat,lon,jan,…,dec`,
+each the station's mean monthly Class-A pan in mm. Build it from DWS's
+evaporation station records once DWS's permission covers them (#646 item
+6). It is client-adjacent data, so keep it and the report out of the repo.
+The report gives the ratio grid ÷ station, the bias and the RMSE, by month
+and overall. To lift the block, the hydrologist signs off on that report
+(docs/followups.md, #646). Then data-sources.md's row becomes `reference
+load`, and the gate and `referenceLoad.ts` take the PenPan grid, in one
+change with its tests.
 
 ```bash
 for c in ZA BW LS MZ NA SZ ZW; do mkdir -p $c && curl -fsSL -o $c/$c.zip https://download.geonames.org/export/dump/$c.zip && unzip -o -q $c/$c.zip -d $c; done
@@ -3172,6 +3300,82 @@ unit, **MAP from the grid** proposes each unit's MAP from it, beside the typed v
 to check them. A wider box later is a reload under the same label (a load
 replaces its dataset).
 
+**Soils and GR4J donors** (issue #622; [model.md §2.10m](./model.md),
+[maps.md § Soil water capacity](./maps.md#soil-water-capacity),
+[data-sources.md § GR4J priors](./data-sources.md#gr4j-priors-issue-622)).
+Both are the regional prior's reference data. Both are operator-run and
+offline, and the app never fetches either. Each needs the first backend
+release that carries migrations 268 (soils) and 269 (donors) deployed
+first. Until both are loaded, nothing uses a prior and GR4J keeps Perrin's
+defaults. No screen reads them yet: wiring the prior in is #622 step 5.
+Work in a folder outside the repo, and never commit a download or a file
+made from one.
+
+*The soil grid.* GDAL reads each source for region D1 only, averages it
+onto one 0.05° WGS 84 grid, and writes the ASCII form `ingest/soils.py`
+reads. SoilGrids' water retention sits in Google Cloud Storage (not on
+`files.isric.org`), one 2.2 GB GeoTIFF per depth. iSDAsoil's bedrock depth
+is one 23.6 GB cloud-optimised GeoTIFF; GDAL reads only the overview
+blocks it needs.
+
+```bash
+for p in wv0033 wv1500; do mkdir -p $p; for d in 0-5 5-15 15-30 30-60 60-100 100-200; do gdalwarp -q -t_srs EPSG:4326 -te 10 -35.5 41 -8 -tr 0.05 0.05 -r average -ot Float32 /vsicurl/https://storage.googleapis.com/isric-share-soilgrids/pre-release/$p/${p}_${d}cm_mean.tif $p/${p}_${d}cm_mean.tif && gdal_translate -q -of AAIGrid $p/${p}_${d}cm_mean.tif $p/${p}_${d}cm_mean.asc; done; done
+AWS_NO_SIGN_REQUEST=YES AWS_REGION=us-west-2 gdalwarp -q -b 1 -t_srs EPSG:4326 -te 10 -35.5 41 -8 -tr 0.05 0.05 -r average -ot Float32 /vsis3/isdasoil/soil_data/bedrock_depth/bedrock_depth.tif bedrock.tif && gdal_translate -q -of AAIGrid bedrock.tif bedrock.asc
+python3 <repo>/ingest/soils.py --wv0033 wv0033 --wv1500 wv1500 --bedrock bedrock.asc --out soils-d1.json.gz
+```
+
+The last line prints how many cells it wrote and how many it left out. Check it locally first:
+`pnpm import:soils <folder>/soils-d1.json.gz --dataset SoilGrids2-iSDA-D1`.
+Region D1 at 0.05° is at most 341 000 cells, about 12 MB of JSON. Keep the
+twelve SoilGrids GeoTIFFs and the bedrock GeoTIFF clip under
+`originals/soils/` in the reference bucket. Then upload and load:
+
+```bash
+sha256sum soils-d1.json.gz
+aws s3 cp soils-d1.json.gz s3://<reference_bucket>/reference/soils/soils-d1-2026.json.gz --profile water-management
+gh workflow run load-reference.yml -f kind=soils -f key=reference/soils/soils-d1-2026.json.gz -f sha256=<hex> -f dataset=SoilGrids2-iSDA-D1
+```
+
+*The donors.* Load the soil grid first, locally and in production, so
+each donor carries its PAWC for the soil x1 relation. The donor fit reads
+this checkout's database for the evaporation and soil grids, so load the
+real dPET grid (`pnpm import:evaporation …`) and the soil grid locally
+first. It reads our rain data copy through `MIRROR_URL`, the production
+copy's S3 URL with your SSO profile, or a local copy of it. The steps:
+
+1. Download GRDC-Caravan's CSV archive, `GRDC_Caravan_extension_csv.zip`
+   (8.8 GB, from the Zenodo record 10.5281/zenodo.15349031; no account),
+   and unzip it. Read `licenses/grdc/LicensesCaravan.xlsx` again for a new
+   version: a D1 country whose terms fail D-B is a decision before loading.
+2. Turn the basin polygons into GeoJSON:
+   `ogr2ogr -f GeoJSON basins.geojson GRDC_Caravan_extension_csv/shapefiles/grdc/<the .shp>`
+   (each feature has `gauge_id`).
+3. Fit: `pnpm fit-donors --caravan GRDC_Caravan_extension_csv --basins basins.geojson --out donors-d1.json.gz`
+   (paths resolve from the folder the command is typed in). Optional:
+   `--from` (default 1981-01-01, CHIRPS v3's start), `--to`, `--product
+   sat|rnl`, `--evaporation <dataset>` and `--soils <dataset>` (default the
+   newest real one of each), `--max-area` (default 10 000 km²), `--min-kge` (default 0.5), `--only
+   <id,…>` to try a few, and `--budget`, `--starts` and `--seed`. A donor
+   is a basin in region D1 with at least 8 years of flow in the window and
+   under 5 % regulation, whose fit reaches KGE′ 0.5 (`--min-kge`). Each is calibrated with the engine's own
+   `calibrate()` (KGE′, the typical bounds, x2 fixed, the split-sample
+   test). Every basin it refuses is printed with its reason, and so is how
+   many donors ended at a typical bound, per parameter. Expect a few
+   hundred basins, each a few seconds to a minute.
+4. Look at it locally: `pnpm import:gr4j-donors donors-d1.json.gz --dataset Caravan-D1-2026`.
+5. Keep the zip under `originals/gr4j-donors/`, then upload and load:
+
+```bash
+sha256sum donors-d1.json.gz
+aws s3 cp donors-d1.json.gz s3://<reference_bucket>/reference/gr4j-donors/caravan-d1-2026.json.gz --profile water-management
+gh workflow run load-reference.yml -f kind=gr4j-donors -f key=reference/gr4j-donors/caravan-d1-2026.json.gz -f sha256=<hex> -f dataset=Caravan-D1-2026
+```
+
+Approve each in the `production` environment. The dataset row records the
+set's SHA-256 (of the engine's `donorSetCanonical`) and the engine that
+fitted it. Refit, under a new label, when the engine's GR4J or calibration
+changes the parameters it would find, or when the copy gains years.
+
 Limits: the file at most 200 MiB as uploaded and 200 MiB of text unzipped
 (a gzip bomb is cut off, not unpacked), refused with a reason beyond that;
 the migrate Lambda has `migrate_memory_mb` (3 008 MB, the least Terraform
@@ -3222,6 +3426,8 @@ production checks](#read-only-production-checks)), or the archive's
 | `evaporation` | dPET on data.bris (DOI-versioned; new years appended) | the dataset page lists its years; refresh when the years you average over change | `pnpm import:evaporation:fetch <first> <last>` (the yearly files are 2.4 GB each and deleted once reduced: keep the reduced totals, not the NetCDF, under `originals/evaporation/`), then `--out` and load | Settings → Evaporation from the map shows the new dataset |
 | `gazetteer` | GeoNames country dumps, `download.geonames.org/export/dump/<CC>.zip` | `curl -sI -z <last load's date> https://download.geonames.org/export/dump/ZA.zip`: 304 is unchanged; refresh a few times a year at most | the gazetteer steps above; keep the seven zips under `originals/gazetteer/` | the Map's search finds the places listed above |
 | `map-grid` | a file from the client (WAAS, 2007): no upstream | never, unless the client sends a new surface | the MAP grid steps above; keep the surface as received under `originals/map-grid/` | the MAP grid layer and its credit line |
+| `soils` | SoilGrids 2.0 water retention (`storage.googleapis.com/isric-share-soilgrids/pre-release/`) and iSDAsoil's bedrock depth (`s3://isdasoil`) | `curl -sI` one SoilGrids file and compare its ETag and Last-Modified (2021-10-27 today); iSDAsoil v1 is final | the soil grid steps above; keep the GeoTIFF clips under `originals/soils/` | the load's counts |
+| `gr4j-donors` | GRDC-Caravan on Zenodo (versioned records) | the record's version list (0.6 today); and whenever the engine's fit or the copy's years change | the donor steps above, under a new label; keep the zip under `originals/gr4j-donors/` | the load's counts; the donor set's SHA-256 on its row |
 
 A large load squeezes the database's memory. The first production loads
 (2026-10-05: HydroRIVERS, 89 454 reaches, then WorldCover, 5.4 million cells,

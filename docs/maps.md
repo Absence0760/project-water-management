@@ -771,7 +771,9 @@ when there are none. The checks are pure and in the browser
 thresholds named constants there:
 
 - **Units with no parcel**: a hydrological unit (farm node) that no farm
-  parcel is linked to.
+  parcel is linked to, and whose area came from no polygon on the map (an
+  *other* area a unit's area was taken from is its outline, as for the
+  per-unit proposals, issue #646 F1).
 - **Outside the boundary** (only with a boundary): a parcel, dam, point or
   line with any vertex outside the catchment boundary (a hole in it counts as
   outside). A vertex within `OUTSIDE_TOLERANCE_M` (10 m) of the boundary's
@@ -799,6 +801,61 @@ thresholds named constants there:
   like a drawn one, so adding the reaches the gauges sit on is how the
   sourced network feeds this check (the layer's own reaches, not added, are
   not measured: the check reads the project's features only).
+
+**What a map edit left behind** (issue #646 item 4, the hydrologist's
+review F6–F9). A value taken from the map is copied into the model, so
+redrawing or moving what it came from changes nothing in the model until
+someone takes it again. These checks say so:
+
+- **A unit's area from an earlier outline** (F6): a unit whose area came
+  from a polygon (Use, Start or Divide) that has another area now ("Upper's
+  area is from an earlier outline of Upper parcel: 12.00 km² in the model,
+  14.10 km² now"), with **Use 14.10 km²**: the Map's Use (POST
+  …/area-from-map, a confirm, one History entry) on the basis the unit took
+  (195). The area-sources grid says "’s earlier outline" beside such a unit.
+  A run warns too (`map.areaFromEarlierOutline`, [model.md § Run warning
+  codes](./model.md)): the backend names each such unit and its outline's
+  area now in the run's input (`ModelInput.mapAreas`, `runs/execute.ts`
+  `staleMapAreas`), which the stored input keeps, so a reproduction says the
+  same.
+- **A value read over an outline redrawn since** (F7, F8): a unit's MAP from
+  the grid, its rain feed's cells, a planted area from land cover, and an
+  evaporation row from the map, each linking where it is proposed again (MAP
+  from the grid, Rain for each unit, Crops, Evaporation from the map). What
+  each was read over is recorded with it as `{ featureId, updatedAt, areaM2 }`
+  (`273_acceptance_polygons`: `node.map_polygon`,
+  `crop_area_land_cover.polygons`, `evaporation_accepted.boundary`; a unit
+  feed's `unit` mark already had it), and GET …/map/features returns them as
+  `accepted` (`geo/acceptances.ts`). The polygon now is the unit's polygon
+  (`geo/unitPolygon.ts`'s rule), the boundary the oldest one. It is another
+  outline when it is gone, another feature, or edited since with another
+  area (`OUTLINE_SLACK_M2`, 0.5 m²; a unit feed's mark keeps its area to
+  0.001 km²): a rename or a relink, which also moves `updatedAt`, keeps it
+  (`map/stale.ts`, the backend's `acceptances.ts outlineChanged`). A value
+  from before 273 records nothing, so it is never flagged. The boundary's
+  rain feed keeps its own flag (the Getting started pill, MapRainLink).
+- **The rest of the catchment's area** (F8): the unit Start made beside
+  units' boundaries has no outline; its area is the boundary less the units
+  as the boundary stood. After the boundary's area changes, while the rest
+  still has the area Start gave it, the check gives the figure now (the
+  boundary less the other units' areas) and links the Network to type it.
+  Read from the applied Start proposal (`stale.ts restOfCatchment`; an
+  effective area, or a rest with an outline, is skipped).
+- **A dam inside another unit's boundary** (F9): a dam linked to unit A
+  whose point (a polygon's centre) is outside A's polygon and inside unit
+  B's. Links never move with the map (Start links a dam once).
+- **A gauge moved since it became its node** (F9): from 273 the database
+  records where a gauge stood when it was linked to its node
+  (`map_feature.link_point`, set only by the `map_feature_link_point`
+  trigger: on a link or a relink; cleared on unlinking). Moved more than
+  `GAUGE_MOVED_M` (50 m) since, the check says how far and points at the
+  Network, where what drains into it is set. A gauge linked before 273 has
+  no point recorded and is never flagged.
+
+Not built here: re-proposing every unit's area at once without an
+elevation model (Divide's area half), and a flag for a WR2012 quaternary
+the moved boundary no longer sits in ([followups.md](./followups.md), issue
+#646 F9 and F14).
 
 Geometry is in metres on a local equirectangular projection around the
 features (well under 1 % off over a catchment); people read haversine
@@ -875,6 +932,40 @@ the legend). What the page shows is in [ui.md § Map](./ui.md#map-tabmap).
 - **Gauges' markers are not yet coloured** met or missed: the markers are
   CatchmentMap's DOM buttons, which don't read `fills`. The EWR is in the
   card, the table and the legend's count line meanwhile.
+
+## Calibration zones on the map
+
+Issue #555 (model.md §2.10n): when a calibration zone applies (a gauge
+ticked in Calibrate at several gauges, under Per unit flow generation),
+**Colour areas by** offers **Calibration zone** (`measure=zone`), with or
+without a run. It is the settings', not a run's: the zones come from the
+model as edited and the project's saved settings by the engine's own rule
+(`resolveZones`, through `frontend/src/lib/calibration/zoneGroups.ts`), the
+same groups and colours the Network colours by, so the map shows what the
+next run applies.
+
+- **No new route.** The settings come with the project (`MapTab`'s
+  `settings`), the units' parcels with the features already loaded; a parcel
+  reaches its zone through `map_feature.node_id`.
+- **Colours** (`mapResults.ts` `zoneFills`): each area linked to a land unit
+  takes its zone's colour token, the crop palette's in order
+  (`ZONE_TOKENS`, `--series-1`, `--series-2`, `--series-3`, `--series-5`, …;
+  upstream first, the calibration site's zone last), read from `<html>`'s
+  computed style and again on a theme switch (`MapResults.zoneColours`), as
+  the bands are. Every other area (not linked, a gauge, a water user, a farm
+  with no land area) takes "No figure"'s colour (`resultFills`). Past nine
+  zones the colours repeat; the name beside each is what tells them apart.
+- **Words.** The legend lists each zone ("Middle weir zone (1 unit)",
+  "Outflow gauge zone (calibration site)", ", not fitted yet"), the card
+  adds **Calibration zone** and Every feature a **Calibration zone** column
+  (`featureZone`), so a colour is never the only cue; the outline and the
+  words carry WCAG 1.4.1 and 1.4.11, as for results.
+- **Not offered** under Fragmentation, or when no ticked gauge is usable
+  (the run would apply none). A `measure=zone` link then shows the kinds.
+
+`mapResults.test.ts` (the options, the fills, the words),
+`calibration/zoneGroups.test.ts`, and `e2e/tests/calibration-zones-views.spec.ts`
+(the legend's colours read from the palette tokens, no pixels read).
 
 ## In an evidence pack
 
@@ -1011,11 +1102,17 @@ unit, averaged over the unit's own polygon, so that under
 ([model.md §2.4h](./model.md)).
 
 - **Which units.** Land units only: farm nodes with an area above 0 (gauges
-  and water users have no land and are never listed). A unit's polygon is its
-  farm parcel on the map: the parcel its area was accepted from
-  (`node.area_feature_id`, which Start from the map and Sub-catchments set
-  for every unit they save), else its only parcel. A unit with no parcel is
-  listed as without a polygon; one with several and none accepted is
+  and water users have no land and are never listed). **A unit's polygon**
+  (one rule for every per-unit proposal and the reference cell,
+  `geo/unitPolygon.ts`, issue #646 F1): the area feature its area was
+  accepted from (`node.area_feature_id`, which Start from the map, Divide and
+  Use this area set), of either area kind, a farm parcel or an *other* area
+  (as Sub-catchments from clicks saves its pieces and Start links them as
+  units' boundaries), linked to the unit or not, while it is a polygon; else
+  its only linked farm parcel. An *other* area alone (linked, but its area
+  not taken) is no unit's outline. Until #646 only farm parcels counted, so
+  units started from other areas had no polygon here. A unit with no polygon
+  is listed as without one; one with several parcels and none accepted is
   refused until one parcel's area is used for it.
 - **The proposal** (`GET /projects/:id/feeds/chirps/from-units`, editor): per
   unit, its parcel, area and cells (latitude, longitude, share inside,
@@ -1413,7 +1510,9 @@ to a point on a river. The design, the method and its accuracy are in
   running, or waiting in another catchment, is refused (429). Locally the
   worker runs only with `pnpm dev:full` (or `pnpm dev:jobs:tick` once);
   under plain `pnpm dev` the sheet waits. Still at the edge at 6 144 cells
-  is refused, never cut off.
+  is refused, never cut off. Start from the map and Divide hand a plan too
+  large for the request to the same job and share the one-per-editor slot
+  ([§ Start from the map](#start-from-the-map), #646 item 3).
 - **The proposal** is drawn dashed in teal over the features, with its
   outlet, until it is decided; the sheet lists its area, the snap distance,
   the cells, what drains into pans and the effective area (below), the
@@ -1762,10 +1861,41 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   gauge in the network*; any of them *not in the model*; the outlet is a
   gauge or the boundary's own), the proposal (each value ticked on its own:
   the unit's area, what it drains into, the rest of the catchment as a
-  unit), and data and the first run (the existing proposals, linked in
-  order: rain from the boundary, the nearest gauging station, evaporation,
-  each unit's composite dam to enter, land cover, then Runs). Typing the
-  model in on the Network stays the other way; upload works at every step.
+  unit), and data and the first run (below). The points step makes units'
+  boundaries too: **Draw a unit's boundary** (an *other* area) and
+  **Sub-catchments, one per click** (with a DEM) sit beside Place a point,
+  and the sheet comes back once the area or the pieces are saved (#646
+  F13). Typing the model in on the Network stays the other way; upload
+  works at every step.
+- **Data and the first run: a to-do list** (issue #646 item 2, the
+  hydrologist's review F2–F4; `startData.ts`). Every data proposal a run
+  needs, in the order a run reads them: the units' areas and order, how
+  natural flow is made, rain from the boundary, the catchment's MAP, rain
+  for each unit, MAP for each unit, evaporation (the A-pan, and Evaporation
+  from the map), the WR2012 check, observed flow (its link opens Data
+  feeds on a DWS gauge with the nearest gauging stations proposed,
+  `?feed=dws`), each unit's composite dam, the cultivated area, then **Run
+  the model**. Each line has a status worked out from what the project
+  holds now, never a stored tick: Done, Started (done for some units),
+  To do, or Checking while it is read (a unit's rain is a CHIRPS feed with
+  that unit's mark; its MAP `mapMm`; observed flow an outlet record, or a
+  DWS feed waiting for its first fetch; a composite dam a volume above 0 on
+  each unit a dam on the map is part of; a run any run). The next one a run
+  needs is marked; the catchment's MAP, the WR2012 check, the cultivated
+  area and the units' areas are optional (a stand-in or a check). The list
+  outlives the sheet: once it is closed, the Map's **Getting started** pill
+  shows the same items, each with its link, and links back to the data
+  step, until every item a run needs is done. An editor's lines say the
+  feeds are an owner's to set up.
+- **Each unit's rain and MAP, together** (`StartUnitsData.svelte`,
+  `unitsData.ts`): under the list, one table with a row per land unit, its
+  MAP from the MAP grid and its own CHIRPS feed over its boundary, each with
+  its source and its own tick, unticked until the editor ticks it or
+  presses **Tick all**. **Apply the ticked values** asks first, then sends
+  the ticked units to MAP for each unit's and Rain for each unit's own
+  POSTs (`nodeIds`), each recorded as it is when used on its own page: the
+  server re-derives every value, refuses a mix of grids, and only an owner
+  can create feeds (an editor sees them without a tick).
 - **Units follow your boundaries** (`start-16`, #523 C1; the
   hydrologist's answer on #90, "Abstraction points from Start from the map /
   Divide"). Each hydrological unit is a boundary you put on the map (drawn,
@@ -1805,7 +1935,19 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   catchment. Beside the units' boundaries the rest of the catchment is the
   catchment (the boundary's area, else the elevation model's) less theirs,
   never below 0, with no outline of its own: its area goes in typed, with
-  no parcel. A gauge on a unit's outflow cell is put one cell further down,
+  no parcel. **Where the rest drains** (`start-17`, #646 item 3, the
+  hydrologist's review F10): it is the catchment's cells that no unit's
+  boundary holds (an undrawn headwater, typically), and it drains into the
+  first unit, water user or gauge its flow path meets, from where most of
+  its area drains, proposed as a tick on its card ("Drains into Middle");
+  the outflow gauge only when nothing lies below it. Before `start-17` it
+  always drained straight into the outflow, which bypassed the units below
+  an undrawn headwater: their upstream inflow missed its runoff (in the
+  review's illustration, 80 km² of headwater above a 40 km² unit and an
+  80 km² unit at the outlet left the lower unit's river pump a third of
+  its inflow), while the catchment's total at the outflow, unchanged, hid
+  it. When under 90 % of a rest larger than 1 % of the catchment drains
+  that way, a warning says the rest of it reaches other units first. A gauge on a unit's outflow cell is put one cell further down,
   so the unit drains into it. With no unit boundary at all the rest is the
   outlet's own piece, as before; the rest of this bullet is how every area
   was made before `start-16`, and how that rest's still is. **Every area comes from the cells** (`start-6`): each cell's own
@@ -1902,7 +2044,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   the method counts them ("1 point at a dam polygon’s outflow (1 marked
   off-channel)", with the rule) only when one is marked; an unmarked dam is
   placed exactly as before, so marking dams didn't bump the method
-  version (it was `start-14` then; `start-16` today). A
+  version (it was `start-14` then; `start-17` today). A
   delineated outlet (a boundary from Delineate) stays on its own cell, where
   Delineate put it. Each card says where its point went ("On the nearest
   terrain channel, 42 m from the point."), and the method names only the
@@ -1914,7 +2056,34 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Without a DEM** (`DEM_URL` empty): each unit has its boundary's area
   and drains into the outflow gauge (the order is set on the Network); the
   rest of the catchment is the boundary less the units' boundaries (the
-  whole boundary, saved as its parcel, with none).
+  whole boundary, saved as its parcel, with none), and drains into the
+  outflow gauge too, a warning saying so ("… until you set the order on the
+  Network: without routing, nothing says where it lies.").
+- **Too large to route within the request** (#646 item 3, the
+  hydrologist's review F11; `272_plan_request`, `delineation/planRequests.ts`,
+  `jobs/handlers/delineate-plan.ts`): routing that still reaches the edge
+  of the request's 3 072-cell window (about 100 km at zoom 11), or would
+  pass its 20 s, no longer refuses the Start. Since `start-16` each unit's
+  area is its own boundary's and the elevation model only orders and checks
+  them, so the server answers at once with the plan a server without a DEM
+  makes from the same map (each unit its boundary's area, no order, the rest
+  the boundary less the units), its first warning saying what wasn't
+  checked ("The catchment is too large to route on the elevation model
+  within a request, so the order wasn’t proposed and no unit’s area was
+  checked against it. …"). It also hands the plan to the background
+  worker, the same `delineate` job as a large click
+  ([§ Delineation](#delineation)), which routes it with windows up to
+  6 144 cells (about 200 km) and proposes the routed plan, with the order
+  and the checks, in place of the quick one while it is still open; the
+  sheet says so while it waits. Applied or discarded first, the quick one
+  stands and the routed one is never stored. **Locally with `pnpm dev`**
+  (no worker running; `JOB_TRANSPORT` defaults to `inprocess`, whose worker
+  starts only with `pnpm dev:full`) the quick plan is what you get; with
+  `pnpm dev:full`, and in production, the routed one follows a minute or
+  two later. A catchment past the worker's 6 144 cells too is refused
+  there, the quick plan standing. **Divide** has no plan without a DEM, so
+  a division too large for the request goes to the worker the same way
+  (`202`), and its sheet waits for it; locally without a worker it waits.
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes; each ticked unit's
   area its own boundary, linked to it as **Use this area** links one
@@ -1955,13 +2124,16 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   against the elevation model) and what it drains into, **beside the node's
   value now**, each taken only when ticked, and the rest of the catchment
   (beside the boundaries, the catchment less them, typed) to a unit, a new
-  unit or nobody. A ticked value that changed since the proposal, or a
+  unit (draining, when ticked, into the point its flow path meets first,
+  `start-17`) or nobody. A ticked value that changed since the proposal, or a
   boundary redrawn since, is refused (409), never overwritten unseen;
   dividing again redraws in place the rest's parcel an earlier division made
   ([design/start-from-map.md § Dividing a model that has
   nodes](./design/start-from-map.md#dividing-a-model-that-has-nodes)).
-- **Limits.** The same as Delineation's: about 100 km across, 30 proposals a
-  project an hour (starts and divisions together), the 20 s budget.
+- **Limits.** The same as Delineation's: about 100 km across in the
+  request, about 200 km on the worker (above), 30 proposals a project an
+  hour (starts and divisions together), the 20 s budget, one waiting or
+  running background delineation or plan per account.
 
 ## Sub-catchments from clicks
 
@@ -2182,7 +2354,14 @@ the unit's name on Crops & demand, the Network, the Summary, Supply or Dams;
 [ui.md § Farm drawer](./ui.md#farm-drawer)) summarises, for one hydrological unit, the
 area a land-cover map shows as cropland inside each **farm parcel** on the map
 linked to that unit, the parcels' sum, and the catchment boundary's for
-reference. The modeller picks an area (all the unit's parcels, or one
+reference. A unit with no linked parcel is summed over its area feature
+instead, the polygon its area came from (an *other* area as Sub-catchments
+from clicks and Start leave a unit's boundary; issue #646 F1,
+`geo/unitPolygon.ts`): its whole sub-catchment's cropland. A unit with
+parcels of its own keeps theirs, since its boundary holds them and summing
+both would count them twice. One polygon picked on its own may be any of them, the area
+feature included, so the boundary's cropland can still be used beside the
+parcels. The modeller picks an area (all the unit's parcels, or one
 parcel) and a crop, and **Use** sets that crop's planted area on the unit to
 it.
 
@@ -2240,7 +2419,9 @@ it.
   revisions list carry, and keeps a `crop_area_land_cover` row (174) with the
   same citation. The box shows that provenance beside each crop, and says
   "Typed over since" once the area no longer matches it. While the model has
-  unsaved changes, Use waits. Viewers see the summary but not Use.
+  unsaved changes, Use waits. Viewers see the summary but not Use. The row records the polygons the area was summed over
+  (`polygons`, 273), so the Map's [Checks](#checks) and the Start data list
+  flag an area summed over an outline redrawn since (issue #646 F7).
 - **Datasets.** The default is a real dataset before the synthetic one, then
   the newest load; the API takes `?dataset=`.
 
@@ -2453,7 +2634,10 @@ grid's kind, and **nothing is converted between them**:
   values); dPET, … (hPET v3 …, 1991–2020 monthly means; dataset
   “dPET-1991-2020”). Pre-summarised at import: …"), which History, the run
   comparison and an evidence pack's revisions list carry, and keeps an
-  `evaporation_accepted` row (181) with the same citation. A monthly PE's own
+  `evaporation_accepted` row (181) with the same citation. The row records the boundary it was summarised over
+  (`boundary`, 273): after the boundary is redrawn, the Map's
+  [Checks](#checks) and the Start data list say to propose it again (issue
+  #646 F8). A monthly PE's own
   `source` names the dataset too, so a fit record and a run's settings carry
   it. The panel says when the saved row no longer holds the accepted values
   ("Typed over since"). While Settings has unsaved changes, Use waits; after
@@ -2471,6 +2655,10 @@ grid's kind, and **nothing is converted between them**:
   ([model.md §2.4a](./model.md) *Daily reference ET*). Both are reference
   ET, so neither is converted; the feed changes nothing under pan
   coefficient × A-pan.
+- **A-pan where no pan station is near**: a modelled Class-A pan grid
+  (PenPan from NASA POWER's weather, [§ The evaporation grid](#the-evaporation-grid))
+  proposes the A-pan row as "Modelled Class-A pan (PenPan)", locally only
+  until it is validated against DWS pans.
 
 ### The evaporation grid
 
@@ -2506,17 +2694,144 @@ only reads them.
 - **An A-pan grid** (kind `apan`) loads from the fixture form
   (`{ "kind": "apan", "cellDeg", "firstYear", "lastYear", "cells": [[lon,
   lat, [Oct … Sep]], …] }`), for example the operator's own interpolation of
-  station pans. No open A-pan grid passes D-B today (§ Sources).
+  station pans; such a grid names its own `--source` and `--attribution`
+  (dPET's lines are never put on it). No measured A-pan grid passes D-B
+  today (§ Sources).
+- **A modelled A-pan grid: PenPan** (issue #646 item 7;
+  [data-sources.md § penpan-apan](./data-sources.md#penpan-apan), blocked in
+  production). Where no pan station is near, `ingest/apan_grid.py` models a
+  US Class-A pan from weather. This is not the conversion "Why no
+  conversion" rules out, since no pan coefficient is guessed: PenPan
+  (Rotstayn et al. 2006; `ingest/penpan.py`, after McMahon et al. 2013
+  Supplement S6, eqs. S6.1–S6.6) is Penman's equation for the pan itself.
+  It takes the shortwave the pan and its walls catch (S6.4–S6.6, pan albedo
+  0.14), the net longwave (FAO-56 eq. 39) and Thom et al.'s vapour transfer
+  for a pan (S6.2), with a = 2.4. Each month runs as a steady state, and the
+  model is checked against McMahon's Worked example 9 (3.66 mm/day at Alice
+  Springs). The weather is NASA POWER's six daily parameters, since the copy
+  holds only reference ET. `fetch` reduces them to each 0.5° point's monthly
+  means a year at a time (resumable, one request a second). `grid` averages
+  each calendar month's PenPan total over the years (a point needs every
+  month of every year) and places it on 0.1° cells centred on x.x5°, each
+  the nearest point's, so 25 cells share one point. It writes the `apan`
+  form with a `model`: `name: "penpan"`, the ground albedo (0.23 by
+  default) and the screen factor (1 for an unscreened pan, 0.93 for a
+  bird-screened one). `pnpm import:evaporation <apan.json[.gz]> --dataset
+  <label>` loads it. Its source always starts "Modelled Class-A pan
+  (PenPan)" (an operator's `--source` is put after it) and the method says
+  "Modelled, not measured: PenPan …", so the proposal, the revision's reason
+  and the provenance row never present it as a measured pan. `validate`
+  compares it with Class-A pan stations, using their 12 monthly means at
+  each station's cell, and writes a Markdown report of the ratio grid ÷
+  station, the bias and the RMSE, by month and overall. The operator runs
+  that report on DWS stations, and production waits for it and the
+  hydrologist's sign-off. Limits: POWER's 0.5° weather smooths relief and
+  coasts, and the model ignores the pan's siting (a dry fetch or an
+  irrigated one) and its heat storage, so one month can be off even when
+  the normal holds. For scale, McMahon found PenPan ÷ pan of 1.078 over 68
+  Australian stations, after their screen factor.
 - **Production loading**: `pnpm import:evaporation <dir>/*.dpet-monthly.json
   --dataset <label> --out dpet.json.gz` writes the averaged grid in the
   fixture form instead of loading it, and `load-reference.yml` (kind
   `evaporation`) loads that file through the migrate Lambda
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
   Only a reference-ET grid (`et0`) loads there; an A-pan grid is refused
-  until its source has an allowed row here. The attribution, stored on the
+  until its source has an allowed row here. The release gate also refuses a
+  PenPan or A-pan key or label before the approval. The attribution, stored on the
   dataset row, is shown under every proposal (§ Sources).
 - **WR2012's evaporation** (S-pan per quaternary, with its evaporation zones'
   monthly distribution) stays **blocked** with the rest of WR2012 (§ Sources).
+
+## Evaporation stations
+
+**Evaporation stations**, in Calibration → Flow calibration under
+"Evaporation from the map" (issue #646 item 6, the hydrologist's F5;
+`EvaporationStationProposal.svelte`), proposes the nearest DWS evaporation
+station's pan record as the **A-pan**, the input dams and crops lose water to,
+the way [§ Gauging stations](#gauging-stations) proposes a flow record: the
+map proposes, the modeller picks and accepts.
+
+- **What is listed.** The stations within 100 km of the catchment boundary
+  (0 inside it, else to its nearest edge; `?within=` up to 300 km), nearest
+  first, at most eight, each with its code, name, pan (**Class-A** or
+  **Symons**), distance, record (first and last year, years, share of days
+  read) and the 12 monthly means of its record beside the saved A-pan row
+  (`backend/src/geo/evaporationStations.ts`). A month counts with 80 % of its
+  days read, and each of the 12 needs 3 counted years, else the station
+  proposes nothing and says which months are short
+  ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45),
+  *A station's pan record*). The nearest usable station is picked first.
+- **A Class-A pan** proposes its means as the A-pan row and, ticked by
+  default, its daily record as the daily A-pan series **`DWS <code>`**
+  (kind `evap_apan_mm`, which replaces the monthly row on every day it
+  covers). A project that already holds another daily A-pan series is
+  refused that part (409; a run reads one series of a kind): delete it on
+  the Data page first, or untick it and use the means only.
+- **A Symons pan** reads S-pan, so its means become A-pan only through the
+  S→A equation the user picks, **WR90** or **Taljaard (2023)**, both the
+  published S ← A equation inverted; none is picked for them, Taljaard's
+  warning that they "cannot be inverted" is shown beside the choice, and an
+  equation that would rest on its intercept (a month under its floor) is
+  disabled with the month named (model.md §2.3a). Its daily record is never
+  written: the equations are monthly.
+- **Use** (editors; "Saves now") asks first, then
+  `POST /projects/:id/evaporation-from-station`
+  ([api.md § Catchment map](./api.md#catchment-map)): the server re-reads the
+  station and re-derives the means, writes the A-pan row as one settings
+  revision whose reason cites the station, its pan, its distance, the
+  months the means came from, any conversion (its equation by name) and the
+  dataset's source, which History, run comparison and an evidence pack's
+  revisions carry, and writes the daily series when asked (queueing a
+  re-run and automatic calibration as any new series does). While Settings
+  has unsaved changes, Use waits. A Class-A or Symons pan only: the
+  dam-evaporation preset (Settings → Demand) still converts the A-pan row to
+  S-pan for the dams where the project uses one.
+- **Who sees it.** A viewer's read; a farmer gets 403 and a non-member 404.
+
+### Evaporation-station dataset
+
+`evaporation_station_reference` (274) holds each station with its whole
+verified daily record (one array of mm a day, `NULL` for a day not read). The
+**operator** loads it as the schema owner; the app only reads it.
+
+- **Committed: synthetic only.** `backend/fixtures/evaporation-stations/`
+  holds four invented stations in drainage region **Z** (DWS has none) round
+  the Sandspruit example's boundary, each reply marked "SYNTHETIC" and
+  "INVENTED", written by
+  `pnpm -C backend exec tsx scripts/gen-evaporation-stations-fixture.ts`
+  (a fixed seed): `Z1E001`, a Class-A pan inside the boundary, 2014–2017;
+  `Z1E002`, a Symons pan nearby, 2010–2013, whose July S-pan sits between
+  the two equations' floors (Taljaard converts it, WR90 refuses); `Z1E003`,
+  a Class-A pan with under two years (too short); `Z2E001`, about 200 km off
+  (outside the default radius). `pnpm import:evaporation-stations` with no
+  argument loads them as dataset `synthetic`; the panel marks them
+  "Synthetic test data". `pnpm setup` loads them; the DB and e2e tests load
+  them themselves.
+- **Real data: the operator's own request to DWS, once the permission covers
+  it** (§ Sources: blocked). DWS publishes a weather station's verified
+  daily records (an `E` code, `A2E001`) on the same `HyData.aspx` pages as
+  river flow (`SiteType=MET`); its per-area station lists
+  (`Verified/dwafapp2_wma/WMA*_Met.pdf`) mark each evaporation record `[A]`
+  Class-A or `[S]` Symons. The reader (`geo/dwsEvaporation.ts`) takes the
+  flow page's layout with the value column named for evaporation in mm; the
+  site answers our network with HTTP 403, so it is tested only against the
+  invented replies, and refuses a page whose header or unit block says
+  anything else. Load with
+  `pnpm import:evaporation-stations stations.csv --records <dir> --dataset "DWS 2026-11" --source "<DWS reply reference, date>"`:
+  the CSV is `code,name,pan,lat,lon[,source]` (pan `A`/`S`, decimal
+  degrees), and each station's reply is a file in `<dir>` whose name starts
+  with its code. A load replaces every row of its dataset in one
+  transaction; stations it can't take are listed as skipped. Load real
+  records into your own database only, and never commit them.
+- **Production loading is refused** until DWS's permission covers
+  evaporation station records: the reference-load kind
+  `evaporation-stations` is blocked in both the release gate
+  (`scripts/release/map-data-gates.mjs`, which offers only the allowed
+  kinds) and the migrate Lambda (`backend/src/geo/referenceLoad.ts`
+  `REFERENCE_KINDS`), and the `dws` kind takes only a river gauge (`H`)
+  code and a flow table, so a pan record can't arrive as flow
+  ([deployment.md § Reference datasets](./deployment.md#reference-datasets);
+  followups.md, *Decision: DWS evaporation station records*).
 
 ## Hydrological units layer
 
@@ -2635,10 +2950,11 @@ grid](#map-grid)), proposed beside what its form holds, and written to the
 units' `mapMm` / `mapSource` only when an editor uses it.
 
 - **Which units and polygons.** Land units only (farm nodes with an area
-  above 0), each over its farm parcel as for its rain ([§ Rain for each
-  unit](#rain-for-each-unit)): the parcel its area came from, else its only
-  one. A unit with no parcel is listed as without one; one with several and
-  none its area is refused until one is chosen.
+  above 0), each over its polygon as for its rain ([§ Rain for each
+  unit](#rain-for-each-unit)): the area feature its area came from (a parcel
+  or an *other* area, issue #646 F1), else its only parcel. A unit with no
+  polygon is listed as without one; one with several parcels and none its
+  area is refused until one is chosen.
 - **The mean.** Over the grid cells the parcel touches, each weighted by the
   share of the cell inside it (exact clipped overlap, `gridShares.ts`) × the
   cell's area on the ellipsoid (which carries the cos latitude), as the
@@ -2672,6 +2988,11 @@ units' `mapMm` / `mapSource` only when an editor uses it.
   line) is refused (`grid_mixed`): use the grid that covers every unit, or
   clear that unit's MAP on its form first. A MAP typed in by hand is no
   grid's and is never touched by an apply that leaves its unit out.
+  Each unit's polygon as it stood is recorded with its MAP
+  (`node.map_polygon`, 273); a model save that changes the MAP clears it.
+  A unit whose polygon has another outline since is not "the same" any more
+  (applying again records the new outline), and the Map's
+  [Checks](#checks) and the Start data list flag it (issue #646 F7).
 - **Coverage shown below 100 %** (issue #500 item 8). A unit covered over
   90–100 % of its parcel gets a MAP from the part the grid has values on, so
   the panel shows its coverage under the proposed MAP ("93.3 % covered",
@@ -2759,6 +3080,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Quaternary catchment outlines | DWS (Department of Water and Sanitation) | open data per [§ Quaternary dataset](#quaternary-dataset); the commercial-use terms are not yet confirmed on DWS's own page | DWS | the operator's download | per DWS release | blocked: licence unconfirmed for anything but the operator's own database; the committed synthetic fixture is used everywhere else |
 | WR2012 reference values (MAP, MAR, monthly flows) | WRC | redistribution terms unpublished ([§ Quaternary dataset](#quaternary-dataset)) | WR2012 (WRC 2015) | the operator's download | none (a 2012 study) | blocked: licence unconfirmed; operator's own database only |
 | Hydrological station catalogue (station code, name, river, lat/lon, catchment area, record start/end): the nearest-gauge proposal | Department of Water and Sanitation (DWS), National Hydrological Services, `https://www.dws.gov.za/Hydrology/Verified/HyCatalogue.aspx` | **Unconfirmed.** Read 2026-10-01: the Verified data pages answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) surfaced DWS's information-page wording (NIWIS pages on `dws.gov.za`): "copyright … remains with the Department of Water and Sanitation", data "may not be sold to third parties", and "the use of information data is restricted to use for academic, research or personal purposes". If that wording covers the hydrological catalogue, it is a non-commercial restriction and fails D-B | "Department of Water and Sanitation" named as the copyright owner, if allowed | the operator's download date | DWS updates the catalogue as stations open and close | **Blocked: licence unconfirmed.** Built and tested against the synthetic fixture only. To unblock: written confirmation from DWS Hydrological Services that the station metadata may be reused in a commercial service, recorded here with the date |
+| DWS evaporation station records (station code, name, pan type Class-A or Symons, lat/lon, the verified daily pan record): the A-pan proposal ([§ Evaporation stations](#evaporation-stations)) | Department of Water and Sanitation (DWS), National Hydrological Services, `https://www.dws.gov.za/Hydrology/Verified/HyData.aspx` (`SiteType=MET`) and the per-area station lists (`Verified/dwafapp2_wma/WMA*_Met.pdf`) | **Not covered.** The permission obtained through the client's hydrologist (recorded 2026-10-28, [data-sources.md § dws-flow](./data-sources.md#dws-flow)) covers verified daily **flow** only; the same NIWIS wording as the station catalogue applies otherwise | "Department of Water and Sanitation" named as the copyright owner, if allowed | the operator's load of DWS's reply | DWS updates records as they are verified | **Blocked: needs DWS's permission extended to evaporation station records** (the operator, through the client's hydrologist, GeoRequests@dws.gov.za). Built and tested against the synthetic fixture only |
 | DWS verified daily flow (the DWS feed, `feeds/sources/dws.ts`; the gauge record store, `gauge_record`, 247) | DWS, `HyData.aspx`, or DWS's reply to a data request | Permission to store the verified daily flow and show results derived from it obtained through the client's hydrologist (recorded 2026-10-28, #618 step 6a; the written permission is kept with the client's records, [data-sources.md § dws-flow](./data-sources.md#dws-flow)); DWS publishes no terms for the pages themselves | "Department of Water and Sanitation" | per fetch or load | daily (the feed), weekly (the store's web pass) | allowed: the verified daily flow only (production loads it with `load-reference.yml` kind `dws`, [deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)); the station catalogue keeps its own row |
 | CHIRPS v3 daily rainfall (`sat`, `rnl`) and CHIRPS-GEFS v3 forecast: the rain feed, and the rain from the boundary | Climate Hazards Center, UC Santa Barbara | Public domain, registered with Creative Commons, and licensed CC BY 4.0 ("CHIRPS3 is in the public domain … licensed under a Creative Commons Attribution 4.0 International License"), [chc.ucsb.edu/data/chirps3](https://www.chc.ucsb.edu/data/chirps3), read 2026-10-01 | "Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025). Data was accessed on [date]." Or Funk, C. et al., *Sci Data* 13, 718 (2026) | v3.0 | Daily: preliminary two days after each pentad, final monthly (about three weeks after the month); GEFS one issue a day | Allowed (fetched live by the feeds; fixtures offline) |
 | ERA5-Land daily precipitation (0.1°, `era5l` in our rain data copy): fills catchment-rain gaps where Model settings → Rain gaps chooses it, and Data → Rain products side by side (issue #604 R4-E) | ECMWF for the Copernicus Climate Change Service (C3S) | **CC BY 4.0** ("CC-BY licence" on the CDS dataset page, [reanalysis-era5-land](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land), read 2026-10-27) | "Contains modified Copernicus Climate Change Service information [year]. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains." and the dataset citation (data-sources.md § ERA5-Land), wherever its values show: the Data sources and credits page, the Data tab's products and per-day preview, a run's results, report and exports, and an evidence pack's bundle | ERA5-Land hourly, daily totals | about 5 days behind, consolidated two months later | allowed (built; off in production until the operator's CDS key) |
@@ -2783,7 +3105,14 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | GeoNames gazetteer, South Africa and its six neighbours (`ZA.txt`, and `BW.txt`, `LS.txt`, `MZ.txt`, `NA.txt`, `SZ.txt`, `ZW.txt` inside the basemap's extent: place and farm names, feature class, province, country, position): the Map's search ([§ Search](#search)) | GeoNames ([geonames.org](https://www.geonames.org), [download.geonames.org/export/dump](https://download.geonames.org/export/dump/)) | **CC BY 4.0**: "This work is licensed under a Creative Commons Attribution 4.0 License" (the dump's `readme.txt`, read 2026-10-13; the seven countries' dumps carry the same `readme.txt`); commercial use allowed with attribution | "GeoNames (geonames.org), CC BY 4.0", stored on every place and shown under every search that lists one, and on the Data sources and credits page (`/data-sources#geonames`) | the operator's download date (`--dataset GeoNames-ZA-<date>`, `GeoNames-neighbours-<date>`) | daily dumps; refreshed when the operator re-loads | **Allowed.** The operator's own download, never committed; built and tested against the synthetic gazetteer |
 | Surveyor-General's farm names (registered farm names and numbers), considered for the search | Chief Surveyor-General, Department of Agriculture, Land Reform and Rural Development | **Unconfirmed**: no reuse terms for a commercial service found in writing | – | – | – | **Blocked: licence unconfirmed.** Not loaded; a later dataset once its reuse licence is confirmed in writing, recorded here with the date |
 | Synthetic gazetteer (`backend/fixtures/geo/gazetteer.synthetic.txt`) | this repo (invented places, GeoNames' format) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm setup`) |
+| SoilGrids 2.0 water retention, `wv0033` and `wv1500` (water content at 33 and 1500 kPa, six depths to 200 cm, 250 m): the soil water capacity grid ([§ Soil water capacity](#soil-water-capacity)) | ISRIC – World Soil Information; Turek, M.E. et al. (2023), ISWCR 11(2) | **CC BY 4.0** on each layer's data.isric.org record and in ISRIC's SoilGrids FAQ (read 2026-10-28; [data-sources.md § GR4J priors](./data-sources.md#gr4j-priors-issue-622)) | "Soil water retention: SoilGrids 2.0 © ISRIC – World Soil Information, CC BY 4.0.", stored on the dataset | SoilGrids 2.0 (water retention of 2023; files of 2021-10-27) | none announced | allowed (`load-reference.yml` kind `soils`) |
+| iSDAsoil depth to bedrock (30 m, 0–200 cm): the soil grid's root depth | Innovative Solutions for Decision Agriculture (iSDA); Hengl, T. et al. (2021), Sci. Rep. 11 | **CC BY 4.0** (the AWS Registry of Open Data entry iSDA manages, read 2026-10-28) | "Depth to bedrock: iSDAsoil © Innovative Solutions for Decision Agriculture (iSDA), CC BY 4.0.", stored on the dataset | v1 (2001–2017) | none announced | allowed (with SoilGrids, kind `soils`) |
+| GRDC-Caravan v0.6 (daily streamflow and basin polygons of GRDC stations; South Africa's 434, Namibia's 51): the GR4J donor basins, fitted offline (`pnpm fit-donors`); their flows never shown, only the fitted parameters, on the Calibration page's Regional prior panel | Färber, C. et al. (2025), Zenodo 10.5281/zenodo.15349031; data from the Global Runoff Data Centre and its providers (DWS, Namibia's ministry) | **CC BY 4.0** on the record and in the archive's licence file; South Africa and Namibia "Free to use" in its per-country table (read 2026-10-28) | the donor set's attribution (`GR4J_DONORS`, `backend/src/geo/gr4jDonors.ts`), stored on the dataset, shown under the Regional prior panel and on `/data-sources` | 0.6 (2025-05-06) | per Zenodo release | allowed (kind `gr4j-donors`; only fitted parameters are loaded) |
+| HydroATLAS v1.0 (BasinATLAS attributes: aridity, precipitation, slope, clay, sand, forest, regulation): the donors' similarity attributes | WWF / McGill University (HydroSHEDS); Linke, S. et al. (2019), Sci. Data 6 | **CC BY 4.0** (hydrosheds.org/hydroatlas, read 2026-10-28) | "Basin attributes: HydroATLAS v1.0 (BasinATLAS; Linke et al. 2019, Lehner et al. 2022), CC BY 4.0." | 1.0 | none | allowed (with GRDC-Caravan, kind `gr4j-donors`) |
+| Synthetic soil water capacity grid (`backend/fixtures/soils/soils.synthetic.json`) | this repo (invented soil over region Z) | the repo's own | none | 1 | never | in use (tests, `pnpm setup`) |
+| Synthetic GR4J donors (`backend/fixtures/gr4j-donors/gr4j-donors.synthetic.json`) | this repo (14 invented basins) | the repo's own | none | 1 | never | in use (tests, `pnpm setup`) |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+| Modelled Class-A pan (PenPan), our own computation from NASA POWER's daily weather: the A-pan row where no pan station is near ([§ The evaporation grid](#the-evaporation-grid), issue #646 item 7) | NASA POWER (the weather); the model is ours (Rotstayn et al. 2006, after McMahon et al. 2013 Supplement S6) | **CC BY 4.0** (POWER, as [data-sources.md § nasa-power](./data-sources.md#nasa-power)); the grid is ours | "NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan (Rotstayn et al. 2006) from its daily meteorology", stored on the dataset row; its source always starts "Modelled Class-A pan (PenPan)", and the proposal and its revision call its values "modelled Class-A pan evaporation (PenPan, not a measured pan)" (`evaporation.ts` `evaporationLabel`) | the years run (e.g. 1991–2020) | per refresh of the normal | **Blocked in production** until `apan_grid.py validate`'s report against DWS Class-A pans and the hydrologist's sign-off ([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)); the release gate and the migrate Lambda refuse it. Locally it loads, built and tested against synthetic weather |
 
 **Which version is in use.** The table's Version column is the version the
 licence was read for. What a deployment actually serves is recorded with
@@ -2801,6 +3130,43 @@ through `app_reference_provenance()`), e.g. "… (version 0.0.13, upstream
 file of 2026-09-30, recorded 2026-10-27)". The Data sources page
 (`/data-sources`) is prerendered static text and shows the licence's
 reading, not the deployment's version.
+
+### Soil water capacity
+
+The regional GR4J prior ([model.md §2.10m](./model.md)) relates x1, GR4J's
+production store, to the soil's root-zone plant-available water capacity
+(PAWC, mm). The grid is built offline from two CC BY 4.0 sources (issue
+#622 step 2):
+
+- **SoilGrids 2.0** water content at field capacity (`wv0033`, 33 kPa) and
+  at wilting point (`wv1500`, 1500 kPa), at 0–5, 5–15, 15–30, 30–60, 60–100
+  and 100–200 cm, in 10⁻³ cm³/cm³ (mm per m);
+- **iSDAsoil** depth to bedrock, cm (0–200; 200 means at least 200).
+
+For each cell, PAWC = Σ over the layers of max(0, wv0033 − wv1500) × the
+layer's thickness inside the root zone ÷ 100. The root zone ends at
+min(200 cm, the depth to bedrock). A cell missing a layer it needs is left
+out. A cell iSDAsoil masks is taken as deep (200 cm), and `ingest/soils.py`
+counts how many. A cell with bedrock at the surface has no root zone and is
+left out.
+
+- **Build:** `ingest/soils.py` (standard library only, `ingest/test_soils.py`)
+  reads the thirteen layers as ESRI ASCII grids on one WGS 84 grid, keeps the
+  cells inside region D1 and writes the JSON grid
+  ([deployment.md § Reference datasets](./deployment.md#reference-datasets),
+  *Soils and GR4J donors*, has the GDAL recipe).
+- **Load:** `pnpm import:soils <soils.json.gz> --dataset <label>` locally;
+  `load-reference.yml` kind `soils` in production. Both go into
+  `soil_dataset` and `soil_cell_reference` (migration 268). `pnpm setup`
+  loads the synthetic grid. A load replaces its dataset in one transaction;
+  a production load records its file in `reference_load`.
+- **Read:** `backend/src/geo/soilGrid.ts` `summariseSoil` gives a catchment
+  or unit polygon's PAWC and root depth. Each cell is weighted by its area on
+  the ellipsoid × the share of it inside (`gridShares`, as the evaporation
+  grid's months are). Cells with no value are left out, and below 50 % cover
+  it gives no value. `fit-donors.ts` records it per donor today. A target
+  project reads it when the prior is wired in (#622 step 5). No route or
+  screen reads it yet.
 
 ### Credits on the map
 

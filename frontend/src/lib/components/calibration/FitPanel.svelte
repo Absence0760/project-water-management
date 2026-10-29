@@ -13,8 +13,16 @@
 		DEFAULT_STARTS,
 		MAX_STARTS,
 		OBJECTIVES,
+		PRIOR_MAX_WEIGHT,
+		type CalibrationPrior,
 		calibrationSeriesKey,
+		gr4jOfParamSet,
+		zoneCalibrationSettings,
+		zoneFitPlan,
 		type CalibrationFlowKind,
+		type Gr4jParams,
+		type SeriesOrigin,
+		type ZoneFitPlanStep,
 		type CalibrationReport,
 		type FitRecord,
 		type ProjectModel,
@@ -55,7 +63,9 @@
 	import { representativenessGist, representativenessKey, representativenessRows } from './representativeness';
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
 	import { wr2012FitPeriods } from '#lib/calibration/wr2012Fit.js';
-	import { startFit } from '#lib/calibration/runner.js';
+	import { startFit, startStepwiseFit } from '#lib/calibration/runner.js';
+	import { calibrationPriorOf, fitBoundsOf, priorKey, priorUseHint, priorWeightError, PRIOR_USE_LABEL, PRIOR_USES } from '#lib/calibration/prior.js';
+	import { stepRows } from '#lib/calibration/zones.js';
 	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
@@ -87,8 +97,11 @@
 		/** The record the fit uses, as the form stands (null = the default pick). */
 		calibrationFlowKind?: CalibrationFlowKind | null;
 		readonly: boolean;
-		/** Writes the fit into the form, with its record (never saves). */
-		onApply: (report: CalibrationReport, record: FitRecord) => void;
+		/**
+		 * Writes the fit into the form, with its record (never saves). A stepwise fit (calibration zones, issue #555)
+		 * also gives each upstream zone's parameters and record, all applied as one.
+		 */
+		onApply: (report: CalibrationReport, record: FitRecord, zones?: { nodeId: string; params: Gr4jParams; record: FitRecord }[]) => void;
 		/** The workspace's fit: choices, progress and result, kept across tab changes. */
 		session: FitSession;
 		/** The WR2012 MAR penalty's fields (a saved setting, Settings' form), beside the fit's own choices. */
@@ -122,7 +135,10 @@
 	// The WR2012 MAR penalty (its fields beside the choices, penaltyFields) adds a fit without it, for comparison.
 	const penalty = $derived(marPenaltyOn(settings()));
 	const runs = $derived(totalRuns(session.budget ?? 0, session.validate, penalty, startsOk ? session.starts! : 1));
-	const canStart = $derived(hasObserved && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && startsOk && !session.busy);
+	// The regional prior (issue #622): a penalty, the search box or both; its weight only matters with the penalty.
+	const priorProblem = $derived(priorWeightError(session.priorUse, session.priorWeight));
+	const priorBox = $derived(session.priorUse === 'bounds' || session.priorUse === 'both');
+	const canStart = $derived(hasObserved && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && !priorProblem && startsOk && !session.busy);
 	const columns = $derived(report ? scoreColumns(report) : []);
 	// Model vs the mean-flow and climatology benchmarks (engine ≥ 1.19.0, CR-5); none on an older report.
 	const benchCols = $derived(benchmarkColumns(columns));
@@ -131,20 +147,40 @@
 	const benchSource = $derived(report ? benchmarkSourceNote(columns) : null);
 	const anyInterval = $derived(columns.some((c) => c.intervals));
 	// The search is a Fold (closed at first; its line says when a field inside needs fixing).
-	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, session.runValidate, penalty, session.runStarts)) : 0);
+	// A stepwise fit (issue #555): each step is one fit's fraction of the whole.
+	const stepOf = $derived(session.stepProgress);
+	const pct = $derived(
+		progress ? Math.round((100 * ((stepOf ? stepOf.step - 1 : 0) + progressFraction(progress, session.runValidate, penalty, session.runStarts))) / (stepOf?.steps ?? 1)) : 0
+	);
+	const steps = $derived(session.steps && session.steps.length > 1 ? stepRows(session.steps) : null);
 	// A report for another model than the form now shows can't be applied.
 
 	function start() {
-		const { budget, seed, starts, objective, bounds, validate } = session;
+		const { budget, seed, starts, objective, validate, priorUse, priorWeight } = session;
+		const bounds = fitBoundsOf(priorUse, session.bounds);
 		if (!canStart || budget === null || seed === null || starts === null) return;
 		const validationRecord = chosenRecord;
 		let server: Awaited<ReturnType<typeof api.runs.modelInput>>;
 		let input: ReturnType<typeof fitInput>;
+		// Calibration zones (issue #555): the stepwise fit's steps, upstream first; null = one fit, as before.
+		let plan: ZoneFitPlanStep[] | null = null;
+		// The regional prior per step, each built for its own target by the server (issue #622): by priorKey.
+		const priors: Record<string, CalibrationPrior> = {};
 		void session.start(
 			async () => {
 				server = await api.runs.modelInput(projectId);
 				const form = settings();
 				input = fitInput(server, form, model?.());
+				// Refuses a zone, or a site, with no land unit (engine zoneFitError): the fit's error line says why.
+				plan = zoneFitPlan(input);
+				if (priorUse !== 'off') {
+					for (const zone of plan ? plan.map((st) => st.zoneNodeId) : [null]) {
+						const got = await api.gr4jPrior.get(projectId, { zone });
+						const prior = calibrationPriorOf(got, priorUse, priorWeight);
+						if (!prior) throw new Error(`The regional prior can’t be used${zone ? ' for a calibration zone' : ''}: ${got.problem ?? 'there is none'}`);
+						priors[priorKey(zone)] = prior;
+					}
+				}
 				// The CHIRPS series' label as the server loaded it: the record's forcing keeps it (issue #40c).
 				// And the daily A-pan series it runs on (issue #45), by the hash a run's snapshot records.
 				return {
@@ -154,14 +190,28 @@
 					chirpsSource: chirpsSourceOfInput(server.series),
 					apanDaily: await apanDailyOfValues(server.series.evap_apan_mm),
 					// And the daily reference ET series (issue #604 R5-E), fingerprinted at Apply through the fit's last scored day.
-					et0Series: server.series.evap_et0_mm ?? null
+					et0Series: server.series.evap_et0_mm ?? null,
+					// Each record's source and unit, for a stepwise fit's zone records (issue #555).
+					origins: Object.fromEntries(Object.entries(server.series).map(([k, v]) => [k, (v as { origin?: SeriesOrigin | null } | undefined)?.origin ?? null]))
 				};
 			},
 			() => {
 				session.runStarts = starts;
 				session.runValidate = validate;
 				const f = free;
-				return startFit({ input, model: 'gr4j', objective, bounds, budget, free: f, validate, seed, starts, validationRecord: validationRecord ?? undefined }, (p) => (session.progress = p));
+				const req = { input, model: 'gr4j' as const, objective, bounds, budget, free: f, validate, seed, starts, validationRecord: validationRecord ?? undefined };
+				if (plan)
+					return startStepwiseFit(
+						req,
+						plan,
+						(p) => {
+							session.progress = p;
+							session.stepProgress = { step: p.step, steps: p.steps, zoneNodeId: p.zoneNodeId };
+						},
+						priors
+					);
+				const prior = priors[priorKey(null)];
+				return startFit(prior ? { ...req, prior } : req, (p) => (session.progress = p));
 			},
 			// The fitted record's source and given unit as the server loaded it (107_series_source.sql); undefined when it didn't say.
 			// At the calibration site: the outlet's record, or a gauge's (engine ≥ 1.41.0).
@@ -182,7 +232,21 @@
 		const { report: r, ran } = session;
 		if (!r || !ran) return;
 		const et0Daily = ran.et0Series === undefined ? undefined : await et0DailyOfValues(ran.et0Series, fitScoredThrough(r));
-		onApply(r, fitRecordFor(r, ran.settings, { ...ran, ...(et0Daily !== undefined ? { et0Daily } : {}) }));
+		// A stepwise fit (issue #555): each upstream zone's record is made on the settings its step read (its row's).
+		const zones: { nodeId: string; params: Gr4jParams; record: FitRecord }[] = [];
+		for (const st of session.steps ?? []) {
+			if (st.zoneNodeId === null) continue;
+			const sr = st.report;
+			const e = ran.et0Series === undefined ? undefined : await et0DailyOfValues(ran.et0Series, fitScoredThrough(sr));
+			const origin = ran.origins?.[calibrationSeriesKey(sr.flowKind as CalibrationFlowKind, sr.siteNodeId ?? null)];
+			const record = fitRecordFor(sr, zoneCalibrationSettings(ran.settings, st.zoneNodeId), {
+				...ran,
+				...(e !== undefined ? { et0Daily: e } : {}),
+				...(origin !== undefined ? { observedOrigin: origin } : {})
+			});
+			zones.push({ nodeId: st.zoneNodeId, params: gr4jOfParamSet(sr.params), record });
+		}
+		onApply(r, fitRecordFor(r, ran.settings, { ...ran, ...(et0Daily !== undefined ? { et0Daily } : {}) }), zones.length ? zones : undefined);
 		session.applied = true;
 	}
 
@@ -241,14 +305,27 @@
 				{/if}
 			</fieldset>
 			{@render penaltyFields?.()}
+			<!-- The regional GR4J prior (issue #622): its ranges, donors and skill are in "Regional prior" above. -->
+			<div class="field" data-testid="fit-prior">
+				<label for="{uid}-prior">Regional prior <HelpTip key="regional-prior" label="About the regional prior" /></label>
+				<select id="{uid}-prior" bind:value={session.priorUse} disabled={status === 'running'} aria-describedby="{uid}-prior-h">
+					{#each PRIOR_USES as u (u)}<option value={u}>{PRIOR_USE_LABEL[u]}</option>{/each}
+				</select>
+				<span class="hint" id="{uid}-prior-h">{priorUseHint(session.priorUse)}</span>
+				{#if session.priorUse === 'penalty' || session.priorUse === 'both'}
+					<label for="{uid}-prior-w">Penalty weight</label>
+					<NumberInput id="{uid}-prior-w" min={0.01} max={PRIOR_MAX_WEIGHT} step={0.05} bind:value={session.priorWeight} disabled={status === 'running'} aria-describedby="{uid}-prior-w-h" aria-invalid={priorProblem ? 'true' : undefined} />
+					<span class="hint" class:explain={!priorProblem} id="{uid}-prior-w-h">{priorProblem ?? 'In score units: at 0.1, a parameter at its p10 or p90 costs about 0.08 of KGE′. Provisional default 0.1.'}</span>
+				{/if}
+			</div>
 		</div>
-		<Fold name="Search:" line={searchSummary({ bounds: session.bounds, budget: session.budget, starts: session.starts, seed: session.seed })} testid="fit-search" lineTestid="fit-search-summary">
+		<Fold name="Search:" line={searchSummary({ bounds: fitBoundsOf(session.priorUse, session.bounds), budget: session.budget, starts: session.starts, seed: session.seed })} testid="fit-search" lineTestid="fit-search-summary">
 			<div class="field">
 				<label for="{uid}-bounds">Bounds <HelpTip key="calibration-bounds" /></label>
-				<select id="{uid}-bounds" bind:value={session.bounds} disabled={status === 'running'} aria-describedby="{uid}-bounds-h">
+				<select id="{uid}-bounds" bind:value={session.bounds} disabled={status === 'running' || priorBox} aria-describedby="{uid}-bounds-h">
 					{#each CALIBRATION_BOUNDS as b (b)}<option value={b}>{BOUNDS_LABEL[b]}</option>{/each}
 				</select>
-				<span class="hint" id="{uid}-bounds-h">{boundsHint(session.bounds)}</span>
+				<span class="hint" id="{uid}-bounds-h">{priorBox ? 'Set aside: the fit searches the regional prior’s p10–p90 box (Regional prior, above).' : boundsHint(session.bounds)}</span>
 			</div>
 			<div class="field">
 				<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
@@ -299,8 +376,8 @@
 				>
 					<span style:width="{pct}%"></span>
 				</div>
-				<p class="muted small" aria-live="polite">
-					{#if progress}{stageText(progress)}: {fmtNum(progress.evaluations)} of {fmtNum(progress.budget)} runs · best {fmtNum(progress.best, 3)}{:else}Starting…{/if}
+				<p class="muted small" aria-live="polite" data-testid="fit-progress-line">
+					{#if stepOf}Step {stepOf.step} of {stepOf.steps} ({stepOf.zoneNodeId === null ? 'the calibration site' : 'an upstream zone'}) · {/if}{#if progress}{stageText(progress)}: {fmtNum(progress.evaluations)} of {fmtNum(progress.budget)} runs · best {fmtNum(progress.best, 3)}{:else}Starting…{/if}
 				</p>
 				<p class="muted small">You can open other tabs while it runs; the fit carries on and its result waits here.</p>
 			</div>
@@ -310,7 +387,55 @@
 
 		{#if report}
 			<div class="result">
-				<h5>Result</h5>
+				{#if steps}
+					<!-- The stepwise fit of calibration zones (issue #555, model.md §2.10n): every step, upstream first, then the
+					     calibration site's own step in full below. Apply writes them all, as one. -->
+					<section class="steps" aria-labelledby="{uid}-steps-h" data-testid="fit-steps">
+						<h5 id="{uid}-steps-h">Steps, upstream first <HelpTip key="calibration-zones" label="About calibration zones" /></h5>
+						<p class="small muted">
+							Each zone was fitted on its own gauge’s record with the zones above it fixed at their fitted parameters, then the calibration site
+							last. Apply writes every step’s parameters and fit record.
+						</p>
+						<div class="table-wrap">
+							<table class="data compact">
+								<caption class="visually-hidden">The stepwise fit’s steps</caption>
+								<thead>
+									<tr>
+										<th scope="col">Step</th>
+										<th scope="col">Scored at</th>
+										<th scope="col" class="num">Land units</th>
+										<th scope="col">Fitted parameters</th>
+										<th scope="col" class="num">{objectiveName(report.objective)}, fit</th>
+										<th scope="col" class="num">Split-sample validation</th>
+										<th scope="col" class="num">Dry → wet validation</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each steps as st (st.key)}
+										<tr data-testid="fit-step">
+											<th scope="row">{st.step}. {st.what}</th>
+											<td>{st.name}</td>
+											<td class="num">{st.units}</td>
+											<td>{st.params}</td>
+											<td class="num">{fmtScore(st.fit)}</td>
+											<td class="num">{fmtScore(st.split)}</td>
+											<td class="num">{fmtScore(st.dsst)}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+						{#each steps.slice(0, -1) as st (st.key)}
+							{#if st.notes.length}
+								<details class="step-notes">
+									<summary>Notes on step {st.step} ({st.name}): {st.notes.length}</summary>
+									{#each st.notes as n (n)}<p class="alert alert-warning small">{n}</p>{/each}
+								</details>
+							{/if}
+						{/each}
+					</section>
+				{/if}
+				<h5>{steps ? `Step ${steps.length}: the calibration site` : 'Result'}</h5>
 				<p class="small muted">
 					{objectiveName(report.objective)} · {BOUNDS_LABEL[report.bounds].replace(' (default)', '')} bounds · seed {report.seed}{report.starts > 1 ? ` · ${report.starts} starts` : ''} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the simulated outflow
 				</p>

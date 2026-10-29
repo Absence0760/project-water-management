@@ -1,0 +1,53 @@
+{
+  "zarr_format": 3,
+  "node_type": "group",
+  "attributes": {
+    "source": "C3S seasonal-original-single-levels",
+    "licence": "CC BY 4.0, and the Additional licence to use non European contributions (CDS dataset seasonal-original-single-levels)",
+    "credit": "Contains modified Copernicus Climate Change Service information [year]. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains.",
+    "citation": "Copernicus Climate Change Service, Climate Data Store (2018): Seasonal forecast daily and subdaily data on single levels. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). DOI: 10.24381/cds.181d637e",
+    "centres": [
+      "European Centre for Medium-Range Weather Forecasts (ECMWF)",
+      "Met Office"
+    ],
+    "variable": "tp_mm",
+    "region": {
+      "w": 9.5,
+      "s": -36.5,
+      "e": 41.5,
+      "n": -7.5
+    },
+    "grid": {
+      "origin": {
+        "lat": -36,
+        "lon": 10
+      },
+      "step": 1
+    },
+    "init": "2018-09",
+    "firstDay": "2018-09-01",
+    "leadDays": 215,
+    "systems": [
+      "ecmwf-51",
+      "ukmo-604",
+      "meteo_france-9",
+      "dwd-22",
+      "cmcc-35",
+      "ncep-2",
+      "jma-3",
+      "eccc-4",
+      "eccc-5"
+    ],
+    "members": [
+      3,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+}

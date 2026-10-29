@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { DATASETS, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
+import { BLOCKED_EVAPORATION, DATASETS, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
 
 const has = () => true;
 const lacks = () => false;
@@ -56,7 +56,13 @@ describe('load: a reference load’s inputs', () => {
 		// The Southwestern Cape MAP surface: its credit is stored with the dataset and shown with the layer (docs/maps.md § MAP grid).
 		const mapGrid = { ...landCover, LOAD_KIND: 'map-grid', LOAD_KEY: 'reference/map-grid/waas-swcape.json.gz', LOAD_DATASET: 'WAAS-SWCape-2007' };
 		assert.deepEqual(loadProblems(mapGrid, lacks), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws']);
+		// SoilGrids 2.0, iSDAsoil, GRDC-Caravan and HydroATLAS are CC BY 4.0: the attribution is stored with the dataset (issue #622).
+		const soils = { ...landCover, LOAD_KIND: 'soils', LOAD_KEY: 'reference/soils/soils-d1.json.gz', LOAD_DATASET: 'SoilGrids2-iSDA-D1' };
+		assert.deepEqual(loadProblems(soils, lacks), []);
+		const donors = { ...landCover, LOAD_KIND: 'gr4j-donors', LOAD_KEY: 'reference/gr4j-donors/caravan-d1.json.gz', LOAD_DATASET: 'Caravan-D1-2026' };
+		assert.deepEqual(loadProblems(donors, lacks), []);
+		assert.match(loadProblems({ ...donors, LOAD_KEY: 'reference/soils/caravan-d1.json.gz' }, lacks).join('\n'), /reference\/gr4j-donors\//);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws', 'soils', 'gr4j-donors']);
 	});
 
 	it('a DWS flow table needs its reference, takes a station only as a river gauge code, and no other kind takes one', () => {
@@ -66,7 +72,8 @@ describe('load: a reference load’s inputs', () => {
 		assert.deepEqual(loadProblems({ ...dws, LOAD_STATION: 'X0H001', LOAD_KEY: 'reference/dws/page.html' }, lacks), []);
 		assert.match(loadProblems({ ...dws, LOAD_SOURCE: ' ' }, has).join('\n'), /dws needs a source/);
 		assert.match(loadProblems({ ...dws, LOAD_SOURCE: 'x'.repeat(201) }, has).join('\n'), /dws needs a source of 1 to 200/);
-		for (const station of ['X0R001', 'x0h001', 'X0H0011', 'X0H001;']) {
+		// X0E001: an evaporation station. DWS's permission covers river flow only, so its pan record can't ride in as a dws load (issue #646 item 6).
+		for (const station of ['X0R001', 'X0E001', 'x0h001', 'X0H0011', 'X0H001;']) {
 			const problems = loadProblems({ ...dws, LOAD_STATION: station }, has);
 			assert.equal(problems.length, 1, station);
 			assert.match(problems[0], /river gauge code/);
@@ -104,8 +111,26 @@ describe('load: a reference load’s inputs', () => {
 		assert.match(loadProblems({ ...tiles, LOAD_KEY: 'originals/terrain/terrain.pmtiles' }, has).join('\n'), /reference\/tiles\/<file>/);
 	});
 
+	it('refuses a modelled Class-A pan (PenPan) or any A-pan evaporation grid by its key or label; dPET still passes', () => {
+		assert.deepEqual(loadProblems(evaporation, lacks), []);
+		for (const extra of [
+			{ LOAD_KEY: 'reference/evaporation/penpan-1991-2020.json.gz' },
+			{ LOAD_DATASET: 'PenPan-1991-2020' },
+			{ LOAD_DATASET: 'apan-power' },
+			{ LOAD_KEY: 'reference/evaporation/class-a-grid.json' }
+		]) {
+			const problems = loadProblems({ ...evaporation, ...extra }, lacks);
+			assert.equal(problems.length, 1, JSON.stringify(extra));
+			assert.match(problems[0], /blocked in production until its validation .*docs\/data-sources\.md § penpan-apan/);
+		}
+		// Only evaporation: a land-cover file that happens to say "apan" is not this gate's business.
+		assert.ok(!BLOCKED_EVAPORATION.test('reference/evaporation/dpet-1991-2020.json.gz dPET-1991-2020'));
+		// A whole word only: a label that merely contains the letters (Japan, capans) is not an A-pan grid.
+		assert.ok(!BLOCKED_EVAPORATION.test('reference/evaporation/dpet-japan.json.gz dPET-capans'));
+	});
+
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {
-		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'crop-types', 'sanlc']) {
+		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'evaporation-stations', 'crop-types', 'sanlc']) {
 			const problems = loadProblems({ ...landCover, LOAD_KIND: kind }, has);
 			assert.equal(problems.length, 1);
 			assert.match(problems[0], /blocked by their licences/);

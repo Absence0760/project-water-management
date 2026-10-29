@@ -325,6 +325,40 @@ describe('delineateUnits (synthetic DEM)', () => {
 		expect(r.method).toMatch(/a unit’s boundary: its most-accumulating cell above the outlet/);
 	});
 
+	describe('the rest of the catchment beside the units’ boundaries (start-17, the hydrologist’s review F10)', () => {
+		const unit = (id: string, from: number, to: number): UnitPoint => ({ id, role: 'unit', geometry: { type: 'Polygon', coordinates: [valleyUnitRing(from, to)] } });
+		const outlet = at(OUTLET_CELL.x, OUTLET_CELL.y);
+
+		it('drains an undrawn headwater into the unit below it, not straight into the outflow', async () => {
+			// The valley's rows 110–350: Lower holds the outlet (rows 300 on), Middle above it (200–300), and the headwater above
+			// row 200 is drawn by nobody: the rest. Its water runs down the river through Middle and then Lower.
+			const r = await delineateUnits(dem, { outlet, boundary: null, points: [unit('lower', 300, 400), unit('middle', 200, 300)] });
+			const by = new Map(r.units.map((u) => [u.id, u]));
+			expect(by.get('middle')!.drainsInto).toBe('lower');
+			expect(by.get('lower')!.drainsInto).toBeNull();
+			expect(r.restDrains).toMatchObject({ into: 'middle' });
+			expect(r.restDrains!.share).toBeGreaterThan(0.95);
+			// The rest's cells are the headwater's: about the catchment less the two boundaries' cells.
+			const headwater = await delineate(dem, at(OUTLET_CELL.x, 200));
+			near(r.restDrains!.areaM2, headwater.areaM2, 0.05);
+		});
+
+		it('drains it into the outflow when no unit lies below it', async () => {
+			// Only the headwater is drawn: the rest of the valley below it reaches the outlet through no unit.
+			const r = await delineateUnits(dem, { outlet, boundary: null, points: [unit('upper', 0, 200)] });
+			expect(r.units.map((u) => [u.id, u.drainsInto])).toEqual([['upper', null]]);
+			expect(r.restDrains).toMatchObject({ into: null });
+			expect(r.restDrains!.share).toBeGreaterThan(0.95);
+		});
+
+		it('gives no rest without boundaries, and none when the boundaries hold the whole catchment', async () => {
+			expect((await delineateUnits(dem, { outlet, boundary: null, points: [point('gauge', DAM_CELL.x, DAM_CELL.y + 50, 'gauge')] })).restDrains).toBeUndefined();
+			const all = await delineateUnits(dem, { outlet, boundary: null, points: [unit('lower', 300, 400), unit('upper', 0, 300)] });
+			// The boundaries are padded past the ridge: at most the odd cell where their straight cuts meet is left over.
+			expect(all.restDrains === undefined || all.restDrains.areaM2 < 0.01 * all.catchment.areaM2).toBe(true);
+		});
+	});
+
 	it('drops a unit boundary outside the catchment, and a second one ending at the outlet, saying why', async () => {
 		const outlet = at(OUTLET_CELL.x, OUTLET_CELL.y);
 		const c = (x: number, y: number) => fixtureLonLat(x, y);
@@ -512,7 +546,17 @@ describe('delineateUnits (synthetic DEM)', () => {
 		const e2 = await delineateUnits(dem, { outlet: at(OUTLET_CELL.x, OUTLET_CELL.y), boundary: null, points: [] }, { windows: [64] }).catch((e: unknown) => e);
 		expect(e2).toBeInstanceOf(DelineationRefused);
 		expect((e2 as DelineationRefused).code).toBe('too_large');
-		expect((e2 as Error).message).toMatch(/Pick an outlet gauge further upstream, or type the units in\.$/);
+		// F11: since start-16 the areas are the boundaries', so the refusal says what still works, and where the worker goes on.
+		expect((e2 as Error).message).toMatch(/can’t order or check the units here\. Each unit’s area is its own boundary’s: set the order on the Network, or pick an outlet gauge further upstream\.$/);
+		expect((e2 as DelineationRefused).windowCells).toBe(64);
+		expect((e2 as DelineationRefused).aim).toMatchObject({ zoom: 10, cut: expect.arrayContaining([true]) });
+		// A boundary wider than the largest window: refused before routing, at that window, so the worker goes on from the next.
+		const wide = { type: 'Polygon' as const, coordinates: [valleyUnitRing(0, 400)] };
+		const e4 = await delineateUnits(dem, { outlet: null, boundary: wide, points: [] }, { windows: [64] }).catch((e: unknown) => e);
+		expect((e4 as DelineationRefused).code).toBe('too_large');
+		expect((e4 as DelineationRefused).windowCells).toBe(64);
+		expect((e4 as Error).message).toMatch(/^The catchment boundary reaches beyond the \d+ km the app routes around its outlet, so the elevation model can’t order or check the units here\. Each unit’s area is its own boundary’s: set the order on the Network\.$/);
+		expect((e4 as Error).message).not.toMatch(/Draw or type the units/);
 		// A gauge on a main stem: no gauge further upstream helps; the units are typed, or the river outlined in pieces (finding 11).
 		const e3 = await delineateUnits(dem, { outlet: at(OUTLET_CELL.x, OUTLET_CELL.y), outletMappedKm2: 340_724, boundary: null, points: [] }, { windows: [64] }).catch((e: unknown) => e);
 		expect((e3 as DelineationRefused).code).toBe('too_large');

@@ -11,11 +11,14 @@
 //        writing the unit's own rain (`rain_chirps_mm`, the series sited at the
 //        unit, 209_unit_rain_series), recorded as one History entry.
 //
-// A unit's polygon is its farm parcel on the map (map_feature.node_id): the
-// one its area was accepted from (node.area_feature_id, which the delineation
-// sets for every unit it saves), else its only parcel. A unit with several
-// parcels and none accepted is refused, since which one is its catchment is
-// the modeller's call (Use this area on the Map tab).
+// A unit's polygon (UNIT_POLYGONS_SQL, shared by the MAP for each unit, the
+// land cover and the reference cell): the area feature its area was accepted
+// from (node.area_feature_id, which Start, Divide and the delineation set for
+// every unit they save), of either area kind (a farm parcel or an *other*
+// area, as Sub-catchments from clicks saves), linked or not; else its only
+// linked farm parcel (map_feature.node_id). A unit with several parcels and
+// none accepted is refused, since which one is its catchment is the
+// modeller's call (Use this area on the Map tab).
 //
 // As with the boundary's feed, a feed never splices two areas or two products
 // into one record: an existing unit feed takes new cells (or another product)
@@ -27,6 +30,7 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
 import type { Geometry } from '../geo/geojson.js';
+import { UNIT_POLYGONS_SQL } from '../geo/unitPolygon.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { recordAudit } from '../history/record.js';
@@ -104,13 +108,13 @@ interface Plan extends UnitsProposal {
 	detail: Map<string, { feed: FeedMeta | null; series: UnitSeries | null; mark: UnitMark; targetName: string }>;
 }
 
-/** The land units (farm nodes with an area above 0) with their farm parcels on the map, in the model's order. */
+/** The land units (farm nodes with an area above 0) with their polygons on the map (UNIT_POLYGONS_SQL), in the model's order. */
 export async function loadUnits(db: Db, projectId: string): Promise<UnitRow[]> {
 	const { rows } = await db.query<UnitRow>(
 		`SELECT n.id AS "nodeId", n.name, n.area_feature_id AS "areaFeatureId",
 			(SELECT json_agg(json_build_object('id', f.id, 'geometry', f.geometry, 'areaM2', f.area_m2,
 				'updatedAt', to_char(f.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) ORDER BY f.created_at, f.id)
-			 FROM map_feature f WHERE f.project_id = n.project_id AND f.node_id = n.id AND f.kind = 'farm_parcel') AS parcels
+			 FROM map_feature f WHERE ${UNIT_POLYGONS_SQL}) AS parcels
 		 FROM node n WHERE n.project_id = $1 AND n.kind = 'farm' AND n.area_km2 > 0
 		 ORDER BY n.sort_order, n.name`,
 		[projectId]
@@ -118,7 +122,7 @@ export async function loadUnits(db: Db, projectId: string): Promise<UnitRow[]> {
 	return rows;
 }
 
-/** The unit's polygon: the parcel its area came from, else its only parcel; 'several' when it has more and none was accepted. */
+/** The unit's polygon: the area feature its area came from, else its only parcel; 'several' when it has more and none was accepted. */
 export function unitParcel(u: UnitRow): Parcel | 'several' | null {
 	const parcels = u.parcels ?? [];
 	const accepted = parcels.find((p) => p.id === u.areaFeatureId);

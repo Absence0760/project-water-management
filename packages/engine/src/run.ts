@@ -55,6 +55,7 @@ import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
 import { calibrationSiteError } from './calibrate/site';
+import { zoneCalibrationSettings } from './calibrate/zones';
 import { calibrationStats } from './network/stats';
 import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology';
 import { cmpStr } from './order';
@@ -96,6 +97,8 @@ import {
 	type ModelOutput,
 	type NetworkNode,
 	type ProjectSettings,
+	type CalibrationStats,
+	type UnitRainZoneSummary,
 	type RunSeries,
 	type SeriesKind,
 	type RunAllocationNode,
@@ -114,6 +117,7 @@ import { pairingFactors, rainStationSummary } from './runoff/stationForcing';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn, entersServiceAfter } from './network/development';
 import { forecastTail } from './forecastTail';
 import { chirpsChoiceWarnings } from './seriesChoice';
+import { mapAreaWarnings } from './mapAreas';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
 
@@ -957,6 +961,8 @@ function runNetworkIn(
 	missingRainWarning(input, settings.rainSource, aligned, start, days, window, warnings);
 	// Another CHIRPS series spans more of the run than the one it read, at the outlet or a unit (engine ≥ 1.90.0, issue #561).
 	warnings.push(...chirpsChoiceWarnings(input, start, days));
+	// A unit's area is from an earlier outline of its polygon on the map (issue #646 F6, ModelInput.mapAreas).
+	warnings.push(...mapAreaWarnings(input));
 	const posOf = (node: number) => posInOrder[node]!;
 	const curtailment = computeCurtailment(
 		nodes.flatMap((node, i) => {
@@ -1027,6 +1033,9 @@ function runNetworkIn(
 				fitStatus: calibrationFitStatus(settings, calKind, calSite?.nodeId ?? null)
 			}
 		: null;
+	// Calibration statistics at each calibration zone's gauge (issue #555, docs/model.md §2.10n): its record against its
+	// simulated outflow on the zone's own window and exclusions, each in or out of sample by the zone's own fit record.
+	const calibrationZones = zoneCalibrationStats(nf.unitRain?.zones, settings, series, start, days, sim.nodes, nodes, startDate);
 	if (!calKind) warnings.push(warn('calibration.noObserved', {}, 'no observed flow series: calibration statistics not computed'));
 	else if (calibration && calibration.days === 0) {
 		warnings.push(
@@ -1290,6 +1299,7 @@ function runNetworkIn(
 			...(nf.unitRain ? { unitRain: nf.unitRain } : {}),
 			...(stationSummary ? { stations: stationSummary } : {}),
 			calibration,
+			...(calibrationZones.length ? { calibrationZones } : {}),
 			curtailment,
 			ewrCompliance: compliance,
 			ewrSplit: built.ewrSplit.info,
@@ -1472,6 +1482,48 @@ function runCalibrationSite(input: ModelInput, siteNodeId: string | null, outflo
 		return null;
 	}
 	return { node, nodeId: siteNodeId };
+}
+
+/**
+ * Calibration statistics at each calibration zone's gauge (issue #555, docs/model.md §2.10n), upstream first as
+ * summary.unitRain.zones lists them (the site's own zone is `calibration`, so it is left out here): the gauge's
+ * record (the row's, else its first) against its simulated outflow, on the zone's own window and exclusions, with
+ * `fitStatus` by the zone's own fit record and parameters (zoneCalibrationSettings), so each site is in or out of
+ * sample on its own. A zone whose gauge has no record is left out. [] when the run applied no zone.
+ */
+function zoneCalibrationStats(
+	zones: readonly UnitRainZoneSummary[] | undefined,
+	settings: ProjectSettings,
+	series: NonNullable<ModelInput['series']>,
+	start: number,
+	days: number,
+	results: readonly NodeResult[],
+	nodes: readonly NetworkNode[],
+	startDate: string
+): CalibrationStats[] {
+	const out: CalibrationStats[] = [];
+	for (const z of zones ?? []) {
+		if (z.nodeId === null) continue;
+		const node = nodes.findIndex((n) => n.id === z.nodeId);
+		const kinds = calibrationRecordsAt(series, z.nodeId);
+		if (node < 0 || !kinds.length) continue;
+		const zs = zoneCalibrationSettings(settings, z.nodeId);
+		const kind = zs.calibrationFlowKind && kinds.includes(zs.calibrationFlowKind) ? zs.calibrationFlowKind : kinds[0]!;
+		out.push({
+			...calibrationStats(results[node]!.outflow, alignFlow(series[calibrationSeriesKey(kind, z.nodeId)], start, days), {
+				startDate,
+				windowStart: zs.calibrationStart,
+				windowEnd: zs.calibrationEnd,
+				exclusions: exclusionRanges(zs.calibrationExclusions)
+			}),
+			flowKind: kind,
+			simulatedKey: 'simulated_outflow',
+			siteNodeId: z.nodeId,
+			siteName: z.name,
+			fitStatus: calibrationFitStatus(zs, kind, z.nodeId)
+		});
+	}
+	return out;
 }
 
 /**

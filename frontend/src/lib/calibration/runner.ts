@@ -2,7 +2,20 @@
 // terminates it at once (the engine loop is synchronous, so the worker can't
 // be asked to stop; nothing it found is kept, and the worker itself never
 // saves anything).
-import type { CalibrationProgress, CalibrationReport, EnsembleProgress, EnsembleResult, PairedResult, SensitivityResult } from '@water-management/engine';
+import {
+	gr4jOfParamSet,
+	withZoneParams,
+	type CalibrationPrior,
+	type CalibrationProgress,
+	type CalibrationReport,
+	type EnsembleProgress,
+	type EnsembleResult,
+	type PairedResult,
+	type SensitivityResult,
+	type StepwiseProgress,
+	type ZoneFitPlanStep,
+	type ZoneFitStep
+} from '@water-management/engine';
 import type { EnsembleJob, EnsembleWorkerMessage } from './ensemble';
 import type { FitRequest, WorkerMessage } from './fit';
 import type { SensitivityJob, SensitivityWorkerMessage } from './sensitivity';
@@ -11,7 +24,10 @@ import type { SensitivityJob, SensitivityWorkerMessage } from './sensitivity';
 import autocalWorkerUrl from 'virtual:autocal-worker-url';
 
 export interface FitHandle {
+	/** The fit's report: under calibration zones, the last step's (the calibration site's own zone). */
 	result: Promise<CalibrationReport>;
+	/** A stepwise fit's every step, upstream first (issue #555); absent for one fit. Settles with `result`. */
+	steps?: Promise<ZoneFitStep[]>;
 	cancel(): void;
 }
 
@@ -59,6 +75,47 @@ export function startFit(req: FitRequest, onProgress: (p: CalibrationProgress) =
 		if (m.type === 'progress') onProgress(m.progress);
 		else if (m.type === 'done') done(m.report);
 	});
+}
+
+/**
+ * The stepwise fit of calibration zones (issue #555, engine calibrateStepwise, docs/model.md §2.10n), one worker per
+ * step, upstream first: each step fits its zone on the input with the zones before it at their fitted parameters, as
+ * the engine's calibrateStepwise does. cancel() stops the step running and every one after it.
+ */
+export function startStepwiseFit(
+	req: FitRequest,
+	plan: readonly ZoneFitPlanStep[],
+	onProgress: (p: StepwiseProgress) => void,
+	/** The regional prior per step, built for that step's zone (issue #622), by priorKey: each zone takes its own, never the catchment's. */
+	priors?: Readonly<Record<string, CalibrationPrior>>
+): FitHandle {
+	let current: FitHandle | null = null;
+	let cancelled = false;
+	const run = async (): Promise<ZoneFitStep[]> => {
+		const done: ZoneFitStep[] = [];
+		let input = req.input;
+		for (const [i, step] of plan.entries()) {
+			if (cancelled) throw new FitCancelled();
+			const { prior: _one, ...rest } = req;
+			const prior = priors?.[step.zoneNodeId ?? ''];
+			current = startFit({ ...rest, input, ...(step.zoneNodeId !== null ? { zone: step.zoneNodeId } : {}), ...(prior ? { prior } : {}) }, (p) =>
+				onProgress({ ...p, step: i + 1, steps: plan.length, zoneNodeId: step.zoneNodeId })
+			);
+			const report = await current.result;
+			done.push({ ...step, report });
+			if (step.zoneNodeId !== null) input = withZoneParams(input, step.zoneNodeId, gr4jOfParamSet(report.params));
+		}
+		return done;
+	};
+	const steps = run();
+	return {
+		steps,
+		result: steps.then((s) => s[s.length - 1]!.report),
+		cancel() {
+			cancelled = true;
+			current?.cancel();
+		}
+	};
 }
 
 export interface EnsembleHandle<R> {

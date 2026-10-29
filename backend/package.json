@@ -32,6 +32,7 @@
 		"reproduce:pack": "tsx ../scripts/reproduce-pack/reproduce-pack.ts",
 		"import:quaternaries": "tsx scripts/import-quaternaries.ts",
 		"import:gauge-stations": "tsx scripts/import-gauge-stations.ts",
+		"import:evaporation-stations": "tsx scripts/import-evaporation-stations.ts",
 		"import:rivers": "tsx scripts/import-rivers.ts",
 		"import:dam-register": "tsx scripts/import-dam-register.ts",
 		"gen:dem-fixture": "tsx scripts/dem-fixture.ts",
@@ -45,6 +46,9 @@
 		"import:gazetteer": "tsx scripts/import-gazetteer.ts",
 		"import:dws": "tsx scripts/import-dws.ts",
 		"import:waterbodies": "tsx scripts/import-waterbodies.ts",
+		"import:soils": "tsx scripts/import-soils.ts",
+		"import:gr4j-donors": "tsx scripts/import-gr4j-donors.ts",
+		"fit-donors": "tsx scripts/fit-donors.ts",
 		"dams:run": "tsx scripts/dams-run.ts"
 	},
 	"dependencies": {

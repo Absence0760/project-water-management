@@ -1,0 +1,71 @@
+{
+  "zarr_format": 3,
+  "node_type": "array",
+  "shape": [
+    9,
+    3,
+    215,
+    29,
+    32
+  ],
+  "data_type": "float32",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        215,
+        29,
+        32
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "codecs": [
+    {
+      "name": "bytes",
+      "configuration": {
+        "endian": "little"
+      }
+    },
+    {
+      "name": "gzip",
+      "configuration": {
+        "level": 6
+      }
+    }
+  ],
+  "fill_value": "NaN",
+  "dimension_names": [
+    "system",
+    "member",
+    "lead_day",
+    "lat",
+    "lon"
+  ],
+  "attributes": {
+    "units": "mm/day",
+    "long_name": "daily precipitation (de-accumulated from C3S total_precipitation)",
+    "firstDay": "2018-09-01",
+    "leadDays": 215,
+    "region": {
+      "w": 9.5,
+      "s": -36.5,
+      "e": 41.5,
+      "n": -7.5
+    },
+    "grid": {
+      "origin": {
+        "lat": -36,
+        "lon": 10
+      },
+      "step": 1
+    }
+  }
+}

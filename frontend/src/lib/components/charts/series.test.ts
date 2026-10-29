@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import uPlot from 'uplot';
-import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, laneRoom, logFloor, panWindow, printScale, TIME_TICKS } from './series';
+import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, focusWindow, isolatedIndices, laneRoom, logFloor, panWindow, printScale, TIME_TICKS } from './series';
 
 describe('printScale', () => {
 	it('lays a chart out twice as large on a 1× screen, so its canvas has 2 device pixels per CSS pixel', () => {
@@ -123,6 +123,31 @@ describe('bandSpan (the forecast band, WP-2.12)', () => {
 		expect(bandSpan({ from: '2026-09-01', to: '2026-09-10' }, x)).toBeNull();
 		expect(bandSpan({ from: '2026-09-21' }, [])).toBeNull();
 		expect(bandSpan({ from: 'not a date' }, x)).toBeNull();
+	});
+});
+
+describe('focusWindow (a period a link opens the chart on)', () => {
+	const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 1000;
+	const lo = day('2010-01-01');
+	const hi = day('2020-12-31');
+
+	it('shows a short period with 30 days on each side', () => {
+		expect(focusWindow({ start: '2015-03-10', end: '2015-03-12' }, lo, hi)).toEqual({ min: day('2015-02-08'), max: day('2015-04-11') });
+	});
+
+	it('pads a long period by its own length, so it fills a third of the view', () => {
+		expect(focusWindow({ start: '2015-01-01', end: '2015-04-10' }, lo, hi)).toEqual({ min: day('2014-09-23'), max: day('2015-07-19') });
+	});
+
+	it('is clipped to the data at both ends', () => {
+		expect(focusWindow({ start: '2010-01-05', end: '2010-01-06' }, lo, hi)).toEqual({ min: lo, max: day('2010-02-05') });
+		expect(focusWindow({ start: '2020-12-30', end: '2020-12-31' }, lo, hi)).toEqual({ min: day('2020-11-30'), max: hi });
+	});
+
+	it('is null for a period outside the data, backwards, or not a date', () => {
+		expect(focusWindow({ start: '2021-02-01', end: '2021-02-03' }, lo, hi)).toBeNull();
+		expect(focusWindow({ start: '2015-03-12', end: '2015-03-10' }, lo, hi)).toBeNull();
+		expect(focusWindow({ start: 'soon', end: '2015-03-10' }, lo, hi)).toBeNull();
 	});
 });
 
