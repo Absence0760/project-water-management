@@ -95,7 +95,7 @@ Every job that fetches from an upstream:
 | [dws-evaporation](#dws-evaporation) | DWS evaporation station records (Class-A and Symons pans, verified daily) | built (#646 item 6); blocked in production until DWS's permission covers them (synthetic stations in dev, CI and e2e) | `www.dws.gov.za` (the operator's request; never fetched) | – | `backend/src/geo/dwsEvaporation.ts`, `backend/src/geo/evaporationStations.ts`, `pnpm import:evaporation-stations` |
 | [era5-land](#era5-land) | ERA5-Land daily precipitation | built R4-A; off until `era5l_enabled` (the operator's CDS key first) | `cds.climate.copernicus.eu` (backfill too) | – | `ingest/era5land.py`, `infra/era5land.tf` |
 | [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS 15-day precipitation (0.1°) | built (R4-C); the copy's job off in production until `ecmwf_enabled` | `ecmwf-forecasts.s3.eu-central-1.amazonaws.com` | `ecmwf_ens` | `ingest/ecmwf.py` (the copy), `ingest/ecmwf_qm_fit.py` (the fit), `backend/src/feeds/fromMirrorEcmwf.ts` (feeds read it) |
-| [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | the copy built (R4-D), off until `imerg_enabled` (needs the operator's Earthdata token) | `cmr.earthdata.nasa.gov`, `opendap.earthdata.nasa.gov` | – | `ingest/imerg.py`, `infra/imerg.tf` |
+| [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | the copy built (R4-D), off until `imerg_enabled` (needs the operator's Earthdata login or token) | `cmr.earthdata.nasa.gov`, `opendap.earthdata.nasa.gov`, `urs.earthdata.nasa.gov` (token API, stored login only) | – | `ingest/imerg.py`, `infra/imerg.tf` |
 | [sanlc](#sanlc) | SANLC orchard and vine classes | built R5-D; blocked in production until its terms are recorded (synthetic grid in dev, CI and e2e) | `egis.environment.gov.za` | `crop_type_dataset` | `pnpm import:crop-types` |
 | [agera5](#agera5) | AgERA5 v2.0 daily FAO-56 reference ET | built R5-E; the copy's job off in production until `agera5_enabled` (the CDS key is ERA5-Land's) | `cds.climate.copernicus.eu` | `agera5_et0` | `ingest/agera5.py` (the copy), `backend/src/feeds/fromMirrorEt0.ts` (feeds read it), `infra/agera5.tf` |
 | [nasa-power](#nasa-power) | NASA POWER daily weather, our FAO-56 ET₀ from it (AgERA5's fallback) | built R5-E; off until `power_et0_enabled` | `power.larc.nasa.gov` | – (read by `agera5_et0` feeds) | `ingest/nasapower.py`, `ingest/fao56.py`, `infra/agera5.tf` |
@@ -416,7 +416,12 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
 - **Hosts:** `cmr.earthdata.nasa.gov` (the granule search, no sign-in) and
   `opendap.earthdata.nasa.gov` (Hyrax OPeNDAP in AWS us-west-2, behind an
   Earthdata Login bearer token). The whole file is also on
-  `data.gesdisc.earthdata.nasa.gov`; we don't fetch it.
+  `data.gesdisc.earthdata.nasa.gov`; we don't fetch it. With the login
+  stored instead of a token, `urs.earthdata.nasa.gov`'s user token API
+  (`/api/users/tokens`, `/api/users/token`, `/api/users/revoke_token`, HTTP
+  Basic; [EDL](https://urs.earthdata.nasa.gov/documentation/for_users/user_token),
+  read 2026-10-28) too: one list a run, a create only when the token in use
+  has 7 days or fewer left, paced at one a second (`ingest/earthdata.py`).
 - **Licence:** NASA's data use guidance says data from a NASA-led mission is
   CC0 unless marked otherwise
   ([Earthdata](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance),
@@ -434,8 +439,9 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   day's version, and the citation is given once per version the values
   carry; where it shows: as ERA5-Land's, [below](#era5-land-r4-a).
 - **Contact:** GES DISC user services (the help link on disc.gsfc.nasa.gov)
-  and the Earthdata forum. Needs an Earthdata Login account and a user token
-  (operator step, docs/deployment.md § IMERG Late).
+  and the Earthdata forum. Needs an Earthdata Login account, with its login
+  (the job renews its own token) or a user token (60 days, rotated by hand)
+  in the secret (operator step, docs/deployment.md § IMERG Late).
 - **Access pattern:** the mirror-ingest Lambda, 4 times a day
   (`{"product":"imerg_late","mode":"recent"}`): one CMR search for the
   last 10 days, then for each day not held from the same granule one

@@ -1866,7 +1866,8 @@ EventBridge, daily
   entry carries its version (`V07`, later `V08`), since bias correction is
   fitted per version. One CMR search a run names the granules and GES
   DISC's OPeNDAP returns region D1 only, with an Earthdata token read from
-  Secrets Manager (`ingest/imerg.py`, `infra/imerg.tf`, off until
+  Secrets Manager, or got from Earthdata Login's token API with the login
+  stored there (`ingest/imerg.py`, `ingest/earthdata.py`, `infra/imerg.tf`, off until
   `imerg_enabled`). Nothing reads it yet: the engine will take a day from
   it only where CHIRPS has no preliminary value (R4-B).
 - **Products and grids** (issue #604 R4-B; `mirror/grid.ts`

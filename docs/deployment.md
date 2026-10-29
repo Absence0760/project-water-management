@@ -1548,8 +1548,8 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
   Its role may get, put, list and delete in the mirror bucket only, send to
   its DLQ, write its own log group, pull its own image, and publish metrics
   in the `water-management/Mirror` namespace only. No database; its one
-  secret is IMERG's Earthdata token (§ IMERG Late), read at run time by the
-  ARN in `EARTHDATA_TOKEN_SECRET_ARN`.
+  secret is IMERG's Earthdata login or token (§ IMERG Late), read at run
+  time by the ARN in `EARTHDATA_TOKEN_SECRET_ARN` and never written back.
   Its 2 reserved executions come out of the account's Lambda concurrency
   quota (infra/README.md § Operator steps).
 - **Schedules:** one EventBridge rule per product, daily (`rnl` at 02:00
@@ -1909,12 +1909,28 @@ ingest Lambda, from `infra/imerg.tf`: a rule 4 times a day (04:40, 10:40,
 16:40, 22:40 UTC) sending `{"product":"imerg_late","mode":"recent"}`. A run
 asks CMR which granules exist (no sign-in), then GES DISC's OPeNDAP service
 for region D1 of each day it doesn't hold, with an Earthdata Login token.
-Off until `imerg_enabled`, which needs the token first.
+Off until `imerg_enabled`, which needs the secret filled first.
 
-**The token.** Terraform creates the secret `water-management/ingest/earthdata-token`
+**The credential.** Terraform creates the secret `water-management/ingest/earthdata-token`
 with no value and gives the ingest role `GetSecretValue` on it alone; the
-token itself never passes through Terraform, the repo or a chat. Once,
-by the operator:
+value never passes through Terraform, the repo or a chat. It holds either:
+
+- **the login** (preferred), JSON `{"username": "…", "password": "…"}`: each
+  run gets its token itself from Earthdata Login's token API
+  (`ingest/earthdata.py`; https://urs.earthdata.nasa.gov/documentation/for_users/user_token):
+  it lists the account's tokens and uses the one that lasts longest, and
+  when none has more than 7 days left it creates a new one. Earthdata Login
+  lets an account hold 2 tokens; at that limit the job revokes the one that
+  ends first (by then within 7 days of its end) and creates again, so **keep
+  this account for the job alone** and don't rely on its tokens elsewhere.
+  The token stays in the run's memory: it is never written back to the
+  secret (the role can only read it). Nothing to rotate. An account with
+  multi-factor sign-in may not accept the API's Basic auth; the run then
+  fails saying so, and the secret needs a bare token instead.
+- **a bare user token** (the original format, still read as before): valid
+  for 60 days, rotated by hand (below).
+
+Once, by the operator:
 
 1. **An Earthdata Login account** at https://urs.earthdata.nasa.gov, on the
    estate's owner identity (`~/github/project-mgmt/docs/vendor-accounts.md`
@@ -1922,14 +1938,19 @@ by the operator:
 2. **Approve GES DISC's application**: Profile → Applications → Authorized
    Apps → Approve More Applications → "NASA GESDISC DATA ARCHIVE", and agree
    to its terms. Without it every request answers 401.
-3. **Create a user token**: Profile → Generate Token. It is valid for 60
-   days. Save it to a file only you can read, for example
-   `~/earthdata-token` with mode 0600, and never print it.
+3. **Write the login to a file only you can read**, never on the command
+   line (it would land in the shell history): create it empty with mode 0600,
+   `install -m 600 /dev/null $HOME/earthdata-login.json`, then open it in an
+   editor and type `{"username": "<your EDL username>", "password": "<its password>"}`
+   (one JSON object, those two keys only). Don't print it.
+   (*Bare token instead:* Profile → Generate Token, saved the same way to
+   `$HOME/earthdata-token`; use that file name below.)
 4. **Put it in the secret**, from that file, with the prod profile
-   (`aws sso login` first):
-   `aws secretsmanager put-secret-value --secret-id water-management/ingest/earthdata-token --secret-string file://$HOME/earthdata-token && shred -u $HOME/earthdata-token`.
+   (`aws sso login` first), and shred the file:
+   `aws secretsmanager put-secret-value --secret-id water-management/ingest/earthdata-token --secret-string file://$HOME/earthdata-login.json && shred -u $HOME/earthdata-login.json`.
    Check without reading it back: `aws secretsmanager describe-secret --secret-id water-management/ingest/earthdata-token --query VersionIdsToStages`
-   shows one `AWSCURRENT` version.
+   shows one `AWSCURRENT` version. Switching from a stored token to the login
+   (or back) is the same two steps; the next run reads the new value.
 5. **Check one real CMR granule record first.** The job (`imerg.py`
    `parse_search`) requires each granule's `RelatedUrls` to hold **exactly
    one** URL starting `https://opendap.earthdata.nasa.gov/`, and refuses
@@ -1945,16 +1966,21 @@ by the operator:
 6. **Turn it on**: `imerg_enabled = true` in the prod tfvars (with an
    `ingest_image_tag` whose release has `ingest/imerg.py`), `terraform plan`,
    then apply with the operator's go-ahead. That creates the rule, its
-   target and permission, and the `mirror-lag-imerg-late` alarm.
+   target and permission, and the `mirror-lag-imerg-late` and
+   `earthdata-token-expiring` alarms.
 7. **First run** without waiting for the schedule:
    `aws lambda invoke --function-name water-management-mirror-ingest --cli-binary-format raw-in-base64-out --payload '{"product":"imerg_late","mode":"recent"}' /tmp/imerg.json && cat /tmp/imerg.json`
    should list 10 days `copied`, each with `"version": "V07"`. A 401 means
-   step 2 or the token is wrong (below).
+   step 2, the login or the token is wrong (below).
 
-**Rotating the token** every 60 days (put a reminder in the calendar when
-creating it): repeat steps 3 and 4; the next run reads the new value. A run
-that met a 401 or 403 wrote `ingest-state/imerg_late/refused.json` and asks
-nothing more that UTC day; after fixing the token the same day, remove it:
+**Rotating.** With the login stored, nothing: each run renews the token
+before its last 7 days. With a bare token, every 60 days: repeat steps 3
+and 4 with a new token (the `earthdata-token-expiring` alarm warns 10 days
+ahead), or switch to the login. A run that met a 401 or 403 (from GES DISC,
+or from Earthdata Login refusing the stored login) wrote
+`ingest-state/imerg_late/refused.json` and asks nothing more that UTC day,
+so a wrong password is tried once a day, not four times; after fixing the
+secret the same day, remove it:
 `aws s3 rm s3://<mirror bucket>/ingest-state/imerg_late/refused.json`.
 
 **Watching it.** Each run publishes `MirrorLagDays{Product=imerg_late}`,
@@ -1963,8 +1989,19 @@ the day's file lands). The `mirror-lag-imerg-late` alarm (essential tier)
 fires above `imerg_lag_alarm_days` (default 3; the day's lowest reading) on
 two days running, or when no datapoint arrives for two days. Runbook: the
 `mirror-ingest` log group and its DLQ. `refused_today` in a run's result,
-or an `HTTP 401` error, is almost always the token's 60 days running out;
-a 403 means GES DISC refused us (stop and write to them, as for CHC). An
+or an `HTTP 401` error from `opendap.earthdata.nasa.gov`, is almost always a
+stored bare token's 60 days running out; `Earthdata Login refused the stored
+username and password` means the login in the secret is wrong, its password
+changed, or the account has multi-factor sign-in (the message says which
+when Earthdata Login does); a 403 means GES DISC refused us (stop and write
+to them, as for CHC).
+Each live run also publishes `EarthdataTokenDaysLeft{Product=imerg_late}`,
+the days left on the token it used (0 when the login was refused). The
+`earthdata-token-expiring` alarm (essential tier) fires when the day's lowest
+reading is under 10: with the login stored that means renewal is broken or
+the login was refused (read the log); with a bare token, it's time to put in
+a new one. A run that publishes nothing doesn't trip it (missing data isn't
+breaching); the lag alarm catches those. An
 `ImergFormatError` means a file or CMR's answer changed shape (a new
 version's layout, say): the run stopped before writing anything wrong.
 When V08 arrives, CMR lists it beside V07 and the job takes the newer
