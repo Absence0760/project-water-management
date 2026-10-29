@@ -11,17 +11,23 @@
 	scenario on the run, which opens on Scenarios to run and compare. The
 	assistant never saves anything itself.
 	The conversation lives in the page (chat.svelte.ts), so closing the sheet
-	keeps it.
+	keeps it. Past chats are kept only in this browser (history.ts), under the
+	signed-in person and the project, and deleted on sign-out: Past chats lists
+	them, newest first, to reopen and continue one, delete one, or clear them
+	all. A reopened chat's recommended changes are read-only: the project may
+	have changed since, so the person asks again for a fresh one.
 -->
 <script lang="ts">
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import Fold from '#lib/components/common/Fold.svelte';
 	import { tick } from 'svelte';
 	import type { AssistantProposal } from '#lib/api/types.js';
-	import { fmtDay, fmtPct } from '#lib/format/number.js';
+	import { fmtDay, fmtPct, fmtWhen } from '#lib/format/number.js';
+	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { basePath } from '#lib/nav/base.js';
 	import { withSite } from '@water-management/engine';
-	import { waitText, type AssistantChat, type AssistantTurn } from './chat.svelte';
+	import { applicable, waitText, type AssistantChat, type AssistantTurn, type ProposalEntry } from './chat.svelte';
 
 	let {
 		open = $bindable(false),
@@ -40,14 +46,21 @@
 		onapply?: (proposal: AssistantProposal) => void | Promise<void>;
 	} = $props();
 
-	type ProposalEntry = AssistantTurn['proposals'][number];
-
 	/** This site's address, for the disclaimer's `{site}` (the Terms link), as liability/Disclaimer.svelte. */
 	const site = typeof location === 'undefined' ? basePath() : `${location.origin}${basePath()}`;
 
 	const EXAMPLES = ['Why does the simulated flow at the outlet not respond to rainfall?', 'Which settings would you change to improve the fit at the outlet?'];
 
+	/** Where past chats are kept, said in the panel (docs/security.md § Personal information). */
+	const KEPT_NOTE = 'Chats are kept only in this browser, and deleted when you sign out.';
+	const OFF_NOTE = 'Past chats are off: this browser isn’t keeping site data (a private window, or storage blocked).';
+
 	let draft = $state('');
+	/** The body shows Past chats in place of the conversation. */
+	let showPast = $state(false);
+	/** Said once a past chat opens, until the next question. */
+	let opened = $state<string | null>(null);
+	let pastHeading: HTMLElement | undefined = $state();
 	let box: HTMLTextAreaElement | undefined = $state();
 	let log: HTMLOListElement | undefined = $state();
 
@@ -61,6 +74,7 @@
 	/** What the screen reader hears once a turn ends (the streaming text itself isn't read out word by word). */
 	const announce = $derived.by(() => {
 		if (chat.busy) return 'The assistant is answering…';
+		if (opened) return `Opened the past chat “${opened}”.`;
 		const t = lastTurn;
 		if (t?.role !== 'assistant') return '';
 		if (t.stopped) return 'Stopped.';
@@ -101,12 +115,54 @@
 	$effect(() => {
 		if (open) void tick().then(keepFoot);
 	});
+	// Each opening reads the list again (another tab of this project may have added to it).
+	$effect(() => {
+		if (open) void chat.loadPast();
+	});
+
+	async function togglePast() {
+		showPast = !showPast;
+		await tick();
+		if (showPast) pastHeading?.focus();
+		else keepFoot();
+	}
+	async function reopen(id: string, title: string) {
+		const ok = await chat.reopen(id);
+		if (!ok) return;
+		opened = title;
+		showPast = false;
+		follow = true;
+		await tick();
+		keepFoot();
+		box?.focus();
+	}
+	async function removePast(id: string, title: string, at: number) {
+		const yes = await confirmDialog({ title: 'Delete this chat?', message: `“${title}” is deleted from this browser. This can’t be undone.`, confirmLabel: 'Delete chat', danger: true });
+		if (!yes) return;
+		await chat.remove(id);
+		await focusAfterRemove(at, '[data-testid="assistant-past-delete"]', pastHeading ?? null);
+	}
+	async function clearPast() {
+		const yes = await confirmDialog({
+			title: 'Clear past chats?',
+			message: 'Every past chat on this project is deleted from this browser, and a new conversation starts. This can’t be undone.',
+			confirmLabel: 'Clear past chats',
+			danger: true
+		});
+		if (!yes) return;
+		await chat.clearHistory();
+		await tick();
+		pastHeading?.focus();
+	}
 
 	async function send(text = draft) {
 		const q = text.trim();
 		if (!q || chat.busy || blocked) return;
 		draft = '';
 		follow = true;
+		opened = null;
+		// Asking from Past chats goes back to the conversation it continues.
+		if (showPast) showPast = false;
 		const taken = await chat.ask(q, runId);
 		// Not taken (the hourly limit, the budget, an error): the question goes back in the box.
 		if (!taken && !draft) draft = q;
@@ -119,12 +175,15 @@
 		void send();
 	}
 	async function apply(p: ProposalEntry) {
-		if (p.applying) return;
+		// A reopened past chat's change has nothing to apply (applicable: null); it is never offered.
+		const proposal = applicable(p);
+		if (p.applying || !proposal) return;
 		p.applying = true;
 		p.failed = null;
 		try {
-			await onapply?.(p.proposal);
+			await onapply?.(proposal);
 			p.applied = true;
+			void chat.persist();
 		} catch (e) {
 			p.failed = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -141,10 +200,79 @@
 </script>
 
 <Dialog bind:open title="Assistant" side>
+	<!-- Past chats, fixed over the body: one control that shows them in place of the conversation. With history
+	     off (no storage here), a quiet line says so instead. -->
+	{#snippet subhead()}
+		{#if chat.historyOff}
+			<p class="hint" data-testid="assistant-history-off">{OFF_NOTE}</p>
+		{:else if chat.past}
+			<div class="history-bar">
+				<button
+					type="button"
+					class="btn btn-sm past-toggle"
+					aria-expanded={showPast}
+					aria-controls="assistant-past"
+					onclick={togglePast}
+					data-testid="assistant-past-toggle"
+				>
+					Past chats{#if chat.past.length}<span class="count" aria-hidden="true">{chat.past.length}</span><span class="visually-hidden">{` (${chat.past.length})`}</span>{/if}
+				</button>
+			</div>
+		{/if}
+	{/snippet}
 	<!-- The conversation scrolls in the sheet's body; the question box, the budget and the disclaimer's line are the
 	     sheet's pinned foot (its actions), so they stay in view however long the conversation gets. -->
 	<div class="convo" data-testid="assistant-panel">
-		{#if chat.turns.length === 0}
+		{#if showPast && chat.past}
+			<section class="past" id="assistant-past" aria-labelledby="assistant-past-h" data-testid="assistant-past">
+				<h3 id="assistant-past-h" tabindex="-1" bind:this={pastHeading}>Past chats on this project</h3>
+				<p class="hint">{KEPT_NOTE}</p>
+				{#if chat.busy && chat.past.length}
+					<p class="hint" id="assistant-past-busy" data-testid="assistant-past-busy">Wait for the answer, or press Stop, to open another chat.</p>
+				{/if}
+				{#if chat.past.length}
+					<ul class="past-list">
+						{#each chat.past as c, i (c.id)}
+							{@const current = c.id === chat.id}
+							<li class="past-row" class:current>
+								<!-- While an answer streams, opening another chat would cut it short: offered, not taken (aria-disabled
+								     keeps it in the Tab order with its reason, ui-playbook § 3). -->
+								<button
+									type="button"
+									class="past-open"
+									data-testid="assistant-past-chat"
+									aria-current={current || undefined}
+									aria-disabled={chat.busy || undefined}
+									aria-describedby={chat.busy ? 'assistant-past-busy' : undefined}
+									onclick={() => !chat.busy && reopen(c.id, c.title)}
+								>
+									<span class="past-title">{c.title}</span>
+									<span class="past-when">{fmtWhen(c.updatedAt)}{current ? ' · open now' : ''}</span>
+								</button>
+								<button
+									type="button"
+									class="btn btn-ghost btn-sm"
+									data-testid="assistant-past-delete"
+									aria-label={`Delete the chat “${c.title}”`}
+									onclick={() => removePast(c.id, c.title, i)}>Delete</button
+								>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="past-empty" data-testid="assistant-past-empty">
+						No past chats on this project yet. Once the assistant answers, the conversation is kept here so you can open it again.
+					</p>
+				{/if}
+				<!-- The way back, beside the toggle above it: on a phone a tinted toggle alone reads as a filter. -->
+				<div class="past-foot">
+					<button type="button" class="btn btn-ghost btn-sm" onclick={togglePast}>Back to the conversation</button>
+					{#if chat.past.length}
+						<button type="button" class="btn btn-ghost btn-sm btn-danger" onclick={clearPast}>Clear past chats</button>
+					{/if}
+				</div>
+			</section>
+		{:else if chat.turns.length === 0}
 			<div class="empty">
 				<p class="intro">
 					Ask about this project’s model and results. The assistant reads the project’s data, the run you have open and
@@ -160,6 +288,7 @@
 						</li>
 					{/each}
 				</ul>
+				{#if !chat.historyOff}<p class="hint" data-testid="assistant-kept-note">{KEPT_NOTE}</p>{/if}
 			</div>
 		{:else}
 			<ol class="log" bind:this={log} aria-label="Conversation">
@@ -281,7 +410,7 @@
 <!-- The card shows only what the server accepted: its title is built from the changes (never the model's words),
      and each change's reason sits under that change's own lines. -->
 {#snippet proposal(p: ProposalEntry)}
-	{@const scenario = p.proposal.apply.kind === 'scenario'}
+	{@const scenario = p.proposal.apply?.kind === 'scenario'}
 	<section class="proposal" data-testid="assistant-proposal" data-goal={p.proposal.goal} aria-label="Recommended change">
 		<h3>Recommended change</h3>
 		<p class="summary" data-testid="assistant-proposal-title">{p.proposal.title}</p>
@@ -294,7 +423,12 @@
 			{/each}
 		</ul>
 		<p class="hint">{GOAL_NOTE[p.proposal.goal]}</p>
-		{#if p.applied}
+		{#if p.stale}
+			<!-- A reopened past chat's change: shown as it was, never applied (its settings or scenario may no longer fit). -->
+			<p class="muted small" data-testid="assistant-proposal-stale">
+				{p.applied ? 'Applied at the time. ' : ''}From a past chat, so it can’t be applied: the project may have changed since. Ask again for a fresh recommendation.
+			</p>
+		{:else if p.applied}
 			<p class="note ok" role="status">
 				{scenario ? 'Made a scenario on this run, not run yet. Run it on Scenarios and compare it with the run.' : 'Put in the settings form, not saved. Check it on Model settings, then Save.'}
 			</p>
@@ -323,6 +457,99 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+	}
+	.history-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.past-toggle[aria-expanded='true'] {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+	}
+	.count {
+		margin-left: 0.4rem;
+		padding: 0 0.4rem;
+		border-radius: 999px;
+		background: var(--accent-soft);
+		font-size: var(--font-xs);
+		font-variant-numeric: tabular-nums;
+	}
+	.past-toggle[aria-expanded='true'] .count {
+		background: var(--surface);
+	}
+	/* Past chats: a list read from the top, not settled at the foot as the conversation is. */
+	.past {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding-block: 0.25rem 0.75rem;
+	}
+	.past h3 {
+		margin: 0;
+		font-size: 0.95rem;
+	}
+	.past-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		border-top: 1px solid var(--border);
+	}
+	.past-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.25rem 0;
+		border-bottom: 1px solid var(--border);
+	}
+	.past-open {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.1rem;
+		padding: 0.4rem 0.5rem;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.past-open:hover {
+		background: var(--surface-2);
+	}
+	.past-row.current .past-open {
+		background: var(--accent-soft);
+	}
+	.past-title {
+		max-width: 100%;
+		overflow-wrap: anywhere;
+	}
+	.past-when {
+		font-size: var(--font-xs);
+		color: var(--text-muted);
+	}
+	.past-foot {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	.past-open[aria-disabled='true'] {
+		cursor: not-allowed;
+		color: var(--text-2);
+	}
+	.past-open[aria-disabled='true']:hover {
+		background: none;
+	}
+	.past-empty {
+		margin: 0;
+		color: var(--text-2);
 	}
 	.intro {
 		margin: 0 0 0.5rem;

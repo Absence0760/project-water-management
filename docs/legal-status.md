@@ -499,6 +499,20 @@ cl. 3). The licensing ones are rows in
 
 ## Change log
 
+- 2026-10-28: the assistant's past chats (issue #610). Privacy §3 no longer
+  says the conversation "is gone when you close the tab": the browser now
+  keeps a person's past chats on their device (the newest 20 a project),
+  and §8, which lists what the browser keeps, says so, with how to delete
+  them and that signing out deletes them. Nothing new reaches the operator:
+  no chat text is sent to or kept on the server (only the conversation a
+  new message already carried), so no new record we hold, no new use, no
+  new recipient or transfer. It is the same kind of on-device storage as
+  the farm view's saved copy, already in §8. A clarification of what the
+  person's own browser keeps, not a material change, so no `LEGAL_VERSION`
+  bump. *For counsel:* whether writing a person's own conversation to their
+  own device under the app's control is "processing" by the operator that
+  needs more than this notice (the app deletes it on sign-out and on an
+  ended session, and the person can delete it at any time).
 - 2026-10-27: the AI assistant (issue #610). Privacy §3 lists what is kept
   (each person's messages in the last hour and tokens per project per
   month, never the conversation), §4 the use, its lawful basis (the

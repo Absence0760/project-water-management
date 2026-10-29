@@ -5,7 +5,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '#lib/api/client.js';
 import type { AssistantProposal, AssistantRequest, AssistantStatus, AssistantStreamEvent } from '#lib/api/types.js';
-import { AssistantChat, waitText, type AssistantTurn } from './chat.svelte';
+import { AssistantChat, MAX_SENT_MESSAGES, applicable, capMessages, waitText, type AssistantTurn } from './chat.svelte';
+import { ChatHistory, type ChatRecord, type HistoryBackend } from './history';
 
 const STATUS: AssistantStatus = {
 	available: true,
@@ -213,5 +214,152 @@ describe('AssistantChat', () => {
 		expect(waitText(90)).toBe('2 min');
 		expect(waitText(3600)).toBe('1 h');
 		expect(waitText(5400)).toBe('1 h 30 min');
+	});
+});
+
+// Past chats in this browser (history.ts): each turn is kept when it ends, under the person and project; a
+// reopened chat continues with the existing send path; its changes are read-only; storage that fails turns
+// history off and the conversation carries on.
+describe('AssistantChat past chats', () => {
+	function memory(): HistoryBackend & { rows: Map<string, ChatRecord> } {
+		const rows = new Map<string, ChatRecord>();
+		return {
+			rows,
+			all: async () => [...rows.values()].map((r) => structuredClone(r)),
+			put: async (r) => void rows.set(r.key, structuredClone(r)),
+			remove: async (keys) => keys.forEach((k) => rows.delete(k))
+		};
+	}
+	const answerWith = (text: string, extra: AssistantStreamEvent[] = []) => async (_body: AssistantRequest, _signal: AbortSignal) => streamOf(sse([{ type: 'text', delta: text }, ...extra, { type: 'done' }]));
+	let n = 0;
+	function chatOn(be: HistoryBackend | null, send: (body: AssistantRequest, signal: AbortSignal) => Promise<ReadableStream<Uint8Array>> = answerWith('An answer.'), userId = 'user-a', projectId = 'p1') {
+		return new AssistantChat({
+			status: async () => structuredClone(STATUS),
+			send,
+			history: async () => (be ? new ChatHistory(be, userId, projectId) : null),
+			newId: () => `chat-${++n}`
+		});
+	}
+
+	it('keeps each answered turn, and lists it for this person only', async () => {
+		const be = memory();
+		const a = chatOn(be);
+		await a.load();
+		await a.loadPast();
+		expect(a.past).toEqual([]);
+		expect(await a.ask('Why is the outlet flat?')).toBe(true);
+		expect(a.id).not.toBeNull();
+		expect(a.past?.map((p) => p.title)).toEqual(['Why is the outlet flat?']);
+
+		// Positive control: A, on a fresh page, sees it; B on the same browser and project sees none.
+		const again = chatOn(be);
+		await again.loadPast();
+		expect(again.past?.map((p) => p.title)).toEqual(['Why is the outlet flat?']);
+		const b = chatOn(be, undefined, 'user-b');
+		await b.loadPast();
+		expect(b.past).toEqual([]);
+	});
+
+	it('reopens a past chat and continues it: the next turn sends the transcript and updates the same chat', async () => {
+		const be = memory();
+		const first = chatOn(be);
+		await first.load();
+		await first.ask('First question');
+		const id = first.id!;
+
+		const send = vi.fn(answerWith('A second answer.'));
+		const page = chatOn(be, send);
+		await page.load();
+		await page.loadPast();
+		expect(await page.reopen(id)).toBe(true);
+		expect(page.id).toBe(id);
+		expect(page.turns.map((t) => t.text)).toEqual(['First question', 'An answer.']);
+		await page.ask('A follow-up');
+		expect(send.mock.calls[0]![0].messages).toEqual([
+			{ role: 'user', content: 'First question' },
+			{ role: 'assistant', content: 'An answer.' },
+			{ role: 'user', content: 'A follow-up' }
+		]);
+		expect(page.past).toHaveLength(1);
+		expect(be.rows.get(`user-a/p1/${id}`)!.turns.map((t) => t.text)).toEqual(['First question', 'An answer.', 'A follow-up', 'A second answer.']);
+	});
+
+	it('a reopened chat’s recommended change is read-only: nothing to apply', async () => {
+		const be = memory();
+		const first = chatOn(be, answerWith('One change.', [{ type: 'proposal', proposal: PROPOSAL }]));
+		await first.load();
+		await first.ask('Recommend something');
+		const live = (first.turns[1] as AssistantTurn).proposals[0]!;
+		// Positive control: in the conversation it came in, the change applies.
+		expect(applicable(live)).toEqual(PROPOSAL);
+
+		const later = chatOn(be);
+		await later.reopen(first.id!);
+		const old = (later.turns[1] as AssistantTurn).proposals[0]!;
+		expect(old.stale).toBe(true);
+		expect(old.proposal.apply).toBeUndefined();
+		expect(applicable(old)).toBeNull();
+		expect(old.proposal.title).toBe(PROPOSAL.title);
+	});
+
+	it('deleting the open chat starts a new conversation; Clear history empties the list', async () => {
+		const be = memory();
+		const c = chatOn(be);
+		await c.load();
+		await c.ask('One');
+		const one = c.id!;
+		c.clear();
+		await c.ask('Two');
+		expect(c.past?.map((p) => p.title)).toEqual(['Two', 'One']);
+		await c.remove(c.id!);
+		expect(c.turns).toEqual([]);
+		expect(c.id).toBeNull();
+		expect(c.past?.map((p) => p.id)).toEqual([one]);
+		await c.clearHistory();
+		expect(c.past).toEqual([]);
+		expect(be.rows.size).toBe(0);
+	});
+
+	it('with no storage, history is off and the conversation still works', async () => {
+		const none = chatOn(null);
+		await none.load();
+		await none.loadPast();
+		expect(none.historyOff).toBe(true);
+		expect(none.past).toBeNull();
+		expect(await none.ask('Still there?')).toBe(true);
+		expect((none.turns[1] as AssistantTurn).text).toBe('An answer.');
+	});
+
+	it('storage that throws turns history off; the answer still shows', async () => {
+		const broken: HistoryBackend = {
+			all: () => Promise.reject(new DOMException('blocked', 'SecurityError')),
+			put: () => Promise.reject(new Error('full')),
+			remove: () => Promise.reject(new Error('blocked'))
+		};
+		const c = chatOn(broken);
+		await c.load();
+		await c.loadPast();
+		expect(c.historyOff).toBe(true);
+		expect(await c.ask('Does it answer?')).toBe(true);
+		expect((c.turns[1] as AssistantTurn).text).toBe('An answer.');
+		expect(await c.reopen('anything')).toBe(false);
+
+		// A loader that throws (IndexedDB missing in a sandboxed frame) is the same.
+		const thrower = new AssistantChat({ status: async () => structuredClone(STATUS), send: answerWith('Fine.'), history: () => Promise.reject(new Error('no idb')) });
+		await thrower.load();
+		await thrower.loadPast();
+		expect(thrower.historyOff).toBe(true);
+		expect(await thrower.ask('Hello')).toBe(true);
+	});
+
+	it('sends at most the server’s message count, starting at a question', () => {
+		const many = Array.from({ length: MAX_SENT_MESSAGES + 5 }, (_, i) => ({ role: i % 2 ? ('assistant' as const) : ('user' as const), content: `m${i}` }));
+		many.push({ role: 'user', content: 'last' });
+		const sent = capMessages(many);
+		expect(sent.length).toBeLessThanOrEqual(MAX_SENT_MESSAGES);
+		expect(sent[0]!.role).toBe('user');
+		expect(sent.at(-1)!.content).toBe('last');
+		const few = [{ role: 'user' as const, content: 'q' }];
+		expect(capMessages(few)).toBe(few);
 	});
 });

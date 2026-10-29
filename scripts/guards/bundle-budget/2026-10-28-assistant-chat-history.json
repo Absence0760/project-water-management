@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Issue #610, the assistant's past chats kept in this browser: history.ts (IndexedDB store, eviction) as its own lazy chunk loaded with the panel (~1.7 KB gzip), the panel's Past chats list, read-only cards and styles, chat.svelte.ts's history state in the page chunk, the sign-out clear, and the help guide and privacy text. Measured locally on main @ 5a9713bf9: 2204 KB by the guard, 2705578 B summed gzip; this branch 2208 KB, 2709951 B (+4373 B, rounded up to 5 KB)."
+}

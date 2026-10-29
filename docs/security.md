@@ -3830,6 +3830,29 @@ PDF someone else asked for kept the person as a recipient
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out, never restored into use without re-applying erasures: a restore re-reads `erasure_log` and the audit log's revocations on the old instance and deletes them again before traffic is back ([deployment.md § Restoring the database](./deployment.md#restoring-the-database), step 6a). The old instance's final snapshot, which never expires, is taken only if needed and deleted within 30 days | Same |
 | Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down: 90 days after the shutdown notice, so an organisation can ask for its projects back, then deleted (Privacy §7, operator agreement 10.2) | Stays in it | Stays in it |
 
+**Kept only in the browser, never on the server.** The assistant's past
+chats (issue #610, `lib/components/assistant/history.ts`): the questions,
+the answers' text, the tool lines and each recommended change as it was
+shown (never its apply payload), in the browser's IndexedDB
+(`wm-assistant-history`), keyed by the signed-in user's id and the
+project's. The newest 20 a project and about 2 MB a person; the person
+deletes one or clears a project's from the panel. Nothing of it is sent to
+the server except as the conversation a new message carries (the same as
+before), so it is not in "Download my data" and an account deletion has
+nothing of it to delete on the server. **Cleared on sign-out**: every
+sign-out path (`lib/auth/signOut.ts` `forgetSession`, which Sign out, Sign
+out everywhere, the farm view's Sign out and Delete my account all end in,
+and the terms page's Sign out) deletes the whole database
+(`historyClear.ts`), and so does the root layout when `/auth/me` answers
+401 (a session that expired or ended on another device), so the next
+person on a shared computer finds none. Another user's chats are deleted
+as soon as a different person's are read, and the list only ever shows the
+signed-in person's own. Without storage (a private window, blocked site
+data) history is off and the panel says so. Privacy §3 and §8 say it. The
+farm view's saved copy of a farm's figures is the other thing kept on the
+device (`farm/savedCopy.ts`, docs/design/farmer-view.md §9), cleared the
+same way.
+
 **Data-subject requests.**
 - **Access / export: self-service.** Account → Your data → **Download my
   data** (`GET /auth/me/export`, [api.md § Auth](./api.md)) saves one JSON
@@ -4404,7 +4427,12 @@ sends project data to a model. What goes, and what keeps it bounded:
   logging (an account setting Terraform can't pin off) would write every
   prompt and answer to CloudWatch or S3; the post-apply check fails if it is
   on (`infra/scripts/postapply-check.sh`, docs/deployment.md § The
-  assistant).
+  assistant). Past chats stay in the person's browser only, cleared on
+  sign-out ([§ Personal information](#personal-information-popia), "Kept
+  only in the browser"); a reopened chat's recommended change is kept
+  without its apply payload and shown read-only, so a patch or scenario
+  built against an older project can never be applied, and anything sent
+  again goes through the same caps and checks as a new turn.
 - **Cost.** Tokens count weighted, input + 5 × output (output costs five
   times input on Bedrock, so each cap is money at the input price). Three
   token budgets per UTC month: the project's (`ASSISTANT_TOKENS_PER_MONTH`,

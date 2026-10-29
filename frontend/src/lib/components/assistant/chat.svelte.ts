@@ -8,9 +8,15 @@
 // as a diff with Apply), then `done`. A refusal before the stream (the hourly
 // cap, the month's budget spent, the assistant off) puts the message back and
 // says why instead.
+// Past chats are kept only in this browser (history.ts, loaded with the
+// panel): each conversation is saved there when a turn ends, under the
+// signed-in person and the project, and the panel's Past chats reopens one.
+// A reopened chat's recommended changes are read-only: ask again for a fresh
+// one. Storage that fails turns history off; the conversation carries on.
 import { ApiError } from '#lib/api/client.js';
 import type { AssistantBudgetScope, AssistantRequest, AssistantStatus, AssistantStreamEvent, ChatMessage, AssistantProposal } from '#lib/api/types.js';
 import { readEvents } from './stream';
+import type { ChatHistory, ChatSummary } from './history';
 
 /** One tool the assistant used in a turn, as its `tool` events said (the label is the server's). */
 export interface ToolLine {
@@ -24,15 +30,30 @@ export interface UserTurn {
 	text: string;
 }
 
+/** A recommended change as the panel shows it; a reopened one (`stale`) has no `apply`. */
+export type ShownProposal = Omit<AssistantProposal, 'apply'> & { apply?: AssistantProposal['apply'] };
+
+/**
+ * A recommended change in a turn, applied at most once (`applied`: put in the settings form, or made a scenario).
+ * `applying` while a scenario is being created, `failed` why it wasn't. `stale`: from a past chat reopened from
+ * this browser's history, shown read-only, never applied (the project may have changed since).
+ */
+export interface ProposalEntry {
+	proposal: ShownProposal;
+	applied: boolean;
+	applying?: boolean;
+	failed?: string | null;
+	stale?: boolean;
+}
+
+/** The change Apply may act on: one from this conversation, with its apply payload; null for a reopened one. */
+export const applicable = (p: ProposalEntry): AssistantProposal | null => (p.stale || !p.proposal.apply ? null : (p.proposal as AssistantProposal));
+
 export interface AssistantTurn {
 	role: 'assistant';
 	text: string;
 	tools: ToolLine[];
-	/**
-	 * Recommended changes, each applied at most once (`applied`: put in the settings form, or made a scenario).
-	 * `applying` while a scenario is being created, `failed` why it wasn't.
-	 */
-	proposals: { proposal: AssistantProposal; applied: boolean; applying?: boolean; failed?: string | null }[];
+	proposals: ProposalEntry[];
 	/** Why the turn ended early, in words (an `error` event, or the stream cut off). */
 	error: string | null;
 	/** Stop was pressed: what came before it stays. */
@@ -54,7 +75,14 @@ export interface AssistantDeps {
 	send(body: AssistantRequest, signal: AbortSignal): Promise<ReadableStream<Uint8Array>>;
 	/** Waits (the rate limit's lifting); setTimeout by default, replaced in tests. */
 	later?: (fn: () => void, ms: number) => void;
+	/** This person's past chats on the project, in this browser (history.ts openChatHistory); null when storage is off. */
+	history?: () => Promise<ChatHistory | null>;
+	/** A new conversation's id; crypto.randomUUID by default. */
+	newId?: () => string;
 }
+
+/** The server takes at most this many messages a turn (backend/src/assistant/routes.ts MAX_MESSAGES). */
+export const MAX_SENT_MESSAGES = 200;
 
 // The server's codes for these refusals (backend/src/http/errors.ts MACHINE_ERROR_CODES; docs/api.md § Assistant).
 // A spent month, by the cap that refused it: the project's, the person's across projects, the server's in all.
@@ -75,6 +103,26 @@ export function waitText(seconds: number): string {
 	return m ? `${h} h ${m} min` : `${h} h`;
 }
 
+/** A new conversation's id. */
+function newId(): string {
+	try {
+		return crypto.randomUUID();
+	} catch {
+		return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+	}
+}
+
+/**
+ * The newest messages the server takes (MAX_SENT_MESSAGES), starting with a question: a long conversation, or a
+ * past chat continued, sends its latest part. The server then keeps the newest that fit its characters cap.
+ */
+export function capMessages(messages: ChatMessage[]): ChatMessage[] {
+	if (messages.length <= MAX_SENT_MESSAGES) return messages;
+	const kept = messages.slice(-MAX_SENT_MESSAGES);
+	while (kept.length > 1 && kept[0]!.role !== 'user') kept.shift();
+	return kept;
+}
+
 const isAbort = (e: unknown) => e instanceof DOMException ? e.name === 'AbortError' : e instanceof Error && e.name === 'AbortError';
 
 export class AssistantChat {
@@ -84,6 +132,15 @@ export class AssistantChat {
 	/** A turn is streaming. */
 	busy = $state(false);
 	refusal = $state<Refusal | null>(null);
+	/** The open conversation's id in the history: null until its first answer is kept. */
+	id = $state<string | null>(null);
+	/** This project's past chats, newest first; null until read (or with history off). */
+	past = $state.raw<ChatSummary[] | null>(null);
+	/** History is off: no storage in this browser (a private window, blocked site data), or it failed. */
+	historyOff = $state(false);
+	#history: Promise<ChatHistory | null> | null = null;
+	/** Saves run one after another, so an older one can't land after a newer. */
+	#saving: Promise<unknown> = Promise.resolve();
 	#ctrl: AbortController | null = null;
 	/** Counts refusals, so a rate limit's timer clears only its own. */
 	#refusals = 0;
@@ -149,7 +206,7 @@ export class AssistantChat {
 	async ask(text: string, runId?: string | null): Promise<boolean> {
 		const q = text.trim();
 		if (!q || this.busy || !this.available || this.spent) return false;
-		const messages = [...this.messages(), { role: 'user' as const, content: q }];
+		const messages = capMessages([...this.messages(), { role: 'user' as const, content: q }]);
 		this.refusal = null;
 		this.busy = true;
 		const ctrl = new AbortController();
@@ -181,7 +238,95 @@ export class AssistantChat {
 			// A tool still running when the turn ended didn't finish.
 			for (const t of turn.tools) if (t.status === 'start' && (turn.stopped || turn.error)) t.status = 'error';
 		}
+		// Kept unless the conversation was left meanwhile (New conversation, a past chat reopened: #leave kept it).
+		if (this.turns.includes(turn)) await this.persist();
 		return true;
+	}
+
+	/** This browser's history, opened once (null and `historyOff` when there is none). */
+	#store(): Promise<ChatHistory | null> {
+		this.#history ??= (async () => {
+			try {
+				const h = (await this.#deps.history?.()) ?? null;
+				if (!h && this.#deps.history) this.historyOff = true;
+				return h;
+			} catch {
+				this.historyOff = true;
+				return null;
+			}
+		})();
+		return this.#history;
+	}
+
+	/** Run a history call; a failure turns history off and answers `fallback`. */
+	async #withHistory<T>(fn: (h: ChatHistory) => Promise<T>, fallback: T): Promise<T> {
+		const h = await this.#store();
+		if (!h || this.historyOff) return fallback;
+		try {
+			return await fn(h);
+		} catch {
+			this.historyOff = true;
+			this.past = null;
+			return fallback;
+		}
+	}
+
+	/** Read this project's past chats (the panel does, when it opens). */
+	async loadPast(): Promise<void> {
+		const list = await this.#withHistory((h) => h.list(), null);
+		if (!this.historyOff) this.past = list;
+	}
+
+	/** Keep the open conversation in this browser's history (after each turn, and after an Apply). */
+	persist(): Promise<void> {
+		const turns = $state.snapshot(this.turns) as Turn[];
+		if (!turns.some((t) => t.role === 'assistant' && t.text.trim())) return Promise.resolve();
+		const id = (this.id ??= this.#deps.newId?.() ?? newId());
+		const run = this.#saving.then(() =>
+			this.#withHistory(async (h) => {
+				await h.save(id, turns);
+				this.past = await h.list();
+			}, undefined)
+		);
+		this.#saving = run;
+		return run;
+	}
+
+	/** Open past chat `id` in place of the conversation (stopping one that is streaming). False when it is gone. */
+	async reopen(id: string): Promise<boolean> {
+		if (id === this.id && this.turns.length) return true;
+		const turns = await this.#withHistory((h) => h.get(id), null);
+		if (!turns) {
+			await this.loadPast();
+			return false;
+		}
+		this.#leave();
+		this.turns = turns;
+		this.id = id;
+		if (this.refusal?.kind === 'error') this.refusal = null;
+		return true;
+	}
+
+	/** Delete past chat `id`; the open conversation, when it is that one, is cleared too. */
+	async remove(id: string): Promise<void> {
+		await this.#saving;
+		await this.#withHistory((h) => h.remove(id), undefined);
+		if (this.id === id) this.clear();
+		await this.loadPast();
+	}
+
+	/** Delete every past chat on this project in this browser, and start a new conversation. */
+	async clearHistory(): Promise<void> {
+		await this.#saving;
+		await this.#withHistory((h) => h.clear(), undefined);
+		this.clear();
+		await this.loadPast();
+	}
+
+	/** Leaving the open conversation: one still streaming is kept as far as it got, then stopped. */
+	#leave(): void {
+		if (this.busy) void this.persist();
+		this.stop();
 	}
 
 	/** Stop the answer streaming now; what came so far stays. */
@@ -191,8 +336,9 @@ export class AssistantChat {
 
 	/** Start a new conversation (stopping one that is streaming). */
 	clear(): void {
-		this.stop();
+		this.#leave();
 		this.turns = [];
+		this.id = null;
 		if (this.refusal?.kind === 'error') this.refusal = null;
 	}
 

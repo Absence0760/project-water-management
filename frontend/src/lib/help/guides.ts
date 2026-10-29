@@ -1250,11 +1250,20 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'Open the project and press **Assistant** in the page’s header (on a phone, under **More actions**). It shows on every page of the project when your organisation has the assistant switched on.',
+							'Open the project and press **Assistant** on the page title’s line, after **How this page works** (on a phone, its chat-bubble icon). It shows on every page of the project when your organisation has the assistant switched on.',
 							'Type a question about this project, such as “Why does the simulated flow at the outlet gauge not respond to rainfall?”, and press **Send** (or Enter).',
 							'The answer comes in as it is written. The lines above it say what the assistant read to answer: the network, a series, the run’s summary, a gauge’s fit or the help guides.',
 							'Ask a follow-up in the same box: the assistant sees the whole conversation. **Stop** ends an answer early; **New conversation** starts again.'
 						]
+					},
+					{
+						type: 'p',
+						text: '**Past chats**, at the top of the panel, lists your earlier conversations on this project, newest first. Open one to read it or carry on asking; **Delete** removes one, **Clear past chats** all of them. A recommended change in a past chat can’t be applied, since the project may have changed since: ask again for a fresh one.'
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'Past chats are kept only in this browser, on this device: they never reach our servers, and signing out deletes them, so the next person on a shared computer sees none. In a private window, or with site data blocked, there are no past chats.'
 					},
 					{
 						type: 'p',
@@ -1299,7 +1308,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Each person can send a set number of messages an hour. Past it, the panel says how long to wait.',
 							'Each project has a monthly budget, shown under the box. Once it is used up the assistant rests until the date shown.',
-							'Nothing you type is kept: the conversation lasts while the project is open in your browser.'
+							'Nothing you type is kept on our servers. Your browser keeps your 20 newest chats on each project until you delete them or sign out.'
 						]
 					}
 				]

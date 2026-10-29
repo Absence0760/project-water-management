@@ -176,6 +176,58 @@ describe('AssistantPanel', () => {
 		expect(html(chat({ refusal: { kind: 'budget', scope: 'total', message: 'Spent' } }))).toContain('This server’s assistant budget for the month is used up.');
 	});
 
+	it('says chats are kept only in this browser, and offers Past chats with their count once read', () => {
+		const empty = html(chat());
+		expect(empty).toContain('Chats are kept only in this browser, and deleted when you sign out.');
+		// Not read yet: no Past chats control.
+		expect(empty).not.toContain('data-testid="assistant-past-toggle"');
+		const c = chat();
+		c.past = [
+			{ id: 'a', title: 'First', updatedAt: '2026-10-28T08:00:00Z' },
+			{ id: 'b', title: 'Second', updatedAt: '2026-10-27T08:00:00Z' }
+		];
+		const out = html(c);
+		// Svelte's server output marks the {#if} block with comments (<!--[-->): strip them until none is left.
+		let bare = out;
+		for (let prev = ''; prev !== bare; ) {
+			prev = bare;
+			bare = bare.replace(/<!--[^>]*-->/g, '');
+		}
+		expect(bare).toMatch(/data-testid="assistant-past-toggle"[^>]*>\s*Past chats<span class="count[^"]*" aria-hidden="true">2<\/span><span class="visually-hidden"> \(2\)<\/span>/);
+		expect(out).toMatch(/aria-expanded="false"[^>]*aria-controls="assistant-past"|aria-controls="assistant-past"[^>]*aria-expanded="false"/);
+	});
+
+	it('says history is off once, not in both the bar and the empty state', () => {
+		const c = chat();
+		c.historyOff = true;
+		expect(html(c).match(/Past chats are off/g)).toHaveLength(1);
+	});
+
+	it('with history off, says so quietly instead of offering Past chats', () => {
+		const c = chat();
+		c.historyOff = true;
+		const out = html(c);
+		expect(out).toContain('data-testid="assistant-history-off"');
+		expect(out).toContain('Past chats are off: this browser isn’t keeping site data');
+		expect(out).not.toContain('data-testid="assistant-past-toggle"');
+		expect(out).not.toContain('Chats are kept only in this browser');
+	});
+
+	it('shows a past chat’s recommended change read-only: no Apply, ask again for a fresh one', () => {
+		const { apply: _apply, ...shown } = PROPOSAL;
+		void _apply;
+		for (const applied of [false, true]) {
+			const out = html(chat({ turns: [{ role: 'user', text: 'Recommend' }, answer({ proposals: [{ proposal: shown, applied, stale: true }] })] }));
+			expect(out).toContain(esc(PROPOSAL.title));
+			expect(out).toContain('350 mm → 420 mm');
+			expect(out).not.toContain('Apply to the settings form');
+			expect(out).not.toContain('Try it as a scenario');
+			expect(out).not.toContain('not saved');
+			expect(out).toContain('From a past chat, so it can’t be applied');
+			expect(out.includes('Applied at the time.')).toBe(applied);
+		}
+	});
+
 	it('shows a turn that ended early, and a question that wasn’t sent', () => {
 		const out = html(chat({ refusal: { kind: 'error', message: 'Could not reach the server' }, turns: [{ role: 'user', text: 'Q' }, answer({ text: 'Half', error: 'The answer stopped before it finished. Ask again.', done: false })] }));
 		expect(out).toContain('The answer stopped before it finished. Ask again.');

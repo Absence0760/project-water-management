@@ -13,6 +13,7 @@
 	import { askForCode, freshCode } from '#lib/auth/freshCode.svelte.js';
 	import { isLandingRoot, isPublicPath, isTranslatedPath, LANDING_ROUTE, landingPath, routeAccess, session, STATIC_ROUTES, termsGateApplies } from '#lib/auth/session.svelte.js';
 	import { dropProjectPage, startProjectPage } from '#lib/workspace/firstLoad.js';
+	import { clearAllChatHistory } from '#lib/components/assistant/historyClear.js';
 	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
 	import { followRetry } from '#lib/components/common/loadState.js';
 	import { pageStart } from '#lib/a11y/focusPage.js';
@@ -52,7 +53,12 @@
 			session.user = await api.auth.me();
 		} catch (e) {
 			dropProjectPage();
-			if (e instanceof ApiError && e.status === 401) session.user = null;
+			if (e instanceof ApiError && e.status === 401) {
+				session.user = null;
+				// Signed out without a sign-out here (the session expired, or ended on another device): the
+				// assistant's past chats go as a sign-out would take them (assistant/historyClear.ts).
+				clearAllChatHistory();
+			}
 			else bootError = e instanceof Error ? e.message : String(e);
 		}
 		session.checked = true;
