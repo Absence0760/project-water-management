@@ -72,7 +72,9 @@ describe('the data credits', () => {
 		expect(backend('geo/rainMap.ts')).toContain(`WAAS_MAP_ATTRIBUTION = '${WAAS_MAP_STATEMENT}'`);
 		// The dam observations' credits (issue #604 R5, #624): DE Africa's, and Copernicus's for the Sentinel views.
 		expect(backend('dams/observed/upstream.ts')).toContain(`DEAFRICA_ATTRIBUTION = '${DEAFRICA_STATEMENT}'`);
-		expect(backend('dams/observed/upstream.ts')).toContain(`SENTINEL_ATTRIBUTION = '${SENTINEL_STATEMENT}'`);
+		// Copernicus's is defined once, in the engine's leaf module, and the backend re-exports it.
+		expect(readFileSync(new URL('../../../../../packages/engine/src/evidence/sentinelCredit.ts', import.meta.url), 'utf8')).toContain(`SENTINEL_CITATION = '${SENTINEL_STATEMENT}'`);
+		expect(backend('dams/observed/upstream.ts')).toContain(`export { SENTINEL_CITATION as SENTINEL_ATTRIBUTION, sentinelCitation as sentinelCredit } from '@water-management/engine/sentinel-credit'`);
 		expect(doc('maps.md')).toContain(`"${SENTINEL_STATEMENT}"`);
 		expect(doc('data-sources.md')).toContain(`"${SENTINEL_STATEMENT}"`);
 		// GeoNames' attribution, stored on every place a load takes without a source of its own (the Map's search shows it).
