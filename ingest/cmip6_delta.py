@@ -132,8 +132,7 @@ YEARS = {"historical": tuple(range(1985, 2015)), "ssp245": tuple(range(2036, 209
 #: Frozen in docs/data-sources.md § nex-gddp-cmip6 with the reason for each; keep the two the same.
 MODELS: dict[str, str | None] = {
     "ACCESS-CM2": None,
-    "CanESM5": None,
-    "CMCC-ESM2": None,
+    "CNRM-CM6-1": None,
     "EC-Earth3": None,
     "GFDL-ESM4": None,
     "INM-CM5-0": None,
@@ -141,6 +140,7 @@ MODELS: dict[str, str | None] = {
     "MIROC6": None,
     "MPI-ESM1-2-HR": None,
     "MRI-ESM2-0": None,
+    "NorESM2-MM": None,
 }
 #: One year of one variable on the whole region, 22 x 31 cells a chunk (20 chunks a year).
 CHUNKS = (1, 12, 22, 31)
