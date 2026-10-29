@@ -936,6 +936,10 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `PATCH ${P}/notes/:noteId`, exempt: 'only the author edits their own note, and the row stamps edited_at (037_notes.sql note_guard)' },
 	{ route: `POST ${P}/yield`, exempt: 'queues a yield job; its yield_result row keeps who asked, the job and the engine version, and no input changes (040_yield.sql)' },
 	{ route: `POST ${P}/yield/:jobId/cancel`, exempt: 'stops a queued or running yield job; the job row stamps cancel_requested_at and no input changes (040_yield.sql)' },
+	{ route: `POST ${P}/runs/:runId/future-yield`, exempt: 'queues a future_yield job; its future_yield row keeps who asked, the job and the engine version, and no input changes (280_future_yield.sql)' },
+	{ route: `POST ${P}/runs/:runId/future-yield/:jobId/cancel`, exempt: 'stops a queued or running future_yield job; the job row stamps cancel_requested_at and no input changes (284_cancel_future_jobs.sql)' },
+	{ route: `POST ${P}/climate-factors`, exempt: 'queues a climate_factors job; its climate_factors row keeps who asked and the job, and no input changes (282_climate_factors.sql)' },
+	{ route: `POST ${P}/climate-factors/:jobId/cancel`, exempt: 'stops a queued or running climate_factors job; the job row stamps cancel_requested_at and no input changes (284_cancel_future_jobs.sql)' },
 	{
 		route: `POST ${P}/assessments`,
 		exempt: 'queues an assessment job (or with dryRun only checks); the assessment row keeps who asked, its base run, each member’s ops copied from its scenario and the engine version, and no input changes (145_assessment.sql)'

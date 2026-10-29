@@ -34,6 +34,7 @@ import { buildLadder, clearLadderJobs, plantDelineationProposal, plantQuestion, 
 import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { hashToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
+import { enqueueJob } from '../jobs/queue.js';
 import { issueRenderToken } from '../reports/tokens.js';
 import { base32Decode, hotp, totpStep } from '../auth/totp.js';
 
@@ -201,6 +202,11 @@ async function ladderDam(): Promise<string> {
 	const square = [[[21.3237, -33.679], [21.3257, -33.679], [21.3257, -33.677], [21.3237, -33.677], [21.3237, -33.679]]];
 	damFid ??= (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'dam', name: 'Mass dam', nodeId: ctx.farmId, geometry: { type: 'Polygon', coordinates: square } }))).feature.id as string;
 	return damFid;
+}
+
+/** A waiting future yield or climate factors job in the ladder's project, queued as the owner, for a cancel route to take. */
+async function plantFutureJob(kind: 'future_yield' | 'climate_factors', payload: Record<string, unknown>): Promise<string> {
+	return withUser(ctx.owner.id, async (db) => (await enqueueJob(db, { projectId: ctx.projectId, kind, payload, dedupeKey: `mass-${crypto.randomUUID()}`, maxAttempts: 1 })).job.id);
 }
 
 const RECIPE: Record<string, () => Promise<Req> | Req> = {
@@ -415,6 +421,9 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		await asOwner(`DELETE FROM job WHERE kind = 'auto_calibration' AND project_id = $1`, [ctx.projectId]);
 		return {};
 	},
+	// A fresh waiting job of the route's own kind each time: a cancel takes only a job of its kind (and run), and works with FUTURE_YIELD off (284).
+	'POST /projects/:id/runs/:runId/future-yield/:jobId/cancel': async () => ({ params: { runId: ctx.runId, jobId: await plantFutureJob('future_yield', { applicationRunId: ctx.runId, nodeId: ctx.farmId }) } }),
+	'POST /projects/:id/climate-factors/:jobId/cancel': async () => ({ params: { jobId: await plantFutureJob('climate_factors', {}) } }),
 	'POST /projects/:id/runs/:runId/uncertainty': async () => {
 		await ok(ctx.owner.call('PUT', `${at()}/series`, observed()));
 		const run = await ok(ctx.owner.call('POST', `${at()}/runs`, { label: 'Mass ensemble' }));
@@ -596,6 +605,8 @@ const NOT_REACHED = new Map<string, { why: string; legit: number }>([
 			legit: 409
 		}
 	],
+	['POST /projects/:id/runs/:runId/future-yield', { why: 'a strict body; FUTURE_YIELD is off in the DB tests, so a legit call is 409 (future/future-yield.db.test.ts turns it on and queues one)', legit: 409 }],
+	['POST /projects/:id/climate-factors', { why: 'a strict body; FUTURE_YIELD is off in the DB tests, so a legit call is 409 (future/climate-factors.db.test.ts turns it on and queues one)', legit: 409 }],
 	['POST /projects/:id/map/start', { why: 'a strict body; the ladder’s model has nodes, and starting from the map only fills an empty model, so a legit call is 409 (delineation/start.db.test.ts proposes on an empty one)', legit: 409 }],
 	[
 		'POST /projects/:id/map/start/:spid/apply',
