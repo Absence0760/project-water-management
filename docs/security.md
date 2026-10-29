@@ -2778,6 +2778,13 @@ In short:
     or owner; the scenes are public and read anonymously, and the COG
     reader refuses anything but the expected format, with every tile's
     inflated size bounded (`cog.ts`).
+    The observed actual ET sources (issue #623) add two hosts shared with
+    things that aren't ours, `storage.googleapis.com` (every public Google
+    Cloud Storage bucket) and `edcintl.cr.usgs.gov` (all of FEWS NET's
+    downloads), so each is held with a path limit too (`FEED_HOST_PATHS`):
+    a fetch or a redirect may ask only under FAO's WaPOR bucket
+    (`/fao-gismgr-wapor-3-data/`) and SSEBop's v6.1 dekadal tree, the
+    parsed path checked after dot segments resolve.
     `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
     On Lambda only the fetcher may build a live client at all

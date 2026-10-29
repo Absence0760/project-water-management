@@ -27,6 +27,7 @@ import { CPC_BASE } from './sources/cpc.js';
 import { DWS_BASE } from './sources/dws.js';
 import { DEAFRICA_SERVICES_BASE } from '../dams/observed/upstream.js';
 import { WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
+import { SSEBOP_BASE, WAPOR_BASE } from '../water-use/observed/upstream.js';
 
 export interface FeedHttp {
 	/** Bytes [start, end] (inclusive) of `url`; null for HTTP 404 (not published yet). */
@@ -126,12 +127,36 @@ export const FEED_HOSTS: readonly string[] = [
 	// Digital Earth Africa's STAC search: the WOfS scenes over a dam (dams/observed/wofs, issue #604 R5-C).
 	new URL(WOFS_STAC_SEARCH).host,
 	// NOAA CPC: the ONI and AAO climate indices (ingest/indices.ts, issue #620).
-	new URL(CPC_BASE).host
+	new URL(CPC_BASE).host,
+	// FAO's WaPOR v3 bucket on Google Cloud Storage: the dekadal actual ET (water-use/observed, issue #623). FEED_HOST_PATHS keeps it to that bucket.
+	new URL(WAPOR_BASE).host,
+	// USGS FEWS NET: SSEBop's dekadal actual ET, the fallback (issue #623). FEED_HOST_PATHS keeps it to that tree.
+	new URL(SSEBOP_BASE).host
 ];
+
+/**
+ * Hosts shared with things that aren't our sources, and the only path
+ * prefixes a live fetch may ask on them (each ends in `/`). Google Cloud
+ * Storage serves every bucket from one host, so allowing the host alone
+ * would let a redirect, or a later code path, read any public bucket. The
+ * path is the URL's parsed one, dot segments (`..`, `%2e%2e`) already
+ * resolved, so a path can't climb out of its prefix.
+ */
+export const FEED_HOST_PATHS: Readonly<Record<string, readonly string[]>> = {
+	[new URL(WAPOR_BASE).hostname]: [new URL(WAPOR_BASE).pathname],
+	[new URL(SSEBOP_BASE).hostname]: [new URL(SSEBOP_BASE).pathname]
+};
+
 /** Redirects followed per request, each checked against FEED_HOSTS. */
 const MAX_REDIRECTS = 3;
 
-const allowed = (url: URL) => url.protocol === 'https:' && url.port === '' && url.username === '' && url.password === '' && FEED_HOSTS.includes(url.hostname);
+const pathAllowed = (url: URL) => {
+	const prefixes = Object.hasOwn(FEED_HOST_PATHS, url.hostname) ? FEED_HOST_PATHS[url.hostname] : undefined;
+	return !prefixes || prefixes.some((p) => url.pathname.startsWith(p));
+};
+
+const allowed = (url: URL) =>
+	url.protocol === 'https:' && url.port === '' && url.username === '' && url.password === '' && FEED_HOSTS.includes(url.hostname) && pathAllowed(url);
 
 const transportError = (err: unknown) =>
 	new FeedUnavailableError((err as Error).name === 'TimeoutError' ? 'the request timed out' : 'the request failed');

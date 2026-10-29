@@ -76,6 +76,8 @@ Every job that fetches from an upstream:
 | [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until the stations' records are loaded (`load-reference.yml` kind `dws`) | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
 | [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies: v0.0.2 per-waterbody wet-area series and v0.0.3 polygons (built R5-A) | built; off in production until `dam_observations_enabled`; the public series frozen upstream since 2024-02 | `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
 | [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `cog.ts`, `sum.ts`, `utm.ts`) |
+| [wapor-aeti](#wapor-aeti) | FAO WaPOR v3 `L2-AETI-D`, dekadal actual ET and interception at 100 m (a unit's observed water use, issue #623) | planned (#623); blocked in production until FAO's reply is recorded on #618 (step 8a) | `storage.googleapis.com` (bucket `fao-gismgr-wapor-3-data` only) | – | `backend/src/water-use/observed/` (`upstream.ts`; the pass is #623 step 4) |
+| [ssebop-eta](#ssebop-eta) | USGS FEWS NET SSEBop v6.1 global dekadal actual ET at 1 km (WaPOR's fallback, issue #623) | planned (#623 step 6, only if FAO declines or as a second opinion) | `edcintl.cr.usgs.gov` (the `…/global/dekadal/etav61/` tree only) | – | `backend/src/water-use/observed/upstream.ts` |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
 | [dpet](#dpet) | dPET daily potential evapotranspiration | reference load | `data.bris.ac.uk` | – | `bin/evaporation-fetch.sh`, `pnpm import:evaporation` |
 | [worldcover](#worldcover) | ESA WorldCover 10 m 2021 v200 (cropland) | reference load | `esa-worldcover.org` (the operator's download) | – | `pnpm import:land-cover` |
@@ -399,6 +401,109 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   invented ones (`backend/fixtures/feeds/wofs-sample.json`,
   `wofs/fixtures.ts`), so dev, CI and e2e never reach either host.
 - **Owner:** the operator; code `backend/src/dams/observed/wofs/`.
+## Observed actual evapotranspiration
+
+Satellite actual ET (ETa) over each unit's farm parcels, an independent
+check on its modelled irrigation use (issue #623). Planned: the store
+(`et_observation`, migration 276) is built; the fetcher's `et-dekadal` mode,
+the handover and the comparison are #623's later steps. It follows the dam
+observations' pattern: out of the VPC, through the mirror bucket, loaded by
+the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
+`et_observations_enabled`), and dev, CI and e2e read a synthetic file only.
+
+### wapor-aeti
+
+- **Source:** FAO WaPOR v3, mapset `L2-AETI-D` (actual evapotranspiration
+  and interception, level 2, dekadal): 100 m (1/1024°, EPSG:4326), Africa
+  and the Near East, from January 2018. int16 × 0.1 mm/day, nodata −9999.
+  One BigTIFF COG per dekad, about 2.1 GB (512-pixel tiles, LZW).
+- **Host:** `storage.googleapis.com`, FAO's own public bucket
+  `fao-gismgr-wapor-3-data`, anonymous HTTPS:
+  `DATA/WAPOR-3/MAPSET/L2-AETI-D/WAPOR-3.L2-AETI-D.<YYYY-MM-Dn>.tif`
+  (`water-use/observed/upstream.ts` `WAPOR_BASE`). The host serves every
+  public bucket on Google Cloud Storage, so `FEED_HOSTS` holds it with a
+  path limit (`FEED_HOST_PATHS`, `feeds/http.ts`): a live fetch, or a
+  redirect, may ask only paths under `/fao-gismgr-wapor-3-data/`. The
+  `s3://wapor-v3/` bucket (af-south-1) refused anonymous list and get
+  (AccessDenied, 2026-10-27), so it isn't used.
+- **Licence** (read 2026-10-27): FAO's [statistical database terms of
+  use](https://www.fao.org/contact-us/terms/db-terms-of-use) list WaPOR in
+  **Annex 1**, under **CC BY 4.0** "unless specified otherwise in their
+  metadata"; the mapset's metadata (FAO's GISMGR API,
+  `catalog/workspaces/WAPOR-3/mapsets/L2-AETI-D`) names no other licence
+  (`additionalInfo` empty, re-checked 2026-10-29). That exception is per
+  mapset and is used: `L1-RET-M`'s own citation says "License: CC BY-NC-SA
+  4.0", which is why reference ET is rejected ([maps.md §
+  Sources](./maps.md#sources)). So re-check `L2-AETI-D`'s metadata before
+  enabling, and ask FAO to confirm it covers this mapset. The same terms bar using the data "for or in conjunction with
+  the promotion of a commercial enterprise", which we read as a bar on
+  advertising with it, not on commercial use (D-B's test), and ask FAO to
+  confirm. Two other labels exist: Digital Earth Africa labels its copy
+  CC BY-SA 4.0, and older FAO material says CC BY-NC-SA 3.0 IGO. Either
+  would fail D-B. So the email to FAO (#618 step 8a) confirms a likely
+  CC BY 4.0 rather than settling an open question: the code may be built
+  now, and **production waits on FAO's reply** being recorded on #618
+  before `et_observations_enabled = true` with WaPOR.
+- **Attribution:** "FAO WaPOR v3, CC BY 4.0"
+  (`water-use/observed/upstream.ts` `WAPOR_ATTRIBUTION`) wherever an ETa
+  value shows: the unit drawer's panel, reports, CSVs, and `/data-sources`.
+- **Contact:** FAO's WaPOR team, through the WaPOR portal's contact (the
+  address #618 step 8a writes to).
+- **Access pattern** (#623 step 4): never a whole file. Per unit with
+  parcels and per dekad, the BigTIFF header, the slice of the TileOffsets
+  and TileByteCounts arrays for the tile rows under the parcels' bounding
+  box (not the whole ~2.8 MB array), then those tiles: about 3–6 range
+  requests. Conditional on the ETag; a changed ETag on a dekad already read
+  (FAO rewrites files: `updated` 2026-05 on 2025 files) means a re-read and
+  a new revision of that dekad's rows. Only units with parcels are read.
+- **Limits we keep to:** one request a second, one connection;
+  feeds/http.ts's User-Agent, host and path allowlist, 20 s timeout and
+  4 MB cap per response; a 403 stops the pass, never retried, and a
+  429/503 pauses the host for its `Retry-After`.
+- **Freshness:** a dekad appears about 3 days after it ends (2026-10-D2 was
+  written 2026-10-23, checked 2026-10-29). The pass's heartbeat and recency
+  alarms come with #623 step 4.
+- **Rows kept:** per unit and dekad, the area-weighted mean ETa (mm/day)
+  over the unit's parcels (∩ WorldCover cropland where loaded, else the
+  whole parcel, labelled), and the share of the area with a valid pixel
+  ([data-model.md § Observed actual ET](./data-model.md#observed-actual-et)).
+- **Fallback:** [ssebop-eta](#ssebop-eta). The values already loaded stay.
+- **Offline:** `FEED_SOURCE=fixtures` serves a synthetic BigTIFF over the
+  seeded examples' parcels (#623 step 4), so dev, CI and e2e never reach
+  the host.
+- **Owner:** the operator; code `backend/src/water-use/observed/`.
+
+### ssebop-eta
+
+- **Source:** USGS FEWS NET's global SSEBop actual ET, version 6.1
+  (VIIRS-based), dekadal, 1 km (1/96°), from 2012-02 (the listing checked
+  2026-10-29 runs `d2012021.zip` to `d2026102.zip`, the last written
+  2026-10-22). Each dekad is a zip, about 93 MB, holding one GeoTIFF.
+  Dataset: doi:10.5066/P9QJWQ6K.
+- **Host:** `edcintl.cr.usgs.gov`, under
+  `/downloads/sciweb1/shared/fews/web/global/dekadal/etav61/downloads/dekadal/d<YYYYMMD>.zip`
+  (`water-use/observed/upstream.ts` `SSEBOP_BASE`). The host carries much
+  else of FEWS NET's, so `FEED_HOST_PATHS` keeps a live fetch to the
+  `…/global/dekadal/etav61/` tree. The older `etav6/` tree stops at
+  `d2024042` and isn't used.
+- **Licence:** **CC0** (USGS; read 2026-10-27, the dataset's ScienceBase
+  record). No operator step.
+- **Attribution:** not required; we credit it anyway, "USGS FEWS NET SSEBop
+  v6, CC0" (`SSEBOP_ATTRIBUTION`), wherever its values show.
+- **Contact:** USGS EROS (FEWS NET's early-warning team,
+  earlywarning.usgs.gov).
+- **Access pattern:** only if FAO declines, or as a second opinion (#623
+  step 6). A zip isn't a COG: its GeoTIFF can't be range-read by tile, and
+  one dekad is far over the live client's 4 MB cap. So the SSEBop slice
+  decides between a whole-file read in a bounded pass (one file a dekad,
+  conditional on the ETag, clipped to the catchments' box at once) and a
+  reference load; that is its design question, not settled here.
+- **Limits we keep to:** one request a second, one connection; feeds/http.ts's
+  allowlist and User-Agent; a 403 stops the pass.
+- **Fallback:** none at 1 km and dekadal; the modelled use stands unchecked.
+- **Owner:** the operator; code `backend/src/water-use/observed/` (#623
+  step 6).
+
 ## The copy's recent days
 
 ### imerg
@@ -980,7 +1085,6 @@ its comments 4, 6, 7 and 8).
 | --- | --- | --- | --- |
 | NEX-GDDP-CMIP6 | CC0 (NASA's expert-use caveat) | S3 us-west-2 | future yield in evidence packs |
 | GloFAS v4 reanalysis | CEMS-FLOODS, free with attribution | EWDS API | modelled daily flow for ungauged catchments |
-| WaPOR v3 actual ET | **contested** (CC BY-SA, CC BY-NC-SA, FAO terms); ask FAO first | `s3://wapor-v3/` af-south-1 | observed vs modelled water use; SSEBop at 1 km if FAO says no |
 | Sentinel-1/2 water masks, SWOT lake heights | Copernicus free and open; SWOT terms unconfirmed | DE Africa STAC; PO.DAAC | small dams through cloud; area–volume curves (trial) |
 
 ## Rejected

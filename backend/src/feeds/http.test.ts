@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { FeedRefusedError, FeedThrottledError, FeedUnavailableError, feedErrorMessage } from './errors.js';
 import {
 	feedHttp,
+	FEED_HOST_PATHS,
+	FEED_HOSTS,
 	feedSourceMode,
 	fileTag,
 	hostPacer,
@@ -221,6 +223,37 @@ describe('liveHttp: where it may go', () => {
 		// Positive control: the real hosts are asked.
 		expect(await http.text('https://www.dws.gov.za/Hydrology/Verified/HyData.aspx?Station=X0H000')).toBe('ok');
 		expect(await http.text(CHC)).toBe('ok');
+	});
+
+	it('asks the actual ET hosts only under their own prefix: FAO\'s bucket, never another bucket on Google Cloud Storage', async () => {
+		const WAPOR = 'https://storage.googleapis.com/fao-gismgr-wapor-3-data/DATA/WAPOR-3/MAPSET/L2-AETI-D/WAPOR-3.L2-AETI-D.2026-10-D2.tif';
+		const SSEBOP = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/fews/web/global/dekadal/etav61/downloads/dekadal/d2026102.zip';
+		expect(FEED_HOSTS).toEqual(expect.arrayContaining(['storage.googleapis.com', 'edcintl.cr.usgs.gov']));
+		expect(FEED_HOST_PATHS).toEqual({
+			'storage.googleapis.com': ['/fao-gismgr-wapor-3-data/'],
+			'edcintl.cr.usgs.gov': ['/downloads/sciweb1/shared/fews/web/global/dekadal/etav61/']
+		});
+		const f = vi.fn(async () => new Response('ok', { status: 200 }));
+		const http = liveHttp(f);
+		for (const url of [
+			'https://storage.googleapis.com/isric-share-soilgrids/pre-release/wv0033/x.tif',
+			'https://storage.googleapis.com/fao-gismgr-wapor-3-data-evil/a.tif',
+			'https://storage.googleapis.com/fao-gismgr-wapor-3-data',
+			'https://storage.googleapis.com/fao-gismgr-wapor-3-data/../other/a.tif',
+			'https://storage.googleapis.com/fao-gismgr-wapor-3-data/%2e%2e/other/a.tif',
+			'https://storage.googleapis.com/fao-gismgr-wapor-3-data%2F..%2Fother/a.tif',
+			'https://storage.googleapis.com/storage/v1/b/other/o',
+			'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/fews/web/global/dekadal/eta/downloads/d2021063.zip'
+		]) {
+			await expect(http.text(url), url).rejects.toThrow(/not a known source host/);
+		}
+		expect(f).not.toHaveBeenCalled();
+		// Positive control: the two trees are asked.
+		expect(await http.text(WAPOR)).toBe('ok');
+		expect(await http.text(SSEBOP)).toBe('ok');
+		// A redirect out of the bucket is refused like one off the hosts.
+		const hop = vi.fn<F>().mockResolvedValueOnce(redirect('/isric-share-soilgrids/a.tif'));
+		await expect(liveHttp(hop as never).text(WAPOR)).rejects.toThrow(/redirected somewhere it may not/);
 	});
 
 	it('gives every hop the one 20 s deadline: a single abort signal, set before the first request and shared by the redirect after it', async () => {
