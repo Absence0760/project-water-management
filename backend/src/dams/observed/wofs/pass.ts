@@ -38,8 +38,9 @@
 // outline (raster/cog.ts), summed inside it (raster/mask.ts, sum.ts). Two scenes on one date
 // (neighbouring Landsat rows overlap) give ONE row: the scene that saw the
 // most of the dam clearly, then the one covering most of it, then the lower
-// item id, with the pixels it has no data for filled from the others when
-// their grids line up (merge.ts: a dam across a footprint's or tile's edge
+// item id, with the pixels it has no data for filled from the others
+// (merge.ts: pixel for pixel when their grids line up, by nearest neighbour
+// from another UTM zone; a dam across a footprint's, tile's or zone's edge
 // is seen whole). After each date the
 // cursor moves to it, so at the deadline a dam stops there and the next run
 // goes on from it: a first backfill (about 90 scenes a year over a dam, 2–3

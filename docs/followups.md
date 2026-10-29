@@ -795,11 +795,12 @@ plan stays on the issue. Found while building:
       fix: also withhold for `s1` load marks with no status entry. Trigger:
       deleting the s1 handover files after radar was on in production.
       **Done (follow-ups, U):** the tick also withholds every `s1` mark still shown that the status doesn't list, when the stage or agreement no longer allows it.
-- [ ] **Views from two UTM zones aren't joined.** A dam across a zone line
+- [x] **Views from two UTM zones aren't joined.** A dam across a zone line
       (S2 or WOfS) gets only the better view, since the grids don't share
       pixels. Durable fix: resample one view onto the other's grid before
       joining. Trigger: a traced dam near a zone line whose clear views stay
       under 90 %.
+      **Done (follow-ups, V):** other-zone views fill the base's gaps by nearest neighbour through `raster/utm.ts`'s new inverse (`merge.ts lookupOn`; architecture.md § Dam observations).
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
       **Decided (round 3, N):** a bounded whole-file pass (data-sources.md § ssebop-eta); the build is its own item below.

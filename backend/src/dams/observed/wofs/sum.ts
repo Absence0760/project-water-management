@@ -109,6 +109,11 @@ export function observation(t: Tally, pixelAreaM2: number): { wetAreaM2: number;
 export interface ViewPixels {
 	/** The lattice: CRS, pixel size, and the origin's offset within a pixel. */
 	lattice: string;
+	/**
+	 * The same as numbers, to place a pixel on the ground (merge.ts, joining views from two UTM zones): pixel (col, row)
+	 * of the lattice has its centre at x = (col + fracX + 0.5) × pixelSizeX, y = −(row + fracY + 0.5) × pixelSizeY.
+	 */
+	grid: { epsg: number; pixelSizeX: number; pixelSizeY: number; fracX: number; fracY: number };
 	/** The OutlineMask's window, in the lattice's columns and rows. */
 	col0: number;
 	row0: number;
@@ -135,6 +140,7 @@ export function viewPixels(grid: MaskGrid, m: OutlineMask, classes: Uint8Array):
 	const y = onLattice(-grid.originY, grid.pixelSizeY);
 	return {
 		lattice: `${grid.epsg}/${grid.pixelSizeX}/${grid.pixelSizeY}/${x.frac}/${y.frac}`,
+		grid: { epsg: grid.epsg, pixelSizeX: grid.pixelSizeX, pixelSizeY: grid.pixelSizeY, fracX: x.frac, fracY: y.frac },
 		col0: x.whole + m.col0,
 		row0: y.whole + m.row0,
 		width: m.width,
