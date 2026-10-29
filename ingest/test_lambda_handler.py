@@ -402,10 +402,13 @@ class FixturesRun(unittest.TestCase):
         # A month that fails keeps the hold (a retried Lambda error must find it its own); the release step ends it.
         s3 = FakeS3()
         mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
-        with self.assertRaises(RuntimeError):
+        def failing_month():
             with lease.hold_host_for_backfill(mirror, "chc", 900.0, EXECUTION, 60, now=lambda: 1000.0):
                 self.assertEqual(self._slot(s3)["expires"], 1000.0 + 900.0 + 60 + lease.BACKFILL_HOLD_MARGIN_S)
                 raise RuntimeError("the month failed")
+
+        with self.assertRaises(RuntimeError):
+            failing_month()
         held = self._slot(s3)
         self.assertEqual(held["owner"], lease.backfill_owner(EXECUTION))
         self.assertEqual(held["expires"], 1000.0 + 60 + lease.BACKFILL_HOLD_MARGIN_S)  # kept through the pause, not released
