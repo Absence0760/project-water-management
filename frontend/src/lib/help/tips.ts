@@ -234,6 +234,12 @@ export const TIPS: HelpTipText[] = [
 		category: 'licensing'
 	},
 	{
+		id: 'future-climate',
+		term: 'Future climate',
+		short: 'A change that multiplies every rain record and the evaporation inputs by one climate model’s monthly change factors for a pathway.',
+		category: 'licensing'
+	},
+	{
 		id: 'cumulative-assessment',
 		term: 'Assess together (cumulative impact)',
 		short: 'Several applications on one baseline, each alone and all together, so their combined effect on the river and existing users shows.',

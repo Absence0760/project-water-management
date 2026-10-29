@@ -148,6 +148,13 @@ describe('changeRows', () => {
 		expect(changeRows(scenario({ ops, classified: null })).map((r) => sp(r.text))).toEqual(['Demand of domestic scaled by 0.9', 'Demand scaled by 0.7']);
 	});
 
+	it('words a future climate (engine 1.107.0, issue #621) by its case, as a baseline assumption', () => {
+		const ops: ScenarioOp[] = [
+			{ op: 'climate.delta', rainFactorByMonth: new Array(12).fill(0.9), evapFactorByMonth: new Array(12).fill(1.05), label: 'SYN-B SSP5-8.5 2066–2095', source: 'synthetic' }
+		];
+		expect(changeRows(scenario({ ops, classified: null })).map((r) => [sp(r.text), r.cls])).toEqual([['A future climate assumed: SYN-B SSP5-8.5 2066–2095', 'baseline']]);
+	});
+
 	it('takes the class its run applied when it has one for every op', () => {
 		expect(changeRows(scenario({ classified: ['baseline', 'baseline'] })).map((r) => r.cls)).toEqual(['baseline', 'baseline']);
 		// A list that doesn't line up with the ops is ignored.

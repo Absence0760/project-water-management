@@ -1,7 +1,8 @@
 // § 8 Future yield (issue #621 slice 4; docs/api.md § Future yield,
 // docs/evidence-pack.md § Future yield, 280_future_yield): the switch, the
 // request, the pair it runs on, and the stored results.
-import { futureDamError, type FutureYieldResult, type ModelInput } from '@water-management/engine';
+import { createHash } from 'node:crypto';
+import { canonicalJson, futureDamError, type FutureYieldResult, type ModelInput } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -80,11 +81,26 @@ export async function futurePair(db: Db, projectId: string, applicationRunId: st
 	}
 	const damError = futureDamError(application, dam);
 	if (damError) throw new ApiError(400, damError, { code: 'future_yield_dam' });
-	const { rows: b } = await db.query<{ geometry: Geometry }>(`SELECT geometry FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary'`, [projectId]);
-	if (!b[0]) throw new ApiError(409, 'the project has no catchment boundary on its map: the change factors are read over it, so draw or upload one on the Map tab first', { code: 'no_boundary' });
-	const cells = climateCells(b[0].geometry);
+	const { cells } = await catchmentClimateCells(db, projectId);
+	return { applicationRunId, baselineRunId: sc.baseRunId, nodeId: dam, ownedNodeIds: [...owned], baseline, application, cells };
+}
+
+/** SHA-256 (hex) of a boundary's geometry as canonical JSON: which boundary a factor table was read over. */
+export const boundarySha256 = (g: Geometry): string => createHash('sha256').update(canonicalJson(g)).digest('hex');
+
+/** The project's catchment boundary, as the change factors read it, under the caller's RLS: its geometry, its hash, or null when the map has none. */
+export async function catchmentBoundary(db: Db, projectId: string): Promise<{ geometry: Geometry; sha256: string } | null> {
+	const { rows } = await db.query<{ geometry: Geometry }>(`SELECT geometry FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary'`, [projectId]);
+	return rows[0] ? { geometry: rows[0].geometry, sha256: boundarySha256(rows[0].geometry) } : null;
+}
+
+/** The 0.25° cells the change factors are read over (the catchment boundary's) and the boundary's hash; a 409 saying why when there are none. */
+export async function catchmentClimateCells(db: Db, projectId: string): Promise<{ cells: ClimateGridCell[]; boundarySha256: string }> {
+	const b = await catchmentBoundary(db, projectId);
+	if (!b) throw new ApiError(409, 'the project has no catchment boundary on its map: the change factors are read over it, so draw or upload one on the Map tab first', { code: 'no_boundary' });
+	const cells = climateCells(b.geometry);
 	if ('problem' in cells) throw new ApiError(409, cells.problem.charAt(0).toUpperCase() + cells.problem.slice(1), { code: 'boundary_cells' });
-	return { applicationRunId, baselineRunId: sc.baseRunId, nodeId: dam, ownedNodeIds: [...owned], baseline, application, cells: cells.cells };
+	return { cells: cells.cells, boundarySha256: b.sha256 };
 }
 
 /** One user's future yield jobs queued or running (one request at a time per user, as pendingYieldJobs). */

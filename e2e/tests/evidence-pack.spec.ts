@@ -418,7 +418,7 @@ test('an application’s packs show in the Applications tab and its panel; a new
 	await anon.close();
 });
 
-test('§ 8 future yield: run on the synthetic projections, shown with its caveat and labels, held from any pack while its caveat is a placeholder', async ({ page, owner }) => {
+test('§ 8 future yield: run on the synthetic projections, shown with its caveat and labels, held from any pack while its caveat is a placeholder', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Pack future yield');
 	const baseline = await createRun(page.request, project.id, 'Baseline');
@@ -450,12 +450,29 @@ test('§ 8 future yield: run on the synthetic projections, shown with its caveat
 	await expect(page.getByRole('heading', { level: 2, name: '8. Future yield' })).toBeVisible();
 	await expect(page.getByTestId('evidence-future-na')).toContainText('Not assessed: the future yield hasn’t been run');
 
-	// Run it (the job, here, deterministically), and read the report again.
-	const queued = await page.request.post(`${API_URL}/projects/${project.id}/runs/${app}/future-yield`, { data: {} });
-	expect(queued.status(), await queued.text()).toBe(202);
+	// An editor runs it from the board above the report (issue #621 slice 5); the board follows the job, and once
+	// it is done (the job run here, deterministically) the page reads the report again, with no reload.
+	const board = page.getByTestId('evidence-future-run');
+	await expect(board).toContainText('§ 8 hasn’t been run for this application run');
+	await board.getByRole('button', { name: 'Run the future yield' }).click();
+	await expect(board.getByTestId('evidence-future-job')).toHaveText('Queued: waiting for the background worker.');
+	await expect(board.getByRole('button', { name: 'Run the future yield' })).toHaveCount(0);
 	await runJobsTick({ projects: [project.id], schedule: false });
+	await expect(page.getByTestId('evidence-future-na')).toHaveCount(0);
+	await expect(board.getByRole('button', { name: 'Run it again' })).toBeVisible();
+	await expect(board).toContainText('Run it again when the climate projections or this application run change');
+	// A reload finds the result and the finished job: the board offers to run it again, never the job's old state.
 	await page.reload();
 	await ready(page);
+	await expect(board.getByRole('button', { name: 'Run it again' })).toBeVisible();
+	await expect(board.getByTestId('evidence-future-job')).toHaveCount(0);
+	// A viewer reads § 8 but gets no board: running it is an editor's.
+	const viewer = await signIn('Future yield viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	await viewer.page.goto(`/projects/${project.id}/report?run=${app}&evidence`);
+	await ready(viewer.page);
+	await expect(viewer.page.getByTestId('evidence-future-table')).toBeVisible();
+	await expect(viewer.page.getByTestId('evidence-future-run')).toHaveCount(0);
 	const caveat = page.getByTestId('evidence-future-caveat');
 	await expect(caveat).toContainText('These are projections, not predictions.');
 	await expect(caveat).toContainText('bias correction and spatial disaggregation (BCSD)');

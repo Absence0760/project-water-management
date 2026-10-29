@@ -11347,7 +11347,20 @@ them scenarios).
   × litres a day, the rest at the category's defaults), change one field of
   one (every field, labelled as on the Network tab's form; its on/off
   schedule with the Network tab's own schedule editor, recorded whole) or
-  remove one
+  remove one, and (issue #621 slice 5) **Future climate (monthly change
+  factors)**: a climate model, pathway and window picked from the
+  project's change factor table, never factors typed in
+  (`FutureClimateFields.svelte`, lazy; not offered to an applicant, who
+  reads no factor table, nor in a licence's terms). With `FUTURE_YIELD` off it says the
+  projections aren't loaded; with no catchment boundary on the Map tab, to
+  draw one; with no table yet, **Work out the change factors** queues the
+  `climate_factors` job and the form follows it (*Working out the change
+  factors. Queued…*), then shows the three pickers, which models and
+  baseline the table rests on, an amber note when the copy holds only part
+  of each 30-year window, and the picked case's 24 factors in a table
+  (`op-climate-factors`, rain and evaporation by calendar month). When the
+  boundary has changed since, an amber note and **Work them out again**
+  ([scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-284_climate_factors))
   ([scenarios.md § UI](./scenarios.md#ui) has each one's wording). A setting's value is typed as
   Model settings or Calibration takes it; GR4J's PE input (`pe`, issue #39) has its own
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
@@ -12946,6 +12959,21 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     applicant has no demand object (`evidence-demand-objects-na`). A pack
     drafted before `evidence-9` has no § 6: its sections print as they
     always did.
+  - **8 Future yield** (application only, `evidence-23`, issue #621, with
+    `FUTURE_YIELD=on`; [evidence-pack.md § Future yield](./evidence-pack.md#future-yield)):
+    the caveat, then the historical record and per pathway and window the
+    median and range across climate models of the applicant's dam's yields,
+    their assurance and the EWR change, and the factor table; *Not
+    assessed* until it is run. Above the report, on screen only
+    (`FutureYieldRun.svelte`, `evidence-future-run`), an editor gets the
+    **§ 8 Future yield** board: **Run the future yield** (or **Run it
+    again** once there is a result) queues the `future_yield` job
+    (`POST …/future-yield`); the board then follows it (*Queued: waiting
+    for the background worker.*, *Running…* with a progress bar, a
+    failure with the job's reason) and reads the report again once it is
+    done. A reload or another tab picks the job up (the GET returns the
+    newest one). Viewers get no board, and a pack never has one: a pack
+    freezes § 8 as it was drafted.
   - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with
     their class and the input diff; A.3 series and SHA-256; A.4 baseline
     history since the previous publication; A.5 warnings verbatim; A.6 every

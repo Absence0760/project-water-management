@@ -1292,6 +1292,24 @@
 		},
 		{
 			"kind": "glossary",
+			"id": "future-climate",
+			"title": "Future climate",
+			"aliases": [
+				"climate change",
+				"cmip6",
+				"nex-gddp-cmip6",
+				"ssp",
+				"pathway",
+				"change factors",
+				"climate delta",
+				"2050"
+			],
+			"url": "/help/glossary/scenarios-and-licensing#future-climate",
+			"summary": "A change that multiplies every rain record and the evaporation inputs by one climate model’s monthly change factors for a pathway.",
+			"text": "A future climate is one climate model’s view of a drier or wetter catchment, put into a scenario as one change. Its factors come from NEX-GDDP-CMIP6, NASA’s downscaled climate projections: for each model, pathway (SSP2-4.5, a middle road, or SSP5-8.5, a high-emissions one) and 30-year window (2036–2065 or 2066–2095), the ratio of the model’s future monthly rain to its own 1985–2014 rain, and the same for evaporation (Hargreaves–Samani, from temperature). Work out the change factors once per catchment: a background job reads them over the catchment boundary on the Map tab, and reads them again when the boundary changes. The change multiplies every rain record (station, CHIRPS and the other products, unit and station rain) by the month’s rain factor, the evaporation inputs (the A-pan row, the daily A-pan, reference ET, a monthly PE row) by the month’s evaporation factor, and every MAP by the year’s. The historical sequence stays: droughts come when they did, no longer and no more often. GR4J keeps its calibrated parameters. One model is one view: to see the spread, make a scenario for several models, or run the Future yield section of an application’s evidence report, which runs them all. Always a baseline assumption: the climate is never the proposer’s to change. A scenario takes one future climate, and no rain or evaporation scaling beside it."
+		},
+		{
+			"kind": "glossary",
 			"id": "cumulative-assessment",
 			"title": "Assess together (cumulative impact)",
 			"aliases": [

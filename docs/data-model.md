@@ -3835,6 +3835,29 @@ No job table of its own: `job` holds status, progress and errors.
   (`JobHandler.alsoRole`), so it dies once they lose the role or the dam
   (`yield/contributor.db.test.ts`).
 
+### Climate factors (284_climate_factors.sql)
+
+The Scenarios tab's future climate (issue #621 slice 5,
+[scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-284_climate_factors)):
+the catchment's monthly change factors per NEX-GDDP-CMIP6 model, SSP and
+horizon, written by a `climate_factors` job as its acting editor. `job.kind`
+accepts `climate_factors`.
+
+| Column | |
+| --- | --- |
+| `project_id` | the project (cascade) |
+| `job_id` | the job (`SET NULL` on the 30-day purge; must be a `climate_factors` job of the project, `climate_factors_guard`) |
+| `method` | `delta-1` |
+| `boundary_sha256` | SHA-256 (hex) of the catchment boundary's geometry as canonical JSON when the factors were read over it |
+| `factors` | the engine's `FutureFactorTable` (≤ 512 KB) |
+| `warnings` | the job's notes (a model's cells with no value left out), a JSON array |
+| `created_by`, `created_at` | stamped by the guard (`SET NULL` when the account goes) |
+
+Insert and delete only (the job keeps the newest 3 per project). RLS: a
+viewer reads; an editor inserts and deletes. No contributor or farmer reads
+any. Nothing else reads it: a `climate.delta` op made from it carries its own
+factors.
+
 ### Future yield (280_future_yield.sql)
 
 § 8 of an application's evidence report (issue #621 slice 4,

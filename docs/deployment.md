@@ -2366,9 +2366,11 @@ A CloudShell session ends after about 20 minutes idle (and its `/tmp` with
 it); the copy resumes where it stopped, so run it a model at a time.
 
 What the app does with it: the evidence pack's § 8 Future yield
-(evidence-pack.md § Future yield), behind **`FUTURE_YIELD`** (`on` | `off`,
-default `off`; anything else refuses to start a request). Off, nothing reads
-the copy's `cmip6` and no report has § 8. Set `FUTURE_YIELD=on` on the API
+(evidence-pack.md § Future yield) and the Scenarios tab's future climate
+(scenarios.md § Future climate, the `climate_factors` job), both behind
+**`FUTURE_YIELD`** (`on` | `off`, default `off`; anything else refuses to
+start a request). Off, nothing reads the copy's `cmip6`, no report has § 8
+and Add a change says the projections aren't loaded. Set `FUTURE_YIELD=on` on the API
 **and** the job worker only once the copy holds every model's whole windows
 (step 4 below shows 30 historical years and 60 per SSP); the worker reads the
 copy through its existing `MIRROR_URL` and read grant, and the API never

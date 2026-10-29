@@ -2,6 +2,8 @@
 import type { Locale } from '@water-management/engine/languages';
 import type {
 	AppliedOp,
+	FutureFactorTable,
+	FutureYieldResult,
 	CatchmentAttributes,
 	ParamPriors,
 	PriorProvenance,
@@ -2556,6 +2558,53 @@ export interface JobMeta {
 	createdBy: string;
 	/** 0–100 while a job that reports progress runs (yield); null otherwise. Absent from an older API. */
 	progress?: number | null;
+}
+
+/**
+ * The Scenarios tab's future climate (docs/api.md § Future climate, issue #621 slice 5): whether it is on, the
+ * project's newest factor table, whether the catchment boundary changed since it was read (or is gone), and the
+ * newest job that works one out.
+ */
+export interface ClimateFactorsState {
+	enabled: boolean;
+	factors: {
+		id: string;
+		jobId: string | null;
+		factors: FutureFactorTable;
+		/** The job's notes (a model's cells with no value left out). */
+		warnings: string[];
+		boundarySha256: string;
+		createdBy: string | null;
+		createdAt: string;
+	} | null;
+	boundary: 'same' | 'changed' | 'none';
+	job: JobMeta | null;
+}
+
+/** § 8 Future yield of an application run (docs/api.md § Future yield): whether it is on, the newest result and the newest job. */
+export interface FutureYieldState {
+	enabled: boolean;
+	result: {
+		id: string;
+		baselineRunId: string;
+		applicationRunId: string;
+		nodeId: string;
+		jobId: string | null;
+		/** null, with withheld ['result'], for a viewer kept from the registered volumes on a cap or full-allocation run. */
+		result: FutureYieldResult | null;
+		withheld?: string[];
+		engineVersion: string;
+		createdBy: string | null;
+		createdAt: string;
+	} | null;
+	job: JobMeta | null;
+}
+
+/** Queueing a background job: the job, and whether it is new (false: one already waiting is returned). */
+export interface QueuedJob {
+	jobId: string;
+	job: JobMeta;
+	created: boolean;
 }
 
 /** A sweep member's outcome series as stored (docs/api.md § Sweeps): a missing value is null. */

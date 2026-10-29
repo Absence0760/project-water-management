@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto';
 import type { AbsolutePath } from '@zarrita/storage';
 import * as zarr from 'zarrita';
-import { canonicalJson, FUTURE_WINDOWS, type ClimateYear, type FutureModelCells, type FutureSourceFile } from '@water-management/engine';
+import { buildFutureFactorTable, canonicalJson, FUTURE_WINDOWS, type ClimateYear, type FutureFactorTable, type FutureModelCells, type FutureSourceFile } from '@water-management/engine';
 import { contiguous, type MirrorArray } from '../mirror/arrays.js';
 import { CMIP6_PRODUCT } from '../mirror/grid.js';
 import { cmip6FileKey, readManifest, type Manifest } from '../mirror/manifest.js';
@@ -139,4 +139,25 @@ export async function readModelCells(store: MirrorStore, model: string, cells: r
 	const kept = cells.flatMap((c, i) => (bad.has(i) ? [] : [{ lat: c.lat, weight: c.weight, historical: per.historical[i]!, ssp245: per.ssp245[i]!, ssp585: per.ssp585[i]! }]));
 	if (!kept.length) throw new Cmip6NotInCopyError(`the data copy's ${model} has no value over the catchment`);
 	return { cells: { model, cells: kept }, sources, dropped: bad.size };
+}
+
+/**
+ * The factor table over a catchment's cells: every model the copy holds,
+ * read and worked out (engine buildFutureFactorTable), with a note for each
+ * model that left cells out. § 8's future_yield job and the Scenarios tab's
+ * climate_factors job both read the copy through it. Throws
+ * Cmip6NotInCopyError when the copy holds no usable model.
+ */
+export async function readFactorTable(store: MirrorStore, cells: readonly ClimateGridCell[]): Promise<{ factors: FutureFactorTable; warnings: string[] }> {
+	const copy = await cmip6Copy(store);
+	const models: FutureModelCells[] = [];
+	const sources: FutureSourceFile[] = [];
+	const warnings: string[] = [];
+	for (const model of copy.models) {
+		const read = await readModelCells(store, model, cells);
+		if (read.dropped) warnings.push(`${model}: ${read.dropped} of the catchment's 0.25° cells hold no value (the sea, or a gap) and were left out`);
+		models.push(read.cells);
+		sources.push(...read.sources);
+	}
+	return { factors: buildFutureFactorTable(models, { sources, citation: copy.citation, licence: copy.licence }), warnings };
 }

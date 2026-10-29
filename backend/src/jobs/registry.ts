@@ -21,7 +21,7 @@ import type { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
 
-/** Every kind the job table accepts (016_jobs.sql CHECK; 040_yield added `yield`, 062_scenario_sweeps `sweep`, 063_seasonal_outlook `outlook`, 108_auto_calibration `auto_calibration` and `uncertainty`, 119_pack_render `pack_render`, 145_assessment `assessment`, 154_pack_reproduce `pack_reproduce`, 165_applicant_copy `applicant_pack_render`, 191_delineation_request `delineate`, 280_future_yield `future_yield`). */
+/** Every kind the job table accepts (016_jobs.sql CHECK; 040_yield added `yield`, 062_scenario_sweeps `sweep`, 063_seasonal_outlook `outlook`, 108_auto_calibration `auto_calibration` and `uncertainty`, 119_pack_render `pack_render`, 145_assessment `assessment`, 154_pack_reproduce `pack_reproduce`, 165_applicant_copy `applicant_pack_render`, 191_delineation_request `delineate`, 280_future_yield `future_yield`, 284_climate_factors `climate_factors`). */
 export const JOB_KINDS = [
 	'feed_fetch',
 	'feed_ingest',
@@ -38,7 +38,8 @@ export const JOB_KINDS = [
 	'pack_reproduce',
 	'applicant_pack_render',
 	'delineate',
-	'future_yield'
+	'future_yield',
+	'climate_factors'
 ] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 

@@ -1,8 +1,11 @@
 // § 8 Future yield of an application run (issue #621 slice 4; docs/api.md
-// § Future yield):
+// § Future yield), and the Scenarios tab's future climate (slice 5,
+// 284_climate_factors; docs/api.md § Future climate):
 //
 //   POST /projects/:id/runs/:runId/future-yield   editor   queue the job (202 { jobId }; 200 when the same one is pending)
-//   GET  /projects/:id/runs/:runId/future-yield   viewer (an applicant: their own application's)   whether it is on, and the newest result
+//   GET  /projects/:id/runs/:runId/future-yield   viewer (an applicant: their own application's)   whether it is on, the newest result and the newest job
+//   POST /projects/:id/climate-factors            editor   queue the factor table's job (202; 200 when one is pending)
+//   GET  /projects/:id/climate-factors            viewer   whether it is on, the newest table, whether the boundary changed since, the newest job
 //
 // Off (409 `future_yield_off`; GET answers enabled: false) unless
 // FUTURE_YIELD=on. The API never reads the data copy: the job does (the
@@ -18,7 +21,8 @@ import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
 import { verdictsOnly } from '../allocations/verdictsOnly.js';
-import { FUTURE_YIELD_JOBS_PER_USER, futurePair, futureYieldDedupeKey, futureYieldEnabled, FutureYieldRequest, latestFutureYield, pendingFutureJobs } from './store.js';
+import { catchmentClimateCells, FUTURE_YIELD_JOBS_PER_USER, futurePair, futureYieldDedupeKey, futureYieldEnabled, FutureYieldRequest, latestFutureYield, pendingFutureJobs } from './store.js';
+import { CLIMATE_FACTORS_DEDUPE_KEY, ClimateFactorsPayload, climateFactorsState, latestJobOf } from './climate.js';
 
 /** Either run caps use at, or scales demand to, the registered volumes. */
 async function onCapOrFull(db: Db, projectId: string, runIds: string[]): Promise<boolean> {
@@ -54,14 +58,42 @@ export const futureYieldRoutes = new Hono<AuthEnv>()
 			async (db) => {
 				const role = await requireRole(db, id, 'contributor');
 				const row = enabled ? await latestFutureYield(db, id, runId) : null;
+				// The newest job for this run (RLS: a contributor sees their own), so § 8's Run button shows its state after a reload.
+				const job = enabled ? await latestJobOf(db, id, 'future_yield', { applicationRunId: runId }) : null;
 				// A viewer kept from the registered volumes, on runs that cap use at or scale it to them, reads that one exists,
 				// not its numbers: as the report withholds § 8 from them (verdictsOnly.ts) and GET …/yield its points.
 				if (row && (await allocationUnitsHidden(db, id, role)) && (await onCapOrFull(db, id, [row.baselineRunId, row.applicationRunId]))) {
 					const { result: _r, ...meta } = row;
 					void _r;
-					return c.json({ enabled, result: { ...meta, result: null, withheld: ['result'] } });
+					return c.json({ enabled, result: { ...meta, result: null, withheld: ['result'] }, job });
 				}
-				return c.json({ enabled, result: row });
+				return c.json({ enabled, result: row, job });
+			},
+			{ readOnly: true }
+		);
+	})
+	.post('/:id/climate-factors', async (c) => {
+		const id = c.req.param('id');
+		ClimateFactorsPayload.parse(await readJson(c, { optional: true }));
+		const result = await withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			if (!futureYieldEnabled()) throw new ApiError(409, 'The future climate is off on this server (FUTURE_YIELD=off).', { code: 'future_yield_off' });
+			// Checked now, so a missing or unreadable boundary is a 409 here rather than a dead job; the job reads it again.
+			await catchmentClimateCells(db, id);
+			return enqueueJob(db, { projectId: id, kind: 'climate_factors', payload: {}, dedupeKey: CLIMATE_FACTORS_DEDUPE_KEY, maxAttempts: 2 });
+		});
+		if (result.created) await wakeWorker(result.job.id);
+		return c.json({ jobId: result.job.id, job: result.job, created: result.created }, result.created ? 202 : 200);
+	})
+	.get('/:id/climate-factors', async (c) => {
+		const id = c.req.param('id');
+		const enabled = futureYieldEnabled();
+		return withUser(
+			c.get('userId'),
+			async (db) => {
+				await requireRole(db, id, 'viewer');
+				if (!enabled) return c.json({ enabled, factors: null, boundary: 'none', job: null });
+				return c.json({ enabled, ...(await climateFactorsState(db, id)) });
 			},
 			{ readOnly: true }
 		);

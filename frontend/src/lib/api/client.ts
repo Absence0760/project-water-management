@@ -145,6 +145,9 @@ import type {
 	User,
 	UserPreferences,
 	JobMeta,
+	ClimateFactorsState,
+	FutureYieldState,
+	QueuedJob,
 	Sweep,
 	SweepRequest,
 	Assessment,
@@ -1402,6 +1405,19 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
 				return request<{ jobs: JobMeta[] }>('GET', `${p(id)}/jobs${qs.size ? `?${qs}` : ''}`).then((r) => r.jobs);
 			}
+		},
+		/**
+		 * The Scenarios tab's future climate (docs/api.md § Future climate, issue #621 slice 5): the catchment's
+		 * monthly change factors per climate model, pathway and window, worked out by a background job (editor).
+		 */
+		climateFactors: {
+			get: (id: string) => request<ClimateFactorsState>('GET', `${p(id)}/climate-factors`),
+			start: (id: string) => request<QueuedJob>('POST', `${p(id)}/climate-factors`, {})
+		},
+		/** § 8 Future yield of an application run (docs/api.md § Future yield): the newest result and job; queue it (editor). */
+		futureYield: {
+			get: (id: string, runId: string) => request<FutureYieldState>('GET', `${p(id)}/runs/${enc(runId)}/future-yield`),
+			start: (id: string, runId: string) => request<QueuedJob>('POST', `${p(id)}/runs/${enc(runId)}/future-yield`, {})
 		},
 		/**
 		 * Firm yield and storage–yield curves (docs/api.md § Yield, WP-3.6): queue

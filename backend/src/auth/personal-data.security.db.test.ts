@@ -305,6 +305,10 @@ beforeAll(async () => {
 			[projectId, runId, secondRun, farm.id]
 		)
 	);
+	// A climate factor table they had worked out (284): created_by, SET NULL.
+	await withUser(subject.id, (tx) =>
+		tx.query(`INSERT INTO climate_factors (project_id, method, boundary_sha256, factors) VALUES ($1, 'delta-1', repeat('0', 64), '{}')`, [projectId])
+	);
 	// A turn they asked the assistant (262, 264), counted as its route counts one, without a provider: their
 	// hourly count (assistant_rate, CASCADE) and their month's tokens on the project (assistant_usage, SET NULL);
 	// and one still running, its reservation unsettled (assistant_reservation, SET NULL).
