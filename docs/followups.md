@@ -88,8 +88,8 @@ The checklist for these is issue #62; the history scrub is #63.
          repository variable `ASSISTANT_FUNCTION_NAME` exists, then release
          `backend@…`: the deploy skips the assistant until both exist.
       6. Ask one question in a project; check CloudTrail's
-         `additionalEventData.inferenceRegion` on the `InvokeModelWithResponseStream`
-         event (where it ran) and that the `assistant-*` alarms are OK.
+         `additionalEventData.inferenceRegion` on the `ConverseStream` event
+         (eventSource `bedrock.amazonaws.com`; where it ran) and that the `assistant-*` alarms are OK.
       Trigger: the release that turns the chat on.
 - [ ] **The assistant's legal decisions (issue #610, counsel and the
       operator; docs/legal-status.md § Other open items).** Before

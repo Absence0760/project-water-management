@@ -3544,7 +3544,8 @@ recorded as an s72 transfer in
 [security.md § Personal information (POPIA)](./security.md#personal-information-popia),
 disclosed in Privacy §5–§6 (`LEGAL_VERSION` 2026-10-27), and named in the
 operator agreement (§ 11, clause 6.1). CloudTrail's `additionalEventData.inferenceRegion`
-shows where each call ran. If a model is ever served In-Region in
+on each `ConverseStream` event (eventSource `bedrock.amazonaws.com`; the
+IAM action is still `InvokeModelWithResponseStream`) shows where each call ran. If a model is ever served In-Region in
 af-south-1, set `assistant_model_id` to its plain `anthropic.…` id: the IAM
 policy follows (the in-region shape), and the transfer goes away.
 
