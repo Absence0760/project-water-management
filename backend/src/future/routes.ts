@@ -35,23 +35,25 @@ async function onCapOrFull(db: Db, projectId: string, runIds: string[]): Promise
 
 /**
  * Cancel one job of `kind` in this project, as an editor, through
- * app_cancel_job: a waiting one is dead at once, a running one stops at its
- * handler's next progress report, before it writes; a finished one answers
- * its status with cancelled: false. `match` narrows it to one run's job. 404
+ * app_cancel_job_outcome (285): a waiting one is dead at once, a running one
+ * stops at its handler's next progress report (after each model read or case
+ * run), before it writes. `cancelled` is whether this call changed it: false
+ * for a finished one, and for one already cancelled. `match` narrows it to one run's job. 404
  * for a job of another project, kind or run.
  */
 async function cancelJob(userId: string, projectId: string, jobId: string, kind: 'future_yield' | 'climate_factors', match: Record<string, string> = {}) {
 	if (!UUID.test(jobId)) throw new ApiError(404, 'not found');
-	const status = await withUser(userId, async (db) => {
+	const out = await withUser(userId, async (db) => {
 		await requireRole(db, projectId, 'editor');
-		const { rows } = await db.query<{ status: string | null }>(
-			`SELECT app_cancel_job(j.id) AS status FROM job j WHERE j.id = $1 AND j.project_id = $2 AND j.kind = $3 AND j.payload @> $4::jsonb`,
+		const { rows } = await db.query<{ status: string | null; changed: boolean }>(
+			`SELECT o.status, o.changed FROM job j CROSS JOIN LATERAL app_cancel_job_outcome(j.id) o
+			 WHERE j.id = $1 AND j.project_id = $2 AND j.kind = $3 AND j.payload @> $4::jsonb`,
 			[jobId, projectId, kind, JSON.stringify(match)]
 		);
-		return rows[0]?.status ?? null;
+		return rows[0];
 	});
-	if (!status) throw new ApiError(404, 'not found');
-	return { status, cancelled: status === 'dead' || status === 'running' };
+	if (!out?.status) throw new ApiError(404, 'not found');
+	return { status: out.status, cancelled: out.changed };
 }
 
 export const futureYieldRoutes = new Hono<AuthEnv>()

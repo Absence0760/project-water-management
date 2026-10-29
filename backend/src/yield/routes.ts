@@ -55,16 +55,17 @@ export const yieldRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const jobId = c.req.param('jobId');
 		if (!UUID.test(jobId)) throw new ApiError(404, 'not found');
-		const status = await withUser(c.get('userId'), async (db) => {
+		const out = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'contributor');
-			const { rows } = await db.query<{ status: string | null }>(
-				`SELECT app_cancel_job(j.id) AS status FROM job j WHERE j.id = $1 AND j.project_id = $2`,
+			// cancelled: whether this call changed it (285_cancel_job_outcome); a second cancel answers false.
+			const { rows } = await db.query<{ status: string | null; changed: boolean }>(
+				`SELECT o.status, o.changed FROM job j CROSS JOIN LATERAL app_cancel_job_outcome(j.id) o WHERE j.id = $1 AND j.project_id = $2`,
 				[jobId, id]
 			);
-			return rows[0]?.status ?? null;
+			return rows[0];
 		});
-		if (!status) throw new ApiError(404, 'not found');
-		return c.json({ status, cancelled: status === 'dead' || status === 'running' });
+		if (!out?.status) throw new ApiError(404, 'not found');
+		return c.json({ status: out.status, cancelled: out.changed });
 	})
 	// Read under RLS from the job's own payload (water_app may SELECT a job of a
 	// project it can view), so no column mirrors it and GET /jobs stays payload-free.

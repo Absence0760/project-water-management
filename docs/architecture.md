@@ -798,9 +798,12 @@ alerts plug in as a further kind.
   its own connection, outside the job's transaction (whose writes nobody sees
   until it commits), so `GET /jobs` shows it at once. Only the lease holder
   of a running job can write it. It answers false once someone cancelled the
-  job (`app_cancel_job`, which kills a waiting job outright and flags a
-  running one) or the lease was lost, and the handler then stops: dead,
-  `cancelled`, its work rolled back.
+  job (`app_cancel_job_outcome`, 285, which kills a waiting job outright and
+  flags a running one, and says whether this call changed it) or the lease
+  was lost, and the handler then stops: dead, `cancelled`, its work rolled
+  back. `future_yield` and `climate_factors` report after each model read
+  from the copy, and `future_yield` after each case it runs
+  (`runFutureYieldAsync`), so a cancel lands before the next.
 - **`yield`** (WP-3.6, `jobs/handlers/yield.ts`, [api.md § Yield](./api.md#yield)):
   the engine's firm-yield search (`network/yield.ts`, model.md §2.13) on a
   saved run's stored inputs or a scenario applied to its base run, as the
@@ -2143,7 +2146,8 @@ EventBridge, hourly at :20 ──► fetcher, {"mode":"dams-weekly"} (outside th
 worker tick: each status, then each key due by its load mark (≤ 200 a tick, oldest lastGood first)
    ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs | s2 | s1)
    ──► app_dam_load_mark_write ──► dam_observation_load_mark (what was loaded, kept across restarts)
-   s1 only with DAM_OBSERVATIONS_S1=on, for the dams dams/s1-agreement.json passes; any other s1 key
+   s1 only with DAM_OBSERVATIONS_S1=on, for the dams dams/s1-agreement.json passes (start ≥ 85 %, stay ≥ 80 %);
+   any other s1 key, or an s1 mark still shown that the status no longer lists
    ──► app_dam_s1_withhold (its rows removed) + a mark with targets S1_WITHHELD, no file read
 ```
 
@@ -2320,15 +2324,32 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     the one covering most of it, then the lower item id; the row is keyed
     by its item. Each pixel of the dam the base has NO data for (off its
     tile or footprint) is filled from the next-best scene of that date that
-    has, when the two grids are one lattice (the same CRS and pixel size,
-    origins whole pixels apart: 1° s1_rtc tiles, MGRS tiles of one UTM
-    zone, Landsat rows of one path). So a dam across a tile edge is seen
-    whole, not as the larger half (under the 90 % a clear view needs). A
-    pixel the base saw, clearly or under cloud, is never replaced: two looks
-    at one pixel (Sentinel-1's ascending and descending passes) aren't
-    mixed. Scenes on other lattices (two UTM zones) aren't joined; the
-    better view is kept. The scenes that filled a row stay in the file's
-    `upstream` list beside the row's own.
+    has: pixel for pixel when the two grids are one lattice (the same CRS
+    and pixel size, origins whole pixels apart: 1° s1_rtc tiles, MGRS tiles
+    of one UTM zone, Landsat rows of one path), and by nearest neighbour
+    when they're two UTM grids that don't line up (a dam across a zone line,
+    as 24° E between zones 34 and 35, seen by a scene gridded in each zone).
+    Nearest neighbour takes the base pixel's centre to the ground and into
+    the other zone (`raster/utm.ts`, Krüger's series both ways, no
+    dependency) and copies the class of the pixel it lands in: the classes
+    (wet, dry, not clear, off the scene) are categorical, so they're never
+    averaged into mixes no scene saw. Where that pixel is outside the other
+    view's own outline mask (the grids cut the outline's edge differently),
+    its nearest outline pixel within one pixel stands in. The base's own
+    lattice fills first (exact), then other zones, each in the same order;
+    counts stay in the base's pixels at the base's ground area, so the join
+    loses at most a pixel a row along a seam where two footprints just
+    meet (a synthetic dam split 50/50 across 24° E comes out ≥ 98 %
+    observed, its wet area within 1 % of one whole view's, `merge.test.ts`).
+    So a dam across a tile edge or a zone line is seen whole, not as the
+    larger half (under the 90 % a clear view needs). A pixel the base saw,
+    clearly or under cloud, is never replaced: two looks at one pixel
+    (Sentinel-1's ascending and descending passes) aren't mixed. Only UTM
+    views join across lattices: each pass joins its own source's views, and
+    Sentinel-1's (EPSG:4326, one pixel size) are all one lattice, so a
+    geographic view never meets a UTM one; views on any other two lattices
+    aren't joined, the better one is kept. The scenes that filled a row
+    stay in the file's `upstream` list beside the row's own.
   - **Newest first, then history.** `dams/wofs-state.json` (the pass's
     own, never read by the worker) keeps per dam the SHA-256 of its
     outline and the span read so far, `[backfilledFrom, scannedThrough]`.
@@ -2477,10 +2498,22 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     (`Source = s1`) and the agreement report, but **the worker loads no
     `s1` row**, so radar is measured without being shown; `on` the same,
     and the worker loads `s1` **only for the dams whose own agreement
-    passes** (`sentinel/agreement.ts s1Passing`: at least 10 pairs and
+    passes** (`sentinel/agreement.ts s1Shows`: at least 10 pairs and
     85 % within). A dam with fewer pairs can't be judged, so its radar
     isn't loaded: the threshold is fixed, not tuned per dam, and an
     unchecked dam (small, windy, shallow) is where it reads wrong.
+  - **Hysteresis.** A dam's radar starts being shown at 85 % and, once
+    shown, stays until its rate falls **below 80 %**
+    (`S1_AGREEMENT.keepBar`), so a dam hovering at the bar isn't withheld
+    and reloaded tick after tick. Five points: the rate is over every pair
+    the dam has, so from 20 pairs one new pair moves it by at most five
+    points, and falling out takes a run of disagreeing days, not one windy
+    pass; at 80 % four radar days in five still sit within 0.1 F of
+    Sentinel-2. Under 10 pairs is never shown. The previous state is the
+    dam's own `s1` load mark (targets `''` with a `last_good`: its last
+    successful decision loaded it), so it needs no file or table of its
+    own and survives a restart; a stage change to `measure` or `off`
+    withholds every dam, so turning `on` again starts each at 85 %.
   - **Withheld radar** (the dams tick, `tick.ts` step 4): a dam's `s1` key
     that may not be loaded is withheld instead of read: its rows are
     removed (`app_dam_s1_withhold`, 283; none on a first look) and its load
@@ -2489,7 +2522,12 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     makes the key due again, so a dam that stops passing loses its radar on
     the next tick, without a new fetch, and one that passes again is
     reloaded from its file. Withholding reads no file (its own cap of 200 a
-    tick). No report in `on` (before any measurement) means no dam passes;
+    tick). Besides the keys `dams/s1-status.json` lists, every `s1` mark
+    still shown is checked, so radar loaded before is withheld in
+    `measure`, `off` or for a dam that stops passing even when the status
+    file is gone or no longer lists the dam (a shown dam the status
+    doesn't list that may still be shown keeps its rows: there is no file
+    to reload). No report in `on` (before any measurement) means no dam passes;
     a report that can't be read leaves radar alone that tick (logged
     `dams_tick_failed`, step `s1_agreement`).
   - **Locally** `sentinel/s1Fixtures.ts` answers the search and both bands

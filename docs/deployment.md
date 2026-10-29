@@ -2685,9 +2685,12 @@ One Terraform variable, off by default:
   0.1 of the outline's area of a clear Sentinel-2 view the same day or a
   day either side). In `"on"` the worker loads radar **only for the dams
   whose own agreement passes** (at least 10 pairs, 85 % within); the rest,
-  and a dam with too few pairs to judge, stay withheld, and a dam that
-  stops passing loses its radar rows on the next tick. Back to
-  `"measure"` or `"off"` removes every radar row within a few ticks. It
+  and a dam with too few pairs to judge, stay withheld. A dam once shown
+  keeps its radar down to 80 % (hysteresis, so one hovering at the bar
+  doesn't flip) and loses its rows on the next tick below that. Back to
+  `"measure"` or `"off"` removes every radar row within a few ticks, found
+  by the worker's load marks, so it works even after the `dams/s1*` files
+  are deleted. It
   needs `dam_s2_enabled` too, or there is nothing to agree with. Turn it
   on only with a backend release that has the pass and migration 283.
 - **`dam_s1_recency_alarm_days`** (default 30, at least 14).

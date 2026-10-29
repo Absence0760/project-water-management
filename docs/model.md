@@ -10975,7 +10975,8 @@ together.
   flag. The reader takes whatever `s1` rows the store holds; what keeps
   untrusted radar out of it is the worker: with `DAM_OBSERVATIONS_S1=measure`
   (Terraform `dam_s1_mode`) it loads none, and with `on` only the dams
-  whose own agreement below passes (at least 10 pairs, 85 % within;
+  whose own agreement below passes (at least 10 pairs, 85 % within to
+  start, and once shown down to 80 %, so a dam near the bar doesn't flip;
   architecture.md § Dam observations).
 - **The S1/S2 agreement** (`sentinel/agreement.ts`, issue #624's acceptance
   criteria). For each clear radar view of a dam (at least 90 % seen), the
@@ -13637,7 +13638,10 @@ rain factors rise. `verify/` mirrors the op from this section (probes
 factors from the copy's yearly monthly aggregates per 0.25° cell
 (`heldWindowClimate`: the window mean over the years the copy holds,
 counted, so the synthetic copy's one or two years a window are said, not
-hidden; `futureFactorsComplete` is false on them). `runFutureYield` then,
+hidden; `futureFactorsComplete` is false on them). `runFutureYield` then
+(one implementation, `futureYieldSteps`, a generator that yields after each
+case; `runFutureYieldAsync` awaits its caller between cases, so the job checks
+for a cancel and reports progress there, with the same result),
 for the historical record (no op) and each case (its `climate.delta` op
 applied to both inputs through `applyScenario`), runs the baseline and the
 application (`runModel`) and reads: the applicant's dam's firm yield and its

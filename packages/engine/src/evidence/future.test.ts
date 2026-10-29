@@ -22,7 +22,9 @@ import {
 	futureFactorsComplete,
 	futureFactorTableError,
 	futureRange,
+	futureYieldSteps,
 	runFutureYield,
+	runFutureYieldAsync,
 	type FutureFactorTable,
 	type FutureYieldCaveat
 } from './future';
@@ -130,6 +132,54 @@ describe('runFutureYield', () => {
 		let calls = 0;
 		expect(() => runFutureYield({ ...inputs(), nodeId: 'F1', ownedNodeIds: ['F1'], factors: fixtureFactorTable(), onCase: () => ++calls < 3 })).toThrow('cancelled');
 		expect(calls).toBe(3);
+	});
+
+	it('gives the same result case by case: the steps, the async driver and the sync one', async () => {
+		const sync = run();
+		const total = fixtureFactorTable().cases.length + 1;
+		// The steps: one after the historical pair and one after each case, then the result.
+		const steps = futureYieldSteps({ ...inputs(), nodeId: 'F1', ownedNodeIds: ['F1'], factors: fixtureFactorTable() });
+		const seen: number[] = [];
+		let s = steps.next();
+		for (; !s.done; s = steps.next()) {
+			expect(s.value.total).toBe(total);
+			seen.push(s.value.done);
+		}
+		expect(seen).toEqual(Array.from({ length: total }, (_, i) => i + 1));
+		expect(JSON.stringify(s.value)).toBe(JSON.stringify(sync));
+		// The async driver, awaiting between cases.
+		const reported: number[] = [];
+		const viaAsync = await runFutureYieldAsync({
+			...inputs(),
+			nodeId: 'F1',
+			ownedNodeIds: ['F1'],
+			factors: fixtureFactorTable(),
+			onCase: async (done) => {
+				reported.push(done);
+				await Promise.resolve();
+			}
+		});
+		expect(reported).toEqual(seen);
+		expect(JSON.stringify(viaAsync)).toBe(JSON.stringify(sync));
+	});
+
+	it('runs no further case once the async caller says stop', async () => {
+		const cases: number[] = [];
+		await expect(
+			runFutureYieldAsync({
+				...inputs(),
+				nodeId: 'F1',
+				ownedNodeIds: ['F1'],
+				factors: fixtureFactorTable(),
+				onCase: async (done) => (cases.push(done), done < 2)
+			})
+		).rejects.toThrow('cancelled');
+		// Told to stop after the first case (done 2): called no more, so no third pair ran.
+		expect(cases).toEqual([1, 2]);
+		// The checks still come first: a unit with no dam is refused before any run.
+		const none: number[] = [];
+		await expect(runFutureYieldAsync({ ...inputs(), nodeId: 'G', ownedNodeIds: ['F1'], factors: fixtureFactorTable(), onCase: (d) => void none.push(d) })).rejects.toThrow(/is of a dam/);
+		expect(none).toEqual([]);
 	});
 });
 
