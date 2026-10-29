@@ -576,7 +576,11 @@ application's only own unit with a dam above 0 m³, or the one the request
 names.
 
 **Where the numbers come from.** A `future_yield` job (280_future_yield,
-`backend/src/jobs/handlers/future-yield.ts`), queued by an editor
+`backend/src/jobs/handlers/future-yield.ts`), queued by an editor with the
+draft report's **Run the future yield** button (a board above the report,
+`FutureYieldRun.svelte`: editors only, never on a pack, following the job
+queued, running or failed and reading the report again once it is done;
+**Run it again** once § 8 has a result), or through the API
 (`POST …/runs/:runId/future-yield`, [api.md § Future yield](./api.md#future-yield)),
 reads the copy's `cmip6/<model>/<scenario>` monthly aggregates
 (`backend/src/future/copy.ts`; the committed synthetic copy in dev, CI and
